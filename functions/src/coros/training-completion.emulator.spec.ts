@@ -138,6 +138,83 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)(
         .toMatchObject({ sourceProvider: 'coros', planWorkoutId: marker, componentKey: 'root', outcome: 'already_linked' });
     });
 
+    it('uses a started reserved identity to resolve an ambiguous first send', async () => {
+      const workout = (await user().collection('scheduledWorkouts').doc('workout').get()).data();
+      const attemptId = randomUUID();
+      await user().collection(DELIVERY_LEDGER).doc('delivery').update({
+        actual: null,
+        acceptedDigest: null,
+        acceptedContentDigest: null,
+        status: 'needs_attention',
+        issues: ['The COROS batch outcome could not be confirmed.'],
+        attempt: {
+          id: attemptId,
+          kind: 'upsert',
+          deliveryId: 'delivery',
+          generation: 1,
+          connectionGeneration: 'connection',
+          destinationKey,
+          timeZone: 'Europe/Helsinki',
+          digest: 'reserved-desired',
+          contentDigest: 'reserved-content',
+          workout,
+          artifact: null,
+          progress: { version: 1, step: 'batch-upsert', state: 'started' },
+          providerIdentity: { athleteId: 987654321, workoutId: Number(marker) },
+          batchId: randomUUID(),
+        },
+      });
+      await user().collection(DELIVERY_LEDGER).doc('delivery').collection('attempts').doc(attemptId).set({
+        schemaVersion: 1,
+        state: 'uncertain',
+      });
+
+      expect(await retain()).toEqual({ retained: true, linkedWorkoutIds: ['workout'] });
+      expect((await user().collection(DELIVERY_LEDGER).doc('delivery').get()).data()).toMatchObject({
+        status: 'completed',
+        desired: 'preserve',
+        actual: { ids: { workout: marker, athlete: '987654321' }, completed: true },
+        acceptedDigest: 'reserved-desired',
+        acceptedContentDigest: 'reserved-content',
+        attempt: null,
+        lease: null,
+      });
+      expect((await user().collection(DELIVERY_LEDGER).doc('delivery')
+        .collection('attempts').doc(attemptId).get()).data()).toMatchObject({
+        state: 'accepted',
+        resolution: 'completion_marker',
+      });
+    });
+
+    it('does not resolve a reserved identity before a provider request started', async () => {
+      const workout = (await user().collection('scheduledWorkouts').doc('workout').get()).data();
+      await user().collection(DELIVERY_LEDGER).doc('delivery').update({
+        actual: null,
+        status: 'needs_attention',
+        attempt: {
+          id: randomUUID(),
+          kind: 'upsert',
+          deliveryId: 'delivery',
+          generation: 1,
+          connectionGeneration: 'connection',
+          destinationKey,
+          timeZone: 'Europe/Helsinki',
+          digest: 'reserved-desired',
+          contentDigest: 'reserved-content',
+          workout,
+          artifact: null,
+          progress: null,
+          providerIdentity: { athleteId: 987654321, workoutId: Number(marker) },
+          batchId: randomUUID(),
+        },
+      });
+
+      expect(await retain()).toEqual({ retained: true, linkedWorkoutIds: [] });
+      expect((await user().collection('events').doc('event')
+        .collection('trainingCompletionEvidence').doc('coros').get()).data()).toMatchObject({ outcome: 'missing' });
+      expect((await user().collection('trainingWorkoutCompletions').get()).empty).toBe(true);
+    });
+
     it('accepts matching generation metadata and rejects stale authority', async () => {
       const root = db.collection('COROSAPIAccessTokens').doc(uid);
       await root.update({ activeOAuthCredentialGeneration: 'generation' });

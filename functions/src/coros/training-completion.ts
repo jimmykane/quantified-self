@@ -18,6 +18,12 @@ import { normalizeCOROSOpenId } from './account';
 
 const COROS_POSITIVE_INT32 = /^[1-9]\d{0,9}$/;
 
+interface COROSTrainingCompletionCandidate {
+  ledger: DeliveryLedgerV1;
+  artifact: NonNullable<DeliveryLedgerV1['actual']>;
+  resolvedAttemptId: string | null;
+}
+
 export interface RetainedCOROSTrainingCompletionResult {
   retained: boolean;
   linkedWorkoutIds: string[];
@@ -39,14 +45,45 @@ function candidateLedger(
   snapshot: QueryDocumentSnapshot,
   destinationKey: string,
   planWorkoutId: string,
-): DeliveryLedgerV1 | null {
+): COROSTrainingCompletionCandidate | null {
   const ledger = snapshot.data() as DeliveryLedgerV1;
-  if (ledger.schemaVersion !== 1 || ledger.provider !== 'coros' || ledger.destinationKey !== destinationKey
-    || ledger.actual?.ids.workout !== planWorkoutId) return null;
+  if (ledger.schemaVersion !== 1 || ledger.provider !== 'coros' || ledger.destinationKey !== destinationKey) return null;
+  const acceptedArtifact = ledger.actual?.ids.workout === planWorkoutId ? ledger.actual : null;
+  const reservedWorkoutId = ledger.attempt?.providerIdentity?.workoutId;
+  const reservedAthleteId = ledger.attempt?.providerIdentity?.athleteId;
+  const reservedArtifact = ledger.actual === null
+    && ledger.status === 'needs_attention'
+    && ledger.attempt?.kind === 'upsert'
+    && ledger.attempt.deliveryId === ledger.id
+    && ledger.attempt.destinationKey === destinationKey
+    && ledger.attempt.progress?.version === 1
+    && ledger.attempt.progress.state === 'started'
+    && ledger.attempt.workout?.id === ledger.workoutId
+    && Number.isSafeInteger(reservedWorkoutId)
+    && Number(reservedWorkoutId) > 0
+    && Number(reservedWorkoutId) <= 2_147_483_647
+    && String(reservedWorkoutId) === planWorkoutId
+    && Number.isSafeInteger(reservedAthleteId)
+    && Number(reservedAthleteId) > 0
+    && Number(reservedAthleteId) <= 2_147_483_647
+    ? {
+      ids: { workout: planWorkoutId, athlete: String(reservedAthleteId) },
+      localDate: ledger.attempt.workout.localDate,
+      completed: false,
+    } : null;
+  if (!acceptedArtifact && !reservedArtifact) return null;
   // Completion and provider writes serialize on the same delivery identity. A
-  // queue retry is safer than allowing a late batch checkpoint to erase this link.
-  if (ledger.attempt || ledger.lease) throw new Error('Training completion link deferred while delivery is changing.');
-  return ledger;
+  // queue retry is safer than allowing a late batch checkpoint to erase this
+  // link. The one exception is a finished ambiguous first send: the exact
+  // provider marker is authoritative acceptance evidence for its reserved ID.
+  if (ledger.lease || (acceptedArtifact && ledger.attempt)) {
+    throw new Error('Training completion link deferred while delivery is changing.');
+  }
+  return {
+    ledger,
+    artifact: acceptedArtifact ?? reservedArtifact!,
+    resolvedAttemptId: reservedArtifact ? ledger.attempt!.id : null,
+  };
 }
 
 function completionTiming(localDate: string, activityStartAtMs: number | null, timeZone: string): TrainingWorkoutCompletionTiming {
@@ -97,18 +134,26 @@ export async function retainCOROSTrainingCompletion(
       return { retained: false, linkedWorkoutIds: [] };
     }
 
-    const ledgerQuery = await tx.get(user.collection(DELIVERY_LEDGER)
-      .where('provider', '==', 'coros')
-      .where('actual.ids.workout', '==', planWorkoutId).limit(2));
-    const candidates = ledgerQuery.docs.flatMap(document => {
+    const [acceptedQuery, reservedQuery] = await Promise.all([
+      tx.get(user.collection(DELIVERY_LEDGER)
+        .where('provider', '==', 'coros')
+        .where('actual.ids.workout', '==', planWorkoutId).limit(2)),
+      tx.get(user.collection(DELIVERY_LEDGER)
+        .where('provider', '==', 'coros')
+        .where('attempt.providerIdentity.workoutId', '==', Number(planWorkoutId)).limit(2)),
+    ]);
+    const matchingDocuments = new Map(
+      [...acceptedQuery.docs, ...reservedQuery.docs].map(document => [document.id, document]),
+    );
+    const candidates = [...matchingDocuments.values()].flatMap(document => {
       const candidate = candidateLedger(document, authority.connection.destinationKey, planWorkoutId);
       return candidate ? [candidate] : [];
     });
     const candidate = candidates.length === 1 ? candidates[0] : null;
     const reverseId = reverseLinkId(uid, eventId);
     const related = candidate ? await Promise.all([
-      tx.get(user.collection('scheduledWorkouts').doc(candidate.workoutId)),
-      tx.get(user.collection(TRAINING_WORKOUT_COMPLETIONS_COLLECTION_ID).doc(candidate.workoutId)),
+      tx.get(user.collection('scheduledWorkouts').doc(candidate.ledger.workoutId)),
+      tx.get(user.collection(TRAINING_WORKOUT_COMPLETIONS_COLLECTION_ID).doc(candidate.ledger.workoutId)),
       tx.get(user.collection(TRAINING_ACTIVITY_COMPLETION_LINKS_COLLECTION_ID).doc(reverseId)),
     ]) : null;
 
@@ -142,7 +187,7 @@ export async function retainCOROSTrainingCompletion(
             && existingCompletion.provider === 'coros'
             && existingCompletion.matchMethod === 'provider_marker'
             && existingCompletion.sourceSessionIndex === null;
-          const sameReverse = reverse?.schemaVersion === 1 && reverse.deliveryId === candidate.id
+          const sameReverse = reverse?.schemaVersion === 1 && reverse.deliveryId === candidate.ledger.id
             && reverse.workoutId === workout.id && reverse.eventId === eventId
             && reverse.sourceSessionIndex === null && reverse.provider === 'coros';
           if (outcome !== 'conflict' && ((completionDocument.exists && !sameCompletion)
@@ -161,14 +206,14 @@ export async function retainCOROSTrainingCompletion(
               activityStartAtMs: activity?.startTimeMs ?? null,
               scheduledLocalDate: workout.localDate,
               workoutRevisionAtLink: workout.revision,
-              timing: completionTiming(workout.localDate, activity?.startTimeMs ?? null, candidate.timeZone),
+              timing: completionTiming(workout.localDate, activity?.startTimeMs ?? null, candidate.ledger.timeZone),
               linkedAtMs: nowMs,
               updatedAtMs: nowMs,
             };
             tx.set(user.collection(TRAINING_WORKOUT_COMPLETIONS_COLLECTION_ID).doc(workout.id), completion);
             tx.set(user.collection(TRAINING_ACTIVITY_COMPLETION_LINKS_COLLECTION_ID).doc(reverseId), {
               schemaVersion: 1,
-              deliveryId: candidate.id,
+              deliveryId: candidate.ledger.id,
               workoutId: workout.id,
               eventId,
               activityId: completion.activityId,
@@ -177,15 +222,32 @@ export async function retainCOROSTrainingCompletion(
               linkedAtMs: completion.linkedAtMs,
             });
             const completedLedger: DeliveryLedgerV1 = {
-              ...candidate,
+              ...candidate.ledger,
               completionLinkId: reverseId,
               desired: 'preserve',
               status: 'completed',
-              actual: { ...candidate.actual!, completed: true },
+              actual: { ...candidate.artifact, completed: true },
+              acceptedDigest: candidate.ledger.acceptedDigest ?? candidate.ledger.attempt?.digest ?? null,
+              acceptedContentDigest: candidate.ledger.acceptedContentDigest
+                ?? candidate.ledger.attempt?.contentDigest ?? null,
+              attempt: null,
+              lease: null,
+              retries: 0,
+              retryAtMs: 0,
+              providerNotBeforeMs: 0,
+              lastAcceptedAtMs: candidate.ledger.lastAcceptedAtMs ?? nowMs,
               updatedAtMs: nowMs,
             };
-            tx.set(user.collection(DELIVERY_LEDGER).doc(candidate.id), completedLedger);
-            tx.set(user.collection('trainingDeliveryStatuses').doc(candidate.id), projectDelivery(completedLedger));
+            tx.set(user.collection(DELIVERY_LEDGER).doc(candidate.ledger.id), completedLedger);
+            tx.set(user.collection('trainingDeliveryStatuses').doc(candidate.ledger.id), projectDelivery(completedLedger));
+            if (candidate.resolvedAttemptId) {
+              tx.set(user.collection(DELIVERY_LEDGER).doc(candidate.ledger.id)
+                .collection('attempts').doc(candidate.resolvedAttemptId), {
+                state: 'accepted',
+                resolution: 'completion_marker',
+                completedAtMs: nowMs,
+              }, { merge: true });
+            }
             linkedWorkoutIds.push(workout.id);
             outcome = existingCompletion ? 'already_linked' : 'linked';
           }
