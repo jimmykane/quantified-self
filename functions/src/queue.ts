@@ -54,7 +54,6 @@ import { resolveProviderImportEventID } from './queue/provider-event-id';
 import { processWahooWorkoutQueueItem } from './wahoo/processor';
 import {
   deferWorkoutQueueItemForTokenRefreshContention,
-  type WorkoutQueueTaskContext,
 } from './queue/token-refresh-contention';
 import { getActiveCOROSTokenSnapshot } from './coros/account';
 import {
@@ -705,7 +704,7 @@ export async function parseWorkoutQueueItemForServiceName(
   tokenCache?: Map<string, Promise<admin.firestore.QuerySnapshot>>,
   usageCache?: Map<string, Promise<{ role: string, limit: number, currentCount: number }>>,
   pendingWrites?: Map<string, number>,
-  taskContext?: WorkoutQueueTaskContext,
+  taskRecoveryGeneration?: number,
 ): Promise<QueueResult> {
   if (serviceName !== ServiceNames.COROSAPI) {
     return parseWorkoutQueueItemForServiceNameInternal(
@@ -716,7 +715,7 @@ export async function parseWorkoutQueueItemForServiceName(
       usageCache,
       pendingWrites,
       undefined,
-      taskContext,
+      taskRecoveryGeneration,
     );
   }
 
@@ -754,7 +753,7 @@ export async function parseWorkoutQueueItemForServiceName(
       usageCache,
       pendingWrites,
       claimState,
-      taskContext,
+      taskRecoveryGeneration,
     );
   } finally {
     await releaseCOROSRevisionClaimIfHeld(corosQueueItem, claimState);
@@ -770,7 +769,7 @@ async function parseWorkoutQueueItemForServiceNameInternal(
   usageCache?: Map<string, Promise<{ role: string, limit: number, currentCount: number }>>,
   pendingWrites?: Map<string, number>,
   corosClaimState?: COROSQueueProcessingClaim,
-  taskContext?: WorkoutQueueTaskContext,
+  taskRecoveryGeneration?: number,
 ): Promise<QueueResult> {
   if (serviceName === ServiceNames.GarminAPI) {
     return processGarminAPIActivityQueueItem(
@@ -779,7 +778,7 @@ async function parseWorkoutQueueItemForServiceNameInternal(
       tokenCache,
       usageCache,
       pendingWrites,
-      taskContext,
+      taskRecoveryGeneration,
     );
   }
   if (serviceName === ServiceNames.WahooAPI) {
@@ -908,10 +907,6 @@ async function parseWorkoutQueueItemForServiceNameInternal(
     } catch (e: any) {
       if (e instanceof TokenRefreshInProgressError) {
         tokenRefreshContentionFirebaseUserID ??= parentID;
-        logger.info('[WorkoutQueue] Deferring item after token-refresh contention.', {
-          serviceName,
-          queueItemId: queueItem.id,
-        });
         continue;
       }
       if (isTokenRefreshSkippedForDeletedUserError(e)) {
@@ -1025,9 +1020,6 @@ async function parseWorkoutQueueItemForServiceNameInternal(
           } catch (retryError: unknown) {
             if (retryError instanceof TokenRefreshInProgressError) {
               tokenRefreshContentionFirebaseUserID ??= parentID;
-              logger.info('[WorkoutQueue] Deferring COROS detail recovery after token-refresh contention.', {
-                queueItemId: queueItem.id,
-              });
               continue;
             }
             if (isTokenUseSkippedForPendingDisconnectError(retryError)) {
@@ -1108,10 +1100,6 @@ async function parseWorkoutQueueItemForServiceNameInternal(
         } catch (retryError: any) {
           if (retryError instanceof TokenRefreshInProgressError) {
             tokenRefreshContentionFirebaseUserID ??= parentID;
-            logger.info('[WorkoutQueue] Deferring refreshed download after token-refresh contention.', {
-              serviceName,
-              queueItemId: queueItem.id,
-            });
             continue;
           }
           if (isTokenUseSkippedForPendingDisconnectError(retryError)) {
@@ -1433,7 +1421,7 @@ async function parseWorkoutQueueItemForServiceNameInternal(
         contentionUserID,
         currentQueueItem,
       ),
-      currentRecoveryGeneration: taskContext?.tokenRefreshRecoveryGeneration,
+      taskRecoveryGeneration,
     });
   }
 

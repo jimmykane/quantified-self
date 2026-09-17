@@ -2,18 +2,18 @@ import * as logger from 'firebase-functions/logger';
 import { ServiceNames } from '@sports-alliance/sports-lib';
 import { QueueItemInterface } from './queue-item.interface';
 import {
-  deferQueueItemForTokenRefreshContentionIfCurrentUserActive,
   QueueResult,
 } from '../queue-utils';
-import { enqueueWorkoutRecoveryTask } from '../shared/cloud-tasks';
+import { enqueueWorkoutTask } from '../shared/cloud-tasks';
 import { TOKEN_REFRESH_LEASE_MS } from '../token-refresh-coordinator';
 import { normalizeQueueRevision } from './revision-identity';
+import {
+  QueueItemUserGuardedUpdateResult,
+  updateQueueItemIfUserActive,
+} from './dispatch-marker';
+import { clearRevisionProcessingLeaseUpdate } from './revision-processing-lease';
 
 const TOKEN_REFRESH_CONTENTION_RETRY_DELAY_SECONDS = Math.ceil(TOKEN_REFRESH_LEASE_MS / 1000) + 5;
-
-export interface WorkoutQueueTaskContext {
-  tokenRefreshRecoveryGeneration?: number;
-}
 
 export interface DeferWorkoutQueueItemForTokenRefreshContentionParams {
   serviceName: ServiceNames;
@@ -22,7 +22,7 @@ export interface DeferWorkoutQueueItemForTokenRefreshContentionParams {
   phase: string;
   logPrefix: string;
   isCurrent: (queueItem: Record<string, unknown>) => boolean;
-  currentRecoveryGeneration?: number;
+  taskRecoveryGeneration?: number;
 }
 
 function normalizeRecoveryGeneration(value: unknown): number {
@@ -39,42 +39,45 @@ function normalizeRecoveryGeneration(value: unknown): number {
 export async function deferWorkoutQueueItemForTokenRefreshContention(
   params: DeferWorkoutQueueItemForTokenRefreshContentionParams,
 ): Promise<QueueResult.TokenRefreshDeferred | QueueResult.Processed | QueueResult.Failed> {
+  if (!params.queueItem.ref) {
+    logger.error(`[WorkoutQueue] Cannot defer queue item ${params.queueItem.id} without a document reference.`);
+    return QueueResult.Failed;
+  }
   const queueRevision = normalizeQueueRevision(params.queueItem.queueRevision);
-  const persistedRecoveryGeneration = normalizeRecoveryGeneration(
-    params.queueItem.tokenRefreshRecoveryGeneration,
-  );
-  const currentRecoveryGeneration = normalizeRecoveryGeneration(params.currentRecoveryGeneration);
-  if (currentRecoveryGeneration < persistedRecoveryGeneration) {
+  const persistedRecoveryGeneration = normalizeRecoveryGeneration(params.queueItem.dispatchRecoveryGeneration);
+  const taskRecoveryGeneration = typeof params.taskRecoveryGeneration === 'number'
+    ? normalizeRecoveryGeneration(params.taskRecoveryGeneration)
+    : null;
+  if (taskRecoveryGeneration !== null && taskRecoveryGeneration < persistedRecoveryGeneration) {
     logger.info('[WorkoutQueue] Skipping stale token-refresh contention task because a later recovery is already pending.', {
       serviceName: params.serviceName,
       queueItemId: params.queueItem.id,
-      currentRecoveryGeneration,
+      taskRecoveryGeneration,
       persistedRecoveryGeneration,
     });
     return QueueResult.TokenRefreshDeferred;
   }
 
-  const recoveryGeneration = Math.max(
-    currentRecoveryGeneration,
-    persistedRecoveryGeneration,
-  ) + 1;
+  const recoveryGeneration = Math.max(taskRecoveryGeneration ?? 0, persistedRecoveryGeneration) + 1;
   if (!Number.isSafeInteger(recoveryGeneration)) {
     logger.error('[WorkoutQueue] Could not advance the token-refresh contention recovery generation.', {
       serviceName: params.serviceName,
       queueItemId: params.queueItem.id,
-      currentRecoveryGeneration,
+      taskRecoveryGeneration,
       persistedRecoveryGeneration,
     });
     return QueueResult.Failed;
   }
   const recoveryDispatchedAtMs = Date.now();
-  const recoveryTaskCreated = await enqueueWorkoutRecoveryTask(
+  const recoveryTaskCreated = await enqueueWorkoutTask(
     params.serviceName,
     params.queueItem.id,
     params.queueItem.dateCreated,
     TOKEN_REFRESH_CONTENTION_RETRY_DELAY_SECONDS,
     {
-      recoveryGeneration,
+      recoveryTaskKey: `token-refresh-${recoveryGeneration}`,
+      dispatchRecoveryGeneration: recoveryGeneration,
+      recoveryTaskOnly: true,
       ...(queueRevision ? { queueRevision } : {}),
     },
   );
@@ -86,18 +89,29 @@ export async function deferWorkoutQueueItemForTokenRefreshContention(
     return QueueResult.Failed;
   }
 
-  const result = await deferQueueItemForTokenRefreshContentionIfCurrentUserActive({
-    queueItem: params.queueItem,
-    userID: params.userID,
-    phase: params.phase,
-    logPrefix: params.logPrefix,
-    recoveryDispatchedAtMs,
-    recoveryGeneration,
-    isCurrent: currentQueueItem => params.isCurrent(currentQueueItem)
-      && normalizeRecoveryGeneration(currentQueueItem.tokenRefreshRecoveryGeneration)
-        === persistedRecoveryGeneration,
-  });
-  return result === QueueResult.Deferred
-    ? QueueResult.TokenRefreshDeferred
-    : result;
+  try {
+    const result = await updateQueueItemIfUserActive({
+      queueItemDocument: params.queueItem.ref,
+      queueItemId: params.queueItem.id,
+      userID: params.userID,
+      phase: params.phase,
+      logPrefix: params.logPrefix,
+      actionDescription: 'token-refresh-contention deferral',
+      updateData: {
+        dispatchedToCloudTask: recoveryDispatchedAtMs,
+        dispatchRecoveryGeneration: recoveryGeneration,
+        providerOperationStartedAt: null,
+        ...clearRevisionProcessingLeaseUpdate(),
+      },
+      isCurrent: currentQueueItem => params.isCurrent(currentQueueItem)
+        && normalizeRecoveryGeneration(currentQueueItem.dispatchRecoveryGeneration)
+          === persistedRecoveryGeneration,
+    });
+    return result === QueueItemUserGuardedUpdateResult.Updated
+      ? QueueResult.TokenRefreshDeferred
+      : QueueResult.Processed;
+  } catch (error) {
+    logger.error(`Could not record token-refresh contention recovery for queue item ${params.queueItem.id}.`, error);
+    return QueueResult.Failed;
+  }
 }

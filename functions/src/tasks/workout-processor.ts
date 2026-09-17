@@ -30,13 +30,13 @@ export const processWorkoutTask = onTaskDispatched({
         serviceName,
         queueRevision,
         queueDateCreated,
-        tokenRefreshRecoveryGeneration,
+        dispatchRecoveryGeneration,
     } = request.data as {
         queueItemId: string;
         serviceName: ServiceNames;
         queueRevision?: string;
         queueDateCreated?: number;
-        tokenRefreshRecoveryGeneration?: number;
+        dispatchRecoveryGeneration?: number;
     };
 
     const collectionName = getServiceWorkoutQueueName(serviceName);
@@ -93,15 +93,17 @@ export const processWorkoutTask = onTaskDispatched({
             id: queueItemId,
             ref: queueRef,
         }, queueItem) as any;
-        const result = await parseWorkoutQueueItemForServiceName(
-            serviceName,
-            queueItemForProcessing,
-            undefined,
-            undefined,
-            undefined,
-            undefined,
-            { tokenRefreshRecoveryGeneration },
-        );
+        const result = typeof dispatchRecoveryGeneration === 'number'
+            ? await parseWorkoutQueueItemForServiceName(
+                serviceName,
+                queueItemForProcessing,
+                undefined,
+                undefined,
+                undefined,
+                undefined,
+                dispatchRecoveryGeneration,
+            )
+            : await parseWorkoutQueueItemForServiceName(serviceName, queueItemForProcessing);
 
         switch (result) {
             case QueueResult.Processed:

@@ -1267,7 +1267,7 @@ describe('queue', () => {
                 'stuck-doc',
                 dateCreated,
                 0,
-                { recoveryTaskKey: '0-1' },
+                { recoveryTaskKey: '0-1', dispatchRecoveryGeneration: 1 },
             );
             expect(mockDoc.ref.update).toHaveBeenCalledWith({ dispatchRecoveryGeneration: 1 });
             expect(mockDoc.ref.update).toHaveBeenCalledWith({ dispatchedToCloudTask: expect.any(Number) });
@@ -1333,7 +1333,7 @@ describe('queue', () => {
                 'stuck-doc',
                 dateCreated,
                 0,
-                { recoveryTaskKey: '0-1' },
+                { recoveryTaskKey: '0-1', dispatchRecoveryGeneration: 1 },
             );
             expect(update).not.toHaveBeenCalledWith({ dispatchRecoveryGeneration: 2 });
             expect(update).toHaveBeenCalledWith({ dispatchedToCloudTask: expect.any(Number) });
@@ -1712,7 +1712,7 @@ describe('queue', () => {
 
             expect(utils.enqueueWorkoutTask).toHaveBeenCalled();
             expect(utils.enqueueWorkoutTask).toHaveBeenCalledTimes(2);
-            expect(utils.enqueueWorkoutTask).toHaveBeenNthCalledWith(2, ServiceNames.GarminAPI, 'u1-f1', expect.any(Number), undefined, { recoveryTaskKey: '0-1' });
+            expect(utils.enqueueWorkoutTask).toHaveBeenNthCalledWith(2, ServiceNames.GarminAPI, 'u1-f1', expect.any(Number), undefined, { recoveryTaskKey: '0-1', dispatchRecoveryGeneration: 1 });
             expect(mockDocRef.update).toHaveBeenCalledWith({ dispatchRecoveryGeneration: 1 });
             expect(mockDocRef.update).not.toHaveBeenCalledWith({ dispatchedToCloudTask: expect.any(Number) });
         });
@@ -2127,7 +2127,7 @@ describe('queue', () => {
 
             expect(result.id).toBe('mock-doc-id');
             expect(utils.enqueueWorkoutTask).toHaveBeenCalledWith(ServiceNames.SuuntoApp, 'user1-work1', 123456, undefined, { recoveryTaskKey: 0 });
-            expect(utils.enqueueWorkoutTask).toHaveBeenCalledWith(ServiceNames.SuuntoApp, 'user1-work1', 123456, undefined, { recoveryTaskKey: '0-1' });
+            expect(utils.enqueueWorkoutTask).toHaveBeenCalledWith(ServiceNames.SuuntoApp, 'user1-work1', 123456, undefined, { recoveryTaskKey: '0-1', dispatchRecoveryGeneration: 1 });
             expect(mockDocRef.update).toHaveBeenCalledWith({ dispatchRecoveryGeneration: 1 });
             expect(mockDocRef.update).not.toHaveBeenCalledWith({ dispatchedToCloudTask: expect.any(Number) });
         });
@@ -2425,7 +2425,7 @@ describe('queue', () => {
                 dispatchedToCloudTask: null,
                 dispatchRecoveryGeneration: expect.any(Number),
             }));
-            expect(utils.enqueueWorkoutTask).toHaveBeenCalledWith(ServiceNames.GarminAPI, 'u1-file123', 123456, undefined, { recoveryTaskKey: '7-2' });
+            expect(utils.enqueueWorkoutTask).toHaveBeenCalledWith(ServiceNames.GarminAPI, 'u1-file123', 123456, undefined, { recoveryTaskKey: '7-2', dispatchRecoveryGeneration: 2 });
             expect(mockDocRef.update).toHaveBeenCalledWith({ dispatchedToCloudTask: expect.any(Number) });
         });
 
@@ -2878,62 +2878,6 @@ describe('queue', () => {
                 retryCount: expect.any(Number),
             }));
             expect(mockBatch.set).not.toHaveBeenCalled();
-        });
-
-        it('should defer a legacy shared-provider item when a usable token is refreshing', async () => {
-            const admin = await import('firebase-admin');
-            const tokenQuery = admin.firestore().collectionGroup('tokens');
-            vi.spyOn(tokenQuery, 'get').mockResolvedValueOnce({
-                size: 2,
-                docs: [{
-                    id: 'terminal-token',
-                    ref: {
-                        parent: {
-                            id: 'tokens',
-                            parent: { id: 'stale-user-id' },
-                        },
-                    },
-                    data: vi.fn(() => ({})),
-                }, {
-                    id: 'refreshing-token',
-                    ref: {
-                        parent: {
-                            id: 'tokens',
-                            parent: { id: 'active-user-id' },
-                        },
-                    },
-                    data: vi.fn(() => ({})),
-                }],
-                empty: false,
-            } as Awaited<ReturnType<typeof tokenQuery.get>>);
-            vi.mocked(getTokenData)
-                .mockRejectedValueOnce(new TerminalServiceAuthError(
-                    ServiceNames.SuuntoApp,
-                    'stale-user-id',
-                    'suuntoUser',
-                    400,
-                    'invalid_grant',
-                    'User no longer active/connected with the partner',
-                    new Error('400 invalid_grant'),
-                ))
-                .mockRejectedValueOnce(new TokenRefreshInProgressError(
-                    ServiceNames.SuuntoApp,
-                    'refreshing-token',
-                ));
-
-            const result = await parseWorkoutQueueItemForServiceName(ServiceNames.SuuntoApp, suuntoQueueItem);
-
-            expect(result).toBe(QueueResult.TokenRefreshDeferred);
-            expect(mockDeferWorkoutQueueItemForTokenRefreshContention).toHaveBeenCalledWith(expect.objectContaining({
-                serviceName: ServiceNames.SuuntoApp,
-                queueItem: suuntoQueueItem,
-                userID: 'active-user-id',
-            }));
-            expect(mockBatch.set).not.toHaveBeenCalled();
-            expect(mockBatch.delete).not.toHaveBeenCalledWith(mockRef);
-            expect(mockRef.update).not.toHaveBeenCalledWith(expect.objectContaining({
-                retryCount: expect.any(Number),
-            }));
         });
 
         it('should mark processed as skipped without retrying when account deletion starts before event write', async () => {

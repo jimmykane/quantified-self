@@ -154,7 +154,7 @@ describe('Cloud Tasks Utils', () => {
 
             await expect(enqueueWorkoutTask('corosAPI' as ServiceNames, 'stable-item', 1000, undefined, {
                 queueRevision: 'revision/2',
-                tokenRefreshRecoveryGeneration: 3,
+                dispatchRecoveryGeneration: 3,
             })).resolves.toBe(true);
 
             expect(hoisted.mockTaskQueue.enqueue).toHaveBeenCalledWith(
@@ -162,7 +162,7 @@ describe('Cloud Tasks Utils', () => {
                     queueItemId: 'stable-item',
                     serviceName: 'corosAPI',
                     queueRevision: 'revision/2',
-                    tokenRefreshRecoveryGeneration: 3,
+                    dispatchRecoveryGeneration: 3,
                 },
                 { id: 'corosAPI-stable-item-1000-revision-revision-2', scheduleDelaySeconds: 1 },
             );
@@ -185,14 +185,18 @@ describe('Cloud Tasks Utils', () => {
         });
 
         it('enqueues a distinct delayed recovery task bound to a legacy queue incarnation', async () => {
-            const { enqueueWorkoutRecoveryTask } = await import('./cloud-tasks');
+            const { enqueueWorkoutTask } = await import('./cloud-tasks');
 
-            await expect(enqueueWorkoutRecoveryTask(
+            await expect(enqueueWorkoutTask(
                 'suuntoApp' as ServiceNames,
                 'item-123',
                 1000,
                 95,
-                { recoveryGeneration: 1 },
+                {
+                    recoveryTaskKey: 'token-refresh-1',
+                    dispatchRecoveryGeneration: 1,
+                    recoveryTaskOnly: true,
+                },
             )).resolves.toBe(true);
 
             expect(hoisted.mockTaskQueue.enqueue).toHaveBeenCalledWith(
@@ -200,10 +204,10 @@ describe('Cloud Tasks Utils', () => {
                     queueItemId: 'item-123',
                     serviceName: 'suuntoApp',
                     queueDateCreated: 1000,
-                    tokenRefreshRecoveryGeneration: 1,
+                    dispatchRecoveryGeneration: 1,
                 },
                 {
-                    id: 'suuntoApp-item-123-1000-token-refresh-1',
+                    id: 'suuntoApp-item-123-1000-dedupe-recovery-token-refresh-1',
                     scheduleDelaySeconds: 95,
                 },
             );
@@ -275,7 +279,6 @@ describe('Cloud Tasks Utils', () => {
                 dateCreated: 1000,
                 retryCount: 2,
                 dispatchRecoveryGeneration: 1,
-                tokenRefreshRecoveryGeneration: 3,
             });
 
             await expect(enqueueWorkoutTaskWithDispatchRecovery({
@@ -284,7 +287,6 @@ describe('Cloud Tasks Utils', () => {
                     id: 'item-recovery',
                     dateCreated: 1000,
                     retryCount: 2,
-                    tokenRefreshRecoveryGeneration: 3,
                 },
                 enqueueTask,
                 advanceDispatchRecoveryGeneration,
@@ -294,21 +296,20 @@ describe('Cloud Tasks Utils', () => {
                 id: 'item-recovery',
                 dateCreated: 1000,
                 retryCount: 2,
-                tokenRefreshRecoveryGeneration: 3,
             });
             expect(enqueueTask).toHaveBeenNthCalledWith(1,
                 'garminAPI',
                 'item-recovery',
                 1000,
                 undefined,
-                { recoveryTaskKey: 2, tokenRefreshRecoveryGeneration: 3 },
+                { recoveryTaskKey: 2 },
             );
             expect(enqueueTask).toHaveBeenNthCalledWith(2,
                 'garminAPI',
                 'item-recovery',
                 1000,
                 undefined,
-                { recoveryTaskKey: '2-1', tokenRefreshRecoveryGeneration: 3 },
+                { recoveryTaskKey: '2-1', dispatchRecoveryGeneration: 1 },
             );
         });
 

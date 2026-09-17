@@ -1,6 +1,6 @@
 import { afterEach, describe, it, expect, vi, beforeEach } from 'vitest';
 import { ServiceNames } from '@sports-alliance/sports-lib';
-import { deferQueueItemForPendingDisconnect, deferQueueItemForPendingDisconnectIfCurrentUserActive, deferQueueItemForReconnectRequiredIfCurrentUserActive, deferQueueItemForTokenRefreshContentionIfCurrentUserActive, moveToDeadLetterQueue, moveToDeadLetterQueueIfCurrentUserActive, increaseRetryCountForQueueItem, increaseRetryCountIfCurrentUserActive, isCurrentSleepQueueTransition, isProviderOperationInFlightLeaseActive, markQueueItemSkipped, PENDING_DISCONNECT_QUEUE_DISPATCH_MARKER, PROVIDER_OPERATION_IN_FLIGHT_LEASE_MS, PROVIDER_OPERATION_IN_FLIGHT_QUEUE_DISPATCH_MARKER, QUEUE_DEFERRED_REASONS, QUEUE_SKIPPED_REASONS, updateToProcessed, QueueResult } from './queue-utils';
+import { deferQueueItemForPendingDisconnect, deferQueueItemForPendingDisconnectIfCurrentUserActive, deferQueueItemForReconnectRequiredIfCurrentUserActive, moveToDeadLetterQueue, moveToDeadLetterQueueIfCurrentUserActive, increaseRetryCountForQueueItem, increaseRetryCountIfCurrentUserActive, isCurrentSleepQueueTransition, isProviderOperationInFlightLeaseActive, markQueueItemSkipped, PENDING_DISCONNECT_QUEUE_DISPATCH_MARKER, PROVIDER_OPERATION_IN_FLIGHT_LEASE_MS, PROVIDER_OPERATION_IN_FLIGHT_QUEUE_DISPATCH_MARKER, QUEUE_DEFERRED_REASONS, QUEUE_SKIPPED_REASONS, updateToProcessed, QueueResult } from './queue-utils';
 import { TTL_CONFIG } from './shared/ttl-config';
 
 // Hoisted Firestore mocks
@@ -1077,42 +1077,6 @@ describe('queue-utils', () => {
                 dispatchedToCloudTask: null,
                 deferredReason: hoisted.fieldValueDelete,
                 serviceDisconnectPendingGeneration: hoisted.fieldValueDelete,
-            }));
-        });
-    });
-
-    describe('deferQueueItemForTokenRefreshContentionIfCurrentUserActive', () => {
-        it('keeps a non-null dispatch marker for the confirmed delayed recovery task', async () => {
-            const queueItem: any = {
-                id: 'token-contention-1',
-                ref: { parent: { id: 'suuntoAppWorkoutQueue' }, id: 'token-contention-1' },
-            };
-            hoisted.transaction.get.mockResolvedValue({
-                exists: true,
-                data: () => ({ revision: 'expected', processed: false }),
-            });
-
-            const result = await deferQueueItemForTokenRefreshContentionIfCurrentUserActive({
-                queueItem,
-                userID: 'user-1',
-                phase: 'workout_token_refresh_contention',
-                logPrefix: 'WorkoutQueue',
-                recoveryDispatchedAtMs: 1_782_126_100_000,
-                recoveryGeneration: 2,
-                isCurrent: current => current.revision === 'expected',
-            });
-
-            expect(result).toBe(QueueResult.Deferred);
-            expect(hoisted.transaction.update).toHaveBeenCalledWith(queueItem.ref, expect.objectContaining({
-                dispatchedToCloudTask: 1_782_126_100_000,
-                tokenRefreshRecoveryGeneration: 2,
-                providerOperationStartedAt: null,
-                processingOwner: hoisted.fieldValueDelete,
-                processingRevision: hoisted.fieldValueDelete,
-                processingLeaseExpiresAt: hoisted.fieldValueDelete,
-            }));
-            expect(hoisted.transaction.update).not.toHaveBeenCalledWith(queueItem.ref, expect.objectContaining({
-                retryCount: expect.any(Number),
             }));
         });
     });

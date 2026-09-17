@@ -37,12 +37,8 @@ interface EnqueueSportsLibReparseHeavyTaskOptions {
 interface EnqueueWorkoutTaskOptions {
     recoveryTaskKey?: number | string;
     queueRevision?: string;
-    tokenRefreshRecoveryGeneration?: number;
-}
-
-export interface EnqueueWorkoutRecoveryTaskOptions {
-    recoveryGeneration: number;
-    queueRevision?: string;
+    dispatchRecoveryGeneration?: number;
+    recoveryTaskOnly?: boolean;
 }
 
 export interface WorkoutTaskDispatchItem {
@@ -52,7 +48,6 @@ export interface WorkoutTaskDispatchItem {
     totalRetryCount?: number;
     queueRevision?: string;
     dispatchRecoveryGeneration?: number;
-    tokenRefreshRecoveryGeneration?: number;
 }
 
 export interface EnqueueWorkoutTaskWithDispatchRecoveryParams<T extends WorkoutTaskDispatchItem> {
@@ -296,38 +291,40 @@ export async function enqueueWorkoutTask(
     const payload = {
         queueItemId,
         serviceName,
-        ...(typeof options.tokenRefreshRecoveryGeneration === 'number'
-            ? { tokenRefreshRecoveryGeneration: options.tokenRefreshRecoveryGeneration }
+        ...(typeof options.dispatchRecoveryGeneration === 'number'
+            ? { dispatchRecoveryGeneration: options.dispatchRecoveryGeneration }
             : {}),
         ...(queueRevision ? { queueRevision } : {}),
-        ...(serviceName === ServiceNames.COROSAPI && !queueRevision
+        ...((serviceName === ServiceNames.COROSAPI || options.recoveryTaskOnly) && !queueRevision
             ? { queueDateCreated: safeDateCreated }
             : {}),
     };
 
-    const taskCreated = await enqueueTaskWithRetry({
-        projectId,
-        location,
-        functionName: workoutQueue,
-        taskId,
-        payload,
-        scheduleDelaySeconds,
-        alreadyExistsLogMessage: `[Dispatcher] Task already exists for ${serviceName}:${queueItemId}, skipping`,
-        failedLogPrefix: `[Dispatcher] Failed to enqueue task for ${serviceName}:${queueItemId}:`,
-    });
-    if (taskCreated) {
-        return true;
-    }
+    if (!options.recoveryTaskOnly) {
+        const taskCreated = await enqueueTaskWithRetry({
+            projectId,
+            location,
+            functionName: workoutQueue,
+            taskId,
+            payload,
+            scheduleDelaySeconds,
+            alreadyExistsLogMessage: `[Dispatcher] Task already exists for ${serviceName}:${queueItemId}, skipping`,
+            failedLogPrefix: `[Dispatcher] Failed to enqueue task for ${serviceName}:${queueItemId}:`,
+        });
+        if (taskCreated) return true;
 
-    if (await cloudTaskExists(taskName)) {
-        logger.info(`[Dispatcher] Existing task is still live for ${serviceName}:${queueItemId}; treating workout queue item as dispatched.`);
-        return true;
+        if (await cloudTaskExists(taskName)) {
+            logger.info(`[Dispatcher] Existing task is still live for ${serviceName}:${queueItemId}; treating workout queue item as dispatched.`);
+            return true;
+        }
     }
 
     const recoveryTaskKey = sanitizeTaskNamePart(`${options.recoveryTaskKey ?? 0}`);
     const recoveryTaskId = `${taskId}-dedupe-recovery-${recoveryTaskKey}`;
     const recoveryTaskName = getCloudTaskName(projectId, location, workoutQueue, recoveryTaskId);
-    logger.warn(`[Dispatcher] Task name for ${serviceName}:${queueItemId} is reserved but no live task was found; enqueueing recovery task.`);
+    if (!options.recoveryTaskOnly) {
+        logger.warn(`[Dispatcher] Task name for ${serviceName}:${queueItemId} is reserved but no live task was found; enqueueing recovery task.`);
+    }
     const recoveryTaskCreated = await enqueueTaskWithRetry({
         projectId,
         location,
@@ -348,55 +345,6 @@ export async function enqueueWorkoutTask(
     }
 
     logger.warn(`[Dispatcher] Recovery task name for ${serviceName}:${queueItemId} is reserved but no live recovery task was found; leaving dispatch marker unchanged.`);
-    return false;
-}
-
-/**
- * Enqueues a distinct recovery task while the ordinary deterministic task is
- * still running. Unlike enqueueWorkoutTask, this deliberately does not treat
- * the live base task as evidence that the delayed follow-up exists.
- */
-export async function enqueueWorkoutRecoveryTask(
-    serviceName: ServiceNames,
-    queueItemId: string,
-    dateCreated: number,
-    scheduleDelaySeconds: number,
-    options: EnqueueWorkoutRecoveryTaskOptions,
-): Promise<boolean> {
-    const { projectId, location, workoutQueue } = config.cloudtasks;
-    if (!projectId) throw new Error('Project ID is not defined in config');
-
-    const safeDateCreated = Number.isFinite(dateCreated) ? Math.max(0, Math.floor(dateCreated)) : 0;
-    const queueRevision = normalizeQueueRevision(options.queueRevision) || '';
-    const safeQueueRevision = queueRevision
-        ? sanitizeTaskNamePart(queueRevision).slice(0, 80)
-        : '';
-    const baseTaskId = `${sanitizeTaskNamePart(serviceName)}-${sanitizeTaskNamePart(`${queueItemId}`)}-${safeDateCreated}${safeQueueRevision ? `-revision-${safeQueueRevision}` : ''}`;
-    const recoveryTaskId = `${baseTaskId}-token-refresh-${options.recoveryGeneration}`;
-    const recoveryTaskName = getCloudTaskName(projectId, location, workoutQueue, recoveryTaskId);
-    const payload = {
-        queueItemId,
-        serviceName,
-        tokenRefreshRecoveryGeneration: options.recoveryGeneration,
-        ...(queueRevision
-            ? { queueRevision }
-            : { queueDateCreated: safeDateCreated }),
-    };
-
-    const created = await enqueueTaskWithRetry({
-        projectId,
-        location,
-        functionName: workoutQueue,
-        taskId: recoveryTaskId,
-        payload,
-        scheduleDelaySeconds,
-        alreadyExistsLogMessage: `[Dispatcher] Token-refresh recovery task already exists for ${serviceName}:${queueItemId}, skipping`,
-        failedLogPrefix: `[Dispatcher] Failed to enqueue token-refresh recovery task for ${serviceName}:${queueItemId}:`,
-    });
-    if (created) return true;
-    if (await cloudTaskExists(recoveryTaskName)) return true;
-
-    logger.warn(`[Dispatcher] Token-refresh recovery task name for ${serviceName}:${queueItemId} is reserved but no live task was found.`);
     return false;
 }
 
@@ -424,15 +372,11 @@ function workoutTaskRecoveryKey(queueItem: WorkoutTaskDispatchItem): number | st
 
 function workoutTaskEnqueueOptions(queueItem: WorkoutTaskDispatchItem): EnqueueWorkoutTaskOptions {
     const queueRevision = normalizeQueueRevision(queueItem.queueRevision) || '';
-    const tokenRefreshRecoveryGeneration = typeof queueItem.tokenRefreshRecoveryGeneration === 'number'
-        && Number.isSafeInteger(queueItem.tokenRefreshRecoveryGeneration)
-        && queueItem.tokenRefreshRecoveryGeneration >= 0
-        ? queueItem.tokenRefreshRecoveryGeneration
-        : null;
+    const dispatchRecoveryGeneration = workoutTaskDispatchRecoveryGeneration(queueItem);
     return {
         recoveryTaskKey: workoutTaskRecoveryKey(queueItem),
+        ...(dispatchRecoveryGeneration > 0 ? { dispatchRecoveryGeneration } : {}),
         ...(queueRevision ? { queueRevision } : {}),
-        ...(tokenRefreshRecoveryGeneration !== null ? { tokenRefreshRecoveryGeneration } : {}),
     };
 }
 

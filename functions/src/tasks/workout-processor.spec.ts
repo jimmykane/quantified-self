@@ -94,15 +94,10 @@ describe('processWorkoutTask', () => {
                 processed: false,
                 some: 'data',
             }),
-            undefined,
-            undefined,
-            undefined,
-            undefined,
-            { tokenRefreshRecoveryGeneration: undefined },
         );
     });
 
-    it('passes the token-refresh recovery generation to queue processing', async () => {
+    it('passes the dispatch recovery generation to queue processing', async () => {
         mockGet.mockResolvedValue({
             exists: true,
             data: () => ({ processed: false }),
@@ -116,7 +111,7 @@ describe('processWorkoutTask', () => {
             data: {
                 queueItemId: 'recovery-item',
                 serviceName: ServiceNames.SuuntoApp,
-                tokenRefreshRecoveryGeneration: 3,
+                dispatchRecoveryGeneration: 3,
             },
         })).resolves.toBeUndefined();
 
@@ -127,7 +122,7 @@ describe('processWorkoutTask', () => {
             undefined,
             undefined,
             undefined,
-            { tokenRefreshRecoveryGeneration: 3 },
+            3,
         );
         expect(mockLoggerInfo).toHaveBeenCalledWith(
             `[TaskWorker] Deferred ${ServiceNames.SuuntoApp} item recovery-item while another worker refreshes its token.`,
@@ -206,23 +201,6 @@ describe('processWorkoutTask', () => {
         expect(mockParseWorkoutQueueItemForServiceName).not.toHaveBeenCalled();
     });
 
-    it('skips a stale Garmin recovery task when its queue item was replaced', async () => {
-        mockGet.mockResolvedValue({
-            exists: true,
-            data: () => ({ processed: false, dateCreated: 200 }),
-        });
-
-        await expect((processWorkoutTask as any)({
-            data: {
-                queueItemId: 'stable-garmin-id',
-                serviceName: ServiceNames.GarminAPI,
-                queueDateCreated: 100,
-            },
-        })).resolves.toBeUndefined();
-
-        expect(mockParseWorkoutQueueItemForServiceName).not.toHaveBeenCalled();
-    });
-
     it('processes a legacy COROS task when its creation-time generation still matches', async () => {
         mockGet.mockResolvedValue({
             exists: true,
@@ -247,11 +225,6 @@ describe('processWorkoutTask', () => {
                 id: 'legacy-coros-id',
                 dateCreated: 100,
             }),
-            undefined,
-            undefined,
-            undefined,
-            undefined,
-            { tokenRefreshRecoveryGeneration: undefined },
         );
     });
 
@@ -276,11 +249,6 @@ describe('processWorkoutTask', () => {
                 id: 'stable-coros-id',
                 queueRevision: 'revision-2',
             }),
-            undefined,
-            undefined,
-            undefined,
-            undefined,
-            { tokenRefreshRecoveryGeneration: undefined },
         );
     });
 

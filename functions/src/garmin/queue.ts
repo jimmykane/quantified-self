@@ -32,7 +32,6 @@ import { shouldSkipQueueWorkForDeletedUser } from '../queue/user-deletion-skip';
 import { resolveProviderImportEventID } from '../queue/provider-event-id';
 import {
   deferWorkoutQueueItemForTokenRefreshContention,
-  type WorkoutQueueTaskContext,
 } from '../queue/token-refresh-contention';
 import { retainGarminFITWorkoutReferences } from '../training-plans/completion/fit-workout-evidence';
 
@@ -216,7 +215,7 @@ export const insertGarminAPIActivityFileToQueue = functions.region('europe-west2
 
 
 
-export async function processGarminAPIActivityQueueItem(queueItem: GarminAPIActivityQueueItemInterface, bulkWriter?: admin.firestore.BulkWriter, tokenCache?: Map<string, Promise<admin.firestore.QuerySnapshot>>, usageCache?: Map<string, Promise<{ role: string, limit: number, currentCount: number }>>, pendingWrites?: Map<string, number>, taskContext?: WorkoutQueueTaskContext): Promise<QueueResult> {
+export async function processGarminAPIActivityQueueItem(queueItem: GarminAPIActivityQueueItemInterface, bulkWriter?: admin.firestore.BulkWriter, tokenCache?: Map<string, Promise<admin.firestore.QuerySnapshot>>, usageCache?: Map<string, Promise<{ role: string, limit: number, currentCount: number }>>, pendingWrites?: Map<string, number>, taskRecoveryGeneration?: number): Promise<QueueResult> {
   logger.info(`Processing queue item ${queueItem.id} at retry count ${queueItem.retryCount}`);
   // queueItem is never undefined for query queueItem snapshots
   let tokenQuerySnapshots: admin.firestore.QuerySnapshot | undefined;
@@ -277,7 +276,7 @@ export async function processGarminAPIActivityQueueItem(queueItem: GarminAPIActi
           && currentQueueItem.dispatchedToCloudTask === queueItem.dispatchedToCloudTask
           && (typeof currentQueueItem.firebaseUserID !== 'string'
             || currentQueueItem.firebaseUserID === firebaseUserID),
-        currentRecoveryGeneration: taskContext?.tokenRefreshRecoveryGeneration,
+        taskRecoveryGeneration,
       });
     }
     if (isTokenRefreshSkippedForDeletedUserError(e)) {
