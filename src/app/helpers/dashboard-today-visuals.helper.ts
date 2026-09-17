@@ -1,4 +1,8 @@
-import type { DashboardFormPoint } from './dashboard-form.helper';
+import type { ReadinessHrvPersonalRange } from '@shared/readiness';
+import {
+  extendDashboardFormPointsWithZeroLoadUntil,
+  type DashboardFormPoint,
+} from './dashboard-form.helper';
 import type { DashboardSleepTrendContext, DashboardSleepTrendPoint } from './dashboard-sleep-chart.helper';
 
 export type DashboardTodayVisualTone = 'positive' | 'negative' | 'neutral';
@@ -7,7 +11,16 @@ export interface DashboardTodayHistoryBar {
   key: string;
   heightPercent: number;
   current: boolean;
+  zero: boolean;
   tone: DashboardTodayVisualTone;
+}
+
+export interface DashboardTodayRangeIndicator {
+  value: number;
+  min: number;
+  max: number;
+  rangeMin: number;
+  rangeMax: number;
 }
 
 export interface DashboardTodayTrainingStateScale {
@@ -24,7 +37,7 @@ export function buildDashboardTodayLoadBars(
   stateLabel: string | null | undefined,
   nowMs = Date.now(),
 ): DashboardTodayHistoryBar[] {
-  const values = [...(points || [])]
+  const values = extendDashboardFormPointsWithZeroLoadUntil(points, nowMs)
     .filter(point => Number.isFinite(point.time)
       && point.time <= nowMs
       && Number.isFinite(point.trainingStressScore)
@@ -33,6 +46,28 @@ export function buildDashboardTodayLoadBars(
     .slice(-MAX_HISTORY_BARS)
     .map(point => ({ key: `${point.time}`, value: point.trainingStressScore }));
   return normalizeHistoryBars(values, resolveTrainingStateTone(stateLabel));
+}
+
+export function buildDashboardTodayHrvRangeIndicator(
+  range: ReadinessHrvPersonalRange | null | undefined,
+): DashboardTodayRangeIndicator | null {
+  const value = finitePositive(range?.currentAverage);
+  const rangeMin = finitePositive(range?.normalRange?.min);
+  const rangeMax = finitePositive(range?.normalRange?.max);
+  if (value === null || rangeMin === null || rangeMax === null || rangeMax <= rangeMin) {
+    return null;
+  }
+  const lowest = Math.min(value, rangeMin);
+  const highest = Math.max(value, rangeMax);
+  const span = Math.max(highest - lowest, rangeMax - rangeMin, 1);
+  const padding = span * 0.25;
+  return {
+    value,
+    min: Math.max(0, lowest - padding),
+    max: highest + padding,
+    rangeMin,
+    rangeMax,
+  };
 }
 
 export function buildDashboardTodayOvernightHeartRateBars(
@@ -91,11 +126,12 @@ function normalizeHistoryBars(
   const maximum = Math.max(...values.map(point => point.value));
   return values.map((point, index) => ({
     key: point.key,
-    heightPercent: maximum > 0
+    heightPercent: point.value > 0 && maximum > 0
       ? Math.max(MIN_VISIBLE_BAR_PERCENT, Math.min(100, point.value / maximum * 100))
-      : MIN_VISIBLE_BAR_PERCENT,
+      : 0,
     current: index === values.length - 1,
-    tone: index === values.length - 1 ? currentTone : 'neutral',
+    zero: point.value === 0,
+    tone: index === values.length - 1 && point.value > 0 ? currentTone : 'neutral',
   }));
 }
 

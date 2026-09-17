@@ -126,7 +126,7 @@
           <div class="dashboard-today-history-bars" role="img"
             [attr.aria-label]="'Daily training load for the latest ' + dashboardTodayReadiness.loadBars.length + ' days'">
             @for (bar of dashboardTodayReadiness.loadBars; track bar.key) {
-              <span aria-hidden="true" [class.current]="bar.current" [attr.data-tone]="bar.tone"
+              <span aria-hidden="true" [class.current]="bar.current" [class.zero]="bar.zero" [attr.data-tone]="bar.tone"
                 [style.height.%]="bar.heightPercent"></span>
             }
           </div>
@@ -134,11 +134,18 @@
         </div>
         <small>Form / ramp</small>
       </div>
-      <div><dt>Sleep</dt><dd>{{ dashboardTodayReadiness.sleepText }}</dd><app-metric-indicator label="Sleep score" [value]="dashboardTodayReadiness.sleepScore" [compact]="true"></app-metric-indicator><small>{{ dashboardTodayReadiness.sleepContextText }}</small></div>
+      <div><dt>Sleep</dt><dd>{{ dashboardTodayReadiness.sleepText }}</dd><div class="dashboard-today-history-slot"><app-metric-indicator label="Sleep score" [value]="dashboardTodayReadiness.sleepScore" [compact]="true"></app-metric-indicator></div><small>{{ dashboardTodayReadiness.sleepContextText }}</small></div>
       <div class="dashboard-readiness-hrv">
         <dt>HRV · 7-day average</dt>
         <dd [attr.data-tone]="dashboardTodayReadiness.hrvTone">{{ dashboardTodayReadiness.hrvText }}</dd>
         <small>{{ dashboardTodayReadiness.hrvStatusText }}</small>
+        @if (dashboardTodayReadiness.hrvRangeIndicator; as indicator) {
+          <app-metric-indicator variant="range" label="HRV" [value]="indicator.value"
+            [min]="indicator.min" [max]="indicator.max"
+            [rangeMin]="indicator.rangeMin" [rangeMax]="indicator.rangeMax"
+            [valueText]="dashboardTodayReadiness.hrvText" [rangeText]="dashboardTodayReadiness.hrvRangeText"
+            [tone]="dashboardTodayReadiness.hrvTone" [compact]="true"></app-metric-indicator>
+        }
         <small>{{ dashboardTodayReadiness.hrvRangeText }}</small>
         @if (dashboardTodayReadiness.hrvLatestText) {
           <small>{{ dashboardTodayReadiness.hrvLatestText }}</small>
@@ -151,7 +158,7 @@
           <div class="dashboard-today-history-bars" role="img"
             [attr.aria-label]="'Overnight heart rate for the latest ' + dashboardTodayReadiness.overnightHeartRateBars.length + ' eligible nights'">
             @for (bar of dashboardTodayReadiness.overnightHeartRateBars; track bar.key) {
-              <span aria-hidden="true" [class.current]="bar.current" [attr.data-tone]="bar.tone"
+              <span aria-hidden="true" [class.current]="bar.current" [class.zero]="bar.zero" [attr.data-tone]="bar.tone"
                 [style.height.%]="bar.heightPercent"></span>
             }
           </div>

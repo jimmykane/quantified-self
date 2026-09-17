@@ -134,8 +134,16 @@
 }
 
 .dashboard-training-state-scale > span.active {
-  outline: 2px solid color-mix(in srgb, currentColor 26%, transparent);
+  outline: 2px solid color-mix(in srgb, var(--mat-sys-outline) 26%, transparent);
   outline-offset: 2px;
+}
+
+.dashboard-training-state-scale > span.active[data-tone='positive'] {
+  outline-color: color-mix(in srgb, var(--mat-sys-primary) 32%, transparent);
+}
+
+.dashboard-training-state-scale > span.active[data-tone='negative'] {
+  outline-color: color-mix(in srgb, var(--mat-sys-error) 32%, transparent);
 }
 
 .dashboard-training-state-scale-labels {
@@ -194,9 +202,9 @@
   display: grid;
   margin: 0.45rem 0 0.35rem;
   min-block-size: 8px;
-  max-width: 240px;
+  max-width: 390px;
 }
-.dashboard-current-state-row dl app-metric-indicator { margin: 0.35rem 0; }
+.dashboard-current-state-row dl app-metric-indicator { display: block; margin: 0.35rem 0; max-width: 170px; width: 100%; }
 
 .dashboard-current-state-row dl {
   display: grid;
@@ -279,6 +287,13 @@
 
 .dashboard-today-history-bars > span.current[data-tone='neutral'] {
   background: var(--mat-sys-on-surface-variant);
+}
+
+.dashboard-today-history-bars > span.zero {
+  background: transparent;
+  border-bottom: 2px solid var(--mat-sys-outline);
+  border-radius: 0;
+  opacity: 0.65;
 }
 
 .dashboard-current-state-row dd[data-tone='positive'] {

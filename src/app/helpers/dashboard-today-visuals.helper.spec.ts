@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest';
+import type { ReadinessHrvPersonalRange } from '@shared/readiness';
 import type { DashboardFormPoint } from './dashboard-form.helper';
 import type { DashboardSleepTrendContext } from './dashboard-sleep-chart.helper';
 import {
   buildDashboardTodayLoadBars,
+  buildDashboardTodayHrvRangeIndicator,
   buildDashboardTodayOvernightHeartRateBars,
   resolveDashboardTodayTrainingStateScale,
 } from './dashboard-today-visuals.helper';
@@ -22,26 +24,48 @@ describe('dashboard Today visuals', () => {
 
     expect(bars).toHaveLength(7);
     expect(bars[0].key).toBe(`${Date.UTC(2026, 8, 3)}`);
-    expect(bars.at(-1)).toMatchObject({ heightPercent: 100, current: true, tone: 'negative' });
+    expect(bars.at(-1)).toMatchObject({ heightPercent: 100, current: true, zero: false, tone: 'negative' });
     expect(bars.slice(0, -1).every(bar => !bar.current && bar.tone === 'neutral')).toBe(true);
   });
 
-  it('keeps zero-load days visible instead of inventing activity', () => {
+  it('extends load history through today and distinguishes zero-load days from activity', () => {
     const points: DashboardFormPoint[] = [0, 1, 2].map(index => ({
       time: Date.UTC(2026, 8, 1 + index),
-      trainingStressScore: 0,
+      trainingStressScore: index === 2 ? 30 : 0,
       ctl: 0,
       atl: 0,
       formSameDay: 0,
       formPriorDay: 0,
     }));
 
-    expect(buildDashboardTodayLoadBars(points, 'Starting', Date.UTC(2026, 8, 3, 12)))
+    expect(buildDashboardTodayLoadBars(points, 'Starting', Date.UTC(2026, 8, 5, 12)))
       .toEqual([
-        { key: `${Date.UTC(2026, 8, 1)}`, heightPercent: 12, current: false, tone: 'neutral' },
-        { key: `${Date.UTC(2026, 8, 2)}`, heightPercent: 12, current: false, tone: 'neutral' },
-        { key: `${Date.UTC(2026, 8, 3)}`, heightPercent: 12, current: true, tone: 'neutral' },
+        { key: `${Date.UTC(2026, 8, 1)}`, heightPercent: 0, current: false, zero: true, tone: 'neutral' },
+        { key: `${Date.UTC(2026, 8, 2)}`, heightPercent: 0, current: false, zero: true, tone: 'neutral' },
+        { key: `${Date.UTC(2026, 8, 3)}`, heightPercent: 100, current: false, zero: false, tone: 'neutral' },
+        { key: `${Date.UTC(2026, 8, 4)}`, heightPercent: 0, current: false, zero: true, tone: 'neutral' },
+        { key: `${Date.UTC(2026, 8, 5)}`, heightPercent: 0, current: true, zero: true, tone: 'neutral' },
       ]);
+  });
+
+  it('builds a padded HRV domain around the current average and personal range', () => {
+    const range = {
+      tone: 'negative',
+      reason: 'outside_range',
+      observationDayCount: 20,
+      requiredObservationDayCount: 14,
+      currentObservationDayCount: 7,
+      requiredCurrentObservationDayCount: 3,
+      baselineAverage: 39,
+      currentAverage: 30,
+      normalRange: { min: 33, max: 45 },
+      latestMs: 29,
+      latestAtMs: Date.UTC(2026, 8, 15),
+    } satisfies ReadinessHrvPersonalRange;
+    const indicator = buildDashboardTodayHrvRangeIndicator(range);
+
+    expect(indicator).toEqual({ value: 30, min: 26.25, max: 48.75, rangeMin: 33, rangeMax: 45 });
+    expect(buildDashboardTodayHrvRangeIndicator(null)).toBeNull();
   });
 
   it('keeps overnight heart-rate history on the latest provider account and excludes naps and future readings', () => {

@@ -45,4 +45,27 @@ describe('MetricIndicatorComponent', () => {
     expect(track.getAttribute('aria-valuenow')).toBe('-20');
     expect(track.getAttribute('aria-label')).toBe('Metric: -20 percent versus baseline');
   });
+
+  it('renders a value against an accessible personal range', () => {
+    fixture.componentRef.setInput('variant', 'range');
+    fixture.componentRef.setInput('label', 'HRV');
+    fixture.componentRef.setInput('value', 30);
+    fixture.componentRef.setInput('min', 25);
+    fixture.componentRef.setInput('max', 50);
+    fixture.componentRef.setInput('rangeMin', 33);
+    fixture.componentRef.setInput('rangeMax', 45);
+    fixture.componentRef.setInput('valueText', '30 ms');
+    fixture.componentRef.setInput('rangeText', '60-day range 33–45 ms');
+    fixture.componentRef.setInput('tone', 'negative');
+    fixture.detectChanges();
+
+    const indicator = fixture.nativeElement.querySelector('.metric-indicator-range');
+    const band = fixture.nativeElement.querySelector('.metric-indicator-range-band');
+    const marker = fixture.nativeElement.querySelector('.metric-indicator-range-marker');
+    expect(indicator.getAttribute('aria-label')).toBe('HRV: 30 ms; 60-day range 33–45 ms');
+    expect(band.style.left).toBe('32%');
+    expect(band.style.width).toBe('48%');
+    expect(marker.style.left).toBe('20%');
+    expect(marker.getAttribute('data-tone')).toBe('negative');
+  });
 });

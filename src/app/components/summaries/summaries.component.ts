@@ -70,9 +70,11 @@ import { formatDashboardRelativeDay } from '../../helpers/dashboard-relative-dat
 import { buildCurrentTrainingStateContext } from '../../helpers/current-training-state.helper';
 import {
   buildDashboardTodayLoadBars,
+  buildDashboardTodayHrvRangeIndicator,
   buildDashboardTodayOvernightHeartRateBars,
   resolveDashboardTodayTrainingStateScale,
   type DashboardTodayHistoryBar,
+  type DashboardTodayRangeIndicator,
 } from '../../helpers/dashboard-today-visuals.helper';
 import { AppUserService } from '../../services/app.user.service';
 import {
@@ -234,6 +236,7 @@ interface DashboardTodayReadinessViewModel {
   hrvRangeText: string;
   hrvLatestText: string;
   hrvTone: DashboardTodayReadinessTone;
+  hrvRangeIndicator: DashboardTodayRangeIndicator | null;
   overnightHeartRateText: string;
   overnightHeartRateDeviationPercent: number | null;
   overnightHeartRateTone: DashboardTodayReadinessTone;
@@ -270,6 +273,7 @@ function createEmptyDashboardTodayReadinessViewModel(loading = false): Dashboard
     hrvRangeText: '60-day personal range',
     hrvLatestText: '',
     hrvTone: 'neutral',
+    hrvRangeIndicator: null,
     overnightHeartRateText: '--',
     overnightHeartRateDeviationPercent: null,
     overnightHeartRateTone: 'neutral',
@@ -1995,6 +1999,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
       hrvRangeText: hrv.rangeText,
       hrvLatestText: hrv.latestText,
       hrvTone: hrv.tone,
+      hrvRangeIndicator: buildDashboardTodayHrvRangeIndicator(context.hrvPersonalRange),
       overnightHeartRateText: this.formatDashboardTodayRatio(context.overnightHeartRateRatio),
       overnightHeartRateDeviationPercent: context.overnightHeartRateRatio === null
         ? null

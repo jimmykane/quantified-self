@@ -1445,7 +1445,10 @@ describe('SummariesComponent', () => {
     expect(nativeElement.querySelector('.dashboard-readiness-hrv')?.textContent).toContain('7-day average');
     expect(nativeElement.querySelector('.dashboard-readiness-hrv')?.textContent).toContain('60-day range');
     expect(nativeElement.querySelector('.dashboard-readiness-hrv')?.textContent).toContain('Latest night 55 ms');
-    expect(nativeElement.querySelector('.dashboard-readiness-hrv app-metric-indicator')).toBeNull();
+    const hrvRange = nativeElement.querySelector('.dashboard-readiness-hrv .metric-indicator-range');
+    expect(hrvRange?.getAttribute('aria-label')).toBe('HRV: 50.8 ms; 60-day range 49.1–51.5 ms');
+    expect(hrvRange?.querySelector('.metric-indicator-range-band')).not.toBeNull();
+    expect(hrvRange?.querySelector('.metric-indicator-range-marker')?.getAttribute('data-tone')).toBe('positive');
     const overnightHeartRate = [...nativeElement.querySelectorAll('.dashboard-current-state-row dl > div')]
       .find(element => element.querySelector('dt')?.textContent?.trim() === 'Overnight HR');
     expect(overnightHeartRate?.querySelector('dd')?.getAttribute('data-tone')).toBe('positive');
