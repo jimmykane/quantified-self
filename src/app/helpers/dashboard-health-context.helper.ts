@@ -62,8 +62,10 @@ export function buildDashboardHealthContext(evidence: DashboardHealthEvidence, s
         const label = context.latestPoint!.providerLabel;
         return [{ key, provider, label }];
     });
-    const sources = settings.metric === 'sleep' ? sleepSources.map((source, index) => {
-        const label = sleepSources.filter(item => item.provider === source.provider).length > 1 ? `${source.label} · Account ${index + 1}` : source.label;
+    const sources = settings.metric === 'sleep' ? sleepSources.map(source => {
+        const providerSources = sleepSources.filter(item => item.provider === source.provider);
+        const providerIndex = providerSources.findIndex(item => item.key === source.key);
+        const label = providerSources.length > 1 ? `${source.label} · Account ${providerIndex + 1}` : source.label;
         return { ...source, label, shortLabel: label, sourceLabel: label, detail: 'Sleep overview' };
     }) : charts.map(chart => ({ ...healthChartSourceChoice(chart.model.series), provider: chart.model.series.provider }));
     const initial = providerFilter.length

@@ -1311,7 +1311,7 @@ function chunkDatums(chunk: HealthSampleChunk): MetricDatum[] {
 }
 
 function sleepHrvDatums(
-  sessions: readonly SleepSession[],
+  sessions: readonly HealthWorkspaceSleepSession[],
   result: HealthRangeResult,
 ): MetricDatum[] {
   const representedReferences = new Set(result.observations.flatMap(observation => {
@@ -1346,7 +1346,10 @@ function sleepHrvDatums(
       return [{
         metricId: HEALTH_METRIC_IDS.HeartRateVariability,
         provider,
-        accountKey: `${session.source?.providerUserId || 'default'}`,
+        // HealthMetricQueryService derives the same opaque account identity as
+        // the Health writer. Reuse it so Sleep HRV and all-day Health evidence
+        // from one provider account do not appear as two connected accounts.
+        accountKey: session.healthAccountKey || `${session.source?.providerUserId || 'default'}`,
         aggregation: 'average',
         semanticVariant,
         origin: HEALTH_VALUE_ORIGINS.ProviderSummary,

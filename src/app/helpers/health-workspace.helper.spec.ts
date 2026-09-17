@@ -1429,6 +1429,41 @@ describe('Health workspace helpers', () => {
     expect(referencedView.series[0].points).toHaveLength(1);
   });
 
+  it('reuses the Health account identity for Sleep HRV instead of inventing another provider account', () => {
+    const session = {
+      ...sleepSession(),
+      healthAccountKey: 'shared-garmin-account',
+    };
+    const standalone = sourceRecord({
+      id: 'standalone-garmin-hrv',
+      provider: HEALTH_PROVIDERS.GarminAPI,
+      accountKey: 'shared-garmin-account',
+      calendarDate: session.sleepDate,
+      metrics: [valueEntry({
+        metricId: HEALTH_METRIC_IDS.HeartRateVariability,
+        semanticVariant: 'overnight_summary',
+        native: { metric: 'hrv', value: 55, unit: 'ms' },
+        canonical: { value: 55, unit: HEALTH_UNITS.Millisecond },
+      })],
+    });
+    const result = projectLoadedHealthRange([standalone], [], {
+      startDate: '2026-08-01',
+      endDate: '2026-08-03',
+      metricIds: [HEALTH_METRIC_IDS.HeartRateVariability],
+    }, { sourceRecordsComplete: true, samplesComplete: true });
+
+    const view = buildHealthMetricWorkspaceView(result, [session]);
+
+    expect(view.series).toHaveLength(2);
+    expect(view.series.map(series => series.sourceLabel)).toEqual(['Garmin', 'Garmin']);
+    expect(view.series.every(series => series.accountLabel === null)).toBe(true);
+    expect(new Set(view.series.map(series => series.sourceSelectionKey)).size).toBe(1);
+    expect(view.series.map(series => series.semanticVariant)).toEqual(expect.arrayContaining([
+      'overnight_summary',
+      'sleep_session_average_hrv',
+    ]));
+  });
+
   it('uses local account ordinals for Sleep priority rows and never exposes provider IDs', () => {
     const rows = buildSleepPriorityRows([
       sleepSession({
