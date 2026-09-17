@@ -31,6 +31,8 @@ The current providers are intentionally not identical:
 
 Treat this table as a high-level orientation, not a partner API specification. The public Help content and each `/integrations/<provider>` page define the user-facing supported scope.
 
+Provider overview cards must name combined history imports consistently with their focused tools. COROS uses **Sleep & daily Health history** and **Import history** because its daily-data replay always queues both domains. Garmin and Suunto use their corresponding combined labels while Health is available, with availability-aware fallback wording where those providers support a Sleep-only path.
+
 Existing-user Health catch-up is available through the dry-run-first `backfill-existing-health`
 operator script for Garmin, Suunto, and COROS. It preserves Pro eligibility, queues existing
 workers in bounded batches, and keeps deletion-safe submission receipts without treating

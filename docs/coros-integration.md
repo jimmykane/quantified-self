@@ -20,6 +20,8 @@ This is the COROS-specific architecture and release record. For shared provider 
 
 Every automatic activity and saved-route direction is off by default. Empty rollout allowlists make the corresponding routes available to all eligible Pro users; a user must still connect the required services and explicitly enable each direction. COROS direct/saved route upload and Suunto-to-COROS route delivery reuse the same empty production allowlist in `shared/coros-rollout.ts`; populating it provides a narrow emergency rollback. A date-range or saved-route backfill does not turn on future delivery.
 
+The Connections overview exposes the daily replay as a dedicated **Sleep & daily Health history** card with an **Import history** action, separate from the COROS activity-history card. Both cards open the shared History import tool, where activity ranges and the three-month Sleep/Health replay remain distinct controls.
+
 ## Account identity
 
 All COROS imports and deliveries resolve the same active token through `functions/src/coros/account.ts`.

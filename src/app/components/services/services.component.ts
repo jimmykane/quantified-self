@@ -271,10 +271,18 @@ export class ServicesComponent implements OnInit, OnDestroy {
     coros: [
       {
         title: 'Activity sync',
-        description: 'New COROS activities import automatically while connected.',
-        detail: 'History import',
+        description: 'New COROS activities import automatically while connected. Backfill earlier activities from History import.',
+        detail: 'Automatic sync and activity backfill',
         icon: 'sync',
-        actionLabel: 'History import',
+        actionLabel: 'Backfill activities',
+        tool: 'history',
+      },
+      {
+        title: 'Sleep & daily Health history',
+        description: 'Backfill COROS sleep and available daily Health metrics.',
+        detail: 'Historical Sleep and daily Health backfill · 7-day cooldown',
+        icon: 'bedtime',
+        actionLabel: 'Import history',
         tool: 'history',
       },
       {
