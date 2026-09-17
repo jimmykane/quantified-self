@@ -13,6 +13,12 @@ import {
 } from '../queue/revision-identity';
 import { FUNCTION_SECRET_BINDINGS } from '../secrets';
 
+function normalizeDispatchRecoveryGeneration(value: unknown): number | null {
+    return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0
+        ? value
+        : null;
+}
+
 /**
  * Task worker that processes a single workout queue item.
  * This is triggered via a Cloud Task.
@@ -68,6 +74,12 @@ export const processWorkoutTask = onTaskDispatched({
     const currentQueueRevision = normalizeQueueRevision(queueItem?.queueRevision);
     const expectedQueueRevision = normalizeQueueRevision(queueRevision);
     const expectedQueueDateCreated = Number(queueDateCreated);
+    const expectedDispatchRecoveryGeneration = normalizeDispatchRecoveryGeneration(
+        dispatchRecoveryGeneration,
+    );
+    const currentDispatchRecoveryGeneration = normalizeDispatchRecoveryGeneration(
+        queueItem?.dispatchRecoveryGeneration,
+    ) ?? 0;
     const shouldCheckQueueRevision = expectedQueueRevision !== null
         || (serviceName === ServiceNames.COROSAPI && currentQueueRevision !== null)
         || Number.isFinite(expectedQueueDateCreated);
@@ -78,6 +90,11 @@ export const processWorkoutTask = onTaskDispatched({
             && queueItem?.dateCreated === expectedQueueDateCreated,
     })) {
         logger.info(`[TaskWorker] Skipping stale ${serviceName} task for item ${queueItemId}; the queue revision has advanced.`);
+        return;
+    }
+    if (expectedDispatchRecoveryGeneration !== null
+        && expectedDispatchRecoveryGeneration < currentDispatchRecoveryGeneration) {
+        logger.info(`[TaskWorker] Skipping stale ${serviceName} task for item ${queueItemId}; the dispatch recovery generation has advanced.`);
         return;
     }
     if (queueItem?.processed === true) {
@@ -93,7 +110,7 @@ export const processWorkoutTask = onTaskDispatched({
             id: queueItemId,
             ref: queueRef,
         }, queueItem) as any;
-        const result = typeof dispatchRecoveryGeneration === 'number'
+        const result = expectedDispatchRecoveryGeneration !== null
             ? await parseWorkoutQueueItemForServiceName(
                 serviceName,
                 queueItemForProcessing,
@@ -101,7 +118,7 @@ export const processWorkoutTask = onTaskDispatched({
                 undefined,
                 undefined,
                 undefined,
-                dispatchRecoveryGeneration,
+                expectedDispatchRecoveryGeneration,
             )
             : await parseWorkoutQueueItemForServiceName(serviceName, queueItemForProcessing);
 

@@ -70,7 +70,11 @@ describe('processWorkoutTask', () => {
     it('should process a valid queue item', async () => {
         const queueItemId = 'test-id';
         const serviceName = ServiceNames.GarminAPI;
-        const queueData = { processed: false, some: 'data' };
+        const queueData = {
+            processed: false,
+            some: 'data',
+            dispatchRecoveryGeneration: 3,
+        };
 
         mockGet.mockResolvedValue({
             exists: true,
@@ -93,6 +97,7 @@ describe('processWorkoutTask', () => {
                 ref: mockDoc,
                 processed: false,
                 some: 'data',
+                dispatchRecoveryGeneration: 3,
             }),
         );
     });
@@ -100,7 +105,7 @@ describe('processWorkoutTask', () => {
     it('passes the dispatch recovery generation to queue processing', async () => {
         mockGet.mockResolvedValue({
             exists: true,
-            data: () => ({ processed: false }),
+            data: () => ({ processed: false, dispatchRecoveryGeneration: 3 }),
         });
         mockParseWorkoutQueueItemForServiceName.mockResolvedValue(QueueResult.TokenRefreshDeferred);
 
@@ -129,6 +134,29 @@ describe('processWorkoutTask', () => {
         );
         expect(mockLoggerWarn).not.toHaveBeenCalledWith(
             expect.stringContaining('recovery-item'),
+        );
+    });
+
+    it('skips an older dispatch recovery generation before provider processing', async () => {
+        mockGet.mockResolvedValue({
+            exists: true,
+            data: () => ({ processed: false, dispatchRecoveryGeneration: 4 }),
+        });
+
+        const invokeTask = processWorkoutTask as unknown as (
+            request: { data: Record<string, unknown> },
+        ) => Promise<void>;
+        await expect(invokeTask({
+            data: {
+                queueItemId: 'stale-recovery-item',
+                serviceName: ServiceNames.SuuntoApp,
+                dispatchRecoveryGeneration: 3,
+            },
+        })).resolves.toBeUndefined();
+
+        expect(mockParseWorkoutQueueItemForServiceName).not.toHaveBeenCalled();
+        expect(mockLoggerInfo).toHaveBeenCalledWith(
+            `[TaskWorker] Skipping stale ${ServiceNames.SuuntoApp} task for item stale-recovery-item; the dispatch recovery generation has advanced.`,
         );
     });
 
