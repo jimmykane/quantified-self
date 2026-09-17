@@ -235,7 +235,8 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('COROS Training batch Fire
     const [id] = await seed(1);
     const user = db.collection('users').doc(uid);
     const ledger = (await user.collection(DELIVERY_LEDGER).doc(id).get()).data() as DeliveryLedgerV1;
-    const attempt = { id: 'prepared-operation', batchId: 'abandoned-batch', kind: 'upsert' as const,
+    const abandonedBatchId = randomUUID();
+    const attempt = { id: 'prepared-operation', batchId: abandonedBatchId, kind: 'upsert' as const,
       deliveryId: id, generation: ledger.desiredGeneration, connectionGeneration: 'connection',
       destinationKey: 'destination', timeZone: ledger.timeZone, digest: ledger.desiredDigest,
       contentDigest: ledger.contentDigest, workout: workout(0), artifact: null, progress: null };
@@ -243,10 +244,15 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('COROS Training batch Fire
       lease: { id: 'expired-lease', expiresAtMs: now - 1 } });
     await user.collection(DELIVERY_LEDGER).doc(id).collection('attempts').doc(attempt.id)
       .set({ schemaVersion: 1, operation: attempt, state: 'prepared', startedAtMs: now - 1000 });
+    const abandonedBatch = user.collection('trainingDeliveryState').doc('current')
+      .collection('batches').doc(abandonedBatchId);
+    await abandonedBatch.set({ schemaVersion: 1, state: 'prepared', createdAtMs: now - 1000 });
     await processTrainingDelivery(runtime, uid, id);
     expect(client).toHaveBeenCalledTimes(1);
     expect((await user.collection(DELIVERY_LEDGER).doc(id).get()).data()).toMatchObject({ status: 'delivered', attempt: null });
     expect((await user.collection(DELIVERY_LEDGER).doc(id).collection('attempts').doc(attempt.id).get()).data())
+      .toMatchObject({ state: 'superseded', reason: 'request_not_started' });
+    expect((await abandonedBatch.get()).data())
       .toMatchObject({ state: 'superseded', reason: 'request_not_started' });
   });
 
@@ -318,6 +324,10 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('COROS Training batch Fire
     await processTrainingDelivery(runtime, uid, id);
     expect((await db.collection('users').doc(uid).collection(DELIVERY_LEDGER).doc(id).get()).data())
       .toMatchObject({ status: 'failed', issues: ['COROS could not accept this workout.'] });
+    const batches = await db.collection('users').doc(uid).collection('trainingDeliveryState').doc('current')
+      .collection('batches').get();
+    expect(batches.docs).toHaveLength(1);
+    expect(batches.docs[0].data()).toMatchObject({ state: 'rejected', rejectedDeliveryIds: [id] });
   });
 
   it.each([

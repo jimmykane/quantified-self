@@ -12,6 +12,8 @@ import { deliveryContentDigest, resolveDeliveryIntent } from './intent';
 import { stageTrainingDeliveryReconciliation } from './marker';
 import { queuedDeliveryOperation, readDeliveryContext, writeDelivery } from './store';
 
+const BATCH_ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
+
 interface BatchClaim {
   batchId: string;
   leaseId: string;
@@ -74,6 +76,7 @@ async function claimBatch(runtime: DeliveryRuntime, uid: string, seedId: string,
     const jobDocs = [currentSeed, ...siblings.docs.filter(doc => doc.id !== seedId)].slice(0, batchTransport.maxSize);
     const prepared: Array<{ ledger: DeliveryLedgerV1; operation: Omit<DeliveryOperation, 'providerIdentity' | 'batchId'> }> = [];
     const deferredWrites: Array<() => void> = [];
+    const abandonedBatchIds = new Set<string>();
     let batchTimeZone: string | null = null;
 
     for (const job of jobDocs) {
@@ -94,6 +97,9 @@ async function claimBatch(runtime: DeliveryRuntime, uid: string, seedId: string,
           // Recover a crash after claim/journal creation without asking the user
           // to review an operation that never left QS.
           const abandonedAttemptId = ledger.attempt.id;
+          if (typeof ledger.attempt.batchId === 'string' && BATCH_ID_PATTERN.test(ledger.attempt.batchId)) {
+            abandonedBatchIds.add(ledger.attempt.batchId);
+          }
           ledger.attempt = null; ledger.lease = null;
           deferredWrites.push(() => tx.set(ledgerRef.collection('attempts').doc(abandonedAttemptId), {
             state: 'superseded', reason: 'request_not_started', completedAtMs: runtime.now(),
@@ -155,9 +161,15 @@ async function claimBatch(runtime: DeliveryRuntime, uid: string, seedId: string,
         workout: kind === 'upsert' ? workout : null, artifact: ledger.actual, progress: null } });
     }
 
+    const abandonedBatches = await Promise.all([...abandonedBatchIds]
+      .map(id => tx.get(batchRef(runtime, uid, id))));
     const identities = prepared.length
       ? await batchTransport.reserveIdentities(db, tx, uid, destinationKey, prepared.map(item => item.ledger.workoutId)) : null;
     for (const write of deferredWrites) write();
+    for (const batch of abandonedBatches) {
+      if (batch.exists) tx.set(batch.ref, { state: 'superseded', reason: 'request_not_started',
+        completedAtMs: runtime.now(), updatedAtMs: runtime.now() }, { merge: true });
+    }
     if (!identities || prepared.length === 0) return null;
 
     const operations: DeliveryOperation[] = [];
@@ -333,7 +345,10 @@ async function acceptBatch(runtime: DeliveryRuntime, uid: string, claim: BatchCl
         completedAtMs: runtime.now() }, { merge: true });
       tx.delete(db.collection(DELIVERY_QUEUE).doc(operation.deliveryId));
     }
-    tx.set(batchRef(runtime, uid, claim.batchId), { state: unresolved.length ? 'needs_attention' : rejected.length ? 'partially_rejected' : 'accepted',
+    const batchState = unresolved.length ? 'needs_attention'
+      : rejected.length === claim.operations.length ? 'rejected'
+        : rejected.length ? 'partially_rejected' : 'accepted';
+    tx.set(batchRef(runtime, uid, claim.batchId), { state: batchState,
       acceptedDeliveryIds: accepted, rejectedDeliveryIds: rejected, unresolvedDeliveryIds: unresolved,
       completedAtMs: runtime.now(), updatedAtMs: runtime.now() }, { merge: true });
     stageTrainingDeliveryReconciliation(tx, db, uid);
