@@ -1072,8 +1072,10 @@ Plan CRUD. The existing Wahoo client secrets are bound to `processTrainingDelive
 
 HTTP calls use the exact API host and allowlisted paths, no redirects/local retries, 10-second deadlines and 2 MiB
 request/response bounds. Existing Wahoo production counters apply to delivery/recovery/inspection; token refresh is
-excluded as documented. Both Retry-After and X-RateLimit-Reset survive retries. Diagnostics contain only safe categories,
-status and phase, never provider bodies, tokens, file URLs or private artifact IDs.
+excluded as documented. Both Retry-After and X-RateLimit-Reset survive retries. A 422 response is read only through a
+separate 16 KiB/500 ms diagnostic bound and reduced in memory to fixed response-shape, rejection-category and known request-field
+enums. A confidently classified application/Plans access rejection follows the existing `provider_unavailable` path;
+validation rejections remain terminal. Diagnostics never retain provider bodies or messages, tokens, file URLs or private artifact IDs.
 
 MCP impact: existing `training-plans:read` projections already represent Wahoo and the `completed` outcome. Same-PR positive
 and negative fixtures cover status reads and reject Plan IDs, workout tokens, completion evidence and journals. The
@@ -1082,6 +1084,8 @@ public schema, scope, write tool, plugin artifact or registered-client refresh. 
 recovery metadata, not an extra MCP field; the existing public time zone remains the user's sync setting.
 No Rules/index changes are required: all private evidence stays in the existing server-only ledger, with unchanged
 safe owner-visible status projections and cleanup.
+The 422 diagnostic enums are private operator logs only, so they do not change MCP tools, scopes, instructions, consent,
+registered schemas or plugin artifacts and require no registered-client refresh.
 
 Release gate: public `deliveryEnabled` stays false and the exact pilot UID is checked on frontend and backend. Prepare
 Functions `getWahooAPIAuthRequestTokenRedirectURI`, `requestAndSetWahooAPIAccessToken`, `previewTrainingProviderDelivery`,
