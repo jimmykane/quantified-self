@@ -125,6 +125,7 @@ export const FUNCTIONS_MANIFEST = {
     getAssistantQuotaStatus: { name: 'getAssistantQuotaStatus', region: 'europe-west2' },
     getAssistantConversation: { name: 'getAssistantConversation', region: 'europe-west2' },
     resetAssistantConversation: { name: 'resetAssistantConversation', region: 'europe-west2' },
+    applyAssistantTrainingProposal: { name: 'applyAssistantTrainingProposal', region: 'europe-west2' },
     ensureDerivedMetrics: { name: 'ensureDerivedMetrics', region: 'europe-west2' },
     setTrainingBuildBenchmark: { name: 'setTrainingBuildBenchmark', region: 'europe-west2' },
     mutateTrainingSchedule: { name: 'mutateTrainingSchedule', region: 'europe-west2' },

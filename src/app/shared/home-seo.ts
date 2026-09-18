@@ -17,7 +17,7 @@ export const HOME_SEO_JSON_LD = {
     'Automatic COROS to Suunto activity sync',
     'Automatic Wahoo to Suunto activity sync',
     'Activity and route delivery to Wahoo',
-    'Read-only MCP access for compatible clients',
+    'Permission-scoped MCP access for compatible clients',
     'Sync past activities to Suunto by date',
     ...HEALTH_FEATURE_CONTENT.seo.featureList,
   ],

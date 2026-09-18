@@ -234,7 +234,7 @@ describe('buildPublicPricingCatalog', () => {
 
         expect(catalog.plans).toHaveLength(3);
         for (const plan of catalog.plans) {
-            expect(plan.features.map((feature) => feature.label)).toContain('Read-only MCP access');
+            expect(plan.features.map((feature) => feature.label)).toContain('MCP data access');
         }
     });
 

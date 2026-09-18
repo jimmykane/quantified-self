@@ -186,6 +186,7 @@ export {
   getAssistantQuotaStatus,
   getAssistantConversation,
   resetAssistantConversation,
+  applyAssistantTrainingProposal,
 } from './assistant/callable';
 export { ensureDerivedMetrics } from './derived-metrics/ensure-derived-metrics';
 export { queryHealthRange } from './health/callable';

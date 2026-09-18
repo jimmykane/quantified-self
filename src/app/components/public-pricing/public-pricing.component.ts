@@ -228,7 +228,7 @@ function buildFeatures(role: PublicPlanRole): PublicPlanFeatureViewModel[] {
         {
             icon: standardIcon,
             iconClass: standardIconClass,
-            label: 'Read-only MCP access',
+            label: 'MCP data access',
         },
     ];
 

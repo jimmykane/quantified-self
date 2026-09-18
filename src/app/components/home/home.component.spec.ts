@@ -140,9 +140,9 @@ describe('HomeComponent', () => {
         expect(aiSectionText).toContain('Check the Evidence');
         expect(aiSectionText).toContain('see exactly what supports it.');
         expect(aiSectionText).toContain('Analyze with ChatGPT or Claude');
-        expect(aiSectionText).toContain('analyze your training, review your season, plan your next workout, or draft a longer training-plan proposal');
-        expect(aiSectionText).toContain('load, fatigue, readiness, sleep, measurements, workout charts, and routes');
-        expect(aiSectionText).toContain('neither tool can add workouts or change your account');
+        expect(aiSectionText).toContain('analyze your training or prepare a bounded Training-plan proposal');
+        expect(aiSectionText).toContain('Training changes require separate access and your confirmation');
+        expect(aiSectionText).toContain('other account data stays read-only');
         expect(aiSectionText).toContain('Location access remains separate.');
         expect(aiSectionText).toContain('Connect ChatGPT or Claude');
         expect(aiSectionText).not.toContain('read-only sleep, readiness');

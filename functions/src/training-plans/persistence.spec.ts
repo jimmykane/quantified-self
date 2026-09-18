@@ -462,6 +462,43 @@ describe('mutateTrainingScheduleForUser persistence', () => {
         expect(db.documents.size).toBe(0);
     });
 
+    it('runs caller authority inside the same transaction before writing or replaying a receipt', async () => {
+        let authorized = false;
+        const transactionPrecondition = vi.fn(async () => {
+            if (!authorized) throw new Error('grant revoked');
+        });
+        const mutation = request({
+            kind: 'create-plan',
+            planId: 'plan-1',
+            name: 'Blocked',
+            startLocalDate: '2026-09-01',
+            endLocalDate: '2026-09-30',
+            activate: false,
+        });
+
+        await expect(mutateTrainingScheduleForUser('user-1', mutation, {
+            db: db as never,
+            nowMs: NOW_MS,
+            transactionPrecondition,
+        })).rejects.toThrow('grant revoked');
+        expect(transactionPrecondition).toHaveBeenCalledTimes(1);
+        expect(db.documents.size).toBe(0);
+
+        authorized = true;
+        await mutateTrainingScheduleForUser('user-1', mutation, {
+            db: db as never,
+            nowMs: NOW_MS,
+            transactionPrecondition,
+        });
+        authorized = false;
+        await expect(mutateTrainingScheduleForUser('user-1', mutation, {
+            db: db as never,
+            nowMs: NOW_MS + 1,
+            transactionPrecondition,
+        })).rejects.toThrow('grant revoked');
+        expect(transactionPrecondition).toHaveBeenCalledTimes(3);
+    });
+
     it('fences all schedule mutations while a resumable plan deletion is active', async () => {
         db.seed('users/user-1/trainingPlanState/current/planDeletionLocks/plan-1', {
             schemaVersion: 1,

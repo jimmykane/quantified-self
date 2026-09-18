@@ -594,6 +594,17 @@ describe('MCP OAuth service', () => {
         }
       }
     }
+    expect(hasValidMcpScopeDependencies([MCP_OAUTH_SCOPES.TrainingPlansRead])).toBe(true);
+    expect(hasValidMcpScopeDependencies([
+      MCP_OAUTH_SCOPES.TrainingPlansRead,
+      MCP_OAUTH_SCOPES.TrainingPlansWrite,
+    ])).toBe(true);
+    expect(hasValidMcpScopeDependencies([
+      MCP_OAUTH_SCOPES.TrainingPlansRead,
+      MCP_OAUTH_SCOPES.TrainingDeliveryWrite,
+    ])).toBe(true);
+    expect(hasValidMcpScopeDependencies([MCP_OAUTH_SCOPES.TrainingPlansWrite])).toBe(false);
+    expect(hasValidMcpScopeDependencies([MCP_OAUTH_SCOPES.TrainingDeliveryWrite])).toBe(false);
   });
 
   it('accepts each independent read scope', () => {
@@ -1638,6 +1649,18 @@ describe('MCP OAuth service', () => {
       scope: 'training-plans:read' }, 'https://quantified-self.io');
     await expect(service.decideAuthorization({ uid: 'user-1', requestId: notesOnly.requestId, approved: true }))
       .rejects.toMatchObject({ code: 'invalid_scope' });
+  });
+
+  it('never adds Training write or delivery scopes through legacy consent fallback', async () => {
+    const store = createMemoryStore();
+    let sequence = 0;
+    const service = createMcpOAuthService({ store, fetchClientMetadata: async () => metadata(),
+      now: () => 1_000, randomToken: () => `legacy-training-write-${++sequence}` });
+    const start = await service.startAuthorization({ ...authorizationParams('b'.repeat(43)),
+      scope: 'metrics:read training-plans:read training-plans:write training-delivery:write' }, 'https://quantified-self.io');
+    const approval = await service.decideAuthorization({ uid: 'user-1', requestId: start.requestId, approved: true });
+    const code = new URL(approval.redirectUri).searchParams.get('code')!;
+    expect(store.codes.get(hashOpaqueValue(code))?.scopes).toEqual([MCP_OAUTH_SCOPES.MetricsRead]);
   });
 
   it('reuses one logical connection and cuts over only when reauthorization succeeds', async () => {

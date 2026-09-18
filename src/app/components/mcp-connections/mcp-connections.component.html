@@ -164,7 +164,7 @@
     <mat-card-header>
       <mat-icon mat-card-avatar class="mcp-connections__card-icon" aria-hidden="true">verified_user</mat-icon>
       <mat-card-title id="mcp-authorization-title">Authorization and data access</mat-card-title>
-      <mat-card-subtitle>Choose the separate read-only permissions you are comfortable granting.</mat-card-subtitle>
+      <mat-card-subtitle>Choose the separate data and Training-change permissions you are comfortable granting.</mat-card-subtitle>
     </mat-card-header>
     <mat-card-content>
       <ul class="mcp-connections__authorization-list" aria-label="Available MCP permissions">
@@ -187,7 +187,7 @@
           @if (permission.parentTitle) {
             <p>Requires {{ permission.parentTitle }} permission.</p>
           }
-          <p>Reconnect the app and approve this permission to grant access. MCP access is read-only.</p>
+          <p>Reconnect the app and approve this permission to grant access. Training changes still require a separate proposal confirmation.</p>
         </mat-dialog-content>
         <mat-dialog-actions align="end">
           <button mat-button mat-dialog-close type="button" (click)="haptics.selection()">Close</button>

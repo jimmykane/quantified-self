@@ -10,11 +10,15 @@ import { SharedModule } from '../../modules/shared.module';
 export interface AssistantExploreBottomSheetData {
   timelineNotesEnabled?: boolean;
   trainingPlansEnabled?: boolean;
+  trainingPlanChangesEnabled?: boolean;
+  trainingDeliveryEnabled?: boolean;
   locationAccess: AssistantLocationAccess;
 }
 
 export type AssistantExploreBottomSheetResult =
   | { kind: 'training_plans'; enabled: boolean }
+  | { kind: 'training_plan_changes'; enabled: boolean }
+  | { kind: 'training_delivery'; enabled: boolean }
   | { kind: 'timeline_notes'; enabled: boolean }
   | { kind: 'prompt'; prompt: string }
   | { kind: 'location_access'; locationAccess: AssistantLocationAccess };
@@ -57,6 +61,16 @@ export class AssistantExploreBottomSheetComponent {
   setTrainingPlans(enabled: boolean): void {
     if (enabled === (this.data.trainingPlansEnabled === true)) return;
     this.bottomSheetRef.dismiss({ kind: 'training_plans', enabled });
+  }
+
+  setTrainingPlanChanges(enabled: boolean): void {
+    if (enabled === (this.data.trainingPlanChangesEnabled === true)) return;
+    this.bottomSheetRef.dismiss({ kind: 'training_plan_changes', enabled });
+  }
+
+  setTrainingDelivery(enabled: boolean): void {
+    if (enabled === (this.data.trainingDeliveryEnabled === true)) return;
+    this.bottomSheetRef.dismiss({ kind: 'training_delivery', enabled });
   }
 
   close(): void {

@@ -564,6 +564,41 @@ h1 {
   font-size: 20px;
 }
 
+.training-proposal {
+  display: grid;
+  gap: 12px;
+  margin: 10px 0 18px;
+  padding: 14px;
+  border: 1px solid var(--mat-sys-outline-variant);
+  border-radius: 16px;
+  background: var(--mat-sys-surface-container-low);
+}
+
+.training-proposal-heading,
+.training-proposal-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 10px;
+  align-items: start;
+}
+
+.training-proposal-heading h2,
+.training-proposal-heading p,
+.training-proposal-disclosure,
+.training-proposal-result {
+  margin: 0;
+}
+
+.training-proposal-heading h2 { font: var(--mat-sys-title-medium); font-weight: 600; }
+.training-proposal-heading p,
+.training-proposal-disclosure { color: var(--mat-sys-on-surface-variant); font-size: 0.82rem; line-height: 1.4; }
+.training-proposal-list { display: grid; }
+.training-proposal-row { padding: 9px 0; border-top: 1px solid var(--mat-sys-outline-variant); font-size: 0.88rem; }
+.training-proposal-row mat-icon { width: 20px; height: 20px; font-size: 20px; color: var(--mat-sys-primary); }
+.training-proposal-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.training-proposal-actions button mat-spinner { display: inline-block; margin-right: 8px; }
+.training-proposal-result { padding: 10px 2px; color: var(--mat-sys-on-surface-variant); font-size: 0.85rem; }
+
 @media (max-width: 720px) {
   .assistant-page {
     padding: 12px 12px calc(10px + env(safe-area-inset-bottom));

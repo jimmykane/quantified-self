@@ -18,7 +18,8 @@ describe('help.content', () => {
   it.each([undefined, null, '', 'another-user'])('omits pre-release planning from public/searchable help for %s', uid => {
     const sections = getHelpSectionsForUser(uid);
     const copy = JSON.stringify(sections);
-    expect(copy).not.toMatch(/training\/plans|training-plans|Planned workouts|Planned-workout|Plan color|Add workout/);
+    expect(copy).not.toContain('/training/plans');
+    expect(sections.some(section => section.id === 'training-plans')).toBe(false);
     expect(sections.some(section => section.id === 'training-analysis')).toBe(true);
     expect(sections.some(section => section.id === 'plans-and-billing')).toBe(true);
     expect(sections.some(section => section.id === 'activity-calendar')).toBe(true);
@@ -87,10 +88,10 @@ describe('help.content', () => {
     expect(searchHelpSections(HELP_SECTIONS, 'Timeline notes').map(section => section.id))
       .toEqual(expect.arrayContaining(['ai-insights', 'data-and-privacy']));
   });
-  it('explains independent read-only Training access without promoting the private planning UI', () => {
+  it('explains independent Training read and confirmed change access without promoting the private planning UI', () => {
     const content = getHelpSectionsForUser('ordinary-user').map(section => section.content).join(' ');
-    expect(content).toContain('**Training plans (optional):**');
-    expect(content).toContain('The Assistant cannot edit workouts or change sync');
+    expect(content).toContain('**Training planning (optional):**');
+    expect(content).toContain('Gemini can prepare one bounded proposal but cannot apply it');
     expect(content).toContain('resets all optional permissions');
     expect(content).toContain('provider-side workout delivery, not receipt on a watch');
   });
@@ -273,7 +274,7 @@ describe('help.content', () => {
     const assistantSection = HELP_SECTIONS.find(section => section.id === 'ai-insights');
 
     expect(assistantSection?.title).toBe('Assistant');
-    expect(assistantSection?.content).toContain('Every current answer must use at least one read-only Quantified Self result');
+    expect(assistantSection?.content).toContain('Every current answer must use at least one verified Quantified Self tool result');
     expect(assistantSection?.content).toContain('Expand **Data used**');
     expect(assistantSection?.content).toContain("browser's IANA timezone");
     expect(assistantSection?.content).toContain('Direct in-app URLs are withheld');
@@ -342,7 +343,7 @@ describe('help.content', () => {
     expect(dataAndPrivacySection?.content).toContain('### Android authorization handoff');
     expect(dataAndPrivacySection?.content).toContain('**Open supported links**');
     expect(dataAndPrivacySection?.content).toContain('cannot force Android or the ChatGPT app');
-    expect(dataAndPrivacySection?.content).toContain('[Read-only MCP Server feature page](/features/mcp-server)');
+    expect(dataAndPrivacySection?.content).toContain('[MCP Server feature page](/features/mcp-server)');
     expect(dataAndPrivacySection?.content).toContain('[Privacy Policy](/privacy)');
     expect(dataAndPrivacySection?.content).toContain('[Terms of Service](/terms)');
     expect(dataAndPrivacySection?.links).toContainEqual({

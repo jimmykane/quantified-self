@@ -422,6 +422,7 @@ export async function mutateTrainingScheduleForUser(
     options: {
         db?: admin.firestore.Firestore;
         nowMs?: number;
+        transactionPrecondition?: (transaction: admin.firestore.Transaction) => Promise<void>;
     } = {},
 ): Promise<MutateTrainingScheduleResponseV1> {
     const db = options.db ?? admin.firestore();
@@ -442,6 +443,11 @@ export async function mutateTrainingScheduleForUser(
                 'This account is being deleted or is no longer available.',
             );
         }
+
+        // Callers with additional server-owned authority (for example an MCP
+        // grant) must verify it in the same transaction as the authored write.
+        // A separate preflight check would leave a revocation race.
+        await options.transactionPrecondition?.(transaction);
 
         const receiptSnapshot = await transaction.get(receiptRef);
         if (receiptSnapshot.exists) {
