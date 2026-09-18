@@ -60,7 +60,13 @@ describe('integration-pages.content', () => {
     expect(PROVIDER_INTEGRATION_ROUTE_DATA.garmin.description).toContain('Garmin to Suunto activity sync');
     expect(PROVIDER_INTEGRATION_PAGES.garmin.highlights).toContain('Send saved routes to Garmin Connect');
     expect(PROVIDER_INTEGRATION_PAGES.garmin.syncFlows.find(flow => flow.title === 'Garmin history import')?.copy)
-      .toContain('full window selected');
+      .toContain('latest 30 days selected');
+    expect(PROVIDER_INTEGRATION_PAGES.suunto.tools.find(tool => tool.title === 'Suunto history, Sleep, and Health imports')?.copy)
+      .toContain('latest 30 days selected');
+    expect(PROVIDER_INTEGRATION_PAGES.coros.syncFlows.find(flow => flow.title === 'COROS history import')?.copy)
+      .toContain('latest 30 days');
+    expect(PROVIDER_INTEGRATION_PAGES.wahoo.syncFlows.find(flow => flow.title === 'Wahoo history import')?.copy)
+      .toContain('latest 30 days selected');
     expect(PROVIDER_INTEGRATION_PAGES.garmin.syncFlows.some(flow => flow.title === 'Send saved routes to Garmin Connect')).toBe(true);
     expect(PROVIDER_INTEGRATION_PAGES.garmin.tools.some(tool => tool.title === 'Send routes to Garmin Connect')).toBe(true);
     expect(PROVIDER_INTEGRATION_PAGES.garmin.tools.some(tool => tool.title === 'GPX and FIT route upload')).toBe(true);

@@ -147,30 +147,28 @@ describe('HistoryImportFormComponent', () => {
         expect(component).toBeTruthy();
     });
 
-    it('defaults Garmin activity history to the full rolling five-year window', () => {
-        const garminFixture = TestBed.createComponent(HistoryImportFormComponent);
-        const garminComponent = garminFixture.componentInstance;
-        garminComponent.serviceName = ServiceNames.GarminAPI;
+    it.each([
+        ServiceNames.GarminAPI,
+        ServiceNames.SuuntoApp,
+        ServiceNames.COROSAPI,
+        ServiceNames.WahooAPI,
+    ])('defaults %s activity history to the latest 30 calendar days', (serviceName) => {
+        const providerFixture = TestBed.createComponent(HistoryImportFormComponent);
+        const providerComponent = providerFixture.componentInstance;
+        providerComponent.serviceName = serviceName;
 
         try {
-            garminFixture.detectChanges();
+            providerFixture.detectChanges();
 
-            const expectedStart = new Date();
-            expectedStart.setHours(0, 0, 0, 0);
-            expectedStart.setFullYear(expectedStart.getFullYear() - garminComponent.garminHistoryLimitYears);
-            const actualStart = dayjs(garminComponent.formGroup.get('startDate')?.value);
-
-            expect(actualStart.format('YYYY-MM-DD')).toBe(dayjs(expectedStart).format('YYYY-MM-DD'));
-            expect(actualStart.isSame(dayjs().startOf('day'))).toBe(false);
+            const actualStart = dayjs(providerComponent.formGroup.get('startDate')?.value).startOf('day');
+            const actualEnd = dayjs(providerComponent.formGroup.get('endDate')?.value).startOf('day');
+            expect(actualEnd.diff(actualStart, 'day')).toBe(providerComponent.historyImportDefaultRangeDays - 1);
+            expect(actualStart.format('YYYY-MM-DD')).toBe(
+                actualEnd.subtract(providerComponent.historyImportDefaultRangeDays - 1, 'day').format('YYYY-MM-DD'),
+            );
         } finally {
-            garminFixture.destroy();
+            providerFixture.destroy();
         }
-    });
-
-    it('keeps non-Garmin activity history defaulted to today', () => {
-        const actualStart = dayjs(component.formGroup.get('startDate')?.value);
-
-        expect(actualStart.format('YYYY-MM-DD')).toBe(dayjs().format('YYYY-MM-DD'));
     });
 
     it.each([

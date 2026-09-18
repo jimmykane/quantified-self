@@ -9,7 +9,7 @@ This is the COROS-specific architecture and release record. For shared provider 
 - OAuth 2.0 connection and refresh using the COROS `openId` as the stable provider identity.
 - Server-side binding-state verification when a connected account is shown in the Services connection grid.
 - One active COROS account per Quantified Self user. New OAuth connects pin the account in safe service metadata. Older unpinned multi-token roots select the most recently refreshed token deterministically and pin it on first server use; a missing pinned token fails closed and requires reconnect.
-- Recent COROS activity-history import within the provider's rolling three-month limit.
+- Recent COROS activity-history import with the latest 30 calendar days selected by default; users can expand the range within the provider's rolling three-month limit.
 - Daily Health and sleep polling plus a user-requested three-month replay in 30-day windows, subject to the existing cooldown. It stores steps, the native COROS calorie value, resting/sleep heart rate, overnight HRV, and bounded detailed HRV/interval-heart-rate samples when supplied. COROS does not supply sleep stages through this integration.
 - Direct FIT activity delivery with asynchronous provider status polling.
 - Automatic and date-range FIT activity delivery from Garmin, Suunto, or Wahoo to COROS through the shared activity-sync queue.

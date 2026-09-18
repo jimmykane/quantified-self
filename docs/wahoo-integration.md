@@ -10,7 +10,7 @@ This is the Wahoo-specific architecture and release record. For the reusable imp
 - Connection identity from `GET /v1/user`, stored on the server-only token document and resolved for webhooks through the shared token index.
 - New and updated completed workouts from `workout_summary` webhooks.
 - Exact completion linking for a QS-delivered Training workout when the imported Wahoo-recorded activity returns the same Workout ID, Plan ID, and deterministic `workout_token` under the current connected account. No title/date fallback is used.
-- Manual history import from the descending, paginated `GET /v1/workouts` endpoint.
+- Manual history import from the descending, paginated `GET /v1/workouts` endpoint, with the latest 30 calendar days selected by default and a user-editable range.
 - FIT parsing through `@sports-alliance/sports-lib`, stable event IDs based on the Wahoo workout ID, and original FIT-file retention with the imported event.
 - FIT activity delivery from Wahoo imported events to Suunto or COROS through the shared activity-sync queue, with separate opt-in automatic delivery for new imports and date-range backfill for retained FIT files.
 - FIT activity delivery to Wahoo from Garmin, COROS, and Suunto imported events through the shared activity-sync queue.
