@@ -64,9 +64,6 @@ export class TrainingDeliveryButtonComponent {
       ? `${summary.projection.syncedWorkouts}/${summary.projection.totalWorkouts}`
       : '—',
   })));
-  readonly planSummaryAriaLabel = computed(() => `Plan sync. ${this.summaries().map(summary =>
-    `${summary.presentation.displayLabel}: ${summary.label}${summary.detail && summary.detail !== summary.label ? `. ${summary.detail}` : ''}`)
-    .join('. ')}. Open plan sync details`);
   readonly visible = computed(() => !!this.users.user()?.uid
     && (this.summaryWorkouts() === null || this.readState().uid === this.users.user()?.uid)
     && ((this.scope() !== 'history' && this.delivery.anyReady()) || this.hasRecords()));

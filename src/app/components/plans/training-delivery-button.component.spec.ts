@@ -71,7 +71,7 @@ describe('Training delivery summaries on the workspace', () => {
     }
     expect(service.watchPresence).not.toHaveBeenCalled(); expect(open).not.toHaveBeenCalled(); expect(selection).not.toHaveBeenCalled();
     const button: HTMLButtonElement = fixture.nativeElement.querySelector(scope === 'plan' ? '.delivery-plan-view' : '.delivery-summary');
-    expect(button.getAttribute('aria-label')).toContain(`Open ${scope} sync details`);
+    expect(button.getAttribute('aria-label')).toContain(scope === 'plan' ? 'View plan sync details' : 'Open workout sync details');
     button.click(); expect(selection).toHaveBeenCalledTimes(1);
     expect(open.mock.calls[0][1].data).toEqual({ scope, id: scope === 'plan' ? 'p' : 'w', title: scope === 'plan' ? plan.name : workout.title });
   });
@@ -146,8 +146,8 @@ describe('Training delivery summaries on the workspace', () => {
     const providerRows: HTMLElement[] = Array.from(fixture.nativeElement.querySelectorAll('.delivery-plan-provider'));
     for (const provider of ['Garmin Connect', 'COROS', 'Wahoo', 'Suunto App']) {
       expect(providerRows.some(row => row.getAttribute('aria-label')?.includes(`${provider}: 1 of 2 workouts synced`))).toBe(true);
-      expect(buttons[0].getAttribute('aria-label')).toContain(`${provider}: 1 of 2 workouts synced`);
     }
+    expect(buttons[0].getAttribute('aria-label')).toBe('View plan sync details');
     const visibleCounts: HTMLElement[] = Array.from(fixture.nativeElement.querySelectorAll('.delivery-plan-provider-count'));
     expect(visibleCounts.map(node => node.textContent?.trim())).toEqual(['1/2', '1/2', '1/2', '1/2']);
     buttons[0].click();
@@ -164,5 +164,15 @@ describe('Training delivery summaries on the workspace', () => {
         + '<style>' + css + 'body{margin:0;background:var(--mat-sys-surface);color:var(--mat-sys-on-surface)}main{padding:16px;max-width:900px;margin:auto}h1{font:var(--mat-sys-title-large)}</style></head>'
         + `<body class="app-hydrated ${theme}-theme"><main><h1>Winter plan · Sync by service</h1><app-training-delivery-button>${fixture.nativeElement.innerHTML}</app-training-delivery-button></main></body></html>`);
     }
+  });
+  it('keeps an incomplete plan total compact while exposing its full status accessibly', async () => {
+    const fixture = await render();
+    view$.next({ settings: [setting], statuses: [status], summaryComplete: false });
+    await vi.waitFor(() => { fixture.detectChanges();
+      expect(fixture.nativeElement.querySelector('.delivery-plan-provider-count').textContent.trim()).toBe('—');
+    });
+    expect(fixture.nativeElement.querySelector('.delivery-plan-provider').getAttribute('aria-label'))
+      .toContain('Garmin Connect: Status incomplete');
+    expect(fixture.nativeElement.querySelector('.delivery-plan-summary').textContent).not.toContain('Status incomplete');
   });
 });

@@ -105,9 +105,9 @@ latest attempt or confirmation; an older success never masks a newer failed atte
 Plans expose one quiet, non-button **Plan sync** row rather than one action per provider. Provider logos and synced/total
 counts remain visible; a small trailing **View** action is the only click target. Provider names and full status detail
 remain available to assistive technology and in the dialog. On phones, provider indicators use a two-column grid below
-the heading and View action. With multiple destinations, the dialog first shows compact provider rows with the saved sync state,
-current workout-status summary and one **Manage** action; Manage drills into only that provider. A single destination opens
-its provider details directly. **All services** returns to the provider overview, while opening a workout and returning
+the heading and View action. With multiple destinations, the dialog first shows compact provider rows with the saved
+sync state, current workout-status summary and one **Manage** action; Manage drills into only that provider. A single
+destination opens its provider details directly. **All services** returns to the provider overview, while opening a workout and returning
 preserves the originating provider. This navigation is local only: it must not preview, mutate, grant consent or call a
 provider.
 

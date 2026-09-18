@@ -636,9 +636,10 @@ using the same local stylesheet fixture workflow below. These fixtures do not en
 Entry points and default dialog titles distinguish **Plan sync**, **Workout sync**, and **Workout sync history**.
 The plan surface uses one quiet, non-button **Plan sync** row because every provider opens the same overview. It keeps
 each provider logo and synced/total count visible without repeating provider prose on the plan. A small trailing **View**
-action is the row's only click target; provider names, current states and exception detail remain available in its
-accessible name and the dialog. At phone widths the provider indicators form a two-column grid below the heading and
-View action. When more than one provider is present, the dialog starts with compact provider rows that show the
+action is the row's only click target; each provider indicator exposes its full name, current state and exception detail
+to assistive technology, and the dialog shows the same detail. At phone widths the provider indicators form a two-column
+grid below the heading and View action. When more than one provider is present, the dialog starts with compact provider
+rows that show the
 destination logo, whether sync is enabled or saved for an inactive plan, a concise summary of the currently loaded workout
 statuses and one **Manage** action. Manage opens a focused provider detail view; **All services** returns to the overview.
 At phone widths the Manage action takes its own full-width row instead of squeezing the provider state. A single provider
