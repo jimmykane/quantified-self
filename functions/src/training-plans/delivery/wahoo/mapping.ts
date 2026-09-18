@@ -8,7 +8,7 @@ import { assessTrainingDeliveryMapping } from '../mapping';
 import { hashTrainingScheduleRequestPayload } from '../../persistence';
 import { TrainingDeliveryTransportError, type DeliveryAssessment } from '../contracts';
 
-export const WAHOO_MAPPING_VERSION = 'wahoo-plans-v3';
+export const WAHOO_MAPPING_VERSION = 'wahoo-plans-v4';
 export const WAHOO_DURATION_ISSUE = 'Wahoo delivery currently requires time-based steps throughout the workout. Distance-based steps cannot provide its required total duration.';
 export function wahooIdentities(destination: string, workoutId: string) {
   const hash = createHash('sha256').update(JSON.stringify([destination, workoutId])).digest('base64url');

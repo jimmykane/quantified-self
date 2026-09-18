@@ -16,6 +16,7 @@ import {
 export type WahooWorkoutLocationV1 = 'indoor' | 'outdoor';
 export type WahooPlanTargetTypeV1 =
     | 'rpm'
+    | 'rpe'
     | 'watts'
     | 'hr'
     | 'speed'
@@ -222,13 +223,18 @@ function collectReferenceRoundingIssues(
 }
 
 function stepToWahoo(step: WorkoutStepV1, context: WahooMappingContext): WahooPlanIntervalV1 {
-    const targets = step.targets.map(target => targetToWahoo(target, context));
+    const mappedTargets = step.targets.map(target => targetToWahoo(target, context));
+    // A full-domain RPE target preserves an authored untargeted interval without
+    // imposing a narrower performance constraint on the athlete.
+    const targets: WahooPlanTargetV1[] = mappedTargets.length > 0
+        ? mappedTargets
+        : [{ type: 'rpe', low: 1, high: 10 }];
     return {
         ...(step.note ? { name: step.note } : {}),
         ...endingToTrigger(step.ending),
         intensity_type: purposeToIntensity(step.purpose),
         // The published schema marks targets optional, but Wahoo's production
-        // validator requires an array on every non-repeat interval.
+        // validator requires a non-empty array on every non-repeat interval.
         targets,
     };
 }

@@ -17,6 +17,11 @@ describe('Wahoo Training HTTP boundary', () => {
       redirect: 'error', headers: expect.objectContaining({ 'Content-Type': 'application/x-www-form-urlencoded' }), body: post.body,
     }));
   });
+  it('accepts Wahoo Plan POST 200 responses', async () => {
+    const client = createWahooTrainingClient(async () => authority(), vi.fn(async () =>
+      new Response('{"id":1,"user_id":123}', { status: 200 })));
+    await expect(client(post, vi.fn())).resolves.toMatchObject({ status: 200, body: { id: 1, user_id: 123 } });
+  });
   it.each([['https://evil.example', 'GET'], ['/v1/plans/1?url=evil', 'GET'], ['/v1/plans', 'DELETE'], ['/v1/workouts/1/plans', 'PUT']])(
     'rejects unsupported path/method %s %s before authorization', async (path, method) => {
       const authorize = vi.fn(async () => authority()); const fetcher = vi.fn();

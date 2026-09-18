@@ -28,8 +28,9 @@ single detailed implementation and operational contract is [Wahoo Training deliv
 time-based Running/Cycling, saved-zone seven-day window, separate Plan/Workout/association receipts, duplicate-safe
 recovery, positive-only cloud checks, scope migration, lifecycle fences and pending production-account/device checks.
 The production Plan validator requires `header.description` and a `targets` array on every non-repeat interval despite
-the published plan.json schema marking both optional. QS supplies the bounded workout title and an empty array for an
-untargeted interval; it does not add another editor field.
+the published plan.json schema marking both optional. It also rejects an empty target array. QS supplies the bounded
+workout title and the documented full-domain RPE range 1–10 for an untargeted interval; it does not add another editor
+field or narrow intended effort. Production Plan create/delete returns HTTP 200; create also remains compatible with 201.
 The existing production app/account is the pilot target. Do not interpret the historical activity launch checklist
 below as a requirement to create a sandbox or apply for Wahoo-owned Plan-library entitlement.
 

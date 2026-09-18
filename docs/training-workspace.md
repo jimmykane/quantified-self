@@ -1038,9 +1038,11 @@ are never guessed across mismatched dates.
 
 Although Wahoo's published plan.json schema marks `header.description` and interval `targets` optional, its production
 Plan validator rejects either omission. Delivery therefore sends the already-bounded workout title as both Plan name
-and description and emits `targets: []` for an untargeted non-repeat interval. This adds no Training editor field or
-authored recipe property. Mapping version `wahoo-plans-v3` ensures any retained future copy is reassessed against this
-production-required envelope.
+and description. The validator also rejects an empty target array, so an authored untargeted interval receives the
+documented full-domain RPE range 1–10; this does not narrow the athlete's effort. This adds no Training editor field or
+authored recipe property. Mapping version `wahoo-plans-v4` ensures any retained future copy is reassessed against this
+production-required envelope. Wahoo production returns HTTP 200 for successful Plan create/delete despite the create
+example commonly being interpreted as 201; the HTTP boundary accepts both 200 and 201 POST success.
 
 Each QS workout owns its own app-created Plan plus dated Workout, even for copied recipes. Destination-bound hashed
 `external_id` and `workout_token` remain stable through edits/rescheduling. Private ledger IDs retain the Plan,
