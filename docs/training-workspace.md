@@ -636,11 +636,13 @@ using the same local stylesheet fixture workflow below. These fixtures do not en
 Entry points and default dialog titles distinguish **Plan sync**, **Workout sync**, and **Workout sync history**.
 The plan surface uses one compact **Plan sync** control because every provider opens the same overview. The control keeps
 each provider logo, destination name, total and exception detail visible, but has one trailing navigation affordance and
-one click target. When more than one provider is present, that overview uses Material provider tabs; a single provider
-keeps the existing compact heading without a redundant tab strip. Tabs change only the visible provider details and
-preserve the selected provider when opening a workout and returning to the plan or history overview. Switching tabs never
-previews delivery, changes consent or starts provider work, and the tab header remains horizontally navigable on narrow
-screens.
+one click target. When more than one provider is present, the dialog starts with compact provider rows that show the
+destination logo, whether sync is enabled or saved for an inactive plan, a concise summary of the currently loaded workout
+statuses and one **Manage** action. Manage opens a focused provider detail view; **All services** returns to the overview.
+At phone widths the Manage action takes its own full-width row instead of squeezing the provider state. A single provider
+opens its detail view directly without a redundant chooser. Opening a workout and returning preserves the selected
+provider, so Back returns to that provider before the user returns to all services. Overview/drill navigation never
+previews delivery, changes consent or starts provider work.
 The plan view names the plan, explains automatic per-workout sending, and separates **Plan sync settings** / **Stop plan
 sync** from a visible **Workout sync status** section. Those entries are individual workout delivery projections, never
 plan records or authored edit history. An inactive plan is explicitly labelled; enabled preferences alone do not claim
@@ -711,12 +713,12 @@ After Resume, current-scope settings take precedence over an older stopped statu
 Account changes clear drafts/results and close the dialog. The planning UI rollout described
 above also hides these entry points from non-allowlisted accounts; it is not a delivery authorization boundary.
 Completed activity totals are unchanged.
-Single-provider headings in Plan sync, Workout sync and sync history pair the visible name with the existing
-`app-service-source-icon` destination logo in a compact 64 × 20px box. Multi-provider views use the same decorative
-destination logos in Material tab labels and do not repeat the provider heading inside the selected tab. Logos have no
-tooltip or action and never trigger activity metadata lookups. The shared thin scrollbar and footer controls remain
-unchanged. MCP impact: presentation only, with no change to reads, counts, safe projections, consent, provider calls or
-wire schemas.
+Focused provider headings in Plan sync, Workout sync and sync history pair the visible name with the existing
+`app-service-source-icon` destination logo in a compact 64 × 20px box. Multi-provider overviews use the same decorative
+destination logos in compact rows and keep the provider's enabled/off state separate from individual workout results.
+Logos have no tooltip or action and never trigger activity metadata lookups. The shared thin scrollbar and footer controls
+remain unchanged. MCP impact: presentation only, with no change to reads, counts, safe projections, consent, provider calls
+or wire schemas.
 The sync dialog's **How sync works** guidance explains stopping updates and requesting removal of upcoming synced
 workouts in plain language. It explicitly preserves the QS plan/workout and provider connection, distinguishes plan
 pause from Pro expiry, and protects past/completed workouts. Do not suggest disconnecting or introduce account-deletion

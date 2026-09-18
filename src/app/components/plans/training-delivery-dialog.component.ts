@@ -128,7 +128,6 @@ export class TrainingDeliveryDialogComponent {
     return !setting?.enabled || (setting.revision ?? 0) !== draft.initialSettingsRevision;
   });
   readonly dialogTitle = computed(() => {
-    if (this.data.scope === 'history') return 'Workout sync history';
     if (this.editingSettings()) return this.data.scope === 'plan' ? 'Plan sync settings' : 'Workout sync settings';
     switch (this.draft()?.action) {
       case 'configure': return `Enable plan sync with ${this.draftLabel()}`;
@@ -137,7 +136,12 @@ export class TrainingDeliveryDialogComponent {
       case 'stop': return `${this.stopLabel()}?`;
       case 'approve': return `Review ${this.draftLabel()} differences`;
       case 'retry': return this.data.scope === 'plan' ? 'Retry plan sync' : 'Retry workout sync';
-      default: return this.data.scope === 'plan' ? 'Plan sync' : 'Workout sync';
+      default: {
+        const provider = this.providerDetailVisible() ? this.activeRow()?.displayLabel : null;
+        if (this.data.scope === 'history') return provider ? `${provider} sync history` : 'Workout sync history';
+        if (this.data.scope === 'plan') return provider ? `Plan sync with ${provider}` : 'Plan sync';
+        return provider ? `Workout sync with ${provider}` : 'Workout sync';
+      }
     }
   });
   readonly canChangeTimeZone = computed(() => {
@@ -179,8 +183,26 @@ export class TrainingDeliveryDialogComponent {
       };
     }).sort((a, b) => (a.localDate ?? '9999-99-99').localeCompare(b.localDate ?? '9999-99-99') || a.id.localeCompare(b.id));
     const ready = this.delivery.isReady(provider);
+    const attentionWorkoutCount = new Set(statuses.filter(item => ['approval_required', 'failed', 'needs_attention', 'unsupported',
+      'reconnect_required', 'connection_repair', 'fresh_consent_required'].includes(item.status)).map(item => item.workoutId)).size;
+    const statusWorkoutCount = new Set(statuses.map(item => item.workoutId)).size;
+    const scopePlan = this.data.scope === 'plan' ? this.scopeRecord() : undefined;
+    const planInactive = !!scopePlan && scopePlan.lifecycle !== 'active';
+    const overviewState = this.data.scope === 'history' ? 'Sync history'
+      : this.planBound() ? suppressed ? 'Excluded from plan sync' : 'Follows plan sync settings'
+        : setting?.enabled ? planInactive ? 'Sync saved · plan inactive' : 'Sync enabled' : 'Sync off';
+    const overviewIcon = this.data.scope === 'history' ? 'history'
+      : this.planBound() ? suppressed ? 'sync_disabled' : 'link'
+        : setting?.enabled ? planInactive ? 'pause_circle' : 'check_circle' : 'sync_disabled';
+    const overviewDetail = !statuses.length ? 'No workout sync status yet.'
+      : statuses.length === 1 ? statuses[0].label
+        : attentionWorkoutCount ? `${statusWorkoutCount} ${statusWorkoutCount === 1 ? 'workout' : 'workouts'} · ${attentionWorkoutCount} ${attentionWorkoutCount === 1 ? 'needs' : 'need'} attention`
+          : new Set(statuses.map(item => item.label)).size === 1
+            ? `${statusWorkoutCount} ${statusWorkoutCount === 1 ? 'workout' : 'workouts'} · ${statuses[0].label}`
+            : `${statusWorkoutCount} ${statusWorkoutCount === 1 ? 'workout' : 'workouts'} · mixed delivery states`;
     return { provider, label: PLANNED_WORKOUT_PROVIDER_CAPABILITIES_V1[provider].label,
-      presentation: PROVIDER_PRESENTATIONS[provider], ready, setting, statuses,
+      displayLabel: PROVIDER_PRESENTATIONS[provider].displayLabel, presentation: PROVIDER_PRESENTATIONS[provider], ready, setting, statuses,
+      overviewState, overviewDetail, overviewIcon, overviewEnabled: !!setting?.enabled && !planInactive,
       canCheck: statuses.some(status => status.verification?.canCheck),
       needsFreshConsent: statuses.some(status => status.status === 'fresh_consent_required'),
       // Current settings precede the asynchronously reconciled status after Resume.
@@ -198,11 +220,15 @@ export class TrainingDeliveryDialogComponent {
       reconnect: statuses.some(item => ['reconnect_required', 'connection_repair', 'fresh_consent_required'].includes(item.status)),
     };
   }).filter(row => row.visible));
-  readonly selectedProviderIndex = computed(() => {
-    const index = this.rows().findIndex(row => row.provider === this.selectedProvider());
-    return index < 0 ? 0 : index;
+  readonly providerOverviewVisible = computed(() => this.rows().length > 1
+    && (!this.selectedProvider() || !this.rows().some(row => row.provider === this.selectedProvider())));
+  readonly activeProvider = computed(() => {
+    const selected = this.selectedProvider();
+    if (selected && this.rows().some(row => row.provider === selected)) return selected;
+    return this.rows().length === 1 ? this.rows()[0].provider : null;
   });
-  readonly activeProvider = computed(() => this.rows()[this.selectedProviderIndex()]?.provider ?? null);
+  readonly activeRow = computed(() => this.rows().find(row => row.provider === this.activeProvider()) ?? null);
+  readonly providerDetailVisible = computed(() => !!this.activeRow() && !this.providerOverviewVisible());
   readonly showsSuuntoGuidance = computed(() => this.activeProvider() === 'suunto');
   readonly showsCorosGuidance = computed(() => this.activeProvider() === 'coros');
   readonly showsWahooGuidance = computed(() => this.activeProvider() === 'wahoo');
@@ -352,11 +378,17 @@ export class TrainingDeliveryDialogComponent {
     if (!this.sameAccount() || this.busy() || !this.canLoadMore()) return;
     this.statusLimit.update(count => count + TRAINING_DELIVERY_PAGE_SIZE);
   }
-  selectProviderTab(index: number): void {
-    const provider = this.rows()[index]?.provider;
-    if (!provider || provider === this.selectedProvider()) return;
+  showProvider(provider: PlannedWorkoutProviderId): void {
+    if (!this.sameAccount() || this.busy() || !this.rows().some(row => row.provider === provider)) return;
     this.selectedProvider.set(provider);
-    this.haptics.selection();
+    this.attemptsExpanded.set(null);
+    this.guidanceExpanded.set(false);
+  }
+  backToProviders(): void {
+    if (!this.sameAccount() || this.busy() || !this.providerDetailVisible() || this.rows().length < 2) return;
+    this.selectedProvider.set(null);
+    this.attemptsExpanded.set(null);
+    this.guidanceExpanded.set(false);
   }
   inspectWorkout(status: TrainingDeliveryStatusV1): void {
     if (!this.sameAccount() || this.busy()) return;

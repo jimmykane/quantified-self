@@ -86,28 +86,34 @@
       }
     </section>
   } @else {
-    @if (rows().length > 1) {
-      <mat-tab-group class="delivery-provider-tabs" animationDuration="0ms" [selectedIndex]="selectedProviderIndex()"
-        [attr.aria-label]="dialogTitle() + ' providers'" (selectedIndexChange)="selectProviderTab($event)">
+    @if (providerOverviewVisible()) {
+      <section class="delivery-provider-overview" [attr.aria-label]="dialogTitle() + ' services'">
+        <p class="delivery-caption">Select a service to manage its sync settings and see individual workout status.</p>
         @for (row of rows(); track row.provider) {
-          <mat-tab>
-            <ng-template mat-tab-label>
-              <span class="delivery-provider-tab-label">
-                <app-service-source-icon [presentation]="row.presentation" [showTooltip]="false"
-                  [iconWidth]="48" [iconHeight]="16" aria-hidden="true"></app-service-source-icon>
-                <span>{{ row.label }}</span>
-              </span>
-            </ng-template>
-            <ng-template matTabContent>
-              <section class="delivery-provider-tab-panel" [attr.aria-label]="row.label + ' sync details'">
-                <ng-container *ngTemplateOutlet="providerDetails; context: { $implicit: row }"></ng-container>
-              </section>
-            </ng-template>
-          </mat-tab>
+          <app-compact-row [title]="row.displayLabel" layout="columns" density="compact" [mobileActionFullWidth]="true">
+            <app-service-source-icon compactRowTitlePrefix class="delivery-provider-logo" [presentation]="row.presentation"
+              [showTooltip]="false" [iconWidth]="48" [iconHeight]="16" aria-hidden="true"></app-service-source-icon>
+            <div class="delivery-provider-overview-copy">
+              <p class="delivery-provider-state" [class.delivery-provider-state--enabled]="row.overviewEnabled">
+                <mat-icon aria-hidden="true">{{ row.overviewIcon }}</mat-icon>
+                <span>{{ row.overviewState }}</span>
+              </p>
+              <p class="delivery-caption">{{ row.overviewDetail }}</p>
+            </div>
+            <button compactRowAction mat-button appHapticTap type="button" class="delivery-provider-manage"
+              [disabled]="busy()" (click)="showProvider(row.provider)" [attr.aria-label]="'Manage ' + row.displayLabel + ' sync'">
+              Manage
+            </button>
+          </app-compact-row>
         }
-      </mat-tab-group>
-    } @else if (rows()[0]; as row) {
-      <app-compact-row [title]="row.label" layout="stacked" density="compact" [showDivider]="false">
+      </section>
+    } @else if (activeRow(); as row) {
+      @if (rows().length > 1 && !data.returnTo) {
+        <button mat-button appHapticTap type="button" class="delivery-provider-back" (click)="backToProviders()" [disabled]="busy()">
+          <mat-icon aria-hidden="true">arrow_back</mat-icon>All services
+        </button>
+      }
+      <app-compact-row [title]="row.displayLabel" layout="stacked" density="compact" [showDivider]="false">
         <app-service-source-icon compactRowTitlePrefix class="delivery-provider-logo" [presentation]="row.presentation"
           [showTooltip]="false" [iconWidth]="64" [iconHeight]="20" aria-hidden="true"></app-service-source-icon>
         <ng-container *ngTemplateOutlet="providerDetails; context: { $implicit: row }"></ng-container>

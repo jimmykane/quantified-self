@@ -103,9 +103,11 @@ override's older zone. Transport timestamps appear in workout details separately
 latest attempt or confirmation; an older success never masks a newer failed attempt.
 
 Plans expose one compact **Plan sync** entry rather than one action per provider. Provider logos, names and totals remain
-visible in that entry; the shared overview then uses Material tabs when multiple destinations exist. A single destination
-does not get a redundant tab strip. Selecting a tab is local navigation only: it must not preview, mutate, grant consent or
-call a provider. Opening a workout from a provider tab and returning preserves that provider context.
+visible in that entry. With multiple destinations, the dialog first shows compact provider rows with the saved sync state,
+current workout-status summary and one **Manage** action; Manage drills into only that provider. A single destination opens
+its provider details directly. **All services** returns to the provider overview, while opening a workout and returning
+preserves the originating provider. This navigation is local only: it must not preview, mutate, grant consent or call a
+provider.
 
 Plan and workout surfaces show per-service destination summaries from the safe delivery projections. Plan totals are
 aggregates of all current authored workouts, not evidence of a native provider plan or device receipt. Only complete,
