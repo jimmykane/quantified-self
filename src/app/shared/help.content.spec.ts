@@ -340,6 +340,11 @@ describe('help.content', () => {
     expect(dataAndPrivacySection?.content).toContain('today’s Readiness drivers');
     expect(dataAndPrivacySection?.content).toContain('daily report with sleep HRV and sleep heart rate');
     expect(dataAndPrivacySection?.content).toContain('[**Connections -> MCP**](/services?serviceName=mcp)');
+    expect(dataAndPrivacySection?.content).toContain('### If an MCP permission is missing');
+    expect(dataAndPrivacySection?.content).toContain('Missing tools do not mean you have no plans, workouts, or recorded data.');
+    expect(dataAndPrivacySection?.content).toContain('**Training plans and planned workouts**');
+    expect(dataAndPrivacySection?.content).toContain('Do not disconnect an app just to add a permission.');
+    expect(dataAndPrivacySection?.content).toContain('The built-in Assistant is separate');
     expect(dataAndPrivacySection?.content).toContain('### Android authorization handoff');
     expect(dataAndPrivacySection?.content).toContain('**Open supported links**');
     expect(dataAndPrivacySection?.content).toContain('cannot force Android or the ChatGPT app');

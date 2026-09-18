@@ -66,8 +66,13 @@ proof or permission to change a Training plan. Keep note context separate from m
 
 Use this workflow for current plans, standalone planned workouts and upcoming sessions as well as Training metrics.
 Planning needs independent `training-plans:read`; metrics, activity, Timeline notes or provider access never substitutes.
-Missing tools can mean the supporting release/catalog refresh is pending; do not infer no plans. Existing clients must
-explicitly reauthorize. Discover plans by name/lifecycle and query a bounded inclusive date window. Default calendar
+Missing tools can mean missing consent or a supporting release/catalog refresh; do not infer no plans. For an external
+MCP client, tell the user to start authorization again in that client, approve **Training plans and planned workouts**,
+then approve the separate plan/workout or delivery child permission only when needed. The existing grant stays active
+until the replacement succeeds; then start a new chat or refresh the tool catalog. If the choices are absent, the client
+needs a catalog refresh/rescan. Never tell the user to disconnect merely to add a permission. For the built-in Assistant,
+enable **Training plans** and its optional change toggles in **Examples & data access**; that starts a fresh chat instead.
+Discover plans by name/lifecycle and query a bounded inclusive date window. Default calendar
 scope combines standalone with the active plan; explicitly select a plan/all scope for paused or archived plans. Include
 skipped labels, exclude deleted records and distinguish current authored records from historical revisions.
 Follow unchanged-query continuations; restart after schedule changes. Preserve calendar labels without inventing a
