@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, computed, DestroyRef, effect, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, DestroyRef, ElementRef, afterRenderEffect, effect, inject, signal, viewChild, viewChildren } from '@angular/core';
 import { toObservable, toSignal } from '@angular/core/rxjs-interop';
 import { MAT_DIALOG_DATA, MatDialog, MatDialogRef } from '@angular/material/dialog';
 import { catchError, combineLatest, map, of, startWith, switchMap } from 'rxjs';
@@ -70,6 +70,9 @@ export class TrainingDeliveryDialogComponent {
   readonly editingTimeZone = signal(false);
   readonly guidanceExpanded = signal(false);
   readonly attemptsExpanded = signal<string | null>(null);
+  private readonly navigationFocus = signal<{ view: 'title' } | { view: 'overview'; provider: PlannedWorkoutProviderId } | null>(null);
+  private readonly dialogTitleElement = viewChild<ElementRef<HTMLHeadingElement>>('dialogTitleElement');
+  private readonly providerManageButtons = viewChildren('providerManage', { read: ElementRef<HTMLButtonElement> });
   readonly preview = signal<{ result: TrainingDeliveryPreviewV1; command: TrainingDeliveryCommandV1 } | null>(null);
   private readonly statusLimit = signal(TRAINING_DELIVERY_PAGE_SIZE);
   // Keep the entire loaded prefix live: separate cursor snapshots leave stale rows
@@ -202,7 +205,7 @@ export class TrainingDeliveryDialogComponent {
             : `${statusWorkoutCount} ${statusWorkoutCount === 1 ? 'workout' : 'workouts'} · mixed delivery states`;
     return { provider, label: PLANNED_WORKOUT_PROVIDER_CAPABILITIES_V1[provider].label,
       displayLabel: PROVIDER_PRESENTATIONS[provider].displayLabel, presentation: PROVIDER_PRESENTATIONS[provider], ready, setting, statuses,
-      overviewState, overviewDetail, overviewIcon, overviewEnabled: !!setting?.enabled && !planInactive,
+      overviewState, overviewDetail, overviewIcon, overviewEnabled: overviewState === 'Sync enabled',
       canCheck: statuses.some(status => status.verification?.canCheck),
       needsFreshConsent: statuses.some(status => status.status === 'fresh_consent_required'),
       // Current settings precede the asynchronously reconciled status after Resume.
@@ -229,6 +232,13 @@ export class TrainingDeliveryDialogComponent {
   });
   readonly activeRow = computed(() => this.rows().find(row => row.provider === this.activeProvider()) ?? null);
   readonly providerDetailVisible = computed(() => !!this.activeRow() && !this.providerOverviewVisible());
+  private readonly selectedProviderValidityEffect = effect(() => {
+    const selected = this.selectedProvider();
+    if (!selected || !this.view().loaded || !this.scheduleView().loaded
+      || this.rows().some(row => row.provider === selected)) return;
+    this.selectedProvider.set(null);
+    this.navigationFocus.set({ view: 'title' });
+  });
   readonly showsSuuntoGuidance = computed(() => this.activeProvider() === 'suunto');
   readonly showsCorosGuidance = computed(() => this.activeProvider() === 'coros');
   readonly showsWahooGuidance = computed(() => this.activeProvider() === 'wahoo');
@@ -265,6 +275,15 @@ export class TrainingDeliveryDialogComponent {
       }
     });
   }
+  private readonly navigationFocusEffect = afterRenderEffect(() => {
+    const target = this.navigationFocus();
+    if (!target) return;
+    const element = target.view === 'title' ? this.dialogTitleElement()?.nativeElement
+      : this.providerManageButtons().find(button => button.nativeElement.dataset['deliveryProvider'] === target.provider)?.nativeElement;
+    if (!element) return;
+    element.focus();
+    this.navigationFocus.set(null);
+  });
   reconnectWahooTraining(): void {
     if (this.busy() || !this.sameAccount() || (!this.wahooPreviewReconnect() && !this.rows().some(row => row.wahooReconnect))) return;
     this.haptics.selection();
@@ -383,12 +402,15 @@ export class TrainingDeliveryDialogComponent {
     this.selectedProvider.set(provider);
     this.attemptsExpanded.set(null);
     this.guidanceExpanded.set(false);
+    this.navigationFocus.set({ view: 'title' });
   }
   backToProviders(): void {
-    if (!this.sameAccount() || this.busy() || !this.providerDetailVisible() || this.rows().length < 2) return;
+    const provider = this.activeProvider();
+    if (!provider || !this.sameAccount() || this.busy() || !this.providerDetailVisible() || this.rows().length < 2) return;
     this.selectedProvider.set(null);
     this.attemptsExpanded.set(null);
     this.guidanceExpanded.set(false);
+    this.navigationFocus.set({ view: 'overview', provider });
   }
   inspectWorkout(status: TrainingDeliveryStatusV1): void {
     if (!this.sameAccount() || this.busy()) return;

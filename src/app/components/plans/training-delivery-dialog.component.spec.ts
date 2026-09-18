@@ -107,8 +107,10 @@ describe('Training provider delivery controls', () => {
     const garmin = (fixture.nativeElement.querySelector('button[aria-label="Manage Garmin Connect sync"]') as HTMLElement).closest('app-compact-row')!;
     const suunto = (fixture.nativeElement.querySelector('button[aria-label="Manage Suunto App sync"]') as HTMLElement).closest('app-compact-row')!;
     expect(garmin.textContent).toContain('Sync enabled');
+    expect(garmin.querySelector('.delivery-provider-state')?.classList).toContain('delivery-provider-state--enabled');
     expect(garmin.textContent).toContain('Sent · remote checking unavailable');
     expect(suunto.textContent).toContain('Sync off');
+    expect(suunto.querySelector('.delivery-provider-state')?.classList).not.toContain('delivery-provider-state--enabled');
     expect(suunto.textContent).toContain('Delivery uncertain');
     expect(service.preview).not.toHaveBeenCalled(); expect(service.mutate).not.toHaveBeenCalled();
     expect(haptics.selection).not.toHaveBeenCalled();
@@ -128,14 +130,17 @@ describe('Training provider delivery controls', () => {
     manage.click(); fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
     expect(fixture.nativeElement.querySelector('.delivery-provider-overview')).toBeNull();
     expect(fixture.nativeElement.querySelector('h2').textContent).toContain('Suunto');
+    expect(document.activeElement).toBe(fixture.nativeElement.querySelector('.delivery-dialog-title'));
     expect(fixture.nativeElement.textContent).toContain('All services');
     expect(haptics.selection).toHaveBeenCalledTimes(1);
     (fixture.nativeElement.querySelector('.delivery-provider-back') as HTMLButtonElement).click(); fixture.detectChanges();
+    await fixture.whenStable(); fixture.detectChanges();
     expect(fixture.nativeElement.querySelector('.delivery-provider-overview')).not.toBeNull();
+    expect(document.activeElement).toBe(fixture.nativeElement.querySelector('[data-delivery-provider="suunto"]'));
     expect(haptics.selection).toHaveBeenCalledTimes(2);
     expect(service.preview).not.toHaveBeenCalled(); expect(service.mutate).not.toHaveBeenCalled();
   });
-  it('returns to the provider overview if the selected provider disappears from the live view', () => {
+  it('returns to the provider overview if the selected provider disappears from the live view', async () => {
     TestBed.overrideProvider(MAT_DIALOG_DATA, { useValue: {
       scope: 'workout', id: 'w', title: 'Morning run', selectedProvider: 'suunto',
     } });
@@ -152,11 +157,19 @@ describe('Training provider delivery controls', () => {
       status,
       { ...status, id: 'wahoo-delivery', provider: 'wahoo' },
     ] });
-    fixture.detectChanges();
+    fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
 
     expect(fixture.nativeElement.querySelector('h2').textContent.trim()).toBe('Workout sync');
     expect(fixture.nativeElement.querySelector('.delivery-provider-overview')).not.toBeNull();
+    expect(fixture.componentInstance.selectedProvider()).toBeNull();
+    expect(document.activeElement).toBe(fixture.nativeElement.querySelector('.delivery-dialog-title'));
     expect(fixture.nativeElement.textContent).not.toContain('No providers are available');
+    scope$.next({ settings: [], statuses: [status,
+      { ...status, id: 'wahoo-delivery', provider: 'wahoo' },
+      { ...status, id: 'suunto-returned', provider: 'suunto' },
+    ] });
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('.delivery-provider-overview')).not.toBeNull();
     expect(service.preview).not.toHaveBeenCalled(); expect(service.mutate).not.toHaveBeenCalled();
     expect(haptics.selection).not.toHaveBeenCalled();
   });

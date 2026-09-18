@@ -1,4 +1,4 @@
-<h2 mat-dialog-title>{{ dialogTitle() }}</h2>
+<h2 #dialogTitleElement mat-dialog-title class="delivery-dialog-title" tabindex="-1">{{ dialogTitle() }}</h2>
 <mat-dialog-content>
   @if (data.returnTo && !draft()) {
     <button mat-button appHapticTap type="button" (click)="backToOverview()" [disabled]="busy()">
@@ -100,8 +100,9 @@
               </p>
               <p class="delivery-caption">{{ row.overviewDetail }}</p>
             </div>
-            <button compactRowAction mat-button appHapticTap type="button" class="delivery-provider-manage"
-              [disabled]="busy()" (click)="showProvider(row.provider)" [attr.aria-label]="'Manage ' + row.displayLabel + ' sync'">
+            <button #providerManage compactRowAction mat-button appHapticTap type="button" class="delivery-provider-manage"
+              [disabled]="busy()" (click)="showProvider(row.provider)" [attr.data-delivery-provider]="row.provider"
+              [attr.aria-label]="'Manage ' + row.displayLabel + ' sync'">
               Manage
             </button>
           </app-compact-row>
