@@ -211,6 +211,8 @@ describe('help.content', () => {
     expect(healthSection?.content).toContain('never plotted as a weigh-in');
     expect(healthSection?.content).toContain('**Workout VO₂ max is separate evidence.**');
     expect(healthSection?.content).toContain('never merges them with provider Health or manual VO₂ max');
+    expect(healthSection?.content).toContain('**Garmin Health summary** and **Garmin workout VO₂**');
+    expect(healthSection?.content).toContain('instead of implying that another Garmin account is connected');
     expect(healthSection?.content).toContain('not copied into Health storage');
     expect(healthSection?.content).toContain('omits workout IDs, names, locations, account IDs, and raw creator details');
     expect(healthSection?.content).toContain('Sleep appears when a normalized Sleep session exists');

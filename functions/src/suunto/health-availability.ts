@@ -8,7 +8,7 @@ export const getSuuntoHealthSyncAvailability = onCall({
   region: FUNCTIONS_MANIFEST.getSuuntoHealthSyncAvailability.region,
   cors: ALLOWED_CORS_ORIGINS,
   timeoutSeconds: 15,
-  memory: '256MiB',
+  memory: '512MiB',
   maxInstances: 100,
 }, async (request): Promise<SuuntoHealthSyncAvailabilityResponse> => {
   if (!request.auth?.uid) {

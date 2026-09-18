@@ -73,6 +73,7 @@ function toHttpsError(error: unknown): never {
 
 export const getMcpAuthorizationRequest = onCall({
   region: FUNCTIONS_MANIFEST.getMcpAuthorizationRequest.region,
+  memory: '512MiB',
 }, async (request) => {
   requireAuthenticatedRequest(request);
   try {

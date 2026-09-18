@@ -75,6 +75,23 @@ describe('dashboard Health semantics',()=>{
     expect(view.hasData).toBe(true);
     expect(view.sleep.latestPoint?.endTimeMs).toBe(session.endTimeMs);
   });
+  it('numbers dashboard Sleep accounts within each provider', () => {
+    const data = evidence('sleep_duration', []);
+    const base = { userID: 'owner', sleepDate: '2026-09-14',
+      startTimeMs: Date.parse('2026-09-13T22:00:00Z'), endTimeMs: Date.parse('2026-09-14T06:00:00Z'),
+      durationSeconds: 28800, stages: [], stageDurationsSeconds: {}, isNap: false, createdAtMs: 0, updatedAtMs: 0 };
+    data.sessions = [
+      { ...base, id: 'garmin', source: { provider: 'GarminAPI', providerUserId: 'garmin', sourceSessionKey: 'garmin' } },
+      { ...base, id: 'suunto-one', source: { provider: 'SuuntoApp', providerUserId: 'suunto-one', sourceSessionKey: 'suunto-one' } },
+      { ...base, id: 'suunto-two', source: { provider: 'SuuntoApp', providerUserId: 'suunto-two', sourceSessionKey: 'suunto-two' } },
+    ];
+
+    const view = buildDashboardHealthContext(data, { metric: 'sleep', range: '30d' });
+
+    expect(view.sources.find(source => source.provider === 'GarminAPI')?.label).toBe('Garmin');
+    expect(view.sources.filter(source => source.provider === 'SuuntoApp').map(source => source.label))
+      .toEqual(['Suunto · Account 1', 'Suunto · Account 2']);
+  });
   it.each(['sleep_duration', 'sleep_score'] as const)('uses real Suunto Sleep sessions for %s previews and availability', metric => {
     const data = evidence(metric, []);
     data.sessions = [{ id: 'night', userID: 'owner', sleepDate: '2026-09-14',
