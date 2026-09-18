@@ -29,4 +29,18 @@ describe('Training remote check labels', () => {
         { state } as TrainingVerificationV1)).toBe(label);
     }
   });
+  it('distinguishes the linked activity source, another sent copy and an unrelated past copy', () => {
+    const base = { workoutId: 'workout', status: 'past', hasRemoteCopy: true, differsFromQS: false,
+      lastAcceptedAtMs: 1000 } as TrainingDeliveryStatusV1;
+    expect(trainingVerificationLabel({ ...base, provider: 'suunto' }, undefined,
+      { workoutId: 'workout', provider: 'suunto' })).toBe('Completed · activity linked');
+    expect(trainingVerificationLabel({ ...base, provider: 'garmin' }, undefined,
+      { workoutId: 'workout', provider: 'suunto' })).toBe('Sent · workout completed');
+    expect(trainingVerificationLabel({ ...base, provider: 'garmin' })).toBe('Past date · provider copy kept');
+    expect(trainingVerificationLabel({ ...base, provider: 'garmin', status: 'failed' }, undefined,
+      { workoutId: 'workout', provider: 'suunto' })).toBe(TRAINING_DELIVERY_STATUS_LABELS.failed);
+    expect(trainingVerificationLabel({ ...base, provider: 'garmin', status: 'delivered' },
+      { state: 'confirmed_missing' } as TrainingVerificationV1,
+      { workoutId: 'workout', provider: 'suunto' })).toBe('Missing from provider');
+  });
 });

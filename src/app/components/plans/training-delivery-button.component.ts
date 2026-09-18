@@ -8,6 +8,7 @@ import { AppUserService } from '../../services/app.user.service';
 import { TrainingDeliveryService, TRAINING_DELIVERY_SUMMARY_LIMIT, type TrainingDeliveryView, type TrainingDeliveryViewScope } from '../../services/training-delivery.service';
 import { TrainingDeliveryDialogComponent, type TrainingDeliveryDialogData } from './training-delivery-dialog.component';
 import type { ScheduledWorkoutV1, TrainingPlanV1 } from '@shared/training-plans';
+import type { TrainingWorkoutCompletionV1 } from '@shared/training-workout-completion';
 import { buildTrainingDeliverySummaries, type TrainingDeliverySummary } from '../../helpers/training-delivery-summary.helper';
 import { ServiceSourceIconComponent } from '../event-summary/service-source-icon/service-source-icon.component';
 
@@ -24,6 +25,7 @@ export class TrainingDeliveryButtonComponent {
   readonly standalone = input(false);
   readonly summaryWorkouts = input<readonly ScheduledWorkoutV1[] | null>(null);
   readonly summaryPlan = input<TrainingPlanV1 | null>(null);
+  readonly summaryCompletions = input<readonly TrainingWorkoutCompletionV1[]>([]);
   readonly context = computed<TrainingDeliveryDialogData>(() => ({ scope: this.scope(), id: this.entityId(), title: this.title() }));
   readonly disabled = input(false);
   private readonly users = inject(AppUserService);
@@ -46,11 +48,13 @@ export class TrainingDeliveryButtonComponent {
   })), { initialValue: EMPTY_READ });
   readonly hasRecords = computed(() => this.readState().uid === this.users.user()?.uid && this.readState().hasRecords);
   readonly summaryState = toSignal(combineLatest([toObservable(this.readState), toObservable(this.summaryWorkouts),
-    toObservable(this.summaryPlan), toObservable(this.context)]).pipe(switchMap(([read, workouts, plan, context]) => {
+    toObservable(this.summaryPlan), toObservable(this.summaryCompletions), toObservable(this.context)]).pipe(switchMap(
+    ([read, workouts, plan, completions, context]) => {
     const empty = { uid: read.uid, rows: [] as TrainingDeliverySummary[], error: read.error };
     if (!read.view || workouts === null || context.scope === 'history') return of(empty);
     return from(buildTrainingDeliverySummaries({ uid: read.uid, scope: context.scope, id: context.id, workouts, plan,
-      ...read.view, complete: read.view.summaryComplete !== false && read.view.statuses.length < TRAINING_DELIVERY_SUMMARY_LIMIT })).pipe(
+      ...read.view, completions,
+      complete: read.view.summaryComplete !== false && read.view.statuses.length < TRAINING_DELIVERY_SUMMARY_LIMIT })).pipe(
       map(rows => ({ ...empty, rows })), startWith(empty), catchError(() => of({ ...empty, error: true })));
   })), { initialValue: { uid: '', rows: [] as TrainingDeliverySummary[], error: false } });
   readonly summaries = computed(() => this.summaryState().uid === this.users.user()?.uid ? this.summaryState().rows : []);

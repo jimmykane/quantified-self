@@ -245,11 +245,17 @@ export async function readTrainingPlans(input: TrainingReadInput, reads: Trainin
       if (a.scope === 'plan') settings.push(...await collect('trainingDeliverySettings', { field: 'associationPlanId', value: doc.id }, 1600));
       else if (plan) settings.push(...await collect('trainingDeliverySettings', { field: 'scopeId', value: doc.id }, 1600));
       const statuses = await collect('trainingDeliveryStatuses', { field: a.scope === 'plan' ? 'planId' : 'workoutId', value: doc.id }, 1600);
+      const completionDocs = a.scope === 'plan'
+        ? await collect('trainingWorkoutCompletions', { field: 'planId', value: doc.id }, 400)
+        : [await view.get('trainingWorkoutCompletions', doc.id)].filter((item): item is Document => item !== null);
+      const completions = completionDocs.map(item => parseTrainingWorkoutCompletionV1(completionSchema.parse(item.data)))
+        .filter(completion => workouts.some(workout => workout.id === completion.workoutId && workout.planId === completion.planId));
       // The authored count is authoritative. Bounded historical scans must not imply full confirmation.
       if (a.scope === 'plan' && workouts.length !== planSchema.parse(doc.data).workoutCount) complete = false;
       const summaries = await buildTrainingDeliverySummaries({ uid: input.uid, scope: a.scope, id: doc.id,
         plan: plan ? planSchema.parse(plan.data) : null, workouts, complete,
-        settings: settings.map(d => settingSchema.parse(d.data)), statuses: statuses.map(d => ({ id: d.id, ...statusSchema.parse(d.data) })) });
+        settings: settings.map(d => settingSchema.parse(d.data)), statuses: statuses.map(d => ({ id: d.id, ...statusSchema.parse(d.data) })),
+        completions });
       return { scheduleRevision: state.revision, scope: a.scope, reference: a.reference, scanComplete: complete,
         checkedAtMs: nowMs, services: summaries.map(summary => summary.projection) };
     }

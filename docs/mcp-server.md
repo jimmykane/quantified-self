@@ -90,8 +90,12 @@ Biking sport survives the read projection. Suunto numeric activity recommendatio
 Sports Lib 21.2.1 FIT workout-reference adoption and the first exact Suunto activity link add no MCP metric, scope,
 provider action or registered wire field. Private FIT references, account digests and reverse-link records are excluded.
 Existing sync status may truthfully become `completed` after an account-bound Guide marker is accepted, using the status
-already present in the frozen delivery schema. The separate safe **Activity linked** projection is not exposed through MCP
-in this slice; #651 remains open for the bounded fallback/manual-link workflow and its planned linked/unlinked read review.
+already present in the frozen delivery schema. `get_training_sync_status` also applies an exact persisted workout
+completion to every confirmed destination copy of that workout: the evidence provider remains private provenance, while
+the existing `completed` outcome represents the authored workout across services. This changes no tool, field, scope,
+consent, enum or provider action, and no event/activity/provider identifier enters the sync projection. The separately
+authorized `get_planned_workout_completion` read remains the only Training MCP surface that reports the completion
+provider and optional opaque activity reference.
 
 Garmin schedule-only remote repair also preserves the registered MCP contract. The existing sanitized delivery status
 already stops a confirmed missing copy from counting as synced and represents restoration as a non-success outcome.

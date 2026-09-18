@@ -76,6 +76,29 @@ describe('Training plan MCP reads', () => {
     Object.assign(f.collections.trainingDeliveryStatuses[id], { privateEvidence: 'must-not-leak', externalId: 'private-guide', subscriptionKey: 'private-key' });
     await expect(f.run('get_training_sync_status', { scope: 'plan', reference: plans.plans[0].planRef })).rejects.toThrow();
   });
+  it('projects one exact workout completion across confirmed provider copies without exposing its source evidence', async () => {
+    const f = fixture(); f.collections.scheduledWorkouts = { w1: workout('p1') };
+    for (const provider of ['garmin', 'suunto'] as const) {
+      f.collections.trainingDeliverySettings[provider] = { scope: 'plan', scopeId: 'p1', provider, enabled: true,
+        suppressed: false, timeZone: 'Europe/Helsinki', destinationKey: `private-${provider}`, associationPlanId: null, updatedAtMs: 1 };
+      const deliveryId = await trainingDeliverySummaryIdentity('owner', provider, `private-${provider}`, 'w1');
+      f.collections.trainingDeliveryStatuses[deliveryId] = { workoutId: 'w1', planId: 'p1', provider, status: 'past',
+        differsFromQS: false, hasRemoteCopy: true, timeZone: 'Europe/Helsinki', lastAttemptAtMs: 1,
+        lastAcceptedAtMs: 1, updatedAtMs: 2 };
+    }
+    f.collections.trainingWorkoutCompletions.w1 = { schemaVersion: 1, workoutId: 'w1', planId: 'p1', provider: 'suunto',
+      matchMethod: 'provider_marker', eventId: 'private-event', activityId: 'private-activity', sourceSessionIndex: 0,
+      activityStartAtMs: 1_789_404_000_000, scheduledLocalDate: '2026-09-15', workoutRevisionAtLink: 1,
+      timing: 'on_date', linkedAtMs: 1_789_404_100_000, updatedAtMs: 1_789_404_100_000 };
+    const plans = TRAINING_READ_OUTPUTS.list_training_plans.parse(await f.run('list_training_plans'));
+    const result = TRAINING_READ_OUTPUTS.get_training_sync_status.parse(await f.run('get_training_sync_status', {
+      scope: 'plan', reference: plans.plans[0].planRef,
+    }));
+    expect(result.services).toHaveLength(2);
+    expect(result.services.every(service => service.syncedWorkouts === 1
+      && service.outcomes.some(outcome => outcome.status === 'completed' && outcome.count === 1))).toBe(true);
+    expect(JSON.stringify(result)).not.toMatch(/private-event|private-activity|sourceSessionIndex|matchMethod/);
+  });
   it('projects COROS completion through the existing enum and rejects private batch or partner identities', async () => {
     const f = fixture(); f.collections.scheduledWorkouts = { w1: workout('p1') };
     f.collections.trainingDeliverySettings.coros = { scope: 'plan', scopeId: 'p1', provider: 'coros', enabled: true,

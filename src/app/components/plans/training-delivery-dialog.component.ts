@@ -18,6 +18,7 @@ import { trainingVerificationCommandError, trainingVerificationLabel } from '../
 import { buildDestinationProviderPresentation } from '../../helpers/provider-presentation.helper';
 import { WAHOO_TRAINING_PERMISSION_ISSUE } from '@shared/wahoo-training';
 import { WahooRouteAccessReconnectDialogComponent } from '../wahoo-route-access-reconnect-dialog/wahoo-route-access-reconnect-dialog.component';
+import type { TrainingWorkoutCompletionV1 } from '@shared/training-workout-completion';
 
 const PROVIDER_PRESENTATIONS = {
   garmin: buildDestinationProviderPresentation(ServiceNames.GarminAPI),
@@ -83,6 +84,11 @@ export class TrainingDeliveryDialogComponent {
     catchError(() => of({ value: null, loaded: true, error: true })))
     : of({ value: null, loaded: true, error: false }))), { initialValue: { value: null, loaded: false, error: false } });
   readonly schedule = computed(() => this.scheduleView().value);
+  readonly completions = toSignal(this.users.user$.pipe(switchMap(user => user?.uid
+    ? (typeof this.plans.watchWorkoutCompletions === 'function'
+      ? this.plans.watchWorkoutCompletions(user.uid).pipe(catchError(() => of([] as TrainingWorkoutCompletionV1[])))
+      : of([] as TrainingWorkoutCompletionV1[]))
+    : of([] as TrainingWorkoutCompletionV1[]))), { initialValue: [] as TrainingWorkoutCompletionV1[] });
   readonly scopeRecord = computed(() => this.data.scope === 'history' ? undefined : this.data.scope === 'plan'
     ? this.schedule()?.plans.find(plan => plan.id === this.data.id)
     : this.schedule()?.workouts.find(workout => workout.id === this.data.id));
@@ -156,13 +162,15 @@ export class TrainingDeliveryDialogComponent {
       const verification = this.view().verifications?.find(item => item.id === status.id);
       const workout = this.schedule()?.workouts.find(item => item.id === status.workoutId);
       const plan = this.schedule()?.plans.find(item => item.id === workout?.planId);
+      const completionPlanId = workout ? workout.planId : status.planId;
+      const completion = this.completions().find(item => item.workoutId === status.workoutId && item.planId === completionPlanId);
       return { ...status, title: workout?.title ?? (this.scheduleView().error ? 'Workout unavailable'
         : this.scheduleView().loaded ? 'Deleted workout' : 'Loading workout…'),
         localDate: workout?.localDate ?? null,
         scopeLabel: workout?.lifecycle === 'deleted' ? 'Deleted workout'
           : workout ? workout.planId ? `Plan: ${plan?.name ?? 'Unavailable plan'}` : 'Standalone workout' : null,
         moved: !!workout && (workout.lifecycle === 'deleted' || (this.data.scope === 'plan' && workout.planId !== this.data.id)),
-        verification, label: trainingVerificationLabel(status, verification), copyMessage: trainingDeliveryCopyMessage(status),
+        verification, label: trainingVerificationLabel(status, verification, completion), copyMessage: trainingDeliveryCopyMessage(status),
         showLastSent: status.lastAcceptedAtMs !== null && (status.hasRemoteCopy || verification?.missing),
         ...trainingDeliveryLatestEvent(status),
       };
