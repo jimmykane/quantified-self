@@ -21,7 +21,7 @@ const status = (id: string, changes: Partial<TrainingDeliveryStatusV1> = {}): Tr
   lastAcceptedAtMs: 2, lastAttemptAtMs: 2, updatedAtMs: 3, retryCount: 0, nextRetryAtMs: null, ...changes,
 });
 const input = () => ({ uid: 'owner', scope: 'plan' as const, id: 'p', workouts: [workout('a'), workout('b'), workout('c')],
-  plan, settings: [setting], statuses: [status('a'), status('b')], complete: true });
+  plan, settings: [setting], statuses: [status('a'), status('b')], completions: [], complete: true });
 
 describe('Training delivery service summaries', () => {
   beforeEach(() => vi.stubGlobal('crypto', webcrypto));
@@ -90,9 +90,23 @@ describe('Training delivery service summaries', () => {
     const [off] = await buildTrainingDeliverySummaries({ ...input(), settings: [{ ...setting, enabled: false }] });
     expect(off.label).toContain('Sync off'); expect(off.label).toContain('0 of 3');
   });
-  it('retains confirmed past/completed copies without claiming that they will be updated', async () => {
+  it('describes retained past/provider-completed copies without the ambiguous left-unchanged label', async () => {
     const [row] = await buildTrainingDeliverySummaries({ ...input(), statuses: [status('a', { status: 'past' }), status('b', { status: 'completed' })] });
-    expect(row.label).toBe('2 of 3 workouts synced'); expect(row.detail).toContain('left unchanged');
+    expect(row.label).toBe('2 of 3 workouts synced');
+    expect(row.detail).toContain('1 past date · provider copy kept');
+    expect(row.detail).toContain('1 completed on provider · provider copy kept');
+    expect(row.detail).not.toContain('left unchanged');
+  });
+  it('uses the activity-link provider as provenance while marking every confirmed provider copy completed', async () => {
+    const providers = ['garmin', 'suunto'] as const;
+    const rows = await buildTrainingDeliverySummaries({ ...input(), workouts: [workout('a')],
+      settings: providers.map(provider => ({ ...setting, provider })),
+      statuses: providers.map(provider => status('a', { provider, id: identity('a', setting.destinationKey, provider), status: 'past' })),
+      completions: [{ workoutId: 'a', planId: 'p', provider: 'suunto' }] });
+    expect(rows.find(row => row.provider === 'suunto')).toMatchObject({ detail: '1 completed · activity linked',
+      projection: { syncedWorkouts: 1, outcomes: [{ status: 'completed', count: 1 }] } });
+    expect(rows.find(row => row.provider === 'garmin')).toMatchObject({ detail: '1 sent · workout completed',
+      projection: { syncedWorkouts: 1, outcomes: [{ status: 'completed', count: 1 }] } });
   });
   it.each([
     ['retrying', 'retry scheduled', 'retries scheduled'],
@@ -162,7 +176,8 @@ describe('Training delivery service summaries', () => {
     for (const protectedStatus of ['past', 'completed'] as const) {
       const [row] = await buildTrainingDeliverySummaries({ ...input(), workouts: [workout('a', { lifecycle: 'skipped' })],
         statuses: [status('a', { status: protectedStatus })] });
-      expect(row.label).toBe('0 of 1 workout synced'); expect(row.detail).toContain('left unchanged'); expect(row.detail).not.toContain('removal pending');
+      expect(row.label).toBe('0 of 1 workout synced'); expect(row.detail).toContain('provider copy kept');
+      expect(row.detail).not.toContain('left unchanged'); expect(row.detail).not.toContain('removal pending');
     }
   });
   it('does not label an unconfirmed earlier artifact as previously synced or an extant copy as removed', async () => {

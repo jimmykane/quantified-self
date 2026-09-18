@@ -1,15 +1,26 @@
 import { TrainingDeliveryContractError, type TrainingDeliveryStatus, type TrainingDeliveryStatusV1 } from '@shared/training-provider-delivery';
+import type { TrainingWorkoutCompletionV1 } from '@shared/training-workout-completion';
 
 export const TRAINING_DELIVERY_STATUS_LABELS: Record<TrainingDeliveryStatus, string> = {
   pending: 'Waiting to sync', delivered: 'Up to date', removed: 'Provider copy removed', stopped: 'Sync stopped',
   paused_plan: 'Plan inactive — withdrawing future copies', paused_pro: 'Paused — Pro required',
   provider_unavailable: 'Provider delivery is unavailable', reconnect_required: 'Reconnect the same provider account',
   connection_repair: 'Connection needs repair', fresh_consent_required: 'Send again to give fresh consent',
-  outside_horizon: 'Scheduled for later', past: 'Past workout — left unchanged',
-  completed: 'Completed on provider — left unchanged', unsupported: 'This workout cannot be mapped',
+  outside_horizon: 'Scheduled for later', past: 'Past date · provider copy kept',
+  completed: 'Completed on provider · provider copy kept', unsupported: 'This workout cannot be mapped',
   approval_required: 'Review workout differences', retrying: 'Retry scheduled',
   needs_attention: 'Delivery uncertain — inspect before retrying', failed: 'Delivery failed',
 };
+
+/** Completion belongs to the authored workout; the provider remains delivery/provenance context. */
+export function trainingDeliveryStatusLabel(status: TrainingDeliveryStatusV1,
+  completion?: Pick<TrainingWorkoutCompletionV1, 'workoutId' | 'provider'>): string {
+  const confirmedCopy = status.hasRemoteCopy && !status.differsFromQS && status.lastAcceptedAtMs !== null;
+  if (completion?.workoutId === status.workoutId && confirmedCopy) {
+    return completion.provider === status.provider ? 'Completed · activity linked' : 'Sent · workout completed';
+  }
+  return TRAINING_DELIVERY_STATUS_LABELS[status.status];
+}
 
 /** Show the latest transport event, not an older success ahead of a newer failure. */
 export function trainingDeliveryLatestEvent(status: Pick<TrainingDeliveryStatusV1, 'lastAcceptedAtMs' | 'lastAttemptAtMs' | 'updatedAtMs'>): {

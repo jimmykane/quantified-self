@@ -61,7 +61,7 @@ describe('Training provider delivery controls', () => {
       { provide: TrainingPlansService, useValue: { watchSchedule: () => of({ state: { revision: 3 }, plans: [], workouts: [{
         schemaVersion: 1, id: 'w', planId: null, title: 'Morning run', revision: 2, localDate: '2026-09-10', lifecycle: 'planned',
         createdAtMs: 1, updatedAtMs: 1, structure: { version: 1, sport: ActivityTypes.Running, nodes: [] },
-      }] }) } },
+      }] }), watchWorkoutCompletions: () => of([]) } },
     ] }).compileComponents();
   });
   it.each(['plan', 'workout', 'history'])('renders all provider logos beside named headings in %s sync without extra reads or actions', scope => {
@@ -96,6 +96,23 @@ describe('Training provider delivery controls', () => {
     // Multiple controls belong below the status, not in the compact heading's
     // single-action slot, where they squeeze the provider name at phone widths.
     expect(fixture.nativeElement.querySelector('[compactRowAction]')).toBeNull();
+  });
+  it('shows whether the activity link came from this provider or another confirmed provider copy', () => {
+    service.watchScope.mockReturnValue(of({ settings: [], statuses: [
+      { ...status, provider: 'garmin', status: 'past', differsFromQS: false, lastAcceptedAtMs: 1000 },
+      { ...status, id: 'suunto-delivery', provider: 'suunto', status: 'completed', differsFromQS: false, lastAcceptedAtMs: 1000 },
+    ] }));
+    TestBed.overrideProvider(TrainingPlansService, { useValue: {
+      watchSchedule: () => of({ state: { revision: 3 }, plans: [], workouts: [{
+        schemaVersion: 1, id: 'w', planId: null, title: 'Morning run', revision: 2, localDate: '2026-09-10', lifecycle: 'planned',
+        createdAtMs: 1, updatedAtMs: 1, structure: { version: 1, sport: ActivityTypes.Running, nodes: [] },
+      }] }),
+      watchWorkoutCompletions: () => of([{ workoutId: 'w', planId: null, provider: 'suunto' }]),
+    } });
+    const fixture = TestBed.createComponent(TrainingDeliveryDialogComponent); fixture.detectChanges();
+    expect(fixture.nativeElement.textContent).toContain('Sent · workout completed');
+    expect(fixture.nativeElement.textContent).toContain('Completed · activity linked');
+    expect(fixture.nativeElement.textContent).not.toContain('left unchanged');
   });
   it('offers targeted Wahoo reconnect without mutating sync settings and preserves account guards', async () => {
     const open = vi.fn();
@@ -244,9 +261,9 @@ describe('Training provider delivery controls', () => {
     expect(guidance.textContent).toContain('asks the connected app to remove upcoming synced workouts');
     expect(guidance.textContent).toContain('Your plans and workouts stay in Quantified Self');
     expect(guidance.textContent).toContain('Your provider account stays connected');
-    expect(guidance.textContent).toContain('Past and completed workouts stay unchanged');
+    expect(guidance.textContent).toContain('Provider copies for past dates or completed workouts are kept');
     expect(guidance.textContent).toContain('If your Pro subscription ends, sync pauses');
-    expect(guidance.textContent).not.toMatch(/disconnect|account deletion|copies|withdraws/i);
+    expect(guidance.textContent).not.toMatch(/disconnect|account deletion|withdraws/i);
     expect(service.preview).not.toHaveBeenCalled(); expect(service.mutate).not.toHaveBeenCalled();
   });
   it('places one Edit workout link beside the workout context, outside sync controls and history', () => {

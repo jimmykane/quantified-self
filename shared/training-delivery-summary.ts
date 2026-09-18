@@ -3,6 +3,7 @@ import { PLANNED_WORKOUT_PROVIDER_IDS, type PlannedWorkoutProviderId } from './p
 import { buildProviderPresentation, type ProviderPresentation } from './provider-presentation';
 import type { ScheduledWorkoutV1, TrainingPlanV1 } from './training-plans';
 import type { TrainingDeliveryScope, TrainingDeliverySettingsV1, TrainingDeliveryStatusV1 } from './training-provider-delivery';
+import type { TrainingWorkoutCompletionV1 } from './training-workout-completion';
 
 export const TRAINING_SYNC_OUTCOMES = ['awaiting_latest_check', 'skipped', 'plan_inactive', 'sync_off',
   'not_synced', 'waiting', 'unconfirmed', 'pending', 'delivered', 'removed', 'stopped', 'paused_plan',
@@ -13,6 +14,7 @@ export type TrainingSyncWorkout = Pick<ScheduledWorkoutV1, 'id' | 'planId' | 'li
 export type TrainingSyncPlan = Pick<TrainingPlanV1, 'lifecycle'>;
 export type TrainingSyncSetting = Pick<TrainingDeliverySettingsV1, 'scope' | 'scopeId' | 'provider' | 'enabled' | 'suppressed' | 'timeZone' | 'destinationKey' | 'associationPlanId' | 'updatedAtMs'>;
 export type TrainingSyncStatus = Pick<TrainingDeliveryStatusV1, 'id' | 'workoutId' | 'planId' | 'provider' | 'status' | 'differsFromQS' | 'hasRemoteCopy' | 'timeZone' | 'lastAttemptAtMs' | 'lastAcceptedAtMs' | 'updatedAtMs'>;
+export type TrainingSyncCompletion = Pick<TrainingWorkoutCompletionV1, 'workoutId' | 'planId' | 'provider'>;
 export interface TrainingSyncProjection {
   provider: PlannedWorkoutProviderId;
   state: 'current' | 'history' | 'inactive' | 'off' | 'empty' | 'incomplete';
@@ -73,13 +75,18 @@ function countedOutcome(label: string, count: number): string {
     'Plan inactive · copy remains': ['in an inactive plan · provider copy kept', 'in an inactive plan · provider copies kept'],
     'Sync off · copy remains': ['not syncing · provider copy kept', 'not syncing · provider copies kept'],
     'Skipped · copy remains': ['skipped · provider copy kept', 'skipped · provider copies kept'],
+    'Completed · activity linked': ['completed · activity linked', 'completed · activities linked'],
+    'Sent · workout completed': ['sent · workout completed', 'sent · workouts completed'],
+    'Past date · provider copy kept': ['past date · provider copy kept', 'past dates · provider copies kept'],
+    'Completed on provider · provider copy kept': ['completed on provider · provider copy kept', 'completed on provider · provider copies kept'],
   };
   // Lowercase only the leading letter, preserving names such as Pro and QS.
   return `${count} ${forms[label]?.[count === 1 ? 0 : 1] ?? label.charAt(0).toLowerCase() + label.slice(1)}`;
 }
 
 function workoutOutcome(workout: TrainingSyncWorkout, status: TrainingSyncStatus | undefined,
-  setting: TrainingSyncSetting | undefined, plan: TrainingSyncPlan | null): Outcome {
+  setting: TrainingSyncSetting | undefined, plan: TrainingSyncPlan | null,
+  completion: TrainingSyncCompletion | undefined): Outcome {
   const outcome = (label: string, synced = false, attention = false,
     code: TrainingSyncOutcome = status?.status ?? 'not_synced'): Outcome => ({ label, code, synced, attention, copy: !!status?.hasRemoteCopy });
   // Independent live listeners may deliver authored data before the worker's new projection.
@@ -94,10 +101,15 @@ function workoutOutcome(workout: TrainingSyncWorkout, status: TrainingSyncStatus
     };
     return outcome(labels[status.status]!, false, true);
   }
+  const confirmedCopy = !!status?.hasRemoteCopy && !status.differsFromQS && status.lastAcceptedAtMs !== null;
+  if (completion && confirmedCopy) {
+    return outcome(completion.provider === status.provider ? 'Completed · activity linked' : 'Sent · workout completed',
+      workout.lifecycle !== 'skipped', false, 'completed');
+  }
   if (status?.status === 'past' || status?.status === 'completed') {
-    const confirmed = status.hasRemoteCopy && !status.differsFromQS && status.lastAcceptedAtMs !== null;
     const skipped = workout.lifecycle === 'skipped';
-    return outcome((skipped ? 'Skipped · ' : '') + (status.status === 'completed' ? 'Completed · left unchanged' : 'Past · left unchanged'), confirmed && !skipped);
+    const label = status.status === 'completed' ? 'Completed on provider · provider copy kept' : 'Past date · provider copy kept';
+    return outcome((skipped ? 'Skipped · ' : '') + label, confirmedCopy && !skipped);
   }
   if (workout.lifecycle === 'skipped') return outcome(status?.hasRemoteCopy ? 'Skipped · copy remains' : 'Skipped', false, false, 'skipped');
   if (plan && plan.lifecycle !== 'active') return outcome(status?.hasRemoteCopy ? 'Plan inactive · copy remains' : 'Plan inactive', false, false, 'plan_inactive');
@@ -122,7 +134,7 @@ function workoutOutcome(workout: TrainingSyncWorkout, status: TrainingSyncStatus
 export async function buildTrainingDeliverySummaries(input: {
   uid: string; scope: TrainingDeliveryScope; id: string; workouts: readonly TrainingSyncWorkout[];
   plan: TrainingSyncPlan | null; settings: readonly TrainingSyncSetting[];
-  statuses: readonly TrainingSyncStatus[]; complete: boolean;
+  statuses: readonly TrainingSyncStatus[]; completions: readonly TrainingSyncCompletion[]; complete: boolean;
 }): Promise<TrainingDeliverySummary[]> {
   const workouts = input.workouts.filter(workout => workout.lifecycle !== 'deleted'
     && (input.scope === 'plan' ? workout.planId === input.id : workout.id === input.id));
@@ -158,7 +170,8 @@ export async function buildTrainingDeliverySummaries(input: {
       if (status && override && override.updatedAtMs > status.updatedAtMs) {
         return { label: 'Awaiting latest check', code: 'awaiting_latest_check' as const, synced: false, attention: false, copy: status.hasRemoteCopy };
       }
-      return workoutOutcome(workout, status, setting, input.plan);
+      return workoutOutcome(workout, status, setting, input.plan,
+        input.completions.find(completion => completion.workoutId === workout.id && completion.planId === workout.planId));
     }));
     const earlier = records.filter(record => !matchedIds.has(record.id));
     const retained = earlier.filter(record => record.hasRemoteCopy);
@@ -177,7 +190,9 @@ export async function buildTrainingDeliverySummaries(input: {
     const historicalOnly = !setting && !records.some(record => workoutIds.has(record.workoutId));
     const countLabel = `${synced} of ${workouts.length} ${workouts.length === 1 ? 'workout' : 'workouts'} synced`;
     let label = input.scope === 'plan' ? countLabel : outcomes[0]?.label ?? 'Sync history';
-    if (input.scope === 'workout' && synced && label !== 'Synced') label = `Synced · ${label.toLowerCase()}`;
+    if (input.scope === 'workout' && synced && label !== 'Synced' && !['past', 'completed'].includes(outcomes[0]?.code ?? '')) {
+      label = `Synced · ${label.toLowerCase()}`;
+    }
     if (input.scope === 'workout' && !setting && retained.length) label = 'Earlier provider copy';
     if (historicalOnly) label = 'Sync history';
     else if (input.scope === 'plan' && !workouts.length) label = setting?.enabled ? 'Sync enabled · no workouts' : 'Sync off · no workouts';

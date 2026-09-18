@@ -105,9 +105,13 @@ latest attempt or confirmation; an older success never masks a newer failed atte
 Plan and workout surfaces show per-service destination summaries from the safe delivery projections. Plan totals are
 aggregates of all current authored workouts, not evidence of a native provider plan or device receipt. Only complete,
 unchanged confirmations for the matching destination count as synced; earlier-account/removed-source records remain
-history. Waiting, paused, unsupported, approval and failure states stay visible. Bounded/incomplete or failed reads must
-not claim complete success. Rendering these summaries performs owner-visible reads only, never provider calls or consent
-changes. See the Training workspace source of truth for identity matching, read bounds and tests.
+history. An exact persisted completion is workout-level: its evidence provider is labelled **Completed · activity linked**,
+other confirmed destination copies are labelled **Sent · workout completed**, and unrelated past copies are labelled
+**Past date · provider copy kept**. This display rule does not turn one provider's evidence into another provider's
+completion claim or expose provider identifiers. Waiting, paused, unsupported, approval and failure states stay visible.
+Bounded/incomplete or failed reads must not claim complete success. Rendering these summaries performs owner-visible
+reads only, never provider calls or consent changes. See the Training workspace source of truth for identity matching,
+read bounds and tests.
 
 Separately authorized MCP Training delivery changes reuse `trainingDeliveryCommand` and its durable reconciliation
 marker; MCP does not implement an adapter or call provider HTTP directly. A strict proposal resolves only server-owned

@@ -192,7 +192,7 @@
             }
           </div>
           <app-training-delivery-button scope="plan" [entityId]="plan.id" [title]="plan.name"
-            [summaryWorkouts]="schedule().workouts" [summaryPlan]="plan"
+            [summaryWorkouts]="schedule().workouts" [summaryPlan]="plan" [summaryCompletions]="completions()"
             [disabled]="busyAction() !== null"></app-training-delivery-button>
 
           @if (renamingPlanId() === plan.id) {
@@ -415,7 +415,7 @@
           </fieldset>
           @if (savedEditorWorkout(); as workout) {
             <app-training-delivery-button scope="workout" [entityId]="workout.id" [title]="workout.title"
-              [summaryWorkouts]="[workout]" [summaryPlan]="savedEditorPlan()"
+              [summaryWorkouts]="[workout]" [summaryPlan]="savedEditorPlan()" [summaryCompletions]="completions()"
               [standalone]="workout.planId === null" [disabled]="busyAction() !== null"></app-training-delivery-button>
           }
         <div class="form-actions editor-save-actions">
@@ -551,6 +551,7 @@
                 </ol>
                 <app-training-delivery-button scope="workout" [entityId]="row.workout.id" [title]="row.workout.title"
                   [summaryWorkouts]="[row.workout]" [summaryPlan]="view() === 'plans' ? selectedPlan() : null"
+                  [summaryCompletions]="completions()"
                   [standalone]="row.workout.planId === null" [disabled]="busyAction() !== null"></app-training-delivery-button>
               <div compactRowAction class="workout-row-actions">
                 <button appHapticTap mat-button type="button" aria-label="Edit workout" (click)="editWorkout(row.workout)" [disabled]="busyAction() !== null">

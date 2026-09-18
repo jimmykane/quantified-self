@@ -597,8 +597,12 @@ opens the existing sync details; rendering it never previews, grants consent, re
 summaries describe the current saved workout, not an unsaved draft. Plan totals cover every current non-deleted workout
 in that plan, across its entire date range—not only the selected day or the first 25 dialog rows. Skipped, waiting,
 outside-window, paused, unsupported and unapproved workouts remain explicit non-success states in that denominator.
-Confirmed past/completed copies may count as synced only while the safe projection confirms unchanged content; they
-are labelled as left unchanged. Empty plans are not fully synced. Plan inactive and sync-off preferences are distinct
+Confirmed past/completed copies may count as synced only while the safe projection confirms unchanged content. The
+status copy separates authored-workout completion from provider delivery: the provider that supplied an exact persisted
+completion link shows **Completed · activity linked**, another provider's confirmed copy shows
+**Sent · workout completed**, and an unrelated past delivery shows **Past date · provider copy kept**. The completion
+provider remains provenance; completion belongs to the planned workout and is not duplicated per destination. Empty
+plans are not fully synced. Plan inactive and sync-off preferences are distinct
 from confirmed delivery, and per-workout failures cannot be hidden by other successful workouts.
 
 `training-delivery-summary.helper.ts` matches the server's JSON-framed SHA-256 delivery identity using the owner-visible

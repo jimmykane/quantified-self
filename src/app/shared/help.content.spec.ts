@@ -549,6 +549,9 @@ describe('help.content', () => {
     expect(planningSection?.content).toContain('Wahoo initially supports time-based running and cycling workouts');
     expect(planningSection?.content).toContain('Scheduled for later');
     expect(planningSection?.content).toContain('Sent is not a watch receipt');
+    expect(planningSection?.content).toContain('**Completed · activity linked**');
+    expect(planningSection?.content).toContain('**Sent · workout completed**');
+    expect(planningSection?.content).toContain('**Past date · provider copy kept**');
     expect(planningSection?.content).toContain('Garmin supports the same choices');
     expect(planningSection?.content).toContain('only the broad Running or Cycling family');
     expect(planningSection?.content).toContain('only one can be active');
