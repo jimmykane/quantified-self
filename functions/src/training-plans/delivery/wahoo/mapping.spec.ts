@@ -27,6 +27,8 @@ describe('Wahoo delivery mapping (no editor changes)', () => {
     const encoded = new URLSearchParams(wahooPlanBody(workout, 'destination', true)).get('plan[file]')!;
     const plan = JSON.parse(Buffer.from(encoded.split(',')[1], 'base64').toString());
     expect(plan.header).toMatchObject({ name: workout.title, description: workout.title });
+    expect(plan.intervals[0].targets).toEqual([]);
+    expect(plan.intervals[1].intervals[0].targets).toEqual([]);
     expect(plan.intervals[1]).toMatchObject({ exit_trigger_type: 'repeat', exit_trigger_value: 2 });
   });
   it.each(['distance', 'kilojoules'] as const)('does not estimate duration from %s endings', ending => {

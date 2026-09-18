@@ -227,7 +227,9 @@ function stepToWahoo(step: WorkoutStepV1, context: WahooMappingContext): WahooPl
         ...(step.note ? { name: step.note } : {}),
         ...endingToTrigger(step.ending),
         intensity_type: purposeToIntensity(step.purpose),
-        ...(targets.length > 0 ? { targets } : {}),
+        // The published schema marks targets optional, but Wahoo's production
+        // validator requires an array on every non-repeat interval.
+        targets,
     };
 }
 
