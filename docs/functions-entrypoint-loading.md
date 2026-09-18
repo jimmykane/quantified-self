@@ -1,8 +1,9 @@
 # Firebase Functions target-aware entrypoint loading
 
-The Functions package exposes every application function through `functions/src/index.ts`. Google sets
-`FUNCTION_TARGET` to the exported handler name when it starts a deployed function container. The entrypoint uses that
-value to load selected handlers without evaluating the complete backend module graph.
+The Functions package runtime main is `functions/src/index.ts`; the complete deployed-function registry lives in
+`functions/src/full-entrypoint.ts`. Google sets `FUNCTION_TARGET` to the exported handler name when it starts a deployed
+function container. The runtime main uses that value to load selected handlers without evaluating the complete backend
+module graph.
 
 ## Loading paths
 
