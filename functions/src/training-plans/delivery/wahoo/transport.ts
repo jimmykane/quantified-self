@@ -174,9 +174,12 @@ export class WahooTrainingTransport implements TrainingDeliveryTransport {
     const value = ownedPlan(raw, operation.artifact!);
     const workout = operation.workout!;
     const expected = wahooWorkoutFields(workout, operation.destinationKey, operation.timeZone, operation.artifact!.ids.plan);
+    const providerUpdatedAt = typeof value.provider_updated_at === 'string' ? Date.parse(value.provider_updated_at) : NaN;
+    // Production readback truncates the submitted ISO timestamp to whole seconds.
+    // Compare at the provider's precision while still rejecting another revision.
     if (value.name !== workout.title || numeric(value.workout_type_family_id) !== expected.workout_type_id
       || numeric(value.workout_type_location_id) !== 1 || typeof value.provider_updated_at !== 'string'
-      || Date.parse(value.provider_updated_at) !== workout.updatedAtMs) uncertain();
+      || Math.trunc(providerUpdatedAt / 1000) !== Math.trunc(workout.updatedAtMs / 1000)) uncertain();
   }
   private matchesWorkout(value: Value, operation: DeliveryOperation): boolean {
     const expected = wahooWorkoutFields(operation.workout!, operation.destinationKey, operation.timeZone, operation.artifact!.ids.plan);

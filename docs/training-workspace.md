@@ -1049,6 +1049,16 @@ the old provider instant in that retained zone, then adopts the new zone only wh
 `starts` instant. Past-copy protection also uses the retained zone, including date-line changes; unknown legacy zones
 are never guessed across mismatched dates.
 
+Although Wahoo's published plan.json schema marks `header.description` and interval `targets` optional, its production
+Plan validator rejects either omission. Delivery therefore sends the already-bounded workout title as both Plan name
+and description. The validator also rejects an empty target array, so an authored untargeted interval receives the
+documented full-domain RPE range 1–10; this does not narrow the athlete's effort. This adds no Training editor field or
+authored recipe property. Mapping version `wahoo-plans-v4` ensures any retained future copy is reassessed against this
+production-required envelope. Wahoo production returns HTTP 200 for successful Plan create/delete despite the create
+example commonly being interpreted as 201; the HTTP boundary accepts both 200 and 201 POST success. Plan readback also
+truncates `provider_updated_at` to whole seconds, so ownership confirmation compares that field at the provider's
+observed precision while still rejecting a different authored revision.
+
 Each QS workout owns its own app-created Plan plus dated Workout, even for copied recipes. Destination-bound hashed
 `external_id` and `workout_token` remain stable through edits/rescheduling. Private ledger IDs retain the Plan,
 Workout, and confirmed association independently. Journal each request boundary and checkpoint each accepted resource
@@ -1085,8 +1095,10 @@ Plan CRUD. The existing Wahoo client secrets are bound to `processTrainingDelive
 
 HTTP calls use the exact API host and allowlisted paths, no redirects/local retries, 10-second deadlines and 2 MiB
 request/response bounds. Existing Wahoo production counters apply to delivery/recovery/inspection; token refresh is
-excluded as documented. Both Retry-After and X-RateLimit-Reset survive retries. Diagnostics contain only safe categories,
-status and phase, never provider bodies, tokens, file URLs or private artifact IDs.
+excluded as documented. Both Retry-After and X-RateLimit-Reset survive retries. A 422 response is read only through a
+separate 16 KiB/500 ms diagnostic bound and reduced in memory to fixed response-shape, rejection-category and known request-field
+enums. A confidently classified application/Plans access rejection follows the existing `provider_unavailable` path;
+validation rejections remain terminal. Diagnostics never retain provider bodies or messages, tokens, file URLs or private artifact IDs.
 
 MCP impact: existing `training-plans:read` projections already represent Wahoo and the `completed` outcome. Same-PR positive
 and negative fixtures cover status reads and reject Plan IDs, workout tokens, completion evidence and journals. The
@@ -1095,6 +1107,8 @@ public schema, scope, write tool, plugin artifact or registered-client refresh. 
 recovery metadata, not an extra MCP field; the existing public time zone remains the user's sync setting.
 No Rules/index changes are required: all private evidence stays in the existing server-only ledger, with unchanged
 safe owner-visible status projections and cleanup.
+The 422 diagnostic enums are private operator logs only, so they do not change MCP tools, scopes, instructions, consent,
+registered schemas or plugin artifacts and require no registered-client refresh.
 
 Release gate: public `deliveryEnabled` stays false and the exact pilot UID is checked on frontend and backend. Prepare
 Functions `getWahooAPIAuthRequestTokenRedirectURI`, `requestAndSetWahooAPIAccessToken`, `previewTrainingProviderDelivery`,
@@ -1103,11 +1117,11 @@ deployment. Do not redeploy unrelated infrastructure. #649 remains open until th
 edit, reschedule, copy, Stop, target warnings and seven-day device behavior. Turning the pilot off blocks withdrawals
 too; use Stop while access is valid when cleanup is intended.
 
-Local release verification (2026-09-17): backend TypeScript and the normal frontend build pass. Production bundling
-hits the same existing initial-bundle budget failure on this branch and unchanged `develop` (`53a7c52cd`): 1.73 MB
-against the 1.44 MB limit, 292.45 kB over. The budget is unchanged. This blocks the production build; no deployment,
-live provider write or device acceptance test has been performed. Synthetic dialog QA covers desktop/320px widths,
-light/dark themes and the shared thin scroll owner; physical haptics and device delivery still require real-device checks.
+Release verification (2026-09-18): backend TypeScript and the focused Wahoo/provider suites pass. A separately authorized
+single-function pilot deployment created and read back one app-owned Plan, its dated Workout and their association through
+the production API. The live responses exposed the required description, non-empty target and whole-second timestamp
+behaviors documented above. The temporary diagnostic Plan was deleted by exact retained ID. Cloud acceptance still does
+not prove download to a physical Wahoo device, so device delivery remains a pilot check.
 
 ### Remote verification and repair (#703)
 
