@@ -53,6 +53,8 @@ describe('help.content', () => {
     expect(content).toContain('**Sync plan with Garmin**');
     expect(content).toContain('**Enable plan sync**');
     expect(content).toContain('**Workout sync status**');
+    expect(content).toContain("each provider's logo and a compact synced/total count");
+    expect(content).toContain('small **View** action');
     expect(content).toContain('whether sync is enabled for each provider');
     expect(content).toContain('one **Manage** action');
     expect(content).toContain('**All services** returns to the provider overview');

@@ -62,9 +62,15 @@ describe('Training delivery summaries on the workspace', () => {
   }
   it.each(['plan', 'workout'] as const)('shows %s destination confirmation and opens details without granting consent', async scope => {
     const fixture = await render(scope);
-    expect(fixture.nativeElement.textContent).toContain(scope === 'plan' ? 'Garmin Connect · 1 of 1 workout synced' : 'Garmin Connect · Synced');
+    if (scope === 'plan') {
+      expect(fixture.nativeElement.querySelector('.delivery-plan-provider').getAttribute('aria-label'))
+        .toContain('Garmin Connect: 1 of 1 workout synced');
+      expect(fixture.nativeElement.querySelector('.delivery-plan-provider-count').textContent.trim()).toBe('1/1');
+    } else {
+      expect(fixture.nativeElement.textContent).toContain('Garmin Connect · Synced');
+    }
     expect(service.watchPresence).not.toHaveBeenCalled(); expect(open).not.toHaveBeenCalled(); expect(selection).not.toHaveBeenCalled();
-    const button: HTMLButtonElement = fixture.nativeElement.querySelector('.delivery-summary');
+    const button: HTMLButtonElement = fixture.nativeElement.querySelector(scope === 'plan' ? '.delivery-plan-view' : '.delivery-summary');
     expect(button.getAttribute('aria-label')).toContain(`Open ${scope} sync details`);
     button.click(); expect(selection).toHaveBeenCalledTimes(1);
     expect(open.mock.calls[0][1].data).toEqual({ scope, id: scope === 'plan' ? 'p' : 'w', title: scope === 'plan' ? plan.name : workout.title });
@@ -72,11 +78,14 @@ describe('Training delivery summaries on the workspace', () => {
   it('updates live failures and authored edits without reopening all Firestore listeners', async () => {
     const fixture = await render();
     fixture.componentRef.setInput('summaryWorkouts', [{ ...workout, updatedAtMs: 10 }]); fixture.detectChanges();
-    await vi.waitFor(() => { fixture.detectChanges(); expect(fixture.nativeElement.textContent).toContain('awaiting latest check'); });
+    await vi.waitFor(() => { fixture.detectChanges(); expect(fixture.nativeElement.querySelector('.delivery-plan-provider').getAttribute('aria-label'))
+      .toContain('awaiting latest check'); });
     expect(service.watchSummaryScope).toHaveBeenCalledTimes(1);
     view$.next({ settings: [setting], statuses: [{ ...status, status: 'approval_required', differsFromQS: true, updatedAtMs: 11 }] });
-    await vi.waitFor(() => { fixture.detectChanges(); expect(fixture.nativeElement.textContent).toContain('1 needs approval'); });
-    expect(fixture.nativeElement.textContent).toContain('needs approval'); expect(open).not.toHaveBeenCalled(); expect(selection).not.toHaveBeenCalled();
+    await vi.waitFor(() => { fixture.detectChanges(); expect(fixture.nativeElement.querySelector('.delivery-plan-provider').getAttribute('aria-label'))
+      .toContain('1 needs approval'); });
+    expect(fixture.nativeElement.querySelector('.delivery-plan-provider').getAttribute('aria-label')).toContain('needs approval');
+    expect(open).not.toHaveBeenCalled(); expect(selection).not.toHaveBeenCalled();
   });
   it('clears summaries immediately on account change/sign-out and tears down the old read', async () => {
     const fixture = await render();
@@ -88,7 +97,7 @@ describe('Training delivery summaries on the workspace', () => {
   });
   it('keeps unavailable-provider details visible, but honors disabled controls', async () => {
     const fixture = await render(); fixture.componentRef.setInput('disabled', true); fixture.detectChanges();
-    const button: HTMLButtonElement = fixture.nativeElement.querySelector('.delivery-summary');
+    const button: HTMLButtonElement = fixture.nativeElement.querySelector('.delivery-plan-view');
     expect(button.disabled).toBe(true); button.click(); expect(open).not.toHaveBeenCalled(); expect(selection).not.toHaveBeenCalled();
   });
   it('reports read errors without displaying invented zero/success totals', async () => {
@@ -127,14 +136,20 @@ describe('Training delivery summaries on the workspace', () => {
       status: index ? 'approval_required' : 'delivered', differsFromQS: index > 0,
     }))) });
     await vi.waitFor(() => { fixture.detectChanges(); expect(fixture.componentInstance.summaries()).toHaveLength(4); });
-    const buttons = fixture.nativeElement.querySelectorAll('.delivery-summary');
+    const summary = fixture.nativeElement.querySelector('.delivery-plan-summary');
+    const buttons = summary.querySelectorAll('button');
     expect(buttons).toHaveLength(1);
-    expect(buttons[0].textContent).toContain('Plan sync');
+    expect(summary.matches('button')).toBe(false);
+    expect(summary.textContent).toContain('Plan sync');
+    expect(buttons[0].textContent).toContain('View');
     expect(fixture.nativeElement.querySelectorAll('.delivery-plan-provider')).toHaveLength(4);
+    const providerRows: HTMLElement[] = Array.from(fixture.nativeElement.querySelectorAll('.delivery-plan-provider'));
     for (const provider of ['Garmin Connect', 'COROS', 'Wahoo', 'Suunto App']) {
-      expect(buttons[0].textContent).toContain(`${provider} · 1 of 2 workouts synced`);
+      expect(providerRows.some(row => row.getAttribute('aria-label')?.includes(`${provider}: 1 of 2 workouts synced`))).toBe(true);
       expect(buttons[0].getAttribute('aria-label')).toContain(`${provider}: 1 of 2 workouts synced`);
     }
+    const visibleCounts: HTMLElement[] = Array.from(fixture.nativeElement.querySelectorAll('.delivery-plan-provider-count'));
+    expect(visibleCounts.map(node => node.textContent?.trim())).toEqual(['1/2', '1/2', '1/2', '1/2']);
     buttons[0].click();
     expect(open).toHaveBeenCalledTimes(1);
     expect(fixture.nativeElement.querySelector('mat-expansion-panel')).toBeNull();

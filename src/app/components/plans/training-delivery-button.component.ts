@@ -58,6 +58,12 @@ export class TrainingDeliveryButtonComponent {
       map(rows => ({ ...empty, rows })), startWith(empty), catchError(() => of({ ...empty, error: true })));
   })), { initialValue: { uid: '', rows: [] as TrainingDeliverySummary[], error: false } });
   readonly summaries = computed(() => this.summaryState().uid === this.users.user()?.uid ? this.summaryState().rows : []);
+  readonly compactPlanSummaries = computed(() => this.summaries().map(summary => ({
+    ...summary,
+    compactLabel: summary.projection.totalWorkouts !== null && summary.projection.syncedWorkouts !== null
+      ? `${summary.projection.syncedWorkouts}/${summary.projection.totalWorkouts}`
+      : '—',
+  })));
   readonly planSummaryAriaLabel = computed(() => `Plan sync. ${this.summaries().map(summary =>
     `${summary.presentation.displayLabel}: ${summary.label}${summary.detail && summary.detail !== summary.label ? `. ${summary.detail}` : ''}`)
     .join('. ')}. Open plan sync details`);
