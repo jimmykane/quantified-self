@@ -50,8 +50,10 @@ The check builds the Functions package and verifies:
 - optimized Suunto startup does not import Genkit, BigQuery, MCP or admin handler modules;
 - optimized Suunto endpoints remain Gen 2 in `europe-west2` with 512 MiB and the same secret bindings.
 
-CI runs the compiled check after the Functions build. Firebase Functions predeploy runs the same compiled check before
-deployment safety and secret-binding validation, so a broken discovery inventory cannot proceed to deployment.
+CI runs the compiled check after the Functions build. Firebase Functions predeploy first rejects forbidden local
+credential, environment and operational files, then runs the compiled entrypoint check and secret-binding validation.
+This ordering prevents the full entrypoint from being evaluated before deployment-source safety succeeds, and a broken
+discovery inventory cannot proceed to deployment.
 
 Run the isolated-process benchmark:
 
