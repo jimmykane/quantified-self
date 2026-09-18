@@ -36,6 +36,19 @@ describe('Wahoo Plan + dated Workout lifecycle', () => {
     expect(await execute()).toBeNull(); expect(server.plans.size).toBe(0); expect(server.workouts.size).toBe(0);
     expect(server.calls.filter(call => call.method === 'DELETE').map(call => call.path)).toEqual([`/v1/workouts/${first.ids.workout}`, `/v1/plans/${first.ids.plan}`]);
   });
+  it('accepts Plan readback that truncates provider_updated_at to whole seconds', async () => {
+    op.workout = { ...op.workout!, updatedAtMs: 1_700_000_000_503 };
+    op.digest = transport.assess(op.workout, op.destinationKey, op.timeZone).digest;
+    server.afterHandle = async request => {
+      if (request.method !== 'POST' || request.path !== '/v1/plans') return;
+      const plan = [...server.plans.values()][0];
+      plan.provider_updated_at = new Date(Math.trunc(op.workout!.updatedAtMs / 1000) * 1000).toISOString();
+      server.afterHandle = null;
+    };
+    const accepted = await execute();
+    expect(accepted?.ids.association).toBe(`${accepted?.ids.workout}:${accepted?.ids.plan}`);
+    expect(server.calls.filter(call => call.method === 'POST')).toHaveLength(2);
+  });
   it('gives duplicated QS workouts independent recipes and dated records', async () => {
     const first = (await execute())!;
     op.artifact = null; next({ id: 'copy' });

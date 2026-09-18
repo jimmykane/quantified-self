@@ -1042,7 +1042,9 @@ and description. The validator also rejects an empty target array, so an authore
 documented full-domain RPE range 1–10; this does not narrow the athlete's effort. This adds no Training editor field or
 authored recipe property. Mapping version `wahoo-plans-v4` ensures any retained future copy is reassessed against this
 production-required envelope. Wahoo production returns HTTP 200 for successful Plan create/delete despite the create
-example commonly being interpreted as 201; the HTTP boundary accepts both 200 and 201 POST success.
+example commonly being interpreted as 201; the HTTP boundary accepts both 200 and 201 POST success. Plan readback also
+truncates `provider_updated_at` to whole seconds, so ownership confirmation compares that field at the provider's
+observed precision while still rejecting a different authored revision.
 
 Each QS workout owns its own app-created Plan plus dated Workout, even for copied recipes. Destination-bound hashed
 `external_id` and `workout_token` remain stable through edits/rescheduling. Private ledger IDs retain the Plan,
@@ -1102,11 +1104,11 @@ deployment. Do not redeploy unrelated infrastructure. #649 remains open until th
 edit, reschedule, copy, Stop, target warnings and seven-day device behavior. Turning the pilot off blocks withdrawals
 too; use Stop while access is valid when cleanup is intended.
 
-Local release verification (2026-09-17): backend TypeScript and the normal frontend build pass. Production bundling
-hits the same existing initial-bundle budget failure on this branch and unchanged `develop` (`53a7c52cd`): 1.73 MB
-against the 1.44 MB limit, 292.45 kB over. The budget is unchanged. This blocks the production build; no deployment,
-live provider write or device acceptance test has been performed. Synthetic dialog QA covers desktop/320px widths,
-light/dark themes and the shared thin scroll owner; physical haptics and device delivery still require real-device checks.
+Release verification (2026-09-18): backend TypeScript and the focused Wahoo/provider suites pass. A separately authorized
+single-function pilot deployment created and read back one app-owned Plan, its dated Workout and their association through
+the production API. The live responses exposed the required description, non-empty target and whole-second timestamp
+behaviors documented above. The temporary diagnostic Plan was deleted by exact retained ID. Cloud acceptance still does
+not prove download to a physical Wahoo device, so device delivery remains a pilot check.
 
 ### Remote verification and repair (#703)
 
