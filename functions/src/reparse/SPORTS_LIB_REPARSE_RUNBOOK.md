@@ -472,7 +472,7 @@ The attention/history table always includes up to ten current-target failures be
   `functions/src/shared/CLOUD_TASKS_DISPATCH_NOTES.md`
 
 ## Exports / Entry Points
-Functions exports in `functions/src/index.ts`:
+Complete function registry exports in `functions/src/full-entrypoint.ts`, served through `functions/src/index.ts`:
 - `scheduleSportsLibReparseScan`
 - `processSportsLibReparseTask`
 
