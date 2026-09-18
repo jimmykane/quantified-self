@@ -4,6 +4,7 @@ import { resolve } from 'node:path';
 import {
   loadOptimizedFunctionTarget,
   OPTIMIZED_FUNCTION_TARGETS,
+  resolveRuntimeFunctionTarget,
 } from '../function-target-loader';
 
 const NO_TARGET = '__NO_TARGET__';
@@ -32,6 +33,8 @@ interface DiscoveredStack {
   endpoints: Record<string, DiscoveredEndpoint>;
 }
 
+type DiscoveryMode = 'none' | 'control-api' | 'manifest-output';
+
 function sortedKeys(value: Record<string, unknown>): string[] {
   return Object.keys(value).sort();
 }
@@ -45,12 +48,14 @@ function probe(targetArgument: string): void {
 
   const entrypoint = module.require(resolve(__dirname, '..', 'index')) as Record<string, unknown>;
   const target = process.env.FUNCTION_TARGET?.trim() || null;
+  const runtimeTarget = resolveRuntimeFunctionTarget(process.env);
   const exports = sortedKeys(entrypoint);
   let matchesFullEntrypoint: boolean | null = null;
   let preservesHandlerIdentity: boolean | null = null;
 
-  if (target && OPTIMIZED_FUNCTION_TARGETS.includes(target)) {
-    preservesHandlerIdentity = entrypoint[target] === loadOptimizedFunctionTarget(target);
+  if (runtimeTarget && OPTIMIZED_FUNCTION_TARGETS.includes(runtimeTarget)) {
+    preservesHandlerIdentity = entrypoint[runtimeTarget]
+      === loadOptimizedFunctionTarget(runtimeTarget);
   } else {
     const fullEntrypoint = module.require(
       resolve(__dirname, '..', 'full-entrypoint'),
@@ -77,15 +82,22 @@ function probe(targetArgument: string): void {
   process.stdout.write(`${JSON.stringify(result)}\n`);
 }
 
-function runProbe(target: string): ProbeResult {
+function runProbe(target: string, discoveryMode: DiscoveryMode = 'none'): ProbeResult {
   const env: NodeJS.ProcessEnv = {
     ...process.env,
     GCLOUD_PROJECT: process.env.GCLOUD_PROJECT || 'quantified-self-io',
   };
+  delete env.FUNCTIONS_CONTROL_API;
+  delete env.FUNCTIONS_MANIFEST_OUTPUT_PATH;
   if (target === NO_TARGET) {
     delete env.FUNCTION_TARGET;
   } else {
     env.FUNCTION_TARGET = target;
+  }
+  if (discoveryMode === 'control-api') {
+    env.FUNCTIONS_CONTROL_API = 'true';
+  } else if (discoveryMode === 'manifest-output') {
+    env.FUNCTIONS_MANIFEST_OUTPUT_PATH = '/tmp/functions.yaml';
   }
   const child = spawnSync(process.execPath, [__filename, '--probe', target], {
     cwd: resolve(__dirname, '..', '..', '..', '..'),
@@ -104,6 +116,8 @@ function assert(condition: unknown, message: string): asserts condition {
 
 async function loadFirebaseManifest(): Promise<DiscoveredStack> {
   delete process.env.FUNCTION_TARGET;
+  delete process.env.FUNCTIONS_MANIFEST_OUTPUT_PATH;
+  process.env.FUNCTIONS_CONTROL_API = 'true';
   process.env.GCLOUD_PROJECT ||= 'quantified-self-io';
   process.env.FIREBASE_CONFIG ||= JSON.stringify({
     projectId: process.env.GCLOUD_PROJECT,
@@ -137,6 +151,17 @@ async function check(): Promise<void> {
     arraysEqual(discovery.exports, unknown.exports),
     'Unknown-target exports differ from discovery exports.',
   );
+
+  const canaryTarget = OPTIMIZED_FUNCTION_TARGETS[0];
+  assert(canaryTarget, 'The optimized target registry is empty.');
+  for (const discoveryMode of ['control-api', 'manifest-output'] as const) {
+    const guardedDiscovery = runProbe(canaryTarget, discoveryMode);
+    assert(
+      guardedDiscovery.matchesFullEntrypoint
+        && arraysEqual(discovery.exports, guardedDiscovery.exports),
+      `Firebase ${discoveryMode} discovery honored an inherited FUNCTION_TARGET.`,
+    );
+  }
 
   for (const target of OPTIMIZED_FUNCTION_TARGETS) {
     const optimized = runProbe(target);

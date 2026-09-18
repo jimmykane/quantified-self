@@ -65,6 +65,10 @@ function runProbe(target: string): ProbeResult {
     ...process.env,
     GCLOUD_PROJECT: process.env.GCLOUD_PROJECT || 'quantified-self-io',
   };
+  // Benchmarks model runtime startup even when the caller's shell previously
+  // ran Firebase discovery commands.
+  delete env.FUNCTIONS_CONTROL_API;
+  delete env.FUNCTIONS_MANIFEST_OUTPUT_PATH;
   if (target === NO_TARGET) {
     delete env.FUNCTION_TARGET;
   } else {

@@ -1,11 +1,14 @@
 'use strict';
 
 import { initializeFirebase } from './bootstrap';
-import { loadOptimizedFunctionTarget } from './function-target-loader';
+import {
+  loadOptimizedFunctionTarget,
+  resolveRuntimeFunctionTarget,
+} from './function-target-loader';
 
 initializeFirebase();
 
-const functionTarget = process.env.FUNCTION_TARGET?.trim();
+const functionTarget = resolveRuntimeFunctionTarget(process.env);
 const optimizedHandler = functionTarget
   ? loadOptimizedFunctionTarget(functionTarget)
   : undefined;

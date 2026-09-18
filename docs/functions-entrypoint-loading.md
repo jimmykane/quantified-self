@@ -15,6 +15,10 @@ value to load selected handlers without evaluating the complete backend module g
   surface used before target-aware loading and remains the safe fallback for Firebase CLI discovery, new functions and
   targets that have not been optimized.
 
+Firebase discovery modes (`FUNCTIONS_CONTROL_API` and `FUNCTIONS_MANIFEST_OUTPUT_PATH`) always take precedence over an
+inherited `FUNCTION_TARGET`. This prevents a developer or CI environment variable from reducing the deployment manifest
+to a single optimized function.
+
 Firebase Admin initialization lives in `functions/src/bootstrap.ts` and runs before either path. It remains idempotent,
 uses the migrated EU Storage bucket and configures Firestore to ignore undefined properties.
 
@@ -37,6 +41,7 @@ npm --prefix functions run entrypoint:check
 The check builds the Functions package and verifies:
 
 - discovery exposes all 153 application exports;
+- both Firebase discovery modes ignore an inherited optimized `FUNCTION_TARGET`;
 - an unknown target exposes the same complete export set;
 - a discovered Gen 1 target retains the complete entrypoint fallback;
 - each optimized target exposes only its requested handler;

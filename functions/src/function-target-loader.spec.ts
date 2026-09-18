@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import {
   loadFunctionTarget,
   OPTIMIZED_FUNCTION_TARGETS,
+  resolveRuntimeFunctionTarget,
 } from './function-target-loader';
 
 describe('function target loader', () => {
@@ -10,6 +11,22 @@ describe('function target loader', () => {
       'getSuuntoAPIAuthRequestTokenRedirectURI',
       'requestAndSetSuuntoAPIAccessToken',
     ]);
+  });
+
+  it('resolves a trimmed target only during runtime loading', () => {
+    expect(resolveRuntimeFunctionTarget({ FUNCTION_TARGET: '  suuntoTarget  ' }))
+      .toBe('suuntoTarget');
+    expect(resolveRuntimeFunctionTarget({ FUNCTION_TARGET: '   ' })).toBeUndefined();
+  });
+
+  it.each([
+    { FUNCTIONS_CONTROL_API: 'true' },
+    { FUNCTIONS_MANIFEST_OUTPUT_PATH: '/tmp/functions.yaml' },
+  ])('ignores an inherited target during Firebase discovery: %o', discoveryEnvironment => {
+    expect(resolveRuntimeFunctionTarget({
+      FUNCTION_TARGET: 'getSuuntoAPIAuthRequestTokenRedirectURI',
+      ...discoveryEnvironment,
+    })).toBeUndefined();
   });
 
   it('returns the original exported function object', () => {
