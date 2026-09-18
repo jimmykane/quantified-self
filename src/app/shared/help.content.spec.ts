@@ -53,6 +53,8 @@ describe('help.content', () => {
     expect(content).toContain('**Sync plan with Garmin**');
     expect(content).toContain('**Enable plan sync**');
     expect(content).toContain('**Workout sync status**');
+    expect(content).toContain('choose a provider tab');
+    expect(content).toContain('Changing tabs does not enable sync or send anything');
     expect(content).toContain('individual workouts, not plans or edits');
     expect(content).toContain('**Garmin Connect · 2 of 3 workouts synced**');
     expect(content).toContain('across the whole plan, not just the selected day');

@@ -64,26 +64,42 @@ describe('Training provider delivery controls', () => {
       }] }), watchWorkoutCompletions: () => of([]) } },
     ] }).compileComponents();
   });
-  it.each(['plan', 'workout', 'history'])('renders all provider logos beside named headings in %s sync without extra reads or actions', scope => {
+  it.each(['plan', 'workout', 'history'])('renders provider tabs with destination logos in %s sync without extra reads or actions', scope => {
     TestBed.overrideProvider(MAT_DIALOG_DATA, { useValue: { scope, id: 'w', title: 'Example' } });
     const providers = ['garmin', 'coros', 'wahoo', 'suunto'];
     service.watchScope.mockReturnValue(of({ settings: [], statuses: providers.map(provider => ({ ...status, provider, id: provider })) }));
     const fixture = TestBed.createComponent(TrainingDeliveryDialogComponent); fixture.detectChanges();
+    expect(fixture.nativeElement.querySelectorAll('[role="tab"]')).toHaveLength(4);
     const icons = fixture.debugElement.queryAll(By.directive(ServiceSourceIconComponent));
     expect(icons).toHaveLength(4);
     icons.forEach((icon, index) => {
       const component = icon.componentInstance as ServiceSourceIconComponent;
       expect(component.presentation?.mode).toBe('destination');
       expect(component.serviceLogo).toBe(providers[index]);
-      expect(icon.nativeElement.closest('h3')?.textContent.trim()).toBe(fixture.componentInstance.rows()[index].label);
+      expect(icon.nativeElement.closest('[role="tab"]')?.textContent.trim()).toContain(fixture.componentInstance.rows()[index].label);
       expect(icon.nativeElement.getAttribute('aria-hidden')).toBe('true');
       expect(icon.nativeElement.querySelector('svg')).not.toBeNull();
       expect(component.showTooltip).toBe(false);
-      expect(component.iconWidth).toBe(64); expect(component.iconHeight).toBe(20);
+      expect(component.iconWidth).toBe(48); expect(component.iconHeight).toBe(16);
     });
     expect(TestBed.inject(AppEventService).getEventMetaDataKeys).not.toHaveBeenCalled();
     expect(service.preview).not.toHaveBeenCalled(); expect(service.mutate).not.toHaveBeenCalled();
     expect(haptics.selection).not.toHaveBeenCalled();
+  });
+  it('omits a redundant tab strip for one provider and changes providers without sync side effects', async () => {
+    let fixture = TestBed.createComponent(TrainingDeliveryDialogComponent); fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('mat-tab-group')).toBeNull();
+    expect(fixture.nativeElement.querySelector('.delivery-provider-logo')).not.toBeNull();
+
+    fixture.destroy();
+    service.watchScope.mockReturnValue(of({ settings: [], statuses: [status,
+      { ...status, id: 'suunto-delivery', provider: 'suunto' }] }));
+    fixture = TestBed.createComponent(TrainingDeliveryDialogComponent); fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('.mat-mdc-tab-body-active')?.textContent).toContain('Garmin');
+    fixture.componentInstance.selectProviderTab(1); fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('.mat-mdc-tab-body-active')?.textContent).toContain('Suunto');
+    expect(haptics.selection).toHaveBeenCalledTimes(1);
+    expect(service.preview).not.toHaveBeenCalled(); expect(service.mutate).not.toHaveBeenCalled();
   });
   it('hides unavailable send controls but preserves problem details and Stop sync', () => {
     const fixture = TestBed.createComponent(TrainingDeliveryDialogComponent); fixture.detectChanges();
@@ -97,7 +113,7 @@ describe('Training provider delivery controls', () => {
     // single-action slot, where they squeeze the provider name at phone widths.
     expect(fixture.nativeElement.querySelector('[compactRowAction]')).toBeNull();
   });
-  it('shows whether the activity link came from this provider or another confirmed provider copy', () => {
+  it('shows whether the activity link came from this provider or another confirmed provider copy', async () => {
     service.watchScope.mockReturnValue(of({ settings: [], statuses: [
       { ...status, provider: 'garmin', status: 'past', differsFromQS: false, lastAcceptedAtMs: 1000 },
       { ...status, id: 'suunto-delivery', provider: 'suunto', status: 'completed', differsFromQS: false, lastAcceptedAtMs: 1000 },
@@ -111,6 +127,7 @@ describe('Training provider delivery controls', () => {
     } });
     const fixture = TestBed.createComponent(TrainingDeliveryDialogComponent); fixture.detectChanges();
     expect(fixture.nativeElement.textContent).toContain('Sent · workout completed');
+    fixture.componentInstance.selectProviderTab(1); fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
     expect(fixture.nativeElement.textContent).toContain('Completed · activity linked');
     expect(fixture.nativeElement.textContent).not.toContain('left unchanged');
   });
@@ -134,6 +151,7 @@ describe('Training provider delivery controls', () => {
     service.preview.mockResolvedValue({ schemaVersion: 1, available: true, connection: 'connection_repair', hasPro: true,
       timeZone: 'Europe/Helsinki', effect: 'enable', settingsRevision: 0, eligibleCount: 0, warningCount: 0, issues: [WAHOO_TRAINING_PERMISSION_ISSUE], approvalDigest: null });
     const fixture = TestBed.createComponent(TrainingDeliveryDialogComponent); fixture.detectChanges();
+    fixture.componentInstance.selectProviderTab(1); fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
     expect(fixture.nativeElement.textContent).toContain('Distance-based steps are not sent');
     expect(fixture.nativeElement.textContent).toContain('Automatic restoration is unavailable');
     await fixture.componentInstance.begin('wahoo', 'send'); fixture.detectChanges();
@@ -318,7 +336,8 @@ describe('Training provider delivery controls', () => {
     expect(fixture.nativeElement.querySelector('.delivery-edit-workout')).toBeNull();
     rows[0].click();
     expect(open).toHaveBeenCalledWith(TrainingDeliveryDialogComponent, expect.objectContaining({ data: {
-      scope: 'workout', id: 'w', title: 'Year-end run', returnTo: { scope: 'plan', id: 'p', title: 'Winter build' },
+      scope: 'workout', id: 'w', title: 'Year-end run', selectedProvider: 'garmin',
+      returnTo: { scope: 'plan', id: 'p', title: 'Winter build', selectedProvider: 'garmin' },
     } }));
     expect(service.preview).not.toHaveBeenCalled(); expect(service.mutate).not.toHaveBeenCalled();
   });
@@ -818,8 +837,8 @@ describe('Training provider delivery controls', () => {
       .find(button => button.getAttribute('aria-label') === 'Sync details for workout: Deleted workout');
     expect(details).toBeDefined(); details!.click();
     expect(open).toHaveBeenCalledWith(TrainingDeliveryDialogComponent,
-      expect.objectContaining({ data: { scope: 'workout', id: 'deleted', title: 'Deleted workout',
-        returnTo: { scope: 'history', id: 'current', title: 'All provider deliveries' } } }));
+      expect.objectContaining({ data: { scope: 'workout', id: 'deleted', title: 'Deleted workout', selectedProvider: 'garmin',
+        returnTo: { scope: 'history', id: 'current', title: 'All provider deliveries', selectedProvider: 'garmin' } } }));
     expect(close).toHaveBeenCalled();
     expect(fixture.nativeElement.querySelector('a[href*="deleted"]')).toBeNull();
     expect(fixture.nativeElement.querySelector('.delivery-edit-workout')).toBeNull();
@@ -932,8 +951,8 @@ describe('Training provider delivery controls', () => {
     ref.componentInstance.inspectWorkout({ ...status, workoutId: 'deleted' } as Parameters<TrainingDeliveryDialogComponent['inspectWorkout']>[0]);
     await TestBed.inject(ApplicationRef).whenStable();
     ref = TestBed.inject(MatDialog).openDialogs.at(-1)!;
-    expect(ref.componentInstance.data).toEqual({ scope: 'workout', id: 'deleted', title: 'Deleted workout',
-      returnTo: { scope: 'history', id: 'current', title: 'All provider deliveries' } });
+    expect(ref.componentInstance.data).toEqual({ scope: 'workout', id: 'deleted', title: 'Deleted workout', selectedProvider: 'garmin',
+      returnTo: { scope: 'history', id: 'current', title: 'All provider deliveries', selectedProvider: 'garmin' } });
     await ref.componentInstance.begin('garmin', 'retry'); render('delivery-deleted-recovery');
     expect(ref.componentInstance.preview()?.command.expectedScopeRevision).toBe(0);
     ref.close();

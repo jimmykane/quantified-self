@@ -11,6 +11,11 @@ p, li, span, a { overflow-wrap: anywhere; }
 .delivery-context .delivery-caption { margin-block: 0.25rem 0; }
 .delivery-setting-label { margin: 0 0 0.25rem; font-weight: 500; }
 .delivery-provider-logo { display: flex; flex: 0 0 auto; }
+.delivery-provider-tabs { min-width: 0; }
+.delivery-provider-tab-label { display: flex; align-items: center; gap: 0.45rem; min-width: 0; }
+.delivery-provider-tab-label > app-service-source-icon { display: flex; flex: 0 0 auto; }
+.delivery-provider-tab-label > span { overflow-wrap: anywhere; }
+.delivery-provider-tab-panel { min-width: 0; padding-block: 0.75rem 0.25rem; }
 .delivery-provider-settings { display: grid; gap: 0.25rem; }
 .delivery-workouts h4 { margin: 0 0 0.25rem; font: var(--mat-sys-title-small); }
 app-compact-row p.delivery-caption { margin: 0; }
@@ -40,3 +45,8 @@ app-compact-row p.delivery-caption { margin: 0; }
 .delivery-guidance { margin-block-start: 0.75rem; padding-block-end: 0.25rem; }
 .delivery-guidance p { margin-block: 0.5rem; }
 [hidden] { display: none !important; }
+
+@media (max-width: 520px) {
+  .delivery-provider-tab-label { gap: 0.3rem; }
+  .delivery-provider-tab-panel { padding-block-start: 0.625rem; }
+}

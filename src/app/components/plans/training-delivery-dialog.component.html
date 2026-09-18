@@ -86,10 +86,36 @@
       }
     </section>
   } @else {
-    @for (row of rows(); track row.provider; let last = $last) {
-      <app-compact-row [title]="row.label" layout="stacked" density="compact" [showDivider]="!last">
+    @if (rows().length > 1) {
+      <mat-tab-group class="delivery-provider-tabs" animationDuration="0ms" [selectedIndex]="selectedProviderIndex()"
+        [attr.aria-label]="dialogTitle() + ' providers'" (selectedIndexChange)="selectProviderTab($event)">
+        @for (row of rows(); track row.provider) {
+          <mat-tab>
+            <ng-template mat-tab-label>
+              <span class="delivery-provider-tab-label">
+                <app-service-source-icon [presentation]="row.presentation" [showTooltip]="false"
+                  [iconWidth]="48" [iconHeight]="16" aria-hidden="true"></app-service-source-icon>
+                <span>{{ row.label }}</span>
+              </span>
+            </ng-template>
+            <ng-template matTabContent>
+              <section class="delivery-provider-tab-panel" [attr.aria-label]="row.label + ' sync details'">
+                <ng-container *ngTemplateOutlet="providerDetails; context: { $implicit: row }"></ng-container>
+              </section>
+            </ng-template>
+          </mat-tab>
+        }
+      </mat-tab-group>
+    } @else if (rows()[0]; as row) {
+      <app-compact-row [title]="row.label" layout="stacked" density="compact" [showDivider]="false">
         <app-service-source-icon compactRowTitlePrefix class="delivery-provider-logo" [presentation]="row.presentation"
           [showTooltip]="false" [iconWidth]="64" [iconHeight]="20" aria-hidden="true"></app-service-source-icon>
+        <ng-container *ngTemplateOutlet="providerDetails; context: { $implicit: row }"></ng-container>
+      </app-compact-row>
+    } @else if (view().loaded) {
+      <p>No providers are available for workout delivery yet.</p>
+    }
+    <ng-template #providerDetails let-row>
         <div class="delivery-provider-settings">
           @if (data.scope !== 'history') {
             <p class="delivery-setting-label">{{ row.settingLabel }}</p>
@@ -206,8 +232,7 @@
             }
           </ul>
         </section>
-      </app-compact-row>
-    } @empty { @if (view().loaded) { <p>No providers are available for workout delivery yet.</p> } }
+    </ng-template>
     @if (canLoadMore()) { <button mat-button appHapticTap type="button" (click)="loadMore()" [disabled]="busy()">Show more workout statuses</button> }
   }
   <div class="delivery-guidance">

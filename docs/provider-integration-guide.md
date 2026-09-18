@@ -102,6 +102,11 @@ provider training-plan parity. Inherited workout reviews show the server-resolve
 override's older zone. Transport timestamps appear in workout details separately from scheduled dates and reflect the
 latest attempt or confirmation; an older success never masks a newer failed attempt.
 
+Plans expose one compact **Plan sync** entry rather than one action per provider. Provider logos, names and totals remain
+visible in that entry; the shared overview then uses Material tabs when multiple destinations exist. A single destination
+does not get a redundant tab strip. Selecting a tab is local navigation only: it must not preview, mutate, grant consent or
+call a provider. Opening a workout from a provider tab and returning preserves that provider context.
+
 Plan and workout surfaces show per-service destination summaries from the safe delivery projections. Plan totals are
 aggregates of all current authored workouts, not evidence of a native provider plan or device receipt. Only complete,
 unchanged confirmations for the matching destination count as synced; earlier-account/removed-source records remain

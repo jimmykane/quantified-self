@@ -36,6 +36,8 @@ No credentials, private ledgers, attempts, artifacts, approval digests, issue te
 not import transports or write Training data; normal OAuth usage counters remain permitted infrastructure behavior.
 
 `shared/training-delivery-summary.ts` supplies machine-readable classification to MCP and unchanged presentation to the UI.
+The plan UI may consolidate those provider projections into one entry and use provider tabs in its details dialog; that is
+presentation-only and does not change this tool schema, provider outcomes, counts, consent or any MCP action.
 Services appear only with existing settings/evidence. Outputs include saved timezone, copy/mismatch indicators, freshness
 timestamps and plan counts. `checkedAtMs` is local read time, not a provider check. Aggregates cover all current non-deleted
 plan workouts (max 400), never a day/page. Historical workout scans cap at 1,000; settings, overrides and retained statuses
