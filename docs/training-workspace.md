@@ -1036,6 +1036,11 @@ the old provider instant in that retained zone, then adopts the new zone only wh
 `starts` instant. Past-copy protection also uses the retained zone, including date-line changes; unknown legacy zones
 are never guessed across mismatched dates.
 
+Although Wahoo's published plan.json schema marks `header.description` optional, its production Plan validator rejects
+an omitted description. Delivery therefore sends the already-bounded workout title as both Plan name and description;
+this adds no Training editor field or authored recipe property. Mapping version `wahoo-plans-v2` ensures any retained
+future copy is reassessed against this production-required envelope.
+
 Each QS workout owns its own app-created Plan plus dated Workout, even for copied recipes. Destination-bound hashed
 `external_id` and `workout_token` remain stable through edits/rescheduling. Private ledger IDs retain the Plan,
 Workout, and confirmed association independently. Journal each request boundary and checkpoint each accepted resource

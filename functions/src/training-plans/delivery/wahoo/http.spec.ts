@@ -34,6 +34,7 @@ describe('Wahoo Training HTTP boundary', () => {
     ['{"errors":["Application is not approved for Plans"]}', 'application_not_approved', undefined],
     ['{"error":"Plans access is not enabled"}', 'plan_access_unavailable', undefined],
     ['{"errors":{"plan[file]":["can\'t be blank"]}}', 'missing_parameter', 'plan_file'],
+    ['{"error":"Plan validation error: field \'description\' is missing"}', 'missing_parameter', 'plan_description'],
     ['{"errors":{"external_id":["is invalid"]}}', 'invalid_parameter', 'plan_external_id'],
     ['{"errors":{"intervals":["is malformed"]}}', 'invalid_parameter', 'plan_payload'],
     ['private provider detail', 'unknown_validation', undefined],

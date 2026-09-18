@@ -86,7 +86,7 @@ export type TrainingDeliveryProviderRejection = 'application_not_approved' | 'pl
   | 'missing_parameter' | 'invalid_parameter' | 'unknown_validation' | 'empty_response'
   | 'oversized_response' | 'unreadable_response';
 export type TrainingDeliveryProviderField = 'plan_file' | 'plan_filename' | 'plan_external_id'
-  | 'plan_provider_updated_at' | 'plan_payload';
+  | 'plan_provider_updated_at' | 'plan_description' | 'plan_payload';
 export type TrainingDeliveryProviderResponseShape = 'empty' | 'json' | 'text' | 'oversized' | 'unreadable';
 export interface TrainingDeliveryTransportDiagnostics {
   httpStatus?: number;
@@ -121,7 +121,7 @@ export class TrainingDeliveryTransportError extends Error {
     const providerRejections: TrainingDeliveryProviderRejection[] = ['application_not_approved', 'plan_access_unavailable',
       'missing_parameter', 'invalid_parameter', 'unknown_validation', 'empty_response', 'oversized_response', 'unreadable_response'];
     const providerFields: TrainingDeliveryProviderField[] = ['plan_file', 'plan_filename', 'plan_external_id',
-      'plan_provider_updated_at', 'plan_payload'];
+      'plan_provider_updated_at', 'plan_description', 'plan_payload'];
     const providerResponseShapes: TrainingDeliveryProviderResponseShape[] = ['empty', 'json', 'text', 'oversized', 'unreadable'];
     this.diagnostics = {
       ...(Number.isInteger(diagnostics.httpStatus) && diagnostics.httpStatus! >= 100 && diagnostics.httpStatus! <= 599

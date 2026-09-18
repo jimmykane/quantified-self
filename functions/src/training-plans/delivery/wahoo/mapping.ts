@@ -8,7 +8,7 @@ import { assessTrainingDeliveryMapping } from '../mapping';
 import { hashTrainingScheduleRequestPayload } from '../../persistence';
 import { TrainingDeliveryTransportError, type DeliveryAssessment } from '../contracts';
 
-export const WAHOO_MAPPING_VERSION = 'wahoo-plans-v1';
+export const WAHOO_MAPPING_VERSION = 'wahoo-plans-v2';
 export const WAHOO_DURATION_ISSUE = 'Wahoo delivery currently requires time-based steps throughout the workout. Distance-based steps cannot provide its required total duration.';
 export function wahooIdentities(destination: string, workoutId: string) {
   const hash = createHash('sha256').update(JSON.stringify([destination, workoutId])).digest('base64url');
@@ -55,7 +55,11 @@ export function assessWahooDelivery(workout: ScheduledWorkoutV1, destination: st
     mappingVersion: WAHOO_MAPPING_VERSION, digest: hashTrainingScheduleRequestPayload({ version: WAHOO_MAPPING_VERSION, digest: assessment.digest, duration }) };
 }
 export function wahooPlanBody(workout: ScheduledWorkoutV1, destination: string, create: boolean): string {
-  const plan = serializeWahooPlanJsonV1(workout.structure, { name: workout.title, location: 'outdoor', allowDegraded: true }).artifact;
+  // Wahoo's published plan.json schema marks description optional, but its
+  // production Plan validator rejects files without it. Scheduled workouts do
+  // not have a separate description, so use the already-bounded title.
+  const plan = serializeWahooPlanJsonV1(workout.structure,
+    { name: workout.title, description: workout.title, location: 'outdoor', allowDegraded: true }).artifact;
   return new URLSearchParams({ 'plan[file]': `data:application/json;base64,${Buffer.from(JSON.stringify(plan)).toString('base64')}`,
     'plan[filename]': 'plan.json', 'plan[provider_updated_at]': new Date(workout.updatedAtMs).toISOString(),
     ...(create ? { 'plan[external_id]': wahooIdentities(destination, workout.id).externalId } : {}) }).toString();

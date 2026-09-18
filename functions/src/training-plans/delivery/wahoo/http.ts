@@ -70,6 +70,7 @@ function providerField(value: string): TrainingDeliveryProviderField | undefined
   if (/provider[_\W]*updated[_\W]*at/.test(value)) return 'plan_provider_updated_at';
   if (/external[_\W]*id/.test(value)) return 'plan_external_id';
   if (/file[_\W]*name/.test(value)) return 'plan_filename';
+  if (/\bdescription\b/.test(value)) return 'plan_description';
   if (/\b(intervals?|header|workout[_\s-]*type|exit[_\s-]*trigger|intensity[_\s-]*type)\b/.test(value)) return 'plan_payload';
   if (/\bfile\b|plan\[file\]|data:application\/json/.test(value)) return 'plan_file';
   return undefined;
@@ -86,7 +87,7 @@ function classifyRejection(raw: string): TrainingDeliveryTransportDiagnostics {
   const access = /not(?: currently| yet)? approved|unapproved|approval required|not authori[sz]ed|unauthori[sz]ed|not allowed|forbidden|access denied|not enabled|permission (?:denied|required)|does not have permission|lacks permission|entitlement/.test(normalized);
   const application = /\b(app|application|client)\b/.test(normalized);
   const plan = /\bplans?\b/.test(normalized);
-  const missing = /can't be blank|cannot be blank|must not be blank|is blank|is required|required parameter|missing parameter|parameter is missing|must be present|not present/.test(normalized);
+  const missing = /can't be blank|cannot be blank|must not be blank|is blank|is required|required parameter|missing parameter|parameter is missing|is missing|must be present|not present/.test(normalized);
   const invalid = /\binvalid\b|not valid|malformed|unprocessable|unsupported|must be (?:a|an|one|valid)|could not parse|can't be parsed|cannot be parsed|parse error/.test(normalized);
   const providerRejection = application && access ? 'application_not_approved'
     : plan && access ? 'plan_access_unavailable'

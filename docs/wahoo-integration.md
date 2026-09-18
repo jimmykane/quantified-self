@@ -27,6 +27,8 @@ Training delivery uses the shared queue and exact-UID private pilot, not the act
 single detailed implementation and operational contract is [Wahoo Training delivery](training-workspace.md#wahoo-plan-and-dated-workout-delivery-649):
 time-based Running/Cycling, saved-zone seven-day window, separate Plan/Workout/association receipts, duplicate-safe
 recovery, positive-only cloud checks, scope migration, lifecycle fences and pending production-account/device checks.
+The production Plan validator requires `header.description` despite the published plan.json schema marking it optional;
+QS supplies the bounded workout title and does not add another editor field.
 The existing production app/account is the pilot target. Do not interpret the historical activity launch checklist
 below as a requirement to create a sandbox or apply for Wahoo-owned Plan-library entitlement.
 
