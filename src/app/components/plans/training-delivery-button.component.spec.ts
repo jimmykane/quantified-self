@@ -116,7 +116,7 @@ describe('Training delivery summaries on the workspace', () => {
     await vi.waitFor(() => { fixture.detectChanges(); expect(fixture.nativeElement.textContent).toContain('Sync status unavailable'); });
     expect(fixture.nativeElement.textContent).not.toContain('workouts synced'); expect(open).not.toHaveBeenCalled();
   });
-  it('keeps a multi-service mixed-result plan compact and individually named', async () => {
+  it('uses one plan-level entry while keeping every service status visible and named', async () => {
     const fixture = await render();
     const providers = ['garmin', 'coros', 'wahoo', 'suunto'] as const;
     const workouts = [workout, { ...workout, id: 'new', title: 'New-year workout', localDate: '2027-01-03' }];
@@ -127,8 +127,16 @@ describe('Training delivery summaries on the workspace', () => {
       status: index ? 'approval_required' : 'delivered', differsFromQS: index > 0,
     }))) });
     await vi.waitFor(() => { fixture.detectChanges(); expect(fixture.componentInstance.summaries()).toHaveLength(4); });
-    expect(fixture.nativeElement.querySelectorAll('.delivery-summary')).toHaveLength(4);
-    for (const button of fixture.nativeElement.querySelectorAll('.delivery-summary')) expect(button.getAttribute('aria-label')).toContain('1 of 2 workouts synced');
+    const buttons = fixture.nativeElement.querySelectorAll('.delivery-summary');
+    expect(buttons).toHaveLength(1);
+    expect(buttons[0].textContent).toContain('Plan sync');
+    expect(fixture.nativeElement.querySelectorAll('.delivery-plan-provider')).toHaveLength(4);
+    for (const provider of ['Garmin Connect', 'COROS', 'Wahoo', 'Suunto App']) {
+      expect(buttons[0].textContent).toContain(`${provider} · 1 of 2 workouts synced`);
+      expect(buttons[0].getAttribute('aria-label')).toContain(`${provider}: 1 of 2 workouts synced`);
+    }
+    buttons[0].click();
+    expect(open).toHaveBeenCalledTimes(1);
     expect(fixture.nativeElement.querySelector('mat-expansion-panel')).toBeNull();
     if (process.env.TRAINING_DELIVERY_QA_DIR) {
       const require = createRequire(import.meta.url);

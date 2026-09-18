@@ -29,7 +29,9 @@ const PROVIDER_PRESENTATIONS = {
 
 export interface TrainingDeliveryDialogData {
   scope: TrainingDeliveryViewScope; id: string; title: string;
-  returnTo?: { scope: 'plan' | 'history'; id: string; title: string };
+  returnTo?: { scope: 'plan' | 'history'; id: string; title: string; selectedProvider?: PlannedWorkoutProviderId };
+  /** Select a provider in the overview without starting or changing consent. */
+  selectedProvider?: PlannedWorkoutProviderId;
   /** Open a read-only consent check directly when there is only one available destination. */
   initialProvider?: PlannedWorkoutProviderId;
 }
@@ -64,6 +66,7 @@ export class TrainingDeliveryDialogComponent {
   readonly busy = computed(() => this.phase() !== null);
   readonly notice = signal<string | null>(null);
   readonly draft = signal<DeliveryDraft | null>(null);
+  readonly selectedProvider = signal<PlannedWorkoutProviderId | null>(this.data.selectedProvider ?? this.data.initialProvider ?? null);
   readonly editingTimeZone = signal(false);
   readonly guidanceExpanded = signal(false);
   readonly attemptsExpanded = signal<string | null>(null);
@@ -195,9 +198,14 @@ export class TrainingDeliveryDialogComponent {
       reconnect: statuses.some(item => ['reconnect_required', 'connection_repair', 'fresh_consent_required'].includes(item.status)),
     };
   }).filter(row => row.visible));
-  readonly showsSuuntoGuidance = computed(() => this.rows().some(row => row.provider === 'suunto'));
-  readonly showsCorosGuidance = computed(() => this.rows().some(row => row.provider === 'coros'));
-  readonly showsWahooGuidance = computed(() => this.rows().some(row => row.provider === 'wahoo'));
+  readonly selectedProviderIndex = computed(() => {
+    const index = this.rows().findIndex(row => row.provider === this.selectedProvider());
+    return index < 0 ? 0 : index;
+  });
+  readonly activeProvider = computed(() => this.rows()[this.selectedProviderIndex()]?.provider ?? null);
+  readonly showsSuuntoGuidance = computed(() => this.activeProvider() === 'suunto');
+  readonly showsCorosGuidance = computed(() => this.activeProvider() === 'coros');
+  readonly showsWahooGuidance = computed(() => this.activeProvider() === 'wahoo');
   readonly wahooPreviewReconnect = computed(() => this.preview()?.command.provider === 'wahoo'
     && this.preview()?.result.issues.includes(WAHOO_TRAINING_PERMISSION_ISSUE));
   readonly canLoadMore = computed(() => this.view().loaded && this.statuses().length === this.statusLimit());
@@ -344,11 +352,18 @@ export class TrainingDeliveryDialogComponent {
     if (!this.sameAccount() || this.busy() || !this.canLoadMore()) return;
     this.statusLimit.update(count => count + TRAINING_DELIVERY_PAGE_SIZE);
   }
+  selectProviderTab(index: number): void {
+    const provider = this.rows()[index]?.provider;
+    if (!provider || provider === this.selectedProvider()) return;
+    this.selectedProvider.set(provider);
+    this.haptics.selection();
+  }
   inspectWorkout(status: TrainingDeliveryStatusV1): void {
     if (!this.sameAccount() || this.busy()) return;
     const title = this.schedule()?.workouts.find(workout => workout.id === status.workoutId)?.title ?? 'Deleted workout';
-    this.openContext({ scope: 'workout', id: status.workoutId, title,
-      ...(this.data.scope !== 'workout' ? { returnTo: { scope: this.data.scope, id: this.data.id, title: this.scopeTitle() } } : {}) });
+    this.openContext({ scope: 'workout', id: status.workoutId, title, selectedProvider: status.provider,
+      ...(this.data.scope !== 'workout' ? { returnTo: { scope: this.data.scope, id: this.data.id,
+        title: this.scopeTitle(), selectedProvider: status.provider } } : {}) });
   }
   backToOverview(): void {
     if (this.data.returnTo) this.openContext(this.data.returnTo);
