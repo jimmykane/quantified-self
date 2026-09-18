@@ -59,6 +59,8 @@ describe('integration-pages.content', () => {
     expect(PROVIDER_INTEGRATION_ROUTE_DATA.garmin.description).toContain('GPX/FIT routes');
     expect(PROVIDER_INTEGRATION_ROUTE_DATA.garmin.description).toContain('Garmin to Suunto activity sync');
     expect(PROVIDER_INTEGRATION_PAGES.garmin.highlights).toContain('Send saved routes to Garmin Connect');
+    expect(PROVIDER_INTEGRATION_PAGES.garmin.syncFlows.find(flow => flow.title === 'Garmin history import')?.copy)
+      .toContain('full window selected');
     expect(PROVIDER_INTEGRATION_PAGES.garmin.syncFlows.some(flow => flow.title === 'Send saved routes to Garmin Connect')).toBe(true);
     expect(PROVIDER_INTEGRATION_PAGES.garmin.tools.some(tool => tool.title === 'Send routes to Garmin Connect')).toBe(true);
     expect(PROVIDER_INTEGRATION_PAGES.garmin.tools.some(tool => tool.title === 'GPX and FIT route upload')).toBe(true);

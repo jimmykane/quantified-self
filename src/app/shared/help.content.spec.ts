@@ -1002,6 +1002,7 @@ describe('help.content', () => {
     expect(serviceConnectionsSection?.content).toContain('**Manage in Garmin**');
     expect(serviceConnectionsSection?.content).toContain('You do not need to disconnect in QS first');
     expect(serviceConnectionsSection?.content).toContain('**Reconnect** is reserved for connection recovery');
+    expect(serviceConnectionsSection?.content).toContain('defaults to the full available five-year window through today');
     expect(serviceConnectionsSection?.content).toContain('When a disconnect begins, automatic activity and saved-route delivery');
     expect(serviceConnectionsSection?.content).toContain('you do not need to keep the page open');
     expect(serviceConnectionsSection?.content).toContain('Health history, and Sleep sessions stay in your account');

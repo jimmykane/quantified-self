@@ -110,7 +110,7 @@ export class HistoryImportFormComponent implements OnInit, OnDestroy, OnChanges 
 
   async ngOnInit() {
     this.formGroup = new UntypedFormGroup({
-      startDate: new UntypedFormControl(dayjs().startOf('day'), [
+      startDate: new UntypedFormControl(this.getDefaultHistoryStartDate(), [
         Validators.required,
       ]),
       endDate: new UntypedFormControl(dayjs().endOf('day'), [
@@ -128,6 +128,17 @@ export class HistoryImportFormComponent implements OnInit, OnDestroy, OnChanges 
     this.currentUserID = this.coerceUserID(user);
 
     this.processChanges();
+  }
+
+  private getDefaultHistoryStartDate() {
+    const startDate = new Date();
+    startDate.setHours(0, 0, 0, 0);
+
+    if (this.serviceName === ServiceNames.GarminAPI) {
+      startDate.setFullYear(startDate.getFullYear() - this.garminHistoryLimitYears);
+    }
+
+    return dayjs(startDate);
   }
 
   dateRangeValidator: ValidatorFn = (group: AbstractControl): ValidationErrors | null => {

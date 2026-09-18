@@ -26,6 +26,7 @@ import { NoopAnimationsModule } from '@angular/platform-browser/animations';
 import { Component, Input, NO_ERRORS_SCHEMA } from '@angular/core';
 import { CommonModule } from '@angular/common'; // Added CommonModule
 import { HISTORY_IMPORT_ACTIVITIES_PER_DAY_LIMIT } from '@shared/history-import.constants';
+import dayjs from 'dayjs';
 
 vi.mock('../../services/app.event.service');
 vi.mock('../../services/app.user.service');
@@ -144,6 +145,32 @@ describe('HistoryImportFormComponent', () => {
 
     it('should create', () => {
         expect(component).toBeTruthy();
+    });
+
+    it('defaults Garmin activity history to the full rolling five-year window', () => {
+        const garminFixture = TestBed.createComponent(HistoryImportFormComponent);
+        const garminComponent = garminFixture.componentInstance;
+        garminComponent.serviceName = ServiceNames.GarminAPI;
+
+        try {
+            garminFixture.detectChanges();
+
+            const expectedStart = new Date();
+            expectedStart.setHours(0, 0, 0, 0);
+            expectedStart.setFullYear(expectedStart.getFullYear() - garminComponent.garminHistoryLimitYears);
+            const actualStart = dayjs(garminComponent.formGroup.get('startDate')?.value);
+
+            expect(actualStart.format('YYYY-MM-DD')).toBe(dayjs(expectedStart).format('YYYY-MM-DD'));
+            expect(actualStart.isSame(dayjs().startOf('day'))).toBe(false);
+        } finally {
+            garminFixture.destroy();
+        }
+    });
+
+    it('keeps non-Garmin activity history defaulted to today', () => {
+        const actualStart = dayjs(component.formGroup.get('startDate')?.value);
+
+        expect(actualStart.format('YYYY-MM-DD')).toBe(dayjs().format('YYYY-MM-DD'));
     });
 
     it.each([

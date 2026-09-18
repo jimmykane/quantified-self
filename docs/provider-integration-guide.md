@@ -477,6 +477,10 @@ waits for started writes before reporting failure, and leaves provider requests 
 the existing workers. The operator CLI retains its smaller job/user/backpressure caps.
 Before publishing initial Garmin progress, its reservation transaction rechecks live
 and failed queue rows so a stale preview cannot reset or recreate already-submitted work.
+Garmin activity history is separate from this Health/Sleep policy. Its picker defaults
+to the full latest rolling five-year window through today because an accepted request
+starts the 30-day activity-history cooldown; users can deliberately narrow the range
+before submission. Keep the selected dates visible in the confirmation and status state.
 
 - Use the same queue format and processor as webhooks. Separate processing paths drift and create inconsistent duplicate or cleanup behavior.
 - Require the appropriate entitlement and connection state at request time, then re-check in the worker.

@@ -981,6 +981,7 @@ Garmin history import has two important limits:
 - and only the latest rolling **5 years** of activity data. It does not support an arbitrary older five-year period.
 
 The history picker disables dates before the current five-year cutoff, and the server rejects an older range before contacting Garmin.
+For a first Garmin activity-history request, the picker defaults to the full available five-year window through today because an accepted request starts the 30-day cooldown. You can narrow the dates before importing if you need less history.
 
 Garmin can deliver imported activities gradually over hours or days.
 

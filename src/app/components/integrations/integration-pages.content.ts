@@ -100,7 +100,7 @@ export const PROVIDER_INTEGRATION_PAGES: Record<IntegrationProviderKey, Provider
       {
         icon: 'history',
         title: 'Garmin history import',
-        copy: 'Import activities from Garmin\'s latest rolling five-year history window. Garmin limits how often a new history import can be started, as documented in Help.',
+        copy: 'Import activities from Garmin\'s latest rolling five-year history window. The picker starts with that full window selected because Garmin limits how often a new history import can be started; narrow it before importing only if you need less history.',
       },
       {
         icon: 'monitor_heart',
