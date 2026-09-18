@@ -1177,8 +1177,29 @@ In Settings you can:
 - and customize charts, maps, and units.
 
 Review and revoke authorized MCP clients under [**Connections -> MCP**](/services?serviceName=mcp).
-Each connection shows all permissions with checked boxes for approved access and unchecked boxes for missing access. These indicators are read-only; reconnect the app and review its authorization choices to change access.
+Each connection separates **Data access** from optional **Training changes**, and labels every permission **Granted** or
+**Not granted**. These indicators are read-only; start authorization again from that MCP app and review its authorization
+choices to change access.
 Use the info button beside a permission in **Authorization and data access** to read what it includes and any required permissions.
+
+### If an MCP permission is missing
+
+Missing tools do not mean you have no plans, workouts, or recorded data. The MCP app may not have that permission, or it
+may still be using an older tool catalog.
+
+1. In ChatGPT or your other MCP app, open its Quantified Self connection and start authorization again.
+2. On the Quantified Self approval screen, select **Training plans and planned workouts** to read plans. Also select
+   **Change Training plans and workouts** to propose schedule edits and/or **Change planned-workout sync** to propose
+   delivery actions. Both change permissions require the read permission.
+3. Finish the app's authorization flow. Your existing connection remains usable until the new flow completes.
+4. Start a new chat or refresh the app's Quantified Self tools. If the Training choices are not offered, refresh or rescan
+   the app's Quantified Self connection first.
+
+Training delivery can still be unavailable after its permission is granted: it also requires Pro, a connected supported
+provider, and current rollout/compatibility approval. Do not disconnect an app just to add a permission.
+
+The built-in Assistant is separate: open **Examples & data access** in the Assistant, enable **Training plans**, and
+optionally enable its two Training-change choices. That starts a fresh chat; it does not require MCP-app authorization.
 
 ## MCP client access
 

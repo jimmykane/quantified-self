@@ -36,6 +36,13 @@ Proposal references bind the exact conversation generation, so permission change
 switches cannot reuse them. The dedicated App Check callable rechecks the conversation before applying and clears the
 pending proposal after either apply or dismiss.
 
+External MCP clients and the built-in Assistant have different recovery paths for missing Training access. An external
+client must start OAuth authorization again and approve `training-plans:read` plus either independent child scope as
+needed; a connection display can report status but cannot initiate that client-bound flow. The prior grant stays active
+until the new exchange succeeds, and a client may need a tool-catalog refresh or new chat afterward. The Assistant uses
+its own **Examples & data access** toggles instead, which start a fresh conversation. A missing delivery permission is
+separate from Pro, provider connection, rollout and compatibility gates.
+
 The shared delivery-summary helper provides UI wording and MCP machine outcomes from the same current evidence. Whole-plan
 counts include every current non-deleted workout, with no success claim for incomplete scans, empty plans, stale evidence
 or old-account copies. Confirmation is provider-side workout delivery, never receipt on a watch or native provider plan.
