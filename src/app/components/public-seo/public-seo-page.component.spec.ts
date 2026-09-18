@@ -127,6 +127,8 @@ describe('PublicSeoPageComponent', () => {
     expect(text).toContain('Find recent activities');
     expect(text).toContain('exact event tag');
     expect(text).toContain('Can an MCP client find workouts by tag?');
+    expect(text).toContain('Why are my Training plan tools missing?');
+    expect(text).toContain('not that your plans are absent');
     expect(text).toContain('exact case-insensitive tag matches');
     expect(text).toContain('personal, health, or location context');
     expect(text).toContain('untrusted labels');

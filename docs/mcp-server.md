@@ -215,11 +215,13 @@ Hosting routes these paths to `mcpApi`:
 
 `/mcp/authorize` is the authenticated Angular consent page. The **Connections > MCP** tab lists connections only after
 the client successfully exchanges its authorization code for credentials, and lets the user revoke one immediately.
-Each connection lists every supported permission as a disabled checkbox labelled with the permission name.
-Only scopes returned for that connection are checked; missing permissions, including scopes added since authorization,
-remain unchecked. This display does not expand grants. Users reconnect and review authorization to change permissions.
-The authorization overview shows compact permission names with individually labelled info buttons. Each opens a
-standard Material dialog using the same permission description as consent, with its parent requirement and reconnect
+Each connection separates data access from optional Training changes and lists every supported permission with an explicit
+**Granted** or **Not granted** status. Missing permissions, including scopes added since authorization, remain not granted.
+This display does not expand grants. OAuth authorization must start in the MCP client so its identity, redirect URI and
+requested scopes remain bound; users authorize again from that client and review its choices to change permissions. The
+current connection remains active until the new authorization successfully completes. The authorization overview shows
+compact permission names with individually labelled info buttons. Each opens a
+standard Material dialog using the same permission description as consent, with its parent requirement and authorization
 guidance. Details remain accessible by touch and keyboard without repeating all descriptions in the page.
 
 ## Public discovery and indexing

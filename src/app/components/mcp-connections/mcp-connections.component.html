@@ -7,9 +7,9 @@
       <mat-icon mat-card-avatar class="mcp-connections__card-icon" aria-hidden="true">devices</mat-icon>
       <mat-card-title id="mcp-connections-title">MCP connections</mat-card-title>
       <mat-card-subtitle>
-        These apps can only view the data you approved. Disconnect an app here to stop sharing—even if you already
-        removed it from ChatGPT or another service. Reconnecting the same app keeps the current connection active until
-        the new setup finishes.
+        These apps can access only the data and Training changes you approve. Disconnect an app here to stop sharing—even
+        if you already removed it from ChatGPT or another service. Authorizing the same app again keeps its current
+        connection active until the new setup finishes.
       </mat-card-subtitle>
     </mat-card-header>
     <mat-card-content>
@@ -36,15 +36,36 @@
               <div class="mcp-connections__details">
                 <h3>{{ connection.clientName }}</h3>
                 <p>{{ connection.redirectHost }}</p>
-                <p class="mcp-connections__permissions-label">Read-only access</p>
-                <div class="mcp-connections__permissions" role="group" aria-label="Read-only permission status">
-                  @for (permission of connection.permissions; track permission.scope) {
-                    <mat-checkbox [checked]="permission.granted" disabled>
-                      {{ permission.label }}
-                    </mat-checkbox>
+                <p class="mcp-connections__permissions-label">Permission status</p>
+                <div class="mcp-connections__permission-groups">
+                  @for (group of connection.permissionGroups; track group.id) {
+                    <section class="mcp-connections__permission-group" [attr.aria-labelledby]="connection.connectionId + '-' + group.id + '-title'">
+                      <h4 [id]="connection.connectionId + '-' + group.id + '-title'">{{ group.title }}</h4>
+                      <p>{{ group.summary }}</p>
+                      @for (permission of group.permissions; track permission.scope; let last = $last) {
+                        <app-compact-row
+                          [title]="permission.title"
+                          [headingLevel]="4"
+                          [icon]="permission.granted ? 'check_circle' : 'remove_circle_outline'"
+                          [iconTone]="permission.granted ? 'primary' : 'neutral'"
+                          [summary]="permission.summary"
+                          density="compact"
+                          [showDivider]="!last">
+                          <span compactRowAction class="mcp-connections__permission-state"
+                            [class.mcp-connections__permission-state--granted]="permission.granted">
+                            {{ permission.granted ? 'Granted' : 'Not granted' }}
+                          </span>
+                        </app-compact-row>
+                      }
+                    </section>
                   }
                 </div>
-                <p>Reconnect this app to approve unchecked permissions.</p>
+                <p class="mcp-connections__authorization-help">
+                  To add a missing permission, start authorization again in {{ connection.clientName }}, select the
+                  access you want on the Quantified Self approval screen, then finish setup. Refresh its tools or start
+                  a new chat after it succeeds. If the permission is not offered, refresh or rescan its Quantified Self
+                  connection first.
+                </p>
                 <p class="mcp-connections__dates">
                   Connected {{ connection.createdAtMs | date:'mediumDate' }}
                   @if (connection.lastUsedAtMs) {
@@ -87,7 +108,7 @@
       <mat-icon mat-card-avatar class="mcp-connections__card-icon" aria-hidden="true">add_link</mat-icon>
       <mat-card-title id="mcp-chatgpt-setup-title">ChatGPT setup</mat-card-title>
       <mat-card-subtitle>
-        Add the Quantified Self endpoint and icon before starting the read-only authorization flow.
+        Add the Quantified Self endpoint and icon before authorizing the data and Training access you want.
       </mat-card-subtitle>
     </mat-card-header>
     <mat-card-content>
@@ -136,7 +157,7 @@
         <ol class="mcp-connections__setup-steps">
           <li>Let ChatGPT scan the available tools.</li>
           <li>Sign in to Quantified Self when prompted.</li>
-          <li>Choose the read-only metrics, body measurements, Health metrics, activity details, sleep, or saved-route permissions you want to grant.</li>
+          <li>Choose the data and optional Training permissions you want to grant.</li>
         </ol>
       </section>
 
@@ -179,7 +200,7 @@
           </li>
         }
       </ul>
-      <p>Reconnect an app to grant additional permissions. You can disconnect it at any time.</p>
+      <p>Start authorization again in an app to grant additional permissions. You can disconnect it at any time.</p>
       <ng-template #permissionDialog let-permission>
         <h2 mat-dialog-title>{{ permission.title }}</h2>
         <mat-dialog-content>
@@ -187,7 +208,7 @@
           @if (permission.parentTitle) {
             <p>Requires {{ permission.parentTitle }} permission.</p>
           }
-          <p>Reconnect the app and approve this permission to grant access. Training changes still require a separate proposal confirmation.</p>
+          <p>Start authorization again in the app and approve this permission to grant access. Training changes still require a separate proposal confirmation.</p>
         </mat-dialog-content>
         <mat-dialog-actions align="end">
           <button mat-button mat-dialog-close type="button" (click)="haptics.selection()">Close</button>

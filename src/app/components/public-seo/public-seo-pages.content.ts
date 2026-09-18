@@ -582,7 +582,7 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
           {
             icon: 'monitor_heart',
             title: 'Recorded Health metrics',
-            copy: 'Explore all-day heart rate, HRV, stress, Body Battery or resources, movement, energy and blood pressure with separate Health permission. Sources stay separate; Body Battery keeps its Garmin points scale. With Health and Sleep access, compare nightly HRV with the Health chart’s shared personal range. Bounded sample trends include UTC times. Body composition also needs Body measurements access. Reconnect an existing client to grant Health access.',
+            copy: 'Explore all-day heart rate, HRV, stress, Body Battery or resources, movement, energy and blood pressure with separate Health permission. Sources stay separate; Body Battery keeps its Garmin points scale. With Health and Sleep access, compare nightly HRV with the Health chart’s shared personal range. Bounded sample trends include UTC times. Body composition also needs Body measurements access. Authorize an existing client again to grant Health access.',
           },
           {
             icon: 'directions_run',
@@ -649,15 +649,19 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
       },
       {
         question: 'Can an MCP client read my activity descriptions?',
-        answer: 'Only when Activity descriptions and Individual activity details are approved. Like every requested permission, the description checkbox starts checked; uncheck it before approving to withhold access. Existing clients must reauthorize. It returns the full event description for a selected activity; activities within one event share that text. Descriptions can contain sensitive health, personal or location information even without location permission. Revocation cannot erase received copies. Oversized text fails without truncation, and MCP cannot edit descriptions.',
+        answer: 'Only when Activity descriptions and Individual activity details are approved. Like every requested permission, the description checkbox starts checked; uncheck it before approving to withhold access. Existing clients must authorize again. It returns the full event description for a selected activity; activities within one event share that text. Descriptions can contain sensitive health, personal or location information even without location permission. Revocation cannot erase received copies. Oversized text fails without truncation, and MCP cannot edit descriptions.',
       },
       {
         question: 'Can an MCP client read my Timeline notes?',
-        answer: 'Only with separate Timeline notes permission, which is selected by default when requested. Uncheck it before approving to withhold access. Existing clients must reauthorize. It includes full note titles and details, including notes hidden from charts, and may contain sensitive health or personal information. Revocation cannot erase copies already received. Notes cannot grant permission to change a Training plan.',
+        answer: 'Only with separate Timeline notes permission, which is selected by default when requested. Uncheck it before approving to withhold access. Existing clients must authorize again. It includes full note titles and details, including notes hidden from charts, and may contain sensitive health or personal information. Revocation cannot erase copies already received. Notes cannot grant permission to change a Training plan.',
       },
       {
         question: 'Can an MCP client read my Training plans and planned workouts?',
         answer: 'With separately approved Training plans and planned workouts permission, supported clients can read current plans, standalone workouts, complete instructions, step notes, exact stored completion links, and existing service sync summaries. Separate child permissions allow bounded plan/workout or provider-delivery proposals. Each proposal requires confirmation, and provider delivery remains Pro and connection-gated. Synced means provider-side workout delivery, not receipt on a watch.',
+      },
+      {
+        question: 'Why are my Training plan tools missing?',
+        answer: 'Missing tools usually mean the app was not authorized for Training plans, not that your plans are absent. Start authorization again from that MCP app, approve Training plans and planned workouts, then approve either optional change permission if you need it. Finish the flow and start a new chat or refresh the tool catalog. If the choices are not shown, refresh or rescan the Quantified Self connection. Training delivery also requires Pro, a supported connected provider, and current compatibility approval.',
       },
       {
         question: 'Can an MCP client rearrange my dashboard or change my data?',
