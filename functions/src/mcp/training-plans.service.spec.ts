@@ -54,7 +54,7 @@ describe('Training plan MCP reads', () => {
       const args = { scope: 'plan', reference: plans.plans[0].planRef };
       const result = TRAINING_READ_OUTPUTS.get_training_sync_status.parse(await f.run('get_training_sync_status', args));
       expect(result.services).toEqual([expect.objectContaining({ provider: 'wahoo', outcomes: [{ status, count: 1 }] })]);
-      expect(JSON.stringify(result)).not.toMatch(/private-wahoo|externalId|workout_token|plan_id|journal|device|ELEMNT/);
+      expect(JSON.stringify(result)).not.toMatch(/private-wahoo|externalId|workout_token|plan_id|journal|device|ELEMNT|planFocus|upcoming/);
       Object.assign(f.collections.trainingDeliveryStatuses[id], { externalId: 'private-plan', workout_token: 'private-workout',
         plan_id: '123', completionLinkId: 'private-reverse-link', completionEvidence: 'private-summary',
         providerAccessBlocked: true, providerJournal: { step: 'plan-create', state: 'started' },

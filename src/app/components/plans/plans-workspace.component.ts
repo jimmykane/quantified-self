@@ -215,7 +215,8 @@ export class PlansWorkspaceComponent {
   readonly completedWorkoutIds = computed(() => this.completions().map(completion => completion.workoutId));
   readonly view = signal<PlansView>('plans');
   readonly selectedPlanId = signal<string | null>(null);
-  readonly today = signal(todayLocalDate());
+  readonly nowMs = signal(Date.now());
+  readonly today = signal(todayLocalDate(new Date(this.nowMs())));
   private readonly todayClock = afterNextRender(() => {
     const handle = globalThis.setInterval(() => this.refreshToday(), 60_000);
     this.destroyRef.onDestroy(() => globalThis.clearInterval(handle));
@@ -453,7 +454,9 @@ export class PlansWorkspaceComponent {
 
   @HostListener('window:focus')
   refreshToday(): void {
-    this.today.set(todayLocalDate());
+    const now = new Date();
+    this.nowMs.set(now.getTime());
+    this.today.set(todayLocalDate(now));
   }
 
   @HostListener('document:visibilitychange')

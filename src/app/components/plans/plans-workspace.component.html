@@ -193,6 +193,7 @@
           </div>
           <app-training-delivery-button scope="plan" [entityId]="plan.id" [title]="plan.name"
             [summaryWorkouts]="schedule().workouts" [summaryPlan]="plan" [summaryCompletions]="completions()"
+            [summaryNowMs]="nowMs()"
             [disabled]="busyAction() !== null"></app-training-delivery-button>
 
           @if (renamingPlanId() === plan.id) {

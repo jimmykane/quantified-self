@@ -327,6 +327,7 @@ describe('PlansWorkspaceComponent', () => {
     await vi.advanceTimersByTimeAsync(60_000);
     fixture.detectChanges();
     expect(refresh).toHaveBeenCalledOnce();
+    expect(fixture.componentInstance.nowMs()).toBe(new Date(2026, 8, 10, 0, 0, 30).getTime());
     expect(fixture.nativeElement.querySelector('[aria-current="date"]')?.getAttribute('data-plan-date')).toBe('2026-09-10');
     fixture.destroy();
     await vi.advanceTimersByTimeAsync(60_000);

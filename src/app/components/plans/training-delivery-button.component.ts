@@ -9,6 +9,7 @@ import { TrainingDeliveryService, TRAINING_DELIVERY_SUMMARY_LIMIT, type Training
 import { TrainingDeliveryDialogComponent, type TrainingDeliveryDialogData } from './training-delivery-dialog.component';
 import type { ScheduledWorkoutV1, TrainingPlanV1 } from '@shared/training-plans';
 import type { TrainingWorkoutCompletionV1 } from '@shared/training-workout-completion';
+import { trainingDeliveryLocalDate } from '@shared/training-provider-delivery';
 import { buildTrainingDeliverySummaries, type TrainingDeliverySummary } from '../../helpers/training-delivery-summary.helper';
 import { ServiceSourceIconComponent } from '../event-summary/service-source-icon/service-source-icon.component';
 
@@ -26,6 +27,7 @@ export class TrainingDeliveryButtonComponent {
   readonly summaryWorkouts = input<readonly ScheduledWorkoutV1[] | null>(null);
   readonly summaryPlan = input<TrainingPlanV1 | null>(null);
   readonly summaryCompletions = input<readonly TrainingWorkoutCompletionV1[]>([]);
+  readonly summaryNowMs = input<number | null>(null);
   readonly context = computed<TrainingDeliveryDialogData>(() => ({ scope: this.scope(), id: this.entityId(), title: this.title() }));
   readonly disabled = input(false);
   private readonly users = inject(AppUserService);
@@ -47,21 +49,34 @@ export class TrainingDeliveryButtonComponent {
     return source.pipe(startWith({ ...EMPTY_READ, uid }), catchError(() => of({ ...EMPTY_READ, uid, loaded: true, hasRecords: true, error: true })));
   })), { initialValue: EMPTY_READ });
   readonly hasRecords = computed(() => this.readState().uid === this.users.user()?.uid && this.readState().hasRecords);
+  private readonly summaryDayKey = computed(() => {
+    const nowMs = this.summaryNowMs();
+    const view = this.readState().view;
+    if (this.scope() !== 'plan' || nowMs === null || !view) return '';
+    return PLANNED_WORKOUT_PROVIDER_IDS.map(provider => {
+      const timeZone = view.settings.find(item => item.provider === provider)?.timeZone
+        ?? view.statuses.find(item => item.provider === provider)?.timeZone ?? 'UTC';
+      try { return `${provider}:${trainingDeliveryLocalDate(nowMs, timeZone)}`; }
+      catch { return `${provider}:${trainingDeliveryLocalDate(nowMs, 'UTC')}`; }
+    }).join('|');
+  });
   readonly summaryState = toSignal(combineLatest([toObservable(this.readState), toObservable(this.summaryWorkouts),
-    toObservable(this.summaryPlan), toObservable(this.summaryCompletions), toObservable(this.context)]).pipe(switchMap(
+    toObservable(this.summaryPlan), toObservable(this.summaryCompletions), toObservable(this.context),
+    toObservable(this.summaryDayKey)]).pipe(switchMap(
     ([read, workouts, plan, completions, context]) => {
     const empty = { uid: read.uid, rows: [] as TrainingDeliverySummary[], error: read.error };
     if (!read.view || workouts === null || context.scope === 'history') return of(empty);
     return from(buildTrainingDeliverySummaries({ uid: read.uid, scope: context.scope, id: context.id, workouts, plan,
       ...read.view, completions,
-      complete: read.view.summaryComplete !== false && read.view.statuses.length < TRAINING_DELIVERY_SUMMARY_LIMIT })).pipe(
+      complete: read.view.summaryComplete !== false && read.view.statuses.length < TRAINING_DELIVERY_SUMMARY_LIMIT,
+      nowMs: this.summaryNowMs() ?? Date.now() })).pipe(
       map(rows => ({ ...empty, rows })), startWith(empty), catchError(() => of({ ...empty, error: true })));
   })), { initialValue: { uid: '', rows: [] as TrainingDeliverySummary[], error: false } });
   readonly summaries = computed(() => this.summaryState().uid === this.users.user()?.uid ? this.summaryState().rows : []);
   readonly compactPlanSummaries = computed(() => this.summaries().map(summary => ({
     ...summary,
-    compactLabel: summary.projection.totalWorkouts !== null && summary.projection.syncedWorkouts !== null
-      ? `${summary.projection.syncedWorkouts}/${summary.projection.totalWorkouts}`
+    compactLabel: summary.planFocus?.totalWorkouts && summary.planFocus.syncedWorkouts !== null
+      ? `${summary.planFocus.syncedWorkouts}/${summary.planFocus.totalWorkouts}`
       : '—',
   })));
   readonly visible = computed(() => !!this.users.user()?.uid
@@ -83,6 +98,7 @@ export class TrainingDeliveryButtonComponent {
     if (!this.visible() || this.disabled()) return;
     const provider = this.singleProvider();
     const data: TrainingDeliveryDialogData = { ...this.context(),
+      ...(this.scope() === 'plan' ? { planSummaries: this.summaries } : {}),
       ...(this.readState().loaded && !this.hasRecords() && provider && (this.scope() === 'plan' || this.standalone()) ? { initialProvider: provider } : {}) };
     this.dialog.open(TrainingDeliveryDialogComponent, { data, width: '640px', maxWidth: '95vw' });
   }

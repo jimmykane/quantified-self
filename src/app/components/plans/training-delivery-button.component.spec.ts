@@ -64,7 +64,7 @@ describe('Training delivery summaries on the workspace', () => {
     const fixture = await render(scope);
     if (scope === 'plan') {
       expect(fixture.nativeElement.querySelector('.delivery-plan-provider').getAttribute('aria-label'))
-        .toContain('Garmin Connect: 1 of 1 workout synced');
+        .toContain('Garmin Connect: Upcoming workout synced');
       expect(fixture.nativeElement.querySelector('.delivery-plan-provider-count').textContent.trim()).toBe('1/1');
     } else {
       expect(fixture.nativeElement.textContent).toContain('Garmin Connect · Synced');
@@ -73,7 +73,9 @@ describe('Training delivery summaries on the workspace', () => {
     const button: HTMLButtonElement = fixture.nativeElement.querySelector(scope === 'plan' ? '.delivery-plan-view' : '.delivery-summary');
     expect(button.getAttribute('aria-label')).toContain(scope === 'plan' ? 'View plan sync details' : 'Open workout sync details');
     button.click(); expect(selection).toHaveBeenCalledTimes(1);
-    expect(open.mock.calls[0][1].data).toEqual({ scope, id: scope === 'plan' ? 'p' : 'w', title: scope === 'plan' ? plan.name : workout.title });
+    expect(open.mock.calls[0][1].data).toMatchObject({ scope, id: scope === 'plan' ? 'p' : 'w', title: scope === 'plan' ? plan.name : workout.title });
+    if (scope === 'plan') expect(typeof open.mock.calls[0][1].data.planSummaries).toBe('function');
+    else expect(open.mock.calls[0][1].data.planSummaries).toBeUndefined();
   });
   it('updates live failures and authored edits without reopening all Firestore listeners', async () => {
     const fixture = await render();
@@ -86,6 +88,19 @@ describe('Training delivery summaries on the workspace', () => {
       .toContain('1 needs approval'); });
     expect(fixture.nativeElement.querySelector('.delivery-plan-provider').getAttribute('aria-label')).toContain('needs approval');
     expect(open).not.toHaveBeenCalled(); expect(selection).not.toHaveBeenCalled();
+  });
+  it('moves a workout from upcoming to earlier when the shared workspace clock crosses its saved-zone day', async () => {
+    const fixture = await render();
+    fixture.componentRef.setInput('summaryNowMs', Date.parse('2027-01-01T20:00:00Z')); fixture.detectChanges();
+    await vi.waitFor(() => { fixture.detectChanges();
+      expect(fixture.nativeElement.querySelector('.delivery-plan-provider-count').textContent.trim()).toBe('1/1');
+    });
+    fixture.componentRef.setInput('summaryNowMs', Date.parse('2027-01-01T22:00:00Z')); fixture.detectChanges();
+    await vi.waitFor(() => { fixture.detectChanges();
+      expect(fixture.nativeElement.querySelector('.delivery-plan-provider').getAttribute('aria-label'))
+        .toContain('No upcoming workouts. 1 earlier workout');
+    });
+    expect(service.watchSummaryScope).toHaveBeenCalledTimes(1);
   });
   it('clears summaries immediately on account change/sign-out and tears down the old read', async () => {
     const fixture = await render();
@@ -145,7 +160,7 @@ describe('Training delivery summaries on the workspace', () => {
     expect(fixture.nativeElement.querySelectorAll('.delivery-plan-provider')).toHaveLength(4);
     const providerRows: HTMLElement[] = Array.from(fixture.nativeElement.querySelectorAll('.delivery-plan-provider'));
     for (const provider of ['Garmin Connect', 'COROS', 'Wahoo', 'Suunto App']) {
-      expect(providerRows.some(row => row.getAttribute('aria-label')?.includes(`${provider}: 1 of 2 workouts synced`))).toBe(true);
+      expect(providerRows.some(row => row.getAttribute('aria-label')?.includes(`${provider}: 1 of 2 upcoming workouts synced`))).toBe(true);
     }
     expect(buttons[0].getAttribute('aria-label')).toBe('View plan sync details');
     const visibleCounts: HTMLElement[] = Array.from(fixture.nativeElement.querySelectorAll('.delivery-plan-provider-count'));
@@ -172,7 +187,7 @@ describe('Training delivery summaries on the workspace', () => {
       expect(fixture.nativeElement.querySelector('.delivery-plan-provider-count').textContent.trim()).toBe('—');
     });
     expect(fixture.nativeElement.querySelector('.delivery-plan-provider').getAttribute('aria-label'))
-      .toContain('Garmin Connect: Status incomplete');
+      .toContain('Garmin Connect: Upcoming status incomplete');
     expect(fixture.nativeElement.querySelector('.delivery-plan-summary').textContent).not.toContain('Status incomplete');
   });
 });

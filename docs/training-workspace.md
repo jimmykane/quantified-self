@@ -599,15 +599,20 @@ Consent/lifecycle rules:
 
 The Material/compact-row delivery dialog is reached from the plan actions area, saved workout editor and workout rows.
 The selected plan, its workout rows and the saved-workout editor also show compact, clickable **per-service sync
-summaries**, using destination branding (for example, **Garmin Connect · 2 of 3 workouts synced**). Opening a summary
+summaries**, using destination branding. The plan-level presentation answers the current question first: its compact
+count includes today and future workouts currently due for delivery, while the overview can say **All 3 upcoming workouts synced · 2 earlier
+workouts**. Opening a summary
 opens the existing sync details; rendering it never previews, grants consent, retries or contacts a provider. Editor
-summaries describe the current saved workout, not an unsaved draft. Plan totals cover every current non-deleted workout
-in that plan, across its entire date range—not only the selected day or the first 25 dialog rows. Skipped, waiting,
-outside-window, paused, unsupported and unapproved workouts remain explicit non-success states in that denominator.
+summaries describe the current saved workout, not an unsaved draft. The presentation focus is computed in the saved
+destination time zone and follows the workspace's existing minute/focus clock across day boundaries. Completed, past and skipped workouts leave the prominent upcoming denominator but remain visible
+in the individual list and quieter secondary context; only workouts before today are called earlier. Workouts outside a
+service's current scheduling window are named **Scheduled for later** rather than making the due-soon count look unhealthy.
+Waiting, paused, unsupported and unapproved upcoming workouts remain explicit non-success states in that denominator. The underlying safe projection continues to
+cover every current non-deleted workout in the plan, across its entire date range—not only the selected day or first 25 rows.
 Confirmed past/completed copies may count as synced only while the safe projection confirms unchanged content. The
 status copy separates authored-workout completion from provider delivery: the provider that supplied an exact persisted
 completion link shows **Completed · activity linked**, another provider's confirmed copy shows
-**Sent · workout completed**, and an unrelated past delivery shows **Past date · provider copy kept**. The completion
+**Sent · workout completed**, and an unrelated past delivery shows **Past workout · previously sent**. The completion
 provider remains provenance; completion belongs to the planned workout and is not duplicated per destination. Empty
 plans are not fully synced. Plan inactive and sync-off preferences are distinct
 from confirmed delivery, and per-workout failures cannot be hidden by other successful workouts.
@@ -620,7 +625,7 @@ withholds an older confirmation until the worker catches up. Summary reads use a
 to 1,601 projections (400 current workouts × four providers plus look-ahead), separately from the dialog's 25-row history
 pagination. Plan summaries also watch bounded workout overrides by their plan association, so a new individual Stop
 invalidates the old plan-level success total before reconciliation. Both look-aheads withhold complete totals at the cap:
-show **Status incomplete**, not an allegedly complete total. Read/crypto failures show
+show **Upcoming status incomplete**, not an allegedly complete total. Read/crypto failures show
 **Sync status unavailable**, never zero or success. Account changes clear visible results and cancel old subscriptions;
 same-scope authored edits recompute the summary without reopening its Firestore listeners.
 
@@ -634,14 +639,14 @@ The latter also exports synthetic light/dark multi-service mixed-result summarie
 using the same local stylesheet fixture workflow below. These fixtures do not enable any provider transport.
 
 Entry points and default dialog titles distinguish **Plan sync**, **Workout sync**, and **Workout sync history**.
-The plan surface uses one quiet, non-button **Plan sync** row because every provider opens the same overview. It keeps
-each provider logo and synced/total count visible without repeating provider prose on the plan. A small trailing **View**
+The plan surface uses one quiet, non-button **Plan sync** row because every service opens the same overview. It keeps
+each service logo and the current/upcoming synced/total count visible without repeating service prose on the plan. A small trailing **View**
 action is the row's only click target; each provider indicator exposes its full name, current state and exception detail
 to assistive technology, and the dialog shows the same detail. At phone widths the provider indicators form a two-column
-grid below the heading and View action. When more than one provider is present, the dialog starts with compact provider
+grid below the heading and View action. When more than one service is present, the dialog starts with compact service
 rows that show the
 destination logo, whether sync is enabled or saved for an inactive plan, a concise summary of the currently loaded workout
-statuses and one **Manage** action. Manage opens a focused provider detail view; **All services** returns to the overview.
+statuses and one **Manage** action. Manage opens a focused service detail view; **All services** returns to the overview.
 At phone widths the Manage action takes its own full-width row instead of squeezing the provider state. A single provider
 opens its detail view directly without a redundant chooser. Opening a workout and returning preserves the selected
 provider, so Back returns to that provider before the user returns to all services. Overview/drill navigation never

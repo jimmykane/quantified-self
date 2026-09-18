@@ -1,4 +1,5 @@
-import { ChangeDetectionStrategy, Component, computed, DestroyRef, ElementRef, afterRenderEffect, effect, inject, signal, viewChild, viewChildren } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, DestroyRef, ElementRef, afterRenderEffect, effect, inject, signal,
+  viewChild, viewChildren, type Signal } from '@angular/core';
 import { toObservable, toSignal } from '@angular/core/rxjs-interop';
 import { MAT_DIALOG_DATA, MatDialog, MatDialogRef } from '@angular/material/dialog';
 import { catchError, combineLatest, map, of, startWith, switchMap } from 'rxjs';
@@ -19,6 +20,7 @@ import { buildDestinationProviderPresentation } from '../../helpers/provider-pre
 import { WAHOO_TRAINING_PERMISSION_ISSUE } from '@shared/wahoo-training';
 import { WahooRouteAccessReconnectDialogComponent } from '../wahoo-route-access-reconnect-dialog/wahoo-route-access-reconnect-dialog.component';
 import type { TrainingWorkoutCompletionV1 } from '@shared/training-workout-completion';
+import type { TrainingDeliverySummary } from '../../helpers/training-delivery-summary.helper';
 
 const PROVIDER_PRESENTATIONS = {
   garmin: buildDestinationProviderPresentation(ServiceNames.GarminAPI),
@@ -34,6 +36,8 @@ export interface TrainingDeliveryDialogData {
   selectedProvider?: PlannedWorkoutProviderId;
   /** Open a read-only consent check directly when there is only one available destination. */
   initialProvider?: PlannedWorkoutProviderId;
+  /** Live presentation summaries from the plan surface; never used as delivery authority. */
+  planSummaries?: Signal<readonly TrainingDeliverySummary[]>;
 }
 interface DeliveryDraft {
   provider: PlannedWorkoutProviderId; action: TrainingDeliveryAction; timeZone: string; approvalDigest?: string;
@@ -191,18 +195,23 @@ export class TrainingDeliveryDialogComponent {
     const statusWorkoutCount = new Set(statuses.map(item => item.workoutId)).size;
     const scopePlan = this.data.scope === 'plan' ? this.scopeRecord() : undefined;
     const planInactive = !!scopePlan && scopePlan.lifecycle !== 'active';
-    const overviewState = this.data.scope === 'history' ? 'Sync history'
+    const planFocus = this.data.scope === 'plan'
+      ? this.data.planSummaries?.().find(summary => summary.provider === provider)?.planFocus ?? null : null;
+    const overviewState = !this.view().loaded ? 'Loading sync status…'
+      : this.data.scope === 'history' ? 'Sync history'
       : this.planBound() ? suppressed ? 'Excluded from plan sync' : 'Follows plan sync settings'
         : setting?.enabled ? planInactive ? 'Sync saved · plan inactive' : 'Sync enabled' : 'Sync off';
-    const overviewIcon = this.data.scope === 'history' ? 'history'
+    const overviewIcon = !this.view().loaded ? 'sync'
+      : this.data.scope === 'history' ? 'history'
       : this.planBound() ? suppressed ? 'sync_disabled' : 'link'
         : setting?.enabled ? planInactive ? 'pause_circle' : 'check_circle' : 'sync_disabled';
-    const overviewDetail = !statuses.length ? 'No workout sync status yet.'
+    const overviewDetail = planFocus ? [planFocus.label, planFocus.detail].filter(Boolean).join(' · ')
+      : !statuses.length ? 'No workout sync status yet.'
       : statuses.length === 1 ? statuses[0].label
         : attentionWorkoutCount ? `${statusWorkoutCount} ${statusWorkoutCount === 1 ? 'workout' : 'workouts'} · ${attentionWorkoutCount} ${attentionWorkoutCount === 1 ? 'needs' : 'need'} attention`
           : new Set(statuses.map(item => item.label)).size === 1
             ? `${statusWorkoutCount} ${statusWorkoutCount === 1 ? 'workout' : 'workouts'} · ${statuses[0].label}`
-            : `${statusWorkoutCount} ${statusWorkoutCount === 1 ? 'workout' : 'workouts'} · mixed delivery states`;
+            : `${statusWorkoutCount} ${statusWorkoutCount === 1 ? 'workout' : 'workouts'} · different sync states`;
     return { provider, label: PLANNED_WORKOUT_PROVIDER_CAPABILITIES_V1[provider].label,
       displayLabel: PROVIDER_PRESENTATIONS[provider].displayLabel, presentation: PROVIDER_PRESENTATIONS[provider], ready, setting, statuses,
       overviewState, overviewDetail, overviewIcon, overviewEnabled: overviewState === 'Sync enabled',
@@ -319,7 +328,7 @@ export class TrainingDeliveryDialogComponent {
         expectedSettingsRevision: this.view().settings.find(item => item.provider === provider)?.revision ?? 0 }, current);
       if (!current()) return;
       this.notice.set(receipt.result === 'coalesced' ? 'A recent check is already queued or complete.'
-        : receipt.result === 'deferred' ? 'Check queued. It will run when provider capacity is available.' : 'Check queued. Results will update here.');
+        : receipt.result === 'deferred' ? 'Check queued. It will run when the service is available.' : 'Check queued. Results will update here.');
       this.haptics.success();
     } catch (error) { if (current()) { this.error.set(trainingVerificationCommandError(error)); this.haptics.error(); } }
     finally { if (current()) { this.phase.set(null); this.checkingProvider.set(null); } }
@@ -383,7 +392,7 @@ export class TrainingDeliveryDialogComponent {
       await this.delivery.mutate(preview.command, current);
       if (!current()) return;
       this.notice.set(preview.command.action === 'stop' ? `${this.stopLabel()} saved. Eligible copies will be removed in the background.`
-        : preview.command.action === 'retry' ? 'Recovery requested. Provider retry limits still apply.'
+        : preview.command.action === 'retry' ? 'Recovery requested. Service retry limits still apply.'
           : 'Sync settings saved. Workout delivery continues in the background.');
       this.preview.set(null); this.draft.set(null); this.closeOnCancel = false; this.haptics.success();
     } catch (error) { if (current()) { this.error.set(trainingDeliveryCommandError(error, true)); this.haptics.error(); } }
@@ -416,11 +425,13 @@ export class TrainingDeliveryDialogComponent {
     if (!this.sameAccount() || this.busy()) return;
     const title = this.schedule()?.workouts.find(workout => workout.id === status.workoutId)?.title ?? 'Deleted workout';
     this.openContext({ scope: 'workout', id: status.workoutId, title, selectedProvider: status.provider,
+      ...(this.data.planSummaries ? { planSummaries: this.data.planSummaries } : {}),
       ...(this.data.scope !== 'workout' ? { returnTo: { scope: this.data.scope, id: this.data.id,
         title: this.scopeTitle(), selectedProvider: status.provider } } : {}) });
   }
   backToOverview(): void {
-    if (this.data.returnTo) this.openContext(this.data.returnTo);
+    if (this.data.returnTo) this.openContext({ ...this.data.returnTo,
+      ...(this.data.planSummaries ? { planSummaries: this.data.planSummaries } : {}) });
   }
   private openContext(data: TrainingDeliveryDialogData): void {
     if (!this.sameAccount() || this.busy()) return;

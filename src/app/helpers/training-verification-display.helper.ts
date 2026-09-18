@@ -24,9 +24,9 @@ export function trainingVerificationLabel(status: TrainingDeliveryStatusV1, veri
   if (completion && !['past', 'completed'].includes(status.status)) {
     if (verification?.state === 'restoring') return 'Restoring missing workout…';
     if (verification?.state === 'deferred') return verification.missing
-      ? 'Restoration paused · will try later' : 'Check queued · waiting for provider capacity';
+      ? 'Restoration paused · will try later' : 'Check queued · will try again later';
     if (verification?.state === 'checking') return 'Checking workout…';
-    if (verification?.state === 'confirmed_missing') return 'Missing from provider';
+    if (verification?.state === 'confirmed_missing') return 'Missing from connected app';
     if (verification?.state === 'suspected_missing') return 'Workout not found · checking again';
     if (verification?.state === 'unknown') return 'Could not check workout';
   }
@@ -36,13 +36,13 @@ export function trainingVerificationLabel(status: TrainingDeliveryStatusV1, veri
   if (['removed', 'stopped', 'paused_plan', 'paused_pro', 'past', 'completed', 'provider_unavailable', 'outside_horizon']
     .includes(status.status)) return TRAINING_DELIVERY_STATUS_LABELS[status.status];
   if (verification?.state === 'restoring') return 'Restoring missing workout…';
-  if (verification?.state === 'deferred') return verification.missing ? 'Restoration paused · will try later' : 'Check queued · waiting for provider capacity';
+  if (verification?.state === 'deferred') return verification.missing ? 'Restoration paused · will try later' : 'Check queued · will try again later';
   if (verification?.state === 'checking') return 'Checking workout…';
-  if (verification?.state === 'confirmed_missing') return 'Missing from provider';
+  if (verification?.state === 'confirmed_missing') return 'Missing from connected app';
   if (verification?.state === 'suspected_missing') return 'Workout not found · checking again';
   if (verification?.state === 'unknown') return 'Could not check workout';
   if (status.status !== 'delivered') return TRAINING_DELIVERY_STATUS_LABELS[status.status];
-  if (!verification || verification.state === 'unsupported') return 'Sent · remote checking unavailable';
+  if (!verification || verification.state === 'unsupported') return 'Sent · automatic checking unavailable';
   if (verification.state === 'present') return 'Found in connected app';
   return 'Sent · awaiting remote check';
 }

@@ -22,6 +22,7 @@ import { TrainingDeliveryButtonComponent } from './training-delivery-button.comp
 import { isTrainingProviderDeliveryEnabled } from '@shared/training-delivery-rollout';
 import { WAHOO_TRAINING_PERMISSION_ISSUE } from '@shared/wahoo-training';
 import { WahooRouteAccessReconnectDialogComponent } from '../wahoo-route-access-reconnect-dialog/wahoo-route-access-reconnect-dialog.component';
+import type { TrainingDeliverySummary } from '../../helpers/training-delivery-summary.helper';
 
 describe('Training provider delivery controls', () => {
   const user = signal<{ uid: string } | null>({ uid: 'owner' });
@@ -108,12 +109,37 @@ describe('Training provider delivery controls', () => {
     const suunto = (fixture.nativeElement.querySelector('button[aria-label="Manage Suunto App sync"]') as HTMLElement).closest('app-compact-row')!;
     expect(garmin.textContent).toContain('Sync enabled');
     expect(garmin.querySelector('.delivery-provider-state')?.classList).toContain('delivery-provider-state--enabled');
-    expect(garmin.textContent).toContain('Sent · remote checking unavailable');
+    expect(garmin.textContent).toContain('Sent · automatic checking unavailable');
     expect(suunto.textContent).toContain('Sync off');
     expect(suunto.querySelector('.delivery-provider-state')?.classList).not.toContain('delivery-provider-state--enabled');
-    expect(suunto.textContent).toContain('Delivery uncertain');
+    expect(suunto.textContent).toContain('Sync could not be confirmed');
     expect(service.preview).not.toHaveBeenCalled(); expect(service.mutate).not.toHaveBeenCalled();
     expect(haptics.selection).not.toHaveBeenCalled();
+  });
+  it('leads with live upcoming plan status and keeps earlier workouts secondary', () => {
+    const planSummaries = signal([{ provider: 'wahoo', planFocus: { totalWorkouts: 3, syncedWorkouts: 3,
+      earlierWorkouts: 2, label: 'All 3 upcoming workouts synced', detail: '2 earlier workouts' } }] as TrainingDeliverySummary[]);
+    TestBed.overrideProvider(MAT_DIALOG_DATA, { useValue: {
+      scope: 'plan', id: 'p', title: 'Winter build', planSummaries,
+    } });
+    service.watchScope.mockReturnValue(of({ settings: [
+      { provider: 'wahoo', enabled: true, timeZone: 'Europe/Helsinki' },
+      { provider: 'suunto', enabled: false, timeZone: 'Europe/Helsinki' },
+    ], statuses: [
+      ...[0, 1, 2, 3, 4].map(index => ({ ...status, id: `wahoo-${index}`, workoutId: `w-${index}`,
+        provider: 'wahoo', planId: 'p', status: index < 2 ? 'past' : 'delivered' })),
+      { ...status, id: 'suunto', provider: 'suunto', planId: 'p' },
+    ] }));
+    TestBed.overrideProvider(TrainingPlansService, { useValue: { watchSchedule: () => of({ state: { revision: 3 },
+      plans: [{ id: 'p', name: 'Winter build', revision: 2, lifecycle: 'active' }], workouts: [] }) } });
+    const fixture = TestBed.createComponent(TrainingDeliveryDialogComponent); fixture.detectChanges();
+    const wahoo = (fixture.nativeElement.querySelector('button[aria-label="Manage Wahoo sync"]') as HTMLElement).closest('app-compact-row')!;
+    expect(wahoo.textContent).toContain('All 3 upcoming workouts synced · 2 earlier workouts');
+    expect(wahoo.textContent).not.toContain('mixed delivery states');
+    planSummaries.set([{ provider: 'wahoo', planFocus: { totalWorkouts: 3, syncedWorkouts: 2,
+      earlierWorkouts: 2, label: '2 of 3 upcoming workouts synced', detail: '1 waiting to sync · 2 earlier workouts' } }] as TrainingDeliverySummary[]);
+    fixture.detectChanges();
+    expect(wahoo.textContent).toContain('2 of 3 upcoming workouts synced · 1 waiting to sync · 2 earlier workouts');
   });
   it('opens one provider directly and drills into a provider without sync side effects', async () => {
     let fixture = TestBed.createComponent(TrainingDeliveryDialogComponent); fixture.detectChanges();
@@ -176,7 +202,7 @@ describe('Training provider delivery controls', () => {
   it('hides unavailable send controls but preserves problem details and Stop sync', () => {
     const fixture = TestBed.createComponent(TrainingDeliveryDialogComponent); fixture.detectChanges();
     const text = fixture.nativeElement.textContent;
-    expect(text).toContain('Delivery uncertain'); expect(text).toContain('Stop workout sync');
+    expect(text).toContain('Sync could not be confirmed'); expect(text).toContain('Stop workout sync');
     expect(text).not.toContain('Send workout'); expect(text).not.toContain('Configure sync');
     expect(text).toContain('Last attempt'); expect(text).toContain('Failed attempts');
     expect(fixture.nativeElement.querySelector('.delivery-attempts').hidden).toBe(true);
@@ -312,7 +338,7 @@ describe('Training provider delivery controls', () => {
       verifications: [{ id: status.id, canCheck: false, state: 'unsupported', lastCheckedAtMs: null, missing: false }],
     }));
     const fixture = TestBed.createComponent(TrainingDeliveryDialogComponent); fixture.detectChanges();
-    expect(fixture.nativeElement.textContent).toContain('Sent · remote checking unavailable');
+    expect(fixture.nativeElement.textContent).toContain('Sent · automatic checking unavailable');
     expect([...fixture.nativeElement.querySelectorAll('button')].some((button: HTMLButtonElement) =>
       button.textContent?.trim() === 'Check COROS')).toBe(false);
     const guidance: HTMLElement = fixture.nativeElement.querySelector('#delivery-guidance-details');
@@ -330,7 +356,7 @@ describe('Training provider delivery controls', () => {
     service.check.mockRejectedValue(new Error('not available'));
     const fixture = TestBed.createComponent(TrainingDeliveryDialogComponent); fixture.detectChanges();
     await fixture.componentInstance.checkProvider('garmin'); fixture.detectChanges();
-    expect(fixture.componentInstance.error()).toContain('Unable to check delivery');
+    expect(fixture.componentInstance.error()).toContain('Unable to check sync');
     expect(fixture.componentInstance.error()).not.toContain('Saving');
   });
   it('ignores an in-flight manual check after sign-out', async () => {
@@ -352,8 +378,8 @@ describe('Training provider delivery controls', () => {
     expect(guidance.hidden).toBe(false);
     expect(guidance.textContent).toContain('asks the connected app to remove upcoming synced workouts');
     expect(guidance.textContent).toContain('Your plans and workouts stay in Quantified Self');
-    expect(guidance.textContent).toContain('Your provider account stays connected');
-    expect(guidance.textContent).toContain('Provider copies for past dates or completed workouts are kept');
+    expect(guidance.textContent).toContain('Your connected account stays connected');
+    expect(guidance.textContent).toContain('Workouts already sent for past dates or completed workouts are kept');
     expect(guidance.textContent).toContain('If your Pro subscription ends, sync pauses');
     expect(guidance.textContent).not.toMatch(/disconnect|account deletion|withdraws/i);
     expect(service.preview).not.toHaveBeenCalled(); expect(service.mutate).not.toHaveBeenCalled();
@@ -405,7 +431,7 @@ describe('Training provider delivery controls', () => {
     expect(rows[0].textContent).not.toContain('Last attempt');
     const description = fixture.nativeElement.querySelector('#' + rows[0].getAttribute('aria-describedby'));
     expect(description.textContent).toContain('Dec 31, 2026');
-    expect(description.textContent).toContain('Delivery uncertain');
+    expect(description.textContent).toContain('Sync could not be confirmed');
     expect(fixture.nativeElement.querySelector('.delivery-list a')).toBeNull();
     expect(fixture.nativeElement.querySelector('.delivery-edit-workout')).toBeNull();
     rows[0].click();
@@ -784,7 +810,7 @@ describe('Training provider delivery controls', () => {
   });
   it('does not claim a first partial delivery is a different workout', () => {
     const fixture = TestBed.createComponent(TrainingDeliveryDialogComponent); fixture.detectChanges();
-    expect(fixture.nativeElement.textContent).toContain('delivery is not fully confirmed yet');
+    expect(fixture.nativeElement.textContent).toContain('sync is not fully confirmed yet');
     expect(fixture.nativeElement.textContent).not.toContain('copy differs from Quantified Self');
   });
   it('does not offer Resume for already inherited delivery and keeps disclosure feedback user-triggered', () => {

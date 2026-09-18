@@ -255,7 +255,7 @@ export async function readTrainingPlans(input: TrainingReadInput, reads: Trainin
       const summaries = await buildTrainingDeliverySummaries({ uid: input.uid, scope: a.scope, id: doc.id,
         plan: plan ? planSchema.parse(plan.data) : null, workouts, complete,
         settings: settings.map(d => settingSchema.parse(d.data)), statuses: statuses.map(d => ({ id: d.id, ...statusSchema.parse(d.data) })),
-        completions });
+        completions, nowMs });
       return { scheduleRevision: state.revision, scope: a.scope, reference: a.reference, scanComplete: complete,
         checkedAtMs: nowMs, services: summaries.map(summary => summary.projection) };
     }

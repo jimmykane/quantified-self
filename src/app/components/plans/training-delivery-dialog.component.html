@@ -23,19 +23,19 @@
   </div>
   @if (data.scope === 'history') { <p class="delivery-caption">Individual workouts across your plans and standalone workouts. Select a workout for sync details.</p> }
   @if (notice()) { <p role="status">{{ notice() }}</p> }
-  @if (view().error || error()) { <p role="alert">{{ error() || 'Unable to load delivery settings.' }}</p> }
+  @if (view().error || error()) { <p role="alert">{{ error() || 'Unable to load sync settings.' }}</p> }
   @if (scheduleView().error) { <p role="alert">Unable to load the training schedule. Close and reopen this dialog to try again.</p> }
-  @if (!view().loaded) { <mat-spinner diameter="24" aria-label="Loading delivery settings"></mat-spinner> }
+  @if (!view().loaded) { <mat-spinner diameter="24" aria-label="Loading sync settings"></mat-spinner> }
   @if (draft(); as draft) {
-    <section aria-label="Review delivery change" class="delivery-review" [attr.aria-busy]="busy()">
+    <section aria-label="Review sync change" class="delivery-review" [attr.aria-busy]="busy()">
       @if (draft.action === 'stop') {
-        <p>{{ data.scope === 'plan' ? 'Stop syncing this plan’s workouts to ' + draftLabel() + ' and remove eligible future copies.' : planBound() && canSend() ? 'Exclude this workout from the plan’s sync with ' + draftLabel() + '. It stays in your QS plan. If an upcoming copy exists, QS will request its removal. Other workouts are not affected.' : 'Stop syncing only this workout to ' + draftLabel() + ' and remove its eligible future copy. Other workouts are not affected.' }} Provider copies for past dates or completed workouts are kept.</p>
+        <p>{{ data.scope === 'plan' ? 'Stop syncing this plan’s workouts to ' + draftLabel() + ' and remove eligible future copies.' : planBound() && canSend() ? 'Exclude this workout from the plan’s sync with ' + draftLabel() + '. It stays in your QS plan. If an upcoming copy exists, QS will request its removal. Other workouts are not affected.' : 'Stop syncing only this workout to ' + draftLabel() + ' and remove its eligible future copy. Other workouts are not affected.' }} Workouts already sent for past dates or completed workouts are kept.</p>
       } @else if (draft.action === 'retry') {
-        <p>Inspect unfinished operations and retry the current delivery intent. Retry does not resume stopped sync or grant new consent.</p>
+        <p>Check unfinished sync work and try again. Retry does not resume stopped sync or grant new consent.</p>
       } @else if (editingSettings()) {
         <p>Sync with {{ draftLabel() }} is already enabled. Change the time zone used for scheduled workout dates.</p>
       } @else if (draft.action !== 'approve') {
-        <p>{{ data.scope === 'plan' ? 'Automatically send upcoming workouts while this plan is active. New workouts and edits sync automatically.' : 'Send this workout and automatically sync future edits to the same provider copy.' }}</p>
+        <p>{{ data.scope === 'plan' ? 'Automatically send upcoming workouts while this plan is active. New workouts and edits sync automatically.' : 'Send this workout and automatically sync future edits to the same workout in the connected app.' }}</p>
       }
       @if (canChangeTimeZone()) {
         <div class="delivery-zone" [hidden]="editingTimeZone()">
@@ -45,7 +45,7 @@
         </div>
         <form id="delivery-time-zone" [hidden]="!editingTimeZone()" (ngSubmit)="review()" class="delivery-zone-form">
           <mat-form-field subscriptSizing="dynamic">
-            <mat-label>Delivery time zone</mat-label>
+            <mat-label>Workout time zone</mat-label>
             <input matInput name="timeZone" [ngModel]="draft.timeZone" (ngModelChange)="updateTimeZone($event)" [disabled]="phase() === 'saving'" placeholder="Europe/Helsinki" [attr.aria-invalid]="!normalizedTimeZone()">
             <mat-hint>@if (normalizedTimeZone()) { Workout dates use this time zone, even when you travel. } @else { <span role="alert">Enter a valid time zone, such as Europe/Helsinki.</span> }</mat-hint>
           </mat-form-field>
@@ -59,20 +59,20 @@
           <mat-spinner diameter="20" aria-hidden="true"></mat-spinner>
           <span>{{ phase() === 'preview' ? 'Checking availability and workout compatibility…' : 'Saving your sync settings…' }}</span>
         </div>
-        <p class="delivery-caption">{{ phase() === 'preview' ? 'Nothing is sent until you confirm.' : 'You can close this dialog. Delivery status will update in the background.' }}</p>
+        <p class="delivery-caption">{{ phase() === 'preview' ? 'Nothing is sent until you confirm.' : 'You can close this dialog. Sync status will update in the background.' }}</p>
       }
       @if (preview(); as preview) {
         @if (!canChangeTimeZone()) { <p class="delivery-caption">Time zone: {{ preview.result.timeZone }}</p> }
         @if (draft.action === 'stop') {
           @if (!preview.result.available || preview.result.connection !== 'connected') {
-            <p>Removal must wait for provider availability and valid access to the same account. Copies left after disconnect may need removing in the provider app.</p>
+            <p>Removal must wait until this service is available and the same account is connected. Copies left after disconnect may need removing in the connected app.</p>
           }
         } @else {
           @if (draft.action !== 'retry' && draft.action !== 'approve') {
-            <p class="delivery-caption">{{ preview.result.eligibleCount }} {{ preview.result.eligibleCount === 1 ? 'workout' : 'workouts' }} in the scheduling window. Provider copies for past dates or completed workouts are kept.</p>
+            <p class="delivery-caption">{{ preview.result.eligibleCount }} {{ preview.result.eligibleCount === 1 ? 'workout' : 'workouts' }} in the scheduling window. Workouts already sent for past dates or completed workouts are kept.</p>
           }
           @if (!preview.result.hasPro) { <p>Pro is required for creates and updates. Removal and recovery remain available. <a routerLink="/subscriptions" (click)="dialogRef.close()" appHapticTap>View Pro</a></p> }
-          @if (!preview.result.available) { <p>This provider is not yet available for workout delivery.</p> }
+          @if (!preview.result.available) { <p>Workout sync is not available for this service yet.</p> }
           @if (wahooPreviewReconnect()) {
             <button mat-button type="button" [disabled]="busy()" (click)="reconnectWahooTraining()">Reconnect Wahoo</button>
           } @else if (preview.result.connection !== 'connected') { <p>Check access in <a routerLink="/services" (click)="dialogRef.close()" appHapticTap>Connectivity</a>.</p> }
@@ -120,7 +120,7 @@
         <ng-container *ngTemplateOutlet="providerDetails; context: { $implicit: row }"></ng-container>
       </app-compact-row>
     } @else if (view().loaded) {
-      <p>No providers are available for workout delivery yet.</p>
+      <p>No connected services are available for workout sync yet.</p>
     }
     <ng-template #providerDetails let-row>
         <div class="delivery-provider-settings">
@@ -132,7 +132,7 @@
             } @else if (planBound()) { <p class="delivery-caption">These controls affect only this workout, not the rest of the plan.</p> }
             @if (!planBound() && row.setting) { <p class="delivery-caption">Time zone: {{ row.setting.timeZone }}</p> }
           }
-          @if (!row.ready) { <p>Delivery unavailable. Existing copies and problems remain visible.</p> }
+          @if (!row.ready) { <p>Workout sync unavailable. Existing copies and problems remain visible.</p> }
           @if (row.provider === 'suunto' && data.scope !== 'workout') {
             <p class="delivery-caption">Workouts for today and the next six days are sent as SuuntoPlus Guides. Later workouts are sent automatically as their dates approach.</p>
             <p class="delivery-caption">Sent means available in the Suunto app, not confirmed on your watch. Sync your compatible watch with the app, then select the Guide for your exercise. Pinning stays under your control.</p>
@@ -191,7 +191,7 @@
             <h4>Workout sync status</h4>
             @if (!row.statuses.length) { <p class="delivery-caption">No workout sync status yet. Workouts appear here after their first sync check.</p> }
           }
-          <ul class="delivery-list" [attr.aria-label]="row.label + ' workout deliveries'">
+          <ul class="delivery-list" [attr.aria-label]="row.label + ' synced workouts'">
             @for (status of row.statuses; track status.id) {
               <li class="delivery-status" [class.delivery-status--summary]="data.scope !== 'workout'">
                 @if (data.scope !== 'workout') {
@@ -254,7 +254,7 @@
       }
       @if (showsCorosGuidance()) {
         <p>QS sends each upcoming workout to your COROS training calendar. The COROS app manages watch synchronization; Sent does not confirm that your watch received it.</p>
-        <p>COROS documents a two-week watch window and one training plan synced to a watch at a time. QS does not claim or replace a native plan object, and remote checking is unavailable.</p>
+        <p>COROS documents a two-week watch window and one training plan synced to a watch at a time. QS does not claim or replace a native plan object, and automatic checking is unavailable.</p>
       }
       @if (showsWahooGuidance()) {
         <p>Wahoo sync currently supports time-based running and cycling workouts for today and the next six days in the saved time zone. Distance-based steps are not sent because Wahoo requires a total duration.</p>
@@ -262,11 +262,11 @@
         <p>Bike computers use only the first target in an interval. Review any target limitations before approving a changed workout.</p>
       }
       <p>Sync requires Pro and starts only when you enable it. Manual planning is free.</p>
-      <p>Stop sync turns off updates and asks the connected app to remove upcoming synced workouts. Your plans and workouts stay in Quantified Self. Your provider account stays connected.</p>
+      <p>Stop sync turns off updates and asks the connected app to remove upcoming synced workouts. Your plans and workouts stay in Quantified Self. Your connected account stays connected.</p>
       <p>For a single workout in a plan, choose Exclude from plan sync in its more-actions menu. The rest of the plan keeps syncing.</p>
-      <p>Plan workouts sync only while their plan is active. Pausing a plan also requests removal of upcoming synced workouts. Provider copies for past dates or completed workouts are kept.</p>
+      <p>Plan workouts sync only while their plan is active. Pausing a plan also requests removal of upcoming synced workouts. Workouts already sent for past dates or completed workouts are kept.</p>
       <p>If your Pro subscription ends, sync pauses. Workouts already sent stay in the connected app.</p>
-      <p>Where remote checking and repair are supported, active sync checks upcoming workouts daily and restores workouts confirmed missing from the connected app. Provider limits can delay checks. Stop sync prevents restoration.</p>
+      <p>Where automatic checking and repair are supported, active sync checks upcoming workouts daily and restores workouts confirmed missing from the connected app. Service limits can delay checks. Stop sync prevents restoration.</p>
     </div>
   </div>
 </mat-dialog-content>

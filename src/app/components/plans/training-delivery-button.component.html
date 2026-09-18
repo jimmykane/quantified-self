@@ -6,7 +6,8 @@
         <span class="delivery-plan-providers">
           @for (summary of compactPlanSummaries(); track summary.provider) {
             <span class="delivery-plan-provider" role="group"
-              [attr.aria-label]="summary.presentation.displayLabel + ': ' + summary.label + '. ' + (summary.detail && summary.detail !== summary.label ? summary.detail + '.' : '')">
+              [attr.aria-label]="summary.presentation.displayLabel + ': ' + (summary.planFocus?.label ?? summary.label) + '. '
+                + ((summary.planFocus?.detail || summary.detail) ? (summary.planFocus?.detail || summary.detail) + '.' : '')">
               <app-service-source-icon [presentation]="summary.presentation" [showTooltip]="false" [iconHeight]="16" aria-hidden="true"></app-service-source-icon>
               <span class="delivery-plan-provider-count" aria-hidden="true">{{ summary.compactLabel }}</span>
             </span>

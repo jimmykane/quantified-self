@@ -102,8 +102,8 @@ provider training-plan parity. Inherited workout reviews show the server-resolve
 override's older zone. Transport timestamps appear in workout details separately from scheduled dates and reflect the
 latest attempt or confirmation; an older success never masks a newer failed attempt.
 
-Plans expose one quiet, non-button **Plan sync** row rather than one action per provider. Provider logos and synced/total
-counts remain visible; a small trailing **View** action is the only click target. Provider names and full status detail
+Plans expose one quiet, non-button **Plan sync** row rather than one action per provider. Service logos and the synced/total
+counts currently due for delivery remain visible; later workouts are named separately. A small trailing **View** action is the only click target. Service names and full status detail
 remain available to assistive technology and in the dialog. On phones, provider indicators use a two-column grid below
 the heading and View action. With multiple destinations, the dialog first shows compact provider rows with the saved
 sync state, current workout-status summary and one **Manage** action; Manage drills into only that provider. A single
@@ -111,12 +111,14 @@ destination opens its provider details directly. **All services** returns to the
 preserves the originating provider. This navigation is local only: it must not preview, mutate, grant consent or call a
 provider.
 
-Plan and workout surfaces show per-service destination summaries from the safe delivery projections. Plan totals are
-aggregates of all current authored workouts, not evidence of a native provider plan or device receipt. Only complete,
+Plan and workout surfaces show per-service destination summaries from the safe delivery projections. The plan UI gives
+today and future workouts the prominent count and summarizes completed, past or skipped workouts as earlier context;
+the underlying safe projection remains an aggregate of all current authored workouts and is not evidence of a native
+provider plan or device receipt. Only complete,
 unchanged confirmations for the matching destination count as synced; earlier-account/removed-source records remain
 history. An exact persisted completion is workout-level: its evidence provider is labelled **Completed · activity linked**,
 other confirmed destination copies are labelled **Sent · workout completed**, and unrelated past copies are labelled
-**Past date · provider copy kept**. This display rule does not turn one provider's evidence into another provider's
+**Past workout · previously sent**. This display rule does not turn one provider's evidence into another provider's
 completion claim or expose provider identifiers. Waiting, paused, unsupported, approval and failure states stay visible.
 Bounded/incomplete or failed reads must not claim complete success. Rendering these summaries performs owner-visible
 reads only, never provider calls or consent changes. See the Training workspace source of truth for identity matching,

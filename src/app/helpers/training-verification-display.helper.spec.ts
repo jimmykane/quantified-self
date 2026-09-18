@@ -8,7 +8,7 @@ describe('Training remote check labels', () => {
   it('offers another check, not a nonexistent Cancel/Save review, after a revision conflict', () => {
     expect(trainingVerificationCommandError({ code: 'functions/aborted' })).toContain('Check again');
     expect(trainingVerificationCommandError({ code: 'aborted' })).not.toContain('Cancel');
-    expect(trainingVerificationCommandError(new Error('failure'))).toContain('Unable to check delivery');
+    expect(trainingVerificationCommandError(new Error('failure'))).toContain('Unable to check sync');
   });
   it.each(['failed', 'needs_attention', 'unsupported', 'outside_horizon'] as const)(
     'does not hide %s behind an earlier check or restoration state', status => {
@@ -36,11 +36,11 @@ describe('Training remote check labels', () => {
       { workoutId: 'workout', provider: 'suunto' })).toBe('Completed · activity linked');
     expect(trainingVerificationLabel({ ...base, provider: 'garmin' }, undefined,
       { workoutId: 'workout', provider: 'suunto' })).toBe('Sent · workout completed');
-    expect(trainingVerificationLabel({ ...base, provider: 'garmin' })).toBe('Past date · provider copy kept');
+    expect(trainingVerificationLabel({ ...base, provider: 'garmin' })).toBe('Past workout · previously sent');
     expect(trainingVerificationLabel({ ...base, provider: 'garmin', status: 'failed' }, undefined,
       { workoutId: 'workout', provider: 'suunto' })).toBe(TRAINING_DELIVERY_STATUS_LABELS.failed);
     expect(trainingVerificationLabel({ ...base, provider: 'garmin', status: 'delivered' },
       { state: 'confirmed_missing' } as TrainingVerificationV1,
-      { workoutId: 'workout', provider: 'suunto' })).toBe('Missing from provider');
+      { workoutId: 'workout', provider: 'suunto' })).toBe('Missing from connected app');
   });
 });
