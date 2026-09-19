@@ -1,6 +1,6 @@
 ---
 name: analyze-quantified-self-training
-description: Analyze authorized Quantified Self training data and, when separately granted, prepare explicitly confirmed Training plan, planned-workout, or provider-delivery changes. Use for current plans, standalone planned workouts, upcoming sessions, workout instructions, completion links, sync status, training load, volume, intensity, fitness, fatigue, readiness or recovery, activity-type trends, persisted activity metrics, or Training-derived snapshots; do not use for one workout's laps or chart streams, sleep-only questions, or body-measurement history.
+description: Analyze authorized Quantified Self training data and, when separately granted, prepare approval-gated Training plan, planned-workout, or provider-delivery changes. Use for current plans, standalone planned workouts, upcoming sessions, workout instructions, completion links, sync status, training load, volume, intensity, fitness, fatigue, readiness or recovery, activity-type trends, persisted activity metrics, or Training-derived snapshots; do not use for one workout's laps or chart streams, sleep-only questions, or body-measurement history.
 ---
 
 # Analyze Training
@@ -131,11 +131,11 @@ Intervals keep work and recovery steps inside one fixed repeat, for example:
 
 For a new standalone workout that should also be sent, use the focused preview's optional delivery object. The server
 owns the local linking key and builds the authored and delivery changes atomically. Preview still changes nothing; the
-confirmed apply remains the only mutation boundary.
+approval-gated apply remains the only mutation boundary.
 
-Present the returned authored and per-provider effects faithfully. Preview is not application. Invoke the apply tool only
-through the server's explicit confirmation request and only after the user accepts; clients without that confirmation
-capability remain read-only. A decline changes nothing. Report independent outcomes: a provider failure does not undo an
-authored workout. After a stale revision, expired proposal, changed grant or changed connection, reread state and prepare
-a fresh proposal rather than replaying guessed input. Never claim a live provider check, transport success, native-plan
-parity or watch receipt beyond the returned result.
+Present the returned authored and per-provider effects faithfully. Preview is not application. After presenting the
+proposal, invoke the separately approval-gated apply tool once; the MCP host owns its native approval UI. Never invent,
+repeat or bypass an approval, and do not call apply again after a client decline or cancellation. Report independent
+outcomes: a provider failure does not undo an authored workout. After a stale revision, expired proposal, changed grant
+or changed connection, reread state and prepare a fresh proposal rather than replaying guessed input. Never claim a live
+provider check, transport success, native-plan parity or watch receipt beyond the returned result.

@@ -61,10 +61,12 @@ operation union. Connections without the delivery grant receive a scope-specific
 field entirely. The existing
 `preview_training_changes` remains the batch/non-create path, accepts at most 25 strict ordered changes, and must not be
 retried unchanged after validation rejects it. Neither preview creates authored or provider state.
-`apply_training_changes` consumes the opaque proposal only
-after the MCP server receives an explicit input-required confirmation. Clients on the legacy transport never receive the
-apply tool. A proposal is owner-, connection-, grant-, revision- and expiry-bound; replay returns its persisted terminal
-result. Permanent workout deletion, plan deletion and history restoration are deliberately absent.
+`apply_training_changes` consumes the opaque proposal as a separately approval-gated write tool. ChatGPT, Claude and
+other MCP hosts own their native tool-approval UI; QS does not use MCP elicitation as a second confirmation round.
+The host may let a user configure automatic tool approval, which the server cannot detect, so users who want to inspect
+every proposal must keep per-call approval enabled in their client. The server still requires the preview-created
+proposal and binds it to the owner, connection, grant, revision and expiry; replay returns its persisted terminal result.
+Permanent workout deletion, plan deletion and history restoration are deliberately absent.
 
 Delivery actions resolve the destination account on the server and reuse the existing #646 command/reconciliation path.
 They never accept credentials or remote IDs. `all_connected` fans out only to connected, rollout-ready providers shown
@@ -306,7 +308,7 @@ The bundled skills divide ownership deliberately:
 | `explore-quantified-self-routes` | Saved-route summaries, geometry, waypoints, and nearby searches | `routes:read`; optional `route-location:read` |
 
 All seven skills allow implicit or explicit invocation and declare the same hosted permission-scoped MCP dependency. Most
-domain tools are read-only; the Training skill can additionally use separately authorized preview and confirmed-apply tools. Their trigger
+domain tools are read-only; the Training skill can additionally use separately authorized preview and approval-gated apply tools. Their trigger
 descriptions keep single-domain work out of the cross-domain skill. Each `agents/openai.yaml` owns one matching
 skill-level starter prompt; the plugin manifest retains only three representative interface prompts because that field
 is intentionally bounded. Skills discover the authenticated server's live tools and catalogs rather than copying tool
@@ -634,7 +636,7 @@ The analytics and map entries follow the
 | `get_planned_workout_completion` | `training-plans:read`; optional activity ref also requires `activity-details:read` | Exact current persisted completion link; no inferred matching |
 | `preview_create_planned_workout` | `training-plans:read` + `training-plans:write`; optional delivery also requires `training-delivery:write` | Focused one-workout proposal with optional atomic initial send; server-owned local key |
 | `preview_training_changes` | `training-plans:read` plus the relevant Training write scope(s) | Strict bounded proposal with authored and per-provider effects; no authored mutation |
-| `apply_training_changes` | Same scopes bound into the proposal; modern confirmation-capable transport only | Idempotently applies a confirmed proposal and returns independent authored/provider outcomes |
+| `apply_training_changes` | Same scopes bound into the proposal; native client approval gate | Idempotently applies a preview-created proposal and returns independent authored/provider outcomes |
 | `list_health_metrics` | `health:read` | Static allowlisted Health capabilities, Sports Lib types/units, range limits and additional body-composition permission requirements |
 | `query_health_metric` | `health:read`; also `measurements:read` for body composition | Source-separated stored scalars or bounded representative sample trends; identity-free calendar-day body composition |
 | `get_hrv_personal_range` | `health:read` + `sleep:read` | Shared rolling nightly HRV baseline, historical classifications and missing-day ranges, separated by source |
@@ -677,8 +679,9 @@ The analytics and map entries follow the
 | `get_route_geometry` | `routes:read` + `route-location:read` | Bounded persisted `polyline5` preview geometry with explicit segment endpoints |
 | `list_route_waypoints` | `routes:read` + `route-location:read` | Bounded allowlisted waypoint coordinates parsed from the saved FIT/GPX source |
 
-Every read tool is annotated read-only, non-destructive, and idempotent. Training preview is non-destructive; confirmed
-Training apply is explicitly write-capable and may be destructive only in the recoverable soft-delete/stop-sync sense.
+Every read tool is annotated read-only, non-destructive, and idempotent. Training preview is non-destructive; Training
+apply is separately approval-gated, explicitly write-capable and may be destructive only in the recoverable
+soft-delete/stop-sync sense.
 The preferred `search_*_near_location` tools are
 closed-world: a place-name input can make a bounded Mapbox geocoding read, but it cannot write to Mapbox or change
 publicly visible internet state. The already-registered `find_*_near_location` variants retain their frozen

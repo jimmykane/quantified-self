@@ -23,11 +23,13 @@ an existing exact stored link; they never infer a match. The optional activity r
 allows only the safe authored lifecycle: create/edit/move/copy/skip/archive/activate/shift and recoverable workout
 deletion. It excludes permanent workout deletion, plan deletion and history restoration. The latter allows plan delivery
 enablement and workout send/resume/stop/retry/check/approval. Delivery remains Pro, provider-connection and rollout gated.
-External clients prepare one strict proposal of at most 25 changes, then `apply_training_changes` appears only on modern
-MCP transports that support the server's input-required confirmation. A decline is a no-op. Legacy clients remain
-preview/read-only. Proposals expire after 15 minutes, bind owner, OAuth connection/grant, schedule revision and entity
-creation time, and retain an idempotent terminal result for safe retries. Provider outcomes are independent: a failed
-send never rolls back a successfully authored standalone workout.
+External clients prepare one strict proposal of at most 25 changes, then invoke the separately approval-gated
+`apply_training_changes` write tool. ChatGPT, Claude and other MCP hosts own their native tool-approval UI; QS does not
+use MCP elicitation for a second confirmation round. A host may let its user configure automatic tool approval, which QS
+cannot detect, so per-proposal review depends on leaving per-call approval enabled in that client. Proposals expire after
+15 minutes, bind owner, OAuth connection/grant, schedule revision and entity creation time, and retain an idempotent
+terminal result for safe retries. Provider outcomes are independent: a failed send never rolls back a successfully
+authored standalone workout.
 
 Single-workout creation has an additive focused MCP preview. The caller supplies the current schedule revision, optional
 plan reference, calendar date, title and complete canonical recipe; the server supplies the proposal-local key and routes

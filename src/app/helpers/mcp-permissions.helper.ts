@@ -31,11 +31,11 @@ export const MCP_SCOPE_CONTENT: Record<McpScope, {
   },
   'training-plans:write': {
     title: 'Change Training plans and workouts',
-    description: 'Create and edit plans and planned workouts, move or copy workouts, change plan dates and lifecycle, mark workouts skipped, and move workouts to recoverable history. Every proposal is previewed and requires your explicit confirmation. Permanent deletion, history restore and plan deletion are not allowed.',
+    description: 'Create and edit plans and planned workouts, move or copy workouts, change plan dates and lifecycle, mark workouts skipped, and move workouts to recoverable history. Every proposal is previewed before a separate apply tool governed by your client\'s approval controls. Permanent deletion, history restore and plan deletion are not allowed.',
   },
   'training-delivery:write': {
     title: 'Change planned-workout sync',
-    description: 'Enable or stop plan sync and send, resume, retry, check or approve planned-workout delivery for one or all connected services. Every proposal is previewed and requires your explicit confirmation. Provider delivery remains subject to Pro access, connection permissions and rollout availability. This cannot connect or disconnect a service.',
+    description: 'Enable or stop plan sync and send, resume, retry, check or approve planned-workout delivery for one or all connected services. Every proposal is previewed before a separate apply tool governed by your client\'s approval controls. Provider delivery remains subject to Pro access, connection permissions and rollout availability. This cannot connect or disconnect a service.',
   },
   'activity-descriptions:read': {
     title: 'Activity descriptions',

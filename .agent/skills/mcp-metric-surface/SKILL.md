@@ -48,8 +48,10 @@ Lib version or parser change, also use `.agent/skills/sports-lib-upgrade-and-rep
   never make the coverage map an automatic field-exposure mechanism.
   Read extensions use `training-plans:read`. New mutation capability is never implied: it must fit the explicit safe
   Training lifecycle, use the independent `training-plans:write` or `training-delivery:write` child scope, enter one
-  bounded preview, bind owner/connection/grant/revision/expiry, and require a server-controlled confirmation before an
-  idempotent apply. The built-in Assistant may expose preview to the model but never apply; app-owned confirmation must
+  bounded preview, bind owner/connection/grant/revision/expiry, and expose an idempotent apply as a separately
+  approval-gated write tool with accurate annotations. The external MCP host owns its native approval UI; do not use MCP
+  elicitation solely to reconfirm a fully specified write call, and document that server code cannot detect a client's
+  automatic-approval setting. The built-in Assistant may expose preview to the model but never apply; app-owned confirmation must
   recheck its server-owned conversation generation. Provider actions reuse the server delivery command and Pro/readiness
   gates, never accept credentials or remote IDs, and return independent outcomes without rolling back authored data.
   Permanent workout deletion, plan deletion, history restore, inferred completion and new provider actions require a

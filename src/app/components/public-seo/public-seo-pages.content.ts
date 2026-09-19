@@ -561,7 +561,7 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
     title: 'MCP Server for Training Data',
     description: 'Connect ChatGPT, Claude, or another MCP client to approved training, Health, sleep, measurements, routes, optional Timeline notes and activity descriptions.',
     h1: 'Connect ChatGPT or Claude to your training data',
-    intro: 'Use the Quantified Self MCP server to let ChatGPT, Claude, or another compatible client analyze approved data and help plan your next workout. You may separately grant bounded Training planning changes, each requiring a Quantified Self confirmation.',
+    intro: 'Use the Quantified Self MCP server to let ChatGPT, Claude, or another compatible client analyze approved data and help plan your next workout. You may separately grant bounded Training planning changes, each previewed before a separate approval-gated apply call.',
     chips: ['MCP server', 'ChatGPT', 'Claude', 'Explicit consent', 'Training', 'Sleep', 'Activities', 'Routes'],
     actions: [
       routeAction('Start Free', '/login', 'flat', 'arrow_forward'),
@@ -604,7 +604,7 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
       },
       {
         eyebrow: 'Access Boundaries',
-        title: 'Separate permissions and confirmed Training changes',
+        title: 'Separate permissions and approval-gated Training changes',
         copy: 'Choose which data categories an external client can read and whether it may propose Training changes, then review or disconnect it from Connections at any time.',
         items: [
           {
@@ -614,8 +614,8 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
           },
           {
             icon: 'lock',
-            title: 'Training-only confirmed writes',
-            copy: 'MCP cannot write Health, activities, routes, sleep, measurements, or dashboard settings. Separately granted Training changes are previewed in a bounded proposal and require your confirmation before application.',
+            title: 'Training-only approval-gated writes',
+            copy: 'MCP cannot write Health, activities, routes, sleep, measurements, or dashboard settings. Separately granted Training changes are previewed in a bounded proposal before a distinct approval-gated apply call.',
           },
           {
             icon: 'shield',
@@ -633,7 +633,7 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
     faqItems: [
       {
         question: 'What does the Quantified Self MCP server do?',
-        answer: 'It lets a compatible external AI client answer questions using the Quantified Self data you approve. You can separately allow bounded plan, workout, and provider-delivery proposals; nothing changes until you explicitly confirm one.',
+        answer: 'It lets a compatible external AI client answer questions using the Quantified Self data you approve. You can separately allow bounded plan, workout, and provider-delivery proposals; application uses a distinct write tool governed by the client\'s native approval controls.',
       },
       {
         question: 'Can I use the MCP server with ChatGPT or Claude?',
@@ -657,7 +657,7 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
       },
       {
         question: 'Can an MCP client read my Training plans and planned workouts?',
-        answer: 'With separately approved Training plans and planned workouts permission, supported clients can read current plans, standalone workouts, complete instructions, step notes, exact stored completion links, and existing service sync summaries. Separate child permissions allow bounded plan/workout or provider-delivery proposals. Each proposal requires confirmation, and provider delivery remains Pro and connection-gated. Synced means provider-side workout delivery, not receipt on a watch.',
+        answer: 'With separately approved Training plans and planned workouts permission, supported clients can read current plans, standalone workouts, complete instructions, step notes, exact stored completion links, and existing service sync summaries. Separate child permissions allow bounded plan/workout or provider-delivery proposals. Applying a proposal uses the client\'s native approval controls, and provider delivery remains Pro and connection-gated. Synced means provider-side workout delivery, not receipt on a watch.',
       },
       {
         question: 'Why are my Training plan tools missing?',
@@ -665,7 +665,7 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
       },
       {
         question: 'Can an MCP client rearrange my dashboard or change my data?',
-        answer: 'It cannot change dashboard settings, activities, routes, Health, measurements, or sleep records. It can change Training plans, planned workouts, or their delivery only when you grant the matching child permission and explicitly confirm the bounded proposal.',
+        answer: 'It cannot change dashboard settings, activities, routes, Health, measurements, or sleep records. It can change Training plans, planned workouts, or their delivery only when you grant the matching child permission and the client permits the separate apply call for a bounded proposal.',
       },
       {
         question: 'Does MCP access expose my original activity or route files?',

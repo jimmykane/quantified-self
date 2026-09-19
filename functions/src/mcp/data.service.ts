@@ -6253,11 +6253,6 @@ export function createMcpDataService(
       return previewCreatePlannedWorkout(input);
     },
 
-    async getTrainingProposalConfirmation(input: import('./training-plans-write.service').TrainingWriteInput) {
-      const { getTrainingProposalConfirmation } = await import('./training-plans-write.service');
-      return getTrainingProposalConfirmation(input);
-    },
-
     async applyTrainingChanges(input: import('./training-plans-write.service').TrainingWriteInput) {
       const { applyTrainingChanges } = await import('./training-plans-write.service');
       return applyTrainingChanges(input);

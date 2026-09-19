@@ -100,7 +100,7 @@ export class McpConnectionsComponent implements OnInit {
         {
           id: 'training-changes',
           title: 'Training changes',
-          summary: 'Optional changes still need a reviewed proposal and your explicit confirmation.',
+          summary: 'Optional changes still need a reviewed proposal and your client\'s native approval.',
           permissions: permissions.filter(permission => TRAINING_CHANGE_SCOPES.has(permission.scope)),
         },
       ],

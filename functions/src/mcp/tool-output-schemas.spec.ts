@@ -481,9 +481,6 @@ function createFixtureDataService(
     readTrainingPlans: vi.fn(async (input: { tool: TrainingReadTool }) => trainingReadFixtures[input.tool]),
     previewCreatePlannedWorkout: vi.fn().mockResolvedValue(trainingPreviewFixture),
     previewTrainingChanges: vi.fn().mockResolvedValue(trainingPreviewFixture),
-    getTrainingProposalConfirmation: vi.fn().mockResolvedValue({
-      message: 'Confirm the displayed Training change.', proposal: trainingPreviewFixture,
-    }),
     applyTrainingChanges: vi.fn().mockResolvedValue(trainingApplyFixture),
     getActivityDescription: vi.fn().mockResolvedValue({ activityRef: 'opaque-activity-ref', description: 'Easy run. Felt tired.\nKeep this as reported context.' }),
     queryTimelineNotes: vi.fn().mockResolvedValue({
@@ -1915,11 +1912,7 @@ describe.each<FixtureTransport>(['in-memory', 'legacy-http', 'modern-http'])('MC
       metric: getMcpHealthCatalog().metrics.find(metric => metric.id === 'body_fat'),
     })).toBe(false); // Body composition must not expose otherwise-valid source series.
 
-    expect(validators.get('apply_training_changes')!(trainingApplyFixture)).toBe(true);
     for (const toolName of PUBLIC_MCP_TOOL_NAMES) {
-      // apply_training_changes intentionally returns an input-required confirmation first; its successful
-      // structured result is validated above and the confirmation lifecycle is covered in server tests.
-      if (toolName === 'apply_training_changes') continue;
       const result = await connection.client.callTool({
         name: toolName,
         arguments: successfulToolArguments[toolName],

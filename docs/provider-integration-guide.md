@@ -126,7 +126,8 @@ read bounds and tests.
 
 Separately authorized MCP Training delivery changes reuse `trainingDeliveryCommand` and its durable reconciliation
 marker; MCP does not implement an adapter or call provider HTTP directly. A strict proposal resolves only server-owned
-connection authority, compatibility and readiness, and a modern MCP input-required confirmation must precede apply.
+connection authority, compatibility and readiness. Apply is a separate write-capable tool behind the MCP host's native
+approval UI; QS does not use MCP elicitation as an additional confirmation round.
 `all_connected` includes only providers that are connected and rollout-ready during preview. Explicit providers retain
 an independent blocked result rather than hiding the reason. Destination keys, credentials, artifact IDs, approval
 digests and attempt journals never enter MCP input or output. Provider delivery remains Pro-gated, and failure does not

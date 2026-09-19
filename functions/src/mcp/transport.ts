@@ -8,11 +8,11 @@ import {
 
 /** One authenticated request factory, identical tools and validation in both eras. */
 export function createMcpTransportHandler(
-  factory: (supportsInputRequired: boolean) => McpServer,
+  factory: () => McpServer,
   onerror: (error: Error) => void,
 ) {
   const modern = createMcpHandler(() => {
-    const server = factory(true);
+    const server = factory();
     // Modern clients must not discover a subscription capability we cannot
     // provide from an ephemeral, request-scoped Firebase Function handler.
     server.server.registerCapabilities({ tools: { listChanged: false } });
@@ -31,7 +31,7 @@ export function createMcpTransportHandler(
       if (!await isLegacyRequest(request, options?.parsedBody)) {
         return modern.fetch(request, options);
       }
-      const server = factory(false);
+      const server = factory();
       const transport = new WebStandardStreamableHTTPServerTransport({
         sessionIdGenerator: undefined,
         enableJsonResponse: true,

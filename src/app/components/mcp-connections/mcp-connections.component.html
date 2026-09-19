@@ -208,7 +208,7 @@
           @if (permission.parentTitle) {
             <p>Requires {{ permission.parentTitle }} permission.</p>
           }
-          <p>Start authorization again in the app and approve this permission to grant access. Training changes still require a separate proposal confirmation.</p>
+          <p>Start authorization again in the app and approve this permission to grant access. Training changes still use a bounded preview and a separate approval-gated apply tool.</p>
         </mat-dialog-content>
         <mat-dialog-actions align="end">
           <button mat-button mat-dialog-close type="button" (click)="haptics.selection()">Close</button>

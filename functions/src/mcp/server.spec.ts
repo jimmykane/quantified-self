@@ -1,11 +1,7 @@
 import { AddressInfo } from 'node:net';
 import { createServer as createHttpServer } from 'node:http';
 import { NodeStreamableHTTPServerTransport } from '@modelcontextprotocol/node';
-import {
-  CLIENT_CAPABILITIES_META_KEY,
-  InMemoryTransport,
-  McpServer,
-} from '@modelcontextprotocol/server';
+import { InMemoryTransport, McpServer } from '@modelcontextprotocol/server';
 import { Client, StreamableHTTPClientTransport } from '@modelcontextprotocol/client';
 import { z } from 'zod';
 import { McpDataError } from './data.service';
@@ -36,7 +32,6 @@ import {
   resolvePublicBaseUrl,
   requireMcpTokenGrantType,
   sanitizeMcpProtocolVersionForDiagnostics,
-  summarizeMcpTrainingConfirmationDiagnostics,
   summarizeMcpOutputValidationIssues,
   supportsMcpTransportMethod,
 } from './server';
@@ -501,7 +496,6 @@ describe('MCP HTTP scope enforcement', () => {
   it('registers only the tools granted by the bearer scopes', async () => {
     const listToolNames = async (
       scopes: Array<typeof MCP_OAUTH_SCOPES[keyof typeof MCP_OAUTH_SCOPES]>,
-      supportsWriteConfirmation = true,
     ) => {
       const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
       const server = createMcpServer({
@@ -509,7 +503,7 @@ describe('MCP HTTP scope enforcement', () => {
         clientId: 'https://client.example/mcp.json',
         connectionId: 'connection-1',
         scopes,
-      }, 'https://quantified-self.io', undefined, supportsWriteConfirmation);
+      }, 'https://quantified-self.io');
       const client = new Client({
         name: 'scope-test-client',
         version: '1.0.0',
@@ -673,21 +667,6 @@ describe('MCP HTTP scope enforcement', () => {
       'preview_training_changes',
       'query_planned_workouts',
     ]);
-    await expect(listToolNames([
-      MCP_OAUTH_SCOPES.TrainingPlansRead,
-      MCP_OAUTH_SCOPES.TrainingPlansWrite,
-      MCP_OAUTH_SCOPES.TrainingDeliveryWrite,
-    ], false)).resolves.toEqual([
-      'get_planned_workout',
-      'get_planned_workout_completion',
-      'get_training_plan',
-      'get_training_sync_status',
-      'list_activity_types',
-      'list_training_plans',
-      'preview_create_planned_workout',
-      'preview_training_changes',
-      'query_planned_workouts',
-    ]);
   }, 15_000);
 
   it('advertises canonical workout authoring guidance only when Training writes are available', async () => {
@@ -788,7 +767,7 @@ describe('MCP HTTP scope enforcement', () => {
   });
 
 
-  it('requires a modern MCP confirmation round and applies only an accepted Training proposal', async () => {
+  it('advertises native approval metadata and applies one server-bound Training proposal call', async () => {
     const preview = {
       proposalRef: 'opaque-proposal-reference', expiresAtMs: Date.now() + 60_000,
       permissionMode: 'schedule' as const, scheduleRevision: 1,
@@ -802,48 +781,39 @@ describe('MCP HTTP scope enforcement', () => {
     };
     const applyTrainingChanges = vi.fn().mockResolvedValue(applied);
     const dataService = {
-      getTrainingProposalConfirmation: vi.fn().mockResolvedValue({
-        message: 'Confirm the displayed Training change.', proposal: preview,
-      }),
       applyTrainingChanges,
     } as unknown as NonNullable<Parameters<typeof createMcpServer>[2]>;
     const auth = {
       uid: 'user-1', clientId: 'https://client.example/mcp.json', connectionId: 'connection-1',
       scopes: [MCP_OAUTH_SCOPES.TrainingPlansRead, MCP_OAUTH_SCOPES.TrainingPlansWrite],
     };
-    const server = createMcpTransportHandler(supportsWriteConfirmation => createMcpServer(
-      auth, 'https://quantified-self.io', dataService, supportsWriteConfirmation,
-    ), error => { throw error; });
+    const server = createMcpTransportHandler(
+      () => createMcpServer(auth, 'https://quantified-self.io', dataService),
+      error => { throw error; },
+    );
     const transport = new StreamableHTTPClientTransport(new URL('https://contract.example/mcp'), {
       fetch: (url, init) => server.fetch(new Request(url, init)),
     });
-    const client = new Client({ name: 'training-confirmation-client', version: '1.0.0' }, {
-      capabilities: { elicitation: {} },
+    const client = new Client({ name: 'training-native-approval-client', version: '1.0.0' }, {
       versionNegotiation: { mode: { pin: '2026-07-28' } },
-    });
-    let confirm = false;
-    client.setRequestHandler('elicitation/create', async request => {
-      expect(request.params.message).toContain('Confirm the displayed Training change.');
-      return { action: 'accept' as const, content: { confirm } };
     });
 
     try {
       await client.connect(transport);
-      const declined = await client.callTool({ name: 'apply_training_changes', arguments: {
+      const applyTool = (await client.listTools()).tools.find(
+        tool => tool.name === 'apply_training_changes',
+      );
+      expect(applyTool?.annotations).toEqual({
+        readOnlyHint: false,
+        destructiveHint: true,
+        idempotentHint: true,
+        openWorldHint: true,
+      });
+      const result = await client.callTool({ name: 'apply_training_changes', arguments: {
         proposalRef: preview.proposalRef, permissionMode: 'schedule',
       } });
-      expect(declined.isError).toBe(true);
-      expect(declined.content).toEqual([expect.objectContaining({
-        type: 'text', text: expect.stringContaining('proposal was declined'),
-      })]);
-      expect(applyTrainingChanges).not.toHaveBeenCalled();
-
-      confirm = true;
-      const accepted = await client.callTool({ name: 'apply_training_changes', arguments: {
-        proposalRef: preview.proposalRef, permissionMode: 'schedule',
-      } });
-      expect(accepted.isError).not.toBe(true);
-      expect(accepted.structuredContent).toEqual(applied);
+      expect(result.isError).not.toBe(true);
+      expect(result.structuredContent).toEqual(applied);
       expect(applyTrainingChanges).toHaveBeenCalledTimes(1);
     } finally {
       await client.close();
@@ -1467,7 +1437,7 @@ describe('MCP HTTP scope enforcement', () => {
         name: 'quantified-self',
         title: 'Quantified Self',
         version: '1.4.0',
-        description: 'Permission-scoped activity, Health, sleep, measurements, and Training access, including explicitly confirmed Training changes when granted.',
+        description: 'Permission-scoped activity, Health, sleep, measurements, and Training access, including approval-gated Training changes when granted.',
         websiteUrl: 'https://beta.quantified-self.io',
         icons: [
           {
@@ -1645,49 +1615,6 @@ describe('MCP HTTP scope enforcement', () => {
     expect(classifyMcpBearerRejectionReason(
       new McpOAuthError('temporarily_unavailable', 'limited', 429),
     )).toBe('request_rate_limited');
-  });
-
-  it('summarizes Training confirmation capabilities and responses without retaining payloads', () => {
-    const envelope = {
-      [CLIENT_CAPABILITIES_META_KEY]: {
-        elicitation: { form: { privateCapability: 'private-capability-canary' } },
-        privateClientData: 'private-client-canary',
-      },
-      privateEnvelopeData: 'private-envelope-canary',
-    };
-    const accepted = summarizeMcpTrainingConfirmationDiagnostics(
-      envelope,
-      {
-        training_confirmation: {
-          action: 'accept',
-          content: { confirm: true, privateText: 'private-form-canary' },
-        },
-      },
-      { confirm: true },
-    );
-    expect(accepted).toEqual({
-      clientCapabilitiesEnvelope: true,
-      elicitationCapability: 'form',
-      inputResponseState: 'accepted_confirm',
-    });
-    expect(JSON.stringify(accepted)).not.toContain('canary');
-
-    expect(summarizeMcpTrainingConfirmationDiagnostics(
-      { [CLIENT_CAPABILITIES_META_KEY]: { elicitation: {} } },
-      { training_confirmation: { action: 'accept', content: { confirm: 'yes' } } },
-      undefined,
-    )).toEqual({
-      clientCapabilitiesEnvelope: true,
-      elicitationCapability: 'implicit_form',
-      inputResponseState: 'accepted_invalid',
-    });
-    expect(summarizeMcpTrainingConfirmationDiagnostics(undefined, {
-      training_confirmation: { action: 'decline', privateText: 'private-decline-canary' },
-    }, undefined)).toEqual({
-      clientCapabilitiesEnvelope: false,
-      elicitationCapability: 'missing',
-      inputResponseState: 'declined',
-    });
   });
 
   it('classifies Streamable HTTP rejections to a fixed safe vocabulary', () => {

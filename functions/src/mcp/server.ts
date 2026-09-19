@@ -1,10 +1,7 @@
 import { activitySampleResultBytes, MCP_ACTIVITY_SAMPLES_LIMITS } from './activity-samples.service';
 import { toNodeHandler } from '@modelcontextprotocol/node';
 import {
-  acceptedContent,
-  CLIENT_CAPABILITIES_META_KEY,
   DEFAULT_NEGOTIATED_PROTOCOL_VERSION,
-  inputRequired,
   McpServer,
   PROTOCOL_VERSION_META_KEY,
 } from '@modelcontextprotocol/server';
@@ -619,88 +616,6 @@ const TRAINING_APPLY_TOOL_ANNOTATIONS = {
   openWorldHint: true,
 } as const;
 
-const TRAINING_CONFIRMATION_SCHEMA = z.strictObject({ confirm: z.boolean() });
-
-type TrainingWriteToolName =
-  | 'preview_create_planned_workout'
-  | 'preview_training_changes'
-  | 'apply_training_changes';
-
-type McpTrainingConfirmationDiagnostics = {
-  clientCapabilitiesEnvelope: boolean;
-  elicitationCapability: 'missing' | 'implicit_form' | 'form' | 'url' | 'form_and_url' | 'other';
-  inputResponseState:
-    | 'absent'
-    | 'accepted_confirm'
-    | 'accepted_decline'
-    | 'accepted_invalid'
-    | 'declined'
-    | 'cancelled'
-    | 'other';
-};
-
-function plainRecord(value: unknown): Record<string, unknown> | undefined {
-  return value !== null && typeof value === 'object' && !Array.isArray(value)
-    ? value as Record<string, unknown>
-    : undefined;
-}
-
-/**
- * Temporary diagnostics for the native MCP multi-round-trip confirmation.
- * Keep this deliberately lossy: no proposal, owner, connection, authored
- * content, or raw client metadata may enter Cloud Logging.
- */
-export function summarizeMcpTrainingConfirmationDiagnostics(
-  envelope: unknown,
-  inputResponses: unknown,
-  accepted: { confirm: boolean } | undefined,
-): McpTrainingConfirmationDiagnostics {
-  const capabilities = plainRecord(plainRecord(envelope)?.[CLIENT_CAPABILITIES_META_KEY]);
-  const elicitation = plainRecord(capabilities?.elicitation);
-  let elicitationCapability: McpTrainingConfirmationDiagnostics['elicitationCapability'] = 'missing';
-  if (elicitation) {
-    const keys = Object.keys(elicitation);
-    const hasForm = plainRecord(elicitation.form) !== undefined;
-    const hasUrl = plainRecord(elicitation.url) !== undefined;
-    if (keys.length === 0) elicitationCapability = 'implicit_form';
-    else if (hasForm && hasUrl) elicitationCapability = 'form_and_url';
-    else if (hasForm) elicitationCapability = 'form';
-    else if (hasUrl) elicitationCapability = 'url';
-    else elicitationCapability = 'other';
-  }
-
-  const response = plainRecord(plainRecord(inputResponses)?.training_confirmation);
-  let inputResponseState: McpTrainingConfirmationDiagnostics['inputResponseState'] = 'absent';
-  if (accepted) inputResponseState = accepted.confirm ? 'accepted_confirm' : 'accepted_decline';
-  else if (response?.action === 'accept') inputResponseState = 'accepted_invalid';
-  else if (response?.action === 'decline') inputResponseState = 'declined';
-  else if (response?.action === 'cancel') inputResponseState = 'cancelled';
-  else if (response) inputResponseState = 'other';
-
-  return {
-    clientCapabilitiesEnvelope: capabilities !== undefined,
-    elicitationCapability,
-    inputResponseState,
-  };
-}
-
-function trainingWriteToolName(body: unknown): TrainingWriteToolName | undefined {
-  const record = plainRecord(body);
-  if (record?.method !== 'tools/call') return undefined;
-  const name = plainRecord(record.params)?.name;
-  return name === 'preview_create_planned_workout'
-    || name === 'preview_training_changes'
-    || name === 'apply_training_changes'
-    ? name
-    : undefined;
-}
-
-function trainingWriteErrorKind(error: unknown): string {
-  if (error instanceof McpDataError) return error.code;
-  if (error instanceof z.ZodError) return 'output_validation';
-  return 'unexpected';
-}
-
 function createReadOnlyToolRunner(outputSchemas: McpOutputSchemaRegistry) {
   return async (
     name: PublicMcpToolName,
@@ -768,7 +683,7 @@ function buildMcpServerInstructions(auth: AuthenticatedMcpRequest): string {
   const trainingChangesAvailable = auth.scopes.includes(MCP_OAUTH_SCOPES.TrainingPlansWrite)
     || auth.scopes.includes(MCP_OAUTH_SCOPES.TrainingDeliveryWrite);
   const instructions = [trainingChangesAvailable
-    ? 'Use only the tools exposed for the permissions this connection was granted. Training mutations always require a preview followed by the server-provided confirmation flow.'
+    ? 'Use only the tools exposed for the permissions this connection was granted. Training mutations always require a preview followed by the separately approval-gated apply tool; the MCP client owns its native approval UI.'
     : 'Use only the read-only tools exposed for the permissions this connection was granted.'];
   if (
     auth.scopes.includes(MCP_OAUTH_SCOPES.MetricsRead)
@@ -830,9 +745,9 @@ function buildMcpServerInstructions(auth: AuthenticatedMcpRequest): string {
       const focusedCreateGuidance = auth.scopes.includes(MCP_OAUTH_SCOPES.TrainingDeliveryWrite)
         ? 'include its optional delivery object when the same workout should be sent immediately to providers'
         : 'provider delivery is not available on this connection, so do not add delivery input';
-      instructions.push(`${readGuidance} Construct workout recipes only from the advertised v1 schema, using stable unique node IDs and canonical seconds, metres, kilojoules, bpm, watts, metres per second, rpm and percentage points. Pace is still stored as metres per second with pace presentation. Never invent a threshold or relative-target reference snapshot; ask when required authored inputs are missing. For one new workout, read the current schedule revision and use preview_create_planned_workout exactly once; ${focusedCreateGuidance}. Do not use the batch tool for either case. Use preview_training_changes once only for other or genuinely multi-change requests. Present preview effects, and use apply_training_changes only through its explicit confirmation request. Never retry a rejected preview unchanged, imply that a preview changed data, or claim provider delivery succeeded before the apply result says so.`);
+      instructions.push(`${readGuidance} Construct workout recipes only from the advertised v1 schema, using stable unique node IDs and canonical seconds, metres, kilojoules, bpm, watts, metres per second, rpm and percentage points. Pace is still stored as metres per second with pace presentation. Never invent a threshold or relative-target reference snapshot; ask when required authored inputs are missing. For one new workout, read the current schedule revision and use preview_create_planned_workout exactly once; ${focusedCreateGuidance}. Do not use the batch tool for either case. Use preview_training_changes once only for other or genuinely multi-change requests. Present preview effects, then call the separately approval-gated apply_training_changes tool once; the client owns its native approval UI. Never retry a rejected preview unchanged, imply that a preview changed data, or claim provider delivery succeeded before the apply result says so.`);
     } else {
-      instructions.push(`${readGuidance} Only provider-delivery changes are available. Use preview_training_changes once with complete input, present its effects, and use apply_training_changes only through its explicit confirmation request. Never retry a rejected preview unchanged or claim delivery succeeded before the apply result says so.`);
+      instructions.push(`${readGuidance} Only provider-delivery changes are available. Use preview_training_changes once with complete input, present its effects, then call the separately approval-gated apply_training_changes tool once; the client owns its native approval UI. Never retry a rejected preview unchanged or claim delivery succeeded before the apply result says so.`);
     }
   }
   if (auth.scopes.includes(MCP_OAUTH_SCOPES.TimelineNotesRead)) {
@@ -871,7 +786,6 @@ export function createMcpServer(
   auth: AuthenticatedMcpRequest,
   publicBaseUrl: string,
   dataService: ReturnType<typeof createMcpDataService> = defaultDataService,
-  supportsWriteConfirmation = true,
 ): McpServer {
   const measurementToolsAvailable = auth.scopes.includes(
     MCP_OAUTH_SCOPES.MeasurementsRead,
@@ -888,14 +802,9 @@ export function createMcpServer(
   });
   const runReadOnlyTool = createReadOnlyToolRunner(outputSchemas);
   const runTrainingWriteTool = async (
-    name: TrainingWriteToolName,
+    name: 'preview_create_planned_workout' | 'preview_training_changes' | 'apply_training_changes',
     operation: () => Promise<unknown>,
   ) => {
-    logger.info('[MCP TEMP] Training write lifecycle', {
-      toolName: name,
-      stage: 'operation_started',
-      supportsInputRequired: supportsWriteConfirmation,
-    });
     try {
       const projected = await operation();
       const validated = await outputSchemas[name].parseAsync(projected);
@@ -903,19 +812,8 @@ export function createMcpServer(
       if (Buffer.byteLength(JSON.stringify(result), 'utf8') > 256 * 1024 - 1024) {
         throw new McpDataError('query_too_large', 'The Training change result exceeds the MCP response limit. Split it into smaller proposals.');
       }
-      logger.info('[MCP TEMP] Training write lifecycle', {
-        toolName: name,
-        stage: 'operation_completed',
-        supportsInputRequired: supportsWriteConfirmation,
-      });
       return result;
     } catch (error) {
-      logger.info('[MCP TEMP] Training write lifecycle', {
-        toolName: name,
-        stage: 'operation_failed',
-        supportsInputRequired: supportsWriteConfirmation,
-        errorKind: trainingWriteErrorKind(error),
-      });
       return formatMcpToolError(error);
     }
   };
@@ -923,7 +821,7 @@ export function createMcpServer(
     name: 'quantified-self',
     title: 'Quantified Self',
     version: '1.4.0',
-    description: 'Permission-scoped activity, Health, sleep, measurements, and Training access, including explicitly confirmed Training changes when granted.',
+    description: 'Permission-scoped activity, Health, sleep, measurements, and Training access, including approval-gated Training changes when granted.',
     websiteUrl: publicBaseUrl,
     icons: MCP_SERVER_ICON_VARIANTS.map(icon => ({
       src: `${publicBaseUrl}${icon.path}`,
@@ -988,8 +886,8 @@ export function createMcpServer(
       registerMcpTool(server, 'preview_create_planned_workout', {
         title: 'Preview a new planned workout',
         description: canDeliverCreatedWorkout
-          ? 'Use for one new standalone or plan-associated workout, with optional immediate delivery to selected or all connected providers. Provide the current schedule revision, complete canonical recipe, and an IANA time zone when delivery is requested. Quantified Self supplies its internal proposal key and previews the authored and delivery effects atomically. Nothing changes until apply_training_changes receives explicit confirmation.'
-          : 'Use for one new standalone or plan-associated workout. Provide the current schedule revision and complete canonical recipe. This connection has no provider-delivery permission, so delivery input is not advertised. Quantified Self supplies its internal proposal key. Nothing changes until apply_training_changes receives explicit confirmation.',
+          ? 'Use for one new standalone or plan-associated workout, with optional immediate delivery to selected or all connected providers. Provide the current schedule revision, complete canonical recipe, and an IANA time zone when delivery is requested. Quantified Self supplies its internal proposal key and previews the authored and delivery effects atomically. Nothing changes until the client permits the separately approval-gated apply_training_changes call.'
+          : 'Use for one new standalone or plan-associated workout. Provide the current schedule revision and complete canonical recipe. This connection has no provider-delivery permission, so delivery input is not advertised. Quantified Self supplies its internal proposal key. Nothing changes until the client permits the separately approval-gated apply_training_changes call.',
         inputSchema: canDeliverCreatedWorkout
           ? TRAINING_WRITE_INPUTS.preview_create_planned_workout
           : TRAINING_CREATE_WORKOUT_INPUT_WITHOUT_DELIVERY,
@@ -1002,88 +900,22 @@ export function createMcpServer(
     }
     registerMcpTool(server, 'preview_training_changes', {
       title: 'Preview Training changes',
-      description: 'Use for plan changes, provider delivery, workout edits, or genuinely multi-change proposals—not for creating one workout. Validate and preview one ordered proposal of at most 25 changes. Nothing authored is changed until apply_training_changes receives explicit user confirmation. Schedule edits require Training plan changes permission; provider actions require Training delivery permission and remain Pro and rollout gated.',
+      description: 'Use for plan changes, provider delivery, workout edits, or genuinely multi-change proposals—not for creating one workout. Validate and preview one ordered proposal of at most 25 changes. Nothing authored is changed until the client permits the separately approval-gated apply_training_changes call. Schedule edits require Training plan changes permission; provider actions require Training delivery permission and remain Pro and rollout gated.',
       inputSchema: TRAINING_WRITE_INPUTS.preview_training_changes,
       outputSchema: outputSchemas.preview_training_changes,
       annotations: TRAINING_PREVIEW_TOOL_ANNOTATIONS,
     }, input => runTrainingWriteTool('preview_training_changes', () => dataService.previewTrainingChanges({
       arguments: input, uid: auth.uid, connectionId: auth.connectionId, scopes: auth.scopes,
     })));
-    if (supportsWriteConfirmation) registerMcpTool(server, 'apply_training_changes', {
+    registerMcpTool(server, 'apply_training_changes', {
       title: 'Confirm and apply Training changes',
-      description: 'Apply a previously previewed Training proposal exactly once after an MCP confirmation prompt. The proposal is bound to this owner, connection, permissions, schedule revision and a short expiry. Provider outcomes are independent and never roll back authored workout changes.',
+      description: 'Apply a previously previewed Training proposal exactly once through this separately approval-gated write tool. The MCP host controls its native approval behavior. The proposal is bound to this owner, connection, permissions, schedule revision and a short expiry. Provider outcomes are independent and never roll back authored workout changes.',
       inputSchema: TRAINING_WRITE_INPUTS.apply_training_changes,
       outputSchema: outputSchemas.apply_training_changes,
       annotations: TRAINING_APPLY_TOOL_ANNOTATIONS,
-    }, async (input, context) => {
-      const accepted = acceptedContent(context.mcpReq.inputResponses, 'training_confirmation', TRAINING_CONFIRMATION_SCHEMA);
-      const diagnostics = summarizeMcpTrainingConfirmationDiagnostics(
-        context.mcpReq.envelope,
-        context.mcpReq.inputResponses,
-        accepted,
-      );
-      logger.info('[MCP TEMP] Training confirmation lifecycle', {
-        toolName: 'apply_training_changes',
-        stage: 'handler_entered',
-        supportsInputRequired: supportsWriteConfirmation,
-        ...diagnostics,
-      });
-      let confirmation;
-      try {
-        confirmation = await dataService.getTrainingProposalConfirmation({
-          arguments: input, uid: auth.uid, connectionId: auth.connectionId, scopes: auth.scopes,
-        });
-      } catch (error) {
-        logger.info('[MCP TEMP] Training confirmation lifecycle', {
-          toolName: 'apply_training_changes',
-          stage: 'confirmation_lookup_failed',
-          supportsInputRequired: supportsWriteConfirmation,
-          ...diagnostics,
-          errorKind: trainingWriteErrorKind(error),
-        });
-        throw error;
-      }
-      if (!accepted) {
-        logger.info('[MCP TEMP] Training confirmation lifecycle', {
-          toolName: 'apply_training_changes',
-          stage: 'input_required_returned',
-          supportsInputRequired: supportsWriteConfirmation,
-          ...diagnostics,
-        });
-        return inputRequired({ inputRequests: {
-          training_confirmation: inputRequired.elicit({
-            message: confirmation.message,
-            requestedSchema: {
-              type: 'object',
-              properties: { confirm: { type: 'boolean', title: 'Apply these Training changes' } },
-              required: ['confirm'],
-              additionalProperties: false,
-            },
-          }),
-        } });
-      }
-      if (!accepted.confirm) {
-        logger.info('[MCP TEMP] Training confirmation lifecycle', {
-          toolName: 'apply_training_changes',
-          stage: 'confirmation_declined',
-          supportsInputRequired: supportsWriteConfirmation,
-          ...diagnostics,
-        });
-        return formatMcpToolError(new McpDataError(
-          'invalid_request',
-          'The Training proposal was declined. Nothing was changed.',
-        ));
-      }
-      logger.info('[MCP TEMP] Training confirmation lifecycle', {
-        toolName: 'apply_training_changes',
-        stage: 'confirmation_accepted',
-        supportsInputRequired: supportsWriteConfirmation,
-        ...diagnostics,
-      });
-      return runTrainingWriteTool('apply_training_changes', () => dataService.applyTrainingChanges({
-        arguments: input, uid: auth.uid, connectionId: auth.connectionId, scopes: auth.scopes,
-      }));
-    });
+    }, input => runTrainingWriteTool('apply_training_changes', () => dataService.applyTrainingChanges({
+      arguments: input, uid: auth.uid, connectionId: auth.connectionId, scopes: auth.scopes,
+    })));
   }
 
   registerMcpTool(server, 'list_activity_types', {
@@ -2550,17 +2382,6 @@ export const mcpApi = onRequest(MCP_API_RUNTIME_OPTIONS, async (request, respons
     return;
   }
 
-  const diagnosticTrainingWriteTool = trainingWriteToolName(request.body);
-  if (diagnosticTrainingWriteTool) {
-    logger.info('[MCP TEMP] Training write request received', {
-      toolName: diagnosticTrainingWriteTool,
-      clientFamily: classifyMcpDiagnosticClientFamily(request.get('user-agent')),
-      protocolVersion: sanitizeMcpProtocolVersionForDiagnostics(
-        request.get('mcp-protocol-version'),
-      ),
-    });
-  }
-
   const invalidTrainingPreview = invalidTrainingPreviewTool(request.body);
   if (invalidTrainingPreview) {
     try {
@@ -2598,8 +2419,8 @@ export const mcpApi = onRequest(MCP_API_RUNTIME_OPTIONS, async (request, respons
 
   let readProtocolVersion = (): string | undefined => undefined;
   const transport = createMcpTransportHandler(
-    supportsWriteConfirmation => {
-      const server = createMcpServer(auth, baseUrl, defaultDataService, supportsWriteConfirmation);
+    () => {
+      const server = createMcpServer(auth, baseUrl, defaultDataService);
       readProtocolVersion = () => server.server.getNegotiatedProtocolVersion();
       return server;
     },

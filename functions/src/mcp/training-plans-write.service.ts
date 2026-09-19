@@ -670,7 +670,7 @@ export async function previewTrainingChanges(
   const ref = proposalRef(proposalId, createdAtMs, input.uid, input.connectionId);
   const preview: PreviewResult = { proposalRef: ref, expiresAtMs, permissionMode: permissionMode(required),
     scheduleRevision: loaded.snapshot.state.revision,
-    summary: `${publicChanges.length} proposed Training change${publicChanges.length === 1 ? '' : 's'} will be applied in order after confirmation. Provider results are independent.`,
+    summary: `${publicChanges.length} proposed Training change${publicChanges.length === 1 ? '' : 's'} will be applied in order after client approval. Provider results are independent.`,
     requiresConfirmation: true, changes: publicChanges, providerPreviews };
   TRAINING_WRITE_OUTPUTS.preview_training_changes.parse(preview);
   const stored: StoredProposal = { schemaVersion: 1, uid: input.uid, connectionId: input.connectionId,
@@ -739,20 +739,6 @@ async function readProposal(input: TrainingWriteInput, deps: TrainingWriteDepend
     invalid('The proposal permission mode does not match. Prepare it again.');
   }
   return { ref: args.data.proposalRef, id: decoded.id, proposal };
-}
-
-export async function getTrainingProposalConfirmation(
-  input: TrainingWriteInput,
-  provided?: TrainingWriteDependencies,
-): Promise<{ message: string; proposal: PreviewResult }> {
-  const deps = provided ?? defaultDependencies();
-  const current = await readProposal(input, deps);
-  if (current.proposal.status === 'applied' || current.proposal.status === 'partially_applied') {
-    return { message: 'This Training proposal was already applied.', proposal: current.proposal.preview };
-  }
-  if (current.proposal.expiresAtMs <= deps.now()) invalid('This Training proposal expired. Prepare it again.');
-  return { message: `${current.proposal.preview.summary} Confirm only if the displayed plan, workout and provider changes are correct.`,
-    proposal: current.proposal.preview };
 }
 
 async function currentDeliveryCommand(
