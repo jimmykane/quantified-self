@@ -94,10 +94,11 @@ describe('help.content', () => {
     expect(searchHelpSections(HELP_SECTIONS, 'Timeline notes').map(section => section.id))
       .toEqual(expect.arrayContaining(['ai-insights', 'data-and-privacy']));
   });
-  it('explains independent Training read and confirmed change access without promoting the private planning UI', () => {
+  it('explains independent Training read and approval-gated change access without promoting the private planning UI', () => {
     const content = getHelpSectionsForUser('ordinary-user').map(section => section.content).join(' ');
     expect(content).toContain('**Training planning (optional):**');
     expect(content).toContain('Gemini can prepare one bounded proposal but cannot apply it');
+    expect(content).toContain('disable Training write tools while using Research');
     expect(content).toContain('resets all optional permissions');
     expect(content).toContain('the workout exists in the connected app, not that it reached a watch');
   });

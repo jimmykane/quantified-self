@@ -3,7 +3,7 @@
 ## Planning access through MCP and the Assistant
 
 The #690 planning surface exposes current plans, standalone/associated workouts, complete v1 instructions, exact stored
-completion links, existing delivery summaries, and an explicitly confirmed proposal/apply workflow. It does not modify
+completion links, existing delivery summaries, and a preview/native-approval/apply workflow. It does not modify
 `WorkoutStructureV1`. The tools, strict scopes, projection and bounds are documented in
 [MCP server](mcp-server.md#training-plans-and-planned-workouts-690). Source support is not a deployed or
 registered-client promise. Provider certification, deployment, registered-contract promotion and plugin installation
@@ -27,13 +27,15 @@ External clients prepare one strict proposal of at most 25 changes, then invoke 
 `apply_training_changes` write tool. ChatGPT, Claude and other MCP hosts own their native tool-approval UI; QS does not
 use MCP elicitation for a second confirmation round. A host may let its user configure automatic tool approval, which QS
 cannot detect, so per-proposal review depends on leaving per-call approval enabled in that client. Proposals expire after
-15 minutes, bind owner, OAuth connection/grant, schedule revision and entity creation time, and retain an idempotent
+15 minutes. Claude users must not choose **Allow always**, and should disable Training write tools while using Research
+because Research can invoke connector tools without another approval. Proposals bind owner, OAuth connection/grant,
+schedule revision and entity creation time, and retain an idempotent
 terminal result for safe retries. Provider outcomes are independent: a failed send never rolls back a successfully
 authored standalone workout.
 
 Single-workout creation has an additive focused MCP preview. The caller supplies the current schedule revision, optional
 plan reference, calendar date, title and complete canonical recipe; the server supplies the proposal-local key and routes
-the result through the same proposal, confirmation and idempotent apply boundary. When the same new workout should be
+the result through the same proposal, native approval and idempotent apply boundary. When the same new workout should be
 sent immediately, an optional delivery object adds selected/all-connected providers and an explicit IANA time zone; this
 also requires the independent delivery-write grant. Connections without that grant are advertised a focused schema with
 no delivery field. It intentionally excludes the batch operation union. Clients use the

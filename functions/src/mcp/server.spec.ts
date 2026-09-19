@@ -807,7 +807,7 @@ describe('MCP HTTP scope enforcement', () => {
         readOnlyHint: false,
         destructiveHint: true,
         idempotentHint: true,
-        openWorldHint: true,
+        openWorldHint: false,
       });
       const result = await client.callTool({ name: 'apply_training_changes', arguments: {
         proposalRef: preview.proposalRef, permissionMode: 'schedule',

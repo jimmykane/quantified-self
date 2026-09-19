@@ -51,7 +51,9 @@ Lib version or parser change, also use `.agent/skills/sports-lib-upgrade-and-rep
   bounded preview, bind owner/connection/grant/revision/expiry, and expose an idempotent apply as a separately
   approval-gated write tool with accurate annotations. The external MCP host owns its native approval UI; do not use MCP
   elicitation solely to reconfirm a fully specified write call, and document that server code cannot detect a client's
-  automatic-approval setting. The built-in Assistant may expose preview to the model but never apply; app-owned confirmation must
+  automatic-approval setting. User guidance must also call out unattended connector modes such as Claude Research and
+  tell users to disable Training write tools there when per-call review is required. The built-in Assistant may expose
+  preview to the model but never apply; app-owned confirmation must
   recheck its server-owned conversation generation. Provider actions reuse the server delivery command and Pro/readiness
   gates, never accept credentials or remote IDs, and return independent outcomes without rolling back authored data.
   Permanent workout deletion, plan deletion, history restore, inferred completion and new provider actions require a
@@ -115,7 +117,7 @@ Lib version or parser change, also use `.agent/skills/sports-lib-upgrade-and-rep
    refresh, bearer validation, HTTP prechecks, tool registration, and data reads. First-class measurement types must also be excluded from generic and
    per-activity metric paths so those tools cannot bypass `measurements:read`. Keep queries bounded, references/cursors
    UID-and-connection-bound, and ordinary data tools read-only. Training mutation tools are the sole exception and must
-   preserve the strict preview/confirmation/idempotent-apply boundary above. Update OAuth metadata, consent, Settings, Help, policies, and
+   preserve the strict preview/native-approval/idempotent-apply boundary above. Update OAuth metadata, consent, Settings, Help, policies, and
    `docs/mcp-server.md` when the user-visible contract moves.
 6. For every new Sports Lib detail or route field, update the named MCP allowlist, add a negative leakage test for nearby
    sensitive fields, confirm historical persistence/reparse expectations, review the Firestore query/index shape, and
@@ -158,8 +160,8 @@ Add or update focused tests for:
 - planned-workout scope isolation, complete recipe/Unicode validation, field-mask leakage rejection, reference replay,
   revision/deletion/consent fences, calendar scopes, bounded pagination and complete/incomplete delivery aggregates;
 - Training proposal scope dependencies, safe-operation union, opaque proposal replay, stale revision/grant/conversation
-  rejection, confirmation decline, idempotent apply, standalone-create-plus-send, provider-failure isolation, and the
-  absence of provider transport from preview;
+  rejection, native approval annotations on every transport, idempotent apply, standalone-create-plus-send,
+  provider-failure isolation, and the absence of provider transport from preview;
 - Assistant optional Training consent reset/retry generation, planned-versus-completed routing and compact untrusted-text
   evidence. Review three cases: a new workout target needs explicit MCP schema/format tests; presentation-only spacing
   needs a documented no-wire-impact rationale; provider-internal artifact metadata must stay excluded;

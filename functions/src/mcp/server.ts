@@ -613,7 +613,7 @@ const TRAINING_APPLY_TOOL_ANNOTATIONS = {
   readOnlyHint: false,
   destructiveHint: true,
   idempotentHint: true,
-  openWorldHint: true,
+  openWorldHint: false,
 } as const;
 
 function createReadOnlyToolRunner(outputSchemas: McpOutputSchemaRegistry) {
@@ -908,7 +908,7 @@ export function createMcpServer(
       arguments: input, uid: auth.uid, connectionId: auth.connectionId, scopes: auth.scopes,
     })));
     registerMcpTool(server, 'apply_training_changes', {
-      title: 'Confirm and apply Training changes',
+      title: 'Apply previewed Training changes',
       description: 'Apply a previously previewed Training proposal exactly once through this separately approval-gated write tool. The MCP host controls its native approval behavior. The proposal is bound to this owner, connection, permissions, schedule revision and a short expiry. Provider outcomes are independent and never roll back authored workout changes.',
       inputSchema: TRAINING_WRITE_INPUTS.apply_training_changes,
       outputSchema: outputSchemas.apply_training_changes,

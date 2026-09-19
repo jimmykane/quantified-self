@@ -64,7 +64,9 @@ retried unchanged after validation rejects it. Neither preview creates authored 
 `apply_training_changes` consumes the opaque proposal as a separately approval-gated write tool. ChatGPT, Claude and
 other MCP hosts own their native tool-approval UI; QS does not use MCP elicitation as a second confirmation round.
 The host may let a user configure automatic tool approval, which the server cannot detect, so users who want to inspect
-every proposal must keep per-call approval enabled in their client. The server still requires the preview-created
+every proposal must keep per-call approval enabled in their client. ChatGPT's destructive annotation triggers its
+native approval request. Claude users must not choose **Allow always**, and should disable Training write tools while
+using Research because Research may invoke connector tools without another approval. The server still requires the preview-created
 proposal and binds it to the owner, connection, grant, revision and expiry; replay returns its persisted terminal result.
 Permanent workout deletion, plan deletion and history restoration are deliberately absent.
 
@@ -420,8 +422,8 @@ The server implements OAuth authorization code with PKCE S256 and refresh-token 
   additionally requires `measurements:read`, while Weight and normalized Sleep keep their existing contracts;
 - `sleep:read` for redacted sleep sessions and sleep summaries;
 - `training-plans:read` for current authored plans/workouts, complete instructions and existing sanitized service sync summaries;
-- `training-plans:write`, dependent on `training-plans:read`, for previewed and explicitly confirmed safe plan/workout lifecycle changes;
-- `training-delivery:write`, dependent on `training-plans:read`, for previewed and explicitly confirmed plan/workout provider delivery controls;
+- `training-plans:write`, dependent on `training-plans:read`, for previewed, native-approval-gated safe plan/workout lifecycle changes;
+- `training-delivery:write`, dependent on `training-plans:read`, for previewed, native-approval-gated plan/workout provider delivery controls;
 - `timeline-notes:read` for full private Timeline note titles/details, category, fixed calendar dates and captured timezone;
 - `activity-details:read` for bounded non-location activity summaries, event tags and exact tag filtering, laps, swim
   lengths, MTB jump measurements, selected metrics, and on-demand chart series;

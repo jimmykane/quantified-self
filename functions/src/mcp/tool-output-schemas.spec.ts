@@ -1851,6 +1851,14 @@ describe.each<FixtureTransport>(['in-memory', 'legacy-http', 'modern-http'])('MC
     expect(Buffer.byteLength(JSON.stringify(planTools), 'utf8')).toBeLessThan(32 * 1024);
     const planWriteTools = tools.filter(tool => (TRAINING_WRITE_TOOLS as readonly string[]).includes(tool.name));
     expect(Buffer.byteLength(JSON.stringify(planWriteTools), 'utf8')).toBeLessThan(48 * 1024);
+    const applyTrainingChangesTool = tools.find(tool => tool.name === 'apply_training_changes');
+    expect(applyTrainingChangesTool?.title).toBe('Apply previewed Training changes');
+    expect(applyTrainingChangesTool?.annotations).toEqual({
+      readOnlyHint: false,
+      destructiveHint: true,
+      idempotentHint: true,
+      openWorldHint: false,
+    });
     const sampleTools = tools.filter(tool => tool.name === 'get_activity_samples');
     const readinessTools = tools.filter(tool => ['get_current_readiness', 'get_readiness_history', 'get_daily_report'].includes(tool.name));
     expect(Buffer.byteLength(JSON.stringify(readinessTools), 'utf8')).toBeLessThan(32 * 1024);

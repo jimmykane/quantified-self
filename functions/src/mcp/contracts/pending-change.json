@@ -1,6 +1,6 @@
 {
   "formatVersion": 1,
-  "candidateSha256": "95a70b2d0e0fc642cdcd82584bb6d67ebb653b1f998c9da78bbdff807919f537",
+  "candidateSha256": "7f878337c390bc432819a68fc6829120e0836f8dec195216cf40f57225e3e9b3",
   "lifecycleAction": "developer-refresh",
   "summary": "Add Training plan/workout reads, completion links, sync summaries, write/delivery scopes, focused/batch previews with optional provider delivery, native approval-gated apply and recipe guidance (#690; #652/#651). Retain formula-4 readiness/history and HRV; frozen formula-3; activity samples, descriptions and tags; Timeline notes; Health; reports; nearby searches; multi-metric queries; Training discovery; activity overviews/rankings; jump/sleep-vital routing; RS256 private_key_jwt; and PKCE.",
   "rescanRequired": true
