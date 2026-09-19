@@ -138,18 +138,30 @@ describe('readiness shared HRV personal range', () => {
     ], now)).toBeNull();
   });
 
-  it('shows the weekly value, actual range and latest night without a misleading percent comparison', () => {
-    const view = buildReadinessHrvDisplay(buildReadinessHrvPersonalRange(history(), now));
+  it('shows the weekly value, actual range and dated latest HRV without a misleading percent comparison', () => {
+    const view = buildReadinessHrvDisplay(buildReadinessHrvPersonalRange(history(), now), null, null, { nowMs: now });
     expect(view.valueText).toBe('31.1 ms');
     expect(view.statusText).toBe('Below personal range');
     expect(view.rangeText).toMatch(/^60-day range [\d.]+–[\d.]+ ms$/);
-    expect(view.latestText).toBe('Latest night 32 ms');
+    expect(view.latestText).toBe('Latest HRV 32 ms · Today');
     expect(JSON.stringify(view)).not.toContain('%');
     expect(buildReadinessHrvDisplay(null)).toMatchObject({ valueText: '—', statusText: 'No recent HRV', latestText: '' });
     expect(buildReadinessHrvDisplay(buildReadinessHrvPersonalRange(nights(Array(5).fill(40)), now)))
       .toMatchObject({ valueText: '—', statusText: 'Building range · 5/14 nights' });
     expect(buildReadinessHrvDisplay(buildReadinessHrvPersonalRange(history(), now), null, 'falling').statusText)
       .toBe('Below range · falling');
+  });
+
+  it('labels retained HRV as a previous reading when the latest sleep has no HRV', () => {
+    const points = history();
+    const latestSleepAtMs = points.at(-1)!.endTimeMs!;
+    points.at(-1)!.averageHrvMs = null;
+    const view = buildReadinessHrvDisplay(buildReadinessHrvPersonalRange(points, now), null, null, {
+      latestSleepAtMs,
+      nowMs: now,
+    });
+
+    expect(view.latestText).toBe('Latest night has no HRV · Previous reading 31 ms · Yesterday');
   });
 
   it('validates current history and rejects stale formulas, inconsistent scores, missing ranges and future evidence', () => {

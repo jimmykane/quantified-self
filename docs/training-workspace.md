@@ -154,8 +154,8 @@ The following rules are architectural constraints:
 - Bounded current scores use the shared lightweight metric indicator rather than a chart instance. Readiness uses a
   0–100 track with its canonical 55 and 75 category boundaries; eligible source sleep scores use a 0–100 track without
   inventing new thresholds. Four discrete segments communicate readiness signal coverage independently from score and
-  confidence. HRV shows its seven-day average, 60-day personal range, status and latest nightly value using the shared
-  `readiness-hrv-display.helper.ts` formatter. Overnight HR retains the baseline-centered ±20% display and exact ratio
+  confidence. HRV shows its seven-day average, 60-day personal range, status and date-labelled latest HRV value using
+  the shared `readiness-hrv-display.helper.ts` formatter. Overnight HR retains the baseline-centered ±20% display and exact ratio
   text (lower Overnight HR may be supportive). Score fills start at zero and remain visible beneath
   their threshold markers. Missing evidence leaves an empty track, never zero.
 - Training-time and workout-count comparisons may use the same baseline-centered visual, but CTL, ATL, Form, ramp,
@@ -2008,7 +2008,9 @@ Formula 4 retains the HRV component's neutral score of 50 and its 20% weight whe
 Outside either bound, its component is `max(0, 50 - 100 × distanceOutsideRange / baselineMean)`. An unusually high value
 earns no automatic bonus. This is the QS scoring policy, not a reproduction of a provider's proprietary algorithm.
 The unchanged weighted score renormalizes around unavailable drivers. The UI shows the weekly average, numeric range,
-range status, recent direction and latest nightly reading separately, instead of a percentage against a different short median. Weekly HRV
+range status, recent direction and date-labelled latest HRV reading separately, instead of a percentage against a different short median.
+When a newer sleep exists without HRV, the shared formatter says that the latest night has no HRV and labels the retained
+value as the previous reading rather than presenting it as current. Weekly HRV
 can remain available without a night in the last 48 hours while at least three recent days remain.
 
 The formula version invalidates only `training_readiness`; the normal ensure lifecycle rebuilds its 14-day series from
