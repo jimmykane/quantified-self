@@ -4,6 +4,7 @@ import { acceptedContent, DEFAULT_NEGOTIATED_PROTOCOL_VERSION, inputRequired, Mc
 import { onRequest, Request } from 'firebase-functions/v2/https';
 import * as logger from 'firebase-functions/logger';
 import { isIP } from 'node:net';
+import { createHash } from 'node:crypto';
 import { z } from 'zod';
 import { SLEEP_PROVIDERS } from '../../../shared/sleep';
 import { EVENT_TAG_LIMIT, EVENT_TAG_MAX_LENGTH } from '../../../shared/event-tags';
@@ -49,6 +50,10 @@ import {
   TRAINING_WRITE_INPUTS,
 } from './training-plans.schemas';
 import { createMcpTransportHandler } from './transport';
+import {
+  buildTemporaryTrainingRequestDiagnostic,
+  temporaryTrainingDiagnosticsEnabled,
+} from './temporary-training-diagnostics';
 
 const defaultDataService = createMcpDataService();
 let oauthService: ReturnType<typeof createMcpOAuthService> | null = null;
@@ -797,8 +802,28 @@ export function createMcpServer(
       if (Buffer.byteLength(JSON.stringify(result), 'utf8') > 256 * 1024 - 1024) {
         throw new McpDataError('query_too_large', 'The Training change result exceeds the MCP response limit. Split it into smaller proposals.');
       }
+      if (temporaryTrainingDiagnosticsEnabled()) {
+        logger.info('[MCP TEMP] Training write tool completed', {
+          toolName: name,
+          outcome: 'success',
+        });
+      }
       return result;
     } catch (error) {
+      if (temporaryTrainingDiagnosticsEnabled()) {
+        const errorName = error instanceof Error ? error.name : 'unknown';
+        const errorMessage = error instanceof Error ? error.message : 'unknown';
+        logger.warn('[MCP TEMP] Training write tool completed', {
+          toolName: name,
+          outcome: error instanceof McpDataError ? 'handled_error' : 'unexpected_error',
+          errorCode: error instanceof McpDataError ? error.code : 'internal_error',
+          errorName,
+          errorFingerprint: createHash('sha256')
+            .update(`${errorName}\u0000${errorMessage}`)
+            .digest('hex')
+            .slice(0, 16),
+        });
+      }
       return formatMcpToolError(error);
     }
   };
@@ -887,6 +912,12 @@ export function createMcpServer(
       });
       const accepted = acceptedContent(context.mcpReq.inputResponses, 'training_confirmation', TRAINING_CONFIRMATION_SCHEMA);
       if (!accepted) {
+        if (temporaryTrainingDiagnosticsEnabled()) {
+          logger.info('[MCP TEMP] Training write tool completed', {
+            toolName: 'apply_training_changes',
+            outcome: 'confirmation_required',
+          });
+        }
         return inputRequired({ inputRequests: {
           training_confirmation: inputRequired.elicit({
             message: confirmation.message,
@@ -900,6 +931,12 @@ export function createMcpServer(
         } });
       }
       if (!accepted.confirm) {
+        if (temporaryTrainingDiagnosticsEnabled()) {
+          logger.info('[MCP TEMP] Training write tool completed', {
+            toolName: 'apply_training_changes',
+            outcome: 'declined',
+          });
+        }
         return formatMcpToolError(new McpDataError(
           'invalid_request',
           'The Training proposal was declined. Nothing was changed.',
@@ -2369,6 +2406,11 @@ export const mcpApi = onRequest(MCP_API_RUNTIME_OPTIONS, async (request, respons
       id: null,
     });
     return;
+  }
+
+  const temporaryTrainingDiagnostic = buildTemporaryTrainingRequestDiagnostic(request.body);
+  if (temporaryTrainingDiagnostic) {
+    logger.info('[MCP TEMP] Training write request received', temporaryTrainingDiagnostic);
   }
 
   let readProtocolVersion = (): string | undefined => undefined;
