@@ -50,7 +50,7 @@
         <section class="assistant-empty-state" aria-labelledby="assistant-empty-state-title">
           <mat-icon aria-hidden="true">history</mat-icon>
           <h2 id="assistant-empty-state-title">If you could ask your training history one question, what would it be?</h2>
-          <p>Ask about the training, sleep, recovery, measurements, and activities you’ve connected. Every answer is grounded in verified, read-only evidence.</p>
+          <p>Ask about the training, sleep, recovery, measurements, and activities you’ve connected. Every answer is grounded in verified evidence; optional Training changes always require your review.</p>
         </section>
       }
 
@@ -170,6 +170,43 @@
 
         <span #conversationEnd class="conversation-end" aria-hidden="true"></span>
       </section>
+      }
+
+      @if (pendingTrainingProposal(); as proposal) {
+        <section class="training-proposal" aria-labelledby="training-proposal-title">
+          <div class="training-proposal-heading">
+            <mat-icon aria-hidden="true">edit_calendar</mat-icon>
+            <div>
+              <h2 id="training-proposal-title">Review Training changes</h2>
+              <p>{{ proposal.summary }}</p>
+            </div>
+          </div>
+          <div class="training-proposal-list">
+            @for (change of proposal.changes; track change.index) {
+              <div class="training-proposal-row">
+                <mat-icon aria-hidden="true">arrow_forward</mat-icon>
+                <span>{{ change.summary }}</span>
+              </div>
+            }
+            @for (provider of proposal.providerPreviews; track provider.index + ':' + provider.provider) {
+              <div class="training-proposal-row training-proposal-row-provider">
+                <mat-icon aria-hidden="true">sync</mat-icon>
+                <span>{{ provider.summary }}</span>
+              </div>
+            }
+          </div>
+          <p class="training-proposal-disclosure">Nothing changes until you apply this proposal. Provider results are independent, so a delivery problem never removes an authored workout.</p>
+          <div class="training-proposal-actions">
+            <button mat-flat-button type="button" [disabled]="applyingTrainingProposal()"
+              (click)="applyPendingTrainingProposal()">
+              @if (applyingTrainingProposal()) { <mat-spinner diameter="18"></mat-spinner> } @else { Apply changes }
+            </button>
+            <button mat-button type="button" [disabled]="applyingTrainingProposal()"
+              (click)="dismissPendingTrainingProposal()">Dismiss</button>
+          </div>
+        </section>
+      } @else if (trainingProposalResult()) {
+        <p class="training-proposal-result" role="status">{{ trainingProposalResult() }}</p>
       }
 
       <footer class="assistant-composer-dock">

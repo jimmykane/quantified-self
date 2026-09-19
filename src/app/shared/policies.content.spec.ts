@@ -47,7 +47,7 @@ describe('Built-in Assistant policy', () => {
     expect(CONNECTED_SERVICES_POLICY_SECTION.summary).toContain('built-in Assistant');
     expect(content).toContain("browser's IANA timezone");
     expect(content).toContain('latest six completed conversation turns');
-    expect(content).toContain('bounded validated results from the read-only tools');
+    expect(content).toContain('bounded validated results selected through Quantified Self\'s MCP tools');
     expect(content).toContain('Results are coordinate-free by default');
     expect(content).toContain('Precise activity locations enabled');
     expect(content).toContain('exact activity start/end and MTB jump coordinates');
@@ -137,7 +137,8 @@ describe('MCP client access policy', () => {
 
     expect(topic?.title).toBe('MCP Client Access');
     expect(topic?.summary).toContain('body-measurement');
-    expect(content).toContain('one or more requested read-only permissions');
+    expect(content).toContain('only the capabilities you approve');
+    expect(content).toContain('Training plan/workout and delivery changes require their separate permission');
     expect(content).toContain(
       'excludes precise latitude/longitude and first-class body-measurement metrics',
     );

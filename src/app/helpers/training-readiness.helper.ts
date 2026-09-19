@@ -107,7 +107,11 @@ export function buildTrainingReadinessViewModel(
   }
 
   const locale = options.locale;
-  const hrv = buildReadinessHrvDisplay(context.hrvPersonalRange, options.unitSettings, options.hrvRecentTrend);
+  const hrv = buildReadinessHrvDisplay(context.hrvPersonalRange, options.unitSettings, options.hrvRecentTrend, {
+    latestSleepAtMs: context.latestSleepAtMs,
+    locale,
+    nowMs: options.calculatedAtMs ?? Date.now(),
+  });
   const loadParts = [
     context.form === null ? null : `Form ${formatSignedNumber(context.form, locale, 1)}`,
     context.rampRate === null ? null : `Ramp ${formatSignedNumber(context.rampRate, locale, 1)}`,

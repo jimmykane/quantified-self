@@ -13,7 +13,7 @@ import { of, Subject } from 'rxjs';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { Auth } from 'app/firebase/auth';
 import { AppThemes } from '@sports-alliance/sports-lib';
-import type { AssistantChatResponse } from '@shared/assistant.types';
+import type { AssistantChatResponse, AssistantTrainingProposalPreview } from '@shared/assistant.types';
 import { ASSISTANT_PROMPT_EXAMPLES } from '@shared/assistant.prompts';
 import { normalizeUserUnitSettings } from '@shared/unit-aware-display';
 import { AssistantQuotaService } from '../../services/assistant-quota.service';
@@ -73,6 +73,19 @@ const chatResponse: AssistantChatResponse = {
   pendingRequestId: null,
 };
 
+const trainingProposal: AssistantTrainingProposalPreview = {
+  proposalRef: 'opaque-proposal-reference',
+  permissionMode: 'combined',
+  expiresAtMs: Date.parse('2026-08-03T12:15:00.000Z'),
+  scheduleRevision: 1,
+  summary: 'Create one standalone workout and send it to Garmin.',
+  requiresConfirmation: true,
+  changes: [{ index: 0, kind: 'create-workout', summary: 'Create “Easy run” on 2026-08-04 as a standalone workout.' }],
+  providerPreviews: [{ index: 1, provider: 'garmin', targetType: 'workout', action: 'send',
+    availability: 'ready', timeZone: 'Europe/Helsinki', eligibleCount: 1, warningCount: 0,
+    summary: 'Garmin: enable ongoing workout delivery; 1 currently eligible, 0 with mapping warnings.' }],
+};
+
 describe('AssistantPageComponent', () => {
   let fixture: ComponentFixture<AssistantPageComponent>;
   let component: AssistantPageComponent;
@@ -80,6 +93,7 @@ describe('AssistantPageComponent', () => {
     getConversationState: vi.fn(),
     sendMessage: vi.fn(),
     resetConversation: vi.fn(),
+    applyTrainingProposal: vi.fn(),
     getErrorMessage: vi.fn(() => 'Friendly error'),
   };
   const quotaService = {
@@ -118,6 +132,9 @@ describe('AssistantPageComponent', () => {
     assistantService.resetConversation.mockReset().mockResolvedValue({
       ...chatResponse.conversation,
       messages: [],
+    });
+    assistantService.applyTrainingProposal.mockReset().mockResolvedValue({
+      status: 'applied', scheduleRevision: 2, changes: [], providers: [],
     });
     assistantService.getErrorMessage.mockClear();
     quotaService.loadQuotaStatus.mockReset().mockResolvedValue(chatResponse.quota);
@@ -162,7 +179,7 @@ describe('AssistantPageComponent', () => {
     expect(text).toContain('Examples & data access');
     expect(text).toContain('If you could ask your training history one question, what would it be?');
     expect(text).toContain('Ask about the training, sleep, recovery, measurements, and activities you’ve connected.');
-    expect(text).toContain('Every answer is grounded in verified, read-only evidence.');
+    expect(text).toContain('Every answer is grounded in verified evidence; optional Training changes always require your review.');
     expect(fixture.nativeElement.querySelector('.assistant-empty-state')).toBeTruthy();
     expect(fixture.nativeElement.querySelector('mat-chip')).toBeNull();
     expect(fixture.nativeElement.querySelector('.assistant-heading-icon')).toBeNull();
@@ -224,6 +241,57 @@ describe('AssistantPageComponent', () => {
     expect(fixture.nativeElement.querySelector('.assistant-empty-state')).toBeNull();
     expect(conversation.compareDocumentPosition(dock) & Node.DOCUMENT_POSITION_FOLLOWING)
       .toBeTruthy();
+  });
+
+  it('shows one compact Training proposal and applies or dismisses it only through explicit app actions', async () => {
+    component.conversation.set(chatResponse.conversation);
+    component.pendingTrainingProposal.set(trainingProposal);
+    fixture.detectChanges();
+
+    const review = fixture.nativeElement.querySelector('.training-proposal') as HTMLElement;
+    expect(review.textContent).toContain('Review Training changes');
+    expect(review.textContent).toContain('Create “Easy run”');
+    expect(review.textContent).toContain('Garmin: enable ongoing workout delivery');
+
+    await component.applyPendingTrainingProposal();
+    expect(assistantService.applyTrainingProposal).toHaveBeenLastCalledWith({
+      proposalRef: trainingProposal.proposalRef,
+      permissionMode: 'combined',
+      conversationId: chatResponse.conversation.conversationId,
+      confirm: true,
+    });
+    expect(component.pendingTrainingProposal()).toBeNull();
+    expect(component.trainingProposalResult()).toBe(
+      'Training changes applied. Provider updates or checks are queued where applicable.',
+    );
+
+    component.pendingTrainingProposal.set(trainingProposal);
+    await component.dismissPendingTrainingProposal();
+    expect(assistantService.applyTrainingProposal).toHaveBeenLastCalledWith(expect.objectContaining({ confirm: false }));
+    expect(component.pendingTrainingProposal()).toBeNull();
+    expect(component.trainingProposalResult()).toContain('Nothing was changed');
+  });
+
+  it('restores a pending Training proposal while recovering a still-running response', async () => {
+    const requestId = 'assistant-training-proposal-recovery';
+    assistantService.getConversationState.mockResolvedValue({
+      conversation: chatResponse.conversation,
+      pendingRequestId: requestId,
+      locationAccess: 'coordinate_free',
+      trainingPlansEnabled: true,
+      trainingPlanChangesEnabled: true,
+      trainingDeliveryEnabled: true,
+      pendingTrainingProposal: trainingProposal,
+    });
+    component.pendingRequestId.set(requestId);
+    (component as unknown as { pendingOwnerUid: string }).pendingOwnerUid = 'assistant-user';
+    (component as unknown as { pendingRecoveryDeadlineMs: number }).pendingRecoveryDeadlineMs = Date.now() + 5_000;
+    (component as unknown as { pendingRegistrationDeadlineMs: number }).pendingRegistrationDeadlineMs = 0;
+
+    await (component as unknown as { pollPendingResponse(id: string): Promise<void> }).pollPendingResponse(requestId);
+
+    expect(component.pendingTrainingProposal()).toEqual(trainingProposal);
+    (component as unknown as { cancelPendingResponsePoll(): void }).cancelPendingResponsePoll();
   });
 
   it('renders deterministic charts but waits for explicit user action before loading maps', async () => {
@@ -1113,7 +1181,13 @@ describe('AssistantPageComponent', () => {
     component.openExploreSheet();
 
     expect(openSpy).toHaveBeenCalledWith(AssistantExploreBottomSheetComponent, {
-      data: { locationAccess: 'coordinate_free', timelineNotesEnabled: false, trainingPlansEnabled: false },
+      data: {
+        locationAccess: 'coordinate_free',
+        timelineNotesEnabled: false,
+        trainingPlansEnabled: false,
+        trainingPlanChangesEnabled: false,
+        trainingDeliveryEnabled: false,
+      },
     });
     expect(component.promptControl.value).toBe(routeExample.prompt);
     openSpy.mockRestore();
@@ -1136,7 +1210,7 @@ describe('AssistantPageComponent', () => {
       expect(assistantService.resetConversation).toHaveBeenCalledWith(
         'precise_activity',
         false,
-        null, false);
+        null, false, false, false);
     });
     fixture.detectChanges();
 
@@ -1263,7 +1337,9 @@ describe('AssistantPageComponent', () => {
 
     await component.resetConversation();
 
-    expect(assistantService.resetConversation).toHaveBeenCalledWith('coordinate_free', false, 'conversation-1', false);
+    expect(assistantService.resetConversation).toHaveBeenCalledWith(
+      'coordinate_free', false, 'conversation-1', false, false, false,
+    );
     expect(component.messages()).toEqual([]);
     expect(component.locationAccess()).toBe('coordinate_free');
     expect(component.timelineNotesEnabled()).toBe(false);
@@ -1276,7 +1352,9 @@ describe('AssistantPageComponent', () => {
     const sheet = (component as unknown as { bottomSheet: MatBottomSheet }).bottomSheet;
     const open = vi.spyOn(sheet, 'open').mockReturnValue({ afterDismissed: () => of({ kind: 'training_plans', enabled: true }) } as never);
     component.openExploreSheet(); await vi.waitFor(() => expect(component.trainingPlansEnabled()).toBe(true));
-    expect(assistantService.resetConversation).toHaveBeenLastCalledWith('precise_activity', true, null, true);
+    expect(assistantService.resetConversation).toHaveBeenLastCalledWith(
+      'precise_activity', true, null, true, false, false,
+    );
     expect(component.timelineNotesEnabled()).toBe(true); expect(component.locationAccess()).toBe('precise_activity');
     expect(component.promptControl.value).toBe('What is planned next week?');
     expect(hapticsService.selection).toHaveBeenCalledTimes(1); expect(hapticsService.success).toHaveBeenCalledTimes(1);
@@ -1293,7 +1371,9 @@ describe('AssistantPageComponent', () => {
     } as never);
     component.openExploreSheet();
     await vi.waitFor(() => expect(component.timelineNotesEnabled()).toBe(true));
-    expect(assistantService.resetConversation).toHaveBeenLastCalledWith('precise_activity', true, null, false);
+    expect(assistantService.resetConversation).toHaveBeenLastCalledWith(
+      'precise_activity', true, null, false, false, false,
+    );
     expect(component.locationAccess()).toBe('precise_activity');
     expect(component.promptControl.value).toBe('Compare sleep and my notes.');
     expect(hapticsService.selection).toHaveBeenCalledTimes(1);
@@ -1305,7 +1385,9 @@ describe('AssistantPageComponent', () => {
     component.openExploreSheet();
     await vi.waitFor(() => expect(component.locationAccess()).toBe('coordinate_free'));
     expect(component.timelineNotesEnabled()).toBe(true);
-    expect(assistantService.resetConversation).toHaveBeenLastCalledWith('coordinate_free', true, 'conversation-1', false);
+    expect(assistantService.resetConversation).toHaveBeenLastCalledWith(
+      'coordinate_free', true, 'conversation-1', false, false, false,
+    );
     open.mockRestore();
   });
 
@@ -1338,7 +1420,9 @@ describe('AssistantPageComponent', () => {
     } as never);
     component.openExploreSheet();
     await vi.waitFor(() => expect(component.resetting()).toBe(false));
-    expect(assistantService.resetConversation).toHaveBeenCalledExactlyOnceWith('precise_activity', true, 'conversation-1', false);
+    expect(assistantService.resetConversation).toHaveBeenCalledExactlyOnceWith(
+      'precise_activity', true, 'conversation-1', false, false, false,
+    );
     expect(component.timelineNotesEnabled()).toBe(false);
     expect(component.locationAccess()).toBe('coordinate_free');
     expect(component.conversation()?.conversationId).toBe('new-chat');

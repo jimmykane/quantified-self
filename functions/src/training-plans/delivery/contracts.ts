@@ -82,6 +82,20 @@ export interface TrainingDeliveryBatchTransport {
     guard: DeliveryRequestGuard): Promise<readonly DeliveryBatchOutcome[]>;
 }
 
+export type TrainingDeliveryProviderRejection = 'application_not_approved' | 'plan_access_unavailable'
+  | 'missing_parameter' | 'invalid_parameter' | 'unknown_validation' | 'empty_response'
+  | 'oversized_response' | 'unreadable_response';
+export type TrainingDeliveryProviderField = 'plan_file' | 'plan_filename' | 'plan_external_id'
+  | 'plan_provider_updated_at' | 'plan_description' | 'plan_payload';
+export type TrainingDeliveryProviderResponseShape = 'empty' | 'json' | 'text' | 'oversized' | 'unreadable';
+export interface TrainingDeliveryTransportDiagnostics {
+  httpStatus?: number;
+  failurePhase?: 'request' | 'response' | 'decode' | 'contract';
+  providerRejection?: TrainingDeliveryProviderRejection;
+  providerField?: TrainingDeliveryProviderField;
+  providerResponseShape?: TrainingDeliveryProviderResponseShape;
+}
+
 /** Adapters must checkpoint every accepted artifact (e.g. workout, then schedule).
  * Final upsert acceptance requires a nonempty artifact identity; final removal requires null.
  * Recovery must inspect or prove the SAME operation id idempotent before repeating it. */
@@ -98,17 +112,28 @@ export interface TrainingDeliveryTransport {
   recover(operation: DeliveryOperation, checkpoint: DeliveryCheckpoint, guard: DeliveryRequestGuard): Promise<DeliveryRecovery>;
 }
 export class TrainingDeliveryTransportError extends Error {
-  readonly diagnostics: { httpStatus?: number; failurePhase?: 'request' | 'response' | 'decode' | 'contract' };
+  readonly diagnostics: TrainingDeliveryTransportDiagnostics;
   constructor(public readonly kind: 'retryable' | 'auth' | 'permission' | 'provider_access' | 'terminal' | 'uncertain' | 'deferred',
     public readonly retryAfterMs = 0,
-    diagnostics: { httpStatus?: number; failurePhase?: 'request' | 'response' | 'decode' | 'contract' } = {}) {
+    diagnostics: TrainingDeliveryTransportDiagnostics = {}) {
     super(kind);
     // Allowlisted diagnostics only: never forward HTTP bodies, URLs, IDs or error messages.
+    const providerRejections: TrainingDeliveryProviderRejection[] = ['application_not_approved', 'plan_access_unavailable',
+      'missing_parameter', 'invalid_parameter', 'unknown_validation', 'empty_response', 'oversized_response', 'unreadable_response'];
+    const providerFields: TrainingDeliveryProviderField[] = ['plan_file', 'plan_filename', 'plan_external_id',
+      'plan_provider_updated_at', 'plan_description', 'plan_payload'];
+    const providerResponseShapes: TrainingDeliveryProviderResponseShape[] = ['empty', 'json', 'text', 'oversized', 'unreadable'];
     this.diagnostics = {
       ...(Number.isInteger(diagnostics.httpStatus) && diagnostics.httpStatus! >= 100 && diagnostics.httpStatus! <= 599
         ? { httpStatus: diagnostics.httpStatus } : {}),
       ...(['request', 'response', 'decode', 'contract'].includes(diagnostics.failurePhase ?? '')
         ? { failurePhase: diagnostics.failurePhase } : {}),
+      ...(providerRejections.includes(diagnostics.providerRejection as TrainingDeliveryProviderRejection)
+        ? { providerRejection: diagnostics.providerRejection } : {}),
+      ...(providerFields.includes(diagnostics.providerField as TrainingDeliveryProviderField)
+        ? { providerField: diagnostics.providerField } : {}),
+      ...(providerResponseShapes.includes(diagnostics.providerResponseShape as TrainingDeliveryProviderResponseShape)
+        ? { providerResponseShape: diagnostics.providerResponseShape } : {}),
     };
   }
 }

@@ -44,6 +44,9 @@ function createFirestoreHarness() {
     set: (ref: FakeDocumentReference, data: Record<string, unknown>) => {
       documents.set(ref.path, data);
     },
+    update: (ref: FakeDocumentReference, data: Record<string, unknown>) => {
+      documents.set(ref.path, { ...(documents.get(ref.path) ?? {}), ...data });
+    },
   };
   const db = {
     collection: (name: string) => ({
@@ -213,6 +216,35 @@ describe('Assistant conversation store', () => {
     expect((await store.getActiveConversationState('owner')).trainingPlansEnabled).not.toBe(true);
     await expect(store.resetConversation('owner', 'coordinate_free', false, chat.conversationId, true)).rejects.toMatchObject({ code: 'conversation_changed' });
     expect((await store.getActiveConversationState('another')).trainingPlansEnabled).not.toBe(true);
+  });
+
+  it('persists one bounded Training proposal across reloads and clears it on dismissal', async () => {
+    const harness = createFirestoreHarness(); let sequence = 0;
+    const store = createAssistantConversationStore({ db: () => harness.db as never,
+      now: () => new Date('2026-08-03T12:00:00Z'), createId: () => `proposal-${++sequence}`,
+      getDeletionGuard: async () => ({ userExists: true, deletionInProgress: false, shouldSkip: false }),
+    });
+    const chat = await store.resetConversation('owner', 'coordinate_free', false, null, true, true, true);
+    const request = 'training-proposal-0001';
+    const fingerprint = createAssistantRequestFingerprint(request, 'Create a run', 'coordinate_free', false, true, true, true);
+    const begun = requireStartedTurn(await store.beginTurn('owner', chat.conversationId, request, fingerprint,
+      'coordinate_free', false, true, true, true));
+    const proposal = { proposalRef: 'opaque-proposal', permissionMode: 'combined' as const,
+      expiresAtMs: Date.parse('2026-08-03T12:15:00Z'), scheduleRevision: 1,
+      summary: 'Create and send one workout.', requiresConfirmation: true as const,
+      changes: [{ index: 0, kind: 'create-workout', summary: 'Create one workout.' }],
+      providerPreviews: [{ index: 1, provider: 'garmin' as const, targetType: 'workout' as const,
+        action: 'send' as const, availability: 'ready' as const, timeZone: 'Europe/Helsinki',
+        eligibleCount: 1, warningCount: 0, summary: 'Garmin is ready.' }] };
+    await store.completeTurn('owner', begun, message(request, 'user', 'Create a run'),
+      message('reply', 'assistant', 'Review the proposal.'), proposal);
+    await expect(store.getActiveConversationState('owner')).resolves.toMatchObject({ pendingTrainingProposal: proposal });
+    await expect(store.findRequestState('owner', chat.conversationId, request, fingerprint))
+      .resolves.toMatchObject({ kind: 'replayed', pendingTrainingProposal: proposal });
+    await store.clearTrainingProposal('owner', chat.conversationId, proposal.proposalRef);
+    expect((await store.getActiveConversationState('owner')).pendingTrainingProposal).toBeUndefined();
+    await expect(store.clearTrainingProposal('owner', chat.conversationId, proposal.proposalRef))
+      .rejects.toMatchObject({ code: 'conversation_changed' });
   });
 
   it('serializes turns and persists only a bounded completed history', async () => {

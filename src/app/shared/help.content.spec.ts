@@ -18,7 +18,8 @@ describe('help.content', () => {
   it.each([undefined, null, '', 'another-user'])('omits pre-release planning from public/searchable help for %s', uid => {
     const sections = getHelpSectionsForUser(uid);
     const copy = JSON.stringify(sections);
-    expect(copy).not.toMatch(/training\/plans|training-plans|Planned workouts|Planned-workout|Plan color|Add workout/);
+    expect(copy).not.toContain('/training/plans');
+    expect(sections.some(section => section.id === 'training-plans')).toBe(false);
     expect(sections.some(section => section.id === 'training-analysis')).toBe(true);
     expect(sections.some(section => section.id === 'plans-and-billing')).toBe(true);
     expect(sections.some(section => section.id === 'activity-calendar')).toBe(true);
@@ -30,7 +31,7 @@ describe('help.content', () => {
   });
   it('distinguishes Training consent, expiry, disconnect and the private pilot boundary', () => {
     const content = HELP_SECTIONS.find(section => section.id === 'training-plans')!.content;
-    expect(content).toContain('Garmin, COROS, Suunto and Wahoo workout delivery are restricted to the private rollout, not a public launch');
+    expect(content).toContain('Garmin, COROS, Suunto and Wahoo workout sync is restricted to the private rollout, not a public launch');
     expect(content).toContain('Distance-based steps are not sent because Wahoo needs a total duration');
     expect(content).toContain('Checks confirm the Plan, Workout and association; automatic restoration is unavailable');
     expect(content).toContain('COROS training calendar');
@@ -41,20 +42,26 @@ describe('help.content', () => {
     expect(content).toContain('**Exclude from plan sync**');
     expect(content).toContain('Opening Review never sends or approves anything by itself');
     expect(content).toContain('Older connections may need this even when activity imports work');
-    expect(content).toContain('Stopping workout sync keeps your provider account connected');
-    expect(content).toContain('If you separately choose to disconnect a provider or delete your Quantified Self account');
+    expect(content).toContain('Stopping workout sync keeps your connected account');
+    expect(content).toContain('If you separately disconnect the service or delete your Quantified Self account');
     expect(content).toContain('workouts already sent may remain');
     expect(content).toContain('Disconnecting turns off workout sync for that connection; reconnecting does not turn it back on');
     expect(content).not.toContain('Stop sync before disconnecting');
-    expect(content).toContain('content, not old provider consent');
+    expect(content).toContain('content, not old sync consent');
     expect(content).toContain('Pro expiry pauses creates and updates');
     expect(content).toContain('IANA time zone');
     expect(content).toContain('**Sync plan with Garmin**');
     expect(content).toContain('**Enable plan sync**');
     expect(content).toContain('**Workout sync status**');
+    expect(content).toContain("each service's logo and a compact synced/total count for workouts currently due for delivery");
+    expect(content).toContain('small **View** action');
+    expect(content).toContain('whether sync is enabled for each service');
+    expect(content).toContain('one **Manage** action');
+    expect(content).toContain('**All services** returns to the service overview');
+    expect(content).toContain('These navigation actions do not enable sync or send anything');
     expect(content).toContain('individual workouts, not plans or edits');
-    expect(content).toContain('**Garmin Connect · 2 of 3 workouts synced**');
-    expect(content).toContain('across the whole plan, not just the selected day');
+    expect(content).toContain('**All 3 upcoming workouts synced · 2 earlier workouts**');
+    expect(content).toContain('prioritizes today and future workouts');
     expect(content).toContain('Older-account copies do not count as current sync');
     expect(content).toContain('not delivery to a device');
     expect(content).toContain('**Stop plan sync**');
@@ -87,12 +94,12 @@ describe('help.content', () => {
     expect(searchHelpSections(HELP_SECTIONS, 'Timeline notes').map(section => section.id))
       .toEqual(expect.arrayContaining(['ai-insights', 'data-and-privacy']));
   });
-  it('explains independent read-only Training access without promoting the private planning UI', () => {
+  it('explains independent Training read and confirmed change access without promoting the private planning UI', () => {
     const content = getHelpSectionsForUser('ordinary-user').map(section => section.content).join(' ');
-    expect(content).toContain('**Training plans (optional):**');
-    expect(content).toContain('The Assistant cannot edit workouts or change sync');
+    expect(content).toContain('**Training planning (optional):**');
+    expect(content).toContain('Gemini can prepare one bounded proposal but cannot apply it');
     expect(content).toContain('resets all optional permissions');
-    expect(content).toContain('provider-side workout delivery, not receipt on a watch');
+    expect(content).toContain('the workout exists in the connected app, not that it reached a watch');
   });
   it('explains private notes in both workspaces and makes their context searchable', () => {
     for (const id of ['health', 'training-analysis']) {
@@ -273,7 +280,7 @@ describe('help.content', () => {
     const assistantSection = HELP_SECTIONS.find(section => section.id === 'ai-insights');
 
     expect(assistantSection?.title).toBe('Assistant');
-    expect(assistantSection?.content).toContain('Every current answer must use at least one read-only Quantified Self result');
+    expect(assistantSection?.content).toContain('Every current answer must use at least one verified Quantified Self tool result');
     expect(assistantSection?.content).toContain('Expand **Data used**');
     expect(assistantSection?.content).toContain("browser's IANA timezone");
     expect(assistantSection?.content).toContain('Direct in-app URLs are withheld');
@@ -339,10 +346,15 @@ describe('help.content', () => {
     expect(dataAndPrivacySection?.content).toContain('today’s Readiness drivers');
     expect(dataAndPrivacySection?.content).toContain('daily report with sleep HRV and sleep heart rate');
     expect(dataAndPrivacySection?.content).toContain('[**Connections -> MCP**](/services?serviceName=mcp)');
+    expect(dataAndPrivacySection?.content).toContain('### If an MCP permission is missing');
+    expect(dataAndPrivacySection?.content).toContain('Missing tools do not mean you have no plans, workouts, or recorded data.');
+    expect(dataAndPrivacySection?.content).toContain('**Training plans and planned workouts**');
+    expect(dataAndPrivacySection?.content).toContain('Do not disconnect an app just to add a permission.');
+    expect(dataAndPrivacySection?.content).toContain('The built-in Assistant is separate');
     expect(dataAndPrivacySection?.content).toContain('### Android authorization handoff');
     expect(dataAndPrivacySection?.content).toContain('**Open supported links**');
     expect(dataAndPrivacySection?.content).toContain('cannot force Android or the ChatGPT app');
-    expect(dataAndPrivacySection?.content).toContain('[Read-only MCP Server feature page](/features/mcp-server)');
+    expect(dataAndPrivacySection?.content).toContain('[MCP Server feature page](/features/mcp-server)');
     expect(dataAndPrivacySection?.content).toContain('[Privacy Policy](/privacy)');
     expect(dataAndPrivacySection?.content).toContain('[Terms of Service](/terms)');
     expect(dataAndPrivacySection?.links).toContainEqual({
@@ -533,7 +545,7 @@ describe('help.content', () => {
     const planningSection = HELP_SECTIONS.find(section => section.id === 'training-plans');
 
     expect(planningSection?.content).toContain('You do not need to create a plan first');
-    expect(planningSection?.content).toContain('Manual planning is available without a provider connection');
+    expect(planningSection?.content).toContain('Manual planning is available without a service connection');
     expect(planningSection?.content).toContain('Settings -> Dashboard -> Start of the Week');
     expect(planningSection?.content).toContain('Its first weekday is marked and named below the grid');
     expect(planningSection?.content).toContain('Saturday and Sunday are subtly tinted wherever they fall in the week');
@@ -544,10 +556,13 @@ describe('help.content', () => {
     expect(planningSection?.content).toContain('restoring plan history also restores its saved color');
     expect(HELP_SECTIONS.find(section => section.id === 'activity-calendar')?.content)
       .toContain('Standalone workouts stay neutral');
-    expect(planningSection?.content).toContain('Garmin, COROS, Suunto and Wahoo workout delivery are restricted to the private rollout');
+    expect(planningSection?.content).toContain('Garmin, COROS, Suunto and Wahoo workout sync is restricted to the private rollout');
     expect(planningSection?.content).toContain('Wahoo initially supports time-based running and cycling workouts');
     expect(planningSection?.content).toContain('Scheduled for later');
     expect(planningSection?.content).toContain('Sent is not a watch receipt');
+    expect(planningSection?.content).toContain('**Completed · activity linked**');
+    expect(planningSection?.content).toContain('**Sent · workout completed**');
+    expect(planningSection?.content).toContain('**Past workout · previously sent**');
     expect(planningSection?.content).toContain('Garmin supports the same choices');
     expect(planningSection?.content).toContain('only the broad Running or Cycling family');
     expect(planningSection?.content).toContain('only one can be active');
@@ -987,6 +1002,10 @@ describe('help.content', () => {
     expect(serviceConnectionsSection?.content).toContain('**Manage in Garmin**');
     expect(serviceConnectionsSection?.content).toContain('You do not need to disconnect in QS first');
     expect(serviceConnectionsSection?.content).toContain('**Reconnect** is reserved for connection recovery');
+    expect(serviceConnectionsSection?.content).toContain('default to the latest **2 calendar years**');
+    expect(serviceConnectionsSection?.content).toContain('COROS defaults to its full **3-month** provider limit');
+    expect(serviceConnectionsSection?.content).toContain('Wahoo defaults to the latest **2 years**');
+    expect(serviceConnectionsSection?.content).toContain('including the full available five-year window');
     expect(serviceConnectionsSection?.content).toContain('When a disconnect begins, automatic activity and saved-route delivery');
     expect(serviceConnectionsSection?.content).toContain('you do not need to keep the page open');
     expect(serviceConnectionsSection?.content).toContain('Health history, and Sleep sessions stay in your account');

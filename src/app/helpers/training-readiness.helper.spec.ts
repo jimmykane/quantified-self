@@ -75,11 +75,12 @@ describe('training-readiness.helper', () => {
       minimumHeartRateRatio: null,
       overnightHeartRateRatio: null,
       trend: [],
-    }, { hrvRecentTrend: 'falling' });
+    }, { hrvRecentTrend: 'falling', calculatedAtMs: Date.UTC(2026, 8, 17, 12) });
 
     const hrv = view.metricRows.find(row => row.label === 'HRV · 7-day average');
     expect(hrv?.valueText).toBe('40 ms');
     expect(hrv?.detailText).toContain('Within range · falling');
+    expect(hrv?.detailText).toContain('Latest HRV 36 ms · Today');
   });
 
   it('keeps unavailable evidence explicit while the shared inputs prepare', () => {

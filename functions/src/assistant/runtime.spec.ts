@@ -1405,7 +1405,7 @@ describe('Assistant runtime', () => {
       'user-1',
       'https://beta.quantified-self.io',
       'coordinate_free',
-      false, false);
+      false, false, false, false, undefined);
     expect(result.answer).toBe('Your readiness is 72 today.');
     expect(result.evidence).toEqual([expect.objectContaining({
       toolName: 'get_daily_report',
@@ -1795,7 +1795,7 @@ describe('Assistant runtime', () => {
       'user-1',
       'https://quantified-self.io',
       'precise_activity',
-      false, false);
+      false, false, false, false, undefined);
   });
 
   it('preserves an explicit model-selected timezone', async () => {

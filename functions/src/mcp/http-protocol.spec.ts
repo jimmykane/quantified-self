@@ -10,10 +10,12 @@ import {
 } from '@modelcontextprotocol/server';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { MCP_OAUTH_SCOPES, McpOAuthError } from './oauth.service';
+import { McpTrainingPreviewLoopGuardError } from './training-preview-loop-guard';
 import { mcpApi } from './server';
 
-const { authenticateBearer, warn, logError, info } = vi.hoisted(() => ({
+const { authenticateBearer, consumeInvalidTrainingPreviewAttempt, warn, logError, info } = vi.hoisted(() => ({
   authenticateBearer: vi.fn(),
+  consumeInvalidTrainingPreviewAttempt: vi.fn(),
   warn: vi.fn(),
   logError: vi.fn(),
   info: vi.fn(),
@@ -21,6 +23,10 @@ const { authenticateBearer, warn, logError, info } = vi.hoisted(() => ({
 vi.mock('./oauth.service', async importOriginal => ({
   ...await importOriginal<typeof import('./oauth.service')>(),
   createMcpOAuthService: () => ({ authenticateBearer }),
+}));
+vi.mock('./training-preview-loop-guard', async importOriginal => ({
+  ...await importOriginal<typeof import('./training-preview-loop-guard')>(),
+  consumeInvalidTrainingPreviewAttempt,
 }));
 vi.mock('firebase-functions/logger', () => ({ warn, error: logError, info }));
 
@@ -82,6 +88,7 @@ describe('MCP Function protocol compatibility', () => {
       uid: 'protocol-user', clientId: 'https://client.example/client.json',
       connectionId: 'protocol-connection', scopes: Object.values(MCP_OAUTH_SCOPES),
     });
+    consumeInvalidTrainingPreviewAttempt.mockResolvedValue(undefined);
   });
   function post(body: unknown, headers: Record<string, string | null> = {}) {
     const record = body as { method?: string; params?: { name?: string } };
@@ -223,6 +230,35 @@ describe('MCP Function protocol compatibility', () => {
     expect(denied.status).toBe(403);
     expect(denied.headers.get('www-authenticate')).toContain('activity-location:read');
     expect(info).not.toHaveBeenCalled();
+  });
+
+  it('stops repeated malformed Training previews at the HTTP boundary', async () => {
+    const malformed = modernRequest('tools/call', {
+      name: 'preview_training_changes',
+      arguments: { expectedScheduleRevision: 1, changes: [{ kind: 'invented-operation' }] },
+    });
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      const response = await post(malformed);
+      expect(response.status).toBe(200);
+      expect(await response.json()).toMatchObject({ result: { isError: true } });
+    }
+    consumeInvalidTrainingPreviewAttempt.mockRejectedValueOnce(
+      new McpTrainingPreviewLoopGuardError(600),
+    );
+    const blocked = await post(malformed);
+    expect(blocked.status).toBe(429);
+    expect(blocked.headers.get('retry-after')).toBe('600');
+    expect(await blocked.json()).toMatchObject({
+      id: 1,
+      error: {
+        code: -32029,
+        message: expect.stringContaining('Do not retry'),
+      },
+    });
+    expect(warn).toHaveBeenCalledWith('[MCP] Repeated invalid Training preview blocked', {
+      toolName: 'preview_training_changes',
+    });
+    expect(JSON.stringify(warn.mock.calls)).not.toMatch(/protocol-user|protocol-connection|invented-operation/);
   });
 
   it.each([[MCP_OAUTH_SCOPES.ActivityDetailsRead], [MCP_OAUTH_SCOPES.ActivityDescriptionsRead]])(

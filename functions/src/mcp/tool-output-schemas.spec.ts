@@ -1,5 +1,5 @@
 import { ActivityTypes } from '@sports-alliance/sports-lib';
-import { TRAINING_READ_TOOLS, type TrainingReadTool } from './training-plans.schemas';
+import { TRAINING_READ_TOOLS, TRAINING_WRITE_TOOLS, type TrainingReadTool } from './training-plans.schemas';
 import { calculateReadinessScore as calculateCurrentReadinessScore, resolveReadinessConfidence } from '../../../shared/readiness';
 import { Client, InMemoryTransport, StreamableHTTPClientTransport } from '@modelcontextprotocol/client';
 import {
@@ -446,7 +446,19 @@ const trainingReadFixtures = {
  query_planned_workouts: { scheduleRevision: 1, scanComplete: true, recordsScanned: 1, limitsReached: [], nextCursor: null, startDate: '2026-07-01', endDate: '2026-07-02', scope: 'calendar', workouts: [{ workoutRef: 'opaque-workout-reference', planRef: null, title: 'Easy run', localDate: '2026-07-01', lifecycle: 'planned', revision: 1, createdAtMs: 1, updatedAtMs: 1 }] },
  get_planned_workout: { scheduleRevision: 1, workout: { ...{ workoutRef: 'opaque-workout-reference', planRef: null, title: 'Easy run', localDate: '2026-07-01', lifecycle: 'planned', revision: 1, createdAtMs: 1, updatedAtMs: 1 }, structure: { version: 1, sport: ActivityTypes.Running, nodes: [{kind:'step', id:'step',purpose:'work',ending:{kind:'manual'},targets:[], note:'Untrusted text'}] }, displaySteps: [{nodeId:'step',text:'Work · Manual transition'}] } },
  get_training_sync_status: { scheduleRevision: 1, scope: 'plan', reference:'opaque-plan-reference',scanComplete:true,checkedAtMs:1,services:[] },
+ get_planned_workout_completion: { scheduleRevision: 1, workoutRef: 'opaque-workout-reference', state: 'unlinked',
+   provider: null, matchMethod: null, timing: null, scheduledDate: '2026-07-01', workoutRevision: 1,
+   linkedWorkoutRevision: null, workoutChangedSinceCompletion: false, activityStartAtMs: null, linkedAtMs: null,
+   activityRef: null },
 };
+
+const trainingPreviewFixture = { proposalRef: 'opaque-proposal-reference', expiresAtMs: DAY_MS + 60_000,
+  permissionMode: 'schedule' as const, scheduleRevision: 1,
+  summary: 'One Training change requires confirmation.', requiresConfirmation: true as const,
+  changes: [{ index: 0, kind: 'rename-plan', summary: 'Rename the plan.' }], providerPreviews: [] };
+const trainingApplyFixture = { proposalRef: 'opaque-proposal-reference', status: 'applied' as const,
+  scheduleRevision: 2, changes: [{ index: 0, kind: 'rename-plan', status: 'applied' as const,
+    message: 'Renamed the plan.' }], providers: [], createdReferences: [] };
 
 function createFixtureDataService(
   options: {
@@ -467,6 +479,12 @@ function createFixtureDataService(
         rangePoints: [{ timeMs: 0, normalRange: null }, { timeMs: DAY_MS, normalRange: { min: 30, max: 50 } }],
       }] }),
     readTrainingPlans: vi.fn(async (input: { tool: TrainingReadTool }) => trainingReadFixtures[input.tool]),
+    previewCreatePlannedWorkout: vi.fn().mockResolvedValue(trainingPreviewFixture),
+    previewTrainingChanges: vi.fn().mockResolvedValue(trainingPreviewFixture),
+    getTrainingProposalConfirmation: vi.fn().mockResolvedValue({
+      message: 'Confirm the displayed Training change.', proposal: trainingPreviewFixture,
+    }),
+    applyTrainingChanges: vi.fn().mockResolvedValue(trainingApplyFixture),
     getActivityDescription: vi.fn().mockResolvedValue({ activityRef: 'opaque-activity-ref', description: 'Easy run. Felt tired.\nKeep this as reported context.' }),
     queryTimelineNotes: vi.fn().mockResolvedValue({
       startDate: '2026-07-01', endDate: '2026-07-02',
@@ -1231,6 +1249,20 @@ const successfulToolArguments: Record<
   query_planned_workouts: { startDate: '2026-07-01', endDate: '2026-07-02' },
   get_planned_workout: { workoutRef: 'opaque-workout-reference' },
   get_training_sync_status: { scope: 'plan', reference: 'opaque-plan-reference' },
+  get_planned_workout_completion: { workoutRef: 'opaque-workout-reference' },
+  preview_create_planned_workout: {
+    expectedScheduleRevision: 1,
+    localDate: '2026-07-02',
+    title: 'Easy run',
+    structure: { version: 1, sport: 'Running', nodes: [{
+      kind: 'step', id: 'easy', purpose: 'work', ending: { kind: 'time', seconds: 1800 }, targets: [],
+    }] },
+    delivery: { providers: ['garmin'], timeZone: 'Europe/Helsinki' },
+  },
+  preview_training_changes: { expectedScheduleRevision: 1, changes: [{
+    kind: 'rename-plan', plan: { ref: 'opaque-plan-reference' }, name: 'Autumn build',
+  }] },
+  apply_training_changes: { proposalRef: 'opaque-proposal-reference', permissionMode: 'schedule' },
   get_activity_description: { activityRef: 'opaque-activity-ref' },
   query_timeline_notes: { startDate: '2026-07-01', endDate: '2026-07-02' },
   list_health_metrics: {},
@@ -1820,12 +1852,16 @@ describe.each<FixtureTransport>(['in-memory', 'legacy-http', 'modern-http'])('MC
     // Keep the frozen surface's budget; each additive family has its own explicit bound.
     const planTools = tools.filter(tool => (TRAINING_READ_TOOLS as readonly string[]).includes(tool.name));
     expect(Buffer.byteLength(JSON.stringify(planTools), 'utf8')).toBeLessThan(32 * 1024);
+    const planWriteTools = tools.filter(tool => (TRAINING_WRITE_TOOLS as readonly string[]).includes(tool.name));
+    expect(Buffer.byteLength(JSON.stringify(planWriteTools), 'utf8')).toBeLessThan(48 * 1024);
     const sampleTools = tools.filter(tool => tool.name === 'get_activity_samples');
     const readinessTools = tools.filter(tool => ['get_current_readiness', 'get_readiness_history', 'get_daily_report'].includes(tool.name));
     expect(Buffer.byteLength(JSON.stringify(readinessTools), 'utf8')).toBeLessThan(32 * 1024);
     expect(Buffer.byteLength(JSON.stringify(sampleTools), 'utf8')).toBeLessThan(12 * 1024);
     expect(Buffer.byteLength(JSON.stringify(healthTools), 'utf8')).toBeLessThan(24 * 1024);
-    expect(Buffer.byteLength(JSON.stringify(tools.filter(tool => !planTools.includes(tool) && !healthTools.includes(tool) && !noteTools.includes(tool) && !sampleTools.includes(tool) && !readinessTools.includes(tool))), 'utf8'))
+    expect(Buffer.byteLength(JSON.stringify(tools.filter(tool => !planTools.includes(tool) && !planWriteTools.includes(tool)
+      && !healthTools.includes(tool) && !noteTools.includes(tool) && !sampleTools.includes(tool)
+      && !readinessTools.includes(tool))), 'utf8'))
       .toBeLessThan(256 * 1024);
     collectObjectSchemas(tools.map(tool => tool.outputSchema))
       .forEach(schema => expect(schema.additionalProperties).toBe(false));
@@ -1879,7 +1915,11 @@ describe.each<FixtureTransport>(['in-memory', 'legacy-http', 'modern-http'])('MC
       metric: getMcpHealthCatalog().metrics.find(metric => metric.id === 'body_fat'),
     })).toBe(false); // Body composition must not expose otherwise-valid source series.
 
+    expect(validators.get('apply_training_changes')!(trainingApplyFixture)).toBe(true);
     for (const toolName of PUBLIC_MCP_TOOL_NAMES) {
+      // apply_training_changes intentionally returns an input-required confirmation first; its successful
+      // structured result is validated above and the confirmation lifecycle is covered in server tests.
+      if (toolName === 'apply_training_changes') continue;
       const result = await connection.client.callTool({
         name: toolName,
         arguments: successfulToolArguments[toolName],

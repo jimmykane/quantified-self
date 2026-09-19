@@ -123,6 +123,11 @@ export class AssistantPageComponent implements OnInit, OnDestroy {
   readonly locationAccess = signal<AssistantLocationAccess>('coordinate_free');
   readonly timelineNotesEnabled = signal(false);
   readonly trainingPlansEnabled = signal(false);
+  readonly trainingPlanChangesEnabled = signal(false);
+  readonly trainingDeliveryEnabled = signal(false);
+  readonly pendingTrainingProposal = signal<import('@shared/assistant.types').AssistantTrainingProposalPreview | null>(null);
+  readonly applyingTrainingProposal = signal(false);
+  readonly trainingProposalResult = signal<string | null>(null);
   readonly preciseActivityLocationsEnabled = computed(
     () => this.locationAccess() === 'precise_activity',
   );
@@ -205,6 +210,9 @@ export class AssistantPageComponent implements OnInit, OnDestroy {
       this.locationAccess.set(state.locationAccess ?? 'coordinate_free');
       this.timelineNotesEnabled.set(state.timelineNotesEnabled === true);
       this.trainingPlansEnabled.set(state.trainingPlansEnabled === true);
+      this.trainingPlanChangesEnabled.set(state.trainingPlanChangesEnabled === true);
+      this.trainingDeliveryEnabled.set(state.trainingDeliveryEnabled === true);
+      this.pendingTrainingProposal.set(state.pendingTrainingProposal ?? null);
       if (rememberedRequest
         && this.hasCompletedRequest(state.conversation, rememberedRequest.requestId)) {
         this.clearRememberedPendingRequest(rememberedRequest.requestId);
@@ -284,7 +292,9 @@ export class AssistantPageComponent implements OnInit, OnDestroy {
     if (!this.canApplyAccountResult(openingUid)) return;
     const openingConversationId = this.conversation()?.conversationId ?? null;
     this.bottomSheet.open(AssistantExploreBottomSheetComponent, {
-      data: { locationAccess: this.locationAccess(), timelineNotesEnabled: this.timelineNotesEnabled(), trainingPlansEnabled: this.trainingPlansEnabled() },
+      data: { locationAccess: this.locationAccess(), timelineNotesEnabled: this.timelineNotesEnabled(),
+        trainingPlansEnabled: this.trainingPlansEnabled(), trainingPlanChangesEnabled: this.trainingPlanChangesEnabled(),
+        trainingDeliveryEnabled: this.trainingDeliveryEnabled() },
     })
       .afterDismissed()
       .subscribe((result: AssistantExploreBottomSheetResult | undefined) => {
@@ -296,11 +306,19 @@ export class AssistantPageComponent implements OnInit, OnDestroy {
           void this.changeLocationAccess(result.locationAccess);
         } else if (result?.kind === 'training_plans') {
           if (result.enabled !== this.trainingPlansEnabled()) {
-            void this.replaceConversation(this.locationAccess(), true, this.timelineNotesEnabled(), result.enabled);
+            void this.replaceConversation(this.locationAccess(), true, this.timelineNotesEnabled(), result.enabled,
+              result.enabled && this.trainingPlanChangesEnabled(), result.enabled && this.trainingDeliveryEnabled());
           }
+        } else if (result?.kind === 'training_plan_changes') {
+          void this.replaceConversation(this.locationAccess(), true, this.timelineNotesEnabled(),
+            result.enabled || this.trainingPlansEnabled(), result.enabled, this.trainingDeliveryEnabled());
+        } else if (result?.kind === 'training_delivery') {
+          void this.replaceConversation(this.locationAccess(), true, this.timelineNotesEnabled(),
+            result.enabled || this.trainingPlansEnabled(), this.trainingPlanChangesEnabled(), result.enabled);
         } else if (result?.kind === 'timeline_notes') {
           if (result.enabled !== this.timelineNotesEnabled()) {
-            void this.replaceConversation(this.locationAccess(), true, result.enabled, this.trainingPlansEnabled());
+            void this.replaceConversation(this.locationAccess(), true, result.enabled, this.trainingPlansEnabled(),
+              this.trainingPlanChangesEnabled(), this.trainingDeliveryEnabled());
           }
         }
       });
@@ -372,6 +390,8 @@ export class AssistantPageComponent implements OnInit, OnDestroy {
       && retryRequest.uid === currentUid
       && (retryRequest.timelineNotesEnabled === true) === this.timelineNotesEnabled()
       && (retryRequest.trainingPlansEnabled === true) === this.trainingPlansEnabled()
+      && (retryRequest.trainingPlanChangesEnabled === true) === this.trainingPlanChangesEnabled()
+      && (retryRequest.trainingDeliveryEnabled === true) === this.trainingDeliveryEnabled()
       && retryRequest.locationAccess === this.locationAccess()
       ? {
         ...retryRequest,
@@ -388,6 +408,8 @@ export class AssistantPageComponent implements OnInit, OnDestroy {
         locationAccess: this.locationAccess(),
         ...(this.timelineNotesEnabled() ? { timelineNotesEnabled: true } : {}),
         ...(this.trainingPlansEnabled() ? { trainingPlansEnabled: true } : {}),
+        ...(this.trainingPlanChangesEnabled() ? { trainingPlanChangesEnabled: true } : {}),
+        ...(this.trainingDeliveryEnabled() ? { trainingDeliveryEnabled: true } : {}),
         submittedAtMs: Date.now(),
         ...(activeConversation?.conversationId
           ? { conversationId: activeConversation.conversationId }
@@ -414,12 +436,15 @@ export class AssistantPageComponent implements OnInit, OnDestroy {
         locationAccess: request.locationAccess,
         ...(request.timelineNotesEnabled ? { timelineNotesEnabled: true } : {}),
         ...(request.trainingPlansEnabled ? { trainingPlansEnabled: true } : {}),
+        ...(request.trainingPlanChangesEnabled ? { trainingPlanChangesEnabled: true } : {}),
+        ...(request.trainingDeliveryEnabled ? { trainingDeliveryEnabled: true } : {}),
         ...(request.conversationId
           ? { conversationId: request.conversationId }
           : {}),
       });
       if (!this.canApplyAccountResult(currentUid)) return;
       this.conversation.set(response.conversation);
+      this.pendingTrainingProposal.set(response.pendingTrainingProposal ?? null);
       this.quota.set(response.quota);
       if (response.pendingRequestId === request.requestId) {
         this.errorMessage.set(null);
@@ -442,6 +467,9 @@ export class AssistantPageComponent implements OnInit, OnDestroy {
         this.locationAccess.set(refreshedState.locationAccess ?? 'coordinate_free');
         this.timelineNotesEnabled.set(refreshedState.timelineNotesEnabled === true);
         this.trainingPlansEnabled.set(refreshedState.trainingPlansEnabled === true);
+        this.trainingPlanChangesEnabled.set(refreshedState.trainingPlanChangesEnabled === true);
+        this.trainingDeliveryEnabled.set(refreshedState.trainingDeliveryEnabled === true);
+        this.pendingTrainingProposal.set(refreshedState.pendingTrainingProposal ?? null);
       } catch {
         // Preserve the original send failure when reconciliation is unavailable.
       }
@@ -515,13 +543,68 @@ export class AssistantPageComponent implements OnInit, OnDestroy {
     await this.replaceConversation('coordinate_free', false);
   }
 
+  async applyPendingTrainingProposal(): Promise<void> {
+    const proposal = this.pendingTrainingProposal();
+    const conversationId = this.conversation()?.conversationId;
+    if (!proposal || !conversationId || this.applyingTrainingProposal()) return;
+    this.applyingTrainingProposal.set(true);
+    this.errorMessage.set(null);
+    try {
+      const result = await this.assistantService.applyTrainingProposal({
+        proposalRef: proposal.proposalRef,
+        permissionMode: proposal.permissionMode,
+        conversationId,
+        confirm: true,
+      });
+      this.pendingTrainingProposal.set(null);
+      if (result.status === 'applied') {
+        this.trainingProposalResult.set('Training changes applied. Provider updates or checks are queued where applicable.');
+      } else {
+        const affectedProviders = [...new Set(result.providers
+          .filter(item => item.status === 'blocked' || item.status === 'failed')
+          .map(item => item.provider[0].toUpperCase() + item.provider.slice(1)))];
+        const providerDetail = affectedProviders.length
+          ? ` ${affectedProviders.join(', ')} sync needs attention.`
+          : '';
+        this.trainingProposalResult.set(`Some Training changes were applied.${providerDetail} Ask the Assistant to read the current status before trying again.`);
+      }
+      this.hapticsService.success();
+    } catch (error) {
+      this.errorMessage.set(this.assistantService.getErrorMessage(error));
+      this.hapticsService.error();
+    } finally {
+      this.applyingTrainingProposal.set(false);
+    }
+  }
+
+  async dismissPendingTrainingProposal(): Promise<void> {
+    if (this.applyingTrainingProposal()) return;
+    const proposal = this.pendingTrainingProposal();
+    const conversationId = this.conversation()?.conversationId;
+    if (!proposal || !conversationId) return;
+    this.applyingTrainingProposal.set(true);
+    try {
+      await this.assistantService.applyTrainingProposal({ proposalRef: proposal.proposalRef,
+        permissionMode: proposal.permissionMode, conversationId, confirm: false });
+      this.pendingTrainingProposal.set(null);
+      this.trainingProposalResult.set('Training proposal dismissed. Nothing was changed.');
+      this.hapticsService.selection();
+    } catch (error) {
+      this.errorMessage.set(this.assistantService.getErrorMessage(error));
+      this.hapticsService.error();
+    } finally {
+      this.applyingTrainingProposal.set(false);
+    }
+  }
+
   private async changeLocationAccess(
     locationAccess: AssistantLocationAccess,
   ): Promise<void> {
     if (locationAccess === this.locationAccess()) {
       return;
     }
-    await this.replaceConversation(locationAccess, true, this.timelineNotesEnabled(), this.trainingPlansEnabled());
+    await this.replaceConversation(locationAccess, true, this.timelineNotesEnabled(), this.trainingPlansEnabled(),
+      this.trainingPlanChangesEnabled(), this.trainingDeliveryEnabled());
   }
 
   private async replaceConversation(
@@ -529,6 +612,8 @@ export class AssistantPageComponent implements OnInit, OnDestroy {
     preservePrompt: boolean,
     timelineNotesEnabled = false,
     trainingPlansEnabled = false,
+    trainingPlanChangesEnabled = false,
+    trainingDeliveryEnabled = false,
   ): Promise<void> {
     if (this.loadingConversation()
       || this.conversationLoadError()
@@ -545,12 +630,16 @@ export class AssistantPageComponent implements OnInit, OnDestroy {
     try {
       const conversation = await this.assistantService.resetConversation(
         locationAccess, timelineNotesEnabled, this.conversation()?.conversationId ?? null, trainingPlansEnabled,
+        trainingPlanChangesEnabled, trainingDeliveryEnabled,
       );
       if (!this.canApplyAccountResult(currentUid)) return;
       this.conversation.set(conversation);
       this.locationAccess.set(locationAccess);
       this.timelineNotesEnabled.set(timelineNotesEnabled);
       this.trainingPlansEnabled.set(trainingPlansEnabled);
+      this.trainingPlanChangesEnabled.set(trainingPlanChangesEnabled);
+      this.trainingDeliveryEnabled.set(trainingDeliveryEnabled);
+      this.pendingTrainingProposal.set(null);
       this.hapticsService.success();
       this.cancelPendingResponsePoll();
       this.pendingRequestId.set(null);
@@ -570,6 +659,9 @@ export class AssistantPageComponent implements OnInit, OnDestroy {
           this.locationAccess.set(state.locationAccess ?? 'coordinate_free');
           this.timelineNotesEnabled.set(state.timelineNotesEnabled === true);
           this.trainingPlansEnabled.set(state.trainingPlansEnabled === true);
+          this.trainingPlanChangesEnabled.set(state.trainingPlanChangesEnabled === true);
+          this.trainingDeliveryEnabled.set(state.trainingDeliveryEnabled === true);
+          this.pendingTrainingProposal.set(state.pendingTrainingProposal ?? null);
           this.retryRequest.set(null);
           if (state.pendingRequestId) this.startPendingResponseRecovery(state.pendingRequestId);
         } catch (refreshError) {
@@ -656,6 +748,9 @@ export class AssistantPageComponent implements OnInit, OnDestroy {
       this.locationAccess.set(state.locationAccess ?? 'coordinate_free');
       this.timelineNotesEnabled.set(state.timelineNotesEnabled === true);
       this.trainingPlansEnabled.set(state.trainingPlansEnabled === true);
+      this.trainingPlanChangesEnabled.set(state.trainingPlanChangesEnabled === true);
+      this.trainingDeliveryEnabled.set(state.trainingDeliveryEnabled === true);
+      this.pendingTrainingProposal.set(state.pendingTrainingProposal ?? null);
       if (this.hasCompletedRequest(state.conversation, requestId)) {
         this.retryRequest.set(null);
         this.errorMessage.set(null);
@@ -754,6 +849,10 @@ export class AssistantPageComponent implements OnInit, OnDestroy {
     this.locationAccess.set('coordinate_free');
     this.timelineNotesEnabled.set(false);
     this.trainingPlansEnabled.set(false);
+    this.trainingPlanChangesEnabled.set(false);
+    this.trainingDeliveryEnabled.set(false);
+    this.pendingTrainingProposal.set(null);
+    this.trainingProposalResult.set(null);
     this.quota.set(null);
     this.retryRequest.set(null);
     this.pendingRequestId.set(null);
@@ -868,6 +967,19 @@ export class AssistantPageComponent implements OnInit, OnDestroy {
         this.clearRememberedPendingRequest();
         return null;
       }
+      if (data.trainingPlanChangesEnabled !== undefined && typeof data.trainingPlanChangesEnabled !== 'boolean') {
+        this.clearRememberedPendingRequest();
+        return null;
+      }
+      if (data.trainingDeliveryEnabled !== undefined && typeof data.trainingDeliveryEnabled !== 'boolean') {
+        this.clearRememberedPendingRequest();
+        return null;
+      }
+      if ((data.trainingPlanChangesEnabled === true || data.trainingDeliveryEnabled === true)
+        && data.trainingPlansEnabled !== true) {
+        this.clearRememberedPendingRequest();
+        return null;
+      }
       if (data.timelineNotesEnabled !== undefined && typeof data.timelineNotesEnabled !== 'boolean') {
         this.clearRememberedPendingRequest();
         return null;
@@ -894,6 +1006,8 @@ export class AssistantPageComponent implements OnInit, OnDestroy {
         locationAccess,
         ...(data.timelineNotesEnabled ? { timelineNotesEnabled: true } : {}),
         ...(data.trainingPlansEnabled ? { trainingPlansEnabled: true } : {}),
+        ...(data.trainingPlanChangesEnabled ? { trainingPlanChangesEnabled: true } : {}),
+        ...(data.trainingDeliveryEnabled ? { trainingDeliveryEnabled: true } : {}),
         submittedAtMs: Number(data.submittedAtMs),
         ...(conversationId ? { conversationId } : {}),
       };
@@ -939,6 +1053,8 @@ export class AssistantPageComponent implements OnInit, OnDestroy {
     }
     if ((request.timelineNotesEnabled === true) !== this.timelineNotesEnabled()
       || (request.trainingPlansEnabled === true) !== this.trainingPlansEnabled()
+      || (request.trainingPlanChangesEnabled === true) !== this.trainingPlanChangesEnabled()
+      || (request.trainingDeliveryEnabled === true) !== this.trainingDeliveryEnabled()
       || request.locationAccess !== this.locationAccess()) return false;
     if (request.conversationId) {
       return request.conversationId === conversation?.conversationId;

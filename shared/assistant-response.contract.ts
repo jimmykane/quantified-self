@@ -16,6 +16,7 @@ import {
   type AssistantConversation,
   type AssistantEvidence,
   type AssistantMessage,
+  type AssistantTrainingProposalPreview,
   type AssistantVisual,
 } from './assistant.types';
 
@@ -107,6 +108,40 @@ function getUtf8ByteLength(value: unknown): number {
 
 function isFiniteNumber(value: unknown): value is number {
   return typeof value === 'number' && Number.isFinite(value);
+}
+
+export function isAssistantTrainingProposal(value: unknown): value is AssistantTrainingProposalPreview {
+  if (!isRecord(value)
+    || !hasOnlyKeys(value, ['proposalRef', 'permissionMode', 'expiresAtMs', 'scheduleRevision', 'summary',
+      'requiresConfirmation', 'changes', 'providerPreviews'])
+    || !isBoundedString(value.proposalRef, 1, 2048)
+    || !['schedule', 'delivery', 'combined'].includes(`${value.permissionMode}`)
+    || !Number.isSafeInteger(value.expiresAtMs) || Number(value.expiresAtMs) < 0
+    || !Number.isSafeInteger(value.scheduleRevision) || Number(value.scheduleRevision) < 0
+    || !isBoundedString(value.summary, 1, 1000)
+    || value.requiresConfirmation !== true
+    || !Array.isArray(value.changes) || value.changes.length < 1 || value.changes.length > 25
+    || !Array.isArray(value.providerPreviews) || value.providerPreviews.length > 100) {
+    return false;
+  }
+  const changesValid = value.changes.every(change => isRecord(change)
+    && hasOnlyKeys(change, ['index', 'kind', 'summary'])
+    && Number.isSafeInteger(change.index) && Number(change.index) >= 0 && Number(change.index) <= 24
+    && isBoundedString(change.kind, 1, 64)
+    && isBoundedString(change.summary, 1, 500));
+  const providersValid = value.providerPreviews.every(preview => isRecord(preview)
+    && hasOnlyKeys(preview, ['index', 'provider', 'targetType', 'action', 'availability', 'timeZone',
+      'eligibleCount', 'warningCount', 'summary'])
+    && Number.isSafeInteger(preview.index) && Number(preview.index) >= 0 && Number(preview.index) <= 24
+    && ['garmin', 'coros', 'wahoo', 'suunto'].includes(`${preview.provider}`)
+    && ['plan', 'workout'].includes(`${preview.targetType}`)
+    && ['enable', 'send', 'resume', 'stop', 'retry', 'check', 'approve'].includes(`${preview.action}`)
+    && ['ready', 'unavailable', 'reconnect_required', 'connection_repair', 'pro_required'].includes(`${preview.availability}`)
+    && (preview.timeZone === null || isIanaTimeZone(preview.timeZone))
+    && Number.isSafeInteger(preview.eligibleCount) && Number(preview.eligibleCount) >= 0 && Number(preview.eligibleCount) <= 400
+    && Number.isSafeInteger(preview.warningCount) && Number(preview.warningCount) >= 0 && Number(preview.warningCount) <= 400
+    && isBoundedString(preview.summary, 1, 500));
+  return changesValid && providersValid && getUtf8ByteLength(value) <= 256 * 1024;
 }
 
 function isIanaTimeZone(value: unknown): value is string {
@@ -315,10 +350,20 @@ export function validateAssistantChatResponse(
   if (!isRecord(value)) {
     return { ok: false, reason: 'response_not_object' };
   }
-  if (!hasOnlyKeys(value, ['conversation', 'quota', 'pendingRequestId', 'timelineNotesEnabled', 'trainingPlansEnabled'])) {
+  if (!hasOnlyKeys(value, ['conversation', 'quota', 'pendingRequestId', 'timelineNotesEnabled', 'trainingPlansEnabled',
+    'trainingPlanChangesEnabled', 'trainingDeliveryEnabled', 'pendingTrainingProposal'])) {
     return { ok: false, reason: 'unexpected_response_fields' };
   }
   if (value.trainingPlansEnabled !== undefined && typeof value.trainingPlansEnabled !== 'boolean') return { ok: false, reason: 'invalid_training_plans_access' };
+  if (value.trainingPlanChangesEnabled !== undefined && typeof value.trainingPlanChangesEnabled !== 'boolean') return { ok: false, reason: 'invalid_training_plan_changes_access' };
+  if (value.trainingDeliveryEnabled !== undefined && typeof value.trainingDeliveryEnabled !== 'boolean') return { ok: false, reason: 'invalid_training_delivery_access' };
+  if ((value.trainingPlanChangesEnabled === true || value.trainingDeliveryEnabled === true)
+    && value.trainingPlansEnabled !== true) return { ok: false, reason: 'invalid_training_write_dependency' };
+  if (value.pendingTrainingProposal !== undefined) {
+    if (!isAssistantTrainingProposal(value.pendingTrainingProposal)) {
+      return { ok: false, reason: 'invalid_training_proposal' };
+    }
+  }
   if (value.timelineNotesEnabled !== undefined && typeof value.timelineNotesEnabled !== 'boolean') {
     return { ok: false, reason: 'invalid_timeline_notes_access' };
   }

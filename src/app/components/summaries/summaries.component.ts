@@ -1982,6 +1982,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
       context.hrvPersonalRange,
       this.user?.settings?.unitSettings,
       resolveReadinessHrvRecentTrend(sleepTrend.points, nowMs),
+      { latestSleepAtMs: context.latestSleepAtMs, locale: this.locale, nowMs },
     );
     const overnightHeartRateTone = this.resolveDashboardTodayRatioTone(context.overnightHeartRateRatio, true);
     return {

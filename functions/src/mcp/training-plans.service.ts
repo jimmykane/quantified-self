@@ -5,6 +5,7 @@ import type { UserUnitSettingsInterface } from '@sports-alliance/sports-lib';
 import { formatWorkoutStepV1, parseWorkoutStructureV1 } from '../../../shared/planned-workout';
 import { buildTrainingDeliverySummaries } from '../../../shared/training-delivery-summary';
 import { PLANNED_WORKOUT_PROVIDER_IDS } from '../../../shared/planned-workout-providers';
+import { parseTrainingWorkoutCompletionV1 } from '../../../shared/training-workout-completion';
 import { isUserDeletionTombstoneActive } from '../shared/user-deletion-guard';
 import { TRAINING_PLANS_SCOPE, TRAINING_READ_INPUTS, TRAINING_READ_OUTPUTS, TRAINING_RECIPE_SCHEMA,
   trainingDate, type TrainingReadResult, type TrainingReadTool } from './training-plans.schemas';
@@ -28,10 +29,17 @@ const statusSchema = z.strictObject({ workoutId: id, planId: id.nullable(), prov
     'unsupported', 'approval_required', 'retrying', 'needs_attention', 'failed']),
   differsFromQS: z.boolean(), hasRemoteCopy: z.boolean(), timeZone: z.string().max(100),
   lastAttemptAtMs: count.nullable(), lastAcceptedAtMs: count.nullable(), updatedAtMs: count });
-type Collection = 'trainingPlans' | 'scheduledWorkouts' | 'trainingDeliverySettings' | 'trainingDeliveryStatuses';
+const completionSchema = z.strictObject({ schemaVersion: z.literal(1), workoutId: id, planId: id.nullable(),
+  provider: z.enum(PLANNED_WORKOUT_PROVIDER_IDS), matchMethod: z.enum(['provider_marker', 'manual_confirmation']),
+  eventId: z.string().min(1).max(1500), activityId: z.string().min(1).max(1500).nullable(),
+  sourceSessionIndex: count.nullable(), activityStartAtMs: count.nullable(), scheduledLocalDate: trainingDate,
+  workoutRevisionAtLink: count.positive(), timing: z.enum(['on_date', 'early', 'late', 'unknown']),
+  linkedAtMs: count, updatedAtMs: count });
+type Collection = 'trainingPlans' | 'scheduledWorkouts' | 'trainingDeliverySettings' | 'trainingDeliveryStatuses'
+  | 'trainingWorkoutCompletions';
 const MASKS: Record<Collection, string[]> = { trainingPlans: Object.keys(planSchema.shape),
   scheduledWorkouts: Object.keys(workoutSchema.shape), trainingDeliverySettings: Object.keys(settingSchema.shape),
-  trainingDeliveryStatuses: Object.keys(statusSchema.shape) };
+  trainingDeliveryStatuses: Object.keys(statusSchema.shape), trainingWorkoutCompletions: Object.keys(completionSchema.shape) };
 interface Document { id: string; data: Record<string, unknown> }
 type Filter = { field: 'planId' | 'workoutId' | 'scopeId' | 'associationPlanId'; value: string | null };
 interface State { revision: number; activePlanId: string | null; accessGeneration?: string }
@@ -48,6 +56,7 @@ export interface TrainingReads {
 export interface TrainingReadCodec {
   encode(value: Record<string, unknown>, uid: string, connectionId: string): string;
   decode(value: string, uid: string, connectionId: string): Record<string, unknown>;
+  encodeActivity?(value: { activityId: string; eventId: string }, uid: string, connectionId: string): string;
 }
 export class TrainingReadError extends Error {
   constructor(readonly code: 'invalid_request' | 'temporarily_unavailable' | 'query_too_large', message: string) { super(message); }
@@ -189,6 +198,27 @@ export async function readTrainingPlans(input: TrainingReadInput, reads: Trainin
         : [{ nodeId: node.id, text: `Repeat ${node.count} times` }, ...node.steps.map(step => ({ nodeId: step.id, text: formatWorkoutStepV1(step, units) }))]);
       return { scheduleRevision: state.revision, workout: { ...summary, structure, displaySteps } };
     }
+    if (input.tool === 'get_planned_workout_completion') {
+      const a = TRAINING_READ_INPUTS.get_planned_workout_completion.parse(args.data);
+      const doc = await resolve(a.workoutRef, 'workout');
+      const workout = workoutSchema.parse(doc.data);
+      const completionDoc = await view.get('trainingWorkoutCompletions', doc.id);
+      if (!completionDoc) return { scheduleRevision: state.revision, workoutRef: a.workoutRef, state: 'unlinked' as const,
+        provider: null, matchMethod: null, timing: null, scheduledDate: workout.localDate, workoutRevision: workout.revision,
+        linkedWorkoutRevision: null, workoutChangedSinceCompletion: false, activityStartAtMs: null, linkedAtMs: null,
+        activityRef: null };
+      const completion = parseTrainingWorkoutCompletionV1(completionSchema.parse(completionDoc.data));
+      if (completion.workoutId !== doc.id || completion.planId !== workout.planId) throw unavailable();
+      const activityRef = input.scopes.includes('activity-details:read') && completion.activityId && codec.encodeActivity
+        ? codec.encodeActivity({ activityId: completion.activityId, eventId: completion.eventId }, input.uid, input.connectionId)
+        : null;
+      return { scheduleRevision: state.revision, workoutRef: a.workoutRef, state: 'linked' as const,
+        provider: completion.provider, matchMethod: completion.matchMethod, timing: completion.timing,
+        scheduledDate: completion.scheduledLocalDate, workoutRevision: workout.revision,
+        linkedWorkoutRevision: completion.workoutRevisionAtLink,
+        workoutChangedSinceCompletion: completion.workoutRevisionAtLink !== workout.revision,
+        activityStartAtMs: completion.activityStartAtMs, linkedAtMs: completion.linkedAtMs, activityRef };
+    }
     if (input.tool === 'get_training_sync_status') {
       const a = TRAINING_READ_INPUTS.get_training_sync_status.parse(args.data);
       const doc = await resolve(a.reference, a.scope);
@@ -215,11 +245,17 @@ export async function readTrainingPlans(input: TrainingReadInput, reads: Trainin
       if (a.scope === 'plan') settings.push(...await collect('trainingDeliverySettings', { field: 'associationPlanId', value: doc.id }, 1600));
       else if (plan) settings.push(...await collect('trainingDeliverySettings', { field: 'scopeId', value: doc.id }, 1600));
       const statuses = await collect('trainingDeliveryStatuses', { field: a.scope === 'plan' ? 'planId' : 'workoutId', value: doc.id }, 1600);
+      const completionDocs = a.scope === 'plan'
+        ? await collect('trainingWorkoutCompletions', { field: 'planId', value: doc.id }, 400)
+        : [await view.get('trainingWorkoutCompletions', doc.id)].filter((item): item is Document => item !== null);
+      const completions = completionDocs.map(item => parseTrainingWorkoutCompletionV1(completionSchema.parse(item.data)))
+        .filter(completion => workouts.some(workout => workout.id === completion.workoutId && workout.planId === completion.planId));
       // The authored count is authoritative. Bounded historical scans must not imply full confirmation.
       if (a.scope === 'plan' && workouts.length !== planSchema.parse(doc.data).workoutCount) complete = false;
       const summaries = await buildTrainingDeliverySummaries({ uid: input.uid, scope: a.scope, id: doc.id,
         plan: plan ? planSchema.parse(plan.data) : null, workouts, complete,
-        settings: settings.map(d => settingSchema.parse(d.data)), statuses: statuses.map(d => ({ id: d.id, ...statusSchema.parse(d.data) })) });
+        settings: settings.map(d => settingSchema.parse(d.data)), statuses: statuses.map(d => ({ id: d.id, ...statusSchema.parse(d.data) })),
+        completions, nowMs });
       return { scheduleRevision: state.revision, scope: a.scope, reference: a.reference, scanComplete: complete,
         checkedAtMs: nowMs, services: summaries.map(summary => summary.projection) };
     }

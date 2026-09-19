@@ -57,7 +57,7 @@ describe('AppRoutingModule routes', () => {
     expect(helpRoute?.loadComponent).toBeTypeOf('function');
     expect(helpRoute?.data).toMatchObject({
       title: 'Help & Support',
-      description: 'Get help with Training analysis, provider imports and sync, Wahoo activity and route delivery, read-only MCP client setup, uploads, billing, privacy, and troubleshooting.',
+      description: 'Get help with Training analysis, provider imports and sync, Wahoo activity and route delivery, MCP client setup, uploads, billing, privacy, and troubleshooting.',
       animation: 'Help',
       preload: true,
       jsonLd: {
@@ -486,7 +486,7 @@ describe('AppRoutingModule routes', () => {
       },
       {
         path: PUBLIC_FEATURE_PATHS.mcpServer,
-        title: 'Read-only MCP Server for Training Data',
+        title: 'MCP Server for Training Data',
         h1: 'Connect ChatGPT or Claude to your training data',
         descriptionText: 'ChatGPT, Claude, or another MCP client',
       },
@@ -640,7 +640,7 @@ describe('AppRoutingModule routes', () => {
     expect(homeRoute?.data?.['jsonLd']?.['featureList']).toContain('Curated training analysis for readiness, load, intensity, durability, sleep context, and best builds');
     expect(homeRoute?.data?.['jsonLd']?.['featureList']).toContain('Automatic Wahoo to Suunto activity sync');
     expect(homeRoute?.data?.['jsonLd']?.['featureList']).toContain('Activity and route delivery to Wahoo');
-    expect(homeRoute?.data?.['jsonLd']?.['featureList']).toContain('Read-only MCP access for compatible clients');
+    expect(homeRoute?.data?.['jsonLd']?.['featureList']).toContain('Permission-scoped MCP access for compatible clients');
   });
 
   it('should keep the dashboard as the authenticated app entry route', () => {

@@ -38,7 +38,7 @@ import { MCP_HEALTH_CATALOG_SCHEMA, MCP_HEALTH_QUERY_SCHEMA } from './health.ser
 import { MCP_HRV_RANGE_SCHEMA } from './hrv-personal-range.service';
 import { MCP_ACTIVITY_DESCRIPTION_MAX_LENGTH } from './activity-description.service';
 import { MCP_TIMELINE_NOTES_SCHEMA } from './timeline-notes.service';
-import { TRAINING_READ_TOOLS, TRAINING_READ_OUTPUTS } from './training-plans.schemas';
+import { TRAINING_READ_TOOLS, TRAINING_READ_OUTPUTS, TRAINING_WRITE_OUTPUTS, TRAINING_WRITE_TOOLS } from './training-plans.schemas';
 import { MCP_SLEEP_VITAL_TYPES } from './sleep-vitals';
 import { EVENT_TAG_LIMIT, EVENT_TAG_MAX_LENGTH } from '../../../shared/event-tags';
 import {
@@ -47,6 +47,7 @@ import {
 
 export const PUBLIC_MCP_TOOL_NAMES = [
   ...TRAINING_READ_TOOLS,
+  ...TRAINING_WRITE_TOOLS,
   'get_activity_description',
   'query_timeline_notes',
   'list_health_metrics',
@@ -1390,6 +1391,7 @@ export function createMcpOutputSchemaRegistry(scope: McpOutputSchemaScope) {
     }),
     query_timeline_notes: MCP_TIMELINE_NOTES_SCHEMA,
     ...TRAINING_READ_OUTPUTS,
+    ...TRAINING_WRITE_OUTPUTS,
     list_measurement_types: z.strictObject({
       measurementTypes: z.array(measurementDescriptor),
     }),

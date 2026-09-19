@@ -131,6 +131,27 @@ describe('CompactRowComponent', () => {
     expect(compactFixture.nativeElement.classList).not.toContain('compact-row-host--fill-height');
   });
 
+  it('opts dense rows into a full-width mobile action without changing the default', () => {
+    const row = fixture.debugElement.query(By.directive(CompactRowComponent)).componentInstance as CompactRowComponent;
+    expect(row.mobileActionFullWidth()).toBe(false);
+    expect(fixture.nativeElement.querySelector('app-compact-row').classList)
+      .not.toContain('compact-row-host--mobile-action-full');
+
+    const compactFixture = TestBed.createComponent(CompactRowComponent);
+    compactFixture.componentRef.setInput('title', 'Provider');
+    compactFixture.componentRef.setInput('layout', 'columns');
+    compactFixture.componentRef.setInput('density', 'compact');
+    compactFixture.componentRef.setInput('mobileActionFullWidth', true);
+    compactFixture.detectChanges();
+
+    expect(compactFixture.nativeElement.classList).toContain('compact-row-host--mobile-action-full');
+    const styles = readFileSync('src/app/components/shared/compact-row/compact-row.component.scss', 'utf8');
+    const mobileAction = styles.slice(styles.indexOf(':host(.compact-row-host--mobile-action-full)'));
+    expect(mobileAction).toContain('grid-column: 1 / -1');
+    expect(mobileAction).toContain('grid-row: 3');
+    expect(mobileAction).toContain('width: 100%');
+  });
+
   it('keeps dense column alignment and responsive actions scoped away from stacked rows', () => {
     const styles = readFileSync('src/app/components/shared/compact-row/compact-row.component.scss', 'utf8');
     const denseColumns = styles.slice(styles.indexOf('.compact-row--compact.compact-row--columns {'));

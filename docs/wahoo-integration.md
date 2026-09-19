@@ -10,7 +10,7 @@ This is the Wahoo-specific architecture and release record. For the reusable imp
 - Connection identity from `GET /v1/user`, stored on the server-only token document and resolved for webhooks through the shared token index.
 - New and updated completed workouts from `workout_summary` webhooks.
 - Exact completion linking for a QS-delivered Training workout when the imported Wahoo-recorded activity returns the same Workout ID, Plan ID, and deterministic `workout_token` under the current connected account. No title/date fallback is used.
-- Manual history import from the descending, paginated `GET /v1/workouts` endpoint.
+- Manual history import from the descending, paginated `GET /v1/workouts` endpoint, with the latest two calendar years selected by default and a user-editable range.
 - FIT parsing through `@sports-alliance/sports-lib`, stable event IDs based on the Wahoo workout ID, and original FIT-file retention with the imported event.
 - FIT activity delivery from Wahoo imported events to Suunto or COROS through the shared activity-sync queue, with separate opt-in automatic delivery for new imports and date-range backfill for retained FIT files.
 - FIT activity delivery to Wahoo from Garmin, COROS, and Suunto imported events through the shared activity-sync queue.
@@ -27,6 +27,10 @@ Training delivery uses the shared queue and exact-UID private pilot, not the act
 single detailed implementation and operational contract is [Wahoo Training delivery](training-workspace.md#wahoo-plan-and-dated-workout-delivery-649):
 time-based Running/Cycling, saved-zone seven-day window, separate Plan/Workout/association receipts, duplicate-safe
 recovery, positive-only cloud checks, scope migration, lifecycle fences and pending production-account/device checks.
+The production Plan validator requires `header.description` and a `targets` array on every non-repeat interval despite
+the published plan.json schema marking both optional. It also rejects an empty target array. QS supplies the bounded
+workout title and the documented full-domain RPE range 1–10 for an untargeted interval; it does not add another editor
+field or narrow intended effort. Production Plan create/delete returns HTTP 200; create also remains compatible with 201.
 The existing production app/account is the pilot target. Do not interpret the historical activity launch checklist
 below as a requirement to create a sandbox or apply for Wahoo-owned Plan-library entitlement.
 
@@ -65,6 +69,7 @@ Wahoo requires six composite indexes: one `tokens` collection-group index on `wa
 - Browser clients can read only the safe connection state and display-only Wahoo account ID under `users/{uid}/meta/Wahoo API`; access and refresh tokens are server-only in Firestore Rules. Existing connections recover the ID through an authenticated, App Check-protected callable that returns that identifier only.
 - `workouts_write` is enforced immediately before activity uploads, while direct course/route delivery requires both `routes_read` and `routes_write` before its external-ID lookup and create/update request. The final pre-request guard also rechecks deletion, disconnect-pending, and reconnect-required state. Connections created before either delivery capability must be reauthorized to receive the new scope; read-only imports remain available until then.
 - Outbound requests are URL-encoded, carry the FIT as Wahoo's documented base64 data value, and never log the source file, generated FIT, bearer token, or upload form body. Wahoo's asynchronous activity-upload token—not the FIT payload—is persisted on an activity-sync queue item. Direct GPX/FIT course/route delivery is synchronous and retains neither payload nor a Quantified Self route document.
+- Training Plan HTTP 422 responses are read through a separate 16 KiB/500 ms cap and reduced in memory to fixed response-shape, rejection-category, and known request-field enums. A confidently classified application/Plans access rejection uses the existing provider-unavailable state; validation rejections remain terminal. Raw provider bodies and messages are discarded and never enter errors, logs, or Firestore.
 - File downloads reject non-HTTPS URLs, credentials in URLs, IP literals, local hostnames, unapproved redirect targets, payloads over 20 MB, non-FIT content, and responses that exceed the bounded request deadline. Wahoo JSON API requests use a separate bounded deadline.
 - Wahoo FIT persistence relies on the queue's revision-scoped processing lease. A newer summary preserves an active lease and waits, preventing concurrent revisions from mixing writes to the same deterministic event. The worker verifies the lease, pinned provider identity, and connection generation immediately before persistence; account-deletion guards remain inside every Firestore write, and the original FIT remains in backend-only staging until all writes succeed.
 - Training completion correlation is exact and account-bound. The importer accepts only the delivered Workout/Plan/token tuple from the current connection generation, serializes against delivery attempts, and records only a digest of the workout token. It never infers a match from date, title, sport, duration, or target adherence.

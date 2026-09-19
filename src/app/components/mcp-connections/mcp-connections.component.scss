@@ -249,11 +249,39 @@
   margin-top: 12px;
 }
 
-.mcp-connections__permissions {
+.mcp-connections__permission-groups {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 2px 16px;
-  margin-top: 4px;
+  gap: 16px;
+  margin-top: 8px;
+}
+
+.mcp-connections__permission-group {
+  min-width: 0;
+
+  h4 {
+    color: var(--mat-sys-on-surface);
+    font: var(--mat-sys-title-small);
+    margin: 0;
+  }
+
+  > p {
+    font: var(--mat-sys-body-small);
+    margin: 2px 0 4px;
+  }
+}
+
+.mcp-connections__permission-state {
+  color: var(--mat-sys-on-surface-variant);
+  font: var(--mat-sys-label-medium);
+}
+
+.mcp-connections__permission-state--granted {
+  color: var(--mat-sys-primary);
+}
+
+.mcp-connections__authorization-help {
+  font: var(--mat-sys-body-small);
+  margin-top: 12px !important;
 }
 
 .mcp-connections__dates {
@@ -278,8 +306,7 @@
   }
 
   .mcp-connections__setup-grid,
-  .mcp-connections__authorization-list,
-  .mcp-connections__permissions {
+  .mcp-connections__authorization-list {
     grid-template-columns: minmax(0, 1fr);
   }
 

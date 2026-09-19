@@ -46,6 +46,8 @@ The callable surface consists of:
   pending turn for the signed-in user.
 - `resetAssistantConversation`: replaces the active conversation generation with an explicit location-access mode so an
   older in-flight response cannot restore cleared content or cross a consent boundary.
+- `applyAssistantTrainingProposal`: applies or dismisses the one current bounded Training proposal after an explicit user
+  action; Gemini never receives or invokes this callable.
 
 All four require Firebase Authentication and App Check. Before a chat turn can reserve quota or send data to Gemini,
 the backend also verifies the required privacy, data, and Terms agreements in the server-authoritative legal document.
@@ -75,7 +77,7 @@ The selected access mode is stored with the server-owned conversation. `beginTur
 fingerprints bind precise-location retries to that wider consent, changing the setting creates a new generation, and
 **New chat** always creates a coordinate-free generation. This prevents coordinate-bearing history from later being
 sent as part of a coordinate-free chat. Route-location scope, saved-route bounds, route geometry, route waypoints,
-original source files, write tools, and dashboard settings remain unavailable in both modes. Coordinate-free chats can
+original source files, arbitrary write tools, and dashboard settings remain unavailable in both modes. Coordinate-free chats can
 read bounded activity chart series but never their breadcrumb location stream. Precise-activity chats can request that
 existing location stream when an activity map is relevant.
 Detailed activity sample pagination remains an external MCP workflow. The first-party allowlist omits
@@ -85,7 +87,7 @@ not enter Gemini context or expand built-in Assistant access.
 External MCP clients remain the path for separately approved saved-route location and geometry access. Saved-route names
 are included in summaries and can themselves contain user- or provider-assigned place information.
 
-## Optional Training plans context
+## Optional Training planning context
 
 **Examples & data access** also contains default-off **Training plans**, available to any Assistant user independently of
 the planning UI pilot. It discloses names, dates, complete instructions, authored notes and existing service sync status,
@@ -94,13 +96,25 @@ while preserving the other choices. **New chat** resets all optional choices. Mi
 The reset expects the current conversation ID; requests, retries and replay fingerprints bind this boolean. Stale tabs,
 sign-out/account switches and old generations cannot grant access. Runtime rechecks consent before and after each read.
 
-Enabled sessions add only `training-plans:read` and the five planning reads, not metrics, activity or provider permissions.
+The read toggle adds `training-plans:read` and the six planning reads, not metrics, activity or provider permissions.
 Planned/upcoming questions use planning tools; completed questions use existing activity tools. Resolve relative dates in
 the turn's explicit IANA timezone. Fetch full structures and sync status only when needed. Titles/notes remain untrusted
 context, never instructions or authority. Evidence is compact names/dates/lifecycle/service counts without recipes, full
-notes, opaque references or links. Answers may quote relevant text under existing retention. No new charts, writes or
-provider actions are available; call/output budgets and quotas are unchanged. Source support does not deploy or promote
-an app. See the [MCP planning contract](mcp-server.md#training-plans-and-planned-workouts-690-read-only-slice).
+notes, opaque references or links. Answers may quote relevant text under existing retention.
+
+Two additional default-off toggles enable **Plan and workout changes** and **Planned-workout sync changes**. They require
+the read toggle but remain independent of each other. The first grants `training-plans:write`; the second grants
+`training-delivery:write`. A write-enabled in-process session exposes the focused single-workout preview plus the bounded
+batch preview to Gemini. The focused preview can include an atomic initial provider send only when the delivery toggle is
+also enabled. The model can prepare one strict proposal after reading current records; it cannot call
+`apply_training_changes` or provider
+transport. Quantified Self stores the safe preview with the conversation and shows an **Apply changes** / **Dismiss**
+surface. Applying uses a dedicated Auth + App Check callable that rechecks the same conversation generation and toggles,
+then invokes the common proposal service. Dismissal clears the server-owned proposal without changes. New chat, a toggle
+change, account switch, expiry, schedule conflict or stale grant makes the proposal unusable. Provider results are
+independent and a send failure never removes a newly authored workout. Call/output budgets and quotas are unchanged.
+Source support does not deploy or promote an app. See the
+[MCP planning contract](mcp-server.md#training-plans-and-planned-workouts-690).
 
 ## Optional Timeline notes context
 
@@ -132,8 +146,8 @@ calculations are unchanged; no note chart overlays are added to Assistant visual
 Deterministic evidence stores compact note titles, categories and actual dates, not full details or raw tool responses.
 Answers can quote relevant details under the same seven-day conversation retention. Logs, analytics and errors must
 not contain private note text. Deployment, registered MCP app rescan/contract promotion, and local plugin sync remain
-separate approved release steps. Future Training plan read/write grants and explicit proposal approval are tracked in
-[#690](https://github.com/jimmykane/quantified-self/issues/690), independently of this notes permission.
+separate approved release steps. Training planning permissions remain independent of this notes permission and use the
+conversation-bound proposal flow described above.
 
 ## Deterministic visual answers
 

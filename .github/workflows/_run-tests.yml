@@ -79,6 +79,7 @@ jobs:
           npm run lint
           npm run test
           npm run build
+          npm run entrypoint:check:compiled
           npm run mcp:contract:check:compiled
           cd ..
 

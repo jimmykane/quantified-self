@@ -19,7 +19,7 @@ import { User } from '@sports-alliance/sports-lib';
 import { UserServiceMetaInterface } from '@sports-alliance/sports-lib';
 import { Subscription } from 'rxjs';
 import { ServiceNames } from '@sports-alliance/sports-lib';
-import { COROS_HISTORY_IMPORT_LIMIT_MONTHS, GARMIN_HISTORY_IMPORT_COOLDOWN_DAYS, GARMIN_HISTORY_IMPORT_LIMIT_YEARS, HISTORY_IMPORT_ACTIVITIES_PER_DAY_LIMIT, HISTORY_IMPORT_PROCESSING_CAPACITY_PER_DAY_PER_USER_ESTIMATE } from '@shared/history-import.constants';
+import { COROS_HISTORY_IMPORT_LIMIT_MONTHS, GARMIN_HISTORY_IMPORT_COOLDOWN_DAYS, GARMIN_HISTORY_IMPORT_LIMIT_YEARS, HISTORY_IMPORT_ACTIVITIES_PER_DAY_LIMIT, HISTORY_IMPORT_DEFAULT_RANGE_YEARS, HISTORY_IMPORT_PROCESSING_CAPACITY_PER_DAY_PER_USER_ESTIMATE } from '@shared/history-import.constants';
 import {
   getHealthBackfillStartMs,
   GARMIN_SLEEP_BACKFILL_REQUIRED_PERMISSIONS,
@@ -72,6 +72,7 @@ export class HistoryImportFormComponent implements OnInit, OnDestroy, OnChanges 
   public isPro = false;
   public corosHistoryLimitMonths = COROS_HISTORY_IMPORT_LIMIT_MONTHS;
   public activitiesPerDayLimit = HISTORY_IMPORT_ACTIVITIES_PER_DAY_LIMIT;
+  public historyImportDefaultRangeYears = HISTORY_IMPORT_DEFAULT_RANGE_YEARS;
   public processingCapacityPerDay = HISTORY_IMPORT_PROCESSING_CAPACITY_PER_DAY_PER_USER_ESTIMATE;
   public garminCooldownDays = GARMIN_HISTORY_IMPORT_COOLDOWN_DAYS;
   public garminHistoryLimitYears = GARMIN_HISTORY_IMPORT_LIMIT_YEARS;
@@ -110,7 +111,7 @@ export class HistoryImportFormComponent implements OnInit, OnDestroy, OnChanges 
 
   async ngOnInit() {
     this.formGroup = new UntypedFormGroup({
-      startDate: new UntypedFormControl(dayjs().startOf('day'), [
+      startDate: new UntypedFormControl(this.getDefaultHistoryStartDate(), [
         Validators.required,
       ]),
       endDate: new UntypedFormControl(dayjs().endOf('day'), [
@@ -128,6 +129,15 @@ export class HistoryImportFormComponent implements OnInit, OnDestroy, OnChanges 
     this.currentUserID = this.coerceUserID(user);
 
     this.processChanges();
+  }
+
+  private getDefaultHistoryStartDate() {
+    const requestedStart = this.serviceName === ServiceNames.COROSAPI
+      ? dayjs().startOf('day').subtract(this.corosHistoryLimitMonths, 'month')
+      : dayjs().startOf('day').subtract(this.historyImportDefaultRangeYears, 'year');
+    const providerMinimum = this.minDate ? dayjs(this.minDate).startOf('day') : null;
+
+    return providerMinimum?.isAfter(requestedStart) ? providerMinimum : requestedStart;
   }
 
   dateRangeValidator: ValidatorFn = (group: AbstractControl): ValidationErrors | null => {
