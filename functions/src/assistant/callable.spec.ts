@@ -125,7 +125,6 @@ describe('Assistant callable', () => {
     const proposal = { proposalRef: 'opaque-proposal', permissionMode: 'combined' as const,
       expiresAtMs: Date.parse('2026-08-03T12:15:00Z'), scheduleRevision: 7,
       summary: 'Create and send a workout.', requiresConfirmation: true as const,
-      confirmationUrl: 'https://quantified-self.io/mcp/training/confirm/opaque-confirmation-reference',
       changes: [{ index: 0, kind: 'create-workout', summary: 'Create it.' }], providerPreviews: [] };
     vi.mocked(store.getActiveConversationState).mockResolvedValue({
       conversation: { version: 1, conversationId: 'conversation-1', messages: [],
@@ -144,7 +143,6 @@ describe('Assistant callable', () => {
     const proposal = { proposalRef: 'opaque-proposal', permissionMode: 'combined' as const,
       expiresAtMs: Date.parse('2026-08-03T12:15:00Z'), scheduleRevision: 7,
       summary: 'Create and send a workout.', requiresConfirmation: true as const,
-      confirmationUrl: 'https://quantified-self.io/mcp/training/confirm/opaque-confirmation-reference',
       changes: [{ index: 0, kind: 'create-workout', summary: 'Create it.' }], providerPreviews: [] };
     vi.mocked(store.getActiveConversationState).mockResolvedValue({
       conversation: { version: 1, conversationId: 'conversation-1', messages: [],
@@ -173,7 +171,6 @@ describe('Assistant callable', () => {
     const proposal = { proposalRef: 'opaque-proposal', permissionMode: 'schedule' as const,
       expiresAtMs: Date.now() + 60_000, scheduleRevision: 7,
       summary: 'Create a workout.', requiresConfirmation: true as const,
-      confirmationUrl: 'https://quantified-self.io/mcp/training/confirm/opaque-confirmation-reference',
       changes: [{ index: 0, kind: 'create-workout', summary: 'Create it.' }], providerPreviews: [] };
     vi.mocked(store.getActiveConversationState).mockResolvedValue({
       conversation: { version: 1, conversationId: 'conversation-1', messages: [],

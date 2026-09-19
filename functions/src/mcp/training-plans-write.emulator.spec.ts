@@ -4,8 +4,7 @@ import { ActivityTypes } from '@sports-alliance/sports-lib';
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 import type { DeliveryRuntime } from '../training-plans/delivery/contracts';
 import { FakeTrainingTransport } from '../training-plans/delivery/test-support/fake-transport';
-import { applyBrowserTrainingProposal, applyTrainingChanges, getBrowserTrainingProposalReview,
-  previewCreatePlannedWorkout, previewTrainingChanges,
+import { applyTrainingChanges, previewCreatePlannedWorkout, previewTrainingChanges,
   type TrainingWriteDependencies } from './training-plans-write.service';
 import { TRAINING_DELIVERY_WRITE_SCOPE, TRAINING_PLANS_SCOPE, TRAINING_PLANS_WRITE_SCOPE } from './training-plans.schemas';
 
@@ -73,44 +72,6 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Training MCP write propos
     expect(workouts.docs.map(doc => doc.data())).toEqual([
       expect.objectContaining({ title: 'Focused easy run', planId: null, lifecycle: 'planned' }),
     ]);
-  });
-
-  it('binds browser review and apply to the exact owner, connection, grant and stored proposal', async () => {
-    const preview = await previewCreatePlannedWorkout({
-      uid,
-      connectionId: 'connection',
-      scopes,
-      confirmationBaseUrl: 'http://localhost:4200',
-      arguments: {
-        expectedScheduleRevision: 1,
-        localDate: '2026-09-18',
-        title: 'Browser-confirmed run',
-        structure,
-      },
-    }, deps);
-    const confirmationRef = decodeURIComponent(new URL(preview.confirmationUrl).pathname.split('/').at(-1)!);
-    await expect(getBrowserTrainingProposalReview(uid, confirmationRef, deps)).resolves.toMatchObject({
-      status: 'pending',
-      permissionMode: 'schedule',
-      changes: [{ kind: 'create-workout' }],
-    });
-    await expect(getBrowserTrainingProposalReview(`${uid}-other`, confirmationRef, deps))
-      .rejects.toThrow('invalid for the signed-in account');
-
-    const storedProposal = (await db.collection('users').doc(uid).collection('trainingMcpProposals').get()).docs[0];
-    await storedProposal.ref.update({ status: 'applying', leaseUntilMs: deps.now() - 1 });
-    await expect(getBrowserTrainingProposalReview(uid, confirmationRef, deps)).resolves.toMatchObject({
-      status: 'pending',
-    });
-
-    const result = await applyBrowserTrainingProposal(uid, confirmationRef, deps);
-    expect(result).toMatchObject({
-      schemaVersion: 1,
-      status: 'applied',
-      changes: [{ kind: 'create-workout', status: 'applied' }],
-    });
-    expect(result).not.toHaveProperty('createdReferences');
-    await expect(applyBrowserTrainingProposal(uid, confirmationRef, deps)).resolves.toEqual(result);
   });
 
   it('previews focused standalone creation and provider delivery atomically', async () => {

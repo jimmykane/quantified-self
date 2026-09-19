@@ -374,7 +374,6 @@ type RouteDocumentKind = 'geometry' | 'source';
 type OpaqueValueKind =
   | 'training_read'
   | 'training_proposal'
-  | 'training_confirmation'
   | 'timeline_notes_cursor'
   | 'activity_ref'
   | 'route_ref'

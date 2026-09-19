@@ -2,12 +2,7 @@ import { HttpsError, onCall } from 'firebase-functions/v2/https';
 import * as logger from 'firebase-functions/logger';
 import { FUNCTIONS_MANIFEST } from '../../../shared/functions-manifest';
 import { enforceAppCheck } from '../utils';
-import { McpDataError } from './data.service';
 import { createMcpOAuthService, McpOAuthError } from './oauth.service';
-import {
-  applyBrowserTrainingProposal,
-  getBrowserTrainingProposalReview,
-} from './training-plans-write.service';
 
 let oauthService: ReturnType<typeof createMcpOAuthService> | null = null;
 
@@ -70,29 +65,10 @@ function toHttpsError(error: unknown): never {
         : 'invalid-argument';
     throw new HttpsError(code, error.message);
   }
-  if (error instanceof McpDataError) {
-    const code = error.code === 'temporarily_unavailable'
-      ? 'unavailable'
-      : error.code === 'query_too_large'
-        ? 'resource-exhausted'
-        : 'failed-precondition';
-    throw new HttpsError(code, error.message);
-  }
   logger.error('[MCP] Callable request failed unexpectedly', {
     errorName: error instanceof Error ? error.name : 'unknown',
   });
   throw new HttpsError('internal', 'The MCP connection request could not be completed.');
-}
-
-function trainingConfirmationRef(value: unknown): string {
-  const data = asRecord(value);
-  const confirmationRef = typeof data.confirmationRef === 'string'
-    ? data.confirmationRef.trim()
-    : '';
-  if (!confirmationRef || confirmationRef.length > 4096 || !/^[A-Za-z0-9_-]+$/.test(confirmationRef)) {
-    throw new HttpsError('invalid-argument', 'This Training confirmation link is invalid.');
-  }
-  return confirmationRef;
 }
 
 export const getMcpAuthorizationRequest = onCall({
@@ -121,31 +97,6 @@ export const decideMcpAuthorization = onCall({
       requestId: `${data.requestId || ''}`,
       ...decision,
     });
-  } catch (error) {
-    return toHttpsError(error);
-  }
-});
-
-export const getMcpTrainingProposalReview = onCall({
-  region: FUNCTIONS_MANIFEST.getMcpTrainingProposalReview.region,
-  memory: '512MiB',
-}, async (request) => {
-  const uid = requireAuthenticatedRequest(request);
-  try {
-    return await getBrowserTrainingProposalReview(uid, trainingConfirmationRef(request.data));
-  } catch (error) {
-    return toHttpsError(error);
-  }
-});
-
-export const applyMcpTrainingProposal = onCall({
-  region: FUNCTIONS_MANIFEST.applyMcpTrainingProposal.region,
-  memory: '512MiB',
-  timeoutSeconds: 120,
-}, async (request) => {
-  const uid = requireAuthenticatedRequest(request);
-  try {
-    return await applyBrowserTrainingProposal(uid, trainingConfirmationRef(request.data));
   } catch (error) {
     return toHttpsError(error);
   }

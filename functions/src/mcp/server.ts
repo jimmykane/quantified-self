@@ -1,13 +1,6 @@
 import { activitySampleResultBytes, MCP_ACTIVITY_SAMPLES_LIMITS } from './activity-samples.service';
 import { toNodeHandler } from '@modelcontextprotocol/node';
-import {
-  acceptedContent,
-  CLIENT_CAPABILITIES_META_KEY,
-  DEFAULT_NEGOTIATED_PROTOCOL_VERSION,
-  inputRequired,
-  McpServer,
-  PROTOCOL_VERSION_META_KEY,
-} from '@modelcontextprotocol/server';
+import { acceptedContent, DEFAULT_NEGOTIATED_PROTOCOL_VERSION, inputRequired, McpServer, PROTOCOL_VERSION_META_KEY } from '@modelcontextprotocol/server';
 import { onRequest, Request } from 'firebase-functions/v2/https';
 import * as logger from 'firebase-functions/logger';
 import { isIP } from 'node:net';
@@ -621,16 +614,6 @@ const TRAINING_APPLY_TOOL_ANNOTATIONS = {
 
 const TRAINING_CONFIRMATION_SCHEMA = z.strictObject({ confirm: z.boolean() });
 
-export function supportsMcpFormElicitation(envelope: unknown): boolean {
-  if (!envelope || typeof envelope !== 'object' || Array.isArray(envelope)) return false;
-  const capabilities = (envelope as Record<string, unknown>)[CLIENT_CAPABILITIES_META_KEY];
-  if (!capabilities || typeof capabilities !== 'object' || Array.isArray(capabilities)) return false;
-  const elicitation = (capabilities as Record<string, unknown>).elicitation;
-  if (!elicitation || typeof elicitation !== 'object' || Array.isArray(elicitation)) return false;
-  const form = (elicitation as Record<string, unknown>).form;
-  return form !== undefined && form !== null && typeof form === 'object' && !Array.isArray(form);
-}
-
 function createReadOnlyToolRunner(outputSchemas: McpOutputSchemaRegistry) {
   return async (
     name: PublicMcpToolName,
@@ -760,9 +743,9 @@ function buildMcpServerInstructions(auth: AuthenticatedMcpRequest): string {
       const focusedCreateGuidance = auth.scopes.includes(MCP_OAUTH_SCOPES.TrainingDeliveryWrite)
         ? 'include its optional delivery object when the same workout should be sent immediately to providers'
         : 'provider delivery is not available on this connection, so do not add delivery input';
-      instructions.push(`${readGuidance} Construct workout recipes only from the advertised v1 schema, using stable unique node IDs and canonical seconds, metres, kilojoules, bpm, watts, metres per second, rpm and percentage points. Pace is still stored as metres per second with pace presentation. Never invent a threshold or relative-target reference snapshot; ask when required authored inputs are missing. For one new workout, read the current schedule revision and use preview_create_planned_workout exactly once; ${focusedCreateGuidance}. Do not use the batch tool for either case. Use preview_training_changes once only for other or genuinely multi-change requests. Present preview effects. If the client supports a native confirmation form, use apply_training_changes through that form. Otherwise, give the user the preview's short-lived confirmationUrl once and stop; do not open or automate that authenticated page, call apply repeatedly, or claim anything changed before a successful apply result. Never retry a rejected preview unchanged, imply that a preview changed data, or claim provider delivery succeeded before the apply result says so.`);
+      instructions.push(`${readGuidance} Construct workout recipes only from the advertised v1 schema, using stable unique node IDs and canonical seconds, metres, kilojoules, bpm, watts, metres per second, rpm and percentage points. Pace is still stored as metres per second with pace presentation. Never invent a threshold or relative-target reference snapshot; ask when required authored inputs are missing. For one new workout, read the current schedule revision and use preview_create_planned_workout exactly once; ${focusedCreateGuidance}. Do not use the batch tool for either case. Use preview_training_changes once only for other or genuinely multi-change requests. Present preview effects, and use apply_training_changes only through its explicit confirmation request. Never retry a rejected preview unchanged, imply that a preview changed data, or claim provider delivery succeeded before the apply result says so.`);
     } else {
-      instructions.push(`${readGuidance} Only provider-delivery changes are available. Use preview_training_changes once with complete input and present its effects. If the client supports a native confirmation form, use apply_training_changes through that form. Otherwise, give the user the preview's short-lived confirmationUrl once and stop; do not open or automate that authenticated page or call apply repeatedly. Never retry a rejected preview unchanged or claim delivery succeeded before the apply result says so.`);
+      instructions.push(`${readGuidance} Only provider-delivery changes are available. Use preview_training_changes once with complete input, present its effects, and use apply_training_changes only through its explicit confirmation request. Never retry a rejected preview unchanged or claim delivery succeeded before the apply result says so.`);
     }
   }
   if (auth.scopes.includes(MCP_OAUTH_SCOPES.TimelineNotesRead)) {
@@ -902,8 +885,8 @@ export function createMcpServer(
       registerMcpTool(server, 'preview_create_planned_workout', {
         title: 'Preview a new planned workout',
         description: canDeliverCreatedWorkout
-          ? 'Preview one new standalone or plan workout, with optional initial provider delivery. Requires the current revision, complete recipe, and delivery timezone. Changes nothing.'
-          : 'Preview one new standalone or plan workout from the current revision and complete recipe. Delivery is unavailable. Changes nothing.',
+          ? 'Use for one new standalone or plan-associated workout, with optional immediate delivery to selected or all connected providers. Provide the current schedule revision, complete canonical recipe, and an IANA time zone when delivery is requested. Quantified Self supplies its internal proposal key and previews the authored and delivery effects atomically. Nothing changes until apply_training_changes receives explicit confirmation.'
+          : 'Use for one new standalone or plan-associated workout. Provide the current schedule revision and complete canonical recipe. This connection has no provider-delivery permission, so delivery input is not advertised. Quantified Self supplies its internal proposal key. Nothing changes until apply_training_changes receives explicit confirmation.',
         inputSchema: canDeliverCreatedWorkout
           ? TRAINING_WRITE_INPUTS.preview_create_planned_workout
           : TRAINING_CREATE_WORKOUT_INPUT_WITHOUT_DELIVERY,
@@ -912,41 +895,29 @@ export function createMcpServer(
         inputSchemaReuse: 'ref',
       }, input => runTrainingWriteTool('preview_create_planned_workout', () => dataService.previewCreatePlannedWorkout({
         arguments: input, uid: auth.uid, connectionId: auth.connectionId, scopes: auth.scopes,
-        confirmationBaseUrl: publicBaseUrl,
       })));
     }
     registerMcpTool(server, 'preview_training_changes', {
       title: 'Preview Training changes',
-      description: 'Preview up to 25 ordered plan, workout, or delivery changes. Use the focused tool for one new workout. Changes nothing.',
+      description: 'Use for plan changes, provider delivery, workout edits, or genuinely multi-change proposals—not for creating one workout. Validate and preview one ordered proposal of at most 25 changes. Nothing authored is changed until apply_training_changes receives explicit user confirmation. Schedule edits require Training plan changes permission; provider actions require Training delivery permission and remain Pro and rollout gated.',
       inputSchema: TRAINING_WRITE_INPUTS.preview_training_changes,
       outputSchema: outputSchemas.preview_training_changes,
       annotations: TRAINING_PREVIEW_TOOL_ANNOTATIONS,
     }, input => runTrainingWriteTool('preview_training_changes', () => dataService.previewTrainingChanges({
       arguments: input, uid: auth.uid, connectionId: auth.connectionId, scopes: auth.scopes,
-      confirmationBaseUrl: publicBaseUrl,
     })));
     if (supportsWriteConfirmation) registerMcpTool(server, 'apply_training_changes', {
       title: 'Confirm and apply Training changes',
-      description: 'Apply one bound, short-lived proposal after native confirmation, or return its authenticated Quantified Self review URL.',
+      description: 'Apply a previously previewed Training proposal exactly once after an MCP confirmation prompt. The proposal is bound to this owner, connection, permissions, schedule revision and a short expiry. Provider outcomes are independent and never roll back authored workout changes.',
       inputSchema: TRAINING_WRITE_INPUTS.apply_training_changes,
       outputSchema: outputSchemas.apply_training_changes,
       annotations: TRAINING_APPLY_TOOL_ANNOTATIONS,
     }, async (input, context) => {
       const confirmation = await dataService.getTrainingProposalConfirmation({
         arguments: input, uid: auth.uid, connectionId: auth.connectionId, scopes: auth.scopes,
-        confirmationBaseUrl: publicBaseUrl,
       });
       const accepted = acceptedContent(context.mcpReq.inputResponses, 'training_confirmation', TRAINING_CONFIRMATION_SCHEMA);
       if (!accepted) {
-        if (!supportsMcpFormElicitation(context.mcpReq.envelope)) {
-          return runTrainingWriteTool('apply_training_changes', async () => ({
-            proposalRef: input.proposalRef,
-            status: 'confirmation_required' as const,
-            expiresAtMs: confirmation.proposal.expiresAtMs,
-            confirmationUrl: confirmation.proposal.confirmationUrl,
-            message: 'Open the Quantified Self review page to confirm these exact Training changes. Nothing changes until you approve there. Do not retry this tool while waiting.',
-          }));
-        }
         return inputRequired({ inputRequests: {
           training_confirmation: inputRequired.elicit({
             message: confirmation.message,

@@ -80,7 +80,6 @@ const trainingProposal: AssistantTrainingProposalPreview = {
   scheduleRevision: 1,
   summary: 'Create one standalone workout and send it to Garmin.',
   requiresConfirmation: true,
-  confirmationUrl: 'https://quantified-self.io/mcp/training/confirm/opaque-confirmation-reference',
   changes: [{ index: 0, kind: 'create-workout', summary: 'Create “Easy run” on 2026-08-04 as a standalone workout.' }],
   providerPreviews: [{ index: 1, provider: 'garmin', targetType: 'workout', action: 'send',
     availability: 'ready', timeZone: 'Europe/Helsinki', eligibleCount: 1, warningCount: 0,

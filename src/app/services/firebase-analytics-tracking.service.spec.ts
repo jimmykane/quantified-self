@@ -94,37 +94,6 @@ describe('FirebaseAnalyticsTrackingService', () => {
     expect(setUserId).toHaveBeenCalledWith(expect.anything(), 'user-123');
   });
 
-  it('never sends an opaque Training confirmation reference as an analytics screen path', () => {
-    TestBed.configureTestingModule({
-      providers: [
-        FirebaseAnalyticsTrackingService,
-        { provide: Analytics, useValue: {} },
-        { provide: Auth, useValue: {} },
-        {
-          provide: Router,
-          useValue: {
-            events: routerEvents$.asObservable(),
-            routerState: { snapshot: { root: { firstChild: null } } },
-          },
-        },
-        { provide: LoggerService, useValue: logger },
-      ],
-    });
-    TestBed.inject(FirebaseAnalyticsTrackingService);
-
-    routerEvents$.next(new NavigationEnd(
-      1,
-      '/mcp/training/confirm/private-reference',
-      '/mcp/training/confirm/private-reference',
-    ));
-
-    expect(logEvent).toHaveBeenCalledWith(expect.anything(), 'screen_view', {
-      firebase_screen: '/mcp/training/confirm/:confirmationRef',
-      firebase_screen_class: 'AppComponent',
-    });
-    expect(JSON.stringify(vi.mocked(logEvent).mock.calls)).not.toContain('private-reference');
-  });
-
   it('falls back to AppComponent screen class when route component is unavailable', () => {
     TestBed.configureTestingModule({
       providers: [

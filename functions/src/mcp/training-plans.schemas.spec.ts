@@ -14,7 +14,6 @@ import {
   TRAINING_READ_OUTPUTS,
   TRAINING_RECIPE_SCHEMA,
   TRAINING_WRITE_INPUTS,
-  TRAINING_WRITE_OUTPUTS,
 } from './training-plans.schemas';
 
 const recipe = (ending: WorkoutEndingV1, targets: WorkoutTargetV1[] = []): WorkoutStructureV1 => ({ version: 1, sport: ActivityTypes.Running,
@@ -151,30 +150,6 @@ describe('Strict public Training recipe v1', () => {
 });
 
 describe('Strict Training write proposal contract', () => {
-  it('keeps browser confirmation and applied result variants semantically separate', () => {
-    const confirmation = {
-      proposalRef: 'opaque-proposal-reference',
-      status: 'confirmation_required',
-      expiresAtMs: Date.now() + 60_000,
-      confirmationUrl: 'https://quantified-self.io/mcp/training/confirm/opaque-confirmation-reference',
-      message: 'Review and confirm this proposal.',
-    };
-    expect(TRAINING_WRITE_OUTPUTS.apply_training_changes.safeParse(confirmation).success).toBe(true);
-    expect(TRAINING_WRITE_OUTPUTS.apply_training_changes.safeParse({
-      ...confirmation,
-      scheduleRevision: 2,
-    }).success).toBe(false);
-    expect(TRAINING_WRITE_OUTPUTS.apply_training_changes.safeParse({
-      proposalRef: 'opaque-proposal-reference',
-      status: 'applied',
-      scheduleRevision: 2,
-      changes: [],
-      providers: [],
-      createdReferences: [],
-      confirmationUrl: confirmation.confirmationUrl,
-    }).success).toBe(false);
-  });
-
   it('offers a focused single-workout input without operation or local-key fields', () => {
     const input = {
       expectedScheduleRevision: 1,

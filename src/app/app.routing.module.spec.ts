@@ -241,16 +241,11 @@ describe('AppRoutingModule routes', () => {
 
   it('should keep MCP consent authenticated and out of search indexes', () => {
     const mcpAuthorizationRoute = routes.find(route => route.path === 'mcp/authorize');
-    const trainingConfirmationRoute = routes.find(route => route.path === 'mcp/training/confirm/:confirmationRef');
 
     expect(mcpAuthorizationRoute).toBeTruthy();
     expect(mcpAuthorizationRoute?.canMatch).toEqual([authGuard]);
     expect(mcpAuthorizationRoute?.loadComponent).toBeTypeOf('function');
     expect(mcpAuthorizationRoute?.data?.['robots']).toBe('noindex, nofollow');
-    expect(trainingConfirmationRoute).toBeTruthy();
-    expect(trainingConfirmationRoute?.canMatch).toEqual([authGuard]);
-    expect(trainingConfirmationRoute?.loadComponent).toBeTypeOf('function');
-    expect(trainingConfirmationRoute?.data?.['robots']).toBe('noindex, nofollow');
   });
 
   it('should define unguarded noindexed public share routes', () => {
