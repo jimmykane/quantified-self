@@ -46,10 +46,31 @@ const referencePayload = z.strictObject({ kind: z.enum(['plan', 'workout']), id:
   createdAtMs: z.number().int().nonnegative().safe() });
 const proposalPayload = z.strictObject({ kind: z.literal('proposal'), id: entityId,
   createdAtMs: z.number().int().nonnegative().safe() });
+const browserConfirmationPayload = z.strictObject({
+  kind: z.literal('training_confirmation'),
+  id: entityId,
+  createdAtMs: z.number().int().nonnegative().safe(),
+  connectionId: z.string().min(1).max(512).refine(value => !value.includes('/')),
+});
+const BROWSER_CONFIRMATION_CONTEXT = 'browser-training-confirmation-v1';
 
 type TrainingChange = z.infer<typeof TRAINING_CHANGE_SCHEMA>;
 type PreviewResult = z.infer<typeof TRAINING_WRITE_OUTPUTS.preview_training_changes>;
-type ApplyResult = z.infer<typeof TRAINING_WRITE_OUTPUTS.apply_training_changes>;
+type TrainingApplySchemaResult = z.infer<typeof TRAINING_WRITE_OUTPUTS.apply_training_changes>;
+type AppliedChangeResult = NonNullable<TrainingApplySchemaResult['changes']>[number];
+type AppliedProviderResult = NonNullable<TrainingApplySchemaResult['providers']>[number];
+interface ApplyResult {
+  proposalRef: string;
+  status: 'applied' | 'partially_applied';
+  scheduleRevision: number;
+  changes: AppliedChangeResult[];
+  providers: AppliedProviderResult[];
+  createdReferences: Array<{
+    localKey: string;
+    kind: 'plan' | 'workout';
+    reference: string;
+  }>;
+}
 
 interface StoredProviderOperation {
   index: number;
@@ -98,6 +119,26 @@ export interface TrainingWriteInput {
   connectionId: string;
   scopes: readonly string[];
   arguments: unknown;
+  confirmationBaseUrl?: string;
+}
+
+export interface BrowserTrainingProposalReview {
+  schemaVersion: 1;
+  status: StoredProposal['status'] | 'expired';
+  expiresAtMs: number;
+  permissionMode: PreviewResult['permissionMode'];
+  scheduleRevision: number;
+  summary: string;
+  changes: PreviewResult['changes'];
+  providerPreviews: PreviewResult['providerPreviews'];
+}
+
+export interface BrowserTrainingProposalResult {
+  schemaVersion: 1;
+  status: ApplyResult['status'];
+  scheduleRevision: number;
+  changes: ApplyResult['changes'];
+  providers: ApplyResult['providers'];
 }
 
 export interface TrainingWriteDependencies {
@@ -538,6 +579,49 @@ function proposalRef(id: string, createdAtMs: number, uid: string, connectionId:
   return encodeOpaqueValue('training_proposal', { kind: 'proposal', id, createdAtMs }, uid, connectionId);
 }
 
+function browserConfirmationRef(
+  id: string,
+  createdAtMs: number,
+  uid: string,
+  connectionId: string,
+): string {
+  return encodeOpaqueValue('training_confirmation', {
+    kind: 'training_confirmation', id, createdAtMs, connectionId,
+  }, uid, BROWSER_CONFIRMATION_CONTEXT);
+}
+
+function browserConfirmationUrl(baseUrl: string | undefined, reference: string): string {
+  const fallback = 'https://quantified-self.io';
+  let origin = fallback;
+  try {
+    const parsed = new URL(baseUrl || fallback);
+    if (parsed.protocol === 'https:' || (parsed.protocol === 'http:'
+      && ['localhost', '127.0.0.1'].includes(parsed.hostname))) {
+      origin = parsed.origin;
+    }
+  } catch {
+    // The canonical production origin is the safe fallback for malformed internal configuration.
+  }
+  return `${origin}/mcp/training/confirm/${encodeURIComponent(reference)}`;
+}
+
+function decodeBrowserConfirmationRef(
+  value: string,
+  uid: string,
+): z.infer<typeof browserConfirmationPayload> {
+  let decoded: Record<string, unknown>;
+  try {
+    decoded = decodeOpaqueValue(
+      'training_confirmation', value, uid, BROWSER_CONFIRMATION_CONTEXT, 'Training confirmation',
+    );
+  } catch {
+    invalid('This Training confirmation link is invalid for the signed-in account.');
+  }
+  const parsed = browserConfirmationPayload.safeParse(decoded!);
+  if (!parsed.success) invalid('This Training confirmation link is invalid.');
+  return parsed.data;
+}
+
 function decodeProposalRef(value: string, uid: string, connectionId: string): { id: string; createdAtMs: number } {
   let decoded: Record<string, unknown>;
   try { decoded = decodeOpaqueValue('training_proposal', value, uid, connectionId, 'Training proposal'); }
@@ -668,10 +752,13 @@ export async function previewTrainingChanges(
   const expiresAtMs = createdAtMs + PROPOSAL_LIFETIME_MS;
   const proposalId = `proposal-${deps.randomId().replace(/[^A-Za-z0-9_-]/g, '')}`.slice(0, 128);
   const ref = proposalRef(proposalId, createdAtMs, input.uid, input.connectionId);
+  const confirmationRef = browserConfirmationRef(proposalId, createdAtMs, input.uid, input.connectionId);
   const preview: PreviewResult = { proposalRef: ref, expiresAtMs, permissionMode: permissionMode(required),
     scheduleRevision: loaded.snapshot.state.revision,
     summary: `${publicChanges.length} proposed Training change${publicChanges.length === 1 ? '' : 's'} will be applied in order after confirmation. Provider results are independent.`,
-    requiresConfirmation: true, changes: publicChanges, providerPreviews };
+    requiresConfirmation: true,
+    confirmationUrl: browserConfirmationUrl(input.confirmationBaseUrl, confirmationRef),
+    changes: publicChanges, providerPreviews };
   TRAINING_WRITE_OUTPUTS.preview_training_changes.parse(preview);
   const stored: StoredProposal = { schemaVersion: 1, uid: input.uid, connectionId: input.connectionId,
     accessGeneration: loaded.accessGeneration, requiredScopes: required, createdAtMs, expiresAtMs,
@@ -747,12 +834,102 @@ export async function getTrainingProposalConfirmation(
 ): Promise<{ message: string; proposal: PreviewResult }> {
   const deps = provided ?? defaultDependencies();
   const current = await readProposal(input, deps);
+  const confirmationRef = browserConfirmationRef(
+    current.id,
+    current.proposal.createdAtMs,
+    input.uid,
+    input.connectionId,
+  );
+  const proposal = TRAINING_WRITE_OUTPUTS.preview_training_changes.parse({
+    ...current.proposal.preview,
+    confirmationUrl: current.proposal.preview.confirmationUrl
+      || browserConfirmationUrl(input.confirmationBaseUrl, confirmationRef),
+  });
   if (current.proposal.status === 'applied' || current.proposal.status === 'partially_applied') {
-    return { message: 'This Training proposal was already applied.', proposal: current.proposal.preview };
+    return { message: 'This Training proposal was already applied.', proposal };
   }
   if (current.proposal.expiresAtMs <= deps.now()) invalid('This Training proposal expired. Prepare it again.');
-  return { message: `${current.proposal.preview.summary} Confirm only if the displayed plan, workout and provider changes are correct.`,
-    proposal: current.proposal.preview };
+  return { message: `${proposal.summary} Confirm only if the displayed plan, workout and provider changes are correct.`,
+    proposal };
+}
+
+async function readBrowserProposal(
+  uid: string,
+  confirmationRef: string,
+  deps: TrainingWriteDependencies,
+): Promise<{ id: string; proposal: StoredProposal; input: TrainingWriteInput }> {
+  if (!confirmationRef || confirmationRef.length > 4096) {
+    invalid('This Training confirmation link is invalid.');
+  }
+  const decoded = decodeBrowserConfirmationRef(confirmationRef, uid);
+  const snapshot = await deps.db.collection('users').doc(uid).collection(PROPOSALS).doc(decoded.id).get();
+  const proposal = snapshot.data() as StoredProposal | undefined;
+  if (!snapshot.exists || !proposal || proposal.schemaVersion !== 1 || proposal.uid !== uid
+    || proposal.connectionId !== decoded.connectionId || proposal.createdAtMs !== decoded.createdAtMs) {
+    invalid('This Training proposal is unavailable. Prepare it again.');
+  }
+  const ref = proposalRef(decoded.id, decoded.createdAtMs, uid, decoded.connectionId);
+  await deps.db.runTransaction(tx => assertAuthorityInTransaction(
+    deps,
+    tx,
+    uid,
+    proposal.connectionId,
+    proposal.requiredScopes,
+    proposal.accessGeneration,
+    proposal.connectionId.startsWith('first-party-assistant-v1:') ? ref : undefined,
+  ), { readOnly: true });
+  return {
+    id: decoded.id,
+    proposal,
+    input: {
+      uid,
+      connectionId: proposal.connectionId,
+      scopes: proposal.requiredScopes,
+      arguments: { proposalRef: ref, permissionMode: permissionMode(proposal.requiredScopes) },
+    },
+  };
+}
+
+export async function getBrowserTrainingProposalReview(
+  uid: string,
+  confirmationRef: string,
+  provided?: TrainingWriteDependencies,
+): Promise<BrowserTrainingProposalReview> {
+  const deps = provided ?? defaultDependencies();
+  const current = await readBrowserProposal(uid, confirmationRef, deps);
+  const now = deps.now();
+  const status = current.proposal.status === 'pending' && current.proposal.expiresAtMs <= now
+    ? 'expired' as const
+    : current.proposal.status === 'applying' && (current.proposal.leaseUntilMs ?? 0) <= now
+      ? 'pending' as const
+    : current.proposal.status;
+  return {
+    schemaVersion: 1,
+    status,
+    expiresAtMs: current.proposal.expiresAtMs,
+    permissionMode: current.proposal.preview.permissionMode,
+    scheduleRevision: current.proposal.preview.scheduleRevision,
+    summary: current.proposal.preview.summary,
+    changes: current.proposal.preview.changes,
+    providerPreviews: current.proposal.preview.providerPreviews,
+  };
+}
+
+export async function applyBrowserTrainingProposal(
+  uid: string,
+  confirmationRef: string,
+  provided?: TrainingWriteDependencies,
+): Promise<BrowserTrainingProposalResult> {
+  const deps = provided ?? defaultDependencies();
+  const current = await readBrowserProposal(uid, confirmationRef, deps);
+  const result = await applyTrainingChanges(current.input, deps);
+  return {
+    schemaVersion: 1,
+    status: result.status,
+    scheduleRevision: result.scheduleRevision,
+    changes: result.changes,
+    providers: result.providers,
+  };
 }
 
 async function currentDeliveryCommand(
@@ -807,7 +984,10 @@ export async function applyTrainingChanges(
     tx.update(proposalRefDoc, { status: next.status, leaseUntilMs: next.leaseUntilMs });
     return next;
   });
-  if (proposal.result) return TRAINING_WRITE_OUTPUTS.apply_training_changes.parse(proposal.result);
+  if (proposal.result) {
+    TRAINING_WRITE_OUTPUTS.apply_training_changes.parse(proposal.result);
+    return proposal.result;
+  }
 
   const changeResults = [...proposal.changeResults];
   for (let index = proposal.nextScheduleOperation; index < proposal.scheduleRequests.length; index += 1) {

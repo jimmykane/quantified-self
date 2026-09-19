@@ -133,9 +133,12 @@ For a new standalone workout that should also be sent, use the focused preview's
 owns the local linking key and builds the authored and delivery changes atomically. Preview still changes nothing; the
 confirmed apply remains the only mutation boundary.
 
-Present the returned authored and per-provider effects faithfully. Preview is not application. Invoke the apply tool only
-through the server's explicit confirmation request and only after the user accepts; clients without that confirmation
-capability remain read-only. A decline changes nothing. Report independent outcomes: a provider failure does not undo an
-authored workout. After a stale revision, expired proposal, changed grant or changed connection, reread state and prepare
-a fresh proposal rather than replaying guessed input. Never claim a live provider check, transport success, native-plan
-parity or watch receipt beyond the returned result.
+Present the returned authored and per-provider effects faithfully. Preview is not application. If this client advertises
+native form elicitation, invoke the apply tool only through that explicit confirmation request and only after the user
+accepts. Otherwise, present the preview's short-lived Quantified Self `confirmationUrl` once and stop tool calls. Never
+open or automate the authenticated review page, retry apply while waiting, or claim the change was applied. If apply
+returns `confirmation_required`, follow the same link-and-stop rule. After the user returns, reread current Training state
+or delivery status before reporting the outcome. A decline or abandoned link changes nothing. Report independent
+outcomes: a provider failure does not undo an authored workout. After a stale revision, expired proposal, changed grant
+or changed connection, reread state and prepare a fresh proposal rather than replaying guessed input. Never claim a live
+provider check, transport success, native-plan parity or watch receipt beyond the returned result.

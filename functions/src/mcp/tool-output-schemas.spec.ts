@@ -455,6 +455,7 @@ const trainingReadFixtures = {
 const trainingPreviewFixture = { proposalRef: 'opaque-proposal-reference', expiresAtMs: DAY_MS + 60_000,
   permissionMode: 'schedule' as const, scheduleRevision: 1,
   summary: 'One Training change requires confirmation.', requiresConfirmation: true as const,
+  confirmationUrl: 'https://quantified-self.io/mcp/training/confirm/opaque-confirmation-reference',
   changes: [{ index: 0, kind: 'rename-plan', summary: 'Rename the plan.' }], providerPreviews: [] };
 const trainingApplyFixture = { proposalRef: 'opaque-proposal-reference', status: 'applied' as const,
   scheduleRevision: 2, changes: [{ index: 0, kind: 'rename-plan', status: 'applied' as const,
@@ -1916,9 +1917,22 @@ describe.each<FixtureTransport>(['in-memory', 'legacy-http', 'modern-http'])('MC
     })).toBe(false); // Body composition must not expose otherwise-valid source series.
 
     expect(validators.get('apply_training_changes')!(trainingApplyFixture)).toBe(true);
+    expect(validators.get('apply_training_changes')!({
+      proposalRef: 'opaque-proposal-reference',
+      status: 'confirmation_required',
+      expiresAtMs: DAY_MS + 60_000,
+      confirmationUrl: 'https://quantified-self.io/mcp/training/confirm/opaque-confirmation-reference',
+      message: 'Open the authenticated review page to confirm.',
+    })).toBe(true);
+    expect(validators.get('apply_training_changes')!({
+      proposalRef: 'opaque-proposal-reference',
+      status: 'confirmation_required',
+      expiresAtMs: DAY_MS + 60_000,
+      confirmationUrl: 'https://quantified-self.io/mcp/training/confirm/opaque-confirmation-reference',
+    })).toBe(false);
     for (const toolName of PUBLIC_MCP_TOOL_NAMES) {
-      // apply_training_changes intentionally returns an input-required confirmation first; its successful
-      // structured result is validated above and the confirmation lifecycle is covered in server tests.
+      // apply_training_changes requires either native form confirmation or the authenticated review page; its
+      // structured variants are validated above and both confirmation lifecycles are covered in server tests.
       if (toolName === 'apply_training_changes') continue;
       const result = await connection.client.callTool({
         name: toolName,

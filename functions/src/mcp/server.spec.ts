@@ -788,6 +788,7 @@ describe('MCP HTTP scope enforcement', () => {
       proposalRef: 'opaque-proposal-reference', expiresAtMs: Date.now() + 60_000,
       permissionMode: 'schedule' as const, scheduleRevision: 1,
       summary: 'One Training change requires confirmation.', requiresConfirmation: true as const,
+      confirmationUrl: 'https://quantified-self.io/mcp/training/confirm/opaque-confirmation-reference',
       changes: [{ index: 0, kind: 'rename-plan', summary: 'Rename the plan.' }], providerPreviews: [],
     };
     const applied = {
@@ -813,7 +814,7 @@ describe('MCP HTTP scope enforcement', () => {
       fetch: (url, init) => server.fetch(new Request(url, init)),
     });
     const client = new Client({ name: 'training-confirmation-client', version: '1.0.0' }, {
-      capabilities: { elicitation: {} },
+      capabilities: { elicitation: { form: {} } },
       versionNegotiation: { mode: { pin: '2026-07-28' } },
     });
     let confirm = false;
@@ -840,6 +841,56 @@ describe('MCP HTTP scope enforcement', () => {
       expect(accepted.isError).not.toBe(true);
       expect(accepted.structuredContent).toEqual(applied);
       expect(applyTrainingChanges).toHaveBeenCalledTimes(1);
+    } finally {
+      await client.close();
+    }
+  });
+
+  it('returns one authenticated review link when a modern client cannot render confirmation forms', async () => {
+    const preview = {
+      proposalRef: 'opaque-proposal-reference', expiresAtMs: Date.now() + 60_000,
+      permissionMode: 'schedule' as const, scheduleRevision: 1,
+      summary: 'One Training change requires confirmation.', requiresConfirmation: true as const,
+      confirmationUrl: 'https://quantified-self.io/mcp/training/confirm/opaque-confirmation-reference',
+      changes: [{ index: 0, kind: 'create-workout', summary: 'Create the workout.' }],
+      providerPreviews: [],
+    };
+    const applyTrainingChanges = vi.fn();
+    const dataService = {
+      getTrainingProposalConfirmation: vi.fn().mockResolvedValue({
+        message: 'Confirm the displayed Training change.', proposal: preview,
+      }),
+      applyTrainingChanges,
+    } as unknown as NonNullable<Parameters<typeof createMcpServer>[2]>;
+    const auth = {
+      uid: 'user-1', clientId: 'https://client.example/mcp.json', connectionId: 'connection-1',
+      scopes: [MCP_OAUTH_SCOPES.TrainingPlansRead, MCP_OAUTH_SCOPES.TrainingPlansWrite],
+    };
+    const server = createMcpTransportHandler(supportsWriteConfirmation => createMcpServer(
+      auth, 'https://quantified-self.io', dataService, supportsWriteConfirmation,
+    ), error => { throw error; });
+    const transport = new StreamableHTTPClientTransport(new URL('https://contract.example/mcp'), {
+      fetch: (url, init) => server.fetch(new Request(url, init)),
+    });
+    const client = new Client({ name: 'training-link-confirmation-client', version: '1.0.0' }, {
+      capabilities: {},
+      versionNegotiation: { mode: { pin: '2026-07-28' } },
+    });
+
+    try {
+      await client.connect(transport);
+      const result = await client.callTool({ name: 'apply_training_changes', arguments: {
+        proposalRef: preview.proposalRef, permissionMode: 'schedule',
+      } });
+      expect(result.isError).not.toBe(true);
+      expect(result.structuredContent).toEqual({
+        proposalRef: preview.proposalRef,
+        status: 'confirmation_required',
+        expiresAtMs: preview.expiresAtMs,
+        confirmationUrl: preview.confirmationUrl,
+        message: expect.stringContaining('Nothing changes until you approve there'),
+      });
+      expect(applyTrainingChanges).not.toHaveBeenCalled();
     } finally {
       await client.close();
     }

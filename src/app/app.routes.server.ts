@@ -65,6 +65,7 @@ export const PRERENDERED_PUBLIC_ROUTES = [
 
 export const CLIENT_RENDERED_APP_ROUTES = [
   'mcp/authorize',
+  'mcp/training/confirm/:confirmationRef',
   'login',
   'onboarding',
   'admin',

@@ -56,6 +56,10 @@ export class FirebaseAnalyticsTrackingService {
     const withoutFragment = urlAfterRedirects.split('#')[0] || '';
     const pathOnly = withoutFragment.split('?')[0] || '';
 
+    if (/^\/mcp\/training\/confirm\/[^/]+$/.test(pathOnly)) {
+      return '/mcp/training/confirm/:confirmationRef';
+    }
+
     return pathOnly || '/';
   }
 

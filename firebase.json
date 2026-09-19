@@ -13,6 +13,43 @@
           "source": "/mcp/authorize",
           "headers": [
             {
+              "key": "Cache-Control",
+              "value": "no-store"
+            },
+            {
+              "key": "Content-Security-Policy",
+              "value": "base-uri 'self'; frame-ancestors 'none'; object-src 'none'; form-action 'self'"
+            },
+            {
+              "key": "Content-Security-Policy-Report-Only",
+              "value": "default-src 'self'; base-uri 'self'; connect-src 'self' https://*.googleapis.com https://*.firebaseio.com wss://*.firebaseio.com https://*.cloudfunctions.net https://*.google-analytics.com https://*.analytics.google.com https://www.googletagmanager.com https://*.g.doubleclick.net https://*.ingest.sentry.io https://api.mapbox.com https://events.mapbox.com https://accounts.google.com https://www.google.com/recaptcha/ https://www.recaptcha.net/recaptcha/; font-src 'self' data:; form-action 'self'; frame-ancestors 'none'; frame-src 'self' https://*.firebaseapp.com https://accounts.google.com https://www.google.com/recaptcha/ https://recaptcha.google.com/recaptcha/ https://www.recaptcha.net/recaptcha/; img-src 'self' data: blob: https:; manifest-src 'self'; media-src 'self' blob:; object-src 'none'; script-src 'self' 'wasm-unsafe-eval' https://apis.google.com https://accounts.google.com https://www.googletagmanager.com https://www.google.com/recaptcha/ https://www.gstatic.com/recaptcha/ https://www.recaptcha.net/recaptcha/; script-src-attr 'none'; style-src 'self' 'unsafe-inline'; worker-src 'self' blob:"
+            },
+            {
+              "key": "Referrer-Policy",
+              "value": "strict-origin-when-cross-origin"
+            },
+            {
+              "key": "X-Content-Type-Options",
+              "value": "nosniff"
+            },
+            {
+              "key": "X-Frame-Options",
+              "value": "DENY"
+            },
+            {
+              "key": "X-Robots-Tag",
+              "value": "noindex, nofollow"
+            }
+          ]
+        },
+        {
+          "source": "/mcp/training/confirm/*",
+          "headers": [
+            {
+              "key": "Cache-Control",
+              "value": "no-store"
+            },
+            {
               "key": "Content-Security-Policy",
               "value": "base-uri 'self'; frame-ancestors 'none'; object-src 'none'; form-action 'self'"
             },
@@ -41,6 +78,10 @@
         {
           "source": "/login",
           "headers": [
+            {
+              "key": "Cache-Control",
+              "value": "no-store"
+            },
             {
               "key": "Content-Security-Policy",
               "value": "base-uri 'self'; frame-ancestors 'none'; object-src 'none'; form-action 'self'"
@@ -191,6 +232,10 @@
       "rewrites": [
         {
           "source": "/mcp/authorize",
+          "destination": "/index.csr.html"
+        },
+        {
+          "source": "/mcp/training/confirm/*",
           "destination": "/index.csr.html"
         },
         {
@@ -417,6 +462,39 @@
           "source": "/mcp/authorize",
           "headers": [
             {
+              "key": "Cache-Control",
+              "value": "no-store"
+            },
+            {
+              "key": "Content-Security-Policy",
+              "value": "base-uri 'self'; frame-ancestors 'none'; object-src 'none'; form-action 'self'"
+            },
+            {
+              "key": "Content-Security-Policy-Report-Only",
+              "value": "default-src 'self'; base-uri 'self'; connect-src 'self' https://*.googleapis.com https://*.firebaseio.com wss://*.firebaseio.com https://*.cloudfunctions.net https://*.google-analytics.com https://*.analytics.google.com https://www.googletagmanager.com https://*.g.doubleclick.net https://*.ingest.sentry.io https://api.mapbox.com https://events.mapbox.com https://accounts.google.com https://www.google.com/recaptcha/ https://www.recaptcha.net/recaptcha/; font-src 'self' data:; form-action 'self'; frame-ancestors 'none'; frame-src 'self' https://*.firebaseapp.com https://accounts.google.com https://www.google.com/recaptcha/ https://recaptcha.google.com/recaptcha/ https://www.recaptcha.net/recaptcha/; img-src 'self' data: blob: https:; manifest-src 'self'; media-src 'self' blob:; object-src 'none'; script-src 'self' 'wasm-unsafe-eval' https://apis.google.com https://accounts.google.com https://www.googletagmanager.com https://www.google.com/recaptcha/ https://www.gstatic.com/recaptcha/ https://www.recaptcha.net/recaptcha/; script-src-attr 'none'; style-src 'self' 'unsafe-inline'; worker-src 'self' blob:"
+            },
+            {
+              "key": "Referrer-Policy",
+              "value": "strict-origin-when-cross-origin"
+            },
+            {
+              "key": "X-Content-Type-Options",
+              "value": "nosniff"
+            },
+            {
+              "key": "X-Frame-Options",
+              "value": "DENY"
+            }
+          ]
+        },
+        {
+          "source": "/mcp/training/confirm/*",
+          "headers": [
+            {
+              "key": "Cache-Control",
+              "value": "no-store"
+            },
+            {
               "key": "Content-Security-Policy",
               "value": "base-uri 'self'; frame-ancestors 'none'; object-src 'none'; form-action 'self'"
             },
@@ -441,6 +519,10 @@
         {
           "source": "/login",
           "headers": [
+            {
+              "key": "Cache-Control",
+              "value": "no-store"
+            },
             {
               "key": "Content-Security-Policy",
               "value": "base-uri 'self'; frame-ancestors 'none'; object-src 'none'; form-action 'self'"
@@ -498,6 +580,10 @@
       "rewrites": [
         {
           "source": "/mcp/authorize",
+          "destination": "/index.csr.html"
+        },
+        {
+          "source": "/mcp/training/confirm/*",
           "destination": "/index.csr.html"
         },
         {

@@ -25,6 +25,8 @@ export const FUNCTIONS_MANIFEST = {
     deleteSelf: { name: 'deleteSelf', region: 'europe-west2' },
     getMcpAuthorizationRequest: { name: 'getMcpAuthorizationRequest', region: 'europe-west2' },
     decideMcpAuthorization: { name: 'decideMcpAuthorization', region: 'europe-west2' },
+    getMcpTrainingProposalReview: { name: 'getMcpTrainingProposalReview', region: 'europe-west2' },
+    applyMcpTrainingProposal: { name: 'applyMcpTrainingProposal', region: 'europe-west2' },
     listMcpConnections: { name: 'listMcpConnections', region: 'europe-west2' },
     revokeMcpConnection: { name: 'revokeMcpConnection', region: 'europe-west2' },
     queryHealthRange: { name: 'queryHealthRange', region: 'europe-west2' },

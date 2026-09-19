@@ -204,6 +204,8 @@ export { mcpApi } from './mcp/server';
 export {
   getMcpAuthorizationRequest,
   decideMcpAuthorization,
+  getMcpTrainingProposalReview,
+  applyMcpTrainingProposal,
   listMcpConnections,
   revokeMcpConnection,
 } from './mcp/callables';

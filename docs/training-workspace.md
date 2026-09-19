@@ -23,11 +23,15 @@ an existing exact stored link; they never infer a match. The optional activity r
 allows only the safe authored lifecycle: create/edit/move/copy/skip/archive/activate/shift and recoverable workout
 deletion. It excludes permanent workout deletion, plan deletion and history restoration. The latter allows plan delivery
 enablement and workout send/resume/stop/retry/check/approval. Delivery remains Pro, provider-connection and rollout gated.
-External clients prepare one strict proposal of at most 25 changes, then `apply_training_changes` appears only on modern
-MCP transports that support the server's input-required confirmation. A decline is a no-op. Legacy clients remain
-preview/read-only. Proposals expire after 15 minutes, bind owner, OAuth connection/grant, schedule revision and entity
-creation time, and retain an idempotent terminal result for safe retries. Provider outcomes are independent: a failed
-send never rolls back a successfully authored standalone workout.
+External clients prepare one strict proposal of at most 25 changes, then `apply_training_changes` appears on modern MCP
+transports. Clients declaring `elicitation.form` receive the native confirmation request. Other modern clients receive
+`confirmation_required` plus the preview's short-lived authenticated QS review URL, which they must present once without
+opening, automating, or repeatedly calling apply. The signed-in page reviews and applies the same stored proposal through
+Auth + App Check callables; it cannot accept a replacement payload. A decline or leaving the page is a no-op. Legacy
+clients remain preview/read-only. Proposals expire after 15 minutes, bind owner, OAuth connection/grant (or Assistant
+conversation generation), schedule revision and entity creation time, and retain an idempotent terminal result for safe
+retries. The review callable rechecks the current grant, deletion and plan-deletion fences before showing or applying.
+Provider outcomes are independent: a failed send never rolls back a successfully authored standalone workout.
 
 Single-workout creation has an additive focused MCP preview. The caller supplies the current schedule revision, optional
 plan reference, calendar date, title and complete canonical recipe; the server supplies the proposal-local key and routes

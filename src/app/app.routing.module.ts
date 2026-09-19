@@ -639,6 +639,16 @@ const topLevelRoutes: Routes = [
     canMatch: [authGuard],
   },
   {
+    path: 'mcp/training/confirm/:confirmationRef',
+    loadComponent: () => import('./components/mcp-training-confirmation/mcp-training-confirmation.component')
+      .then(module => module.McpTrainingConfirmationComponent),
+    data: {
+      title: 'Review Training changes',
+      robots: 'noindex, nofollow',
+    },
+    canMatch: [authGuard],
+  },
+  {
     path: 'share/event/:userID/:eventID',
     loadChildren: () => import('./modules/event.module').then(module => module.EventModule),
     data: {

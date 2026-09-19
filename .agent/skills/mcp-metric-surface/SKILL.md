@@ -52,6 +52,10 @@ Lib version or parser change, also use `.agent/skills/sports-lib-upgrade-and-rep
   idempotent apply. The built-in Assistant may expose preview to the model but never apply; app-owned confirmation must
   recheck its server-owned conversation generation. Provider actions reuse the server delivery command and Pro/readiness
   gates, never accept credentials or remote IDs, and return independent outcomes without rolling back authored data.
+  Treat confirmation UI as a declared client capability, not an assumption. Use native MCP form elicitation only when the
+  request advertises it. For modern clients without it, return one short-lived authenticated QS review URL bound to the
+  exact stored proposal, tell the client to present it once and stop, and reuse the same idempotent apply only after the
+  owner clicks in QS. Never let a client open or automate the page, replace proposal fields, or loop apply while waiting.
   Permanent workout deletion, plan deletion, history restore, inferred completion and new provider actions require a
   new explicit contract decision rather than silently widening the existing union.
   Record a genuine no-impact rationale in verification notes. If relevant coverage must be deferred, create or

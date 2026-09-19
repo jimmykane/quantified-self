@@ -96,6 +96,7 @@ describe('serverRoutes', () => {
     );
     expect(prerenderedPaths.has('')).toBe(true);
     expect(prerenderedPaths.has('mcp/authorize')).toBe(false);
+    expect(prerenderedPaths.has('mcp/training/confirm/:confirmationRef')).toBe(false);
     expect(prerenderedPaths.has('dashboard')).toBe(false);
     expect(prerenderedPaths.has('health')).toBe(false);
     expect(prerenderedPaths.has('training/plans')).toBe(false);
@@ -164,6 +165,8 @@ describe('serverRoutes', () => {
     expect(clientRoutes.find(route => route.path === 'training/plans')).toMatchObject({ renderMode: RenderMode.Client });
     expect(clientRoutes.some(route => route.path === 'plans')).toBe(false);
     expect(clientRoutes.find(route => route.path === 'mcp/authorize')?.status).toBeUndefined();
+    expect(clientRoutes.find(route => route.path === 'mcp/training/confirm/:confirmationRef'))
+      .toMatchObject({ renderMode: RenderMode.Client });
     expect(clientRoutes.find(route => route.path === 'pricing')?.status).toBeUndefined();
     expect(clientRoutes.find(route => route.path === 'releases')?.status).toBeUndefined();
     expect(clientRoutes.find(route => route.path === 'tools/compare/saved')?.status).toBeUndefined();

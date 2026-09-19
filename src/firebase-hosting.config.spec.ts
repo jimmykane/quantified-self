@@ -102,9 +102,10 @@ const betaNoIndexHeader = {
   key: 'X-Robots-Tag',
   value: 'noindex, nofollow',
 };
-const networkOnlyAuthSources = ['/mcp/authorize', '/login'];
+const networkOnlyAuthSources = ['/mcp/authorize', '/mcp/training/confirm/*', '/login'];
 const mcpAuthorizeEnforcedCsp = "base-uri 'self'; frame-ancestors 'none'; object-src 'none'; form-action 'self'";
 const mcpAuthorizeSecurityHeaders = {
+  'Cache-Control': 'no-store',
   'Content-Security-Policy': mcpAuthorizeEnforcedCsp,
   'Referrer-Policy': 'strict-origin-when-cross-origin',
   'X-Content-Type-Options': 'nosniff',
@@ -262,6 +263,7 @@ describe('Firebase Hosting configuration', () => {
       .map(rewrite => rewrite.source) ?? [];
 
     expect(matchesAnyHostingSource(sources, '/mcp/authorize')).toBe(true);
+    expect(matchesAnyHostingSource(sources, '/mcp/training/confirm/opaque-reference')).toBe(true);
     expect(matchesAnyHostingSource(sources, '/dashboard')).toBe(true);
     expect(matchesAnyHostingSource(sources, '/calendar')).toBe(true);
     expect(matchesAnyHostingSource(sources, '/routes')).toBe(true);

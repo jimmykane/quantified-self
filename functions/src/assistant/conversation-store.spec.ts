@@ -232,6 +232,7 @@ describe('Assistant conversation store', () => {
     const proposal = { proposalRef: 'opaque-proposal', permissionMode: 'combined' as const,
       expiresAtMs: Date.parse('2026-08-03T12:15:00Z'), scheduleRevision: 1,
       summary: 'Create and send one workout.', requiresConfirmation: true as const,
+      confirmationUrl: 'https://quantified-self.io/mcp/training/confirm/opaque-confirmation-reference',
       changes: [{ index: 0, kind: 'create-workout', summary: 'Create one workout.' }],
       providerPreviews: [{ index: 1, provider: 'garmin' as const, targetType: 'workout' as const,
         action: 'send' as const, availability: 'ready' as const, timeZone: 'Europe/Helsinki',

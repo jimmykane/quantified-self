@@ -1,0 +1,159 @@
+<main class="mcp-training-confirmation qs-workspace-page">
+  <section class="confirmation-shell" aria-labelledby="confirmation-title">
+    <header class="confirmation-header">
+      <div class="confirmation-header__icon" aria-hidden="true">
+        <mat-icon>fact_check</mat-icon>
+      </div>
+      <div>
+        <p class="confirmation-eyebrow">Quantified Self Training</p>
+        <h1 id="confirmation-title">Review Training changes</h1>
+        <p>Only this exact preview can be applied. Nothing changes until you confirm below.</p>
+      </div>
+    </header>
+
+    @if (loading()) {
+      <div class="confirmation-state" role="status">
+        <mat-spinner diameter="32"></mat-spinner>
+        <span>Loading the secure preview…</span>
+      </div>
+    } @else if (review(); as proposal) {
+      @if (result(); as applied) {
+        <div class="confirmation-callout" [class.confirmation-callout--warning]="applied.status === 'partially_applied'" role="status">
+          <mat-icon>{{ applied.status === 'applied' ? 'check_circle' : 'warning' }}</mat-icon>
+          <div>
+            <strong>{{ applied.status === 'applied' ? 'Changes applied' : 'Some changes need attention' }}</strong>
+            <p>Schedule revision {{ applied.scheduleRevision }}. Return to your client to continue.</p>
+          </div>
+        </div>
+
+        @if (applied.changes.length) {
+          <section class="confirmation-section" aria-labelledby="applied-changes-title">
+            <h2 id="applied-changes-title">Schedule results</h2>
+            <div class="confirmation-rows">
+              @for (change of applied.changes; track change.index) {
+                <app-compact-row
+                  [title]="change.status === 'failed' ? 'Could not apply' : 'Applied'"
+                  [summary]="change.message"
+                  [icon]="change.status === 'failed' ? 'error' : 'check'"
+                  [iconTone]="change.status === 'failed' ? 'tertiary' : 'primary'"
+                  density="compact">
+                </app-compact-row>
+              }
+            </div>
+          </section>
+        }
+
+        @if (applied.providers.length) {
+          <section class="confirmation-section" aria-labelledby="provider-results-title">
+            <h2 id="provider-results-title">Provider results</h2>
+            <div class="confirmation-rows">
+              @for (provider of applied.providers; track provider.index + ':' + provider.provider) {
+                <app-compact-row
+                  [title]="providerLabel(provider.provider)"
+                  [summary]="provider.message"
+                  [icon]="provider.status === 'blocked' || provider.status === 'failed' ? 'warning' : 'sync'"
+                  [iconTone]="provider.status === 'blocked' || provider.status === 'failed' ? 'tertiary' : 'secondary'"
+                  density="compact">
+                </app-compact-row>
+              }
+            </div>
+          </section>
+        }
+      } @else {
+        @if (proposal.status === 'expired') {
+          <div class="confirmation-callout confirmation-callout--warning" role="alert">
+            <mat-icon>schedule</mat-icon>
+            <div>
+              <strong>This preview expired</strong>
+              <p>Nothing was applied. Ask your connected client to prepare the change again.</p>
+            </div>
+          </div>
+        } @else if (proposal.status === 'applying') {
+          <div class="confirmation-callout" role="status">
+            <mat-spinner diameter="22"></mat-spinner>
+            <div>
+              <strong>This change is already being applied</strong>
+              <p>Wait a moment, then reload this review. Do not confirm it again elsewhere.</p>
+            </div>
+          </div>
+        } @else if (proposal.status === 'applied' || proposal.status === 'partially_applied') {
+          <div class="confirmation-callout" [class.confirmation-callout--warning]="proposal.status === 'partially_applied'" role="status">
+            <mat-icon>{{ proposal.status === 'applied' ? 'check_circle' : 'warning' }}</mat-icon>
+            <div>
+              <strong>{{ proposal.status === 'applied' ? 'This preview was already applied' : 'This preview was partially applied' }}</strong>
+              <p>Return to your connected client to read the current Training state.</p>
+            </div>
+          </div>
+        } @else {
+          <div class="confirmation-meta" role="note">
+            <span>Expires {{ proposal.expiresAtMs | date:'mediumTime' }}</span>
+            <span>Schedule revision {{ proposal.scheduleRevision }}</span>
+          </div>
+
+          <section class="confirmation-section" aria-labelledby="requested-changes-title">
+            <h2 id="requested-changes-title">Requested changes</h2>
+            <p class="confirmation-section__intro">{{ proposal.summary }}</p>
+            <div class="confirmation-rows">
+              @for (change of proposal.changes; track change.index) {
+                <app-compact-row
+                  [title]="'Change ' + (change.index + 1)"
+                  [summary]="change.summary"
+                  icon="edit_calendar"
+                  density="compact">
+                </app-compact-row>
+              }
+            </div>
+          </section>
+
+          @if (proposal.providerPreviews.length) {
+            <section class="confirmation-section" aria-labelledby="provider-effects-title">
+              <h2 id="provider-effects-title">Provider delivery</h2>
+              <div class="confirmation-rows">
+                @for (provider of proposal.providerPreviews; track provider.index + ':' + provider.provider) {
+                  <app-compact-row
+                    [title]="providerLabel(provider.provider)"
+                    [summary]="provider.summary"
+                    icon="sync"
+                    iconTone="secondary"
+                    density="compact">
+                  </app-compact-row>
+                }
+              </div>
+            </section>
+          }
+        }
+      }
+    }
+
+    @if (error()) {
+      <div class="confirmation-error" role="alert">
+        <mat-icon>error</mat-icon>
+        <span>{{ error() }}</span>
+      </div>
+    }
+
+    <footer class="confirmation-actions">
+      @if (!loading() && review()?.status === 'pending' && !result()) {
+        <button mat-flat-button type="button" [disabled]="applying()" (click)="apply()">
+          <span class="confirmation-button-content">
+            @if (applying()) {
+              <mat-spinner diameter="18"></mat-spinner>
+            } @else {
+              <mat-icon>check</mat-icon>
+            }
+            <span>{{ applying() ? 'Applying…' : 'Confirm and apply' }}</span>
+          </span>
+        </button>
+      }
+      @if (!loading() && review()?.status === 'applying' && !result()) {
+        <button mat-stroked-button type="button" (click)="load()">Reload status</button>
+      }
+      @if (error() && !review()) {
+        <button mat-stroked-button type="button" (click)="load()">Try again</button>
+      }
+      <button mat-button type="button" [disabled]="applying()" (click)="leave()">
+        {{ review()?.status === 'pending' && !result() ? 'Not now' : 'Done' }}
+      </button>
+    </footer>
+  </section>
+</main>

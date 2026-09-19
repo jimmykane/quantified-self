@@ -259,13 +259,66 @@ export const TRAINING_WRITE_INPUTS = {
 const trainingPreviewOutput = z.strictObject({ proposalRef: ref, expiresAtMs: count,
     permissionMode: z.enum(['schedule', 'delivery', 'combined']),
     scheduleRevision: count, summary: z.string().min(1).max(1000), requiresConfirmation: z.literal(true),
+    confirmationUrl: z.string().url().max(4096),
     changes: z.array(proposedChange).min(1).max(25), providerPreviews: z.array(providerPreview).max(100) });
+
+const trainingApplyOutput = z.strictObject({
+  proposalRef: ref,
+  status: z.enum(['applied', 'partially_applied', 'confirmation_required']),
+  scheduleRevision: count.optional(),
+  changes: z.array(appliedChange).max(25).optional(),
+  providers: z.array(providerResult).max(100).optional(),
+  createdReferences: z.array(z.strictObject({
+    localKey, kind: z.enum(['plan', 'workout']), reference: ref,
+  })).max(25).optional(),
+  expiresAtMs: count.optional(),
+  confirmationUrl: z.string().url().max(4096).optional(),
+  message: z.string().min(1).max(1000).optional(),
+}).superRefine((value, context) => {
+  const confirmation = value.status === 'confirmation_required';
+  const missingConfirmation = value.expiresAtMs === undefined
+    || value.confirmationUrl === undefined || value.message === undefined;
+  const missingApplied = value.scheduleRevision === undefined
+    || value.changes === undefined || value.providers === undefined || value.createdReferences === undefined;
+  const hasAnyApplied = value.scheduleRevision !== undefined
+    || value.changes !== undefined || value.providers !== undefined || value.createdReferences !== undefined;
+  const hasAnyConfirmation = value.expiresAtMs !== undefined
+    || value.confirmationUrl !== undefined || value.message !== undefined;
+  if ((confirmation && missingConfirmation) || (!confirmation && missingApplied)) {
+    context.addIssue({
+      code: 'custom',
+      message: confirmation
+        ? 'A browser confirmation result requires its URL, message and expiry.'
+        : 'An applied result requires the schedule revision, changes, providers and created references.',
+    });
+  }
+  if (confirmation && hasAnyApplied) {
+    context.addIssue({ code: 'custom', message: 'A browser confirmation result cannot claim applied changes.' });
+  }
+  if (!confirmation && hasAnyConfirmation) {
+    context.addIssue({ code: 'custom', message: 'An applied result cannot request browser confirmation.' });
+  }
+}).meta({
+  oneOf: [
+    {
+      properties: {
+        status: { const: 'confirmation_required' },
+        proposalRef: {}, expiresAtMs: {}, confirmationUrl: {}, message: {},
+      },
+      required: ['proposalRef', 'status', 'expiresAtMs', 'confirmationUrl', 'message'],
+    },
+    {
+      properties: {
+        status: { enum: ['applied', 'partially_applied'] },
+        proposalRef: {}, scheduleRevision: {}, changes: {}, providers: {}, createdReferences: {},
+      },
+      required: ['proposalRef', 'status', 'scheduleRevision', 'changes', 'providers', 'createdReferences'],
+    },
+  ],
+});
 
 export const TRAINING_WRITE_OUTPUTS = {
   preview_create_planned_workout: trainingPreviewOutput,
   preview_training_changes: trainingPreviewOutput,
-  apply_training_changes: z.strictObject({ proposalRef: ref,
-    status: z.enum(['applied', 'partially_applied']), scheduleRevision: count,
-    changes: z.array(appliedChange).max(25), providers: z.array(providerResult).max(100),
-    createdReferences: z.array(z.strictObject({ localKey, kind: z.enum(['plan', 'workout']), reference: ref })).max(25) }),
+  apply_training_changes: trainingApplyOutput,
 };
