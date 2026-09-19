@@ -49,6 +49,7 @@ import {
   TRAINING_WRITE_INPUTS,
 } from './training-plans.schemas';
 import { createMcpTransportHandler } from './transport';
+import { buildTemporaryTrainingRequestDiagnostic } from './temporary-training-diagnostics';
 
 const defaultDataService = createMcpDataService();
 let oauthService: ReturnType<typeof createMcpOAuthService> | null = null;
@@ -2389,6 +2390,11 @@ export const mcpApi = onRequest(MCP_API_RUNTIME_OPTIONS, async (request, respons
       id: null,
     });
     return;
+  }
+
+  const temporaryTrainingDiagnostic = buildTemporaryTrainingRequestDiagnostic(request.body);
+  if (temporaryTrainingDiagnostic) {
+    logger.info('[MCP TEMP] Training write request received', temporaryTrainingDiagnostic);
   }
 
   let readProtocolVersion = (): string | undefined => undefined;
