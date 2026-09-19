@@ -148,11 +148,11 @@ describe('HistoryImportFormComponent', () => {
     });
 
     it.each([
-        ServiceNames.GarminAPI,
-        ServiceNames.SuuntoApp,
-        ServiceNames.COROSAPI,
-        ServiceNames.WahooAPI,
-    ])('defaults %s activity history to the latest 30 calendar days', (serviceName) => {
+        [ServiceNames.GarminAPI, 2, 'year'],
+        [ServiceNames.SuuntoApp, 2, 'year'],
+        [ServiceNames.COROSAPI, 3, 'month'],
+        [ServiceNames.WahooAPI, 2, 'year'],
+    ] as const)('defaults %s activity history to its provider-aware range', (serviceName, amount, unit) => {
         const providerFixture = TestBed.createComponent(HistoryImportFormComponent);
         const providerComponent = providerFixture.componentInstance;
         providerComponent.serviceName = serviceName;
@@ -162,9 +162,8 @@ describe('HistoryImportFormComponent', () => {
 
             const actualStart = dayjs(providerComponent.formGroup.get('startDate')?.value).startOf('day');
             const actualEnd = dayjs(providerComponent.formGroup.get('endDate')?.value).startOf('day');
-            expect(actualEnd.diff(actualStart, 'day')).toBe(providerComponent.historyImportDefaultRangeDays - 1);
             expect(actualStart.format('YYYY-MM-DD')).toBe(
-                actualEnd.subtract(providerComponent.historyImportDefaultRangeDays - 1, 'day').format('YYYY-MM-DD'),
+                actualEnd.subtract(amount, unit).format('YYYY-MM-DD'),
             );
         } finally {
             providerFixture.destroy();

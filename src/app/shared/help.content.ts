@@ -939,7 +939,7 @@ The public [Tools hub](/tools) links to the [File Comparison Tool](/tools/compar
 
 The public [Features hub](/features) links to [Workout Data Comparison](/features/workout-data-comparison), [Workout File Analyzer](/features/fit-gpx-tcx-file-analyzer), and [FIT and GPX Route Files](/features/fit-gpx-route-files). The comparison page combines centralized Garmin, Suunto, COROS, and Wahoo activities with uploaded FIT/TCX/GPX/JSON/SML activity files, synchronized overlays, sports-device benchmarks, and reviewer workflows for device tests, YouTube videos, and blog posts. Manual uploads, core analysis, and benchmark comparisons are available on the free plan for up to ${USAGE_LIMITS.free} activities and ${ROUTE_USAGE_LIMITS.free} saved routes; automatic provider sync and higher limits require a paid plan.
 
-Activity-history date pickers for Garmin, Suunto, COROS, and Wahoo default to the latest **30 calendar days**, including today. You can select a longer or shorter range before importing, subject to each provider's available-history limit.
+Activity-history date pickers for Garmin and Suunto default to the latest **2 calendar years** through today. COROS defaults to its full **3-month** provider limit, and Wahoo defaults to the latest **2 years**. You can select a longer or shorter range before importing, subject to each provider's available-history limit.
 
 ## Sleep data
 
@@ -983,7 +983,7 @@ Garmin history import has two important limits:
 - and only the latest rolling **5 years** of activity data. It does not support an arbitrary older five-year period.
 
 The history picker disables dates before the current five-year cutoff, and the server rejects an older range before contacting Garmin.
-The picker starts with the latest 30 calendar days selected. You can expand it to any allowed range before importing, including the full available five-year window.
+The picker starts with the latest two calendar years selected. You can expand it to any allowed range before importing, including the full available five-year window.
 
 Garmin can deliver imported activities gradually over hours or days.
 

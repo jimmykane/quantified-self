@@ -4,7 +4,7 @@ This document is the source of truth for the Suunto 24/7 Health ingestion added 
 
 Suunto 24/7 Health is available production-wide for active connected Suunto accounts. `functions/src/suunto/health-flags.ts` remains the source-controlled kill switch, independent from Suunto Sleep enablement. An authenticated App Check-protected callable returns the current Health availability so the History Import UI follows that switch without treating retained Health sync state as authorization.
 
-The separate Suunto activity-history picker defaults to the latest 30 calendar days including today. Users can select a longer or shorter range before submitting; this default does not change the Sleep and 24/7 Health history range policies below.
+The separate Suunto activity-history picker defaults to the latest two calendar years through today. Users can select a longer or shorter range before submitting; this default does not change the Sleep and 24/7 Health history range policies below.
 
 ## Provider contract
 

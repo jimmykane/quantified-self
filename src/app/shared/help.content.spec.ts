@@ -1002,7 +1002,9 @@ describe('help.content', () => {
     expect(serviceConnectionsSection?.content).toContain('**Manage in Garmin**');
     expect(serviceConnectionsSection?.content).toContain('You do not need to disconnect in QS first');
     expect(serviceConnectionsSection?.content).toContain('**Reconnect** is reserved for connection recovery');
-    expect(serviceConnectionsSection?.content).toContain('default to the latest **30 calendar days**');
+    expect(serviceConnectionsSection?.content).toContain('default to the latest **2 calendar years**');
+    expect(serviceConnectionsSection?.content).toContain('COROS defaults to its full **3-month** provider limit');
+    expect(serviceConnectionsSection?.content).toContain('Wahoo defaults to the latest **2 years**');
     expect(serviceConnectionsSection?.content).toContain('including the full available five-year window');
     expect(serviceConnectionsSection?.content).toContain('When a disconnect begins, automatic activity and saved-route delivery');
     expect(serviceConnectionsSection?.content).toContain('you do not need to keep the page open');

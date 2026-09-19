@@ -90,13 +90,13 @@
   <app-status-info [title]="garminCooldownDays + '-Day Cooldown • ' + garminHistoryLimitYears + '-Year History'">
     Garmin's API limits history imports to once per month. Dates before {{ minDate | date:'mediumDate' }} are disabled
     because Garmin only makes the latest {{ garminHistoryLimitYears }} years available. The picker starts with the latest
-    {{ historyImportDefaultRangeDays }} days selected; you can expand it to any allowed range before importing.
+    {{ historyImportDefaultRangeYears }} years selected; you can expand it to any allowed range before importing.
   </app-status-info>
   }
   @if (minDate && serviceName === serviceNames.COROSAPI) {
   <app-status-info [title]="corosHistoryLimitMonths + '-Month Import Limit'">
     Dates before {{ minDate | date:'mediumDate' }} are disabled in the picker due to API restrictions. The latest
-    {{ historyImportDefaultRangeDays }} days are selected by default, and you can expand the range up to this limit.
+    {{ corosHistoryLimitMonths }} months are selected by default, which is the full available range.
   </app-status-info>
   }
   <div class="date-fields">
