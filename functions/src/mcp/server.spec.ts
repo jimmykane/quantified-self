@@ -1,7 +1,11 @@
 import { AddressInfo } from 'node:net';
 import { createServer as createHttpServer } from 'node:http';
 import { NodeStreamableHTTPServerTransport } from '@modelcontextprotocol/node';
-import { InMemoryTransport, McpServer } from '@modelcontextprotocol/server';
+import {
+  CLIENT_CAPABILITIES_META_KEY,
+  InMemoryTransport,
+  McpServer,
+} from '@modelcontextprotocol/server';
 import { Client, StreamableHTTPClientTransport } from '@modelcontextprotocol/client';
 import { z } from 'zod';
 import { McpDataError } from './data.service';
@@ -32,6 +36,7 @@ import {
   resolvePublicBaseUrl,
   requireMcpTokenGrantType,
   sanitizeMcpProtocolVersionForDiagnostics,
+  summarizeMcpTrainingConfirmationDiagnostics,
   summarizeMcpOutputValidationIssues,
   supportsMcpTransportMethod,
 } from './server';
@@ -1640,6 +1645,49 @@ describe('MCP HTTP scope enforcement', () => {
     expect(classifyMcpBearerRejectionReason(
       new McpOAuthError('temporarily_unavailable', 'limited', 429),
     )).toBe('request_rate_limited');
+  });
+
+  it('summarizes Training confirmation capabilities and responses without retaining payloads', () => {
+    const envelope = {
+      [CLIENT_CAPABILITIES_META_KEY]: {
+        elicitation: { form: { privateCapability: 'private-capability-canary' } },
+        privateClientData: 'private-client-canary',
+      },
+      privateEnvelopeData: 'private-envelope-canary',
+    };
+    const accepted = summarizeMcpTrainingConfirmationDiagnostics(
+      envelope,
+      {
+        training_confirmation: {
+          action: 'accept',
+          content: { confirm: true, privateText: 'private-form-canary' },
+        },
+      },
+      { confirm: true },
+    );
+    expect(accepted).toEqual({
+      clientCapabilitiesEnvelope: true,
+      elicitationCapability: 'form',
+      inputResponseState: 'accepted_confirm',
+    });
+    expect(JSON.stringify(accepted)).not.toContain('canary');
+
+    expect(summarizeMcpTrainingConfirmationDiagnostics(
+      { [CLIENT_CAPABILITIES_META_KEY]: { elicitation: {} } },
+      { training_confirmation: { action: 'accept', content: { confirm: 'yes' } } },
+      undefined,
+    )).toEqual({
+      clientCapabilitiesEnvelope: true,
+      elicitationCapability: 'implicit_form',
+      inputResponseState: 'accepted_invalid',
+    });
+    expect(summarizeMcpTrainingConfirmationDiagnostics(undefined, {
+      training_confirmation: { action: 'decline', privateText: 'private-decline-canary' },
+    }, undefined)).toEqual({
+      clientCapabilitiesEnvelope: false,
+      elicitationCapability: 'missing',
+      inputResponseState: 'declined',
+    });
   });
 
   it('classifies Streamable HTTP rejections to a fixed safe vocabulary', () => {

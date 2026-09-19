@@ -1,6 +1,13 @@
 import { activitySampleResultBytes, MCP_ACTIVITY_SAMPLES_LIMITS } from './activity-samples.service';
 import { toNodeHandler } from '@modelcontextprotocol/node';
-import { acceptedContent, DEFAULT_NEGOTIATED_PROTOCOL_VERSION, inputRequired, McpServer, PROTOCOL_VERSION_META_KEY } from '@modelcontextprotocol/server';
+import {
+  acceptedContent,
+  CLIENT_CAPABILITIES_META_KEY,
+  DEFAULT_NEGOTIATED_PROTOCOL_VERSION,
+  inputRequired,
+  McpServer,
+  PROTOCOL_VERSION_META_KEY,
+} from '@modelcontextprotocol/server';
 import { onRequest, Request } from 'firebase-functions/v2/https';
 import * as logger from 'firebase-functions/logger';
 import { isIP } from 'node:net';
@@ -614,6 +621,86 @@ const TRAINING_APPLY_TOOL_ANNOTATIONS = {
 
 const TRAINING_CONFIRMATION_SCHEMA = z.strictObject({ confirm: z.boolean() });
 
+type TrainingWriteToolName =
+  | 'preview_create_planned_workout'
+  | 'preview_training_changes'
+  | 'apply_training_changes';
+
+type McpTrainingConfirmationDiagnostics = {
+  clientCapabilitiesEnvelope: boolean;
+  elicitationCapability: 'missing' | 'implicit_form' | 'form' | 'url' | 'form_and_url' | 'other';
+  inputResponseState:
+    | 'absent'
+    | 'accepted_confirm'
+    | 'accepted_decline'
+    | 'accepted_invalid'
+    | 'declined'
+    | 'cancelled'
+    | 'other';
+};
+
+function plainRecord(value: unknown): Record<string, unknown> | undefined {
+  return value !== null && typeof value === 'object' && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : undefined;
+}
+
+/**
+ * Temporary diagnostics for the native MCP multi-round-trip confirmation.
+ * Keep this deliberately lossy: no proposal, owner, connection, authored
+ * content, or raw client metadata may enter Cloud Logging.
+ */
+export function summarizeMcpTrainingConfirmationDiagnostics(
+  envelope: unknown,
+  inputResponses: unknown,
+  accepted: { confirm: boolean } | undefined,
+): McpTrainingConfirmationDiagnostics {
+  const capabilities = plainRecord(plainRecord(envelope)?.[CLIENT_CAPABILITIES_META_KEY]);
+  const elicitation = plainRecord(capabilities?.elicitation);
+  let elicitationCapability: McpTrainingConfirmationDiagnostics['elicitationCapability'] = 'missing';
+  if (elicitation) {
+    const keys = Object.keys(elicitation);
+    const hasForm = plainRecord(elicitation.form) !== undefined;
+    const hasUrl = plainRecord(elicitation.url) !== undefined;
+    if (keys.length === 0) elicitationCapability = 'implicit_form';
+    else if (hasForm && hasUrl) elicitationCapability = 'form_and_url';
+    else if (hasForm) elicitationCapability = 'form';
+    else if (hasUrl) elicitationCapability = 'url';
+    else elicitationCapability = 'other';
+  }
+
+  const response = plainRecord(plainRecord(inputResponses)?.training_confirmation);
+  let inputResponseState: McpTrainingConfirmationDiagnostics['inputResponseState'] = 'absent';
+  if (accepted) inputResponseState = accepted.confirm ? 'accepted_confirm' : 'accepted_decline';
+  else if (response?.action === 'accept') inputResponseState = 'accepted_invalid';
+  else if (response?.action === 'decline') inputResponseState = 'declined';
+  else if (response?.action === 'cancel') inputResponseState = 'cancelled';
+  else if (response) inputResponseState = 'other';
+
+  return {
+    clientCapabilitiesEnvelope: capabilities !== undefined,
+    elicitationCapability,
+    inputResponseState,
+  };
+}
+
+function trainingWriteToolName(body: unknown): TrainingWriteToolName | undefined {
+  const record = plainRecord(body);
+  if (record?.method !== 'tools/call') return undefined;
+  const name = plainRecord(record.params)?.name;
+  return name === 'preview_create_planned_workout'
+    || name === 'preview_training_changes'
+    || name === 'apply_training_changes'
+    ? name
+    : undefined;
+}
+
+function trainingWriteErrorKind(error: unknown): string {
+  if (error instanceof McpDataError) return error.code;
+  if (error instanceof z.ZodError) return 'output_validation';
+  return 'unexpected';
+}
+
 function createReadOnlyToolRunner(outputSchemas: McpOutputSchemaRegistry) {
   return async (
     name: PublicMcpToolName,
@@ -801,9 +888,14 @@ export function createMcpServer(
   });
   const runReadOnlyTool = createReadOnlyToolRunner(outputSchemas);
   const runTrainingWriteTool = async (
-    name: 'preview_create_planned_workout' | 'preview_training_changes' | 'apply_training_changes',
+    name: TrainingWriteToolName,
     operation: () => Promise<unknown>,
   ) => {
+    logger.info('[MCP TEMP] Training write lifecycle', {
+      toolName: name,
+      stage: 'operation_started',
+      supportsInputRequired: supportsWriteConfirmation,
+    });
     try {
       const projected = await operation();
       const validated = await outputSchemas[name].parseAsync(projected);
@@ -811,8 +903,19 @@ export function createMcpServer(
       if (Buffer.byteLength(JSON.stringify(result), 'utf8') > 256 * 1024 - 1024) {
         throw new McpDataError('query_too_large', 'The Training change result exceeds the MCP response limit. Split it into smaller proposals.');
       }
+      logger.info('[MCP TEMP] Training write lifecycle', {
+        toolName: name,
+        stage: 'operation_completed',
+        supportsInputRequired: supportsWriteConfirmation,
+      });
       return result;
     } catch (error) {
+      logger.info('[MCP TEMP] Training write lifecycle', {
+        toolName: name,
+        stage: 'operation_failed',
+        supportsInputRequired: supportsWriteConfirmation,
+        errorKind: trainingWriteErrorKind(error),
+      });
       return formatMcpToolError(error);
     }
   };
@@ -913,11 +1016,40 @@ export function createMcpServer(
       outputSchema: outputSchemas.apply_training_changes,
       annotations: TRAINING_APPLY_TOOL_ANNOTATIONS,
     }, async (input, context) => {
-      const confirmation = await dataService.getTrainingProposalConfirmation({
-        arguments: input, uid: auth.uid, connectionId: auth.connectionId, scopes: auth.scopes,
-      });
       const accepted = acceptedContent(context.mcpReq.inputResponses, 'training_confirmation', TRAINING_CONFIRMATION_SCHEMA);
+      const diagnostics = summarizeMcpTrainingConfirmationDiagnostics(
+        context.mcpReq.envelope,
+        context.mcpReq.inputResponses,
+        accepted,
+      );
+      logger.info('[MCP TEMP] Training confirmation lifecycle', {
+        toolName: 'apply_training_changes',
+        stage: 'handler_entered',
+        supportsInputRequired: supportsWriteConfirmation,
+        ...diagnostics,
+      });
+      let confirmation;
+      try {
+        confirmation = await dataService.getTrainingProposalConfirmation({
+          arguments: input, uid: auth.uid, connectionId: auth.connectionId, scopes: auth.scopes,
+        });
+      } catch (error) {
+        logger.info('[MCP TEMP] Training confirmation lifecycle', {
+          toolName: 'apply_training_changes',
+          stage: 'confirmation_lookup_failed',
+          supportsInputRequired: supportsWriteConfirmation,
+          ...diagnostics,
+          errorKind: trainingWriteErrorKind(error),
+        });
+        throw error;
+      }
       if (!accepted) {
+        logger.info('[MCP TEMP] Training confirmation lifecycle', {
+          toolName: 'apply_training_changes',
+          stage: 'input_required_returned',
+          supportsInputRequired: supportsWriteConfirmation,
+          ...diagnostics,
+        });
         return inputRequired({ inputRequests: {
           training_confirmation: inputRequired.elicit({
             message: confirmation.message,
@@ -931,11 +1063,23 @@ export function createMcpServer(
         } });
       }
       if (!accepted.confirm) {
+        logger.info('[MCP TEMP] Training confirmation lifecycle', {
+          toolName: 'apply_training_changes',
+          stage: 'confirmation_declined',
+          supportsInputRequired: supportsWriteConfirmation,
+          ...diagnostics,
+        });
         return formatMcpToolError(new McpDataError(
           'invalid_request',
           'The Training proposal was declined. Nothing was changed.',
         ));
       }
+      logger.info('[MCP TEMP] Training confirmation lifecycle', {
+        toolName: 'apply_training_changes',
+        stage: 'confirmation_accepted',
+        supportsInputRequired: supportsWriteConfirmation,
+        ...diagnostics,
+      });
       return runTrainingWriteTool('apply_training_changes', () => dataService.applyTrainingChanges({
         arguments: input, uid: auth.uid, connectionId: auth.connectionId, scopes: auth.scopes,
       }));
@@ -2404,6 +2548,17 @@ export const mcpApi = onRequest(MCP_API_RUNTIME_OPTIONS, async (request, respons
       id: null,
     });
     return;
+  }
+
+  const diagnosticTrainingWriteTool = trainingWriteToolName(request.body);
+  if (diagnosticTrainingWriteTool) {
+    logger.info('[MCP TEMP] Training write request received', {
+      toolName: diagnosticTrainingWriteTool,
+      clientFamily: classifyMcpDiagnosticClientFamily(request.get('user-agent')),
+      protocolVersion: sanitizeMcpProtocolVersionForDiagnostics(
+        request.get('mcp-protocol-version'),
+      ),
+    });
   }
 
   const invalidTrainingPreview = invalidTrainingPreviewTool(request.body);

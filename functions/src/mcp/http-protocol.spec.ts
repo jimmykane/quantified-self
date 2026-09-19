@@ -258,6 +258,21 @@ describe('MCP Function protocol compatibility', () => {
     expect(warn).toHaveBeenCalledWith('[MCP] Repeated invalid Training preview blocked', {
       toolName: 'preview_training_changes',
     });
+    const requestDiagnostics = info.mock.calls.filter(
+      ([message]) => message === '[MCP TEMP] Training write request received',
+    );
+    expect(requestDiagnostics).toHaveLength(4);
+    expect(requestDiagnostics).toEqual(Array.from({ length: 4 }, () => [
+      '[MCP TEMP] Training write request received',
+      {
+        toolName: 'preview_training_changes',
+        clientFamily: 'claude',
+        protocolVersion: VERSION,
+      },
+    ]));
+    expect(JSON.stringify(requestDiagnostics)).not.toMatch(
+      /protocol-user|protocol-connection|invented-operation|expectedScheduleRevision/,
+    );
     expect(JSON.stringify(warn.mock.calls)).not.toMatch(/protocol-user|protocol-connection|invented-operation/);
   });
 
