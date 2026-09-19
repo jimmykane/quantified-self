@@ -276,4 +276,30 @@ describe('McpConnectionsComponent', () => {
       { duration: 4000 },
     );
   });
+
+  it('ends loading and allows retry when MCP connections cannot be loaded', async () => {
+    functions.call.mockRejectedValueOnce(new Error('App Check is taking too long'));
+    const fixture = TestBed.createComponent(McpConnectionsComponent);
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    expect(fixture.componentInstance.loading()).toBe(false);
+    expect(fixture.componentInstance.error()).toBe('Could not load MCP connections.');
+  });
+
+  it('re-enables disconnect after a failed request', async () => {
+    const fixture = TestBed.createComponent(McpConnectionsComponent);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    functions.call.mockRejectedValueOnce(new Error('App Check is taking too long'));
+
+    await fixture.componentInstance.revoke(connection);
+
+    expect(fixture.componentInstance.revokingConnectionId()).toBeNull();
+    expect(snackBar.open).toHaveBeenCalledWith(
+      'Could not disconnect this MCP client. Please try again.',
+      undefined,
+      { duration: 5000 },
+    );
+  });
 });
