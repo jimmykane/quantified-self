@@ -74,6 +74,42 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Training MCP write propos
     ]);
   });
 
+  it('previews focused standalone creation and provider delivery atomically', async () => {
+    const preview = await previewCreatePlannedWorkout({
+      uid,
+      connectionId: 'connection',
+      scopes,
+      arguments: {
+        expectedScheduleRevision: 1,
+        localDate: '2026-09-18',
+        title: 'Focused delivered run',
+        structure,
+        delivery: { providers: ['garmin'], timeZone: 'Europe/Helsinki' },
+      },
+    }, deps);
+    expect(preview).toMatchObject({
+      permissionMode: 'combined',
+      requiresConfirmation: true,
+      changes: [
+        { index: 0, kind: 'create-workout' },
+        { index: 1, kind: 'provider-delivery' },
+      ],
+      providerPreviews: [{ index: 1, provider: 'garmin', availability: 'ready' }],
+    });
+    const applied = await applyTrainingChanges({
+      uid,
+      connectionId: 'connection',
+      scopes,
+      arguments: { proposalRef: preview.proposalRef, permissionMode: 'combined' },
+    }, deps);
+    expect(applied.createdReferences).toEqual([
+      expect.objectContaining({ localKey: 'created_workout', kind: 'workout' }),
+    ]);
+    expect(applied.providers).toEqual([
+      expect.objectContaining({ provider: 'garmin', status: 'applied' }),
+    ]);
+  });
+
   it('creates a standalone workout, fans out only to ready providers and applies idempotently', async () => {
     const preview = await previewCreateAndSend();
     expect(preview.providerPreviews.map(item => [item.provider, item.availability])).toEqual([

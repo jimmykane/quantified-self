@@ -1257,6 +1257,7 @@ const successfulToolArguments: Record<
     structure: { version: 1, sport: 'Running', nodes: [{
       kind: 'step', id: 'easy', purpose: 'work', ending: { kind: 'time', seconds: 1800 }, targets: [],
     }] },
+    delivery: { providers: ['garmin'], timeZone: 'Europe/Helsinki' },
   },
   preview_training_changes: { expectedScheduleRevision: 1, changes: [{
     kind: 'rename-plan', plan: { ref: 'opaque-plan-reference' }, name: 'Autumn build',

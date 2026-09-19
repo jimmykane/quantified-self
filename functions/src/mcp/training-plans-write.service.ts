@@ -712,7 +712,14 @@ export async function previewCreatePlannedWorkout(
         localDate: parsed.data.localDate,
         title: parsed.data.title,
         structure: parsed.data.structure,
-      }],
+      }, ...(parsed.data.delivery ? [{
+        kind: 'provider-delivery' as const,
+        targetType: 'workout' as const,
+        target: { localKey: 'created_workout' },
+        providers: parsed.data.delivery.providers,
+        action: 'send' as const,
+        timeZone: parsed.data.delivery.timeZone,
+      }] : [])],
     },
   }, provided);
 }

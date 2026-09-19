@@ -46,10 +46,15 @@ import { MCP_TIMELINE_NOTES_LIMITS } from './timeline-notes.service';
 import {
   TRAINING_READ_INPUTS,
   TRAINING_READ_TOOLS,
+  TRAINING_CREATE_WORKOUT_INPUT_WITHOUT_DELIVERY,
   TRAINING_WRITE_INPUTS,
 } from './training-plans.schemas';
 import { createMcpTransportHandler } from './transport';
-import { buildTemporaryTrainingRequestDiagnostic } from './temporary-training-diagnostics';
+import {
+  consumeInvalidTrainingPreviewAttempt,
+  invalidTrainingPreviewTool,
+  McpTrainingPreviewLoopGuardError,
+} from './training-preview-loop-guard';
 
 const defaultDataService = createMcpDataService();
 let oauthService: ReturnType<typeof createMcpOAuthService> | null = null;
@@ -735,7 +740,10 @@ function buildMcpServerInstructions(auth: AuthenticatedMcpRequest): string {
     if (!trainingChangesAvailable) {
       instructions.push(`${readGuidance} No planning edits or provider actions are available.`);
     } else if (auth.scopes.includes(MCP_OAUTH_SCOPES.TrainingPlansWrite)) {
-      instructions.push(`${readGuidance} Construct workout recipes only from the advertised v1 schema, using stable unique node IDs and canonical seconds, metres, kilojoules, bpm, watts, metres per second, rpm and percentage points. Pace is still stored as metres per second with pace presentation. Never invent a threshold or relative-target reference snapshot; ask when required authored inputs are missing. For one new workout, read the current schedule revision and use preview_create_planned_workout exactly once with the complete workout; do not use the batch tool. Use preview_training_changes once only for other or genuinely multi-change requests. Present preview effects, and use apply_training_changes only through its explicit confirmation request. Never retry a rejected preview unchanged, imply that a preview changed data, or claim provider delivery succeeded before the apply result says so.`);
+      const focusedCreateGuidance = auth.scopes.includes(MCP_OAUTH_SCOPES.TrainingDeliveryWrite)
+        ? 'include its optional delivery object when the same workout should be sent immediately to providers'
+        : 'provider delivery is not available on this connection, so do not add delivery input';
+      instructions.push(`${readGuidance} Construct workout recipes only from the advertised v1 schema, using stable unique node IDs and canonical seconds, metres, kilojoules, bpm, watts, metres per second, rpm and percentage points. Pace is still stored as metres per second with pace presentation. Never invent a threshold or relative-target reference snapshot; ask when required authored inputs are missing. For one new workout, read the current schedule revision and use preview_create_planned_workout exactly once; ${focusedCreateGuidance}. Do not use the batch tool for either case. Use preview_training_changes once only for other or genuinely multi-change requests. Present preview effects, and use apply_training_changes only through its explicit confirmation request. Never retry a rejected preview unchanged, imply that a preview changed data, or claim provider delivery succeeded before the apply result says so.`);
     } else {
       instructions.push(`${readGuidance} Only provider-delivery changes are available. Use preview_training_changes once with complete input, present its effects, and use apply_training_changes only through its explicit confirmation request. Never retry a rejected preview unchanged or claim delivery succeeded before the apply result says so.`);
     }
@@ -873,10 +881,15 @@ export function createMcpServer(
     && (auth.scopes.includes(MCP_OAUTH_SCOPES.TrainingPlansWrite)
       || auth.scopes.includes(MCP_OAUTH_SCOPES.TrainingDeliveryWrite))) {
     if (auth.scopes.includes(MCP_OAUTH_SCOPES.TrainingPlansWrite)) {
+      const canDeliverCreatedWorkout = auth.scopes.includes(MCP_OAUTH_SCOPES.TrainingDeliveryWrite);
       registerMcpTool(server, 'preview_create_planned_workout', {
         title: 'Preview a new planned workout',
-        description: 'Use for one new standalone or plan-associated workout. Provide the current schedule revision and the complete canonical workout recipe. Quantified Self supplies its internal proposal key. This validates and previews only; the workout is created only after apply_training_changes receives explicit confirmation.',
-        inputSchema: TRAINING_WRITE_INPUTS.preview_create_planned_workout,
+        description: canDeliverCreatedWorkout
+          ? 'Use for one new standalone or plan-associated workout, with optional immediate delivery to selected or all connected providers. Provide the current schedule revision, complete canonical recipe, and an IANA time zone when delivery is requested. Quantified Self supplies its internal proposal key and previews the authored and delivery effects atomically. Nothing changes until apply_training_changes receives explicit confirmation.'
+          : 'Use for one new standalone or plan-associated workout. Provide the current schedule revision and complete canonical recipe. This connection has no provider-delivery permission, so delivery input is not advertised. Quantified Self supplies its internal proposal key. Nothing changes until apply_training_changes receives explicit confirmation.',
+        inputSchema: canDeliverCreatedWorkout
+          ? TRAINING_WRITE_INPUTS.preview_create_planned_workout
+          : TRAINING_CREATE_WORKOUT_INPUT_WITHOUT_DELIVERY,
         outputSchema: outputSchemas.preview_create_planned_workout,
         annotations: TRAINING_PREVIEW_TOOL_ANNOTATIONS,
         inputSchemaReuse: 'ref',
@@ -1867,7 +1880,8 @@ export function requiredScopesForRequest(body: unknown): McpOAuthScope[] {
   if (toolName === 'query_timeline_notes') return [MCP_OAUTH_SCOPES.TimelineNotesRead];
   if ((TRAINING_READ_TOOLS as readonly string[]).includes(toolName)) return [MCP_OAUTH_SCOPES.TrainingPlansRead];
   if (toolName === 'preview_create_planned_workout') {
-    return [MCP_OAUTH_SCOPES.TrainingPlansRead, MCP_OAUTH_SCOPES.TrainingPlansWrite];
+    return [MCP_OAUTH_SCOPES.TrainingPlansRead, MCP_OAUTH_SCOPES.TrainingPlansWrite,
+      ...(toolArguments.delivery ? [MCP_OAUTH_SCOPES.TrainingDeliveryWrite] : [])];
   }
   if (toolName === 'preview_training_changes') {
     const changes = Array.isArray(toolArguments.changes) ? toolArguments.changes : [];
@@ -2392,9 +2406,39 @@ export const mcpApi = onRequest(MCP_API_RUNTIME_OPTIONS, async (request, respons
     return;
   }
 
-  const temporaryTrainingDiagnostic = buildTemporaryTrainingRequestDiagnostic(request.body);
-  if (temporaryTrainingDiagnostic) {
-    logger.info('[MCP TEMP] Training write request received', temporaryTrainingDiagnostic);
+  const invalidTrainingPreview = invalidTrainingPreviewTool(request.body);
+  if (invalidTrainingPreview) {
+    try {
+      await consumeInvalidTrainingPreviewAttempt(auth.uid, auth.connectionId);
+    } catch (error) {
+      if (error instanceof McpTrainingPreviewLoopGuardError) {
+        logger.warn('[MCP] Repeated invalid Training preview blocked', {
+          toolName: invalidTrainingPreview,
+        });
+        response.set('Retry-After', `${error.retryAfterSeconds}`);
+        const requestId = typeof request.body?.id === 'string' || typeof request.body?.id === 'number'
+          ? request.body.id
+          : null;
+        response.status(429).json({
+          jsonrpc: '2.0',
+          error: {
+            code: -32029,
+            message: 'Training preview paused after repeated invalid arguments. Do not retry this request. Read the current Training state and make one fresh preview with complete advertised input; for one new workout use preview_create_planned_workout.',
+          },
+          id: requestId,
+        });
+        return;
+      }
+      logger.error('[MCP] Training preview loop guard failed', {
+        errorName: error instanceof Error ? error.name : 'unknown',
+      });
+      response.status(503).json({
+        jsonrpc: '2.0',
+        error: { code: -32603, message: 'Training preview is temporarily unavailable.' },
+        id: null,
+      });
+      return;
+    }
   }
 
   let readProtocolVersion = (): string | undefined => undefined;

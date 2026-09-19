@@ -31,9 +31,14 @@ send never rolls back a successfully authored standalone workout.
 
 Single-workout creation has an additive focused MCP preview. The caller supplies the current schedule revision, optional
 plan reference, calendar date, title and complete canonical recipe; the server supplies the proposal-local key and routes
-the result through the same proposal, confirmation and idempotent apply boundary. It intentionally excludes provider
-delivery and the batch operation union. Clients use the existing batch preview for edits, provider actions and genuinely
-multi-change requests, and must not retry rejected input unchanged. Repeated recipe components are advertised through
+the result through the same proposal, confirmation and idempotent apply boundary. When the same new workout should be
+sent immediately, an optional delivery object adds selected/all-connected providers and an explicit IANA time zone; this
+also requires the independent delivery-write grant. Connections without that grant are advertised a focused schema with
+no delivery field. It intentionally excludes the batch operation union. Clients use the
+existing batch preview for edits, later provider actions and genuinely multi-change requests, and must not retry rejected
+input unchanged. Repeated malformed previews are stopped after three per connection per minute (six per owner) with a
+ten-minute invalid-call cooldown and retryable HTTP boundary; correctly formed previews remain available, so a client
+schema failure cannot run indefinitely. Repeated recipe components are advertised through
 draft-07 references to keep the complete strict recipe inside the existing Training write-metadata budget; runtime Zod
 validation and the public recipe coverage gate remain identical.
 

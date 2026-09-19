@@ -168,6 +168,30 @@ describe('Strict Training write proposal contract', () => {
     }).success).toBe(false);
   });
 
+  it('adds optional focused delivery without client-owned linking fields', () => {
+    const input = {
+      expectedScheduleRevision: 1,
+      localDate: '2026-09-18',
+      title: 'Easy run',
+      structure: recipe({ kind: 'time', seconds: 1800 }),
+      delivery: { providers: ['garmin'], timeZone: 'Europe/Helsinki' },
+    };
+    expect(TRAINING_WRITE_INPUTS.preview_create_planned_workout.parse(input)).toMatchObject({
+      ...input,
+      planRef: null,
+    });
+    expect(TRAINING_WRITE_INPUTS.preview_create_planned_workout.safeParse({
+      ...input,
+      kind: 'create-workout',
+      localKey: 'client-owned-key',
+      target: { localKey: 'client-owned-key' },
+    }).success).toBe(false);
+    expect(TRAINING_WRITE_INPUTS.preview_create_planned_workout.safeParse({
+      ...input,
+      delivery: { providers: ['garmin'], timeZone: '' },
+    }).success).toBe(false);
+  });
+
   it('accepts only the bounded safe lifecycle and explicit provider actions', () => {
     expect(TRAINING_CHANGE_SCHEMA.safeParse({ kind: 'create-workout', localKey: 'run', plan: null,
       localDate: '2026-09-18', title: 'Easy run', structure: recipe({ kind: 'time', seconds: 1800 }) }).success).toBe(true);

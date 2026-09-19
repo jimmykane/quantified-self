@@ -231,13 +231,22 @@ const appliedChange = z.strictObject({ index: count.max(24), kind: z.string().mi
 const providerResult = z.strictObject({ index: count.max(24), provider: z.enum(PLANNED_WORKOUT_PROVIDER_IDS),
   status: z.enum(['queued', 'applied', 'already_applied', 'blocked', 'failed']), message: z.string().min(1).max(500) });
 
+const focusedWorkoutPreviewInput = {
+  expectedScheduleRevision: count,
+  planRef: ref.nullable().default(null),
+  localDate: trainingDate,
+  title: z.string().trim().min(1).max(120),
+  structure: TRAINING_RECIPE_SCHEMA,
+};
+export const TRAINING_CREATE_WORKOUT_INPUT_WITHOUT_DELIVERY = z.strictObject(focusedWorkoutPreviewInput);
+
 export const TRAINING_WRITE_INPUTS = {
   preview_create_planned_workout: z.strictObject({
-    expectedScheduleRevision: count,
-    planRef: ref.nullable().default(null),
-    localDate: trainingDate,
-    title: z.string().trim().min(1).max(120),
-    structure: TRAINING_RECIPE_SCHEMA,
+    ...focusedWorkoutPreviewInput,
+    delivery: z.strictObject({
+      providers,
+      timeZone: z.string().min(1).max(100),
+    }).optional(),
   }),
   preview_training_changes: z.strictObject({
     expectedScheduleRevision: count,

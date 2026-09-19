@@ -97,8 +97,11 @@ horizon and compatibility gated.
 ### Workout recipe authoring
 
 Use the live advertised input schemas as the authority; never guess an unadvertised field or variant. Prefer the focused
-single-workout preview when creating exactly one workout. Use the batch preview only for edits, delivery actions, or
-genuinely multi-change requests, and never retry rejected input unchanged.
+single-workout preview when creating exactly one workout. When that new workout should also be sent, put the selected or
+all-connected providers and explicit IANA time zone in its advertised optional delivery object; do not synthesize a
+two-change batch. Use the batch preview only for edits, later delivery actions, or genuinely multi-change requests, and
+never retry rejected input unchanged. If the server pauses repeated malformed previews, stop and explain the validation
+failure instead of retrying during the `Retry-After` window.
 Translate the workout the user actually requested rather than silently prescribing a different session. Preserve an
 existing structure when the requested edit only changes its title, date or association.
 
@@ -126,9 +129,9 @@ Intervals keep work and recovery steps inside one fixed repeat, for example:
 {"version":1,"sport":"Running","nodes":[{"kind":"step","id":"warmup","purpose":"warmup","ending":{"kind":"time","seconds":600},"targets":[]},{"kind":"repeat","id":"main-set","count":6,"steps":[{"kind":"step","id":"hard","purpose":"work","ending":{"kind":"time","seconds":180},"targets":[{"kind":"heart-rate","mode":"absolute","minimumBpm":150,"maximumBpm":165}]},{"kind":"step","id":"easy","purpose":"recovery","ending":{"kind":"time","seconds":120},"targets":[]}]},{"kind":"step","id":"cooldown","purpose":"cooldown","ending":{"kind":"time","seconds":600},"targets":[]}]}
 ```
 
-For a new standalone workout that should also be sent, create it with a local key and target that same local key in a
-later provider-delivery change in the one proposal. Preview still changes nothing; the confirmed apply remains the only
-mutation boundary.
+For a new standalone workout that should also be sent, use the focused preview's optional delivery object. The server
+owns the local linking key and builds the authored and delivery changes atomically. Preview still changes nothing; the
+confirmed apply remains the only mutation boundary.
 
 Present the returned authored and per-provider effects faithfully. Preview is not application. Invoke the apply tool only
 through the server's explicit confirmation request and only after the user accepts; clients without that confirmation

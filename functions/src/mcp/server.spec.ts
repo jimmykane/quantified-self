@@ -319,6 +319,13 @@ describe('MCP HTTP scope enforcement', () => {
     expect(requiredScopesForRequest({ method: 'tools/call', params: {
       name: 'preview_create_planned_workout', arguments: { expectedScheduleRevision: 1 },
     } })).toEqual([MCP_OAUTH_SCOPES.TrainingPlansRead, MCP_OAUTH_SCOPES.TrainingPlansWrite]);
+    expect(requiredScopesForRequest({ method: 'tools/call', params: {
+      name: 'preview_create_planned_workout', arguments: {
+        expectedScheduleRevision: 1,
+        delivery: { providers: ['garmin'], timeZone: 'Europe/Helsinki' },
+      },
+    } })).toEqual([MCP_OAUTH_SCOPES.TrainingPlansRead, MCP_OAUTH_SCOPES.TrainingPlansWrite,
+      MCP_OAUTH_SCOPES.TrainingDeliveryWrite]);
     expect(requiredScopesForRequest({ method: 'tools/call', params: { name: 'preview_training_changes', arguments: {
       expectedScheduleRevision: 1, changes: [{ kind: 'rename-plan' }],
     } } })).toEqual([MCP_OAUTH_SCOPES.TrainingPlansRead, MCP_OAUTH_SCOPES.TrainingPlansWrite]);
@@ -701,9 +708,18 @@ describe('MCP HTTP scope enforcement', () => {
     ]);
     expect(writeInstructions).toContain('Construct workout recipes only from the advertised v1 schema');
     expect(writeInstructions).toContain('use preview_create_planned_workout exactly once');
+    expect(writeInstructions).toContain('provider delivery is not available on this connection');
     expect(writeInstructions).toContain('Never retry a rejected preview unchanged');
     expect(writeInstructions).toContain('Pace is still stored as metres per second with pace presentation');
     expect(writeInstructions).toContain('Never invent a threshold or relative-target reference snapshot');
+
+    const combinedWriteInstructions = await readInstructions([
+      MCP_OAUTH_SCOPES.TrainingPlansRead,
+      MCP_OAUTH_SCOPES.TrainingPlansWrite,
+      MCP_OAUTH_SCOPES.TrainingDeliveryWrite,
+    ]);
+    expect(combinedWriteInstructions).toContain('optional delivery object');
+    expect(combinedWriteInstructions).not.toContain('provider delivery is not available on this connection');
 
     const readInstructionsOnly = await readInstructions([MCP_OAUTH_SCOPES.TrainingPlansRead]);
     expect(readInstructionsOnly).not.toContain('Construct workout recipes');
@@ -733,6 +749,7 @@ describe('MCP HTTP scope enforcement', () => {
         'expectedScheduleRevision', 'localDate', 'title', 'structure',
       ]);
       expect(tool?.inputSchema.properties).toHaveProperty('planRef');
+      expect(tool?.inputSchema.properties).not.toHaveProperty('delivery');
       expect(tool?.inputSchema.properties).not.toHaveProperty('kind');
       expect(tool?.inputSchema.properties).not.toHaveProperty('localKey');
       expect(tool?.inputSchema.properties).not.toHaveProperty('changes');
@@ -743,6 +760,28 @@ describe('MCP HTTP scope enforcement', () => {
       await server.close();
     }
   });
+
+  it('advertises focused initial delivery only when its independent grant is present', async () => {
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+    const server = createMcpServer({
+      uid: 'user-1', clientId: 'https://client.example/mcp.json', connectionId: 'connection-1',
+      scopes: [MCP_OAUTH_SCOPES.TrainingPlansRead, MCP_OAUTH_SCOPES.TrainingPlansWrite,
+        MCP_OAUTH_SCOPES.TrainingDeliveryWrite],
+    }, 'https://quantified-self.io');
+    const client = new Client({ name: 'focused-workout-delivery-contract-client', version: '1.0.0' });
+    try {
+      await server.connect(serverTransport);
+      await client.connect(clientTransport);
+      const tool = (await client.listTools()).tools.find(item => item.name === 'preview_create_planned_workout');
+      expect(tool?.inputSchema.properties).toHaveProperty('delivery');
+      expect(JSON.stringify(tool?.inputSchema.properties?.delivery)).toContain('all_connected');
+      expect(JSON.stringify(tool?.inputSchema.properties?.delivery)).toContain('timeZone');
+    } finally {
+      await client.close();
+      await server.close();
+    }
+  });
+
 
   it('requires a modern MCP confirmation round and applies only an accepted Training proposal', async () => {
     const preview = {
