@@ -53,8 +53,12 @@ evidence is not success. Assistant consent/routing is described in [Assistant](a
 
 Two child scopes add mutations without broadening reads: `training-plans:write` covers the bounded safe plan/workout
 lifecycle and `training-delivery:write` covers provider delivery controls. Either requires `training-plans:read`; existing
-connections must reauthorize and refresh cannot add either scope. `preview_training_changes` accepts at most 25 strict
-ordered changes and creates no authored or provider state. `apply_training_changes` consumes the opaque proposal only
+connections must reauthorize and refresh cannot add either scope. `preview_create_planned_workout` is the preferred
+single-workout path: it requires the current schedule revision plus one complete canonical recipe, while the server owns
+the proposal-local key. It deliberately has no operation union and does not accept provider delivery. The existing
+`preview_training_changes` remains the batch/non-create path, accepts at most 25 strict ordered changes, and must not be
+retried unchanged after validation rejects it. Neither preview creates authored or provider state.
+`apply_training_changes` consumes the opaque proposal only
 after the MCP server receives an explicit input-required confirmation. Clients on the legacy transport never receive the
 apply tool. A proposal is owner-, connection-, grant-, revision- and expiry-bound; replay returns its persisted terminal
 result. Permanent workout deletion, plan deletion and history restoration are deliberately absent.
@@ -65,7 +69,8 @@ by preview; explicit providers return independent blocked/success results. Pro, 
 connection, completion and provider readiness checks remain authoritative. Provider failure never rolls back authored
 schedule changes, and MCP itself makes no direct provider HTTP request.
 
-The built-in Assistant exposes only preview to Gemini. One bounded proposal is stored with the current conversation and
+The built-in Assistant exposes only the applicable focused/batch previews to Gemini. It prefers the focused tool for one
+new workout and the batch tool for other or genuinely multi-change requests. One bounded proposal is stored with the current conversation and
 rendered in a compact review surface; a separate Auth + App Check callable applies or dismisses it after the user's click.
 The opaque reference and data-boundary authorization include the conversation generation and its three independent
 Training toggles. New chat and permission changes invalidate stale proposals.
@@ -617,6 +622,7 @@ The analytics and map entries follow the
 | `get_planned_workout` | `training-plans:read` | Complete validated canonical v1 instructions plus owner-unit display text |
 | `get_training_sync_status` | `training-plans:read` | Existing local delivery evidence, with whole-plan counts only for complete reads |
 | `get_planned_workout_completion` | `training-plans:read`; optional activity ref also requires `activity-details:read` | Exact current persisted completion link; no inferred matching |
+| `preview_create_planned_workout` | `training-plans:read` + `training-plans:write` | Focused one-workout proposal; server-owned local key and no provider action |
 | `preview_training_changes` | `training-plans:read` plus the relevant Training write scope(s) | Strict bounded proposal with authored and per-provider effects; no authored mutation |
 | `apply_training_changes` | Same scopes bound into the proposal; modern confirmation-capable transport only | Idempotently applies a confirmed proposal and returns independent authored/provider outcomes |
 | `list_health_metrics` | `health:read` | Static allowlisted Health capabilities, Sports Lib types/units, range limits and additional body-composition permission requirements |

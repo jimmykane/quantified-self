@@ -29,8 +29,16 @@ preview/read-only. Proposals expire after 15 minutes, bind owner, OAuth connecti
 creation time, and retain an idempotent terminal result for safe retries. Provider outcomes are independent: a failed
 send never rolls back a successfully authored standalone workout.
 
+Single-workout creation has an additive focused MCP preview. The caller supplies the current schedule revision, optional
+plan reference, calendar date, title and complete canonical recipe; the server supplies the proposal-local key and routes
+the result through the same proposal, confirmation and idempotent apply boundary. It intentionally excludes provider
+delivery and the batch operation union. Clients use the existing batch preview for edits, provider actions and genuinely
+multi-change requests, and must not retry rejected input unchanged. Repeated recipe components are advertised through
+draft-07 references to keep the complete strict recipe inside the existing Training write-metadata budget; runtime Zod
+validation and the public recipe coverage gate remain identical.
+
 The built-in Assistant has separate default-off **Training plans**, **Plan and workout changes**, and **Planned-workout
-sync changes** choices. Only the preview tool enters Gemini context. The model cannot apply changes; Quantified Self
+sync changes** choices. Only applicable focused/batch preview tools enter Gemini context. The model cannot apply changes; Quantified Self
 stores one bounded proposal under the current server-owned conversation and the user must apply or dismiss it in the app.
 Proposal references bind the exact conversation generation, so permission changes, New chat, stale tabs and account
 switches cannot reuse them. The dedicated App Check callable rechecks the conversation before applying and clears the

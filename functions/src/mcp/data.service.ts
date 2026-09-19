@@ -6248,6 +6248,11 @@ export function createMcpDataService(
       return previewTrainingChanges(input);
     },
 
+    async previewCreatePlannedWorkout(input: import('./training-plans-write.service').TrainingWriteInput) {
+      const { previewCreatePlannedWorkout } = await import('./training-plans-write.service');
+      return previewCreatePlannedWorkout(input);
+    },
+
     async getTrainingProposalConfirmation(input: import('./training-plans-write.service').TrainingWriteInput) {
       const { getTrainingProposalConfirmation } = await import('./training-plans-write.service');
       return getTrainingProposalConfirmation(input);

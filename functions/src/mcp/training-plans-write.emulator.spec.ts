@@ -4,7 +4,8 @@ import { ActivityTypes } from '@sports-alliance/sports-lib';
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 import type { DeliveryRuntime } from '../training-plans/delivery/contracts';
 import { FakeTrainingTransport } from '../training-plans/delivery/test-support/fake-transport';
-import { applyTrainingChanges, previewTrainingChanges, type TrainingWriteDependencies } from './training-plans-write.service';
+import { applyTrainingChanges, previewCreatePlannedWorkout, previewTrainingChanges,
+  type TrainingWriteDependencies } from './training-plans-write.service';
 import { TRAINING_DELIVERY_WRITE_SCOPE, TRAINING_PLANS_SCOPE, TRAINING_PLANS_WRITE_SCOPE } from './training-plans.schemas';
 
 describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Training MCP write proposals with real Firestore transactions', { timeout: 30_000 }, () => {
@@ -52,6 +53,26 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Training MCP write propos
       { kind: 'provider-delivery', targetType: 'workout', target: { localKey: 'run' },
         providers: 'all_connected', action: 'send', timeZone: 'Europe/Helsinki' },
     ] } }, deps);
+
+  it('creates a focused standalone-workout proposal without a client operation kind or local key', async () => {
+    const preview = await previewCreatePlannedWorkout({ uid, connectionId: 'connection', scopes,
+      arguments: { expectedScheduleRevision: 1, localDate: '2026-09-18', title: 'Focused easy run', structure } }, deps);
+    expect(preview).toMatchObject({
+      permissionMode: 'schedule',
+      requiresConfirmation: true,
+      changes: [{ index: 0, kind: 'create-workout' }],
+      providerPreviews: [],
+    });
+    const applied = await applyTrainingChanges({ uid, connectionId: 'connection', scopes,
+      arguments: { proposalRef: preview.proposalRef, permissionMode: 'schedule' } }, deps);
+    expect(applied.createdReferences).toEqual([
+      expect.objectContaining({ localKey: 'created_workout', kind: 'workout' }),
+    ]);
+    const workouts = await db.collection('users').doc(uid).collection('scheduledWorkouts').get();
+    expect(workouts.docs.map(doc => doc.data())).toEqual([
+      expect.objectContaining({ title: 'Focused easy run', planId: null, lifecycle: 'planned' }),
+    ]);
+  });
 
   it('creates a standalone workout, fans out only to ready providers and applies idempotently', async () => {
     const preview = await previewCreateAndSend();

@@ -11,13 +11,14 @@ import type { PublicMcpToolName } from './tool-output-schemas';
 // validator (including refinements). SDK upgrades must not rewrite tool schemas.
 function registeredSchema<T extends z.ZodType>(
   schema: T,
+  reused: 'inline' | 'ref',
 ): StandardSchemaWithJSON<z.input<T>, z.output<T>> {
   return {
     '~standard': {
       ...schema['~standard'],
       jsonSchema: {
-        input: () => z.toJSONSchema(schema, { target: 'draft-7', io: 'input' }),
-        output: () => z.toJSONSchema(schema, { target: 'draft-7', io: 'output' }),
+        input: () => z.toJSONSchema(schema, { target: 'draft-7', io: 'input', reused }),
+        output: () => z.toJSONSchema(schema, { target: 'draft-7', io: 'output', reused }),
       },
     },
   };
@@ -32,13 +33,15 @@ export function registerMcpTool<Input extends z.ZodType>(
     inputSchema: Input;
     outputSchema: z.ZodType;
     annotations: ToolAnnotations;
+    inputSchemaReuse?: 'inline' | 'ref';
   },
   callback: ToolCallback<StandardSchemaWithJSON<z.input<Input>, z.output<Input>>>,
 ): void {
+  const { inputSchemaReuse = 'inline', ...publicConfig } = config;
   const tool = server.registerTool(name, {
-    ...config,
-    inputSchema: registeredSchema(config.inputSchema),
-    outputSchema: registeredSchema(config.outputSchema),
+    ...publicConfig,
+    inputSchema: registeredSchema(config.inputSchema, inputSchemaReuse),
+    outputSchema: registeredSchema(config.outputSchema, 'inline'),
   }, callback);
   // This public registration field preserves the frozen 2025-era contract.
   // The SDK's 2026 wire codec removes execution, as required by that revision.

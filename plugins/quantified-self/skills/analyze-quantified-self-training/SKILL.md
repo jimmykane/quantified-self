@@ -96,7 +96,9 @@ horizon and compatibility gated.
 
 ### Workout recipe authoring
 
-Use the live `preview_training_changes` input schema as the authority; never guess an unadvertised field or variant.
+Use the live advertised input schemas as the authority; never guess an unadvertised field or variant. Prefer the focused
+single-workout preview when creating exactly one workout. Use the batch preview only for edits, delivery actions, or
+genuinely multi-change requests, and never retry rejected input unchanged.
 Translate the workout the user actually requested rather than silently prescribing a different session. Preserve an
 existing structure when the requested edit only changes its title, date or association.
 

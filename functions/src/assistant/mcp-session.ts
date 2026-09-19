@@ -1,4 +1,4 @@
-import { TRAINING_READ_TOOLS } from '../mcp/training-plans.schemas';
+import { TRAINING_PREVIEW_TOOLS, TRAINING_READ_TOOLS } from '../mcp/training-plans.schemas';
 import { InMemoryTransport } from '@modelcontextprotocol/server';
 import type { McpServer } from '@modelcontextprotocol/server';
 import { Client } from '@modelcontextprotocol/client';
@@ -52,7 +52,7 @@ export const ASSISTANT_MCP_TOOL_NAMES = [
   ...ASSISTANT_ACTIVITY_LOCATION_MCP_TOOL_NAMES,
   'query_timeline_notes',
   ...TRAINING_READ_TOOLS,
-  'preview_training_changes',
+  ...TRAINING_PREVIEW_TOOLS,
 ] as const;
 
 export type AssistantMcpToolName = typeof ASSISTANT_MCP_TOOL_NAMES[number];
@@ -282,7 +282,9 @@ export async function createAssistantMcpSession(
     ...(activityLocationEnabled ? ASSISTANT_ACTIVITY_LOCATION_MCP_TOOL_NAMES : []),
     ...(timelineNotesEnabled ? ['query_timeline_notes' as const] : []),
     ...(trainingPlansEnabled ? TRAINING_READ_TOOLS : []),
-    ...((trainingPlanChangesEnabled || trainingDeliveryEnabled) ? ['preview_training_changes' as const] : []),
+    ...(trainingPlanChangesEnabled
+      ? TRAINING_PREVIEW_TOOLS
+      : trainingDeliveryEnabled ? ['preview_training_changes' as const] : []),
   ];
   const auth: AuthenticatedMcpRequest = {
     uid,

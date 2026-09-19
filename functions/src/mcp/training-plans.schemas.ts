@@ -24,7 +24,8 @@ export const TRAINING_DELIVERY_WRITE_SCOPE = 'training-delivery:write';
 export const TRAINING_READ_TOOLS = ['list_training_plans', 'get_training_plan', 'query_planned_workouts',
   'get_planned_workout', 'get_training_sync_status', 'get_planned_workout_completion'] as const;
 export type TrainingReadTool = typeof TRAINING_READ_TOOLS[number];
-export const TRAINING_WRITE_TOOLS = ['preview_training_changes', 'apply_training_changes'] as const;
+export const TRAINING_PREVIEW_TOOLS = ['preview_create_planned_workout', 'preview_training_changes'] as const;
+export const TRAINING_WRITE_TOOLS = [...TRAINING_PREVIEW_TOOLS, 'apply_training_changes'] as const;
 export type TrainingWriteTool = typeof TRAINING_WRITE_TOOLS[number];
 export const trainingDate = z.string().length(10).refine(value => {
   try { return normalizeTrainingLocalDate(value) === value; } catch { return false; }
@@ -231,6 +232,13 @@ const providerResult = z.strictObject({ index: count.max(24), provider: z.enum(P
   status: z.enum(['queued', 'applied', 'already_applied', 'blocked', 'failed']), message: z.string().min(1).max(500) });
 
 export const TRAINING_WRITE_INPUTS = {
+  preview_create_planned_workout: z.strictObject({
+    expectedScheduleRevision: count,
+    planRef: ref.nullable().default(null),
+    localDate: trainingDate,
+    title: z.string().trim().min(1).max(120),
+    structure: TRAINING_RECIPE_SCHEMA,
+  }),
   preview_training_changes: z.strictObject({
     expectedScheduleRevision: count,
     changes: z.array(TRAINING_CHANGE_SCHEMA).min(1).max(25),
@@ -239,11 +247,14 @@ export const TRAINING_WRITE_INPUTS = {
     permissionMode: z.enum(['schedule', 'delivery', 'combined']) }),
 };
 
-export const TRAINING_WRITE_OUTPUTS = {
-  preview_training_changes: z.strictObject({ proposalRef: ref, expiresAtMs: count,
+const trainingPreviewOutput = z.strictObject({ proposalRef: ref, expiresAtMs: count,
     permissionMode: z.enum(['schedule', 'delivery', 'combined']),
     scheduleRevision: count, summary: z.string().min(1).max(1000), requiresConfirmation: z.literal(true),
-    changes: z.array(proposedChange).min(1).max(25), providerPreviews: z.array(providerPreview).max(100) }),
+    changes: z.array(proposedChange).min(1).max(25), providerPreviews: z.array(providerPreview).max(100) });
+
+export const TRAINING_WRITE_OUTPUTS = {
+  preview_create_planned_workout: trainingPreviewOutput,
+  preview_training_changes: trainingPreviewOutput,
   apply_training_changes: z.strictObject({ proposalRef: ref,
     status: z.enum(['applied', 'partially_applied']), scheduleRevision: count,
     changes: z.array(appliedChange).max(25), providers: z.array(providerResult).max(100),

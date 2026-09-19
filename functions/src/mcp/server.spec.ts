@@ -316,6 +316,9 @@ describe('MCP HTTP scope enforcement', () => {
   });
 
   it('derives independent Training read, schedule-write and delivery-write requirements from tool input', () => {
+    expect(requiredScopesForRequest({ method: 'tools/call', params: {
+      name: 'preview_create_planned_workout', arguments: { expectedScheduleRevision: 1 },
+    } })).toEqual([MCP_OAUTH_SCOPES.TrainingPlansRead, MCP_OAUTH_SCOPES.TrainingPlansWrite]);
     expect(requiredScopesForRequest({ method: 'tools/call', params: { name: 'preview_training_changes', arguments: {
       expectedScheduleRevision: 1, changes: [{ kind: 'rename-plan' }],
     } } })).toEqual([MCP_OAUTH_SCOPES.TrainingPlansRead, MCP_OAUTH_SCOPES.TrainingPlansWrite]);
@@ -654,6 +657,7 @@ describe('MCP HTTP scope enforcement', () => {
       'get_training_sync_status',
       'list_activity_types',
       'list_training_plans',
+      'preview_create_planned_workout',
       'preview_training_changes',
       'query_planned_workouts',
     ]);
@@ -668,6 +672,7 @@ describe('MCP HTTP scope enforcement', () => {
       'get_training_sync_status',
       'list_activity_types',
       'list_training_plans',
+      'preview_create_planned_workout',
       'preview_training_changes',
       'query_planned_workouts',
     ]);
@@ -695,12 +700,48 @@ describe('MCP HTTP scope enforcement', () => {
       MCP_OAUTH_SCOPES.TrainingPlansWrite,
     ]);
     expect(writeInstructions).toContain('Construct workout recipes only from the advertised v1 schema');
+    expect(writeInstructions).toContain('use preview_create_planned_workout exactly once');
+    expect(writeInstructions).toContain('Never retry a rejected preview unchanged');
     expect(writeInstructions).toContain('Pace is still stored as metres per second with pace presentation');
     expect(writeInstructions).toContain('Never invent a threshold or relative-target reference snapshot');
 
     const readInstructionsOnly = await readInstructions([MCP_OAUTH_SCOPES.TrainingPlansRead]);
     expect(readInstructionsOnly).not.toContain('Construct workout recipes');
     expect(readInstructionsOnly).toContain('No planning edits or provider actions are available');
+
+    const deliveryInstructionsOnly = await readInstructions([
+      MCP_OAUTH_SCOPES.TrainingPlansRead,
+      MCP_OAUTH_SCOPES.TrainingDeliveryWrite,
+    ]);
+    expect(deliveryInstructionsOnly).toContain('Only provider-delivery changes are available');
+    expect(deliveryInstructionsOnly).not.toContain('preview_create_planned_workout');
+  });
+
+  it('advertises one focused workout-create contract without the batch operation union', async () => {
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+    const server = createMcpServer({
+      uid: 'user-1', clientId: 'https://client.example/mcp.json', connectionId: 'connection-1',
+      scopes: [MCP_OAUTH_SCOPES.TrainingPlansRead, MCP_OAUTH_SCOPES.TrainingPlansWrite],
+    }, 'https://quantified-self.io');
+    const client = new Client({ name: 'focused-workout-contract-client', version: '1.0.0' });
+    try {
+      await server.connect(serverTransport);
+      await client.connect(clientTransport);
+      const tool = (await client.listTools()).tools.find(item => item.name === 'preview_create_planned_workout');
+      expect(tool).toBeDefined();
+      expect(tool?.inputSchema.required).toEqual([
+        'expectedScheduleRevision', 'localDate', 'title', 'structure',
+      ]);
+      expect(tool?.inputSchema.properties).toHaveProperty('planRef');
+      expect(tool?.inputSchema.properties).not.toHaveProperty('kind');
+      expect(tool?.inputSchema.properties).not.toHaveProperty('localKey');
+      expect(tool?.inputSchema.properties).not.toHaveProperty('changes');
+      expect(JSON.stringify(tool?.inputSchema)).not.toContain('client-owned-key');
+      expect(Buffer.byteLength(JSON.stringify(tool), 'utf8')).toBeLessThan(12 * 1024);
+    } finally {
+      await client.close();
+      await server.close();
+    }
   });
 
   it('requires a modern MCP confirmation round and applies only an accepted Training proposal', async () => {

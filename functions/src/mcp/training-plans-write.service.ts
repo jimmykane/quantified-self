@@ -688,6 +688,35 @@ export async function previewTrainingChanges(
   return preview;
 }
 
+/**
+ * Focused single-workout authoring entry point. The server owns the proposal-local
+ * key so clients only need to describe the workout they actually want to create.
+ */
+export async function previewCreatePlannedWorkout(
+  input: TrainingWriteInput,
+  provided?: TrainingWriteDependencies,
+): Promise<PreviewResult> {
+  assertBytes(input.arguments);
+  const parsed = TRAINING_WRITE_INPUTS.preview_create_planned_workout.safeParse(input.arguments);
+  if (!parsed.success) {
+    invalid('Invalid planned workout. Provide the schedule revision, date, title, optional plan reference, and complete advertised workout structure.');
+  }
+  return previewTrainingChanges({
+    ...input,
+    arguments: {
+      expectedScheduleRevision: parsed.data.expectedScheduleRevision,
+      changes: [{
+        kind: 'create-workout',
+        localKey: 'created_workout',
+        plan: parsed.data.planRef ? { ref: parsed.data.planRef } : null,
+        localDate: parsed.data.localDate,
+        title: parsed.data.title,
+        structure: parsed.data.structure,
+      }],
+    },
+  }, provided);
+}
+
 async function readProposal(input: TrainingWriteInput, deps: TrainingWriteDependencies): Promise<{ ref: string; id: string; proposal: StoredProposal }> {
   const args = TRAINING_WRITE_INPUTS.apply_training_changes.safeParse(input.arguments);
   if (!args.success) invalid('A valid Training proposal reference is required.');

@@ -479,6 +479,7 @@ function createFixtureDataService(
         rangePoints: [{ timeMs: 0, normalRange: null }, { timeMs: DAY_MS, normalRange: { min: 30, max: 50 } }],
       }] }),
     readTrainingPlans: vi.fn(async (input: { tool: TrainingReadTool }) => trainingReadFixtures[input.tool]),
+    previewCreatePlannedWorkout: vi.fn().mockResolvedValue(trainingPreviewFixture),
     previewTrainingChanges: vi.fn().mockResolvedValue(trainingPreviewFixture),
     getTrainingProposalConfirmation: vi.fn().mockResolvedValue({
       message: 'Confirm the displayed Training change.', proposal: trainingPreviewFixture,
@@ -1249,6 +1250,14 @@ const successfulToolArguments: Record<
   get_planned_workout: { workoutRef: 'opaque-workout-reference' },
   get_training_sync_status: { scope: 'plan', reference: 'opaque-plan-reference' },
   get_planned_workout_completion: { workoutRef: 'opaque-workout-reference' },
+  preview_create_planned_workout: {
+    expectedScheduleRevision: 1,
+    localDate: '2026-07-02',
+    title: 'Easy run',
+    structure: { version: 1, sport: 'Running', nodes: [{
+      kind: 'step', id: 'easy', purpose: 'work', ending: { kind: 'time', seconds: 1800 }, targets: [],
+    }] },
+  },
   preview_training_changes: { expectedScheduleRevision: 1, changes: [{
     kind: 'rename-plan', plan: { ref: 'opaque-plan-reference' }, name: 'Autumn build',
   }] },
