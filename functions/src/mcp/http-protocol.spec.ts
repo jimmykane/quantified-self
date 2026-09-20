@@ -232,7 +232,7 @@ describe('MCP Function protocol compatibility', () => {
     expect(info).not.toHaveBeenCalled();
   });
 
-  it('stops repeated malformed Training previews at the HTTP boundary', async () => {
+  it('returns a non-retryable protocol error for repeated malformed Training previews', async () => {
     const malformed = modernRequest('tools/call', {
       name: 'preview_training_changes',
       arguments: { expectedScheduleRevision: 1, changes: [{ kind: 'invented-operation' }] },
@@ -246,13 +246,13 @@ describe('MCP Function protocol compatibility', () => {
       new McpTrainingPreviewLoopGuardError(600),
     );
     const blocked = await post(malformed);
-    expect(blocked.status).toBe(429);
-    expect(blocked.headers.get('retry-after')).toBe('600');
+    expect(blocked.status).toBe(200);
+    expect(blocked.headers.get('retry-after')).toBeNull();
     expect(await blocked.json()).toMatchObject({
       id: 1,
       error: {
-        code: -32029,
-        message: expect.stringContaining('Do not retry'),
+        code: -32602,
+        message: expect.stringMatching(/must not be retried.*available immediately/),
       },
     });
     expect(warn).toHaveBeenCalledWith('[MCP] Repeated invalid Training preview blocked', {

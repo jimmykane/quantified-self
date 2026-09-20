@@ -74,7 +74,7 @@ describe('Training preview loop guard', () => {
     await expect(consumeInvalidTrainingPreviewAttempt('user', 'connection', dependencies))
       .rejects.toMatchObject({
         name: 'McpTrainingPreviewLoopGuardError',
-        retryAfterSeconds: 600,
+        blockedForSeconds: 600,
       });
     expect([...documents.values()]).toEqual(expect.arrayContaining([
       expect.objectContaining({
@@ -95,6 +95,6 @@ describe('Training preview loop guard', () => {
     await expect(consumeInvalidTrainingPreviewAttempt('user', 'connection', {
       ...dependencies,
       now: () => 130_000,
-    })).rejects.toMatchObject({ retryAfterSeconds: 595 });
+    })).rejects.toMatchObject({ blockedForSeconds: 595 });
   });
 });

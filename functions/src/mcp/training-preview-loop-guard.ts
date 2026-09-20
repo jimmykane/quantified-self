@@ -17,8 +17,8 @@ export type GuardedTrainingPreviewTool = Extract<
 >;
 
 export class McpTrainingPreviewLoopGuardError extends Error {
-  constructor(readonly retryAfterSeconds: number) {
-    super('Repeated invalid Training previews were paused.');
+  constructor(readonly blockedForSeconds: number) {
+    super('Repeated invalid Training previews were refused.');
     this.name = 'McpTrainingPreviewLoopGuardError';
   }
 }
@@ -116,7 +116,7 @@ function nextCounterState(
   snapshot: CounterSnapshot,
   nowMs: number,
   maximum: number,
-): { count: number; windowStartMs: number; blockedUntilMs: number; retryAfterSeconds: number } {
+): { count: number; windowStartMs: number; blockedUntilMs: number; blockedForSeconds: number } {
   const data = snapshot.exists ? snapshot.data() : undefined;
   const previousWindowStartMs = safeNonNegativeInteger(data?.windowStartMs);
   const previousBlockedUntilMs = safeNonNegativeInteger(data?.blockedUntilMs) ?? 0;
@@ -125,7 +125,7 @@ function nextCounterState(
       count: safeNonNegativeInteger(data?.count) ?? maximum,
       windowStartMs: previousWindowStartMs ?? nowMs,
       blockedUntilMs: previousBlockedUntilMs,
-      retryAfterSeconds: Math.max(1, Math.ceil((previousBlockedUntilMs - nowMs) / 1000)),
+      blockedForSeconds: Math.max(1, Math.ceil((previousBlockedUntilMs - nowMs) / 1000)),
     };
   }
   const withinWindow = previousWindowStartMs !== null
@@ -139,10 +139,10 @@ function nextCounterState(
       count: maximum,
       windowStartMs,
       blockedUntilMs: nowMs + BLOCK_MS,
-      retryAfterSeconds: Math.ceil(BLOCK_MS / 1000),
+      blockedForSeconds: Math.ceil(BLOCK_MS / 1000),
     };
   }
-  return { count, windowStartMs, blockedUntilMs: 0, retryAfterSeconds: 0 };
+  return { count, windowStartMs, blockedUntilMs: 0, blockedForSeconds: 0 };
 }
 
 export async function consumeInvalidTrainingPreviewAttempt(
@@ -169,7 +169,7 @@ export async function consumeInvalidTrainingPreviewAttempt(
     },
   ];
 
-  let retryAfterSeconds = 0;
+  let blockedForSeconds = 0;
   await resolved.runTransaction(async transaction => {
     await transaction.assertUserAvailable(uid, nowMs);
     const snapshots = await Promise.all(counters.map(counter => transaction.get(counter.reference)));
@@ -178,7 +178,7 @@ export async function consumeInvalidTrainingPreviewAttempt(
       nowMs,
       counters[index].maximum,
     ));
-    retryAfterSeconds = Math.max(...states.map(state => state.retryAfterSeconds));
+    blockedForSeconds = Math.max(...states.map(state => state.blockedForSeconds));
     counters.forEach((counter, index) => transaction.set(counter.reference, {
       uid,
       ...(counter.subjectKind === 'connection' ? { connectionId } : {}),
@@ -193,7 +193,7 @@ export async function consumeInvalidTrainingPreviewAttempt(
       )),
     }));
   });
-  if (retryAfterSeconds > 0) {
-    throw new McpTrainingPreviewLoopGuardError(retryAfterSeconds);
+  if (blockedForSeconds > 0) {
+    throw new McpTrainingPreviewLoopGuardError(blockedForSeconds);
   }
 }

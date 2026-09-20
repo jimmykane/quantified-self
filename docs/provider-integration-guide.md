@@ -156,10 +156,13 @@ preflight and rollback. This is a controlled production pilot, not public rollou
 
 Garmin mapping follows the local ignored Training API V2 version 1.0 partner contract; the confidential PDF is evidence,
 not a repository artifact. Workout content and its date-only schedule remain separate artifacts because each has its own
-provider ID and CRUD lifecycle. The fixture mapper supports Running and Cycling exactly. Trail Running and Treadmill
-fold to `RUNNING`; Mountain Biking, Indoor Cycling, E-Biking and Hand Cycle fold to `CYCLING`. Because the contract has
-no sub-sport field, those folds are explicit degradations requiring approval rather than claims that Garmin receives the
-exact profile. The mapper also supports fixed repeats, time/distance/manual endings, and absolute HR/power/speed/pace/cadence ranges. Garmin's percentage fields do not carry
+provider ID and CRUD lifecycle. The fixture mapper supports Running and Cycling exactly. Trail Running, Treadmill,
+Indoor Running and Virtual Running fold to `RUNNING`; Mountain Biking, Indoor and Virtual Cycling, E-Biking, Hand Cycle,
+Velomobile, Enduro MTB and Downhill Cycling fold to `CYCLING`. These are the explicit QS running/cycling Training
+profiles; unrelated Sports Lib activity types remain unsupported. Because the contract has no sub-sport field, those
+folds are explicit degradations requiring approval rather than claims that Garmin receives the exact profile. The
+authored workout sport is never rewritten to make delivery pass. The mapper also supports fixed repeats,
+time/distance/manual endings, and absolute HR/power/speed/pace/cadence ranges. Garmin's percentage fields do not carry
 the canonical reference snapshot, so relative targets are frozen to their stored absolute range only after explicit
 degradation approval. Secondary targets are rejected outside cycling, must differ from the primary target, and remain
 an explicit device-support degradation even for cycling. The private contract does not document a completed-activity
@@ -168,9 +171,10 @@ workout identifier.
 Suunto is the first adapter to support the editor's exact running/cycling profiles. Its documented Guide `activities`
 array receives provider IDs only at serialization time: Running `1`, Trail Running `22`, Treadmill `53`, Cycling `2`,
 Mountain Biking `10`, Indoor Cycling `52`, E-Biking `105` and E-MTB `106`, and Hand Cycle `109`. Generic Cycling does
-not automatically include Mountain Biking. Garmin independently supports the same authored QS profiles by folding them
-to its broad `RUNNING`/`CYCLING` API values with an explicit degradation warning. COROS accepts native Running, Trail
-Running and Cycling; Treadmill and the remaining cycling profiles fold to COROS `run`/`bike` only with explicit approval.
+not automatically include Mountain Biking. Garmin folds those profiles—and the additional Indoor/Virtual Running,
+Virtual Cycling, Velomobile, Enduro MTB and Downhill Cycling profiles—to its broad `RUNNING`/`CYCLING` API values with an
+explicit degradation warning. COROS accepts native Running, Trail Running and Cycling; Treadmill and the remaining
+cycling profiles fold to COROS `run`/`bike` only with explicit approval.
 Wahoo remains limited to its proved Running/Cycling baseline.
 
 COROS mapping follows the local ignored COROS API Reference V2.0.6 (February 2026); the confidential PDF is likewise

@@ -41,8 +41,9 @@ also requires the independent delivery-write grant. Connections without that gra
 no delivery field. It intentionally excludes the batch operation union. Clients use the
 existing batch preview for edits, later provider actions and genuinely multi-change requests, and must not retry rejected
 input unchanged. Repeated malformed previews are stopped after three per connection per minute (six per owner) with a
-ten-minute invalid-call cooldown and retryable HTTP boundary; correctly formed previews remain available, so a client
-schema failure cannot run indefinitely. Repeated recipe components are advertised through
+ten-minute invalid-call cooldown. The server returns a non-retryable JSON-RPC `Invalid params` result over HTTP 200 and
+does not emit `Retry-After`, while correctly formed previews remain available immediately. This prevents an MCP host from
+turning a schema failure into a transport retry loop. Repeated recipe components are advertised through
 draft-07 references to keep the complete strict recipe inside the existing Training write-metadata budget; runtime Zod
 validation and the public recipe coverage gate remain identical.
 
@@ -832,12 +833,14 @@ These are explicit tracked slices, not anonymous TODOs.
 
 #### Garmin workout sport profiles (#647)
 
-Garmin Training API V2 exposes `RUNNING` and `CYCLING` for this editor's supported endurance workouts and no sub-sport
+Garmin Training API V2 exposes `RUNNING` and `CYCLING` for supported running/cycling planned workouts and no sub-sport
 field. QS therefore preserves the authored canonical sport while the Garmin adapter maps Running to `RUNNING` and
-Cycling to `CYCLING` exactly; Trail Running and Treadmill fold to `RUNNING`; Mountain Biking, Indoor Cycling, E-Biking
-and Hand Cycle fold to `CYCLING`. A fold is `degraded`, names the exact loss, and requires the normal destination- and
-payload-bound approval. It is not presented as Garmin receiving an MTB, trail, treadmill, indoor, e-bike or hand-cycle
-profile. Generic Cycling is still not changed into Mountain Biking in QS.
+Cycling to `CYCLING` exactly. Trail Running, Treadmill, Indoor Running and Virtual Running fold to `RUNNING`.
+Mountain Biking, Indoor Cycling, Virtual Cycling, E-Biking, Hand Cycle, Velomobile, Enduro MTB and Downhill Cycling fold
+to `CYCLING`. These are explicit QS Training profiles, not a broad guess over every Sports Lib activity type. A fold is
+`degraded`, names the exact loss, and requires the normal destination- and payload-bound approval. It is not presented as
+Garmin receiving the exact subtype, and the canonical workout remains unchanged. Generic Cycling is still not changed
+into Mountain Biking in QS.
 
 Garmin receives the same broad family at the workout and segment levels. Cycling-family folds may use the API's
 cycling-only secondary-target field subject to its existing device-support warning; running-family folds may not.

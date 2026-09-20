@@ -88,10 +88,12 @@ Assistant/plugin guidance and tests. Record a no-impact rationale or a focused e
 registered write actions never automatically expand when internal lifecycle or provider fields are added.
 
 Malformed preview arguments are bounded separately from ordinary MCP request quotas. After three invalid Training preview
-attempts from one connection in a minute, the server returns HTTP 429 with `Retry-After` and explicit restart guidance;
-the owner-wide ceiling is six and malformed calls enter a ten-minute cooldown. Correctly formed previews remain accepted
-during that cooldown. The counter contains no authored request content and expires. This guard prevents a client
-tool-selection failure from producing an unbounded validation loop; it never repairs, applies, or silently degrades input.
+attempts from one connection in a minute, the server returns a JSON-RPC `Invalid params` error over HTTP 200 with an
+explicit instruction not to retry the malformed call. It deliberately sends no HTTP retry signal: transport-level 429
+responses caused MCP hosts to replay the same invalid tool call. The owner-wide ceiling is six and further malformed calls
+enter a ten-minute invalid-call cooldown. Correctly formed previews remain accepted immediately. The counter contains no
+authored request content and expires. This guard prevents a client tool-selection failure from producing an unbounded
+validation loop; it never repairs, applies, or silently degrades input.
 
 The manually mirrored public recipe schema has an exhaustive compile-time coverage map for the version, node/ending
 kinds, step purposes, target modes and kind/mode pairs, relative-target references and speed presentation. Focused
@@ -108,7 +110,10 @@ evidence, watch receipts, live checks or write actions are exposed; consent and 
 The manual editor's additional canonical running/cycling profiles also require no MCP contract change: the existing
 recipe schema already accepts the complete Sports Lib activity-type enum, and focused coverage proves an exact Mountain
 Biking sport survives the read projection. Suunto numeric activity recommendations and Garmin's broad
-`RUNNING`/`CYCLING` payload fold remain private adapter behavior; the MCP recipe keeps the authored exact sport.
+`RUNNING`/`CYCLING` payload fold remain private adapter behavior; the MCP recipe keeps the authored exact sport. Garmin's
+explicit folds cover the QS running and cycling Training profiles, including indoor/virtual running, virtual cycling,
+velomobile, Enduro MTB and Downhill Cycling. Every non-base profile remains an approval-bound degradation; clients must
+not rewrite the authored sport just to satisfy a provider.
 
 Sports Lib 21.2.1 FIT workout-reference adoption and the first exact Suunto activity link add no MCP metric, scope,
 provider action or registered wire field. Private FIT references, account digests and reverse-link records are excluded.

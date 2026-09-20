@@ -25,4 +25,14 @@ describe('Training delivery mapping and production boundary', () => {
     expect(result.level).toBe('degraded');
     expect(result.issues).toContain('Garmin receives Mountain Biking as a Cycling workout because its Training API has no exact Mountain Biking profile.');
   });
+  it('treats Downhill Cycling as an approval-bound Garmin family fold instead of unsupported', () => {
+    const downhill = {
+      ...workout,
+      structure: { ...workout.structure, sport: ActivityTypes.DownhillCycling },
+    };
+    const result = assessTrainingDeliveryMapping('garmin', downhill, 'destination', 'UTC');
+    expect(result.level).toBe('degraded');
+    expect(result.issues).toContain('Garmin receives Downhill Cycling as a Cycling workout because its Training API has no exact Downhill Cycling profile.');
+    expect(downhill.structure.sport).toBe(ActivityTypes.DownhillCycling);
+  });
 });

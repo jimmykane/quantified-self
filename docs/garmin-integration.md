@@ -124,10 +124,12 @@ Workout content and date-only Workout Schedule payloads are deliberately separat
 their lifecycles independently. The proof covers fixed repeats, time/distance/manual steps, and absolute
 heart-rate/power/speed/pace/cadence ranges.
 
-Training API V2 accepts only broad `RUNNING` and `CYCLING` values for this editor's workouts and does not define a
-sub-sport field. The adapter keeps the authored QS sport unchanged and maps Trail Running and Treadmill to `RUNNING`,
-then Mountain Biking, Indoor Cycling, E-Biking and Hand Cycle to `CYCLING`. Running and Cycling remain exact; every
-subtype fold is a visible degradation that requires approval because Garmin does not receive the exact profile.
+Training API V2 accepts only broad `RUNNING` and `CYCLING` values for supported running/cycling planned workouts and does
+not define a sub-sport field. The adapter keeps the authored QS sport unchanged and maps Trail Running, Treadmill, Indoor Running and
+Virtual Running to `RUNNING`, then Mountain Biking, Indoor Cycling, Virtual Cycling, E-Biking, Hand Cycle, Velomobile,
+Enduro MTB and Downhill Cycling to `CYCLING`. These are explicit QS Training profiles; it does not infer a family for
+unrelated Sports Lib activity types. Running and Cycling remain exact; every subtype fold is a visible degradation that
+requires approval because Garmin does not receive the exact profile.
 Cycling-family folds retain the existing cycling-only secondary-target rule and device-support warning.
 
 Public Garmin planned-workout rollout remains disabled. A separate backend-enforced exact-UID private production pilot can

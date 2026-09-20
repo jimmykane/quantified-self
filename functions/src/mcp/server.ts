@@ -2391,15 +2391,14 @@ export const mcpApi = onRequest(MCP_API_RUNTIME_OPTIONS, async (request, respons
         logger.warn('[MCP] Repeated invalid Training preview blocked', {
           toolName: invalidTrainingPreview,
         });
-        response.set('Retry-After', `${error.retryAfterSeconds}`);
         const requestId = typeof request.body?.id === 'string' || typeof request.body?.id === 'number'
           ? request.body.id
           : null;
-        response.status(429).json({
+        response.status(200).json({
           jsonrpc: '2.0',
           error: {
-            code: -32029,
-            message: 'Training preview paused after repeated invalid arguments. Do not retry this request. Read the current Training state and make one fresh preview with complete advertised input; for one new workout use preview_create_planned_workout.',
+            code: -32602,
+            message: 'Invalid Training preview arguments were repeated. This malformed request was refused and must not be retried. Correctly formed Training previews remain available immediately; use the advertised schema and preview_create_planned_workout for one new workout.',
           },
           id: requestId,
         });
