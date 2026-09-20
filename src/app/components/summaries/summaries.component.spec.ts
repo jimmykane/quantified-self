@@ -1445,7 +1445,7 @@ describe('SummariesComponent', () => {
     expect(nativeElement.querySelector('.dashboard-readiness-hrv')?.textContent).toContain('7-day average');
     expect(nativeElement.querySelector('.dashboard-readiness-hrv')?.textContent).toContain('Within range · rising');
     expect(nativeElement.querySelector('.dashboard-readiness-hrv')?.textContent).toContain('60-day range');
-    expect(nativeElement.querySelector('.dashboard-readiness-hrv')?.textContent).toContain('Latest night 55 ms');
+    expect(nativeElement.querySelector('.dashboard-readiness-hrv')?.textContent).toContain('Latest HRV 55 ms · Today');
     const hrvRange = nativeElement.querySelector('.dashboard-readiness-hrv .metric-indicator-range');
     expect(hrvRange?.getAttribute('aria-label')).toBe('HRV: 50.8 ms; 60-day range 49.1–51.5 ms');
     expect(hrvRange?.querySelector('.metric-indicator-range-band')).not.toBeNull();
@@ -1615,7 +1615,7 @@ describe('SummariesComponent', () => {
       expect(scoreSlot.querySelector('[label="Readiness"]')).not.toBeNull();
       expect(host.querySelector('.dashboard-readiness-recovery-indicator')).not.toBeNull();
       expect(host.querySelector('.dashboard-readiness-recovery-placeholder')).toBeNull();
-      expect(host.querySelector('.dashboard-readiness-hrv')?.textContent).toContain('Latest night');
+      expect(host.querySelector('.dashboard-readiness-hrv')?.textContent).toContain('Latest HRV');
       expect(reservations()).toEqual(pendingLayout);
       expect(reservedTopAndRecoveryHeight()).toBe(pendingTopAndRecoveryHeight);
 

@@ -87,6 +87,7 @@ export async function handleServiceTokenRootDisconnected(
 export const disableActivitySyncRoutesOnGarminTokenRootDelete = onDocumentDeleted({
   document: `${GARMIN_API_TOKENS_COLLECTION_NAME}/{uid}`,
   region: REGION,
+  memory: '512MiB',
 }, async (event) => {
   await handleServiceTokenRootDisconnected(
     event.params.uid,

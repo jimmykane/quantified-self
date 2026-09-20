@@ -2055,6 +2055,36 @@
       "indexes": []
     },
     {
+      "collectionGroup": "trainingMcpProposals",
+      "fieldPath": "expireAt",
+      "ttl": true,
+      "indexes": []
+    },
+    {
+      "collectionGroup": "trainingMcpProposals",
+      "fieldPath": "preview",
+      "ttl": false,
+      "indexes": []
+    },
+    {
+      "collectionGroup": "trainingMcpProposals",
+      "fieldPath": "scheduleRequests",
+      "ttl": false,
+      "indexes": []
+    },
+    {
+      "collectionGroup": "trainingMcpProposals",
+      "fieldPath": "providerOperations",
+      "ttl": false,
+      "indexes": []
+    },
+    {
+      "collectionGroup": "trainingMcpProposals",
+      "fieldPath": "result",
+      "ttl": false,
+      "indexes": []
+    },
+    {
       "collectionGroup": "COROSAPIWorkoutQueue",
       "fieldPath": "expireAt",
       "ttl": true,

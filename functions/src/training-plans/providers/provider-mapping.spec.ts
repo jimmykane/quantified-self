@@ -1,7 +1,9 @@
 import { ActivityTypes } from '@sports-alliance/sports-lib';
 import { describe, expect, it } from 'vitest';
 import {
+    GARMIN_CYCLING_WORKOUT_SPORTS_V1,
     GARMIN_PLANNED_WORKOUT_SPORTS_V1,
+    GARMIN_RUNNING_WORKOUT_SPORTS_V1,
     COROS_PLANNED_WORKOUT_SPORTS_V1,
     PLANNED_WORKOUT_PROVIDER_CAPABILITIES_V1,
     assessPlannedWorkoutProviderMappingV1,
@@ -60,7 +62,25 @@ describe('planned-workout provider proof fixtures', () => {
         expect(PLANNED_WORKOUT_PROVIDER_CAPABILITIES_V1.suunto.implementationState).toBe('private-rollout');
         expect(PLANNED_WORKOUT_PROVIDER_CAPABILITIES_V1.suunto.profile?.sports)
             .toEqual(MANUAL_WORKOUT_EDITOR_SPORTS_V1);
-        expect(GARMIN_PLANNED_WORKOUT_SPORTS_V1).toEqual(MANUAL_WORKOUT_EDITOR_SPORTS_V1);
+        expect(GARMIN_PLANNED_WORKOUT_SPORTS_V1).toEqual([
+            ActivityTypes.Running,
+            ActivityTypes.TrailRunning,
+            ActivityTypes.Treadmill,
+            ActivityTypes.IndoorRunning,
+            ActivityTypes.VirtualRunning,
+            ActivityTypes.Cycling,
+            ActivityTypes.MountainBiking,
+            ActivityTypes.IndoorCycling,
+            ActivityTypes.VirtualCycling,
+            ActivityTypes.EBiking,
+            ActivityTypes.Handcycle,
+            ActivityTypes.Velomobile,
+            ActivityTypes['Enduro MTB'],
+            ActivityTypes.DownhillCycling,
+        ]);
+        expect(GARMIN_PLANNED_WORKOUT_SPORTS_V1).toEqual(expect.arrayContaining(
+            [...MANUAL_WORKOUT_EDITOR_SPORTS_V1],
+        ));
         expect(PLANNED_WORKOUT_PROVIDER_CAPABILITIES_V1.garmin.profile?.sports)
             .toBe(GARMIN_PLANNED_WORKOUT_SPORTS_V1);
         expect(PLANNED_WORKOUT_PROVIDER_CAPABILITIES_V1.coros.profile?.sports)
@@ -167,11 +187,17 @@ describe('planned-workout provider proof fixtures', () => {
         [ActivityTypes.Running, 'RUNNING', 'exact'],
         [ActivityTypes.TrailRunning, 'RUNNING', 'degraded'],
         [ActivityTypes.Treadmill, 'RUNNING', 'degraded'],
+        [ActivityTypes.IndoorRunning, 'RUNNING', 'degraded'],
+        [ActivityTypes.VirtualRunning, 'RUNNING', 'degraded'],
         [ActivityTypes.Cycling, 'CYCLING', 'exact'],
         [ActivityTypes.MountainBiking, 'CYCLING', 'degraded'],
         [ActivityTypes.IndoorCycling, 'CYCLING', 'degraded'],
+        [ActivityTypes.VirtualCycling, 'CYCLING', 'degraded'],
         [ActivityTypes.EBiking, 'CYCLING', 'degraded'],
         [ActivityTypes.Handcycle, 'CYCLING', 'degraded'],
+        [ActivityTypes.Velomobile, 'CYCLING', 'degraded'],
+        [ActivityTypes['Enduro MTB'], 'CYCLING', 'degraded'],
+        [ActivityTypes.DownhillCycling, 'CYCLING', 'degraded'],
     ] as const)('maps canonical %s to Garmin %s with truthful fidelity', (sport, garminSport, level) => {
         const structure = { ...oneStepStructure(), sport };
         const result = serializeGarminWorkoutV1(structure, {
@@ -185,12 +211,37 @@ describe('planned-workout provider proof fixtures', () => {
         expect(result.issues.some(issue => issue.code === 'sport_profile_degraded')).toBe(level === 'degraded');
     });
 
+    it('keeps Garmin family folds explicit and separate from the authored workout sport', () => {
+        expect(GARMIN_RUNNING_WORKOUT_SPORTS_V1).toContain(ActivityTypes.VirtualRunning);
+        expect(GARMIN_CYCLING_WORKOUT_SPORTS_V1).toContain(ActivityTypes.DownhillCycling);
+        const structure = { ...oneStepStructure(), sport: ActivityTypes.DownhillCycling };
+        const before = structuredClone(structure);
+        const result = serializeGarminWorkoutV1(structure, {
+            name: 'Downhill session',
+            allowDegraded: true,
+        });
+
+        expect(structure).toEqual(before);
+        expect(structure.sport).toBe(ActivityTypes.DownhillCycling);
+        expect(result.artifact.sport).toBe('CYCLING');
+        expect(result.level).toBe('degraded');
+        expect(result.issues).toContainEqual(expect.objectContaining({
+            code: 'sport_profile_degraded',
+            message: expect.stringContaining('Downhill Cycling'),
+        }));
+    });
+
     it('requires approval for a Garmin family fold while keeping other unproved mappings unsupported', () => {
         const mountainBike = { ...oneStepStructure(), sport: ActivityTypes.MountainBiking };
+        const swimming = { ...oneStepStructure(), sport: ActivityTypes.Swimming };
         expect(assessPlannedWorkoutProviderMappingV1('suunto', mountainBike).level).toBe('exact');
         expect(assessPlannedWorkoutProviderMappingV1('garmin', mountainBike)).toMatchObject({
             level: 'degraded',
             issues: [expect.objectContaining({ code: 'sport_profile_degraded' })],
+        });
+        expect(assessPlannedWorkoutProviderMappingV1('garmin', swimming)).toMatchObject({
+            level: 'unsupported',
+            issues: [expect.objectContaining({ code: 'unsupported_sport' })],
         });
         expect(() => serializeGarminWorkoutV1(mountainBike, {
             name: 'MTB workout',

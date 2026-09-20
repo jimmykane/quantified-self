@@ -100,7 +100,7 @@ export const PROVIDER_INTEGRATION_PAGES: Record<IntegrationProviderKey, Provider
       {
         icon: 'history',
         title: 'Garmin history import',
-        copy: 'Import activities from Garmin\'s latest rolling five-year history window. Garmin limits how often a new history import can be started, as documented in Help.',
+        copy: 'Import activities from Garmin\'s latest rolling five-year history window. The picker starts with the latest two years selected; you can expand it to any allowed range before importing.',
       },
       {
         icon: 'monitor_heart',
@@ -313,7 +313,7 @@ export const PROVIDER_INTEGRATION_PAGES: Record<IntegrationProviderKey, Provider
       {
         icon: 'bedtime',
         title: 'Suunto history, Sleep, and Health imports',
-        copy: 'Use Suunto activity and Sleep history imports when your Suunto account is the source of historical training or recovery data. Connected accounts can queue separate 24/7 Activity, daily-statistics, and Recovery Health records through the combined Sleep & Health history control while Suunto Health is enabled.',
+        copy: 'Use Suunto activity and Sleep history imports when your Suunto account is the source of historical training or recovery data. Activity history starts with the latest two years selected, and you can choose a longer or shorter range. Connected accounts can queue separate 24/7 Activity, daily-statistics, and Recovery Health records through the combined Sleep & Health history control while Suunto Health is enabled.',
       },
     ],
     dashboardEyebrow: 'Training Dashboard',
@@ -404,7 +404,7 @@ export const PROVIDER_INTEGRATION_PAGES: Record<IntegrationProviderKey, Provider
       {
         icon: 'history',
         title: 'COROS history import',
-        copy: 'Import the last 3 months of COROS history within the current provider limit, then review the imported activities from the same dashboard as Garmin and Suunto.',
+        copy: 'Start with COROS\'s full rolling three-month activity-history limit selected, or choose a shorter range, then review the imported activities from the same dashboard as Garmin and Suunto.',
       },
       {
         icon: 'published_with_changes',
@@ -528,7 +528,7 @@ export const PROVIDER_INTEGRATION_PAGES: Record<IntegrationProviderKey, Provider
       {
         icon: 'history',
         title: 'Wahoo history import',
-        copy: 'Choose a date range in Services to page through Wahoo history and queue workouts that include an importable FIT file.',
+        copy: 'Start with the latest two years selected, or choose a different date range in Services to page through Wahoo history and queue workouts that include an importable FIT file.',
       },
       {
         icon: 'update',

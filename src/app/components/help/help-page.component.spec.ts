@@ -185,7 +185,7 @@ describe('HelpPageComponent', () => {
     }
 
     const sectionCopy = fixture.debugElement.query(By.css('#help-section-content .section-copy'))?.nativeElement as HTMLElement | undefined;
-    expect(sectionCopy?.innerHTML).toContain('Every current answer must use at least one read-only Quantified Self result');
+    expect(sectionCopy?.innerHTML).toContain('Every current answer must use at least one verified Quantified Self tool result');
     expect(sectionCopy?.innerHTML).toContain('latest six completed turns');
     expect(sectionCopy?.innerHTML).toContain('keeps the pending question visible');
     expect(sectionCopy?.innerHTML).toContain('safely resends the same request ID');

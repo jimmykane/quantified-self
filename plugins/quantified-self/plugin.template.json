@@ -22,7 +22,7 @@
   "interface": {
     "displayName": "Quantified Self",
     "shortDescription": "Analyze your fitness, health, sleep, and routes.",
-    "longDescription": "Connect your authorized Quantified Self data for focused read-only workflows covering recorded all-day Health, cross-domain trends, training, sleep, body measurements, activity performance, charts, and saved routes.",
+    "longDescription": "Connect your authorized Quantified Self data for focused analysis across Health, training, sleep, measurements, activities, charts, and routes, with separately granted and approval-gated Training planning changes.",
     "developerName": "Quantified Self",
     "category": "Lifestyle",
     "capabilities": [

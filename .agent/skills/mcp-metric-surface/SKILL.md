@@ -35,16 +35,32 @@ Lib version or parser change, also use `.agent/skills/sports-lib-upgrade-and-rep
   `functions/src/mcp/derived-output-schemas.ts`; the exhaustive map must fail compilation until the new kind is covered.
 - **Training plans and planned workouts:** distinct from Training-derived metrics and completed activities. Review every
   planning change for MCP impact. Relevant plan/workout capabilities, lifecycle semantics, recipe fields and safe
-  delivery-status changes must extend the plan-specific read surface in the same feature PR. Coordinate explicit
+  delivery-status changes must extend the plan-specific MCP surface in the same feature PR. Coordinate explicit
   Firestore projections, strict schemas, independent `training-plans:read` consent, owner/connection-bound references,
   revision-bound pagination and byte limits, Sports Lib unit formatting, Assistant routing/evidence, bundled Training,
   Activity and cross-domain guidance, tests and documentation. Keep detailed behavior in `docs/mcp-server.md` and
   `docs/training-workspace.md`; distinguish implementation from deployed/registered-client availability.
   Never forward whole records or automatically expose new stored fields. Preserve registered schemas using the
   compatible additive-tool lifecycle when a shape cannot safely change. Keep private delivery fields private.
-  Record a genuine no-impact rationale in verification notes. If relevant read coverage must be deferred, create or
+  Keep every manually mirrored workout recipe discriminant behind an exhaustive compile-time coverage map and fixtures
+  that JSON-round-trip each shared variant through public read and write validation. A shared-model addition must fail
+  closed until its MCP schema, formatting, Assistant/plugin authoring guidance, contract digest and tests are reviewed;
+  never make the coverage map an automatic field-exposure mechanism.
+  Read extensions use `training-plans:read`. New mutation capability is never implied: it must fit the explicit safe
+  Training lifecycle, use the independent `training-plans:write` or `training-delivery:write` child scope, enter one
+  bounded preview, bind owner/connection/grant/revision/expiry, and expose an idempotent apply as a separately
+  approval-gated write tool with accurate annotations. The external MCP host owns its native approval UI; do not use MCP
+  elicitation solely to reconfirm a fully specified write call, and document that server code cannot detect a client's
+  automatic-approval setting. User guidance must also call out unattended connector modes such as Claude Research and
+  tell users to disable Training write tools there when per-call review is required. The built-in Assistant may expose
+  preview to the model but never apply; app-owned confirmation must
+  recheck its server-owned conversation generation. Provider actions reuse the server delivery command and Pro/readiness
+  gates, never accept credentials or remote IDs, and return independent outcomes without rolling back authored data.
+  Permanent workout deletion, plan deletion, history restore, inferred completion and new provider actions require a
+  new explicit contract decision rather than silently widening the existing union.
+  Record a genuine no-impact rationale in verification notes. If relevant coverage must be deferred, create or
   reuse a focused #583 subissue, add/verify it in Project 2, and reference it before declaring completion.
-  Maintaining read coverage does not authorize writes, provider actions, wider consent or deployment.
+  Existing read/write coverage does not authorize wider consent, additional mutations, provider transport calls or deployment.
 - **Sleep field or provider:** update the normalized contract in `shared/sleep.ts`, then deliberately decide whether it
   belongs in the MCP safe projection. Never forward provider user/session identifiers, provider payloads, raw stage
   intervals, or raw HRV, SpO2, or respiration samples.
@@ -100,7 +116,8 @@ Lib version or parser change, also use `.agent/skills/sports-lib-upgrade-and-rep
    depends on routes; the two location domains remain independent. Enforce those dependencies in consent, approval,
    refresh, bearer validation, HTTP prechecks, tool registration, and data reads. First-class measurement types must also be excluded from generic and
    per-activity metric paths so those tools cannot bypass `measurements:read`. Keep queries bounded, references/cursors
-   UID-and-connection-bound, and tools read-only. Update OAuth metadata, consent, Settings, Help, policies, and
+   UID-and-connection-bound, and ordinary data tools read-only. Training mutation tools are the sole exception and must
+   preserve the strict preview/native-approval/idempotent-apply boundary above. Update OAuth metadata, consent, Settings, Help, policies, and
    `docs/mcp-server.md` when the user-visible contract moves.
 6. For every new Sports Lib detail or route field, update the named MCP allowlist, add a negative leakage test for nearby
    sensitive fields, confirm historical persistence/reparse expectations, review the Firestore query/index shape, and
@@ -142,6 +159,9 @@ Add or update focused tests for:
 - Training ready-state handling and identity redaction;
 - planned-workout scope isolation, complete recipe/Unicode validation, field-mask leakage rejection, reference replay,
   revision/deletion/consent fences, calendar scopes, bounded pagination and complete/incomplete delivery aggregates;
+- Training proposal scope dependencies, safe-operation union, opaque proposal replay, stale revision/grant/conversation
+  rejection, native approval annotations on every transport, idempotent apply, standalone-create-plus-send,
+  provider-failure isolation, and the absence of provider transport from preview;
 - Assistant optional Training consent reset/retry generation, planned-versus-completed routing and compact untrusted-text
   evidence. Review three cases: a new workout target needs explicit MCP schema/format tests; presentation-only spacing
   needs a documented no-wire-impact rationale; provider-internal artifact metadata must stay excluded;

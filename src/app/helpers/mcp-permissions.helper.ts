@@ -1,5 +1,7 @@
 export type McpScope =
   | 'training-plans:read'
+  | 'training-plans:write'
+  | 'training-delivery:write'
   | 'timeline-notes:read'
   | 'health:read'
   | 'metrics:read'
@@ -12,6 +14,8 @@ export type McpScope =
   | 'route-location:read';
 
 export const MCP_SCOPE_PARENTS: Partial<Record<McpScope, McpScope>> = {
+  'training-plans:write': 'training-plans:read',
+  'training-delivery:write': 'training-plans:read',
   'activity-location:read': 'activity-details:read',
   'activity-descriptions:read': 'activity-details:read',
   'route-location:read': 'routes:read',
@@ -23,7 +27,15 @@ export const MCP_SCOPE_CONTENT: Record<McpScope, {
 }> = {
   'training-plans:read': {
     title: 'Training plans and planned workouts',
-    description: 'Read your current plans and standalone planned workouts, including names, dates, complete workout instructions, step notes and existing service sync summaries. Authored text may contain sensitive health or personal information. Selected when requested; uncheck it to keep this data private. Existing connections must reauthorize. This does not grant activity or Timeline notes access. No edits, provider checks or sync actions are allowed. Revoking access cannot erase copies already received.',
+    description: 'Read your current plans and standalone planned workouts, including names, dates, complete workout instructions, step notes, exact recorded completion links and existing service sync summaries. Authored text may contain sensitive health or personal information. Existing connections must reauthorize. This does not grant activity or Timeline notes access. Revoking access cannot erase copies already received.',
+  },
+  'training-plans:write': {
+    title: 'Change Training plans and workouts',
+    description: 'Create and edit plans and planned workouts, move or copy workouts, change plan dates and lifecycle, mark workouts skipped, and move workouts to recoverable history. Every proposal is previewed before a separate apply tool governed by your client\'s approval controls. Permanent deletion, history restore and plan deletion are not allowed.',
+  },
+  'training-delivery:write': {
+    title: 'Change planned-workout sync',
+    description: 'Enable or stop plan sync and send, resume, retry, check or approve planned-workout delivery for one or all connected services. Every proposal is previewed before a separate apply tool governed by your client\'s approval controls. Provider delivery remains subject to Pro access, connection permissions and rollout availability. This cannot connect or disconnect a service.',
   },
   'activity-descriptions:read': {
     title: 'Activity descriptions',

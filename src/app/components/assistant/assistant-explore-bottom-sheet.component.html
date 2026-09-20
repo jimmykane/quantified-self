@@ -27,7 +27,7 @@
       <h3 id="assistant-data-access">Your data stays in your control</h3>
       <div>
         <mat-icon aria-hidden="true">verified_user</mat-icon>
-        <span>Answers use verified, read-only data requests.</span>
+        <span>Answers use verified data requests. Optional Training changes are previewed for your review.</span>
       </div>
       <div>
         <mat-icon aria-hidden="true">route</mat-icon>
@@ -64,11 +64,23 @@
     <section class="assistant-notes-access" aria-labelledby="assistant-training-plans-access">
       <h3 id="assistant-training-plans-access">Training plans</h3>
       <p id="assistant-training-plans-disclosure">Allow Gemini to read your plans and planned workouts when relevant, including names, dates, workout instructions, step notes and existing service sync status. Authored text may contain sensitive health or personal information.</p>
-      <p>Off by default. Changing access starts a new chat and keeps your other choices. New chat turns all optional access off. Answers may quote relevant details. The Assistant cannot edit workouts or change sync.</p>
+      <p>Off by default. Changing access starts a new chat and keeps your other choices. New chat turns all optional access off. Answers may quote relevant details.</p>
       <mat-slide-toggle [checked]="data.trainingPlansEnabled === true"
         aria-label="Training plans access — changing this starts a new chat"
         aria-describedby="assistant-training-plans-disclosure"
         (change)="setTrainingPlans($event.checked)">Training plans</mat-slide-toggle>
+      <div class="assistant-training-write-options">
+        <mat-slide-toggle [checked]="data.trainingPlanChangesEnabled === true"
+          aria-label="Training plan changes — changing this starts a new chat"
+          [disabled]="data.trainingPlansEnabled !== true"
+          (change)="setTrainingPlanChanges($event.checked)">Plan and workout changes</mat-slide-toggle>
+        <p>Lets the Assistant prepare create, edit, move, copy, skip, archive and other recoverable plan changes. You review one clear proposal before anything is applied.</p>
+        <mat-slide-toggle [checked]="data.trainingDeliveryEnabled === true"
+          aria-label="Training delivery changes — changing this starts a new chat"
+          [disabled]="data.trainingPlansEnabled !== true"
+          (change)="setTrainingDelivery($event.checked)">Planned-workout sync changes</mat-slide-toggle>
+        <p>Lets the Assistant prepare send, enable, stop, retry and mapping-approval actions for connected services. Pro and provider rollout rules still apply. You must confirm before anything changes.</p>
+      </div>
     </section>
 
     <section class="assistant-mcp-link" aria-labelledby="assistant-mcp-link">

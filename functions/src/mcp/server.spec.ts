@@ -2,7 +2,7 @@ import { AddressInfo } from 'node:net';
 import { createServer as createHttpServer } from 'node:http';
 import { NodeStreamableHTTPServerTransport } from '@modelcontextprotocol/node';
 import { InMemoryTransport, McpServer } from '@modelcontextprotocol/server';
-import { Client } from '@modelcontextprotocol/client';
+import { Client, StreamableHTTPClientTransport } from '@modelcontextprotocol/client';
 import { z } from 'zod';
 import { McpDataError } from './data.service';
 import {
@@ -35,6 +35,7 @@ import {
   summarizeMcpOutputValidationIssues,
   supportsMcpTransportMethod,
 } from './server';
+import { createMcpTransportHandler } from './transport';
 
 describe('MCP HTTP scope enforcement', () => {
   it('requires Health and Sleep before serving shared HRV ranges', () => {
@@ -314,6 +315,29 @@ describe('MCP HTTP scope enforcement', () => {
     ]);
   });
 
+  it('derives independent Training read, schedule-write and delivery-write requirements from tool input', () => {
+    expect(requiredScopesForRequest({ method: 'tools/call', params: {
+      name: 'preview_create_planned_workout', arguments: { expectedScheduleRevision: 1 },
+    } })).toEqual([MCP_OAUTH_SCOPES.TrainingPlansRead, MCP_OAUTH_SCOPES.TrainingPlansWrite]);
+    expect(requiredScopesForRequest({ method: 'tools/call', params: {
+      name: 'preview_create_planned_workout', arguments: {
+        expectedScheduleRevision: 1,
+        delivery: { providers: ['garmin'], timeZone: 'Europe/Helsinki' },
+      },
+    } })).toEqual([MCP_OAUTH_SCOPES.TrainingPlansRead, MCP_OAUTH_SCOPES.TrainingPlansWrite,
+      MCP_OAUTH_SCOPES.TrainingDeliveryWrite]);
+    expect(requiredScopesForRequest({ method: 'tools/call', params: { name: 'preview_training_changes', arguments: {
+      expectedScheduleRevision: 1, changes: [{ kind: 'rename-plan' }],
+    } } })).toEqual([MCP_OAUTH_SCOPES.TrainingPlansRead, MCP_OAUTH_SCOPES.TrainingPlansWrite]);
+    expect(requiredScopesForRequest({ method: 'tools/call', params: { name: 'preview_training_changes', arguments: {
+      expectedScheduleRevision: 1, changes: [{ kind: 'provider-delivery' }],
+    } } })).toEqual([MCP_OAUTH_SCOPES.TrainingPlansRead, MCP_OAUTH_SCOPES.TrainingDeliveryWrite]);
+    expect(requiredScopesForRequest({ method: 'tools/call', params: { name: 'apply_training_changes', arguments: {
+      proposalRef: 'opaque', permissionMode: 'combined',
+    } } })).toEqual([MCP_OAUTH_SCOPES.TrainingPlansRead, MCP_OAUTH_SCOPES.TrainingPlansWrite,
+      MCP_OAUTH_SCOPES.TrainingDeliveryWrite]);
+  });
+
   it('advertises live readiness drivers and the daily health and Training report', async () => {
     const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
     const server = createMcpServer({
@@ -470,7 +494,9 @@ describe('MCP HTTP scope enforcement', () => {
   });
 
   it('registers only the tools granted by the bearer scopes', async () => {
-    const listToolNames = async (scopes: Array<typeof MCP_OAUTH_SCOPES[keyof typeof MCP_OAUTH_SCOPES]>) => {
+    const listToolNames = async (
+      scopes: Array<typeof MCP_OAUTH_SCOPES[keyof typeof MCP_OAUTH_SCOPES]>,
+    ) => {
       const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
       const server = createMcpServer({
         uid: 'user-1',
@@ -625,7 +651,174 @@ describe('MCP HTTP scope enforcement', () => {
       'query_activities_with_tags',
       'search_activities_near_location',
     ]);
+    await expect(listToolNames([
+      MCP_OAUTH_SCOPES.TrainingPlansRead,
+      MCP_OAUTH_SCOPES.TrainingPlansWrite,
+      MCP_OAUTH_SCOPES.TrainingDeliveryWrite,
+    ])).resolves.toEqual([
+      'apply_training_changes',
+      'get_planned_workout',
+      'get_planned_workout_completion',
+      'get_training_plan',
+      'get_training_sync_status',
+      'list_activity_types',
+      'list_training_plans',
+      'preview_create_planned_workout',
+      'preview_training_changes',
+      'query_planned_workouts',
+    ]);
   }, 15_000);
+
+  it('advertises canonical workout authoring guidance only when Training writes are available', async () => {
+    async function readInstructions(scopes: string[]): Promise<string> {
+      const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+      const server = createMcpServer({
+        uid: 'user-1', clientId: 'https://client.example/mcp.json', connectionId: 'connection-1', scopes,
+      }, 'https://quantified-self.io');
+      const client = new Client({ name: 'training-recipe-instructions-client', version: '1.0.0' });
+      try {
+        await server.connect(serverTransport);
+        await client.connect(clientTransport);
+        return client.getInstructions() || '';
+      } finally {
+        await client.close();
+        await server.close();
+      }
+    }
+
+    const writeInstructions = await readInstructions([
+      MCP_OAUTH_SCOPES.TrainingPlansRead,
+      MCP_OAUTH_SCOPES.TrainingPlansWrite,
+    ]);
+    expect(writeInstructions).toContain('Construct workout recipes only from the advertised v1 schema');
+    expect(writeInstructions).toContain('use preview_create_planned_workout exactly once');
+    expect(writeInstructions).toContain('provider delivery is not available on this connection');
+    expect(writeInstructions).toContain('Never retry a rejected preview unchanged');
+    expect(writeInstructions).toContain('Pace is still stored as metres per second with pace presentation');
+    expect(writeInstructions).toContain('Never invent a threshold or relative-target reference snapshot');
+
+    const combinedWriteInstructions = await readInstructions([
+      MCP_OAUTH_SCOPES.TrainingPlansRead,
+      MCP_OAUTH_SCOPES.TrainingPlansWrite,
+      MCP_OAUTH_SCOPES.TrainingDeliveryWrite,
+    ]);
+    expect(combinedWriteInstructions).toContain('optional delivery object');
+    expect(combinedWriteInstructions).not.toContain('provider delivery is not available on this connection');
+
+    const readInstructionsOnly = await readInstructions([MCP_OAUTH_SCOPES.TrainingPlansRead]);
+    expect(readInstructionsOnly).not.toContain('Construct workout recipes');
+    expect(readInstructionsOnly).toContain('No planning edits or provider actions are available');
+
+    const deliveryInstructionsOnly = await readInstructions([
+      MCP_OAUTH_SCOPES.TrainingPlansRead,
+      MCP_OAUTH_SCOPES.TrainingDeliveryWrite,
+    ]);
+    expect(deliveryInstructionsOnly).toContain('Only provider-delivery changes are available');
+    expect(deliveryInstructionsOnly).not.toContain('preview_create_planned_workout');
+  });
+
+  it('advertises one focused workout-create contract without the batch operation union', async () => {
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+    const server = createMcpServer({
+      uid: 'user-1', clientId: 'https://client.example/mcp.json', connectionId: 'connection-1',
+      scopes: [MCP_OAUTH_SCOPES.TrainingPlansRead, MCP_OAUTH_SCOPES.TrainingPlansWrite],
+    }, 'https://quantified-self.io');
+    const client = new Client({ name: 'focused-workout-contract-client', version: '1.0.0' });
+    try {
+      await server.connect(serverTransport);
+      await client.connect(clientTransport);
+      const tool = (await client.listTools()).tools.find(item => item.name === 'preview_create_planned_workout');
+      expect(tool).toBeDefined();
+      expect(tool?.inputSchema.required).toEqual([
+        'expectedScheduleRevision', 'localDate', 'title', 'structure',
+      ]);
+      expect(tool?.inputSchema.properties).toHaveProperty('planRef');
+      expect(tool?.inputSchema.properties).not.toHaveProperty('delivery');
+      expect(tool?.inputSchema.properties).not.toHaveProperty('kind');
+      expect(tool?.inputSchema.properties).not.toHaveProperty('localKey');
+      expect(tool?.inputSchema.properties).not.toHaveProperty('changes');
+      expect(JSON.stringify(tool?.inputSchema)).not.toContain('client-owned-key');
+      expect(Buffer.byteLength(JSON.stringify(tool), 'utf8')).toBeLessThan(12 * 1024);
+    } finally {
+      await client.close();
+      await server.close();
+    }
+  });
+
+  it('advertises focused initial delivery only when its independent grant is present', async () => {
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+    const server = createMcpServer({
+      uid: 'user-1', clientId: 'https://client.example/mcp.json', connectionId: 'connection-1',
+      scopes: [MCP_OAUTH_SCOPES.TrainingPlansRead, MCP_OAUTH_SCOPES.TrainingPlansWrite,
+        MCP_OAUTH_SCOPES.TrainingDeliveryWrite],
+    }, 'https://quantified-self.io');
+    const client = new Client({ name: 'focused-workout-delivery-contract-client', version: '1.0.0' });
+    try {
+      await server.connect(serverTransport);
+      await client.connect(clientTransport);
+      const tool = (await client.listTools()).tools.find(item => item.name === 'preview_create_planned_workout');
+      expect(tool?.inputSchema.properties).toHaveProperty('delivery');
+      expect(JSON.stringify(tool?.inputSchema.properties?.delivery)).toContain('all_connected');
+      expect(JSON.stringify(tool?.inputSchema.properties?.delivery)).toContain('timeZone');
+    } finally {
+      await client.close();
+      await server.close();
+    }
+  });
+
+
+  it('advertises native approval metadata and applies one server-bound Training proposal call', async () => {
+    const preview = {
+      proposalRef: 'opaque-proposal-reference', expiresAtMs: Date.now() + 60_000,
+      permissionMode: 'schedule' as const, scheduleRevision: 1,
+      summary: 'One Training change requires confirmation.', requiresConfirmation: true as const,
+      changes: [{ index: 0, kind: 'rename-plan', summary: 'Rename the plan.' }], providerPreviews: [],
+    };
+    const applied = {
+      proposalRef: preview.proposalRef, status: 'applied' as const, scheduleRevision: 2,
+      changes: [{ index: 0, kind: 'rename-plan', status: 'applied' as const, message: 'Renamed the plan.' }],
+      providers: [], createdReferences: [],
+    };
+    const applyTrainingChanges = vi.fn().mockResolvedValue(applied);
+    const dataService = {
+      applyTrainingChanges,
+    } as unknown as NonNullable<Parameters<typeof createMcpServer>[2]>;
+    const auth = {
+      uid: 'user-1', clientId: 'https://client.example/mcp.json', connectionId: 'connection-1',
+      scopes: [MCP_OAUTH_SCOPES.TrainingPlansRead, MCP_OAUTH_SCOPES.TrainingPlansWrite],
+    };
+    const server = createMcpTransportHandler(
+      () => createMcpServer(auth, 'https://quantified-self.io', dataService),
+      error => { throw error; },
+    );
+    const transport = new StreamableHTTPClientTransport(new URL('https://contract.example/mcp'), {
+      fetch: (url, init) => server.fetch(new Request(url, init)),
+    });
+    const client = new Client({ name: 'training-native-approval-client', version: '1.0.0' }, {
+      versionNegotiation: { mode: { pin: '2026-07-28' } },
+    });
+
+    try {
+      await client.connect(transport);
+      const applyTool = (await client.listTools()).tools.find(
+        tool => tool.name === 'apply_training_changes',
+      );
+      expect(applyTool?.annotations).toEqual({
+        readOnlyHint: false,
+        destructiveHint: true,
+        idempotentHint: true,
+        openWorldHint: false,
+      });
+      const result = await client.callTool({ name: 'apply_training_changes', arguments: {
+        proposalRef: preview.proposalRef, permissionMode: 'schedule',
+      } });
+      expect(result.isError).not.toBe(true);
+      expect(result.structuredContent).toEqual(applied);
+      expect(applyTrainingChanges).toHaveBeenCalledTimes(1);
+    } finally {
+      await client.close();
+    }
+  });
 
   it('advertises bounded saved-route type and name filters', async () => {
     const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
@@ -1244,7 +1437,7 @@ describe('MCP HTTP scope enforcement', () => {
         name: 'quantified-self',
         title: 'Quantified Self',
         version: '1.4.0',
-        description: 'Read-only activity and Health metrics, body measurements, Training snapshots, and sleep-session summaries.',
+        description: 'Permission-scoped activity, Health, sleep, measurements, and Training access, including approval-gated Training changes when granted.',
         websiteUrl: 'https://beta.quantified-self.io',
         icons: [
           {

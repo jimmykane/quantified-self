@@ -358,6 +358,7 @@ service cloud.firestore {
         match /trainingDeliveryLedger/{document=**} { allow read, write: if false; }
         match /trainingDeliveryState/{document=**} { allow read, write: if false; }
         match /trainingDeliveryScopes/{document=**} { allow read, write: if false; }
+        match /trainingMcpProposals/{document=**} { allow read, write: if false; }
 
         match /sleepSessions/{sleepSessionID} {
           allow read: if request.auth.uid == userID;

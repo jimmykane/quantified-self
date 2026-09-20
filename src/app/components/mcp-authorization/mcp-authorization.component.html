@@ -2,7 +2,7 @@
   <mat-card appearance="outlined" class="mcp-authorization__card">
     <mat-card-header>
       <mat-card-title>Connect an MCP client</mat-card-title>
-      <mat-card-subtitle>Choose exactly what this client may read from your account.</mat-card-subtitle>
+    <mat-card-subtitle>Choose exactly what this client may access or change.</mat-card-subtitle>
     </mat-card-header>
 
     <mat-card-content>
@@ -65,7 +65,8 @@
             </mat-checkbox>
           }
           <p class="mcp-authorization__privacy">
-            This connection is read-only. Activity details and saved-route summaries exclude locations unless you
+            Training changes are always previewed, then sent through a separate write tool using your client's native
+            approval controls. Keep automatic approval disabled if you want to review every proposal. Activity details and saved-route summaries exclude locations unless you
             separately approve their matching location permission. Activity locations can reveal exact starts, ends,
             MTB jumps, and bounded breadcrumb traces. Saved-route locations can reveal exact bounds, preview geometry,
             segment endpoints, and waypoints. These permissions are independent: granting one never grants the other.

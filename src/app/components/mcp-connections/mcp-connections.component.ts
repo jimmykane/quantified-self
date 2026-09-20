@@ -6,7 +6,6 @@ import { AppHapticsService } from '../../services/app.haptics.service';
 import { MCP_SCOPE_CONTENT, MCP_SCOPE_PARENTS, type McpScope } from '../../helpers/mcp-permissions.helper';
 import { MatButtonModule } from '@angular/material/button';
 import { MatCardModule } from '@angular/material/card';
-import { MatCheckboxModule } from '@angular/material/checkbox';
 import { MatDividerModule } from '@angular/material/divider';
 import { MatIconModule } from '@angular/material/icon';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
@@ -14,24 +13,23 @@ import { MatSnackBar } from '@angular/material/snack-bar';
 import { AppFunctionsService } from '../../services/app.functions.service';
 import { AppWindowService } from '../../services/app.window.service';
 import { LoggerService } from '../../services/logger.service';
+import { CompactRowComponent } from '../shared/compact-row/compact-row.component';
+
+const MCP_SCOPE_ENTRIES = Object.entries(MCP_SCOPE_CONTENT) as Array<[
+  McpScope,
+  typeof MCP_SCOPE_CONTENT[McpScope],
+]>;
+const TRAINING_CHANGE_SCOPES = new Set<McpScope>([
+  'training-plans:write',
+  'training-delivery:write',
+]);
 
 interface McpConnection {
   connectionId: string;
   clientId: string;
   clientName: string;
   redirectHost: string;
-  scopes: Array<
-    | 'activity-descriptions:read'
-    | 'timeline-notes:read'
-    | 'health:read'
-    | 'metrics:read'
-    | 'measurements:read'
-    | 'sleep:read'
-    | 'activity-details:read'
-    | 'activity-location:read'
-    | 'routes:read'
-    | 'route-location:read'
-  >;
+  scopes: McpScope[];
   createdAtMs: number;
   lastUsedAtMs: number | null;
 }
@@ -44,11 +42,11 @@ interface McpConnection {
     ClipboardModule,
     MatButtonModule,
     MatCardModule,
-    MatCheckboxModule,
     MatDividerModule,
     MatDialogModule,
     MatIconModule,
     MatProgressSpinnerModule,
+    CompactRowComponent,
   ],
   templateUrl: './mcp-connections.component.html',
   styleUrls: ['./mcp-connections.component.scss'],
@@ -66,18 +64,6 @@ export class McpConnectionsComponent implements OnInit {
   readonly loading = signal(true);
   readonly error = signal<string | null>(null);
   readonly revokingConnectionId = signal<string | null>(null);
-  readonly scopeLabels: Record<McpConnection['scopes'][number], string> = {
-    'timeline-notes:read': 'Timeline notes',
-    'activity-descriptions:read': 'Activity descriptions',
-    'health:read': 'Health metrics',
-    'metrics:read': 'Activity and Training metrics',
-    'measurements:read': 'Body measurements',
-    'sleep:read': 'Sleep summaries',
-    'activity-details:read': 'Individual activity details',
-    'activity-location:read': 'Activity locations',
-    'routes:read': 'Saved-route summaries',
-    'route-location:read': 'Saved-route locations and geometry',
-  };
   readonly mcpEndpoint = `${this.windowService.currentDomain}/mcp`;
   readonly permissionInfo = Object.entries(MCP_SCOPE_CONTENT).map(([scope, content]) => ({
     scope,
@@ -91,12 +77,33 @@ export class McpConnectionsComponent implements OnInit {
     this.dialog.open(template, { data: permission, width: '480px', maxWidth: 'calc(100vw - 32px)' });
   }
   readonly connectionDetails = computed(() => this.connections().map(connection => {
-    const granted = new Set<string>(connection.scopes);
+    const granted = new Set(connection.scopes);
+    const permissions = MCP_SCOPE_ENTRIES.map(([scope, content]) => ({
+      scope,
+      title: content.title,
+      granted: granted.has(scope),
+      parentTitle: MCP_SCOPE_PARENTS[scope]
+        ? MCP_SCOPE_CONTENT[MCP_SCOPE_PARENTS[scope]!].title : null,
+      summary: MCP_SCOPE_PARENTS[scope]
+        ? `Requires ${MCP_SCOPE_CONTENT[MCP_SCOPE_PARENTS[scope]!].title}.` : null,
+    }));
     return {
       ...connection,
-      permissions: Object.entries(this.scopeLabels).map(([scope, label]) => ({
-        scope, label, granted: granted.has(scope),
-      })),
+      permissions,
+      permissionGroups: [
+        {
+          id: 'data',
+          title: 'Data access',
+          summary: 'Read permissions, including Training plans and planned workouts.',
+          permissions: permissions.filter(permission => !TRAINING_CHANGE_SCOPES.has(permission.scope)),
+        },
+        {
+          id: 'training-changes',
+          title: 'Training changes',
+          summary: 'Optional changes still need a reviewed proposal and your client\'s native approval.',
+          permissions: permissions.filter(permission => TRAINING_CHANGE_SCOPES.has(permission.scope)),
+        },
+      ],
     };
   }));
 

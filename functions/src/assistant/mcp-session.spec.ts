@@ -1,4 +1,4 @@
-import { TRAINING_READ_TOOLS } from '../mcp/training-plans.schemas';
+import { TRAINING_PREVIEW_TOOLS, TRAINING_READ_TOOLS } from '../mcp/training-plans.schemas';
 import { McpServer, type CallToolResult } from '@modelcontextprotocol/server';
 import { TimeIntervals } from '@sports-alliance/sports-lib';
 import { z } from 'zod';
@@ -83,6 +83,21 @@ describe('Assistant MCP session', () => {
         structuredContent: { source: 'list_training_plans' },
       });
       await expect(session.callTool('query_timeline_notes', {})).rejects.toThrow('not available');
+    } finally { await session.close(); }
+  });
+
+  it('adds focused and batch previews only for Training changes and binds them to the current conversation generation', async () => {
+    let capturedAuth: AuthenticatedMcpRequest | null = null;
+    const session = await createAssistantMcpSession('ordinary-owner', 'https://quantified-self.io', {
+      createServer: auth => { capturedAuth = auth; return createTestServer(); },
+    }, 'coordinate_free', false, true, true, true, 'conversation-123');
+    try {
+      expect(session.tools.map(tool => tool.name)).toContain('preview_training_changes');
+      expect(session.tools.map(tool => tool.name)).toContain('preview_create_planned_workout');
+      expect(session.tools.map(tool => tool.name)).not.toContain('apply_training_changes' as never);
+      expect(capturedAuth).toMatchObject({ connectionId: 'first-party-assistant-v1:conversation-123',
+        scopes: expect.arrayContaining([MCP_OAUTH_SCOPES.TrainingPlansRead, MCP_OAUTH_SCOPES.TrainingPlansWrite,
+          MCP_OAUTH_SCOPES.TrainingDeliveryWrite]) });
     } finally { await session.close(); }
   });
 
@@ -197,7 +212,9 @@ describe('Assistant MCP session', () => {
     );
 
     try {
-      expect(session.tools.map(tool => tool.name)).toEqual(ASSISTANT_MCP_TOOL_NAMES.filter(name => name !== 'query_timeline_notes' && !(TRAINING_READ_TOOLS as readonly string[]).includes(name)));
+      expect(session.tools.map(tool => tool.name)).toEqual(ASSISTANT_MCP_TOOL_NAMES.filter(name => name !== 'query_timeline_notes'
+        && !(TRAINING_PREVIEW_TOOLS as readonly string[]).includes(name)
+        && !(TRAINING_READ_TOOLS as readonly string[]).includes(name)));
       expect(session.tools.map(tool => tool.name)).toContain(
         'search_activities_near_location',
       );

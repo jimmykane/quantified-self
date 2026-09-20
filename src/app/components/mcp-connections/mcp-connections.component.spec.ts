@@ -11,7 +11,7 @@ import { LoggerService } from '../../services/logger.service';
 import { McpConnectionsComponent } from './mcp-connections.component';
 import { AppHapticsService } from '../../services/app.haptics.service';
 import { MatDialog } from '@angular/material/dialog';
-import { MCP_SCOPE_CONTENT } from '../../helpers/mcp-permissions.helper';
+import { MCP_SCOPE_CONTENT, type McpScope } from '../../helpers/mcp-permissions.helper';
 
 describe('McpConnectionsComponent', () => {
   const connection = {
@@ -20,6 +20,8 @@ describe('McpConnectionsComponent', () => {
     clientName: 'Training Copilot',
     redirectHost: 'client.example',
     scopes: [
+      'training-plans:read',
+      'training-delivery:write',
       'health:read',
       'metrics:read',
       'measurements:read',
@@ -28,16 +30,7 @@ describe('McpConnectionsComponent', () => {
       'activity-location:read',
       'routes:read',
       'route-location:read',
-    ] as Array<
-      | 'health:read'
-      | 'metrics:read'
-      | 'measurements:read'
-      | 'sleep:read'
-      | 'activity-details:read'
-      | 'activity-location:read'
-      | 'routes:read'
-      | 'route-location:read'
-    >,
+    ] as McpScope[],
     createdAtMs: 1_700_000_000_000,
     lastUsedAtMs: 1_700_001_000_000,
   };
@@ -70,7 +63,7 @@ describe('McpConnectionsComponent', () => {
     }).compileComponents();
   });
 
-  it('lists all permissions and distinguishes granted from not granted without allowing changes', async () => {
+  it('lists every shared permission and distinguishes data from optional Training changes', async () => {
     const fixture = TestBed.createComponent(McpConnectionsComponent);
     fixture.detectChanges();
     await fixture.whenStable();
@@ -78,6 +71,11 @@ describe('McpConnectionsComponent', () => {
 
     const content = fixture.nativeElement.textContent as string;
     expect(content).toContain('Training Copilot');
+    expect(content).toContain('Data access');
+    expect(content).toContain('Training changes');
+    expect(content).toContain('Training plans and planned workouts');
+    expect(content).toContain('Change Training plans and workouts');
+    expect(content).toContain('Change planned-workout sync');
     expect(content).toContain('Activity and Training metrics');
     expect(content).toContain('Body measurements');
     expect(content).toContain('Health metrics');
@@ -86,28 +84,35 @@ describe('McpConnectionsComponent', () => {
     expect(content).toContain('Activity locations');
     expect(content).toContain('Saved-route summaries');
     expect(content).toContain('Saved-route locations and geometry');
-    expect(content).toContain('These apps can only view the data you approved');
+    expect(content).toContain('These apps can access only the data and Training changes you approve');
     expect(content).toContain('Disconnect an app here to stop sharing');
-    expect(content).toContain('Reconnecting the same app keeps the current connection active');
+    expect(content).toContain('Authorizing the same app again keeps its current connection active');
+    expect(content).toContain('start authorization again in Training Copilot');
+    expect(content).toContain('refresh or rescan its Quantified Self connection');
 
-    const permissionInputs = Array.from(
-      fixture.nativeElement.querySelectorAll<HTMLInputElement>(
-        '.mcp-connections__permissions input[type="checkbox"]',
-      ),
+    const rows = fixture.componentInstance.connectionDetails()[0].permissions;
+    expect(rows).toHaveLength(Object.keys(MCP_SCOPE_CONTENT).length);
+    expect(rows.filter(permission => permission.granted).map(permission => permission.scope).sort())
+      .toEqual([...connection.scopes].sort());
+    expect(rows.find(permission => permission.scope === 'training-plans:read')).toMatchObject({
+      title: 'Training plans and planned workouts', granted: true,
+    });
+    expect(rows.find(permission => permission.scope === 'training-plans:write')).toMatchObject({
+      title: 'Change Training plans and workouts', granted: false,
+      parentTitle: 'Training plans and planned workouts',
+      summary: 'Requires Training plans and planned workouts.',
+    });
+    expect(rows.find(permission => permission.scope === 'training-delivery:write')).toMatchObject({
+      title: 'Change planned-workout sync', granted: true,
+      parentTitle: 'Training plans and planned workouts',
+    });
+    expect(fixture.nativeElement.querySelectorAll('app-compact-row')).toHaveLength(Object.keys(MCP_SCOPE_CONTENT).length);
+    const states = Array.from(fixture.nativeElement.querySelectorAll<HTMLElement>('.mcp-connections__permission-state'));
+    expect(states.filter(state => state.textContent?.trim() === 'Granted')).toHaveLength(connection.scopes.length);
+    expect(states.filter(state => state.textContent?.trim() === 'Not granted')).toHaveLength(
+      Object.keys(MCP_SCOPE_CONTENT).length - connection.scopes.length,
     );
-    expect(permissionInputs).toHaveLength(Object.keys(fixture.componentInstance.scopeLabels).length);
-    expect(permissionInputs.filter(input => input.checked)).toHaveLength(connection.scopes.length);
-    expect(permissionInputs.every(input => input.disabled)).toBe(true);
-    const rows = Array.from(fixture.nativeElement.querySelectorAll<HTMLElement>(
-      '.mcp-connections__permissions mat-checkbox',
-    ));
-    for (const label of ['Timeline notes', 'Activity descriptions']) {
-      const row = rows.find(row => row.textContent?.includes(label))!;
-      expect(row.textContent.trim()).toBe(label);
-      expect(row.querySelector('input')?.checked).toBe(false);
-    }
-    expect(rows.find(row => row.textContent?.includes('Health metrics'))?.textContent.trim()).toBe('Health metrics');
-    expect(content).toContain('Reconnect this app to approve unchecked permissions.');
+    expect(content).toContain('Requires Training plans and planned workouts.');
     expect(functions.call).toHaveBeenCalledTimes(1);
   });
 
@@ -137,7 +142,7 @@ describe('McpConnectionsComponent', () => {
     const buttons = Array.from(card.querySelectorAll<HTMLButtonElement>('button'));
     expect(buttons).toHaveLength(Object.keys(MCP_SCOPE_CONTENT).length);
     expect(card.textContent).not.toContain('Text may include sensitive health');
-    expect(card.textContent).toContain('Reconnect an app to grant additional permissions');
+    expect(card.textContent).toContain('Start authorization again in an app to grant additional permissions');
     expect(haptics.selection).not.toHaveBeenCalled();
     for (const permission of fixture.componentInstance.permissionInfo) {
       buttons.find(button => button.getAttribute('aria-label') === `About ${permission.title}`)!.click();
@@ -152,7 +157,7 @@ describe('McpConnectionsComponent', () => {
         expect(dialog.textContent).toContain('untrusted labels');
       }
       if (permission.parentTitle) expect(dialog.textContent).toContain(`Requires ${permission.parentTitle} permission`);
-      expect(dialog.textContent).toContain('Reconnect the app and approve this permission');
+      expect(dialog.textContent).toContain('Start authorization again in the app and approve this permission');
       (dialog.querySelector('button') as HTMLButtonElement).click();
       await fixture.whenStable();
       fixture.detectChanges();
@@ -211,7 +216,7 @@ describe('McpConnectionsComponent', () => {
     expect(content).toContain('Open supported links');
     expect(content).toContain('no active connection is created');
     expect(content).toContain('Authorization and data access');
-    expect(content).toContain('metrics, body measurements');
+    expect(content).toContain('data and optional Training permissions');
 
     const iconDownloads = fixture.nativeElement.querySelectorAll<HTMLAnchorElement>(
       '.mcp-connections__icon-actions a',
@@ -269,6 +274,32 @@ describe('McpConnectionsComponent', () => {
       'Training Copilot was disconnected.',
       undefined,
       { duration: 4000 },
+    );
+  });
+
+  it('ends loading and allows retry when MCP connections cannot be loaded', async () => {
+    functions.call.mockRejectedValueOnce(new Error('App Check is taking too long'));
+    const fixture = TestBed.createComponent(McpConnectionsComponent);
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    expect(fixture.componentInstance.loading()).toBe(false);
+    expect(fixture.componentInstance.error()).toBe('Could not load MCP connections.');
+  });
+
+  it('re-enables disconnect after a failed request', async () => {
+    const fixture = TestBed.createComponent(McpConnectionsComponent);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    functions.call.mockRejectedValueOnce(new Error('App Check is taking too long'));
+
+    await fixture.componentInstance.revoke(connection);
+
+    expect(fixture.componentInstance.revokingConnectionId()).toBeNull();
+    expect(snackBar.open).toHaveBeenCalledWith(
+      'Could not disconnect this MCP client. Please try again.',
+      undefined,
+      { duration: 5000 },
     );
   });
 });

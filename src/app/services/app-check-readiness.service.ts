@@ -5,6 +5,8 @@ import { AppCheck, getToken as getAppCheckToken } from 'app/firebase/app-check';
   providedIn: 'root'
 })
 export class AppCheckReadinessService {
+  private static readonly readinessTimeoutMs = 15_000;
+
   private appCheck = inject(AppCheck, { optional: true });
   private readyPromise: Promise<void> | null = null;
 
@@ -22,7 +24,7 @@ export class AppCheckReadinessService {
       return;
     }
 
-    const readinessPromise = this.fetchToken(forceRefresh).then(() => undefined);
+    const readinessPromise = this.fetchTokenWithinDeadline(forceRefresh).then(() => undefined);
     this.readyPromise = readinessPromise;
 
     try {
@@ -36,7 +38,25 @@ export class AppCheckReadinessService {
   }
 
   async getToken(forceRefresh = false): Promise<string> {
-    return this.fetchToken(forceRefresh);
+    return this.fetchTokenWithinDeadline(forceRefresh);
+  }
+
+  private async fetchTokenWithinDeadline(forceRefresh: boolean): Promise<string> {
+    let timeout: ReturnType<typeof setTimeout> | undefined;
+    const tokenRequest = this.fetchToken(forceRefresh);
+    const deadline = new Promise<never>((_, reject) => {
+      timeout = setTimeout(() => {
+        reject(new Error('App Check is taking too long. Please try again.'));
+      }, AppCheckReadinessService.readinessTimeoutMs);
+    });
+
+    try {
+      return await Promise.race([tokenRequest, deadline]);
+    } finally {
+      if (timeout !== undefined) {
+        clearTimeout(timeout);
+      }
+    }
   }
 
   private async fetchToken(forceRefresh: boolean): Promise<string> {

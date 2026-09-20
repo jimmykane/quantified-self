@@ -2,17 +2,20 @@ import { ServiceNames } from '@sports-alliance/sports-lib';
 import { PLANNED_WORKOUT_PROVIDER_IDS, type PlannedWorkoutProviderId } from './planned-workout-providers';
 import { buildProviderPresentation, type ProviderPresentation } from './provider-presentation';
 import type { ScheduledWorkoutV1, TrainingPlanV1 } from './training-plans';
-import type { TrainingDeliveryScope, TrainingDeliverySettingsV1, TrainingDeliveryStatusV1 } from './training-provider-delivery';
+import { trainingDeliveryLocalDate, type TrainingDeliveryScope, type TrainingDeliverySettingsV1,
+  type TrainingDeliveryStatusV1 } from './training-provider-delivery';
+import type { TrainingWorkoutCompletionV1 } from './training-workout-completion';
 
 export const TRAINING_SYNC_OUTCOMES = ['awaiting_latest_check', 'skipped', 'plan_inactive', 'sync_off',
   'not_synced', 'waiting', 'unconfirmed', 'pending', 'delivered', 'removed', 'stopped', 'paused_plan',
   'paused_pro', 'provider_unavailable', 'reconnect_required', 'connection_repair', 'fresh_consent_required',
   'outside_horizon', 'past', 'completed', 'unsupported', 'approval_required', 'retrying', 'needs_attention', 'failed'] as const;
 export type TrainingSyncOutcome = typeof TRAINING_SYNC_OUTCOMES[number];
-export type TrainingSyncWorkout = Pick<ScheduledWorkoutV1, 'id' | 'planId' | 'lifecycle' | 'updatedAtMs'>;
+export type TrainingSyncWorkout = Pick<ScheduledWorkoutV1, 'id' | 'planId' | 'localDate' | 'lifecycle' | 'updatedAtMs'>;
 export type TrainingSyncPlan = Pick<TrainingPlanV1, 'lifecycle'>;
 export type TrainingSyncSetting = Pick<TrainingDeliverySettingsV1, 'scope' | 'scopeId' | 'provider' | 'enabled' | 'suppressed' | 'timeZone' | 'destinationKey' | 'associationPlanId' | 'updatedAtMs'>;
 export type TrainingSyncStatus = Pick<TrainingDeliveryStatusV1, 'id' | 'workoutId' | 'planId' | 'provider' | 'status' | 'differsFromQS' | 'hasRemoteCopy' | 'timeZone' | 'lastAttemptAtMs' | 'lastAcceptedAtMs' | 'updatedAtMs'>;
+export type TrainingSyncCompletion = Pick<TrainingWorkoutCompletionV1, 'workoutId' | 'planId' | 'provider'>;
 export interface TrainingSyncProjection {
   provider: PlannedWorkoutProviderId;
   state: 'current' | 'history' | 'inactive' | 'off' | 'empty' | 'incomplete';
@@ -35,6 +38,16 @@ export interface TrainingDeliverySummary {
   detail: string;
   icon: string;
   projection: TrainingSyncProjection;
+  /** UI-only current/future emphasis. The public MCP projection remains the all-workout aggregate above. */
+  planFocus: TrainingPlanSyncFocus | null;
+}
+
+export interface TrainingPlanSyncFocus {
+  totalWorkouts: number | null;
+  syncedWorkouts: number | null;
+  earlierWorkouts: number | null;
+  label: string;
+  detail: string;
 }
 
 const SERVICES: Record<PlannedWorkoutProviderId, ServiceNames> = {
@@ -58,28 +71,33 @@ function countedOutcome(label: string, count: number): string {
     'Retry scheduled': ['retry scheduled', 'retries scheduled'],
     'Needs approval': ['needs approval', 'need approval'],
     'Needs sync setup': ['needs sync setup', 'need sync setup'],
-    'Delivery unconfirmed': ['delivery unconfirmed', 'deliveries unconfirmed'],
+    'Sync unconfirmed': ['sync unconfirmed', 'syncs unconfirmed'],
     'Copy removed': ['copy removed', 'copies removed'],
     'Removal pending': ['removal pending', 'removals pending'],
     'Removal unconfirmed': ['removal unconfirmed', 'removals unconfirmed'],
     'Sync failed': ['sync failed', 'syncs failed'],
     'Sync stopped': ['sync stopped', 'syncs stopped'],
     'Sync off': ['not syncing', 'not syncing'],
-    'Delivery unavailable': ['delivery unavailable', 'deliveries unavailable'],
+    'Sync unavailable': ['sync unavailable', 'syncs unavailable'],
     'Status unconfirmed': ['status unconfirmed', 'statuses unconfirmed'],
     'Check connection': ['needs a connection check', 'need a connection check'],
     'Reconnect required': ['requires reconnection', 'require reconnection'],
     'Plan inactive': ['in an inactive plan', 'in an inactive plan'],
-    'Plan inactive · copy remains': ['in an inactive plan · provider copy kept', 'in an inactive plan · provider copies kept'],
-    'Sync off · copy remains': ['not syncing · provider copy kept', 'not syncing · provider copies kept'],
-    'Skipped · copy remains': ['skipped · provider copy kept', 'skipped · provider copies kept'],
+    'Plan inactive · copy remains': ['in an inactive plan · sent copy kept', 'in an inactive plan · sent copies kept'],
+    'Sync off · copy remains': ['not syncing · sent copy kept', 'not syncing · sent copies kept'],
+    'Skipped · copy remains': ['skipped · sent copy kept', 'skipped · sent copies kept'],
+    'Completed · activity linked': ['completed · activity linked', 'completed · activities linked'],
+    'Sent · workout completed': ['sent · workout completed', 'sent · workouts completed'],
+    'Past date · copy kept': ['past date · copy kept', 'past dates · copies kept'],
+    'Completed in connected app · copy kept': ['completed in connected app · copy kept', 'completed in connected app · copies kept'],
   };
   // Lowercase only the leading letter, preserving names such as Pro and QS.
   return `${count} ${forms[label]?.[count === 1 ? 0 : 1] ?? label.charAt(0).toLowerCase() + label.slice(1)}`;
 }
 
 function workoutOutcome(workout: TrainingSyncWorkout, status: TrainingSyncStatus | undefined,
-  setting: TrainingSyncSetting | undefined, plan: TrainingSyncPlan | null): Outcome {
+  setting: TrainingSyncSetting | undefined, plan: TrainingSyncPlan | null,
+  completion: TrainingSyncCompletion | undefined): Outcome {
   const outcome = (label: string, synced = false, attention = false,
     code: TrainingSyncOutcome = status?.status ?? 'not_synced'): Outcome => ({ label, code, synced, attention, copy: !!status?.hasRemoteCopy });
   // Independent live listeners may deliver authored data before the worker's new projection.
@@ -89,15 +107,20 @@ function workoutOutcome(workout: TrainingSyncWorkout, status: TrainingSyncStatus
   if (status && ATTENTION.has(status.status)) {
     const labels: Partial<Record<TrainingDeliveryStatusV1['status'], string>> = {
       unsupported: 'Not supported', approval_required: 'Needs approval', failed: 'Sync failed',
-      needs_attention: 'Delivery unconfirmed', reconnect_required: 'Reconnect required',
+      needs_attention: 'Sync unconfirmed', reconnect_required: 'Reconnect required',
       connection_repair: 'Check connection', fresh_consent_required: 'Needs sync setup',
     };
     return outcome(labels[status.status]!, false, true);
   }
+  const confirmedCopy = !!status?.hasRemoteCopy && !status.differsFromQS && status.lastAcceptedAtMs !== null;
+  if (completion && confirmedCopy) {
+    return outcome(completion.provider === status.provider ? 'Completed · activity linked' : 'Sent · workout completed',
+      workout.lifecycle !== 'skipped', false, 'completed');
+  }
   if (status?.status === 'past' || status?.status === 'completed') {
-    const confirmed = status.hasRemoteCopy && !status.differsFromQS && status.lastAcceptedAtMs !== null;
     const skipped = workout.lifecycle === 'skipped';
-    return outcome((skipped ? 'Skipped · ' : '') + (status.status === 'completed' ? 'Completed · left unchanged' : 'Past · left unchanged'), confirmed && !skipped);
+    const label = status.status === 'completed' ? 'Completed in connected app · copy kept' : 'Past date · copy kept';
+    return outcome((skipped ? 'Skipped · ' : '') + label, confirmedCopy && !skipped);
   }
   if (workout.lifecycle === 'skipped') return outcome(status?.hasRemoteCopy ? 'Skipped · copy remains' : 'Skipped', false, false, 'skipped');
   if (plan && plan.lifecycle !== 'active') return outcome(status?.hasRemoteCopy ? 'Plan inactive · copy remains' : 'Plan inactive', false, false, 'plan_inactive');
@@ -105,12 +128,12 @@ function workoutOutcome(workout: TrainingSyncWorkout, status: TrainingSyncStatus
   if (!status) return outcome(setting?.enabled ? 'Waiting to sync' : 'Not synced', false, false, setting?.enabled ? 'waiting' : 'not_synced');
   switch (status.status) {
     case 'delivered': return status.hasRemoteCopy && !status.differsFromQS && status.lastAcceptedAtMs !== null
-      ? outcome('Synced', true) : outcome('Delivery unconfirmed', false, false, 'unconfirmed');
+      ? outcome('Synced', true) : outcome('Sync unconfirmed', false, false, 'unconfirmed');
     case 'pending': return outcome(status.hasRemoteCopy ? 'Updating' : 'Waiting to sync');
     case 'retrying': return outcome('Retry scheduled');
     case 'outside_horizon': return outcome('Scheduled for later');
     case 'paused_pro': return outcome('Paused · Pro required');
-    case 'provider_unavailable': return outcome('Delivery unavailable');
+    case 'provider_unavailable': return outcome('Sync unavailable');
     case 'removed': return outcome(status.hasRemoteCopy ? 'Removal unconfirmed' : 'Copy removed');
     case 'stopped': return outcome(status.hasRemoteCopy ? 'Removal pending' : 'Sync stopped');
     case 'paused_plan': return outcome(status.hasRemoteCopy ? 'Removal pending' : 'Plan inactive');
@@ -122,7 +145,7 @@ function workoutOutcome(workout: TrainingSyncWorkout, status: TrainingSyncStatus
 export async function buildTrainingDeliverySummaries(input: {
   uid: string; scope: TrainingDeliveryScope; id: string; workouts: readonly TrainingSyncWorkout[];
   plan: TrainingSyncPlan | null; settings: readonly TrainingSyncSetting[];
-  statuses: readonly TrainingSyncStatus[]; complete: boolean;
+  statuses: readonly TrainingSyncStatus[]; completions: readonly TrainingSyncCompletion[]; complete: boolean; nowMs?: number;
 }): Promise<TrainingDeliverySummary[]> {
   const workouts = input.workouts.filter(workout => workout.lifecycle !== 'deleted'
     && (input.scope === 'plan' ? workout.planId === input.id : workout.id === input.id));
@@ -146,7 +169,9 @@ export async function buildTrainingDeliverySummaries(input: {
     if (!input.complete) return { provider, presentation, label: 'Status incomplete',
       detail: input.scope === 'plan' ? 'More delivery records exist. Open sync details; this is not a complete plan total.'
         : 'More delivery records exist. Open sync details; current delivery is not fully checked.', icon: 'info',
-      projection: { ...projection, state: 'incomplete' as const } };
+      projection: { ...projection, state: 'incomplete' as const },
+      planFocus: input.scope === 'plan' ? { totalWorkouts: null, syncedWorkouts: null, earlierWorkouts: null,
+        label: 'Upcoming status incomplete', detail: 'Open sync details to see the latest workout status' } : null };
     const byId = new Map(records.map(item => [item.id, item]));
     const matchedIds = new Set<string>();
     const outcomes = await Promise.all(workouts.map(async workout => {
@@ -158,7 +183,8 @@ export async function buildTrainingDeliverySummaries(input: {
       if (status && override && override.updatedAtMs > status.updatedAtMs) {
         return { label: 'Awaiting latest check', code: 'awaiting_latest_check' as const, synced: false, attention: false, copy: status.hasRemoteCopy };
       }
-      return workoutOutcome(workout, status, setting, input.plan);
+      return workoutOutcome(workout, status, setting, input.plan,
+        input.completions.find(completion => completion.workoutId === workout.id && completion.planId === workout.planId));
     }));
     const earlier = records.filter(record => !matchedIds.has(record.id));
     const retained = earlier.filter(record => record.hasRemoteCopy);
@@ -168,7 +194,7 @@ export async function buildTrainingDeliverySummaries(input: {
     for (const outcome of outcomes) if (input.scope === 'plan' && outcome.label !== 'Synced') notes.set(outcome.label, (notes.get(outcome.label) ?? 0) + 1);
     const detail = [...notes].map(([label, count]) => countedOutcome(label, count));
     if (input.scope === 'workout' && outcomes[0]?.copy && !outcomes[0].synced) {
-      detail.push('A provider copy remains; current delivery is not confirmed');
+      detail.push('A sent copy remains; the latest sync is not confirmed');
     }
     if (retained.length) detail.push(`${retained.length} retained ${retained.length === 1 ? 'copy' : 'copies'} from earlier sync; see details`);
     const earlierAttention = earlier.filter(record => ATTENTION.has(record.status)).length;
@@ -177,8 +203,10 @@ export async function buildTrainingDeliverySummaries(input: {
     const historicalOnly = !setting && !records.some(record => workoutIds.has(record.workoutId));
     const countLabel = `${synced} of ${workouts.length} ${workouts.length === 1 ? 'workout' : 'workouts'} synced`;
     let label = input.scope === 'plan' ? countLabel : outcomes[0]?.label ?? 'Sync history';
-    if (input.scope === 'workout' && synced && label !== 'Synced') label = `Synced · ${label.toLowerCase()}`;
-    if (input.scope === 'workout' && !setting && retained.length) label = 'Earlier provider copy';
+    if (input.scope === 'workout' && synced && label !== 'Synced' && !['past', 'completed'].includes(outcomes[0]?.code ?? '')) {
+      label = `Synced · ${label.toLowerCase()}`;
+    }
+    if (input.scope === 'workout' && !setting && retained.length) label = 'Earlier synced copy';
     if (historicalOnly) label = 'Sync history';
     else if (input.scope === 'plan' && !workouts.length) label = setting?.enabled ? 'Sync enabled · no workouts' : 'Sync off · no workouts';
     else if (input.scope === 'plan' && input.plan?.lifecycle !== 'active') label = `Plan inactive · ${countLabel}`;
@@ -189,7 +217,42 @@ export async function buildTrainingDeliverySummaries(input: {
     projection.outcomes = TRAINING_SYNC_OUTCOMES.map(status => ({ status, count: outcomes.filter(item => item.code === status).length }))
       .filter(item => item.count > 0);
     if (outcomes.some(item => item.code === 'awaiting_latest_check')) projection.differsFromQS = null;
+    let planFocus: TrainingPlanSyncFocus | null = null;
+    if (input.scope === 'plan') {
+      const nowMs = input.nowMs ?? Date.now();
+      let today: string;
+      try { today = trainingDeliveryLocalDate(nowMs, setting?.timeZone ?? records[0]?.timeZone ?? 'UTC'); }
+      catch { today = trainingDeliveryLocalDate(nowMs, 'UTC'); }
+      const dated = outcomes.map((outcome, index) => ({ outcome, workout: workouts[index] }));
+      const focused = dated.filter(item => item.workout.localDate >= today
+        && item.workout.lifecycle !== 'skipped' && !['completed', 'outside_horizon'].includes(item.outcome.code));
+      const earlierCount = dated.filter(item => item.workout.localDate < today).length;
+      const completedCount = dated.filter(item => item.workout.localDate >= today && item.outcome.code === 'completed').length;
+      const skippedCount = dated.filter(item => item.workout.localDate >= today
+        && item.outcome.code !== 'completed' && item.workout.lifecycle === 'skipped').length;
+      const laterCount = dated.filter(item => item.workout.localDate >= today
+        && item.workout.lifecycle !== 'skipped' && item.outcome.code === 'outside_horizon').length;
+      const focusedSynced = focused.filter(item => item.outcome.synced).length;
+      const focusedNotes = new Map<string, number>();
+      for (const item of focused) if (!item.outcome.synced) {
+        focusedNotes.set(item.outcome.label, (focusedNotes.get(item.outcome.label) ?? 0) + 1);
+      }
+      const focusedDetail = [...focusedNotes].map(([outcomeLabel, count]) => countedOutcome(outcomeLabel, count));
+      if (earlierCount) focusedDetail.push(`${earlierCount} earlier ${earlierCount === 1 ? 'workout' : 'workouts'}`);
+      if (completedCount) focusedDetail.push(`${completedCount} completed ${completedCount === 1 ? 'workout' : 'workouts'}`);
+      if (skippedCount) focusedDetail.push(`${skippedCount} skipped ${skippedCount === 1 ? 'workout' : 'workouts'}`);
+      const focusedCount = focused.length;
+      if (laterCount && focusedCount) focusedDetail.push(`${laterCount} scheduled for later`);
+      const focusedLabel = focusedCount === 0 ? laterCount ? `${laterCount} ${laterCount === 1 ? 'workout' : 'workouts'} scheduled for later` : 'No upcoming workouts'
+        : laterCount ? focusedSynced === focusedCount
+          ? focusedCount === 1 ? 'Next workout synced' : `All ${focusedCount} workouts due soon synced`
+          : `${focusedSynced} of ${focusedCount} ${focusedCount === 1 ? 'workout' : 'workouts'} due soon synced`
+          : focusedSynced === focusedCount ? focusedCount === 1 ? 'Upcoming workout synced' : `All ${focusedCount} upcoming workouts synced`
+            : `${focusedSynced} of ${focusedCount} upcoming ${focusedCount === 1 ? 'workout' : 'workouts'} synced`;
+      planFocus = { totalWorkouts: focusedCount, syncedWorkouts: focusedSynced, earlierWorkouts: earlierCount,
+        label: focusedLabel, detail: focusedDetail.join(' · ') };
+    }
     return { provider, presentation, label, detail: detail.join('. '),
-      icon: attention ? 'error_outline' : synced > 0 && synced === workouts.length ? 'check_circle' : 'sync', projection };
+      icon: attention ? 'error_outline' : synced > 0 && synced === workouts.length ? 'check_circle' : 'sync', projection, planFocus };
   }))).filter((row): row is TrainingDeliverySummary => row !== null);
 }

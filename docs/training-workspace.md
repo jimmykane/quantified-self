@@ -1,19 +1,66 @@
 # Training Workspace Architecture and Maintenance Guide
 
-## Planning reads through MCP and the Assistant
+## Planning access through MCP and the Assistant
 
-The #690 read-only slice exposes current plans, standalone/associated workouts, complete v1 instructions and existing
-delivery summaries. It does not introduce new storage or modify `WorkoutStructureV1`. Five tools and their strict scope,
-projection and bounds are documented in [MCP server](mcp-server.md#training-plans-and-planned-workouts-690-read-only-slice).
-Source support is not a deployed or registered-client promise. No provider certification, #652 approval flow, sync
-enablement, deployment or plugin installation is implied. Writes remain tracked in #690 with #652.
+The #690 planning surface exposes current plans, standalone/associated workouts, complete v1 instructions, exact stored
+completion links, existing delivery summaries, and a preview/native-approval/apply workflow. It does not modify
+`WorkoutStructureV1`. The tools, strict scopes, projection and bounds are documented in
+[MCP server](mcp-server.md#training-plans-and-planned-workouts-690). Source support is not a deployed or
+registered-client promise. Provider certification, deployment, registered-contract promotion and plugin installation
+remain separate. The approval workflow implements the bounded #652 dependency; fallback/manual completion matching
+remains under #651.
 
 Independent `training-plans:read` consent is available without a UID or Pro gate; the planning UI pilot remains unchanged.
 The Assistant's default-off Training plans choice is conversation-owned, not a UI gate. Current calendar reads default to
 standalone plus active-plan workouts, include skipped, exclude deleted, and allow explicit inactive-plan/all scopes.
 Historical dates still read current records, not history. Calendar dates are not instants or delivery timezones.
 Full structures preserve canonical primitives, ordered node IDs, notes, repeat limits and Sports Lib owner-unit formatting.
-There are no new `Data*` classes, completed-event metrics, inferred duration estimates, provider calls or writes.
+There are no new `Data*` classes, completed-event metrics or inferred duration estimates. Completion reads return only
+an existing exact stored link; they never infer a match. The optional activity reference additionally requires
+`activity-details:read`.
+
+`training-plans:write` and `training-delivery:write` are independent child scopes of `training-plans:read`. The former
+allows only the safe authored lifecycle: create/edit/move/copy/skip/archive/activate/shift and recoverable workout
+deletion. It excludes permanent workout deletion, plan deletion and history restoration. The latter allows plan delivery
+enablement and workout send/resume/stop/retry/check/approval. Delivery remains Pro, provider-connection and rollout gated.
+External clients prepare one strict proposal of at most 25 changes, then invoke the separately approval-gated
+`apply_training_changes` write tool. ChatGPT, Claude and other MCP hosts own their native tool-approval UI; QS does not
+use MCP elicitation for a second confirmation round. A host may let its user configure automatic tool approval, which QS
+cannot detect, so per-proposal review depends on leaving per-call approval enabled in that client. Proposals expire after
+15 minutes. Claude users must not choose **Allow always**, and should disable Training write tools while using Research
+because Research can invoke connector tools without another approval. Proposals bind owner, OAuth connection/grant,
+schedule revision and entity creation time, and retain an idempotent
+terminal result for safe retries. Provider outcomes are independent: a failed send never rolls back a successfully
+authored standalone workout.
+
+Single-workout creation has an additive focused MCP preview. The caller supplies the current schedule revision, optional
+plan reference, calendar date, title and complete canonical recipe; the server supplies the proposal-local key and routes
+the result through the same proposal, native approval and idempotent apply boundary. When the same new workout should be
+sent immediately, an optional delivery object adds selected/all-connected providers and an explicit IANA time zone; this
+also requires the independent delivery-write grant. Connections without that grant are advertised a focused schema with
+no delivery field. It intentionally excludes the batch operation union. Clients use the
+existing batch preview for edits, later provider actions and genuinely multi-change requests, and must not retry rejected
+input unchanged. Repeated malformed previews are stopped after three per connection per minute (six per owner) with a
+ten-minute invalid-call cooldown. The server completes blocked calls as ordinary MCP `isError` tool results over HTTP 200,
+with bounded issue codes and safe schema paths; it emits neither a JSON-RPC protocol error nor `Retry-After`, while
+correctly formed previews remain available immediately. Only the first cooldown transition is logged. This prevents an MCP
+host from turning a schema failure into a transport retry loop. Repeated recipe components are advertised through
+draft-07 references to keep the complete strict recipe inside the existing Training write-metadata budget; runtime Zod
+validation and the public recipe coverage gate remain identical.
+
+The built-in Assistant has separate default-off **Training plans**, **Plan and workout changes**, and **Planned-workout
+sync changes** choices. Only applicable focused/batch preview tools enter Gemini context. The model cannot apply changes; Quantified Self
+stores one bounded proposal under the current server-owned conversation and the user must apply or dismiss it in the app.
+Proposal references bind the exact conversation generation, so permission changes, New chat, stale tabs and account
+switches cannot reuse them. The dedicated App Check callable rechecks the conversation before applying and clears the
+pending proposal after either apply or dismiss.
+
+External MCP clients and the built-in Assistant have different recovery paths for missing Training access. An external
+client must start OAuth authorization again and approve `training-plans:read` plus either independent child scope as
+needed; a connection display can report status but cannot initiate that client-bound flow. The prior grant stays active
+until the new exchange succeeds, and a client may need a tool-catalog refresh or new chat afterward. The Assistant uses
+its own **Examples & data access** toggles instead, which start a fresh conversation. A missing delivery permission is
+separate from Pro, provider connection, rollout and compatibility gates.
 
 The shared delivery-summary helper provides UI wording and MCP machine outcomes from the same current evidence. Whole-plan
 counts include every current non-deleted workout, with no success claim for incomplete scans, empty plans, stale evidence
@@ -24,10 +71,15 @@ projections. Valid sync-off settings without a destination remain readable. Plan
 directly to planning reads without asking for metric permission or catalog access.
 
 Every planning feature PR must assess MCP impact using the root instructions and MCP skill. New recipe targets require
-explicit public schemas, formatters and tests in the same PR; presentation-only spacing can document no wire impact;
+explicit public schemas, formatters, exhaustive discriminant coverage and read/write JSON round-trip tests in the same
+PR. The coverage gate must fail closed when the shared version, node, purpose, ending, target, reference or presentation
+variants change; it must never auto-expose a stored field. MCP authoring guidance must preserve canonical units, stable
+IDs and explicit relative-target snapshots rather than inventing athlete thresholds. Presentation-only spacing can
+document no wire impact;
 private provider artifact metadata must remain excluded. Review safe projections, lifecycle semantics, scope isolation,
 pagination/bytes, unit formatting, Assistant evidence/routing and bundled skills together. A real deferral needs a focused
-#583 subissue in Project 2 before completion. Read coverage never authorizes wider consent, writes or deployment.
+#583 subissue in Project 2 before completion. Existing write scopes never implicitly authorize new lifecycle mutations,
+provider actions, wider consent or deployment.
 
 This document is the implementation guide for the authenticated `/training` workspace. It is intended for product
 engineers, data engineers, reviewers, and AI coding agents. Update it whenever the Training product contract, a derived
@@ -113,8 +165,8 @@ The following rules are architectural constraints:
 - Bounded current scores use the shared lightweight metric indicator rather than a chart instance. Readiness uses a
   0–100 track with its canonical 55 and 75 category boundaries; eligible source sleep scores use a 0–100 track without
   inventing new thresholds. Four discrete segments communicate readiness signal coverage independently from score and
-  confidence. HRV shows its seven-day average, 60-day personal range, status and latest nightly value using the shared
-  `readiness-hrv-display.helper.ts` formatter. Overnight HR retains the baseline-centered ±20% display and exact ratio
+  confidence. HRV shows its seven-day average, 60-day personal range, status and date-labelled latest HRV value using
+  the shared `readiness-hrv-display.helper.ts` formatter. Overnight HR retains the baseline-centered ±20% display and exact ratio
   text (lower Overnight HR may be supportive). Score fills start at zero and remain visible beneath
   their threshold markers. Missing evidence leaves an empty track, never zero.
 - Training-time and workout-count comparisons may use the same baseline-centered visual, but CTL, ATL, Form, ramp,
@@ -566,13 +618,22 @@ Consent/lifecycle rules:
 
 The Material/compact-row delivery dialog is reached from the plan actions area, saved workout editor and workout rows.
 The selected plan, its workout rows and the saved-workout editor also show compact, clickable **per-service sync
-summaries**, using destination branding (for example, **Garmin Connect · 2 of 3 workouts synced**). Opening a summary
+summaries**, using destination branding. The plan-level presentation answers the current question first: its compact
+count includes today and future workouts currently due for delivery, while the overview can say **All 3 upcoming workouts synced · 2 earlier
+workouts**. Opening a summary
 opens the existing sync details; rendering it never previews, grants consent, retries or contacts a provider. Editor
-summaries describe the current saved workout, not an unsaved draft. Plan totals cover every current non-deleted workout
-in that plan, across its entire date range—not only the selected day or the first 25 dialog rows. Skipped, waiting,
-outside-window, paused, unsupported and unapproved workouts remain explicit non-success states in that denominator.
-Confirmed past/completed copies may count as synced only while the safe projection confirms unchanged content; they
-are labelled as left unchanged. Empty plans are not fully synced. Plan inactive and sync-off preferences are distinct
+summaries describe the current saved workout, not an unsaved draft. The presentation focus is computed in the saved
+destination time zone and follows the workspace's existing minute/focus clock across day boundaries. Completed, past and skipped workouts leave the prominent upcoming denominator but remain visible
+in the individual list and quieter secondary context; only workouts before today are called earlier. Workouts outside a
+service's current scheduling window are named **Scheduled for later** rather than making the due-soon count look unhealthy.
+Waiting, paused, unsupported and unapproved upcoming workouts remain explicit non-success states in that denominator. The underlying safe projection continues to
+cover every current non-deleted workout in the plan, across its entire date range—not only the selected day or first 25 rows.
+Confirmed past/completed copies may count as synced only while the safe projection confirms unchanged content. The
+status copy separates authored-workout completion from provider delivery: the provider that supplied an exact persisted
+completion link shows **Completed · activity linked**, another provider's confirmed copy shows
+**Sent · workout completed**, and an unrelated past delivery shows **Past workout · previously sent**. The completion
+provider remains provenance; completion belongs to the planned workout and is not duplicated per destination. Empty
+plans are not fully synced. Plan inactive and sync-off preferences are distinct
 from confirmed delivery, and per-workout failures cannot be hidden by other successful workouts.
 
 `training-delivery-summary.helper.ts` matches the server's JSON-framed SHA-256 delivery identity using the owner-visible
@@ -583,7 +644,7 @@ withholds an older confirmation until the worker catches up. Summary reads use a
 to 1,601 projections (400 current workouts × four providers plus look-ahead), separately from the dialog's 25-row history
 pagination. Plan summaries also watch bounded workout overrides by their plan association, so a new individual Stop
 invalidates the old plan-level success total before reconciliation. Both look-aheads withhold complete totals at the cap:
-show **Status incomplete**, not an allegedly complete total. Read/crypto failures show
+show **Upcoming status incomplete**, not an allegedly complete total. Read/crypto failures show
 **Sync status unavailable**, never zero or success. Account changes clear visible results and cancel old subscriptions;
 same-scope authored edits recompute the summary without reopening its Firestore listeners.
 
@@ -597,6 +658,18 @@ The latter also exports synthetic light/dark multi-service mixed-result summarie
 using the same local stylesheet fixture workflow below. These fixtures do not enable any provider transport.
 
 Entry points and default dialog titles distinguish **Plan sync**, **Workout sync**, and **Workout sync history**.
+The plan surface uses one quiet, non-button **Plan sync** row because every service opens the same overview. It keeps
+each service logo and the current/upcoming synced/total count visible without repeating service prose on the plan. A small trailing **View**
+action is the row's only click target; each provider indicator exposes its full name, current state and exception detail
+to assistive technology, and the dialog shows the same detail. At phone widths the provider indicators form a two-column
+grid below the heading and View action. When more than one service is present, the dialog starts with compact service
+rows that show the
+destination logo, whether sync is enabled or saved for an inactive plan, a concise summary of the currently loaded workout
+statuses and one **Manage** action. Manage opens a focused service detail view; **All services** returns to the overview.
+At phone widths the Manage action takes its own full-width row instead of squeezing the provider state. A single provider
+opens its detail view directly without a redundant chooser. Opening a workout and returning preserves the selected
+provider, so Back returns to that provider before the user returns to all services. Overview/drill navigation never
+previews delivery, changes consent or starts provider work.
 The plan view names the plan, explains automatic per-workout sending, and separates **Plan sync settings** / **Stop plan
 sync** from a visible **Workout sync status** section. Those entries are individual workout delivery projections, never
 plan records or authored edit history. An inactive plan is explicitly labelled; enabled preferences alone do not claim
@@ -667,12 +740,12 @@ After Resume, current-scope settings take precedence over an older stopped statu
 Account changes clear drafts/results and close the dialog. The planning UI rollout described
 above also hides these entry points from non-allowlisted accounts; it is not a delivery authorization boundary.
 Completed activity totals are unchanged.
-Provider section headings in Plan sync, Workout sync and sync history pair the visible name with the existing
-`app-service-source-icon` destination logo in a compact 64 × 20px box. The compact-row title-prefix slot keeps the
-logo and name aligned without adding a card or reserving a body column; names can wrap at phone widths. Logos are
-decorative, have no tooltip or action, and never trigger activity metadata lookups. The shared thin scrollbar and
-footer controls remain unchanged. MCP impact: presentation only, with no change to reads, counts, safe projections,
-consent, provider calls or wire schemas. Help was reviewed; existing provider/sync explanations need no logo-specific copy.
+Focused provider headings in Plan sync, Workout sync and sync history pair the visible name with the existing
+`app-service-source-icon` destination logo in a compact 64 × 20px box. Multi-provider overviews use the same decorative
+destination logos in compact rows and keep the provider's enabled/off state separate from individual workout results.
+Logos have no tooltip or action and never trigger activity metadata lookups. The shared thin scrollbar and footer controls
+remain unchanged. MCP impact: presentation only, with no change to reads, counts, safe projections, consent, provider calls
+or wire schemas.
 The sync dialog's **How sync works** guidance explains stopping updates and requesting removal of upcoming synced
 workouts in plain language. It explicitly preserves the QS plan/workout and provider connection, distinguishes plan
 pause from Pro expiry, and protects past/completed workouts. Do not suggest disconnecting or introduce account-deletion
@@ -761,12 +834,14 @@ These are explicit tracked slices, not anonymous TODOs.
 
 #### Garmin workout sport profiles (#647)
 
-Garmin Training API V2 exposes `RUNNING` and `CYCLING` for this editor's supported endurance workouts and no sub-sport
+Garmin Training API V2 exposes `RUNNING` and `CYCLING` for supported running/cycling planned workouts and no sub-sport
 field. QS therefore preserves the authored canonical sport while the Garmin adapter maps Running to `RUNNING` and
-Cycling to `CYCLING` exactly; Trail Running and Treadmill fold to `RUNNING`; Mountain Biking, Indoor Cycling, E-Biking
-and Hand Cycle fold to `CYCLING`. A fold is `degraded`, names the exact loss, and requires the normal destination- and
-payload-bound approval. It is not presented as Garmin receiving an MTB, trail, treadmill, indoor, e-bike or hand-cycle
-profile. Generic Cycling is still not changed into Mountain Biking in QS.
+Cycling to `CYCLING` exactly. Trail Running, Treadmill, Indoor Running and Virtual Running fold to `RUNNING`.
+Mountain Biking, Indoor Cycling, Virtual Cycling, E-Biking, Hand Cycle, Velomobile, Enduro MTB and Downhill Cycling fold
+to `CYCLING`. These are explicit QS Training profiles, not a broad guess over every Sports Lib activity type. A fold is
+`degraded`, names the exact loss, and requires the normal destination- and payload-bound approval. It is not presented as
+Garmin receiving the exact subtype, and the canonical workout remains unchanged. Generic Cycling is still not changed
+into Mountain Biking in QS.
 
 Garmin receives the same broad family at the workout and segment levels. Cycling-family folds may use the API's
 cycling-only secondary-target field subject to its existing device-support warning; running-family folds may not.
@@ -1003,6 +1078,16 @@ the old provider instant in that retained zone, then adopts the new zone only wh
 `starts` instant. Past-copy protection also uses the retained zone, including date-line changes; unknown legacy zones
 are never guessed across mismatched dates.
 
+Although Wahoo's published plan.json schema marks `header.description` and interval `targets` optional, its production
+Plan validator rejects either omission. Delivery therefore sends the already-bounded workout title as both Plan name
+and description. The validator also rejects an empty target array, so an authored untargeted interval receives the
+documented full-domain RPE range 1–10; this does not narrow the athlete's effort. This adds no Training editor field or
+authored recipe property. Mapping version `wahoo-plans-v4` ensures any retained future copy is reassessed against this
+production-required envelope. Wahoo production returns HTTP 200 for successful Plan create/delete despite the create
+example commonly being interpreted as 201; the HTTP boundary accepts both 200 and 201 POST success. Plan readback also
+truncates `provider_updated_at` to whole seconds, so ownership confirmation compares that field at the provider's
+observed precision while still rejecting a different authored revision.
+
 Each QS workout owns its own app-created Plan plus dated Workout, even for copied recipes. Destination-bound hashed
 `external_id` and `workout_token` remain stable through edits/rescheduling. Private ledger IDs retain the Plan,
 Workout, and confirmed association independently. Journal each request boundary and checkpoint each accepted resource
@@ -1039,8 +1124,10 @@ Plan CRUD. The existing Wahoo client secrets are bound to `processTrainingDelive
 
 HTTP calls use the exact API host and allowlisted paths, no redirects/local retries, 10-second deadlines and 2 MiB
 request/response bounds. Existing Wahoo production counters apply to delivery/recovery/inspection; token refresh is
-excluded as documented. Both Retry-After and X-RateLimit-Reset survive retries. Diagnostics contain only safe categories,
-status and phase, never provider bodies, tokens, file URLs or private artifact IDs.
+excluded as documented. Both Retry-After and X-RateLimit-Reset survive retries. A 422 response is read only through a
+separate 16 KiB/500 ms diagnostic bound and reduced in memory to fixed response-shape, rejection-category and known request-field
+enums. A confidently classified application/Plans access rejection follows the existing `provider_unavailable` path;
+validation rejections remain terminal. Diagnostics never retain provider bodies or messages, tokens, file URLs or private artifact IDs.
 
 MCP impact: existing `training-plans:read` projections already represent Wahoo and the `completed` outcome. Same-PR positive
 and negative fixtures cover status reads and reject Plan IDs, workout tokens, completion evidence and journals. The
@@ -1049,6 +1136,8 @@ public schema, scope, write tool, plugin artifact or registered-client refresh. 
 recovery metadata, not an extra MCP field; the existing public time zone remains the user's sync setting.
 No Rules/index changes are required: all private evidence stays in the existing server-only ledger, with unchanged
 safe owner-visible status projections and cleanup.
+The 422 diagnostic enums are private operator logs only, so they do not change MCP tools, scopes, instructions, consent,
+registered schemas or plugin artifacts and require no registered-client refresh.
 
 Release gate: public `deliveryEnabled` stays false and the exact pilot UID is checked on frontend and backend. Prepare
 Functions `getWahooAPIAuthRequestTokenRedirectURI`, `requestAndSetWahooAPIAccessToken`, `previewTrainingProviderDelivery`,
@@ -1057,11 +1146,11 @@ deployment. Do not redeploy unrelated infrastructure. #649 remains open until th
 edit, reschedule, copy, Stop, target warnings and seven-day device behavior. Turning the pilot off blocks withdrawals
 too; use Stop while access is valid when cleanup is intended.
 
-Local release verification (2026-09-17): backend TypeScript and the normal frontend build pass. Production bundling
-hits the same existing initial-bundle budget failure on this branch and unchanged `develop` (`53a7c52cd`): 1.73 MB
-against the 1.44 MB limit, 292.45 kB over. The budget is unchanged. This blocks the production build; no deployment,
-live provider write or device acceptance test has been performed. Synthetic dialog QA covers desktop/320px widths,
-light/dark themes and the shared thin scroll owner; physical haptics and device delivery still require real-device checks.
+Release verification (2026-09-18): backend TypeScript and the focused Wahoo/provider suites pass. A separately authorized
+single-function pilot deployment created and read back one app-owned Plan, its dated Workout and their association through
+the production API. The live responses exposed the required description, non-empty target and whole-second timestamp
+behaviors documented above. The temporary diagnostic Plan was deleted by exact retained ID. Cloud acceptance still does
+not prove download to a physical Wahoo device, so device delivery remains a pilot check.
 
 ### Remote verification and repair (#703)
 
@@ -1932,7 +2021,9 @@ Formula 4 retains the HRV component's neutral score of 50 and its 20% weight whe
 Outside either bound, its component is `max(0, 50 - 100 × distanceOutsideRange / baselineMean)`. An unusually high value
 earns no automatic bonus. This is the QS scoring policy, not a reproduction of a provider's proprietary algorithm.
 The unchanged weighted score renormalizes around unavailable drivers. The UI shows the weekly average, numeric range,
-range status, recent direction and latest nightly reading separately, instead of a percentage against a different short median. Weekly HRV
+range status, recent direction and date-labelled latest HRV reading separately, instead of a percentage against a different short median.
+When a newer sleep exists without HRV, the shared formatter says that the latest night has no HRV and labels the retained
+value as the previous reading rather than presenting it as current. Weekly HRV
 can remain available without a night in the last 48 hours while at least three recent days remain.
 
 The formula version invalidates only `training_readiness`; the normal ensure lifecycle rebuilds its 14-day series from
@@ -2849,7 +2940,7 @@ Do not read settings or sleep unconditionally in the worker. Source requirements
 
 ### Exposing Training snapshots through MCP
 
-The read-only MCP server does not recalculate Training metrics and does not scan activity history for a derived tool call.
+The MCP Training-metric read surface does not recalculate Training metrics and does not scan activity history for a derived tool call.
 `get_training_metric` accepts only a kind registered in `DERIVED_METRIC_KINDS` and reads the normal
 `users/{uid}/derivedMetrics/{metricKind}` snapshot. It returns only a `ready`, current-schema payload plus schema, update,
 and source-count metadata. Building, stale-schema, failed, and missing snapshots remain unavailable instead of being

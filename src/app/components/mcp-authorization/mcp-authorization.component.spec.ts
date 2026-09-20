@@ -283,6 +283,19 @@ describe('McpAuthorizationComponent', () => {
     expect(assign).toHaveBeenCalledWith('https://client.example/oauth/callback?code=code-1');
   });
 
+  it('re-enables the authorization controls when a decision request fails', async () => {
+    const fixture = TestBed.createComponent(McpAuthorizationComponent);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    functions.call.mockRejectedValueOnce(new Error('App Check is taking too long'));
+
+    await fixture.componentInstance.approve();
+
+    expect(fixture.componentInstance.deciding()).toBeNull();
+    expect(fixture.componentInstance.error()).toContain('Could not complete this authorization request');
+    expect(assign).not.toHaveBeenCalled();
+  });
+
   it('keeps Health opt-in independent and gives feedback only for an accepted selection change', async () => {
     const fixture = TestBed.createComponent(McpAuthorizationComponent);
     fixture.detectChanges();

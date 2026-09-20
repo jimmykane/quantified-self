@@ -21,7 +21,8 @@ const status = (id: string, changes: Partial<TrainingDeliveryStatusV1> = {}): Tr
   lastAcceptedAtMs: 2, lastAttemptAtMs: 2, updatedAtMs: 3, retryCount: 0, nextRetryAtMs: null, ...changes,
 });
 const input = () => ({ uid: 'owner', scope: 'plan' as const, id: 'p', workouts: [workout('a'), workout('b'), workout('c')],
-  plan, settings: [setting], statuses: [status('a'), status('b')], complete: true });
+  plan, settings: [setting], statuses: [status('a'), status('b')], completions: [], complete: true,
+  nowMs: Date.parse('2026-09-18T10:00:00Z') });
 
 describe('Training delivery service summaries', () => {
   beforeEach(() => vi.stubGlobal('crypto', webcrypto));
@@ -50,7 +51,7 @@ describe('Training delivery service summaries', () => {
     });
   it('does not count a partial first delivery or an older accepted version', async () => {
     const [row] = await buildTrainingDeliverySummaries({ ...input(), statuses: [status('a', { lastAcceptedAtMs: null }), status('b', { differsFromQS: true })] });
-    expect(row.label).toBe('0 of 3 workouts synced'); expect(row.detail).toContain('2 deliveries unconfirmed');
+    expect(row.label).toBe('0 of 3 workouts synced'); expect(row.detail).toContain('2 syncs unconfirmed');
   });
   it('does not count confirmed missing remote artifacts even though earlier acceptance is retained', async () => {
     const [row] = await buildTrainingDeliverySummaries({ ...input(), statuses: [
@@ -82,7 +83,7 @@ describe('Training delivery service summaries', () => {
     const [row] = await buildTrainingDeliverySummaries({ ...input(), workouts: states.map(id => workout(id)),
       statuses: states.map(id => status(id, { status: id, hasRemoteCopy: id !== 'removed' })) });
     expect(row.label).toBe('0 of 7 workouts synced');
-    for (const phrase of ['removals pending', 'Pro required', 'scheduled for later', 'copy removed', 'delivery unavailable', 'retry scheduled']) expect(row.detail).toContain(phrase);
+    for (const phrase of ['removals pending', 'Pro required', 'scheduled for later', 'copy removed', 'sync unavailable', 'retry scheduled']) expect(row.detail).toContain(phrase);
     const [inactive] = await buildTrainingDeliverySummaries({ ...input(), plan: { ...plan, lifecycle: 'paused' } });
     expect(inactive.label).toBe('Plan inactive · 0 of 3 workouts synced');
     const [skipped] = await buildTrainingDeliverySummaries({ ...input(), workouts: [workout('a', { lifecycle: 'skipped' })] });
@@ -90,19 +91,76 @@ describe('Training delivery service summaries', () => {
     const [off] = await buildTrainingDeliverySummaries({ ...input(), settings: [{ ...setting, enabled: false }] });
     expect(off.label).toContain('Sync off'); expect(off.label).toContain('0 of 3');
   });
-  it('retains confirmed past/completed copies without claiming that they will be updated', async () => {
+  it('describes retained past/provider-completed copies without the ambiguous left-unchanged label', async () => {
     const [row] = await buildTrainingDeliverySummaries({ ...input(), statuses: [status('a', { status: 'past' }), status('b', { status: 'completed' })] });
-    expect(row.label).toBe('2 of 3 workouts synced'); expect(row.detail).toContain('left unchanged');
+    expect(row.label).toBe('2 of 3 workouts synced');
+    expect(row.detail).toContain('1 past date · copy kept');
+    expect(row.detail).toContain('1 completed in connected app · copy kept');
+    expect(row.detail).not.toContain('left unchanged');
+  });
+  it('uses the activity-link provider as provenance while marking every confirmed provider copy completed', async () => {
+    const providers = ['garmin', 'suunto'] as const;
+    const rows = await buildTrainingDeliverySummaries({ ...input(), workouts: [workout('a')],
+      settings: providers.map(provider => ({ ...setting, provider })),
+      statuses: providers.map(provider => status('a', { provider, id: identity('a', setting.destinationKey, provider), status: 'past' })),
+      completions: [{ workoutId: 'a', planId: 'p', provider: 'suunto' }] });
+    expect(rows.find(row => row.provider === 'suunto')).toMatchObject({ detail: '1 completed · activity linked',
+      projection: { syncedWorkouts: 1, outcomes: [{ status: 'completed', count: 1 }] } });
+    expect(rows.find(row => row.provider === 'garmin')).toMatchObject({ detail: '1 sent · workout completed',
+      projection: { syncedWorkouts: 1, outcomes: [{ status: 'completed', count: 1 }] } });
+  });
+  it('emphasizes healthy current and upcoming workouts without hiding earlier outcomes', async () => {
+    const providers = ['wahoo', 'suunto'] as const;
+    const workouts = [
+      workout('past-completed', { localDate: '2026-09-16' }),
+      workout('past', { localDate: '2026-09-17' }),
+      workout('today', { localDate: '2026-09-18' }),
+      workout('next', { localDate: '2026-09-20' }),
+      workout('later', { localDate: '2026-09-22' }),
+    ];
+    const rows = await buildTrainingDeliverySummaries({ ...input(), workouts,
+      settings: providers.map(provider => ({ ...setting, provider })),
+      statuses: providers.flatMap(provider => workouts.map((item, index) => status(item.id, {
+        provider, id: identity(item.id, setting.destinationKey, provider),
+        status: index < 2 ? index === 0 && provider === 'suunto' ? 'completed' : 'past' : 'delivered',
+        ...(provider === 'wahoo' && index < 2 ? { lastAcceptedAtMs: null } : {}),
+      }))),
+      completions: [{ workoutId: 'past-completed', planId: 'p', provider: 'suunto' }] });
+    const wahoo = rows.find(row => row.provider === 'wahoo')!;
+    const suunto = rows.find(row => row.provider === 'suunto')!;
+    expect(wahoo.projection).toMatchObject({ totalWorkouts: 5, syncedWorkouts: 3 });
+    expect(suunto.projection).toMatchObject({ totalWorkouts: 5, syncedWorkouts: 5 });
+    for (const row of [wahoo, suunto]) expect(row.planFocus).toEqual({
+      totalWorkouts: 3, syncedWorkouts: 3, earlierWorkouts: 2,
+      label: 'All 3 upcoming workouts synced', detail: '2 earlier workouts',
+    });
+  });
+  it('does not mislabel current completed or future skipped workouts as earlier', async () => {
+    const workouts = [workout('today-complete', { localDate: '2026-09-18' }),
+      workout('future-skipped', { localDate: '2026-09-20', lifecycle: 'skipped' }),
+      workout('future', { localDate: '2026-09-22' })];
+    const [row] = await buildTrainingDeliverySummaries({ ...input(), workouts,
+      statuses: workouts.map(item => status(item.id, { status: item.id === 'today-complete' ? 'completed' : 'delivered' })),
+      completions: [{ workoutId: 'today-complete', planId: 'p', provider: 'garmin' }] });
+    expect(row.planFocus).toEqual({ totalWorkouts: 1, syncedWorkouts: 1, earlierWorkouts: 0,
+      label: 'Upcoming workout synced', detail: '1 completed workout · 1 skipped workout' });
+  });
+  it('separates workouts outside the service window from the due-soon sync count', async () => {
+    const workouts = [workout('due'), workout('later', { localDate: '2027-02-01' })];
+    const [row] = await buildTrainingDeliverySummaries({ ...input(), workouts,
+      statuses: [status('due'), status('later', { status: 'outside_horizon', hasRemoteCopy: false })] });
+    expect(row.planFocus).toEqual({ totalWorkouts: 1, syncedWorkouts: 1, earlierWorkouts: 0,
+      label: 'Next workout synced', detail: '1 scheduled for later' });
   });
   it.each([
     ['retrying', 'retry scheduled', 'retries scheduled'],
     ['approval_required', 'needs approval', 'need approval'],
     ['fresh_consent_required', 'needs sync setup', 'need sync setup'],
-    ['needs_attention', 'delivery unconfirmed', 'deliveries unconfirmed'],
+    ['needs_attention', 'sync unconfirmed', 'syncs unconfirmed'],
     ['removed', 'copy removed', 'copies removed'],
     ['stopped', 'removal pending', 'removals pending'],
     ['failed', 'sync failed', 'syncs failed'],
-    ['provider_unavailable', 'delivery unavailable', 'deliveries unavailable'],
+    ['provider_unavailable', 'sync unavailable', 'syncs unavailable'],
     ['connection_repair', 'needs a connection check', 'need a connection check'],
     ['reconnect_required', 'requires reconnection', 'require reconnection'],
     ['paused_pro', 'paused · Pro required', 'paused · Pro required'],
@@ -122,7 +180,7 @@ describe('Training delivery service summaries', () => {
         const [row] = await buildTrainingDeliverySummaries({ ...input(), workouts,
           plan: { ...plan, lifecycle: mode === 'inactive' ? 'paused' : 'active' },
           settings: [{ ...setting, enabled: mode !== 'off' }], statuses: workouts.map(item => status(item.id)) });
-        expect(row.detail).toContain(`provider ${count === 1 ? 'copy' : 'copies'} kept`);
+        expect(row.detail).toContain(`sent ${count === 1 ? 'copy' : 'copies'} kept`);
       }
     }
   });
@@ -156,19 +214,20 @@ describe('Training delivery service summaries', () => {
     expect((await buildTrainingDeliverySummaries(data))[0].label).toBe('Synced');
     expect(await buildTrainingDeliverySummaries({ ...data, id: 'copy', workouts: [workout('copy', { planId: null })], statuses: [] })).toEqual([]);
     const [transferred] = await buildTrainingDeliverySummaries({ ...data, plan: null, workouts: [workout('a', { planId: null })] });
-    expect(transferred.label).toBe('Earlier provider copy'); expect(transferred.detail).toContain('earlier sync');
+    expect(transferred.label).toBe('Earlier synced copy'); expect(transferred.detail).toContain('earlier sync');
   });
   it('never promises removal of skipped past/completed workouts', async () => {
     for (const protectedStatus of ['past', 'completed'] as const) {
       const [row] = await buildTrainingDeliverySummaries({ ...input(), workouts: [workout('a', { lifecycle: 'skipped' })],
         statuses: [status('a', { status: protectedStatus })] });
-      expect(row.label).toBe('0 of 1 workout synced'); expect(row.detail).toContain('left unchanged'); expect(row.detail).not.toContain('removal pending');
+      expect(row.label).toBe('0 of 1 workout synced'); expect(row.detail).toContain('copy kept');
+      expect(row.detail).not.toContain('left unchanged'); expect(row.detail).not.toContain('removal pending');
     }
   });
   it('does not label an unconfirmed earlier artifact as previously synced or an extant copy as removed', async () => {
     const [earlier] = await buildTrainingDeliverySummaries({ ...input(), scope: 'workout', id: 'a', plan: null,
       workouts: [workout('a', { planId: null })], settings: [], statuses: [status('a', { lastAcceptedAtMs: null, status: 'needs_attention' })] });
-    expect(earlier.label).toBe('Earlier provider copy'); expect(earlier.detail).toContain('needs attention');
+    expect(earlier.label).toBe('Earlier synced copy'); expect(earlier.detail).toContain('needs attention');
     const [removed] = await buildTrainingDeliverySummaries({ ...input(), workouts: [workout('a')], statuses: [status('a', { status: 'removed' })] });
     expect(removed.detail).toContain('removal unconfirmed');
   });

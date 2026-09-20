@@ -68,6 +68,8 @@ Stress Details accepts numeric zero samples (the API 1.2.4 table describes rest 
 
 Garmin Health is available to every valid connected Garmin account while the independent operational switch in `functions/src/garmin/health-flags.ts` is enabled. There is no Garmin Health UID allowlist. Sleep remains governed by the existing Sleep provider/user controls.
 
+Garmin activity history remains a separate user-selected flow. Its picker defaults to the latest two calendar years through today; users can expand the selection up to the available rolling five-year limit or choose a shorter range before submitting. Every accepted activity-history request still starts Garmin's 30-day cooldown. The callable divides the selected range into requests of at most 89 days, respects a stricter provider-reported minimum, and does not treat request acceptance as proof that callbacks or activities arrived.
+
 `backfillGarminAPIHealth` is the user-facing Garmin history callable. It requests the existing Sleep history and creates one durable `garmin_health_backfill` cursor spanning all ten supported Health families for every eligible connected Pro user while Garmin Health is enabled. The UI checks the server-owned operational switch before presenting the action and reports the scope returned by the callable. If the emergency switch is disabled, Sleep-only history remains available.
 
 Sleep minimum-start recovery allows at most three provider attempts per window. Garmin's reported cutoff can move while requests and state writes are in flight, so an overlapping retry rounds the minimum upward to a whole second and adds up to 30 seconds of headroom, capped to preserve a non-empty whole-second request window. Windows entirely before the provider minimum are skipped without the extra headroom. The adjusted start is remembered for the same provider account; it is not a fixed, app-wide history-retention limit. A retry warning is emitted only when another attempt remains. Exhaustion still fails the callable and clears its cooldown; Health work is queued only after Sleep request submission succeeds.
@@ -122,10 +124,12 @@ Workout content and date-only Workout Schedule payloads are deliberately separat
 their lifecycles independently. The proof covers fixed repeats, time/distance/manual steps, and absolute
 heart-rate/power/speed/pace/cadence ranges.
 
-Training API V2 accepts only broad `RUNNING` and `CYCLING` values for this editor's workouts and does not define a
-sub-sport field. The adapter keeps the authored QS sport unchanged and maps Trail Running and Treadmill to `RUNNING`,
-then Mountain Biking, Indoor Cycling, E-Biking and Hand Cycle to `CYCLING`. Running and Cycling remain exact; every
-subtype fold is a visible degradation that requires approval because Garmin does not receive the exact profile.
+Training API V2 accepts only broad `RUNNING` and `CYCLING` values for supported running/cycling planned workouts and does
+not define a sub-sport field. The adapter keeps the authored QS sport unchanged and maps Trail Running, Treadmill, Indoor Running and
+Virtual Running to `RUNNING`, then Mountain Biking, Indoor Cycling, Virtual Cycling, E-Biking, Hand Cycle, Velomobile,
+Enduro MTB and Downhill Cycling to `CYCLING`. These are explicit QS Training profiles; it does not infer a family for
+unrelated Sports Lib activity types. Running and Cycling remain exact; every subtype fold is a visible degradation that
+requires approval because Garmin does not receive the exact profile.
 Cycling-family folds retain the existing cycling-only secondary-target rule and device-support warning.
 
 Public Garmin planned-workout rollout remains disabled. A separate backend-enforced exact-UID private production pilot can

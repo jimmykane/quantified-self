@@ -60,14 +60,20 @@ export const GARMIN_RUNNING_WORKOUT_SPORTS_V1 = [
   ActivityTypes.Running,
   ActivityTypes.TrailRunning,
   ActivityTypes.Treadmill,
+  ActivityTypes.IndoorRunning,
+  ActivityTypes.VirtualRunning,
 ] as const;
 
 export const GARMIN_CYCLING_WORKOUT_SPORTS_V1 = [
   ActivityTypes.Cycling,
   ActivityTypes.MountainBiking,
   ActivityTypes.IndoorCycling,
+  ActivityTypes.VirtualCycling,
   ActivityTypes.EBiking,
   ActivityTypes.Handcycle,
+  ActivityTypes.Velomobile,
+  ActivityTypes['Enduro MTB'],
+  ActivityTypes.DownhillCycling,
 ] as const;
 
 export const GARMIN_PLANNED_WORKOUT_SPORTS_V1 = [

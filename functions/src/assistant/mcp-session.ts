@@ -1,4 +1,4 @@
-import { TRAINING_READ_TOOLS } from '../mcp/training-plans.schemas';
+import { TRAINING_PREVIEW_TOOLS, TRAINING_READ_TOOLS } from '../mcp/training-plans.schemas';
 import { InMemoryTransport } from '@modelcontextprotocol/server';
 import type { McpServer } from '@modelcontextprotocol/server';
 import { Client } from '@modelcontextprotocol/client';
@@ -52,6 +52,7 @@ export const ASSISTANT_MCP_TOOL_NAMES = [
   ...ASSISTANT_ACTIVITY_LOCATION_MCP_TOOL_NAMES,
   'query_timeline_notes',
   ...TRAINING_READ_TOOLS,
+  ...TRAINING_PREVIEW_TOOLS,
 ] as const;
 
 export type AssistantMcpToolName = typeof ASSISTANT_MCP_TOOL_NAMES[number];
@@ -271,6 +272,9 @@ export async function createAssistantMcpSession(
   locationAccess: AssistantLocationAccess = 'coordinate_free',
   timelineNotesEnabled = false,
   trainingPlansEnabled = false,
+  trainingPlanChangesEnabled = false,
+  trainingDeliveryEnabled = false,
+  conversationId?: string,
 ): Promise<AssistantMcpSession> {
   const activityLocationEnabled = locationAccess === 'precise_activity';
   const expectedToolNames: readonly AssistantMcpToolName[] = [
@@ -278,11 +282,16 @@ export async function createAssistantMcpSession(
     ...(activityLocationEnabled ? ASSISTANT_ACTIVITY_LOCATION_MCP_TOOL_NAMES : []),
     ...(timelineNotesEnabled ? ['query_timeline_notes' as const] : []),
     ...(trainingPlansEnabled ? TRAINING_READ_TOOLS : []),
+    ...(trainingPlanChangesEnabled
+      ? TRAINING_PREVIEW_TOOLS
+      : trainingDeliveryEnabled ? ['preview_training_changes' as const] : []),
   ];
   const auth: AuthenticatedMcpRequest = {
     uid,
     clientId: ASSISTANT_CLIENT_ID,
-    connectionId: ASSISTANT_CONNECTION_ID,
+    connectionId: conversationId
+      ? `${ASSISTANT_CONNECTION_ID}:${conversationId}`
+      : ASSISTANT_CONNECTION_ID,
     scopes: [
       MCP_OAUTH_SCOPES.MetricsRead,
       MCP_OAUTH_SCOPES.MeasurementsRead,
@@ -294,6 +303,8 @@ export async function createAssistantMcpSession(
       MCP_OAUTH_SCOPES.RoutesRead,
       ...(timelineNotesEnabled ? [MCP_OAUTH_SCOPES.TimelineNotesRead] : []),
       ...(trainingPlansEnabled ? [MCP_OAUTH_SCOPES.TrainingPlansRead] : []),
+      ...(trainingPlanChangesEnabled ? [MCP_OAUTH_SCOPES.TrainingPlansWrite] : []),
+      ...(trainingDeliveryEnabled ? [MCP_OAUTH_SCOPES.TrainingDeliveryWrite] : []),
     ],
   };
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();

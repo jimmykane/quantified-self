@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { TrainingDeliveryTransportError } from '../contracts';
-import { createWahooTrainingClient, WAHOO_TRAINING_RESPONSE_BYTES, wahooId } from './http';
+import { createWahooTrainingClient, WAHOO_TRAINING_REJECTION_BYTES, WAHOO_TRAINING_RESPONSE_BYTES, wahooId } from './http';
 
 describe('Wahoo Training HTTP boundary', () => {
   const authority = () => ({ accessToken: 'fixture-token', account: '123', assertCurrent: vi.fn(async () => {}) });
@@ -17,6 +17,11 @@ describe('Wahoo Training HTTP boundary', () => {
       redirect: 'error', headers: expect.objectContaining({ 'Content-Type': 'application/x-www-form-urlencoded' }), body: post.body,
     }));
   });
+  it('accepts Wahoo Plan POST 200 responses', async () => {
+    const client = createWahooTrainingClient(async () => authority(), vi.fn(async () =>
+      new Response('{"id":1,"user_id":123}', { status: 200 })));
+    await expect(client(post, vi.fn())).resolves.toMatchObject({ status: 200, body: { id: 1, user_id: 123 } });
+  });
   it.each([['https://evil.example', 'GET'], ['/v1/plans/1?url=evil', 'GET'], ['/v1/plans', 'DELETE'], ['/v1/workouts/1/plans', 'PUT']])(
     'rejects unsupported path/method %s %s before authorization', async (path, method) => {
       const authorize = vi.fn(async () => authority()); const fetcher = vi.fn();
@@ -30,6 +35,34 @@ describe('Wahoo Training HTTP boundary', () => {
         .rejects.toMatchObject({ kind, rejected, message: kind, diagnostics: { httpStatus: status } });
       expect(fetcher).toHaveBeenCalledTimes(1);
     });
+  it.each([
+    ['{"errors":["Application is not approved for Plans"]}', 'application_not_approved', undefined],
+    ['{"error":"Plans access is not enabled"}', 'plan_access_unavailable', undefined],
+    ['{"errors":{"plan[file]":["can\'t be blank"]}}', 'missing_parameter', 'plan_file'],
+    ['{"error":"Plan validation error: field \'description\' is missing"}', 'missing_parameter', 'plan_description'],
+    ['{"errors":{"external_id":["is invalid"]}}', 'invalid_parameter', 'plan_external_id'],
+    ['{"errors":{"intervals":["is malformed"]}}', 'invalid_parameter', 'plan_payload'],
+    ['private provider detail', 'unknown_validation', undefined],
+  ])('classifies a bounded 422 without retaining its text', async (body, providerRejection, field) => {
+    const client = createWahooTrainingClient(async () => authority(), vi.fn(async () => new Response(body, { status: 422 })));
+    const failure = await client(post, vi.fn()).catch(error => error as TrainingDeliveryTransportError);
+    const kind = ['application_not_approved', 'plan_access_unavailable'].includes(providerRejection ?? '') ? 'provider_access' : 'terminal';
+    expect(failure).toMatchObject({ kind, rejected: true, diagnostics: {
+      httpStatus: 422, failurePhase: 'response', providerRejection,
+      providerResponseShape: body.startsWith('{') ? 'json' : 'text', ...(field ? { providerField: field } : {}),
+    } });
+    expect(JSON.stringify(failure)).not.toContain(body);
+    expect(failure.message).toBe(kind);
+  });
+  it.each([
+    { body: '', providerRejection: 'empty_response', providerResponseShape: 'empty' },
+    { body: 'x'.repeat(WAHOO_TRAINING_REJECTION_BYTES + 1), providerRejection: 'oversized_response', providerResponseShape: 'oversized' },
+  ])('keeps a known 422 when its diagnostic body maps to $providerRejection', async ({ body, providerRejection, providerResponseShape }) => {
+    const client = createWahooTrainingClient(async () => authority(), vi.fn(async () => new Response(body, { status: 422 })));
+    await expect(client(post, vi.fn())).rejects.toMatchObject({ kind: 'terminal', rejected: true, diagnostics: {
+      httpStatus: 422, providerRejection, providerResponseShape,
+    } });
+  });
   it('retains the largest server delay and shares it even when a request was rejected', async () => {
     const capacity = { reserve: vi.fn(), defer: vi.fn() };
     const fetcher = vi.fn(async () => new Response('private', { status: 429,

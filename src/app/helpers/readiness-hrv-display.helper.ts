@@ -2,12 +2,20 @@ import type { UserUnitSettingsInterface } from '@sports-alliance/sports-lib';
 import { HEALTH_METRIC_IDS } from '@shared/health';
 import { formatCanonicalHealthMetricSportsLibValue } from '@shared/sports-lib-health-data';
 import type { ReadinessHrvPersonalRange, ReadinessHrvRecentTrend } from '@shared/readiness';
+import { formatDashboardRelativeDay } from './dashboard-relative-date.helper';
+
+interface ReadinessHrvDisplayOptions {
+  latestSleepAtMs?: number | null;
+  locale?: string;
+  nowMs?: number;
+}
 
 /** Shared wording and canonical HRV units for Dashboard Today and Training. */
 export function buildReadinessHrvDisplay(
   range: ReadinessHrvPersonalRange | null | undefined,
   unitSettings: UserUnitSettingsInterface | null = null,
   recentTrend: ReadinessHrvRecentTrend | null = null,
+  options: ReadinessHrvDisplayOptions = {},
 ) {
   const format = (value: number | null | undefined) => {
     if (value === null || value === undefined) return '—';
@@ -15,7 +23,7 @@ export function buildReadinessHrvDisplay(
     return display ? [display.value, display.unit].filter(Boolean).join(' ') : '—';
   };
   const valueText = format(range?.currentAverage);
-  const latestText = range?.latestMs ? `Latest night ${format(range.latestMs)}` : '';
+  const latestText = buildLatestHrvText(range, format, options);
   if (!range || !range.normalRange) {
     const statusText = !range ? 'No recent HRV' : range.reason === 'building_baseline'
       ? `Building range · ${range.observationDayCount}/14 nights`
@@ -34,4 +42,26 @@ export function buildReadinessHrvDisplay(
   return { valueText, statusText,
     rangeText: `60-day range ${rangeValue}`,
     latestText, tone: range.tone === 'caution' ? 'neutral' as const : range.tone };
+}
+
+function buildLatestHrvText(
+  range: ReadinessHrvPersonalRange | null | undefined,
+  format: (value: number | null | undefined) => string,
+  options: ReadinessHrvDisplayOptions,
+): string {
+  if (!range?.latestMs || !Number.isFinite(range.latestAtMs)) return '';
+  const nowMs = Number.isFinite(options.nowMs) ? options.nowMs! : Date.now();
+  const relativeDay = formatDashboardRelativeDay(range.latestAtMs, { nowMs, locale: options.locale });
+  const value = format(range.latestMs);
+  const latestSleepAtMs = options.latestSleepAtMs;
+  if (Number.isFinite(latestSleepAtMs)
+    && localDayStart(latestSleepAtMs as number) > localDayStart(range.latestAtMs as number)) {
+    return `Latest night has no HRV · Previous reading ${value} · ${relativeDay}`;
+  }
+  return `Latest HRV ${value} · ${relativeDay}`;
+}
+
+function localDayStart(timestampMs: number): number {
+  const date = new Date(timestampMs);
+  return new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime();
 }

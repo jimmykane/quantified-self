@@ -26,6 +26,7 @@ import { NoopAnimationsModule } from '@angular/platform-browser/animations';
 import { Component, Input, NO_ERRORS_SCHEMA } from '@angular/core';
 import { CommonModule } from '@angular/common'; // Added CommonModule
 import { HISTORY_IMPORT_ACTIVITIES_PER_DAY_LIMIT } from '@shared/history-import.constants';
+import dayjs from 'dayjs';
 
 vi.mock('../../services/app.event.service');
 vi.mock('../../services/app.user.service');
@@ -144,6 +145,29 @@ describe('HistoryImportFormComponent', () => {
 
     it('should create', () => {
         expect(component).toBeTruthy();
+    });
+
+    it.each([
+        [ServiceNames.GarminAPI, 2, 'year'],
+        [ServiceNames.SuuntoApp, 2, 'year'],
+        [ServiceNames.COROSAPI, 3, 'month'],
+        [ServiceNames.WahooAPI, 2, 'year'],
+    ] as const)('defaults %s activity history to its provider-aware range', (serviceName, amount, unit) => {
+        const providerFixture = TestBed.createComponent(HistoryImportFormComponent);
+        const providerComponent = providerFixture.componentInstance;
+        providerComponent.serviceName = serviceName;
+
+        try {
+            providerFixture.detectChanges();
+
+            const actualStart = dayjs(providerComponent.formGroup.get('startDate')?.value).startOf('day');
+            const actualEnd = dayjs(providerComponent.formGroup.get('endDate')?.value).startOf('day');
+            expect(actualStart.format('YYYY-MM-DD')).toBe(
+                actualEnd.subtract(amount, unit).format('YYYY-MM-DD'),
+            );
+        } finally {
+            providerFixture.destroy();
+        }
     });
 
     it.each([

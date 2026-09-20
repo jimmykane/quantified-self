@@ -118,7 +118,8 @@ describe('PublicSeoPageComponent', () => {
     expect(text).toContain('Recorded Health metrics');
     expect(text).toContain('separate Health permission');
     expect(text).toContain('Body Battery keeps its Garmin points scale');
-    expect(text).toContain('cannot create, edit, delete, or backfill Health measurements');
+    expect(text).toContain('MCP cannot write Health, activities, routes, sleep, measurements, or dashboard settings');
+    expect(text).toContain('Training changes are previewed in a bounded proposal before a distinct approval-gated apply call');
     expect(text).toContain('body-weight history');
     expect(text).toContain('Sleep, readiness, and daily context');
     expect(text).toContain('Saved routes and optional locations');
@@ -126,11 +127,13 @@ describe('PublicSeoPageComponent', () => {
     expect(text).toContain('Find recent activities');
     expect(text).toContain('exact event tag');
     expect(text).toContain('Can an MCP client find workouts by tag?');
+    expect(text).toContain('Why are my Training plan tools missing?');
+    expect(text).toContain('not that your plans are absent');
     expect(text).toContain('exact case-insensitive tag matches');
     expect(text).toContain('personal, health, or location context');
     expect(text).toContain('untrusted labels');
     expect(text).toContain('plan your next workout');
-    expect(text).toContain('No settings or data writes');
+    expect(text).toContain('Training-only approval-gated writes');
     expect(text).toContain('External clients have their own privacy and retention practices');
     expect(mcpFixture.debugElement.queryAll(By.directive(CompactRowComponent))).toHaveLength(9);
     expect(mcpFixture.nativeElement.querySelectorAll('.faq-item')).toHaveLength(PUBLIC_SEO_PAGES.mcpServer.faqItems.length);

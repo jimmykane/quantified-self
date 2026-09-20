@@ -102,12 +102,36 @@ provider training-plan parity. Inherited workout reviews show the server-resolve
 override's older zone. Transport timestamps appear in workout details separately from scheduled dates and reflect the
 latest attempt or confirmation; an older success never masks a newer failed attempt.
 
-Plan and workout surfaces show per-service destination summaries from the safe delivery projections. Plan totals are
-aggregates of all current authored workouts, not evidence of a native provider plan or device receipt. Only complete,
+Plans expose one quiet, non-button **Plan sync** row rather than one action per provider. Service logos and the synced/total
+counts currently due for delivery remain visible; later workouts are named separately. A small trailing **View** action is the only click target. Service names and full status detail
+remain available to assistive technology and in the dialog. On phones, provider indicators use a two-column grid below
+the heading and View action. With multiple destinations, the dialog first shows compact provider rows with the saved
+sync state, current workout-status summary and one **Manage** action; Manage drills into only that provider. A single
+destination opens its provider details directly. **All services** returns to the provider overview, while opening a workout and returning
+preserves the originating provider. This navigation is local only: it must not preview, mutate, grant consent or call a
+provider.
+
+Plan and workout surfaces show per-service destination summaries from the safe delivery projections. The plan UI gives
+today and future workouts the prominent count and summarizes completed, past or skipped workouts as earlier context;
+the underlying safe projection remains an aggregate of all current authored workouts and is not evidence of a native
+provider plan or device receipt. Only complete,
 unchanged confirmations for the matching destination count as synced; earlier-account/removed-source records remain
-history. Waiting, paused, unsupported, approval and failure states stay visible. Bounded/incomplete or failed reads must
-not claim complete success. Rendering these summaries performs owner-visible reads only, never provider calls or consent
-changes. See the Training workspace source of truth for identity matching, read bounds and tests.
+history. An exact persisted completion is workout-level: its evidence provider is labelled **Completed · activity linked**,
+other confirmed destination copies are labelled **Sent · workout completed**, and unrelated past copies are labelled
+**Past workout · previously sent**. This display rule does not turn one provider's evidence into another provider's
+completion claim or expose provider identifiers. Waiting, paused, unsupported, approval and failure states stay visible.
+Bounded/incomplete or failed reads must not claim complete success. Rendering these summaries performs owner-visible
+reads only, never provider calls or consent changes. See the Training workspace source of truth for identity matching,
+read bounds and tests.
+
+Separately authorized MCP Training delivery changes reuse `trainingDeliveryCommand` and its durable reconciliation
+marker; MCP does not implement an adapter or call provider HTTP directly. A strict proposal resolves only server-owned
+connection authority, compatibility and readiness. Apply is a separate write-capable tool behind the MCP host's native
+approval UI; QS does not use MCP elicitation as an additional confirmation round.
+`all_connected` includes only providers that are connected and rollout-ready during preview. Explicit providers retain
+an independent blocked result rather than hiding the reason. Destination keys, credentials, artifact IDs, approval
+digests and attempt journals never enter MCP input or output. Provider delivery remains Pro-gated, and failure does not
+roll back an authored plan/workout mutation in the same confirmed proposal.
 
 Training planning currently has an explicit UID-based **frontend presentation** rollout across its routes, calendar
 actions/overlays, Help and planning-specific connection/deletion instructions. Other accounts retain normal provider
@@ -132,10 +156,13 @@ preflight and rollback. This is a controlled production pilot, not public rollou
 
 Garmin mapping follows the local ignored Training API V2 version 1.0 partner contract; the confidential PDF is evidence,
 not a repository artifact. Workout content and its date-only schedule remain separate artifacts because each has its own
-provider ID and CRUD lifecycle. The fixture mapper supports Running and Cycling exactly. Trail Running and Treadmill
-fold to `RUNNING`; Mountain Biking, Indoor Cycling, E-Biking and Hand Cycle fold to `CYCLING`. Because the contract has
-no sub-sport field, those folds are explicit degradations requiring approval rather than claims that Garmin receives the
-exact profile. The mapper also supports fixed repeats, time/distance/manual endings, and absolute HR/power/speed/pace/cadence ranges. Garmin's percentage fields do not carry
+provider ID and CRUD lifecycle. The fixture mapper supports Running and Cycling exactly. Trail Running, Treadmill,
+Indoor Running and Virtual Running fold to `RUNNING`; Mountain Biking, Indoor and Virtual Cycling, E-Biking, Hand Cycle,
+Velomobile, Enduro MTB and Downhill Cycling fold to `CYCLING`. These are the explicit QS running/cycling Training
+profiles; unrelated Sports Lib activity types remain unsupported. Because the contract has no sub-sport field, those
+folds are explicit degradations requiring approval rather than claims that Garmin receives the exact profile. The
+authored workout sport is never rewritten to make delivery pass. The mapper also supports fixed repeats,
+time/distance/manual endings, and absolute HR/power/speed/pace/cadence ranges. Garmin's percentage fields do not carry
 the canonical reference snapshot, so relative targets are frozen to their stored absolute range only after explicit
 degradation approval. Secondary targets are rejected outside cycling, must differ from the primary target, and remain
 an explicit device-support degradation even for cycling. The private contract does not document a completed-activity
@@ -144,9 +171,10 @@ workout identifier.
 Suunto is the first adapter to support the editor's exact running/cycling profiles. Its documented Guide `activities`
 array receives provider IDs only at serialization time: Running `1`, Trail Running `22`, Treadmill `53`, Cycling `2`,
 Mountain Biking `10`, Indoor Cycling `52`, E-Biking `105` and E-MTB `106`, and Hand Cycle `109`. Generic Cycling does
-not automatically include Mountain Biking. Garmin independently supports the same authored QS profiles by folding them
-to its broad `RUNNING`/`CYCLING` API values with an explicit degradation warning. COROS accepts native Running, Trail
-Running and Cycling; Treadmill and the remaining cycling profiles fold to COROS `run`/`bike` only with explicit approval.
+not automatically include Mountain Biking. Garmin folds those profiles—and the additional Indoor/Virtual Running,
+Virtual Cycling, Velomobile, Enduro MTB and Downhill Cycling profiles—to its broad `RUNNING`/`CYCLING` API values with an
+explicit degradation warning. COROS accepts native Running, Trail Running and Cycling; Treadmill and the remaining
+cycling profiles fold to COROS `run`/`bike` only with explicit approval.
 Wahoo remains limited to its proved Running/Cycling baseline.
 
 COROS mapping follows the local ignored COROS API Reference V2.0.6 (February 2026); the confidential PDF is likewise
@@ -304,7 +332,10 @@ Complete these shared changes early. Exhaustive unions and switch statements are
 1. Add the provider to `ServiceNames` and provider metadata in `@sports-alliance/sports-lib` when the provider is part of the shared contract.
 2. Publish the required sports-lib version before making the application depend on it. Do not leave an application lockfile pointing at an unpublished package version.
 3. Add provider labels, source/destination branding, and icon keys to `shared/provider-presentation.ts`. Use source attribution for imported data and destination branding for connection or sending surfaces.
-4. Add Function names and the correct region to `shared/functions-manifest.ts`; export every deployed entry point from `functions/src/index.ts`.
+4. Add Function names and the correct region to `shared/functions-manifest.ts`; export every deployed entry point from
+   `functions/src/full-entrypoint.ts`. Add a direct loader in `functions/src/function-target-loader.ts` only when the
+   endpoint has passed the benchmark, discovery, metadata, rollout, and rollback process in
+   [Firebase Functions target-aware entrypoint loading](functions-entrypoint-loading.md).
 5. Add the environment configuration in `functions/src/config.ts`. Match established providers by requiring credentials when the integration runs; add a feature gate only when an explicitly approved staged rollout or operational requirement needs one. Update the configuration table in `README.md` with names only—never values, secrets, or production URLs.
 6. Add approved SVG assets and register them through the existing icon/presentation path. Confirm partner brand requirements before release.
 7. Add or update Firestore indexes, Rules, Storage Rules, TTL policies, and Firebase configuration only when the provider data model needs them.
@@ -451,6 +482,13 @@ waits for started writes before reporting failure, and leaves provider requests 
 the existing workers. The operator CLI retains its smaller job/user/backpressure caps.
 Before publishing initial Garmin progress, its reservation transaction rechecks live
 and failed queue rows so a stale preview cannot reset or recreate already-submitted work.
+Activity history is separate from this Health/Sleep policy. Garmin and Suunto activity-history
+pickers default to the latest two calendar years through today. COROS defaults to its full
+rolling three-month provider limit. Wahoo defaults to the latest two years, or a narrower
+provider limit when one is supplied. Users can select a longer or shorter range before
+submission, subject to each provider's available-history limit. Garmin still starts its
+30-day activity-history cooldown after an accepted request. Keep the selected dates visible
+in confirmation and status state.
 
 - Use the same queue format and processor as webhooks. Separate processing paths drift and create inconsistent duplicate or cleanup behavior.
 - Require the appropriate entitlement and connection state at request time, then re-check in the worker.

@@ -1,0 +1,244 @@
+'use strict';
+
+import {
+  RETRY_SPORTS_LIB_REPARSE_HEAVY_JOB_FUNCTION_NAME,
+  SPORTS_LIB_REPARSE_HEAVY_TASK_FUNCTION_NAME,
+} from '../../shared/functions-manifest';
+import { retrySportsLibReparseHeavyJob as retrySportsLibReparseHeavyJobFunction } from './admin';
+import { processSportsLibReparseHeavyTask as processSportsLibReparseHeavyTaskFunction } from './tasks/sports-lib-reparse-worker';
+
+// Coros Auth
+export {
+  getCOROSAPIAuthRequestTokenRedirectURI,
+  requestAndSetCOROSAPIAccessToken,
+  deauthorizeCOROSAPI,
+} from './coros/auth/wrapper';
+export { getCOROSAPIBindingState } from './coros/binding-state';
+
+export {
+  getWahooAPIAuthRequestTokenRedirectURI,
+  requestAndSetWahooAPIAccessToken,
+  deauthorizeWahooAPI,
+  getWahooAPIConnectionAccount,
+} from './wahoo/auth/wrapper';
+
+// Suunto Auth
+export {
+  getSuuntoAPIAuthRequestTokenRedirectURI,
+  requestAndSetSuuntoAPIAccessToken,
+  deauthorizeSuuntoApp,
+} from './suunto/auth/wrapper';
+
+export {
+  deauthorizeGarminAPI,
+  deauthorizeGarminAPIUsers,
+  receiveGarminAPIUserPermissions,
+  getGarminAPIAuthRequestTokenRedirectURI,
+  requestAndSetGarminAPIAccessToken,
+} from './garmin/auth/wrapper';
+
+
+
+
+
+// Coros Queue & History
+export {
+  addCOROSAPIHistoryToQueue,
+} from './coros/history-to-queue';
+
+export {
+  insertCOROSAPIWorkoutDataToQueue,
+} from './coros/queue';
+
+export {
+  parseCOROSAPIWorkoutQueue,
+} from './queue';
+
+export { parseWahooAPIWorkoutQueue } from './queue';
+export { wahooAPIWebhook } from './wahoo/webhook';
+export { addWahooAPIHistoryToQueue } from './wahoo/history-to-queue';
+
+
+// Suunto Queue & History
+export {
+  addSuuntoAppHistoryToQueue,
+} from './suunto/history-to-queue';
+
+export {
+  insertSuuntoAppActivityToQueue,
+} from './suunto/queue';
+
+export {
+  addSuuntoAppRoutesToQueue,
+  insertSuuntoAppRouteToQueue,
+} from './suunto/route-sync';
+
+export {
+  parseSuuntoAppActivityQueue,
+} from './queue';
+
+
+// Garmin Queue & Backfill
+export {
+  insertGarminAPIActivityFileToQueue,
+} from './garmin/queue';
+
+export {
+  parseGarminAPIActivityQueue,
+} from './queue';
+
+
+export {
+  backfillGarminAPIActivities,
+} from './garmin/backfill';
+
+export { backfillActivitySyncRoute } from './activity-sync/backfill';
+export { dispatchActivitySyncQueue } from './activity-sync/dispatcher';
+export {
+  receiveGarminAPIHealthData,
+  receiveSuunto247Data,
+} from './sleep/webhooks';
+export { dispatchSleepSyncQueue } from './sleep/dispatcher';
+export { dispatchGarminPingBatchOnWrite } from './sleep/garmin-ping-batch-dispatcher';
+export {
+  scheduleSuuntoSleepSync,
+  scheduleCOROSSleepSync,
+  scheduleSuuntoHealthSync,
+} from './sleep/polling';
+export {
+  backfillCorosAPISleep,
+  backfillGarminAPIHealth,
+  backfillSuuntoAppSleep,
+} from './sleep/backfill';
+export { getSuuntoHealthSyncAvailability } from './suunto/health-availability';
+export { getGarminHealthSyncAvailability } from './garmin/health-availability';
+export { fanOutSuuntoHealthWebhookIngress } from './suunto/health-webhook-ingress';
+export {
+  projectGarminConnectionOnTokenWrite,
+  projectSuuntoConnectionOnTokenWrite,
+  projectCOROSConnectionOnTokenWrite,
+} from './service-connection-account-projection';
+export {
+  disableActivitySyncRoutesOnGarminTokenRootDelete,
+  disableActivitySyncRoutesOnSuuntoTokenRootDelete,
+  disableActivitySyncRoutesOnCOROSTokenRootDelete,
+  disableActivitySyncRoutesOnWahooTokenRootDelete,
+} from './activity-sync/disconnect-routes';
+
+// Tokens
+export { refreshCOROSAPIRefreshTokens } from './coros/tokens';
+export { refreshSuuntoAppRefreshTokens } from './suunto/tokens';
+export { refreshGarminAPIRefreshTokens } from './garmin/tokens';
+
+// Suunto Utils
+export { importActivityToSuuntoApp } from './suunto/activities';
+export { importActivityToWahooAPI, getWahooAPIWorkoutFileUploadStatus } from './wahoo/activities';
+export { importRouteToWahooAPI } from './wahoo/routes';
+export { importRouteToCOROSAPI } from './coros/routes';
+export { importRouteToSuuntoApp } from './suunto/routes';
+export { importRouteToGarminAPI } from './garmin/manual-route-upload';
+export { sendRoutesToService } from './routes/send-routes-to-service';
+export { backfillRouteDeliverySyncRoute } from './route-delivery-sync/backfill';
+export { getSuuntoFITFile } from './suunto/get-suunto-fit-file';
+export { importActivityToCOROSAPI, getCOROSAPIWorkoutFileUploadStatus } from './coros/activities';
+
+// Events
+export { cleanupEventFile } from './events/cleanup';
+export { uploadActivity } from './events/upload-activity';
+export { cleanupRouteFiles } from './routes/cleanup';
+export {
+  cleanupRejectedRouteOriginalFile,
+  redriveRejectedRouteOriginalCleanup,
+} from './routes/rejected-original-cleanup';
+export { uploadRoute } from './routes/upload-route';
+export { createToolComparisonEvent } from './events/create-tool-comparison-event';
+export { reprocessEvent } from './events/reprocess-event';
+export { setEventSharing } from './events/set-event-sharing';
+export { reprocessRoute } from './routes/reprocess-route';
+export { mergeEvents } from './events/merge-events';
+export {
+  assistantChat,
+  getAssistantQuotaStatus,
+  getAssistantConversation,
+  resetAssistantConversation,
+  applyAssistantTrainingProposal,
+} from './assistant/callable';
+export { ensureDerivedMetrics } from './derived-metrics/ensure-derived-metrics';
+export { queryHealthRange } from './health/callable';
+export { saveTimelineNoteCallable as saveTimelineNote, deleteTimelineNoteCallable as deleteTimelineNote } from './timeline-notes/callable';
+export { queryActivityHealthRange } from './health/activity-callable';
+export {
+  saveManualHealthMeasurementCallable as saveManualHealthMeasurement,
+  deleteManualHealthMeasurementCallable as deleteManualHealthMeasurement,
+} from './health/manual-callable';
+export { setTrainingBuildBenchmark } from './derived-metrics/set-training-build-benchmark';
+export { mutateTrainingSchedule } from './training-plans/mutate-training-schedule';
+export {
+  getTrainingScheduleHistory,
+  previewTrainingScheduleRestore,
+} from './training-plans/history-callables';
+export { restoreTrainingScheduleRevision } from './training-plans/restore-callable';
+export { deleteTrainingPlan } from './training-plans/delete-training-plan-callable';
+export { previewTrainingProviderDelivery, mutateTrainingProviderDelivery } from './training-plans/delivery/commands';
+export { processTrainingDeliveryTask, onTrainingDeliveryQueued, dispatchTrainingDelivery } from './training-plans/delivery/tasks';
+export { onTrainingDeliveryConnectionChanged, onTrainingDeliveryEntitlementChanged } from './training-plans/delivery/lifecycle';
+export {
+  onDashboardDerivedMetricsActivityWrite,
+  onDashboardDerivedMetricsEventWrite,
+  onDashboardDerivedMetricsSleepWrite,
+  onDashboardDerivedMetricsHealthWrite,
+} from './derived-metrics/derived-metrics.trigger';
+export { restoreUserClaims, linkExistingStripeCustomer } from './stripe/claims';
+export { getUpcomingRenewalAmount } from './stripe/get-upcoming-renewal-amount';
+export { onSubscriptionUpdated } from './stripe/subscriptions';
+export { sendRegistrationWelcomeEmail } from './email/registration-welcome';
+export { enforceSubscriptionLimits } from './schedule/enforce-subscription-limits';
+export { retryPendingServiceDisconnects } from './schedule/retry-pending-service-disconnects';
+export { checkSubscriptionNotifications } from './schedule/notifications';
+export { scheduleSportsLibReparseScan } from './schedule/sports-lib-reparse';
+export { scheduleSportsLibRouteReparseScan } from './schedule/sports-lib-route-reparse';
+export { dispatchRouteDeliverySyncQueue } from './route-delivery-sync/dispatcher';
+export { cleanupUserAccounts } from './users/cleanup';
+export { deleteSelf } from './user/user';
+export { mcpApi } from './mcp/server';
+export {
+  getMcpAuthorizationRequest,
+  decideMcpAuthorization,
+  listMcpConnections,
+  revokeMcpConnection,
+} from './mcp/callables';
+export {
+  listUsers,
+  getQueueStats,
+  setSportsLibReparseSettings,
+  getUserCount,
+  getAdminDashboardHistory,
+  scheduleAdminDashboardSnapshot,
+  getSubscriptionHistoryTrend,
+  getUserGrowthTrend,
+  setMaintenanceMode,
+  getMaintenanceStatus,
+  impersonateUser,
+  stopImpersonation,
+  getFinancialStats,
+  previewAdminSubscriptionGift,
+  grantAdminSubscriptionGift,
+} from './admin';
+
+// Tasks
+export { processWorkoutTask } from './tasks/workout-processor';
+export { processActivitySyncTask } from './tasks/activity-sync-worker';
+export { processRouteSyncTask } from './tasks/route-sync-worker';
+export { processRouteDeliverySyncTask } from './tasks/route-delivery-sync-worker';
+export { processSleepSyncTask } from './tasks/sleep-sync-worker';
+export { processGarminHealthBackfillTask } from './tasks/garmin-health-backfill-worker';
+export { processSportsLibReparseTask } from './tasks/sports-lib-reparse-worker';
+export { processSportsLibRouteReparseTask } from './tasks/sports-lib-route-reparse-worker';
+export { processDerivedMetricsTask } from './tasks/derived-metrics-worker';
+export { processDerivedMetricsIngressTask } from './tasks/derived-metrics-ingress-worker';
+
+// Stripe Cleanup
+export { cleanupStripeCustomer } from './stripe/cleanup';
+
+exports[SPORTS_LIB_REPARSE_HEAVY_TASK_FUNCTION_NAME] = processSportsLibReparseHeavyTaskFunction;
+exports[RETRY_SPORTS_LIB_REPARSE_HEAVY_JOB_FUNCTION_NAME] = retrySportsLibReparseHeavyJobFunction;

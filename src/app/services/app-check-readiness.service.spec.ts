@@ -79,9 +79,37 @@ describe('AppCheckReadinessService', () => {
     expect(hoisted.mockGetAppCheckToken).toHaveBeenCalledTimes(2);
   });
 
+  it('should time out a stalled readiness request and allow a later retry', async () => {
+    vi.useFakeTimers();
+    hoisted.mockGetAppCheckToken
+      .mockImplementationOnce(() => new Promise(() => undefined))
+      .mockResolvedValueOnce({ token: 'app-check-token' });
+
+    const stalledAttempt = service.ensureReady();
+    const stalledExpectation = expect(stalledAttempt).rejects.toThrow('App Check is taking too long');
+    await vi.advanceTimersByTimeAsync(15_000);
+    await stalledExpectation;
+
+    await expect(service.ensureReady()).resolves.toBeUndefined();
+    expect(hoisted.mockGetAppCheckToken).toHaveBeenCalledTimes(2);
+    vi.useRealTimers();
+  });
+
   it('should return a usable token through getToken', async () => {
     await expect(service.getToken()).resolves.toBe('app-check-token');
     expect(hoisted.mockGetAppCheckToken).toHaveBeenCalledWith(appCheckMock, false);
+  });
+
+  it('should bound an individual token request', async () => {
+    vi.useFakeTimers();
+    hoisted.mockGetAppCheckToken.mockImplementationOnce(() => new Promise(() => undefined));
+
+    const tokenRequest = service.getToken();
+    const expectation = expect(tokenRequest).rejects.toThrow('App Check is taking too long');
+    await vi.advanceTimersByTimeAsync(15_000);
+    await expectation;
+
+    vi.useRealTimers();
   });
 
   it('should reject getToken when App Check is unavailable', async () => {

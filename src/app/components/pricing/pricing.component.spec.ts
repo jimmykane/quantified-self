@@ -341,7 +341,7 @@ describe('PricingComponent', () => {
         const content = fixture.nativeElement.textContent as string;
         expect(content).toContain('Cross-device sync');
         expect(content).toContain('Unlimited saved routes');
-        expect(content.match(/Read-only MCP access/g)).toHaveLength(2);
+        expect(content.match(/MCP data access/g)).toHaveLength(2);
         expect(content).not.toContain('Garmin/COROS');
         expect(fixture.nativeElement.querySelectorAll('.product-card-shell')).toHaveLength(2);
         expect(fixture.nativeElement.querySelector('.plan-badge')?.textContent?.trim()).toBe('Recommended');

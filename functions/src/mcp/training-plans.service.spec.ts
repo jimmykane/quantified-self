@@ -15,13 +15,14 @@ function fixture() {
   const collections: Record<string, Record<string, Record<string, unknown>>> = {
     trainingPlans: { p1: plan('Active'), p2: plan('Paused', 'paused'), p3: plan('Archived', 'archived') },
     scheduledWorkouts: { w1: workout('p1'), w2: workout(null), w3: workout('p2'), w4: workout('p3'), w5: workout('p1', undefined, 'skipped'), w6: workout('p1', undefined, 'deleted') },
-    trainingDeliverySettings: {}, trainingDeliveryStatuses: {},
+    trainingDeliverySettings: {}, trainingDeliveryStatuses: {}, trainingWorkoutCompletions: {},
   };
   let revision = 1, calls = 0, deleted = false;
   const tokens = new Map<string, { uid: string; connection: string; value: Record<string, unknown> }>();
   const codec: TrainingReadCodec = {
     encode(value, uid, connection) { const token = `opaque-${tokens.size}`; tokens.set(token, { uid, connection, value }); return token; },
     decode(token, uid, connection) { const data = tokens.get(token); if (!data || data.uid !== uid || data.connection !== connection) throw Error(); return data.value; },
+    encodeActivity(value, uid, connection) { const token = `activity-${tokens.size}`; tokens.set(token, { uid, connection, value }); return token; },
   };
   const reads: TrainingReads = {
     state: async () => { calls++; if (deleted) throw Error('deleted'); return { revision, activePlanId: 'p1' }; },
@@ -53,7 +54,7 @@ describe('Training plan MCP reads', () => {
       const args = { scope: 'plan', reference: plans.plans[0].planRef };
       const result = TRAINING_READ_OUTPUTS.get_training_sync_status.parse(await f.run('get_training_sync_status', args));
       expect(result.services).toEqual([expect.objectContaining({ provider: 'wahoo', outcomes: [{ status, count: 1 }] })]);
-      expect(JSON.stringify(result)).not.toMatch(/private-wahoo|externalId|workout_token|plan_id|journal|device|ELEMNT/);
+      expect(JSON.stringify(result)).not.toMatch(/private-wahoo|externalId|workout_token|plan_id|journal|device|ELEMNT|planFocus|upcoming/);
       Object.assign(f.collections.trainingDeliveryStatuses[id], { externalId: 'private-plan', workout_token: 'private-workout',
         plan_id: '123', completionLinkId: 'private-reverse-link', completionEvidence: 'private-summary',
         providerAccessBlocked: true, providerJournal: { step: 'plan-create', state: 'started' },
@@ -74,6 +75,29 @@ describe('Training plan MCP reads', () => {
     expect(JSON.stringify(result)).not.toMatch(/private-account|private-guide|private-key|must-not-leak|watch/);
     Object.assign(f.collections.trainingDeliveryStatuses[id], { privateEvidence: 'must-not-leak', externalId: 'private-guide', subscriptionKey: 'private-key' });
     await expect(f.run('get_training_sync_status', { scope: 'plan', reference: plans.plans[0].planRef })).rejects.toThrow();
+  });
+  it('projects one exact workout completion across confirmed provider copies without exposing its source evidence', async () => {
+    const f = fixture(); f.collections.scheduledWorkouts = { w1: workout('p1') };
+    for (const provider of ['garmin', 'suunto'] as const) {
+      f.collections.trainingDeliverySettings[provider] = { scope: 'plan', scopeId: 'p1', provider, enabled: true,
+        suppressed: false, timeZone: 'Europe/Helsinki', destinationKey: `private-${provider}`, associationPlanId: null, updatedAtMs: 1 };
+      const deliveryId = await trainingDeliverySummaryIdentity('owner', provider, `private-${provider}`, 'w1');
+      f.collections.trainingDeliveryStatuses[deliveryId] = { workoutId: 'w1', planId: 'p1', provider, status: 'past',
+        differsFromQS: false, hasRemoteCopy: true, timeZone: 'Europe/Helsinki', lastAttemptAtMs: 1,
+        lastAcceptedAtMs: 1, updatedAtMs: 2 };
+    }
+    f.collections.trainingWorkoutCompletions.w1 = { schemaVersion: 1, workoutId: 'w1', planId: 'p1', provider: 'suunto',
+      matchMethod: 'provider_marker', eventId: 'private-event', activityId: 'private-activity', sourceSessionIndex: 0,
+      activityStartAtMs: 1_789_404_000_000, scheduledLocalDate: '2026-09-15', workoutRevisionAtLink: 1,
+      timing: 'on_date', linkedAtMs: 1_789_404_100_000, updatedAtMs: 1_789_404_100_000 };
+    const plans = TRAINING_READ_OUTPUTS.list_training_plans.parse(await f.run('list_training_plans'));
+    const result = TRAINING_READ_OUTPUTS.get_training_sync_status.parse(await f.run('get_training_sync_status', {
+      scope: 'plan', reference: plans.plans[0].planRef,
+    }));
+    expect(result.services).toHaveLength(2);
+    expect(result.services.every(service => service.syncedWorkouts === 1
+      && service.outcomes.some(outcome => outcome.status === 'completed' && outcome.count === 1))).toBe(true);
+    expect(JSON.stringify(result)).not.toMatch(/private-event|private-activity|sourceSessionIndex|matchMethod/);
   });
   it('projects COROS completion through the existing enum and rejects private batch or partner identities', async () => {
     const f = fixture(); f.collections.scheduledWorkouts = { w1: workout('p1') };
@@ -142,6 +166,36 @@ describe('Training plan MCP reads', () => {
       workoutRef: list.workouts[0].workoutRef,
     }));
     expect(result.workout.structure.sport).toBe(ActivityTypes.MountainBiking);
+  });
+
+  it('reports only exact persisted completion and gates the activity reference independently', async () => {
+    const f = fixture();
+    const list = TRAINING_READ_OUTPUTS.query_planned_workouts.parse(await f.run('query_planned_workouts', {
+      startDate: '2026-09-01', endDate: '2027-01-01',
+    }));
+    const workoutRef = list.workouts.find(item => item.title === 'Easy run')!.workoutRef;
+    const unlinked = TRAINING_READ_OUTPUTS.get_planned_workout_completion.parse(await f.run(
+      'get_planned_workout_completion', { workoutRef },
+    ));
+    expect(unlinked).toMatchObject({ state: 'unlinked', activityRef: null, workoutChangedSinceCompletion: false });
+    f.collections.trainingWorkoutCompletions.w1 = { schemaVersion: 1, workoutId: 'w1', planId: 'p1', provider: 'garmin',
+      matchMethod: 'provider_marker', eventId: 'event-1', activityId: 'activity-1', sourceSessionIndex: 0,
+      activityStartAtMs: 1_789_404_000_000, scheduledLocalDate: '2026-09-15', workoutRevisionAtLink: 1,
+      timing: 'on_date', linkedAtMs: 1_789_404_100_000, updatedAtMs: 1_789_404_100_000 };
+    const withoutActivity = TRAINING_READ_OUTPUTS.get_planned_workout_completion.parse(await f.run(
+      'get_planned_workout_completion', { workoutRef },
+    ));
+    expect(withoutActivity).toMatchObject({ state: 'linked', provider: 'garmin', activityRef: null });
+    const withActivity = TRAINING_READ_OUTPUTS.get_planned_workout_completion.parse(await f.run(
+      'get_planned_workout_completion', { workoutRef }, [TRAINING_PLANS_SCOPE, 'activity-details:read'],
+    ));
+    expect(withActivity.activityRef).toMatch(/^activity-/);
+    expect(JSON.stringify(withActivity)).not.toMatch(/event-1|activity-1/);
+    f.collections.scheduledWorkouts.w1.revision = 2;
+    const changed = TRAINING_READ_OUTPUTS.get_planned_workout_completion.parse(await f.run(
+      'get_planned_workout_completion', { workoutRef },
+    ));
+    expect(changed.workoutChangedSinceCompletion).toBe(true);
   });
   it('binds continuations to filters and revisions and does not skip matching records', async () => {
     const f = fixture(); const first = TRAINING_READ_OUTPUTS.list_training_plans.parse(await f.run('list_training_plans', { limit: 1 }));

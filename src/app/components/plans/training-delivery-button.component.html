@@ -1,19 +1,39 @@
 @if (visible()) {
   @if (summaries().length) {
-    <div class="delivery-summaries" [attr.aria-label]="scope() === 'plan' ? 'Plan sync by service' : 'Workout sync by service'">
-      @for (summary of summaries(); track summary.provider) {
-        <button mat-button appHapticTap type="button" class="delivery-summary" (click)="open()" [disabled]="disabled()"
-          [attr.aria-label]="summary.presentation.displayLabel + ': ' + summary.label + '. ' + (summary.detail ? summary.detail + '. ' : '') + 'Open ' + (scope() === 'plan' ? 'plan' : 'workout') + ' sync details'">
-          <span class="delivery-summary-content">
-            <app-service-source-icon [presentation]="summary.presentation" [showTooltip]="false" [iconHeight]="16" aria-hidden="true"></app-service-source-icon>
-            <span class="delivery-summary-copy"><span>{{ summary.presentation.displayLabel }} · {{ summary.label }}</span>
-              @if (summary.detail && summary.detail !== summary.label) { <span class="delivery-summary-detail">{{ summary.detail }}</span> }
+    @if (scope() === 'plan') {
+      <div class="delivery-plan-summary" role="group" aria-label="Plan sync by service">
+        <span class="delivery-plan-summary-heading">Plan sync</span>
+        <span class="delivery-plan-providers">
+          @for (summary of compactPlanSummaries(); track summary.provider) {
+            <span class="delivery-plan-provider" role="group"
+              [attr.aria-label]="summary.presentation.displayLabel + ': ' + (summary.planFocus?.label ?? summary.label) + '. '
+                + ((summary.planFocus?.detail || summary.detail) ? (summary.planFocus?.detail || summary.detail) + '.' : '')">
+              <app-service-source-icon [presentation]="summary.presentation" [showTooltip]="false" [iconHeight]="16" aria-hidden="true"></app-service-source-icon>
+              <span class="delivery-plan-provider-count" aria-hidden="true">{{ summary.compactLabel }}</span>
             </span>
-            <mat-icon aria-hidden="true">{{ summary.icon }}</mat-icon>
-          </span>
+          }
+        </span>
+        <button mat-button appHapticTap type="button" class="delivery-plan-view" (click)="open()" [disabled]="disabled()"
+          aria-label="View plan sync details">
+          View <mat-icon iconPositionEnd aria-hidden="true">chevron_right</mat-icon>
         </button>
-      }
-    </div>
+      </div>
+    } @else {
+      <div class="delivery-summaries" aria-label="Workout sync by service">
+        @for (summary of summaries(); track summary.provider) {
+          <button mat-button appHapticTap type="button" class="delivery-summary" (click)="open()" [disabled]="disabled()"
+            [attr.aria-label]="summary.presentation.displayLabel + ': ' + summary.label + '. ' + (summary.detail ? summary.detail + '. ' : '') + 'Open workout sync details'">
+            <span class="delivery-summary-content">
+              <app-service-source-icon [presentation]="summary.presentation" [showTooltip]="false" [iconHeight]="16" aria-hidden="true"></app-service-source-icon>
+              <span class="delivery-summary-copy"><span>{{ summary.presentation.displayLabel }} · {{ summary.label }}</span>
+                @if (summary.detail && summary.detail !== summary.label) { <span class="delivery-summary-detail">{{ summary.detail }}</span> }
+              </span>
+              <mat-icon aria-hidden="true">{{ summary.icon }}</mat-icon>
+            </span>
+          </button>
+        }
+      </div>
+    }
   } @else {
   <button mat-button appHapticTap type="button" (click)="open()" [disabled]="disabled()">
     <mat-icon aria-hidden="true">sync</mat-icon>{{ buttonLabel() }}

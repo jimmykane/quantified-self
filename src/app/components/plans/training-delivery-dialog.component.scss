@@ -11,6 +11,15 @@ p, li, span, a { overflow-wrap: anywhere; }
 .delivery-context .delivery-caption { margin-block: 0.25rem 0; }
 .delivery-setting-label { margin: 0 0 0.25rem; font-weight: 500; }
 .delivery-provider-logo { display: flex; flex: 0 0 auto; }
+.delivery-provider-overview { min-width: 0; }
+.delivery-provider-overview > .delivery-caption { margin-block: 0 0.5rem; }
+.delivery-provider-overview-copy { display: grid; gap: 0.125rem; min-width: 0; }
+.delivery-provider-overview-copy p { margin: 0; }
+.delivery-provider-state { display: flex; align-items: center; gap: 0.35rem; color: var(--mat-sys-on-surface); font-weight: 500; }
+.delivery-provider-state mat-icon { width: 18px; height: 18px; font-size: 18px; }
+.delivery-provider-state--enabled { color: var(--mat-sys-primary); }
+.delivery-provider-back { margin-block-end: 0.25rem; }
+.delivery-provider-manage { min-width: 6rem; }
 .delivery-provider-settings { display: grid; gap: 0.25rem; }
 .delivery-workouts h4 { margin: 0 0 0.25rem; font: var(--mat-sys-title-small); }
 app-compact-row p.delivery-caption { margin: 0; }
@@ -40,3 +49,7 @@ app-compact-row p.delivery-caption { margin: 0; }
 .delivery-guidance { margin-block-start: 0.75rem; padding-block-end: 0.25rem; }
 .delivery-guidance p { margin-block: 0.5rem; }
 [hidden] { display: none !important; }
+
+@media (max-width: 520px) {
+  .delivery-provider-manage { width: 100%; }
+}
