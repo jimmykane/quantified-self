@@ -4,6 +4,10 @@ import { createHash } from 'node:crypto';
 import { getUserDeletionGuardStateInTransaction } from '../shared/user-deletion-guard';
 import { MCP_OAUTH_COLLECTIONS } from './oauth.service';
 import { TRAINING_WRITE_INPUTS, type TrainingWriteTool } from './training-plans.schemas';
+import {
+  type McpValidationIssueSummary,
+  summarizeMcpValidationIssues,
+} from './validation-issues';
 
 const CONNECTION_FAILURES_PER_MINUTE = 3;
 const USER_FAILURES_PER_MINUTE = 6;
@@ -16,8 +20,16 @@ export type GuardedTrainingPreviewTool = Extract<
   'preview_create_planned_workout' | 'preview_training_changes'
 >;
 
+export interface InvalidTrainingPreviewCall {
+  toolName: GuardedTrainingPreviewTool;
+  validationIssues: McpValidationIssueSummary[];
+}
+
 export class McpTrainingPreviewLoopGuardError extends Error {
-  constructor(readonly blockedForSeconds: number) {
+  constructor(
+    readonly blockedForSeconds: number,
+    readonly shouldLog = true,
+  ) {
     super('Repeated invalid Training previews were refused.');
     this.name = 'McpTrainingPreviewLoopGuardError';
   }
@@ -77,21 +89,25 @@ function asRecord(value: unknown): Record<string, unknown> | null {
     : null;
 }
 
-export function invalidTrainingPreviewTool(body: unknown): GuardedTrainingPreviewTool | null {
+export function invalidTrainingPreviewTool(body: unknown): InvalidTrainingPreviewCall | null {
   const envelope = asRecord(body);
   if (envelope?.method !== 'tools/call') return null;
   const params = asRecord(envelope.params);
   const toolName = params?.name;
   const args = asRecord(params?.arguments) ?? {};
   if (toolName === 'preview_create_planned_workout') {
-    return TRAINING_WRITE_INPUTS.preview_create_planned_workout.safeParse(args).success
-      ? null
-      : toolName;
+    const parsed = TRAINING_WRITE_INPUTS.preview_create_planned_workout.safeParse(args);
+    return parsed.success ? null : {
+      toolName,
+      validationIssues: summarizeMcpValidationIssues(parsed.error) ?? [],
+    };
   }
   if (toolName === 'preview_training_changes') {
-    return TRAINING_WRITE_INPUTS.preview_training_changes.safeParse(args).success
-      ? null
-      : toolName;
+    const parsed = TRAINING_WRITE_INPUTS.preview_training_changes.safeParse(args);
+    return parsed.success ? null : {
+      toolName,
+      validationIssues: summarizeMcpValidationIssues(parsed.error) ?? [],
+    };
   }
   return null;
 }
@@ -116,7 +132,13 @@ function nextCounterState(
   snapshot: CounterSnapshot,
   nowMs: number,
   maximum: number,
-): { count: number; windowStartMs: number; blockedUntilMs: number; blockedForSeconds: number } {
+): {
+  count: number;
+  windowStartMs: number;
+  blockedUntilMs: number;
+  blockedForSeconds: number;
+  newlyBlocked: boolean;
+} {
   const data = snapshot.exists ? snapshot.data() : undefined;
   const previousWindowStartMs = safeNonNegativeInteger(data?.windowStartMs);
   const previousBlockedUntilMs = safeNonNegativeInteger(data?.blockedUntilMs) ?? 0;
@@ -126,6 +148,7 @@ function nextCounterState(
       windowStartMs: previousWindowStartMs ?? nowMs,
       blockedUntilMs: previousBlockedUntilMs,
       blockedForSeconds: Math.max(1, Math.ceil((previousBlockedUntilMs - nowMs) / 1000)),
+      newlyBlocked: false,
     };
   }
   const withinWindow = previousWindowStartMs !== null
@@ -140,9 +163,16 @@ function nextCounterState(
       windowStartMs,
       blockedUntilMs: nowMs + BLOCK_MS,
       blockedForSeconds: Math.ceil(BLOCK_MS / 1000),
+      newlyBlocked: true,
     };
   }
-  return { count, windowStartMs, blockedUntilMs: 0, blockedForSeconds: 0 };
+  return {
+    count,
+    windowStartMs,
+    blockedUntilMs: 0,
+    blockedForSeconds: 0,
+    newlyBlocked: false,
+  };
 }
 
 export async function consumeInvalidTrainingPreviewAttempt(
@@ -170,6 +200,7 @@ export async function consumeInvalidTrainingPreviewAttempt(
   ];
 
   let blockedForSeconds = 0;
+  let shouldLog = false;
   await resolved.runTransaction(async transaction => {
     await transaction.assertUserAvailable(uid, nowMs);
     const snapshots = await Promise.all(counters.map(counter => transaction.get(counter.reference)));
@@ -179,6 +210,8 @@ export async function consumeInvalidTrainingPreviewAttempt(
       counters[index].maximum,
     ));
     blockedForSeconds = Math.max(...states.map(state => state.blockedForSeconds));
+    shouldLog = states[0].newlyBlocked
+      || (states[0].blockedForSeconds === 0 && states[1].newlyBlocked);
     counters.forEach((counter, index) => transaction.set(counter.reference, {
       uid,
       ...(counter.subjectKind === 'connection' ? { connectionId } : {}),
@@ -194,6 +227,6 @@ export async function consumeInvalidTrainingPreviewAttempt(
     }));
   });
   if (blockedForSeconds > 0) {
-    throw new McpTrainingPreviewLoopGuardError(blockedForSeconds);
+    throw new McpTrainingPreviewLoopGuardError(blockedForSeconds, shouldLog);
   }
 }

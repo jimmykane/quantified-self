@@ -41,9 +41,10 @@ also requires the independent delivery-write grant. Connections without that gra
 no delivery field. It intentionally excludes the batch operation union. Clients use the
 existing batch preview for edits, later provider actions and genuinely multi-change requests, and must not retry rejected
 input unchanged. Repeated malformed previews are stopped after three per connection per minute (six per owner) with a
-ten-minute invalid-call cooldown. The server returns a non-retryable JSON-RPC `Invalid params` result over HTTP 200 and
-does not emit `Retry-After`, while correctly formed previews remain available immediately. This prevents an MCP host from
-turning a schema failure into a transport retry loop. Repeated recipe components are advertised through
+ten-minute invalid-call cooldown. The server completes blocked calls as ordinary MCP `isError` tool results over HTTP 200,
+with bounded issue codes and safe schema paths; it emits neither a JSON-RPC protocol error nor `Retry-After`, while
+correctly formed previews remain available immediately. Only the first cooldown transition is logged. This prevents an MCP
+host from turning a schema failure into a transport retry loop. Repeated recipe components are advertised through
 draft-07 references to keep the complete strict recipe inside the existing Training write-metadata budget; runtime Zod
 validation and the public recipe coverage gate remain identical.
 

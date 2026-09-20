@@ -232,7 +232,7 @@ describe('MCP Function protocol compatibility', () => {
     expect(info).not.toHaveBeenCalled();
   });
 
-  it('returns a non-retryable protocol error for repeated malformed Training previews', async () => {
+  it('completes repeated malformed Training previews as bounded tool errors', async () => {
     const malformed = modernRequest('tools/call', {
       name: 'preview_training_changes',
       arguments: { expectedScheduleRevision: 1, changes: [{ kind: 'invented-operation' }] },
@@ -248,17 +248,38 @@ describe('MCP Function protocol compatibility', () => {
     const blocked = await post(malformed);
     expect(blocked.status).toBe(200);
     expect(blocked.headers.get('retry-after')).toBeNull();
-    expect(await blocked.json()).toMatchObject({
+    const blockedBody = await blocked.json();
+    expect(blockedBody).toMatchObject({
       id: 1,
-      error: {
-        code: -32602,
-        message: expect.stringMatching(/must not be retried.*available immediately/),
+      result: {
+        isError: true,
+        content: [{ type: 'text', text: expect.any(String) }],
       },
     });
+    expect(blockedBody).not.toHaveProperty('error');
+    const blockedText = JSON.parse(blockedBody.result.content[0].text);
+    expect(blockedText).toMatchObject({
+      error: 'invalid_arguments',
+      message: expect.stringMatching(/Do not retry it unchanged.*one fresh preview/),
+      validationIssues: expect.arrayContaining([
+        expect.objectContaining({ path: ['changes', 0, 'kind'] }),
+      ]),
+    });
+    expect(JSON.stringify(blockedBody)).not.toContain('invented-operation');
     expect(warn).toHaveBeenCalledWith('[MCP] Repeated invalid Training preview blocked', {
       toolName: 'preview_training_changes',
+      validationIssues: expect.arrayContaining([
+        expect.objectContaining({ path: ['changes', 0, 'kind'] }),
+      ]),
     });
     expect(JSON.stringify(warn.mock.calls)).not.toMatch(/protocol-user|protocol-connection|invented-operation/);
+
+    consumeInvalidTrainingPreviewAttempt.mockRejectedValueOnce(
+      new McpTrainingPreviewLoopGuardError(599, false),
+    );
+    const stillBlocked = await post(malformed);
+    expect(await stillBlocked.json()).toMatchObject({ result: { isError: true } });
+    expect(warn).toHaveBeenCalledTimes(1);
   });
 
   it.each([[MCP_OAUTH_SCOPES.ActivityDetailsRead], [MCP_OAUTH_SCOPES.ActivityDescriptionsRead]])(

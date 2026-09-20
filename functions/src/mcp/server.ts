@@ -59,6 +59,7 @@ import {
   invalidTrainingPreviewTool,
   McpTrainingPreviewLoopGuardError,
 } from './training-preview-loop-guard';
+import { summarizeMcpValidationIssues } from './validation-issues';
 
 const defaultDataService = createMcpDataService();
 let oauthService: ReturnType<typeof createMcpOAuthService> | null = null;
@@ -660,21 +661,7 @@ function createReadOnlyToolRunner(outputSchemas: McpOutputSchemaRegistry) {
 export function summarizeMcpOutputValidationIssues(
   error: unknown,
 ): Array<{ code: string; path: Array<string | number> }> | null {
-  if (!(error instanceof z.ZodError)) {
-    return null;
-  }
-  return error.issues.slice(0, 8).map(issue => ({
-    code: issue.code,
-    path: issue.path.slice(0, 8).map(part => {
-      if (typeof part === 'number') {
-        return part;
-      }
-      return typeof part === 'string'
-        && /^[A-Za-z][A-Za-z0-9_]{0,63}$/.test(part)
-        ? part
-        : '<dynamic>';
-    }),
-  }));
+  return summarizeMcpValidationIssues(error);
 }
 
 export const MCP_ACTIVITY_SAMPLES_INSTRUCTIONS = 'Use existing activity summaries for ordinary workout overviews. Use get_activity_chart_data for a visual overview. For detailed samples, interval analysis or calculations, discover metrics with list_activity_chart_metrics and use get_activity_samples with only the needed metrics and elapsed-second range. Keep the same query and limit when following nextCursor; finish the requested range before claiming complete coverage. Null means a missing reading. Never calculate whole-activity averages, time in zones or correlations from downsampled chart points; prefer persisted summary metrics when they answer the question.';
@@ -2388,17 +2375,27 @@ export const mcpApi = onRequest(MCP_API_RUNTIME_OPTIONS, async (request, respons
       await consumeInvalidTrainingPreviewAttempt(auth.uid, auth.connectionId);
     } catch (error) {
       if (error instanceof McpTrainingPreviewLoopGuardError) {
-        logger.warn('[MCP] Repeated invalid Training preview blocked', {
-          toolName: invalidTrainingPreview,
-        });
+        if (error.shouldLog) {
+          logger.warn('[MCP] Repeated invalid Training preview blocked', {
+            toolName: invalidTrainingPreview.toolName,
+            validationIssues: invalidTrainingPreview.validationIssues,
+          });
+        }
         const requestId = typeof request.body?.id === 'string' || typeof request.body?.id === 'number'
           ? request.body.id
           : null;
         response.status(200).json({
           jsonrpc: '2.0',
-          error: {
-            code: -32602,
-            message: 'Invalid Training preview arguments were repeated. This malformed request was refused and must not be retried. Correctly formed Training previews remain available immediately; use the advertised schema and preview_create_planned_workout for one new workout.',
+          result: {
+            isError: true,
+            content: [{
+              type: 'text',
+              text: JSON.stringify({
+                error: 'invalid_arguments',
+                message: 'This Training preview does not match the advertised schema. Do not retry it unchanged. Correct the listed fields and make one fresh preview. For one new workout, use preview_create_planned_workout.',
+                validationIssues: invalidTrainingPreview.validationIssues,
+              }),
+            }],
           },
           id: requestId,
         });

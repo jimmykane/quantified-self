@@ -88,12 +88,14 @@ Assistant/plugin guidance and tests. Record a no-impact rationale or a focused e
 registered write actions never automatically expand when internal lifecycle or provider fields are added.
 
 Malformed preview arguments are bounded separately from ordinary MCP request quotas. After three invalid Training preview
-attempts from one connection in a minute, the server returns a JSON-RPC `Invalid params` error over HTTP 200 with an
-explicit instruction not to retry the malformed call. It deliberately sends no HTTP retry signal: transport-level 429
-responses caused MCP hosts to replay the same invalid tool call. The owner-wide ceiling is six and further malformed calls
-enter a ten-minute invalid-call cooldown. Correctly formed previews remain accepted immediately. The counter contains no
-authored request content and expires. This guard prevents a client tool-selection failure from producing an unbounded
-validation loop; it never repairs, applies, or silently degrades input.
+attempts from one connection in a minute, the server completes the invocation as a normal MCP tool result with
+`isError: true` over HTTP 200. It includes only bounded validation issue codes and safe schema paths, plus an explicit
+instruction not to retry the malformed call unchanged. It deliberately returns neither a JSON-RPC protocol error nor an
+HTTP retry signal: both can cause hosts to replay the same invalid tool call at the transport layer. The owner-wide ceiling
+is six and further malformed calls enter a ten-minute invalid-call cooldown. Correctly formed previews remain accepted
+immediately. The counter contains no authored request content and expires, and only the first transition into a cooldown
+is logged. This guard prevents a client tool-selection failure from producing an unbounded validation loop; it never
+repairs, applies, or silently degrades input.
 
 The manually mirrored public recipe schema has an exhaustive compile-time coverage map for the version, node/ending
 kinds, step purposes, target modes and kind/mode pairs, relative-target references and speed presentation. Focused

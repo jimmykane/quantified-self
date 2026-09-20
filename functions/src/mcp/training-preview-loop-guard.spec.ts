@@ -17,14 +17,24 @@ const validStructure = {
 
 describe('Training preview loop guard', () => {
   it('recognizes only malformed Training preview calls', () => {
-    expect(invalidTrainingPreviewTool({ method: 'tools/call', params: {
+    const invalidBatch = invalidTrainingPreviewTool({ method: 'tools/call', params: {
       name: 'preview_training_changes',
       arguments: { expectedScheduleRevision: 1, changes: [{ kind: 'invented' }] },
-    } })).toBe('preview_training_changes');
+    } });
+    expect(invalidBatch).toMatchObject({
+      toolName: 'preview_training_changes',
+      validationIssues: expect.arrayContaining([
+        expect.objectContaining({ path: ['changes', 0, 'kind'] }),
+      ]),
+    });
+    expect(JSON.stringify(invalidBatch)).not.toContain('invented');
     expect(invalidTrainingPreviewTool({ method: 'tools/call', params: {
       name: 'preview_create_planned_workout',
       arguments: { expectedScheduleRevision: 1 },
-    } })).toBe('preview_create_planned_workout');
+    } })).toMatchObject({
+      toolName: 'preview_create_planned_workout',
+      validationIssues: expect.any(Array),
+    });
     expect(invalidTrainingPreviewTool({ method: 'tools/call', params: {
       name: 'preview_create_planned_workout',
       arguments: {
@@ -75,6 +85,7 @@ describe('Training preview loop guard', () => {
       .rejects.toMatchObject({
         name: 'McpTrainingPreviewLoopGuardError',
         blockedForSeconds: 600,
+        shouldLog: true,
       });
     expect([...documents.values()]).toEqual(expect.arrayContaining([
       expect.objectContaining({
@@ -95,6 +106,32 @@ describe('Training preview loop guard', () => {
     await expect(consumeInvalidTrainingPreviewAttempt('user', 'connection', {
       ...dependencies,
       now: () => 130_000,
-    })).rejects.toMatchObject({ blockedForSeconds: 595 });
+    })).rejects.toMatchObject({ blockedForSeconds: 595, shouldLog: false });
+  });
+
+  it('logs an owner-wide cooldown once when failures are spread across connections', async () => {
+    const documents = new Map<string, Record<string, unknown>>();
+    const runTransaction: TrainingPreviewLoopGuardDependencies['runTransaction'] = async operation => operation({
+      get: async (reference: string) => ({
+        exists: documents.has(reference),
+        data: () => documents.get(reference),
+      }),
+      set: (reference: string, value: Record<string, unknown>) => documents.set(reference, value),
+      assertUserAvailable: vi.fn().mockResolvedValue(undefined),
+    });
+    const dependencies = {
+      now: () => 250_000,
+      document: (id: string) => id,
+      runTransaction,
+      timestampFromMillis: (value: number) => value,
+    };
+
+    for (const connectionId of ['a', 'b', 'c', 'd', 'e', 'f']) {
+      await consumeInvalidTrainingPreviewAttempt('user', connectionId, dependencies);
+    }
+    await expect(consumeInvalidTrainingPreviewAttempt('user', 'g', dependencies))
+      .rejects.toMatchObject({ blockedForSeconds: 600, shouldLog: true });
+    await expect(consumeInvalidTrainingPreviewAttempt('user', 'h', dependencies))
+      .rejects.toMatchObject({ blockedForSeconds: 600, shouldLog: false });
   });
 });
