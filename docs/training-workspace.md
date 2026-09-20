@@ -2088,10 +2088,12 @@ values, so ECharts leaves visible gaps rather than interpolating them.
 
 `recovery_now` combines supported imported post-workout recovery estimates. An active estimate appears as the compact
 **Recovery left** row at the start of the Recovery context inside Readiness, directly before Sleep history. Its live
-countdown includes the estimated local finish clock, remains visible while the sleep details are collapsed, and explicitly
+countdown includes the estimated local recovery day and time, remains visible while the sleep details are collapsed, and
+explicitly
 stays separate from the Readiness score and Freshness/Form. It replaces the former top-level status tile so the same timer
-is not presented twice. Dashboard Today uses the same **Recovery left** label, remaining duration, and estimated local
-finish clock beneath its score. Both surfaces remove the row without a placeholder when the estimate elapses. The timer
+is not presented twice. Dashboard Today and the optional Recovery tile use the same **Recovery left** label, day-based
+remaining duration, and estimated local recovery day and time. Both surfaces remove active recovery without a placeholder
+when the estimate elapses. The timer
 uses the stored end time, is contextual rather than a second recovery model, and never changes Readiness, Freshness, or
 the Training state. The worker scans a bounded 16-day event window; no events in that window is a valid empty result for
 new or inactive users and is logged as informational rather than a warning.

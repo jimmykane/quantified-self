@@ -4,7 +4,9 @@ import {
   ChangeDetectionStrategy,
   Component,
   ElementRef,
+  Inject,
   Input,
+  LOCALE_ID,
   OnChanges,
   OnDestroy,
   SimpleChanges,
@@ -15,7 +17,6 @@ import {
   ActivityTypesHelper,
   ChartDataCategoryTypes,
   ChartDataValueTypes,
-  DataDuration,
   DataRecoveryTime,
   TimeIntervals,
   type UserUnitSettingsInterface,
@@ -62,6 +63,7 @@ import {
   getDashboardSummaryMetaLabel
 } from '../../../helpers/dashboard-chart-data.helper';
 import {
+  buildDashboardRecoveryPresentation,
   RECOVERY_NOW_REFRESH_INTERVAL_MS,
   resolveActiveRecoveryTotalSeconds,
   resolveRemainingRecoverySeconds,
@@ -122,7 +124,8 @@ export class ChartsPieComponent implements AfterViewInit, OnChanges, OnDestroy {
   constructor(
     private eChartsLoader: EChartsLoaderService,
     private eventColorService: AppEventColorService,
-    private logger: LoggerService
+    private logger: LoggerService,
+    @Inject(LOCALE_ID) private readonly locale: string,
   ) {
     this.chartHost = new EChartsHostController({
       deferUntilNearViewport: true,
@@ -218,7 +221,10 @@ export class ChartsPieComponent implements AfterViewInit, OnChanges, OnDestroy {
     const textColor = chartStyle.textColor;
     const isCompactLayout = chartStyle.isCompactLayout;
     const isMobileTooltipViewport = isEChartsMobileTooltipViewport();
-    const recoverySeriesData = this.buildRecoverySeriesData(chartStyle.subtleBorderColor);
+    const recoverySeriesData = this.buildRecoverySeriesData(
+      chartStyle.subtleBorderColor,
+      chartStyle.errorColor,
+    );
     const seriesData = recoverySeriesData || pieData.slices.map((slice, index) => ({
       name: getDashboardPieSliceDisplayLabel(
         slice,
@@ -289,14 +295,24 @@ export class ChartsPieComponent implements AfterViewInit, OnChanges, OnDestroy {
           );
           const percent = Number(entry.percent || 0).toFixed(1);
           const valueTypeLabel = this.chartDataValueType || 'Value';
+          const recovery = buildDashboardRecoveryPresentation(this.recoveryNow, {
+            locale: this.locale,
+            unitSettings: this.userUnitSettings,
+          });
 
           return renderDashboardEChartsTooltipCard(chartStyle, {
             title: entry.name,
             subtitle: `${percent}%`,
-            rows: [
-              { label: valueTypeLabel, value: valueText },
-              ...(entry.count > 0 ? [{ label: 'Activities', value: `${entry.count}` }] : []),
-            ],
+            rows: recovery && this.enableRecoveryNowMode && this.chartDataType === DataRecoveryTime.type
+              ? [
+                { label: 'Duration', value: valueText },
+                { label: 'Active total', value: recovery.activeTotalText },
+                { label: 'Expected by', value: recovery.finishText },
+              ]
+              : [
+                { label: valueTypeLabel, value: valueText },
+                ...(entry.count > 0 ? [{ label: 'Activities', value: `${entry.count}` }] : []),
+              ],
           });
         }
       },
@@ -410,8 +426,8 @@ export class ChartsPieComponent implements AfterViewInit, OnChanges, OnDestroy {
                   text: compactRecovery ? centerSubLabel.replace(': ', ':\n') : centerSubLabel,
                   width: compactRecovery ? recoveryTextWidth : undefined,
                   overflow: compactRecovery ? 'break' : undefined,
-                  lineHeight: compactRecovery ? 11 : undefined,
-                  fontSize: compactRecovery ? 9 : isCompactLayout ? 11 : 12,
+                  lineHeight: compactRecovery ? 12 : undefined,
+                  fontSize: compactRecovery ? 10 : isCompactLayout ? 11 : 12,
                   fontWeight: 500,
                   fill: textColor,
                   opacity: 0.7,
@@ -432,13 +448,11 @@ export class ChartsPieComponent implements AfterViewInit, OnChanges, OnDestroy {
       return null;
     }
 
-    const nowMs = Date.now();
-    const activeTotalSeconds = resolveActiveRecoveryTotalSeconds(this.recoveryNow, nowMs);
-    const remainingSeconds = resolveRemainingRecoverySeconds(this.recoveryNow, nowMs);
-    const hasRenderableRecovery = activeTotalSeconds !== null
-      && activeTotalSeconds > 0
-      && remainingSeconds !== null;
-    if (!hasRenderableRecovery) {
+    const recovery = buildDashboardRecoveryPresentation(this.recoveryNow, {
+      locale: this.locale,
+      unitSettings: this.userUnitSettings,
+    });
+    if (!recovery) {
       if (this.recoveryNowStatus === 'ready') {
         return {
           label: 'No active recovery now',
@@ -450,23 +464,10 @@ export class ChartsPieComponent implements AfterViewInit, OnChanges, OnDestroy {
       return null;
     }
 
-    const normalizedUnitSettings = this.getNormalizedUnitSettings();
-    const totalText = formatDashboardNumericValue(
-      DataDuration.type,
-      activeTotalSeconds!,
-      this.logger,
-      normalizedUnitSettings,
-    );
-    const remainingText = formatDashboardNumericValue(
-      DataDuration.type,
-      remainingSeconds!,
-      this.logger,
-      normalizedUnitSettings,
-    );
     return {
       label: 'Recovery left',
-      value: remainingText,
-      meta: `Total recovery: ${totalText}`,
+      value: recovery.remainingText,
+      meta: `Expected by: ${recovery.finishDateText} · ${recovery.finishClockText}`,
       layoutMode: 'default',
     };
   }
@@ -521,7 +522,7 @@ export class ChartsPieComponent implements AfterViewInit, OnChanges, OnDestroy {
     return normalizeUserUnitSettings(this.userUnitSettings);
   }
 
-  private buildRecoverySeriesData(subtleBorderColor: string): Array<{
+  private buildRecoverySeriesData(subtleBorderColor: string, recoveryColor: string): Array<{
     name: string;
     value: number;
     count: number;
@@ -563,12 +564,12 @@ export class ChartsPieComponent implements AfterViewInit, OnChanges, OnDestroy {
 
     return [
       {
-        name: 'Left now',
+        name: 'Recovery left',
         value: remainingSeconds!,
         count: 0,
         percent: leftPercent,
         itemStyle: {
-          color: AppColors.Green,
+          color: recoveryColor,
           borderColor: subtleBorderColor,
           borderWidth: 1.2
         }

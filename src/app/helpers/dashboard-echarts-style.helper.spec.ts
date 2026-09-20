@@ -27,6 +27,7 @@ describe('buildDashboardEChartsStyleTokens', () => {
     });
     expect(tokens.textColor).toBe('#3c3c41');
     expect(tokens.axisColor).toBe('#54555a');
+    expect(tokens.errorColor).toBe('#ba1a1a');
   });
 
   it('should return dark values for dark app themes', () => {
@@ -44,6 +45,7 @@ describe('buildDashboardEChartsStyleTokens', () => {
     expect(tokens.textColor).toBe('rgba(223,223,225,1)');
     expect(tokens.tooltipBackgroundColor).toBe('rgba(58,62,68,1)');
     expect(tokens.tooltipBorderColor).toBe('rgba(91,94,100,1)');
+    expect(tokens.errorColor).toBe('#ffb4ab');
   });
 
   it('should build the shared tooltip text style from tooltip typography tokens', () => {

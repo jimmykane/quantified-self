@@ -249,7 +249,7 @@ describe('TrainingWorkspaceComponent', () => {
     expect(recoveryContext?.querySelector('#training-recovery-context-title')?.textContent).toContain('Recovery context');
     expect(element.querySelector('.training-readiness-source')?.nextElementSibling).toBe(recoveryContext);
     expect(importedRecovery?.textContent).toContain('Recovery left');
-    expect(importedRecovery?.textContent).toContain('remaining · until');
+    expect(importedRecovery?.textContent).toContain('remaining · expected by');
     expect(importedRecovery?.textContent).toContain('Imported post-workout estimate');
     expect(importedRecovery?.textContent).toContain('separate from Readiness and Freshness');
     expect(sleepHistory?.querySelector('#training-recovery-history-title')?.textContent).toContain('Sleep history');

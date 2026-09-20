@@ -1434,7 +1434,8 @@ describe('SummariesComponent', () => {
     expect(nativeElement.querySelector('.dashboard-readiness-primary-value')?.textContent).toContain('/100');
     expect(nativeElement.querySelector('.dashboard-readiness-method')?.textContent).toContain('Freshness stays TSS-only');
     expect(nativeElement.querySelector('.dashboard-readiness-imported-recovery')?.textContent)
-      .toContain('Recovery left · 2h 00m remaining · until');
+      .toContain(`Recovery left · 02h 00m · expected by ${component.dashboardTodayReadiness.recoveryFinishText}`);
+    expect(component.dashboardTodayReadiness.recoveryFinishText).toMatch(/.+ at .+/);
     expect(nativeElement.querySelector('.dashboard-readiness-recovery-indicator .metric-indicator-track')
       ?.getAttribute('aria-label')).toBe('Recovery remaining: 100 of 100');
     expect(component.dashboardTodayReadiness.recoveryFinishTimeMs).toBe(nowMs + (2 * 3_600_000));
@@ -1472,7 +1473,7 @@ describe('SummariesComponent', () => {
     (component as any).changeDetector.markForCheck();
     fixture.detectChanges();
 
-    expect(component.dashboardTodayReadiness.recoveryText).toBe('1h 00m');
+    expect(component.dashboardTodayReadiness.recoveryText).toBe('01h 00m');
     expect(nativeElement.querySelector('.dashboard-readiness-recovery-indicator .metric-indicator-track')
       ?.getAttribute('aria-label')).toBe('Recovery remaining: 50 of 100');
 

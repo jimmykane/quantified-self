@@ -58,7 +58,6 @@ import {
 } from '../../helpers/dashboard-tile-view-model.helper';
 import {
   buildDashboardSleepTrendContext,
-  formatSleepDuration,
   type DashboardSleepTrendWindow,
 } from '../../helpers/dashboard-sleep-chart.helper';
 import {
@@ -84,9 +83,8 @@ import {
 import { AppSleepService } from '../../services/app.sleep.service';
 import type { DashboardFormPoint } from '../../helpers/dashboard-form.helper';
 import {
+  buildDashboardRecoveryPresentation,
   RECOVERY_NOW_REFRESH_INTERVAL_MS,
-  resolveActiveRecoveryTotalSeconds,
-  resolveRecoveryFinishTimeMs,
   resolveRemainingRecoverySeconds,
   type DashboardRecoveryNowContext,
 } from '../../helpers/dashboard-recovery-now.helper';
@@ -244,6 +242,7 @@ interface DashboardTodayReadinessViewModel {
   recoveryText: string;
   recoveryRemainingPercent: number | null;
   recoveryFinishTimeMs: number | null;
+  recoveryFinishText: string;
   loadBars: DashboardTodayHistoryBar[];
   overnightHeartRateBars: DashboardTodayHistoryBar[];
 }
@@ -281,6 +280,7 @@ function createEmptyDashboardTodayReadinessViewModel(loading = false): Dashboard
     recoveryText: '--',
     recoveryRemainingPercent: null,
     recoveryFinishTimeMs: null,
+    recoveryFinishText: '',
     loadBars: [],
     overnightHeartRateBars: [],
   };
@@ -1953,15 +1953,15 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
       sleepTrend,
       nowMs,
     });
-    const recoveryRemainingSeconds = resolveRemainingRecoverySeconds(this.derivedRecoveryNowContext, nowMs);
-    const activeRecoveryTotalSeconds = resolveActiveRecoveryTotalSeconds(this.derivedRecoveryNowContext, nowMs);
-    const recoveryRemainingPercent = recoveryRemainingSeconds !== null
-      && activeRecoveryTotalSeconds !== null
-      && activeRecoveryTotalSeconds > 0
-      ? (recoveryRemainingSeconds / activeRecoveryTotalSeconds) * 100
-      : null;
-    const recoveryText = formatSleepDuration(recoveryRemainingSeconds);
-    const recoveryFinishTimeMs = resolveRecoveryFinishTimeMs(this.derivedRecoveryNowContext, nowMs);
+    const recovery = buildDashboardRecoveryPresentation(this.derivedRecoveryNowContext, {
+      locale: this.locale,
+      nowMs,
+      unitSettings: this.user?.settings?.unitSettings,
+    });
+    const recoveryText = recovery?.remainingText ?? '--';
+    const recoveryRemainingPercent = recovery?.remainingPercent ?? null;
+    const recoveryFinishTimeMs = recovery?.finishTimeMs ?? null;
+    const recoveryFinishText = recovery?.finishText ?? '';
     const loadBars = buildDashboardTodayLoadBars(
       this.derivedFormPoints,
       this.dashboardTodayTrainingState.label,
@@ -1975,6 +1975,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
         recoveryText,
         recoveryRemainingPercent,
         recoveryFinishTimeMs,
+        recoveryFinishText,
         loadBars,
       };
     }
@@ -2014,6 +2015,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
       recoveryText,
       recoveryRemainingPercent,
       recoveryFinishTimeMs,
+      recoveryFinishText,
       loadBars,
       overnightHeartRateBars: buildDashboardTodayOvernightHeartRateBars(
         sleepTrend,

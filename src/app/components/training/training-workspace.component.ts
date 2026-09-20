@@ -1821,6 +1821,8 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
     this.trainingRecoveryEstimate = buildTrainingRecoveryEstimateViewModel(
       this.derivedState.recoveryNow,
       this.derivedState.recoveryNowStatus,
+      Date.now(),
+      { locale: this.locale, unitSettings: this.unitSettings },
     );
   }
 

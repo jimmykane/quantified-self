@@ -1,5 +1,11 @@
-import { DataDuration, DataRecoveryTime, type EventInterface } from '@sports-alliance/sports-lib';
+import {
+  DataDuration,
+  DataRecoveryTime,
+  type EventInterface,
+  type UserUnitSettingsInterface,
+} from '@sports-alliance/sports-lib';
 import { DERIVED_RECOVERY_MAX_SUPPORTED_SECONDS } from '@shared/derived-metrics';
+import { formatUnitAwareDataValue } from '@shared/unit-aware-display';
 
 export const RECOVERY_NOW_REFRESH_INTERVAL_MS = 60 * 1000;
 
@@ -15,6 +21,25 @@ export interface DashboardRecoveryNowContext {
   latestWorkoutSeconds?: number | null;
   latestWorkoutEndTimeMs?: number | null;
   maxSupportedRecoverySeconds?: number;
+}
+
+export interface DashboardRecoveryPresentation {
+  activeTotalSeconds: number;
+  activeTotalText: string;
+  remainingSeconds: number;
+  remainingText: string;
+  remainingPercent: number;
+  finishTimeMs: number;
+  finishDateText: string;
+  finishClockText: string;
+  finishText: string;
+}
+
+export interface DashboardRecoveryPresentationOptions {
+  locale?: string;
+  nowMs?: number;
+  timeZone?: string;
+  unitSettings?: UserUnitSettingsInterface | null;
 }
 
 function toFiniteNumber(value: unknown): number | null {
@@ -198,6 +223,57 @@ export function resolveRecoveryFinishTimeMs(
 
   const finishTimeMs = nowMs + (remainingSeconds * 1000);
   return Number.isFinite(finishTimeMs) ? finishTimeMs : null;
+}
+
+export function buildDashboardRecoveryPresentation(
+  context: DashboardRecoveryNowContext | null | undefined,
+  options: DashboardRecoveryPresentationOptions = {},
+): DashboardRecoveryPresentation | null {
+  const nowMs = options.nowMs ?? Date.now();
+  const activeTotalSeconds = resolveActiveRecoveryTotalSeconds(context, nowMs);
+  const remainingSeconds = resolveRemainingRecoverySeconds(context, nowMs);
+  const finishTimeMs = resolveRecoveryFinishTimeMs(context, nowMs);
+  if (
+    activeTotalSeconds === null
+    || activeTotalSeconds <= 0
+    || remainingSeconds === null
+    || remainingSeconds <= 0
+    || finishTimeMs === null
+  ) {
+    return null;
+  }
+
+  const dateTimeOptions = options.timeZone ? { timeZone: options.timeZone } : {};
+  const finishDate = new Date(finishTimeMs);
+  const finishDateText = finishDate.toLocaleDateString(options.locale, {
+    ...dateTimeOptions,
+    weekday: 'short',
+    day: 'numeric',
+    month: 'short',
+  });
+  const finishClockText = finishDate.toLocaleTimeString(options.locale, {
+    ...dateTimeOptions,
+    hour: 'numeric',
+    minute: '2-digit',
+  });
+  const formatDuration = (seconds: number): string => formatUnitAwareDataValue(
+    DataDuration.type,
+    seconds,
+    options.unitSettings,
+    { compactDuration: true, stripRepeatedUnit: true },
+  ) || '--';
+
+  return {
+    activeTotalSeconds,
+    activeTotalText: formatDuration(activeTotalSeconds),
+    remainingSeconds,
+    remainingText: formatDuration(remainingSeconds),
+    remainingPercent: Math.min(100, Math.max(0, (remainingSeconds / activeTotalSeconds) * 100)),
+    finishTimeMs,
+    finishDateText,
+    finishClockText,
+    finishText: `${finishDateText} at ${finishClockText}`,
+  };
 }
 
 export function resolveActiveRecoveryTotalSeconds(

@@ -349,7 +349,7 @@
                   <span class="training-metric-label">Recovery left</span>
                   <div class="training-readiness-imported-recovery-value">
                     <strong><app-training-metric-text [text]="estimate.valueText"></app-training-metric-text></strong>
-                    <span>remaining · until {{ estimate.finishTimeMs | date:'shortTime' }}</span>
+                    <span>remaining · expected by {{ estimate.finishText }}</span>
                   </div>
                   <p>{{ estimate.detailText }}</p>
                 </div>
