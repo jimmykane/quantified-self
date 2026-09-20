@@ -426,7 +426,7 @@ describe('help.content', () => {
   it('should document the Dashboard Today recovery countdown behavior', () => {
     const gettingStartedSection = HELP_SECTIONS.find(section => section.id === 'getting-started');
 
-    expect(gettingStartedSection?.content).toContain('estimated local finish time as Training');
+    expect(gettingStartedSection?.content).toContain('estimated local recovery day and time as Training');
     expect(gettingStartedSection?.content).toContain('remaining share of the active imported recovery estimates');
     expect(gettingStartedSection?.content).toContain('disappears when elapsed');
   });
@@ -658,7 +658,7 @@ describe('help.content', () => {
     expect(trainingSection?.content).toContain('**Recovery left**');
     expect(trainingSection?.content).toContain('**Sleep history**');
     expect(trainingSection?.content).toContain('remains visible while sleep details are collapsed');
-    expect(trainingSection?.content).toContain('estimated local finish time');
+    expect(trainingSection?.content).toContain('estimated local recovery day and time');
     expect(trainingSection?.content).toContain('**Show sleep details**');
     expect(trainingSection?.content).toContain('omitted quietly when missing or elapsed');
     expect(trainingSection?.content).toContain('without changing the Training state');
