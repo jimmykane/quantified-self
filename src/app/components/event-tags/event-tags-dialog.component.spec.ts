@@ -39,6 +39,10 @@ describe('EventTagsDialogComponent', () => {
     fixture.detectChanges();
   });
 
+  it('uses activity language in the default dialog title', () => {
+    expect(component.title).toBe('Activity tags');
+  });
+
   it('uses success feedback after saving tags', async () => {
     component.selectSuggestion({ option: { value: 'Race' } } as any);
 

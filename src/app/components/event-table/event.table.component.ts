@@ -120,8 +120,8 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
     'Tag Action Label',
     'Tags Accessible Label',
   ]);
-  private readonly duplicateSourceFilesMessage = 'Selected events include identical source files. Deselect duplicates and try again.';
-  readonly sharedEventTooltip = 'Public link enabled. Anyone with the link can view this event, comparison data, and original files.';
+  private readonly duplicateSourceFilesMessage = 'Selected activities include identical source files. Deselect duplicates and try again.';
+  readonly sharedEventTooltip = 'Public link enabled. Anyone with the link can view this activity, comparison data, and original files.';
   private rowCache = new Map<string, EventTableRowCacheEntry>();
 
 
@@ -485,7 +485,7 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
 
   async mergeSelection(event) {
     if (this.selection.selected.length < 2) {
-      this.snackBar.open('Select at least two events to merge', undefined, { duration: 2000 });
+      this.snackBar.open('Select at least two activities to merge', undefined, { duration: 2000 });
       return;
     }
 
@@ -523,7 +523,7 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
     if (eventIDs.length < 2) {
       this.restoreEventSelection(selectedRows);
       this.loaded();
-      this.snackBar.open('Not enough events to merge', undefined, { duration: 3000 });
+      this.snackBar.open('Not enough activities to merge', undefined, { duration: 3000 });
       dialogRef.disableClose = false;
       dialogRef.componentInstance.isMerging = false;
       dialogRef.close(null);
@@ -566,7 +566,7 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
     try {
       const navigated = await this.router.navigate(['/user', this.user.uid, 'event', result.eventId], {});
       if (navigated) {
-        this.snackBar.open('Events merged', undefined, {
+        this.snackBar.open('Activities merged', undefined, {
           duration: 2000,
         });
         return;
@@ -583,7 +583,7 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
     }
 
     this.loaded();
-    this.snackBar.open('Events merged. Open the merged event from the table once it appears.', undefined, {
+    this.snackBar.open('Activities merged. Open the merged activity from the table once it appears.', undefined, {
       duration: 5000,
     });
   }
@@ -620,13 +620,13 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
         }
 
         this.analyticsService.logEvent('delete_events');
-        this.snackBar.open('Events deleted', undefined, {
+        this.snackBar.open('Activities deleted', undefined, {
           duration: 2000,
         });
         this.hapticsService.success();
       } catch (error) {
         this.logger.error('[EventTableComponent] Failed to delete selected events', error);
-        this.snackBar.open('Could not delete selected events', undefined, {
+        this.snackBar.open('Could not delete selected activities', undefined, {
           duration: 3000,
         });
         this.hapticsService.error();
@@ -656,7 +656,7 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
     try {
       const selectedEvents = this.selection.selected.map(selected => selected.Event) as EventInterface[];
       if (selectedEvents.length === 0) {
-        this.snackBar.open('No events selected', undefined, { duration: 2000 });
+        this.snackBar.open('No activities selected', undefined, { duration: 2000 });
         this.processingService.removeJob(jobId);
         return;
       }
@@ -697,7 +697,7 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
       }
 
       if (generatedFiles.length === 0) {
-        this.snackBar.open('Could not export GPX for selected events', undefined, { duration: 3000 });
+        this.snackBar.open('Could not export GPX for selected activities', undefined, { duration: 3000 });
         this.processingService.failJob(jobId, 'No GPX files exported');
         this.hapticsService.error();
         return;
@@ -740,7 +740,7 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
 
       if (failedCount > 0) {
         this.snackBar.open(
-          `Downloaded ${downloadedCount} GPX ${downloadedCount === 1 ? 'file' : 'files'}. Skipped ${failedCount} ${failedCount === 1 ? 'event' : 'events'}.`,
+          `Downloaded ${downloadedCount} GPX ${downloadedCount === 1 ? 'file' : 'files'}. Skipped ${failedCount} ${failedCount === 1 ? 'activity' : 'activities'}.`,
           undefined,
           { duration: 4000 },
         );
@@ -767,7 +767,7 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
     try {
       const selectedEvents = this.selection.selected.map(s => s.Event) as EventInterface[];
       if (selectedEvents.length === 0) {
-        this.snackBar.open('No events selected', undefined, { duration: 2000 });
+        this.snackBar.open('No activities selected', undefined, { duration: 2000 });
         this.processingService.removeJob(jobId);
         return;
       }
@@ -786,7 +786,7 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
       }
 
       if (filesToDownload.length === 0) {
-        this.snackBar.open('No original files available for selected events', undefined, { duration: 3000 });
+        this.snackBar.open('No original files available for selected activities', undefined, { duration: 3000 });
         this.processingService.removeJob(jobId);
         this.hapticsService.error();
         return;
@@ -891,7 +891,7 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
     await this.eventService.updateEventProperties(this.user, event.getID(), {
       description: event.description,
     });
-    this.snackBar.open('Event saved', undefined, {
+    this.snackBar.open('Activity saved', undefined, {
       duration: 2000,
     });
   }
@@ -902,7 +902,7 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
     await this.eventService.updateEventProperties(this.user, event.getID(), {
       name: event.name,
     });
-    this.snackBar.open('Event saved', undefined, {
+    this.snackBar.open('Activity saved', undefined, {
       duration: 2000,
     });
   }
@@ -954,7 +954,7 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
       width: 'min(34rem, calc(100vw - 32px))',
       maxWidth: 'calc(100vw - 32px)',
       data: {
-        title: 'Event tags',
+        title: 'Activity tags',
         tags: originalTags,
         suggestions: this.tagFilterOptions,
         save: async (tags: string[]) => {
@@ -981,7 +981,7 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
     }
     if (this.selection.selected.length > EVENT_TAG_BULK_LIMIT) {
       this.snackBar.open(
-        `Select up to ${EVENT_TAG_BULK_LIMIT} events to update tags.`,
+        `Select up to ${EVENT_TAG_BULK_LIMIT} activities to update tags.`,
         undefined,
         { duration: 3000 },
       );
@@ -993,7 +993,7 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
       .filter((event): event is AppEventInterface => !!event?.getID?.());
     const selectedEventIDs = selectedEvents.map(event => event.getID());
     if (!selectedEventIDs.length) {
-      this.snackBar.open('Select at least one valid event to update tags.', undefined, { duration: 2500 });
+      this.snackBar.open('Select at least one valid activity to update tags.', undefined, { duration: 2500 });
       return;
     }
     this.hapticsService.selection();
@@ -1029,7 +1029,7 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
     }
     this.processChanges('bulk_event_tags_saved');
     this.snackBar.open(
-      `Tags updated on ${selectedEvents.length} ${selectedEvents.length === 1 ? 'event' : 'events'}.`,
+      `Tags updated on ${selectedEvents.length} ${selectedEvents.length === 1 ? 'activity' : 'activities'}.`,
       undefined,
       { duration: 2500 },
     );
@@ -1293,9 +1293,9 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
     statRowElement['Tags'] = tags.join(' ');
     statRowElement['Tag Values'] = tags;
     statRowElement['Tags Title'] = tags.join('\n');
-    const eventLabel = event.name || 'event';
-    statRowElement['Tag Action Label'] = `${tags.length ? 'Edit' : 'Add'} event tags for ${eventLabel}`;
-    statRowElement['Tags Accessible Label'] = `Event tags for ${eventLabel}: ${tags.join(', ')}`;
+    const eventLabel = event.name || 'activity';
+    statRowElement['Tag Action Label'] = `${tags.length ? 'Edit' : 'Add'} activity tags for ${eventLabel}`;
+    statRowElement['Tags Accessible Label'] = `Activity tags for ${eventLabel}: ${tags.join(', ')}`;
     statRowElement['Device Names'] = event.getDeviceNamesAsString();
     statRowElement['Device Name Items'] = this.buildDeviceNameDisplayItems(event);
     statRowElement['Color'] = this.eventColorService.getColorForActivityTypeByActivityTypeGroup(

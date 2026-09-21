@@ -95,7 +95,7 @@ export class EventTagsBulkDialogComponent {
       this.dialogRef.close(true);
     } catch (error) {
       this.snackBar.open(
-        error instanceof Error && error.message ? error.message : 'Could not update event tags.',
+        error instanceof Error && error.message ? error.message : 'Could not update activity tags.',
         undefined,
         { duration: 3500 },
       );

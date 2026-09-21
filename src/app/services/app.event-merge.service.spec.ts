@@ -166,8 +166,8 @@ describe('AppEventMergeService', () => {
     expect(service.getMergeErrorMessage(new EventMergeError('MISSING_SOURCE_FILE', 'x'))).toContain('missing original files');
     expect(service.getMergeErrorMessage(new EventMergeError('DUPLICATE_SOURCE_FILE', 'x'))).toContain('identical source files');
     expect(service.getMergeErrorMessage(new EventMergeError('OUTCOME_UNKNOWN', 'x'))).toContain('existing result will be reused');
-    expect(service.getMergeErrorMessage(new EventMergeError('INTERNAL', 'x'))).toBe('Could not merge events.');
+    expect(service.getMergeErrorMessage(new EventMergeError('INTERNAL', 'x'))).toBe('Could not merge activities.');
     expect(service.getMergeErrorMessage(new Error('boom'))).toBe('boom');
-    expect(service.getMergeErrorMessage(null)).toBe('Could not merge events.');
+    expect(service.getMergeErrorMessage(null)).toBe('Could not merge activities.');
   });
 });

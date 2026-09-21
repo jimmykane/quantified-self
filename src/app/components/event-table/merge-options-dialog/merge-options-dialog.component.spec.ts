@@ -33,12 +33,12 @@ describe('MergeOptionsDialogComponent', () => {
       .map((chip) => (chip.nativeElement.textContent as string).trim());
 
     expect(optionCards).toHaveLength(2);
-    expect(fixture.nativeElement.textContent).toContain('Choose how the merged event should behave after it is created.');
+    expect(fixture.nativeElement.textContent).toContain('Choose how the merged activity should behave after it is created.');
     expect(chipLabels).toEqual([
       'Excluded from stats',
       'Benchmark tools enabled',
       'Included in stats',
-      'Standard event behavior',
+      'Standard activity behavior',
     ]);
   });
 
@@ -52,12 +52,12 @@ describe('MergeOptionsDialogComponent', () => {
 
   it('keeps the primary action label stable when the selected merge type changes', () => {
     let actionLabel = fixture.debugElement.query(By.css('button.qs-mat-primary')).nativeElement.textContent as string;
-    expect(actionLabel).toContain('Merge selected events');
+    expect(actionLabel).toContain('Merge selected activities');
 
     component.selectOption('multi');
     fixture.detectChanges();
 
     actionLabel = fixture.debugElement.query(By.css('button.qs-mat-primary')).nativeElement.textContent as string;
-    expect(actionLabel).toContain('Merge selected events');
+    expect(actionLabel).toContain('Merge selected activities');
   });
 });

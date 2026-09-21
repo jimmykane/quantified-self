@@ -205,7 +205,7 @@ describe('EventActionsComponent', () => {
         expect(mockEventService.deleteAllEventData).toHaveBeenCalledWith(component.user, 'event-123');
         expect(deleted).toHaveBeenCalledWith('event-123');
         expect(mockRouter.navigate).not.toHaveBeenCalled();
-        expect(mockSnackBar.open).toHaveBeenCalledWith('Event deleted', undefined, { duration: 2000 });
+        expect(mockSnackBar.open).toHaveBeenCalledWith('Activity deleted', undefined, { duration: 2000 });
         expect(mockHapticsService.success).toHaveBeenCalledOnce();
     });
 
@@ -246,8 +246,8 @@ describe('EventActionsComponent', () => {
 
         expect(mockDialog.open).toHaveBeenCalledWith(ConfirmationDialogComponent, expect.objectContaining({
             data: expect.objectContaining({
-                title: 'Share event publicly?',
-                message: expect.stringContaining('every source-file object stored under this event folder'),
+                title: 'Share activity publicly?',
+                message: expect.stringContaining('view this activity and its source files'),
             }),
         }));
         expect(mockEventSharingService.setEventSharing).not.toHaveBeenCalled();
