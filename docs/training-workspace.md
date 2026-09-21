@@ -125,7 +125,7 @@ presentation-only optimizations with no Training calculation, planning, or MCP c
 Current compatibility baseline:
 
 - Quantified Self derived-metric schema: `19`
-- `@sports-alliance/sports-lib`: `21.2.3`
+- `@sports-alliance/sports-lib`: `21.2.4`
 - Training sport groups: eight modeled benchmark families plus data-backed Fitness & Gym and Other training volume groups
 - Imported FTP/VO2 capacity disciplines: Running and Cycling only
 - Rolling power-system capacity: every exact canonical activity type with usable persisted power curves
@@ -3304,12 +3304,15 @@ sleep duration, score, HRV, and sleep-heart-rate aggregates it already consumes;
 changes. Existing normalized Sleep documents use the dedicated Health/Sleep scalar migration, not an activity reparse,
 and do not require a Training snapshot rebuild solely for this storage transition.
 
-The repository now pins Sports Lib `21.2.3`, and Functions pins FIT parser `5.2.1`. The 21.0.3 package-emission transition
+The repository now pins Sports Lib `21.2.4`, and Functions pins FIT parser `5.2.1`. The 21.0.3 package-emission transition
 remains module-preserving ESM and per-module CommonJS. Sports Lib 21.2.1 added nonnumeric, package-root FIT
-workout-reference classes and the bounded `readFITWorkoutReferences(...)` metadata reader. Sports Lib 21.2.3 keeps those
-public classes, return shapes and numeric values unchanged while restoring the bounded metadata-only synchronous reader;
-the full `fit-file-parser` remains lazy for activity and route imports instead of entering application startup bundles.
-It also retains 21.2.2's tolerance for irrelevant nonstandard vendor definitions on unrelated messages. These values stay
+workout-reference classes and the bounded `readFITWorkoutReferences(...)` metadata reader. Sports Lib 21.2.4 keeps those
+public classes, return shapes, numeric values, serialized event/route data, and representative FIT course output unchanged
+while delegating duplicate protocol tables, encoding, and selected-message reading to `fit-file-parser` 6.1.1. The
+lightweight raw reader enters the package-root workout-reference path without loading the full activity decoder or semantic
+profile; full activity and route imports remain lazy. It also retains 21.2.2's tolerance for irrelevant nonstandard vendor
+definitions on unrelated messages. No source reparse, derived-snapshot rebuild, schema bump, or persisted-data migration is
+required solely for 21.2.4. These values stay
 outside default Event/Activity JSON, streams, metrics, MCP metric discovery and Training-derived calculations. New Garmin
 and Suunto FIT imports can retain private evidence; there is no Firestore activity-schema migration, derived-snapshot
 rebuild or global reparse requirement. A separately approved targeted source-backed reparse may be used only when a
