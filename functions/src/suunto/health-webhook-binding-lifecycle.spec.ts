@@ -66,6 +66,7 @@ const hoisted = vi.hoisted(() => {
     tokenRef,
     tokenSnapshot,
     tokenRootRef,
+    transactionGet,
     transactionSet,
     getTokenData: vi.fn(),
   };
@@ -93,6 +94,7 @@ import {
   captureCurrentSuuntoWebhookWriteLifecycleGuards,
   ensureSuuntoWebhookAccountBindingForProviderVerifiedToken,
   getSuuntoWebhookWriteLifecycleAuthorityDigest,
+  validateCurrentSuuntoWebhookWriteLifecycle,
 } from './health-webhook-binding-lifecycle';
 
 describe('Suunto Health webhook account binding lifecycle', () => {
@@ -490,6 +492,45 @@ describe('Suunto Health webhook account binding lifecycle', () => {
       credentialGeneration: 'token-generation-1',
     }));
     expect(guards?.requiredDocumentFieldValues.expectedFields).toEqual(hoisted.state.binding);
+  });
+
+  it('validates the complete current request boundary in one transaction', async () => {
+    hoisted.state.binding = {
+      schemaVersion: 3,
+      authorizationSource: 'oauth_callback',
+      userID: 'user-1',
+      providerAccountDigest: PROVIDER_ACCOUNT_DIGEST,
+      tokenCredentialGeneration: 'token-generation-1',
+    };
+
+    const validation = await validateCurrentSuuntoWebhookWriteLifecycle(
+      hoisted.db as never,
+      'user-1',
+      'provider-1',
+    );
+
+    expect(validation).toEqual({
+      status: 'current',
+      guards: expect.objectContaining({
+        requiredExistingDocumentRef: hoisted.tokenRef,
+        requiredExistingTokenCredential: expect.objectContaining({
+          accessToken: 'access-token-1',
+        }),
+      }),
+    });
+    expect(hoisted.db.runTransaction).toHaveBeenCalledTimes(1);
+    expect(hoisted.transactionGet).toHaveBeenCalledTimes(4);
+    expect(hoisted.deletionGuard).toHaveBeenCalledTimes(1);
+  });
+
+  it('retains the deleted-user classification from the consolidated transaction', async () => {
+    hoisted.deletionGuard.mockResolvedValueOnce({ shouldSkip: true });
+
+    await expect(validateCurrentSuuntoWebhookWriteLifecycle(
+      hoisted.db as never,
+      'user-1',
+      'provider-1',
+    )).resolves.toEqual({ status: 'user_deleted_or_deleting' });
   });
 
   it('allows credential rotation only while every authority field remains continuous', () => {

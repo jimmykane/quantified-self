@@ -47,6 +47,11 @@ export type SuuntoWebhookWriteLifecycleGuards = Required<Pick<
   | 'additionalRequiredDocumentFieldValues'
 >>;
 
+export type SuuntoWebhookWriteLifecycleValidation =
+  | { status: 'current'; guards: SuuntoWebhookWriteLifecycleGuards }
+  | { status: 'user_deleted_or_deleting' }
+  | { status: 'inactive' };
+
 function expectedFieldsEqual(
   left: Readonly<Record<string, unknown>>,
   right: Readonly<Record<string, unknown>>,
@@ -416,7 +421,31 @@ export async function captureCurrentSuuntoWebhookWriteLifecycleGuards(
     || providerUserId.length > SUUNTO_HEALTH_MAX_PROVIDER_ACCOUNT_ID_LENGTH) {
     return null;
   }
-  return captureSuuntoWebhookWriteLifecycleGuards(
+  const validation = await captureSuuntoWebhookWriteLifecycleValidation(
+    db,
+    userID,
+    providerUserId,
+    nowMs,
+  );
+  return validation.status === 'current' ? validation.guards : null;
+}
+
+/**
+ * Reads the complete Suunto lifecycle boundary in one fresh transaction while
+ * retaining the deleted-user classification used by queue processing.
+ */
+export async function validateCurrentSuuntoWebhookWriteLifecycle(
+  db: admin.firestore.Firestore,
+  userID: string,
+  providerUserId: string,
+  nowMs = Date.now(),
+): Promise<SuuntoWebhookWriteLifecycleValidation> {
+  if (!providerUserId
+    || providerUserId !== providerUserId.trim()
+    || providerUserId.length > SUUNTO_HEALTH_MAX_PROVIDER_ACCOUNT_ID_LENGTH) {
+    return { status: 'inactive' };
+  }
+  return captureSuuntoWebhookWriteLifecycleValidation(
     db,
     userID,
     providerUserId,
@@ -431,6 +460,23 @@ async function captureSuuntoWebhookWriteLifecycleGuards(
   nowMs: number,
   expectedCredential?: ReturnType<typeof getTokenCredentialSnapshot>,
 ): Promise<SuuntoWebhookWriteLifecycleGuards | null> {
+  const validation = await captureSuuntoWebhookWriteLifecycleValidation(
+    db,
+    userID,
+    providerUserId,
+    nowMs,
+    expectedCredential,
+  );
+  return validation.status === 'current' ? validation.guards : null;
+}
+
+async function captureSuuntoWebhookWriteLifecycleValidation(
+  db: admin.firestore.Firestore,
+  userID: string,
+  providerUserId: string,
+  nowMs: number,
+  expectedCredential?: ReturnType<typeof getTokenCredentialSnapshot>,
+): Promise<SuuntoWebhookWriteLifecycleValidation> {
   const bindingRef = getSuuntoHealthWebhookAccountBindingRef(db, providerUserId, userID);
   const tokenRootRef = getServiceTokenRootDocumentRef(userID, ServiceNames.SuuntoApp);
   const tokenRef = tokenRootRef.collection('tokens').doc(providerUserId);
@@ -451,8 +497,10 @@ async function captureSuuntoWebhookWriteLifecycleGuards(
     const tokenRootData = tokenRootSnapshot.data() as Record<string, unknown> | undefined;
     const serviceMeta = serviceMetaSnapshot.data() as Record<string, unknown> | undefined;
     const liveCredential = getTokenCredentialSnapshot(tokenData);
-    if (deletionGuard.shouldSkip
-      || !bindingSnapshot.exists
+    if (deletionGuard.shouldSkip) {
+      return { status: 'user_deleted_or_deleting' };
+    }
+    if (!bindingSnapshot.exists
       || !liveTokenSnapshot.exists
       || !tokenRootSnapshot.exists
       || !serviceMetaSnapshot.exists
@@ -469,10 +517,10 @@ async function captureSuuntoWebhookWriteLifecycleGuards(
       || isServiceUnavailableForSyncConnection(serviceMeta)
       || isServiceDisconnectPendingData(tokenRootData)
       || !doesServiceDisconnectOperationPermitTokenUse(tokenRootData, undefined, nowMs)) {
-      return null;
+      return { status: 'inactive' };
     }
 
-    return {
+    return { status: 'current', guards: {
       requiredExistingDocumentRef: tokenRef,
       requiredExistingTokenCredential: liveCredential,
       requiredDocumentFieldValues: {
@@ -508,7 +556,7 @@ async function captureSuuntoWebhookWriteLifecycleGuards(
           connectionStateGeneration: serviceMeta?.connectionStateGeneration,
         },
       }],
-    };
+    } };
   });
 }
 

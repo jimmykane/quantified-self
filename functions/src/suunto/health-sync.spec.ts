@@ -7,17 +7,14 @@ import { getTokenCredentialSnapshot } from '../token-refresh-coordinator';
 const hoisted = vi.hoisted(() => ({
   requestGet: vi.fn(),
   getTokenData: vi.fn(),
-  shouldSkipQueueWorkForDeletedUser: vi.fn(),
-  tokenGet: vi.fn(),
-  tokenRootGet: vi.fn(),
+  validateCurrentSuuntoWebhookWriteLifecycle: vi.fn(),
+  userDeleting: false,
   tokenData: {} as Record<string, unknown>,
   tokenRootData: {} as Record<string, unknown>,
   connectionStateGeneration: 'connection-generation-1',
-  captureCurrentSuuntoWebhookWriteLifecycleGuards: vi.fn(),
   metaRef: { path: 'users/staged-user/meta/suuntoApp' },
   tokenRootRef: {
     path: 'suuntoAppAccessTokens/staged-user',
-    get: (...args: unknown[]) => hoisted.tokenRootGet(...args),
   },
 }));
 
@@ -42,14 +39,6 @@ vi.mock('../request-helper', async importOriginal => ({
   get: hoisted.requestGet,
 }));
 
-vi.mock('../service-token-store', () => ({
-  getServiceTokenRootDocumentRef: vi.fn(() => hoisted.tokenRootRef),
-}));
-
-vi.mock('../queue/user-deletion-skip', () => ({
-  shouldSkipQueueWorkForDeletedUser: hoisted.shouldSkipQueueWorkForDeletedUser,
-}));
-
 vi.mock('../tokens', () => ({
   getTokenData: hoisted.getTokenData,
   TokenRefreshSkippedForDeletedUserError: class TokenRefreshSkippedForDeletedUserError extends Error {
@@ -68,8 +57,8 @@ vi.mock('../tokens', () => ({
 
 vi.mock('./health-webhook-binding-lifecycle', async importOriginal => ({
   ...await importOriginal<typeof import('./health-webhook-binding-lifecycle')>(),
-  captureCurrentSuuntoWebhookWriteLifecycleGuards:
-    (...args: unknown[]) => hoisted.captureCurrentSuuntoWebhookWriteLifecycleGuards(...args),
+  validateCurrentSuuntoWebhookWriteLifecycle:
+    (...args: unknown[]) => hoisted.validateCurrentSuuntoWebhookWriteLifecycle(...args),
 }));
 
 import {
@@ -116,6 +105,12 @@ function tokenProjection(accessToken: string): Record<string, unknown> {
   };
 }
 
+function tokenReturnProjection(): Record<string, unknown> {
+  const projection = { ...hoisted.tokenData };
+  delete projection.tokenCredentialGeneration;
+  return projection;
+}
+
 function tokenSnapshot(): admin.firestore.DocumentSnapshot {
   return {
     id: 'suunto-account-1',
@@ -125,7 +120,6 @@ function tokenSnapshot(): admin.firestore.DocumentSnapshot {
       id: 'suunto-account-1',
       path: 'suuntoAppAccessTokens/staged-user/tokens/suunto-account-1',
       parent: { parent: { id: 'staged-user' } },
-      get: hoisted.tokenGet,
     },
   } as unknown as admin.firestore.DocumentSnapshot;
 }
@@ -278,18 +272,13 @@ describe('Suunto Health provider sync', () => {
       activeOAuthCredentialGeneration: 'credential-generation-2',
     };
     hoisted.connectionStateGeneration = 'connection-generation-1';
-    hoisted.captureCurrentSuuntoWebhookWriteLifecycleGuards
-      .mockImplementation(async () => currentAuthorityGuards());
-    hoisted.tokenGet.mockImplementation(async () => ({
-      exists: true,
-      data: () => hoisted.tokenData,
-    }));
-    hoisted.tokenRootGet.mockImplementation(async () => ({
-      exists: true,
-      data: () => hoisted.tokenRootData,
-    }));
-    hoisted.getTokenData.mockImplementation(async () => ({ ...hoisted.tokenData }));
-    hoisted.shouldSkipQueueWorkForDeletedUser.mockResolvedValue(false);
+    hoisted.userDeleting = false;
+    hoisted.validateCurrentSuuntoWebhookWriteLifecycle.mockImplementation(async () => (
+      hoisted.userDeleting
+        ? { status: 'user_deleted_or_deleting' }
+        : { status: 'current', guards: currentAuthorityGuards() }
+    ));
+    hoisted.getTokenData.mockImplementation(async () => tokenReturnProjection());
     hoisted.requestGet
       .mockResolvedValueOnce([{
         timestamp: '2026-08-26T12:00:00.000Z',
@@ -326,6 +315,7 @@ describe('Suunto Health provider sync', () => {
       'suunto_247_recovery',
     ]);
     expect(hoisted.requestGet).toHaveBeenCalledTimes(3);
+    expect(hoisted.validateCurrentSuuntoWebhookWriteLifecycle).toHaveBeenCalledTimes(5);
     expect(result.lifecycleGuards.requiredExistingTokenCredential.credentialGeneration)
       .toBe('credential-generation-1');
     expect(result.lifecycleGuards.additionalRequiredDocumentFieldValues[1]?.expectedFields)
@@ -474,7 +464,7 @@ describe('Suunto Health provider sync', () => {
     ['deletion', 'bytes'], ['reconnect', 'bytes'],
   ])('rechecks %s before an adaptive child request after a %s limit', async (change, limit) => {
     hoisted.requestGet.mockReset().mockImplementationOnce(async () => {
-      if (change === 'deletion') hoisted.shouldSkipQueueWorkForDeletedUser.mockResolvedValue(true);
+      if (change === 'deletion') hoisted.userDeleting = true;
       else hoisted.connectionStateGeneration = 'connection-generation-2';
       if (limit === 'bytes') throw new ResponseBodyTooLargeError(4 * 1024 * 1024, 4 * 1024 * 1024 + 1);
       return Array(SUUNTO_HEALTH_MAX_RAW_SAMPLE_ROWS + 1).fill(null);
@@ -618,7 +608,7 @@ describe('Suunto Health provider sync', () => {
       forceRefresh = false,
     ) => {
       if (forceRefresh) hoisted.tokenData = tokenProjection('refreshed-access-token');
-      return { ...hoisted.tokenData };
+      return tokenReturnProjection();
     });
     const snapshot = tokenSnapshot();
     const initialGuards = currentAuthorityGuards(snapshot);
@@ -716,7 +706,7 @@ describe('Suunto Health provider sync', () => {
   it('checks the deletion guard before every provider request', async () => {
     const snapshot = tokenSnapshot();
     const initialGuards = currentAuthorityGuards(snapshot);
-    hoisted.shouldSkipQueueWorkForDeletedUser.mockResolvedValueOnce(true);
+    hoisted.userDeleting = true;
 
     await expect(processSuuntoHealthQueueItem(
       queueItem(),
@@ -725,16 +715,17 @@ describe('Suunto Health provider sync', () => {
       initialGuards,
     )).rejects.toMatchObject({ name: 'TokenRefreshSkippedForDeletedUserError' });
     expect(hoisted.requestGet).not.toHaveBeenCalled();
+    expect(hoisted.validateCurrentSuuntoWebhookWriteLifecycle).toHaveBeenCalledTimes(1);
   });
 
   it('stops before the next feed when deletion starts between provider requests', async () => {
-    hoisted.requestGet.mockReset().mockResolvedValueOnce([{
-      timestamp: '2026-08-26T12:00:00.000Z',
-      entryData: { HR: 60 },
-    }]);
-    hoisted.shouldSkipQueueWorkForDeletedUser.mockReset()
-      .mockResolvedValueOnce(false)
-      .mockResolvedValueOnce(true);
+    hoisted.requestGet.mockReset().mockImplementationOnce(async () => {
+      hoisted.userDeleting = true;
+      return [{
+        timestamp: '2026-08-26T12:00:00.000Z',
+        entryData: { HR: 60 },
+      }];
+    });
     const snapshot = tokenSnapshot();
     const initialGuards = currentAuthorityGuards(snapshot);
 
