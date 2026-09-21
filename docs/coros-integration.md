@@ -238,3 +238,11 @@ imports. Deployment remains a separate explicitly approved operation.
 ## Rollback
 
 Automatic routes remain user-opt-in. If provider errors rise after release, populate the shared COROS route allowlist with approved internal accounts and deploy that narrow rollback while preserving disconnect and status reconciliation for already accepted uploads. A route-entitlement failure should roll back the COROS route UI/callable and Suunto-to-COROS route availability without disabling COROS activity import, sleep, or confirmed activity delivery. Never delete accepted upload IDs or live queue state as a rollback mechanism.
+
+## Optional history on connection
+
+Connections offers **Import my last 30 days of history**, selected by default for eligible Pro connections and reconnections. Clearing it connects without starting history. The server accepts a durable run only after successful authorization; users can keep using the app or close the page. Progress and recoverable retries appear on Connections, independently of connection status. Existing cooldowns and permissions apply, and no automatic import continues into older dates.
+
+COROS imports activities and uses one combined daily operation for Sleep and Health. The run binds the single newly authorized active account and stays within the provider’s existing date limits.
+
+See [connection history import](connection-history-import.md) for the shared architecture, capability-registration requirements and backend-first release order. Manual History Import retains its existing range and response contract.

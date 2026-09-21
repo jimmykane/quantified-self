@@ -90,3 +90,11 @@ Wahoo requires six composite indexes: one `tokens` collection-group index on `wa
 5. Deploy the Firestore indexes, Rules, queue TTL configuration, Functions, and Hosting artifacts through the normal release workflow.
 6. Exercise OAuth with activity, route, Plan and Workout scopes; webhook handling; edited-workout deduplication; history pagination/rate limiting; activity and route delivery; planned-workout create/update/reschedule/copy/Stop; duplicate recovery; saved-zone today/+6 behavior; disconnect; expired-Pro enforcement; and account deletion with authorized test accounts. Do not treat cloud acceptance as a device receipt.
 7. After the separately approved deployment, monitor callable/webhook error rates, Training delivery outcomes and queue age/retries, reconnect prompts, skipped reasons, FIT download failures, Wahoo upload status failures, Wahoo 429 responses, and cleanup failures. If rollback is needed, turn off the source-controlled Wahoo delivery flag; note that doing so also hides Stop/withdrawal actions until the flag is restored.
+
+## Optional history on connection
+
+Connections offers **Import my last 30 days of history**, selected by default for eligible Pro connections and reconnections. Clearing it connects without starting history. The server accepts a durable run only after successful authorization; users can keep using the app or close the page. Progress and recoverable retries appear on Connections, independently of connection status. Existing cooldowns and permissions apply, and no automatic import continues into older dates.
+
+Wahoo imports eligible FIT-backed workouts only, one history page at a time. Route libraries and outbound delivery remain separate. Route-permission reconnect shortcuts open Connections before authorization so users can review the history checkbox.
+
+See [connection history import](connection-history-import.md) for the shared architecture, capability-registration requirements and backend-first release order. Manual History Import retains its existing range and response contract.

@@ -1,3 +1,4 @@
+import { Router } from '@angular/router';
 import { Component, DestroyRef, inject, signal } from '@angular/core';
 import { MatButtonModule } from '@angular/material/button';
 import { MAT_DIALOG_DATA, MatDialogModule, MatDialogRef, MatDialogState } from '@angular/material/dialog';
@@ -5,8 +6,6 @@ import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { ServiceNames } from '@sports-alliance/sports-lib';
 import { AppHapticsService } from '../../services/app.haptics.service';
 import { AppAnalyticsService } from '../../services/app.analytics.service';
-import { AppUserService } from '../../services/app.user.service';
-import { AppWindowService } from '../../services/app.window.service';
 import { LoggerService } from '../../services/logger.service';
 import { MatSnackBar } from '@angular/material/snack-bar';
 
@@ -18,8 +17,7 @@ import { MatSnackBar } from '@angular/material/snack-bar';
   styleUrls: ['./wahoo-route-access-reconnect-dialog.component.scss'],
 })
 export class WahooRouteAccessReconnectDialogComponent {
-  private userService = inject(AppUserService);
-  private windowService = inject(AppWindowService);
+  private router = inject(Router);
   private analyticsService = inject(AppAnalyticsService);
   private snackBar = inject(MatSnackBar);
   private logger = inject(LoggerService);
@@ -45,10 +43,8 @@ export class WahooRouteAccessReconnectDialogComponent {
         service_name: ServiceNames.WahooAPI,
         source: this.training ? 'training_access_dialog' : 'route_access_dialog',
       });
-      const tokenAndURI = await this.userService.getCurrentUserServiceTokenAndRedirectURI(ServiceNames.WahooAPI);
-      if (this.isActive()) {
-        this.windowService.windowRef.location.href = tokenAndURI.redirect_uri;
-      }
+      await this.router.navigate(['/services'], { queryParams: { serviceName: ServiceNames.WahooAPI, reconnect: '1' } });
+      if (this.isActive()) this.dialogRef?.close();
     } catch (error) {
       this.reconnecting.set(false);
       this.logger.error('[WahooRouteAccessReconnectDialogComponent] Failed to start Wahoo reconnect', error);

@@ -179,6 +179,25 @@ describe('Firestore Security Rules', () => {
         });
     });
 
+    describe('Connection history imports', () => {
+        it('keeps runs server-only and exposes safe progress only to the metadata owner', async () => {
+            const statusPath = 'users/owner/meta/Wahoo API';
+            await testEnv.withSecurityRulesDisabled(async context => {
+                await context.firestore().doc(statusPath).set({ connectionHistoryImport: { runId: 'opaque', active: true, steps: [] } });
+                await context.firestore().doc('connectionHistoryImports/opaque').set({ userID: 'owner', tokenPath: 'private' });
+            });
+            const owner = testEnv.authenticatedContext('owner').firestore();
+            await assertSucceeds(owner.doc(statusPath).get());
+            await assertFails(testEnv.authenticatedContext('other').firestore().doc(statusPath).get());
+            await assertFails(owner.doc(statusPath).update({ connectionHistoryImport: { active: false } }));
+            for (const context of [testEnv.authenticatedContext('owner'), testEnv.authenticatedContext('admin', { admin: true }), testEnv.unauthenticatedContext()]) {
+                await assertFails(context.firestore().doc('connectionHistoryImports/opaque').get());
+                await assertFails(context.firestore().doc('connectionHistoryImports/opaque').set({ userID: 'owner' }));
+                await assertFails(context.firestore().doc('connectionHistoryImports/opaque/receipts/unit').get());
+            }
+        });
+    });
+
     describe('Timeline notes', () => {
         it('supports inclusive overlapping ranges, earlier starts, ongoing and future history pages', async () => {
             const path = 'users/owner/timelineNotes';

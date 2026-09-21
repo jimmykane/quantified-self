@@ -1,3 +1,5 @@
+import { getGarminHistorySummaryTypes } from './health-backfill-range';
+import { withHistoryQueueExecution } from '../connection-history/execution';
 import * as admin from 'firebase-admin';
 import * as logger from 'firebase-functions/logger';
 import { ServiceNames } from '@sports-alliance/sports-lib';
@@ -49,7 +51,6 @@ import {
   isCompleteGarminHealthBackfillCursor,
   type GarminHealthBackfillCursor,
 } from './health-backfill-range';
-import { GARMIN_HEALTH_SUMMARY_TYPES } from './health-summary-types';
 import {
   extractGarminBackfillMinimumStartMs,
   getGarminBackfillStatusCode,
@@ -292,7 +293,7 @@ async function advanceCursorTransaction(
       healthBackfillWindowsTotal: total,
       healthBackfillSummaryType: complete
         ? null
-        : GARMIN_HEALTH_SUMMARY_TYPES[nextCursor.summaryIndex],
+        : getGarminHistorySummaryTypes()[nextCursor.summaryIndex],
       updatedAtMs: Date.now(),
     }, { merge: true });
     return 'advanced';
@@ -585,6 +586,11 @@ async function sleepForPacing(): Promise<void> {
 }
 
 export async function processGarminHealthBackfillQueueItem(
+  queueItem: SleepSyncQueueItemInterface,
+): Promise<QueueResult> {
+  return withHistoryQueueExecution(queueItem, () => processHistoryGuardedGarminHealthBackfillQueueItem(queueItem));
+}
+async function processHistoryGuardedGarminHealthBackfillQueueItem(
   queueItem: SleepSyncQueueItemInterface,
 ): Promise<QueueResult> {
   let parsed;

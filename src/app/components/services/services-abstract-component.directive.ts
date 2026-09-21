@@ -6,7 +6,7 @@ import {
   Output,
   EventEmitter,
   OnChanges,
-  OnDestroy,
+  OnDestroy, OnInit,
 } from '@angular/core';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { MatDialog, MatDialogRef } from '@angular/material/dialog';
@@ -38,7 +38,7 @@ import {
 type ServiceSyncRouteImpact = ActivitySyncRoute | RouteDeliverySyncRoute;
 
 @Directive()
-export abstract class ServicesAbstractComponentDirective implements OnDestroy, OnChanges {
+export abstract class ServicesAbstractComponentDirective implements OnDestroy, OnChanges, OnInit {
   public abstract serviceName: ServiceNames;
 
   @Input() user!: AppUserInterface;
@@ -57,6 +57,8 @@ export abstract class ServicesAbstractComponentDirective implements OnDestroy, O
   public selectedTabIndex = 0;
   public serviceNames = ServiceNames;
   public isConnecting = false;
+  public importRecentHistory = true;
+  public reconnectRequested = false;
   public isDisconnecting = false;
   public forceConnected = false;
   public isConnected = false;
@@ -189,7 +191,9 @@ export abstract class ServicesAbstractComponentDirective implements OnDestroy, O
         this.analyticsService.logEvent('connected_to_service', { serviceName: this.serviceName });
         this.forceConnected = true;
         this.emitConnectionState();
-        this.snackBar.open(`Successfully connected to ${this.getPartnerDisplayName()}`, undefined, {
+        this.snackBar.open(completion.historyImport
+          ? 'Connected! Sit back while we bring in your recent history. You can keep using the app or close this page.'
+          : `Successfully connected to ${this.getPartnerDisplayName()}`, undefined, {
           duration: 10000,
         });
         this.hapticsService.success();
@@ -229,6 +233,10 @@ export abstract class ServicesAbstractComponentDirective implements OnDestroy, O
     });
   }
 
+  async ngOnInit() {
+    this.reconnectRequested = this.route.snapshot.queryParamMap.get('reconnect') === '1';
+  }
+
   protected onServiceDataChanged(): void {
   }
 
@@ -261,7 +269,11 @@ export abstract class ServicesAbstractComponentDirective implements OnDestroy, O
     const isCurrentView = this.captureConnectionView();
     try {
       this.analyticsService.logEvent('service_connect_start', { service_name: this.serviceName });
-      const tokenAndURI = await this.userService.getCurrentUserServiceTokenAndRedirectURI(this.serviceName, isCurrentView);
+      const tokenAndURI = await this.userService.getCurrentUserServiceTokenAndRedirectURI(
+        this.serviceName,
+        this.importRecentHistory,
+        isCurrentView,
+      );
       if (!isCurrentView()) return;
       // Get the redirect url for the unsigned token created with the post
       this.windowService.windowRef.location.href = this.buildRedirectURIFromServiceToken(tokenAndURI);

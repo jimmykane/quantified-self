@@ -1,3 +1,4 @@
+import { withHistoryQueueExecution } from './connection-history/execution';
 import * as functions from 'firebase-functions/v1';
 import { fitActivityReferencesFromEvent, retainSuuntoGuideCompletions } from './suunto/guide-completion';
 import { retainCOROSTrainingCompletion } from './coros/training-completion';
@@ -771,6 +772,17 @@ async function parseWorkoutQueueItemForServiceNameInternal(
   pendingWrites?: Map<string, number>,
   corosClaimState?: COROSQueueProcessingClaim,
   taskRecoveryGeneration?: number,
+): Promise<QueueResult> {
+  return withHistoryQueueExecution(queueItem, () => parseHistoryGuardedWorkoutQueueItem(serviceName, queueItem, bulkWriter, tokenCache, usageCache, pendingWrites, corosClaimState));
+}
+async function parseHistoryGuardedWorkoutQueueItem(
+  serviceName: ServiceNames,
+  queueItem: ProviderWorkoutQueueItem,
+  bulkWriter?: admin.firestore.BulkWriter,
+  tokenCache?: Map<string, Promise<admin.firestore.QuerySnapshot>>,
+  usageCache?: Map<string, Promise<{ role: string, limit: number, currentCount: number }>>,
+  pendingWrites?: Map<string, number>,
+  corosClaimState?: COROSQueueProcessingClaim,
 ): Promise<QueueResult> {
   if (serviceName === ServiceNames.GarminAPI) {
     return processGarminAPIActivityQueueItem(

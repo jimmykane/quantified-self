@@ -369,6 +369,8 @@ describe('backfillSuuntoAppSleep', () => {
         });
         expect(hoisted.addSleepSyncQueueItem).toHaveBeenCalledTimes(expectedWindows.length * 2);
         expect(hoisted.transactionSet).toHaveBeenCalledWith(expect.anything(), {
+            connectionHistoryReservation: expect.anything(),
+            connectionHistoryReservationExpiresAt: expect.anything(),
             provider: SLEEP_PROVIDERS.SuuntoApp,
             status: 'ready',
             lastBackfillQueuedAtMs: nowMs,
@@ -759,6 +761,8 @@ describe('backfillCorosAPISleep', () => {
         });
         expect(hoisted.addSleepSyncQueueItem).toHaveBeenCalledTimes(expectedWindows.length);
         expect(hoisted.transactionSet).toHaveBeenCalledWith(expect.anything(), {
+            connectionHistoryReservation: expect.anything(),
+            connectionHistoryReservationExpiresAt: expect.anything(),
             provider: SLEEP_PROVIDERS.COROSAPI,
             status: 'ready',
             lastBackfillQueuedAtMs: nowMs,
@@ -892,6 +896,8 @@ describe('backfillGarminAPIHealth', () => {
         expect(hoisted.addSleepSyncQueueItem).not.toHaveBeenCalled();
         expect(hoisted.requestGet).toHaveBeenCalledTimes(expectedWindows.length);
         expect(hoisted.transactionSet).toHaveBeenCalledWith(expect.anything(), {
+            connectionHistoryReservation: expect.anything(),
+            connectionHistoryReservationExpiresAt: expect.anything(),
             provider: SLEEP_PROVIDERS.GarminAPI,
             status: 'ready',
             lastBackfillQueuedAtMs: nowMs,

@@ -947,6 +947,14 @@ When a disconnect begins, automatic activity and saved-route delivery involving 
 
 At the top of Connections, **Your data flow** explains that connected providers import new activities into Quantified Self. Non-Pro accounts see a Pro upgrade explanation instead of an unusable connection prompt. Once two or more services are connected with Pro access, it shows a provider-to-provider matrix of compatible automatic activity and saved-route delivery paths through Quantified Self. On phones, the same routes are grouped by source and destination instead of using a wide table. Enabled routes show **On**, available routes remain opt-in, and a configured route that cannot run because a provider is disconnected or needs reconnection is marked **Needs connection**. With no services connected, it prompts a Pro account to connect its first provider.
 
+## Recent history when connecting
+
+When you connect or reconnect a service, **Import my last 30 days of history** is selected by default. Clear the checkbox if you prefer to connect without a history import. It includes activities, Sleep, and Health where supported; Wahoo imports eligible FIT-backed activities only.
+
+After the connection and background import are accepted, sit back while we bring in your recent history. You can keep using the app or close the page. Connections keeps a **Recent history import** summary with expandable details, cooldown dates, missing-permission explanations, and **Retry failed imports** where recovery is available. An import failure does not undo a successful connection. Use **Review reconnect options** when authorization or permissions need updating.
+
+The range is the connection day plus the previous 29 UTC calendar dates, ending when you connect. It stops there: older history and saved-route libraries remain separate manual actions. Existing cooldowns apply; a scope in cooldown is skipped rather than automatically imported later. Garmin reports **History requested; data may take hours or days to arrive.** This confirms request submission, not complete delivery.
+
 ## Integration pages overview
 
 The public [Integrations hub](/integrations) links to focused [Garmin Integration](/integrations/garmin), [Suunto Integration](/integrations/suunto), [COROS Integration](/integrations/coros), and [Wahoo Integration](/integrations/wahoo) pages. They explain provider activity imports, supported activity-sync directions to Suunto, Wahoo, and COROS, direct GPX/FIT and saved-route delivery to Garmin, Suunto, Wahoo, and COROS, saved-route row and bulk sends, syncing past activities, opt-in Suunto route delivery, history imports, uploads, and how those workflows connect to the private training dashboard.

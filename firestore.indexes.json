@@ -1653,6 +1653,34 @@
         }
       ],
       "density": "SPARSE_ALL"
+    },
+    {
+      "collectionGroup": "connectionHistoryImports",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "processed",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "nextAttemptAt",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "connectionHistoryImports",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "processed",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "dateCreated",
+          "order": "ASCENDING"
+        }
+      ]
     }
   ],
   "fieldOverrides": [
@@ -2520,6 +2548,16 @@
       "collectionGroup": "chunks",
       "fieldPath": "payloadBase64",
       "ttl": false,
+      "indexes": []
+    },
+    {
+      "collectionGroup": "connectionHistoryImports",
+      "fieldPath": "lastOperation",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "connectionHistoryImports",
+      "fieldPath": "steps",
       "indexes": []
     }
   ]

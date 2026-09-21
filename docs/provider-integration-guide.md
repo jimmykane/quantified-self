@@ -37,7 +37,7 @@ Existing-user Health catch-up is available through the dry-run-first `backfill-e
 operator script for Garmin, Suunto, and COROS. It preserves Pro eligibility, queues existing
 workers in bounded batches, and keeps deletion-safe submission receipts without treating
 request completion as complete data coverage. See [Health backfill operations](health-backfill-operations.md)
-before any execution. Automatic connection backfill remains enhancement #681, not an enabled behavior.
+before any execution. New eligible Pro connections/reconnections offer a preselected, optional 30-day history import. It uses the same manual operations and durable ingestion workers, stops after the connection day and preceding 29 UTC dates, and does not start an older-history catch-up. See [connection history import](connection-history-import.md) for the #681 implementation, capability-registration contract, private progress model, admission switch and release order.
 
 Suunto Health history adapts to item-count limits by halving oversized target windows and reapplying local-day context, rather than truncating responses or increasing parser caps. Subrequests remain sequential, lifecycle-fenced, and bounded by per-job HTTP/time/result budgets; irreducible or malformed responses remain failures. See [Suunto ingestion bounds](suunto-integration.md#ingestion-and-revision-flow). Do not treat repeated `response_item_limit` validation failures as transient upstream 500s during bulk backfill monitoring.
 
@@ -924,3 +924,7 @@ Use this checklist in every provider integration PR or implementation handoff:
 - [ ] Unit, Rules, frontend, admin, shared-library, and build verification passed.
 - [ ] Provider-specific architecture/release document and this guide were updated.
 - [ ] Rollout, monitoring, and rollback plan are written before enabling production traffic.
+
+### Connection-history capability registration
+
+For each provider/history API addition, register a versioned capability in `shared/connection-history.ts` and its adapter in `functions/src/connection-history/adapters.ts`, or explicitly declare history unsupported. Contract tests enforce the pairing. Reuse the existing family registry, manual import operation, reservations and canonical queues/writers. Snapshot inventories affect future connections only. Test the bounded range, owner-scoped identity, restart receipts, shared cooldowns, permission failures, replacement credentials and deletion guards; do not add OAuth-specific fetch loops or frontend background orchestration. See [the extension checklist](connection-history-import.md#adding-capabilities).

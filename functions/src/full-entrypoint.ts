@@ -236,6 +236,12 @@ export { processRouteSyncTask } from './tasks/route-sync-worker';
 export { processRouteDeliverySyncTask } from './tasks/route-delivery-sync-worker';
 export { processSleepSyncTask } from './tasks/sleep-sync-worker';
 export { processGarminHealthBackfillTask } from './tasks/garmin-health-backfill-worker';
+export {
+  processConnectionHistoryTask,
+  onConnectionHistoryImportWritten,
+  recoverConnectionHistoryImports,
+  retryConnectionHistoryImport,
+} from './connection-history/tasks';
 export { processSportsLibReparseTask } from './tasks/sports-lib-reparse-worker';
 export { processSportsLibRouteReparseTask } from './tasks/sports-lib-route-reparse-worker';
 export { processDerivedMetricsTask } from './tasks/derived-metrics-worker';

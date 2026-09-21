@@ -182,6 +182,13 @@ describe('ServicesSuuntoComponent', () => {
         expect(component.forceConnected).toBe(true);
     });
 
+    it.each(Object.values(ServiceNames).flatMap(service => [true, false].map(checked => [service, checked] as const)))('sends explicit history consent for %s checked=%s through the shared connection flow', async (service, checked) => {
+        component.serviceName = service; component.hasProAccess = true; component.importRecentHistory = checked;
+        mockUserService.getCurrentUserServiceTokenAndRedirectURI.mockResolvedValue({ redirect_uri: 'https://provider.example/authorize' });
+        await component.connectWithService(new MouseEvent('click'));
+        expect(mockUserService.getCurrentUserServiceTokenAndRedirectURI).toHaveBeenCalledWith(service, checked);
+    });
+
     it('starts only one OAuth flow while the authorization URL request is pending', async () => {
         component.hasProAccess = true;
         let resolveAuthorization!: (value: { redirect_uri: string }) => void;

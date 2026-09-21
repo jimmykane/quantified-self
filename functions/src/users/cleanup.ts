@@ -1,3 +1,4 @@
+import { CONNECTION_HISTORY_COLLECTION } from '../connection-history/model';
 import * as functions from 'firebase-functions/v1';
 import * as logger from 'firebase-functions/logger';
 import * as admin from 'firebase-admin';
@@ -136,6 +137,7 @@ interface UserProviderIdentifiers {
 }
 
 const CLOUD_TASK_SOURCE_QUEUE_COLLECTIONS = new Set([
+    CONNECTION_HISTORY_COLLECTION,
     ACTIVITY_SYNC_QUEUE_COLLECTION_NAME,
     ROUTE_DELIVERY_SYNC_QUEUE_COLLECTION_NAME,
     ROUTE_SYNC_QUEUE_COLLECTION_NAME,
@@ -914,6 +916,7 @@ async function cleanupTopLevelQueueState(uid: string, identifiers: UserProviderI
         getExplicitFirebaseUidAssociation('failed_jobs', doc.data() as Record<string, unknown>) === uid;
 
     await recursiveDeleteQueryResults(db, uid, 'activity sync queue', ACTIVITY_SYNC_QUEUE_COLLECTION_NAME, 'userID', firebaseUIDValues, deletedRefKeys);
+    await recursiveDeleteQueryResults(db, uid, 'connection history imports', CONNECTION_HISTORY_COLLECTION, 'userID', firebaseUIDValues, deletedRefKeys);
     await recursiveDeleteQueryResults(db, uid, 'training delivery queue', DELIVERY_QUEUE, 'uid', firebaseUIDValues, deletedRefKeys);
     await recursiveDeleteQueryResults(db, uid, 'COROS Training integer claim', COROS_INTEGER_CLAIMS, 'uid', firebaseUIDValues, deletedRefKeys);
     await recursiveDeleteQueryResults(db, uid, 'activity sync queue', ACTIVITY_SYNC_QUEUE_COLLECTION_NAME, 'firebaseUserID', firebaseUIDValues, deletedRefKeys);

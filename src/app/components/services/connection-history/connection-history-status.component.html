@@ -1,0 +1,31 @@
+@if (status(); as history) {
+<mat-expansion-panel (opened)="haptics.selection()" (closed)="haptics.selection()">
+  <mat-expansion-panel-header>
+    <mat-panel-title>Recent history import</mat-panel-title>
+  </mat-expansion-panel-header>
+  <p role="status">{{ summary() }}</p>
+  <p>{{ history.startMs | date:'mediumDate':'UTC' }} – {{ history.endMs | date:'mediumDate':'UTC' }} (UTC)</p>
+  @for (step of steps(); track step.id) {
+  <div class="history-step">
+    <strong>{{ step.label }}</strong>
+    <span>{{ step.description }}</span>
+    @if (step.count > 0) { <span>{{ step.count }} items or requests</span> }
+    @if (step.message) { <p>{{ step.message }}</p> }
+    @if (step.nextAllowedAtMs) { <p>Available again: {{ step.nextAllowedAtMs | date:'medium' }}</p> }
+  </div>
+  }
+  @if (retrying()) { <mat-progress-bar mode="indeterminate" aria-label="Requesting history retry"></mat-progress-bar> }
+  @if (error()) { <p role="alert">{{ error() }}</p> }
+  <div class="history-actions">
+    @if (history.canRetry) {
+    <button mat-stroked-button type="button" [disabled]="disabled() || retrying()" (click)="retry()">
+      {{ retrying() ? 'Requesting retry…' : 'Retry failed imports' }}
+    </button>
+    }
+    @if (needsReconnect()) {
+    <button mat-button type="button" [disabled]="disabled()" (click)="reviewReconnect()">Review reconnect options</button>
+    }
+  </div>
+</mat-expansion-panel>
+<p class="history-summary" aria-live="polite">{{ summary() }}</p>
+}
