@@ -488,7 +488,7 @@ export class AdminUserHistoryComponent implements OnDestroy {
     private formatAxisDate(value: string): string {
         const timestamp = Date.parse(`${value}T00:00:00.000Z`);
         return Number.isFinite(timestamp)
-            ? getDateTimeFormatter(undefined, { month: 'short', day: 'numeric', timeZone: 'UTC' }).format(timestamp)
+            ? getDateTimeFormatter(undefined, { month: 'numeric', day: 'numeric', timeZone: 'UTC' }).format(timestamp)
             : value;
     }
 

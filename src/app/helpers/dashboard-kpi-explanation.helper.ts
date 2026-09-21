@@ -41,7 +41,7 @@ import type {
   DashboardAerobicCapacityContext,
   DashboardAerobicDurabilityContext,
 } from './dashboard-training-insights.helper';
-import { getBrowserLocale } from '../shared/adapters/date-locale.config';
+import { getBrowserLocale } from '../shared/adapters/app-locale';
 import { getDateTimeFormatter } from './date-time-format.helper';
 
 export interface DashboardKpiExplanationRow {

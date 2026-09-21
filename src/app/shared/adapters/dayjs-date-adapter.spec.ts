@@ -97,6 +97,16 @@ describe('DayjsDateAdapter locale normalization', () => {
         expect(formatted).toBe('12/25/2023');
     });
 
+    it('preserves US format when the locale includes Unicode extensions', () => {
+        TestBed.resetTestingModule();
+        TestBed.configureTestingModule({
+            providers: [DayjsDateAdapter, { provide: MAT_DATE_LOCALE, useValue: 'en-US-u-nu-latn' }]
+        });
+        const adapter = TestBed.inject(DayjsDateAdapter);
+
+        expect(adapter.format(dayjs('2023-12-25'), 'L')).toBe('12/25/2023');
+    });
+
     it('should use international English for an English locale without a Day.js bundle', () => {
         TestBed.resetTestingModule();
         TestBed.configureTestingModule({
@@ -118,5 +128,17 @@ describe('DayjsDateAdapter locale normalization', () => {
         const date = dayjs('2023-12-25');
         const formatted = adapter.format(date, 'L');
         expect(formatted).toBe('25/12/2023');
+    });
+
+    it('falls back deterministically when a Day.js locale bundle is not imported', () => {
+        dayjs.locale('fr');
+        TestBed.resetTestingModule();
+        TestBed.configureTestingModule({
+            providers: [DayjsDateAdapter, { provide: MAT_DATE_LOCALE, useValue: 'fi-FI' }]
+        });
+        const adapter = TestBed.inject(DayjsDateAdapter);
+
+        expect(adapter.format(dayjs('2023-12-25'), 'L')).toBe('25/12/2023');
+        expect(adapter.getMonthNames('long')[0]).toBe('January');
     });
 });

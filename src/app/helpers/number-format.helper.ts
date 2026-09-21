@@ -1,4 +1,4 @@
-import { getBrowserLocale } from '../shared/adapters/date-locale.config';
+import { getBrowserLocale } from '../shared/adapters/app-locale';
 
 const MAX_FORMATTERS = 64;
 const formatters = new Map<string, Intl.NumberFormat>();

@@ -28,7 +28,6 @@ import { convertSpeedToSwimPace } from '@sports-alliance/sports-lib';
 import { AppAnalyticsService } from '../../services/app.analytics.service';
 import { LoggerService } from '../../services/logger.service';
 import { resolveUnitAwareDisplayStat } from '@shared/unit-aware-display';
-import { getDateTimeFormatter } from '../../helpers/date-time-format.helper';
 
 function formatLocalDateKey(value: Date): string {
   const year = value.getFullYear();
@@ -136,7 +135,6 @@ export class EventsExportFormComponent extends FormsAbstract {
     // Create a csv header
     const headers = [];
     const rows = [];
-    const csvDateFormatter = getDateTimeFormatter();
 
     if (this.user.settings.exportToCSVSettings.startDate) {
       headers.push(`Date`);
@@ -216,7 +214,7 @@ export class EventsExportFormComponent extends FormsAbstract {
 
       const row = [];
       if (this.user.settings.exportToCSVSettings.startDate) {
-        row.push(`"${csvDateFormatter.format(event.startDate)}"`);
+        row.push(`"${formatLocalDateKey(event.startDate)}"`);
       }
       if (this.user.settings.exportToCSVSettings.name) {
         row.push(`"${event.name}"`);

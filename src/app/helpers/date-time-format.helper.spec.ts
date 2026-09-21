@@ -1,9 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 let getDateTimeFormatter: typeof import('./date-time-format.helper').getDateTimeFormatter;
+let getLocalDateTimeFormatter: typeof import('./date-time-format.helper').getLocalDateTimeFormatter;
 beforeEach(async () => {
   vi.resetModules();
-  ({ getDateTimeFormatter } = await import('./date-time-format.helper'));
+  ({ getDateTimeFormatter, getLocalDateTimeFormatter } = await import('./date-time-format.helper'));
 });
 
 describe('shared date formatter cache', () => {
@@ -52,5 +53,11 @@ describe('shared date formatter cache', () => {
   it('retains Intl validation errors without poisoning later calls', () => {
     expect(() => getDateTimeFormatter('en', { timeZone: 'Invalid/Zone' })).toThrow(RangeError);
     expect(getDateTimeFormatter('en', { timeZone: 'UTC' }).resolvedOptions().timeZone).toBe('UTC');
+  });
+  it('preserves the date, time, and seconds shown by the default local date-time format', () => {
+    const value = new Date(2026, 8, 21, 13, 14, 15);
+    for (const locale of ['en-GB', 'en-US', 'el-GR']) {
+      expect(getLocalDateTimeFormatter(locale).format(value)).toBe(value.toLocaleString(locale));
+    }
   });
 });

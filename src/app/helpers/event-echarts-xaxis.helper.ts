@@ -6,7 +6,7 @@ import {
   UserUnitSettingsInterface,
   XAxisTypes,
 } from '@sports-alliance/sports-lib';
-import { getBrowserLocale } from '../shared/adapters/date-locale.config';
+import { getBrowserLocale } from '../shared/adapters/app-locale';
 import { formatUnitAwareDataValue } from '@shared/unit-aware-display';
 import { normalizeEventRange } from './event-chart-range.helper';
 import type { EventChartRange } from './event-chart-range.helper';

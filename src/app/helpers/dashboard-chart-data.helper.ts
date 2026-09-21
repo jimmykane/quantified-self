@@ -15,7 +15,7 @@ import {
 } from '@sports-alliance/sports-lib';
 import * as weeknumber from 'weeknumber';
 import type { AggregatedChartRow } from './aggregated-chart-row.helper';
-import { getBrowserLocale } from '../shared/adapters/date-locale.config';
+import { getBrowserLocale } from '../shared/adapters/app-locale';
 import {
   normalizeUserUnitSettings,
   resolveUnitAwareDisplayStat,

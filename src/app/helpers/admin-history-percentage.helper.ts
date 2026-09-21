@@ -1,3 +1,5 @@
+import { getNumberFormatter } from './number-format.helper';
+
 export type AdminHistoryDisplayMode = 'count' | 'percentage';
 export type AdminHistoryPlanBasis = 'withinPlan' | 'activeShare';
 
@@ -41,4 +43,3 @@ export function formatAdminHistoryTooltipValue(
         detail: `${mode === 'percentage' ? countFormat.format(count) : formattedPercentage} of ${countFormat.format(total!)} ${population}`,
     };
 }
-import { getNumberFormatter } from './number-format.helper';
