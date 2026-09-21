@@ -362,15 +362,9 @@ export async function processSuuntoHealthQueueItem(
   if (!accessToken || providerUserID !== queueItem.providerUserId.trim()) {
     throw new SuuntoHealthAccountValidationError();
   }
-  onStage?.('lifecycle_check');
-  let lifecycleGuards = await captureSuuntoHealthLifecycleForAccessToken(
-    firebaseUserID,
-    tokenSnapshot.ref,
-    accessToken,
-    initialGuards,
-  );
-  let tokenCredential = lifecycleGuards.requiredExistingTokenCredential;
-  onLifecycleGuardsCaptured?.(lifecycleGuards);
+  let lifecycleGuards = initialGuards;
+  let tokenCredential = initialGuards.requiredExistingTokenCredential;
+  let resolvedAccessTokenNeedsValidation = true;
 
   let pullAttempts = 0;
   const pullDeadline = Date.now() + SUUNTO_HEALTH_PULL_BUDGET_MS;
@@ -381,12 +375,21 @@ export async function processSuuntoHealthQueueItem(
   };
   const fetchPayload = async (url: string, stage: SuuntoHealthFailureStage): Promise<unknown> => {
     onStage?.('lifecycle_check');
-    lifecycleGuards = await assertCurrentLifecycle(
-      firebaseUserID,
-      tokenSnapshot.ref,
-      tokenCredential,
-      initialGuards,
-    );
+    lifecycleGuards = resolvedAccessTokenNeedsValidation
+      ? await captureSuuntoHealthLifecycleForAccessToken(
+        firebaseUserID,
+        tokenSnapshot.ref,
+        accessToken,
+        initialGuards,
+      )
+      : await assertCurrentLifecycle(
+        firebaseUserID,
+        tokenSnapshot.ref,
+        tokenCredential,
+        initialGuards,
+      );
+    tokenCredential = lifecycleGuards.requiredExistingTokenCredential;
+    resolvedAccessTokenNeedsValidation = false;
     onLifecycleGuardsCaptured?.(lifecycleGuards);
     claimPullAttempt();
     try {
@@ -429,6 +432,7 @@ export async function processSuuntoHealthQueueItem(
       initialGuards,
     );
     tokenCredential = lifecycleGuards.requiredExistingTokenCredential;
+    resolvedAccessTokenNeedsValidation = false;
     onLifecycleGuardsCaptured?.(lifecycleGuards);
     claimPullAttempt();
     try {

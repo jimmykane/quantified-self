@@ -315,7 +315,7 @@ describe('Suunto Health provider sync', () => {
       'suunto_247_recovery',
     ]);
     expect(hoisted.requestGet).toHaveBeenCalledTimes(3);
-    expect(hoisted.validateCurrentSuuntoWebhookWriteLifecycle).toHaveBeenCalledTimes(5);
+    expect(hoisted.validateCurrentSuuntoWebhookWriteLifecycle).toHaveBeenCalledTimes(4);
     expect(result.lifecycleGuards.requiredExistingTokenCredential.credentialGeneration)
       .toBe('credential-generation-1');
     expect(result.lifecycleGuards.additionalRequiredDocumentFieldValues[1]?.expectedFields)
@@ -336,6 +336,23 @@ describe('Suunto Health provider sync', () => {
       }));
       expect(options.headers.Authorization).toBe('Bearer initial-access-token');
     }
+  });
+
+  it('rejects a stale token resolution at the first request boundary', async () => {
+    hoisted.getTokenData.mockResolvedValueOnce({
+      ...tokenReturnProjection(),
+      accessToken: 'stale-access-token',
+    });
+    const snapshot = tokenSnapshot();
+
+    await expect(processSuuntoHealthQueueItem(
+      queueItem(),
+      snapshot,
+      'staged-user',
+      currentAuthorityGuards(snapshot),
+    )).rejects.toMatchObject({ name: 'SuuntoHealthAccountValidationError' });
+    expect(hoisted.validateCurrentSuuntoWebhookWriteLifecycle).toHaveBeenCalledTimes(1);
+    expect(hoisted.requestGet).not.toHaveBeenCalled();
   });
 
   it('pads split requests without exceeding the provider 28-day limit', () => {
@@ -802,5 +819,25 @@ describe('Suunto Health provider sync', () => {
       initialGuards,
     )).rejects.toMatchObject({ name: 'SuuntoHealthAccountValidationError' });
     expect(hoisted.requestGet).toHaveBeenCalledTimes(1);
+  });
+
+  it('rejects results when the lifecycle changes during the final provider request', async () => {
+    hoisted.requestGet.mockReset()
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([])
+      .mockImplementationOnce(async () => {
+        hoisted.connectionStateGeneration = 'connection-generation-2';
+        return [];
+      });
+    const snapshot = tokenSnapshot();
+
+    await expect(processSuuntoHealthQueueItem(
+      queueItem(),
+      snapshot,
+      'staged-user',
+      currentAuthorityGuards(snapshot),
+    )).rejects.toMatchObject({ name: 'SuuntoHealthAccountValidationError' });
+    expect(hoisted.requestGet).toHaveBeenCalledTimes(3);
+    expect(hoisted.validateCurrentSuuntoWebhookWriteLifecycle).toHaveBeenCalledTimes(4);
   });
 });
