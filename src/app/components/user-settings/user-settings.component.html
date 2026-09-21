@@ -260,6 +260,33 @@
               </header>
               <mat-divider></mat-divider>
               <div class="settings-panel-body">
+                <div class="settings-option-block settings-regional-format">
+                  <div>
+                    <h2 class="settings-subsection-title">Regional formatting</h2>
+                    <p>Choose how dates, times, numbers, and percentages are displayed.</p>
+                  </div>
+                  <mat-form-field appearance="outline" subscriptSizing="dynamic">
+                    <mat-label>Regional format</mat-label>
+                    <mat-select
+                      formControlName="formatLocale"
+                      aria-label="Regional format"
+                      (selectionChange)="onFormatLocaleChange()">
+                      <mat-select-trigger>{{ selectedFormatLocaleLabel }}</mat-select-trigger>
+                      @for (option of formatLocaleOptions; track option.value) {
+                      <mat-option class="regional-format-option" [value]="option.value">
+                        <span class="regional-format-option__content">
+                          <span>{{ option.label }}</span>
+                          <span class="regional-format-option__preview">{{ option.preview.date }} · {{ option.preview.number }}</span>
+                        </span>
+                      </mat-option>
+                      }
+                    </mat-select>
+                    <mat-hint>Display only; language, timezone, units, week start, and exported dates stay separate.</mat-hint>
+                  </mat-form-field>
+                </div>
+
+                <mat-divider></mat-divider>
+
                 <div class="settings-option-block">
                   <div>
                     <h2 class="settings-subsection-title">Simple preset</h2>

@@ -253,6 +253,31 @@
     }
 }
 
+.settings-regional-format mat-form-field {
+    flex: 0 1 auto;
+    width: min(100%, 390px);
+    min-width: 0;
+}
+
+.regional-format-option {
+    height: auto;
+    min-height: 64px;
+}
+
+.regional-format-option__content {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 2px;
+    width: 100%;
+    padding-block: 6px;
+    line-height: 1.3;
+}
+
+.regional-format-option__preview {
+    color: var(--mat-sys-on-surface-variant);
+    font-variant-numeric: tabular-nums;
+}
+
 .settings-subsection-title {
     margin: 0;
     color: var(--mat-sys-on-surface);

@@ -22,9 +22,9 @@ import localeIt from '@angular/common/locales/it';
 import localeNl from '@angular/common/locales/nl';
 import localePl from '@angular/common/locales/pl';
 import localeEl from '@angular/common/locales/el';
-import { getBrowserLocale } from './app-locale';
+import { getAppLocale } from './app-locale';
 
-export { DEFAULT_APP_LOCALE, SUPPORTED_LOCALES, getBrowserLocale } from './app-locale';
+export { DEFAULT_APP_LOCALE, SUPPORTED_LOCALES, getAppLocale, getBrowserLocale } from './app-locale';
 
 /**
  * Registers Angular locale data for all supported languages.
@@ -50,6 +50,6 @@ export function registerAppLocales() {
  */
 export const MAT_DATE_LOCALE_PROVIDER: Provider = {
     provide: MAT_DATE_LOCALE,
-    useFactory: getBrowserLocale,
+    useFactory: getAppLocale,
     deps: [[new Optional(), LoggerService]]
 };

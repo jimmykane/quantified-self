@@ -1,4 +1,4 @@
-import { getBrowserLocale } from '../shared/adapters/app-locale';
+import { getAppLocale } from '../shared/adapters/app-locale';
 
 const MAX_FORMATTERS = 64;
 const formatters = new Map<string, Intl.NumberFormat>();
@@ -8,7 +8,7 @@ export function getNumberFormatter(
   locales: string | string[] | undefined = undefined,
   options: Intl.NumberFormatOptions = {},
 ): Intl.NumberFormat {
-  const resolvedLocales = locales ?? getBrowserLocale();
+  const resolvedLocales = locales ?? getAppLocale();
   const key = JSON.stringify([resolvedLocales, Object.entries(options)
     .filter(([, value]) => value !== undefined).sort(([a], [b]) => a.localeCompare(b))]);
   const cached = formatters.get(key);

@@ -106,10 +106,10 @@ or reset metric series, zoom or legends. Normal data/theme changes still render 
 weekly/date-offset adapters. Explicit time bounds bypass sample scans when projecting notes, and range registrations
 remain deduplicated until disposal. Readiness and body-weight date labels use the bounded shared Intl formatter cache;
 local-time formatting remains uncached. Date, time, and number formatter calls that omit a locale resolve through the
-app-wide browser-locale policy: non-US English uses registered international-English date data and unsupported or
-missing locales fall back to `en-GB`, never silently to Angular's built-in US patterns. Explicit UTC, provider-offset,
-and saved delivery-zone semantics remain unchanged. These are presentation-only optimizations with no Training
-calculation, planning, or MCP contract impact.
+app-wide regional-formatting policy: an explicit account preference wins, **Automatic** uses the browser's first
+supported language, and unsupported or missing locales fall back to `en-GB`, never silently to Angular's built-in US
+patterns. Explicit UTC, provider-offset, and saved delivery-zone semantics remain unchanged. These are
+presentation-only optimizations with no Training calculation, planning, or MCP contract impact.
 
 Current compatibility baseline:
 

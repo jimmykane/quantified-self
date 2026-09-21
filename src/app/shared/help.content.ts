@@ -1172,7 +1172,19 @@ In Settings you can:
 
 - turn anonymous usage statistics on or off,
 - turn marketing emails on or off,
-- and customize charts, maps, and units.
+- and customize charts, maps, units, and regional formatting.
+
+### Regional formatting
+
+Open **Settings -> Units -> Regional formatting** to choose how the app displays dates, times, numbers, percentages,
+month names, and weekday names. **Automatic (browser)** is the recommended default and follows the first supported
+language in your browser preferences. You can instead select a specific regional format, which is saved to your account
+and follows you between devices. When a changed selection is saved, the app reloads once so every screen uses it
+consistently.
+
+Regional formatting does not change the app language, timezone, measurement units, start of week, stored data,
+calculations, APIs, or connected-service behavior. Machine-readable CSV dates and generated filenames remain in the
+unambiguous **YYYY-MM-DD** format.
 
 Review and revoke authorized MCP clients under [**Connections -> MCP**](/services?serviceName=mcp).
 Each connection separates **Data access** from optional **Training changes**, and labels every permission **Granted** or

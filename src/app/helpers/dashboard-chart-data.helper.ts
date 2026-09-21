@@ -15,7 +15,7 @@ import {
 } from '@sports-alliance/sports-lib';
 import * as weeknumber from 'weeknumber';
 import type { AggregatedChartRow } from './aggregated-chart-row.helper';
-import { getBrowserLocale } from '../shared/adapters/app-locale';
+import { getAppLocale } from '../shared/adapters/app-locale';
 import {
   normalizeUserUnitSettings,
   resolveUnitAwareDisplayStat,
@@ -218,7 +218,7 @@ export function getDashboardAxisDateFormat(timeInterval: TimeIntervals): string 
 export function formatDashboardDateByInterval(
   value: number | Date,
   timeInterval: TimeIntervals,
-  locale = getBrowserLocale(),
+  locale = getAppLocale(),
   timeZone?: string,
 ): string {
   return formatDashboardDateByIntervalWithOptions(value, timeInterval, {
@@ -236,7 +236,7 @@ export function formatDashboardAxisDateByInterval(
   value: number | Date,
   timeInterval: TimeIntervals,
   compact = false,
-  locale = getBrowserLocale(),
+  locale = getAppLocale(),
   timeZone?: string,
 ): string {
   const date = toValidDate(value);
@@ -273,7 +273,7 @@ export function formatDashboardAxisDateByInterval(
 export function formatDashboardWeeklyAxisLabel(
   value: number | Date,
   compact = false,
-  locale = getBrowserLocale(),
+  locale = getAppLocale(),
   timeZone?: string,
 ): string {
   const date = toValidDate(value);
@@ -294,7 +294,7 @@ export function formatDashboardWeeklyAxisLabel(
 
 export function formatDashboardWeekRangeLabel(
   value: number | Date | string,
-  locale = getBrowserLocale(),
+  locale = getAppLocale(),
   timeZone?: string,
 ): string {
   const startDate = toValidDate(value);
@@ -316,7 +316,7 @@ export function formatDashboardWeekRangeLabel(
 export function formatDashboardDateRange(
   startValue: number | Date | string,
   endValue: number | Date | string,
-  locale = getBrowserLocale(),
+  locale = getAppLocale(),
   timeZone?: string,
 ): string {
   const startDate = toValidDate(startValue);
@@ -331,7 +331,7 @@ export function formatDashboardDateRange(
 export function formatDashboardBucketDateByInterval(
   value: number | Date,
   timeInterval: TimeIntervals,
-  locale = getBrowserLocale(),
+  locale = getAppLocale(),
   timeZone?: string,
 ): string {
   return formatDashboardDateByInterval(value, resolveDashboardDisplayInterval(timeInterval), locale, timeZone);

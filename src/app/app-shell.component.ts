@@ -27,6 +27,7 @@ import { AppAnalyticsService } from './services/app.analytics.service';
 import { SeoService } from './services/seo.service';
 import { AppIconService } from './services/app.icon.service';
 import { AppThemeService } from './services/app.theme.service';
+import { AppLocaleService } from './services/app.locale.service';
 import { AppWhatsNewService } from './services/app.whats-new.service';
 import { MatDialog } from '@angular/material/dialog';
 import { AppThemes } from '@sports-alliance/sports-lib';
@@ -123,6 +124,7 @@ export class AppShellComponent implements OnInit, OnDestroy {
   private seoService = inject(SeoService);
   private iconService = inject(AppIconService);
   private themeService = inject(AppThemeService);
+  private localeService = inject(AppLocaleService);
   private whatsNewService = inject(AppWhatsNewService);
   public dialog = inject(MatDialog);
   public maintenanceMode = this.remoteConfigService.maintenanceMode;
@@ -280,6 +282,7 @@ export class AppShellComponent implements OnInit, OnDestroy {
     this.authService.user$
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe(async user => {
+        this.localeService.reconcileAccountPreference(user);
         this.authState = !!user;
         if (this.renderPublicShellWhileAuthPendingSignal()) {
           this.renderPublicShellWhileAuthPendingSignal.set(false);

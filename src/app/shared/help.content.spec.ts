@@ -23,6 +23,17 @@ describe('help.content', () => {
     expect(HELP_SECTIONS.some(section => section.id === 'activity-calendar')).toBe(true);
   });
 
+  it('documents regional formatting scope, precedence, and stable export dates', () => {
+    const content = HELP_SECTIONS.find(section => section.id === 'data-and-privacy')!.content.replace(/\s+/g, ' ');
+
+    expect(content).toContain('**Settings -> Units -> Regional formatting**');
+    expect(content).toContain('**Automatic (browser)** is the recommended default');
+    expect(content).toContain('saved to your account and follows you between devices');
+    expect(content).toContain('the app reloads once');
+    expect(content).toContain('does not change the app language, timezone, measurement units, start of week');
+    expect(content).toContain('**YYYY-MM-DD**');
+  });
+
   it('distinguishes Training consent, expiry, disconnect and the private pilot boundary', () => {
     const content = HELP_SECTIONS.find(section => section.id === 'training-plans')!.content;
     expect(content).toContain('Provider workout sync is restricted to the private rollout, not a public launch');
