@@ -51,6 +51,13 @@ describe('recent history status', () => {
     expect(fixture.nativeElement.textContent).toContain('History requested; data may take hours or days to arrive.');
     expect(fixture.nativeElement.textContent).not.toContain('has been processed'); expect(haptics.success).not.toHaveBeenCalled();
   });
+  it('describes a completed maximum-range run as selected history', () => {
+    const fixture = TestBed.createComponent(ConnectionHistoryStatusComponent);
+    fixture.componentRef.setInput('status', { ...status, rangePreset: 'maximum', canRetry: false,
+      steps: [{ ...status.steps[0], status: 'processed' }] }); fixture.detectChanges();
+    expect(fixture.nativeElement.textContent).toContain('Selected history has been processed.');
+    expect(fixture.nativeElement.textContent).not.toContain('Recent history');
+  });
   it('retries the opaque run once and gives feedback only after acceptance', async () => {
     const fixture = TestBed.createComponent(ConnectionHistoryStatusComponent); fixture.componentRef.setInput('status', status);
     let finish!: () => void; users.retryConnectionHistoryImport.mockReturnValue(new Promise<void>(resolve => finish = resolve));
