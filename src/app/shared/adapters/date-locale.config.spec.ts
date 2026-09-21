@@ -1,4 +1,4 @@
-import { DatePipe } from '@angular/common';
+import { DatePipe, DecimalPipe, PercentPipe } from '@angular/common';
 import { DEFAULT_APP_LOCALE, getBrowserLocale, registerAppLocales } from './date-locale.config';
 import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
 
@@ -91,14 +91,26 @@ describe('date-locale.config', () => {
 
             expect(getBrowserLocale()).toBe('en-US');
         });
+
+        it('maps supported language variants to the registered regional locale', () => {
+            setNavigator({ language: 'fr-CA', languages: ['fr-CA'] });
+
+            expect(getBrowserLocale()).toBe('fr-FR');
+        });
     });
 
-    it('registers non-US English and Greek Angular date patterns', () => {
+    it.each([
+        { locale: 'en-GB', date: '21/09/2026', number: '1,234.56', percent: '12%' },
+        { locale: 'en-US', date: '9/21/26', number: '1,234.56', percent: '12%' },
+        { locale: 'fr-FR', date: '21/09/2026', number: '1 234,56', percent: '12 %' },
+        { locale: 'de-DE', date: '21.09.26', number: '1.234,56', percent: '12 %' },
+        { locale: 'el-GR', date: '21/9/26', number: '1.234,56', percent: '12%' },
+    ])('registers matching Angular date and numeric patterns for $locale', ({ locale, date, number, percent }) => {
         registerAppLocales();
         const timestamp = Date.UTC(2026, 8, 21, 12);
 
-        expect(new DatePipe('en-GB').transform(timestamp, 'shortDate', 'UTC')).toBe('21/09/2026');
-        expect(new DatePipe('el-GR').transform(timestamp, 'shortDate', 'UTC')).toBe('21/9/26');
-        expect(new DatePipe('en-US').transform(timestamp, 'shortDate', 'UTC')).toBe('9/21/26');
+        expect(new DatePipe(locale).transform(timestamp, 'shortDate', 'UTC')).toBe(date);
+        expect(new DecimalPipe(locale).transform(1234.56, '1.2-2')?.replace(/\s/g, ' ')).toBe(number);
+        expect(new PercentPipe(locale).transform(0.12, '1.0-0')?.replace(/\s/g, ' ')).toBe(percent);
     });
 });

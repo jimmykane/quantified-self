@@ -1,7 +1,55 @@
 export const SUPPORTED_LOCALES = ['en', 'de', 'fr', 'es', 'it', 'nl', 'pl', 'el'] as const;
 export const DEFAULT_APP_LOCALE = 'en-GB';
+export const AUTOMATIC_APP_FORMAT_LOCALE = 'auto';
+export const APP_FORMAT_LOCALE_STORAGE_KEY = 'appFormatLocale';
+
+export const APP_FORMAT_LOCALE_OPTIONS = [
+    { value: AUTOMATIC_APP_FORMAT_LOCALE, label: 'Automatic (browser)' },
+    { value: 'en-GB', label: 'English (United Kingdom)' },
+    { value: 'en-US', label: 'English (United States)' },
+    { value: 'de-DE', label: 'German (Germany)' },
+    { value: 'fr-FR', label: 'French (France)' },
+    { value: 'es-ES', label: 'Spanish (Spain)' },
+    { value: 'it-IT', label: 'Italian (Italy)' },
+    { value: 'nl-NL', label: 'Dutch (Netherlands)' },
+    { value: 'pl-PL', label: 'Polish (Poland)' },
+    { value: 'el-GR', label: 'Greek (Greece)' },
+] as const;
+
+export type AppFormatLocalePreference = typeof APP_FORMAT_LOCALE_OPTIONS[number]['value'];
+
+export interface AppFormatLocalePreview {
+    date: string;
+    number: string;
+}
 
 type LocaleWarningLogger = Pick<Console, 'warn'>;
+type LocalePreferenceStorage = Pick<Storage, 'getItem' | 'setItem'>;
+
+const FORMAT_PREVIEW_DATE = new Date(Date.UTC(2026, 8, 21, 13, 45, 6));
+const FORMAT_PREVIEW_NUMBER = 1234.56;
+const DEFAULT_LOCALE_BY_LANGUAGE: Record<typeof SUPPORTED_LOCALES[number], Exclude<AppFormatLocalePreference, 'auto'>> = {
+    en: DEFAULT_APP_LOCALE,
+    de: 'de-DE',
+    fr: 'fr-FR',
+    es: 'es-ES',
+    it: 'it-IT',
+    nl: 'nl-NL',
+    pl: 'pl-PL',
+    el: 'el-GR',
+};
+
+function isBrowserRuntime(): boolean {
+    return typeof globalThis.window !== 'undefined' && typeof globalThis.document !== 'undefined';
+}
+
+export function isAppFormatLocalePreference(value: unknown): value is AppFormatLocalePreference {
+    return APP_FORMAT_LOCALE_OPTIONS.some(option => option.value === value);
+}
+
+export function normalizeAppFormatLocalePreference(value: unknown): AppFormatLocalePreference {
+    return isAppFormatLocalePreference(value) ? value : AUTOMATIC_APP_FORMAT_LOCALE;
+}
 
 function localeRegion(locale: string): string | null {
     const subtags = locale.split('-');
@@ -38,10 +86,19 @@ function normalizeSupportedLocale(locale: string): string | null {
         return localeRegion(locale) === 'US' ? 'en-US' : DEFAULT_APP_LOCALE;
     }
 
-    return locale;
+    // Only the registry locales have matching Angular and Day.js locale data.
+    // Map other regions for the same language to that registered locale so
+    // native Intl helpers and Angular pipes cannot disagree within one screen.
+    return DEFAULT_LOCALE_BY_LANGUAGE[languageCode as typeof SUPPORTED_LOCALES[number]];
 }
 
 function browserLocaleCandidates(): string[] {
+    if (!isBrowserRuntime()) {
+        // Recent Node runtimes may expose navigator. Browser globals must both
+        // exist before client preferences are allowed to affect SSR output.
+        return [];
+    }
+
     const browserNavigator = globalThis.navigator;
     if (!browserNavigator) {
         // Server and prerender processes must not leak their host locale into output.
@@ -92,4 +149,71 @@ export function getBrowserLocale(logger?: LocaleWarningLogger): string {
         logger.warn(`[Locale] Unsupported locale detected: ${candidates[0]}. Falling back to ${DEFAULT_APP_LOCALE}.`);
     }
     return DEFAULT_APP_LOCALE;
+}
+
+function getBrowserStorage(): LocalePreferenceStorage | null {
+    if (!isBrowserRuntime()) return null;
+
+    try {
+        return globalThis.localStorage ?? null;
+    } catch {
+        return null;
+    }
+}
+
+export function readStoredAppFormatLocalePreference(
+    storage: LocalePreferenceStorage | null = getBrowserStorage(),
+): AppFormatLocalePreference {
+    if (!storage) return AUTOMATIC_APP_FORMAT_LOCALE;
+
+    try {
+        return normalizeAppFormatLocalePreference(storage.getItem(APP_FORMAT_LOCALE_STORAGE_KEY));
+    } catch {
+        return AUTOMATIC_APP_FORMAT_LOCALE;
+    }
+}
+
+export function storeAppFormatLocalePreference(
+    preference: AppFormatLocalePreference,
+    storage: LocalePreferenceStorage | null = getBrowserStorage(),
+): boolean {
+    if (!storage || !isAppFormatLocalePreference(preference)) return false;
+
+    try {
+        storage.setItem(APP_FORMAT_LOCALE_STORAGE_KEY, preference);
+        return storage.getItem(APP_FORMAT_LOCALE_STORAGE_KEY) === preference;
+    } catch {
+        return false;
+    }
+}
+
+export function resolveAppLocale(
+    preference: unknown,
+    logger?: LocaleWarningLogger,
+): string {
+    const normalizedPreference = normalizeAppFormatLocalePreference(preference);
+    return normalizedPreference === AUTOMATIC_APP_FORMAT_LOCALE
+        ? getBrowserLocale(logger)
+        : normalizedPreference;
+}
+
+/** Resolves the locale captured by Angular and Material during application bootstrap. */
+export function getAppLocale(logger?: LocaleWarningLogger): string {
+    return resolveAppLocale(readStoredAppFormatLocalePreference(), logger);
+}
+
+export function buildAppFormatLocalePreview(preference: AppFormatLocalePreference): AppFormatLocalePreview {
+    const locale = resolveAppLocale(preference);
+    return {
+        date: new Intl.DateTimeFormat(locale, {
+            year: 'numeric',
+            month: 'numeric',
+            day: 'numeric',
+            timeZone: 'UTC',
+        }).format(FORMAT_PREVIEW_DATE),
+        number: new Intl.NumberFormat(locale, {
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 2,
+        }).format(FORMAT_PREVIEW_NUMBER),
+    };
 }

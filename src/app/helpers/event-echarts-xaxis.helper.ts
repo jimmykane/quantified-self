@@ -6,7 +6,7 @@ import {
   UserUnitSettingsInterface,
   XAxisTypes,
 } from '@sports-alliance/sports-lib';
-import { getBrowserLocale } from '../shared/adapters/app-locale';
+import { getAppLocale } from '../shared/adapters/app-locale';
 import { formatUnitAwareDataValue } from '@shared/unit-aware-display';
 import { normalizeEventRange } from './event-chart-range.helper';
 import type { EventChartRange } from './event-chart-range.helper';
@@ -79,7 +79,7 @@ export function formatEventXAxisValue(value: number, axisType: XAxisTypes, optio
     return '';
   }
 
-  const locale = options?.locale || getBrowserLocale();
+  const locale = options?.locale || getAppLocale();
 
   switch (axisType) {
     case XAxisTypes.Time: {

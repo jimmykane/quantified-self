@@ -1,4 +1,4 @@
-import { getBrowserLocale } from '../shared/adapters/app-locale';
+import { getAppLocale } from '../shared/adapters/app-locale';
 
 const MAX_FORMATTERS = 64;
 const formatters = new Map<string, Intl.DateTimeFormat>();
@@ -16,7 +16,7 @@ export function getDateTimeFormatter(
   locales: string | string[] | undefined = undefined,
   options: Intl.DateTimeFormatOptions = {},
 ): Intl.DateTimeFormat {
-  const resolvedLocales = locales ?? getBrowserLocale();
+  const resolvedLocales = locales ?? getAppLocale();
 
   // A formatter captures the system timezone when constructed. Leave local-time formatting
   // uncached so changing the device timezone cannot retain the old zone until a page reload.

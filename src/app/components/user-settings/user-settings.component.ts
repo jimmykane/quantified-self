@@ -3,7 +3,7 @@ import { Clipboard } from '@angular/cdk/clipboard';
 import { ActivatedRoute, Router } from '@angular/router';
 import { Subscription } from 'rxjs';
 import { AppWindowService } from '../../services/app.window.service';
-import { AppChartSettingsInterface, AppUserInterface, AppUserSettingsInterface } from '../../models/app-user.interface';
+import { AppAppSettingsInterface, AppChartSettingsInterface, AppUserInterface, AppUserSettingsInterface } from '../../models/app-user.interface';
 import { AppAuthService } from '../../authentication/app.auth.service';
 import { AppUserService } from '../../services/app.user.service';
 import { AppUserUtilities } from '../../utils/app.user.utilities';
@@ -18,7 +18,7 @@ import {
   ChartCursorBehaviours,
   XAxisTypes,
 } from '@sports-alliance/sports-lib';
-import { AppThemes, UserAppSettingsInterface } from '@sports-alliance/sports-lib';
+import { AppThemes } from '@sports-alliance/sports-lib';
 import {
   DistanceUnits,
   PaceUnits,
@@ -48,6 +48,12 @@ import {
   getAppBasicChartDataTypes,
   getAppCanonicalChartDataTypes,
 } from '../../helpers/app-chart-data-types.helper';
+import { AppLocaleService } from '../../services/app.locale.service';
+import {
+  APP_FORMAT_LOCALE_OPTIONS,
+  buildAppFormatLocalePreview,
+  normalizeAppFormatLocalePreference,
+} from '../../shared/adapters/app-locale';
 
 type SettingsSectionId = 'profile' | 'app' | 'dashboard' | 'map' | 'charts' | 'units' | 'account';
 
@@ -163,6 +169,10 @@ export class UserSettingsComponent implements OnChanges, OnDestroy, OnInit {
     { label: 'Miles', value: DistanceUnits.Miles },
   ];
   public readonly unitPresetOptions = UNIT_SETUP_PRESET_OPTIONS;
+  public readonly formatLocaleOptions = APP_FORMAT_LOCALE_OPTIONS.map(option => ({
+    ...option,
+    preview: buildAppFormatLocalePreview(option.value),
+  }));
   public selectedUnitPreset: UnitSetupPreset = 'kilometers';
   public verticalSpeedUnits = VerticalSpeedUnits;
   public paceUnits = PaceUnits;
@@ -173,6 +183,15 @@ export class UserSettingsComponent implements OnChanges, OnDestroy, OnInit {
   private analyticsService = inject(AppAnalyticsService);
   private clipboard = inject(Clipboard);
   private hapticsService = inject(AppHapticsService);
+  private localeService = inject(AppLocaleService);
+
+  public get selectedFormatLocaleLabel(): string {
+    const selected = normalizeAppFormatLocalePreference(
+      this.userSettingsFormGroup?.get('formatLocale')?.value,
+    );
+    return this.formatLocaleOptions.find(option => option.value === selected)?.label
+      ?? this.formatLocaleOptions[0].label;
+  }
 
 
 
@@ -182,6 +201,7 @@ export class UserSettingsComponent implements OnChanges, OnDestroy, OnInit {
   private readonly controlLabels: Record<string, string> = {
     displayName: 'Name',
     appTheme: 'Interface Theme',
+    formatLocale: 'Regional formatting',
     dataTypesToUse: 'Default chart metrics',
     xAxisType: 'Data Scaling (X-Axis)',
     chartStrokeWidth: 'Line Width',
@@ -287,6 +307,10 @@ export class UserSettingsComponent implements OnChanges, OnDestroy, OnInit {
         [
           Validators.required,
         ]),
+      formatLocale: new UntypedFormControl(
+        normalizeAppFormatLocalePreference(settings.appSettings.formatLocale),
+        [Validators.required],
+      ),
       acceptedTrackingPolicy: new UntypedFormControl(this.user.acceptedTrackingPolicy === true, []),
       acceptedMarketingPolicy: new UntypedFormControl(this.user.acceptedMarketingPolicy === true, []),
       brandText: new UntypedFormControl(
@@ -429,6 +453,10 @@ export class UserSettingsComponent implements OnChanges, OnDestroy, OnInit {
     this.userSettingsFormGroup.markAsDirty();
   }
 
+  onFormatLocaleChange(): void {
+    this.hapticsService.selection();
+  }
+
   async onSubmit(event) {
     event.preventDefault();
     if (!this.userSettingsFormGroup.valid) {
@@ -487,10 +515,16 @@ export class UserSettingsComponent implements OnChanges, OnDestroy, OnInit {
         ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? AppThemes.Dark : AppThemes.Normal)
         : selectedThemePreference;
       const settings = AppUserUtilities.fillMissingAppSettings(this.user as unknown as User);
+      const savedFormatLocale = normalizeAppFormatLocalePreference(settings.appSettings.formatLocale);
+      const selectedFormatLocale = normalizeAppFormatLocalePreference(
+        this.userSettingsFormGroup.get('formatLocale').value,
+      );
+      const formatLocaleChanged = selectedFormatLocale !== savedFormatLocale;
       const shouldCompleteUnitSetup = this.shouldCompleteUnitSetupFromForm(settings);
-      const appSettingsToSave: UserAppSettingsInterface & { themePreference?: AppThemePreference; unitSetupCompleted?: boolean } = {
+      const appSettingsToSave: AppAppSettingsInterface = {
         theme: resolvedTheme,
-        themePreference: selectedThemePreference
+        themePreference: selectedThemePreference,
+        formatLocale: selectedFormatLocale,
       };
       if (shouldCompleteUnitSetup) {
         appSettingsToSave.unitSetupCompleted = true;
@@ -548,13 +582,28 @@ export class UserSettingsComponent implements OnChanges, OnDestroy, OnInit {
       }
 
       await this.userService.updateUserProperties(this.user, propertiesToUpdate);
+      const localeSyncResult = formatLocaleChanged
+        ? this.localeService.cachePreference(selectedFormatLocale)
+        : 'unchanged';
       this.userSettingsFormGroup.markAsPristine();
       this.userSettingsFormGroup.markAsUntouched();
-      this.snackBar.open('User updated', undefined, {
-        duration: 2000,
-      });
-      this.hapticsService.success();
       this.analyticsService.logEvent('user_settings_update');
+
+      if (localeSyncResult === 'storage-unavailable') {
+        this.snackBar.open('Settings saved, but this browser could not apply the regional format.', undefined, {
+          duration: 5000,
+        });
+        this.hapticsService.warning();
+        return;
+      }
+
+      this.snackBar.open(
+        localeSyncResult === 'updated' ? 'Settings saved. Applying regional format…' : 'User updated',
+        undefined,
+        { duration: 2000 },
+      );
+      this.hapticsService.success();
+      if (localeSyncResult === 'updated') this.localeService.reload();
     } catch (e) {
       this.logger.error('[UserSettingsComponent] onSubmit FAILED. Error details:', e);
       this.snackBar.open('Could not update user', undefined, {
