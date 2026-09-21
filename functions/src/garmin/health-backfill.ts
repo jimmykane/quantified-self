@@ -1,3 +1,4 @@
+import { assertHistoryWrite } from '../connection-history/context';
 import { getGarminHistorySummaryTypes } from './health-backfill-range';
 import { withHistoryQueueExecution } from '../connection-history/execution';
 import * as admin from 'firebase-admin';
@@ -240,6 +241,7 @@ async function advanceCursorTransaction(
   const stateRef = db.collection('users').doc(queueItem.userID!)
     .collection('sleepSyncState').doc(SLEEP_PROVIDERS.GarminAPI);
   return db.runTransaction(async transaction => {
+    await assertHistoryWrite(transaction);
     let deletionGuard;
     try {
       deletionGuard = await getUserDeletionGuardStateInTransaction(
@@ -333,6 +335,7 @@ async function markBackfillSkipped(
   const nowMs = Date.now();
   try {
     const transition = await db.runTransaction(async transaction => {
+      await assertHistoryWrite(transaction);
       let deletionGuard;
       try {
         deletionGuard = await getUserDeletionGuardStateInTransaction(
@@ -409,6 +412,7 @@ async function updateMatchingBackfillStateInTransaction(
   update: Record<string, unknown>,
   expectedTotal?: number,
 ): Promise<void> {
+  await assertHistoryWrite(transaction);
   const total = Number(currentQueueItem.garminHealthBackfillWindowsTotal);
   const rangeEndMs = Number(currentQueueItem.rangeEndMs);
   if (currentQueueItem.type !== 'garmin_health_backfill'

@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 vi.unmock('@sports-alliance/sports-lib');
 const mocks = vi.hoisted(() => ({
-  rows: new Map<string, any>(), pro: vi.fn(), depth: vi.fn(), enqueue: vi.fn(), execute: vi.fn(), appCheck: vi.fn(),
+  replayFinalCommit: false, rows: new Map<string, any>(), pro: vi.fn(), depth: vi.fn(), enqueue: vi.fn(), execute: vi.fn(), appCheck: vi.fn(),
 }));
 vi.mock('firebase-functions/v2/tasks', () => ({ onTaskDispatched: (_: unknown, handler: unknown) => handler }));
 vi.mock('firebase-functions/v2/firestore', () => ({ onDocumentWritten: (_: unknown, handler: unknown) => handler }));
@@ -11,7 +11,7 @@ vi.mock('../utils', () => ({ hasProAccess: mocks.pro, enforceAppCheck: mocks.app
 vi.mock('../config', () => ({ config: { cloudtasks: { workoutQueue: 'workout', sleepSyncQueue: 'sleep', garminHealthBackfillQueue: 'health', connectionHistoryQueue: 'history' } } }));
 vi.mock('../secrets', () => ({ FUNCTION_SECRET_BINDINGS: { processConnectionHistoryTask: [] } }));
 vi.mock('../shared/cloud-tasks', () => ({ enqueueConnectionHistoryTask: mocks.enqueue, getCloudTaskQueueDepthForQueue: mocks.depth }));
-vi.mock('./adapters', () => ({ executeHistoryOperation: mocks.execute, historySleepProvider: () => 'garmin', historyCooldownUntil: (_: unknown, meta: any) => Number(meta?.testCooldownUntil || 0), isHistoryWindowTooLarge: () => false,
+vi.mock('./adapters', () => ({ executeHistoryOperation: mocks.execute, historyAdmissionQueue: () => ({ taskQueue: 'workout', collection: 'workoutQueue' }), historySleepProvider: () => 'garmin', historyCooldownUntil: (_: unknown, meta: any) => Number(meta?.testCooldownUntil || 0), isHistoryWindowTooLarge: () => false,
   HistorySkippedError: class HistorySkippedError extends Error {} }));
 vi.mock('firebase-admin', () => {
   const doc = (path: string): any => ({ path, id: path.split('/').at(-1), parent: { id: path.split('/').at(-2) },
@@ -20,11 +20,18 @@ vi.mock('firebase-admin', () => {
   const collection = (path: string) => ({ doc: (id: string) => doc(`${path}/${id}`), where: () => ({ count: () => ({ get: async () => ({ data: () => ({ count: 0 }) }) }) }) });
   const db = { doc, collection, getAll: async (...refs: any[]) => refs.map(ref => snapshot(ref.path)),
     runTransaction: async (work: any) => {
-      const writes: (() => void)[] = [];
-      const set = (ref: any, data: any, options?: any) => writes.push(() => mocks.rows.set(ref.path, options?.merge ? { ...mocks.rows.get(ref.path), ...structuredClone(data) } : structuredClone(data)));
-      const result = await work({ get: async (ref: any) => { if (writes.length) throw new Error('Read after write'); return snapshot(ref.path); }, set,
-        update: (ref: any, data: any) => set(ref, data, { merge: true }), delete: (ref: any) => writes.push(() => { mocks.rows.delete(ref.path); }) });
-      writes.forEach(write => write()); return result;
+      for (let attempt = 0; attempt < 2; attempt++) {
+        const writes: (() => void)[] = []; let finalCommit = false;
+        const set = (ref: any, data: any, options?: any) => {
+          if (ref.path.startsWith('connectionHistoryImports/') && data.revision === 1 && data.processed === true) finalCommit = true;
+          writes.push(() => mocks.rows.set(ref.path, options?.merge ? { ...mocks.rows.get(ref.path), ...structuredClone(data) } : structuredClone(data)));
+        };
+        const result = await work({ get: async (ref: any) => { if (writes.length) throw new Error('Read after write'); return snapshot(ref.path); }, set,
+          update: (ref: any, data: any) => set(ref, data, { merge: true }), delete: (ref: any) => writes.push(() => { mocks.rows.delete(ref.path); }) });
+        if (mocks.replayFinalCommit && finalCommit) { mocks.replayFinalCommit = false; continue; }
+        writes.forEach(write => write()); return result;
+      }
+      throw new Error('Unexpected transaction attempts');
     } };
   return { firestore: () => db };
 });
@@ -38,7 +45,7 @@ let run: ConnectionHistoryRun;
 const path = () => `${CONNECTION_HISTORY_COLLECTION}/${run.id}`;
 const saved = () => mocks.rows.get(path()) as ConnectionHistoryRun;
 beforeEach(() => {
-  vi.restoreAllMocks(); vi.spyOn(Date, 'now').mockReturnValue(now); mocks.rows.clear();
+  mocks.replayFinalCommit = false; vi.restoreAllMocks(); vi.spyOn(Date, 'now').mockReturnValue(now); mocks.rows.clear();
   mocks.pro.mockReset().mockResolvedValue(true); mocks.depth.mockReset().mockResolvedValue(0); mocks.enqueue.mockReset().mockResolvedValue(true); mocks.appCheck.mockReset();
   run = createHistoryRun('owner', ServiceNames.WahooAPI, { requested: true, flowGeneration: 'flow', tokenPath: 'wahooAPIAccessTokens/owner/tokens/account', rootPath: 'wahooAPIAccessTokens/owner', providerUserId: 'account', credentialGeneration: 'credential' }, 'connection', now);
   mocks.rows.set(path(), run); mocks.rows.set('users/owner', { uid: 'owner' });
@@ -51,6 +58,13 @@ describe('durable history coordinator', () => {
     await processConnectionHistoryRun(run.id, '0'); expect(saved().processed).toBe(true);
     const meta = mocks.rows.get(`users/owner/meta/${run.serviceName}`);
     expect(meta.connectionHistoryImport.steps[0].status).toBe('processed'); expect(JSON.stringify(meta)).not.toContain('credential');
+    expect(mocks.execute).toHaveBeenCalledTimes(1);
+  });
+  it('saves the same checkpoint when Firestore retries the completion transaction', async () => {
+    mocks.replayFinalCommit = true;
+    await processConnectionHistoryRun(run.id, '0');
+    expect(saved()).toMatchObject({ processed: true, revision: 1 });
+    expect(saved().leaseOwner).toBeUndefined();
     expect(mocks.execute).toHaveBeenCalledTimes(1);
   });
   it('ignores duplicate task revisions and active leases', async () => {
@@ -95,8 +109,8 @@ describe('durable history coordinator', () => {
     mocks.rows.set('queue/item', { processed: true, resultStatus });
     expect(await observeHistoryChildren(['queue/item'])).toBe('skipped');
   });
-  it('recognizes only the current run’s matching authorization failure without exposing DLQ details', async () => {
-    mocks.rows.set('failed_jobs/missing', { connectionHistoryRunId: run.id, originalCollection: 'queue', context: 'PERMISSION_MISSING', error: 'private provider details' });
+  it.each(['PERMISSION_MISSING', 'GARMIN_HEALTH_BACKFILL_PERMISSION_MISSING', 'GARMIN_HEALTH_BACKFILL_AUTH_REQUIRED'])('recognizes only the current run’s matching %s failure without exposing DLQ details', async context => {
+    mocks.rows.set('failed_jobs/missing', { connectionHistoryRunId: run.id, originalCollection: 'queue', context, error: 'private provider details' });
     expect(await observeHistoryChildren(['queue/missing'], run.id)).toBe('authorization');
     expect(await observeHistoryChildren(['queue/missing'], 'different-run')).toBe('failed');
     expect(await observeHistoryChildren(['otherQueue/missing'], run.id)).toBe('failed');
@@ -139,11 +153,12 @@ describe('durable history coordinator', () => {
     run.steps[0].childPaths = ['workoutQueue/failed'];
     const meta = mocks.rows.get(`users/owner/meta/${run.serviceName}`);
     meta.connectionHistoryReservation = run.id; meta.testCooldownUntil = now + 60000;
-    mocks.rows.set('failed_jobs/failed', { connectionHistoryRunId: run.id, originalCollection: 'workoutQueue', queueRevision: 'old', error: 'failed' });
+    mocks.rows.set('failed_jobs/failed', { connectionHistoryRunId: run.id, originalCollection: 'workoutQueue', queueRevision: 'old', error: 'failed', expireAt: { seconds: 1 } });
     const retry = retryConnectionHistoryImport as unknown as (request: any) => Promise<unknown>;
     await retry({ auth: { uid: 'owner' }, data: { runId: run.id } });
     expect(mocks.rows.get('workoutQueue/failed')).toMatchObject({ processed: false, retryCount: 0 });
     expect(mocks.rows.get('workoutQueue/failed').queueRevision).not.toBe('old');
+    expect(mocks.rows.get('workoutQueue/failed').expireAt).toMatchObject({ _seconds: Math.floor(now / 1000) + 7 * 86400 });
     expect(mocks.rows.has('failed_jobs/failed')).toBe(false);
     expect(mocks.rows.get(`users/owner/meta/${run.serviceName}`).testCooldownUntil).toBe(now + 60000);
   });

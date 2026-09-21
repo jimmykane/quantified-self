@@ -39,10 +39,14 @@ vi.mock('../utils', () => ({
     PRO_REQUIRED_MESSAGE: 'Service sync is a Pro feature.'
 }));
 
-vi.mock('../history', () => ({
-    addHistoryToQueue: vi.fn().mockResolvedValue({ successCount: 1, failureCount: 0, processedBatches: 1, failedBatches: 0 }),
-    getNextAllowedHistoryImportDate: vi.fn().mockResolvedValue(null)
-}));
+vi.mock('../history', () => {
+    const addHistoryToQueue = vi.fn().mockResolvedValue({ successCount: 1, failureCount: 0, processedBatches: 1, failedBatches: 0 });
+    return {
+        addHistoryToQueue,
+        withActivityHistoryImportReservation: vi.fn((uid, service, operation) => operation((start, end, options) => addHistoryToQueue(uid, service, start, end, options))),
+        getNextAllowedHistoryImportDate: vi.fn().mockResolvedValue(null),
+    };
+});
 
 vi.mock('./account', () => ({
     getActiveCOROSTokenSnapshot: (...args: unknown[]) => accountMocks.getActiveCOROSTokenSnapshot(...args),
@@ -176,6 +180,7 @@ describe('COROS History to Queue', () => {
 
             await addCOROSAPIHistoryToQueue(data, context);
 
+            expect(history.withActivityHistoryImportReservation).toHaveBeenCalledTimes(1);
             // 40 days / 30 days batches = 2 batches
             expect(history.addHistoryToQueue).toHaveBeenCalledTimes(2);
             expect(history.addHistoryToQueue).toHaveBeenNthCalledWith(

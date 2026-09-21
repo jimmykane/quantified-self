@@ -1,3 +1,4 @@
+import { replacesSupersededHistoryWork } from './connection-history/queue-replacement';
 import { randomUUID } from 'node:crypto';
 import { FieldValue } from 'firebase-admin/firestore';
 import { HttpsError } from 'firebase-functions/v2/https';
@@ -134,7 +135,9 @@ async function commitHistoryBatchForActiveUser(params: {
     for (let index = 0; index < queueWrites.length; index++) {
       const { workoutQueueItem, queueRef } = queueWrites[index];
       // Preserve an existing canonical queue revision, including a webhook in flight.
-      if (params.execution && existingQueueSnapshots[index]?.exists) continue;
+      if (params.execution && existingQueueSnapshots[index]?.exists && !replacesSupersededHistoryWork(
+        existingQueueSnapshots[index].data() || {}, { connectionHistoryRunId: params.execution.runId, firebaseUserID: params.userID },
+      )) continue;
       const activeProcessingLease = params.serviceName === ServiceNames.COROSAPI
         ? getActiveRevisionProcessingLease(
           existingQueueSnapshots[index]?.exists
@@ -179,6 +182,15 @@ export async function addHistoryToQueue(
   options: HistoryImportOptions = {},
 ): Promise<HistoryImportResult> {
   if (options.execution) return addHistoryToQueueOperation(userID, serviceName, startDate, endDate, options);
+  return withActivityHistoryImportReservation(userID, serviceName, importWindow => importWindow(startDate, endDate, options));
+}
+
+/** Reserve once for a complete manual import, including every provider window. */
+export async function withActivityHistoryImportReservation<T>(
+  userID: string,
+  serviceName: ServiceNames,
+  operation: (importWindow: (startDate: Date, endDate: Date, options?: HistoryImportOptions) => Promise<HistoryImportResult>) => Promise<T>,
+): Promise<T> {
   const owner = randomUUID(); const db = admin.firestore();
   const ref = db.collection('users').doc(userID).collection('meta').doc(serviceName);
   await db.runTransaction(async transaction => {
@@ -192,7 +204,7 @@ export async function addHistoryToQueue(
     transaction.set(ref, { historyImportLeaseOwner: owner, historyImportLeaseExpiresAt: Date.now() + 30 * 60_000,
       connectionHistoryReservation: FieldValue.delete(), connectionHistoryReservationExpiresAt: FieldValue.delete() }, { merge: true });
   });
-  try { return await addHistoryToQueueOperation(userID, serviceName, startDate, endDate, options); }
+  try { return await operation((startDate, endDate, options = {}) => addHistoryToQueueOperation(userID, serviceName, startDate, endDate, options)); }
   finally {
     await db.runTransaction(async transaction => {
       const deletion = await getUserDeletionGuardStateInTransaction(db, transaction, userID);

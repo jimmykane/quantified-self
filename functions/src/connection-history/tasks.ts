@@ -1,8 +1,7 @@
-import { getServiceWorkoutQueueName } from '../shared/queue-names';
-import { SLEEP_SYNC_QUEUE_COLLECTION_NAME } from '../sleep/constants';
+import { getExpireAtTimestamp, TTL_CONFIG } from '../shared/ttl-config';
 import { getUserDeletionGuardStateInTransaction } from '../shared/user-deletion-guard';
 import { ServiceNames } from '@sports-alliance/sports-lib';
-import { historySleepProvider, historyCooldownUntil } from './adapters';
+import { historySleepProvider, historyCooldownUntil, historyAdmissionQueue } from './adapters';
 import { randomUUID } from 'node:crypto';
 import * as admin from 'firebase-admin';
 import * as logger from 'firebase-functions/logger';
@@ -17,7 +16,7 @@ import { ALLOWED_CORS_ORIGINS, enforceAppCheck, hasProAccess } from '../utils';
 import { CLOUD_TASK_RETRY_CONFIG, MAX_PENDING_TASKS } from '../shared/queue-config';
 import { enqueueConnectionHistoryTask, getCloudTaskQueueDepthForQueue } from '../shared/cloud-tasks';
 import { CONNECTION_HISTORY_COLLECTION, historyProjection, type ConnectionHistoryRun } from './model';
-import { assertHistoryConnectionCurrent, assertHistoryReservation, historyExecution, HistoryLifecycleChangedError } from './execution';
+import { assertHistoryConnectionCurrent, assertHistoryReservation, historyExecution, HistoryLifecycleChangedError, HistoryUnavailableError } from './execution';
 import { executeHistoryOperation, HistorySkippedError, isHistoryWindowTooLarge } from './adapters';
 import { advanceHistoryRun } from './advance';
 import { withHistoryExecution } from './context';
@@ -45,7 +44,7 @@ export async function observeHistoryChildren(paths: string[], runId?: string): P
   if (missing.length) {
     if (runId) {
       const dead = await db.getAll(...missing.map(row => db.collection('failed_jobs').doc(row.ref.id)));
-      const authorizationContexts = new Set(['PERMISSION_MISSING', 'GARMIN_HEALTH_PERMISSION_MISSING', 'INVALID_GRANT', 'AUTH_RECONNECT_REQUIRED', 'NO_TOKEN_FOUND']);
+      const authorizationContexts = new Set(['PERMISSION_MISSING', 'GARMIN_HEALTH_PERMISSION_MISSING', 'GARMIN_HEALTH_BACKFILL_PERMISSION_MISSING', 'GARMIN_HEALTH_BACKFILL_AUTH_REQUIRED', 'INVALID_GRANT', 'AUTH_RECONNECT_REQUIRED', 'NO_TOKEN_FOUND']);
       if (dead.some((row, index) => row.data()?.connectionHistoryRunId === runId
         && row.data()?.originalCollection === missing[index].ref.parent.id && authorizationContexts.has(row.data()?.context))) return 'authorization';
     }
@@ -61,6 +60,7 @@ class HistoryCapacityWaitError extends Error {}
 export function classifyHistoryFailure(error: unknown) {
   if (error instanceof HistoryCapacityWaitError) return { kind: 'wait' as const, message: 'Waiting for capacity. Your history will continue automatically.' };
   if (isHistoryWindowTooLarge(error)) return { kind: 'split' as const, message: 'This history window is too large. Trying a smaller range.' };
+  if (error instanceof HistoryUnavailableError) return { kind: 'skip' as const, message: error.message };
   if (error instanceof HistorySkippedError) return { kind: 'skip' as const, message: error.message, nextAllowedAtMs: error.nextAllowedAtMs };
   if (error instanceof HistoryLifecycleChangedError) return { kind: 'skip' as const, message: 'This connection changed. Connect again to import recent history.' };
   const detail = error as { code?: string; statusCode?: number; retryAt?: number; details?: { retryAfterSeconds?: number; retryAt?: number }; response?: { headers?: Record<string, string> } };
@@ -75,31 +75,34 @@ export function classifyHistoryFailure(error: unknown) {
     ...(Number.isFinite(retryAt) ? { retryAt } : {}) };
 }
 
-async function saveRun(run: ConnectionHistoryRun, owner: string): Promise<void> {
+async function saveRun(run: ConnectionHistoryRun, owner: string): Promise<ConnectionHistoryRun | null> {
   const db = admin.firestore();
-  await db.runTransaction(async tx => {
+  return db.runTransaction(async tx => {
     const ref = refFor(run.id); const current = await tx.get(ref);
-    if (!current.exists || current.data()?.leaseOwner !== owner || current.data()?.revision !== run.revision) return;
-    if ((await getUserDeletionGuardStateInTransaction(db, tx, run.userID)).shouldSkip) return;
+    if (!current.exists || current.data()?.leaseOwner !== owner || current.data()?.revision !== run.revision) return null;
+    if ((await getUserDeletionGuardStateInTransaction(db, tx, run.userID)).shouldSkip) return null;
+    // Firestore can replay this callback; keep the input revision and checkpoint immutable.
+    const checkpoint = structuredClone(run);
     let currentConnection = true;
-    try { await assertHistoryConnectionCurrent(run, tx); }
+    try { await assertHistoryConnectionCurrent(checkpoint, tx); }
     catch (error) { if (!(error instanceof HistoryLifecycleChangedError)) throw error; currentConnection = false; }
     if (!currentConnection) {
-      for (const step of run.steps.filter(step => !step.done)) {
+      for (const step of checkpoint.steps.filter(step => !step.done)) {
         step.done = true; step.status = 'skipped'; step.message = 'This import was superseded by a connection change.';
       }
-      run.processed = true;
+      checkpoint.processed = true;
     }
-    const sleepRef = run.serviceName === ServiceNames.WahooAPI ? null : db.doc(`users/${run.userID}/sleepSyncState/${historySleepProvider(run.serviceName)}`);
-    const sleep = currentConnection && run.processed && sleepRef ? await tx.get(sleepRef) : null;
-    run.failed = run.steps.some(step => step.status === 'failed');
-    run.revision++; run.updatedAtMs = Date.now(); delete run.leaseOwner; delete run.leaseExpiresAt;
-    tx.set(ref, run);
-    if (sleepRef && sleep?.data()?.connectionHistoryReservation === run.id) tx.set(sleepRef, { connectionHistoryReservationExpiresAt: 0 }, { merge: true });
-    if (currentConnection) tx.set(db.doc(`users/${run.userID}/meta/${run.serviceName}`), {
-      connectionHistoryImport: historyProjection(run),
-      ...(run.processed ? { connectionHistoryReservationExpiresAt: 0 } : {}),
+    const sleepRef = checkpoint.serviceName === ServiceNames.WahooAPI ? null : db.doc(`users/${checkpoint.userID}/sleepSyncState/${historySleepProvider(checkpoint.serviceName)}`);
+    const sleep = currentConnection && checkpoint.processed && sleepRef ? await tx.get(sleepRef) : null;
+    checkpoint.failed = checkpoint.steps.some(step => step.status === 'failed');
+    checkpoint.revision++; checkpoint.updatedAtMs = Date.now(); delete checkpoint.leaseOwner; delete checkpoint.leaseExpiresAt;
+    tx.set(ref, checkpoint);
+    if (sleepRef && sleep?.data()?.connectionHistoryReservation === checkpoint.id) tx.set(sleepRef, { connectionHistoryReservationExpiresAt: 0 }, { merge: true });
+    if (currentConnection) tx.set(db.doc(`users/${checkpoint.userID}/meta/${checkpoint.serviceName}`), {
+      connectionHistoryImport: historyProjection(checkpoint),
+      ...(checkpoint.processed ? { connectionHistoryReservationExpiresAt: 0 } : {}),
     }, { merge: true });
+    return checkpoint;
   });
 }
 
@@ -124,11 +127,9 @@ export async function processConnectionHistoryRun(id: string, revision: string):
           const key = JSON.stringify([step.id, step.capability.version, step.nextStartMs, step.windowDays || 30, step.page]);
           if (run.lastOperation?.key === key) return run.lastOperation.result;
           const paths: string[] = [];
-          const downstreamQueue = step.id === 'activities' ? config.cloudtasks.workoutQueue
-            : run.serviceName === ServiceNames.GarminAPI && step.id === 'health' ? config.cloudtasks.garminHealthBackfillQueue : config.cloudtasks.sleepSyncQueue;
-          const queueCollection = step.id === 'activities' ? getServiceWorkoutQueueName(run.serviceName) : SLEEP_SYNC_QUEUE_COLLECTION_NAME;
-          const [depth, backlog] = await Promise.all([getCloudTaskQueueDepthForQueue(downstreamQueue, true),
-            db.collection(queueCollection).where('processed', '==', false).count().get()]);
+          const downstream = historyAdmissionQueue(run, step);
+          const [depth, backlog] = await Promise.all([getCloudTaskQueueDepthForQueue(downstream.taskQueue, true),
+            db.collection(downstream.collection).where('processed', '==', false).count().get()]);
           if (Math.max(depth, backlog.data().count) >= MAX_PENDING_TASKS / 2) {
             logger.info('[ConnectionHistory]', { event: 'capacity_wait', service: run.serviceName });
             throw new HistoryCapacityWaitError();
@@ -154,9 +155,9 @@ export async function processConnectionHistoryRun(id: string, revision: string):
     }
     run.processed = true;
   }
-  await saveRun(run, owner);
-  logger.info('[ConnectionHistory]', { event: run.processed ? 'finished' : 'checkpoint', service: run.serviceName,
-    ageMs: Date.now() - run.dateCreated, outcomes: run.steps.map(step => step.status) });
+  const checkpoint = await saveRun(run, owner);
+  if (checkpoint) logger.info('[ConnectionHistory]', { event: checkpoint.processed ? 'finished' : 'checkpoint', service: checkpoint.serviceName,
+    ageMs: Date.now() - checkpoint.dateCreated, outcomes: checkpoint.steps.map(step => step.status) });
 }
 
 export const processConnectionHistoryTask = onTaskDispatched({ region, timeoutSeconds: 300, memory: '512MiB',
@@ -231,7 +232,7 @@ export const retryConnectionHistoryImport = onCall({ region, cors: ALLOWED_CORS_
       if (!data || data.connectionHistoryRunId !== run.id || data.originalCollection !== child.ref.parent.id) {
         throw new HttpsError('failed-precondition', 'Some history is no longer available to retry. Use History Import or reconnect.');
       }
-      const restored = { ...data, retryCount: 0, processed: false, dispatchedToCloudTask: false, queueRevision: randomUUID(), dateCreated: Date.now() };
+      const restored = { ...data, retryCount: 0, processed: false, dispatchedToCloudTask: false, queueRevision: randomUUID(), dateCreated: Date.now(), expireAt: getExpireAtTimestamp(TTL_CONFIG.QUEUE_ITEM_IN_DAYS) };
       for (const field of ['error', 'failedAt', 'context', 'originalCollection', 'processingOwner', 'processingRevision', 'processingLeaseExpiresAt']) delete restored[field as keyof typeof restored];
       // Queue and DLQ rows are leaves by contract; there are no descendants to restore.
       tx.set(child.ref, restored); tx.delete(child.dead.ref);

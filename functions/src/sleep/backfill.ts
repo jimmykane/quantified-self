@@ -1,5 +1,5 @@
 import { FieldValue } from 'firebase-admin/firestore';
-import { type HistoryExecution, assertHistoryReservation } from '../connection-history/execution';
+import { HistoryUnavailableError, type HistoryExecution, assertHistoryReservation } from '../connection-history/execution';
 import type { HistoryResource } from '../../../shared/connection-history';
 import * as admin from 'firebase-admin';
 import * as logger from 'firebase-functions/logger';
@@ -78,7 +78,7 @@ interface CorosSleepBackfillToken {
     providerUserId: string;
 }
 
-type GarminSleepBackfillRequestResult = 'requested' | 'skipped' | 'aborted';
+type GarminSleepBackfillRequestResult = 'requested' | 'already-requested' | 'skipped' | 'aborted';
 
 interface GarminSleepBackfillRequestContext {
     providerUserId: string;
@@ -236,6 +236,7 @@ async function getGarminSleepBackfillToken(userID: string, execution?: HistoryEx
         throw new HttpsError('failed-precondition', 'Connected Garmin token is incomplete for sleep backfill.');
     }
     if (lastTokenReadError) {
+        if (execution) throw lastTokenReadError;
         throw new HttpsError('internal', 'Could not read connected Garmin token for sleep backfill.');
     }
     if (bestMissingPermissions) {
@@ -542,7 +543,7 @@ async function requestGarminSleepBackfillRangeWithRecoveries(
         } catch (error) {
             if (isGarminSleepBackfillAlreadyRequestedError(error)) {
                 logger.warn(`[SleepBackfill] Garmin sleep backfill window was already requested: ${new Date(requestStartMs).toISOString()} - ${new Date(endMs).toISOString()}`);
-                return 'skipped';
+                return execution ? 'already-requested' : 'skipped';
             }
 
             if (!isGarminSleepBackfillMinStartError(error)) {
@@ -601,6 +602,8 @@ async function requestGarminSleepBackfillRange(
     endMs: number,
 ): Promise<void> {
     await requestPromise.get({
+        timeout: 30_000,
+        maxResponseBytes: 1024 * 1024,
         headers: {
             Authorization: `Bearer ${token.accessToken}`,
         },
@@ -843,6 +846,8 @@ export async function queueCorosSleepHealthHistory(userID: string, options: Slee
             queued += 1;
         }
     } catch (error) {
+        // Durable imports retain their reservation and provider retry/auth details.
+        if (options.execution) throw error;
         const message = error instanceof Error ? error.message : `${error}`;
         logger.error(`[SleepBackfill] Failed after queueing ${queued} COROS Sleep and Health windows for ${userID}`, error);
         await updateHistorySleepState(options.execution, userID, SLEEP_PROVIDERS.COROSAPI, {
@@ -949,9 +954,12 @@ export async function queueGarminSleepHealthHistory(userID: string, options: Sle
                 abortedForDeletion = true;
                 break;
             }
-            if (requestResult === 'requested') {
+            if (requestResult === 'requested' || requestResult === 'already-requested') {
                 requested += 1;
             }
+        }
+        if (options.execution && options.resources?.includes('sleep') && !includeHealth && requested === 0 && !abortedForDeletion) {
+            throw new HistoryUnavailableError('Garmin does not provide Sleep history for this date range.');
         }
         if (!abortedForDeletion) {
             completedStartMs = Math.max(startMs, requestContext.providerMinStartMs || startMs);
@@ -1001,6 +1009,8 @@ export async function queueGarminSleepHealthHistory(userID: string, options: Sle
             });
         }
     } catch (error) {
+        // Durable imports retain their reservation and provider retry/auth details.
+        if (options.execution) throw error;
         const message = error instanceof Error ? error.message : `${error}`;
         logger.error(`[SleepBackfill] Failed after requesting ${requested} Garmin sleep windows for ${userID}`, error);
         await updateHistorySleepState(options.execution, userID, SLEEP_PROVIDERS.GarminAPI, {

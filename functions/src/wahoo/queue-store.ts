@@ -1,3 +1,5 @@
+import { randomUUID } from 'node:crypto';
+import { replacesSupersededHistoryWork } from '../connection-history/queue-replacement';
 import * as admin from 'firebase-admin';
 import { recordImportCommit, recordImportCompletion } from '../queue/import-monitoring';
 import * as logger from 'firebase-functions/logger';
@@ -36,10 +38,12 @@ function revisionTime(value: unknown): number {
 
 function hasSameRevision(
   current: Partial<WahooAPIWorkoutQueueItemInterface>,
-  queueItem: Pick<WahooAPIWorkoutQueueItemInterface, 'workoutSummaryID' | 'summaryUpdatedAt'>,
+  queueItem: Pick<WahooAPIWorkoutQueueItemInterface, 'workoutSummaryID' | 'summaryUpdatedAt' | 'connectionHistoryRunId' | 'queueRevision'>,
 ): boolean {
   return current.workoutSummaryID === queueItem.workoutSummaryID
-    && current.summaryUpdatedAt === queueItem.summaryUpdatedAt;
+    && current.summaryUpdatedAt === queueItem.summaryUpdatedAt
+    && current.connectionHistoryRunId === queueItem.connectionHistoryRunId
+    && current.queueRevision === queueItem.queueRevision;
 }
 
 function isNewerRevision(
@@ -146,6 +150,7 @@ export async function upsertWahooWorkoutQueueItem(
   const db = admin.firestore();
   const ref = db.collection(WAHOO_API_WORKOUT_QUEUE_COLLECTION_NAME).doc(input.id);
   const now = Date.now();
+  const historyRevision = input.connectionHistoryRunId ? { queueRevision: input.queueRevision || randomUUID() } : {};
   const result = await db.runTransaction(async (transaction) => {
     let deletionGuard;
     try {
@@ -160,7 +165,7 @@ export async function upsertWahooWorkoutQueueItem(
 
     const existingSnapshot = await transaction.get(ref);
     const existing = existingSnapshot.exists ? existingSnapshot.data() as Partial<WahooAPIWorkoutQueueItemInterface> : null;
-    if (existing && !isNewerRevision(existing, input)) {
+    if (existing && !isNewerRevision(existing, input) && !replacesSupersededHistoryWork(existing, input)) {
       if ((existing as Record<string, unknown>).processed !== true) {
         const refreshed: Partial<WahooAPIWorkoutQueueItemInterface> = {};
         if (existing.FITFileURI !== input.FITFileURI) refreshed.FITFileURI = input.FITFileURI;
@@ -177,6 +182,7 @@ export async function upsertWahooWorkoutQueueItem(
     // revision becomes dispatchable.
     transaction.set(ref, {
       ...input,
+      ...historyRevision,
       dateCreated: now,
       processed: false,
       retryCount: 0,
@@ -192,6 +198,7 @@ export async function upsertWahooWorkoutQueueItem(
 
   const queueItemForDispatch = {
     ...input,
+    ...historyRevision,
     ref,
     dateCreated: result.dateCreated,
     processed: false,

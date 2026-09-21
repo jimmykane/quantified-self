@@ -3,7 +3,7 @@ vi.unmock('@sports-alliance/sports-lib');
 const mocks = vi.hoisted(() => ({ activity: vi.fn(), garminActivity: vi.fn(), wahoo: vi.fn(), suunto: vi.fn(), coros: vi.fn(), garmin: vi.fn(),
   healthEnabled: vi.fn(), sleepEnabled: vi.fn(), before: vi.fn(), meta: {} as Record<string, unknown> }));
 vi.mock('../history', () => ({ addHistoryToQueue: mocks.activity }));
-vi.mock('../garmin/backfill', () => ({ processGarminBackfill: mocks.garminActivity }));
+vi.mock('../garmin/backfill', () => ({ processGarminBackfill: mocks.garminActivity, GarminHistoryRangeUnavailableError: class GarminHistoryRangeUnavailableError extends Error {} }));
 vi.mock('../wahoo/history-to-queue', () => ({ importWahooHistory: mocks.wahoo }));
 vi.mock('../sleep/backfill', () => ({ queueSuuntoSleepHealthHistory: mocks.suunto, queueCorosSleepHealthHistory: mocks.coros, queueGarminSleepHealthHistory: mocks.garmin }));
 vi.mock('../garmin/health-flags', () => ({ isGarminHealthSyncEnabled: mocks.healthEnabled }));
@@ -12,10 +12,11 @@ vi.mock('../sleep/provider-flags', () => ({ isSleepProviderEnabled: mocks.sleepE
 vi.mock('./execution', () => ({ assertHistoryConnectionCurrent: vi.fn(), HistoryWindowTooLargeError: class HistoryWindowTooLargeError extends Error {} }));
 vi.mock('firebase-admin', () => ({ firestore: () => ({ doc: () => ({ get: async () => ({ data: () => mocks.meta }) }),
   runTransaction: async (work: any) => work({ get: async () => ({ data: () => mocks.meta }), set: vi.fn() }) }) }));
+import { GarminHistoryRangeUnavailableError } from '../garmin/backfill';
 import { ServiceNames } from '@sports-alliance/sports-lib';
-import { historyCapabilities } from '../../../shared/connection-history';
+import { CONNECTION_HISTORY_CAPABILITIES, historyCapabilities, type HistoryCapability } from '../../../shared/connection-history';
 import { createHistoryRun } from './model';
-import { executeHistoryOperation, HISTORY_ADAPTER_VERSIONS } from './adapters';
+import { executeHistoryOperation, HISTORY_ADAPTERS, historyAdmissionQueue } from './adapters';
 import type { HistoryExecution } from './execution';
 const now = Date.parse('2026-03-01T13:00:00+02:00');
 function run(service: ServiceNames) { return createHistoryRun('owner', service, { requested: true, flowGeneration: 'flow', providerUserId: 'selected-account', tokenPath: 'private/exact/token', rootPath: 'private/root', credentialGeneration: 'credential' }, 'connection', now); }
@@ -26,9 +27,25 @@ beforeEach(() => { vi.clearAllMocks(); mocks.meta = {}; mocks.healthEnabled.mock
 describe('shared history adapter contracts', () => {
   it('requires explicit support (or an empty unsupported declaration) for every service and version', () => {
     for (const service of Object.values(ServiceNames)) {
-      expect(HISTORY_ADAPTER_VERSIONS[service]).toBeDefined();
-      for (const capability of historyCapabilities(service)) expect(HISTORY_ADAPTER_VERSIONS[service][capability.id]).toContain(capability.version);
+      expect(HISTORY_ADAPTERS[service]).toBeDefined();
+      for (const capability of historyCapabilities(service)) expect(HISTORY_ADAPTERS[service][capability.id][capability.version].execute).toBeTypeOf('function');
     }
+  });
+  it('executes a newly registered capability and its queue without changing coordinator or OAuth routing', async () => {
+    const service = ServiceNames.WahooAPI;
+    const previousRun = run(service);
+    const capabilities = CONNECTION_HISTORY_CAPABILITIES[service] as unknown as HistoryCapability[];
+    const execute = vi.fn().mockResolvedValue({ count: 3, nextStartMs: now + 1000, nextPage: 1 });
+    capabilities.push({ id: 'fixture', version: 1, resources: ['activities'], cooldownGroup: 'activities', completion: 'queued' });
+    HISTORY_ADAPTERS[service].fixture = { 1: { execute, downstream: 'activities' } };
+    try {
+      const futureRun = run(service); const step = futureRun.steps[1];
+      expect(previousRun.steps).toHaveLength(1);
+      expect(historyAdmissionQueue(futureRun, step)).toEqual(historyAdmissionQueue(futureRun, futureRun.steps[0]));
+      expect(await executeHistoryOperation(futureRun, step, execution)).toMatchObject({ count: 3 });
+      expect(execute).toHaveBeenCalledWith(futureRun, step, execution);
+      expect(mocks.wahoo).not.toHaveBeenCalled();
+    } finally { capabilities.pop(); delete HISTORY_ADAPTERS[service].fixture; }
   });
   it.each([ServiceNames.SuuntoApp, ServiceNames.COROSAPI])('reuses the canonical activity operation with the exact account and original UTC range for %s', async service => {
     const job = run(service); await executeHistoryOperation(job, job.steps[0], execution);
@@ -38,6 +55,11 @@ describe('shared history adapter contracts', () => {
   it('reuses Garmin submission without claiming webhook delivery', async () => {
     const job = run(ServiceNames.GarminAPI); await executeHistoryOperation(job, job.steps[0], execution);
     expect(mocks.garminActivity).toHaveBeenCalledWith('owner', new Date(job.startMs), new Date(job.endMs), execution); expect(job.steps[0].capability.completion).toBe('requested');
+  });
+  it('skips a provider-declared unavailable Garmin range without retrying it', async () => {
+    const job = run(ServiceNames.GarminAPI);
+    mocks.garminActivity.mockRejectedValue(new GarminHistoryRangeUnavailableError());
+    await expect(executeHistoryOperation(job, job.steps[0], execution)).rejects.toMatchObject({ name: 'HistorySkippedError' });
   });
   it('resumes Wahoo one page at a time with cumulative counts and a fixed range', async () => {
     const job = run(ServiceNames.WahooAPI); job.steps[0].page = 3; job.steps[0].count = 100; mocks.wahoo.mockResolvedValue({ successCount: 50, nextPage: 4 });
