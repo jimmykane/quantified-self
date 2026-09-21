@@ -29,6 +29,7 @@ import {
     ConfirmationDialogData,
 } from '../../confirmation-dialog/confirmation-dialog.component';
 import { validateSportsLibReparseTargetUid } from '../../../../../shared/admin-queue-stats';
+import { getDateTimeFormatter } from '../../../helpers/date-time-format.helper';
 
 export type AdminQueueStatsView = 'all' | 'workout' | 'activity-sync' | 'route-delivery-sync' | 'route-sync' | 'sleep-sync' | 'reparse' | 'route-reparse' | 'derived';
 
@@ -778,24 +779,25 @@ export class AdminQueueStatsComponent implements OnInit, OnChanges, OnDestroy, A
         if (!value) {
             return 'N/A';
         }
+        const formatter = getDateTimeFormatter(undefined, { dateStyle: 'medium', timeStyle: 'short' });
         if (typeof value === 'number' && Number.isFinite(value)) {
             const parsedFromEpoch = new Date(value);
             if (!Number.isNaN(parsedFromEpoch.getTime())) {
-                return parsedFromEpoch.toLocaleString();
+                return formatter.format(parsedFromEpoch);
             }
         }
         if (typeof (value as { toDate?: unknown }).toDate === 'function') {
             const tsDate = (value as { toDate: () => Date }).toDate();
-            return tsDate.toLocaleString();
+            return formatter.format(tsDate);
         }
         if (typeof (value as { toMillis?: unknown }).toMillis === 'function') {
             const tsMillis = (value as { toMillis: () => number }).toMillis();
             if (!Number.isNaN(tsMillis)) {
-                return new Date(tsMillis).toLocaleString();
+                return formatter.format(new Date(tsMillis));
             }
         }
         if (value instanceof Date) {
-            return value.toLocaleString();
+            return formatter.format(value);
         }
         if (typeof value === 'object' && value !== null) {
             const obj = value as Record<string, unknown>;
@@ -803,7 +805,7 @@ export class AdminQueueStatsComponent implements OnInit, OnChanges, OnDestroy, A
             if (rawSeconds !== undefined && rawSeconds !== null) {
                 const tsSeconds = Number(rawSeconds);
                 if (!Number.isNaN(tsSeconds)) {
-                    return new Date(tsSeconds * 1000).toLocaleString();
+                    return formatter.format(new Date(tsSeconds * 1000));
                 }
             }
         }
@@ -811,6 +813,6 @@ export class AdminQueueStatsComponent implements OnInit, OnChanges, OnDestroy, A
         if (Number.isNaN(date.getTime())) {
             return `${value}`;
         }
-        return date.toLocaleString();
+        return formatter.format(date);
     }
 }

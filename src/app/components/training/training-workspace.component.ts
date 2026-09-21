@@ -28,6 +28,8 @@ import {
   resolveActivityTypeMaterialIcon,
 } from '../../helpers/activity-type-presentation.helper';
 import { resolveDashboardChartInfoTooltip } from '../../helpers/dashboard-chart-info.helper';
+import { getDateTimeFormatter } from '../../helpers/date-time-format.helper';
+import { getNumberFormatter } from '../../helpers/number-format.helper';
 import {
   DASHBOARD_FORM_CHART_TYPE,
   DASHBOARD_FRESHNESS_FORECAST_CHART_TYPE,
@@ -606,7 +608,7 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
       return '--';
     }
     const prefix = signed && value > 0 ? '+' : '';
-    return `${prefix}${new Intl.NumberFormat(undefined, {
+    return `${prefix}${getNumberFormatter(undefined, {
       maximumFractionDigits: fractionDigits,
       minimumFractionDigits: 0,
     }).format(value)}`;
@@ -1720,7 +1722,7 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
   }
 
   private formatTrainingUtcDate(dayMs: number): string {
-    const formatter = new Intl.DateTimeFormat(undefined, {
+    const formatter = getDateTimeFormatter(undefined, {
       month: 'short',
       day: 'numeric',
       year: 'numeric',
@@ -1738,9 +1740,9 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
       timeZone: 'UTC',
     };
     try {
-      return new Intl.DateTimeFormat(this.locale || undefined, options).format(new Date(dayMs));
+      return getDateTimeFormatter(this.locale || undefined, options).format(new Date(dayMs));
     } catch {
-      return new Intl.DateTimeFormat(undefined, options).format(new Date(dayMs));
+      return getDateTimeFormatter(undefined, options).format(new Date(dayMs));
     }
   }
 

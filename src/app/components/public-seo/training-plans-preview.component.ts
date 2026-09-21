@@ -5,6 +5,7 @@ import { formatManualWorkoutStructure } from '../../helpers/planned-workout-edit
 import { trainingPlanAppearance } from '../../helpers/training-plan-appearance.helper';
 import { resolveActivityTypeMaterialIcon } from '../../helpers/activity-type-presentation.helper';
 import { PlanScheduleCalendarComponent } from '../plans/plan-schedule-calendar.component';
+import { getDateTimeFormatter } from '../../helpers/date-time-format.helper';
 import {
   TRAINING_PLANS_PREVIEW_PLAN,
   TRAINING_PLANS_PREVIEW_TODAY,
@@ -62,7 +63,7 @@ export class TrainingPlansPreviewComponent {
 
   private formatDate(localDate: string, options: Intl.DateTimeFormatOptions): string {
     const [year, month, day] = localDate.split('-').map(Number);
-    return new Intl.DateTimeFormat(this.locale, options).format(new Date(year, month - 1, day));
+    return getDateTimeFormatter(this.locale, options).format(new Date(year, month - 1, day));
   }
 
   private formatSport(sport: string): string {

@@ -32,6 +32,8 @@ import type {
 } from '../../helpers/training-power-systems.helper';
 import { EChartsLoaderService } from '../../services/echarts-loader.service';
 import { LoggerService } from '../../services/logger.service';
+import { getDateTimeFormatter } from '../../helpers/date-time-format.helper';
+import { getNumberFormatter } from '../../helpers/number-format.helper';
 
 type ChartOption = Parameters<EChartsType['setOption']>[0];
 
@@ -142,7 +144,7 @@ export class TrainingPowerSystemsTrendChartComponent implements AfterViewInit, O
     );
     const isMobileTooltipViewport = isEChartsMobileTooltipViewport();
     const pointsByTime = new Map(trend.points.map(point => [point.dayMs, point]));
-    const dateFormatter = new Intl.DateTimeFormat(undefined, {
+    const dateFormatter = getDateTimeFormatter(undefined, {
       month: 'short',
       day: 'numeric',
       year: 'numeric',
@@ -235,13 +237,13 @@ function resolvePointAtIndex(
 }
 
 function formatTrendValue(value: number, unit: TrainingPowerSystemsTrendViewModel['unit']): string {
-  return new Intl.NumberFormat(undefined, {
+  return getNumberFormatter(undefined, {
     maximumFractionDigits: unit === 'kJ' ? 1 : 0,
   }).format(value);
 }
 
 function formatTrendDate(dayMs: number): string {
-  return new Intl.DateTimeFormat(undefined, {
+  return getDateTimeFormatter(undefined, {
     month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC',
   }).format(new Date(dayMs));
 }

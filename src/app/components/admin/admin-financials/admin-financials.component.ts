@@ -5,6 +5,7 @@ import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatButtonModule } from '@angular/material/button';
 import { MatCardModule } from '@angular/material/card';
 import { FinancialStats } from '../../../services/admin.service';
+import { getNumberFormatter } from '../../../helpers/number-format.helper';
 
 @Component({
     selector: 'app-admin-financials',
@@ -24,7 +25,7 @@ export class AdminFinancialsComponent {
     @Input() loading = false;
 
     formatCurrency(amountCents: number, currency: string): string {
-        return new Intl.NumberFormat('en-US', {
+        return getNumberFormatter(undefined, {
             style: 'currency',
             currency: currency.toUpperCase()
         }).format(amountCents / 100);

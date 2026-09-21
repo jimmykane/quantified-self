@@ -1,3 +1,5 @@
+import { getNumberFormatter } from './number-format.helper';
+
 export interface TrainingStateSignalInput {
   form: number | null;
   rampRate: number | null;
@@ -34,7 +36,7 @@ function formatStateInput(value: number | null, maximumFractionDigits: number, s
     return 'unavailable';
   }
   const prefix = signed && value > 0 ? '+' : '';
-  return `${prefix}${new Intl.NumberFormat(undefined, { maximumFractionDigits }).format(value)}`;
+  return `${prefix}${getNumberFormatter(undefined, { maximumFractionDigits }).format(value)}`;
 }
 
 export function buildTrainingStateInfo(input: TrainingStateSignalInput): TrainingStateInfo {

@@ -10,6 +10,7 @@ import { getBrowserLocale } from '../shared/adapters/date-locale.config';
 import { formatUnitAwareDataValue } from '@shared/unit-aware-display';
 import { normalizeEventRange } from './event-chart-range.helper';
 import type { EventChartRange } from './event-chart-range.helper';
+import { getDateTimeFormatter } from './date-time-format.helper';
 
 export { normalizeEventRange } from './event-chart-range.helper';
 export type { EventChartRange } from './event-chart-range.helper';
@@ -88,19 +89,19 @@ export function formatEventXAxisValue(value: number, axisType: XAxisTypes, optio
       }
       const includeDate = options?.includeDateForTime !== false;
       if (includeDate) {
-        return date.toLocaleString(locale, {
+        return getDateTimeFormatter(locale, {
           hour: '2-digit',
           minute: '2-digit',
           second: '2-digit',
           day: '2-digit',
           month: 'short'
-        });
+        }).format(date);
       }
-      return date.toLocaleTimeString(locale, {
+      return getDateTimeFormatter(locale, {
         hour: '2-digit',
         minute: '2-digit',
         second: '2-digit',
-      });
+      }).format(date);
     }
     case XAxisTypes.Duration:
       return formatDurationSeconds(value);

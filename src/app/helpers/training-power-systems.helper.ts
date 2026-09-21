@@ -19,6 +19,7 @@ import {
   type DerivedTrainingPowerSystemsSnapshot,
   type DerivedTrainingPowerSystemsStatus,
 } from '@shared/derived-metrics';
+import { getNumberFormatter } from './number-format.helper';
 import {
   createTrainingSportRecord,
   hasTrainingSportCapability,
@@ -691,7 +692,7 @@ export function resolveTrainingPowerSystemsMetricPayload(
 }
 
 function formatNumber(value: number, fractionDigits = 0): string {
-  return new Intl.NumberFormat(undefined, {
+  return getNumberFormatter(undefined, {
     maximumFractionDigits: fractionDigits,
     minimumFractionDigits: fractionDigits,
   }).format(value);

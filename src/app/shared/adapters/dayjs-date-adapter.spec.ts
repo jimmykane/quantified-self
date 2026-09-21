@@ -97,6 +97,16 @@ describe('DayjsDateAdapter locale normalization', () => {
         expect(formatted).toBe('12/25/2023');
     });
 
+    it('should use international English for an English locale without a Day.js bundle', () => {
+        TestBed.resetTestingModule();
+        TestBed.configureTestingModule({
+            providers: [DayjsDateAdapter, { provide: MAT_DATE_LOCALE, useValue: 'en-GR' }]
+        });
+        const adapter = TestBed.inject(DayjsDateAdapter);
+
+        expect(adapter.format(dayjs('2023-12-25'), 'L')).toBe('25/12/2023');
+    });
+
     it('should handle fr-FR locale', () => {
         TestBed.resetTestingModule();
         TestBed.configureTestingModule({
@@ -110,4 +120,3 @@ describe('DayjsDateAdapter locale normalization', () => {
         expect(formatted).toBe('25/12/2023');
     });
 });
-

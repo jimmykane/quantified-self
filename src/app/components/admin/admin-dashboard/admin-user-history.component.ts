@@ -33,6 +33,8 @@ import type {
 import { buildAdminHistoryAxisBounds, type AdminHistoryScale } from '../../../helpers/admin-history-axis.helper';
 import { adminHistoryMetrics, type HistoryChartKey } from '../../../helpers/admin-history-series.helper';
 import { adminHistoryPercentage, formatAdminHistoryPercentage, formatAdminHistoryTooltipValue, type AdminHistoryDisplayMode, type AdminHistoryPlanBasis } from '../../../helpers/admin-history-percentage.helper';
+import { getNumberFormatter } from '../../../helpers/number-format.helper';
+import { getDateTimeFormatter } from '../../../helpers/date-time-format.helper';
 import { AppHapticsService } from '../../../services/app.haptics.service';
 import { AppThemeService } from '../../../services/app.theme.service';
 import { EChartsLoaderService } from '../../../services/echarts-loader.service';
@@ -480,16 +482,18 @@ export class AdminUserHistoryComponent implements OnDestroy {
     }
 
     private formatCount(value: number): string {
-        return new Intl.NumberFormat('en-US').format(value);
+        return getNumberFormatter().format(value);
     }
 
     private formatAxisDate(value: string): string {
-        const [, month, day] = value.split('-');
-        return month && day ? `${month}/${day}` : value;
+        const timestamp = Date.parse(`${value}T00:00:00.000Z`);
+        return Number.isFinite(timestamp)
+            ? getDateTimeFormatter(undefined, { month: 'short', day: 'numeric', timeZone: 'UTC' }).format(timestamp)
+            : value;
     }
 
     private formatFullDate(value: string): string {
-        return new Intl.DateTimeFormat('en-US', {
+        return getDateTimeFormatter(undefined, {
             dateStyle: 'medium',
             timeZone: 'UTC',
         }).format(new Date(`${value}T00:00:00.000Z`));

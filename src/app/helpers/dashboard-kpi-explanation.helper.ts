@@ -42,6 +42,7 @@ import type {
   DashboardAerobicDurabilityContext,
 } from './dashboard-training-insights.helper';
 import { getBrowserLocale } from '../shared/adapters/date-locale.config';
+import { getDateTimeFormatter } from './date-time-format.helper';
 
 export interface DashboardKpiExplanationRow {
   label: string;
@@ -419,12 +420,12 @@ function formatBaselineWeeks(value: unknown): string {
 }
 
 function formatDay(timestamp: number, locale: string): string {
-  return new Date(timestamp).toLocaleDateString(locale, {
+  return getDateTimeFormatter(locale, {
     day: 'numeric',
     month: 'short',
     year: 'numeric',
     timeZone: 'UTC',
-  });
+  }).format(new Date(timestamp));
 }
 
 function maxFiniteNumber(values: ReadonlyArray<unknown>): number | null {
