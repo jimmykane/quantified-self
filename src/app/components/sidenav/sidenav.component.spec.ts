@@ -335,7 +335,7 @@ describe('SideNavComponent', () => {
         expect(plansItem.parentElement?.classList.contains('sidenav-subitem-guide-active')).toBe(false);
     });
 
-    it('shows Plans beneath the direct Training link for the staged user and closes on selection', () => {
+    it('shows Plans as Beta beneath the direct Training link and closes on selection', () => {
         mockUserService.user = vi.fn().mockReturnValue({
             uid: TRAINING_PLANNING_NAVIGATION_ALLOWED_UID,
             displayName: 'Athlete',
@@ -349,6 +349,7 @@ describe('SideNavComponent', () => {
 
         expect(plansItem).toBeTruthy();
         expect(plansItem?.nativeElement.getAttribute('routerlink')).toBe('/training/plans');
+        expect(plansItem?.nativeElement.querySelector('.sidenav-status-label')?.textContent.trim()).toBe('Beta');
         const trainingGroup = fixture.nativeElement.querySelector('[role="group"][aria-label="Training"]');
         const guide = plansItem?.nativeElement.parentElement;
         expect(guide?.classList.contains('sidenav-subitem-guide')).toBe(true);
@@ -373,6 +374,19 @@ describe('SideNavComponent', () => {
             .find(item => item.nativeElement.textContent.includes('Plans'));
 
         expect(plansItem).toBeTruthy();
+        expect(plansItem?.nativeElement.querySelector('.sidenav-status-label')?.textContent.trim()).toBe('Beta');
+    });
+
+    it('keeps the nested guide rail as the only Plans active indicator', () => {
+        const styles = readFileSync(resolve(process.cwd(), 'src/app/components/sidenav/sidenav.component.scss'), 'utf8');
+        const genericDarkActiveRule = styles.indexOf(':host-context(.dark-theme) .active');
+        const nestedActiveRule = styles.indexOf('mat-list-item.sidenav-subitem.active');
+        const genericDarkActiveBlock = styles.slice(genericDarkActiveRule, styles.indexOf('}', genericDarkActiveRule));
+
+        expect(nestedActiveRule).toBeGreaterThan(genericDarkActiveRule);
+        expect(genericDarkActiveBlock).not.toContain('border-left');
+        expect(styles.slice(nestedActiveRule, styles.indexOf('}', nestedActiveRule)))
+            .toContain('border-left: 0 !important');
     });
 
     it('opens the profile section when the signed-in profile shortcut is selected', () => {

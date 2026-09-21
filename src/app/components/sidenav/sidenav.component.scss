@@ -227,15 +227,21 @@ mat-list-item.sidenav-subitem {
   padding-inline-start: 0;
 }
 
-mat-list-item.sidenav-subitem.active {
-  border-inline-start: 0 !important;
-}
-
 mat-list-item.sidenav-subitem mat-icon {
   width: 20px;
   height: 20px;
   margin-inline: 4px 12px;
   font-size: 20px;
+}
+
+.sidenav-status-label {
+  margin-inline-end: 16px;
+  color: var(--mat-sys-primary);
+  font-size: 0.625rem;
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
 }
 
 :host ::ng-deep mat-list-item:not(.theme-toggle-item) .mat-mdc-list-item-unscoped-content {
@@ -272,13 +278,19 @@ mat-list-item.active:hover {
   background: linear-gradient(90deg,
       color-mix(in srgb, var(--mat-sys-primary) 15%, transparent),
       color-mix(in srgb, var(--mat-sys-primary) 5%, transparent)) !important;
-  border-left: 3px solid var(--mat-sys-primary) !important;
 }
 
 :host-context(.dark-theme) mat-list-item.active:hover {
   background: linear-gradient(90deg,
       color-mix(in srgb, var(--mat-sys-primary) 18%, transparent),
       color-mix(in srgb, var(--mat-sys-primary) 8%, transparent)) !important;
+}
+
+// The guide rail is the nested route's active indicator. Keep this after the
+// generic light/dark active rules so a second inset border cannot win the cascade.
+mat-list-item.sidenav-subitem.active {
+  border-left: 0 !important;
+  border-inline-start: 0 !important;
 }
 
 /* Icon Styling */

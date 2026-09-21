@@ -556,7 +556,8 @@ return entry when available and otherwise replaces a direct deep link with its s
 Route changes may replace a draft, but live schedule and unit-setting updates do not. A pending save captures the owner
 and editor generation so a response arriving after Back navigation cannot reopen or overwrite the new screen. Training
 Planning is not live yet: `/plans` and the former query-parameter editor shapes are not registered and have no
-compatibility redirects. The sidebar entry sits beneath Training on a compact guide rail.
+compatibility redirects. The sidebar entry sits beneath Training on a compact guide rail and carries a visible **Beta**
+status label.
 
 Training Planning has no UID presentation rollout. Every signed-in owner can open the authenticated `/training/plans`
 routes, use the sidebar entry, and see their planned-workout overlays/actions in Calendar, the dashboard tile and Today
@@ -567,6 +568,7 @@ flags and delivery entitlement enforcement are unchanged. #655 tracks the wider 
 
 MCP impact: none. `training-plans:read` already applied to every consenting owner without a UID or Pro gate, so this
 presentation rollout changes no MCP tool, scope, consent, projection, schema, provider action or registered contract.
+The sidenav Beta label is presentation-only and does not change access, routing, lifecycle semantics or MCP behavior.
 
 ### Provider delivery foundation (#646)
 
