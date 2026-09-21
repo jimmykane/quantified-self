@@ -21,9 +21,15 @@
       <mat-icon>auto_awesome</mat-icon>
       Examples &amp; data access
       @if (preciseActivityLocationsEnabled()) {
-        <span class="assistant-location-status">
+        <span class="assistant-access-status assistant-location-status">
           <mat-icon aria-hidden="true">location_on</mat-icon>
           Precise locations on
+        </span>
+      }
+      @if (trainingAccessStatus(); as trainingStatus) {
+        <span class="assistant-access-status assistant-training-status">
+          <mat-icon aria-hidden="true">event_note</mat-icon>
+          {{ trainingStatus }}
         </span>
       }
     </button>

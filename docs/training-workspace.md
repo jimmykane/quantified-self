@@ -107,6 +107,10 @@ The first-party identity correction and Assistant callable memory floor are impl
 They add no MCP tool, scope, schema, projected field, provider action or consent. The registered public contract and
 bundled plugin remain unchanged.
 
+The built-in Assistant keeps enabled Training access visible after its access sheet closes and groups the read and two
+dependent change permissions as compact rows on desktop and mobile. This is a presentation and failure-copy correction:
+it changes no Training projection, mutation contract, consent meaning, tool registration, schema or MCP wire behavior.
+
 This document is the implementation guide for the authenticated `/training` workspace. It is intended for product
 engineers, data engineers, reviewers, and AI coding agents. Update it whenever the Training product contract, a derived
 metric payload, the sports-lib durability protocol, or the refresh pipeline changes.

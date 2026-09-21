@@ -74,7 +74,7 @@ h1 {
   font-size: 18px;
 }
 
-.assistant-location-status {
+.assistant-access-status {
   display: inline-flex;
   align-items: center;
   gap: 3px;
@@ -84,7 +84,7 @@ h1 {
   line-height: 1.2;
 }
 
-.assistant-location-status mat-icon {
+.assistant-access-status mat-icon {
   width: 14px;
   height: 14px;
   color: currentColor;
@@ -644,11 +644,11 @@ h1 {
 }
 
 @media (max-width: 430px) {
-  .assistant-location-status {
+  .assistant-access-status {
     font-size: 0;
   }
 
-  .assistant-location-status mat-icon {
+  .assistant-access-status mat-icon {
     margin: 0;
   }
 

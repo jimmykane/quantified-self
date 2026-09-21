@@ -6,6 +6,7 @@ import {
 import { ASSISTANT_PROMPT_EXAMPLES } from '@shared/assistant.prompts';
 import type { AssistantLocationAccess } from '@shared/assistant.types';
 import { SharedModule } from '../../modules/shared.module';
+import { CompactRowComponent } from '../shared/compact-row/compact-row.component';
 
 export interface AssistantExploreBottomSheetData {
   timelineNotesEnabled?: boolean;
@@ -26,7 +27,7 @@ export type AssistantExploreBottomSheetResult =
 @Component({
   selector: 'app-assistant-explore-bottom-sheet',
   standalone: true,
-  imports: [SharedModule],
+  imports: [SharedModule, CompactRowComponent],
   templateUrl: './assistant-explore-bottom-sheet.component.html',
   styleUrls: ['./assistant-explore-bottom-sheet.component.scss'],
   changeDetection: ChangeDetectionStrategy.OnPush,

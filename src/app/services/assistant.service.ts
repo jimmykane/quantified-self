@@ -262,7 +262,7 @@ export class AssistantService {
       && !['INTERNAL', 'UNAVAILABLE'].includes(error.code)) {
       return this.getErrorMessage(error);
     }
-    return 'The Assistant conversation could not be updated. Please try again.';
+    return 'The Assistant could not update this chat. Your conversation and data access settings are unchanged. Please try again.';
   }
 
   private mapFunctionError(error: unknown): AssistantError {

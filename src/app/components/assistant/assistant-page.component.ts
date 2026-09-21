@@ -131,6 +131,14 @@ export class AssistantPageComponent implements OnInit, OnDestroy {
   readonly preciseActivityLocationsEnabled = computed(
     () => this.locationAccess() === 'precise_activity',
   );
+  readonly trainingAccessStatus = computed(() => {
+    if (!this.trainingPlansEnabled()) return null;
+    const changeCount = Number(this.trainingPlanChangesEnabled())
+      + Number(this.trainingDeliveryEnabled());
+    return changeCount === 0
+      ? 'Training read on'
+      : `Training read + ${changeCount} change${changeCount === 1 ? '' : 's'}`;
+  });
   readonly pendingUserMessage = signal<AssistantMessage | null>(null);
   readonly quota = signal<AssistantQuotaStatus | null>(null);
   readonly loadingConversation = signal(true);

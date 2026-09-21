@@ -201,7 +201,7 @@ describe('AssistantService', () => {
     expect(service.getConversationUpdateErrorMessage(new AssistantError(
       'INTERNAL',
       'Function crashed.',
-    ))).toBe('The Assistant conversation could not be updated. Please try again.');
+    ))).toBe('The Assistant could not update this chat. Your conversation and data access settings are unchanged. Please try again.');
     expect(service.getConversationUpdateErrorMessage(new AssistantError(
       'APP_CHECK_REQUIRED',
       'App verification failed.',

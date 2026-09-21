@@ -121,6 +121,12 @@ independent and a send failure never removes a newly authored workout. Call/outp
 Source support does not deploy or promote an app. See the
 [MCP planning contract](mcp-server.md#training-plans-and-planned-workouts-690).
 
+The page keeps a compact Training read/change indicator beside **Examples & data access** while Training reads are enabled, so
+closing the access sheet does not hide the current state. The sheet presents Training read, schedule-change and delivery-
+change permissions as compact rows, explains the read dependency before enabling either child permission and keeps every
+toggle keyboard- and screen-reader-labelled. A failed conversation replacement states that the previous conversation and
+access choices remain unchanged.
+
 ## Optional Timeline notes context
 
 **Examples & data access** includes an independent, default-off **Timeline notes** Material toggle. It discloses full

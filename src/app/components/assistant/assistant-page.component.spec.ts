@@ -199,6 +199,7 @@ describe('AssistantPageComponent', () => {
     expect(chat.contains(composer)).toBe(true);
     expect(header.compareDocumentPosition(composer) & Node.DOCUMENT_POSITION_FOLLOWING)
       .toBeTruthy();
+    expect(explore.textContent).not.toContain('Training read');
     const sendButton = fixture.nativeElement.querySelector('button[type="submit"]') as HTMLButtonElement;
     expect(sendButton.textContent).not.toContain('Send');
     expect(sendButton.getAttribute('aria-label')).toBe('Send message');
@@ -1345,6 +1346,19 @@ describe('AssistantPageComponent', () => {
     expect(component.locationAccess()).toBe('coordinate_free');
     expect(component.timelineNotesEnabled()).toBe(false);
     expect(component.trainingPlansEnabled()).toBe(false);
+  });
+
+  it('keeps enabled Training access visible without reopening the access panel', () => {
+    component.trainingPlansEnabled.set(true);
+    fixture.detectChanges();
+
+    const explore = fixture.nativeElement.querySelector('.assistant-explore-trigger') as HTMLElement;
+    expect(explore.textContent).toContain('Training read on');
+    expect(explore.querySelector('.assistant-training-status mat-icon')?.textContent).toContain('event_note');
+
+    component.trainingDeliveryEnabled.set(true);
+    fixture.detectChanges();
+    expect(explore.textContent).toContain('Training read + 1 change');
   });
 
   it('changes Training consent independently, preserving notes, locations, drafts and single-owner haptics', async () => {
