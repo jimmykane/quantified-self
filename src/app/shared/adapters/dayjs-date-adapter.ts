@@ -5,6 +5,7 @@ import dayjs, { Dayjs } from 'dayjs';
 import localeData from 'dayjs/plugin/localeData';
 import localizedFormat from 'dayjs/plugin/localizedFormat';
 import customParseFormat from 'dayjs/plugin/customParseFormat';
+import { getBrowserLocale } from './app-locale';
 
 dayjs.extend(localeData);
 dayjs.extend(localizedFormat);
@@ -25,8 +26,14 @@ function localeRegion(locale: string): string | null {
 /** Adapts Dayjs for the Angular Material Datepicker. */
 @Injectable()
 export class DayjsDateAdapter extends DateAdapter<Dayjs> {
+    private readonly browserFirstDayOfWeek: number;
+
     constructor(@Optional() @Inject(MAT_DATE_LOCALE) private matDateLocale: string) {
         super();
+        this.browserFirstDayOfWeek = dayjs()
+            .locale(this.normalizeLocale(getBrowserLocale()))
+            .localeData()
+            .firstDayOfWeek();
         this.setLocale(matDateLocale || dayjs.locale());
     }
 
@@ -117,7 +124,9 @@ export class DayjsDateAdapter extends DateAdapter<Dayjs> {
     }
 
     getFirstDayOfWeek(): number {
-        return dayjs.localeData().firstDayOfWeek();
+        // Regional formatting owns labels and date shapes, while the existing
+        // browser-derived week layout remains independent of that preference.
+        return this.browserFirstDayOfWeek;
     }
 
     getNumDaysInMonth(date: Dayjs): number {

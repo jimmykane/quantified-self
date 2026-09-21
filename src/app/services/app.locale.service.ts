@@ -70,7 +70,7 @@ export class AppLocaleService {
     const preference = normalizeAppFormatLocalePreference(user.settings?.appSettings?.formatLocale);
     const result = this.cachePreference(preference);
     if (result === 'unchanged') {
-      this.clearReloadGuard(user.uid, preference);
+      this.clearReloadGuard(user.uid);
     } else if (result === 'updated' && this.claimReload(user.uid, preference)) {
       this.reload();
     }
@@ -87,14 +87,17 @@ export class AppLocaleService {
   }
 
   private claimReload(userId: string, preference: AppFormatLocalePreference): boolean {
-    const guardValue = `${userId}:${preference}`;
+    const guardValue = JSON.stringify({ userId, preference });
     try {
       const sessionStorage = this.windowService.windowRef.sessionStorage;
       if (!sessionStorage) {
         this.logger.warn('[AppLocaleService] Regional format cache changed, but a guarded reload is unavailable.');
         return false;
       }
-      if (sessionStorage.getItem(APP_FORMAT_LOCALE_RELOAD_GUARD_KEY) === guardValue) {
+      if (this.reloadGuardBelongsToUser(
+        sessionStorage.getItem(APP_FORMAT_LOCALE_RELOAD_GUARD_KEY),
+        userId,
+      )) {
         this.logger.warn('[AppLocaleService] Prevented a repeated regional format reload.');
         return false;
       }
@@ -110,15 +113,29 @@ export class AppLocaleService {
     }
   }
 
-  private clearReloadGuard(userId: string, preference: AppFormatLocalePreference): void {
-    const guardValue = `${userId}:${preference}`;
+  private clearReloadGuard(userId: string): void {
     try {
       const sessionStorage = this.windowService.windowRef.sessionStorage;
-      if (sessionStorage?.getItem(APP_FORMAT_LOCALE_RELOAD_GUARD_KEY) === guardValue) {
+      if (sessionStorage && this.reloadGuardBelongsToUser(
+        sessionStorage.getItem(APP_FORMAT_LOCALE_RELOAD_GUARD_KEY),
+        userId,
+      )) {
         sessionStorage.removeItem(APP_FORMAT_LOCALE_RELOAD_GUARD_KEY);
       }
     } catch {
       // The preference is already applied. A blocked cleanup must not affect the app.
+    }
+  }
+
+  private reloadGuardBelongsToUser(value: string | null, userId: string): boolean {
+    if (!value) return false;
+
+    try {
+      const parsed = JSON.parse(value) as { userId?: unknown };
+      return parsed?.userId === userId;
+    } catch {
+      // Accept the previous guard representation during a rolling upgrade.
+      return value.startsWith(`${userId}:`);
     }
   }
 }

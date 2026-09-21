@@ -39,6 +39,10 @@ const DEFAULT_LOCALE_BY_LANGUAGE: Record<typeof SUPPORTED_LOCALES[number], Exclu
     el: 'el-GR',
 };
 
+function isBrowserRuntime(): boolean {
+    return typeof globalThis.window !== 'undefined' && typeof globalThis.document !== 'undefined';
+}
+
 export function isAppFormatLocalePreference(value: unknown): value is AppFormatLocalePreference {
     return APP_FORMAT_LOCALE_OPTIONS.some(option => option.value === value);
 }
@@ -89,6 +93,12 @@ function normalizeSupportedLocale(locale: string): string | null {
 }
 
 function browserLocaleCandidates(): string[] {
+    if (!isBrowserRuntime()) {
+        // Recent Node runtimes may expose navigator. Browser globals must both
+        // exist before client preferences are allowed to affect SSR output.
+        return [];
+    }
+
     const browserNavigator = globalThis.navigator;
     if (!browserNavigator) {
         // Server and prerender processes must not leak their host locale into output.
@@ -142,6 +152,8 @@ export function getBrowserLocale(logger?: LocaleWarningLogger): string {
 }
 
 function getBrowserStorage(): LocalePreferenceStorage | null {
+    if (!isBrowserRuntime()) return null;
+
     try {
         return globalThis.localStorage ?? null;
     } catch {

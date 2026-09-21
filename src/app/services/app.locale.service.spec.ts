@@ -65,15 +65,24 @@ describe('AppLocaleService', () => {
     expect(reload).toHaveBeenCalledOnce();
   });
 
-  it('prevents a reload loop if the verified cache is lost before the next hydration', () => {
+  it('prevents a reload loop if one account alternates between stale preferences', () => {
     storage.setItem(APP_FORMAT_LOCALE_STORAGE_KEY, 'en-GB');
 
     expect(service.reconcileAccountPreference(user('el-GR'))).toBe('updated');
-    storage.setItem(APP_FORMAT_LOCALE_STORAGE_KEY, 'en-GB');
-    expect(service.reconcileAccountPreference(user('el-GR'))).toBe('updated');
+    expect(service.reconcileAccountPreference(user('fr-FR'))).toBe('updated');
 
     expect(reload).toHaveBeenCalledOnce();
     expect(logger.warn).toHaveBeenCalledWith('[AppLocaleService] Prevented a repeated regional format reload.');
+  });
+
+  it('allows a later account update after matching hydration clears the reload guard', () => {
+    storage.setItem(APP_FORMAT_LOCALE_STORAGE_KEY, 'en-GB');
+
+    expect(service.reconcileAccountPreference(user('el-GR'))).toBe('updated');
+    expect(service.reconcileAccountPreference(user('el-GR'))).toBe('unchanged');
+    expect(service.reconcileAccountPreference(user('fr-FR'))).toBe('updated');
+
+    expect(reload).toHaveBeenCalledTimes(2);
   });
 
   it('reconciles a different account preference independently', () => {

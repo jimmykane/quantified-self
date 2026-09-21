@@ -14,10 +14,12 @@ import {
 describe('app-locale', () => {
     let originalNavigatorDescriptor: PropertyDescriptor | undefined;
     let originalLocalStorageDescriptor: PropertyDescriptor | undefined;
+    let originalWindowDescriptor: PropertyDescriptor | undefined;
 
     beforeEach(() => {
         originalNavigatorDescriptor = Object.getOwnPropertyDescriptor(globalThis, 'navigator');
         originalLocalStorageDescriptor = Object.getOwnPropertyDescriptor(globalThis, 'localStorage');
+        originalWindowDescriptor = Object.getOwnPropertyDescriptor(globalThis, 'window');
     });
 
     afterEach(() => {
@@ -31,10 +33,15 @@ describe('app-locale', () => {
         } else {
             Reflect.deleteProperty(globalThis, 'localStorage');
         }
+        if (originalWindowDescriptor) {
+            Object.defineProperty(globalThis, 'window', originalWindowDescriptor);
+        } else {
+            Reflect.deleteProperty(globalThis, 'window');
+        }
         vi.restoreAllMocks();
     });
 
-    function setGlobal(name: 'navigator' | 'localStorage', value: unknown): void {
+    function setGlobal(name: 'navigator' | 'localStorage' | 'window', value: unknown): void {
         Object.defineProperty(globalThis, name, { configurable: true, value });
     }
 
@@ -73,6 +80,17 @@ describe('app-locale', () => {
     it('uses the deterministic server fallback for Automatic', () => {
         setGlobal('navigator', undefined);
         setGlobal('localStorage', undefined);
+
+        expect(getAppLocale()).toBe('en-GB');
+    });
+
+    it('ignores browser-like globals when rendering outside a browser runtime', () => {
+        setGlobal('window', undefined);
+        setGlobal('navigator', { language: 'en-US', languages: ['en-US'] });
+        setGlobal('localStorage', {
+            getItem: vi.fn(() => 'fr-FR'),
+            setItem: vi.fn(),
+        });
 
         expect(getAppLocale()).toBe('en-GB');
     });
