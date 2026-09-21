@@ -5,7 +5,8 @@
 This is source implementation, not deployment, provider enablement, registered-client promotion or real-profile plugin
 installation. After a separately approved release, refresh the client catalog and explicitly reauthorize the independent
 `training-plans:read` scope (**Training plans and planned workouts**). Metrics, activities, Timeline notes and provider
-permissions never grant it. Any consenting owner may use it, with no pilot UID or Pro gate; planning UI rollout is unchanged.
+permissions never grant it. Any consenting owner may use it, with no pilot UID or Pro gate; manual planning is available
+to every signed-in account.
 Authored titles/notes may contain sensitive personal information. Legacy omitted selections and refresh exclude this new
 grant. HTTP prechecks, tool registration and data reads enforce it. Revocation cannot erase copies already received.
 
@@ -19,7 +20,7 @@ grant. HTTP prechecks, tool registration and data reads enforce it. Revocation c
 | `get_planned_workout_completion` | Exact stored completion link only; never similarity inference |
 
 References bind owner, connection, entity and creation time. Structural node IDs are public recipe fields, not document
-IDs. No app links are returned while planning UI remains restricted. Lists use document-ID order (not date order), default
+IDs. No app links are returned from these planning projections. Lists use document-ID order (not date order), default
 25/max 100 results, 25-record scan pages and 1,000 scanned records per call. Inclusive windows permit 366 days. Skipped
 workouts are labelled, deleted excluded; historical dates read current authored records, not revisions. Explicit plan/all
 scopes include inactive plans. Cursors bind exact filters/limit, owner, connection and schedule revision; changed schedules

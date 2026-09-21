@@ -1,4 +1,3 @@
-import { TRAINING_PLANNING_UI_ALLOWED_UIDS } from '@shared/training-planning-rollout';
 import { Component, Input, signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { MatBottomSheet } from '@angular/material/bottom-sheet';
@@ -41,8 +40,9 @@ class ActivityRangeTableSectionStubComponent {
 }
 
 describe('CalendarPageComponent', () => {
+  const planningUserUid = 'planning-user';
   const user = {
-    uid: TRAINING_PLANNING_UI_ALLOWED_UIDS[0],
+    uid: planningUserUid,
     settings: {
       unitSettings: { startOfTheWeek: DaysOfTheWeek.Monday },
       summariesSettings: {
@@ -57,7 +57,7 @@ describe('CalendarPageComponent', () => {
   let openBottomSheet: ReturnType<typeof vi.fn>;
   let dismissed: Subject<string | undefined>;
   const note: TimelineNote = { id: 'a'.repeat(64), category: 'travel', title: 'A trip', startDate: '2026-08-04', endDate: '2026-08-05', timeZone: 'UTC', revision: 1, createdAtMs: 1, updatedAtMs: 1 };
-  const notesService = { uid: signal<string | null>(TRAINING_PLANNING_UI_ALLOWED_UIDS[0]), showOnCharts: signal(true), changes$: new Subject<void>(), loadRange: vi.fn(), cachedRange: vi.fn(() => null), invalidate: vi.fn(), isOwner: (uid: string) => notesService.uid() === uid };
+  const notesService = { uid: signal<string | null>(planningUserUid), showOnCharts: signal(true), changes$: new Subject<void>(), loadRange: vi.fn(), cachedRange: vi.fn(() => null), invalidate: vi.fn(), isOwner: (uid: string) => notesService.uid() === uid };
   const haptics = { selection: vi.fn() };
   const dialogs = { open: vi.fn() };
   let watchSchedule: ReturnType<typeof vi.fn>;
@@ -72,7 +72,7 @@ describe('CalendarPageComponent', () => {
     watchEvents = vi.fn().mockReturnValue(of([createEvent()]));
     dismissed = new Subject();
     openBottomSheet = vi.fn().mockReturnValue({ afterDismissed: () => dismissed });
-    notesService.uid.set(TRAINING_PLANNING_UI_ALLOWED_UIDS[0]); notesService.showOnCharts.set(true);
+    notesService.uid.set(planningUserUid); notesService.showOnCharts.set(true);
     notesService.loadRange.mockReset().mockResolvedValue({ notes: [], incomplete: null });
     notesService.invalidate.mockImplementation(() => notesService.changes$.next());
     haptics.selection.mockClear(); dialogs.open.mockClear();
@@ -131,15 +131,15 @@ describe('CalendarPageComponent', () => {
     expect(fixture.nativeElement.textContent).toContain('August 2026');
   });
 
-  it('does not read or expose planning for another account while completed activities remain visible', async () => {
+  it('reads and exposes planning for any signed-in account while completed activities remain visible', async () => {
     const otherUser = { ...user, uid: 'another-user' };
+    watchSchedule.mockReturnValue(of(trainingSchedule()));
     Object.assign(TestBed.inject(AppUserService), { user: signal(otherUser), user$: of(otherUser) });
     const fixture = TestBed.createComponent(CalendarPageComponent);
     fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
-    expect(watchSchedule).not.toHaveBeenCalled();
+    expect(watchSchedule).toHaveBeenCalledWith(otherUser.uid);
     expect(watchEvents).toHaveBeenCalledOnce();
-    expect(fixture.componentInstance.plannedWorkoutsByDate()).toEqual({});
-    expect(fixture.nativeElement.textContent).not.toContain('Planned workouts');
+    expect(fixture.componentInstance.plannedWorkoutsByDate()).not.toEqual({});
     expect(fixture.nativeElement.querySelectorAll('.activity-calendar-day-button')).toHaveLength(42);
   });
 
@@ -296,7 +296,7 @@ describe('CalendarPageComponent', () => {
 
     expect(componentOpen).toHaveBeenCalledWith(expect.any(Function), expect.objectContaining({
       data: expect.objectContaining({
-        userId: TRAINING_PLANNING_UI_ALLOWED_UIDS[0],
+        userId: planningUserUid,
         unitSettings: user.settings.unitSettings,
         summariesSettings: user.settings.summariesSettings,
       }),
@@ -368,14 +368,14 @@ describe('CalendarPageComponent', () => {
     const fixture = TestBed.createComponent(CalendarPageComponent);
     fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
     await vi.waitFor(() => expect(fixture.componentInstance.notesByDate().size).toBe(2));
-    expect(notesService.loadRange).toHaveBeenCalledWith(TRAINING_PLANNING_UI_ALLOWED_UIDS[0], { startDate: '2026-07-27', endDate: '2026-09-06' }, false);
+    expect(notesService.loadRange).toHaveBeenCalledWith(planningUserUid, { startDate: '2026-07-27', endDate: '2026-09-06' }, false);
     const day = fixture.componentInstance.calendarModel().months[0].days.find(day => day.dateKey === note.startDate)!;
     fixture.componentInstance.openDay(day);
     const data = openBottomSheet.mock.calls.at(-1)?.[1].data as CalendarDayDetailsData;
     expect(data.timelineNotes?.()).toEqual([note]);
     expect(day.eventCount).toBe(0);
     dismissed.next(note.id);
-    expect(dialogs.open).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ data: { uid: TRAINING_PLANNING_UI_ALLOWED_UIDS[0], notes: [note] } }));
+    expect(dialogs.open).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ data: { uid: planningUserUid, notes: [note] } }));
     expect(haptics.selection).toHaveBeenCalledOnce();
   });
   it('clears an open sheet on account change and ignores a stale note selection', async () => {

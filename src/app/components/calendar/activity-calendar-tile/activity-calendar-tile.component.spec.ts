@@ -1,4 +1,3 @@
-import { TRAINING_PLANNING_UI_ALLOWED_UIDS } from '@shared/training-planning-rollout';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { TestBed } from '@angular/core/testing';
@@ -19,8 +18,9 @@ import { ActivityCalendarTileComponent } from './activity-calendar-tile.componen
 import { STANDALONE_WORKOUT_COLOR, trainingPlanAppearance } from '../../../helpers/training-plan-appearance.helper';
 
 describe('ActivityCalendarTileComponent', () => {
+  const planningUserUid = 'planning-user';
   const user = {
-    uid: TRAINING_PLANNING_UI_ALLOWED_UIDS[0],
+    uid: planningUserUid,
     settings: { unitSettings: { startOfTheWeek: DaysOfTheWeek.Monday } },
   };
   let watchEvents: ReturnType<typeof vi.fn>;
@@ -69,7 +69,7 @@ describe('ActivityCalendarTileComponent', () => {
     expect(fixture.nativeElement.textContent).toContain('Activity calendar');
   });
 
-  it.each([false, true])('hides planning and stops its reads on account changes (mini calendar: %s)', async showNavigation => {
+  it.each([false, true])('hides planning for a different displayed account (mini calendar: %s)', async showNavigation => {
     const fixture = TestBed.createComponent(ActivityCalendarTileComponent);
     watchSchedule.mockReturnValue(of(scheduleForDate(currentLocalDate(2))));
     fixture.componentRef.setInput('user', { ...user, uid: 'another-user' });
@@ -144,7 +144,7 @@ describe('ActivityCalendarTileComponent', () => {
 
     expect(openBottomSheet).toHaveBeenCalledWith(expect.any(Function), expect.objectContaining({
       data: expect.objectContaining({
-        userId: TRAINING_PLANNING_UI_ALLOWED_UIDS[0],
+        userId: planningUserUid,
         unitSettings: user.settings.unitSettings,
       }),
     }));

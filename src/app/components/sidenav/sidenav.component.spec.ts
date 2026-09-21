@@ -19,9 +19,7 @@ import { AppWhatsNewService } from '../../services/app.whats-new.service';
 import { signal } from '@angular/core';
 import { AppThemes } from '@sports-alliance/sports-lib';
 import { SYSTEM_THEME_PREFERENCE } from '../../models/app-theme-preference.type';
-import { TRAINING_PLANNING_UI_ALLOWED_UIDS } from '@shared/training-planning-rollout';
-
-const TRAINING_PLANNING_NAVIGATION_ALLOWED_UID = TRAINING_PLANNING_UI_ALLOWED_UIDS[0];
+const TRAINING_PLANNING_NAVIGATION_ALLOWED_UID = 'planning-user';
 
 describe('SideNavComponent', () => {
     let component: SideNavComponent;
@@ -273,7 +271,7 @@ describe('SideNavComponent', () => {
         expect(trainingItem?.nativeElement.textContent).not.toContain('Beta');
     });
 
-    it.each(['free', 'basic', 'pro'])('orders signed-in %s navigation as Dashboard, Calendar, Training, Health', stripeRole => {
+    it.each(['free', 'basic', 'pro'])('orders signed-in %s navigation as Dashboard, Calendar, Training, Plans, Health', stripeRole => {
         mockUserService.user = vi.fn().mockReturnValue({
             uid: 'user-1',
             stripeRole,
@@ -290,7 +288,7 @@ describe('SideNavComponent', () => {
         expect(healthItem?.nativeElement.textContent).not.toContain('BETA');
         expect(healthItem?.nativeElement.querySelector('.pro-badge')).toBeNull();
         expect(navigationItems.slice(0, 7).map(item => item.nativeElement.getAttribute('routerlink')))
-            .toEqual(['/dashboard', '/calendar', '/training', '/health', '/routes', '/mytracks', '/tools/compare']);
+            .toEqual(['/dashboard', '/calendar', '/training', '/training/plans', '/health', '/routes', '/mytracks']);
         healthItem!.triggerEventHandler('click', new MouseEvent('click'));
         expect(mockSideNavService.close).toHaveBeenCalledOnce();
         expect(mockHapticsService.selection).toHaveBeenCalledOnce();
@@ -362,7 +360,7 @@ describe('SideNavComponent', () => {
         expect(mockHapticsService.selection).toHaveBeenCalledOnce();
     });
 
-    it('silently hides Plans navigation from signed-in users outside the staged rollout', () => {
+    it('shows Plans navigation for every signed-in user', () => {
         mockUserService.user = vi.fn().mockReturnValue({
             uid: 'another-user',
             displayName: 'Athlete',
@@ -374,7 +372,7 @@ describe('SideNavComponent', () => {
             .queryAll(By.css('mat-list-item'))
             .find(item => item.nativeElement.textContent.includes('Plans'));
 
-        expect(plansItem).toBeUndefined();
+        expect(plansItem).toBeTruthy();
     });
 
     it('opens the profile section when the signed-in profile shortcut is selected', () => {

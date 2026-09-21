@@ -4,7 +4,6 @@ import { TIMELINE_NOTE_ICONS, timelineNoteColor } from '../../../helpers/timelin
 import { MAT_BOTTOM_SHEET_DATA, MatBottomSheetRef } from '@angular/material/bottom-sheet';
 import { Router } from '@angular/router';
 import { AppUserService } from '../../../services/app.user.service';
-import { isTrainingPlanningUIAllowed } from '@shared/training-planning-rollout';
 import type { EventInterface, UserUnitSettingsInterface } from '@sports-alliance/sports-lib';
 import {
   type ActivityCalendarDayViewModel,
@@ -80,8 +79,10 @@ export class CalendarDayDetailsComponent {
   private readonly navigation = inject(CalendarDayDetailsNavigationService);
   readonly data = inject<CalendarDayDetailsData>(MAT_BOTTOM_SHEET_DATA);
   private readonly users = inject(AppUserService);
-  readonly hasTrainingPlanningUIAccess = computed(() => this.users.user()?.uid === this.data.userId
-    && isTrainingPlanningUIAllowed(this.users.user()?.uid));
+  readonly hasTrainingPlanningUIAccess = computed(() => {
+    const viewerUid = this.users.user()?.uid;
+    return !!viewerUid && viewerUid === this.data.userId;
+  });
   private readonly titleFormatter = new Intl.DateTimeFormat(this.data.locale, {
     weekday: 'long',
     month: 'long',

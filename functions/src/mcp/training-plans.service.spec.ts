@@ -35,12 +35,21 @@ function fixture() {
       units: async () => normalizeUserUnitSettings({ distanceUnits: DistanceUnits.Miles }),
     }),
   };
-  const run = (tool: TrainingReadTool, args: unknown = {}, scopes = [TRAINING_PLANS_SCOPE], connectionId = 'connection') =>
-    readTrainingPlans({ tool, arguments: args, uid: 'owner', connectionId, scopes }, reads, codec, 2);
+  const run = (tool: TrainingReadTool, args: unknown = {}, scopes = [TRAINING_PLANS_SCOPE], connectionId = 'connection', uid = 'owner') =>
+    readTrainingPlans({ tool, arguments: args, uid, connectionId, scopes }, reads, codec, 2);
   return { run, reads, codec, collections, change: () => revision++, delete: () => { deleted = true; }, calls: () => calls };
 }
 
 describe('Training plan MCP reads', () => {
+  it('keeps plan reads available to any consenting owner without a frontend rollout identity', async () => {
+    const f = fixture();
+    const result = TRAINING_READ_OUTPUTS.list_training_plans.parse(
+      await f.run('list_training_plans', {}, [TRAINING_PLANS_SCOPE], 'connection', 'ordinary-planning-owner'),
+    );
+
+    expect(result.plans.map(plan => plan.name)).toEqual(['Active', 'Paused', 'Archived']);
+  });
+
   it.each(['delivered', 'unsupported', 'outside_horizon', 'needs_attention', 'connection_repair', 'provider_unavailable', 'completed'])(
     'projects Wahoo %s without private Plan/Workout identities or device claims', async status => {
       const f = fixture(); f.collections.scheduledWorkouts = { w1: workout('p1') };

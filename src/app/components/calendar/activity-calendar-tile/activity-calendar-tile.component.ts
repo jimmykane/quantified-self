@@ -29,7 +29,6 @@ import { SharedModule } from '../../../modules/shared.module';
 import { ActivityCalendarService } from '../../../services/activity-calendar.service';
 import { AppUserService } from '../../../services/app.user.service';
 import { CalendarDayDetailsNavigationService } from '../../../services/calendar-day-details-navigation.service';
-import { isTrainingPlanningUIAllowed } from '@shared/training-planning-rollout';
 import {
   TrainingPlansService,
   selectCalendarVisibleScheduledWorkouts,
@@ -78,8 +77,10 @@ export class ActivityCalendarTileComponent {
   private readonly today = signal(new Date());
 
   readonly user = input<User | null | undefined>(null);
-  readonly hasTrainingPlanningUIAccess = computed(() => this.user()?.uid === this.users.user()?.uid
-    && isTrainingPlanningUIAllowed(this.users.user()?.uid));
+  readonly hasTrainingPlanningUIAccess = computed(() => {
+    const viewerUid = this.users.user()?.uid;
+    return !!viewerUid && this.user()?.uid === viewerUid;
+  });
   /** Keep the workspace signal live even when the month popup is replaced by a day sheet. */
   readonly timelineNotes = input<Signal<TimelineNoteChartContext | null> | null>(null);
   private readonly notesContext = computed(() => {
@@ -111,7 +112,7 @@ export class ActivityCalendarTileComponent {
     { initialValue: { status: 'loading', events: [] } as ActivityCalendarTileState });
   private readonly plansSource = computed(() => {
     const user = this.user();
-    if (!isTrainingPlanningUIAllowed(user?.uid)) return of({ status: 'ready', schedule: null } as ActivityCalendarTilePlansState);
+    if (!user?.uid) return of({ status: 'ready', schedule: null } as ActivityCalendarTilePlansState);
     // A popup's user input is a snapshot. Keep the live viewer fence inside the shared
     // stream so it also cancels a day-sheet listener after Material destroys this tile.
     return this.users.user$.pipe(

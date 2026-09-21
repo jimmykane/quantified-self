@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest';
 import { HELP_ACTIONS, HELP_SECTIONS, HelpSectionId, getHelpSectionsForUser } from './help.content';
-import { TRAINING_PLANNING_UI_ALLOWED_UIDS } from '@shared/training-planning-rollout';
 import { searchHelpSections } from '../helpers/help-search.helper';
 import { CONNECTED_SERVICES_POLICY_SECTION } from './policies.content';
 import { ROUTE_USAGE_LIMITS, USAGE_LIMITS } from '../../../shared/limits';
@@ -15,20 +14,18 @@ import {
 } from './policies.content';
 
 describe('help.content', () => {
-  it.each([undefined, null, '', 'another-user'])('omits pre-release planning from public/searchable help for %s', uid => {
+  it.each([undefined, null, '', 'another-user'])('keeps Planning guidance public and searchable for %s', uid => {
     const sections = getHelpSectionsForUser(uid);
     const copy = JSON.stringify(sections);
-    expect(copy).not.toContain('/training/plans');
-    expect(sections.some(section => section.id === 'training-plans')).toBe(false);
+    expect(sections).toBe(HELP_SECTIONS);
+    expect(copy).toContain('/training/plans');
+    expect(sections.some(section => section.id === 'training-plans')).toBe(true);
     expect(sections.some(section => section.id === 'training-analysis')).toBe(true);
     expect(sections.some(section => section.id === 'plans-and-billing')).toBe(true);
     expect(sections.some(section => section.id === 'activity-calendar')).toBe(true);
     expect(HELP_SECTIONS.some(section => section.id === 'training-plans')).toBe(true);
   });
 
-  it('retains complete planning guidance for the allowlisted account', () => {
-    expect(getHelpSectionsForUser(TRAINING_PLANNING_UI_ALLOWED_UIDS[0])).toBe(HELP_SECTIONS);
-  });
   it('distinguishes Training consent, expiry, disconnect and the private pilot boundary', () => {
     const content = HELP_SECTIONS.find(section => section.id === 'training-plans')!.content;
     expect(content).toContain('Garmin, COROS, Suunto and Wahoo workout sync is restricted to the private rollout, not a public launch');

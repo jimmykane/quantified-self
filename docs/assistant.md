@@ -90,7 +90,7 @@ are included in summaries and can themselves contain user- or provider-assigned 
 ## Optional Training planning context
 
 **Examples & data access** also contains default-off **Training plans**, available to any Assistant user independently of
-the planning UI pilot. It discloses names, dates, complete instructions, authored notes and existing service sync status,
+the authenticated manual-planning workspace. It discloses names, dates, complete instructions, authored notes and existing service sync status,
 including potentially sensitive personal text. Changing any optional permission starts a fresh server-owned generation
 while preserving the other choices. **New chat** resets all optional choices. Missing `trainingPlansEnabled` means false.
 The reset expects the current conversation ID; requests, retries and replay fingerprints bind this boolean. Stale tabs,

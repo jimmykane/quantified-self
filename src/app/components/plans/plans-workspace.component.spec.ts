@@ -1,4 +1,3 @@
-import { TRAINING_PLANNING_UI_ALLOWED_UIDS } from '@shared/training-planning-rollout';
 import { signal } from '@angular/core';
 import { Location } from '@angular/common';
 import { TestBed } from '@angular/core/testing';
@@ -30,7 +29,7 @@ import { resolve, join } from 'node:path';
 import { createRequire } from 'node:module';
 
 describe('PlansWorkspaceComponent', () => {
-  const user = { uid: TRAINING_PLANNING_UI_ALLOWED_UIDS[0], settings: { unitSettings: {} } };
+  const user = { uid: 'planning-user', settings: { unitSettings: {} } };
   let route: {
     snapshot: { paramMap: ParamMap; queryParamMap: ParamMap; data: Data };
     paramMap: Observable<ParamMap>;
@@ -390,7 +389,7 @@ describe('PlansWorkspaceComponent', () => {
       expect.objectContaining({ queryParams: undefined, replaceUrl: undefined }),
     );
     expect(navigate.mock.calls[0]?.[1]?.state).toMatchObject({
-      trainingPlansEditorReturn: { uid: TRAINING_PLANNING_UI_ALLOWED_UIDS[0] },
+      trainingPlansEditorReturn: { uid: user.uid },
     });
   });
 
@@ -427,7 +426,7 @@ describe('PlansWorkspaceComponent', () => {
     const back = vi.spyOn(location, 'back').mockImplementation(() => undefined);
     vi.spyOn(location, 'getState').mockReturnValue({
       trainingPlansEditorReturn: {
-        uid: TRAINING_PLANNING_UI_ALLOWED_UIDS[0],
+        uid: user.uid,
         url: '/training/plans/plan/active-plan?date=2026-09-09',
       },
     });
@@ -1166,12 +1165,12 @@ describe('PlansWorkspaceComponent', () => {
     expect(fixture.componentInstance.historyPanel()?.nextBeforeRevision).toBeNull();
   });
 
-  it('does not render or read planning for a non-allowlisted account', async () => {
+  it('renders and reads planning for any signed-in account', async () => {
     const otherUser = { ...user, uid: 'another-user' };
     TestBed.overrideProvider(AppUserService, { useValue: { user: signal(otherUser), user$: of(otherUser) } });
     const fixture = await renderPlans();
-    expect(watchSchedule).not.toHaveBeenCalled();
-    expect(fixture.nativeElement.querySelector('main')).toBeNull();
+    expect(watchSchedule).toHaveBeenCalledWith(otherUser.uid);
+    expect(fixture.nativeElement.querySelector('main')).toBeTruthy();
     expect(mutate).not.toHaveBeenCalled();
     expect(haptics.selection).not.toHaveBeenCalled();
   });

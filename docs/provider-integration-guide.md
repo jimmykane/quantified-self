@@ -133,11 +133,10 @@ an independent blocked result rather than hiding the reason. Destination keys, c
 digests and attempt journals never enter MCP input or output. Provider delivery remains Pro-gated, and failure does not
 roll back an authored plan/workout mutation in the same confirmed proposal.
 
-Training planning currently has an explicit UID-based **frontend presentation** rollout across its routes, calendar
-actions/overlays, Help and planning-specific connection/deletion instructions. Other accounts retain normal provider
-controls and generic provider-copy retention warnings. This does not authorize transport work, alter disconnect or
-deletion behavior, or enable a provider. See the [Training workspace source of truth](training-workspace.md) for the
-shared gate and account-change behavior.
+Manual training planning is available to every signed-in account across its routes, calendar actions/overlays, Help and
+planning-specific connection/deletion instructions. This does not authorize transport work, alter disconnect or deletion
+behavior, or enable a provider. See the [Training workspace source of truth](training-workspace.md) for account-change
+behavior and the separate delivery boundaries.
 
 The versioned research snapshot lives in `shared/planned-workout-providers.ts`; pure fixture serializers live under
 `functions/src/training-plans/providers/`. Every public provider delivery flag is currently `false`. The separate

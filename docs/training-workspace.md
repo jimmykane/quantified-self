@@ -10,7 +10,8 @@ registered-client promise. Provider certification, deployment, registered-contra
 remain separate. The approval workflow implements the bounded #652 dependency; fallback/manual completion matching
 remains under #651.
 
-Independent `training-plans:read` consent is available without a UID or Pro gate; the planning UI pilot remains unchanged.
+Independent `training-plans:read` consent is available without a UID or Pro gate. Manual planning is available to every
+signed-in account; provider delivery remains separately gated by readiness, connection authority, explicit consent and Pro.
 The Assistant's default-off Training plans choice is conversation-owned, not a UI gate. Current calendar reads default to
 standalone plus active-plan workouts, include skipped, exclude deleted, and allow explicit inactive-plan/all scopes.
 Historical dates still read current records, not history. Calendar dates are not instants or delivery timezones.
@@ -509,20 +510,15 @@ and editor generation so a response arriving after Back navigation cannot reopen
 Planning is not live yet: `/plans` and the former query-parameter editor shapes are not registered and have no
 compatibility redirects. The sidebar entry sits beneath Training on a compact guide rail.
 
-The shared `isTrainingPlanningUIAllowed` rollout in `shared/training-planning-rollout.ts` limits all planning UI to the
-explicitly allowlisted account. Other signed-in users are silently redirected from every `/training/plans` route to
-`/training`; signed-out navigation keeps the existing authentication flow. The workspace also clears/hides its editor
-on account changes. Full Calendar, Activity Calendar tiles and Today mini-calendars omit planning listeners, overlays,
-empty-day planning announcements and day-sheet planning actions for other accounts, while completed activities,
-Timeline notes and selectable dates remain unchanged. Calendar planning checks the live signed-in viewer against the
-displayed owner, not just the popup's user snapshot. An already-open day sheet hides planning and its retained planning
-listener cancels on sign-out/account change, even after Material destroys the originating month popup.
-Help filters planning articles, links and mixed-section text before search and Markdown rendering, including public
-prerendering and account changes. Same-account profile refreshes preserve the rendered guide and its navigation state.
-Planning-specific disconnect/deletion instructions use the same gate; generic
-provider-copy retention warnings and public privacy disclosures remain available. Existing Training analysis is not
-gated. This is a frontend presentation rollout, **not backend authorization**: owner-scoped APIs, Rules, provider
-readiness flags and delivery entitlement enforcement are unchanged. Broader rollout remains tracked by #655.
+Training Planning has no UID presentation rollout. Every signed-in owner can open the authenticated `/training/plans`
+routes, use the sidebar entry, and see their planned-workout overlays/actions in Calendar, the dashboard tile and Today
+mini-calendar. Help documents Planning for everyone. The workspace still clears its editor on account changes, while a
+viewed calendar exposes planned workouts only when its owner matches the live signed-in account. Completed activities,
+Timeline notes and selectable dates remain unchanged. Firebase Rules, callables, owner-scoped reads, provider readiness
+flags and delivery entitlement enforcement are unchanged. #655 tracks the wider rollout, certification and release work.
+
+MCP impact: none. `training-plans:read` already applied to every consenting owner without a UID or Pro gate, so this
+presentation rollout changes no MCP tool, scope, consent, projection, schema, provider action or registered contract.
 
 ### Provider delivery foundation (#646)
 
@@ -659,7 +655,7 @@ same-scope authored edits recompute the summary without reopening its Firestore 
 These are workout-delivery aggregates for all services, including services without a native plan object. A provider that
 does not support workout delivery cannot become synced merely through aggregation. **Synced** confirms the complete
 provider-side workout/schedule delivery reported by QS, not receipt on a watch or other device. The existing readiness,
-UID presentation, Pro, consent, ledger, Rules and provider-adapter boundaries are unchanged; this presentation needs no
+Pro, consent, ledger, Rules and provider-adapter boundaries are unchanged; this presentation needs no
 Functions or index deployment. Verification includes `training-delivery-summary.helper.spec.ts` and
 `training-delivery-button.component.spec.ts` alongside the existing service/workspace/dialog tests.
 The latter also exports synthetic light/dark multi-service mixed-result summaries when `TRAINING_DELIVERY_QA_DIR` is set,
@@ -745,8 +741,8 @@ details; no raised expansion panels. The next automatic check remains visible in
 delivery does not offer a misleading Resume action. A prior plan's suppression cannot hide Stop after a transfer,
 including before the first new status arrives; a prior plan's stopped status cannot offer Resume for the current plan.
 After Resume, current-scope settings take precedence over an older stopped status until reconciliation catches up.
-Account changes clear drafts/results and close the dialog. The planning UI rollout described
-above also hides these entry points from non-allowlisted accounts; it is not a delivery authorization boundary.
+Account changes clear drafts/results and close the dialog. Planning entry points are available to every signed-in owner;
+they are not a delivery authorization boundary.
 Completed activity totals are unchanged.
 Focused provider headings in Plan sync, Workout sync and sync history pair the visible name with the existing
 `app-service-source-icon` destination logo in a compact 64 × 20px box. Multi-provider overviews use the same decorative
@@ -1054,7 +1050,7 @@ Healthy connections use **Manage in Garmin**, not **Reconnect**, for permission 
 for connection recovery; an explicit disconnect is not needed for permission changes and disables other sync routes.
 An unknown snapshot is not a denied grant, and
 the display never authorizes delivery or changes consent. This permission-management UI is available to all connected
-Garmin users; the separate Training UI and backend pilot UID restrictions are unchanged.
+Garmin users; the separate backend pilot UID restrictions are unchanged.
 Start approved provider testing with one explicitly sent future standalone workout, not an opted-in multi-workout plan.
 
 Deployment requires separate explicit approval. Before activation, inspect only the pilot account's existing settings,
@@ -1265,7 +1261,7 @@ never authorizes another replacement workout POST if that accepted ID disappears
 The compact sync details offer **Check Garmin** when supported, without another consent dialog. Last sent, last checked
 and device availability are separate. Unsupported verification reads **Sent · remote checking unavailable**, not failure
 or verified presence. Checking/restoring/deferred/inconclusive states remain concise, with thin global scrollbars,
-surface-free details, keyboard access and sign-out guards. The existing UID restrictions are unchanged.
+surface-free details, keyboard access and sign-out guards. Provider-delivery restrictions are unchanged.
 
 MCP impact: none. `get_training_sync_status` already consumes the sanitized delivery projection, where confirmed missing
 artifacts stop counting as synced and restoration remains an existing non-success delivery outcome. This change adds no

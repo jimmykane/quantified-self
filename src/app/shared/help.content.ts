@@ -1,5 +1,4 @@
 import { environment } from '../../environments/environment';
-import { isTrainingPlanningUIAllowed } from '@shared/training-planning-rollout';
 import { ASSISTANT_REQUEST_LIMITS, ROUTE_USAGE_LIMITS, USAGE_LIMITS } from '../../../shared/limits';
 import {
   POLICIES_AI_AND_PROCESSORS_FRAGMENT,
@@ -295,14 +294,9 @@ export const HELP_ACTIONS: HelpAction[] = [
   },
 ];
 
-/** Filter before search and Markdown rendering; omit pre-release links from public/SSR help. */
-export function getHelpSectionsForUser(uid: string | null | undefined): readonly HelpSection[] {
-  if (isTrainingPlanningUIAllowed(uid)) return HELP_SECTIONS;
-  return HELP_SECTIONS.filter(section => section.id !== 'training-plans').map(section => ({
-    ...section,
-    content: Object.values(TRAINING_PLANNING_HELP_SNIPPETS).reduce((copy, snippet) => copy.replace(snippet, ''), section.content),
-    links: section.links.filter(link => !link.target.startsWith('/training/plans') && link.fragment !== 'training-plans'),
-  }));
+/** Training plans are documented for everyone; the workspace itself remains authenticated. */
+export function getHelpSectionsForUser(_uid: string | null | undefined): readonly HelpSection[] {
+  return HELP_SECTIONS;
 }
 
 export const HELP_SECTIONS: HelpSection[] = [

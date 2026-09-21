@@ -7,7 +7,6 @@ import { AppHapticsService } from '../../services/app.haptics.service';
 import { DeleteAccountDialogComponent } from './delete-account-dialog.component';
 import { signal } from '@angular/core';
 import { AppUserService } from '../../services/app.user.service';
-import { TRAINING_PLANNING_UI_ALLOWED_UIDS } from '@shared/training-planning-rollout';
 
 describe('DeleteAccountDialogComponent', () => {
   let component: DeleteAccountDialogComponent;
@@ -16,7 +15,7 @@ describe('DeleteAccountDialogComponent', () => {
   const viewer = signal<{ uid: string } | null>(null);
 
   beforeEach(() => {
-    viewer.set({ uid: TRAINING_PLANNING_UI_ALLOWED_UIDS[0] });
+    viewer.set({ uid: 'planning-user' });
     close = vi.fn();
     hapticsService = {
       selection: vi.fn(),
@@ -48,11 +47,11 @@ describe('DeleteAccountDialogComponent', () => {
     expect(fixture.nativeElement.textContent).toContain('Use Stop sync before deleting your account');
   });
 
-  it.each([null, { uid: 'another-user' }])('hides planning instructions but preserves provider retention warnings for %s', user => {
+  it('keeps planning instructions visible for a signed-in user outside the former rollout', () => {
     const fixture = TestBed.createComponent(DeleteAccountDialogComponent); fixture.detectChanges();
-    viewer.set(user); fixture.detectChanges();
-    expect(fixture.nativeElement.textContent).not.toContain('Training plans');
-    expect(fixture.nativeElement.textContent).not.toContain('Stop sync');
+    viewer.set({ uid: 'another-user' }); fixture.detectChanges();
+    expect(fixture.nativeElement.textContent).toContain('Training plans');
+    expect(fixture.nativeElement.textContent).toContain('Stop sync');
     expect(fixture.nativeElement.textContent).toContain('may remain there after access is revoked');
     expect(fixture.nativeElement.textContent).toContain('This action is irreversible.');
     expect(hapticsService.warning).not.toHaveBeenCalled();
