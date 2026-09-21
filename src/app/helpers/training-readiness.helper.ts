@@ -1,4 +1,5 @@
 import { getDateTimeFormatter } from './date-time-format.helper';
+import { getNumberFormatter } from './number-format.helper';
 import type { UserUnitSettingsInterface } from '@sports-alliance/sports-lib';
 import { buildReadinessHrvDisplay } from './readiness-hrv-display.helper';
 import type { DerivedTrainingReadinessMetricPayload } from '@shared/derived-metrics';
@@ -341,7 +342,7 @@ function formatSignedNumber(value: number, locale?: string, maximumFractionDigit
 }
 
 function formatNumber(value: number, locale?: string, maximumFractionDigits = 1): string {
-  return new Intl.NumberFormat(locale, {
+  return getNumberFormatter(locale, {
     maximumFractionDigits,
     minimumFractionDigits: 0,
   }).format(value);

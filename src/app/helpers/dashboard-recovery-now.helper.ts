@@ -6,6 +6,7 @@ import {
 } from '@sports-alliance/sports-lib';
 import { DERIVED_RECOVERY_MAX_SUPPORTED_SECONDS } from '@shared/derived-metrics';
 import { formatUnitAwareDataValue } from '@shared/unit-aware-display';
+import { getDateTimeFormatter } from './date-time-format.helper';
 
 export const RECOVERY_NOW_REFRESH_INTERVAL_MS = 60 * 1000;
 
@@ -245,17 +246,17 @@ export function buildDashboardRecoveryPresentation(
 
   const dateTimeOptions = options.timeZone ? { timeZone: options.timeZone } : {};
   const finishDate = new Date(finishTimeMs);
-  const finishDateText = finishDate.toLocaleDateString(options.locale, {
+  const finishDateText = getDateTimeFormatter(options.locale, {
     ...dateTimeOptions,
     weekday: 'short',
     day: 'numeric',
     month: 'short',
-  });
-  const finishClockText = finishDate.toLocaleTimeString(options.locale, {
+  }).format(finishDate);
+  const finishClockText = getDateTimeFormatter(options.locale, {
     ...dateTimeOptions,
     hour: 'numeric',
     minute: '2-digit',
-  });
+  }).format(finishDate);
   const formatDuration = (seconds: number): string => formatUnitAwareDataValue(
     DataDuration.type,
     seconds,

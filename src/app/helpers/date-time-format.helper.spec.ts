@@ -35,6 +35,10 @@ describe('shared date formatter cache', () => {
     expect(getDateTimeFormatter(undefined, options)).not.toBe(first);
     expect(first.resolvedOptions().month).toBe('short');
   });
+  it('uses the app locale policy when callers omit a locale', () => {
+    const formatter = getDateTimeFormatter(undefined, { dateStyle: 'short', timeZone: 'UTC' });
+    expect(formatter.resolvedOptions().locale).toMatch(/^(en-GB|en-US|de|fr|es|it|nl|pl|el)/i);
+  });
   it('evicts the least recently used entry instead of growing with arbitrary locales', () => {
     const options: Intl.DateTimeFormatOptions = { timeZone: 'UTC', month: 'short' };
     const oldest = getDateTimeFormatter('en-x-000', options);

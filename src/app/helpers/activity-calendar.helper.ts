@@ -16,6 +16,7 @@ import { AppEventUtilities } from '../utils/app.event.utilities';
 import type { SummaryStatsSettingsLike } from './summary-stats.helper';
 import { resolveTrainingEventDisplayLabel } from './training-event-label.helper';
 import type { ActivityRange } from '../models/activity-range.interface';
+import { getDateTimeFormatter } from './date-time-format.helper';
 
 export type ActivityCalendarView = 'week' | 'month' | 'year';
 export type ActivityCalendarVolumeMetric = 'duration' | 'distance' | 'ascent' | 'descent';
@@ -451,7 +452,7 @@ function buildDayViewModel(
   const totalDurationSeconds = families.reduce((total, family) => total + family.durationSeconds, 0);
   const hasUnknownDuration = families.some(family => family.hasUnknownDuration);
   const durationLabel = formatActivityCalendarDuration(totalDurationSeconds, hasUnknownDuration && totalDurationSeconds === 0);
-  const dateLabel = new Intl.DateTimeFormat(locale, {
+  const dateLabel = getDateTimeFormatter(locale, {
     weekday: 'long',
     year: 'numeric',
     month: 'long',
@@ -705,7 +706,7 @@ function buildWeekdays(
 ): ActivityCalendarWeekdayViewModel[] {
   const normalizedStart = normalizeStartOfWeek(startOfWeek);
   const referenceSunday = new Date(2024, 0, 7);
-  const formatter = new Intl.DateTimeFormat(locale, { weekday: 'short' });
+  const formatter = getDateTimeFormatter(locale, { weekday: 'short' });
   return Array.from({ length: 7 }, (_, index) => {
     const dayOfWeek = (normalizedStart + index) % 7;
     return {
@@ -722,16 +723,16 @@ function isWeekendDay(dayOfWeek: number): boolean {
 }
 
 function formatMonthLabel(date: Date, locale?: string): string {
-  return new Intl.DateTimeFormat(locale, { month: 'long', year: 'numeric' }).format(date);
+  return getDateTimeFormatter(locale, { month: 'long', year: 'numeric' }).format(date);
 }
 
 function formatWeekRange(start: Date, end: Date, locale?: string): string {
   const sameMonth = start.getMonth() === end.getMonth() && start.getFullYear() === end.getFullYear();
-  const startLabel = new Intl.DateTimeFormat(locale, sameMonth
+  const startLabel = getDateTimeFormatter(locale, sameMonth
     ? { month: 'short', day: 'numeric' }
     : { month: 'short', day: 'numeric', year: start.getFullYear() !== end.getFullYear() ? 'numeric' : undefined }
   ).format(start);
-  const endLabel = new Intl.DateTimeFormat(locale, { month: 'short', day: 'numeric', year: 'numeric' }).format(end);
+  const endLabel = getDateTimeFormatter(locale, { month: 'short', day: 'numeric', year: 'numeric' }).format(end);
   return `${startLabel} - ${endLabel}`;
 }
 

@@ -25,6 +25,7 @@ import { ActivityCalendarVolumeListComponent } from '../activity-calendar-volume
 import { ActivityCalendarVolumeStatsComponent } from '../activity-calendar-volume-list/activity-calendar-volume-stats.component';
 import type { PlannedWorkoutCalendarEntry } from '../../../helpers/planned-workout-calendar.helper';
 import { formatManualWorkoutStructure } from '../../../helpers/planned-workout-editor.helper';
+import { getDateTimeFormatter } from '../../../helpers/date-time-format.helper';
 
 export interface CalendarDayDetailsData {
   day: ActivityCalendarDayViewModel;
@@ -83,7 +84,7 @@ export class CalendarDayDetailsComponent {
     const viewerUid = this.users.user()?.uid;
     return !!viewerUid && viewerUid === this.data.userId;
   });
-  private readonly titleFormatter = new Intl.DateTimeFormat(this.data.locale, {
+  private readonly titleFormatter = getDateTimeFormatter(this.data.locale, {
     weekday: 'long',
     month: 'long',
     day: 'numeric',
@@ -154,7 +155,7 @@ export class CalendarDayDetailsComponent {
     const label = resolveActivityCalendarEventLabel(event);
     const activityTypeLabel = `${event?.getActivityTypesAsString?.() || 'Activity'}`.trim() || 'Activity';
     const timeLabel = startDate
-      ? new Intl.DateTimeFormat(this.data.locale, { hour: 'numeric', minute: '2-digit' }).format(startDate)
+      ? getDateTimeFormatter(this.data.locale, { hour: 'numeric', minute: '2-digit' }).format(startDate)
       : 'Time unavailable';
     const durationLabel = durationSeconds === null
       ? 'Duration unavailable'

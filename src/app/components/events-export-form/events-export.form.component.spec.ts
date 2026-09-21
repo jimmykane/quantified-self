@@ -10,6 +10,7 @@ import { AppUserService } from '../../services/app.user.service';
 import { AppFileService } from '../../services/app.file.service';
 import { AppAnalyticsService } from '../../services/app.analytics.service';
 import { LoggerService } from '../../services/logger.service';
+import { getDateTimeFormatter } from '../../helpers/date-time-format.helper';
 import {
   ActivityTypes,
   DataActivityTypes,
@@ -159,6 +160,21 @@ describe('EventsExportFormComponent', () => {
 
     const blob = mockFileService.downloadFile.mock.calls[0][0] as Blob;
     await expect(readBlobText(blob)).resolves.toContain('"6.22 mi"');
+  });
+
+  it('uses the app locale for CSV dates and safe date keys for the filename', async () => {
+    component.exportFromGroup.get('startDate')?.setValue(true);
+
+    await component.onSubmit({
+      preventDefault: vi.fn(),
+      stopPropagation: vi.fn(),
+    });
+
+    const [blob, filename] = mockFileService.downloadFile.mock.calls[0] as [Blob, string];
+    const csv = await readBlobText(blob);
+    expect(csv).toContain(`"${getDateTimeFormatter().format(component.events[0].startDate)}"`);
+    expect(filename).toMatch(/^\d{4}-\d{2}-\d{2}-\d{4}-\d{2}-\d{2}$/);
+    expect(filename).not.toMatch(/[\\/]/);
   });
 
   it('exports swim pace fallback with 100-yard units through sports-lib speed conversion', async () => {

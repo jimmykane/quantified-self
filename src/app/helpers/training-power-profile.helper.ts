@@ -3,6 +3,7 @@ import {
   DEFAULT_POWER_CURVE_MAXIMUM_BRACKET_DURATION_RATIO,
 } from '@sports-alliance/sports-lib';
 import type { DashboardPowerCurveContext, DashboardPowerCurveSeries } from './dashboard-power-curve.helper';
+import { getNumberFormatter } from './number-format.helper';
 
 export type TrainingPowerProfileDeltaTone = 'positive' | 'negative' | 'neutral';
 export interface TrainingPowerProfileAnchorViewModel {
@@ -96,6 +97,6 @@ function formatGap(durationSeconds: number, deltaPercent: number): string {
   if (Math.abs(deltaPercent) < 0.05) return `${formatDuration(durationSeconds)} matches the one-year best`;
   return `${formatDuration(durationSeconds)} is furthest ${deltaPercent > 0 ? 'above' : 'below'} the one-year best`;
 }
-function formatPercent(value: number): string { return `${new Intl.NumberFormat(undefined, { maximumFractionDigits: 1 }).format(value)}%`; }
+function formatPercent(value: number): string { return `${getNumberFormatter(undefined, { maximumFractionDigits: 1 }).format(value)}%`; }
 function formatDuration(seconds: number): string { return seconds < 60 ? `${seconds}s` : seconds < 3600 ? `${seconds / 60}m` : `${seconds / 3600}h`; }
 function resolveTone(deltaPercent: number): TrainingPowerProfileDeltaTone { return deltaPercent > 0.05 ? 'positive' : deltaPercent < -0.05 ? 'negative' : 'neutral'; }

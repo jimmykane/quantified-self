@@ -15,6 +15,8 @@ import type { DashboardPreviewInput } from '../../helpers/dashboard-chart-previe
 import { TimelineNotesWorkspaceComponent } from '../timeline-notes/timeline-notes-workspace.component';
 import type { TimelineNoteChartContext } from '../../helpers/timeline-notes-chart.helper';
 import { DOCUMENT } from '@angular/common';
+import { getDateTimeFormatter } from '../../helpers/date-time-format.helper';
+import { getNumberFormatter } from '../../helpers/number-format.helper';
 import {
   ChangeDetectionStrategy,
   ChangeDetectorRef,
@@ -581,14 +583,14 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
 
   private formatTodayDateSubtitle(date: Date): string {
     try {
-      return new Intl.DateTimeFormat(this.locale || undefined, {
+      return getDateTimeFormatter(this.locale || undefined, {
         weekday: 'long',
         year: 'numeric',
         month: 'long',
         day: 'numeric',
       }).format(date);
     } catch {
-      return new Intl.DateTimeFormat(undefined, {
+      return getDateTimeFormatter(undefined, {
         weekday: 'long',
         year: 'numeric',
         month: 'long',
@@ -1879,7 +1881,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
   }
 
   private formatSleepTrendWindowDate(timestampMs: number): string {
-    return new Intl.DateTimeFormat(undefined, {
+    return getDateTimeFormatter(undefined, {
       year: 'numeric',
       month: 'short',
       day: 'numeric',
@@ -2051,7 +2053,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
       return '--';
     }
     const prefix = signed && value > 0 ? '+' : '';
-    return `${prefix}${new Intl.NumberFormat(this.locale, { maximumFractionDigits: 1 }).format(value)}`;
+    return `${prefix}${getNumberFormatter(this.locale, { maximumFractionDigits: 1 }).format(value)}`;
   }
 
   private formatDashboardTodayRatio(ratio: number | null | undefined): string {

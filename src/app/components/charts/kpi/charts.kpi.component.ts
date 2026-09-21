@@ -22,6 +22,7 @@ import {
   ECHARTS_CARTESIAN_IMMEDIATE_UPDATE_SETTINGS,
   EChartsHostController,
 } from '../../../helpers/echarts-host-controller';
+import { getDateTimeFormatter } from '../../../helpers/date-time-format.helper';
 import {
   buildDashboardEChartsTooltipChrome,
   buildDashboardEChartsStyleTokens,
@@ -1051,11 +1052,11 @@ export class ChartsKpiComponent implements AfterViewInit, OnChanges, OnDestroy {
         if (!entry) {
           return '';
         }
-        const dateLabel = new Date(entry[0]).toLocaleDateString(undefined, {
+        const dateLabel = getDateTimeFormatter(undefined, {
           month: 'short',
           day: 'numeric',
           year: 'numeric',
-        });
+        }).format(new Date(entry[0]));
         const heading = this.isWeeklyTrendKpi()
           ? formatDashboardWeekRangeLabel(entry[0], undefined, 'UTC')
           : dateLabel;

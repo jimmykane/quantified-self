@@ -1,5 +1,6 @@
 import { environment } from '../../environments/environment';
 import { ASSISTANT_REQUEST_LIMITS, ROUTE_USAGE_LIMITS, USAGE_LIMITS } from '../../../shared/limits';
+import { getNumberFormatter } from '../helpers/number-format.helper';
 import {
   POLICIES_AI_AND_PROCESSORS_FRAGMENT,
   POLICIES_CONNECTED_SERVICES_FRAGMENT,
@@ -762,7 +763,7 @@ HRV and Sleep each have their own date range and older/newer navigation. While a
 ### Basic
 
 - Everything in Starter
-- Up to **${USAGE_LIMITS.basic.toLocaleString('en-US')} activities**
+- Up to **${getNumberFormatter().format(USAGE_LIMITS.basic)} activities**
 - Up to **${ROUTE_USAGE_LIMITS.basic} saved routes**
 - **My Tracks (Beta)** access
 - Paid-only profile customization such as custom chart watermark text

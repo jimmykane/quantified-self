@@ -8,6 +8,7 @@ import {
   type TrainingStateClassification,
   type TrainingStateSignalInput,
 } from './training-state.helper';
+import { getNumberFormatter } from './number-format.helper';
 
 export interface TrainingWindowComparison {
   current: number;
@@ -56,11 +57,11 @@ function buildComparison(current: number, baseline: number): TrainingWindowCompa
 }
 
 function formatAbsolute(value: number): string {
-  return new Intl.NumberFormat(undefined, { maximumFractionDigits: 0 }).format(Math.abs(value));
+  return getNumberFormatter(undefined, { maximumFractionDigits: 0 }).format(Math.abs(value));
 }
 
 function formatPercent(value: number): string {
-  return new Intl.NumberFormat(undefined, { maximumFractionDigits: 0 }).format(Math.abs(value));
+  return getNumberFormatter(undefined, { maximumFractionDigits: 0 }).format(Math.abs(value));
 }
 
 function resolveIntensityInsight(

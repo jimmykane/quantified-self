@@ -31,6 +31,8 @@ import { ECHARTS_GLOBAL_FONT_FAMILY, resolveEChartsThemeName } from '../../helpe
 import type { TrainingBodyWeightTrendPointViewModel } from '../../helpers/training-body-weight.helper';
 import { EChartsLoaderService } from '../../services/echarts-loader.service';
 import { LoggerService } from '../../services/logger.service';
+import { getDateTimeFormatter } from '../../helpers/date-time-format.helper';
+import { getNumberFormatter } from '../../helpers/number-format.helper';
 
 type ChartOption = Parameters<EChartsType['setOption']>[0];
 
@@ -113,7 +115,7 @@ export class TrainingBodyWeightTrendChartComponent implements AfterViewInit, OnC
     );
     const isMobileTooltipViewport = isEChartsMobileTooltipViewport();
     const pointsByIndex = this.points;
-    const dateFormatter = new Intl.DateTimeFormat(undefined, {
+    const dateFormatter = getDateTimeFormatter(undefined, {
       month: 'short',
       day: 'numeric',
       year: 'numeric',
@@ -205,5 +207,5 @@ export class TrainingBodyWeightTrendChartComponent implements AfterViewInit, OnC
 }
 
 function formatNumber(value: number): string {
-  return new Intl.NumberFormat(undefined, { maximumFractionDigits: 1 }).format(value);
+  return getNumberFormatter(undefined, { maximumFractionDigits: 1 }).format(value);
 }

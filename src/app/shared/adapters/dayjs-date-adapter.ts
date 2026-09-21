@@ -27,22 +27,26 @@ export class DayjsDateAdapter extends DateAdapter<Dayjs> {
 
         const lowerLocale = locale.toLowerCase();
 
-        // Map common browser locales to Day.js locales
+        // Only return locale bundles imported by date-locale.config.ts. Day.js
+        // otherwise keeps its previous global locale, which makes formatting
+        // depend on whichever adapter happened to run first.
         const localeMap: Record<string, string> = {
             'en-us': 'en',
             'en-gb': 'en-gb',
+            'en-150': 'en-gb',
+            'en-001': 'en-gb',
             'el-gr': 'el',
             'de-de': 'de',
-            'de-at': 'de-at',
-            'de-ch': 'de-ch',
+            'de-at': 'de',
+            'de-ch': 'de',
             'fr-fr': 'fr',
             'fr-be': 'fr',
-            'fr-ca': 'fr-ca',
-            'fr-ch': 'fr-ch',
+            'fr-ca': 'fr',
+            'fr-ch': 'fr',
             'es-es': 'es',
             'it-it': 'it',
             'nl-nl': 'nl',
-            'nl-be': 'nl-be',
+            'nl-be': 'nl',
         };
 
         // Check exact match in the map
@@ -52,6 +56,9 @@ export class DayjsDateAdapter extends DateAdapter<Dayjs> {
 
         // Try the base language (e.g., 'el-GR' -> 'el')
         const baseLang = lowerLocale.split('-')[0];
+        if (baseLang === 'en') {
+            return lowerLocale === 'en-us' ? 'en' : 'en-gb';
+        }
         return baseLang;
     }
 
