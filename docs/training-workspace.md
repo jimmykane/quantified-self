@@ -1034,8 +1034,8 @@ users keep their existing Suunto connection and explicit workout/plan sync conse
 
 #### Private Garmin production pilot
 
-`shared/training-delivery-rollout.ts` contains a separate, exact-match Garmin pilot allowlist. It is not derived from
-the presentation-only Training UI gate. An empty pilot list disables the exception; it never means everyone. The
+`shared/training-delivery-rollout.ts` contains a separate, exact-match Garmin pilot allowlist. It is independent of
+manual-planning availability. An empty pilot list disables the exception; it never means everyone. The
 production runtime selects the real Garmin adapter only when this per-user gate admits the identity. Callables use
 the authenticated UID, workers use server-owned job identity, and the worker rechecks transport readiness immediately
 before provider I/O. Request data cannot select a UID, destination, credential or test transport. Frontend readiness

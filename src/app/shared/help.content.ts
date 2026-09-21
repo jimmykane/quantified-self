@@ -294,11 +294,6 @@ export const HELP_ACTIONS: HelpAction[] = [
   },
 ];
 
-/** Training plans are documented for everyone; the workspace itself remains authenticated. */
-export function getHelpSectionsForUser(_uid: string | null | undefined): readonly HelpSection[] {
-  return HELP_SECTIONS;
-}
-
 export const HELP_SECTIONS: HelpSection[] = [
   {
     id: 'getting-started',

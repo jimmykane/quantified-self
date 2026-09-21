@@ -141,7 +141,7 @@ behavior and the separate delivery boundaries.
 The versioned research snapshot lives in `shared/planned-workout-providers.ts`; pure fixture serializers live under
 `functions/src/training-plans/providers/`. Every public provider delivery flag is currently `false`. The separate
 exact-UID Garmin production pilot in `shared/training-delivery-rollout.ts` is enforced by both the production runtime
-and reactive frontend controls; it does not depend on the presentation-only allowlist. It retains Pro, explicit consent,
+and reactive frontend controls; it is independent of manual-planning availability. It retains Pro, explicit consent,
 connection authority and `WORKOUT_IMPORT` checks. Legacy connections must reconnect rather than have permission inferred.
 See the [private pilot operational boundary](training-workspace.md#private-garmin-production-pilot) for deployment,
 preflight and rollback. This is a controlled production pilot, not public rollout:

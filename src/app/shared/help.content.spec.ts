@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { HELP_ACTIONS, HELP_SECTIONS, HelpSectionId, getHelpSectionsForUser } from './help.content';
+import { HELP_ACTIONS, HELP_SECTIONS, HelpSectionId } from './help.content';
 import { searchHelpSections } from '../helpers/help-search.helper';
 import { CONNECTED_SERVICES_POLICY_SECTION } from './policies.content';
 import { ROUTE_USAGE_LIMITS, USAGE_LIMITS } from '../../../shared/limits';
@@ -14,16 +14,13 @@ import {
 } from './policies.content';
 
 describe('help.content', () => {
-  it.each([undefined, null, '', 'another-user'])('keeps Planning guidance public and searchable for %s', uid => {
-    const sections = getHelpSectionsForUser(uid);
-    const copy = JSON.stringify(sections);
-    expect(sections).toBe(HELP_SECTIONS);
+  it('keeps Planning guidance public and searchable', () => {
+    const copy = JSON.stringify(HELP_SECTIONS);
     expect(copy).toContain('/training/plans');
-    expect(sections.some(section => section.id === 'training-plans')).toBe(true);
-    expect(sections.some(section => section.id === 'training-analysis')).toBe(true);
-    expect(sections.some(section => section.id === 'plans-and-billing')).toBe(true);
-    expect(sections.some(section => section.id === 'activity-calendar')).toBe(true);
     expect(HELP_SECTIONS.some(section => section.id === 'training-plans')).toBe(true);
+    expect(HELP_SECTIONS.some(section => section.id === 'training-analysis')).toBe(true);
+    expect(HELP_SECTIONS.some(section => section.id === 'plans-and-billing')).toBe(true);
+    expect(HELP_SECTIONS.some(section => section.id === 'activity-calendar')).toBe(true);
   });
 
   it('distinguishes Training consent, expiry, disconnect and the private pilot boundary', () => {
@@ -91,8 +88,8 @@ describe('help.content', () => {
     expect(searchHelpSections(HELP_SECTIONS, 'Timeline notes').map(section => section.id))
       .toEqual(expect.arrayContaining(['ai-insights', 'data-and-privacy']));
   });
-  it('explains independent Training read and approval-gated change access without promoting the private planning UI', () => {
-    const content = getHelpSectionsForUser('ordinary-user').map(section => section.content).join(' ');
+  it('explains independent Training read and approval-gated change access without expanding Assistant access', () => {
+    const content = HELP_SECTIONS.map(section => section.content).join(' ');
     expect(content).toContain('**Training planning (optional):**');
     expect(content).toContain('Gemini can prepare one bounded proposal but cannot apply it');
     expect(content).toContain('disable Training write tools while using Research');

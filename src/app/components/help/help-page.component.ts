@@ -14,8 +14,7 @@ import { MatInputModule } from '@angular/material/input';
 import { MatListModule } from '@angular/material/list';
 import { MarkdownPipe } from '../../helpers/markdown.pipe';
 import { searchHelpSections } from '../../helpers/help-search.helper';
-import { HELP_ACTIONS, getHelpSectionsForUser, HelpAction, HelpSection, HelpSectionId } from '../../shared/help.content';
-import { AppUserService } from '../../services/app.user.service';
+import { HELP_ACTIONS, HELP_SECTIONS, HelpAction, HelpSection, HelpSectionId } from '../../shared/help.content';
 
 interface HelpActionCard extends HelpAction {
   description: string;
@@ -61,10 +60,7 @@ export class HelpPageComponent implements OnInit, OnDestroy {
   private markdownPipe = inject(MarkdownPipe);
   private onHashChange = () => this.selectSectionFromHash();
 
-  private readonly users = inject(AppUserService);
-  // Profile/settings refreshes must not blank the article and re-render every guide.
-  private readonly viewerUid = computed(() => this.users.user()?.uid);
-  readonly sections = computed(() => getHelpSectionsForUser(this.viewerUid()));
+  readonly sections = computed(() => HELP_SECTIONS);
   readonly actions: readonly HelpActionCard[] = HELP_ACTIONS.map(action => ({
     ...action,
     description: HELP_ACTION_DESCRIPTIONS[action.id],
