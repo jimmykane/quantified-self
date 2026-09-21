@@ -22,6 +22,7 @@ const SERVICE_NAME = ServiceNames.SuuntoApp;
 
 
 interface GetAuthRedirectURIRequest {
+  importRecentHistory?: boolean;
   redirectUri: string;
 }
 
@@ -59,7 +60,7 @@ export const getSuuntoAPIAuthRequestTokenRedirectURI = onCall({
 
   try {
     return {
-      redirect_uri: await getServiceOAuth2CodeRedirectAndSaveStateToUser(userID, SERVICE_NAME, redirectUri),
+      redirect_uri: await getServiceOAuth2CodeRedirectAndSaveStateToUser(userID, SERVICE_NAME, redirectUri, request.data?.importRecentHistory),
     };
   } catch (error) {
     if (isServiceDisconnectInProgressError(error)) {

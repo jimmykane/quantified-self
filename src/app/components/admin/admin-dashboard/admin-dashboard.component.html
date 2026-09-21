@@ -201,10 +201,12 @@
                     <ng-container matColumnDef="actions">
                         <th mat-header-cell *matHeaderCellDef></th>
                         <td mat-cell *matCellDef="let row">
+                            @if (row.route) {
                             <button mat-icon-button class="qs-mat-primary" appHapticTap [routerLink]="row.route"
                                 [attr.aria-label]="'Open ' + row.label + ' queue'">
                                 <mat-icon>open_in_new</mat-icon>
                             </button>
+                            }
                         </td>
                     </ng-container>
 
@@ -230,10 +232,12 @@
                             [class.status-disabled-icon]="row.severity === 'disabled'">{{ row.icon }}</mat-icon>
                         <span>{{ row.label }}</span>
                     </div>
+                    @if (row.route) {
                     <button mat-icon-button class="qs-mat-primary" appHapticTap [routerLink]="row.route"
                         [attr.aria-label]="'Open ' + row.label + ' queue'">
                         <mat-icon>open_in_new</mat-icon>
                     </button>
+                    }
                 </div>
 
                 <div class="queue-card-metrics">

@@ -1,4 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { withHistoryExecution } from '../connection-history/context';
+import type { HistoryExecution } from '../connection-history/execution';
 
 const firestoreMocks = vi.hoisted(() => {
   const metaRef = { path: 'users/user-1/meta/Wahoo API' };
@@ -230,6 +232,16 @@ describe('finishWahooHistoryLease', () => {
       }),
       { merge: true },
     );
+  });
+
+  it('keeps the original automatic cooldown anchor across pages and retries', async () => {
+    const connectedAt = Date.parse('2026-07-18T00:00:00Z');
+    const execution = { cooldownStartedAtMs: connectedAt, inTransaction: vi.fn() } as unknown as HistoryExecution;
+    for (const count of [4, 8]) {
+      await withHistoryExecution(execution, () => finishWahooHistoryLease('user-1', 'lease-1', new Date('2026-06-19'), new Date(connectedAt), count, true));
+      expect(firestoreMocks.transactionSet).toHaveBeenLastCalledWith(firestoreMocks.metaRef,
+        expect.objectContaining({ didLastHistoryImport: connectedAt, processedActivitiesFromLastHistoryImportCount: count }), { merge: true });
+    }
   });
 
   it('does not recreate Wahoo metadata after account deletion begins', async () => {

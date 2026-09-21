@@ -1,3 +1,4 @@
+import { currentHistoryExecution } from './connection-history/context';
 export class ResponseBodyTooLargeError extends Error {
     readonly name = 'ResponseBodyTooLargeError';
 
@@ -112,6 +113,7 @@ export async function del(urlOrOptions: string | any, options: any = {}) {
 }
 
 async function request(urlOrOptions: string | any, options: any = {}) {
+    await currentHistoryExecution()?.beforeRequest();
     let url: string;
     let opts: any;
 

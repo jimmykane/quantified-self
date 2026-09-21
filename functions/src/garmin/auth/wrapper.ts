@@ -27,6 +27,7 @@ const SERVICE_NAME = ServiceNames.GarminAPI;
 
 // Define Interfaces for Type Safety
 interface GetAuthRedirectURIRequest {
+  importRecentHistory?: boolean;
   redirectUri: string;
 }
 
@@ -73,7 +74,7 @@ export const getGarminAPIAuthRequestTokenRedirectURI = functions
   }
 
   try {
-    const url = await getServiceOAuth2CodeRedirectAndSaveStateToUser(userID, SERVICE_NAME, redirectURI);
+    const url = await getServiceOAuth2CodeRedirectAndSaveStateToUser(userID, SERVICE_NAME, redirectURI, data.importRecentHistory);
     return {
       redirect_uri: url,
     };

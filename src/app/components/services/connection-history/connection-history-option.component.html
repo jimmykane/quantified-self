@@ -1,0 +1,4 @@
+<mat-checkbox [checked]="checked()" [disabled]="disabled()" (change)="change($event.checked)">
+  Import my last 30 days of history
+</mat-checkbox>
+<p class="history-option-description">{{ description() }}</p>

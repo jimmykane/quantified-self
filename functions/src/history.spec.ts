@@ -164,11 +164,22 @@ describe('history', () => {
             exists: false,
             data: () => undefined,
         })));
+        let historyLeaseMetadata: Record<string, unknown> | undefined;
+        hoisted.batchSetMock.mockImplementation((_ref, payload: Record<string, unknown>) => {
+            if (Object.prototype.hasOwnProperty.call(payload, 'historyImportLeaseOwner')) {
+                historyLeaseMetadata = { ...historyLeaseMetadata, ...payload };
+            }
+        });
         hoisted.runTransactionMock.mockImplementation(async (runner: (transaction: {
             set: typeof hoisted.batchSetMock;
+            get: ReturnType<typeof vi.fn>;
             getAll: typeof hoisted.transactionGetAllMock;
         }) => unknown) => runner({
             set: hoisted.batchSetMock,
+            get: vi.fn().mockImplementation(async () => ({
+                exists: historyLeaseMetadata !== undefined,
+                data: () => historyLeaseMetadata,
+            })),
             getAll: hoisted.transactionGetAllMock,
         }));
 
@@ -310,6 +321,17 @@ describe('history', () => {
     });
 
     describe('addHistoryToQueue', () => {
+        function expectOnlyHistoryLeaseWrites() {
+            expect(hoisted.runTransactionMock).toHaveBeenCalledTimes(2);
+            expect(hoisted.batchSetMock.mock.calls.map(([, payload]) => payload)).toEqual([
+                expect.objectContaining({
+                    historyImportLeaseOwner: expect.any(String),
+                    historyImportLeaseExpiresAt: expect.any(Number),
+                }),
+                expect.objectContaining({ historyImportLeaseOwner: expect.anything() }),
+            ]);
+        }
+
         it.each([401, 403])('refreshes the same Suunto token once after history HTTP %s', async statusCode => {
             vi.mocked(tokens.getTokenData)
                 .mockResolvedValueOnce({ accessToken: 'old-token', userName: 'testUser' } as any)
@@ -337,7 +359,7 @@ describe('history', () => {
 
             expect(tokens.getTokenData).toHaveBeenCalledTimes(2);
             expect(requestHelper.get).toHaveBeenCalledTimes(2);
-            expect(hoisted.runTransactionMock).not.toHaveBeenCalled();
+            expectOnlyHistoryLeaseWrites();
         });
 
         it('never retries history with a different Suunto account', async () => {
@@ -350,7 +372,7 @@ describe('history', () => {
                 .rejects.toThrow('Suunto history account changed during token refresh.');
 
             expect(requestHelper.get).toHaveBeenCalledTimes(1);
-            expect(hoisted.runTransactionMock).not.toHaveBeenCalled();
+            expectOnlyHistoryLeaseWrites();
         });
 
         it('propagates a disconnect-blocked history refresh without another provider read', async () => {
@@ -363,7 +385,7 @@ describe('history', () => {
             await expect(history.addHistoryToQueue('uid', ServiceNames.SuuntoApp, new Date(), new Date())).rejects.toBe(error);
 
             expect(requestHelper.get).toHaveBeenCalledTimes(1);
-            expect(hoisted.runTransactionMock).not.toHaveBeenCalled();
+            expectOnlyHistoryLeaseWrites();
         });
 
         it('checks deletion again before the refreshed Suunto history request', async () => {
@@ -377,7 +399,7 @@ describe('history', () => {
                 .rejects.toMatchObject({ name: 'HistoryImportSkippedForDeletedUserError' });
 
             expect(requestHelper.get).toHaveBeenCalledTimes(1);
-            expect(hoisted.runTransactionMock).not.toHaveBeenCalled();
+            expectOnlyHistoryLeaseWrites();
         });
 
         it.each([404, 429, 500])('does not refresh Suunto history for HTTP %s', async statusCode => {
@@ -426,13 +448,13 @@ describe('history', () => {
             });
         });
 
-        it('should handle empty workouts without writes', async () => {
+        it('releases its reservation after empty history without admitting queue items', async () => {
             const firestore = admin.firestore();
             (requestHelper.get as any).mockResolvedValue(JSON.stringify({ payload: [] }));
 
             const result = await history.addHistoryToQueue('uid', ServiceNames.SuuntoApp, new Date(), new Date());
 
-            expect(hoisted.runTransactionMock).toHaveBeenCalledTimes(0);
+            expect(hoisted.runTransactionMock).toHaveBeenCalledTimes(2);
             expect(result).toEqual({
                 successCount: 0,
                 failureCount: 0,
@@ -440,7 +462,7 @@ describe('history', () => {
                 failedBatches: 0
             });
             // ensure meta doc not touched
-            expect(firestore.collection).not.toHaveBeenCalledWith('users');
+            expect(hoisted.batchSetMock.mock.calls.some(call => call[1]?.fromHistory)).toBe(false);
         });
 
         it('should process multiple batches and count failures', async () => {
@@ -452,15 +474,16 @@ describe('history', () => {
 
             // First batch commit succeeds, second fails
             hoisted.runTransactionMock
-                .mockImplementationOnce(async (runner: (transaction: { set: typeof hoisted.batchSetMock }) => unknown) => (
-                    runner({ set: hoisted.batchSetMock })
+                .mockImplementationOnce(async runner => runner({ set: hoisted.batchSetMock, get: vi.fn().mockResolvedValue({ exists: false, data: () => undefined }), getAll: hoisted.transactionGetAllMock }))
+                .mockImplementationOnce(async (runner: (transaction: { set: typeof hoisted.batchSetMock; get: ReturnType<typeof vi.fn>; getAll: typeof hoisted.transactionGetAllMock }) => unknown) => (
+                    runner({ set: hoisted.batchSetMock, get: vi.fn().mockResolvedValue({ exists: false, data: () => undefined }), getAll: hoisted.transactionGetAllMock })
                 ))
                 .mockRejectedValueOnce(new Error('commit failed'));
 
             const result = await history.addHistoryToQueue('uid', ServiceNames.SuuntoApp, new Date(), new Date());
 
             // Two batches should have been created
-            expect(hoisted.runTransactionMock).toHaveBeenCalledTimes(2);
+            expect(hoisted.runTransactionMock).toHaveBeenCalledTimes(4);
 
             // First batch (450) succeeds, second (1) fails
             expect(result).toEqual({

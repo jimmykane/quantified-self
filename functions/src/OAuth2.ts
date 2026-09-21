@@ -1,3 +1,6 @@
+import { isConnectionHistoryAdmissionEnabled } from './connection-history/admission';
+import { parseImportRecentHistory } from '../../shared/connection-history';
+import { OAUTH_HISTORY_FIELD, historyRunId } from './connection-history/model';
 import { ServiceNames } from '@sports-alliance/sports-lib';
 import { AccessToken } from 'simple-oauth2';
 import * as crypto from 'crypto';
@@ -219,6 +222,7 @@ async function beginOAuthFlowIfUserActive(
   serviceName: ServiceNames,
   tokenCollectionName: string,
   state: string,
+  importRecentHistory = false,
 ): Promise<string> {
   const db = admin.firestore();
   const tokenRootRef = db.collection(tokenCollectionName).doc(userID);
@@ -251,6 +255,7 @@ async function beginOAuthFlowIfUserActive(
     // only publish state for the lifecycle episode it actually claimed.
     transaction.set(tokenRootRef, {
       state,
+      [OAUTH_HISTORY_FIELD]: importRecentHistory,
       codeVerifier: FieldValue.delete(),
       [OAUTH_FLOW_GENERATION_FIELD]: generation,
       [OAUTH_FLOW_CREATED_AT_FIELD]: nowMs,
@@ -337,6 +342,7 @@ async function finishRejectedOAuthFlowIfCurrent(
 
     const cleanupUpdate: Record<string, FieldValue> = {
       state: FieldValue.delete(),
+      [OAUTH_HISTORY_FIELD]: FieldValue.delete(),
       codeVerifier: FieldValue.delete(),
       [OAUTH_FLOW_GENERATION_FIELD]: FieldValue.delete(),
       [OAUTH_FLOW_CREATED_AT_FIELD]: FieldValue.delete(),
@@ -399,6 +405,7 @@ async function claimOAuthFlowContext(
 
     transaction.update(tokenRootRef, {
       state: FieldValue.delete(),
+      [OAUTH_HISTORY_FIELD]: FieldValue.delete(),
       codeVerifier: FieldValue.delete(),
     });
     return { data, generation };
@@ -484,6 +491,7 @@ async function beginExplicitDisconnectOperation(
       [SERVICE_DISCONNECT_OPERATION_GENERATION_FIELD]: disconnectOperationGeneration,
       [SERVICE_DISCONNECT_OPERATION_LEASE_EXPIRES_AT_FIELD]: nowMs + EXPLICIT_DISCONNECT_OPERATION_LEASE_MS,
       state: FieldValue.delete(),
+      [OAUTH_HISTORY_FIELD]: FieldValue.delete(),
       codeVerifier: FieldValue.delete(),
     };
     transaction.set(tokenRootRef, nextRootData, { merge: true });
@@ -797,7 +805,7 @@ export function getServiceConfig(serviceName: ServiceNames, refresh = false): { 
  * @param serviceName
  * @param redirectUri
  */
-export async function getServiceOAuth2CodeRedirectAndSaveStateToUser(userID: string, serviceName: ServiceNames, redirectUri: string): Promise<string> {
+export async function getServiceOAuth2CodeRedirectAndSaveStateToUser(userID: string, serviceName: ServiceNames, redirectUri: string, importRecentHistory?: boolean): Promise<string> {
   const adapter = getServiceAdapter(serviceName);
   const state = crypto.randomBytes(20).toString('hex');
   await assertOAuthUserCanWriteServiceState(userID, serviceName, `oauth_state_prepare:${serviceName}`);
@@ -806,6 +814,7 @@ export async function getServiceOAuth2CodeRedirectAndSaveStateToUser(userID: str
     serviceName,
     adapter.tokenCollectionName,
     state,
+    parseImportRecentHistory(importRecentHistory),
   );
 
   try {
@@ -962,6 +971,11 @@ export async function getAndSetServiceOAuth2AccessTokenForUser(
         uniqueId,
         persistedOAuthCredentialGuard.rootGenerationGuard,
         persistedOAuthCredentialGuard.oauthFlowGenerationGuard,
+        { requested: claimedOAuthFlowContext.data[OAUTH_HISTORY_FIELD] === true && isConnectionHistoryAdmissionEnabled(),
+          flowGeneration: claimedOAuthFlowContext.generation,
+          providerUserId: uniqueId || 'default', tokenPath: persistedOAuthCredentialGuard.tokenRef.path,
+          rootPath: persistedOAuthCredentialGuard.rootGenerationGuard.documentRef.path,
+          credentialGeneration: persistedOAuthCredentialGuard.tokenCredentialGeneration },
       )
       : await markServiceConnected(
         userID,
@@ -969,6 +983,11 @@ export async function getAndSetServiceOAuth2AccessTokenForUser(
         undefined,
         persistedOAuthCredentialGuard.rootGenerationGuard,
         persistedOAuthCredentialGuard.oauthFlowGenerationGuard,
+        { requested: claimedOAuthFlowContext.data[OAUTH_HISTORY_FIELD] === true && isConnectionHistoryAdmissionEnabled(),
+          flowGeneration: claimedOAuthFlowContext.generation,
+          providerUserId: uniqueId || 'default', tokenPath: persistedOAuthCredentialGuard.tokenRef.path,
+          rootPath: persistedOAuthCredentialGuard.rootGenerationGuard.documentRef.path,
+          credentialGeneration: persistedOAuthCredentialGuard.tokenCredentialGeneration },
       );
     if (!didMarkConnected) {
       logger.warn(`Skipping stale ${serviceName} OAuth callback for user ${userID} because a newer credential or account lifecycle transition won after token persistence.`);
@@ -1038,6 +1057,9 @@ export async function getAndSetServiceOAuth2AccessTokenForUser(
   return {
     connected: true,
     outcome: SERVICE_OAUTH_COMPLETION_OUTCOMES.Connected,
+    ...(claimedOAuthFlowContext.data[OAUTH_HISTORY_FIELD] === true && isConnectionHistoryAdmissionEnabled() ? {
+      historyImport: { runId: historyRunId(userID, serviceName, claimedOAuthFlowContext.generation) },
+    } : {}),
   };
 }
 

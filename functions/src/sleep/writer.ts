@@ -1,3 +1,4 @@
+import { assertHistoryWrite } from '../connection-history/context';
 import * as admin from 'firebase-admin';
 import { FieldValue } from 'firebase-admin/firestore';
 import * as logger from 'firebase-functions/logger';
@@ -410,6 +411,7 @@ export async function upsertSleepSession(
     const db = admin.firestore();
     const docRef = userSleepSessionsRef(db, userID).doc(id);
     return db.runTransaction(async (transaction) => {
+        await assertHistoryWrite(transaction);
         if (await shouldSkipSleepUserWriteInTransaction(db, transaction, userID, provider, 'session')) {
             return { id, session: skippedSession, written: false };
         }
@@ -537,6 +539,7 @@ export async function updateSleepSyncState(
     const db = admin.firestore();
     const stateRef = userSleepSyncStateRef(db, userID, provider);
     return db.runTransaction(async (transaction) => {
+        await assertHistoryWrite(transaction);
         if (await shouldSkipSleepUserWriteInTransaction(db, transaction, userID, provider, 'state')) {
             return false;
         }

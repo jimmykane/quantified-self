@@ -2804,6 +2804,7 @@ describe('AppUserService', () => {
 
                 expect(mockFunctionsService.call).toHaveBeenCalledWith('getCOROSAPIAuthRequestTokenRedirectURI', {
                     redirectUri: 'http://localhost/services?serviceName=COROS%20API&connect=1',
+                    importRecentHistory: false,
                 }, { canExecute: expect.any(Function) });
             });
 
@@ -2813,6 +2814,7 @@ describe('AppUserService', () => {
 
                 expect(mockFunctionsService.call).toHaveBeenCalledWith('getSuuntoAPIAuthRequestTokenRedirectURI', {
                     redirectUri: 'http://localhost/services?serviceName=Suunto%20app&connect=1',
+                    importRecentHistory: false,
                 }, { canExecute: expect.any(Function) });
             });
 
@@ -2822,6 +2824,7 @@ describe('AppUserService', () => {
 
                 expect(mockFunctionsService.call).toHaveBeenCalledWith('getGarminAPIAuthRequestTokenRedirectURI', {
                     redirectUri: 'http://localhost/services?serviceName=Garmin%20API&connect=1',
+                    importRecentHistory: false,
                 }, { canExecute: expect.any(Function) });
             });
 
@@ -2830,12 +2833,13 @@ describe('AppUserService', () => {
 
                 expect(mockFunctionsService.call).toHaveBeenCalledWith('getWahooAPIAuthRequestTokenRedirectURI', {
                     redirectUri: 'http://localhost/services?serviceName=Wahoo%20API&connect=1',
+                    importRecentHistory: false,
                 }, { canExecute: expect.any(Function) });
             });
 
             it('pins OAuth dispatch to the initiating Firebase user and view', async () => {
                 let currentView = true;
-                await service.getCurrentUserServiceTokenAndRedirectURI(ServiceNames.GarminAPI, () => currentView);
+                await service.getCurrentUserServiceTokenAndRedirectURI(ServiceNames.GarminAPI, false, () => currentView);
                 const canExecute = mockFunctionsService.call.mock.calls[0][2].canExecute;
                 expect(canExecute()).toBe(true);
                 currentView = false;

@@ -1,6 +1,7 @@
 // Compatibility facade: callers keep their existing API while lifecycle and
 // provider recovery implementations have separate owners.
 import { ServiceNames } from '@sports-alliance/sports-lib';
+import type { HistoryConnectionContext } from './connection-history/model';
 import type { DocumentGenerationGuard } from './token-refresh-coordinator';
 import {
   clearServiceConnectionStateLifecycle,
@@ -48,6 +49,7 @@ export async function markServiceConnected(
   providerUserId?: string | null,
   expectedTokenCredentialGeneration?: DocumentGenerationGuard,
   expectedOAuthFlowGeneration?: DocumentGenerationGuard,
+  historyContext?: HistoryConnectionContext,
 ): Promise<boolean> {
   return markServiceConnectedLifecycle(
     userID,
@@ -61,6 +63,7 @@ export async function markServiceConnected(
         ? releaseWahooReconnectQueueItemsWithRepair
         : undefined,
     },
+    historyContext,
   );
 }
 

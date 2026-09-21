@@ -977,3 +977,8 @@ async function enqueueTaskWithRetry(params: EnqueueTaskParams): Promise<boolean>
 
     throw new Error('[Dispatcher] Failed to enqueue task after retry loop exhausted.');
 }
+
+export async function enqueueConnectionHistoryTask(queueItemId: string, dateCreated: number, scheduleDelaySeconds?: number, identity?: RevisionBoundQueueTaskIdentity): Promise<boolean> {
+    return enqueueRevisionBoundQueueTask(queueItemId, dateCreated, config.cloudtasks.connectionHistoryQueue,
+        'connection-history', 'ConnectionHistory', scheduleDelaySeconds, identity, 300);
+}
