@@ -250,6 +250,11 @@ describe('HomeComponent', () => {
         expect(providerMatrix.nativeElement.closest('div[data-nosnippet]')).toBeTruthy();
         expect(providerMatrix.nativeElement.querySelector('.provider-data-flow-matrix__mobile')).toBeNull();
         expect(providerMatrix.nativeElement.querySelectorAll('button')).toHaveLength(0);
+        const homeStyles = readFileSync(resolve(process.cwd(), 'src/app/components/home/home.component.scss'), 'utf8');
+        const matrixStyles = readFileSync(resolve(process.cwd(),
+            'src/app/components/shared/provider-data-flow-matrix/provider-data-flow-matrix.component.scss'), 'utf8');
+        expect(homeStyles).toMatch(/\.integration-capability-details\s*\{[^}]*min-width:\s*0[^}]*max-width:\s*100%/s);
+        expect(matrixStyles).toMatch(/\.provider-data-flow-matrix__scroll\s*\{[^}]*max-width:\s*100%[^}]*overflow-x:\s*auto/s);
         expect(text).toContain('Upload Your Own Files');
         expect(text).toContain('FIT, TCX, GPX, JSON, and SML activity files');
         expect(text).toContain('send FIT activities directly to Suunto, COROS, or Wahoo');
