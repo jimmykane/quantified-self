@@ -31,7 +31,7 @@ export const MCP_SCOPE_CONTENT: Record<McpScope, {
   },
   'training-plans:write': {
     title: 'Change Training plans and workouts',
-    description: 'Create and edit plans and planned workouts, move or copy workouts, change plan dates and lifecycle, mark workouts skipped, and move workouts to recoverable history. Every proposal is previewed before a separate apply tool governed by your client\'s approval controls. Permanent deletion, history restore and plan deletion are not allowed.',
+    description: 'Create and edit plans and planned workouts, move or copy workouts, change plan dates and lifecycle, mark workouts skipped, move workouts to recoverable history, and explicitly delete a plan. Plan deletion is reviewed alone and requires choosing whether its workouts become standalone or are permanently deleted; the plan and its history are permanently removed. Every proposal is previewed before a separate apply tool governed by your client\'s approval controls. Permanent single-workout deletion and history restore are not allowed.',
   },
   'training-delivery:write': {
     title: 'Change planned-workout sync',

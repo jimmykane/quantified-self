@@ -68,7 +68,16 @@ every proposal must keep per-call approval enabled in their client. ChatGPT's de
 native approval request. Claude users must not choose **Allow always**, and should disable Training write tools while
 using Research because Research may invoke connector tools without another approval. The server still requires the preview-created
 proposal and binds it to the owner, connection, grant, revision and expiry; replay returns its persisted terminal result.
-Permanent workout deletion, plan deletion and history restoration are deliberately absent.
+Plan deletion is available only as the sole proposal change and requires an explicit `convert-to-standalone` or
+`delete-workouts` choice. Its preview states that the plan and revision history are permanently removed, describes the
+workout effect, and warns that provider copies may remain when access is unavailable. Permanent single-workout deletion
+and history restoration remain deliberately absent.
+
+Compatible schedule operations are applied in one bounded Firestore transaction while retaining one immutable revision
+and idempotency receipt per operation. A write-budget overflow falls back to the existing sequential path; authority is
+still checked in every authored-write transaction. Apply diagnostics contain only operation counts, total/stage durations,
+terminal outcome and the slowest stage—never owner IDs, references, titles, notes or arguments. Applies taking at least
+five seconds emit one structured slow warning for operational investigation.
 
 Delivery actions resolve the destination account on the server and reuse the existing #646 command/reconciliation path.
 They never accept credentials or remote IDs. `all_connected` fans out only to connected, rollout-ready providers shown

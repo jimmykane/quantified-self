@@ -204,6 +204,8 @@ export const TRAINING_CHANGE_SCHEMA = z.discriminatedUnion('kind', [
   z.strictObject({ kind: z.literal('set-plan-lifecycle'), plan: entityTarget,
     lifecycle: z.enum(['active', 'paused', 'archived']) }),
   z.strictObject({ kind: z.literal('shift-plan'), plan: entityTarget, days: z.number().int().min(-366).max(366).refine(days => days !== 0) }),
+  z.strictObject({ kind: z.literal('delete-plan'), plan: entityTarget,
+    workoutDisposition: z.enum(['convert-to-standalone', 'delete-workouts']) }),
   z.strictObject({ kind: z.literal('create-workout'), localKey, plan: optionalPlanTarget.default(null),
     localDate: trainingDate, title: z.string().trim().min(1).max(120), structure: TRAINING_RECIPE_SCHEMA }),
   z.strictObject({ kind: z.literal('update-workout'), workout: entityTarget, plan: optionalPlanTarget,

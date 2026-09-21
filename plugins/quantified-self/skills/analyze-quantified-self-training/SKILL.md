@@ -89,8 +89,10 @@ When the user clearly asks for a change, first read the affected current records
 require the separate plan/workout-change grant; delivery changes require the separate provider-delivery grant, and both
 depend on planning read access. Prepare one complete proposal of at most 25 changes. Use local keys only to refer to
 entities created earlier in that proposal; never invent opaque references, credentials, destination IDs, provider
-artifact IDs or approval digests. The safe lifecycle excludes permanent workout deletion, plan deletion and history
-restore. A standalone create may be followed by send to explicit providers or all connected providers. Plan sync means
+artifact IDs or approval digests. Plan deletion must be the only proposal change. Never infer its required workout
+disposition: ask whether current workouts should become standalone or be permanently deleted, and explain that the plan
+and its revision history are permanently removed. Permanent single-workout deletion and history restore remain excluded.
+A standalone create may be followed by send to explicit providers or all connected providers. Plan sync means
 automatic per-workout delivery while active, not a native provider plan. Delivery remains Pro, connection, rollout,
 horizon and compatibility gated.
 

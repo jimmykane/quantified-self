@@ -732,7 +732,7 @@ function buildMcpServerInstructions(auth: AuthenticatedMcpRequest): string {
       const focusedCreateGuidance = auth.scopes.includes(MCP_OAUTH_SCOPES.TrainingDeliveryWrite)
         ? 'include its optional delivery object when the same workout should be sent immediately to providers'
         : 'provider delivery is not available on this connection, so do not add delivery input';
-      instructions.push(`${readGuidance} Construct workout recipes only from the advertised v1 schema, using stable unique node IDs and canonical seconds, metres, kilojoules, bpm, watts, metres per second, rpm and percentage points. Pace is still stored as metres per second with pace presentation. Never invent a threshold or relative-target reference snapshot; ask when required authored inputs are missing. For one new workout, read the current schedule revision and use preview_create_planned_workout exactly once; ${focusedCreateGuidance}. Do not use the batch tool for either case. Use preview_training_changes once only for other or genuinely multi-change requests. Present preview effects, then call the separately approval-gated apply_training_changes tool once; the client owns its native approval UI. Never retry a rejected preview unchanged, imply that a preview changed data, or claim provider delivery succeeded before the apply result says so.`);
+      instructions.push(`${readGuidance} Construct workout recipes only from the advertised v1 schema, using stable unique node IDs and canonical seconds, metres, kilojoules, bpm, watts, metres per second, rpm and percentage points. Pace is still stored as metres per second with pace presentation. Never invent a threshold or relative-target reference snapshot; ask when required authored inputs are missing. For one new workout, read the current schedule revision and use preview_create_planned_workout exactly once; ${focusedCreateGuidance}. Do not use the batch tool for either case. Use preview_training_changes once only for other or genuinely multi-change requests. Plan deletion must be the sole proposed change: never infer whether its workouts should become standalone or be permanently deleted, and state that the plan and its revision history are permanently removed. Present preview effects, then call the separately approval-gated apply_training_changes tool once; the client owns its native approval UI. Never retry a rejected preview unchanged, imply that a preview changed data, or claim provider delivery succeeded before the apply result says so.`);
     } else {
       instructions.push(`${readGuidance} Only provider-delivery changes are available. Use preview_training_changes once with complete input, present its effects, then call the separately approval-gated apply_training_changes tool once; the client owns its native approval UI. Never retry a rejected preview unchanged or claim delivery succeeded before the apply result says so.`);
     }
@@ -873,8 +873,8 @@ export function createMcpServer(
       registerMcpTool(server, 'preview_create_planned_workout', {
         title: 'Preview a new planned workout',
         description: canDeliverCreatedWorkout
-          ? 'Use for one new standalone or plan-associated workout, with optional immediate delivery to selected or all connected providers. Provide the current schedule revision, complete canonical recipe, and an IANA time zone when delivery is requested. Quantified Self supplies its internal proposal key and previews the authored and delivery effects atomically. Nothing changes until the client permits the separately approval-gated apply_training_changes call.'
-          : 'Use for one new standalone or plan-associated workout. Provide the current schedule revision and complete canonical recipe. This connection has no provider-delivery permission, so delivery input is not advertised. Quantified Self supplies its internal proposal key. Nothing changes until the client permits the separately approval-gated apply_training_changes call.',
+          ? 'Preview one new standalone or plan workout, optionally sent to connected providers. Provide the current schedule revision, canonical recipe, and a delivery time zone when sending. Nothing changes before approval-gated apply_training_changes.'
+          : 'Preview one new standalone or plan workout using the current schedule revision and canonical recipe. Delivery is not permitted on this connection. Nothing changes before approval-gated apply_training_changes.',
         inputSchema: canDeliverCreatedWorkout
           ? TRAINING_WRITE_INPUTS.preview_create_planned_workout
           : TRAINING_CREATE_WORKOUT_INPUT_WITHOUT_DELIVERY,
@@ -887,7 +887,7 @@ export function createMcpServer(
     }
     registerMcpTool(server, 'preview_training_changes', {
       title: 'Preview Training changes',
-      description: 'Use for plan changes, provider delivery, workout edits, or genuinely multi-change proposals—not for creating one workout. Validate and preview one ordered proposal of at most 25 changes. Nothing authored is changed until the client permits the separately approval-gated apply_training_changes call. Schedule edits require Training plan changes permission; provider actions require Training delivery permission and remain Pro and rollout gated.',
+      description: 'Preview plan/workout edits, provider delivery, or ordered batches of at most 25 changes. Use the focused tool for one new workout. Plan deletion must stand alone and requires an explicit workout disposition. Nothing changes before approval-gated apply_training_changes; delivery remains Pro and rollout gated.',
       inputSchema: TRAINING_WRITE_INPUTS.preview_training_changes,
       outputSchema: outputSchemas.preview_training_changes,
       annotations: TRAINING_PREVIEW_TOOL_ANNOTATIONS,
@@ -896,7 +896,7 @@ export function createMcpServer(
     })));
     registerMcpTool(server, 'apply_training_changes', {
       title: 'Apply previewed Training changes',
-      description: 'Apply a previously previewed Training proposal exactly once through this separately approval-gated write tool. The MCP host controls its native approval behavior. The proposal is bound to this owner, connection, permissions, schedule revision and a short expiry. Provider outcomes are independent and never roll back authored workout changes.',
+      description: 'Apply one previewed Training proposal through the MCP host\'s approval-gated write UI. The proposal is owner-, connection-, permission-, revision- and expiry-bound. Provider outcomes are independent.',
       inputSchema: TRAINING_WRITE_INPUTS.apply_training_changes,
       outputSchema: outputSchemas.apply_training_changes,
       annotations: TRAINING_APPLY_TOOL_ANNOTATIONS,

@@ -241,12 +241,17 @@ type LockResult =
     | { kind: 'completed'; response: DeleteTrainingPlanResponseV1 }
     | { kind: 'pending'; lock: PlanDeletionLockV1 };
 
+type PlanDeletionTransactionPrecondition = (
+    transaction: admin.firestore.Transaction,
+) => Promise<void>;
+
 async function ensurePlanDeletionLock(
     db: admin.firestore.Firestore,
     uid: string,
     request: DeleteTrainingPlanRequestV1,
     requestHash: string,
     nowMs: number,
+    transactionPrecondition?: PlanDeletionTransactionPrecondition,
 ): Promise<LockResult> {
     const userRef = db.collection('users').doc(uid);
     const stateRef = userRef.collection('trainingPlanState').doc('current');
@@ -263,6 +268,7 @@ async function ensurePlanDeletionLock(
         if (deletionGuard.shouldSkip) {
             throw new TrainingScheduleMutationError('failed-precondition', 'This account is being deleted or is no longer available.');
         }
+        await transactionPrecondition?.(transaction);
         const [receiptSnapshot, lockSnapshots, stateSnapshot, planSnapshot, workoutSnapshots] = await Promise.all([
             transaction.get(receiptRef),
             transaction.get(locksRef),
@@ -353,6 +359,7 @@ async function prepareStandaloneRevisionSnapshots(
     uid: string,
     lock: PlanDeletionLockV1,
     nowMs: number,
+    transactionPrecondition?: PlanDeletionTransactionPrecondition,
 ): Promise<void> {
     if (lock.workoutDisposition !== 'convert-to-standalone' || lock.workouts.length === 0) return;
     const workoutsRef = db.collection('users').doc(uid).collection(SCHEDULED_WORKOUTS_COLLECTION_ID);
@@ -378,6 +385,7 @@ async function prepareStandaloneRevisionSnapshots(
                 'This account is being deleted or is no longer available.',
             );
         }
+        await transactionPrecondition?.(transaction);
         const revisionSnapshots = await Promise.all(revisionRefs.map(ref => transaction.get(ref)));
         revisionSnapshots.forEach((snapshot, index) => {
             const workout = converted[index];
@@ -408,6 +416,7 @@ async function preparePlanDeletionTombstones(
     uid: string,
     lock: PlanDeletionLockV1,
     nowMs: number,
+    transactionPrecondition?: PlanDeletionTransactionPrecondition,
 ): Promise<void> {
     const stateRef = db.collection('users').doc(uid).collection('trainingPlanState').doc('current');
     const targets: Array<{ kind: 'plan' | 'workout'; id: string }> = [
@@ -435,6 +444,7 @@ async function preparePlanDeletionTombstones(
                 'This account is being deleted or is no longer available.',
             );
         }
+        await transactionPrecondition?.(transaction);
         const existing = await Promise.all(tombstones.map(tombstone => transaction.get(tombstone.ref)));
         tombstones.forEach((tombstone, index) => {
             if (!existing[index].exists) {
@@ -554,6 +564,7 @@ async function finalizePlanDeletion(
     requestHash: string,
     lock: PlanDeletionLockV1,
     nowMs: number,
+    transactionPrecondition?: PlanDeletionTransactionPrecondition,
 ): Promise<DeleteTrainingPlanResponseV1> {
     const userRef = db.collection('users').doc(uid);
     const stateRef = userRef.collection('trainingPlanState').doc('current');
@@ -569,6 +580,7 @@ async function finalizePlanDeletion(
         if (deletionGuard.shouldSkip) {
             throw new TrainingScheduleMutationError('failed-precondition', 'This account is being deleted or is no longer available.');
         }
+        await transactionPrecondition?.(transaction);
         const [receiptSnapshot, lockSnapshot, stateSnapshot, planSnapshot, workoutSnapshots] = await Promise.all([
             transaction.get(receiptRef),
             transaction.get(lockRef),
@@ -681,17 +693,40 @@ async function cleanupDeletedPlanData(
 export async function deleteTrainingPlanForUser(
     uid: string,
     request: DeleteTrainingPlanRequestV1,
-    options: { db?: admin.firestore.Firestore; nowMs?: number } = {},
+    options: {
+        db?: admin.firestore.Firestore;
+        nowMs?: number;
+        transactionPrecondition?: PlanDeletionTransactionPrecondition;
+    } = {},
 ): Promise<DeleteTrainingPlanResponseV1> {
     const db = options.db ?? admin.firestore();
     const nowMs = options.nowMs ?? Date.now();
     const requestHash = hashTrainingScheduleRequestPayload(request);
-    const lockResult = await ensurePlanDeletionLock(db, uid, request, requestHash, nowMs);
+    const lockResult = await ensurePlanDeletionLock(
+        db,
+        uid,
+        request,
+        requestHash,
+        nowMs,
+        options.transactionPrecondition,
+    );
     const response = lockResult.kind === 'completed'
         ? lockResult.response
         : await (async () => {
-            await preparePlanDeletionTombstones(db, uid, lockResult.lock, nowMs);
-            await prepareStandaloneRevisionSnapshots(db, uid, lockResult.lock, nowMs);
+            await preparePlanDeletionTombstones(
+                db,
+                uid,
+                lockResult.lock,
+                nowMs,
+                options.transactionPrecondition,
+            );
+            await prepareStandaloneRevisionSnapshots(
+                db,
+                uid,
+                lockResult.lock,
+                nowMs,
+                options.transactionPrecondition,
+            );
             const lockedRequest: DeleteTrainingPlanRequestV1 = {
                 ...request,
                 mutationId: lockResult.lock.mutationId,
@@ -704,6 +739,7 @@ export async function deleteTrainingPlanForUser(
                 lockResult.lock.requestHash,
                 lockResult.lock,
                 nowMs,
+                options.transactionPrecondition,
             );
         })();
     await persistPlanDeletionResumeReceipt(db, uid, request, requestHash, response, nowMs);

@@ -375,6 +375,29 @@ describe('deleteTrainingPlanForUser persistence', () => {
         expect(db.read('users/user-1/trainingPlanState/current/planDeletionLocks/plan-1')).toBeUndefined();
     });
 
+    it('rechecks caller authority during a resumable deletion before destructive writes', async () => {
+        seed(db, [workout('workout-1')]);
+        let checks = 0;
+        const transactionPrecondition = vi.fn(async () => {
+            checks += 1;
+            if (checks > 1) throw new Error('grant revoked');
+        });
+
+        await expect(deleteTrainingPlanForUser(
+            'user-1', request('delete-workouts'), {
+                db: db as never,
+                nowMs: NOW_MS,
+                transactionPrecondition,
+            },
+        )).rejects.toThrow('grant revoked');
+
+        expect(transactionPrecondition).toHaveBeenCalledTimes(2);
+        expect(db.read('users/user-1/trainingPlans/plan-1')).toBeDefined();
+        expect(db.read('users/user-1/scheduledWorkouts/workout-1')).toBeDefined();
+        expect(db.read('users/user-1/trainingPlanState/current/planDeletionLocks/plan-1')).toBeDefined();
+        expect([...db.docs.keys()].some(path => path.includes('/deletionTombstones/'))).toBe(false);
+    });
+
     it('resumes an interrupted deletion after a reload supplies a new mutation ID', async () => {
         const current = workout('workout-1');
         seed(db, [current]);

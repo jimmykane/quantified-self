@@ -24,6 +24,7 @@ vi.mock('../shared/user-deletion-guard', () => ({
 import {
     buildTrainingScheduleRevisionWrites,
     hashTrainingScheduleMutationRequest,
+    mutateTrainingScheduleBatchForUser,
     mutateTrainingScheduleForUser,
     trainingScheduleDeletionTombstoneDocumentId,
 } from './persistence';
@@ -114,6 +115,12 @@ class FakeTransaction {
         this.db.documents.set(ref.path, JSON.parse(JSON.stringify(value)) as FakeDocumentData);
     }
 
+    update(ref: FakeDocumentReference, value: unknown): void {
+        const current = this.db.documents.get(ref.path);
+        if (!current) throw new Error(`Document does not exist: ${ref.path}`);
+        this.set(ref, { ...current, ...(value as FakeDocumentData) });
+    }
+
     create(ref: FakeDocumentReference, value: unknown): void {
         if (this.db.documents.has(ref.path)) throw new Error(`Document already exists: ${ref.path}`);
         this.set(ref, value);
@@ -126,6 +133,7 @@ class FakeTransaction {
 
 class FakeFirestore {
     readonly documents = new Map<string, FakeDocumentData>();
+    transactionCount = 0;
     readonly recursiveDelete = vi.fn(async (ref: FakeDocumentReference) => {
         for (const path of [...this.documents.keys()]) {
             if (path === ref.path || path.startsWith(`${ref.path}/`)) this.documents.delete(path);
@@ -137,6 +145,7 @@ class FakeFirestore {
     }
 
     async runTransaction<T>(handler: (transaction: FakeTransaction) => Promise<T>): Promise<T> {
+        this.transactionCount += 1;
         return handler(new FakeTransaction(this));
     }
 
@@ -377,6 +386,50 @@ describe('mutateTrainingScheduleForUser persistence', () => {
         });
         expect(first.workouts).toEqual([]);
         expect([...db.documents.keys()].some(path => path.includes('/scheduledWorkouts/'))).toBe(false);
+    });
+
+    it('persists chained schedule changes and proposal progress in one transaction', async () => {
+        db.seed('users/user-1/trainingMcpProposals/proposal-1', { status: 'applying' });
+        const create = request({
+            kind: 'create-plan',
+            planId: 'plan-batch',
+            name: 'Original name',
+            startLocalDate: '2026-09-01',
+            endLocalDate: '2026-09-30',
+            activate: false,
+        }, [], 'batch-create');
+        const rename: MutateTrainingScheduleRequestV1 = {
+            mutationId: 'batch-rename',
+            expectedRevisions: [
+                { scope: 'state', id: 'current', revision: 1 },
+                { scope: 'plan', id: 'plan-batch', revision: 1 },
+            ],
+            operation: { kind: 'rename-plan', planId: 'plan-batch', name: 'Final name' },
+        };
+
+        const responses = await mutateTrainingScheduleBatchForUser('user-1', [create, rename], {
+            db: db as never,
+            nowMs: NOW_MS,
+            additionalWriteBudget: 1,
+            transactionPostcondition: transaction => {
+                transaction.update(
+                    db.collection('users').doc('user-1').collection('trainingMcpProposals').doc('proposal-1') as never,
+                    { status: 'batched' },
+                );
+            },
+        });
+
+        expect(db.transactionCount).toBe(1);
+        expect(responses).toHaveLength(2);
+        expect(db.read('users/user-1/trainingPlanState/current')).toMatchObject({ revision: 2 });
+        expect(db.read('users/user-1/trainingPlans/plan-batch')).toMatchObject({ name: 'Final name', revision: 2 });
+        expect(db.read('users/user-1/trainingPlans/plan-batch/revisions/0000000001')).toMatchObject({
+            operationKind: 'create-plan',
+        });
+        expect(db.read('users/user-1/trainingPlans/plan-batch/revisions/0000000002')).toMatchObject({
+            operationKind: 'rename-plan',
+        });
+        expect(db.read('users/user-1/trainingMcpProposals/proposal-1')).toMatchObject({ status: 'batched' });
     });
 
     it('persists current state, a standalone snapshot, and an internal idempotency receipt', async () => {

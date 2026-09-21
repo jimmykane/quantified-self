@@ -696,6 +696,8 @@ describe('MCP HTTP scope enforcement', () => {
     expect(writeInstructions).toContain('Never retry a rejected preview unchanged');
     expect(writeInstructions).toContain('Pace is still stored as metres per second with pace presentation');
     expect(writeInstructions).toContain('Never invent a threshold or relative-target reference snapshot');
+    expect(writeInstructions).toContain('Plan deletion must be the sole proposed change');
+    expect(writeInstructions).toContain('never infer whether its workouts should become standalone');
 
     const combinedWriteInstructions = await readInstructions([
       MCP_OAUTH_SCOPES.TrainingPlansRead,

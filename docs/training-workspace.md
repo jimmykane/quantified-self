@@ -20,8 +20,10 @@ an existing exact stored link; they never infer a match. The optional activity r
 `activity-details:read`.
 
 `training-plans:write` and `training-delivery:write` are independent child scopes of `training-plans:read`. The former
-allows only the safe authored lifecycle: create/edit/move/copy/skip/archive/activate/shift and recoverable workout
-deletion. It excludes permanent workout deletion, plan deletion and history restoration. The latter allows plan delivery
+allows the bounded authored lifecycle: create/edit/move/copy/skip/archive/activate/shift, recoverable workout deletion,
+and explicit plan deletion. Plan deletion must be the sole proposal change, requires a convert-workouts-to-standalone or
+permanently-delete-workouts choice, and permanently removes the plan revision history. Permanent single-workout deletion
+and history restoration remain excluded. The latter allows plan delivery
 enablement and workout send/resume/stop/retry/check/approval. Delivery remains Pro, provider-connection and rollout gated.
 External clients prepare one strict proposal of at most 25 changes, then invoke the separately approval-gated
 `apply_training_changes` write tool. ChatGPT, Claude and other MCP hosts own their native tool-approval UI; QS does not
@@ -32,6 +34,11 @@ because Research can invoke connector tools without another approval. Proposals 
 schedule revision and entity creation time, and retain an idempotent
 terminal result for safe retries. Provider outcomes are independent: a failed send never rolls back a successfully
 authored standalone workout.
+
+Compatible MCP schedule changes share one bounded Firestore transaction while preserving each change's own immutable
+revision and idempotency receipt; oversized revision-history batches fall back to sequential transactions. Structured
+apply diagnostics expose only operation counts, stage/total durations, outcome and slowest stage. No owner identifiers,
+opaque references or authored content are logged. A five-second total duration emits one slow-apply warning.
 
 Single-workout creation has an additive focused MCP preview. The caller supplies the current schedule revision, optional
 plan reference, calendar date, title and complete canonical recipe; the server supplies the proposal-local key and routes

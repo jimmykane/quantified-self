@@ -63,6 +63,7 @@ describe('AssistantExploreBottomSheetComponent', () => {
     const toggle = fixture.nativeElement.querySelector('[aria-describedby="assistant-training-plans-disclosure"]');
     expect(toggle).not.toBeNull();
     expect(fixture.nativeElement.textContent).toContain('sensitive health or personal information');
+    expect(fixture.nativeElement.textContent).toContain('choose what happens to its workouts');
     component.setTrainingPlans(false); expect(bottomSheetRef.dismiss).not.toHaveBeenCalled();
     component.setTrainingPlans(true); expect(bottomSheetRef.dismiss).toHaveBeenCalledWith({ kind: 'training_plans', enabled: true });
     // Optional rendered-component artifact for phone/desktop light/dark layout QA. No account/API data.

@@ -1,13 +1,17 @@
 import * as admin from 'firebase-admin';
 import { randomUUID } from 'node:crypto';
+import { performance } from 'node:perf_hooks';
 import { Timestamp } from 'firebase-admin/firestore';
+import * as logger from 'firebase-functions/logger';
 import { HttpsError } from 'firebase-functions/v2/https';
 import { z } from 'zod';
 import {
   parseMutateTrainingScheduleRequestV1,
+  parseDeleteTrainingPlanRequestV1,
   parseScheduledWorkoutV1,
   parseTrainingPlanStateV1,
   parseTrainingPlanV1,
+  type DeleteTrainingPlanRequestV1,
   type ExpectedTrainingScheduleRevision,
   type MutateTrainingScheduleRequestV1,
   type ScheduledWorkoutV1,
@@ -22,7 +26,9 @@ import { getUserDeletionGuardStateInTransaction } from '../shared/user-deletion-
 import { assertNoTrainingPlanDeletionInProgress } from '../training-plans/deletion-lock';
 import { applyTrainingScheduleMutation, createEmptyTrainingPlanState, TrainingScheduleMutationError,
   type TrainingScheduleSnapshotV1 } from '../training-plans/mutation';
-import { mutateTrainingScheduleForUser } from '../training-plans/persistence';
+import { TrainingScheduleBatchWriteLimitError, mutateTrainingScheduleBatchForUser,
+  mutateTrainingScheduleForUser } from '../training-plans/persistence';
+import { applyTrainingPlanDeletion, deleteTrainingPlanForUser } from '../training-plans/delete-training-plan';
 import { trainingDeliveryCommand } from '../training-plans/delivery/commands';
 import { productionDeliveryRuntime } from '../training-plans/delivery/runtime';
 import type { DeliveryRuntime } from '../training-plans/delivery/contracts';
@@ -72,6 +78,11 @@ interface StoredScheduleOperation {
   request: MutateTrainingScheduleRequestV1;
 }
 
+interface StoredPlanDeletion {
+  index: number;
+  request: DeleteTrainingPlanRequestV1;
+}
+
 interface StoredProposal {
   schemaVersion: 1;
   uid: string;
@@ -85,6 +96,7 @@ interface StoredProposal {
   leaseUntilMs: number | null;
   nextScheduleOperation: number;
   scheduleRequests: StoredScheduleOperation[];
+  planDeletion?: StoredPlanDeletion;
   providerOperations: StoredProviderOperation[];
   localEntities: Array<{ localKey: string; kind: 'plan' | 'workout'; id: string }>;
   preview: PreviewResult;
@@ -105,6 +117,7 @@ export interface TrainingWriteDependencies {
   runtime: DeliveryRuntime;
   now(): number;
   randomId(): string;
+  monotonicNow?: () => number;
 }
 
 function defaultDependencies(): TrainingWriteDependencies {
@@ -148,6 +161,9 @@ function permissionMode(required: readonly string[]): 'schedule' | 'delivery' | 
 }
 
 function assertProviderActionsLast(changes: readonly TrainingChange[]): void {
+  if (changes.some(change => change.kind === 'delete-plan') && changes.length !== 1) {
+    invalid('Plan deletion must be reviewed and approved as the only change in a proposal.');
+  }
   let providerActionSeen = false;
   for (const change of changes) {
     if (change.kind === 'provider-delivery') providerActionSeen = true;
@@ -174,13 +190,14 @@ async function assertAuthorityInTransaction(
   required: readonly string[],
   expectedGeneration?: string,
   expectedAssistantProposalRef?: string,
+  allowActivePlanDeletion = false,
 ): Promise<string> {
   const user = deps.db.collection('users').doc(uid);
   if ((await getUserDeletionGuardStateInTransaction(deps.db, tx, uid, deps.now())).shouldSkip) {
     invalid('This account is unavailable or being deleted.');
   }
   const stateRef = user.collection('trainingPlanState').doc('current');
-  await assertNoTrainingPlanDeletionInProgress(tx, stateRef);
+  if (!allowActivePlanDeletion) await assertNoTrainingPlanDeletionInProgress(tx, stateRef);
   if (connectionId.startsWith('first-party-assistant-v1:')) {
     const conversationId = connectionId.slice('first-party-assistant-v1:'.length);
     if (!conversationId) invalid('The Assistant Training permission generation is unavailable.');
@@ -362,7 +379,7 @@ function describeScheduleEffects(
 }
 
 function resolveScheduleOperation(
-  change: Exclude<TrainingChange, { kind: 'provider-delivery' }>,
+  change: Exclude<TrainingChange, { kind: 'provider-delivery' } | { kind: 'delete-plan' }>,
   input: Pick<TrainingWriteInput, 'uid' | 'connectionId'>,
   snapshot: TrainingScheduleSnapshotV1,
   locals: Map<string, { kind: 'plan' | 'workout'; id: string }>,
@@ -564,6 +581,7 @@ export async function previewTrainingChanges(
   }
   const locals = new Map<string, { kind: 'plan' | 'workout'; id: string }>();
   const scheduleRequests: StoredScheduleOperation[] = [];
+  let planDeletion: StoredPlanDeletion | undefined;
   const providerTemplates: Array<{ index: number; change: Extract<TrainingChange, { kind: 'provider-delivery' }> }> = [];
   let simulated = loaded.snapshot;
   const publicChanges: PreviewResult['changes'] = [];
@@ -571,6 +589,31 @@ export async function previewTrainingChanges(
     if (change.kind === 'provider-delivery') {
       providerTemplates.push({ index, change });
       publicChanges.push({ index, kind: change.kind, summary: `${change.action} ${change.targetType} delivery.` });
+      return;
+    }
+    if (change.kind === 'delete-plan') {
+      const planId = resolveReference(change.plan, 'plan', input, simulated, locals);
+      const plan = simulated.plans.get(planId)!;
+      const currentWorkoutCount = [...simulated.workouts.values()]
+        .filter(workout => workout.planId === planId && workout.lifecycle !== 'deleted').length;
+      const request = parseDeleteTrainingPlanRequestV1({
+        mutationId: `mcp-plan-deletion-${deps.randomId()}`,
+        planId,
+        expectedRevisions: [
+          { scope: 'state', id: 'current', revision: simulated.state.revision },
+          { scope: 'plan', id: planId, revision: plan.revision },
+        ],
+        workoutDisposition: change.workoutDisposition,
+        confirmPlanDeletion: true,
+      });
+      try { simulated = applyTrainingPlanDeletion(simulated, request, deps.now()).after; }
+      catch (error) { invalid(publicErrorMessage(error) ?? 'This Training plan cannot be deleted safely.'); }
+      planDeletion = { index, request };
+      const workoutEffect = change.workoutDisposition === 'convert-to-standalone'
+        ? `${currentWorkoutCount} current workout${currentWorkoutCount === 1 ? '' : 's'} will become standalone.`
+        : `${currentWorkoutCount} current workout${currentWorkoutCount === 1 ? '' : 's'} will also be permanently deleted.`;
+      publicChanges.push({ index, kind: change.kind,
+        summary: `Permanently delete plan “${plan.name}” and its revision history. ${workoutEffect} Provider copies may remain when provider access is unavailable.` });
       return;
     }
     const operation = resolveScheduleOperation(change, input, simulated, locals, deps.randomId);
@@ -676,7 +719,8 @@ export async function previewTrainingChanges(
   const stored: StoredProposal = { schemaVersion: 1, uid: input.uid, connectionId: input.connectionId,
     accessGeneration: loaded.accessGeneration, requiredScopes: required, createdAtMs, expiresAtMs,
     expireAt: Timestamp.fromMillis(expiresAtMs), status: 'pending', leaseUntilMs: null, nextScheduleOperation: 0,
-    scheduleRequests, providerOperations, localEntities: [...locals].map(([localKey, value]) => ({ localKey, ...value })),
+    scheduleRequests, ...(planDeletion ? { planDeletion } : {}), providerOperations,
+    localEntities: [...locals].map(([localKey, value]) => ({ localKey, ...value })),
     preview, changeResults: [], providerResults: [] };
   await deps.db.runTransaction(async tx => {
     const generation = await assertAuthorityInTransaction(deps, tx, input.uid, input.connectionId, required, loaded.accessGeneration);
@@ -770,11 +814,56 @@ async function currentDeliveryCommand(
       .then(() => undefined)) as unknown as Record<string, unknown>;
 }
 
-export async function applyTrainingChanges(
+export interface TrainingApplyTiming {
+  operationCount: number;
+  scheduleOperationCount: number;
+  providerOperationCount: number;
+  proposalMs: number;
+  scheduleMs: number;
+  providerMs: number;
+  finalizeMs: number;
+  outcome: 'applied' | 'partially_applied' | 'failed' | 'replayed';
+}
+
+function roundedDuration(value: number): number {
+  return Math.max(0, Math.round(value));
+}
+
+export function emitTrainingApplyDiagnostic(timing: TrainingApplyTiming, durationMs: number): void {
+  const stages = {
+    proposal: roundedDuration(timing.proposalMs),
+    schedule: roundedDuration(timing.scheduleMs),
+    provider: roundedDuration(timing.providerMs),
+    finalize: roundedDuration(timing.finalizeMs),
+  };
+  const slowStage = Object.entries(stages).sort((left, right) => right[1] - left[1])[0]?.[0] ?? 'proposal';
+  const diagnostic = {
+    operationCount: timing.operationCount,
+    scheduleOperationCount: timing.scheduleOperationCount,
+    providerOperationCount: timing.providerOperationCount,
+    durationMs: roundedDuration(durationMs),
+    stageDurationMs: stages,
+    outcome: timing.outcome,
+    slowStage,
+  };
+  logger.info('[MCP] Training apply completed', diagnostic);
+  if (durationMs >= 5_000) logger.warn('[MCP] Training apply slow', diagnostic);
+}
+
+async function resetProposalLease(
+  proposalRefDoc: FirebaseFirestore.DocumentReference,
+): Promise<void> {
+  try { await proposalRefDoc.set({ status: 'pending', leaseUntilMs: null }, { merge: true }); }
+  catch { /* Preserve the original apply failure. The lease still expires safely. */ }
+}
+
+async function applyTrainingChangesInternal(
   input: TrainingWriteInput,
-  provided?: TrainingWriteDependencies,
+  deps: TrainingWriteDependencies,
+  timing: TrainingApplyTiming,
+  clock: () => number,
 ): Promise<ApplyResult> {
-  const deps = provided ?? defaultDependencies();
+  const proposalStarted = clock();
   const current = await readProposal(input, deps);
   const ref = current.ref;
   const proposalRefDoc = deps.db.collection('users').doc(input.uid).collection(PROPOSALS).doc(current.id);
@@ -793,43 +882,125 @@ export async function applyTrainingChanges(
     tx.update(proposalRefDoc, { status: next.status, leaseUntilMs: next.leaseUntilMs });
     return next;
   });
-  if (proposal.result) return TRAINING_WRITE_OUTPUTS.apply_training_changes.parse(proposal.result);
+  timing.operationCount = proposal.scheduleRequests.length + proposal.providerOperations.length
+    + (proposal.planDeletion ? 1 : 0);
+  timing.scheduleOperationCount = proposal.scheduleRequests.length + (proposal.planDeletion ? 1 : 0);
+  timing.providerOperationCount = proposal.providerOperations.length;
+  timing.proposalMs = clock() - proposalStarted;
+  if (proposal.result) {
+    timing.outcome = 'replayed';
+    return TRAINING_WRITE_OUTPUTS.apply_training_changes.parse(proposal.result);
+  }
 
+  const scheduleStarted = clock();
   const changeResults = [...proposal.changeResults];
-  for (let index = proposal.nextScheduleOperation; index < proposal.scheduleRequests.length; index += 1) {
-    const storedOperation = proposal.scheduleRequests[index];
-    const request = storedOperation.request;
+  if (proposal.planDeletion && !changeResults.some(result => result.index === proposal.planDeletion!.index)) {
     try {
-      await deps.db.runTransaction(tx => assertAuthorityInTransaction(deps, tx, input.uid, input.connectionId,
-        proposal.requiredScopes, proposal.accessGeneration,
-        input.connectionId.startsWith('first-party-assistant-v1:') ? current.ref : undefined), { readOnly: true });
-      await mutateTrainingScheduleForUser(input.uid, request, {
+      const response = await deleteTrainingPlanForUser(input.uid, proposal.planDeletion.request, {
         db: deps.db,
-        nowMs: proposal.createdAtMs + index,
+        nowMs: proposal.createdAtMs,
         transactionPrecondition: tx => assertAuthorityInTransaction(deps, tx, input.uid, input.connectionId,
           proposal.requiredScopes, proposal.accessGeneration,
-          input.connectionId.startsWith('first-party-assistant-v1:') ? current.ref : undefined).then(() => undefined),
+          input.connectionId.startsWith('first-party-assistant-v1:') ? current.ref : undefined, true)
+          .then(() => undefined),
       });
-      changeResults.push({ index: storedOperation.index,
-        kind: request.operation.kind, status: 'applied', message: describeOperation(request.operation) });
-      await proposalRefDoc.update({ nextScheduleOperation: index + 1, changeResults,
-        leaseUntilMs: deps.now() + APPLY_LEASE_MS });
+      const effect = response.workoutDisposition === 'convert-to-standalone'
+        ? `${response.convertedWorkoutIds.length} workout${response.convertedWorkoutIds.length === 1 ? '' : 's'} converted to standalone.`
+        : `${response.permanentlyDeletedWorkoutIds.length} workout${response.permanentlyDeletedWorkoutIds.length === 1 ? '' : 's'} permanently deleted.`;
+      changeResults.push({ index: proposal.planDeletion.index, kind: 'delete-plan', status: 'applied',
+        message: `The plan and its revision history were permanently deleted. ${effect}` });
+      await proposalRefDoc.update({ changeResults, leaseUntilMs: deps.now() + APPLY_LEASE_MS });
     } catch (error) {
-      changeResults.push({ index: storedOperation.index, kind: request.operation.kind, status: 'failed',
-        message: publicErrorMessage(error) ?? 'The schedule change could not be applied safely. Read the latest schedule and prepare it again.' });
-      break;
+      const message = publicErrorMessage(error);
+      if (!message) {
+        await resetProposalLease(proposalRefDoc);
+        throw error;
+      }
+      changeResults.push({ index: proposal.planDeletion.index, kind: 'delete-plan', status: 'failed', message });
     }
   }
 
-  const completedSchedule = changeResults.filter(item => item.status !== 'failed').length >= proposal.scheduleRequests.length;
+  const pendingSchedule = proposal.scheduleRequests.slice(proposal.nextScheduleOperation);
+  if (pendingSchedule.length > 0 && !changeResults.some(result => result.status === 'failed')) {
+    const appliedResults: ApplyResult['changes'] = pendingSchedule.map(stored => ({
+      index: stored.index,
+      kind: stored.request.operation.kind,
+      status: 'applied' as const,
+      message: describeOperation(stored.request.operation),
+    }));
+    try {
+      await mutateTrainingScheduleBatchForUser(input.uid, pendingSchedule.map(stored => stored.request), {
+        db: deps.db,
+        nowMs: proposal.createdAtMs + proposal.nextScheduleOperation,
+        additionalWriteBudget: 1,
+        transactionPrecondition: tx => assertAuthorityInTransaction(deps, tx, input.uid, input.connectionId,
+          proposal.requiredScopes, proposal.accessGeneration,
+          input.connectionId.startsWith('first-party-assistant-v1:') ? current.ref : undefined).then(() => undefined),
+        transactionPostcondition: transaction => {
+          transaction.update(proposalRefDoc, {
+            nextScheduleOperation: proposal.scheduleRequests.length,
+            changeResults: [...changeResults, ...appliedResults],
+            leaseUntilMs: deps.now() + APPLY_LEASE_MS,
+          });
+        },
+      });
+      changeResults.push(...appliedResults);
+    } catch (error) {
+      if (error instanceof TrainingScheduleBatchWriteLimitError) {
+        for (let offset = 0; offset < pendingSchedule.length; offset += 1) {
+          const stored = pendingSchedule[offset];
+          const appliedResult = appliedResults[offset];
+          try {
+            await mutateTrainingScheduleForUser(input.uid, stored.request, {
+              db: deps.db,
+              nowMs: proposal.createdAtMs + proposal.nextScheduleOperation + offset,
+              additionalWriteBudget: 1,
+              transactionPrecondition: tx => assertAuthorityInTransaction(deps, tx, input.uid, input.connectionId,
+                proposal.requiredScopes, proposal.accessGeneration,
+                input.connectionId.startsWith('first-party-assistant-v1:') ? current.ref : undefined)
+                .then(() => undefined),
+              transactionPostcondition: transaction => {
+                transaction.update(proposalRefDoc, {
+                  nextScheduleOperation: proposal.nextScheduleOperation + offset + 1,
+                  changeResults: [...changeResults, appliedResult],
+                  leaseUntilMs: deps.now() + APPLY_LEASE_MS,
+                });
+              },
+            });
+            changeResults.push(appliedResult);
+          } catch (sequentialError) {
+            const message = publicErrorMessage(sequentialError);
+            if (!message) {
+              await resetProposalLease(proposalRefDoc);
+              throw sequentialError;
+            }
+            changeResults.push({ index: stored.index, kind: stored.request.operation.kind, status: 'failed',
+              message });
+            break;
+          }
+        }
+      } else {
+        const message = publicErrorMessage(error);
+        if (!message) {
+          await resetProposalLease(proposalRefDoc);
+          throw error;
+        }
+        const failed = pendingSchedule[0];
+        changeResults.push({ index: failed.index, kind: failed.request.operation.kind, status: 'failed', message });
+      }
+    }
+  }
+  timing.scheduleMs = clock() - scheduleStarted;
+
+  const expectedScheduleResults = proposal.scheduleRequests.length + (proposal.planDeletion ? 1 : 0);
+  const completedSchedule = !changeResults.some(item => item.status === 'failed')
+    && changeResults.length >= expectedScheduleResults;
+  const providerStarted = clock();
   const providerResults = [...proposal.providerResults];
   if (completedSchedule) {
     for (let index = providerResults.length; index < proposal.providerOperations.length; index += 1) {
       const operation = proposal.providerOperations[index];
       try {
-        await deps.db.runTransaction(tx => assertAuthorityInTransaction(deps, tx, input.uid, input.connectionId,
-          proposal.requiredScopes, proposal.accessGeneration,
-          input.connectionId.startsWith('first-party-assistant-v1:') ? current.ref : undefined), { readOnly: true });
         await currentDeliveryCommand(deps, input.uid, input.connectionId, proposal.requiredScopes,
           proposal.accessGeneration, current.ref, operation, `mcp-${current.id}-${index}`.slice(0, 128));
         providerResults.push({ index: operation.index, provider: operation.provider,
@@ -842,16 +1013,20 @@ export async function applyTrainingChanges(
       await proposalRefDoc.update({ providerResults, leaseUntilMs: deps.now() + APPLY_LEASE_MS });
     }
   }
+  timing.providerMs = clock() - providerStarted;
 
+  const finalizeStarted = clock();
   const state = await deps.db.collection('users').doc(input.uid).collection('trainingPlanState').doc('current').get();
   const createdReferences: ApplyResult['createdReferences'] = [];
-  for (const local of proposal.localEntities) {
-    const doc = await deps.db.collection('users').doc(input.uid)
-      .collection(local.kind === 'plan' ? 'trainingPlans' : 'scheduledWorkouts').doc(local.id).get();
+  const localRefs = proposal.localEntities.map(local => deps.db.collection('users').doc(input.uid)
+    .collection(local.kind === 'plan' ? 'trainingPlans' : 'scheduledWorkouts').doc(local.id));
+  const localDocs = localRefs.length > 0 ? await deps.db.getAll(...localRefs) : [];
+  proposal.localEntities.forEach((local, index) => {
+    const doc = localDocs[index];
     if (doc.exists) createdReferences.push({ localKey: local.localKey, kind: local.kind,
       reference: encodeOpaqueValue('training_read', { kind: local.kind, id: local.id,
         createdAtMs: Number(doc.get('createdAtMs')) }, input.uid, input.connectionId) });
-  }
+  });
   const partial = changeResults.some(item => item.status === 'failed') || providerResults.some(item => ['blocked', 'failed'].includes(item.status));
   const result: ApplyResult = { proposalRef: ref, status: partial ? 'partially_applied' : 'applied',
     scheduleRevision: Number(state.get('revision') ?? 0), changes: changeResults,
@@ -864,5 +1039,31 @@ export async function applyTrainingChanges(
   await deps.db.runTransaction(tx => assertAuthorityInTransaction(deps, tx, input.uid, input.connectionId,
     proposal.requiredScopes, proposal.accessGeneration,
     input.connectionId.startsWith('first-party-assistant-v1:') ? current.ref : undefined), { readOnly: true });
+  timing.finalizeMs = clock() - finalizeStarted;
+  timing.outcome = result.status;
   return result;
+}
+
+export async function applyTrainingChanges(
+  input: TrainingWriteInput,
+  provided?: TrainingWriteDependencies,
+): Promise<ApplyResult> {
+  const deps = provided ?? defaultDependencies();
+  const clock = deps.monotonicNow ?? (() => performance.now());
+  const started = clock();
+  const timing: TrainingApplyTiming = {
+    operationCount: 0,
+    scheduleOperationCount: 0,
+    providerOperationCount: 0,
+    proposalMs: 0,
+    scheduleMs: 0,
+    providerMs: 0,
+    finalizeMs: 0,
+    outcome: 'failed',
+  };
+  try {
+    return await applyTrainingChangesInternal(input, deps, timing, clock);
+  } finally {
+    emitTrainingApplyDiagnostic(timing, clock() - started);
+  }
 }
