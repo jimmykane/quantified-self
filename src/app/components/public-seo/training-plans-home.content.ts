@@ -12,7 +12,7 @@ interface TrainingPlansHomeRow {
 /** Compact Training Plans discovery content rendered on the public homepage. */
 export const TRAINING_PLANS_HOME_CONTENT = {
   title: 'Plan What Comes Next',
-  intro: 'Create free manual running and cycling plans or schedule one standalone structured workout. No provider connection is required, and planned workouts stay separate from completed activity totals.',
+  intro: 'Build structured running and cycling workouts, organize them into dated plans or keep them standalone, and choose how you want to manage and deliver them.',
   preview: 'training-plans' satisfies PublicFeaturePreviewKey,
   cta: {
     label: 'Explore Training Plans',
@@ -30,11 +30,23 @@ export const TRAINING_PLANS_HOME_CONTENT = {
       icon: 'repeat',
       iconTone: 'secondary',
       title: 'Structured Running and Cycling',
-      copy: 'Combine time or distance steps, fixed repeats, and absolute heart-rate, power, or pace targets in the manual editor.',
+      copy: 'Combine time or distance steps, fixed repeats, and absolute heart-rate, power, or pace targets in a clear workout editor.',
+    },
+    {
+      icon: 'devices',
+      iconTone: 'tertiary',
+      title: 'Plan Through MCP',
+      copy: 'With separate Training permissions, compatible MCP clients can read your schedule, assess provider compatibility, and prepare bounded plan, workout, or delivery changes for your approval.',
+    },
+    {
+      icon: 'sync',
+      iconTone: 'primary',
+      title: 'Optional Provider Delivery',
+      copy: 'Provider workout sync is a separate Pro limited beta with explicit plan opt-in or standalone Send actions. Connecting Garmin, Suunto, Wahoo, or COROS never sends workouts by itself.',
     },
     {
       icon: 'calendar_month',
-      iconTone: 'tertiary',
+      iconTone: 'secondary',
       title: 'Separate Calendar Overlays',
       copy: 'See standalone and active-plan workouts beside completed activities without adding them to recorded totals or Training analysis.',
     },

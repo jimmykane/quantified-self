@@ -13,7 +13,7 @@ export const HOME_SEO_JSON_LD = {
   featureList: [
     'Week, Month, and Year activity calendar with duration-scaled activity groups',
     'Curated training analysis for readiness, load, intensity, durability, sleep context, and best builds',
-    'Free manual training plans and standalone structured workouts for running and cycling',
+    'Training plans and standalone structured workouts for running and cycling',
     'Automatic Garmin to Suunto activity sync',
     'Automatic COROS to Suunto activity sync',
     'Automatic Wahoo to Suunto activity sync',

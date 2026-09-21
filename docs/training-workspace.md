@@ -359,12 +359,17 @@ public layout, startup-route registry, prerender list and sitemap with no authen
 authenticated `/training/plans` route family remains client-rendered, owner-scoped and `noindex, follow`; it never enters
 the sitemap. There are no aliases or redirects between these route families.
 
-The public launch is manual-first: manual plans and standalone structured workouts are free, and neither requires a
-provider connection. Public copy must say that connecting Garmin, COROS, Wahoo or Suunto never sends a planned workout.
-Provider workout delivery is a distinct Pro capability with explicit actions, compatibility checks and independent
-provider rollout gates; it is not part of this public launch. A provider page may describe workout delivery as available
-only after that provider's public delivery switch and release scope are approved. An implemented adapter, private pilot
-or connected account is not evidence of public availability.
+Public discovery leads with the planning workflow rather than internal rollout labels such as **manual-first** or badges
+such as **Manual and free**. Plans and standalone structured workouts created in Quantified Self are available on the
+free tier and require no provider connection, but that boundary belongs in supporting copy and pricing rather than as
+the feature's identity. The homepage, public page, and Help also make the separately permissioned MCP planning surface
+and opt-in provider delivery discoverable. They distinguish source implementation from released MCP client availability,
+and describe provider workout delivery as a distinct Pro limited beta with explicit actions, compatibility checks and
+independent provider rollout gates. Authenticated Help names the private-rollout boundary directly. Public copy must say
+that connecting Garmin, COROS, Wahoo or Suunto never sends a planned workout. A provider page may describe workout
+delivery as available only after that provider's public delivery
+switch and release scope are approved. An implemented adapter, private pilot or connected account is not evidence of
+public availability.
 
 The page and homepage reuse `PlanScheduleCalendarComponent`, the canonical plan/workout parsers, plan appearance helper
 and Sports Lib-backed workout formatters through a deterministic synthetic fixture. The fixture spans multiple weeks and
@@ -379,9 +384,10 @@ The homepage and public feature page keep their composition separate. Compact ho
 `training-plans-page.content.ts`. Keep these modules physically separate so route-only copy cannot enter homepage
 startup, and keep page-only detail, FAQ and launch-boundary sections out of a generic homepage configuration renderer.
 
-This discovery surface has no MCP wire impact: it adds no tool, schema, field, scope, consent, projection, Assistant
-authority, provider action or bundled-skill behavior. It reads canonical frontend types only to validate and render
-synthetic data; the existing Training plan read/write contract and independent consent remain unchanged.
+This discovery surface has no MCP wire impact: its copy makes the existing separately permissioned planning surface
+discoverable but adds no tool, schema, field, scope, consent, projection, Assistant authority, provider action or
+bundled-skill behavior. It reads canonical frontend types only to validate and render synthetic data; the existing
+Training plan read/write contract, release lifecycle, and independent consent remain unchanged.
 
 ### Canonical workout boundary
 

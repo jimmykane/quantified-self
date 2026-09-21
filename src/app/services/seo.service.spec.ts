@@ -178,7 +178,7 @@ describe('SeoService', () => {
         expect(mockScript.textContent).not.toMatch(/\bprivate\b/i);
         expect(mockScript.textContent).toContain('Week, Month, and Year activity calendar with duration-scaled activity groups');
         expect(mockScript.textContent).toContain('Curated training analysis for readiness, load, intensity, durability, sleep context, and best builds');
-        expect(mockScript.textContent).toContain('Free manual training plans and standalone structured workouts for running and cycling');
+        expect(mockScript.textContent).toContain('Training plans and standalone structured workouts for running and cycling');
         expect(mockScript.textContent).toContain('Garmin to Suunto activity sync');
         expect(mockScript.textContent).toContain('COROS to Suunto activity sync');
         expect(mockScript.textContent).toContain('Wahoo to Suunto activity sync');

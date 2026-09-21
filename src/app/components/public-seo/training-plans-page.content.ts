@@ -5,15 +5,15 @@ export const TRAINING_PLANS_SEO_CONTENT = {
   title: 'Training Plans for Running and Cycling',
   description: 'Create free running and cycling training plans or standalone structured workouts, schedule them by date, and keep them separate from completed activities.',
   h1: 'Plan running and cycling workouts your way',
-  intro: 'Create a dated plan or start with one standalone workout. Manual planning is free, works without a provider connection, and keeps what you intend to do separate from the activities you already completed.',
+  intro: 'Build a dated plan or start with one standalone workout. Work directly in Quantified Self, keep scheduled work separate from completed activities, and connect other tools only when you choose.',
   featureList: [
-    'Free manual running and cycling training plans',
+    'Running and cycling training plans included on the free tier',
     'Standalone structured workouts without a plan',
     'Dated plan calendars with colors, history, and shifting',
     'Planned-workout overlays kept separate from completed activity totals',
   ],
   socialImageAlt: 'Synthetic purple running and cycling training plan calendar with structured workout examples',
-  freeOfferDescription: 'Manual training plans and standalone structured workouts',
+  freeOfferDescription: 'Training plans and standalone structured workouts created in Quantified Self',
 } as const;
 
 /** Long-form Training Plans sections loaded with the public feature-page content. */
@@ -44,7 +44,7 @@ export const TRAINING_PLANS_PAGE_SECTIONS = [
   {
     eyebrow: 'Structured Workouts',
     title: 'Build the running and cycling workout you mean',
-    copy: 'The first manual editor supports the current Running and Cycling families with date-only scheduling, time or distance steps, fixed repeats, and one absolute heart-rate, power, or pace target per step.',
+    copy: 'The current editor supports the Running and Cycling families with date-only scheduling, time or distance steps, fixed repeats, and one absolute heart-rate, power, or pace target per step.',
     items: [
       {
         icon: 'directions_run',
@@ -59,7 +59,7 @@ export const TRAINING_PLANS_PAGE_SECTIONS = [
       {
         icon: 'repeat',
         title: 'Clear limits, predictable recipes',
-        copy: 'Use up to 100 total nodes, fixed repeat counts up to 100, no nested repeats, and one supported absolute target per step in the current manual editor.',
+        copy: 'Use up to 100 total nodes, fixed repeat counts up to 100, no nested repeats, and one supported absolute target per step in the current editor.',
       },
     ],
   },

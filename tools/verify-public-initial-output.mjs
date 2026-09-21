@@ -390,8 +390,10 @@ function assertTrainingPlansDocument(documentRef) {
   const pageText = documentRef.body.textContent?.replace(/\s+/g, ' ').trim() ?? '';
   for (const expectedCopy of [
     'A standalone workout is first-class',
-    'Provider workout delivery is a separate Pro capability and is not included in this launch.',
+    'Plan directly, through MCP, or with provider delivery',
+    'Provider workout delivery is a separate Pro limited beta',
     'Can I add a workout without creating a plan?',
+    'Can I use an MCP client with Training Plans?',
   ]) {
     if (!pageText.includes(expectedCopy)) {
       throw new Error(`Prerendered ${TRAINING_PLANS_ROUTE} is missing visible copy: ${expectedCopy}`);

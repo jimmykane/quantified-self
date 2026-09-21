@@ -35,7 +35,17 @@ describe('help.content', () => {
   });
 
   it('distinguishes Training consent, expiry, disconnect and the private pilot boundary', () => {
-    const content = HELP_SECTIONS.find(section => section.id === 'training-plans')!.content;
+    const section = HELP_SECTIONS.find(section => section.id === 'training-plans')!;
+    const content = section.content;
+    expect(section.summary).toContain('approval-gated MCP planning');
+    expect(section.summary).toContain('private-beta provider delivery');
+    expect(content).toContain('## Use Training Plans through MCP');
+    expect(content).toContain('Training Plans uses independent MCP permissions');
+    expect(content).toContain('The MCP update must be released, discovered by your client, and explicitly authorized');
+    expect(content).toContain('Previewing a change never contacts a provider');
+    expect(content).toContain('## Send workouts to connected providers (private beta)');
+    expect(section.links.some(link => link.label === 'MCP Connections')).toBe(true);
+    expect(section.links.some(link => link.label === 'Connected services')).toBe(true);
     expect(content).toContain('Provider workout sync is restricted to the private rollout, not a public launch');
     expect(content).toContain('New COROS plan sync setup in the app is shown as **Coming soon**');
     expect(content).toContain('Distance-based steps are not sent because Wahoo needs a total duration');
@@ -549,13 +559,13 @@ describe('help.content', () => {
     });
   });
 
-  it('documents standalone manual planning, revision recovery, and truthful provider status', () => {
+  it('documents standalone planning, revision recovery, and truthful provider status', () => {
     const gettingStartedSection = HELP_SECTIONS.find(section => section.id === 'getting-started');
     const planningSection = HELP_SECTIONS.find(section => section.id === 'training-plans');
 
     expect(planningSection?.content).toContain('You do not need to create a plan first');
     expect(planningSection?.content).toContain('[Training Plans overview](/features/training-plans)');
-    expect(planningSection?.content).toContain('Manual planning is available without a service connection');
+    expect(planningSection?.content).toContain('Plans and standalone workouts work without a service connection');
     expect(planningSection?.content).toContain('Settings -> Dashboard -> Start of the Week');
     expect(planningSection?.content).toContain('Its first weekday is marked and named below the grid');
     expect(planningSection?.content).toContain('Saturday and Sunday are subtly tinted wherever they fall in the week');

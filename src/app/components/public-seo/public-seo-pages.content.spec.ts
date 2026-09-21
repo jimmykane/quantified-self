@@ -148,10 +148,12 @@ describe('public-seo-pages.content', () => {
     expect(trainingPlans.sections.some(section => section.items.some(item => item.copy.includes('Hand Cycle')))).toBe(true);
     expect(trainingPlans.sections.some(section => section.items.some(item => item.copy.includes('up to 100 total nodes')))).toBe(true);
     expect(trainingPlans.sections.some(section => section.items.some(item => item.copy.includes('never adds distance')))).toBe(true);
-    expect(trainingPlans.sections.some(section => section.items.some(item => item.copy.includes('not present workout delivery to any provider as publicly available')))).toBe(true);
+    expect(trainingPlans.sections.some(section => section.items.some(item => item.copy.includes('explicit Send and plan opt-in actions')))).toBe(true);
+    expect(trainingPlans.sections.some(section => section.items.some(item => item.copy.includes('compatible MCP client')))).toBe(true);
     expect(trainingPlans.faqItems.some(item => item.question === 'Can I add a workout without creating a plan?')).toBe(true);
+    expect(trainingPlans.faqItems.some(item => item.question === 'Can I use an MCP client with Training Plans?')).toBe(true);
     expect(trainingPlans.socialImage).toBe('https://quantified-self.io/assets/images/training-plans-social.png');
-    expect(trainingPlans.freeOfferDescription).toBe('Manual training plans and standalone structured workouts');
+    expect(trainingPlans.freeOfferDescription).toBe('Training plans and standalone structured workouts created in Quantified Self');
     const trainingPlanEntities = PUBLIC_SEO_ROUTE_DATA.trainingPlans.jsonLd['mainEntity'] as Record<string, unknown>[];
     const trainingPlanApplication = trainingPlanEntities.find(entity => entity['@type'] === 'SoftwareApplication');
     const trainingPlanOffer = trainingPlanApplication?.['offers'] as Record<string, unknown>;

@@ -13,7 +13,6 @@
 
 .preview-header,
 .selected-day-heading,
-.manual-label,
 .preview-eyebrow,
 .empty-day {
   display: flex;
@@ -66,17 +65,6 @@
   background: var(--preview-plan-color);
 }
 
-.manual-label {
-  flex: 0 0 auto;
-  gap: 0.35rem;
-  padding: 0.4rem 0.65rem;
-  border: 1px solid var(--mat-sys-outline-variant);
-  border-radius: 999px;
-  color: var(--mat-sys-on-surface-variant);
-  font: var(--mat-sys-label-medium);
-}
-
-.manual-label mat-icon,
 .empty-day mat-icon {
   width: 18px;
   height: 18px;
@@ -142,9 +130,5 @@
   .selected-day-heading {
     align-items: flex-start;
     flex-direction: column;
-  }
-
-  .manual-label {
-    align-self: flex-start;
   }
 }

@@ -173,7 +173,7 @@ describe('PublicSeoPageComponent', () => {
     calendarFixture.destroy();
   });
 
-  it('renders the manual-first Training Plans page with visible FAQ and safe internal links', () => {
+  it('renders Training Plans with visible MCP and limited-beta delivery boundaries', () => {
     routeStub.snapshot.data.publicSeoPage = PUBLIC_SEO_PAGES.trainingPlans;
 
     const plansFixture = TestBed.createComponent(PublicSeoPageComponent);
@@ -189,16 +189,19 @@ describe('PublicSeoPageComponent', () => {
     expect(text).toContain('Standalone when that is all you need');
     expect(text).toContain('Multiple plans, one active calendar');
     expect(text).toContain('Completed totals remain unchanged');
-    expect(text).toContain('Provider workout delivery is a separate Pro capability and is not included in this launch');
-    expect(text).toContain('Connecting a provider does not send a planned workout');
+    expect(text).toContain('Plan directly, through MCP, or with provider delivery');
+    expect(text).toContain('compatible MCP client can read your schedule');
+    expect(text).toContain('Provider workout delivery is a separate Pro limited beta');
+    expect(text).toContain('Connecting a provider never sends a workout by itself');
     expect(text).toContain('Can I add a workout without creating a plan?');
-    expect(text).toContain('Manual plans and standalone structured workouts are available on the free tier');
+    expect(text).toContain('Can I use an MCP client with Training Plans?');
+    expect(text).toContain('Plans and standalone structured workouts created in Quantified Self are available on the free tier');
     expect(text).not.toContain('workout delivery is available');
     expect(text).not.toContain('Send to Garmin');
     expect(text).not.toContain('Send to COROS');
     expect(text).not.toContain('Send to Wahoo');
     expect(text).not.toContain('Send to Suunto');
-    expect(plansFixture.nativeElement.querySelectorAll('.faq-item')).toHaveLength(5);
+    expect(plansFixture.nativeElement.querySelectorAll('.faq-item')).toHaveLength(6);
     expect(preview).toBeTruthy();
     expect(hrefs).toContain('/login');
     expect(hrefs).toContain('/help#training-plans');

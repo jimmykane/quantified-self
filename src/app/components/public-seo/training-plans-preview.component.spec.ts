@@ -35,7 +35,8 @@ describe('TrainingPlansPreviewComponent', () => {
     expect(fixture.nativeElement.textContent).toContain('3×');
     expect(fixture.nativeElement.textContent).toContain('245');
     expect(fixture.nativeElement.textContent).toContain('270');
-    expect(fixture.nativeElement.textContent).toContain('Manual and free');
+    expect(fixture.nativeElement.textContent).not.toContain('Manual and free');
+    expect(fixture.nativeElement.querySelector('.manual-label')).toBeNull();
     expect(selection).not.toHaveBeenCalled();
   });
 

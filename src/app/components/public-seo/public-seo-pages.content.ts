@@ -174,7 +174,7 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
           {
             icon: 'edit_calendar',
             title: 'Training plans',
-            copy: 'Create free manual running and cycling plans or standalone structured workouts, then see them beside—not inside—your completed activity history.',
+            copy: 'Create running and cycling plans or standalone structured workouts, then see them beside—not inside—your completed activity history.',
           },
           {
             icon: 'auto_awesome',
@@ -246,7 +246,7 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
       },
       {
         question: 'Which features are available on the free plan?',
-        answer: `Manual uploads, manual training plans and standalone workouts, core analysis, benchmark comparisons, and ${FREE_ASSISTANT_REQUEST_LIMIT} Assistant requests per calendar month are available on the free plan. Automatic provider sync and higher limits require a paid plan.`,
+        answer: `File uploads, training plans and standalone workouts, core analysis, benchmark comparisons, and ${FREE_ASSISTANT_REQUEST_LIMIT} Assistant requests per calendar month are available on the free plan. Automatic provider sync and higher limits require a paid plan.`,
       },
     ],
     closingTitle: 'Choose what you want to understand next',
@@ -473,7 +473,7 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
     description: TRAINING_PLANS_SEO_CONTENT.description,
     h1: TRAINING_PLANS_SEO_CONTENT.h1,
     intro: TRAINING_PLANS_SEO_CONTENT.intro,
-    chips: ['Free manual planning', 'Standalone workouts', 'Multiple dated plans', 'Structured workouts', 'Plan calendar', 'Completed totals stay separate'],
+    chips: ['Plans included', 'Standalone workouts', 'MCP planning', 'Provider delivery limited beta', 'Plan calendar', 'Completed totals stay separate'],
     actions: [
       routeAction('Start Free', '/login', 'flat', 'arrow_forward'),
       routeAction('Training Plans Help', '/help', 'stroked', undefined, 'training-plans'),
@@ -486,24 +486,24 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
     sections: [
       ...TRAINING_PLANS_PAGE_SECTIONS,
       {
-        eyebrow: 'Manual-first Launch',
-        title: 'Start without connecting a provider',
-        copy: 'The public launch covers manual plans and standalone workouts. Provider workout delivery is a separate Pro capability and is not included in this launch.',
+        eyebrow: 'Connected on Your Terms',
+        title: 'Plan directly, through MCP, or with provider delivery',
+        copy: 'Training Plans works on its own. MCP planning and provider workout delivery are separately permissioned extensions, so you decide when another client or connected service participates.',
         items: [
           {
-            icon: 'cloud_off',
-            title: 'No connection required',
-            copy: 'Create, schedule, edit, copy, move, skip, and restore manual workouts without connecting Garmin, COROS, Wahoo, Suunto, or any other service.',
+            icon: 'edit_calendar',
+            title: 'Plan directly in Quantified Self',
+            copy: 'Create, schedule, edit, copy, move, skip, and restore workouts without connecting Garmin, COROS, Wahoo, Suunto, or any other service.',
+          },
+          {
+            icon: 'devices',
+            title: 'Bring an approved MCP client',
+            copy: 'With separate Training permissions, a compatible MCP client can read your schedule and prepare bounded plan, workout, or delivery changes for your approval. Client availability follows the separate MCP release and authorization flow.',
           },
           {
             icon: 'send',
-            title: 'Connections never send a workout by themselves',
-            copy: 'Connecting a provider does not send a planned workout. Workout delivery has separate Pro controls, explicit actions, compatibility checks, and provider-specific rollout gates.',
-          },
-          {
-            icon: 'verified_user',
-            title: 'No provider availability claim',
-            copy: 'This page does not present workout delivery to any provider as publicly available. Provider-specific pages will describe it only after each integration is released.',
+            title: 'Opt in to provider delivery',
+            copy: 'Provider workout delivery is a separate Pro limited beta with explicit Send and plan opt-in actions, compatibility checks, and provider-specific rollout gates. Connecting a provider never sends a workout by itself.',
           },
         ],
       },
@@ -514,7 +514,7 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
         answer: 'Yes. Standalone workouts are first-class and free. Give the workout a date and structure now, then keep it standalone or attach it to a plan later.',
       },
       {
-        question: 'Which sports and workout steps can I create manually?',
+        question: 'Which sports and workout steps can I create?',
         answer: 'The current editor supports Running, Trail Running, Treadmill, Cycling, Mountain Biking, Indoor Cycling, E-Biking, and Hand Cycle. It supports time or distance steps, fixed repeats, and one absolute heart-rate, power, or pace target per step.',
       },
       {
@@ -523,11 +523,15 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
       },
       {
         question: 'Does connecting Garmin, COROS, Wahoo, or Suunto send my planned workouts?',
-        answer: 'No. Connecting a provider never sends a planned workout by itself. Provider workout delivery is a separate Pro capability and is not part of this public launch.',
+        answer: 'No. Provider workout delivery is a separate Pro limited beta with explicit Send or plan opt-in actions. Connecting a provider never sends a planned workout by itself.',
       },
       {
-        question: 'Is manual training planning free?',
-        answer: 'Yes. Manual plans and standalone structured workouts are available on the free tier and do not require a provider connection.',
+        question: 'Can I use an MCP client with Training Plans?',
+        answer: 'The Training Plans MCP surface rolls out separately. When it is available in your client and you approve the independent Training permissions, the client can read your schedule and prepare bounded changes for a separate approval-gated apply step.',
+      },
+      {
+        question: 'Are Training Plans included on the free tier?',
+        answer: 'Yes. Plans and standalone structured workouts created in Quantified Self are available on the free tier and do not require a provider connection. Provider workout delivery remains a separate Pro capability.',
       },
     ],
     closingTitle: 'Plan the next workout before it becomes history',

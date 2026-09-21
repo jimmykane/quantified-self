@@ -337,7 +337,7 @@ describe('HomeComponent', () => {
     it('uses the shared compact row primitive for every top-level homepage card', () => {
         const compactRows = fixture.nativeElement.querySelectorAll('app-compact-row');
 
-        expect(compactRows.length).toBe(18);
+        expect(compactRows.length).toBe(20);
         expect(fixture.nativeElement.querySelector('mat-card')).toBeNull();
         expect(fixture.nativeElement.querySelectorAll('.compact-row-stack').length).toBe(7);
         expect(Array.from(compactRows).every((row: Element) => row.querySelector('article.compact-row'))).toBe(true);
@@ -367,7 +367,7 @@ describe('HomeComponent', () => {
         expect(previews.every(preview => preview.nativeElement.querySelector(':scope > div[data-nosnippet]'))).toBe(true);
     });
 
-    it('presents manual Training Plans between analysis and Health with one focused CTA', () => {
+    it('presents Training Plans, MCP planning, and limited-beta provider delivery with one focused CTA', () => {
         const section = fixture.nativeElement.querySelector('.training-plans-section') as HTMLElement;
         const rows = section.querySelectorAll('app-compact-row');
         const links = section.querySelectorAll('a');
@@ -381,8 +381,12 @@ describe('HomeComponent', () => {
             expect(text).toContain(row.title);
             expect(text).toContain(row.copy);
         }
-        expect(text).toContain('No provider connection is required');
-        expect(text).toContain('stay separate from completed activity totals');
+        expect(text).toContain('Plan Through MCP');
+        expect(text).toContain('compatible MCP clients');
+        expect(text).toContain('Optional Provider Delivery');
+        expect(text).toContain('Provider workout sync is a separate Pro limited beta');
+        expect(text).toContain('never sends workouts by itself');
+        expect(text).toContain('without adding them to recorded totals or Training analysis');
         expect(rows).toHaveLength(TRAINING_PLANS_HOME_CONTENT.rows.length);
         expect(links).toHaveLength(1);
         expect(links[0].getAttribute('href')).toBe(TRAINING_PLANS_HOME_CONTENT.cta.routerLink);
