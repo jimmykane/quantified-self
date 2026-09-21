@@ -68,7 +68,7 @@ export class ConnectionHistoryStatusComponent {
     if (status?.active) return 'Your selected history is importing in the background. You can keep using the app or close this page.';
     if (status?.steps.some(step => step.status === 'failed' || step.status === 'skipped')) return 'Some history needs attention. Expand for details.';
     if (status?.steps.some(step => step.status === 'requested')) return 'History requested; data may take hours or days to arrive.';
-    return 'Recent history has been processed.';
+    return 'Selected history has been processed.';
   });
   readonly steps = computed(() => (this.status()?.steps || []).map(step => ({ ...step,
     label: resourceLabel(step.resources),
