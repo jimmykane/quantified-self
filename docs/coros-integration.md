@@ -154,10 +154,11 @@ HTTP 408, 429, 5xx, and transient transport failures are retryable. Authenticati
 
 The ignored local COROS API Reference V2.0.6 (February 2026) is available for development but is never committed. The
 versioned capability matrix, serializer and transport live under `functions/src/training-plans/`. Public COROS Training
-delivery remains disabled; the exact private UID is admitted independently by the backend runtime. New browser setup is
-temporarily hidden as **Coming soon** under #648, but existing enabled delivery, reconciliation and Stop sync continue.
-The browser keeps existing delivery records, retry and copy status visible while omitting new enable, send and resume
-actions. This presentation/setup gate does not affect backend delivery, MCP behavior, COROS activity/history, Sleep,
+delivery remains disabled; the exact private UID is admitted independently by the backend runtime. New browser plan-sync
+setup is temporarily hidden as **Coming soon** under #648, but standalone sends and existing enabled plan delivery,
+reconciliation and Stop sync continue. The browser keeps existing plan delivery records, retry and copy status visible
+while omitting plan configuration and plan-workout resume actions. Existing enabled plan delivery continues to follow its
+saved settings and plan status. Standalone **Send to COROS** remains available. This presentation/setup gate does not affect backend delivery, MCP behavior, COROS activity/history, Sleep,
 Health, FIT activity upload, activity sync, or route delivery.
 Connecting COROS alone never opts in, and implementation does not authorize a provider call or deployment.
 

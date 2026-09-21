@@ -145,7 +145,7 @@ Artifact-specific inspection authority, retained provider IDs and repair evidenc
 provider check or repair and gains no tool, field, scope, consent or write authority.
 
 COROS Training delivery (#648) retains its backend private-rollout behavior with no wire-contract change. The temporary
-**Coming soon** setup gate is browser-only, so explicit COROS proposals and `all_connected` continue to use the existing
+**Coming soon** plan-setup gate is browser-only, so explicit COROS proposals and `all_connected` continue to use the existing
 backend rollout and availability checks. The existing sync-status enum can report delivered, approval, retry, attention
 and completed states for COROS. Partner athlete/workout IDs, destination
 identity, batch journals, request outcomes, token authority and exact `planWorkoutId` evidence remain private and are

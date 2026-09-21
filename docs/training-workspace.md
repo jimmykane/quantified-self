@@ -853,8 +853,8 @@ The separate certification/evaluation ticket #698 is retired; it is not an enabl
 `shared/planned-workout-providers.ts` is the versioned capability/research snapshot. All four public delivery switches remain
 false. Garmin, COROS, Suunto and Wahoo have exact-UID private production pilots backed by offline-tested transports. Offline
 verification does not constitute a real provider request or device result. The UID-restricted runtime admits only the
-owner for each implemented adapter. New COROS browser setup is temporarily hidden under #648 while existing enabled
-delivery and server reconciliation continue. Wahoo's production-account/device evidence remains pending in #649. The
+owner for each implemented adapter. New COROS plan-sync setup is temporarily hidden under #648 while standalone sends,
+existing enabled plan delivery and server reconciliation continue. Wahoo's production-account/device evidence remains pending in #649. The
 ignored local Garmin Training API V2 and COROS API Reference PDFs remain evidence only and are never committed.
 
 Every serializer returns `exact`, `degraded`, or `unsupported`. Degraded output requires explicit approval. Current
@@ -925,9 +925,10 @@ removes only its matching link/evidence and requeues ordinary reconciliation. Fa
 remain #651. COROS has no documented planned-workout read/list endpoint, so it exposes no Check action, missing-copy
 inference or automatic recreation.
 
-The exact pilot UID remains enforced in the server runtime, so existing enabled COROS delivery, reconciliation and Stop
-sync continue. The browser has a narrower presentation/setup gate: it labels new COROS setup **Coming soon** and omits
-new enable, send and resume actions while retaining existing settings, statuses, retry and Stop sync. This frontend-only
+The exact pilot UID remains enforced in the server runtime, so standalone sends and existing enabled COROS plan delivery,
+reconciliation and Stop sync continue. The browser has a narrower presentation/setup gate: it labels new COROS plan setup
+**Coming soon** and omits plan configuration and plan-workout resume actions while retaining read-only visibility of
+existing plan settings and statuses plus retry and Stop sync. Standalone **Send to COROS** remains available. This frontend-only
 gate does not affect COROS activity/history, Sleep, Health, FIT activity upload, activity sync, route delivery, backend
 delivery, or MCP behavior. Public delivery stays disabled. Ordinary authorized live evidence is still required for
 Training entitlement, repeated-ID update, overlapping-window

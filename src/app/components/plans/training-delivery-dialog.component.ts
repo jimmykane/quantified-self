@@ -111,6 +111,7 @@ export class TrainingDeliveryDialogComponent {
   readonly stopLabel = computed(() => this.data.scope === 'plan' ? 'Stop plan sync'
     : this.planBound() && this.canSend() ? 'Exclude from plan sync' : 'Stop workout sync');
   readonly planBound = computed(() => this.schedule()?.workouts.find(workout => workout.id === this.data.id)?.planId != null && this.data.scope === 'workout');
+  readonly planDelivery = computed(() => this.data.scope === 'plan' || this.planBound());
   readonly canSend = computed(() => !!this.scopeRecord() && this.scopeRecord()!.lifecycle !== 'deleted');
   readonly canReview = computed(() => this.view().loaded && !this.view().error && !!this.schedule() && this.data.scope !== 'history'
     && (!!this.scopeRecord() || this.statuses().length > 0));
@@ -190,7 +191,7 @@ export class TrainingDeliveryDialogComponent {
       };
     }).sort((a, b) => (a.localDate ?? '9999-99-99').localeCompare(b.localDate ?? '9999-99-99') || a.id.localeCompare(b.id));
     const ready = this.delivery.isReady(provider);
-    const setupAvailable = this.delivery.isSetupAvailable(provider);
+    const setupAvailable = this.delivery.isSetupAvailable(provider, this.planDelivery());
     const attentionWorkoutCount = new Set(statuses.filter(item => ['approval_required', 'failed', 'needs_attention', 'unsupported',
       'reconnect_required', 'connection_repair', 'fresh_consent_required'].includes(item.status)).map(item => item.workoutId)).size;
     const statusWorkoutCount = new Set(statuses.map(item => item.workoutId)).size;
@@ -224,7 +225,7 @@ export class TrainingDeliveryDialogComponent {
       settingLabel: this.planBound() ? suppressed ? 'Excluded from plan sync' : 'Follows plan sync settings'
         : this.data.scope === 'plan' ? setting?.enabled ? 'Plan sync enabled' : 'Plan sync off'
           : setting?.enabled ? 'Workout sync enabled' : 'Workout sync off',
-      visible: (setupAvailable && this.canSend()) || !!setting || statuses.length > 0,
+      visible: (ready && this.canSend()) || !!setting || statuses.length > 0,
       canStop: !!setting?.enabled || (this.planBound() && !suppressed)
         || statuses.some(item => item.hasRemoteCopy || !['stopped', 'removed', 'past', 'completed'].includes(item.status)),
       approvalDigest: suppressed ? null : statuses.find(item => item.status === 'approval_required' && item.approvalDigest)?.approvalDigest ?? null,
@@ -277,7 +278,7 @@ export class TrainingDeliveryDialogComponent {
       if (this.initialReviewHandled || !this.data.initialProvider || !this.canReview()) return;
       this.initialReviewHandled = true;
       const provider = this.data.initialProvider;
-      if (this.delivery.isReady(provider) && this.canSend() && !this.planBound()
+      if (this.delivery.isSetupAvailable(provider, this.planDelivery()) && this.canSend() && !this.planBound()
         && !this.view().settings.some(item => item.provider === provider)
         && !this.statuses().some(item => item.provider === provider)) {
         this.closeOnCancel = true;
@@ -304,9 +305,11 @@ export class TrainingDeliveryDialogComponent {
     if (this.busy() || !this.sameAccount() || !this.canReview() || this.data.scope === 'history'
       || (!this.canSend() && !['stop', 'retry'].includes(action))) return;
     const setting = this.view().settings.find(item => item.provider === provider);
+    const setupAction = ['configure', 'send', 'resume'].includes(action);
+    if (setupAction && !this.delivery.isSetupAvailable(provider, this.planDelivery())) return;
     // Historical copies can still need consent for an old account. They must not
     // silently turn opening current settings into enabling delivery again.
-    const editingSettings = !!setting?.enabled && (action === 'configure' || action === 'send') && !renewConsent;
+    const editingSettings = !!setting?.enabled && !renewConsent && (action === 'configure' || action === 'send');
     const timeZone = setting?.timeZone ?? Intl.DateTimeFormat().resolvedOptions().timeZone;
     this.clearTimeZoneReview(); this.confirmationAttempted.set(false);
     this.error.set(null); this.preview.set(null); this.notice.set(null);
