@@ -10,7 +10,6 @@ import { AppUserService } from '../../services/app.user.service';
 import { AppFileService } from '../../services/app.file.service';
 import { AppAnalyticsService } from '../../services/app.analytics.service';
 import { LoggerService } from '../../services/logger.service';
-import { getDateTimeFormatter } from '../../helpers/date-time-format.helper';
 import {
   ActivityTypes,
   DataActivityTypes,
@@ -162,7 +161,7 @@ describe('EventsExportFormComponent', () => {
     await expect(readBlobText(blob)).resolves.toContain('"6.22 mi"');
   });
 
-  it('uses the app locale for CSV dates and safe date keys for the filename', async () => {
+  it('uses unambiguous local date keys for CSV dates and the filename', async () => {
     component.exportFromGroup.get('startDate')?.setValue(true);
 
     await component.onSubmit({
@@ -172,7 +171,7 @@ describe('EventsExportFormComponent', () => {
 
     const [blob, filename] = mockFileService.downloadFile.mock.calls[0] as [Blob, string];
     const csv = await readBlobText(blob);
-    expect(csv).toContain(`"${getDateTimeFormatter().format(component.events[0].startDate)}"`);
+    expect(csv).toContain('"2024-01-01"');
     expect(filename).toMatch(/^\d{4}-\d{2}-\d{2}-\d{4}-\d{2}-\d{2}$/);
     expect(filename).not.toMatch(/[\\/]/);
   });

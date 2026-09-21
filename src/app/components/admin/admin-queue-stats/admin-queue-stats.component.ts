@@ -29,7 +29,7 @@ import {
     ConfirmationDialogData,
 } from '../../confirmation-dialog/confirmation-dialog.component';
 import { validateSportsLibReparseTargetUid } from '../../../../../shared/admin-queue-stats';
-import { getDateTimeFormatter } from '../../../helpers/date-time-format.helper';
+import { getLocalDateTimeFormatter } from '../../../helpers/date-time-format.helper';
 
 export type AdminQueueStatsView = 'all' | 'workout' | 'activity-sync' | 'route-delivery-sync' | 'route-sync' | 'sleep-sync' | 'reparse' | 'route-reparse' | 'derived';
 
@@ -779,7 +779,7 @@ export class AdminQueueStatsComponent implements OnInit, OnChanges, OnDestroy, A
         if (!value) {
             return 'N/A';
         }
-        const formatter = getDateTimeFormatter(undefined, { dateStyle: 'medium', timeStyle: 'short' });
+        const formatter = getLocalDateTimeFormatter();
         if (typeof value === 'number' && Number.isFinite(value)) {
             const parsedFromEpoch = new Date(value);
             if (!Number.isNaN(parsedFromEpoch.getTime())) {

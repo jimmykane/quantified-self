@@ -10,6 +10,18 @@ dayjs.extend(localeData);
 dayjs.extend(localizedFormat);
 dayjs.extend(customParseFormat);
 
+const IMPORTED_DAYJS_BASE_LOCALES = new Set(['de', 'fr', 'es', 'it', 'nl', 'pl', 'el']);
+
+function localeRegion(locale: string): string | null {
+    const subtags = locale.split('-');
+    for (let index = 1; index < subtags.length; index += 1) {
+        const subtag = subtags[index];
+        if (subtag.length === 1) break;
+        if (/^[a-z]{2}$/i.test(subtag) || /^\d{3}$/.test(subtag)) return subtag.toUpperCase();
+    }
+    return null;
+}
+
 /** Adapts Dayjs for the Angular Material Datepicker. */
 @Injectable()
 export class DayjsDateAdapter extends DateAdapter<Dayjs> {
@@ -23,7 +35,7 @@ export class DayjsDateAdapter extends DateAdapter<Dayjs> {
      * e.g., 'el-GR' -> 'el', 'en-US' -> 'en', 'en-GB' -> 'en-gb'
      */
     private normalizeLocale(locale: string): string {
-        if (!locale) return 'en';
+        if (!locale) return 'en-gb';
 
         const lowerLocale = locale.toLowerCase();
 
@@ -57,9 +69,9 @@ export class DayjsDateAdapter extends DateAdapter<Dayjs> {
         // Try the base language (e.g., 'el-GR' -> 'el')
         const baseLang = lowerLocale.split('-')[0];
         if (baseLang === 'en') {
-            return lowerLocale === 'en-us' ? 'en' : 'en-gb';
+            return localeRegion(locale) === 'US' ? 'en' : 'en-gb';
         }
-        return baseLang;
+        return IMPORTED_DAYJS_BASE_LOCALES.has(baseLang) ? baseLang : 'en-gb';
     }
 
     getYear(date: Dayjs): number {

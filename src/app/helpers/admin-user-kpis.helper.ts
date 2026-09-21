@@ -6,7 +6,7 @@ import type {
     UserCountStats,
     UserGrowthTrendResponse,
 } from '../services/admin.service';
-import { getDateTimeFormatter } from './date-time-format.helper';
+import { getLocalDateTimeFormatter } from './date-time-format.helper';
 import { getNumberFormatter } from './number-format.helper';
 
 export type AdminUserKpiProfile = 'dashboard' | 'full';
@@ -299,7 +299,7 @@ function countUpdatedSubtitle(computedAt: string | null | undefined): string | u
     const parsedDate = new Date(computedAt);
     return Number.isNaN(parsedDate.getTime())
         ? undefined
-        : `Updated ${getDateTimeFormatter(undefined, { dateStyle: 'medium', timeStyle: 'short' }).format(parsedDate)}`;
+        : `Updated ${getLocalDateTimeFormatter().format(parsedDate)}`;
 }
 
 function connectedServiceSubtitle(
