@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { HEALTH_FEATURE_CONTENT } from './health-feature.content';
+import { TRAINING_PLANS_HOME_CONTENT, TRAINING_PLANS_SEO_CONTENT } from './training-plans-feature.content';
+import { TRAINING_PLANS_PAGE_SECTIONS } from './training-plans-page.content';
 import {
   PUBLIC_FEATURE_PATHS,
   PUBLIC_GUIDE_PATHS,
@@ -34,6 +36,19 @@ describe('public-seo-pages.content', () => {
     }
     expect(row.copy).toContain('manual entries clearly labelled');
     expect(PUBLIC_SEO_PAGES.health.sections.find(section => section.preview === 'health-weight')?.copy).toBe(row.copy);
+  });
+  it('centralizes Training Plans homepage, SEO metadata, and route-only sections', () => {
+    const page = PUBLIC_SEO_PAGES.trainingPlans;
+
+    expect(page.title).toBe(TRAINING_PLANS_SEO_CONTENT.title);
+    expect(page.h1).toBe(TRAINING_PLANS_SEO_CONTENT.h1);
+    expect(page.intro).toBe(TRAINING_PLANS_SEO_CONTENT.intro);
+    expect(page.description).toBe(TRAINING_PLANS_SEO_CONTENT.description);
+    expect(page.featureList).toBe(TRAINING_PLANS_SEO_CONTENT.featureList);
+    expect(page.socialImageAlt).toBe(TRAINING_PLANS_SEO_CONTENT.socialImageAlt);
+    expect(page.freeOfferDescription).toBe(TRAINING_PLANS_SEO_CONTENT.freeOfferDescription);
+    expect(page.sections.slice(0, TRAINING_PLANS_PAGE_SECTIONS.length)).toEqual(TRAINING_PLANS_PAGE_SECTIONS);
+    expect(TRAINING_PLANS_HOME_CONTENT.cta.routerLink).toBe(`/${page.path}`);
   });
   it('defines distinct public feature and guide paths', () => {
     expect(PUBLIC_FEATURE_PATHS).toEqual({

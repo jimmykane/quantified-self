@@ -177,45 +177,31 @@
   </section>
 
   <section class="features-section training-plans-section public-below-fold" aria-labelledby="home-training-plans-title">
-    <h2 id="home-training-plans-title" class="section-title animate-on-scroll">Plan What Comes Next</h2>
-    <p class="section-subtitle animate-on-scroll">
-      Create free manual running and cycling plans or schedule one standalone structured workout. No provider connection
-      is required, and planned workouts stay separate from completed activity totals.
-    </p>
+    <h2 id="home-training-plans-title" class="section-title animate-on-scroll">{{ trainingPlansFeature.title }}</h2>
+    <p class="section-subtitle animate-on-scroll">{{ trainingPlansFeature.intro }}</p>
 
     <div class="compact-row-stack training-plans-row-stack">
-      <app-compact-row
-        class="animate-on-scroll"
-        icon="event_available"
-        title="Standalone or Dated Plans"
-        summary="Start with one standalone workout, or organize multiple dated plans with one active plan, colors, skips, date shifting, and history."
-      ></app-compact-row>
-      <app-compact-row
-        class="animate-on-scroll"
-        icon="repeat"
-        iconTone="secondary"
-        title="Structured Running and Cycling"
-        summary="Combine time or distance steps, fixed repeats, and absolute heart-rate, power, or pace targets in the manual editor."
-      ></app-compact-row>
-      <app-compact-row
-        class="animate-on-scroll"
-        icon="calendar_month"
-        iconTone="tertiary"
-        title="Separate Calendar Overlays"
-        summary="See standalone and active-plan workouts beside completed activities without adding them to recorded totals or Training analysis."
-        [showDivider]="false"
-      ></app-compact-row>
+      @for (row of trainingPlansFeature.rows; track row.title; let last = $last) {
+        <app-compact-row
+          class="animate-on-scroll"
+          [icon]="row.icon"
+          [iconTone]="row.iconTone"
+          [title]="row.title"
+          [summary]="row.copy"
+          [showDivider]="!last"
+        ></app-compact-row>
+      }
     </div>
 
     <app-public-feature-preview
       class="training-plans-home-preview animate-on-scroll"
-      previewKey="training-plans"
+      [previewKey]="trainingPlansFeature.preview"
     ></app-public-feature-preview>
 
     <div class="section-actions animate-on-scroll">
-      <a mat-stroked-button routerLink="/features/training-plans">
-        Explore Training Plans
-        <mat-icon iconPositionEnd>edit_calendar</mat-icon>
+      <a mat-stroked-button [routerLink]="trainingPlansFeature.cta.routerLink">
+        {{ trainingPlansFeature.cta.label }}
+        <mat-icon iconPositionEnd>{{ trainingPlansFeature.cta.icon }}</mat-icon>
       </a>
     </div>
   </section>

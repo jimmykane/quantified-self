@@ -23,6 +23,7 @@ import { LoggerService } from '../../services/logger.service';
 import { CompactRowComponent } from '../shared/compact-row/compact-row.component';
 import { ProviderDataFlowMatrixComponent } from '../shared/provider-data-flow-matrix/provider-data-flow-matrix.component';
 import { PublicFeaturePreviewComponent } from '../public-seo/public-feature-preview.component';
+import { TRAINING_PLANS_HOME_CONTENT } from '../public-seo/training-plans-feature.content';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
@@ -374,15 +375,17 @@ describe('HomeComponent', () => {
         const preview = fixture.debugElement.queryAll(By.directive(PublicFeaturePreviewComponent))
             .find(candidate => candidate.componentInstance.previewKey() === 'training-plans');
 
-        expect(text).toContain('Plan What Comes Next');
-        expect(text).toContain('Standalone or Dated Plans');
-        expect(text).toContain('Structured Running and Cycling');
-        expect(text).toContain('Separate Calendar Overlays');
+        expect(text).toContain(TRAINING_PLANS_HOME_CONTENT.title);
+        expect(text).toContain(TRAINING_PLANS_HOME_CONTENT.intro);
+        for (const row of TRAINING_PLANS_HOME_CONTENT.rows) {
+            expect(text).toContain(row.title);
+            expect(text).toContain(row.copy);
+        }
         expect(text).toContain('No provider connection is required');
         expect(text).toContain('stay separate from completed activity totals');
-        expect(rows).toHaveLength(3);
+        expect(rows).toHaveLength(TRAINING_PLANS_HOME_CONTENT.rows.length);
         expect(links).toHaveLength(1);
-        expect(links[0].getAttribute('href')).toBe('/features/training-plans');
+        expect(links[0].getAttribute('href')).toBe(TRAINING_PLANS_HOME_CONTENT.cta.routerLink);
         expect(preview).toBeTruthy();
         expect(preview?.nativeElement.querySelector(':scope > div[data-nosnippet]')).toBeTruthy();
     });

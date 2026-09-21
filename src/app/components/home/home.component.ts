@@ -13,6 +13,7 @@ import { AppAuthService } from '../../authentication/app.auth.service';
 import { CompactRowComponent } from '../shared/compact-row/compact-row.component';
 import { PublicFeaturePreviewComponent } from '../public-seo/public-feature-preview.component';
 import { HEALTH_FEATURE_CONTENT } from '../public-seo/health-feature.content';
+import { TRAINING_PLANS_HOME_CONTENT } from '../public-seo/training-plans-feature.content';
 import { ProviderDataFlowMatrixComponent } from '../shared/provider-data-flow-matrix/provider-data-flow-matrix.component';
 import { buildPublicProviderDataFlowRows } from '../shared/provider-data-flow-matrix/provider-data-flow-matrix.helper';
 
@@ -43,6 +44,7 @@ const HOME_TOOLTIP_DEFAULT_OPTIONS: MatTooltipDefaultOptions = {
 })
 export class HomeComponent implements OnInit, AfterViewInit, OnDestroy {
   readonly healthFeature = HEALTH_FEATURE_CONTENT;
+  readonly trainingPlansFeature = TRAINING_PLANS_HOME_CONTENT;
 
   public readonly providerDataFlowRows = buildPublicProviderDataFlowRows();
 

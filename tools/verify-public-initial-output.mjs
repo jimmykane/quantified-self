@@ -62,7 +62,7 @@ const homeSignalPreviewIncrementalStaticAssets = homeSignalPreviewJavaScriptAsse
 
 assertNoHomeStartupSource(
   'route-only public page content',
-  /^src\/app\/components\/(?:features\/(?:workout-data-comparison-page|supported-activities-page)|integrations\/integration-pages|public-seo\/public-seo-pages)\.content\.ts$/,
+  /^src\/app\/components\/(?:features\/(?:workout-data-comparison-page|supported-activities-page)|integrations\/integration-pages|public-seo\/(?:public-seo-pages|training-plans-page))\.content\.ts$/,
 );
 assertNoHomeStartupSource(
   'unused event data runtime',
