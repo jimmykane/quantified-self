@@ -1,4 +1,6 @@
 import { TestBed } from '@angular/core/testing';
+import { By } from '@angular/platform-browser';
+import { MatTooltip } from '@angular/material/tooltip';
 import { ActivityTypes } from '@sports-alliance/sports-lib';
 import type { ScheduledWorkoutV1, TrainingPlanV1 } from '@shared/training-plans';
 import { AppHapticsService } from '../../services/app.haptics.service';
@@ -41,7 +43,10 @@ describe('PlanScheduleCalendarComponent', () => {
     const date = fixture.nativeElement.querySelector('[data-plan-date="2026-09-08"]') as HTMLButtonElement;
     expect(date.disabled).toBe(true);
     expect(date.getAttribute('aria-label')).toContain('Outside this plan');
-    expect(fixture.nativeElement.querySelector('.calendar-workout')?.getAttribute('aria-label')).toBe(`Edit ${workout.title}, skipped`);
+    const workoutButton = fixture.debugElement.query(By.css('.calendar-workout'));
+    expect(fixture.componentInstance.workoutActionVerb()).toBe('Edit');
+    expect(workoutButton.nativeElement.getAttribute('aria-label')).toBe(`Edit ${workout.title}, skipped`);
+    expect(workoutButton.injector.get(MatTooltip).message).toBe(`${workout.title} · Skipped`);
     expect(fixture.nativeElement.querySelector('.calendar-workout--skipped')).toBeTruthy();
     fixture.componentInstance.selectDate('2026-09-09');
     fixture.componentInstance.selectDate(null);
@@ -59,9 +64,9 @@ describe('PlanScheduleCalendarComponent', () => {
     fixture.componentRef.setInput('calendarHint', 'Choose a sample date; nothing is saved.');
     fixture.detectChanges();
 
-    const workoutButton = fixture.nativeElement.querySelector('.calendar-workout') as HTMLButtonElement;
-    expect(workoutButton.getAttribute('aria-label')).toBe(`Preview ${workout.title}, skipped`);
-    expect(workoutButton.getAttribute('mattooltip')).toBeNull();
+    const workoutButton = fixture.debugElement.query(By.css('.calendar-workout'));
+    expect(workoutButton.nativeElement.getAttribute('aria-label')).toBe(`Preview ${workout.title}, skipped`);
+    expect(workoutButton.injector.get(MatTooltip).message).toBe(`Preview ${workout.title} · Skipped`);
     expect(fixture.nativeElement.querySelector('.calendar-hint')?.textContent)
       .toContain('Choose a sample date; nothing is saved.');
     expect(fixture.nativeElement.querySelector('.calendar-hint')?.textContent)

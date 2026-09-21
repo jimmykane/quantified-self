@@ -99,10 +99,25 @@ assertNoSourceRecords(
 const trainingPlansPreviewAssets = findAssetsContainingSource(
   /^src\/app\/components\/public-seo\/training-plans-preview\.component\.ts$/,
 );
+const trainingPlansPreviewSourceRecords = uniqueSourceRecords(
+  collectStaticDependencyGraph(trainingPlansPreviewAssets).flatMap(readSourceRecords),
+);
 assertNoSourceRecords(
   'authenticated Training Plans or provider-delivery runtime',
-  uniqueSourceRecords(collectStaticDependencyGraph(trainingPlansPreviewAssets).flatMap(readSourceRecords)),
+  trainingPlansPreviewSourceRecords,
   /^src\/app\/(?:components\/plans\/(?:plans-workspace|training-delivery-(?:button|dialog))\.component|services\/training-(?:plans|delivery)\.service|helpers\/training-delivery-(?:display|rollout|summary)\.helper)\.ts$/,
+  'deferred public Training Plans preview graph',
+);
+assertNoSourceRecords(
+  'authentication, Firebase, or account-data runtime',
+  trainingPlansPreviewSourceRecords,
+  /(?:^|\/)(?:src\/app\/(?:authentication|firebase)\/|src\/app\/services\/app\.(?:functions|user)\.service\.ts$|shared\/user-profile-firestore\.ts$|node_modules\/(?:@angular\/fire|@firebase|firebase)\/)/,
+  'deferred public Training Plans preview graph',
+);
+assertNoSourceRecords(
+  'broad shared or Material module',
+  trainingPlansPreviewSourceRecords,
+  /^src\/app\/modules\/(?:shared|material)\.module\.ts$/,
   'deferred public Training Plans preview graph',
 );
 assertNoStartupSource('dashboard upload UI', /\/components\/(?:dashboard\/dashboard-header-upload|upload\/upload-activities)\//);

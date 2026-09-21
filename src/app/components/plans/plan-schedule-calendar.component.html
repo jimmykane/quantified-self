@@ -47,7 +47,7 @@
               <button mat-button type="button" class="calendar-workout" [disabled]="disabled()"
                 [class.calendar-workout--skipped]="workout.lifecycle === 'skipped'"
                 [attr.aria-label]="workoutActionVerb() + ' ' + workout.title + (workout.lifecycle === 'skipped' ? ', skipped' : '') + (isActivityLinked(workout.id) ? ', activity linked' : '')"
-                [matTooltip]="workoutActionVerb() + ' ' + workout.title + (workout.lifecycle === 'skipped' ? ' · Skipped' : '') + (isActivityLinked(workout.id) ? ' · Activity linked' : '')"
+                [matTooltip]="(workoutActionVerb() === 'Edit' ? '' : workoutActionVerb() + ' ') + workout.title + (workout.lifecycle === 'skipped' ? ' · Skipped' : '') + (isActivityLinked(workout.id) ? ' · Activity linked' : '')"
                 (click)="editWorkout(workout)">
                 <span class="calendar-workout-title">{{ workout.lifecycle === 'skipped' ? 'Skipped · ' : '' }}{{ isActivityLinked(workout.id) ? 'Linked · ' : '' }}{{ workout.title }}</span>
               </button>

@@ -1,15 +1,18 @@
 import { ChangeDetectionStrategy, Component, ElementRef, LOCALE_ID, afterRenderEffect, computed, inject, input, output, signal } from '@angular/core';
+import { MatButtonModule } from '@angular/material/button';
+import { MatRippleModule } from '@angular/material/core';
+import { MatIconModule } from '@angular/material/icon';
+import { MatTooltipModule } from '@angular/material/tooltip';
 import type { ScheduledWorkoutV1, TrainingPlanV1 } from '@shared/training-plans';
 import { buildPlanScheduleMonth } from '../../helpers/plan-schedule-calendar.helper';
 import { formatActivityCalendarDateParam, navigateActivityCalendarDate, parseActivityCalendarDate } from '../../helpers/activity-calendar.helper';
-import { SharedModule } from '../../modules/shared.module';
 import { AppHapticsService } from '../../services/app.haptics.service';
 import { trainingPlanAppearance } from '../../helpers/training-plan-appearance.helper';
 
 @Component({
   selector: 'app-plan-schedule-calendar',
   standalone: true,
-  imports: [SharedModule],
+  imports: [MatButtonModule, MatIconModule, MatRippleModule, MatTooltipModule],
   templateUrl: './plan-schedule-calendar.component.html',
   styleUrls: ['./plan-schedule-calendar.component.scss'],
   changeDetection: ChangeDetectionStrategy.OnPush,
