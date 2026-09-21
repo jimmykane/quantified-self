@@ -271,6 +271,7 @@ Form history and canonical parent/activity join.
 
 - Route: `src/app/app.routing.module.ts`
 - Public SEO overview: `/features/training-analysis` via `src/app/components/public-seo/public-seo-pages.content.ts`
+- Public Training Plans overview: `/features/training-plans` via `src/app/components/public-seo/public-seo-pages.content.ts`
 - Lazy routing module: `src/app/training.routing.module.ts`
 - Angular module: `src/app/modules/training.module.ts`
 - Workspace controller: `src/app/components/training/training-workspace.component.ts`
@@ -334,6 +335,32 @@ Training planning is a separate authored-workout workflow at authenticated `/tra
 meaning of `/training`. Manual planning is available without a provider connection. A scheduled workout may belong to a
 plan or remain standalone, so a user can add a workout without creating a plan. Provider delivery is an opt-in Pro action
 and must never be inferred from merely connecting a service.
+
+### Public discovery and launch claims
+
+`/features/training-plans` is the canonical public, prerendered and indexable discovery page. It is registered in the
+public layout, startup-route registry, prerender list and sitemap with no authentication or rollout guard. The
+authenticated `/training/plans` route family remains client-rendered, owner-scoped and `noindex, follow`; it never enters
+the sitemap. There are no aliases or redirects between these route families.
+
+The public launch is manual-first: manual plans and standalone structured workouts are free, and neither requires a
+provider connection. Public copy must say that connecting Garmin, COROS, Wahoo or Suunto never sends a planned workout.
+Provider workout delivery is a distinct Pro capability with explicit actions, compatibility checks and independent
+provider rollout gates; it is not part of this public launch. A provider page may describe workout delivery as available
+only after that provider's public delivery switch and release scope are approved. An implemented adapter, private pilot
+or connected account is not evidence of public availability.
+
+The page and homepage reuse `PlanScheduleCalendarComponent`, the canonical plan/workout parsers, plan appearance helper
+and Sports Lib-backed workout formatters through a deterministic synthetic fixture. The fixture spans multiple weeks and
+months, includes Running and Cycling recipes, fixed repeats, time/distance endings, heart-rate/power/pace targets, a
+skipped workout and an empty selectable date. The deferred preview stays inside a native `data-nosnippet` boundary and
+has an SSR-stable placeholder. It may add presentation-only calendar inputs with authenticated defaults, but it must not
+inject authentication, Firestore, Functions, delivery services or account state. Planned examples never contribute to
+completed totals or Training analysis.
+
+This discovery surface has no MCP wire impact: it adds no tool, schema, field, scope, consent, projection, Assistant
+authority, provider action or bundled-skill behavior. It reads canonical frontend types only to validate and render
+synthetic data; the existing Training plan read/write contract and independent consent remain unchanged.
 
 ### Canonical workout boundary
 

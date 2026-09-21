@@ -163,12 +163,48 @@ describe('PublicSeoPageComponent', () => {
     expect(text).toContain('Week, Month, and Year views');
     expect(text).toContain('Duration-scaled activity circles');
     expect(text).toContain('independent from dashboard event-search filters');
-    expect(calendarFixture.debugElement.queryAll(By.directive(CompactRowComponent))).toHaveLength(6);
+    expect(calendarFixture.debugElement.queryAll(By.directive(CompactRowComponent))).toHaveLength(7);
     expect(calendarFixture.nativeElement.querySelectorAll('.faq-item')).toHaveLength(4);
     expect(hrefs).not.toContain('/calendar');
     expect(hrefs).toContain('/help#activity-calendar');
     expect(hrefs).toContain('/features/training-analysis');
+    expect(hrefs).toContain('/features/training-plans');
 
     calendarFixture.destroy();
+  });
+
+  it('renders the manual-first Training Plans page with visible FAQ and safe internal links', () => {
+    routeStub.snapshot.data.publicSeoPage = PUBLIC_SEO_PAGES.trainingPlans;
+
+    const plansFixture = TestBed.createComponent(PublicSeoPageComponent);
+    plansFixture.detectChanges();
+
+    const text = plansFixture.nativeElement.textContent as string;
+    const hrefs = Array.from(plansFixture.nativeElement.querySelectorAll('a'))
+      .map(link => (link as HTMLAnchorElement).getAttribute('href') ?? '');
+    const preview = plansFixture.debugElement.queryAll(By.directive(PublicFeaturePreviewComponent))
+      .find(candidate => candidate.componentInstance.previewKey() === 'training-plans');
+
+    expect(text).toContain('Plan running and cycling workouts your way');
+    expect(text).toContain('Standalone when that is all you need');
+    expect(text).toContain('Multiple plans, one active calendar');
+    expect(text).toContain('Completed totals remain unchanged');
+    expect(text).toContain('Provider workout delivery is a separate Pro capability and is not included in this launch');
+    expect(text).toContain('Connecting a provider does not send a planned workout');
+    expect(text).toContain('Can I add a workout without creating a plan?');
+    expect(text).toContain('Manual plans and standalone structured workouts are available on the free tier');
+    expect(text).not.toContain('workout delivery is available');
+    expect(text).not.toContain('Send to Garmin');
+    expect(text).not.toContain('Send to COROS');
+    expect(text).not.toContain('Send to Wahoo');
+    expect(text).not.toContain('Send to Suunto');
+    expect(plansFixture.nativeElement.querySelectorAll('.faq-item')).toHaveLength(5);
+    expect(preview).toBeTruthy();
+    expect(hrefs).toContain('/login');
+    expect(hrefs).toContain('/help#training-plans');
+    expect(hrefs).toContain('/features/activity-calendar');
+    expect(hrefs).toContain('/features/training-analysis');
+
+    plansFixture.destroy();
   });
 });

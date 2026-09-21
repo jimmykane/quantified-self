@@ -53,6 +53,21 @@ describe('PlanScheduleCalendarComponent', () => {
     expect(selection).toHaveBeenCalledOnce();
   });
 
+  it('allows public previews to replace presentation copy without changing authenticated defaults', async () => {
+    const fixture = await render();
+    fixture.componentRef.setInput('workoutActionVerb', 'Preview');
+    fixture.componentRef.setInput('calendarHint', 'Choose a sample date; nothing is saved.');
+    fixture.detectChanges();
+
+    const workoutButton = fixture.nativeElement.querySelector('.calendar-workout') as HTMLButtonElement;
+    expect(workoutButton.getAttribute('aria-label')).toBe(`Preview ${workout.title}, skipped`);
+    expect(workoutButton.getAttribute('mattooltip')).toBeNull();
+    expect(fixture.nativeElement.querySelector('.calendar-hint')?.textContent)
+      .toContain('Choose a sample date; nothing is saved.');
+    expect(fixture.nativeElement.querySelector('.calendar-hint')?.textContent)
+      .toContain('Weeks start on Monday. Saturday and Sunday are tinted.');
+  });
+
   it('navigates months within the range and keeps arrow-key selection and focus together across months', async () => {
     const fixture = await render();
     (fixture.nativeElement.querySelector('[aria-label="Next plan month"]') as HTMLButtonElement).click();

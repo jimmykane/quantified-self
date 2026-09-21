@@ -401,6 +401,37 @@
 
 }
 
+.training-plans-section {
+    .training-plans-row-stack {
+        margin-bottom: 1.5rem;
+    }
+
+    .training-plans-home-preview {
+        display: block;
+        max-width: 1024px;
+        margin: 0 auto;
+    }
+
+    a:focus-visible {
+        outline: 3px solid var(--mat-sys-primary);
+        outline-offset: 3px;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .animate-on-scroll,
+    .hero-section .hero-content > * {
+        opacity: 1 !important;
+        transform: none !important;
+        transition: none !important;
+        animation: none !important;
+    }
+
+    .highlight-text {
+        animation: none;
+    }
+}
+
 
 .ai-insights-section {
     padding-top: 0.5rem;

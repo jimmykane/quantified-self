@@ -171,6 +171,8 @@ const TRAINING_PLANNING_HELP_SNIPPETS = {
 
 const TRAINING_PLANS_HELP_CONTENT = `## Plan without a connected service
 
+See the public [Training Plans overview](/features/training-plans) for a manual-first walkthrough and interactive sample calendar. The sample uses synthetic workouts and never loads account data.
+
 - Open [Plans](/training/plans) to create a dated workout. Its sidebar entry sits beneath **Training**. You do not need to create a plan first: choose **Standalone** to keep the workout independent, or use the active plan when you want it grouped into a date range.
 - Select a plan or **Standalone**, then use **Add workout** in that view. Each saved workout editor has its own link, and browser Back and Forward return between the editor and the previous plan, Standalone, or Calendar screen. **Save workout** keeps you in the workout's chosen destination, while **Cancel** returns without saving. Dates within the plan stay selected, and Save and Cancel stay available while scrolling on mobile.
 - **Plan schedule** shows only the selected plan, even when paused or archived. Its start and end are marked; dates outside the plan are muted and unavailable. Navigate its months, select a day, then use **Add workout** to prefill that day and plan. Empty days are simply unscheduled—not automatically rest days. On desktop you can edit a workout directly from its calendar label; on mobile, select its day to see the compact workout rows below the grid. The **Main Calendar** remains your separate overview of completed activities, standalone workouts, and the active plan.
@@ -621,6 +623,7 @@ HRV and Sleep each have their own date range and older/newer navigation. While a
     content: TRAINING_PLANS_HELP_CONTENT,
     links: [
       { label: 'Open Plans', icon: 'event_note', kind: 'route', target: '/training/plans' },
+      { label: 'Training Plans overview', icon: 'travel_explore', kind: 'route', target: '/features/training-plans' },
       { label: 'Open Calendar', icon: 'calendar_month', kind: 'route', target: '/calendar' },
       { label: 'Training analysis guide', icon: 'monitoring', kind: 'route', target: '/help', fragment: 'training-analysis' },
     ],

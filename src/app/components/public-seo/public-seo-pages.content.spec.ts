@@ -41,6 +41,7 @@ describe('public-seo-pages.content', () => {
       health: 'features/health',
       activityCalendar: 'features/activity-calendar',
       trainingAnalysis: 'features/training-analysis',
+      trainingPlans: 'features/training-plans',
       trainingDashboard: 'features/training-dashboard',
       activityMap: 'features/activity-map',
       mcpServer: 'features/mcp-server',
@@ -72,6 +73,8 @@ describe('public-seo-pages.content', () => {
       expect(routeData.title).toBe(page.title);
       expect(routeData.description).toBe(page.description);
       expect(routeData.publicSeoPage).toBe(page);
+      expect(routeData.socialImage).toMatch(/^https:\/\/quantified-self\.io\/assets\/images\//);
+      expect(routeData.socialImageAlt.trim().length).toBeGreaterThan(0);
       expect(routeData).not.toHaveProperty('keywords');
       expect(routeData.jsonLd).toMatchObject({
         '@context': 'https://schema.org',
@@ -119,6 +122,27 @@ describe('public-seo-pages.content', () => {
     expect(PUBLIC_SEO_PAGES.trainingAnalysis.sections.map(section => section.preview)).toContain('training-signals');
     expect(PUBLIC_SEO_PAGES.trainingAnalysis.sections.map(section => section.preview)).toContain('training-readiness');
     expect(PUBLIC_SEO_PAGES.trainingAnalysis.sections.map(section => section.preview)).toContain('training-explorer');
+
+    const trainingPlans = PUBLIC_SEO_PAGES.trainingPlans;
+    expect(trainingPlans.title).toBe('Training Plans for Running and Cycling');
+    expect(trainingPlans.h1).toBe('Plan running and cycling workouts your way');
+    expect(trainingPlans.description).toBe('Create free running and cycling training plans or standalone structured workouts, schedule them by date, and keep them separate from completed activities.');
+    expect(trainingPlans.sections.some(section => section.preview === 'training-plans')).toBe(true);
+    expect(trainingPlans.sections.some(section => section.copy.includes('one active at a time'))).toBe(true);
+    expect(trainingPlans.sections.some(section => section.items.some(item => item.copy.includes('Trail Running')))).toBe(true);
+    expect(trainingPlans.sections.some(section => section.items.some(item => item.copy.includes('Hand Cycle')))).toBe(true);
+    expect(trainingPlans.sections.some(section => section.items.some(item => item.copy.includes('up to 100 total nodes')))).toBe(true);
+    expect(trainingPlans.sections.some(section => section.items.some(item => item.copy.includes('never adds distance')))).toBe(true);
+    expect(trainingPlans.sections.some(section => section.items.some(item => item.copy.includes('not present workout delivery to any provider as publicly available')))).toBe(true);
+    expect(trainingPlans.faqItems.some(item => item.question === 'Can I add a workout without creating a plan?')).toBe(true);
+    expect(trainingPlans.socialImage).toBe('https://quantified-self.io/assets/images/training-plans-social.png');
+    expect(trainingPlans.freeOfferDescription).toBe('Manual training plans and standalone structured workouts');
+    const trainingPlanEntities = PUBLIC_SEO_ROUTE_DATA.trainingPlans.jsonLd['mainEntity'] as Record<string, unknown>[];
+    const trainingPlanApplication = trainingPlanEntities.find(entity => entity['@type'] === 'SoftwareApplication');
+    const trainingPlanOffer = trainingPlanApplication?.['offers'] as Record<string, unknown>;
+    expect(trainingPlanOffer['price']).toBe('0');
+    expect(trainingPlanOffer['description']).toBe(trainingPlans.freeOfferDescription);
+    expect(trainingPlanEntities.find(entity => entity['@type'] === 'FAQPage')).toBeTruthy();
 
     expect(PUBLIC_SEO_PAGES.trainingDashboard.h1).toBe('Build the training dashboard you need');
     expect(PUBLIC_SEO_PAGES.trainingDashboard.sections.some(section => section.preview === 'dashboard')).toBe(true);
@@ -285,6 +309,7 @@ describe('public-seo-pages.content', () => {
     expect(featureHubLinks).toContain('/features/activity-calendar');
     expect(featureHubLinks).toContain('/features/supported-activities');
     expect(featureHubLinks).toContain('/features/training-analysis');
+    expect(featureHubLinks).toContain('/features/training-plans');
     expect(featureHubLinks).toContain('/features/training-dashboard');
     expect(featureHubLinks).toContain('/features/activity-map');
     expect(featureHubLinks).toContain('/features/mcp-server');
@@ -312,6 +337,7 @@ describe('public-seo-pages.content', () => {
       PUBLIC_SEO_PAGES.featuresHub,
       PUBLIC_SEO_PAGES.activityCalendar,
       PUBLIC_SEO_PAGES.trainingAnalysis,
+      PUBLIC_SEO_PAGES.trainingPlans,
       PUBLIC_SEO_PAGES.trainingDashboard,
       PUBLIC_SEO_PAGES.health,
       PUBLIC_SEO_PAGES.activityMap,
@@ -334,6 +360,7 @@ describe('public-seo-pages.content', () => {
       PUBLIC_SEO_PAGES.featuresHub,
       PUBLIC_SEO_PAGES.activityCalendar,
       PUBLIC_SEO_PAGES.trainingAnalysis,
+      PUBLIC_SEO_PAGES.trainingPlans,
       PUBLIC_SEO_PAGES.trainingDashboard,
       PUBLIC_SEO_PAGES.health,
       PUBLIC_SEO_PAGES.activityMap,

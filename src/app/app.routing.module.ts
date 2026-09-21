@@ -24,7 +24,12 @@ import { PublicLayoutComponent } from './components/public-layout/public-layout.
 import { HOME_SEO_DESCRIPTION, HOME_SEO_JSON_LD } from './shared/home-seo';
 
 const SEO_RESOLVED_KEYS = ['title', 'description', 'jsonLd'] as const;
-const PUBLIC_SEO_RESOLVED_KEYS = [...SEO_RESOLVED_KEYS, 'publicSeoPage'] as const;
+const PUBLIC_SEO_RESOLVED_KEYS = [
+  ...SEO_RESOLVED_KEYS,
+  'publicSeoPage',
+  'socialImage',
+  'socialImageAlt',
+] as const;
 
 type IntegrationProviderKey = 'garmin' | 'suunto' | 'coros' | 'wahoo';
 
@@ -383,6 +388,15 @@ const topLevelRoutes: Routes = [
     path: PUBLIC_FEATURE_PATHS.trainingAnalysis,
     loadComponent: () => import('./components/public-seo/public-seo-page.component').then(m => m.PublicSeoPageComponent),
     resolve: publicSeoRouteData('trainingAnalysis'),
+    data: {
+      preload: true,
+      animation: 'PublicSeo',
+    },
+  },
+  {
+    path: PUBLIC_FEATURE_PATHS.trainingPlans,
+    loadComponent: () => import('./components/public-seo/public-seo-page.component').then(m => m.PublicSeoPageComponent),
+    resolve: publicSeoRouteData('trainingPlans'),
     data: {
       preload: true,
       animation: 'PublicSeo',

@@ -466,6 +466,12 @@ describe('AppRoutingModule routes', () => {
         descriptionText: 'training load, readiness, intensity, durability, sleep, power, and sport-specific trends',
       },
       {
+        path: PUBLIC_FEATURE_PATHS.trainingPlans,
+        title: 'Training Plans for Running and Cycling',
+        h1: 'Plan running and cycling workouts your way',
+        descriptionText: 'Create free running and cycling training plans or standalone structured workouts',
+      },
+      {
         path: PUBLIC_FEATURE_PATHS.trainingDashboard,
         title: 'Custom Training Dashboard for Endurance Athletes',
         h1: 'Build the training dashboard you need',
@@ -526,12 +532,18 @@ describe('AppRoutingModule routes', () => {
       expect(routeData['title']).toBe(expectedRoute.title);
       expect(routeData['description']).toContain(expectedRoute.descriptionText);
       expect(routeData['keywords']).toBeUndefined();
+      expect(routeData['socialImage']).toMatch(/^https:\/\/quantified-self\.io\/assets\/images\//);
+      expect(routeData['socialImageAlt']).toBeTypeOf('string');
       expect(page?.['h1']).toBe(expectedRoute.h1);
       expect(jsonLd?.['@type']).toBe('WebPage');
       expect(jsonLd?.['url']).toBe(`https://quantified-self.io/${expectedRoute.path}`);
 
       if (expectedRoute.path === PUBLIC_FEATURE_PATHS.hub) {
         expect(route?.pathMatch).toBe('full');
+      }
+
+      if (expectedRoute.path === PUBLIC_FEATURE_PATHS.trainingPlans) {
+        expect(routeData['socialImage']).toBe('https://quantified-self.io/assets/images/training-plans-social.png');
       }
     }
   });

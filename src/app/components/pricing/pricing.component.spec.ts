@@ -306,6 +306,38 @@ describe('PricingComponent', () => {
         expect(component.getAssistantLimitLabel('pro')).toBe(`Assistant up to ${ASSISTANT_REQUEST_LIMITS.pro} requests per billing period`);
     });
 
+    it('should include manual training planning in every membership tier', async () => {
+        const paymentService = TestBed.inject(AppPaymentService);
+        const products: StripeProduct[] = (['basic', 'pro'] as const).map((role, index) => ({
+            id: `product_${role}`,
+            active: true,
+            name: role,
+            description: role,
+            role,
+            images: [],
+            metadata: { role },
+            prices: [{
+                id: `price_${role}`,
+                active: true,
+                currency: 'usd',
+                unit_amount: (index + 1) * 500,
+                description: role,
+                type: 'recurring',
+                interval: 'month',
+                interval_count: 1,
+                trial_period_days: null,
+                recurring: { interval: 'month' as const },
+            }],
+        }));
+        vi.spyOn(paymentService, 'getProducts').mockReturnValue(of(products));
+
+        await component.ngOnInit();
+        fixture.detectChanges();
+
+        expect((fixture.nativeElement.textContent as string)
+            .match(/Manual training plans and standalone workouts/g)).toHaveLength(3);
+    });
+
     it('should show cross-device sync in the Pro plan feature list without service names', async () => {
         const paymentService = TestBed.inject(AppPaymentService);
         const userService = TestBed.inject(AppUserService);

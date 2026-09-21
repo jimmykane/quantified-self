@@ -23,6 +23,8 @@ export class PlanScheduleCalendarComponent {
   readonly today = input.required<string>();
   readonly startOfWeek = input<number | null>(null);
   readonly disabled = input(false);
+  readonly workoutActionVerb = input('Edit');
+  readonly calendarHint = input<string | null>(null);
   readonly appearance = computed(() => trainingPlanAppearance(this.plan()));
   readonly dateSelected = output<string>();
   readonly workoutSelected = output<ScheduledWorkoutV1>();

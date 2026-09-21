@@ -57,6 +57,9 @@ export interface PublicSeoPage {
   closingActions: readonly PublicSeoAction[];
   howToSteps?: readonly string[];
   featureList?: readonly string[];
+  socialImage?: string;
+  socialImageAlt?: string;
+  freeOfferDescription?: string;
 }
 
 export interface PublicSeoRouteData {
@@ -66,9 +69,13 @@ export interface PublicSeoRouteData {
   description: string;
   publicSeoPage: PublicSeoPage;
   jsonLd: Record<string, unknown>;
+  socialImage: string;
+  socialImageAlt: string;
 }
 
 const SITE_ORIGIN = 'https://quantified-self.io';
+const DEFAULT_SOCIAL_IMAGE = `${SITE_ORIGIN}/assets/images/og-image-v4.jpg`;
+const DEFAULT_SOCIAL_IMAGE_ALT = 'Quantified Self training charts and activity analysis';
 const STARTER_ACTIVITY_LIMIT = USAGE_LIMITS.free;
 const STARTER_ROUTE_LIMIT = ROUTE_USAGE_LIMITS.free;
 const FREE_ASSISTANT_REQUEST_LIMIT = ASSISTANT_REQUEST_LIMITS.free;
@@ -132,9 +139,10 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
     description: 'Bring Garmin, Suunto, COROS, Wahoo, and workout files together for training analysis, maps, dashboards, comparisons, and AI answers.',
     h1: 'Features for endurance training data',
     intro: 'Use Quantified Self to centralize provider activities, uploaded files, and saved routes, review workout history in an activity calendar, analyze training context, compare recordings, benchmark devices, and ask questions through the built-in Assistant or an MCP client you explicitly authorize.',
-    chips: ['Activity calendar', 'Training analysis', 'Supported activity types', 'Assistant', 'MCP server', 'Workout comparison', 'Route files', 'Benchmarks'],
+    chips: ['Activity calendar', 'Training analysis', 'Training plans', 'Supported activity types', 'Assistant', 'MCP server', 'Workout comparison', 'Route files', 'Benchmarks'],
     actions: [
       routeAction('Training Analysis', '/features/training-analysis', 'flat', 'arrow_forward'),
+      routeAction('Training Plans', '/features/training-plans'),
       routeAction('Training Dashboard', '/features/training-dashboard'),
       routeAction('Health', '/features/health'),
       routeAction('Activity Map', '/features/activity-map'),
@@ -161,6 +169,11 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
             icon: 'monitoring',
             title: 'Training analysis',
             copy: 'Compare current training with your usual workload, then inspect readiness, load, intensity, durability, sleep context, and selected historical builds.',
+          },
+          {
+            icon: 'edit_calendar',
+            title: 'Training plans',
+            copy: 'Create free manual running and cycling plans or standalone structured workouts, then see them beside—not inside—your completed activity history.',
           },
           {
             icon: 'auto_awesome',
@@ -232,7 +245,7 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
       },
       {
         question: 'Which features are available on the free plan?',
-        answer: `Manual uploads, core analysis, benchmark comparisons, and ${FREE_ASSISTANT_REQUEST_LIMIT} Assistant requests per calendar month are available on the free plan. Automatic provider sync and higher limits require a paid plan.`,
+        answer: `Manual uploads, manual training plans and standalone workouts, core analysis, benchmark comparisons, and ${FREE_ASSISTANT_REQUEST_LIMIT} Assistant requests per calendar month are available on the free plan. Automatic provider sync and higher limits require a paid plan.`,
       },
     ],
     closingTitle: 'Choose what you want to understand next',
@@ -247,13 +260,14 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
     path: PUBLIC_FEATURE_PATHS.activityCalendar,
     eyebrow: 'Activity Calendar',
     title: 'Activity Calendar for Endurance Training',
-    description: 'Review running, cycling, swimming, skiing, and other workouts in Week, Month, and Year calendar views with duration-scaled circles and period totals.',
+    description: 'Review completed running, cycling, swimming, skiing, and other workouts with separate planned overlays in selectable Week, Month, and Year calendar views.',
     h1: 'Activity calendar for endurance training',
-    intro: 'Turn Garmin, Suunto, COROS, Wahoo, and uploaded workout history into a visual calendar. Move between Week, Month, and Year views, scan duration-scaled activity groups, and open any active day for its recorded workouts.',
-    chips: ['Week view', 'Month view', 'Year view', 'Duration circles', 'Distance and ascent', 'Account activity data'],
+    intro: 'Turn Garmin, Suunto, COROS, Wahoo, and uploaded workout history into a visual calendar. Move between Week, Month, and Year views, select every day, and keep planned workouts visually separate from recorded activities and completed totals.',
+    chips: ['Week view', 'Month view', 'Year view', 'Every day selectable', 'Planned overlays', 'Completed totals stay separate'],
     actions: [
       routeAction('Start Free', '/login', 'flat', 'arrow_forward'),
       routeAction('Calendar Help', '/help', 'stroked', undefined, 'activity-calendar'),
+      routeAction('Training Plans', '/features/training-plans'),
     ],
     sections: [
       {
@@ -273,8 +287,8 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
           },
           {
             icon: 'event_note',
-            title: 'Day activity details',
-            copy: 'Select an active day to review its total duration, activity-group totals, and individual workouts without leaving calendar context.',
+            title: 'Every date stays selectable',
+            copy: 'Select an empty, planned, or completed day without leaving calendar context. Recorded activities and planned workouts keep separate rows and actions.',
           },
         ],
       },
@@ -298,13 +312,18 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
             title: 'Your week and summary settings',
             copy: 'Weekday order follows the configured start of week, units follow account preferences, and ascent or descent exclusions also apply to calendar summaries.',
           },
+          {
+            icon: 'edit_calendar',
+            title: 'Planned workouts remain an overlay',
+            copy: 'Standalone and active-plan workouts can appear on the calendar, including skipped workouts, but never increase completed distance, duration, ascent, load, or workout totals.',
+          },
         ],
       },
     ],
     faqItems: [
       {
         question: 'Which activities appear in the calendar?',
-        answer: 'The calendar uses normal activity events already imported or uploaded to your Quantified Self account. Merge and benchmark records are excluded so comparison artifacts do not inflate training days or totals.',
+        answer: 'Completed entries come from normal activities already imported or uploaded to your Quantified Self account. Standalone and active-plan workouts can appear as a separate planned overlay. Merge and benchmark records remain excluded from completed totals.',
       },
       {
         question: 'What do the calendar circle colors and sizes mean?',
@@ -324,6 +343,7 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
     closingActions: [
       routeAction('Start Free', '/login', 'flat', 'arrow_forward'),
       routeAction('Training Analysis', '/features/training-analysis'),
+      routeAction('Training Plans', '/features/training-plans'),
     ],
   },
   trainingAnalysis: {
@@ -440,7 +460,152 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
     closingActions: [
       routeAction('Start Free', '/login', 'flat', 'arrow_forward'),
       routeAction('Explore Integrations', '/integrations'),
+      routeAction('Plan Future Workouts', '/features/training-plans'),
       routeAction('Training Help', '/help', 'stroked', undefined, 'getting-started'),
+    ],
+  },
+  trainingPlans: {
+    key: 'trainingPlans',
+    path: PUBLIC_FEATURE_PATHS.trainingPlans,
+    eyebrow: 'Training Plans',
+    title: 'Training Plans for Running and Cycling',
+    description: 'Create free running and cycling training plans or standalone structured workouts, schedule them by date, and keep them separate from completed activities.',
+    h1: 'Plan running and cycling workouts your way',
+    intro: 'Create a dated plan or start with one standalone workout. Manual planning is free, works without a provider connection, and keeps what you intend to do separate from the activities you already completed.',
+    chips: ['Free manual planning', 'Standalone workouts', 'Multiple dated plans', 'Structured workouts', 'Plan calendar', 'Completed totals stay separate'],
+    actions: [
+      routeAction('Start Free', '/login', 'flat', 'arrow_forward'),
+      routeAction('Training Plans Help', '/help', 'stroked', undefined, 'training-plans'),
+      routeAction('Activity Calendar', '/features/activity-calendar'),
+    ],
+    featureList: [
+      'Free manual running and cycling training plans',
+      'Standalone structured workouts without a plan',
+      'Dated plan calendars with colors, history, and shifting',
+      'Planned-workout overlays kept separate from completed activity totals',
+    ],
+    socialImage: `${SITE_ORIGIN}/assets/images/training-plans-social.png`,
+    socialImageAlt: 'Synthetic purple running and cycling training plan calendar with structured workout examples',
+    freeOfferDescription: 'Manual training plans and standalone structured workouts',
+    sections: [
+      {
+        eyebrow: 'Plan or Standalone',
+        title: 'Plan with or without a training plan',
+        copy: 'A standalone workout is first-class: create it without a plan, then attach it later if your schedule grows. Keep multiple dated plans, with one active at a time for calendar overlays, and leave the others available in Training Plans.',
+        items: [
+          {
+            icon: 'event_available',
+            title: 'Standalone when that is all you need',
+            copy: 'Schedule one workout by date without creating a plan. Move the same workout into a plan later without replacing its identity.',
+          },
+          {
+            icon: 'calendar_month',
+            title: 'Multiple plans, one active calendar',
+            copy: 'Create multiple dated plans and keep one active at a time. Active-plan and standalone workouts appear on calendar surfaces; inactive plans remain in Training Plans.',
+          },
+          {
+            icon: 'palette',
+            title: 'Dates, colors, skips, shifts, and history',
+            copy: 'Give each plan a color, select any date in its range, keep skipped workouts visible, shift the plan dates, and use revision history when a change needs to be restored.',
+          },
+        ],
+        preview: 'training-plans',
+      },
+      {
+        eyebrow: 'Structured Workouts',
+        title: 'Build the running and cycling workout you mean',
+        copy: 'The first manual editor supports the current Running and Cycling families with date-only scheduling, time or distance steps, fixed repeats, and one absolute heart-rate, power, or pace target per step.',
+        items: [
+          {
+            icon: 'directions_run',
+            title: 'Running sports',
+            copy: 'Create Running, Trail Running, and Treadmill workouts with warmup, work, recovery, cooldown, rest, or other steps.',
+          },
+          {
+            icon: 'directions_bike',
+            title: 'Cycling sports',
+            copy: 'Create Cycling, Mountain Biking, Indoor Cycling, E-Biking, and Hand Cycle workouts using the same structure.',
+          },
+          {
+            icon: 'repeat',
+            title: 'Clear limits, predictable recipes',
+            copy: 'Use up to 100 total nodes, fixed repeat counts up to 100, no nested repeats, and one supported absolute target per step in the current manual editor.',
+          },
+        ],
+      },
+      {
+        eyebrow: 'Calendar Context',
+        title: 'Keep planned work separate from completed training',
+        copy: 'Planned workouts are an overlay, not completed evidence. Every calendar date remains selectable, while planned and completed entries retain separate meaning and actions.',
+        items: [
+          {
+            icon: 'event_note',
+            title: 'Visible across calendar surfaces',
+            copy: 'See standalone and active-plan workouts on the main Calendar, dashboard Activity Calendar tile, and Today mini-calendar. Skipped workouts remain visible and marked.',
+          },
+          {
+            icon: 'calculate',
+            title: 'Completed totals remain unchanged',
+            copy: 'A planned workout never adds distance, duration, ascent, load, or workout count to completed-activity totals.',
+          },
+          {
+            icon: 'monitoring',
+            title: 'Training analysis uses recorded evidence',
+            copy: 'Training analysis continues to use imported or uploaded completed activities. A plan does not become completed training until a recorded activity exists.',
+          },
+        ],
+      },
+      {
+        eyebrow: 'Manual-first Launch',
+        title: 'Start without connecting a provider',
+        copy: 'The public launch covers manual plans and standalone workouts. Provider workout delivery is a separate Pro capability and is not included in this launch.',
+        items: [
+          {
+            icon: 'cloud_off',
+            title: 'No connection required',
+            copy: 'Create, schedule, edit, copy, move, skip, and restore manual workouts without connecting Garmin, COROS, Wahoo, Suunto, or any other service.',
+          },
+          {
+            icon: 'send',
+            title: 'Connections never send a workout by themselves',
+            copy: 'Connecting a provider does not send a planned workout. Workout delivery has separate Pro controls, explicit actions, compatibility checks, and provider-specific rollout gates.',
+          },
+          {
+            icon: 'verified_user',
+            title: 'No provider availability claim',
+            copy: 'This page does not present workout delivery to any provider as publicly available. Provider-specific pages will describe it only after each integration is released.',
+          },
+        ],
+      },
+    ],
+    faqItems: [
+      {
+        question: 'Can I add a workout without creating a plan?',
+        answer: 'Yes. Standalone workouts are first-class and free. Give the workout a date and structure now, then keep it standalone or attach it to a plan later.',
+      },
+      {
+        question: 'Which sports and workout steps can I create manually?',
+        answer: 'The current editor supports Running, Trail Running, Treadmill, Cycling, Mountain Biking, Indoor Cycling, E-Biking, and Hand Cycle. It supports time or distance steps, fixed repeats, and one absolute heart-rate, power, or pace target per step.',
+      },
+      {
+        question: 'Do planned workouts change completed activity totals or Training analysis?',
+        answer: 'No. Planned workouts remain separate from completed activities and never increase completed totals. Training analysis continues to use recorded activity evidence.',
+      },
+      {
+        question: 'Does connecting Garmin, COROS, Wahoo, or Suunto send my planned workouts?',
+        answer: 'No. Connecting a provider never sends a planned workout by itself. Provider workout delivery is a separate Pro capability and is not part of this public launch.',
+      },
+      {
+        question: 'Is manual training planning free?',
+        answer: 'Yes. Manual plans and standalone structured workouts are available on the free tier and do not require a provider connection.',
+      },
+    ],
+    closingTitle: 'Plan the next workout before it becomes history',
+    closingCopy: 'Start with one standalone workout or map out a dated running and cycling plan. Your completed activity history stays exactly where it belongs.',
+    closingActions: [
+      routeAction('Start Free', '/login', 'flat', 'arrow_forward'),
+      routeAction('Training Plans Help', '/help', 'stroked', undefined, 'training-plans'),
+      routeAction('Training Analysis', '/features/training-analysis'),
     ],
   },
   trainingDashboard: {
@@ -1778,6 +1943,7 @@ function buildJsonLd(page: PublicSeoPage): Record<string, unknown> {
         '@type': 'Offer',
         price: '0',
         priceCurrency: 'USD',
+        ...(page.freeOfferDescription ? { description: page.freeOfferDescription } : {}),
       },
     },
     {
@@ -1835,6 +2001,8 @@ function buildRouteData(page: PublicSeoPage): PublicSeoRouteData {
     description: page.description,
     publicSeoPage: page,
     jsonLd: buildJsonLd(page),
+    socialImage: page.socialImage ?? DEFAULT_SOCIAL_IMAGE,
+    socialImageAlt: page.socialImageAlt ?? DEFAULT_SOCIAL_IMAGE_ALT,
   };
 }
 
@@ -1843,6 +2011,7 @@ export const PUBLIC_SEO_ROUTE_DATA: Record<PublicSeoPageKey, PublicSeoRouteData>
   featuresHub: buildRouteData(PUBLIC_SEO_PAGES.featuresHub),
   activityCalendar: buildRouteData(PUBLIC_SEO_PAGES.activityCalendar),
   trainingAnalysis: buildRouteData(PUBLIC_SEO_PAGES.trainingAnalysis),
+  trainingPlans: buildRouteData(PUBLIC_SEO_PAGES.trainingPlans),
   trainingDashboard: buildRouteData(PUBLIC_SEO_PAGES.trainingDashboard),
   activityMap: buildRouteData(PUBLIC_SEO_PAGES.activityMap),
   mcpServer: buildRouteData(PUBLIC_SEO_PAGES.mcpServer),

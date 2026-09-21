@@ -238,6 +238,15 @@ describe('buildPublicPricingCatalog', () => {
         }
     });
 
+    it('includes manual training plans and standalone workouts in every plan', () => {
+        const catalog = buildPublicPricingCatalog(PAID_PRODUCTS);
+
+        for (const plan of catalog.plans) {
+            expect(plan.features.map(feature => feature.label))
+                .toContain('Manual training plans and standalone workouts');
+        }
+    });
+
     it('does not advertise a yearly switch across different currencies', () => {
         const basicProduct = PAID_PRODUCTS[0];
         const monthlyPrice = basicProduct.prices?.[0];

@@ -80,6 +80,11 @@ h3 {
   align-items: center;
 }
 
+.action-row a:focus-visible {
+  outline: 3px solid var(--mat-sys-primary);
+  outline-offset: 3px;
+}
+
 .topic-chip {
   display: inline-flex;
   align-items: center;

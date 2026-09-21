@@ -1,0 +1,150 @@
+:host {
+  display: block;
+  min-width: 0;
+}
+
+.training-plans-preview {
+  min-width: 0;
+  padding: clamp(0.75rem, 2vw, 1.25rem);
+  border: 1px solid var(--mat-sys-outline-variant);
+  border-radius: 16px;
+  background: var(--mat-sys-surface-container-low);
+}
+
+.preview-header,
+.selected-day-heading,
+.manual-label,
+.preview-eyebrow,
+.empty-day {
+  display: flex;
+  align-items: center;
+}
+
+.preview-header,
+.selected-day-heading {
+  justify-content: space-between;
+  gap: 0.75rem 1.5rem;
+}
+
+.preview-header {
+  margin-bottom: 1rem;
+}
+
+.preview-header h3,
+.selected-day-heading h4,
+.selected-workout h5,
+.preview-header p,
+.selected-day-heading p,
+.selected-workout p,
+.empty-day {
+  margin: 0;
+}
+
+.preview-header h3 {
+  font: var(--mat-sys-title-large);
+}
+
+.preview-header > div > p:last-child,
+.selected-day-heading > span,
+.selected-workout p,
+.empty-day {
+  color: var(--mat-sys-on-surface-variant);
+  font: var(--mat-sys-body-small);
+}
+
+.preview-eyebrow {
+  gap: 0.4rem;
+  color: var(--preview-plan-color);
+  font: var(--mat-sys-label-medium);
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.plan-color {
+  width: 0.25rem;
+  height: 1rem;
+  background: var(--preview-plan-color);
+}
+
+.manual-label {
+  flex: 0 0 auto;
+  gap: 0.35rem;
+  padding: 0.4rem 0.65rem;
+  border: 1px solid var(--mat-sys-outline-variant);
+  border-radius: 999px;
+  color: var(--mat-sys-on-surface-variant);
+  font: var(--mat-sys-label-medium);
+}
+
+.manual-label mat-icon,
+.empty-day mat-icon {
+  width: 18px;
+  height: 18px;
+  font-size: 18px;
+}
+
+.selected-day {
+  margin-top: 1rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--mat-sys-outline-variant);
+}
+
+.selected-day-heading h4 {
+  font: var(--mat-sys-title-medium);
+}
+
+.selected-workouts {
+  display: grid;
+  margin-top: 0.75rem;
+  gap: 0.75rem;
+}
+
+.selected-workout {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 0.75rem;
+  padding-inline-start: 0.75rem;
+  border-inline-start: 3px solid var(--preview-plan-color);
+}
+
+.selected-workout > mat-icon {
+  margin-top: 0.15rem;
+  color: var(--preview-plan-color);
+}
+
+.selected-workout h5 {
+  font: var(--mat-sys-title-small);
+}
+
+.selected-workout ul {
+  display: grid;
+  margin: 0.4rem 0 0;
+  padding-inline-start: 1rem;
+  gap: 0.2rem;
+  color: var(--mat-sys-on-surface-variant);
+  font: var(--mat-sys-body-small);
+}
+
+.empty-day {
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+  padding-inline-start: 0.75rem;
+  border-inline-start: 3px solid var(--mat-sys-outline-variant);
+}
+
+@media (max-width: 520px) {
+  .training-plans-preview {
+    padding: 0.75rem;
+    border-radius: 12px;
+  }
+
+  .preview-header,
+  .selected-day-heading {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .manual-label {
+    align-self: flex-start;
+  }
+}

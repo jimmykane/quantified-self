@@ -1,0 +1,80 @@
+import { TestBed } from '@angular/core/testing';
+import { By } from '@angular/platform-browser';
+import { NoopAnimationsModule } from '@angular/platform-browser/animations';
+import { AppHapticsService } from '../../services/app.haptics.service';
+import { PlanScheduleCalendarComponent } from '../plans/plan-schedule-calendar.component';
+import { TrainingPlansPreviewComponent } from './training-plans-preview.component';
+import {
+  TRAINING_PLANS_PREVIEW_EMPTY_DATE,
+  TRAINING_PLANS_PREVIEW_PLAN,
+  TRAINING_PLANS_PREVIEW_TODAY,
+} from './training-plans-preview.data';
+
+describe('TrainingPlansPreviewComponent', () => {
+  const selection = vi.fn();
+
+  beforeEach(async () => {
+    selection.mockClear();
+    await TestBed.configureTestingModule({
+      imports: [TrainingPlansPreviewComponent, NoopAnimationsModule],
+      providers: [{ provide: AppHapticsService, useValue: { selection } }],
+    }).compileComponents();
+  });
+
+  it('reuses the real plan calendar and canonical workout summaries without account services', async () => {
+    const fixture = TestBed.createComponent(TrainingPlansPreviewComponent);
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    const calendar = fixture.debugElement.query(By.directive(PlanScheduleCalendarComponent)).componentInstance;
+    expect(calendar.plan()).toBe(TRAINING_PLANS_PREVIEW_PLAN);
+    expect(calendar.workouts()).toBe(fixture.componentInstance.workouts);
+    expect(calendar.workoutActionVerb()).toBe('Preview');
+    expect(calendar.calendarHint()).toContain('nothing here is saved');
+    expect(fixture.nativeElement.textContent).toContain('Threshold bike blocks');
+    expect(fixture.nativeElement.textContent).toContain('3×');
+    expect(fixture.nativeElement.textContent).toContain('245');
+    expect(fixture.nativeElement.textContent).toContain('270');
+    expect(fixture.nativeElement.textContent).toContain('Manual and free');
+    expect(selection).not.toHaveBeenCalled();
+  });
+
+  it('selects an empty date locally and exposes an accessible add-without-a-plan explanation', async () => {
+    const fixture = TestBed.createComponent(TrainingPlansPreviewComponent);
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    const emptyDate = fixture.nativeElement.querySelector(
+      `[data-plan-date="${TRAINING_PLANS_PREVIEW_EMPTY_DATE}"]`,
+    ) as HTMLButtonElement;
+    expect(emptyDate).toBeTruthy();
+    expect(emptyDate.disabled).toBe(false);
+    emptyDate.click();
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    expect(fixture.componentInstance.selectedDate()).toBe(TRAINING_PLANS_PREVIEW_EMPTY_DATE);
+    expect(fixture.nativeElement.textContent).toContain('This date is open');
+    expect(fixture.nativeElement.textContent).toContain('without creating another plan');
+    expect(selection).toHaveBeenCalledOnce();
+  });
+
+  it('lets the calendar navigate across the multi-month fixture and preview a skipped workout', async () => {
+    const fixture = TestBed.createComponent(TrainingPlansPreviewComponent);
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    expect(fixture.componentInstance.selectedDate()).toBe(TRAINING_PLANS_PREVIEW_TODAY);
+    (fixture.nativeElement.querySelector('[aria-label="Previous plan month"]') as HTMLButtonElement).click();
+    fixture.detectChanges();
+    await fixture.whenStable();
+    const skipped = fixture.nativeElement.querySelector('[aria-label^="Preview Long progression run"]') as HTMLButtonElement;
+    expect(skipped).toBeTruthy();
+    skipped.click();
+    fixture.detectChanges();
+
+    expect(fixture.componentInstance.selectedWorkoutId()).toBe('long-progression-run');
+    expect(fixture.nativeElement.textContent).toContain('Trail Running · Skipped');
+    expect(selection).toHaveBeenCalledTimes(2);
+  });
+});

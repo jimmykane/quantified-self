@@ -12,6 +12,7 @@ import { McpReadOnlyFlowPreviewComponent } from '../shared/mcp-read-only-flow-pr
 import type { PublicFeaturePreviewKey } from './public-feature-preview.types';
 import { HealthPreviewComponent } from './health-preview.component';
 import { TrainingExplorerPreviewComponent } from './training-explorer-preview.component';
+import { TrainingPlansPreviewComponent } from './training-plans-preview.component';
 
 @Component({
   selector: 'app-public-feature-preview',
@@ -19,6 +20,7 @@ import { TrainingExplorerPreviewComponent } from './training-explorer-preview.co
   imports: [
     HealthPreviewComponent,
     TrainingExplorerPreviewComponent,
+    TrainingPlansPreviewComponent,
     HomeDashboardPreviewComponent,
     HomeMyTracksPreviewComponent,
     HomeSignalChartsPreviewComponent,

@@ -540,6 +540,7 @@ describe('help.content', () => {
     const planningSection = HELP_SECTIONS.find(section => section.id === 'training-plans');
 
     expect(planningSection?.content).toContain('You do not need to create a plan first');
+    expect(planningSection?.content).toContain('[Training Plans overview](/features/training-plans)');
     expect(planningSection?.content).toContain('Manual planning is available without a service connection');
     expect(planningSection?.content).toContain('Settings -> Dashboard -> Start of the Week');
     expect(planningSection?.content).toContain('Its first weekday is marked and named below the grid');
@@ -572,6 +573,12 @@ describe('help.content', () => {
       icon: 'event_note',
       kind: 'route',
       target: '/training/plans',
+    });
+    expect(planningSection?.links).toContainEqual({
+      label: 'Training Plans overview',
+      icon: 'travel_explore',
+      kind: 'route',
+      target: '/features/training-plans',
     });
     expect(gettingStartedSection?.content).toContain('[Training plans guide](/help#training-plans)');
   });

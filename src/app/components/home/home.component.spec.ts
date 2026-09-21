@@ -23,6 +23,8 @@ import { LoggerService } from '../../services/logger.service';
 import { CompactRowComponent } from '../shared/compact-row/compact-row.component';
 import { ProviderDataFlowMatrixComponent } from '../shared/provider-data-flow-matrix/provider-data-flow-matrix.component';
 import { PublicFeaturePreviewComponent } from '../public-seo/public-feature-preview.component';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 
 describe('HomeComponent', () => {
     let component: HomeComponent;
@@ -84,6 +86,14 @@ describe('HomeComponent', () => {
 
     it('should create', () => {
         expect(component).toBeTruthy();
+    });
+
+    it('keeps homepage content visible when reduced motion is requested', () => {
+        const styles = readFileSync(resolve(process.cwd(), 'src/app/components/home/home.component.scss'), 'utf8');
+
+        expect(styles).toContain('@media (prefers-reduced-motion: reduce)');
+        expect(styles).toMatch(/\.animate-on-scroll,[\s\S]*?opacity:\s*1 !important;/);
+        expect(styles).toMatch(/\.hero-section \.hero-content > \*[\s\S]*?animation:\s*none !important;/);
     });
 
     it('should redirect app-authenticated browser users from public home to dashboard', () => {
@@ -170,6 +180,9 @@ describe('HomeComponent', () => {
             if (section.classList.contains('health-section')) {
                 return 'health';
             }
+            if (section.classList.contains('training-plans-section')) {
+                return 'training-plans';
+            }
             if (section.classList.contains('features-section') && !section.classList.contains('ai-insights-section')) {
                 return 'performance';
             }
@@ -192,6 +205,7 @@ describe('HomeComponent', () => {
             'hero',
             'integrations',
             'performance',
+            'training-plans',
             'health',
             'ai-insights',
             'footprint',
@@ -322,9 +336,9 @@ describe('HomeComponent', () => {
     it('uses the shared compact row primitive for every top-level homepage card', () => {
         const compactRows = fixture.nativeElement.querySelectorAll('app-compact-row');
 
-        expect(compactRows.length).toBe(15);
+        expect(compactRows.length).toBe(18);
         expect(fixture.nativeElement.querySelector('mat-card')).toBeNull();
-        expect(fixture.nativeElement.querySelectorAll('.compact-row-stack').length).toBe(6);
+        expect(fixture.nativeElement.querySelectorAll('.compact-row-stack').length).toBe(7);
         expect(Array.from(compactRows).every((row: Element) => row.querySelector('article.compact-row'))).toBe(true);
         expect(fixture.nativeElement.querySelector('app-public-feature-preview[previewkey="reviewer-benchmark"]')).toBeTruthy();
     });
@@ -340,6 +354,7 @@ describe('HomeComponent', () => {
             'training-explorer',
             'dashboard',
             'workout-analysis',
+            'training-plans',
             'health-sleep',
             'health-hrv',
             'health-weight',
@@ -349,6 +364,27 @@ describe('HomeComponent', () => {
             'reviewer-benchmark',
         ]);
         expect(previews.every(preview => preview.nativeElement.querySelector(':scope > div[data-nosnippet]'))).toBe(true);
+    });
+
+    it('presents manual Training Plans between analysis and Health with one focused CTA', () => {
+        const section = fixture.nativeElement.querySelector('.training-plans-section') as HTMLElement;
+        const rows = section.querySelectorAll('app-compact-row');
+        const links = section.querySelectorAll('a');
+        const text = section.textContent ?? '';
+        const preview = fixture.debugElement.queryAll(By.directive(PublicFeaturePreviewComponent))
+            .find(candidate => candidate.componentInstance.previewKey() === 'training-plans');
+
+        expect(text).toContain('Plan What Comes Next');
+        expect(text).toContain('Standalone or Dated Plans');
+        expect(text).toContain('Structured Running and Cycling');
+        expect(text).toContain('Separate Calendar Overlays');
+        expect(text).toContain('No provider connection is required');
+        expect(text).toContain('stay separate from completed activity totals');
+        expect(rows).toHaveLength(3);
+        expect(links).toHaveLength(1);
+        expect(links[0].getAttribute('href')).toBe('/features/training-plans');
+        expect(preview).toBeTruthy();
+        expect(preview?.nativeElement.querySelector(':scope > div[data-nosnippet]')).toBeTruthy();
     });
 
     it('should explain benchmark merge and hardware precision workflows', () => {

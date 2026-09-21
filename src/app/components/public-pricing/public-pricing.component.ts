@@ -230,6 +230,11 @@ function buildFeatures(role: PublicPlanRole): PublicPlanFeatureViewModel[] {
             iconClass: standardIconClass,
             label: 'MCP data access',
         },
+        {
+            icon: standardIcon,
+            iconClass: standardIconClass,
+            label: 'Manual training plans and standalone workouts',
+        },
     ];
 
     if (role === 'free') {
