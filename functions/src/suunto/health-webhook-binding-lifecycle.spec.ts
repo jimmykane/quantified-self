@@ -533,6 +533,32 @@ describe('Suunto Health webhook account binding lifecycle', () => {
     )).resolves.toEqual({ status: 'user_deleted_or_deleting' });
   });
 
+  it.each([
+    ['token', 'tokenCredentialGeneration'],
+    ['tokenRoot', 'activeOAuthCredentialGeneration'],
+    ['serviceMeta', 'connectionStateGeneration'],
+  ] as const)('rejects a malformed %s lifecycle generation', async (documentName, fieldName) => {
+    hoisted.state.binding = {
+      schemaVersion: 3,
+      authorizationSource: 'oauth_callback',
+      userID: 'user-1',
+      providerAccountDigest: PROVIDER_ACCOUNT_DIGEST,
+      tokenCredentialGeneration: documentName === 'token'
+        ? 'malformed'
+        : 'token-generation-1',
+    };
+    hoisted.state[documentName] = {
+      ...hoisted.state[documentName],
+      [fieldName]: ' malformed ',
+    };
+
+    await expect(validateCurrentSuuntoWebhookWriteLifecycle(
+      hoisted.db as never,
+      'user-1',
+      'provider-1',
+    )).resolves.toEqual({ status: 'inactive' });
+  });
+
   it('allows credential rotation only while every authority field remains continuous', () => {
     const initial = {
       requiredExistingDocumentRef: hoisted.tokenRef,

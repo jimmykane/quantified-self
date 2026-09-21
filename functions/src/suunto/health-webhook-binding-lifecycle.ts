@@ -497,6 +497,15 @@ async function captureSuuntoWebhookWriteLifecycleValidation(
     const tokenRootData = tokenRootSnapshot.data() as Record<string, unknown> | undefined;
     const serviceMeta = serviceMetaSnapshot.data() as Record<string, unknown> | undefined;
     const liveCredential = getTokenCredentialSnapshot(tokenData);
+    const tokenCredentialGeneration = parseLifecycleGeneration(
+      tokenData?.tokenCredentialGeneration,
+    );
+    const rootOAuthCredentialGeneration = parseLifecycleGeneration(
+      tokenRootData?.[ACTIVE_OAUTH_CREDENTIAL_GENERATION_FIELD],
+    );
+    const connectionStateGeneration = parseLifecycleGeneration(
+      serviceMeta?.connectionStateGeneration,
+    );
     if (deletionGuard.shouldSkip) {
       return { status: 'user_deleted_or_deleting' };
     }
@@ -514,6 +523,9 @@ async function captureSuuntoWebhookWriteLifecycleValidation(
         providerUserId,
         normalizeSuuntoTokenCredentialGeneration(tokenData?.tokenCredentialGeneration),
       )
+      || tokenCredentialGeneration.kind === 'malformed'
+      || rootOAuthCredentialGeneration.kind === 'malformed'
+      || connectionStateGeneration.kind === 'malformed'
       || isServiceUnavailableForSyncConnection(serviceMeta)
       || isServiceDisconnectPendingData(tokenRootData)
       || !doesServiceDisconnectOperationPermitTokenUse(tokenRootData, undefined, nowMs)) {

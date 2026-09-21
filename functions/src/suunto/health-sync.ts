@@ -352,18 +352,30 @@ export async function processSuuntoHealthQueueItem(
     throw new SuuntoHealthAccountValidationError();
   }
   const expectedRootGeneration = capturedTokenRootGeneration(initialGuards);
+  let lifecycleGuards = initialGuards;
+  let tokenCredential = initialGuards.requiredExistingTokenCredential;
+  const validateBeforeTokenRefreshRequest = async (): Promise<void> => {
+    onStage?.('lifecycle_check');
+    lifecycleGuards = await captureCurrentSuuntoHealthLifecycle(
+      firebaseUserID,
+      tokenSnapshot.ref,
+      initialGuards,
+    );
+    tokenCredential = lifecycleGuards.requiredExistingTokenCredential;
+    onLifecycleGuardsCaptured?.(lifecycleGuards);
+    onStage?.('token_refresh');
+  };
   onStage?.('token_refresh');
   const tokenData = await getTokenData(tokenSnapshot, ServiceNames.SuuntoApp, false, {
     opaqueTelemetry: true,
     expectedActiveOAuthCredentialGeneration: expectedRootGeneration,
+    beforeRefreshRequest: validateBeforeTokenRefreshRequest,
   });
   let accessToken = typeof tokenData.accessToken === 'string' ? tokenData.accessToken : '';
   const providerUserID = typeof tokenData.userName === 'string' ? tokenData.userName.trim() : '';
   if (!accessToken || providerUserID !== queueItem.providerUserId.trim()) {
     throw new SuuntoHealthAccountValidationError();
   }
-  let lifecycleGuards = initialGuards;
-  let tokenCredential = initialGuards.requiredExistingTokenCredential;
   let resolvedAccessTokenNeedsValidation = true;
 
   let pullAttempts = 0;
@@ -413,6 +425,7 @@ export async function processSuuntoHealthQueueItem(
     const refreshedToken = await getTokenData(tokenSnapshot, ServiceNames.SuuntoApp, true, {
       opaqueTelemetry: true,
       expectedActiveOAuthCredentialGeneration: expectedRootGeneration,
+      beforeRefreshRequest: validateBeforeTokenRefreshRequest,
     });
     const refreshedAccessToken = typeof refreshedToken.accessToken === 'string'
       ? refreshedToken.accessToken

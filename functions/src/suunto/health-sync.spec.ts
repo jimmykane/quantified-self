@@ -355,6 +355,32 @@ describe('Suunto Health provider sync', () => {
     expect(hoisted.requestGet).not.toHaveBeenCalled();
   });
 
+  it('checks the complete lifecycle before an expired-token refresh request', async () => {
+    let refreshRequestStarted = false;
+    hoisted.getTokenData.mockImplementationOnce(async (
+      _snapshot: admin.firestore.DocumentSnapshot,
+      _serviceName: ServiceNames,
+      _forceRefresh: boolean,
+      options: { beforeRefreshRequest?: () => Promise<void> },
+    ) => {
+      hoisted.connectionStateGeneration = 'connection-generation-2';
+      await options.beforeRefreshRequest?.();
+      refreshRequestStarted = true;
+      return tokenReturnProjection();
+    });
+    const snapshot = tokenSnapshot();
+
+    await expect(processSuuntoHealthQueueItem(
+      queueItem(),
+      snapshot,
+      'staged-user',
+      currentAuthorityGuards(snapshot),
+    )).rejects.toMatchObject({ name: 'SuuntoHealthAccountValidationError' });
+    expect(refreshRequestStarted).toBe(false);
+    expect(hoisted.requestGet).not.toHaveBeenCalled();
+    expect(hoisted.validateCurrentSuuntoWebhookWriteLifecycle).toHaveBeenCalledTimes(1);
+  });
+
   it('pads split requests without exceeding the provider 28-day limit', () => {
     const endMs = START_MS + 28 * 24 * 60 * 60 * 1000;
     const windows = suuntoHealthSyncTestInternals.buildSuuntoHealthRequestWindows(START_MS, endMs);
@@ -623,8 +649,12 @@ describe('Suunto Health provider sync', () => {
       _snapshot: admin.firestore.DocumentSnapshot,
       _serviceName: ServiceNames,
       forceRefresh = false,
+      options?: { beforeRefreshRequest?: () => Promise<void> },
     ) => {
-      if (forceRefresh) hoisted.tokenData = tokenProjection('refreshed-access-token');
+      if (forceRefresh) {
+        await options?.beforeRefreshRequest?.();
+        hoisted.tokenData = tokenProjection('refreshed-access-token');
+      }
       return tokenReturnProjection();
     });
     const snapshot = tokenSnapshot();
@@ -641,6 +671,7 @@ describe('Suunto Health provider sync', () => {
     expect(hoisted.getTokenData).toHaveBeenCalledWith(snapshot, ServiceNames.SuuntoApp, true, {
       opaqueTelemetry: true,
       expectedActiveOAuthCredentialGeneration: 'credential-generation-2',
+      beforeRefreshRequest: expect.any(Function),
     });
     expect(hoisted.requestGet.mock.calls[1]?.[0]?.headers.Authorization)
       .toBe('Bearer refreshed-access-token');
