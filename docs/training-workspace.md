@@ -2,8 +2,9 @@
 
 ## Planning access through MCP and the Assistant
 
-The #690 planning surface exposes current plans, standalone/associated workouts, complete v1 instructions, exact stored
-completion links, existing delivery summaries, and a preview/native-approval/apply workflow. It does not modify
+The #690 planning surface exposes current plans, standalone/associated workouts, complete v1 instructions, chronological
+calendar queries, exact single/bulk stored completion links, local provider-mapping assessments, existing delivery
+summaries, and a preview/native-approval/apply workflow. It does not modify
 `WorkoutStructureV1`. The tools, strict scopes, projection and bounds are documented in
 [MCP server](mcp-server.md#training-plans-and-planned-workouts-690). Source support is not a deployed or
 registered-client promise. Provider certification, deployment, registered-contract promotion and plugin installation
@@ -15,10 +16,20 @@ signed-in account; provider delivery remains separately gated by readiness, conn
 The Assistant's default-off Training plans choice is conversation-owned, not a UI gate. Current calendar reads default to
 standalone plus active-plan workouts, include skipped, exclude deleted, and allow explicit inactive-plan/all scopes.
 Historical dates still read current records, not history. Calendar dates are not instants or delivery timezones.
+The legacy registered workout query retains document order; the additive chronological query orders by local date and
+document ID and is the preferred source for upcoming-session questions. Its continuation binds both values plus the
+exact filters and schedule revision. Bulk completion reads accept at most 25 unique current workout references, preserve
+input order and reuse the same exact-evidence projection as the single-workout read.
 Full structures preserve canonical primitives, ordered node IDs, notes, repeat limits and Sports Lib owner-unit formatting.
 There are no new `Data*` classes, completed-event metrics or inferred duration estimates. Completion reads return only
 an existing exact stored link; they never infer a match. The optional activity reference additionally requires
 `activity-details:read`.
+
+The read-only compatibility assessment operates on one persisted canonical recipe and selected or all provider mapping
+fixtures. It returns bounded safe exact/degraded/unsupported issues without reading connection authority, Pro status,
+destination identity, mapping digests, ledgers or provider APIs. It includes Wahoo's time-only dated-workout duration
+constraint and never estimates a duration for another ending. Delivery preview remains authoritative for current
+connection/readiness/horizon/consent and approval binding.
 
 `training-plans:write` and `training-delivery:write` are independent child scopes of `training-plans:read`. The former
 allows the bounded authored lifecycle: create/edit/move/copy/skip/archive/activate/shift, recoverable workout deletion,

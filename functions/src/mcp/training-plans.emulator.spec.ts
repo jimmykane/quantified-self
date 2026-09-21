@@ -98,4 +98,32 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Training MCP loopback Fir
     await expect(run('list_training_plans', {})).rejects.toThrow();
     // Fixtures live only in this disposable emulator; no production cleanup or user data is touched.
   }, 30_000);
+
+  it('orders and resumes workout pages by local date plus document identity', async () => {
+    const uid = `training-date-order-${randomUUID()}`, user = db.collection('users').doc(uid);
+    const codec: TrainingReadCodec = { encode: value => JSON.stringify(value), decode: value => JSON.parse(value) };
+    const reads = createFirestoreTrainingReads(() => db);
+    const run = (args: unknown) => readTrainingPlans({ tool: 'query_planned_workouts_by_date', arguments: args, uid,
+      connectionId: 'connection', scopes: ['training-plans:read'] }, reads, codec);
+    await user.set({});
+    await user.collection('mcpConnections').doc('connection').set({ status: 'active', scopes: ['training-plans:read'] });
+    await user.collection('trainingPlanState').doc('current').set({ revision: 1, activePlanId: null });
+    const batch = db.batch();
+    for (const [id, localDate] of [['a-late', '2027-01-20'], ['z-early', '2027-01-10'],
+      ['b-same', '2027-01-15'], ['a-same', '2027-01-15']] as const) {
+      batch.set(user.collection('scheduledWorkouts').doc(id), { schemaVersion: 1, planId: null, localDate,
+        lifecycle: 'planned', title: id, revision: 1, createdAtMs: 1, updatedAtMs: 1 });
+    }
+    await batch.commit();
+    const args = { startDate: '2027-01-01', endDate: '2027-01-31', limit: 2 };
+    const first = TRAINING_READ_OUTPUTS.query_planned_workouts_by_date.parse(await run(args));
+    expect(first.workouts.map(item => [item.localDate, item.title])).toEqual([
+      ['2027-01-10', 'z-early'], ['2027-01-15', 'a-same'],
+    ]);
+    const second = TRAINING_READ_OUTPUTS.query_planned_workouts_by_date.parse(await run({ ...args, cursor: first.nextCursor }));
+    expect(second.workouts.map(item => [item.localDate, item.title])).toEqual([
+      ['2027-01-15', 'b-same'], ['2027-01-20', 'a-late'],
+    ]);
+    expect(second.scanComplete).toBe(true);
+  }, 30_000);
 });

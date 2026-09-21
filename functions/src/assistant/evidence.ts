@@ -316,6 +316,40 @@ export function buildAssistantEvidence(
   structuredContent: Record<string, unknown>,
 ): AssistantEvidence {
   if ((TRAINING_READ_TOOLS as readonly string[]).includes(tool.name)) {
+    if (tool.name === 'get_planned_workout_completion' || tool.name === 'get_planned_workout_completions') {
+      const raw = tool.name === 'get_planned_workout_completions'
+        ? structuredContent.completions : [structuredContent];
+      const completions = Array.isArray(raw) ? raw.filter(isRecord) : [];
+      const linked = completions.filter(completion => completion.state === 'linked').length;
+      return { toolName: tool.name, title: truncate(tool.title, 160),
+        summary: `${linked} of ${completions.length} planned workout${completions.length === 1 ? '' : 's'} have an exact stored completion link.`,
+        facts: completions.slice(0, MAX_FACTS).map(completion => ({
+          label: truncate(String(completion.scheduledDate ?? 'Planned workout'), 80),
+          value: completion.state === 'linked'
+            ? truncate(`Linked${completion.provider ? ` via ${completion.provider}` : ''}${completion.timing ? `; ${String(completion.timing).replace(/_/g, ' ')}` : ''}${completion.workoutChangedSinceCompletion ? '; workout changed afterward' : ''}`, 160)
+            : 'No exact stored completion link',
+        })), links: [],
+      };
+    }
+    if (tool.name === 'assess_planned_workout_compatibility') {
+      const assessments = Array.isArray(structuredContent.assessments)
+        ? structuredContent.assessments.filter(isRecord) : [];
+      const counts = { exact: 0, degraded: 0, unsupported: 0 };
+      assessments.forEach(assessment => {
+        if (assessment.level === 'exact' || assessment.level === 'degraded' || assessment.level === 'unsupported') {
+          counts[assessment.level]++;
+        }
+      });
+      return { toolName: tool.name, title: truncate(tool.title, 160),
+        summary: `${counts.exact} exact, ${counts.degraded} degraded, ${counts.unsupported} unsupported local provider mappings; not a live provider check.`,
+        facts: assessments.slice(0, MAX_FACTS).map(assessment => {
+          const issues = Array.isArray(assessment.issues) ? assessment.issues.filter(isRecord) : [];
+          const firstMessage = issues.length && typeof issues[0].message === 'string' ? issues[0].message : null;
+          return { label: truncate(String(assessment.provider ?? 'Provider'), 80),
+            value: truncate(`${String(assessment.level ?? 'unknown')}${firstMessage ? `: ${firstMessage}` : ''}`, 160) };
+        }), links: [],
+      };
+    }
     const raw = structuredContent.plans ?? structuredContent.workouts ?? structuredContent.services
       ?? [structuredContent.plan ?? structuredContent.workout];
     const rows = Array.isArray(raw) ? raw.filter(isRecord) : [];

@@ -72,14 +72,16 @@ then approve the separate plan/workout or delivery child permission only when ne
 until the replacement succeeds; then start a new chat or refresh the tool catalog. If the choices are absent, the client
 needs a catalog refresh/rescan. Never tell the user to disconnect merely to add a permission. For the built-in Assistant,
 enable **Training plans** and its optional change toggles in **Examples & data access**; that starts a fresh chat instead.
-Discover plans by name/lifecycle and query a bounded inclusive date window. Default calendar
+Discover plans by name/lifecycle and prefer the advertised chronological workout query for a bounded inclusive date
+window. Default calendar
 scope combines standalone with the active plan; explicitly select a plan/all scope for paused or archived plans. Include
 skipped labels, exclude deleted records and distinguish current authored records from historical revisions.
 Follow unchanged-query continuations; restart after schedule changes. Preserve calendar labels without inventing a
 timezone. Resolve relative dates with the user's explicit IANA timezone. Read complete structures only for instructions
 and existing per-service status only for sync questions. Use canonical numbers plus returned owner-unit display.
-Do not estimate durations for manual/mixed endings or count planned workouts as completed activity. When completion is
-asked, use only the exact stored completion result; never infer it from title, date, sport, duration or proximity. An
+Do not estimate durations for manual/mixed endings or count planned workouts as completed activity. For several returned
+workouts, prefer the advertised bounded bulk completion read; use the single-workout read for one exact link. Never infer
+completion from title, date, sport, duration or proximity. An
 activity reference appears only with separate activity-detail permission.
 Service confirmation is provider-side workout delivery, not native-plan parity or receipt on a watch. Missing, stale,
 earlier-account or incomplete evidence is not success; never infer plan totals from one day or page.
@@ -95,6 +97,9 @@ and its revision history are permanently removed. Permanent single-workout delet
 A standalone create may be followed by send to explicit providers or all connected providers. Plan sync means
 automatic per-workout delivery while active, not a native provider plan. Delivery remains Pro, connection, rollout,
 horizon and compatibility gated.
+Before proposing delivery when mapping fidelity matters, use the advertised read-only compatibility assessment for the
+current workout and relevant providers. Preserve its exact/degraded/unsupported result and structured issues. This is
+local mapping evidence, not a live connection check, Pro/readiness result, approval, delivery guarantee or watch receipt.
 
 ### Workout recipe authoring
 

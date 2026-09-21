@@ -1,7 +1,7 @@
 {
   "formatVersion": 1,
-  "candidateSha256": "20ca963e6375490ac71fb2c173f420cc159e4ec80abc3d0d9b22c4d49cd78d3e",
+  "candidateSha256": "335ae0e24aa32b363c64778cff0e30f90bdb3e69d6a00d7c7b078e0a5e3c7b7c",
   "lifecycleAction": "developer-refresh",
-  "summary": "Add Training reads, completion/sync summaries, read/write/delivery scopes, focused/batch previews, optional delivery, sole-change plan deletion with explicit workout disposition, native-approval apply and recipe guidance (#690; #652/#651). Retain readiness/HRV contracts, activity samples/descriptions/tags, Timeline notes, Health, reports, nearby search, multi-metric queries, activity rankings, jump/sleep routing, RS256 private_key_jwt and PKCE.",
+  "summary": "Add Training reads and approved writes plus chronological workout queries, bounded bulk exact-completion reads, and local provider-compatibility assessment (#690; #652/#651). Retain sync summaries, scoped previews/native-approval apply, plan deletion disposition, recipe guidance, Health/Timeline/activity/readiness additions, RS256 private_key_jwt and PKCE.",
   "rescanRequired": true
 }

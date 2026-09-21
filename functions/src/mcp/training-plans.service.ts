@@ -4,7 +4,8 @@ import { z } from 'zod';
 import type { UserUnitSettingsInterface } from '@sports-alliance/sports-lib';
 import { formatWorkoutStepV1, parseWorkoutStructureV1 } from '../../../shared/planned-workout';
 import { buildTrainingDeliverySummaries } from '../../../shared/training-delivery-summary';
-import { PLANNED_WORKOUT_PROVIDER_IDS } from '../../../shared/planned-workout-providers';
+import { assessPlannedWorkoutProviderMappingV1, PLANNED_WORKOUT_PROVIDER_IDS,
+  type PlannedWorkoutProviderId } from '../../../shared/planned-workout-providers';
 import { parseTrainingWorkoutCompletionV1 } from '../../../shared/training-workout-completion';
 import { isUserDeletionTombstoneActive } from '../shared/user-deletion-guard';
 import { TRAINING_PLANS_SCOPE, TRAINING_READ_INPUTS, TRAINING_READ_OUTPUTS, TRAINING_RECIPE_SCHEMA,
@@ -42,10 +43,12 @@ const MASKS: Record<Collection, string[]> = { trainingPlans: Object.keys(planSch
   trainingDeliveryStatuses: Object.keys(statusSchema.shape), trainingWorkoutCompletions: Object.keys(completionSchema.shape) };
 interface Document { id: string; data: Record<string, unknown> }
 type Filter = { field: 'planId' | 'workoutId' | 'scopeId' | 'associationPlanId'; value: string | null };
+interface WorkoutDateCursor { localDate: string; id: string }
 interface State { revision: number; activePlanId: string | null; accessGeneration?: string }
 export interface TrainingReadView {
   get(collection: Collection, id: string, structure?: boolean): Promise<Document | null>;
   page(collection: Collection, after: string | null, limit: number, filter?: Filter): Promise<Document[]>;
+  workoutDatePage(startDate: string, endDate: string, after: WorkoutDateCursor | null, limit: number): Promise<Document[]>;
   units(): Promise<UserUnitSettingsInterface | null>;
 }
 export interface TrainingReads {
@@ -100,6 +103,14 @@ export function createFirestoreTrainingReads(database: () => FirebaseFirestore.F
         if (after) query = query.startAfter(after);
         return (await transaction.get(query)).docs.map(doc => ({ id: doc.id, data: doc.data() }));
       },
+      async workoutDatePage(startDate, endDate, after, limit) {
+        let query = user.collection('scheduledWorkouts')
+          .where('localDate', '>=', startDate).where('localDate', '<=', endDate)
+          .orderBy('localDate').orderBy(FieldPath.documentId())
+          .select(...MASKS.scheduledWorkouts).limit(limit);
+        if (after) query = query.startAfter(after.localDate, after.id);
+        return (await transaction.get(query)).docs.map(doc => ({ id: doc.id, data: doc.data() }));
+      },
       async units() {
         const [owner] = await transaction.getAll(user, { fieldMask: ['settings.unitSettings'] });
         return owner.get('settings.unitSettings') ?? null;
@@ -112,6 +123,25 @@ export const firestoreTrainingReads = createFirestoreTrainingReads();
 export interface TrainingReadInput { tool: TrainingReadTool; arguments: unknown; uid: string; connectionId: string; scopes: readonly string[] }
 const refSchema = z.strictObject({ kind: z.enum(['plan', 'workout']), id, createdAtMs: count });
 const cursorSchema = z.strictObject({ kind: z.literal('cursor'), query: z.string().max(4096), revision: count, after: id.nullable() });
+const dateCursorSchema = z.strictObject({ kind: z.literal('date-cursor'), query: z.string().max(4096), revision: count,
+  after: z.strictObject({ localDate: trainingDate, id }).nullable() });
+
+const WAHOO_SCHEDULING_DURATION_ISSUE = {
+  severity: 'unsupported',
+  code: 'scheduling_duration_unavailable',
+  path: '$.nodes',
+  message: 'Wahoo delivery requires time-based steps throughout because its dated Workout record needs a total duration. Quantified Self does not estimate one from distance, work, repetitions, or manual transitions.',
+};
+
+function assessDeliveryCompatibility(provider: PlannedWorkoutProviderId, structure: ReturnType<typeof parseWorkoutStructureV1>) {
+  const assessment = assessPlannedWorkoutProviderMappingV1(provider, structure);
+  const needsWahooDuration = provider === 'wahoo' && structure.nodes.some(node =>
+    (node.kind === 'step' ? [node] : node.steps).some(step => step.ending.kind !== 'time'));
+  const issues = [...(needsWahooDuration ? [WAHOO_SCHEDULING_DURATION_ISSUE] : []), ...assessment.issues].slice(0, 20);
+  const level = needsWahooDuration || assessment.level === 'unsupported' ? 'unsupported' as const
+    : assessment.level === 'degraded' ? 'degraded' as const : 'exact' as const;
+  return { provider, level, issues };
+}
 
 /** Dedicated owner-authorized projections: no mutation API, delivery worker or provider import is reachable here. */
 export async function readTrainingPlans(input: TrainingReadInput, reads: TrainingReads,
@@ -154,6 +184,11 @@ export async function readTrainingPlans(input: TrainingReadInput, reads: Trainin
         page.forEach(measure);
         return page;
       },
+      async workoutDatePage(startDate, endDate, after, limit) {
+        const page = await source.workoutDatePage(startDate, endDate, after, limit);
+        page.forEach(measure);
+        return page;
+      },
       async units() {
         const units = await source.units();
         measure({ id: 'units', data: { units } });
@@ -183,6 +218,26 @@ export async function readTrainingPlans(input: TrainingReadInput, reads: Trainin
         title: workout.title, localDate: workout.localDate, lifecycle: workout.lifecycle,
         revision: workout.revision, createdAtMs: workout.createdAtMs, updatedAtMs: workout.updatedAtMs };
     };
+    const projectCompletion = async (workoutRef: string) => {
+      const doc = await resolve(workoutRef, 'workout');
+      const workout = workoutSchema.parse(doc.data);
+      const completionDoc = await view.get('trainingWorkoutCompletions', doc.id);
+      if (!completionDoc) return { workoutRef, state: 'unlinked' as const,
+        provider: null, matchMethod: null, timing: null, scheduledDate: workout.localDate, workoutRevision: workout.revision,
+        linkedWorkoutRevision: null, workoutChangedSinceCompletion: false, activityStartAtMs: null, linkedAtMs: null,
+        activityRef: null };
+      const completion = parseTrainingWorkoutCompletionV1(completionSchema.parse(completionDoc.data));
+      if (completion.workoutId !== doc.id || completion.planId !== workout.planId) throw unavailable();
+      const activityRef = input.scopes.includes('activity-details:read') && completion.activityId && codec.encodeActivity
+        ? codec.encodeActivity({ activityId: completion.activityId, eventId: completion.eventId }, input.uid, input.connectionId)
+        : null;
+      return { workoutRef, state: 'linked' as const,
+        provider: completion.provider, matchMethod: completion.matchMethod, timing: completion.timing,
+        scheduledDate: completion.scheduledLocalDate, workoutRevision: workout.revision,
+        linkedWorkoutRevision: completion.workoutRevisionAtLink,
+        workoutChangedSinceCompletion: completion.workoutRevisionAtLink !== workout.revision,
+        activityStartAtMs: completion.activityStartAtMs, linkedAtMs: completion.linkedAtMs, activityRef };
+    };
     if (input.tool === 'get_training_plan') {
       const a = TRAINING_READ_INPUTS.get_training_plan.parse(args.data);
       return { scheduleRevision: state.revision, plan: projectPlan(await resolve(a.planRef, 'plan')) };
@@ -200,24 +255,25 @@ export async function readTrainingPlans(input: TrainingReadInput, reads: Trainin
     }
     if (input.tool === 'get_planned_workout_completion') {
       const a = TRAINING_READ_INPUTS.get_planned_workout_completion.parse(args.data);
-      const doc = await resolve(a.workoutRef, 'workout');
-      const workout = workoutSchema.parse(doc.data);
-      const completionDoc = await view.get('trainingWorkoutCompletions', doc.id);
-      if (!completionDoc) return { scheduleRevision: state.revision, workoutRef: a.workoutRef, state: 'unlinked' as const,
-        provider: null, matchMethod: null, timing: null, scheduledDate: workout.localDate, workoutRevision: workout.revision,
-        linkedWorkoutRevision: null, workoutChangedSinceCompletion: false, activityStartAtMs: null, linkedAtMs: null,
-        activityRef: null };
-      const completion = parseTrainingWorkoutCompletionV1(completionSchema.parse(completionDoc.data));
-      if (completion.workoutId !== doc.id || completion.planId !== workout.planId) throw unavailable();
-      const activityRef = input.scopes.includes('activity-details:read') && completion.activityId && codec.encodeActivity
-        ? codec.encodeActivity({ activityId: completion.activityId, eventId: completion.eventId }, input.uid, input.connectionId)
-        : null;
-      return { scheduleRevision: state.revision, workoutRef: a.workoutRef, state: 'linked' as const,
-        provider: completion.provider, matchMethod: completion.matchMethod, timing: completion.timing,
-        scheduledDate: completion.scheduledLocalDate, workoutRevision: workout.revision,
-        linkedWorkoutRevision: completion.workoutRevisionAtLink,
-        workoutChangedSinceCompletion: completion.workoutRevisionAtLink !== workout.revision,
-        activityStartAtMs: completion.activityStartAtMs, linkedAtMs: completion.linkedAtMs, activityRef };
+      return { scheduleRevision: state.revision, ...await projectCompletion(a.workoutRef) };
+    }
+    if (input.tool === 'get_planned_workout_completions') {
+      const a = TRAINING_READ_INPUTS.get_planned_workout_completions.parse(args.data);
+      return { scheduleRevision: state.revision,
+        completions: await Promise.all(a.workoutRefs.map(workoutRef => projectCompletion(workoutRef))) };
+    }
+    if (input.tool === 'assess_planned_workout_compatibility') {
+      const a = TRAINING_READ_INPUTS.assess_planned_workout_compatibility.parse(args.data);
+      const doc = await resolve(a.workoutRef, 'workout', true);
+      const structure = parseWorkoutStructureV1(doc.data.structure);
+      const providers = a.providers ?? PLANNED_WORKOUT_PROVIDER_IDS;
+      return { scheduleRevision: state.revision, workoutRef: a.workoutRef,
+        assessments: providers.map(provider => {
+          const assessment = assessDeliveryCompatibility(provider, structure);
+          return { provider: assessment.provider, level: assessment.level,
+            issues: assessment.issues.map(issue => ({ severity: issue.severity, code: issue.code,
+              field: issue.path, message: issue.message })) };
+        }) };
     }
     if (input.tool === 'get_training_sync_status') {
       const a = TRAINING_READ_INPUTS.get_training_sync_status.parse(args.data);
@@ -260,8 +316,13 @@ export async function readTrainingPlans(input: TrainingReadInput, reads: Trainin
         checkedAtMs: nowMs, services: summaries.map(summary => summary.projection) };
     }
     const isPlans = input.tool === 'list_training_plans';
-    const a = isPlans ? TRAINING_READ_INPUTS.list_training_plans.parse(args.data) : TRAINING_READ_INPUTS.query_planned_workouts.parse(args.data);
-    const queryArgs = !isPlans ? TRAINING_READ_INPUTS.query_planned_workouts.parse(a) : null;
+    const isDateOrdered = input.tool === 'query_planned_workouts_by_date';
+    const a = isPlans ? TRAINING_READ_INPUTS.list_training_plans.parse(args.data)
+      : isDateOrdered ? TRAINING_READ_INPUTS.query_planned_workouts_by_date.parse(args.data)
+        : TRAINING_READ_INPUTS.query_planned_workouts.parse(args.data);
+    const queryArgs = !isPlans ? (isDateOrdered
+      ? TRAINING_READ_INPUTS.query_planned_workouts_by_date.parse(a)
+      : TRAINING_READ_INPUTS.query_planned_workouts.parse(a)) : null;
     let selectedPlan: string | null = null;
     if (queryArgs) {
       if (queryArgs.endDate < queryArgs.startDate || Date.parse(queryArgs.endDate) - Date.parse(queryArgs.startDate) > 365 * 86400000
@@ -273,16 +334,26 @@ export async function readTrainingPlans(input: TrainingReadInput, reads: Trainin
     delete filters.cursor;
     const query = JSON.stringify({ tool: input.tool, ...filters });
     let after: string | null = null;
+    let dateAfter: WorkoutDateCursor | null = null;
     if (a.cursor) {
-      const cursor = cursorSchema.safeParse(decode(a.cursor));
-      if (!cursor.success || cursor.data.query !== query) throw new TrainingReadError('invalid_request', 'Repeat the original query filters with this cursor.');
-      if (cursor.data.revision !== state.revision) throw stale();
-      after = cursor.data.after;
+      if (isDateOrdered) {
+        const cursor = dateCursorSchema.safeParse(decode(a.cursor));
+        if (!cursor.success || cursor.data.query !== query) throw new TrainingReadError('invalid_request', 'Repeat the original query filters with this cursor.');
+        if (cursor.data.revision !== state.revision) throw stale();
+        dateAfter = cursor.data.after;
+      } else {
+        const cursor = cursorSchema.safeParse(decode(a.cursor));
+        if (!cursor.success || cursor.data.query !== query) throw new TrainingReadError('invalid_request', 'Repeat the original query filters with this cursor.');
+        if (cursor.data.revision !== state.revision) throw stale();
+        after = cursor.data.after;
+      }
     }
     const items: unknown[] = []; let scanned = 0, done = false;
     const limits: ('limit' | 'scan' | 'bytes')[] = [];
     outer: while (scanned < TRAINING_READ_LIMITS.scan) {
-      const page = await view.page(isPlans ? 'trainingPlans' : 'scheduledWorkouts', after, 25);
+      const page = isDateOrdered
+        ? await view.workoutDatePage(queryArgs!.startDate, queryArgs!.endDate, dateAfter, 25)
+        : await view.page(isPlans ? 'trainingPlans' : 'scheduledWorkouts', after, 25);
       for (const doc of page) {
         scanned++;
         let match = false;
@@ -300,12 +371,15 @@ export async function readTrainingPlans(input: TrainingReadInput, reads: Trainin
           items.push(isPlans ? projectPlan(doc) : await projectWorkout(doc));
         }
         after = id.parse(doc.id);
+        if (isDateOrdered) dateAfter = { localDate: trainingDate.parse(doc.data.localDate), id: after };
       }
       if (page.length < 25) { done = true; break; }
     }
     if (!done && !limits.length) limits.push('scan');
     const envelope = { scheduleRevision: state.revision, scanComplete: done, recordsScanned: scanned,
-      nextCursor: done ? null : encode({ kind: 'cursor', query, revision: state.revision, after }), limitsReached: limits };
+      nextCursor: done ? null : encode(isDateOrdered
+        ? { kind: 'date-cursor', query, revision: state.revision, after: dateAfter }
+        : { kind: 'cursor', query, revision: state.revision, after }), limitsReached: limits };
     return isPlans ? { ...envelope, plans: items } : { ...envelope, startDate: queryArgs!.startDate,
       endDate: queryArgs!.endDate, scope: queryArgs!.scope, workouts: items };
   });

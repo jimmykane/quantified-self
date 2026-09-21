@@ -1,5 +1,6 @@
 import { ActivityTypes } from '@sports-alliance/sports-lib';
-import { TRAINING_READ_TOOLS, TRAINING_WRITE_TOOLS, type TrainingReadTool } from './training-plans.schemas';
+import { TRAINING_READ_EXTENSION_TOOLS, TRAINING_READ_TOOLS, TRAINING_WRITE_TOOLS,
+  type TrainingReadTool } from './training-plans.schemas';
 import { calculateReadinessScore as calculateCurrentReadinessScore, resolveReadinessConfidence } from '../../../shared/readiness';
 import { Client, InMemoryTransport, StreamableHTTPClientTransport } from '@modelcontextprotocol/client';
 import {
@@ -444,12 +445,21 @@ const trainingReadFixtures = {
  list_training_plans: { scheduleRevision: 1, scanComplete: true, recordsScanned: 1, limitsReached: [], nextCursor: null, plans: [{ planRef: 'opaque-plan-reference', name: 'Autumn', lifecycle: 'active', startDate: '2026-07-01', endDate: '2026-07-02', revision: 1, currentWorkoutCount: 1, color: null, createdAtMs: 1, updatedAtMs: 1 }] },
  get_training_plan: { scheduleRevision: 1, plan: { planRef: 'opaque-plan-reference', name: 'Autumn', lifecycle: 'active', startDate: '2026-07-01', endDate: '2026-07-02', revision: 1, currentWorkoutCount: 1, color: null, createdAtMs: 1, updatedAtMs: 1 } },
  query_planned_workouts: { scheduleRevision: 1, scanComplete: true, recordsScanned: 1, limitsReached: [], nextCursor: null, startDate: '2026-07-01', endDate: '2026-07-02', scope: 'calendar', workouts: [{ workoutRef: 'opaque-workout-reference', planRef: null, title: 'Easy run', localDate: '2026-07-01', lifecycle: 'planned', revision: 1, createdAtMs: 1, updatedAtMs: 1 }] },
+ query_planned_workouts_by_date: { scheduleRevision: 1, scanComplete: true, recordsScanned: 1, limitsReached: [], nextCursor: null, startDate: '2026-07-01', endDate: '2026-07-02', scope: 'calendar', workouts: [{ workoutRef: 'opaque-workout-reference', planRef: null, title: 'Easy run', localDate: '2026-07-01', lifecycle: 'planned', revision: 1, createdAtMs: 1, updatedAtMs: 1 }] },
  get_planned_workout: { scheduleRevision: 1, workout: { ...{ workoutRef: 'opaque-workout-reference', planRef: null, title: 'Easy run', localDate: '2026-07-01', lifecycle: 'planned', revision: 1, createdAtMs: 1, updatedAtMs: 1 }, structure: { version: 1, sport: ActivityTypes.Running, nodes: [{kind:'step', id:'step',purpose:'work',ending:{kind:'manual'},targets:[], note:'Untrusted text'}] }, displaySteps: [{nodeId:'step',text:'Work · Manual transition'}] } },
  get_training_sync_status: { scheduleRevision: 1, scope: 'plan', reference:'opaque-plan-reference',scanComplete:true,checkedAtMs:1,services:[] },
  get_planned_workout_completion: { scheduleRevision: 1, workoutRef: 'opaque-workout-reference', state: 'unlinked',
    provider: null, matchMethod: null, timing: null, scheduledDate: '2026-07-01', workoutRevision: 1,
    linkedWorkoutRevision: null, workoutChangedSinceCompletion: false, activityStartAtMs: null, linkedAtMs: null,
    activityRef: null },
+ get_planned_workout_completions: { scheduleRevision: 1, completions: [{ workoutRef: 'opaque-workout-reference', state: 'unlinked',
+   provider: null, matchMethod: null, timing: null, scheduledDate: '2026-07-01', workoutRevision: 1,
+   linkedWorkoutRevision: null, workoutChangedSinceCompletion: false, activityStartAtMs: null, linkedAtMs: null,
+   activityRef: null }] },
+ assess_planned_workout_compatibility: { scheduleRevision: 1, workoutRef: 'opaque-workout-reference', assessments: [{
+   provider: 'garmin', level: 'degraded', issues: [{ severity: 'degraded', code: 'sport_profile_degraded', field: '$.sport',
+     message: 'Garmin receives the exact authored profile through its Cycling family.' }],
+ }] },
 };
 
 const trainingPreviewFixture = { proposalRef: 'opaque-proposal-reference', expiresAtMs: DAY_MS + 60_000,
@@ -1244,9 +1254,12 @@ const successfulToolArguments: Record<
   list_training_plans: {},
   get_training_plan: { planRef: 'opaque-plan-reference' },
   query_planned_workouts: { startDate: '2026-07-01', endDate: '2026-07-02' },
+  query_planned_workouts_by_date: { startDate: '2026-07-01', endDate: '2026-07-02' },
   get_planned_workout: { workoutRef: 'opaque-workout-reference' },
   get_training_sync_status: { scope: 'plan', reference: 'opaque-plan-reference' },
   get_planned_workout_completion: { workoutRef: 'opaque-workout-reference' },
+  get_planned_workout_completions: { workoutRefs: ['opaque-workout-reference'] },
+  assess_planned_workout_compatibility: { workoutRef: 'opaque-workout-reference', providers: ['garmin'] },
   preview_create_planned_workout: {
     expectedScheduleRevision: 1,
     localDate: '2026-07-02',
@@ -1848,7 +1861,10 @@ describe.each<FixtureTransport>(['in-memory', 'legacy-http', 'modern-http'])('MC
     expect(Buffer.byteLength(JSON.stringify(noteTools), 'utf8')).toBeLessThan(8 * 1024);
     // Keep the frozen surface's budget; each additive family has its own explicit bound.
     const planTools = tools.filter(tool => (TRAINING_READ_TOOLS as readonly string[]).includes(tool.name));
-    expect(Buffer.byteLength(JSON.stringify(planTools), 'utf8')).toBeLessThan(32 * 1024);
+    const planReadExtensions = planTools.filter(tool => (TRAINING_READ_EXTENSION_TOOLS as readonly string[]).includes(tool.name));
+    const planReadCore = planTools.filter(tool => !(TRAINING_READ_EXTENSION_TOOLS as readonly string[]).includes(tool.name));
+    expect(Buffer.byteLength(JSON.stringify(planReadCore), 'utf8')).toBeLessThan(32 * 1024);
+    expect(Buffer.byteLength(JSON.stringify(planReadExtensions), 'utf8')).toBeLessThan(12 * 1024);
     const planWriteTools = tools.filter(tool => (TRAINING_WRITE_TOOLS as readonly string[]).includes(tool.name));
     expect(Buffer.byteLength(JSON.stringify(planWriteTools), 'utf8')).toBeLessThan(48 * 1024);
     const applyTrainingChangesTool = tools.find(tool => tool.name === 'apply_training_changes');

@@ -42,6 +42,10 @@ Lib version or parser change, also use `.agent/skills/sports-lib-upgrade-and-rep
   `docs/training-workspace.md`; distinguish implementation from deployed/registered-client availability.
   Never forward whole records or automatically expose new stored fields. Preserve registered schemas using the
   compatible additive-tool lifecycle when a shape cannot safely change. Keep private delivery fields private.
+  Keep upcoming-session reads chronologically ordered by calendar date with a stable opaque continuation. Use bounded
+  bulk reads for exact completion reviews instead of forcing one tool call per workout. Provider-compatibility reads
+  may expose only versioned local exact/degraded/unsupported mapping issues; they must not read connection authority,
+  private mapping digests, ledgers or provider APIs, and must not imply approval, delivery or watch receipt.
   Keep every manually mirrored workout recipe discriminant behind an exhaustive compile-time coverage map and fixtures
   that JSON-round-trip each shared variant through public read and write validation. A shared-model addition must fail
   closed until its MCP schema, formatting, Assistant/plugin authoring guidance, contract digest and tests are reviewed;

@@ -14,14 +14,19 @@ grant. HTTP prechecks, tool registration and data reads enforce it. Revocation c
 | --- | --- |
 | `list_training_plans` | Optional name/lifecycle filters; active, paused and archived metadata |
 | `get_training_plan` | Metadata, range, revision and current workout count, without loading workouts |
-| `query_planned_workouts` | Inclusive dates; calendar-visible (default standalone + active plan), standalone, selected plan or all |
+| `query_planned_workouts` | Legacy document-ordered inclusive-date query retained for registered-client compatibility |
+| `query_planned_workouts_by_date` | Inclusive dates in ascending local-date and stable reference order; calendar-visible (default standalone + active plan), standalone, selected plan or all |
 | `get_planned_workout` | Complete validated v1 canonical recipe, notes and owner-unit display text |
 | `get_training_sync_status` | Existing local per-service evidence for a plan/workout; never a live provider check |
 | `get_planned_workout_completion` | Exact stored completion link only; never similarity inference |
+| `get_planned_workout_completions` | Exact stored completion links for up to 25 referenced workouts, preserving input order |
+| `assess_planned_workout_compatibility` | Safe local exact/degraded/unsupported mapping assessment for selected or all providers |
 
 References bind owner, connection, entity and creation time. Structural node IDs are public recipe fields, not document
-IDs. No app links are returned from these planning projections. Lists use document-ID order (not date order), default
-25/max 100 results, 25-record scan pages and 1,000 scanned records per call. Inclusive windows permit 366 days. Skipped
+IDs. No app links are returned from these planning projections. Plan lists and the legacy workout query use document-ID
+order. The additive chronological workout query orders by `localDate` and document ID, so bounded upcoming results cannot
+omit earlier matching dates merely because their document IDs sort later. Lists default to 25/max 100 results, use
+25-record scan pages and permit at most 1,000 scanned records per call. Inclusive windows permit 366 days. Skipped
 workouts are labelled, deleted excluded; historical dates read current authored records, not revisions. Explicit plan/all
 scopes include inactive plans. Cursors bind exact filters/limit, owner, connection and schedule revision; changed schedules
 require restarting. Dates remain calendar labels; no plan timezone is invented. Delivery retains its saved timezone.
@@ -29,6 +34,18 @@ Selected input includes every fetched page entry (even unused lookahead/tail ent
 once per fetch. It is bounded to 2 MiB, an individual record to 128 KiB and complete structured-plus-JSON-text responses to
 256 KiB. Oversized records fail without truncating instructions. Canonical values remain alongside Sports Lib display;
 manual/mixed-ending recipes receive no invented duration estimate.
+
+The bulk completion read accepts 1–25 unique opaque workout references and returns the same exact linked/unlinked
+projection as the single-workout tool in input order. It does not scan for similar activities. Completed-activity
+references remain independently gated by `activity-details:read`; provider/event/activity identities never leak when that
+grant is absent.
+
+Compatibility assessment reads one current stored recipe and applies the versioned local provider mapping rules. It
+returns only provider, exact/degraded/unsupported level, and bounded safe code/field/message issues. Wahoo's dated-workout
+duration requirement is included, so any non-time step makes delivery unsupported rather than prompting an invented
+duration. The assessment does not read a provider connection, Pro state, destination, mapping digest/version or delivery
+ledger; it does not contact providers, approve degradation, or promise provider-account/device readiness. The later
+delivery preview/apply remains authoritative.
 
 `training-plans.service.ts` owns explicit field masks and read-only Firestore snapshot transactions, not new persistence.
 Fresh schedule/account-deletion/plan-deletion fences run before and after results, as do external connection consent and
@@ -150,16 +167,17 @@ backend rollout and availability checks. The existing sync-status enum can repor
 and completed states for COROS. Partner athlete/workout IDs, destination
 identity, batch journals, request outcomes, token authority and exact `planWorkoutId` evidence remain private and are
 rejected from browser/MCP projections. Plan totals continue to derive from individual workout statuses rather than a
-claimed native plan object. The exact provider marker can update the existing private completion link, but exposing a
-completion link through MCP remains the focused #651 deferral. No new MCP scope, tool, provider action, schema,
-Assistant route or plugin metadata is introduced.
+claimed native plan object. The exact provider marker can update the existing private completion link, which the single
+and bounded bulk completion tools expose only as their sanitized current projection. Candidate discovery, fallback
+matching and manual link changes remain the focused #651 deferral. No provider identity, batch evidence or transport
+action is introduced.
 
 Wahoo exact completion correlation follows the same no-wire-change boundary. An imported activity can move its existing
 sanitized delivery status to `completed` only after the private Workout ID, Plan ID and deterministic `workout_token`
 resolve one current account-bound delivery. Those identifiers, the account digest, workout-summary evidence and reverse
-link remain private and are rejected from MCP projections. The separate safe **Activity linked** projection is still not
-part of MCP; #651 retains the bounded fallback/manual-link and linked/unlinked read review. No tool, scope, schema,
-Assistant route, provider action or bundled-plugin change is introduced.
+link remain private and are rejected from MCP projections. The existing sanitized completion tools can report the exact
+current link; #651 retains bounded fallback candidate discovery and approval-gated manual link/unlink/relink behavior.
+No private Wahoo identity, live check or provider action is introduced.
 
 ## Purpose and boundary
 
@@ -653,10 +671,13 @@ The analytics and map entries follow the
 | --- | --- | --- |
 | `list_training_plans` | `training-plans:read` | Paginated current plan summaries across active, paused and archived lifecycles |
 | `get_training_plan` | `training-plans:read` | Current plan metadata and workout count without loading all workouts |
-| `query_planned_workouts` | `training-plans:read` | Bounded calendar-date summaries; standalone plus active plan by default |
+| `query_planned_workouts` | `training-plans:read` | Legacy document-ordered calendar-date summaries retained for compatible clients |
+| `query_planned_workouts_by_date` | `training-plans:read` | Chronological bounded calendar-date summaries; standalone plus active plan by default |
 | `get_planned_workout` | `training-plans:read` | Complete validated canonical v1 instructions plus owner-unit display text |
 | `get_training_sync_status` | `training-plans:read` | Existing local delivery evidence, with whole-plan counts only for complete reads |
 | `get_planned_workout_completion` | `training-plans:read`; optional activity ref also requires `activity-details:read` | Exact current persisted completion link; no inferred matching |
+| `get_planned_workout_completions` | `training-plans:read`; optional activity refs also require `activity-details:read` | Exact current completion links for 1–25 workouts in input order; no inferred matching |
+| `assess_planned_workout_compatibility` | `training-plans:read` | Local mapping fidelity for one current workout; no connection/provider call or delivery guarantee |
 | `preview_create_planned_workout` | `training-plans:read` + `training-plans:write`; optional delivery also requires `training-delivery:write` | Focused one-workout proposal with optional atomic initial send; server-owned local key |
 | `preview_training_changes` | `training-plans:read` plus the relevant Training write scope(s) | Strict bounded proposal with authored and per-provider effects; no authored mutation |
 | `apply_training_changes` | Same scopes bound into the proposal; native client approval gate | Idempotently applies a preview-created proposal and returns independent authored/provider outcomes |

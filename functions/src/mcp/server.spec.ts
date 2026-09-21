@@ -657,8 +657,10 @@ describe('MCP HTTP scope enforcement', () => {
       MCP_OAUTH_SCOPES.TrainingDeliveryWrite,
     ])).resolves.toEqual([
       'apply_training_changes',
+      'assess_planned_workout_compatibility',
       'get_planned_workout',
       'get_planned_workout_completion',
+      'get_planned_workout_completions',
       'get_training_plan',
       'get_training_sync_status',
       'list_activity_types',
@@ -666,6 +668,7 @@ describe('MCP HTTP scope enforcement', () => {
       'preview_create_planned_workout',
       'preview_training_changes',
       'query_planned_workouts',
+      'query_planned_workouts_by_date',
     ]);
   }, 15_000);
 
@@ -691,6 +694,9 @@ describe('MCP HTTP scope enforcement', () => {
       MCP_OAUTH_SCOPES.TrainingPlansWrite,
     ]);
     expect(writeInstructions).toContain('Construct workout recipes only from the advertised v1 schema');
+    expect(writeInstructions).toContain('query_planned_workouts_by_date');
+    expect(writeInstructions).toContain('get_planned_workout_completions');
+    expect(writeInstructions).toContain('local mapping assessment, not a live provider/account check');
     expect(writeInstructions).toContain('use preview_create_planned_workout exactly once');
     expect(writeInstructions).toContain('provider delivery is not available on this connection');
     expect(writeInstructions).toContain('Never retry a rejected preview unchanged');
