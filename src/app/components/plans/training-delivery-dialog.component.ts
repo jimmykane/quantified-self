@@ -190,6 +190,7 @@ export class TrainingDeliveryDialogComponent {
       };
     }).sort((a, b) => (a.localDate ?? '9999-99-99').localeCompare(b.localDate ?? '9999-99-99') || a.id.localeCompare(b.id));
     const ready = this.delivery.isReady(provider);
+    const setupAvailable = this.delivery.isSetupAvailable(provider);
     const attentionWorkoutCount = new Set(statuses.filter(item => ['approval_required', 'failed', 'needs_attention', 'unsupported',
       'reconnect_required', 'connection_repair', 'fresh_consent_required'].includes(item.status)).map(item => item.workoutId)).size;
     const statusWorkoutCount = new Set(statuses.map(item => item.workoutId)).size;
@@ -213,7 +214,7 @@ export class TrainingDeliveryDialogComponent {
             ? `${statusWorkoutCount} ${statusWorkoutCount === 1 ? 'workout' : 'workouts'} · ${statuses[0].label}`
             : `${statusWorkoutCount} ${statusWorkoutCount === 1 ? 'workout' : 'workouts'} · different sync states`;
     return { provider, label: PLANNED_WORKOUT_PROVIDER_CAPABILITIES_V1[provider].label,
-      displayLabel: PROVIDER_PRESENTATIONS[provider].displayLabel, presentation: PROVIDER_PRESENTATIONS[provider], ready, setting, statuses,
+      displayLabel: PROVIDER_PRESENTATIONS[provider].displayLabel, presentation: PROVIDER_PRESENTATIONS[provider], ready, setupAvailable, setting, statuses,
       overviewState, overviewDetail, overviewIcon, overviewEnabled: overviewState === 'Sync enabled',
       canCheck: statuses.some(status => status.verification?.canCheck),
       needsFreshConsent: statuses.some(status => status.status === 'fresh_consent_required'),
@@ -223,7 +224,7 @@ export class TrainingDeliveryDialogComponent {
       settingLabel: this.planBound() ? suppressed ? 'Excluded from plan sync' : 'Follows plan sync settings'
         : this.data.scope === 'plan' ? setting?.enabled ? 'Plan sync enabled' : 'Plan sync off'
           : setting?.enabled ? 'Workout sync enabled' : 'Workout sync off',
-      visible: (ready && this.canSend()) || !!setting || statuses.length > 0,
+      visible: (setupAvailable && this.canSend()) || !!setting || statuses.length > 0,
       canStop: !!setting?.enabled || (this.planBound() && !suppressed)
         || statuses.some(item => item.hasRemoteCopy || !['stopped', 'removed', 'past', 'completed'].includes(item.status)),
       approvalDigest: suppressed ? null : statuses.find(item => item.status === 'approval_required' && item.approvalDigest)?.approvalDigest ?? null,

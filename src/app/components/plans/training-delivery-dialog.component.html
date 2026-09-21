@@ -132,13 +132,24 @@
             } @else if (planBound()) { <p class="delivery-caption">These controls affect only this workout, not the rest of the plan.</p> }
             @if (!planBound() && row.setting) { <p class="delivery-caption">Time zone: {{ row.setting.timeZone }}</p> }
           }
-          @if (!row.ready) { <p>Workout sync unavailable. Existing copies and problems remain visible.</p> }
+          @if (!row.setupAvailable) {
+            @if (row.provider === 'coros' && row.ready) {
+              <p><strong>New COROS workout sync setup is coming soon.</strong></p>
+              <p class="delivery-caption">Existing enabled sync keeps running. Delivery records, retry, copy status, and Stop sync remain available here.</p>
+            } @else {
+              <p>Workout sync unavailable. Existing copies and problems remain visible.</p>
+            }
+          }
           @if (row.provider === 'suunto' && data.scope !== 'workout') {
             <p class="delivery-caption">Workouts for today and the next six days are sent as SuuntoPlus Guides. Later workouts are sent automatically as their dates approach.</p>
             <p class="delivery-caption">Sent means available in the Suunto app, not confirmed on your watch. Sync your compatible watch with the app, then select the Guide for your exercise. Pinning stays under your control.</p>
           }
           @if (row.provider === 'coros' && data.scope !== 'workout') {
-            <p class="delivery-caption">Upcoming workouts are sent individually to your COROS training calendar. Sent does not confirm that a watch received them.</p>
+            @if (row.setupAvailable) {
+              <p class="delivery-caption">Upcoming workouts are sent individually to your COROS training calendar. Sent does not confirm that a watch received them.</p>
+            } @else {
+              <p class="delivery-caption">When available, plan workouts will be sent individually rather than as a QS-owned COROS plan.</p>
+            }
           }
           @if (row.provider === 'wahoo' && data.scope !== 'workout') {
             <p class="delivery-caption">Time-based running and cycling workouts for today and the next six days are sent to Wahoo. Later workouts wait until their dates approach. Sent confirms cloud delivery, not receipt on a device.</p>
@@ -154,12 +165,12 @@
                     {{ checkingProvider() === row.provider ? 'Queuing check…' : 'Check ' + row.label }}
                   </button>
                 }
-                @if (canSend() && (!planBound() || row.canResume)) {
+                @if (canSend() && (!planBound() || row.canResume) && (row.setupAvailable || row.setting?.enabled)) {
                   <button mat-button type="button" appHapticTap [disabled]="busy() || !canReview()" (click)="begin(row.provider, data.scope === 'plan' ? 'configure' : planBound() ? 'resume' : 'send')">
                     {{ planBound() ? 'Resume workout sync' : row.setting?.enabled ? data.scope === 'plan' ? 'Plan sync settings' : 'Workout sync settings' : data.scope === 'plan' ? 'Sync plan with ' + row.label : 'Send to ' + row.label }}
                   </button>
                 }
-                @if (canSend() && !planBound() && row.setting?.enabled && row.needsFreshConsent) {
+                @if (row.setupAvailable && canSend() && !planBound() && row.setting?.enabled && row.needsFreshConsent) {
                   <button mat-button type="button" appHapticTap [disabled]="busy() || !canReview()" (click)="begin(row.provider, data.scope === 'plan' ? 'configure' : 'send', undefined, true)">Review sync setup</button>
                 }
                 @if (row.canRetry) { <button mat-button appHapticTap type="button" [disabled]="busy() || !canReview()" (click)="begin(row.provider, 'retry')">{{ data.scope === 'plan' ? 'Retry plan sync' : 'Retry workout sync' }}</button> }
@@ -253,7 +264,12 @@
         <p>Sent means available in the Suunto app, not confirmed on your watch. Sync your compatible watch with the app, then select the Guide for your exercise. Pinning stays under your control.</p>
       }
       @if (showsCorosGuidance()) {
-        <p>QS sends each upcoming workout to your COROS training calendar. The COROS app manages watch synchronization; Sent does not confirm that your watch received it.</p>
+        @if (activeRow()?.setupAvailable) {
+          <p>QS sends each upcoming workout to your COROS training calendar. The COROS app manages watch synchronization; Sent does not confirm that your watch received it.</p>
+        } @else {
+          <p>New COROS workout sync setup is coming soon. Existing enabled sync continues in the background, and its delivery records, retry, copy status, and Stop sync remain available here.</p>
+          <p>The app does not currently offer new COROS enable, send, or resume actions.</p>
+        }
         <p>COROS documents a two-week watch window and one training plan synced to a watch at a time. QS does not claim or replace a native plan object, and automatic checking is unavailable.</p>
       }
       @if (showsWahooGuidance()) {

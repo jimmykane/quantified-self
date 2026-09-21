@@ -853,7 +853,8 @@ The separate certification/evaluation ticket #698 is retired; it is not an enabl
 `shared/planned-workout-providers.ts` is the versioned capability/research snapshot. All four public delivery switches remain
 false. Garmin, COROS, Suunto and Wahoo have exact-UID private production pilots backed by offline-tested transports. Offline
 verification does not constitute a real provider request or device result. The UID-restricted runtime admits only the
-owner for each implemented adapter. Wahoo's production-account/device evidence remains pending in #649. The
+owner for each implemented adapter. New COROS browser setup is temporarily hidden under #648 while existing enabled
+delivery and server reconciliation continue. Wahoo's production-account/device evidence remains pending in #649. The
 ignored local Garmin Training API V2 and COROS API Reference PDFs remain evidence only and are never committed.
 
 Every serializer returns `exact`, `degraded`, or `unsupported`. Degraded output requires explicit approval. Current
@@ -924,15 +925,20 @@ removes only its matching link/evidence and requeues ordinary reconciliation. Fa
 remain #651. COROS has no documented planned-workout read/list endpoint, so it exposes no Check action, missing-copy
 inference or automatic recreation.
 
-The exact pilot UID is enforced in both frontend readiness and the server runtime. Public delivery stays disabled.
-Ordinary authorized live evidence is still required for Training entitlement, repeated-ID update, overlapping-window
+The exact pilot UID remains enforced in the server runtime, so existing enabled COROS delivery, reconciliation and Stop
+sync continue. The browser has a narrower presentation/setup gate: it labels new COROS setup **Coming soon** and omits
+new enable, send and resume actions while retaining existing settings, statuses, retry and Stop sync. This frontend-only
+gate does not affect COROS activity/history, Sleep, Health, FIT activity upload, activity sync, route delivery, backend
+delivery, or MCP behavior. Public delivery stays disabled. Ordinary authorized live evidence is still required for
+Training entitlement, repeated-ID update, overlapping-window
 preservation, reschedule, eligible delete, completion callback/history correlation and COROS app/watch behavior before
 broader rollout. Implementation, tests or deployment do not constitute that evidence.
 
-MCP impact: no wire-contract change. `get_planned_workout` already returns the exact authored Sports Lib activity type,
-while `get_training_sync_status` exposes only the existing sanitized approval/status result and never the COROS
-payload. The existing Mountain Biking read fixture covers exact recipe preservation. No new scope, tool, registered
-schema, Assistant route or plugin update is needed.
+MCP impact: no wire-contract or behavior change. The browser-only setup gate is not consulted by MCP; the existing
+backend rollout, proposal availability and `all_connected` behavior remain unchanged. `get_planned_workout` still returns
+the exact authored Sports Lib activity type, while `get_training_sync_status` exposes only existing sanitized statuses
+and never the COROS payload. The existing Mountain Biking read fixture covers exact recipe preservation. No new scope,
+tool, registered schema, Assistant route or plugin update is needed.
 
 #### SuuntoPlus Guide delivery (#650)
 

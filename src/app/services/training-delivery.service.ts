@@ -29,6 +29,11 @@ export const TRAINING_DELIVERY_SAVE_TIMEOUT_MS = 70_000;
 // identities can exceed it; summaries must then explicitly withhold complete totals.
 export const TRAINING_DELIVERY_SUMMARY_LIMIT = TRAINING_PLAN_MAX_CURRENT_WORKOUTS * PLANNED_WORKOUT_PROVIDER_IDS.length + 1;
 
+/** Browser setup control only. Existing server-owned delivery continues under its separate rollout gate. */
+export function isTrainingDeliverySetupAvailableInApp(provider: PlannedWorkoutProviderId, uid: string | null | undefined): boolean {
+  return provider !== 'coros' && isTrainingProviderDeliveryEnabled(provider, uid);
+}
+
 @Injectable({ providedIn: 'root' })
 export class TrainingDeliveryService {
   private readonly firestore = inject(Firestore);
@@ -36,7 +41,8 @@ export class TrainingDeliveryService {
   private readonly browser = inject(BrowserCompatibilityService);
   private readonly users = inject(AppUserService);
   readonly isReady = (provider: PlannedWorkoutProviderId) => isTrainingProviderDeliveryEnabled(provider, this.users.user()?.uid);
-  readonly anyReady = computed(() => PLANNED_WORKOUT_PROVIDER_IDS.some(provider => this.isReady(provider)));
+  readonly isSetupAvailable = (provider: PlannedWorkoutProviderId) => isTrainingDeliverySetupAvailableInApp(provider, this.users.user()?.uid);
+  readonly anyReady = computed(() => PLANNED_WORKOUT_PROVIDER_IDS.some(provider => this.isSetupAvailable(provider)));
 
   createMutationId(): string {
     return this.browser.createRandomUUID() ?? `delivery-${Date.now()}-${Math.random().toString(36).slice(2)}`;

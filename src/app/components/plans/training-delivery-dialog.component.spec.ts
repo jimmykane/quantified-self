@@ -28,7 +28,7 @@ describe('Training provider delivery controls', () => {
   const user = signal<{ uid: string } | null>({ uid: 'owner' });
   const user$ = new BehaviorSubject<{ uid: string } | null>({ uid: 'owner' });
   let close: ReturnType<typeof vi.fn>;
-  let service: { anyReady: () => boolean; isReady: ReturnType<typeof vi.fn>; watchPresence: ReturnType<typeof vi.fn>;
+  let service: { anyReady: () => boolean; isReady: ReturnType<typeof vi.fn>; isSetupAvailable: ReturnType<typeof vi.fn>; watchPresence: ReturnType<typeof vi.fn>;
     watchScope: ReturnType<typeof vi.fn>; createMutationId: ReturnType<typeof vi.fn>; preview: ReturnType<typeof vi.fn>; mutate: ReturnType<typeof vi.fn>; check: ReturnType<typeof vi.fn> };
   let haptics: { selection: ReturnType<typeof vi.fn>; success: ReturnType<typeof vi.fn>; error: ReturnType<typeof vi.fn> };
   const status = { schemaVersion: 1, id: 'delivery', workoutId: 'w', planId: null, provider: 'garmin',
@@ -38,7 +38,7 @@ describe('Training provider delivery controls', () => {
   beforeEach(async () => {
     user.set({ uid: 'owner' }); user$.next(user()); close = vi.fn();
     haptics = { selection: vi.fn(), success: vi.fn(), error: vi.fn() };
-    service = { anyReady: () => false, isReady: vi.fn(() => false), watchPresence: vi.fn(() => of(true)),
+    service = { anyReady: () => false, isReady: vi.fn(() => false), isSetupAvailable: vi.fn(provider => service.isReady(provider)), watchPresence: vi.fn(() => of(true)),
       watchScope: vi.fn(() => of({ settings: [], statuses: [status] })), createMutationId: vi.fn(() => 'mutation'),
       preview: vi.fn(async () => ({ schemaVersion: 1, available: true, connection: 'connected', hasPro: true,
         timeZone: 'Europe/Helsinki', effect: 'enable', settingsRevision: 0, eligibleCount: 1, warningCount: 0, issues: [], approvalDigest: null })),
@@ -329,23 +329,29 @@ describe('Training provider delivery controls', () => {
     expect(service.preview).not.toHaveBeenCalled(); expect(service.mutate).not.toHaveBeenCalled();
     expect(fixture.nativeElement.textContent).toContain('Check queued');
   });
-  it('explains COROS calendar and watch behavior without offering unsupported remote checks', () => {
+  it('keeps existing COROS sync and copy help visible while new setup actions are coming soon', () => {
     service.isReady.mockImplementation(provider => provider === 'coros');
+    service.isSetupAvailable.mockReturnValue(false);
     service.watchScope.mockReturnValue(of({
-      settings: [],
-      statuses: [{ ...status, provider: 'coros', status: 'delivered', differsFromQS: false,
+      settings: [{ provider: 'coros', enabled: true, timeZone: 'Europe/Helsinki' }],
+      statuses: [{ ...status, provider: 'coros', status: 'needs_attention', differsFromQS: false,
         lastAcceptedAtMs: 1000, lastAttemptAtMs: 1000 }],
       verifications: [{ id: status.id, canCheck: false, state: 'unsupported', lastCheckedAtMs: null, missing: false }],
     }));
     const fixture = TestBed.createComponent(TrainingDeliveryDialogComponent); fixture.detectChanges();
-    expect(fixture.nativeElement.textContent).toContain('Sent · automatic checking unavailable');
+    expect(fixture.nativeElement.textContent).toContain('New COROS workout sync setup is coming soon');
+    expect(fixture.nativeElement.textContent).toContain('Sync could not be confirmed');
     expect([...fixture.nativeElement.querySelectorAll('button')].some((button: HTMLButtonElement) =>
       button.textContent?.trim() === 'Check COROS')).toBe(false);
     const guidance: HTMLElement = fixture.nativeElement.querySelector('#delivery-guidance-details');
-    expect(guidance.textContent).toContain('COROS training calendar');
+    expect(guidance.textContent).toContain('Existing enabled sync continues in the background');
+    expect(guidance.textContent).toContain('does not currently offer new COROS enable, send, or resume actions');
+    expect(guidance.textContent).toContain('asks the connected app to remove upcoming synced workouts');
     expect(guidance.textContent).toContain('two-week watch window');
     expect(guidance.textContent).toContain('one training plan synced to a watch at a time');
-    expect(guidance.textContent).toContain('does not confirm that your watch received it');
+    expect(fixture.nativeElement.textContent).not.toContain('Send to COROS');
+    expect(fixture.nativeElement.textContent).toContain('Retry workout sync');
+    expect(fixture.nativeElement.textContent).toContain('Stop workout sync');
     expect(service.check).not.toHaveBeenCalled();
   });
   it('shows the last attempt for partial delivery instead of an empty last-sent date', () => {
@@ -965,7 +971,7 @@ describe('Training provider delivery controls', () => {
     const open = vi.fn();
     TestBed.overrideComponent(TrainingDeliveryButtonComponent, { add: { providers: [{ provide: MatDialog, useValue: { open } }] } });
     service.anyReady = () => true; service.watchPresence.mockReturnValue(of(false));
-    service.isReady.mockImplementation(provider => provider === 'garmin' || (count === 2 && provider === 'coros'));
+    service.isReady.mockImplementation(provider => provider === 'garmin' || (count === 2 && provider === 'suunto'));
     const fixture = TestBed.createComponent(TrainingDeliveryButtonComponent);
     fixture.componentRef.setInput('scope', 'plan'); fixture.componentRef.setInput('entityId', 'p'); fixture.componentRef.setInput('title', 'Plan');
     fixture.detectChanges();
@@ -974,6 +980,19 @@ describe('Training provider delivery controls', () => {
     const data = open.mock.calls[0][1].data;
     expect(data.initialProvider).toBe(count === 1 ? 'garmin' : undefined);
     expect(service.mutate).not.toHaveBeenCalled();
+  });
+  it('does not count backend-ready COROS as a new browser setup destination', () => {
+    const open = vi.fn();
+    TestBed.overrideComponent(TrainingDeliveryButtonComponent, { add: { providers: [{ provide: MatDialog, useValue: { open } }] } });
+    service.anyReady = () => true; service.watchPresence.mockReturnValue(of(false));
+    service.isReady.mockImplementation(provider => provider === 'garmin' || provider === 'coros');
+    service.isSetupAvailable.mockImplementation(provider => provider === 'garmin');
+    const fixture = TestBed.createComponent(TrainingDeliveryButtonComponent);
+    fixture.componentRef.setInput('scope', 'plan'); fixture.componentRef.setInput('entityId', 'p'); fixture.componentRef.setInput('title', 'Plan');
+    fixture.detectChanges();
+    expect(fixture.nativeElement.textContent).toContain('Sync plan with Garmin');
+    fixture.nativeElement.querySelector('button').click();
+    expect(open.mock.calls[0][1].data.initialProvider).toBe('garmin');
   });
   it('shows Send only for the pilot and hides it on account switch or sign-out without creating consent', () => {
     service.watchPresence.mockReturnValue(of(false));

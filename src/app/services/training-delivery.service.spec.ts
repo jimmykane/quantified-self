@@ -4,7 +4,7 @@ import { firstValueFrom } from 'rxjs';
 import { Firestore } from 'app/firebase/firestore';
 import { AppFunctionsService } from './app.functions.service';
 import { BrowserCompatibilityService } from './browser.compatibility.service';
-import { TRAINING_DELIVERY_PREVIEW_TIMEOUT_MS, TrainingDeliveryService } from './training-delivery.service';
+import { isTrainingDeliverySetupAvailableInApp, TRAINING_DELIVERY_PREVIEW_TIMEOUT_MS, TrainingDeliveryService } from './training-delivery.service';
 import { AppUserService } from './app.user.service';
 
 describe('TrainingDeliveryService boundary', () => {
@@ -23,6 +23,8 @@ describe('TrainingDeliveryService boundary', () => {
     expect(service.anyReady()).toBe(true);
     expect(service.isReady('garmin')).toBe(true);
     expect(service.isReady('coros')).toBe(true);
+    expect(isTrainingDeliverySetupAvailableInApp('coros', user()?.uid)).toBe(false);
+    expect(isTrainingDeliverySetupAvailableInApp('garmin', user()?.uid)).toBe(true);
     expect(service.isReady('suunto')).toBe(true);
     expect(service.isReady('wahoo')).toBe(true);
     user.set({ uid: 'another-user' });

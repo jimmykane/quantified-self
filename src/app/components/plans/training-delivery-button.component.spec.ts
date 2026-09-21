@@ -33,13 +33,15 @@ describe('Training delivery summaries on the workspace', () => {
     workoutId: 'w', planId: 'p', provider: 'garmin', status: 'delivered', hasRemoteCopy: true, differsFromQS: false,
     timeZone: 'Europe/Helsinki', approvalDigest: null, issues: [], lastAcceptedAtMs: 2, lastAttemptAtMs: 2, retryCount: 0, nextRetryAtMs: null, updatedAtMs: 3 };
   let view$: BehaviorSubject<TrainingDeliveryView>;
-  let service: { watchSummaryScope: ReturnType<typeof vi.fn>; watchPresence: ReturnType<typeof vi.fn>; anyReady: ReturnType<typeof vi.fn>; isReady: ReturnType<typeof vi.fn> };
+  let service: { watchSummaryScope: ReturnType<typeof vi.fn>; watchPresence: ReturnType<typeof vi.fn>; anyReady: ReturnType<typeof vi.fn>;
+    isReady: ReturnType<typeof vi.fn>; isSetupAvailable: ReturnType<typeof vi.fn> };
   let open: ReturnType<typeof vi.fn>;
   let selection: ReturnType<typeof vi.fn>;
   beforeEach(async () => {
     vi.stubGlobal('crypto', webcrypto); user.set({ uid: 'owner' }); user$.next(user());
     view$ = new BehaviorSubject<TrainingDeliveryView>({ settings: [setting], statuses: [status] });
-    service = { watchSummaryScope: vi.fn(() => view$), watchPresence: vi.fn(() => of(true)), anyReady: vi.fn(() => false), isReady: vi.fn(() => false) };
+    service = { watchSummaryScope: vi.fn(() => view$), watchPresence: vi.fn(() => of(true)), anyReady: vi.fn(() => false),
+      isReady: vi.fn(() => false), isSetupAvailable: vi.fn(provider => service.isReady(provider)) };
     open = vi.fn(); selection = vi.fn();
     TestBed.overrideComponent(ServiceSourceIconComponent, { set: { template: '' } });
     TestBed.overrideComponent(TrainingDeliveryButtonComponent, { add: { providers: [{ provide: MatDialog, useValue: { open } }] } });
