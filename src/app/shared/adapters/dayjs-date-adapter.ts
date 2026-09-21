@@ -5,16 +5,35 @@ import dayjs, { Dayjs } from 'dayjs';
 import localeData from 'dayjs/plugin/localeData';
 import localizedFormat from 'dayjs/plugin/localizedFormat';
 import customParseFormat from 'dayjs/plugin/customParseFormat';
+import { getBrowserLocale } from './app-locale';
 
 dayjs.extend(localeData);
 dayjs.extend(localizedFormat);
 dayjs.extend(customParseFormat);
 
+const IMPORTED_DAYJS_BASE_LOCALES = new Set(['de', 'fr', 'es', 'it', 'nl', 'pl', 'el']);
+
+function localeRegion(locale: string): string | null {
+    const subtags = locale.split('-');
+    for (let index = 1; index < subtags.length; index += 1) {
+        const subtag = subtags[index];
+        if (subtag.length === 1) break;
+        if (/^[a-z]{2}$/i.test(subtag) || /^\d{3}$/.test(subtag)) return subtag.toUpperCase();
+    }
+    return null;
+}
+
 /** Adapts Dayjs for the Angular Material Datepicker. */
 @Injectable()
 export class DayjsDateAdapter extends DateAdapter<Dayjs> {
+    private readonly browserFirstDayOfWeek: number;
+
     constructor(@Optional() @Inject(MAT_DATE_LOCALE) private matDateLocale: string) {
         super();
+        this.browserFirstDayOfWeek = dayjs()
+            .locale(this.normalizeLocale(getBrowserLocale()))
+            .localeData()
+            .firstDayOfWeek();
         this.setLocale(matDateLocale || dayjs.locale());
     }
 
@@ -23,26 +42,30 @@ export class DayjsDateAdapter extends DateAdapter<Dayjs> {
      * e.g., 'el-GR' -> 'el', 'en-US' -> 'en', 'en-GB' -> 'en-gb'
      */
     private normalizeLocale(locale: string): string {
-        if (!locale) return 'en';
+        if (!locale) return 'en-gb';
 
         const lowerLocale = locale.toLowerCase();
 
-        // Map common browser locales to Day.js locales
+        // Only return locale bundles imported by date-locale.config.ts. Day.js
+        // otherwise keeps its previous global locale, which makes formatting
+        // depend on whichever adapter happened to run first.
         const localeMap: Record<string, string> = {
             'en-us': 'en',
             'en-gb': 'en-gb',
+            'en-150': 'en-gb',
+            'en-001': 'en-gb',
             'el-gr': 'el',
             'de-de': 'de',
-            'de-at': 'de-at',
-            'de-ch': 'de-ch',
+            'de-at': 'de',
+            'de-ch': 'de',
             'fr-fr': 'fr',
             'fr-be': 'fr',
-            'fr-ca': 'fr-ca',
-            'fr-ch': 'fr-ch',
+            'fr-ca': 'fr',
+            'fr-ch': 'fr',
             'es-es': 'es',
             'it-it': 'it',
             'nl-nl': 'nl',
-            'nl-be': 'nl-be',
+            'nl-be': 'nl',
         };
 
         // Check exact match in the map
@@ -52,7 +75,10 @@ export class DayjsDateAdapter extends DateAdapter<Dayjs> {
 
         // Try the base language (e.g., 'el-GR' -> 'el')
         const baseLang = lowerLocale.split('-')[0];
-        return baseLang;
+        if (baseLang === 'en') {
+            return localeRegion(locale) === 'US' ? 'en' : 'en-gb';
+        }
+        return IMPORTED_DAYJS_BASE_LOCALES.has(baseLang) ? baseLang : 'en-gb';
     }
 
     getYear(date: Dayjs): number {
@@ -98,7 +124,9 @@ export class DayjsDateAdapter extends DateAdapter<Dayjs> {
     }
 
     getFirstDayOfWeek(): number {
-        return dayjs.localeData().firstDayOfWeek();
+        // Regional formatting owns labels and date shapes, while the existing
+        // browser-derived week layout remains independent of that preference.
+        return this.browserFirstDayOfWeek;
     }
 
     getNumDaysInMonth(date: Dayjs): number {

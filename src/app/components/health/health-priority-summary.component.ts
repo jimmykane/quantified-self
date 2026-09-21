@@ -26,6 +26,7 @@ import { HealthMetricSeriesChartComponent } from './health-metric-series-chart.c
 import { HealthSleepStageSummaryComponent } from './health-sleep-stage-summary.component';
 import type { TimelineNoteChartContext } from '../../helpers/timeline-notes-chart.helper';
 import type { AppHealthHighlightId, AppHealthHighlightSources } from '../../models/app-user.interface';
+import { getDateTimeFormatter } from '../../helpers/date-time-format.helper';
 
 interface HealthPrioritySourceView {
   key: string;
@@ -132,7 +133,7 @@ export class HealthPrioritySummaryComponent {
           )
           : '—',
         contextText: card.id === 'heart_rate' && latestPoint
-          ? `Last recorded ${new Intl.DateTimeFormat(undefined, {
+          ? `Last recorded ${getDateTimeFormatter(undefined, {
             hour: 'numeric', minute: '2-digit', timeZoneName: 'short',
           }).format(latestPoint.timestampMs)} · ${model.series.semanticVariant === 'activity_interval_average'
             ? 'Interval averages' : '15-second samples'}`

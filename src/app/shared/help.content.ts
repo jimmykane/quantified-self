@@ -1,5 +1,6 @@
 import { environment } from '../../environments/environment';
 import { ASSISTANT_REQUEST_LIMITS, ROUTE_USAGE_LIMITS, USAGE_LIMITS } from '../../../shared/limits';
+import { getNumberFormatter } from '../helpers/number-format.helper';
 import {
   POLICIES_AI_AND_PROCESSORS_FRAGMENT,
   POLICIES_CONNECTED_SERVICES_FRAGMENT,
@@ -762,7 +763,7 @@ HRV and Sleep each have their own date range and older/newer navigation. While a
 ### Basic
 
 - Everything in Starter
-- Up to **${USAGE_LIMITS.basic.toLocaleString('en-US')} activities**
+- Up to **${getNumberFormatter('en-US').format(USAGE_LIMITS.basic)} activities**
 - Up to **${ROUTE_USAGE_LIMITS.basic} saved routes**
 - **My Tracks (Beta)** access
 - Paid-only profile customization such as custom chart watermark text
@@ -871,6 +872,7 @@ From **Route actions → Send to** on Route Details, Pro members can send the cu
 ## Export and backup options
 
 - You can export dashboard activity tables to CSV.
+- CSV activity dates use the local calendar date in **YYYY-MM-DD** format so spreadsheets do not reinterpret the day and month order.
 - From selected dashboard rows, CSV export, GPX export, and original-file download actions support your current multi-selection.
 - If an activity has positional data, you can download **GPX** from its action menu or export selected dashboard rows to GPX; multi-selected GPX exports download as a ZIP.
 - If original source files are stored for an activity, you can download the original file or files.
@@ -1170,7 +1172,19 @@ In Settings you can:
 
 - turn anonymous usage statistics on or off,
 - turn marketing emails on or off,
-- and customize charts, maps, and units.
+- and customize charts, maps, units, and regional formatting.
+
+### Regional formatting
+
+Open **Settings -> Units -> Regional formatting** to choose how the app displays dates, times, numbers, percentages,
+month names, and weekday names. **Automatic (browser)** is the recommended default and follows the first supported
+language in your browser preferences. You can instead select a specific regional format, which is saved to your account
+and follows you between devices. When a changed selection is saved, the app reloads once so every screen uses it
+consistently.
+
+Regional formatting does not change the app language, timezone, measurement units, start of week, stored data,
+calculations, APIs, or connected-service behavior. Machine-readable CSV dates and generated filenames remain in the
+unambiguous **YYYY-MM-DD** format.
 
 Review and revoke authorized MCP clients under [**Connections -> MCP**](/services?serviceName=mcp).
 Each connection separates **Data access** from optional **Training changes**, and labels every permission **Granted** or

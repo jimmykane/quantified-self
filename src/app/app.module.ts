@@ -42,7 +42,7 @@ import { PublicLayoutComponent } from './components/public-layout/public-layout.
 import { AppRemoteConfigService } from './services/app.remote-config.service';
 import { FirebaseAnalyticsTrackingService } from './services/firebase-analytics-tracking.service';
 
-import { MAT_DATE_LOCALE_PROVIDER, getBrowserLocale } from './shared/adapters/date-locale.config';
+import { MAT_DATE_LOCALE_PROVIDER, getAppLocale } from './shared/adapters/date-locale.config';
 import { APP_STORAGE } from './services/storage/app.storage.token';
 import { MemoryStorage } from './services/storage/memory.storage';
 import { shouldProvideClientHydrationForRuntime } from './shared/public-startup-route';
@@ -173,7 +173,7 @@ const hydrationProviders = shouldProvideClientHydrationForRuntime(appDocument, t
     { provide: MAT_MENU_DEFAULT_OPTIONS, useValue: QS_MENU_DEFAULT_OPTIONS },
     { provide: MAT_BOTTOM_SHEET_DEFAULT_OPTIONS, useValue: { autoFocus: 'dialog', panelClass: 'qs-bottom-sheet-container' } },
     MAT_DATE_LOCALE_PROVIDER,
-    { provide: LOCALE_ID, useFactory: getBrowserLocale },
+    { provide: LOCALE_ID, useFactory: getAppLocale },
     {
       provide: APP_STORAGE,
       useFactory: () => {

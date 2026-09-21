@@ -14,6 +14,7 @@ import type {
 import { getTrainingSportDefinition } from '@shared/training-disciplines';
 import { resolveUnitAwareDisplayStat } from '@shared/unit-aware-display';
 import { formatSleepDuration } from '../../helpers/dashboard-sleep-chart.helper';
+import { getNumberFormatter } from '../../helpers/number-format.helper';
 import { resolveTrainingEventDisplayLabel } from '../../helpers/training-event-label.helper';
 import { AppFunctionsService } from '../../services/app.functions.service';
 
@@ -324,7 +325,7 @@ export class TrainingBuildBenchmarkDialogComponent {
       Number.isFinite(event.durationSeconds) && event.durationSeconds >= 60
         ? formatSleepDuration(event.durationSeconds)
         : null,
-      Number.isFinite(event.trainingStressScore) && event.trainingStressScore >= 0.5 ? `${new Intl.NumberFormat(undefined, {
+      Number.isFinite(event.trainingStressScore) && event.trainingStressScore >= 0.5 ? `${getNumberFormatter(undefined, {
         maximumFractionDigits: 0,
       }).format(event.trainingStressScore)} TSS` : null,
     ].filter((detail): detail is string => !!detail && detail !== '--');
@@ -342,7 +343,7 @@ export class TrainingBuildBenchmarkDialogComponent {
     }
     const fallbackValue = this.data.discipline === 'swimming' ? value : value / 1000;
     const fallbackUnit = this.data.discipline === 'swimming' ? 'm' : 'km';
-    return `${new Intl.NumberFormat(undefined, {
+    return `${getNumberFormatter(undefined, {
       maximumFractionDigits: this.data.discipline === 'swimming' ? 0 : 1,
     }).format(fallbackValue)} ${fallbackUnit}`;
   }

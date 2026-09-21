@@ -14,6 +14,7 @@ import 'dayjs/locale/pl';
 import 'dayjs/locale/el';
 
 import { registerLocaleData } from '@angular/common';
+import localeEnGb from '@angular/common/locales/en-GB';
 import localeDe from '@angular/common/locales/de';
 import localeFr from '@angular/common/locales/fr';
 import localeEs from '@angular/common/locales/es';
@@ -21,12 +22,18 @@ import localeIt from '@angular/common/locales/it';
 import localeNl from '@angular/common/locales/nl';
 import localePl from '@angular/common/locales/pl';
 import localeEl from '@angular/common/locales/el';
+import { getAppLocale } from './app-locale';
+
+export { DEFAULT_APP_LOCALE, SUPPORTED_LOCALES, getAppLocale, getBrowserLocale } from './app-locale';
 
 /**
  * Registers Angular locale data for all supported languages.
  * Should be called before bootstrap in main.ts.
  */
 export function registerAppLocales() {
+    // Angular ships en-US as its built-in locale. Register international English
+    // explicitly so en-GB does not silently inherit Angular's US date patterns.
+    registerLocaleData(localeEnGb);
     registerLocaleData(localeDe);
     registerLocaleData(localeFr);
     registerLocaleData(localeEs);
@@ -37,50 +44,12 @@ export function registerAppLocales() {
 }
 
 
-// Define supported locales for the application
-export const SUPPORTED_LOCALES = ['en', 'de', 'fr', 'es', 'it', 'nl', 'pl', 'el'];
-
-/**
- * Gets the user's locale using the modern Intl API.
- * This respects system/OS regional settings, not just browser language.
- * Falls back to navigator.language if Intl is unavailable.
- *
- * IMPORTANT: This function now validates the detected locale against SUPPORTED_LOCALES.
- * If the locale is not supported, it falls back to 'en-US'.
- */
-export function getBrowserLocale(logger?: LoggerService): string {
-    try {
-        // Use Intl.DateTimeFormat to get the actual system locale for dates
-        const systemLocale = Intl.DateTimeFormat().resolvedOptions().locale;
-        const detected = systemLocale || navigator.language || 'en-US';
-
-        // 1. Try exact match (e.g. 'en-GB') - Logic: some locales might have specific regions we support
-        // For now our supported list is mostly language codes, but good to check.
-
-        // 2. Try language code match (e.g. 'pl-PL' -> 'pl')
-        const languageCode = detected.split('-')[0];
-
-        if (SUPPORTED_LOCALES.includes(languageCode)) {
-            return detected; // We use the full locale (e.g. pl-PL) but we know we have data for 'pl'
-        }
-
-        if (logger) {
-            logger.warn(`[Locale] Unsupported locale detected: ${detected}. Falling back to en-US.`);
-        }
-        return 'en-US';
-
-    } catch {
-        return 'en-US';
-    }
-}
-
 /**
  * Provider for MAT_DATE_LOCALE to be used in AppModule.
  * This keeps the module clean from locale logic.
  */
 export const MAT_DATE_LOCALE_PROVIDER: Provider = {
     provide: MAT_DATE_LOCALE,
-    useFactory: getBrowserLocale,
+    useFactory: getAppLocale,
     deps: [[new Optional(), LoggerService]]
 };
-

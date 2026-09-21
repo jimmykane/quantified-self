@@ -1,3 +1,5 @@
+import { getNumberFormatter } from './number-format.helper';
+
 export type AdminHistoryDisplayMode = 'count' | 'percentage';
 export type AdminHistoryPlanBasis = 'withinPlan' | 'activeShare';
 
@@ -10,8 +12,8 @@ export function adminHistoryPercentage(count: number | null | undefined, total: 
     return count / total * 100;
 }
 
-const percentageFormat = new Intl.NumberFormat('en-US', { maximumFractionDigits: 1 });
-const countFormat = new Intl.NumberFormat('en-US');
+const percentageFormat = getNumberFormatter(undefined, { maximumFractionDigits: 1 });
+const countFormat = getNumberFormatter();
 
 export function formatAdminHistoryPercentage(value: number): string {
     return `${percentageFormat.format(value)}%`;

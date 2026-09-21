@@ -1,5 +1,6 @@
 import { SwimPaceUnits, type UserUnitSettingsInterface } from '@sports-alliance/sports-lib';
 import type { DashboardTrainingSwimPerformanceContext } from './dashboard-derived-metrics.helper';
+import { getNumberFormatter } from './number-format.helper';
 
 export interface TrainingSwimChartPoint {
   weekStartMs: number;
@@ -73,7 +74,7 @@ export function buildTrainingSwimPerformanceViewModel(
       : null,
     latestSwolfText: latestSwolf?.swolf === null || latestSwolf?.swolf === undefined
       ? null
-      : new Intl.NumberFormat(undefined, { maximumFractionDigits: 1 }).format(latestSwolf.swolf),
+      : getNumberFormatter(undefined, { maximumFractionDigits: 1 }).format(latestSwolf.swolf),
     conclusionText: buildConclusion(poolPaceWeekCount, openWaterPaceWeekCount),
     evidenceText: buildEvidenceText(poolPaceWeekCount, openWaterPaceWeekCount),
     nextStepText: latestSwolf && swolfContext

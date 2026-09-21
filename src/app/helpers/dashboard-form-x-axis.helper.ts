@@ -1,3 +1,5 @@
+import { getDateTimeFormatter } from './date-time-format.helper';
+
 const DAY_MS = 24 * 60 * 60 * 1000;
 const YEAR_MS = 365 * DAY_MS;
 const MONTH_MIN_INTERVAL_MS = 28 * DAY_MS;
@@ -121,12 +123,12 @@ export function formatDashboardFormXAxisLabel(
   }
 
   if (mode === 'yearly') {
-    return date.toLocaleDateString(undefined, { year: 'numeric' });
+    return getDateTimeFormatter(undefined, { year: 'numeric' }).format(date);
   }
 
   if (mode === 'monthly') {
-    return date.toLocaleDateString(undefined, { month: 'short', year: '2-digit' });
+    return getDateTimeFormatter(undefined, { month: 'short', year: '2-digit' }).format(date);
   }
 
-  return date.toLocaleDateString(undefined, { day: '2-digit', month: 'short' });
+  return getDateTimeFormatter(undefined, { day: '2-digit', month: 'short' }).format(date);
 }

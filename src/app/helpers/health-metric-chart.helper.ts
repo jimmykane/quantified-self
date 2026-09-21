@@ -1,4 +1,5 @@
 import { getDateTimeFormatter } from './date-time-format.helper';
+import { getNumberFormatter } from './number-format.helper';
 import type { EChartsType } from 'echarts/core';
 import {
   DashboardEChartsStyleTokens,
@@ -723,7 +724,7 @@ function buildSeriesModel(
   const displayUnit = latest
     ? formatHealthUnit(series.metricId, latest.value, series.unit, series.nativeOnly, unitSettings)
     : '';
-  const readingCountText = `${sortedPoints.length.toLocaleString()} ${sortedPoints.length === 1 ? 'reading' : 'readings'}`;
+  const readingCountText = `${getNumberFormatter().format(sortedPoints.length)} ${sortedPoints.length === 1 ? 'reading' : 'readings'}`;
 
   return {
     series,

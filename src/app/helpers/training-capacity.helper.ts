@@ -5,6 +5,8 @@ import type {
   DashboardTrainingCapacityImportedMetric,
   DashboardTrainingCapacityReferenceVo2Max,
 } from './dashboard-derived-metrics.helper';
+import { getDateTimeFormatter } from './date-time-format.helper';
+import { getNumberFormatter } from './number-format.helper';
 
 export interface TrainingCapacityMarkerViewModel {
   label: string;
@@ -22,14 +24,14 @@ export interface TrainingCapacityDisciplineViewModel {
 }
 
 function formatNumber(value: number, fractionDigits = 0): string {
-  return new Intl.NumberFormat(undefined, {
+  return getNumberFormatter(undefined, {
     maximumFractionDigits: fractionDigits,
     minimumFractionDigits: 0,
   }).format(value);
 }
 
 function formatDate(timeMs: number): string {
-  return new Intl.DateTimeFormat(undefined, {
+  return getDateTimeFormatter(undefined, {
     month: 'short',
     day: 'numeric',
     year: 'numeric',

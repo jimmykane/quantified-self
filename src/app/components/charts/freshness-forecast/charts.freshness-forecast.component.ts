@@ -33,6 +33,7 @@ import {
   isDerivedMetricPendingStatus,
 } from '../../../helpers/derived-metric-status.helper';
 import { ECHARTS_GLOBAL_FONT_FAMILY, resolveEChartsThemeName } from '../../../helpers/echarts-theme.helper';
+import { getDateTimeFormatter } from '../../../helpers/date-time-format.helper';
 import { resolveDashboardFormStatus } from '../../../helpers/dashboard-form.helper';
 import type {
   DashboardFreshnessForecastContext,
@@ -233,10 +234,10 @@ export class ChartsFreshnessForecastComponent implements AfterViewInit, OnChange
           color: style.secondaryTextColor,
           hideOverlap: true,
           ...TRAINING_STATE_AXIS_LABEL,
-          formatter: (value: number) => new Date(value).toLocaleDateString(undefined, {
+          formatter: (value: number) => getDateTimeFormatter(undefined, {
             month: 'short',
             day: 'numeric',
-          }),
+          }).format(new Date(value)),
         },
       },
       yAxis: {
@@ -339,11 +340,11 @@ export class ChartsFreshnessForecastComponent implements AfterViewInit, OnChange
       && Number.isFinite(previousFormValue)
     ) ? Number(formValue) - Number(previousFormValue) : null;
     const status = resolveDashboardFormStatus(formValue);
-    const dateLabel = new Date(point.dayMs).toLocaleDateString(undefined, {
+    const dateLabel = getDateTimeFormatter(undefined, {
       month: 'short',
       day: 'numeric',
       year: 'numeric',
-    });
+    }).format(new Date(point.dayMs));
     const firstForecastIndex = points.findIndex(entry => entry.isForecast);
     const forecastOffset = point.isForecast && firstForecastIndex >= 0
       ? (pointIndex - firstForecastIndex + 1)

@@ -9,6 +9,7 @@ import { SimpleChange } from '@angular/core';
 import { EChartsLoaderService } from '../../../services/echarts-loader.service';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { MatDialog } from '@angular/material/dialog';
+import { getLocalDateTimeFormatter } from '../../../helpers/date-time-format.helper';
 
 function createReparseQueueStats(
     enabled = false,
@@ -573,9 +574,9 @@ describe('AdminQueueStatsComponent', () => {
 
     describe('formatTimestamp', () => {
         it('should format epoch milliseconds numbers', () => {
-            const result = component.formatTimestamp(1700000000000);
-            expect(result).not.toBe('1700000000000');
-            expect(result).not.toBe('N/A');
+            const timestamp = 1700000000000;
+            expect(component.formatTimestamp(timestamp))
+                .toBe(getLocalDateTimeFormatter().format(new Date(timestamp)));
         });
 
         it('should format firestore-like objects with _seconds', () => {

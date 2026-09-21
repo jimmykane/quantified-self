@@ -31,6 +31,7 @@ import {
   isDerivedMetricPendingStatus,
 } from '../../../helpers/derived-metric-status.helper';
 import { ECHARTS_GLOBAL_FONT_FAMILY, resolveEChartsThemeName } from '../../../helpers/echarts-theme.helper';
+import { getDateTimeFormatter } from '../../../helpers/date-time-format.helper';
 import type {
   DashboardIntensityDistributionContext,
   DashboardIntensityDistributionWeek,
@@ -365,14 +366,14 @@ export class ChartsIntensityDistributionComponent implements AfterViewInit, OnCh
     const currentWeekStartMs = this.resolveUtcWeekStartMs(Date.now());
     const contextPrefix = weekStartMs === currentWeekStartMs ? 'Current week' : 'Latest week';
     const weekEndMs = weekStartMs + (6 * 24 * 60 * 60 * 1000);
-    const startLabel = new Date(weekStartMs).toLocaleDateString(undefined, {
+    const startLabel = getDateTimeFormatter(undefined, {
       month: 'short',
       day: 'numeric',
-    });
-    const endLabel = new Date(weekEndMs).toLocaleDateString(undefined, {
+    }).format(new Date(weekStartMs));
+    const endLabel = getDateTimeFormatter(undefined, {
       month: 'short',
       day: 'numeric',
-    });
+    }).format(new Date(weekEndMs));
     return `${contextPrefix} (${startLabel} - ${endLabel})`;
   }
 
@@ -427,12 +428,12 @@ export class ChartsIntensityDistributionComponent implements AfterViewInit, OnCh
     const date = new Date(Number(value));
     switch (mode) {
       case 'year':
-        return date.toLocaleDateString(undefined, { year: 'numeric' });
+        return getDateTimeFormatter(undefined, { year: 'numeric' }).format(date);
       case 'month-year':
-        return date.toLocaleDateString(undefined, { month: 'short', year: 'numeric' });
+        return getDateTimeFormatter(undefined, { month: 'short', year: 'numeric' }).format(date);
       case 'day-month':
       default:
-        return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+        return getDateTimeFormatter(undefined, { month: 'short', day: 'numeric' }).format(date);
     }
   }
 

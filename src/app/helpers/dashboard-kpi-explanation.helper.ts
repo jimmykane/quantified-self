@@ -41,7 +41,8 @@ import type {
   DashboardAerobicCapacityContext,
   DashboardAerobicDurabilityContext,
 } from './dashboard-training-insights.helper';
-import { getBrowserLocale } from '../shared/adapters/date-locale.config';
+import { getAppLocale } from '../shared/adapters/app-locale';
+import { getDateTimeFormatter } from './date-time-format.helper';
 
 export interface DashboardKpiExplanationRow {
   label: string;
@@ -84,7 +85,7 @@ export function buildDashboardKpiExplanation(
   formatMetricValue: FormatMetricValue = defaultFormatMetricValue,
 ): DashboardKpiExplanationViewModel {
   const rows: DashboardKpiExplanationRow[] = [];
-  const locale = inputs.locale || getBrowserLocale();
+  const locale = inputs.locale || getAppLocale();
   const description = resolveDescription(inputs);
   const missingHint = resolveMissingHint(inputs.chartType);
 
@@ -355,7 +356,7 @@ function textRow(label: string, value: unknown): DashboardKpiExplanationRow | nu
   return text && text !== '--' ? { label, value: text } : null;
 }
 
-function dateRow(label: string, value: unknown, locale = getBrowserLocale()): DashboardKpiExplanationRow | null {
+function dateRow(label: string, value: unknown, locale = getAppLocale()): DashboardKpiExplanationRow | null {
   const timestamp = toFiniteNumber(value);
   return timestamp === null ? null : { label, value: formatDay(timestamp, locale) };
 }
@@ -419,12 +420,12 @@ function formatBaselineWeeks(value: unknown): string {
 }
 
 function formatDay(timestamp: number, locale: string): string {
-  return new Date(timestamp).toLocaleDateString(locale, {
+  return getDateTimeFormatter(locale, {
     day: 'numeric',
     month: 'short',
     year: 'numeric',
     timeZone: 'UTC',
-  });
+  }).format(new Date(timestamp));
 }
 
 function maxFiniteNumber(values: ReadonlyArray<unknown>): number | null {

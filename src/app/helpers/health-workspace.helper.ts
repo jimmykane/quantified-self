@@ -1,4 +1,5 @@
 import { getDateTimeFormatter } from './date-time-format.helper';
+import { getNumberFormatter } from './number-format.helper';
 import {
   HEALTH_COVERAGE_STATUSES,
   HEALTH_METRIC_CATALOG,
@@ -594,7 +595,7 @@ export function buildHealthMetricWorkspaceView(
       sourceLabel,
       deviceLabel: datum.deviceLabel || 'Not reported',
       valueText: datum.rowKind === 'chunk'
-        ? `${datum.sampleCount.toLocaleString()} samples · latest ${formatHealthValue(datum.metricId, datum.value, datum.unit, datum.nativeOnly, unitSettings)}`
+        ? `${getNumberFormatter().format(datum.sampleCount)} samples · latest ${formatHealthValue(datum.metricId, datum.value, datum.unit, datum.nativeOnly, unitSettings)}`
         : formatHealthValue(datum.metricId, datum.value, datum.unit, datum.nativeOnly, unitSettings),
       semanticsText: `${datum.semanticLabel
         || `${humanize(datum.aggregation)} · ${humanize(datum.semanticVariant)} · ${humanize(datum.origin)} · ${humanize(datum.recordingMethod)}`}${datum.nativeOnly ? ' · native only' : ''}`,
@@ -1123,7 +1124,7 @@ export function formatHealthAxisValue(
     return display ? (display.unit === '%' ? `${display.value}${display.unit}` : display.value) : '';
   }
   const rounded = Math.abs(value) >= 100 ? Math.round(value) : Math.round(value * 10) / 10;
-  return unit === HEALTH_UNITS.Percent ? `${rounded}%` : new Intl.NumberFormat(undefined, {
+  return unit === HEALTH_UNITS.Percent ? `${rounded}%` : getNumberFormatter(undefined, {
     maximumFractionDigits: 1,
   }).format(rounded);
 }
@@ -1142,14 +1143,14 @@ function formatNativeHealthValue(value: number | string | boolean, unit: string)
     case HEALTH_UNITS.BeatsPerMinute: return `${rounded} bpm`;
     case HEALTH_UNITS.Millisecond: return `${rounded} ms`;
     case HEALTH_UNITS.Meter: return Math.abs(value) >= 1_000 ? `${Math.round((value / 1_000) * 10) / 10} km` : `${rounded} m`;
-    case HEALTH_UNITS.Kilocalorie: return `${rounded.toLocaleString()} kcal`;
+    case HEALTH_UNITS.Kilocalorie: return `${getNumberFormatter().format(rounded)} kcal`;
     case HEALTH_UNITS.Kilogram: return `${rounded} kg`;
     case HEALTH_UNITS.MillimetersMercury: return `${rounded} mmHg`;
     case HEALTH_UNITS.Celsius: return `${rounded} °C`;
     case HEALTH_UNITS.BreathsPerMinute: return `${rounded} brpm`;
     case HEALTH_UNITS.MillilitersPerKilogramPerMinute: return `${rounded} ml/kg/min`;
     case HEALTH_UNITS.Years: return `${rounded} years`;
-    case HEALTH_UNITS.Count: return rounded.toLocaleString();
+    case HEALTH_UNITS.Count: return getNumberFormatter().format(rounded);
     default: return unit ? `${rounded} ${humanize(unit)}` : `${rounded}`;
   }
 }
@@ -1668,7 +1669,7 @@ function exactSeriesCoverageText(
 ): string {
   const dates = new Set(items.map(item => item.calendarDate));
   if (items.every(item => item.rowKind === 'activity')) {
-    return `${dates.size.toLocaleString()} workout ${dates.size === 1 ? 'date' : 'dates'} · coverage not applicable`;
+    return `${getNumberFormatter().format(dates.size)} workout ${dates.size === 1 ? 'date' : 'dates'} · coverage not applicable`;
   }
   const partialDates = new Set(items
     .filter(item => item.coverageStatus === 'partial')

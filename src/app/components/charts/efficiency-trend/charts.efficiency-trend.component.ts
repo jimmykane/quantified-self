@@ -31,6 +31,7 @@ import {
   isDerivedMetricPendingStatus,
 } from '../../../helpers/derived-metric-status.helper';
 import { ECHARTS_GLOBAL_FONT_FAMILY, resolveEChartsThemeName } from '../../../helpers/echarts-theme.helper';
+import { getDateTimeFormatter } from '../../../helpers/date-time-format.helper';
 import type {
   DashboardEfficiencyTrendContext,
   DashboardEfficiencyTrendPoint,
@@ -307,12 +308,12 @@ export class ChartsEfficiencyTrendComponent implements AfterViewInit, OnChanges,
     }
     const date = new Date(value);
     if (mode === 'year') {
-      return date.toLocaleDateString(undefined, { year: 'numeric' });
+      return getDateTimeFormatter(undefined, { year: 'numeric' }).format(date);
     }
     if (mode === 'month-year') {
-      return date.toLocaleDateString(undefined, { month: 'short', year: '2-digit' });
+      return getDateTimeFormatter(undefined, { month: 'short', year: '2-digit' }).format(date);
     }
-    return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+    return getDateTimeFormatter(undefined, { month: 'short', day: 'numeric' }).format(date);
   }
 
   private formatValue(value: unknown): string {

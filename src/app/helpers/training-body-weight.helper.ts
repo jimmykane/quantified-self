@@ -1,4 +1,5 @@
 import { getDateTimeFormatter } from './date-time-format.helper';
+import { getNumberFormatter } from './number-format.helper';
 import { DataWeight, type UserUnitSettingsInterface } from '@sports-alliance/sports-lib';
 import type {
   DerivedBodyWeightTrendMetricPayload,
@@ -390,7 +391,7 @@ function formatUtcDate(value: number | null | undefined, locale?: string): strin
 }
 
 function formatNumber(value: number, fractionDigits: number, locale?: string): string {
-  return new Intl.NumberFormat(locale, { maximumFractionDigits: fractionDigits, minimumFractionDigits: 0 }).format(value);
+  return getNumberFormatter(locale, { maximumFractionDigits: fractionDigits, minimumFractionDigits: 0 }).format(value);
 }
 
 function asRecord(value: unknown): UnknownRecord | null {

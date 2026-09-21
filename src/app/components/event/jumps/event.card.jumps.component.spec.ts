@@ -9,6 +9,7 @@ import {
 import { Sort } from '@angular/material/sort';
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import { EventCardJumpsComponent } from './event.card.jumps.component';
+import { getLocalDateTimeFormatter } from '../../../helpers/date-time-format.helper';
 
 function createStat(displayValue: string, displayUnit = '', numericValue?: number): any {
   return {
@@ -160,6 +161,17 @@ describe('EventCardJumpsComponent', () => {
     component.sortRows(dataSource, { active: 'At', direction: 'desc' } as Sort);
 
     expect(dataSource.data.map(row => row.sortValues.At)).toEqual([180, 120, 60]);
+  });
+
+  it('preserves second-level precision for absolute jump timestamps', () => {
+    const timestamp = Date.UTC(2026, 8, 21, 10, 11, 12);
+    const jumpActivity = createActivity('activity-1', 'Snowboarding', [createJumpEvent(timestamp)]);
+
+    component.selectedActivities = [jumpActivity];
+    component.ngOnChanges();
+
+    expect(component.getDataSource(jumpActivity)?.data[0]?.At)
+      .toBe(getLocalDateTimeFormatter().format(new Date(timestamp)));
   });
 
   it('keeps rows without a sortable value after rows with data in either direction', () => {

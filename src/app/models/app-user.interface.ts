@@ -24,6 +24,7 @@ import type { TrainingSettings } from '@shared/derived-metrics';
 import { HEALTH_METRIC_IDS, type HealthMetricId } from '@shared/health';
 import type { TrainingDestinationId, TrainingSportId } from '@shared/training-disciplines';
 import { UserServiceMetaInterface } from '@sports-alliance/sports-lib';
+import type { AppFormatLocalePreference } from '../shared/adapters/app-locale';
 
 export type AppMapStyleName = 'default' | 'satellite' | 'outdoors';
 export type AppMyTracksTripSortDirection = 'asc' | 'desc';
@@ -223,6 +224,7 @@ export interface AppAppSettingsInterface extends UserAppSettingsInterface {
     trainingWorkspace?: TrainingWorkspacePreferences;
     healthWorkspace?: AppHealthWorkspaceSettingsInterface;
     timelineNotes?: { showOnCharts?: boolean };
+    formatLocale?: AppFormatLocalePreference;
 }
 
 export interface TrainingWorkspacePreferences {

@@ -18,6 +18,8 @@ import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { RouterLink } from '@angular/router';
+import { getDateTimeFormatter } from '../../helpers/date-time-format.helper';
+import { getNumberFormatter } from '../../helpers/number-format.helper';
 import { AppThemes, ServiceNames } from '@sports-alliance/sports-lib';
 import {
   ACTIVITY_HEALTH_METRIC_IDS,
@@ -751,7 +753,7 @@ export class HealthWorkspaceComponent {
   readonly revisionNotice = computed(() => {
     const count = this.selectedHealthLoad()?.result.pageInfo.sampleRevisionMismatchCount || 0;
     return count > 0
-      ? `${count.toLocaleString()} superseded sample ${count === 1 ? 'chunk was' : 'chunks were'} excluded. The loaded sample aggregate is incomplete.`
+      ? `${getNumberFormatter().format(count)} superseded sample ${count === 1 ? 'chunk was' : 'chunks were'} excluded. The loaded sample aggregate is incomplete.`
       : null;
   });
   readonly partialCoverageNotice = computed(() => {
@@ -762,13 +764,14 @@ export class HealthWorkspaceComponent {
     if (missingDays === 0 && partialDays === 0 && unknownDays === 0) {
       return null;
     }
-    return `Coverage is incomplete for this view: ${missingDays.toLocaleString()} missing, ${partialDays.toLocaleString()} partial, and ${unknownDays.toLocaleString()} unknown source-days.`;
+    const formatter = getNumberFormatter();
+    return `Coverage is incomplete for this view: ${formatter.format(missingDays)} missing, ${formatter.format(partialDays)} partial, and ${formatter.format(unknownDays)} unknown source-days.`;
   });
   readonly metricRows = computed<HealthObservationTableRow[]>(() => this.metricView().rows);
   readonly tableTruncationText = computed(() => {
     const view = this.metricView();
     return view.totalRowCount > view.rows.length
-      ? `Showing the newest ${view.rows.length.toLocaleString()} of ${view.totalRowCount.toLocaleString()} source observations.`
+      ? `Showing the newest ${getNumberFormatter().format(view.rows.length)} of ${getNumberFormatter().format(view.totalRowCount)} source observations.`
       : null;
   });
   readonly priorityCards = computed<HealthPriorityCardView[]>(() => {
@@ -1816,7 +1819,7 @@ function syncStateView(
     : null;
   const lastUpdateText = lastUpdateAtMs === null
     ? 'No update yet'
-    : new Intl.DateTimeFormat(undefined, {
+    : getDateTimeFormatter(undefined, {
       month: 'short',
       day: 'numeric',
       hour: 'numeric',
