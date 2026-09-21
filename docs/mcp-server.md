@@ -245,6 +245,9 @@ existing `activity-location:read` scope and preferred nearby-activity search too
 Changing that setting replaces the conversation generation, and New chat returns it to coordinate-free. It does not
 call the hosted endpoint or mint OAuth credentials, but it still uses the same registration,
 scope checks, input schemas, strict output schemas, projections, data-service budgets, and Sports Lib-backed catalogs.
+The internal connection identity carries the server-owned conversation generation so opaque Training references cannot
+cross chats. Training read authority recognizes that complete first-party identity directly and never looks for an
+external OAuth connection document. This reliability correction changes no hosted MCP tool, scope, schema or grant.
 Direct app URLs are removed before validated results reach Gemini, and generated answers cannot repeat exact opaque
 references or cursors returned by the current tool calls. The separate deterministic evidence projection can still
 offer a validated safe app link. The internal allowlist also includes the existing bounded activity chart catalog and

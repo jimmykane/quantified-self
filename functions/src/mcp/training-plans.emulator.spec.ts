@@ -91,6 +91,12 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Training MCP loopback Fir
     expect(sync.scanComplete).toBe(true); expect(sync.services).toEqual([]);
     expect(set).not.toHaveBeenCalled(); expect(update).not.toHaveBeenCalled();
     set.mockRestore(); update.mockRestore();
+    const assistantRead = await readTrainingPlans({ tool: 'list_training_plans', arguments: {}, uid,
+      connectionId: 'first-party-assistant-v1:conversation-generation', scopes: ['training-plans:read'] }, reads, codec);
+    expect(TRAINING_READ_OUTPUTS.list_training_plans.parse(assistantRead).plans).toHaveLength(1);
+    await expect(readTrainingPlans({ tool: 'list_training_plans', arguments: {}, uid,
+      connectionId: 'first-party-assistant-v1-lookalike', scopes: ['training-plans:read'] }, reads, codec))
+      .rejects.toThrow();
     await user.collection('mcpConnections').doc('connection').update({ revokedAtMs: 2 });
     await expect(run('list_training_plans', {})).rejects.toThrow();
     await user.collection('mcpConnections').doc('connection').update({ revokedAtMs: null });

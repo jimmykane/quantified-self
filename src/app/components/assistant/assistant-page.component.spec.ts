@@ -95,6 +95,7 @@ describe('AssistantPageComponent', () => {
     resetConversation: vi.fn(),
     applyTrainingProposal: vi.fn(),
     getErrorMessage: vi.fn(() => 'Friendly error'),
+    getConversationUpdateErrorMessage: vi.fn(() => 'Friendly conversation error'),
   };
   const quotaService = {
     loadQuotaStatus: vi.fn(),
@@ -1397,7 +1398,8 @@ describe('AssistantPageComponent', () => {
     const open = vi.spyOn(sheet, 'open').mockReturnValue({ afterDismissed: () => of({ kind: 'timeline_notes', enabled: true }) } as never);
     component.promptControl.setValue('Keep my draft');
     component.openExploreSheet();
-    await vi.waitFor(() => expect(component.errorMessage()).toBe('Friendly error'));
+    await vi.waitFor(() => expect(component.errorMessage()).toBe('Friendly conversation error'));
+    expect(assistantService.getConversationUpdateErrorMessage).toHaveBeenCalledOnce();
     expect(component.timelineNotesEnabled()).toBe(false);
     expect(component.promptControl.value).toBe('Keep my draft');
     expect(hapticsService.error).toHaveBeenCalledTimes(1);

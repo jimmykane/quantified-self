@@ -49,9 +49,14 @@ The callable surface consists of:
 - `applyAssistantTrainingProposal`: applies or dismisses the one current bounded Training proposal after an explicit user
   action; Gemini never receives or invokes this callable.
 
-All four require Firebase Authentication and App Check. Before a chat turn can reserve quota or send data to Gemini,
+All five require Firebase Authentication and App Check. Before a chat turn can reserve quota or send data to Gemini,
 the backend also verifies the required privacy, data, and Terms agreements in the server-authoritative legal document.
 Firestore rules deny browser access to `users/{uid}/assistantConversations/active`.
+
+Conversation replacement and Training-proposal application use an explicit 512 MiB runtime floor because both load the
+shared Assistant and Training contract graph. The internal MCP connection identity includes the server-owned conversation
+generation; Training reads recognize only the reserved fixed identity or its colon-delimited generation form, while
+external clients still require their OAuth connection record. These are runtime boundaries, not public MCP contracts.
 
 ## Tool and data boundary
 

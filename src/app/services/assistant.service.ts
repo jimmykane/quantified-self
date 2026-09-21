@@ -257,6 +257,14 @@ export class AssistantService {
     }
   }
 
+  getConversationUpdateErrorMessage(error: unknown): string {
+    if (error instanceof AssistantError
+      && !['INTERNAL', 'UNAVAILABLE'].includes(error.code)) {
+      return this.getErrorMessage(error);
+    }
+    return 'The Assistant conversation could not be updated. Please try again.';
+  }
+
   private mapFunctionError(error: unknown): AssistantError {
     const code = `${(error as { code?: unknown } | null)?.code || ''}`;
     const message = `${(error as { message?: unknown } | null)?.message || ''}`.trim();

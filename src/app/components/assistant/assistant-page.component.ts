@@ -669,7 +669,7 @@ export class AssistantPageComponent implements OnInit, OnDestroy {
           this.conversationLoadError.set(this.assistantService.getErrorMessage(refreshError));
         }
       }
-      this.errorMessage.set(this.assistantService.getErrorMessage(error));
+      this.errorMessage.set(this.assistantService.getConversationUpdateErrorMessage(error));
       this.hapticsService.error();
     } finally {
       if (this.canApplyAccountResult(currentUid)) this.resetting.set(false);

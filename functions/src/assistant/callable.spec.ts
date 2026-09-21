@@ -7,7 +7,9 @@ import {
 } from './conversation-store';
 import type { AssistantCallableDependencies } from './callable';
 import {
+  APPLY_ASSISTANT_TRAINING_PROPOSAL_OPTIONS,
   ASSISTANT_CALLABLE_OPTIONS,
+  RESET_ASSISTANT_CONVERSATION_OPTIONS,
   assertAssistantLegalAccess,
   resolveAssistantAppBaseUrl,
   runAssistantChat,
@@ -266,6 +268,11 @@ describe('Assistant callable', () => {
       maxInstances: 10,
       timeoutSeconds: 180,
     });
+  });
+
+  it('gives conversation changes enough memory for the shared Assistant runtime', () => {
+    expect(RESET_ASSISTANT_CONVERSATION_OPTIONS.memory).toBe('512MiB');
+    expect(APPLY_ASSISTANT_TRAINING_PROPOSAL_OPTIONS.memory).toBe('512MiB');
   });
 
   it('uses only allowlisted app origins for generated MCP links', () => {

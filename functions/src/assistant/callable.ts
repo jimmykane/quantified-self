@@ -824,15 +824,27 @@ export const getAssistantConversation = onCall({
   memory: '512MiB',
 }, request => runGetAssistantConversation(request));
 
-export const resetAssistantConversation = onCall({
+export const RESET_ASSISTANT_CONVERSATION_OPTIONS = {
   region: FUNCTIONS_MANIFEST.resetAssistantConversation.region,
   cors: ALLOWED_CORS_ORIGINS,
   enforceAppCheck: true,
-}, request => runResetAssistantConversation(request.data, request));
+  memory: '512MiB' as const,
+};
 
-export const applyAssistantTrainingProposal = onCall({
+export const resetAssistantConversation = onCall(
+  RESET_ASSISTANT_CONVERSATION_OPTIONS,
+  request => runResetAssistantConversation(request.data, request),
+);
+
+export const APPLY_ASSISTANT_TRAINING_PROPOSAL_OPTIONS = {
   region: FUNCTIONS_MANIFEST.applyAssistantTrainingProposal.region,
   secrets: FUNCTION_SECRET_BINDINGS.applyAssistantTrainingProposal,
   cors: ALLOWED_CORS_ORIGINS,
   enforceAppCheck: true,
-}, request => runApplyAssistantTrainingProposal(request.data, request));
+  memory: '512MiB' as const,
+};
+
+export const applyAssistantTrainingProposal = onCall(
+  APPLY_ASSISTANT_TRAINING_PROPOSAL_OPTIONS,
+  request => runApplyAssistantTrainingProposal(request.data, request),
+);

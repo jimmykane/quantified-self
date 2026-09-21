@@ -13,6 +13,9 @@ import { TRAINING_PLANS_SCOPE, TRAINING_READ_INPUTS, TRAINING_READ_OUTPUTS, TRAI
 
 export const TRAINING_READ_LIMITS = { page: 25, scan: 1000, inputBytes: 2 * 1024 * 1024,
   responseBytes: 256 * 1024, singleRecordBytes: 128 * 1024, syncRecords: 1600 } as const;
+const FIRST_PARTY_ASSISTANT_CONNECTION_ID = 'first-party-assistant-v1';
+const isFirstPartyAssistantConnection = (connectionId: string) => connectionId === FIRST_PARTY_ASSISTANT_CONNECTION_ID
+  || connectionId.startsWith(`${FIRST_PARTY_ASSISTANT_CONNECTION_ID}:`);
 const id = z.string().regex(/^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/);
 const count = z.number().int().nonnegative().safe();
 const planSchema = z.strictObject({ schemaVersion: z.literal(1), name: z.string().min(1).max(120),
@@ -77,7 +80,7 @@ export function createFirestoreTrainingReads(database: () => FirebaseFirestore.F
     // Only the internal Assistant session uses this reserved identity. Its live generation consent is checked
     // by the callable/runtime on both sides of every tool read; public connection IDs are server-generated hashes.
     let accessGeneration: string | undefined;
-    if (connectionId !== 'first-party-assistant-v1') {
+    if (!isFirstPartyAssistantConnection(connectionId)) {
       const [connection] = await db.getAll(user.collection('mcpConnections').doc(connectionId),
         { fieldMask: ['scopes', 'status', 'revokedAtMs', 'grantId', 'createdAtMs'] });
       if (!connection.exists || connection.get('revokedAtMs') != null

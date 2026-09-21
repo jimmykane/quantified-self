@@ -73,7 +73,9 @@ sync changes** choices. Only applicable focused/batch preview tools enter Gemini
 stores one bounded proposal under the current server-owned conversation and the user must apply or dismiss it in the app.
 Proposal references bind the exact conversation generation, so permission changes, New chat, stale tabs and account
 switches cannot reuse them. The dedicated App Check callable rechecks the conversation before applying and clears the
-pending proposal after either apply or dismiss.
+pending proposal after either apply or dismiss. Internal Training reads recognize both the fixed first-party Assistant
+identity and its conversation-bound suffix as server-owned authority while retaining that complete identity in opaque
+reference binding. They never require or synthesize an external MCP connection record.
 
 External MCP clients and the built-in Assistant have different recovery paths for missing Training access. An external
 client must start OAuth authorization again and approve `training-plans:read` plus either independent child scope as
@@ -100,6 +102,10 @@ private provider artifact metadata must remain excluded. Review safe projections
 pagination/bytes, unit formatting, Assistant evidence/routing and bundled skills together. A real deferral needs a focused
 #583 subissue in Project 2 before completion. Existing write scopes never implicitly authorize new lifecycle mutations,
 provider actions, wider consent or deployment.
+
+The first-party identity correction and Assistant callable memory floor are implementation-only reliability changes.
+They add no MCP tool, scope, schema, projected field, provider action or consent. The registered public contract and
+bundled plugin remain unchanged.
 
 This document is the implementation guide for the authenticated `/training` workspace. It is intended for product
 engineers, data engineers, reviewers, and AI coding agents. Update it whenever the Training product contract, a derived
