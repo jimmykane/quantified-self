@@ -22,8 +22,9 @@ an existing exact stored link; they never infer a match. The optional activity r
 `training-plans:write` and `training-delivery:write` are independent child scopes of `training-plans:read`. The former
 allows the bounded authored lifecycle: create/edit/move/copy/skip/archive/activate/shift, recoverable workout deletion,
 and explicit plan deletion. Plan deletion must be the sole proposal change, requires a convert-workouts-to-standalone or
-permanently-delete-workouts choice, and permanently removes the plan revision history. Permanent single-workout deletion
-and history restoration remain excluded. The latter allows plan delivery
+permanently-delete-workouts choice, and permanently removes the plan revision history. An interruption after its deletion
+lock is acquired keeps the proposal resumable so the same approved apply can finish idempotent finalization or cleanup.
+Permanent single-workout deletion and history restoration remain excluded. The latter allows plan delivery
 enablement and workout send/resume/stop/retry/check/approval. Delivery remains Pro, provider-connection and rollout gated.
 External clients prepare one strict proposal of at most 25 changes, then invoke the separately approval-gated
 `apply_training_changes` write tool. ChatGPT, Claude and other MCP hosts own their native tool-approval UI; QS does not

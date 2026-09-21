@@ -7,7 +7,8 @@ const logging = vi.hoisted(() => ({
 
 vi.mock('firebase-functions/logger', () => logging);
 
-import { emitTrainingApplyDiagnostic, type TrainingApplyTiming } from './training-plans-write.service';
+import { applyTrainingChanges, emitTrainingApplyDiagnostic, type TrainingApplyTiming,
+  type TrainingWriteDependencies } from './training-plans-write.service';
 
 function timing(overrides: Partial<TrainingApplyTiming> = {}): TrainingApplyTiming {
   return {
@@ -29,7 +30,7 @@ describe('Training MCP apply diagnostics', () => {
   it('emits one privacy-safe completion diagnostic without authored or account data', () => {
     emitTrainingApplyDiagnostic(timing(), 3_000.4);
 
-    expect(logging.info).toHaveBeenCalledWith('[MCP] Training apply completed', {
+    expect(logging.info).toHaveBeenCalledWith('[MCP] Training apply finished', {
       operationCount: 4,
       scheduleOperationCount: 3,
       providerOperationCount: 1,
@@ -51,6 +52,33 @@ describe('Training MCP apply diagnostics', () => {
       durationMs: 5000,
       outcome: 'partially_applied',
       slowStage: 'schedule',
+    }));
+  });
+
+  it('attributes an early rejected request to proposal processing', async () => {
+    const monotonicNow = vi.fn()
+      .mockReturnValueOnce(100)
+      .mockReturnValueOnce(260);
+    const deps = {
+      db: {} as TrainingWriteDependencies['db'],
+      runtime: {} as TrainingWriteDependencies['runtime'],
+      now: () => 1,
+      randomId: () => 'unused',
+      monotonicNow,
+    } satisfies TrainingWriteDependencies;
+
+    await expect(applyTrainingChanges({
+      uid: 'user',
+      connectionId: 'connection',
+      scopes: [],
+      arguments: {},
+    }, deps)).rejects.toThrow('valid Training proposal reference');
+
+    expect(logging.info).toHaveBeenCalledWith('[MCP] Training apply finished', expect.objectContaining({
+      durationMs: 160,
+      stageDurationMs: { proposal: 160, schedule: 0, provider: 0, finalize: 0 },
+      outcome: 'failed',
+      slowStage: 'proposal',
     }));
   });
 });

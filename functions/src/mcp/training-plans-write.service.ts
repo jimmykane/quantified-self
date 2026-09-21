@@ -28,7 +28,8 @@ import { applyTrainingScheduleMutation, createEmptyTrainingPlanState, TrainingSc
   type TrainingScheduleSnapshotV1 } from '../training-plans/mutation';
 import { TrainingScheduleBatchWriteLimitError, mutateTrainingScheduleBatchForUser,
   mutateTrainingScheduleForUser } from '../training-plans/persistence';
-import { applyTrainingPlanDeletion, deleteTrainingPlanForUser } from '../training-plans/delete-training-plan';
+import { applyTrainingPlanDeletion, deleteTrainingPlanForUser,
+  TrainingPlanDeletionResumeRequiredError } from '../training-plans/delete-training-plan';
 import { trainingDeliveryCommand } from '../training-plans/delivery/commands';
 import { productionDeliveryRuntime } from '../training-plans/delivery/runtime';
 import type { DeliveryRuntime } from '../training-plans/delivery/contracts';
@@ -846,8 +847,44 @@ export function emitTrainingApplyDiagnostic(timing: TrainingApplyTiming, duratio
     outcome: timing.outcome,
     slowStage,
   };
-  logger.info('[MCP] Training apply completed', diagnostic);
+  logger.info('[MCP] Training apply finished', diagnostic);
   if (durationMs >= 5_000) logger.warn('[MCP] Training apply slow', diagnostic);
+}
+
+type TrainingApplyStage = 'proposal' | 'schedule' | 'provider' | 'finalize';
+type TrainingApplyDurationField = 'proposalMs' | 'scheduleMs' | 'providerMs' | 'finalizeMs';
+
+function createTrainingApplyStageTracker(
+  timing: TrainingApplyTiming,
+  startedAtMs: number,
+  clock: () => number,
+): { moveTo(stage: TrainingApplyStage): void; finish(finishedAtMs: number): void } {
+  const fields: Record<TrainingApplyStage, TrainingApplyDurationField> = {
+    proposal: 'proposalMs',
+    schedule: 'scheduleMs',
+    provider: 'providerMs',
+    finalize: 'finalizeMs',
+  };
+  let activeStage: TrainingApplyStage = 'proposal';
+  let activeStartedAtMs = startedAtMs;
+  let finished = false;
+  const recordActiveStage = (finishedAtMs: number): void => {
+    if (finished) return;
+    const field = fields[activeStage];
+    timing[field] += Math.max(0, finishedAtMs - activeStartedAtMs);
+    activeStartedAtMs = finishedAtMs;
+  };
+  return {
+    moveTo(stage): void {
+      const changedAtMs = clock();
+      recordActiveStage(changedAtMs);
+      activeStage = stage;
+    },
+    finish(finishedAtMs): void {
+      recordActiveStage(finishedAtMs);
+      finished = true;
+    },
+  };
 }
 
 async function resetProposalLease(
@@ -857,13 +894,30 @@ async function resetProposalLease(
   catch { /* Preserve the original apply failure. The lease still expires safely. */ }
 }
 
+async function preserveResumablePlanDeletionProposal(
+  proposalRefDoc: FirebaseFirestore.DocumentReference,
+  nowMs: number,
+): Promise<void> {
+  const expiresAtMs = nowMs + PROPOSAL_RESULT_LIFETIME_MS;
+  try {
+    await proposalRefDoc.set({
+      status: 'pending',
+      leaseUntilMs: null,
+      expiresAtMs,
+      expireAt: Timestamp.fromMillis(expiresAtMs),
+    }, { merge: true });
+  } catch {
+    // Preserve the original interruption. The current lease still expires and
+    // the deletion lock keeps unrelated schedule writes fenced.
+  }
+}
+
 async function applyTrainingChangesInternal(
   input: TrainingWriteInput,
   deps: TrainingWriteDependencies,
   timing: TrainingApplyTiming,
-  clock: () => number,
+  moveToStage: (stage: TrainingApplyStage) => void,
 ): Promise<ApplyResult> {
-  const proposalStarted = clock();
   const current = await readProposal(input, deps);
   const ref = current.ref;
   const proposalRefDoc = deps.db.collection('users').doc(input.uid).collection(PROPOSALS).doc(current.id);
@@ -886,13 +940,12 @@ async function applyTrainingChangesInternal(
     + (proposal.planDeletion ? 1 : 0);
   timing.scheduleOperationCount = proposal.scheduleRequests.length + (proposal.planDeletion ? 1 : 0);
   timing.providerOperationCount = proposal.providerOperations.length;
-  timing.proposalMs = clock() - proposalStarted;
   if (proposal.result) {
     timing.outcome = 'replayed';
     return TRAINING_WRITE_OUTPUTS.apply_training_changes.parse(proposal.result);
   }
 
-  const scheduleStarted = clock();
+  moveToStage('schedule');
   const changeResults = [...proposal.changeResults];
   if (proposal.planDeletion && !changeResults.some(result => result.index === proposal.planDeletion!.index)) {
     try {
@@ -911,6 +964,13 @@ async function applyTrainingChangesInternal(
         message: `The plan and its revision history were permanently deleted. ${effect}` });
       await proposalRefDoc.update({ changeResults, leaseUntilMs: deps.now() + APPLY_LEASE_MS });
     } catch (error) {
+      if (error instanceof TrainingPlanDeletionResumeRequiredError) {
+        await preserveResumablePlanDeletionProposal(proposalRefDoc, deps.now());
+        throw new McpDataError(
+          'temporarily_unavailable',
+          'The approved plan deletion was interrupted. Retry the same approved change; it resumes safely without repeating completed work.',
+        );
+      }
       const message = publicErrorMessage(error);
       if (!message) {
         await resetProposalLease(proposalRefDoc);
@@ -990,12 +1050,11 @@ async function applyTrainingChangesInternal(
       }
     }
   }
-  timing.scheduleMs = clock() - scheduleStarted;
 
   const expectedScheduleResults = proposal.scheduleRequests.length + (proposal.planDeletion ? 1 : 0);
   const completedSchedule = !changeResults.some(item => item.status === 'failed')
     && changeResults.length >= expectedScheduleResults;
-  const providerStarted = clock();
+  moveToStage('provider');
   const providerResults = [...proposal.providerResults];
   if (completedSchedule) {
     for (let index = providerResults.length; index < proposal.providerOperations.length; index += 1) {
@@ -1013,9 +1072,8 @@ async function applyTrainingChangesInternal(
       await proposalRefDoc.update({ providerResults, leaseUntilMs: deps.now() + APPLY_LEASE_MS });
     }
   }
-  timing.providerMs = clock() - providerStarted;
 
-  const finalizeStarted = clock();
+  moveToStage('finalize');
   const state = await deps.db.collection('users').doc(input.uid).collection('trainingPlanState').doc('current').get();
   const createdReferences: ApplyResult['createdReferences'] = [];
   const localRefs = proposal.localEntities.map(local => deps.db.collection('users').doc(input.uid)
@@ -1039,7 +1097,6 @@ async function applyTrainingChangesInternal(
   await deps.db.runTransaction(tx => assertAuthorityInTransaction(deps, tx, input.uid, input.connectionId,
     proposal.requiredScopes, proposal.accessGeneration,
     input.connectionId.startsWith('first-party-assistant-v1:') ? current.ref : undefined), { readOnly: true });
-  timing.finalizeMs = clock() - finalizeStarted;
   timing.outcome = result.status;
   return result;
 }
@@ -1061,9 +1118,12 @@ export async function applyTrainingChanges(
     finalizeMs: 0,
     outcome: 'failed',
   };
+  const stageTracker = createTrainingApplyStageTracker(timing, started, clock);
   try {
-    return await applyTrainingChangesInternal(input, deps, timing, clock);
+    return await applyTrainingChangesInternal(input, deps, timing, stageTracker.moveTo);
   } finally {
-    emitTrainingApplyDiagnostic(timing, clock() - started);
+    const finished = clock();
+    stageTracker.finish(finished);
+    emitTrainingApplyDiagnostic(timing, finished - started);
   }
 }

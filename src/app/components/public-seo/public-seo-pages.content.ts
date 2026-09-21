@@ -615,7 +615,7 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
           {
             icon: 'lock',
             title: 'Training-only approval-gated writes',
-            copy: 'MCP cannot write Health, activities, routes, sleep, measurements, or dashboard settings. Separately granted Training changes are previewed in a bounded proposal before a distinct approval-gated apply call.',
+            copy: 'MCP cannot write Health, activities, routes, sleep, measurements, or dashboard settings. Separately granted Training changes are previewed in a bounded proposal before a distinct approval-gated apply call. Deleting a plan is reviewed by itself and requires choosing whether its workouts become standalone or are permanently deleted with it.',
           },
           {
             icon: 'shield',
@@ -665,7 +665,7 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
       },
       {
         question: 'Can an MCP client rearrange my dashboard or change my data?',
-        answer: 'It cannot change dashboard settings, activities, routes, Health, measurements, or sleep records. It can change Training plans, planned workouts, or their delivery only when you grant the matching child permission and the client permits the separate apply call for a bounded proposal.',
+        answer: 'It cannot change dashboard settings, activities, routes, Health, measurements, or sleep records. It can change Training plans, planned workouts, or their delivery only when you grant the matching child permission and the client permits the separate apply call for a bounded proposal. Plan deletion must be reviewed alone, requires your explicit choice for its workouts, and permanently removes the plan and its revision history.',
       },
       {
         question: 'Does MCP access expose my original activity or route files?',

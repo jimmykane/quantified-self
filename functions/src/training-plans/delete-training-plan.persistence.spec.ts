@@ -12,7 +12,7 @@ vi.mock('../shared/user-deletion-guard', () => ({
     getUserDeletionGuardStateInTransaction: guard.getUserDeletionGuardStateInTransaction,
 }));
 
-import { deleteTrainingPlanForUser } from './delete-training-plan';
+import { deleteTrainingPlanForUser, TrainingPlanDeletionResumeRequiredError } from './delete-training-plan';
 import {
     hashTrainingScheduleRequestPayload,
     mutateTrainingScheduleForUser,
@@ -389,7 +389,11 @@ describe('deleteTrainingPlanForUser persistence', () => {
                 nowMs: NOW_MS,
                 transactionPrecondition,
             },
-        )).rejects.toThrow('grant revoked');
+        )).rejects.toMatchObject({
+            name: 'TrainingPlanDeletionResumeRequiredError',
+            message: 'grant revoked',
+            originalError: expect.any(Error),
+        } satisfies Partial<TrainingPlanDeletionResumeRequiredError>);
 
         expect(transactionPrecondition).toHaveBeenCalledTimes(2);
         expect(db.read('users/user-1/trainingPlans/plan-1')).toBeDefined();

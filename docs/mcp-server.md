@@ -70,8 +70,10 @@ using Research because Research may invoke connector tools without another appro
 proposal and binds it to the owner, connection, grant, revision and expiry; replay returns its persisted terminal result.
 Plan deletion is available only as the sole proposal change and requires an explicit `convert-to-standalone` or
 `delete-workouts` choice. Its preview states that the plan and revision history are permanently removed, describes the
-workout effect, and warns that provider copies may remain when access is unavailable. Permanent single-workout deletion
-and history restoration remain deliberately absent.
+workout effect, and warns that provider copies may remain when access is unavailable. If its resumable multi-transaction
+deletion or cleanup is interrupted after the lock is acquired, the proposal remains retryable and the same approved apply
+resumes the idempotent operation instead of recording a false terminal failure. Permanent single-workout deletion and
+history restoration remain deliberately absent.
 
 Compatible schedule operations are applied in one bounded Firestore transaction while retaining one immutable revision
 and idempotency receipt per operation. A write-budget overflow falls back to the existing sequential path; authority is

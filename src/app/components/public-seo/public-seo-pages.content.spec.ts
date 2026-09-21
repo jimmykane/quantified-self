@@ -161,6 +161,8 @@ describe('public-seo-pages.content', () => {
     expect(PUBLIC_SEO_PAGES.mcpServer.sections.some(section => section.items.some(item => item.copy.includes('Find recent activities')))).toBe(true);
     expect(PUBLIC_SEO_PAGES.mcpServer.sections.some(section => section.items.some(item => item.copy.includes('saved routes by sport, name, or recency')))).toBe(true);
     expect(PUBLIC_SEO_PAGES.mcpServer.faqItems.some(item => item.question === 'Can an MCP client rearrange my dashboard or change my data?')).toBe(true);
+    expect(PUBLIC_SEO_PAGES.mcpServer.faqItems.find(item => item.question === 'Can an MCP client rearrange my dashboard or change my data?')?.answer)
+      .toContain('Plan deletion must be reviewed alone');
     expect(PUBLIC_SEO_PAGES.mcpServer.faqItems.some(item => item.question === 'Can I use the MCP server with ChatGPT or Claude?')).toBe(true);
     expect(PUBLIC_SEO_PAGES.mcpServer.faqItems.some(item => item.answer.includes('Granting one never exposes the other'))).toBe(true);
     expect(PUBLIC_SEO_PAGES.mcpServer.sections.some(section => section.preview === 'mcp-flow')).toBe(true);

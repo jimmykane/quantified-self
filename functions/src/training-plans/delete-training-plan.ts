@@ -59,6 +59,13 @@ export interface AppliedTrainingPlanDeletionV1 {
     response: DeleteTrainingPlanResponseV1;
 }
 
+export class TrainingPlanDeletionResumeRequiredError extends Error {
+    constructor(readonly originalError: unknown) {
+        super(originalError instanceof Error ? originalError.message : 'The plan deletion was interrupted.');
+        this.name = 'TrainingPlanDeletionResumeRequiredError';
+    }
+}
+
 function documentData(snapshot: admin.firestore.DocumentSnapshot): Record<string, unknown> {
     return (snapshot.data() ?? {}) as Record<string, unknown>;
 }
@@ -710,39 +717,47 @@ export async function deleteTrainingPlanForUser(
         nowMs,
         options.transactionPrecondition,
     );
-    const response = lockResult.kind === 'completed'
-        ? lockResult.response
-        : await (async () => {
-            await preparePlanDeletionTombstones(
-                db,
-                uid,
-                lockResult.lock,
-                nowMs,
-                options.transactionPrecondition,
-            );
-            await prepareStandaloneRevisionSnapshots(
-                db,
-                uid,
-                lockResult.lock,
-                nowMs,
-                options.transactionPrecondition,
-            );
-            const lockedRequest: DeleteTrainingPlanRequestV1 = {
-                ...request,
-                mutationId: lockResult.lock.mutationId,
-                workoutDisposition: lockResult.lock.workoutDisposition,
-            };
-            return finalizePlanDeletion(
-                db,
-                uid,
-                lockedRequest,
-                lockResult.lock.requestHash,
-                lockResult.lock,
-                nowMs,
-                options.transactionPrecondition,
-            );
-        })();
-    await persistPlanDeletionResumeReceipt(db, uid, request, requestHash, response, nowMs);
-    await cleanupDeletedPlanData(db, uid, response, nowMs);
-    return response;
+    try {
+        const response = lockResult.kind === 'completed'
+            ? lockResult.response
+            : await (async () => {
+                await preparePlanDeletionTombstones(
+                    db,
+                    uid,
+                    lockResult.lock,
+                    nowMs,
+                    options.transactionPrecondition,
+                );
+                await prepareStandaloneRevisionSnapshots(
+                    db,
+                    uid,
+                    lockResult.lock,
+                    nowMs,
+                    options.transactionPrecondition,
+                );
+                const lockedRequest: DeleteTrainingPlanRequestV1 = {
+                    ...request,
+                    mutationId: lockResult.lock.mutationId,
+                    workoutDisposition: lockResult.lock.workoutDisposition,
+                };
+                return finalizePlanDeletion(
+                    db,
+                    uid,
+                    lockedRequest,
+                    lockResult.lock.requestHash,
+                    lockResult.lock,
+                    nowMs,
+                    options.transactionPrecondition,
+                );
+            })();
+        await persistPlanDeletionResumeReceipt(db, uid, request, requestHash, response, nowMs);
+        await cleanupDeletedPlanData(db, uid, response, nowMs);
+        return response;
+    } catch (error) {
+        // Once the lock lookup succeeds, either a resumable lock or the
+        // canonical completion receipt exists. The caller must retain a retry
+        // path instead of recording a terminal failure while cleanup remains.
+        if (error instanceof TrainingPlanDeletionResumeRequiredError) throw error;
+        throw new TrainingPlanDeletionResumeRequiredError(error);
+    }
 }
