@@ -241,7 +241,7 @@ Automatic routes remain user-opt-in. If provider errors rise after release, popu
 
 ## Optional history on connection
 
-Connections offers **Import my last 30 days of history**, selected by default for eligible Pro connections and reconnections. Clearing it connects without starting history. The server accepts a durable run only after successful authorization; users can keep using the app or close the page. Progress and recoverable retries appear on Connections, independently of connection status. Existing cooldowns and permissions apply, and no automatic import continues into older dates.
+Connections offers **Import history from this service**, selected by default for eligible Pro connections and reconnections, with **30 days** selected initially. Users can choose 60 days or COROS's maximum rolling 3 months. Clearing the checkbox connects without starting history. The server accepts a durable run only after successful authorization; users can keep using the app or close the page. Progress and recoverable retries appear on Connections, independently of connection status. Existing cooldowns and permissions apply, and no automatic import continues earlier than the selected boundary.
 
 COROS imports activities and uses one combined daily operation for Sleep and Health. The run binds the single newly authorized active account and stays within the provider’s existing date limits.
 

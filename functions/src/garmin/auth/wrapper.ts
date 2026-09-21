@@ -21,12 +21,14 @@ import {
 import { hasServiceOAuthConnectAccess } from '../../service-oauth-access';
 import { FUNCTION_SECRET_BINDINGS } from '../../secrets';
 import type { ServiceOAuthCompletionResult } from '../../../../shared/service-connection';
+import type { ConnectionHistoryRangePreset } from '../../../../shared/connection-history';
 
 const SERVICE_NAME = ServiceNames.GarminAPI;
 
 // Define Interfaces for Type Safety
 interface GetAuthRedirectURIRequest {
   importRecentHistory?: boolean;
+  importHistoryRange?: ConnectionHistoryRangePreset;
   redirectUri: string;
 }
 
@@ -73,7 +75,13 @@ export const getGarminAPIAuthRequestTokenRedirectURI = functions
   }
 
   try {
-    const url = await getServiceOAuth2CodeRedirectAndSaveStateToUser(userID, SERVICE_NAME, redirectURI, data.importRecentHistory);
+    const url = await getServiceOAuth2CodeRedirectAndSaveStateToUser(
+      userID,
+      SERVICE_NAME,
+      redirectURI,
+      data.importRecentHistory,
+      data.importHistoryRange,
+    );
     return {
       redirect_uri: url,
     };

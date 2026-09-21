@@ -1,5 +1,5 @@
 import { isConnectionHistoryAdmissionEnabled } from './connection-history/admission';
-import { CONNECTION_HISTORY_COLLECTION, OAUTH_HISTORY_FIELD, createHistoryRun, historyProjection, type HistoryConnectionContext } from './connection-history/model';
+import { CONNECTION_HISTORY_COLLECTION, OAUTH_HISTORY_FIELD, OAUTH_HISTORY_RANGE_FIELD, createHistoryRun, historyProjection, type HistoryConnectionContext } from './connection-history/model';
 import * as admin from 'firebase-admin';
 import * as crypto from 'crypto';
 import { FieldValue } from 'firebase-admin/firestore';
@@ -564,6 +564,7 @@ async function setServiceMetaIfUserActive(
         [expectedOAuthFlowGeneration.fieldName]: FieldValue.delete(),
         [OAUTH_FLOW_CREATED_AT_FIELD]: FieldValue.delete(),
         [OAUTH_HISTORY_FIELD]: FieldValue.delete(),
+        [OAUTH_HISTORY_RANGE_FIELD]: FieldValue.delete(),
         [OAUTH_FLOW_EXPIRES_AT_FIELD]: FieldValue.delete(),
       }, { merge: true });
     }

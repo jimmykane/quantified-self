@@ -949,11 +949,11 @@ At the top of Connections, **Your data flow** explains that connected providers 
 
 ## Recent history when connecting
 
-When you connect or reconnect a service, **Import my last 30 days of history** is selected by default. Clear the checkbox if you prefer to connect without a history import. It includes activities, Sleep, and Health where supported; Wahoo imports eligible FIT-backed activities only.
+When you connect or reconnect a service, **Import history from this service** is selected by default and its range starts at **30 days**. You can choose a longer provider-valid range before connecting: Garmin supports up to its latest rolling five years, COROS up to its latest rolling three months, and Suunto and Wahoo offer all history the provider makes available. Clear the checkbox if you prefer to connect without a history import. It includes activities, Sleep, and Health where supported; Wahoo imports eligible FIT-backed activities only.
 
-After the connection and background import are accepted, sit back while we bring in your recent history. You can keep using the app or close the page. Connections keeps a **Recent history import** summary with expandable details, cooldown dates, missing-permission explanations, and **Retry failed imports** where recovery is available. An import failure does not undo a successful connection. Use **Review reconnect options** when authorization or permissions need updating.
+After the connection and background import are accepted, sit back while we bring in your selected history. You can keep using the app or close the page. Connections keeps a **History import** summary with expandable details, cooldown dates, missing-permission explanations, and **Retry failed imports** where recovery is available. An import failure does not undo a successful connection. Use **Review reconnect options** when authorization or permissions need updating.
 
-The range is the connection day plus the previous 29 UTC calendar dates, ending when you connect. It stops there: older history and saved-route libraries remain separate manual actions. Existing cooldowns apply; a scope in cooldown is skipped rather than automatically imported later. Garmin reports **History requested; data may take hours or days to arrive.** This confirms request submission, not complete delivery.
+The default range is the connection day plus the previous 29 UTC calendar dates, ending when you connect. A selected longer range is snapshotted at that same connection time and stops at its chosen boundary. It never expands automatically. Saved-route libraries remain separate manual actions. Existing cooldowns apply; a scope in cooldown is skipped rather than automatically imported later. Garmin reports **History requested; data may take hours or days to arrive.** This confirms request submission, not complete delivery.
 
 ## Integration pages overview
 

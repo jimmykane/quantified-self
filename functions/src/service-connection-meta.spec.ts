@@ -301,12 +301,12 @@ describe('service-connection-meta', () => {
   });
 
   it('creates accepted history in the connected-state transaction and omits jobs for unchecked clients', async () => {
-    const context = { requested: true, flowGeneration: 'single-use-flow', tokenPath: 'private/owner/tokens/account',
+    const context = { requested: true, rangePreset: '2_years' as const, flowGeneration: 'single-use-flow', tokenPath: 'private/owner/tokens/account',
       rootPath: 'private/owner', providerUserId: 'account', credentialGeneration: 'credential' };
     await expect(markServiceConnected('user-1', ServiceNames.WahooAPI, 'account', undefined, undefined, context)).resolves.toBe(true);
     expect(hoisted.historyCreate).toHaveBeenCalledTimes(1);
     const run = hoisted.historyCreate.mock.calls[0][1];
-    expect(run).toMatchObject({ userID: 'user-1', tokenPath: context.tokenPath, credentialGeneration: 'credential', processed: false });
+    expect(run).toMatchObject({ userID: 'user-1', tokenPath: context.tokenPath, credentialGeneration: 'credential', rangePreset: '2_years', processed: false });
     expect(hoisted.metaSet).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
       connectionState: 'connected', connectionHistoryImport: expect.objectContaining({ runId: run.id }),
     }), { merge: true });
@@ -880,7 +880,8 @@ describe('service-connection-meta', () => {
       {
         oauthFlowGeneration: 'delete-sentinel',
         oauthFlowCreatedAt: 'delete-sentinel',
-      oauthImportRecentHistory: 'delete-sentinel',
+        oauthImportRecentHistory: 'delete-sentinel',
+        oauthImportHistoryRange: 'delete-sentinel',
         oauthFlowExpiresAt: 'delete-sentinel',
       },
       { merge: true },

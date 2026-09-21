@@ -143,7 +143,7 @@ The bounded writer needs no schema, index, Rules, or data migration; rolling the
 
 ## Optional history on connection
 
-Connections offers **Import my last 30 days of history**, selected by default for eligible Pro connections and reconnections. Clearing it connects without starting history. The server accepts a durable run only after successful authorization; users can keep using the app or close the page. Progress and recoverable retries appear on Connections, independently of connection status. Existing cooldowns and permissions apply, and no automatic import continues into older dates.
+Connections offers **Import history from this service**, selected by default for eligible Pro connections and reconnections, with **30 days** selected initially. Users can choose 90 days, 1 year, 2 years, or all history Suunto makes available. Clearing the checkbox connects without starting history. The server accepts a durable run only after successful authorization; users can keep using the app or close the page. Progress and recoverable retries appear on Connections, independently of connection status. Existing cooldowns and permissions apply, and no automatic import continues earlier than the selected boundary.
 
 Suunto imports activities, Sleep and supported 24/7 Health through the existing queues. Automatic activity admission uses the same Firebase-owner-scoped identity as live webhooks and binds only the newly authorized account.
 

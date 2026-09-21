@@ -1,5 +1,6 @@
 :host { display: block; min-width: 0; }
 .history-option-description { margin: 0 0 12px 16px; max-width: 32rem; color: var(--mat-sys-on-surface-variant); }
+.history-range-field { display: block; margin: 8px 0 0 16px; max-width: 20rem; }
 .history-step { display: grid; gap: 4px; margin-block: 16px; }
 .history-step p { margin: 0; }
 .history-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 16px; }

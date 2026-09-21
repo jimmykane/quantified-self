@@ -93,7 +93,7 @@ Wahoo requires six composite indexes: one `tokens` collection-group index on `wa
 
 ## Optional history on connection
 
-Connections offers **Import my last 30 days of history**, selected by default for eligible Pro connections and reconnections. Clearing it connects without starting history. The server accepts a durable run only after successful authorization; users can keep using the app or close the page. Progress and recoverable retries appear on Connections, independently of connection status. Existing cooldowns and permissions apply, and no automatic import continues into older dates.
+Connections offers **Import history from this service**, selected by default for eligible Pro connections and reconnections, with **30 days** selected initially. Users can choose 90 days, 1 year, 2 years, or all eligible retained Wahoo history. Clearing the checkbox connects without starting history. The server accepts a durable run only after successful authorization; users can keep using the app or close the page. Progress and recoverable retries appear on Connections, independently of connection status. Existing cooldowns and permissions apply, and no automatic import continues earlier than the selected boundary.
 
 Wahoo imports eligible FIT-backed workouts only, one history page at a time. Route libraries and outbound delivery remain separate. Route-permission reconnect shortcuts open Connections before authorization so users can review the history checkbox.
 

@@ -2775,6 +2775,7 @@ describe('AppUserService', () => {
                 expect(mockFunctionsService.call).toHaveBeenCalledWith('getCOROSAPIAuthRequestTokenRedirectURI', {
                     redirectUri: 'http://localhost/services?serviceName=COROS%20API&connect=1',
                     importRecentHistory: false,
+                    importHistoryRange: '30_days',
                 }, { canExecute: expect.any(Function) });
             });
 
@@ -2785,6 +2786,7 @@ describe('AppUserService', () => {
                 expect(mockFunctionsService.call).toHaveBeenCalledWith('getSuuntoAPIAuthRequestTokenRedirectURI', {
                     redirectUri: 'http://localhost/services?serviceName=Suunto%20app&connect=1',
                     importRecentHistory: false,
+                    importHistoryRange: '30_days',
                 }, { canExecute: expect.any(Function) });
             });
 
@@ -2795,6 +2797,7 @@ describe('AppUserService', () => {
                 expect(mockFunctionsService.call).toHaveBeenCalledWith('getGarminAPIAuthRequestTokenRedirectURI', {
                     redirectUri: 'http://localhost/services?serviceName=Garmin%20API&connect=1',
                     importRecentHistory: false,
+                    importHistoryRange: '30_days',
                 }, { canExecute: expect.any(Function) });
             });
 
@@ -2804,12 +2807,13 @@ describe('AppUserService', () => {
                 expect(mockFunctionsService.call).toHaveBeenCalledWith('getWahooAPIAuthRequestTokenRedirectURI', {
                     redirectUri: 'http://localhost/services?serviceName=Wahoo%20API&connect=1',
                     importRecentHistory: false,
+                    importHistoryRange: '30_days',
                 }, { canExecute: expect.any(Function) });
             });
 
             it('pins OAuth dispatch to the initiating Firebase user and view', async () => {
                 let currentView = true;
-                await service.getCurrentUserServiceTokenAndRedirectURI(ServiceNames.GarminAPI, false, () => currentView);
+                await service.getCurrentUserServiceTokenAndRedirectURI(ServiceNames.GarminAPI, false, '30_days', () => currentView);
                 const canExecute = mockFunctionsService.call.mock.calls[0][2].canExecute;
                 expect(canExecute()).toBe(true);
                 currentView = false;
@@ -2817,6 +2821,15 @@ describe('AppUserService', () => {
                 currentView = true;
                 mockAuth.currentUser = { ...mockAuth.currentUser };
                 expect(canExecute()).toBe(false);
+            });
+
+            it('forwards the selected provider-valid history range', async () => {
+                await service.getCurrentUserServiceTokenAndRedirectURI(ServiceNames.WahooAPI, true, 'maximum');
+                expect(mockFunctionsService.call).toHaveBeenCalledWith('getWahooAPIAuthRequestTokenRedirectURI', {
+                    redirectUri: 'http://localhost/services?serviceName=Wahoo%20API&connect=1',
+                    importRecentHistory: true,
+                    importHistoryRange: 'maximum',
+                }, { canExecute: expect.any(Function) });
             });
         });
 

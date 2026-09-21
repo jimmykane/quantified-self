@@ -1255,6 +1255,11 @@ describe('help.content', () => {
     expect(serviceConnectionsSection?.content).not.toContain('2016');
     expect(serviceConnectionsSection?.content).toContain('7-day cooldown');
     expect(serviceConnectionsSection?.content).toContain('30-day cooldown');
+    expect(serviceConnectionsSection?.content).toContain('**Import history from this service** is selected by default');
+    expect(serviceConnectionsSection?.content).toContain('Garmin supports up to its latest rolling five years');
+    expect(serviceConnectionsSection?.content).toContain('COROS up to its latest rolling three months');
+    expect(serviceConnectionsSection?.content).toContain('Suunto and Wahoo offer all history the provider makes available');
+    expect(serviceConnectionsSection?.content).toContain('never expands automatically');
     expect(serviceConnectionsSection?.content).toContain('one-time dashboard prompt');
     expect(serviceConnectionsSection?.content).toContain('only the latest rolling **5 years** of activity data');
     expect(serviceConnectionsSection?.content).toContain('does not support an arbitrary older five-year period');

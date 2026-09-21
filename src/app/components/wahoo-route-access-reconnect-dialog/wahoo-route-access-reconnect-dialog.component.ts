@@ -6,6 +6,7 @@ import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { ServiceNames } from '@sports-alliance/sports-lib';
 import { AppHapticsService } from '../../services/app.haptics.service';
 import { AppAnalyticsService } from '../../services/app.analytics.service';
+import { AppUserService } from '../../services/app.user.service';
 import { LoggerService } from '../../services/logger.service';
 import { MatSnackBar } from '@angular/material/snack-bar';
 
@@ -18,6 +19,7 @@ import { MatSnackBar } from '@angular/material/snack-bar';
 })
 export class WahooRouteAccessReconnectDialogComponent {
   private router = inject(Router);
+  private userService = inject(AppUserService);
   private analyticsService = inject(AppAnalyticsService);
   private snackBar = inject(MatSnackBar);
   private logger = inject(LoggerService);

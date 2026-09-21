@@ -1305,6 +1305,7 @@ describe('OAuth2', () => {
             await getServiceOAuth2CodeRedirectAndSaveStateToUser(userID, ServiceNames.SuuntoApp, redirectUri, consent);
             expect(mockTransactionDocumentData).toMatchObject({
                 oauthImportRecentHistory: consent === true,
+                oauthImportHistoryRange: '30_days',
                 oauthFlowGeneration: expect.any(String),
                 oauthFlowExpiresAt: expect.any(Number),
             });
@@ -1994,11 +1995,14 @@ describe('OAuth2', () => {
                 const result = await getAndSetServiceOAuth2AccessTokenForUser(userID, ServiceNames.GarminAPI, redirectUri, code, 'some-state');
                 expect(result.connected).toBe(true);
                 expect(mockMarkServiceConnected.mock.calls[0][5]).toMatchObject({
-                    requested: enabled, flowGeneration: 'oauth-flow-generation', providerUserId: 'mock-garmin-user', credentialGeneration: expect.any(String),
+                    requested: enabled, rangePreset: '30_days', flowGeneration: 'oauth-flow-generation', providerUserId: 'mock-garmin-user', credentialGeneration: expect.any(String),
                 });
                 if (enabled) expect(result.historyImport?.runId).toMatch(/^[a-f0-9]{64}$/);
                 else expect(result).not.toHaveProperty('historyImport');
-                expect(mockUpdate).toHaveBeenCalledWith(expect.objectContaining({ oauthImportRecentHistory: 'delete-sentinel' }));
+                expect(mockUpdate).toHaveBeenCalledWith(expect.objectContaining({
+                    oauthImportRecentHistory: 'delete-sentinel',
+                    oauthImportHistoryRange: 'delete-sentinel',
+                }));
             } finally { vi.unstubAllEnvs(); }
         });
 

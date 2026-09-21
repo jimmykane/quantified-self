@@ -1,10 +1,15 @@
 @if (status(); as history) {
 <mat-expansion-panel (opened)="haptics.selection()" (closed)="haptics.selection()">
   <mat-expansion-panel-header>
-    <mat-panel-title>Recent history import</mat-panel-title>
+    <mat-panel-title>History import</mat-panel-title>
   </mat-expansion-panel-header>
   <p role="status">{{ summary() }}</p>
+  <p>Selected range: {{ rangeLabel() }}</p>
+  @if (isAllAvailableRange()) {
+  <p>All available history through {{ history.endMs | date:'mediumDate':'UTC' }} (UTC)</p>
+  } @else {
   <p>{{ history.startMs | date:'mediumDate':'UTC' }} – {{ history.endMs | date:'mediumDate':'UTC' }} (UTC)</p>
+  }
   @for (step of steps(); track step.id) {
   <div class="history-step">
     <strong>{{ step.label }}</strong>

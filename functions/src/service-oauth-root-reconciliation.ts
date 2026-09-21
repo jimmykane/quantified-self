@@ -1,4 +1,4 @@
-import { OAUTH_HISTORY_FIELD } from './connection-history/model';
+import { OAUTH_HISTORY_FIELD, OAUTH_HISTORY_RANGE_FIELD } from './connection-history/model';
 import * as admin from 'firebase-admin';
 import { FieldPath, FieldValue } from 'firebase-admin/firestore';
 import { ServiceNames } from '@sports-alliance/sports-lib';
@@ -288,6 +288,7 @@ async function reconcileServiceOAuthRootSnapshot(
       markDeleted('state');
       markDeleted('codeVerifier');
       markDeleted(OAUTH_HISTORY_FIELD);
+      markDeleted(OAUTH_HISTORY_RANGE_FIELD);
     }
 
     if (shouldFullyCleanLifecycle && currentDecision.expiredOAuthFlow) {

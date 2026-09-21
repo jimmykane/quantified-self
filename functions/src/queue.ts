@@ -773,7 +773,16 @@ async function parseWorkoutQueueItemForServiceNameInternal(
   corosClaimState?: COROSQueueProcessingClaim,
   taskRecoveryGeneration?: number,
 ): Promise<QueueResult> {
-  return withHistoryQueueExecution(queueItem, () => parseHistoryGuardedWorkoutQueueItem(serviceName, queueItem, bulkWriter, tokenCache, usageCache, pendingWrites, corosClaimState));
+  return withHistoryQueueExecution(queueItem, () => parseHistoryGuardedWorkoutQueueItem(
+    serviceName,
+    queueItem,
+    bulkWriter,
+    tokenCache,
+    usageCache,
+    pendingWrites,
+    corosClaimState,
+    taskRecoveryGeneration,
+  ));
 }
 async function parseHistoryGuardedWorkoutQueueItem(
   serviceName: ServiceNames,
@@ -783,6 +792,7 @@ async function parseHistoryGuardedWorkoutQueueItem(
   usageCache?: Map<string, Promise<{ role: string, limit: number, currentCount: number }>>,
   pendingWrites?: Map<string, number>,
   corosClaimState?: COROSQueueProcessingClaim,
+  taskRecoveryGeneration?: number,
 ): Promise<QueueResult> {
   if (serviceName === ServiceNames.GarminAPI) {
     return processGarminAPIActivityQueueItem(

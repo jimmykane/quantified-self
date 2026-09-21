@@ -34,6 +34,7 @@ import {
   ServiceConnectionAccountProjection,
   ServiceOAuthCompletionResult,
 } from '@shared/service-connection';
+import { CONNECTION_HISTORY_DEFAULT_RANGE, type ConnectionHistoryRangePreset } from '@shared/connection-history';
 
 type ServiceSyncRouteImpact = ActivitySyncRoute | RouteDeliverySyncRoute;
 
@@ -58,6 +59,7 @@ export abstract class ServicesAbstractComponentDirective implements OnDestroy, O
   public serviceNames = ServiceNames;
   public isConnecting = false;
   public importRecentHistory = true;
+  public importHistoryRange: ConnectionHistoryRangePreset = CONNECTION_HISTORY_DEFAULT_RANGE;
   public reconnectRequested = false;
   public isDisconnecting = false;
   public forceConnected = false;
@@ -193,7 +195,7 @@ export abstract class ServicesAbstractComponentDirective implements OnDestroy, O
         this.forceConnected = true;
         this.emitConnectionState();
         this.snackBar.open(completion.historyImport
-          ? 'Connected! Sit back while we bring in your recent history. You can keep using the app or close this page.'
+          ? 'Connected! Sit back while we bring in your selected history. You can keep using the app or close this page.'
           : `Successfully connected to ${this.getPartnerDisplayName()}`, undefined, {
           duration: 10000,
         });
@@ -276,6 +278,7 @@ export abstract class ServicesAbstractComponentDirective implements OnDestroy, O
       const tokenAndURI = await this.userService.getCurrentUserServiceTokenAndRedirectURI(
         this.serviceName,
         this.importRecentHistory,
+        this.importHistoryRange,
         isCurrentView,
       );
       if (!isCurrentView()) return;

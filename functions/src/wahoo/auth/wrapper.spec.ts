@@ -119,6 +119,24 @@ describe('Wahoo Auth Wrapper', () => {
     mocks.validateOAuth2State.mockResolvedValue(true);
   });
 
+  it('forwards explicit history consent and range to the OAuth context', async () => {
+    mocks.getServiceOAuth2CodeRedirectAndSaveStateToUser.mockResolvedValue('https://wahoo.example/authorize');
+    await expect(getWahooAPIAuthRequestTokenRedirectURI({
+      auth: { uid: 'user-1' },
+      app: { appId: 'app-1' },
+      data: { redirectUri: 'https://localhost/callback', importRecentHistory: true, importHistoryRange: 'maximum' },
+    } as Parameters<typeof getWahooAPIAuthRequestTokenRedirectURI>[0])).resolves.toEqual({
+      redirect_uri: 'https://wahoo.example/authorize',
+    });
+    expect(mocks.getServiceOAuth2CodeRedirectAndSaveStateToUser).toHaveBeenCalledWith(
+      'user-1',
+      ServiceNames.WahooAPI,
+      'https://localhost/callback',
+      true,
+      'maximum',
+    );
+  });
+
   it('returns a retryable callable error when OAuth start is blocked by a disconnect', async () => {
     const details = {
       reason: 'service_disconnect_in_progress',

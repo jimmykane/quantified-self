@@ -208,6 +208,7 @@ describe('ServicesSuuntoComponent', () => {
         expect(mockUserService.getCurrentUserServiceTokenAndRedirectURI).toHaveBeenCalledWith(
             service,
             checked,
+            '30_days',
             expect.any(Function),
         );
     });
