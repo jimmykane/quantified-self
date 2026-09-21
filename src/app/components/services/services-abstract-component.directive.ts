@@ -69,6 +69,7 @@ export abstract class ServicesAbstractComponentDirective implements OnDestroy, O
   private disconnectConfirmation: MatDialogRef<ConfirmationDialogComponent, boolean> | undefined;
 
   protected serviceDataSubscription!: Subscription;
+  private reconnectRouteSubscription?: Subscription;
 
   protected router = inject(Router);
   protected changeDetectorRef = inject(ChangeDetectorRef);
@@ -234,7 +235,10 @@ export abstract class ServicesAbstractComponentDirective implements OnDestroy, O
   }
 
   async ngOnInit() {
-    this.reconnectRequested = this.route.snapshot.queryParamMap.get('reconnect') === '1';
+    this.reconnectRouteSubscription = this.route.queryParamMap.subscribe(params => {
+      this.reconnectRequested = params.get('serviceName') === this.serviceName && params.get('reconnect') === '1';
+      this.changeDetectorRef.markForCheck();
+    });
   }
 
   protected onServiceDataChanged(): void {
@@ -476,6 +480,7 @@ export abstract class ServicesAbstractComponentDirective implements OnDestroy, O
     this.connectionViewRevision++;
     this.disconnectConfirmation?.close(false);
     this.disconnectConfirmation = undefined;
+    this.reconnectRouteSubscription?.unsubscribe();
     if (this.serviceDataSubscription) {
       this.serviceDataSubscription.unsubscribe();
     }

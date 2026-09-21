@@ -56,6 +56,9 @@ export function historyExecution(run: ConnectionHistoryRun, paths: string[], lea
     onQueued: path => { if (!paths.includes(path)) paths.push(path); },
   };
 }
+export class HistoryUnavailableError extends Error {
+  constructor(message: string) { super(message); this.name = 'HistoryUnavailableError'; }
+}
 export class HistoryWindowTooLargeError extends Error {
   constructor() { super('History window must be subdivided.'); this.name = 'HistoryWindowTooLargeError'; }
 }

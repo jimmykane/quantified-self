@@ -1,10 +1,13 @@
 import * as admin from 'firebase-admin';
+import { config } from '../config';
+import { getServiceWorkoutQueueName } from '../shared/queue-names';
+import { SLEEP_SYNC_QUEUE_COLLECTION_NAME } from '../sleep/constants';
 import { ServiceNames } from '@sports-alliance/sports-lib';
 import { SLEEP_PROVIDERS } from '../../../shared/sleep';
 import { getSleepBackfillCooldownMs } from '../../../shared/sleep-backfill';
 import { activityHistoryNextAllowedAt } from '../../../shared/history-import.constants';
 import { addHistoryToQueue } from '../history';
-import { processGarminBackfill } from '../garmin/backfill';
+import { processGarminBackfill, GarminHistoryRangeUnavailableError } from '../garmin/backfill';
 import { importWahooHistory } from '../wahoo/history-to-queue';
 import { queueSuuntoSleepHealthHistory, queueCorosSleepHealthHistory, queueGarminSleepHealthHistory } from '../sleep/backfill';
 import { isGarminHealthSyncEnabled } from '../garmin/health-flags';
@@ -42,28 +45,52 @@ async function reserveActivities(run: ConnectionHistoryRun): Promise<void> {
   });
 }
 export interface HistoryOperationResult { count: number; nextStartMs: number; nextPage: number; }
-export async function executeHistoryOperation(run: ConnectionHistoryRun, step: HistoryStep, execution: HistoryExecution): Promise<HistoryOperationResult> {
-  if (!HISTORY_ADAPTER_VERSIONS[run.serviceName]?.[step.id]?.includes(step.capability.version)) throw new HistorySkippedError('This history capability changed. Reconnect to use the current version.');
+type HistoryOperation = (run: ConnectionHistoryRun, step: HistoryStep, execution: HistoryExecution) => Promise<HistoryOperationResult>;
+export interface HistoryAdapter {
+  execute: HistoryOperation;
+  downstream: 'activities' | 'sleep' | 'garmin-health';
+}
+function historyWindow(run: ConnectionHistoryRun, step: HistoryStep) {
   const endMs = Math.min(run.endMs, step.nextStartMs + (step.windowDays ?? 30) * 86400000 - 1000);
-  const nextStartMs = endMs + 1000;
+  return { endMs, nextStartMs: endMs + 1000 };
+}
+export function getHistoryAdapter(run: ConnectionHistoryRun, step: HistoryStep): HistoryAdapter {
+  const adapter = HISTORY_ADAPTERS[run.serviceName]?.[step.id]?.[step.capability.version];
+  if (!adapter) throw new HistorySkippedError('This history capability changed. Reconnect to use the current version.');
+  return adapter;
+}
+export function historyAdmissionQueue(run: ConnectionHistoryRun, step: HistoryStep): { taskQueue: string; collection: string } {
+  const { downstream } = getHistoryAdapter(run, step);
+  return downstream === 'activities'
+    ? { taskQueue: config.cloudtasks.workoutQueue, collection: getServiceWorkoutQueueName(run.serviceName) }
+    : { taskQueue: downstream === 'garmin-health' ? config.cloudtasks.garminHealthBackfillQueue : config.cloudtasks.sleepSyncQueue, collection: SLEEP_SYNC_QUEUE_COLLECTION_NAME };
+}
+export async function executeHistoryOperation(run: ConnectionHistoryRun, step: HistoryStep, execution: HistoryExecution): Promise<HistoryOperationResult> {
+  const adapter = getHistoryAdapter(run, step);
   await execution.beforeRequest();
-  if (step.id === 'activities') {
-    await reserveActivities(run);
-    if (run.serviceName === ServiceNames.GarminAPI) {
-      await processGarminBackfill(run.userID, new Date(step.nextStartMs), new Date(endMs), execution);
-      return { count: 1, nextStartMs, nextPage: 1 };
-    }
-    if (run.serviceName === ServiceNames.WahooAPI) {
-      const result = await importWahooHistory(run.userID, new Date(run.startMs), new Date(run.endMs), { execution, singlePage: true, page: step.page, processedCountOffset: step.count });
-      return { count: result.successCount, nextStartMs: result.nextPage ? run.startMs : run.endMs + 1000, nextPage: result.nextPage ?? 1 };
-    }
-    const result = await addHistoryToQueue(run.userID, run.serviceName, new Date(step.nextStartMs), new Date(endMs), {
-      execution, maxItems: 100, expectedProviderUserId: run.providerUserId,
-      cumulativeMetadata: { startDate: new Date(run.startMs), endDate: new Date(run.endMs), processedActivitiesCountOffset: step.count },
-    });
-    if (result.failureCount) throw new Error('Some activity admissions failed.');
-    return { count: result.successCount, nextStartMs, nextPage: 1 };
+  return adapter.execute(run, step, execution);
+}
+async function executeActivityHistory(run: ConnectionHistoryRun, step: HistoryStep, execution: HistoryExecution): Promise<HistoryOperationResult> {
+  const { endMs, nextStartMs } = historyWindow(run, step);
+  await reserveActivities(run);
+  if (run.serviceName === ServiceNames.GarminAPI) {
+    try { await processGarminBackfill(run.userID, new Date(step.nextStartMs), new Date(endMs), execution); }
+    catch (error) { if (error instanceof GarminHistoryRangeUnavailableError) throw new HistorySkippedError(error.message); throw error; }
+    return { count: 1, nextStartMs, nextPage: 1 };
   }
+  if (run.serviceName === ServiceNames.WahooAPI) {
+    const result = await importWahooHistory(run.userID, new Date(run.startMs), new Date(run.endMs), { execution, singlePage: true, page: step.page, processedCountOffset: step.count });
+    return { count: result.successCount, nextStartMs: result.nextPage ? run.startMs : run.endMs + 1000, nextPage: result.nextPage ?? 1 };
+  }
+  const result = await addHistoryToQueue(run.userID, run.serviceName, new Date(step.nextStartMs), new Date(endMs), {
+    execution, maxItems: 100, expectedProviderUserId: run.providerUserId,
+    cumulativeMetadata: { startDate: new Date(run.startMs), endDate: new Date(run.endMs), processedActivitiesCountOffset: step.count },
+  });
+  if (result.failureCount) throw new Error('Some activity admissions failed.');
+  return { count: result.successCount, nextStartMs, nextPage: 1 };
+}
+async function executeSleepHealthHistory(run: ConnectionHistoryRun, step: HistoryStep, execution: HistoryExecution): Promise<HistoryOperationResult> {
+  const { endMs, nextStartMs } = historyWindow(run, step);
   const provider = historySleepProvider(run.serviceName);
   if (!isSleepProviderEnabled(provider) || !isSleepSyncUserAllowed(run.userID)) throw new HistorySkippedError('History sync is currently unavailable.');
   if (step.id === 'health' && ((run.serviceName === ServiceNames.GarminAPI && !isGarminHealthSyncEnabled())
@@ -89,10 +116,21 @@ export function historySleepCooldown(run: ConnectionHistoryRun): number | null {
   return run.serviceName === ServiceNames.WahooAPI ? null : getSleepBackfillCooldownMs(historySleepProvider(run.serviceName));
 }
 
-/** Versions remain explicit so a removed/changed adapter cannot reinterpret an existing run. */
-export const HISTORY_ADAPTER_VERSIONS: Record<ServiceNames, Record<string, readonly number[]>> = {
-  [ServiceNames.GarminAPI]: { activities: [1], sleep: [1], health: [1] },
-  [ServiceNames.SuuntoApp]: { activities: [1], sleep: [1], health: [1] },
-  [ServiceNames.COROSAPI]: { activities: [1], daily: [1] },
-  [ServiceNames.WahooAPI]: { activities: [1] },
+/** Each advertised version must register executable work and its admission queue. */
+export const HISTORY_ADAPTERS: Record<ServiceNames, Record<string, Record<number, HistoryAdapter>>> = {
+  [ServiceNames.GarminAPI]: {
+    activities: { 1: { execute: executeActivityHistory, downstream: 'activities' } },
+    sleep: { 1: { execute: executeSleepHealthHistory, downstream: 'sleep' } },
+    health: { 1: { execute: executeSleepHealthHistory, downstream: 'garmin-health' } },
+  },
+  [ServiceNames.SuuntoApp]: {
+    activities: { 1: { execute: executeActivityHistory, downstream: 'activities' } },
+    sleep: { 1: { execute: executeSleepHealthHistory, downstream: 'sleep' } },
+    health: { 1: { execute: executeSleepHealthHistory, downstream: 'sleep' } },
+  },
+  [ServiceNames.COROSAPI]: {
+    activities: { 1: { execute: executeActivityHistory, downstream: 'activities' } },
+    daily: { 1: { execute: executeSleepHealthHistory, downstream: 'sleep' } },
+  },
+  [ServiceNames.WahooAPI]: { activities: { 1: { execute: executeActivityHistory, downstream: 'activities' } } },
 };

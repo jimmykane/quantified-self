@@ -45,6 +45,9 @@ export interface HistoryConnectionContext {
   providerUserId: string;
   credentialGeneration: string;
 }
+// This is a document identity hash, not a password verifier. flowGeneration is
+// a server-generated randomUUID (beginOAuthFlowIfUserActive), never a password,
+// access token, OAuth state, or PKCE verifier. No credential is hashed here.
 export function historyRunId(userID: string, serviceName: ServiceNames, flowGeneration: string): string {
   return createHash('sha256').update(JSON.stringify([userID, serviceName, flowGeneration])).digest('hex');
 }
