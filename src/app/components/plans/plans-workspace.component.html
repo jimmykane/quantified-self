@@ -539,7 +539,7 @@
                 @if (row.completion) {
                 <span class="workout-completion-state">
                   <mat-icon aria-hidden="true">task_alt</mat-icon>
-                  <span>Activity linked@if (row.completion.workoutRevisionAtLink !== row.workout.revision) { · workout changed since
+                  <span>Completed · activity linked@if (row.completion.workoutRevisionAtLink !== row.workout.revision) { · workout changed since
                     } @else if (row.completion.timing === 'late') { · late
                     } @else if (row.completion.timing === 'early') { · early }</span>
                 </span>

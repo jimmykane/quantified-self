@@ -372,9 +372,12 @@ switch and release scope are approved. An implemented adapter, private pilot or 
 public availability.
 
 The page and homepage reuse `PlanScheduleCalendarComponent`, the canonical plan/workout parsers, plan appearance helper
-and Sports Lib-backed workout formatters through a deterministic synthetic fixture. The fixture spans multiple weeks and
-months, includes Running and Cycling recipes, fixed repeats, time/distance endings, heart-rate/power/pace targets, a
-skipped workout and an empty selectable date. The deferred preview stays inside a native `data-nosnippet` boundary and
+and Sports Lib-backed workout formatters through a deterministic synthetic recipe. One local reference date is captured
+when the deferred component is created; the fixed workout offsets then keep the selected month current for the visitor
+without reading account state or changing during that render. Tests inject an explicit reference date. The generated
+fixture spans multiple weeks and months, includes Running and Cycling recipes, fixed repeats, time/distance endings,
+heart-rate/power/pace targets, a skipped workout, an exact synthetic completed-workout marker on the selected date and
+an empty selectable date. The deferred preview stays inside a native `data-nosnippet` boundary and
 has an SSR-stable placeholder. It may add presentation-only calendar inputs with authenticated defaults, but it must not
 inject authentication, Firestore, Functions, delivery services or account state. Planned examples never contribute to
 completed totals or Training analysis.
@@ -384,7 +387,7 @@ The homepage and public feature page keep their composition separate. Compact ho
 `training-plans-page.content.ts`. Keep these modules physically separate so route-only copy cannot enter homepage
 startup, and keep page-only detail, FAQ and launch-boundary sections out of a generic homepage configuration renderer.
 
-This discovery surface has no MCP wire impact: its copy makes the existing separately permissioned planning surface
+This discovery surface and its relative-date/completion presentation have no MCP wire impact: its copy makes the existing separately permissioned planning surface
 discoverable but adds no tool, schema, field, scope, consent, projection, Assistant authority, provider action or
 bundled-skill behavior. It reads canonical frontend types only to validate and render synthetic data; the existing
 Training plan read/write contract, release lifecycle, and independent consent remain unchanged.
@@ -497,7 +500,10 @@ disposed with the workspace and performs no schedule writes or provider requests
 
 Desktop places the date grid beside one selected day's compact workout rows. Grid cells show up to two independently
 editable workout titles with full accessible labels/tooltips and an overflow action; the day's detail list shows every
-workout. Same-day previews and detail rows share the schedule service's stable workout-ID order, independent of creation
+workout. An existing exact `trainingWorkoutCompletions/{workoutId}` projection adds a task/completed marker and the
+explicit label **Completed · activity linked** without changing the authored planned/skipped lifecycle. It never infers
+completion from title, date, or proximity, and still keeps the linked activity in recorded totals only. Same-day previews
+and detail rows share the schedule service's stable workout-ID order, independent of creation
 time, so expanding overflow does not reorder the workouts. On narrow containers the grid shows counts, with day details
 below it. Selecting an empty day shows a neutral empty state rather than assuming rest, and the single **Add workout**
 action opens the existing editor with that date
@@ -537,7 +543,9 @@ marked. Every rendered date is selectable, including empty dates. Day details ke
 activities in separate sections. Their navigation rows retain a visible trailing affordance at narrow widths, with
 supporting text yielding before that affordance. Planned workouts never enter recorded activity counts, durations, distance, elevation,
 group bars, activity tables, or Training-derived metrics.
-Planned and skipped icons use their current plan's color; standalone icons stay theme-neutral. The day-details planned
+Planned and skipped icons use their current plan's color; standalone icons stay theme-neutral. An exact stored completion
+link changes the overlay icon to a task check and the day-detail state to **Completed · activity linked**; it does not
+duplicate or restyle the completed activity. The day-details planned
 rows repeat that accent as a rounded rail outside the Material row highlight, keeping the selection surface and color
 edge visually separate. Trailing navigation chevrons stay vertically centered for multi-line rows. The overlay resolves
 colors from the live plans, so recoloring or moving
@@ -1067,7 +1075,7 @@ scheduled workout and mark the delivery artifact protected as completed. The saf
 `trainingWorkoutCompletions/{workoutId}`; the account digest, Guide ID, raw reference data, reverse uniqueness record and
 matching evidence stay private. Activity identity is attached only when its start timestamp uniquely matches the native
 FIT session timestamp; source order is never treated as an activity ID. A repeated marker, missing workout, different
-account, multiple candidate ledgers or conflicting existing link fails closed. The UI says **Activity linked**; this means
+account, multiple candidate ledgers or conflicting existing link fails closed. The UI says **Completed · activity linked**; this means
 the Guide was referenced by a recorded session, not that every prescribed interval or target was completed. Planned
 workouts remain separate from completed-activity totals and authored schedule/revision history. Linking waits for any
 in-flight delivery lease to finish. Deleting the source event removes its safe/private link records, clears only the
@@ -1162,7 +1170,7 @@ before continuing. Updates keep IDs; removal checks ownership, observed date and
 deletes the Workout before the Plan. A provider summary protects the copy even before its recorded activity is imported.
 When Wahoo returns that activity, QS links it only when the inbound Workout ID, Plan ID and deterministic
 `workout_token` identify one exact delivery under the same current account authority. The normal safe
-`trainingWorkoutCompletions/{workoutId}` projection then shows **Activity linked**, while the raw identifiers, account
+`trainingWorkoutCompletions/{workoutId}` projection then shows **Completed · activity linked**, while the raw identifiers, account
 digest and reverse evidence remain private. Repeated imports are idempotent; missing identifiers, collisions, changed
 accounts, active delivery writes and conflicting existing links fail closed without date/title matching. Deleting the
 source event removes only its matching link/evidence, clears that marker-derived completion protection and queues
@@ -1198,7 +1206,7 @@ validation rejections remain terminal. Diagnostics never retain provider bodies 
 
 MCP impact: existing `training-plans:read` projections already represent Wahoo and the `completed` outcome. Same-PR positive
 and negative fixtures cover status reads and reject Plan IDs, workout tokens, completion evidence and journals. The
-separate safe **Activity linked** projection remains outside MCP, as it does for other exact provider links. This change needs no new
+separate safe **Completed · activity linked** projection remains outside MCP, as it does for other exact provider links. This change needs no new
 public schema, scope, write tool, plugin artifact or registered-client refresh. The retained artifact zone is private
 recovery metadata, not an extra MCP field; the existing public time zone remains the user's sync setting.
 No Rules/index changes are required: all private evidence stays in the existing server-only ledger, with unchanged
@@ -3304,7 +3312,7 @@ sleep duration, score, HRV, and sleep-heart-rate aggregates it already consumes;
 changes. Existing normalized Sleep documents use the dedicated Health/Sleep scalar migration, not an activity reparse,
 and do not require a Training snapshot rebuild solely for this storage transition.
 
-The repository now pins Sports Lib `21.2.4`, and Functions pins FIT parser `5.2.1`. The 21.0.3 package-emission transition
+The repository now pins Sports Lib `21.2.4`, and Functions pins FIT parser `6.1.1`. The 21.0.3 package-emission transition
 remains module-preserving ESM and per-module CommonJS. Sports Lib 21.2.1 added nonnumeric, package-root FIT
 workout-reference classes and the bounded `readFITWorkoutReferences(...)` metadata reader. Sports Lib 21.2.4 keeps those
 public classes, return shapes, numeric values, serialized event/route data, and representative FIT course output unchanged

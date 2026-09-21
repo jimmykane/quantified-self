@@ -26,6 +26,7 @@ describe('ActivityCalendarTileComponent', () => {
   let watchEvents: ReturnType<typeof vi.fn>;
   let openBottomSheet: ReturnType<typeof vi.fn>;
   let watchSchedule: ReturnType<typeof vi.fn>;
+  let watchWorkoutCompletions: ReturnType<typeof vi.fn>;
   let viewer: ReturnType<typeof signal<{ uid: string } | null>>;
   let viewer$: BehaviorSubject<{ uid: string } | null>;
   let dayDetailsNavigation: {
@@ -38,6 +39,7 @@ describe('ActivityCalendarTileComponent', () => {
     viewer$ = new BehaviorSubject<{ uid: string } | null>(user);
     watchEvents = vi.fn().mockReturnValue(of([createEvent()]));
     watchSchedule = vi.fn().mockReturnValue(of(emptySchedule()));
+    watchWorkoutCompletions = vi.fn().mockReturnValue(of([]));
     openBottomSheet = vi.fn().mockReturnValue({ afterDismissed: () => of(undefined) });
     dayDetailsNavigation = {
       restorationFor: vi.fn().mockReturnValue(null),
@@ -49,7 +51,7 @@ describe('ActivityCalendarTileComponent', () => {
         provideRouter([]),
         { provide: AppUserService, useValue: { user: viewer, user$: viewer$ } },
         { provide: ActivityCalendarService, useValue: { watchEvents } },
-        { provide: TrainingPlansService, useValue: { watchSchedule } },
+        { provide: TrainingPlansService, useValue: { watchSchedule, watchWorkoutCompletions } },
         { provide: CalendarDayDetailsNavigationService, useValue: dayDetailsNavigation },
       ],
     }).compileComponents();
@@ -309,6 +311,7 @@ describe('ActivityCalendarTileComponent', () => {
   it('shows active-plan and standalone workouts and passes them to empty-day details', async () => {
     const plannedDate = currentLocalDate(2);
     watchSchedule.mockReturnValue(of(scheduleForDate(plannedDate)));
+    watchWorkoutCompletions.mockReturnValue(of([{ workoutId: 'active-workout' }]));
     watchEvents.mockReturnValue(of([]));
     const fixture = TestBed.createComponent(ActivityCalendarTileComponent);
     fixture.componentRef.setInput('user', user);
@@ -326,9 +329,11 @@ describe('ActivityCalendarTileComponent', () => {
     fixture.componentInstance.openDay(day);
 
     const plannedWorkouts = (componentOpen.mock.calls[0][1] as {
-      data: { plannedWorkouts: Array<{ workout: { id: string } }> };
+      data: { plannedWorkouts: Array<{ workout: { id: string }; completed?: boolean }> };
     }).data.plannedWorkouts;
     expect(plannedWorkouts.map(entry => entry.workout.id)).toEqual(['active-workout', 'standalone-workout']);
+    expect(plannedWorkouts.find(entry => entry.workout.id === 'active-workout')?.completed).toBe(true);
+    expect(fixture.nativeElement.querySelector('.planned-workout-marker--completed')?.textContent?.trim()).toBe('task_alt');
   });
 
   it.each([false, true])('updates saved plan colors in the tile / Today picker (navigation: %s) without changing activities', async showNavigation => {

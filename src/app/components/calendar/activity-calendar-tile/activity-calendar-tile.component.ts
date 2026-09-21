@@ -128,6 +128,23 @@ export class ActivityCalendarTileComponent {
   });
   readonly plansState = toSignal(toObservable(this.plansSource).pipe(switchMap(source => source)),
     { initialValue: { status: 'loading', schedule: null } as ActivityCalendarTilePlansState });
+  private readonly completionsSource = computed(() => {
+    const user = this.user();
+    if (!user?.uid) return of([]);
+    return this.users.user$.pipe(
+      map(viewer => viewer?.uid ?? null),
+      distinctUntilChanged(),
+      switchMap(viewerUid => viewerUid === user.uid
+        ? this.plansService.watchWorkoutCompletions(user.uid).pipe(
+          startWith([]),
+          catchError(() => of([])),
+        )
+        : of([])),
+      shareReplay({ bufferSize: 1, refCount: true }),
+    );
+  });
+  readonly workoutCompletions = toSignal(toObservable(this.completionsSource).pipe(switchMap(source => source)),
+    { initialValue: [] });
   readonly plannedWorkoutsByDate = computed<PlannedWorkoutCalendarOverlay>(() => {
     const schedule = this.plansState().schedule;
     if (!this.hasTrainingPlanningUIAccess() || !schedule) return {};
@@ -135,6 +152,7 @@ export class ActivityCalendarTileComponent {
       selectCalendarVisibleScheduledWorkouts(schedule),
       schedule.plans,
       schedule.state.activePlanId,
+      this.workoutCompletions().map(completion => completion.workoutId),
     );
   });
   readonly calendarModel = computed(() => buildActivityCalendarViewModel(this.eventState().events, {
@@ -236,6 +254,7 @@ export class ActivityCalendarTileComponent {
     const subscriptions = new Subscription();
     const eventState = signal(this.eventState());
     const plansState = signal(this.plansState());
+    const workoutCompletions = signal(this.workoutCompletions());
     const monthOptions = {
       view: 'month' as const,
       anchorDate: day.date,
@@ -253,6 +272,7 @@ export class ActivityCalendarTileComponent {
       const schedule = plansState().schedule;
       return schedule ? buildPlannedWorkoutCalendarOverlay(
         selectCalendarVisibleScheduledWorkouts(schedule), schedule.plans, schedule.state.activePlanId,
+        workoutCompletions().map(completion => completion.workoutId),
       )[day.dateKey]?.entries ?? [] : [];
     });
     const release = () => {
@@ -262,6 +282,7 @@ export class ActivityCalendarTileComponent {
     try {
       subscriptions.add(this.eventsSource().subscribe(state => eventState.set(state)));
       subscriptions.add(this.plansSource().subscribe(state => plansState.set(state)));
+      subscriptions.add(this.completionsSource().subscribe(completions => workoutCompletions.set(completions)));
       const sheet = this.bottomSheet.open<CalendarDayDetailsComponent, CalendarDayDetailsData, string>(CalendarDayDetailsComponent, {
         data: {
           day,

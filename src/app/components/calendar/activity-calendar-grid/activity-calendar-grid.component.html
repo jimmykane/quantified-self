@@ -65,7 +65,9 @@
               <span class="planned-workout-markers" aria-hidden="true"
                 [class.planned-workout-markers--skipped]="plannedDay.hasSkipped">
                 @for (entry of plannedDay.visibleEntries; track entry.workout.id) {
-                  <mat-icon [style.color]="entry.color" [class.planned-workout-marker--skipped]="entry.workout.lifecycle === 'skipped'">{{ entry.workout.lifecycle === 'skipped' ? 'event_busy' : 'event_note' }}</mat-icon>
+                  <mat-icon [style.color]="entry.color"
+                    [class.planned-workout-marker--skipped]="!entry.completed && entry.workout.lifecycle === 'skipped'"
+                    [class.planned-workout-marker--completed]="entry.completed">{{ entry.completed ? 'task_alt' : entry.workout.lifecycle === 'skipped' ? 'event_busy' : 'event_note' }}</mat-icon>
                 }
                 @if (plannedDay.overflowCount) {
                   <span>+{{ plannedDay.overflowCount }}</span>

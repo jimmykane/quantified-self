@@ -103,6 +103,18 @@ describe('CalendarDayDetailsComponent', () => {
     expect(fixture.nativeElement.querySelector('[aria-labelledby="calendar-day-family-title"]')).toBeNull();
   });
 
+  it('shows exact completion links as completed without adding them to recorded activity totals', async () => {
+    const fixture = await renderDayDetails([], { plannedWorkouts: [{
+      workout: createPlannedWorkout(),
+      planName: 'Autumn build',
+      completed: true,
+    }] });
+
+    expect(fixture.nativeElement.querySelector('.calendar-day-planned-item')?.textContent)
+      .toContain('Autumn build · Completed · activity linked');
+    expect(fixture.nativeElement.querySelector('.calendar-day-total')?.textContent).toContain('0 completed activities');
+  });
+
   it('centers trailing navigation icons and keeps the rounded plan accent outside the Material row', async () => {
     const fixture = await renderDayDetails(createEvent(), {
       plannedWorkouts: [{ workout: createPlannedWorkout(), planName: 'Autumn build' }],

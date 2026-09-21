@@ -46,10 +46,11 @@
             @for (workout of day.visibleEntries; track workout.id) {
               <button mat-button type="button" class="calendar-workout" [disabled]="disabled()"
                 [class.calendar-workout--skipped]="workout.lifecycle === 'skipped'"
-                [attr.aria-label]="workoutActionVerb() + ' ' + workout.title + (workout.lifecycle === 'skipped' ? ', skipped' : '') + (isActivityLinked(workout.id) ? ', activity linked' : '')"
-                [matTooltip]="(workoutActionVerb() === 'Edit' ? '' : workoutActionVerb() + ' ') + workout.title + (workout.lifecycle === 'skipped' ? ' · Skipped' : '') + (isActivityLinked(workout.id) ? ' · Activity linked' : '')"
+                [class.calendar-workout--completed]="isActivityLinked(workout.id)"
+                [attr.aria-label]="workoutActionVerb() + ' ' + workout.title + (workout.lifecycle === 'skipped' ? ', skipped' : '') + (isActivityLinked(workout.id) ? ', completed, activity linked' : '')"
+                [matTooltip]="(workoutActionVerb() === 'Edit' ? '' : workoutActionVerb() + ' ') + workout.title + (workout.lifecycle === 'skipped' ? ' · Skipped' : '') + (isActivityLinked(workout.id) ? ' · Completed · activity linked' : '')"
                 (click)="editWorkout(workout)">
-                <span class="calendar-workout-title">{{ workout.lifecycle === 'skipped' ? 'Skipped · ' : '' }}{{ isActivityLinked(workout.id) ? 'Linked · ' : '' }}{{ workout.title }}</span>
+                <span class="calendar-workout-title">{{ workout.lifecycle === 'skipped' ? 'Skipped · ' : '' }}{{ isActivityLinked(workout.id) ? 'Completed · ' : '' }}{{ workout.title }}</span>
               </button>
             }
             @if (day.overflowCount) {

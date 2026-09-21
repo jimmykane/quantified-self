@@ -11,6 +11,7 @@
   <app-plan-schedule-calendar
     [plan]="plan"
     [workouts]="workouts"
+    [completedWorkoutIds]="completedWorkoutIds"
     [selectedDate]="selectedDate()"
     [today]="today"
     [startOfWeek]="1"
@@ -36,7 +37,7 @@
             <mat-icon aria-hidden="true">{{ row.icon }}</mat-icon>
             <div>
               <h5>{{ row.workout.title }}</h5>
-              <p>{{ row.sport }}{{ row.workout.lifecycle === 'skipped' ? ' · Skipped' : ' · Planned' }}</p>
+              <p>{{ row.sport }}{{ row.workout.lifecycle === 'skipped' ? ' · Skipped' : row.completed ? ' · Completed · activity linked' : ' · Planned' }}</p>
               <ul [attr.aria-label]="row.workout.title + ' structure'">
                 @for (step of row.summary; track step) { <li>{{ step }}</li> }
               </ul>

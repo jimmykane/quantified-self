@@ -112,8 +112,9 @@ describe('PlanScheduleCalendarComponent', () => {
     fixture.componentRef.setInput('completedWorkoutIds', [workout.id]);
     fixture.detectChanges();
     const edit = fixture.nativeElement.querySelector('.calendar-workout') as HTMLButtonElement;
-    expect(edit.getAttribute('aria-label')).toBe(`Edit ${workout.title}, skipped, activity linked`);
-    expect(edit.textContent?.replace(/\s+/g, ' ').trim()).toBe(`Skipped · Linked · ${workout.title.trim()}`);
+    expect(edit.getAttribute('aria-label')).toBe(`Edit ${workout.title}, skipped, completed, activity linked`);
+    expect(edit.textContent?.replace(/\s+/g, ' ').trim()).toBe(`Skipped · Completed · ${workout.title.trim()}`);
+    expect(edit.classList).toContain('calendar-workout--completed');
     const count = fixture.nativeElement.querySelector('[data-plan-date="2026-09-12"] .calendar-day-count');
     expect(count?.querySelector('mat-icon')?.textContent?.trim()).toBe('task_alt');
     expect(workout.lifecycle).toBe('skipped');

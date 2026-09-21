@@ -196,6 +196,11 @@
   text-decoration: line-through;
 }
 
+.calendar-workout--completed {
+  color: var(--plan-calendar-color);
+  font-weight: 600;
+}
+
 .calendar-hint {
   color: var(--mat-sys-on-surface-variant);
   font: var(--mat-sys-body-small);

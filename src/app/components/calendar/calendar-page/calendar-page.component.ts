@@ -139,6 +139,14 @@ export class CalendarPageComponent {
       )
       : of({ status: 'ready', schedule: null } as CalendarPlansState)),
   ), { initialValue: { status: 'loading', schedule: null } as CalendarPlansState });
+  readonly workoutCompletions = toSignal(this.userService.user$.pipe(
+    switchMap(user => user?.uid
+      ? this.plansService.watchWorkoutCompletions(user.uid).pipe(
+        startWith([]),
+        catchError(() => of([])),
+      )
+      : of([])),
+  ), { initialValue: [] });
   readonly plannedWorkoutsByDate = computed<PlannedWorkoutCalendarOverlay>(() => {
     const schedule = this.plansState().schedule;
     if (!this.hasTrainingPlanningUIAccess() || !schedule) return {};
@@ -146,6 +154,7 @@ export class CalendarPageComponent {
       selectCalendarVisibleScheduledWorkouts(schedule),
       schedule.plans,
       schedule.state.activePlanId,
+      this.workoutCompletions().map(completion => completion.workoutId),
     );
   });
   readonly calendarModel = computed(() => {

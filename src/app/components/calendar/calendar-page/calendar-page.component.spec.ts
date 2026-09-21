@@ -61,6 +61,7 @@ describe('CalendarPageComponent', () => {
   const haptics = { selection: vi.fn() };
   const dialogs = { open: vi.fn() };
   let watchSchedule: ReturnType<typeof vi.fn>;
+  let watchWorkoutCompletions: ReturnType<typeof vi.fn>;
   let dayDetailsNavigation: {
     restorationFor: ReturnType<typeof vi.fn>;
     consumeRestoration: ReturnType<typeof vi.fn>;
@@ -77,6 +78,7 @@ describe('CalendarPageComponent', () => {
     notesService.invalidate.mockImplementation(() => notesService.changes$.next());
     haptics.selection.mockClear(); dialogs.open.mockClear();
     watchSchedule = vi.fn().mockReturnValue(of(emptySchedule()));
+    watchWorkoutCompletions = vi.fn().mockReturnValue(of([]));
     dayDetailsNavigation = {
       restorationFor: vi.fn().mockReturnValue(null),
       consumeRestoration: vi.fn().mockReturnValue(true),
@@ -91,7 +93,7 @@ describe('CalendarPageComponent', () => {
         } },
         { provide: AppUserService, useValue: { user: signal(user), user$: of(user) } },
         { provide: ActivityCalendarService, useValue: { watchEvents } },
-        { provide: TrainingPlansService, useValue: { watchSchedule } },
+        { provide: TrainingPlansService, useValue: { watchSchedule, watchWorkoutCompletions } },
         { provide: CalendarDayDetailsNavigationService, useValue: dayDetailsNavigation },
         { provide: AppTimelineNotesService, useValue: notesService },
         { provide: AppHapticsService, useValue: haptics },
@@ -134,12 +136,17 @@ describe('CalendarPageComponent', () => {
   it('reads and exposes planning for any signed-in account while completed activities remain visible', async () => {
     const otherUser = { ...user, uid: 'another-user' };
     watchSchedule.mockReturnValue(of(trainingSchedule()));
+    watchWorkoutCompletions.mockReturnValue(of([{ workoutId: 'active-workout' }]));
     Object.assign(TestBed.inject(AppUserService), { user: signal(otherUser), user$: of(otherUser) });
     const fixture = TestBed.createComponent(CalendarPageComponent);
     fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
     expect(watchSchedule).toHaveBeenCalledWith(otherUser.uid);
+    expect(watchWorkoutCompletions).toHaveBeenCalledWith(otherUser.uid);
     expect(watchEvents).toHaveBeenCalledOnce();
     expect(fixture.componentInstance.plannedWorkoutsByDate()).not.toEqual({});
+    expect(fixture.componentInstance.plannedWorkoutsByDate()['2026-08-04'].entries
+      .find(entry => entry.workout.id === 'active-workout')?.completed).toBe(true);
+    expect(fixture.nativeElement.querySelector('.planned-workout-marker--completed')?.textContent?.trim()).toBe('task_alt');
     expect(fixture.nativeElement.querySelectorAll('.activity-calendar-day-button')).toHaveLength(42);
   });
 

@@ -208,7 +208,10 @@ export class PlansWorkspaceComponent {
   readonly schedule = computed(() => this.scheduleState().schedule);
   readonly completions = toSignal(this.userService.user$.pipe(
     switchMap(user => user?.uid
-      ? this.plansService.watchWorkoutCompletions(user.uid).pipe(catchError(() => of([])))
+      ? this.plansService.watchWorkoutCompletions(user.uid).pipe(
+        startWith([] as TrainingWorkoutCompletionV1[]),
+        catchError(() => of([])),
+      )
       : of([])),
   ), { initialValue: [] as TrainingWorkoutCompletionV1[] });
   readonly completedWorkoutIds = computed(() => this.completions().map(completion => completion.workoutId));

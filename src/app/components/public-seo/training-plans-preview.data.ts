@@ -1,39 +1,35 @@
 import { ActivityTypes } from '@sports-alliance/sports-lib';
 import {
+  addDaysToTrainingLocalDate,
   parseScheduledWorkoutV1,
   parseTrainingPlanV1,
   type ScheduledWorkoutV1,
   type TrainingPlanV1,
 } from '@shared/training-plans';
 
-export const TRAINING_PLANS_PREVIEW_TODAY = '2026-10-06';
-export const TRAINING_PLANS_PREVIEW_EMPTY_DATE = '2026-10-08';
+export interface TrainingPlansPreviewFixture {
+  plan: TrainingPlanV1;
+  workouts: readonly ScheduledWorkoutV1[];
+  today: string;
+  emptyDate: string;
+  completedWorkoutIds: readonly string[];
+}
 
-const FIXTURE_TIMESTAMP_MS = Date.UTC(2026, 8, 1, 12);
+interface PreviewWorkoutTemplate {
+  id: string;
+  dayOffset: number;
+  lifecycle: ScheduledWorkoutV1['lifecycle'];
+  title: string;
+  structure: ScheduledWorkoutV1['structure'];
+  revision?: number;
+}
 
-export const TRAINING_PLANS_PREVIEW_PLAN: TrainingPlanV1 = parseTrainingPlanV1({
-  schemaVersion: 1,
-  id: 'autumn-build',
-  name: 'Autumn run + ride build',
-  color: 'purple',
-  lifecycle: 'active',
-  startLocalDate: '2026-09-21',
-  endLocalDate: '2026-11-08',
-  revision: 8,
-  lastCheckpointRevision: 1,
-  workoutCount: 8,
-  createdAtMs: FIXTURE_TIMESTAMP_MS,
-  updatedAtMs: FIXTURE_TIMESTAMP_MS,
-});
+const PLAN_ID = 'current-run-ride-build';
+const COMPLETED_WORKOUT_ID = 'threshold-bike-blocks';
 
-const WORKOUT_FIXTURES: readonly unknown[] = [
+const WORKOUT_TEMPLATES: readonly PreviewWorkoutTemplate[] = [
   {
-    schemaVersion: 1,
-    id: 'easy-aerobic-run',
-    planId: TRAINING_PLANS_PREVIEW_PLAN.id,
-    localDate: '2026-09-22',
-    lifecycle: 'planned',
-    title: 'Easy aerobic run',
+    id: 'easy-aerobic-run', dayOffset: -14, lifecycle: 'planned', title: 'Easy aerobic run',
     structure: {
       version: 1,
       sport: ActivityTypes.Running,
@@ -46,17 +42,9 @@ const WORKOUT_FIXTURES: readonly unknown[] = [
         { kind: 'step', id: 'cooldown', purpose: 'cooldown', ending: { kind: 'time', seconds: 300 }, targets: [] },
       ],
     },
-    revision: 1,
-    createdAtMs: FIXTURE_TIMESTAMP_MS,
-    updatedAtMs: FIXTURE_TIMESTAMP_MS,
   },
   {
-    schemaVersion: 1,
-    id: 'steady-endurance-ride',
-    planId: TRAINING_PLANS_PREVIEW_PLAN.id,
-    localDate: '2026-09-26',
-    lifecycle: 'planned',
-    title: 'Steady endurance ride',
+    id: 'steady-endurance-ride', dayOffset: -10, lifecycle: 'planned', title: 'Steady endurance ride',
     structure: {
       version: 1,
       sport: ActivityTypes.Cycling,
@@ -64,17 +52,9 @@ const WORKOUT_FIXTURES: readonly unknown[] = [
         { kind: 'step', id: 'ride', purpose: 'work', ending: { kind: 'distance', meters: 42000 }, targets: [] },
       ],
     },
-    revision: 1,
-    createdAtMs: FIXTURE_TIMESTAMP_MS,
-    updatedAtMs: FIXTURE_TIMESTAMP_MS,
   },
   {
-    schemaVersion: 1,
-    id: 'track-pace-set',
-    planId: TRAINING_PLANS_PREVIEW_PLAN.id,
-    localDate: '2026-09-29',
-    lifecycle: 'planned',
-    title: 'Track pace set',
+    id: 'track-pace-set', dayOffset: -7, lifecycle: 'planned', title: 'Track pace set',
     structure: {
       version: 1,
       sport: ActivityTypes.Running,
@@ -94,17 +74,9 @@ const WORKOUT_FIXTURES: readonly unknown[] = [
         },
       ],
     },
-    revision: 1,
-    createdAtMs: FIXTURE_TIMESTAMP_MS,
-    updatedAtMs: FIXTURE_TIMESTAMP_MS,
   },
   {
-    schemaVersion: 1,
-    id: 'long-progression-run',
-    planId: TRAINING_PLANS_PREVIEW_PLAN.id,
-    localDate: '2026-10-03',
-    lifecycle: 'skipped',
-    title: 'Long progression run',
+    id: 'long-progression-run', dayOffset: -3, lifecycle: 'skipped', title: 'Long progression run', revision: 2,
     structure: {
       version: 1,
       sport: ActivityTypes.TrailRunning,
@@ -112,17 +84,9 @@ const WORKOUT_FIXTURES: readonly unknown[] = [
         { kind: 'step', id: 'long-run', purpose: 'work', ending: { kind: 'time', seconds: 5400 }, targets: [] },
       ],
     },
-    revision: 2,
-    createdAtMs: FIXTURE_TIMESTAMP_MS,
-    updatedAtMs: FIXTURE_TIMESTAMP_MS,
   },
   {
-    schemaVersion: 1,
-    id: 'threshold-bike-blocks',
-    planId: TRAINING_PLANS_PREVIEW_PLAN.id,
-    localDate: TRAINING_PLANS_PREVIEW_TODAY,
-    lifecycle: 'planned',
-    title: 'Threshold bike blocks',
+    id: COMPLETED_WORKOUT_ID, dayOffset: 0, lifecycle: 'planned', title: 'Threshold bike blocks',
     structure: {
       version: 1,
       sport: ActivityTypes.IndoorCycling,
@@ -139,17 +103,9 @@ const WORKOUT_FIXTURES: readonly unknown[] = [
         },
       ],
     },
-    revision: 1,
-    createdAtMs: FIXTURE_TIMESTAMP_MS,
-    updatedAtMs: FIXTURE_TIMESTAMP_MS,
   },
   {
-    schemaVersion: 1,
-    id: 'easy-recovery-run',
-    planId: TRAINING_PLANS_PREVIEW_PLAN.id,
-    localDate: '2026-10-13',
-    lifecycle: 'planned',
-    title: 'Easy recovery run',
+    id: 'easy-recovery-run', dayOffset: 7, lifecycle: 'planned', title: 'Easy recovery run',
     structure: {
       version: 1,
       sport: ActivityTypes.Treadmill,
@@ -160,17 +116,9 @@ const WORKOUT_FIXTURES: readonly unknown[] = [
         },
       ],
     },
-    revision: 1,
-    createdAtMs: FIXTURE_TIMESTAMP_MS,
-    updatedAtMs: FIXTURE_TIMESTAMP_MS,
   },
   {
-    schemaVersion: 1,
-    id: 'rolling-hills-ride',
-    planId: TRAINING_PLANS_PREVIEW_PLAN.id,
-    localDate: '2026-10-24',
-    lifecycle: 'planned',
-    title: 'Rolling hills ride',
+    id: 'rolling-hills-ride', dayOffset: 18, lifecycle: 'planned', title: 'Rolling hills ride',
     structure: {
       version: 1,
       sport: ActivityTypes.MountainBiking,
@@ -178,17 +126,9 @@ const WORKOUT_FIXTURES: readonly unknown[] = [
         { kind: 'step', id: 'hills', purpose: 'work', ending: { kind: 'distance', meters: 32000 }, targets: [] },
       ],
     },
-    revision: 1,
-    createdAtMs: FIXTURE_TIMESTAMP_MS,
-    updatedAtMs: FIXTURE_TIMESTAMP_MS,
   },
   {
-    schemaVersion: 1,
-    id: 'november-steady-run',
-    planId: TRAINING_PLANS_PREVIEW_PLAN.id,
-    localDate: '2026-11-03',
-    lifecycle: 'planned',
-    title: 'November steady run',
+    id: 'steady-10k-run', dayOffset: 28, lifecycle: 'planned', title: 'Steady 10K run',
     structure: {
       version: 1,
       sport: ActivityTypes.Running,
@@ -202,11 +142,56 @@ const WORKOUT_FIXTURES: readonly unknown[] = [
         },
       ],
     },
-    revision: 1,
-    createdAtMs: FIXTURE_TIMESTAMP_MS,
-    updatedAtMs: FIXTURE_TIMESTAMP_MS,
   },
 ];
 
-export const TRAINING_PLANS_PREVIEW_WORKOUTS: readonly ScheduledWorkoutV1[] = WORKOUT_FIXTURES
-  .map(workout => parseScheduledWorkoutV1(workout));
+/**
+ * Builds a fixed synthetic workout recipe around one local calendar date. Capturing the date once keeps a rendered
+ * preview internally stable while making the selected month relevant whenever a visitor opens the page.
+ */
+export function buildTrainingPlansPreviewFixture(referenceDate = new Date()): TrainingPlansPreviewFixture {
+  const today = formatLocalDate(referenceDate);
+  const timestampMs = Date.UTC(referenceDate.getFullYear(), referenceDate.getMonth(), referenceDate.getDate(), 12);
+  const plan = parseTrainingPlanV1({
+    schemaVersion: 1,
+    id: PLAN_ID,
+    name: 'Run + ride build',
+    color: 'purple',
+    lifecycle: 'active',
+    startLocalDate: addDaysToTrainingLocalDate(today, -16),
+    endLocalDate: addDaysToTrainingLocalDate(today, 35),
+    revision: 8,
+    lastCheckpointRevision: 1,
+    workoutCount: WORKOUT_TEMPLATES.length,
+    createdAtMs: timestampMs,
+    updatedAtMs: timestampMs,
+  });
+  const workouts = WORKOUT_TEMPLATES.map(template => parseScheduledWorkoutV1({
+    schemaVersion: 1,
+    id: template.id,
+    planId: plan.id,
+    localDate: addDaysToTrainingLocalDate(today, template.dayOffset),
+    lifecycle: template.lifecycle,
+    title: template.title,
+    structure: template.structure,
+    revision: template.revision ?? 1,
+    createdAtMs: timestampMs,
+    updatedAtMs: timestampMs,
+  }));
+  return {
+    plan,
+    workouts,
+    today,
+    emptyDate: addDaysToTrainingLocalDate(today, 2),
+    completedWorkoutIds: [COMPLETED_WORKOUT_ID],
+  };
+}
+
+function formatLocalDate(value: Date): string {
+  if (!Number.isFinite(value.getTime())) throw new TypeError('Expected a valid preview reference date.');
+  return [
+    `${value.getFullYear()}`.padStart(4, '0'),
+    `${value.getMonth() + 1}`.padStart(2, '0'),
+    `${value.getDate()}`.padStart(2, '0'),
+  ].join('-');
+}

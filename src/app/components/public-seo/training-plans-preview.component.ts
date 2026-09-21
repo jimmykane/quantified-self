@@ -7,15 +7,14 @@ import { resolveActivityTypeMaterialIcon } from '../../helpers/activity-type-pre
 import { PlanScheduleCalendarComponent } from '../plans/plan-schedule-calendar.component';
 import { getDateTimeFormatter } from '../../helpers/date-time-format.helper';
 import {
-  TRAINING_PLANS_PREVIEW_PLAN,
-  TRAINING_PLANS_PREVIEW_TODAY,
-  TRAINING_PLANS_PREVIEW_WORKOUTS,
+  buildTrainingPlansPreviewFixture,
 } from './training-plans-preview.data';
 
 interface TrainingPlansPreviewWorkoutRow {
   workout: ScheduledWorkoutV1;
   sport: string;
   icon: string;
+  completed: boolean;
   summary: readonly string[];
 }
 
@@ -30,13 +29,16 @@ interface TrainingPlansPreviewWorkoutRow {
 })
 export class TrainingPlansPreviewComponent {
   private readonly locale = inject(LOCALE_ID);
-  readonly plan = TRAINING_PLANS_PREVIEW_PLAN;
-  readonly workouts = TRAINING_PLANS_PREVIEW_WORKOUTS;
-  readonly today = TRAINING_PLANS_PREVIEW_TODAY;
+  readonly preview = buildTrainingPlansPreviewFixture();
+  readonly plan = this.preview.plan;
+  readonly workouts = this.preview.workouts;
+  readonly today = this.preview.today;
+  readonly completedWorkoutIds = this.preview.completedWorkoutIds;
+  private readonly completedWorkoutIdSet = new Set(this.completedWorkoutIds);
   readonly appearance = trainingPlanAppearance(this.plan);
-  readonly selectedDate = signal(TRAINING_PLANS_PREVIEW_TODAY);
+  readonly selectedDate = signal(this.today);
   readonly selectedWorkoutId = signal<string | null>(
-    this.workouts.find(workout => workout.localDate === TRAINING_PLANS_PREVIEW_TODAY)?.id ?? null,
+    this.workouts.find(workout => workout.localDate === this.today)?.id ?? null,
   );
   readonly dateRangeLabel = `${this.formatDate(this.plan.startLocalDate, { day: 'numeric', month: 'short' })}–${this.formatDate(this.plan.endLocalDate, { day: 'numeric', month: 'short' })}`;
   readonly selectedDateLabel = computed(() => this.formatDate(this.selectedDate(), {
@@ -48,6 +50,7 @@ export class TrainingPlansPreviewComponent {
       workout,
       sport: this.formatSport(workout.structure.sport),
       icon: resolveActivityTypeMaterialIcon(workout.structure.sport),
+      completed: this.completedWorkoutIdSet.has(workout.id),
       summary: formatManualWorkoutStructure(workout.structure, null, this.locale),
     })));
 

@@ -201,7 +201,7 @@ describe('PlansWorkspaceComponent', () => {
     }]));
     const fixture = await renderPlans();
     expect(fixture.nativeElement.querySelector('.workout-completion-state > span')?.textContent.replace(/\s+/g, ' ').trim())
-      .toBe('Activity linked · late');
+      .toBe('Completed · activity linked · late');
     expect(schedule.workouts[0].lifecycle).toBe('planned');
     expect(mutate).not.toHaveBeenCalled();
   });
