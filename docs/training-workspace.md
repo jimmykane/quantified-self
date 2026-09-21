@@ -272,8 +272,8 @@ Form history and canonical parent/activity join.
 - Route: `src/app/app.routing.module.ts`
 - Public SEO overview: `/features/training-analysis` via `src/app/components/public-seo/public-seo-pages.content.ts`
 - Public Training Plans overview: `/features/training-plans` via `src/app/components/public-seo/public-seo-pages.content.ts`
-- Compact Training Plans discovery content and metadata: `src/app/components/public-seo/training-plans-feature.content.ts`
-- Long-form Training Plans page content: `src/app/components/public-seo/training-plans-page.content.ts`
+- Compact Training Plans homepage content: `src/app/components/public-seo/training-plans-home.content.ts`
+- Route-only Training Plans metadata and long-form content: `src/app/components/public-seo/training-plans-page.content.ts`
 - Lazy routing module: `src/app/training.routing.module.ts`
 - Angular module: `src/app/modules/training.module.ts`
 - Workspace controller: `src/app/components/training/training-workspace.component.ts`
@@ -360,10 +360,10 @@ has an SSR-stable placeholder. It may add presentation-only calendar inputs with
 inject authentication, Firestore, Functions, delivery services or account state. Planned examples never contribute to
 completed totals or Training analysis.
 
-The homepage and public feature page keep their composition separate. Compact homepage rows and concise SEO metadata
-live in tree-shakeable exports from `training-plans-feature.content.ts`; long-form route-only sections live in
-`training-plans-page.content.ts`. Keep repeated short-form product claims in the feature content model, and keep
-homepage layout, page-only detail, FAQ and launch-boundary sections out of a generic homepage configuration renderer.
+The homepage and public feature page keep their composition separate. Compact homepage rows live in
+`training-plans-home.content.ts`; SEO metadata and long-form route-only sections live in
+`training-plans-page.content.ts`. Keep these modules physically separate so route-only copy cannot enter homepage
+startup, and keep page-only detail, FAQ and launch-boundary sections out of a generic homepage configuration renderer.
 
 This discovery surface has no MCP wire impact: it adds no tool, schema, field, scope, consent, projection, Assistant
 authority, provider action or bundled-skill behavior. It reads canonical frontend types only to validate and render

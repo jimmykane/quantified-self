@@ -6,8 +6,7 @@ import {
 import type { PublicSeoPageKey } from './public-seo-pages.paths';
 import type { PublicFeaturePreviewKey } from './public-feature-preview.types';
 import { HEALTH_FEATURE_CONTENT } from './health-feature.content';
-import { TRAINING_PLANS_SEO_CONTENT } from './training-plans-feature.content';
-import { TRAINING_PLANS_PAGE_SECTIONS } from './training-plans-page.content';
+import { TRAINING_PLANS_PAGE_SECTIONS, TRAINING_PLANS_SEO_CONTENT } from './training-plans-page.content';
 
 export {
   PUBLIC_FEATURE_PATHS,

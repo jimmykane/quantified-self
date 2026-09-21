@@ -1,4 +1,20 @@
-import { TRAINING_PLANS_PREVIEW_KEY } from './training-plans-feature.content';
+import type { PublicFeaturePreviewKey } from './public-feature-preview.types';
+
+/** Concise metadata shared by the public Training Plans route and its structured data. */
+export const TRAINING_PLANS_SEO_CONTENT = {
+  title: 'Training Plans for Running and Cycling',
+  description: 'Create free running and cycling training plans or standalone structured workouts, schedule them by date, and keep them separate from completed activities.',
+  h1: 'Plan running and cycling workouts your way',
+  intro: 'Create a dated plan or start with one standalone workout. Manual planning is free, works without a provider connection, and keeps what you intend to do separate from the activities you already completed.',
+  featureList: [
+    'Free manual running and cycling training plans',
+    'Standalone structured workouts without a plan',
+    'Dated plan calendars with colors, history, and shifting',
+    'Planned-workout overlays kept separate from completed activity totals',
+  ],
+  socialImageAlt: 'Synthetic purple running and cycling training plan calendar with structured workout examples',
+  freeOfferDescription: 'Manual training plans and standalone structured workouts',
+} as const;
 
 /** Long-form Training Plans sections loaded with the public feature-page content. */
 export const TRAINING_PLANS_PAGE_SECTIONS = [
@@ -23,7 +39,7 @@ export const TRAINING_PLANS_PAGE_SECTIONS = [
         copy: 'Give each plan a color, select any date in its range, keep skipped workouts visible, shift the plan dates, and use revision history when a change needs to be restored.',
       },
     ],
-    preview: TRAINING_PLANS_PREVIEW_KEY,
+    preview: 'training-plans' satisfies PublicFeaturePreviewKey,
   },
   {
     eyebrow: 'Structured Workouts',
