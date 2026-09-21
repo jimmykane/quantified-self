@@ -1,10 +1,11 @@
 import { GARMIN_HEALTH_SUMMARY_TYPES, type GarminHealthSummaryType } from '../garmin/health-summary-types';
 import { createHash } from 'node:crypto';
 import { ServiceNames } from '@sports-alliance/sports-lib';
-import { connectionHistoryRange, historyCapabilities, type HistoryCapability, type ConnectionHistoryStepStatus, type ConnectionHistoryStatusProjection } from '../../../shared/connection-history';
+import { connectionHistoryRange, historyCapabilities, type ConnectionHistoryRangePreset, type HistoryCapability, type ConnectionHistoryStepStatus, type ConnectionHistoryStatusProjection } from '../../../shared/connection-history';
 
 export const CONNECTION_HISTORY_COLLECTION = 'connectionHistoryImports';
 export const OAUTH_HISTORY_FIELD = 'oauthImportRecentHistory';
+export const OAUTH_HISTORY_RANGE_FIELD = 'oauthImportHistoryRange';
 export interface HistoryStep extends ConnectionHistoryStepStatus {
   capability: HistoryCapability;
   nextStartMs: number;
@@ -23,6 +24,7 @@ export interface ConnectionHistoryRun {
   rootPath: string;
   credentialGeneration: string;
   connectionGeneration: string;
+  rangePreset: ConnectionHistoryRangePreset;
   startMs: number;
   endMs: number;
   dateCreated: number;
@@ -39,6 +41,7 @@ export interface ConnectionHistoryRun {
 }
 export interface HistoryConnectionContext {
   requested: boolean;
+  rangePreset: ConnectionHistoryRangePreset;
   flowGeneration: string;
   tokenPath: string;
   rootPath: string;
@@ -52,11 +55,11 @@ export function historyRunId(userID: string, serviceName: ServiceNames, flowGene
   return createHash('sha256').update(JSON.stringify([userID, serviceName, flowGeneration])).digest('hex');
 }
 export function createHistoryRun(userID: string, serviceName: ServiceNames, context: HistoryConnectionContext, connectionGeneration: string, nowMs: number): ConnectionHistoryRun {
-  const range = connectionHistoryRange(nowMs);
+  const range = connectionHistoryRange(nowMs, serviceName, context.rangePreset);
   return {
     id: historyRunId(userID, serviceName, context.flowGeneration), userID, serviceName,
     providerUserId: context.providerUserId, tokenPath: context.tokenPath, rootPath: context.rootPath,
-    credentialGeneration: context.credentialGeneration, connectionGeneration, ...range,
+    credentialGeneration: context.credentialGeneration, connectionGeneration, rangePreset: context.rangePreset, ...range,
     dateCreated: nowMs, updatedAtMs: nowMs, nextAttemptAt: nowMs, processed: false, revision: 0,
     ...(serviceName === ServiceNames.GarminAPI ? { garminHealthSummaryTypes: [...GARMIN_HEALTH_SUMMARY_TYPES] } : {}),
     steps: historyCapabilities(serviceName).map(capability => ({
@@ -67,7 +70,7 @@ export function createHistoryRun(userID: string, serviceName: ServiceNames, cont
 }
 export function historyProjection(run: ConnectionHistoryRun): ConnectionHistoryStatusProjection {
   return {
-    runId: run.id, startMs: run.startMs, endMs: run.endMs, updatedAtMs: run.updatedAtMs,
+    runId: run.id, rangePreset: run.rangePreset, startMs: run.startMs, endMs: run.endMs, updatedAtMs: run.updatedAtMs,
     active: !run.processed, canRetry: run.processed && run.steps.some(step => step.status === 'failed'),
     steps: run.steps.map(step => ({ id: step.id, resources: step.resources, status: step.status, count: step.count,
       ...(step.message ? { message: step.message } : {}), ...(step.nextAllowedAtMs ? { nextAllowedAtMs: step.nextAllowedAtMs } : {}) })),

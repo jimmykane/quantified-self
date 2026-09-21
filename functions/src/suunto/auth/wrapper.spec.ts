@@ -118,7 +118,7 @@ describe('Suunto Auth Wrapper', () => {
     describe('getSuuntoAPIAuthRequestTokenRedirectURI', () => {
         it('should return redirect URI for pro user', async () => {
             const request = createMockRequest({
-                data: { redirectUri: 'https://app.com/callback' }
+                data: { redirectUri: 'https://app.com/callback', importRecentHistory: true, importHistoryRange: 'maximum' }
             });
 
             const result = await getSuuntoAPIAuthRequestTokenRedirectURI(request as any);
@@ -128,7 +128,8 @@ describe('Suunto Auth Wrapper', () => {
                 'testUserID',
                 ServiceNames.SuuntoApp,
                 'https://app.com/callback',
-                undefined
+                true,
+                'maximum'
             );
             expect(result).toEqual({ redirect_uri: 'https://mock-redirect.com' });
         });

@@ -4,7 +4,7 @@ import { ServiceNames } from '@sports-alliance/sports-lib';
 import { createHistoryRun } from './model';
 import { advanceHistoryRun, type HistoryAdvanceDependencies } from './advance';
 const now = Date.parse('2026-09-14T12:00:00Z');
-function run() { return createHistoryRun('owner', ServiceNames.WahooAPI, { requested: true, providerUserId: 'account', tokenPath: 'tokens/account', rootPath: 'tokens', credentialGeneration: 'credential', flowGeneration: 'flow' }, 'connection', now); }
+function run() { return createHistoryRun('owner', ServiceNames.WahooAPI, { requested: true, rangePreset: '30_days', providerUserId: 'account', tokenPath: 'tokens/account', rootPath: 'tokens', credentialGeneration: 'credential', flowGeneration: 'flow' }, 'connection', now); }
 function dependencies(): HistoryAdvanceDependencies { return { execute: vi.fn(async () => ({ count: 1, nextStartMs: now + 1000, nextPage: 1, childPaths: [] })), observe: vi.fn(async () => 'processed'), classify: () => ({ kind: 'retry', message: 'Please retry.' }) }; }
 describe('history continuation', () => {
   it('finishes an empty or fully persisted window and never runs it again', async () => {

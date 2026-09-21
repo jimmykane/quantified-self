@@ -88,6 +88,8 @@ describe('COROS Auth Wrapper', () => {
 
     describe('getCOROSAPIAuthRequestTokenRedirectURI', () => {
         it('should return redirect URI for pro user', async () => {
+            data.importRecentHistory = true;
+            data.importHistoryRange = 'maximum';
             const result = await getCOROSAPIAuthRequestTokenRedirectURI(data, context);
 
             expect(serviceOAuthAccess.hasServiceOAuthConnectAccess).toHaveBeenCalledWith('testUserID', SERVICE_NAME);
@@ -95,7 +97,8 @@ describe('COROS Auth Wrapper', () => {
                 'testUserID',
                 SERVICE_NAME,
                 'https://app.com/callback',
-                undefined
+                true,
+                'maximum'
             );
             expect(result).toEqual({ redirect_uri: 'https://mock-redirect.com' });
         });

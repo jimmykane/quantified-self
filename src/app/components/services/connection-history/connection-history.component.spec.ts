@@ -14,9 +14,23 @@ describe('recent history option', () => {
     const fixture = TestBed.createComponent(ConnectionHistoryOptionComponent); fixture.detectChanges();
     expect(fixture.nativeElement.querySelector('input').checked).toBe(true);
     expect(fixture.nativeElement.textContent).toContain('activities, Sleep, and Health');
+    expect(fixture.componentInstance.range()).toBe('30_days');
     fixture.componentRef.setInput('service', ServiceNames.WahooAPI); fixture.detectChanges();
     expect(fixture.nativeElement.textContent).toContain('Includes activities where supported');
     expect(fixture.nativeElement.textContent).not.toContain('Sleep'); expect(haptics.selection).not.toHaveBeenCalled();
+  });
+  it('offers provider-specific maximums and emits an accessible range choice', () => {
+    const fixture = TestBed.createComponent(ConnectionHistoryOptionComponent); const changed = vi.fn();
+    fixture.componentInstance.rangeChange.subscribe(changed); fixture.detectChanges();
+    expect(fixture.componentInstance.rangeOptions().at(-1)?.label).toBe('Maximum available (5 years)');
+    fixture.componentInstance.changeRange('maximum');
+    expect(changed).toHaveBeenCalledWith('maximum');
+    fixture.componentRef.setInput('service', ServiceNames.COROSAPI); fixture.detectChanges();
+    expect(fixture.componentInstance.rangeOptions().map(option => option.label)).toEqual([
+      '30 days', '60 days', 'Maximum available (3 months)',
+    ]);
+    fixture.componentRef.setInput('service', ServiceNames.WahooAPI); fixture.detectChanges();
+    expect(fixture.componentInstance.rangeOptions().at(-1)?.label).toBe('All available history');
   });
   it('emits a choice once and preserves it while pending', () => {
     const fixture = TestBed.createComponent(ConnectionHistoryOptionComponent); const changed = vi.fn();
@@ -29,7 +43,7 @@ describe('recent history option', () => {
   });
 });
 describe('recent history status', () => {
-  const status = { runId: 'opaque', startMs: 1, endMs: 2, updatedAtMs: 3, active: false, canRetry: true,
+  const status = { runId: 'opaque', rangePreset: '30_days' as const, startMs: 1, endMs: 2, updatedAtMs: 3, active: false, canRetry: true,
     steps: [{ id: 'activities', resources: ['activities'], status: 'failed', count: 1 }] };
   it('restores durable status and never equates Garmin submission with delivery', () => {
     const fixture = TestBed.createComponent(ConnectionHistoryStatusComponent);

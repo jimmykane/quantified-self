@@ -17,12 +17,14 @@ import { hasServiceOAuthConnectAccess } from '../../service-oauth-access';
 import { extractRefreshFailureDetails } from '../../service-auth-lifecycle';
 import { FUNCTION_SECRET_BINDINGS } from '../../secrets';
 import type { ServiceOAuthCompletionResult } from '../../../../shared/service-connection';
+import type { ConnectionHistoryRangePreset } from '../../../../shared/connection-history';
 
 const SERVICE_NAME = ServiceNames.SuuntoApp;
 
 
 interface GetAuthRedirectURIRequest {
   importRecentHistory?: boolean;
+  importHistoryRange?: ConnectionHistoryRangePreset;
   redirectUri: string;
 }
 
@@ -60,7 +62,13 @@ export const getSuuntoAPIAuthRequestTokenRedirectURI = onCall({
 
   try {
     return {
-      redirect_uri: await getServiceOAuth2CodeRedirectAndSaveStateToUser(userID, SERVICE_NAME, redirectUri, request.data?.importRecentHistory),
+      redirect_uri: await getServiceOAuth2CodeRedirectAndSaveStateToUser(
+        userID,
+        SERVICE_NAME,
+        redirectUri,
+        request.data?.importRecentHistory,
+        request.data?.importHistoryRange,
+      ),
     };
   } catch (error) {
     if (isServiceDisconnectInProgressError(error)) {

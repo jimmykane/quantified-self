@@ -156,6 +156,7 @@ describe('service OAuth root reconciliation', () => {
       state: hoisted.fieldDelete,
       codeVerifier: hoisted.fieldDelete,
       oauthImportRecentHistory: hoisted.fieldDelete,
+      oauthImportHistoryRange: hoisted.fieldDelete,
       oauthFlowGeneration: hoisted.fieldDelete,
       oauthFlowCreatedAt: hoisted.fieldDelete,
       oauthFlowExpiresAt: hoisted.fieldDelete,
@@ -186,6 +187,7 @@ describe('service OAuth root reconciliation', () => {
       state: hoisted.fieldDelete,
       codeVerifier: hoisted.fieldDelete,
       oauthImportRecentHistory: hoisted.fieldDelete,
+      oauthImportHistoryRange: hoisted.fieldDelete,
       oauthFlowGeneration: hoisted.fieldDelete,
       oauthFlowCreatedAt: hoisted.fieldDelete,
       oauthFlowExpiresAt: hoisted.fieldDelete,
@@ -242,6 +244,7 @@ describe('service OAuth root reconciliation', () => {
       state: hoisted.fieldDelete,
       codeVerifier: hoisted.fieldDelete,
       oauthImportRecentHistory: hoisted.fieldDelete,
+      oauthImportHistoryRange: hoisted.fieldDelete,
     });
     expect(harness.transaction.delete).not.toHaveBeenCalled();
   });
@@ -279,6 +282,7 @@ describe('service OAuth root reconciliation', () => {
       state: hoisted.fieldDelete,
       codeVerifier: hoisted.fieldDelete,
       oauthImportRecentHistory: hoisted.fieldDelete,
+      oauthImportHistoryRange: hoisted.fieldDelete,
     });
     expect(harness.transaction.delete).not.toHaveBeenCalled();
   });
@@ -311,6 +315,7 @@ describe('service OAuth root reconciliation', () => {
       state: hoisted.fieldDelete,
       codeVerifier: hoisted.fieldDelete,
       oauthImportRecentHistory: hoisted.fieldDelete,
+      oauthImportHistoryRange: hoisted.fieldDelete,
     });
     expect(harness.transaction.delete).not.toHaveBeenCalled();
   });

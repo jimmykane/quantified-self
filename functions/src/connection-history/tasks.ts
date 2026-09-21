@@ -62,7 +62,7 @@ export function classifyHistoryFailure(error: unknown) {
   if (isHistoryWindowTooLarge(error)) return { kind: 'split' as const, message: 'This history window is too large. Trying a smaller range.' };
   if (error instanceof HistoryUnavailableError) return { kind: 'skip' as const, message: error.message };
   if (error instanceof HistorySkippedError) return { kind: 'skip' as const, message: error.message, nextAllowedAtMs: error.nextAllowedAtMs };
-  if (error instanceof HistoryLifecycleChangedError) return { kind: 'skip' as const, message: 'This connection changed. Connect again to import recent history.' };
+  if (error instanceof HistoryLifecycleChangedError) return { kind: 'skip' as const, message: 'This connection changed. Connect again to import the selected history.' };
   const detail = error as { code?: string; statusCode?: number; retryAt?: number; details?: { retryAfterSeconds?: number; retryAt?: number }; response?: { headers?: Record<string, string> } };
   if ((error instanceof Error && /missing required .*permissions|connected .* token is required/i.test(error.message)) || ['permission-denied', 'unauthenticated'].includes(detail?.code || '') || [401, 403].includes(detail?.statusCode || 0)) {
     return { kind: 'skip' as const, message: 'Permission is missing or authorization expired. Reconnect to enable this history.' };
@@ -151,7 +151,7 @@ export async function processConnectionHistoryRun(id: string, revision: string):
   } catch (error) {
     if (!(error instanceof HistoryLifecycleChangedError)) throw error;
     for (const step of run.steps.filter(step => !step.done)) {
-      step.done = true; step.status = 'skipped'; step.message = 'The connection or Pro access changed. Reconnect to import recent history.';
+      step.done = true; step.status = 'skipped'; step.message = 'The connection or Pro access changed. Reconnect to import the selected history.';
     }
     run.processed = true;
   }

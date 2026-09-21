@@ -121,6 +121,7 @@ import {
   type ServiceDisconnectRetryDetails,
   type ServiceConnectionAccountProjection,
 } from '@shared/service-connection';
+import { CONNECTION_HISTORY_DEFAULT_RANGE, type ConnectionHistoryRangePreset } from '@shared/connection-history';
 import {
   getUserLegalAgreementsPath,
   OPTIONAL_USER_LEGAL_CONSENT_FIELDS,
@@ -1598,6 +1599,7 @@ export class AppUserService implements OnDestroy {
   async getCurrentUserServiceTokenAndRedirectURI(
     serviceName: ServiceNames,
     importRecentHistory = false,
+    importHistoryRange: ConnectionHistoryRangePreset = CONNECTION_HISTORY_DEFAULT_RANGE,
     isCurrentView?: () => boolean,
   ): Promise<{ redirect_uri: string }> {
     const canExecute = this.captureServiceConnectionAccount(isCurrentView);
@@ -1623,9 +1625,9 @@ export class AppUserService implements OnDestroy {
     }
 
     const result = await this.functionsService.call<
-      { redirectUri: string; importRecentHistory: boolean },
+      { redirectUri: string; importRecentHistory: boolean; importHistoryRange: ConnectionHistoryRangePreset },
       { redirect_uri: string }
-    >(functionName, { redirectUri, importRecentHistory }, { canExecute });
+    >(functionName, { redirectUri, importRecentHistory, importHistoryRange }, { canExecute });
     return result.data;
   }
 

@@ -7,7 +7,6 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { AppHapticsService } from '../../services/app.haptics.service';
 import { AppAnalyticsService } from '../../services/app.analytics.service';
 import { AppUserService } from '../../services/app.user.service';
-import { AppWindowService } from '../../services/app.window.service';
 import { LoggerService } from '../../services/logger.service';
 import { WahooRouteAccessReconnectDialogComponent } from './wahoo-route-access-reconnect-dialog.component';
 
@@ -16,7 +15,6 @@ describe('WahooRouteAccessReconnectDialogComponent', () => {
   let fixture: ComponentFixture<WahooRouteAccessReconnectDialogComponent>;
 
   const routerMock = { navigate: vi.fn().mockResolvedValue(true) };
-  const windowRef = { location: { href: '' } };
   const userServiceMock = {
     user: vi.fn(() => ({ uid: 'fixture-owner' })),
     getCurrentUserServiceTokenAndRedirectURI: vi.fn(),
@@ -30,11 +28,8 @@ describe('WahooRouteAccessReconnectDialogComponent', () => {
   beforeEach(async () => {
     vi.clearAllMocks();
     userServiceMock.user.mockReturnValue({ uid: 'fixture-owner' });
-    windowRef.location.href = '';
     dialogRefMock.getState.mockReturnValue(MatDialogState.OPEN);
-    routerMock.navigate.mockResolvedValue({
-      redirect_uri: 'https://wahoo.example/authorize',
-    });
+    routerMock.navigate.mockResolvedValue(true);
 
     await TestBed.configureTestingModule({
       imports: [WahooRouteAccessReconnectDialogComponent],
@@ -43,7 +38,6 @@ describe('WahooRouteAccessReconnectDialogComponent', () => {
         { provide: MatDialogRef, useValue: dialogRefMock },
         { provide: AppHapticsService, useValue: hapticsMock },
         { provide: AppUserService, useValue: userServiceMock },
-        { provide: AppWindowService, useValue: { windowRef } },
         { provide: AppAnalyticsService, useValue: analyticsServiceMock },
         { provide: MatSnackBar, useValue: snackBarMock },
         { provide: LoggerService, useValue: loggerMock },
@@ -71,9 +65,10 @@ describe('WahooRouteAccessReconnectDialogComponent', () => {
     fixture.destroy();
     TestBed.resetTestingModule();
     await TestBed.configureTestingModule({ imports: [WahooRouteAccessReconnectDialogComponent], providers: [
+      { provide: Router, useValue: routerMock },
       { provide: MAT_DIALOG_DATA, useValue: { purpose: 'training' } }, { provide: MatDialogRef, useValue: dialogRefMock },
       { provide: AppHapticsService, useValue: hapticsMock }, { provide: AppUserService, useValue: userServiceMock },
-      { provide: AppWindowService, useValue: { windowRef } }, { provide: AppAnalyticsService, useValue: analyticsServiceMock },
+      { provide: AppAnalyticsService, useValue: analyticsServiceMock },
       { provide: MatSnackBar, useValue: snackBarMock }, { provide: LoggerService, useValue: loggerMock },
     ] }).compileComponents();
     fixture = TestBed.createComponent(WahooRouteAccessReconnectDialogComponent); component = fixture.componentInstance; fixture.detectChanges();
@@ -84,13 +79,13 @@ describe('WahooRouteAccessReconnectDialogComponent', () => {
     expect(analyticsServiceMock.logEvent).toHaveBeenCalledWith('service_reconnect_start', expect.objectContaining({ source: 'training_access_dialog' }));
     expect(hapticsMock.selection).toHaveBeenCalledTimes(1);
   });
-  it('does not redirect after the signed-in account changes', async () => {
-    let finish!: (value: { redirect_uri: string }) => void;
-    userServiceMock.getCurrentUserServiceTokenAndRedirectURI.mockReturnValueOnce(new Promise(resolve => { finish = resolve; }));
+  it('does not close the dialog after the signed-in account changes during navigation', async () => {
+    let finish!: (value: boolean) => void;
+    routerMock.navigate.mockReturnValueOnce(new Promise(resolve => { finish = resolve; }));
     const pending = component.reconnect();
     userServiceMock.user.mockReturnValue({ uid: 'different-owner' });
-    finish({ redirect_uri: 'https://wahoo.example/authorize' }); await pending;
-    expect(windowRef.location.href).toBe('');
+    finish(true); await pending;
+    expect(dialogRefMock.close).not.toHaveBeenCalled();
     await component.reconnect(); expect(hapticsMock.selection).toHaveBeenCalledTimes(1);
   });
 
@@ -121,13 +116,13 @@ describe('WahooRouteAccessReconnectDialogComponent', () => {
   });
 
   it('keeps duplicate reconnect attempts silent while opening Wahoo', async () => {
-    let finish!: (value: { redirect_uri: string }) => void;
+    let finish!: (value: boolean) => void;
     routerMock.navigate.mockReturnValueOnce(new Promise(resolve => { finish = resolve; }));
     const reconnecting = component.reconnect();
     await component.reconnect();
     expect(hapticsMock.selection).toHaveBeenCalledTimes(1);
     expect(routerMock.navigate).toHaveBeenCalledTimes(1);
-    finish({ redirect_uri: 'https://wahoo.example/authorize' });
+    finish(true);
     await reconnecting;
   });
 
@@ -135,7 +130,7 @@ describe('WahooRouteAccessReconnectDialogComponent', () => {
     ['success', 'closing'], ['failure', 'closing'],
     ['success', 'destroyed'], ['failure', 'destroyed'],
   ])('discards a late reconnect %s when the dialog is %s', async (outcome, state) => {
-    let finish!: (value: { redirect_uri: string }) => void;
+    let finish!: (value: boolean) => void;
     let fail!: (reason: unknown) => void;
     routerMock.navigate.mockReturnValueOnce(new Promise((resolve, reject) => { finish = resolve; fail = reject; }));
     const reconnecting = component.reconnect();
@@ -145,12 +140,12 @@ describe('WahooRouteAccessReconnectDialogComponent', () => {
       dialogRefMock.getState.mockReturnValue(MatDialogState.CLOSING);
     }
     if (outcome === 'success') {
-      finish({ redirect_uri: 'https://wahoo.example/authorize' });
+      finish(true);
     } else {
       fail(new Error('Network unavailable'));
     }
     await reconnecting;
-    expect(windowRef.location.href).toBe('');
+    expect(dialogRefMock.close).not.toHaveBeenCalled();
     expect(snackBarMock.open).not.toHaveBeenCalled();
     expect(hapticsMock.error).not.toHaveBeenCalled();
     expect(hapticsMock.success).not.toHaveBeenCalled();

@@ -47,7 +47,7 @@ const saved = () => mocks.rows.get(path()) as ConnectionHistoryRun;
 beforeEach(() => {
   mocks.replayFinalCommit = false; vi.restoreAllMocks(); vi.spyOn(Date, 'now').mockReturnValue(now); mocks.rows.clear();
   mocks.pro.mockReset().mockResolvedValue(true); mocks.depth.mockReset().mockResolvedValue(0); mocks.enqueue.mockReset().mockResolvedValue(true); mocks.appCheck.mockReset();
-  run = createHistoryRun('owner', ServiceNames.WahooAPI, { requested: true, flowGeneration: 'flow', tokenPath: 'wahooAPIAccessTokens/owner/tokens/account', rootPath: 'wahooAPIAccessTokens/owner', providerUserId: 'account', credentialGeneration: 'credential' }, 'connection', now);
+  run = createHistoryRun('owner', ServiceNames.WahooAPI, { requested: true, rangePreset: '30_days', flowGeneration: 'flow', tokenPath: 'wahooAPIAccessTokens/owner/tokens/account', rootPath: 'wahooAPIAccessTokens/owner', providerUserId: 'account', credentialGeneration: 'credential' }, 'connection', now);
   mocks.rows.set(path(), run); mocks.rows.set('users/owner', { uid: 'owner' });
   mocks.rows.set(run.rootPath, { activeOAuthCredentialGeneration: 'credential' }); mocks.rows.set(run.tokenPath, { tokenCredentialGeneration: 'credential' });
   mocks.rows.set(`users/owner/meta/${run.serviceName}`, { connectionState: 'connected', connectionStateGeneration: 'connection' });
