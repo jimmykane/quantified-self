@@ -61,7 +61,7 @@ for the full policy, request accounting, privacy, diagnostics and rollout contra
 | Garmin | Separate retained Workout/Schedule GETs, exact account/owner/date association checks. A controlled deletion proved that removing a calendar entry leaves its Workout present and makes the exact retained Schedule ID return 404. | Schedule-only negative classification and repair are enabled after two unchanged observations at least 15 minutes apart. Missing Workout remains inconclusive and cannot trigger recreation; its semantics/replacement recovery remain in #703/#645. |
 | COROS | Unavailable; no documented planned-resource read established. | Delivery support does not enable checking; do not substitute activity polling or blind republishing. |
 | Wahoo | The public #649 adapter independently checks its app-owned Plan, dated Workout and association. | Positive-only retained-ID reads and bounded exact create recovery; empty/partial/unstable inventory and 404 never authorize absence or repair. `workout_token` is not POST idempotency. Production cloud CRUD/readback is proved; Wahoo app, ELEMNT and watch receipt remain provider-managed post-release observations, not claimed delivery evidence. |
-| Suunto | Private #650 adapter keeps positive owned Guide-record reads and resumable inventory internal to exact uncertain-create recovery. User-facing remote visibility checking is unavailable. | A Guide hidden or removed in Suunto can remain visible through the partner API. API presence proves only a retained cloud record, never app/watch visibility; 404/unstable inventory cannot prove deletion. Negative classification and automatic repair remain disabled by #710. |
+| Suunto | The #650 adapter keeps positive owned Guide-record reads and resumable inventory internal to exact uncertain-create recovery. User-facing remote visibility checking is unavailable. | A Guide hidden or removed in Suunto can remain visible through the partner API. API presence proves only a retained cloud record, never app/watch visibility; 404/unstable inventory cannot prove deletion. Negative classification and automatic repair remain disabled by #710. |
 
 Inspection never claims device receipt or routinely overwrites provider edits. Stop sync prevents restoration. Pro,
 readiness, compatibility, exact connection, saved-zone date/completion eligibility and deletion are rechecked before
@@ -257,7 +257,7 @@ tests with the demo Firestore suite and synthetic transport, not just a localhos
 tests also distinguish empty successful reads from explicit 404 absence and asynchronous acknowledgement from
 completed mutation. Interrupted edits invalidate the old fully accepted payload digest, and provider-imposed retry
 deadlines survive authored changes and manual Retry; these are tested locally, not inferred live provider results.
-Garmin integration checks remain #647/#703; #645 owns contract questions and #655 production observability/rollout.
+Garmin integration checks remain #647/#703; #645 owns contract questions and #655 deployment and post-release observability.
 The separate #698 certification/evaluation issue is retired. Track deferred functionality in an epic subissue, not a
 code-only TODO, and do not silently narrow the epic's product scope.
 

@@ -1376,7 +1376,7 @@ with `--maxWorkers=1 --fileParallelism=false` inside
 8081/9199 ports. Never run bulk/destructive tests against a Functions-only emulator connected to live Firestore.
 Deploying this change, if separately approved, requires Rules/indexes and the delivery callables, worker and dispatchers
 before the frontend. It neither authorizes a deployment nor changes any public provider switch. Provider/device proof
-remains in the relevant adapter issues #647–#650, completion matching #651, Sports Lib extraction #654 and rollout #655.
+remains in the relevant adapter issues #647–#650, completion matching #651, Sports Lib extraction #654 and deployment/post-release operations #655.
 
 ### Garmin workout/calendar adapter (#647)
 
