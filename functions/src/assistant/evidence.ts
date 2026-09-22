@@ -357,7 +357,9 @@ export function buildAssistantEvidence(
       summary: `${rows.length} ${tool.name === 'get_training_sync_status' ? 'service summaries from existing delivery evidence' : 'current authored records'}.${structuredContent.scanComplete === false ? ' Incomplete read; more records may remain.' : ''}`,
       facts: rows.slice(0, MAX_FACTS).map(row => ({
         label: truncate(String(row.name ?? row.title ?? row.provider ?? 'Training'), 80),
-        value: truncate(row.provider ? `${row.state}; ${row.syncedWorkouts ?? 'unknown'} of ${row.totalWorkouts ?? 'unknown'} workouts confirmed; not watch receipt`
+        value: truncate(row.provider ? row.provider === 'suunto'
+          ? `${row.state}; ${row.syncedWorkouts ?? 'unknown'} of ${row.totalWorkouts ?? 'unknown'} workouts sent; Suunto app/watch visibility unknown`
+          : `${row.state}; ${row.syncedWorkouts ?? 'unknown'} of ${row.totalWorkouts ?? 'unknown'} workouts confirmed; not watch receipt`
           : `${row.lifecycle}: ${row.localDate ?? `${row.startDate} – ${row.endDate}`}`, 160),
       })), links: [],
     };

@@ -217,7 +217,9 @@ export class TrainingDeliveryDialogComponent {
     return { provider, label: PLANNED_WORKOUT_PROVIDER_CAPABILITIES_V1[provider].label,
       displayLabel: PROVIDER_PRESENTATIONS[provider].displayLabel, presentation: PROVIDER_PRESENTATIONS[provider], ready, setupAvailable, setting, statuses,
       overviewState, overviewDetail, overviewIcon, overviewEnabled: overviewState === 'Sync enabled',
-      canCheck: statuses.some(status => status.verification?.canCheck),
+      // Suunto partner records can outlive app/watch visibility. Ignore stale
+      // canCheck projections and keep positive lookup internal to safe recovery.
+      canCheck: provider !== 'suunto' && statuses.some(status => status.verification?.canCheck),
       needsFreshConsent: statuses.some(status => status.status === 'fresh_consent_required'),
       // Current settings precede the asynchronously reconciled status after Resume.
       canResume: suppressed || (!inheritedSetting && statuses.some(status => status.status === 'stopped'

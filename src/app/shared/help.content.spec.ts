@@ -71,7 +71,7 @@ describe('help.content', () => {
     expect(content).toContain('**Sync plan with Garmin**');
     expect(content).toContain('**Enable plan sync**');
     expect(content).toContain('**Workout sync status**');
-    expect(content).toContain("each service's logo and a compact synced/total count for workouts currently due for delivery");
+    expect(content).toContain("each service's logo and a compact sent/total count for Suunto");
     expect(content).toContain('small **View** action');
     expect(content).toContain('whether sync is enabled for each service');
     expect(content).toContain('one **Manage** action');
@@ -79,8 +79,9 @@ describe('help.content', () => {
     expect(content).toContain('These navigation actions do not enable sync or send anything');
     expect(content).toContain('individual workouts, not plans or edits');
     expect(content).toContain('**All 3 upcoming workouts synced · 2 earlier workouts**');
+    expect(content).toContain("Suunto's **All 3 upcoming workouts sent · 2 earlier workouts**");
     expect(content).toContain('prioritizes today and future workouts');
-    expect(content).toContain('Older-account copies do not count as current sync');
+    expect(content).toContain('Older-account copies do not count as current delivery');
     expect(content).toContain('not delivery to a device');
     expect(content).toContain('**Stop plan sync**');
     expect(content).toContain('**Stop workout sync**');
@@ -580,7 +581,12 @@ describe('help.content', () => {
     expect(planningSection?.content).toContain('New COROS plan sync setup in the app is shown as **Coming soon**');
     expect(planningSection?.content).toContain('Wahoo initially supports time-based running and cycling workouts');
     expect(planningSection?.content).toContain('Scheduled for later');
-    expect(planningSection?.content).toContain('Sent is not a watch receipt');
+    expect(planningSection?.content).toContain('**Sent to Suunto** means Suunto accepted the Guide for your account');
+    expect(planningSection?.content).toContain('does not prove that the Guide is visible in the Suunto app');
+    expect(planningSection?.content).toContain('leave its cloud record visible to partners');
+    expect(planningSection?.content).toContain('does not offer a Suunto visibility check');
+    expect(planningSection?.content).toContain('never recreates a Guide automatically');
+    expect(planningSection?.content).toContain('reconnecting is not required or recommended as a normal QS workflow');
     expect(planningSection?.content).toContain('**Completed · activity linked**');
     expect(planningSection?.content).toContain('**Sent · workout completed**');
     expect(planningSection?.content).toContain('**Past workout · previously sent**');

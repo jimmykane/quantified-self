@@ -157,7 +157,7 @@ describe('Suunto Guide lifecycle — synthetic transport', () => {
     op.progress = null; await execute(); op.artifact!.completed = true; next();
     const count = server.calls.length; await expect(execute()).rejects.toThrow(); expect(server.calls).toHaveLength(count);
   });
-  it('checks cloud presence independently of pinning and refuses to infer absence', async () => {
+  it('keeps hidden-Guide lookup internal while declaring visibility checks and repair unavailable', async () => {
     const artifact = (await execute())!;
     const request = { destinationKey: op.destinationKey, connectionGeneration: op.connectionGeneration, artifact, timeZone: op.timeZone, cursor: null };
     expect(await transport.inspection.inspect(request, guard)).toMatchObject({ artifacts: [{ key: 'guide', state: 'present' }] });
@@ -165,6 +165,8 @@ describe('Suunto Guide lifecycle — synthetic transport', () => {
     expect(await transport.inspection.inspect(request, guard)).toMatchObject({ artifacts: [{ state: 'present' }] });
     server.guides.delete(artifact.ids.guide);
     expect(await transport.inspection.inspect(request, guard)).toMatchObject({ artifacts: [{ state: 'unknown', authoritative: false }] });
+    expect(transport.inspection.policy.mode).toBe('unavailable');
+    expect(transport.inspection.policy.authoritativeAbsenceKeys).toEqual([]);
     expect(transport.inspection.policy.repairReadyKeys).toEqual([]);
   });
   it('does not overwrite or withdraw an externally moved Guide', async () => {

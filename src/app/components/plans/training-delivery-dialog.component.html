@@ -142,7 +142,8 @@
           }
           @if (row.provider === 'suunto' && data.scope !== 'workout') {
             <p class="delivery-caption">Workouts for today and the next six days are sent as SuuntoPlus Guides. Later workouts are sent automatically as their dates approach.</p>
-            <p class="delivery-caption">Sent means available in the Suunto app, not confirmed on your watch. Sync your compatible watch with the app, then select the Guide for your exercise. Pinning stays under your control.</p>
+            <p class="delivery-caption">Sent means Suunto accepted the Guide for your account. QS cannot verify whether it is visible in the Suunto app, selected or pinned, or available on your watch.</p>
+            <p class="delivery-caption">Hiding or removing a Guide in Suunto can leave its cloud record visible to partners, so QS never recreates it automatically from a cloud-presence check.</p>
           }
           @if (row.provider === 'coros' && data.scope !== 'workout') {
             @if (row.setupAvailable) {
@@ -202,7 +203,7 @@
             <h4>Workout sync status</h4>
             @if (!row.statuses.length) { <p class="delivery-caption">No workout sync status yet. Workouts appear here after their first sync check.</p> }
           }
-          <ul class="delivery-list" [attr.aria-label]="row.label + ' synced workouts'">
+          <ul class="delivery-list" [attr.aria-label]="row.label + ' workout delivery records'">
             @for (status of row.statuses; track status.id) {
               <li class="delivery-status" [class.delivery-status--summary]="data.scope !== 'workout'">
                 @if (data.scope !== 'workout') {
@@ -223,13 +224,17 @@
                 } @else {
                   @if (row.statuses.length !== 1) { <p class="delivery-status-label">{{ status.label }}</p> }
                   <p class="delivery-caption">{{ status.showLastSent ? 'Last sent' : status.timestampLabel }}: <time>{{ status.showLastSent ? (status.lastAcceptedAtMs | date:'medium') : (status.timestamp | date:'medium') }}</time></p>
-                  @if (status.verification?.lastCheckedAtMs !== null && status.verification?.lastCheckedAtMs !== undefined) {
+                  @if (row.provider !== 'suunto' && status.verification?.lastCheckedAtMs !== null && status.verification?.lastCheckedAtMs !== undefined) {
                     <p class="delivery-caption">Last checked: {{ status.verification.lastCheckedAtMs | date:'medium' }}</p>
                   }
-                  @if (status.verification?.state === 'deferred' && status.verification?.nextCheckAtMs) {
+                  @if (row.provider !== 'suunto' && status.verification?.state === 'deferred' && status.verification?.nextCheckAtMs) {
                     <p class="delivery-caption">Next check: {{ status.verification.nextCheckAtMs | date:'medium' }}</p>
                   }
-                  @if (status.hasRemoteCopy) { <p class="delivery-caption">Device availability is managed by {{ row.label }}. A cloud check does not confirm a device download.</p> }
+                  @if (status.hasRemoteCopy && row.provider === 'suunto') {
+                    <p class="delivery-caption">A retained Suunto cloud record does not confirm that the Guide is visible in the Suunto app, selected or pinned, or available on your watch.</p>
+                  } @else if (status.hasRemoteCopy) {
+                    <p class="delivery-caption">Device availability is managed by {{ row.label }}. A cloud check does not confirm a device download.</p>
+                  }
                   @if (status.copyMessage) { <p>{{ status.copyMessage }}</p> }
                   @if (status.nextRetryAtMs !== null) { <p class="delivery-caption">Next automatic check: {{ status.nextRetryAtMs | date:'medium' }}</p> }
                   @if (status.status === 'needs_attention') { <p>Retry inspects the earlier operation first. It will not blindly create another copy.</p> }
@@ -241,7 +246,7 @@
                     </button>
                     <dl class="delivery-attempts delivery-caption" [id]="'delivery-attempt-' + status.id" [hidden]="attemptsExpanded() !== status.id">
                       @if (status.lastAttemptAtMs !== null) { <div><dt>Last attempt</dt><dd>{{ status.lastAttemptAtMs | date:'medium' }}</dd></div> }
-                      @if (status.lastAcceptedAtMs !== null) { <div><dt>Last confirmed</dt><dd>{{ status.lastAcceptedAtMs | date:'medium' }}</dd></div> }
+                      @if (status.lastAcceptedAtMs !== null) { <div><dt>Last accepted</dt><dd>{{ status.lastAcceptedAtMs | date:'medium' }}</dd></div> }
                       @if (status.retryCount) { <div><dt>Failed attempts</dt><dd>{{ status.retryCount }}</dd></div> }
                     </dl>
                   }
@@ -261,7 +266,8 @@
     <div id="delivery-guidance-details" [hidden]="!guidanceExpanded()" class="delivery-caption">
       @if (data.scope === 'workout' && showsSuuntoGuidance()) {
         <p>Workouts for today and the next six days are sent as SuuntoPlus Guides. Later workouts are sent automatically as their dates approach.</p>
-        <p>Sent means available in the Suunto app, not confirmed on your watch. Sync your compatible watch with the app, then select the Guide for your exercise. Pinning stays under your control.</p>
+        <p>Sent means Suunto accepted the Guide for your account. QS cannot verify whether it is visible in the Suunto app, selected or pinned, or available on your watch.</p>
+        <p>Hiding or removing a Guide in Suunto can leave its cloud record visible to partners, so QS never recreates it automatically from a cloud-presence check.</p>
       }
       @if (showsCorosGuidance()) {
         @if (activeRow()?.setupAvailable) {

@@ -98,10 +98,13 @@ as described by the [official Guides authentication workflow](https://apizone.su
 The existing subscription must have Guides access; no separate Guides key or OAuth application is required by QS.
 Activity, route, Sleep and Health credential bindings remain unchanged. Guide delivery runs in the
 existing Training worker, not these Health queues. Its owner-only rollout, exact app-name configuration, rolling dated
-Guide window, app/watch messaging, positive checks and uncertain-create recovery are documented in
-[Training workspace](training-workspace.md#suuntoplus-guide-delivery-650). Do not infer watch receipt from cloud delivery,
-or cloud deletion from unpinning, eviction, an ownership-related 404 or an unstable inventory scan. Safe missing-Guide
-repair is tracked by #710. No assumed subscription quota or separate certification process is introduced.
+Guide window, truthful visibility messaging and positive cloud-record reads used only for uncertain-create recovery are documented in
+[Training workspace](training-workspace.md#suuntoplus-guide-delivery-650). A Guide hidden or removed in Suunto can remain
+visible through the partner API. Do not infer app/watch visibility from API acceptance or presence, or cloud deletion from
+unpinning, eviction, an ownership-related 404 or an unstable inventory scan. #710 therefore keeps negative classification
+and automatic missing-Guide repair disabled. Suunto may clean hidden Guides after a later account reconnect; that is
+provider-managed cleanup, not a normal action QS asks a user to perform. No assumed subscription quota or separate
+certification process is introduced.
 
 Each authored workout keeps its canonical Sports Lib sport. The Guide serializer maps the manual editor's Running,
 Trail Running, Treadmill, Cycling, Mountain Biking, Indoor Cycling, E-Biking, and Hand Cycle choices to Suunto's

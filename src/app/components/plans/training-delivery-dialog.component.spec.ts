@@ -112,7 +112,7 @@ describe('Training provider delivery controls', () => {
     expect(garmin.textContent).toContain('Sent · automatic checking unavailable');
     expect(suunto.textContent).toContain('Sync off');
     expect(suunto.querySelector('.delivery-provider-state')?.classList).not.toContain('delivery-provider-state--enabled');
-    expect(suunto.textContent).toContain('Sync could not be confirmed');
+    expect(suunto.textContent).toContain('Send could not be confirmed');
     expect(service.preview).not.toHaveBeenCalled(); expect(service.mutate).not.toHaveBeenCalled();
     expect(haptics.selection).not.toHaveBeenCalled();
   });
@@ -1239,10 +1239,16 @@ describe('Training provider delivery controls', () => {
       data: { scope: 'workout', id: 'w', title: 'Winter endurance workout' }, width: '640px', maxWidth: '95vw',
     });
     await TestBed.inject(ApplicationRef).whenStable(); render('suunto-guide'); render('suunto-guide-dark');
-    expect(document.body.textContent).toContain('Check Suunto');
+    expect(document.body.textContent).not.toContain('Check Suunto');
     expect(document.body.textContent).toContain('today and the next six days');
-    expect(document.body.textContent).toContain('not confirmed on your watch');
-    expect(document.body.textContent).toContain('Pinning stays under your control');
+    expect(document.body.textContent).toContain('Sent to Suunto · app and watch visibility cannot be checked');
+    expect(document.body.textContent).toContain('Sent means Suunto accepted the Guide for your account');
+    expect(document.body.textContent).toContain('cannot verify whether it is visible in the Suunto app');
+    expect(document.body.textContent).toContain('Hiding or removing a Guide in Suunto can leave its cloud record visible to partners');
+    expect(document.body.textContent).toContain('never recreates it automatically');
+    expect(document.body.textContent).not.toContain('Sent means available in the Suunto app');
+    expect(document.body.textContent).not.toContain('Last checked:');
+    expect(document.querySelector('.delivery-list')?.getAttribute('aria-label')).toBe('Suunto workout delivery records');
     ref.close();
     service.watchScope.mockReturnValue(of({ settings: [], statuses: [{ ...status, provider: 'suunto', planId: 'p',
       status: 'approval_required', hasRemoteCopy: false, differsFromQS: false, lastAttemptAtMs: null, retryCount: 0, approvalDigest: 'approval',

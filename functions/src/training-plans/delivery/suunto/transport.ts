@@ -10,8 +10,9 @@ import { packageGuide, readGuideArchive } from './archive';
 import { assessSuuntoGuide, guideExternalId, guideMapping, SUUNTO_MAPPING_VERSION, validateGuideOwner } from './mapping';
 
 export const SUUNTO_INSPECTION_POLICY: InspectionPolicy = {
-  version: 'suunto-owned-guide-v1', mode: 'retained-ids', required: ['guide'], confirmationDelayMs: 15 * 60_000,
-  // #710 / #645: 404 conflates ownership and absence; offset inventory has no snapshot guarantee.
+  version: 'suunto-owned-guide-v1', mode: 'unavailable', required: ['guide'], confirmationDelayMs: 15 * 60_000,
+  // #710 / #645: Suunto can retain hidden Guides in the partner API. Presence
+  // is cloud-record evidence only; 404 and offset inventory cannot prove absence.
   authoritativeAbsenceKeys: [], repairReadyKeys: [],
 };
 function equal(a: unknown, b: unknown): boolean { return hashTrainingScheduleRequestPayload(a) === hashTrainingScheduleRequestPayload(b); }

@@ -697,8 +697,9 @@ Consent/lifecycle rules:
 The Material/compact-row delivery dialog is reached from the plan actions area, saved workout editor and workout rows.
 The selected plan, its workout rows and the saved-workout editor also show compact, clickable **per-service sync
 summaries**, using destination branding. The plan-level presentation answers the current question first: its compact
-count includes today and future workouts currently due for delivery, while the overview can say **All 3 upcoming workouts synced · 2 earlier
-workouts**. Opening a summary
+count includes today and future workouts currently due for delivery. Providers retain their own truthful vocabulary: the
+overview can say **All 3 upcoming workouts synced · 2 earlier workouts**, while Suunto says **All 3 upcoming workouts sent · 2 earlier workouts**
+because partner API acceptance/presence cannot prove app or watch visibility. Opening a summary
 opens the existing sync details; rendering it never previews, grants consent, retries or contacts a provider. Editor
 summaries describe the current saved workout, not an unsaved draft. The presentation focus is computed in the saved
 destination time zone and follows the workspace's existing minute/focus clock across day boundaries. Completed, past and skipped workouts leave the prominent upcoming denominator but remain visible
@@ -706,7 +707,7 @@ in the individual list and quieter secondary context; only workouts before today
 service's current scheduling window are named **Scheduled for later** rather than making the due-soon count look unhealthy.
 Waiting, paused, unsupported and unapproved upcoming workouts remain explicit non-success states in that denominator. The underlying safe projection continues to
 cover every current non-deleted workout in the plan, across its entire date range—not only the selected day or first 25 rows.
-Confirmed past/completed copies may count as synced only while the safe projection confirms unchanged content. The
+Confirmed past/completed copies may count in the provider-specific delivered total only while the safe projection confirms unchanged content. The
 status copy separates authored-workout completion from provider delivery: the provider that supplied an exact persisted
 completion link shows **Completed · activity linked**, another provider's confirmed copy shows
 **Sent · workout completed**, and an unrelated past delivery shows **Past workout · previously sent**. The completion
@@ -1065,11 +1066,19 @@ revisions. Lost POST acknowledgement or 409 recovers only through exact app/acco
 three 50-item inventory pages per attempt make recovery resumable. Empty/unstable listings never authorize another POST.
 Unknown recovery remains needs-attention, including Retry; accepted IDs survive newer edits and Stop.
 
-**Check Suunto** can prove cloud presence using retained IDs or owned inventory. A 404 conflates missing and different
-ownership, and offset inventory has no stable snapshot guarantee, so negative classification and automatic repair stay
-disabled. #710, an epic subissue, owns establishing safe absence/repair; #645 tracks the contract question. Unpinning,
-watch eviction and storage limits are not cloud deletion. The UI separates Last sent / Last checked from watch availability
-and explains Suunto app/watch sync and Guide selection without adding a setup wizard.
+Provider confirmation for #710 established that hiding or removing a Guide in the Suunto app can leave that Guide visible
+through the partner API. API acceptance and positive presence therefore prove neither app visibility, selection/pinning,
+nor watch availability. A 404 also conflates missing and different ownership, and offset inventory has no stable snapshot
+guarantee. Suunto remote visibility verification is declared unavailable, so no manual **Check Suunto** action or periodic
+visibility check is exposed. Positive owned-record reads remain internal only where exact uncertain-create recovery needs
+them. Negative classification and automatic repair remain disabled: the app never recreates a Guide because a user removed
+or hid it in Suunto. Suunto may clean hidden Guides after a later account reconnect, but that provider-managed cleanup is
+not a normal workflow and the UI does not recommend reconnecting. #645 retains the original contract evidence; #710 records
+the final product semantics. The UI says **Sent to Suunto**, separates Last sent from app/watch visibility, and never claims
+that acceptance or a retained cloud record makes the Guide available in the app or on a watch. This is wire-neutral: the
+existing MCP `syncedWorkouts`, outcome enums and sanitized
+timestamps remain unchanged for compatibility and continue to expose accepted, unchanged delivery state rather than
+Suunto app/watch visibility. No MCP tool, scope, consent, proposal, provider action, schema or bundled-skill change is made.
 
 Activity ingestion now uses Sports Lib `readFITWorkoutReferences(...)`; QS no longer walks FIT definitions itself.
 Sports Lib validates framing, CRC, base types, endianness, definition reuse and developer-data pairing, and supports both
@@ -1258,7 +1267,8 @@ its documented contract has no planned-resource inspection mechanism; recorded-a
 republishing are not substitutes.
 Wahoo #649 models Plan/Workout/association separately with conservative external-ID and uncertain-create recovery;
 `workout_token` is not a documented POST idempotency guarantee. Suunto #650 implements owned reads and exact externalId
-conflict recovery; negative classification/repair is tracked by #710. Unpinning or device eviction is not cloud deletion.
+conflict recovery. #710 records that a hidden Guide may remain present through the partner API, so positive inspection is
+cloud-record evidence only and negative classification/repair remain disabled. Unpinning or device eviction is not cloud deletion.
 
 Stable, unfiltered inventory pages may carry the previous completed scan's negative while a second scan advances;
 only its complete coverage can provide the second observation. Positive observations, unstable coverage or a stalled

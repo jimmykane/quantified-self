@@ -162,7 +162,8 @@ describe('Training delivery summaries on the workspace', () => {
     expect(fixture.nativeElement.querySelectorAll('.delivery-plan-provider')).toHaveLength(4);
     const providerRows: HTMLElement[] = Array.from(fixture.nativeElement.querySelectorAll('.delivery-plan-provider'));
     for (const provider of ['Garmin Connect', 'COROS', 'Wahoo', 'Suunto App']) {
-      expect(providerRows.some(row => row.getAttribute('aria-label')?.includes(`${provider}: 1 of 2 upcoming workouts synced`))).toBe(true);
+      const state = provider === 'Suunto App' ? 'sent' : 'synced';
+      expect(providerRows.some(row => row.getAttribute('aria-label')?.includes(`${provider}: 1 of 2 upcoming workouts ${state}`))).toBe(true);
     }
     expect(buttons[0].getAttribute('aria-label')).toBe('View plan sync details');
     const visibleCounts: HTMLElement[] = Array.from(fixture.nativeElement.querySelectorAll('.delivery-plan-provider-count'));

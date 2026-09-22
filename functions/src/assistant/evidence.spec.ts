@@ -318,6 +318,24 @@ describe('Assistant evidence', () => {
     expect(JSON.stringify(evidence)).not.toContain('private-workout');
   });
 
+  it('describes Suunto sync evidence as sent without claiming app or watch visibility', () => {
+    const evidence = buildAssistantEvidence({
+      name: 'get_training_sync_status',
+      title: 'Get Training sync status',
+    }, {
+      scanComplete: true,
+      services: [
+        { provider: 'suunto', state: 'current', syncedWorkouts: 2, totalWorkouts: 3 },
+        { provider: 'garmin', state: 'current', syncedWorkouts: 3, totalWorkouts: 3 },
+      ],
+    });
+    expect(evidence.facts).toEqual([
+      { label: 'suunto', value: 'current; 2 of 3 workouts sent; Suunto app/watch visibility unknown' },
+      { label: 'garmin', value: 'current; 3 of 3 workouts confirmed; not watch receipt' },
+    ]);
+    expect(evidence.facts[0].value).not.toMatch(/found in|available in/i);
+  });
+
   it('does not discover app links nested under denied provenance fields', () => {
     const evidence = buildAssistantEvidence({
       name: 'get_training_metric',

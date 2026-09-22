@@ -44,6 +44,28 @@ describe('Training delivery service summaries', () => {
     expect(row.label).toBe('3 of 3 workouts synced'); expect(row.icon).toBe('check_circle');
     expect(JSON.stringify(row)).not.toMatch(/plan synced|device synced|watch synced/i);
   });
+  it('uses sent language for Suunto acceptance without changing the machine projection', async () => {
+    const suuntoSetting = { ...setting, provider: 'suunto' as const };
+    const suuntoStatus = (id: string) => status(id, {
+      provider: 'suunto', id: identity(id, suuntoSetting.destinationKey, 'suunto'),
+    });
+    const [row] = await buildTrainingDeliverySummaries({ ...input(), settings: [suuntoSetting],
+      statuses: [suuntoStatus('a'), suuntoStatus('b')] });
+    expect(row.label).toBe('2 of 3 workouts sent');
+    expect(row.detail).toContain('1 waiting to send');
+    expect(row.planFocus?.label).toBe('2 of 3 upcoming workouts sent');
+    expect(row.projection).toMatchObject({ provider: 'suunto', syncedWorkouts: 2,
+      outcomes: [{ status: 'waiting', count: 1 }, { status: 'delivered', count: 2 }] });
+    const [single] = await buildTrainingDeliverySummaries({ ...input(), scope: 'workout', id: 'a',
+      workouts: [workout('a')], settings: [suuntoSetting], statuses: [suuntoStatus('a')] });
+    expect(single.label).toBe('Sent to Suunto');
+    const [removed] = await buildTrainingDeliverySummaries({ ...input(), workouts: [workout('a')],
+      settings: [suuntoSetting], statuses: [{ ...suuntoStatus('a'), status: 'removed', hasRemoteCopy: false }] });
+    expect(removed.detail).toBe('1 no active delivery');
+    const [completed] = await buildTrainingDeliverySummaries({ ...input(), workouts: [workout('a')],
+      settings: [suuntoSetting], statuses: [{ ...suuntoStatus('a'), status: 'completed' }] });
+    expect(completed.detail).toBe('1 completed workout · sent Guide kept');
+  });
   it.each(['failed', 'unsupported', 'approval_required', 'needs_attention', 'reconnect_required', 'connection_repair', 'fresh_consent_required'] as const)(
     'keeps %s visible and does not count its retained copy as synced', async state => {
       const [row] = await buildTrainingDeliverySummaries({ ...input(), statuses: [status('a'), status('b', { status: state, differsFromQS: true })] });
@@ -130,9 +152,13 @@ describe('Training delivery service summaries', () => {
     const suunto = rows.find(row => row.provider === 'suunto')!;
     expect(wahoo.projection).toMatchObject({ totalWorkouts: 5, syncedWorkouts: 3 });
     expect(suunto.projection).toMatchObject({ totalWorkouts: 5, syncedWorkouts: 5 });
-    for (const row of [wahoo, suunto]) expect(row.planFocus).toEqual({
+    expect(wahoo.planFocus).toEqual({
       totalWorkouts: 3, syncedWorkouts: 3, earlierWorkouts: 2,
       label: 'All 3 upcoming workouts synced', detail: '2 earlier workouts',
+    });
+    expect(suunto.planFocus).toEqual({
+      totalWorkouts: 3, syncedWorkouts: 3, earlierWorkouts: 2,
+      label: 'All 3 upcoming workouts sent', detail: '2 earlier workouts',
     });
   });
   it('does not mislabel current completed or future skipped workouts as earlier', async () => {
@@ -207,7 +233,8 @@ describe('Training delivery service summaries', () => {
       settings: providers.map(provider => ({ ...setting, provider })), statuses: providers.flatMap(provider => workouts.map(workout =>
         status(workout.id, { provider, id: identity(workout.id, setting.destinationKey, provider) }))) });
     expect(rows).toHaveLength(4);
-    for (const row of rows) expect(row.label).toBe('400 of 400 workouts synced');
+    for (const row of rows) expect(row.label).toBe(row.provider === 'suunto'
+      ? '400 of 400 workouts sent' : '400 of 400 workouts synced');
   });
   it('inherits plan settings for a workout but does not enroll standalone copies or transferred workouts', async () => {
     const data = { ...input(), scope: 'workout' as const, id: 'a', workouts: [workout('a')], statuses: [status('a')] };
