@@ -65,7 +65,7 @@ describe('AssistantExploreBottomSheetComponent', () => {
     expect(fixture.nativeElement.textContent).toContain('sensitive health or personal information');
     expect(fixture.nativeElement.textContent).toContain('choose what happens to its workouts');
     expect(fixture.nativeElement.textContent).toContain('Turn on Training plans before allowing changes');
-    expect(fixture.nativeElement.querySelectorAll('app-compact-row')).toHaveLength(3);
+    expect(fixture.nativeElement.querySelectorAll('.assistant-training-access app-compact-row')).toHaveLength(3);
     const changeToggles = Array.from(fixture.nativeElement.querySelectorAll(
       '[aria-label^="Training plan changes"], [aria-label^="Training delivery changes"]',
     )) as HTMLButtonElement[];
@@ -125,6 +125,19 @@ describe('AssistantExploreBottomSheetComponent', () => {
     expect(bottomSheetRef.dismiss).not.toHaveBeenCalled();
     component.setTimelineNotes(true);
     expect(bottomSheetRef.dismiss).toHaveBeenCalledWith({ kind: 'timeline_notes', enabled: true });
+  });
+
+  it('keeps tag and note writes separate and disables note writes without note reads', () => {
+    const tagToggle = fixture.nativeElement.querySelector('[aria-label^="Activity tag changes"]') as HTMLButtonElement;
+    const noteWriteToggle = fixture.nativeElement.querySelector('[aria-label^="Timeline note changes"]') as HTMLButtonElement;
+    expect(tagToggle).not.toBeNull();
+    expect(noteWriteToggle.disabled).toBe(true);
+    expect(fixture.nativeElement.textContent).toContain('Nothing changes until you approve it');
+    expect(fixture.nativeElement.textContent).toContain('permanently delete');
+    component.setActivityTagChanges(true);
+    expect(bottomSheetRef.dismiss).toHaveBeenLastCalledWith({ kind: 'activity_tag_changes', enabled: true });
+    component.setTimelineNoteChanges(true);
+    expect(bottomSheetRef.dismiss).toHaveBeenLastCalledWith({ kind: 'timeline_note_changes', enabled: true });
   });
 
   it('closes without a prompt when dismissed explicitly', () => {

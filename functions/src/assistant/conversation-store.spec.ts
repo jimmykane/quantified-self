@@ -247,6 +247,37 @@ describe('Assistant conversation store', () => {
       .rejects.toMatchObject({ code: 'conversation_changed' });
   });
 
+  it('binds content permissions and one expiring proposal to the active generation', async () => {
+    const harness = createFirestoreHarness(); let sequence = 0;
+    const store = createAssistantConversationStore({ db: () => harness.db as never,
+      now: () => new Date('2026-08-03T12:00:00Z'), createId: () => `content-${++sequence}`,
+      getDeletionGuard: async () => ({ userExists: true, deletionInProgress: false, shouldSkip: false }),
+    });
+    const chat = await store.resetConversation('owner', 'coordinate_free', true, null,
+      false, false, false, true, true);
+    const request = 'content-proposal-0001';
+    const fingerprint = createAssistantRequestFingerprint(request, 'Create a note', 'coordinate_free', true,
+      false, false, false, true, true);
+    const begun = requireStartedTurn(await store.beginTurn('owner', chat.conversationId, request, fingerprint,
+      'coordinate_free', true, false, false, false, true, true));
+    const proposal = { proposalRef: '5b5aa348-50a3-4e62-a1fd-46a7e6dd639f',
+      kind: 'create_timeline_note' as const, expiresAtMs: Date.parse('2026-08-03T12:10:00Z'),
+      summary: 'Create Timeline note “Travel”.', requiresConfirmation: true as const,
+      arguments: { mutationId: '11111111-1111-4111-8111-111111111111', category: 'travel' as const,
+        title: 'Travel', details: null, startDate: '2026-08-03', endDate: '2026-08-04',
+        timeZone: 'UTC', showOnCharts: true, color: 'default' as const } };
+    await store.completeTurn('owner', begun, message(request, 'user', 'Create a note'),
+      message('reply', 'assistant', 'Review the note.'), undefined, proposal);
+    await expect(store.getActiveConversationState('owner')).resolves.toMatchObject({
+      timelineNotesEnabled: true,
+      activityTagChangesEnabled: true,
+      timelineNoteChangesEnabled: true,
+      pendingContentProposal: proposal,
+    });
+    await store.clearContentProposal('owner', chat.conversationId, proposal.proposalRef);
+    expect((await store.getActiveConversationState('owner')).pendingContentProposal).toBeUndefined();
+  });
+
   it('serializes turns and persists only a bounded completed history', async () => {
     const harness = createFirestoreHarness();
     let sequence = 0;

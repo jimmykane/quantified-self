@@ -7,7 +7,7 @@
           <mat-icon>help_outline</mat-icon>
         </a>
         <button mat-icon-button type="button" aria-label="Start a new chat with all optional data access off" matTooltip="Start a new chat"
-          [disabled]="loadingConversation() || !!conversationLoadError() || sending() || resetting()" (click)="resetConversation()">
+          [disabled]="loadingConversation() || !!conversationLoadError() || sending() || resetting() || proposalActionInProgress()" (click)="resetConversation()">
           @if (resetting()) {
             <mat-spinner diameter="20"></mat-spinner>
           } @else {
@@ -17,7 +17,7 @@
       </div>
     </div>
     <button class="assistant-explore-trigger" mat-button type="button"
-      [disabled]="loadingConversation() || !!conversationLoadError() || sending() || resetting()" (click)="openExploreSheet()">
+      [disabled]="loadingConversation() || !!conversationLoadError() || sending() || resetting() || proposalActionInProgress()" (click)="openExploreSheet()">
       <mat-icon>auto_awesome</mat-icon>
       Examples &amp; data access
       @if (preciseActivityLocationsEnabled()) {
@@ -30,6 +30,12 @@
         <span class="assistant-access-status assistant-training-status">
           <mat-icon aria-hidden="true">event_note</mat-icon>
           {{ trainingStatus }}
+        </span>
+      }
+      @if (contentAccessStatus(); as contentStatus) {
+        <span class="assistant-access-status assistant-content-status">
+          <mat-icon aria-hidden="true">edit_note</mat-icon>
+          {{ contentStatus }}
         </span>
       }
     </button>
@@ -178,6 +184,39 @@
       </section>
       }
 
+      @if (pendingContentProposal(); as proposal) {
+        <section class="content-proposal" aria-labelledby="content-proposal-title">
+          <div class="training-proposal-heading">
+            <mat-icon aria-hidden="true">{{ proposal.kind === 'update_activity_tags' ? 'sell' : 'edit_note' }}</mat-icon>
+            <div>
+              <h2 id="content-proposal-title">{{ contentProposalTitle(proposal.kind) }}</h2>
+              <p>{{ proposal.summary }}</p>
+            </div>
+          </div>
+          <div class="training-proposal-list">
+            @for (detail of contentProposalDetails(proposal); track $index) {
+              <div class="training-proposal-row">
+                <mat-icon aria-hidden="true">{{ proposal.kind === 'delete_timeline_note' ? 'warning' : 'arrow_forward' }}</mat-icon>
+                <span>{{ detail }}</span>
+              </div>
+            }
+          </div>
+          <p class="training-proposal-disclosure">Nothing changes until you apply this proposal. Concurrent edits are never overwritten.</p>
+          <div class="training-proposal-actions">
+            <button mat-flat-button type="button" [disabled]="proposalActionInProgress()"
+              (click)="applyPendingContentProposal()">
+              @if (applyingContentProposal()) { <mat-spinner diameter="18"></mat-spinner> } @else {
+                {{ proposal.kind === 'delete_timeline_note' ? 'Delete note' : 'Apply change' }}
+              }
+            </button>
+            <button mat-button type="button" [disabled]="proposalActionInProgress()"
+              (click)="dismissPendingContentProposal()">Dismiss</button>
+          </div>
+        </section>
+      } @else if (contentProposalResult()) {
+        <p class="training-proposal-result" role="status">{{ contentProposalResult() }}</p>
+      }
+
       @if (pendingTrainingProposal(); as proposal) {
         <section class="training-proposal" aria-labelledby="training-proposal-title">
           <div class="training-proposal-heading">
@@ -203,11 +242,11 @@
           </div>
           <p class="training-proposal-disclosure">Nothing changes until you apply this proposal. Provider results are independent, so a delivery problem never removes an authored workout.</p>
           <div class="training-proposal-actions">
-            <button mat-flat-button type="button" [disabled]="applyingTrainingProposal()"
+            <button mat-flat-button type="button" [disabled]="proposalActionInProgress()"
               (click)="applyPendingTrainingProposal()">
               @if (applyingTrainingProposal()) { <mat-spinner diameter="18"></mat-spinner> } @else { Apply changes }
             </button>
-            <button mat-button type="button" [disabled]="applyingTrainingProposal()"
+            <button mat-button type="button" [disabled]="proposalActionInProgress()"
               (click)="dismissPendingTrainingProposal()">Dismiss</button>
           </div>
         </section>
@@ -229,10 +268,10 @@
           <form class="composer" (submit)="handleComposerSubmit($event)">
             <textarea class="composer-input qs-scrollbar" rows="1" aria-label="Ask about your data"
               cdkTextareaAutosize cdkAutosizeMinRows="1" cdkAutosizeMaxRows="5"
-              [maxlength]="maxMessageChars" [formControl]="promptControl" [readonly]="sending() || resetting()"
+              [maxlength]="maxMessageChars" [formControl]="promptControl" [readonly]="sending() || resetting() || proposalActionInProgress()"
               [placeholder]="composerPlaceholder" (keydown)="handleComposerKeydown($event)"></textarea>
             <button mat-icon-button class="composer-submit" type="submit"
-              [disabled]="sending() || resetting() || quotaPreventsSend() || promptControl.invalid"
+              [disabled]="sending() || resetting() || proposalActionInProgress() || quotaPreventsSend() || promptControl.invalid"
               [attr.aria-label]="sending() ? 'Sending message' : 'Send message'">
               <span class="composer-submit-content">
                 @if (sending()) {

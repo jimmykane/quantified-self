@@ -10,6 +10,8 @@ import { CompactRowComponent } from '../shared/compact-row/compact-row.component
 
 export interface AssistantExploreBottomSheetData {
   timelineNotesEnabled?: boolean;
+  activityTagChangesEnabled?: boolean;
+  timelineNoteChangesEnabled?: boolean;
   trainingPlansEnabled?: boolean;
   trainingPlanChangesEnabled?: boolean;
   trainingDeliveryEnabled?: boolean;
@@ -21,6 +23,8 @@ export type AssistantExploreBottomSheetResult =
   | { kind: 'training_plan_changes'; enabled: boolean }
   | { kind: 'training_delivery'; enabled: boolean }
   | { kind: 'timeline_notes'; enabled: boolean }
+  | { kind: 'activity_tag_changes'; enabled: boolean }
+  | { kind: 'timeline_note_changes'; enabled: boolean }
   | { kind: 'prompt'; prompt: string }
   | { kind: 'location_access'; locationAccess: AssistantLocationAccess };
 
@@ -57,6 +61,16 @@ export class AssistantExploreBottomSheetComponent {
   setTimelineNotes(enabled: boolean): void {
     if (enabled === (this.data.timelineNotesEnabled === true)) return;
     this.bottomSheetRef.dismiss({ kind: 'timeline_notes', enabled });
+  }
+
+  setActivityTagChanges(enabled: boolean): void {
+    if (enabled === (this.data.activityTagChangesEnabled === true)) return;
+    this.bottomSheetRef.dismiss({ kind: 'activity_tag_changes', enabled });
+  }
+
+  setTimelineNoteChanges(enabled: boolean): void {
+    if (enabled === (this.data.timelineNoteChangesEnabled === true)) return;
+    this.bottomSheetRef.dismiss({ kind: 'timeline_note_changes', enabled });
   }
 
   setTrainingPlans(enabled: boolean): void {

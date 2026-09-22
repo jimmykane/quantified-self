@@ -84,7 +84,13 @@ Lib version or parser change, also use `.agent/skills/sports-lib-upgrade-and-rep
   create mutation ID, and permanent-delete disclosure. Both use existing sanitized persistence paths, recheck the
   stored connection grant and account-deletion fence inside the transaction, advertise accurate write/destructive/
   idempotency annotations, and rely on the MCP host's native approval UI. Never infer either write from user-authored
-  text, expose raw IDs/receipts, add a parallel callable, or silently add these public writes to the built-in Assistant.
+  text, expose raw IDs/receipts, or add a parallel persistence path. The built-in Assistant may support the same safe
+  mutations only through separate default-off, server-owned per-chat choices: expose read-current-state and local
+  prepare-only tools to the model, store at most one short-lived proposal, show an app-owned review, and apply through
+  the existing sanitized mutation service after rechecking the conversation generation, permission, proposal identity,
+  expiry, optimistic precondition, deletion fence, and owner. Never expose the public write tools directly to the model
+  or let model-authored text bypass app confirmation. Reuse the existing Assistant apply endpoint rather than adding a
+  callable for each content mutation.
 - **On-demand activity chart stream:** add deliberate aliases and canonical units to
   `functions/src/mcp/activity-stream.service.ts` (re-exported by the chart service), request only the stream and Sports Lib derivation dependencies, and
   preserve the existing original-file-only workflow. Keep file, raw/decompressed byte, selected-sample, runtime,

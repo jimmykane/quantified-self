@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { FieldPath, Firestore } from 'firebase-admin/firestore';
+import { FieldPath, Firestore, Timestamp } from 'firebase-admin/firestore';
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 import {
   createMcpTimelineNote,
@@ -200,6 +200,56 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)(
         uid, connectionId: 'other', grantId: 'grant-2', scopes: noteScopes,
         arguments: { noteRef: `note:${'a'.repeat(64)}:${uid}:connection`, expectedRevision: 1 },
       }, codec, deps)).rejects.toMatchObject({ code: 'invalid_request' });
+    });
+
+    it('binds first-party Assistant writes to the active generation, permission, and pending proposal', async () => {
+      const user = db.collection('users').doc(uid);
+      const conversationId = 'assistant-conversation';
+      const connectionId = `first-party-assistant-v1:${conversationId}`;
+      await user.collection('activities').doc('activity-1').set({ eventID: 'event-1' });
+      await user.collection('events').doc('event-1').set({ tags: ['Easy'] });
+      await user.collection('assistantConversations').doc('active').set({
+        conversationId,
+        expireAt: Timestamp.fromMillis(now() + 60_000),
+        activityTagChangesEnabled: true,
+        timelineNotesEnabled: false,
+        timelineNoteChangesEnabled: false,
+        pendingContentProposal: { proposalRef: 'proposal-1', expiresAtMs: now() + 60_000 },
+      });
+      const input = {
+        uid, connectionId, assistantConversationId: conversationId,
+        assistantProposalRef: 'proposal-1', scopes: activityScopes,
+        arguments: {
+          activityRef: `activity:${uid}:${connectionId}`,
+          expectedTags: ['Easy'], tags: ['Quality'],
+        },
+      };
+      await expect(updateMcpActivityTags(input, codec, deps)).resolves.toMatchObject({ changed: true });
+      await expect(updateMcpActivityTags({
+        ...input,
+        assistantProposalRef: undefined,
+        arguments: { ...input.arguments, expectedTags: ['Quality'], tags: ['Missing review'] },
+      }, codec, deps)).rejects.toMatchObject({ code: 'invalid_request' });
+      await user.collection('assistantConversations').doc('active').update({
+        pendingContentProposal: { proposalRef: 'proposal-1', expiresAtMs: now() },
+      });
+      await expect(updateMcpActivityTags({
+        ...input,
+        arguments: { ...input.arguments, expectedTags: ['Quality'], tags: ['Expired'] },
+      }, codec, deps)).rejects.toMatchObject({ code: 'invalid_request' });
+      await user.collection('assistantConversations').doc('active').update({
+        pendingContentProposal: { proposalRef: 'proposal-2', expiresAtMs: now() + 60_000 },
+      });
+      await expect(updateMcpActivityTags(input, codec, deps)).rejects.toMatchObject({ code: 'invalid_request' });
+      await user.collection('assistantConversations').doc('active').update({
+        pendingContentProposal: { proposalRef: 'proposal-1', expiresAtMs: now() + 60_000 },
+        activityTagChangesEnabled: false,
+      });
+      await expect(updateMcpActivityTags({
+        ...input,
+        arguments: { ...input.arguments, expectedTags: ['Quality'], tags: ['Blocked'] },
+      }, codec, deps)).rejects.toMatchObject({ code: 'invalid_request' });
+      expect((await user.collection('events').doc('event-1').get()).data()?.tags).toEqual(['Quality']);
     });
 
     it('rejects cross-owner references and fences every write during account deletion', async () => {

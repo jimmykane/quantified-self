@@ -28,7 +28,7 @@ describe('Built-in Assistant policy', () => {
     const external = CONNECTED_SERVICES_POLICY_SECTION.topics
       .find(candidate => candidate.id === POLICIES_MCP_CLIENTS_FRAGMENT)?.content.join(' ') ?? '';
     expect(assistant).toContain('Timeline notes');
-    expect(assistant).toContain('Timeline notes access is off by default');
+    expect(assistant).toContain('Timeline notes, Timeline note changes, and Activity tag changes are off by default');
     expect(assistant).toContain('full private');
     expect(external).toContain('Timeline notes permission');
     expect(external).toContain('Both checkboxes are selected by default when requested; uncheck either before approving.');
@@ -52,7 +52,7 @@ describe('Built-in Assistant policy', () => {
     expect(content).toContain('Results are coordinate-free by default');
     expect(content).toContain('Precise activity locations enabled');
     expect(content).toContain('exact activity start/end and MTB jump coordinates');
-    expect(content).toContain('Changing the setting starts a fresh chat');
+    expect(content).toContain('Changing a setting starts a fresh chat');
     expect(content).toContain('Coordinate-free saved-route summaries may be selected');
     expect(content).toContain('Direct in-app URLs are withheld from Gemini');
     expect(content).toContain('opaque reference or cursor is rejected');
@@ -172,7 +172,7 @@ describe('MCP client access policy', () => {
     expect(content).toContain('Tag reads select only the event tag fields');
     expect(content).toContain('separate internal ID fields');
     expect(content).toContain('signed-in application link retains its normal event route');
-    expect(content).toContain('built-in Assistant is not expanded');
+    expect(content).toContain('built-in Assistant can read current tags only after its separate default-off');
     expect(content).toContain('discover canonical Sports Lib activity types');
     expect(content).toContain('filter bounded newest-first scans');
     expect(content).toContain('explicit IANA timezone');

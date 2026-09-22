@@ -361,7 +361,7 @@ describe('help.content', () => {
     expect(dataAndPrivacySection?.content).toContain('personal, health, or location context');
     expect(dataAndPrivacySection?.content).toContain('untrusted labels');
     expect(dataAndPrivacySection?.content).toContain('Existing clients must reauthorize for this new write permission');
-    expect(dataAndPrivacySection?.content).toContain('The built-in Assistant is not expanded');
+    expect(dataAndPrivacySection?.content).toContain('separate default-off Activity tag changes choice');
     expect(dataAndPrivacySection?.content).toContain('Oversized rankings fail');
     expect(dataAndPrivacySection?.content).toContain('jump count is not treated as jump quality');
     expect(dataAndPrivacySection?.content).toContain('missing or insufficient-history states');

@@ -256,6 +256,10 @@ scope checks, input schemas, strict output schemas, projections, data-service bu
 The internal connection identity carries the server-owned conversation generation so opaque Training references cannot
 cross chats. Training read authority recognizes that complete first-party identity directly and never looks for an
 external OAuth connection document. This reliability correction changes no hosted MCP tool, scope, schema or grant.
+Separate default-off per-chat choices can also add tag-aware activity reads, editable Timeline-note reads, and local
+prepare-only content tools. Gemini never receives the public tag/note write tools. An app-owned confirmation reuses the
+existing Assistant apply endpoint and the same sanitized MCP content mutation services, with the active generation,
+permission, exact proposal, expiry, owner, deletion fence, and optimistic precondition rechecked at the data boundary.
 Direct app URLs are removed before validated results reach Gemini, and generated answers cannot repeat exact opaque
 references or cursors returned by the current tool calls. The separate deterministic evidence projection can still
 offer a validated safe app link. The internal allowlist also includes the existing bounded activity chart catalog and
@@ -1144,9 +1148,11 @@ coordinates remain excluded. The existing authenticated app link still uses the 
 Tag text is untrusted user- or provider-assigned label data, never instructions, verified facts, diagnoses, or authority
 to act, and it can itself contain personal, health, or location context.
 Its complete MCP result, including structured content and the JSON-text copy, is limited to 256 KiB.
-Tag reads use the existing `activity-details:read` grant, add no Firestore index, migration, or backfill, and do not
-expand the built-in Assistant allowlist. Existing external clients may need to refresh their tool catalog after the MCP
-release and registered-app rescan; no reauthorization is required for reads.
+Tag reads use the existing `activity-details:read` grant and add no Firestore index, migration, or backfill. Existing
+external clients may need to refresh their tool catalog after the MCP release and registered-app rescan; no
+reauthorization is required for reads. The built-in Assistant exposes this read only after its independent per-chat
+**Activity tag changes** choice is enabled, so it can verify the current complete tag list before preparing—but never
+directly applying—a change.
 
 `activity-tags:write` is a separate dependent permission for `update_activity_tags`. Both requested checkboxes start
 selected; removing Activity details removes and disables the child. Existing connections must reauthorize and refresh
@@ -1751,13 +1757,17 @@ All three writes use the existing note mutation transactions, add the stored con
 transaction, and retain the account-deletion fence. The client never supplies a raw document ID or UID. Outputs contain
 only the opaque reference, operation/revision/current public fields, or deletion result. Expected validation/conflict
 errors are safe and never log note text. The tools are accurately annotated as writes and depend on the MCP host's
-native approval UI; no MCP elicitation, new callable, storage model, index or migration is introduced. Note content can
-never authorize another mutation. The built-in Assistant deliberately receives none of these write tools.
+  native approval UI; no MCP elicitation, new callable, storage model, index or migration is introduced. Note content can
+  never authorize another mutation. The built-in Assistant deliberately receives none of these public write tools.
 
-The built-in Assistant grants this same tool only to a notes-enabled server-owned conversation, with generation checks
-before and after private reads. Notes are consulted for relevant questions, not every request. Their text is untrusted
-user-reported context, never instructions, verified diagnoses, causal proof or permission to act. Metric, Sleep,
-readiness and briefing outputs remain unchanged. See [Assistant](assistant.md) and [Timeline notes](timeline-notes.md).
+The built-in Assistant grants the ordinary note read only to a notes-enabled server-owned conversation, with generation
+checks before and after private reads. Its separate note-change choice additionally exposes the editable read and local
+prepare-only tools. Gemini can prepare at most one short-lived change, which the app identifies and reviews before a
+human applies it. The existing content mutation service then rechecks the conversation generation, permission, exact
+proposal and expiry, owner/deletion fence, and current revision in its transaction. Notes are consulted for relevant
+questions, not every request. Their text is untrusted user-reported context, never instructions, verified diagnoses,
+causal proof or permission to act. Metric, Sleep, readiness and briefing outputs remain unchanged. See
+[Assistant](assistant.md) and [Timeline notes](timeline-notes.md).
 
 No new Function, storage, index, migration or callable is introduced. Release the changed existing MCP/OAuth backend
 paths and consent/Connections UI before enabling access. Then separately approve the registered-app rescan, verify the

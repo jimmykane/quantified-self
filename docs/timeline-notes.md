@@ -57,12 +57,15 @@ create cannot restore the note. Every write rechecks account deletion and curren
 the Firestore transaction, uses the existing note mutation path, and is advertised as a write for the MCP host's native
 approval UI. No new callable, collection, index or persistence model is introduced.
 
-The built-in [Assistant](assistant.md#optional-timeline-notes-context) uses only the read tool through a separate default-off,
-server-owned per-chat choice. Changing it starts a fresh chat and preserves the independent location choice; New chat
-turns both off. Relevant answers may quote notes under the existing conversation retention policy. Text is context,
-not instructions, a verified diagnosis, causal proof or authorization for writes. The public MCP write scope does not
-enter the in-process Assistant allowlist. Notes do not alter calculations or
-add Assistant chart overlays. Provider disconnect retains them and account cleanup still removes notes and receipts.
+The built-in [Assistant](assistant.md#optional-tags-and-timeline-notes) uses the read tool through a separate default-off,
+server-owned per-chat choice. A second default-off **Timeline note changes** choice requires note reads and exposes only
+current-note lookup plus local prepare-only tools to Gemini—not the public MCP write tools. A prepared create, edit, or
+permanent delete is stored briefly with the conversation and must be reviewed and applied in Quantified Self. Final
+execution reuses the existing sanitized mutation path and rechecks the active generation, permission, exact proposal,
+expiry, owner, deletion fence, and current note revision. Changing access starts a fresh chat; New chat turns optional
+access off. Relevant answers may quote notes under the existing conversation retention policy. Text is context, not
+instructions, a verified diagnosis, causal proof, or authorization for writes. Notes do not alter calculations or add
+Assistant chart overlays. Provider disconnect retains them and account cleanup still removes notes and receipts.
 
 ## Loading and UI
 

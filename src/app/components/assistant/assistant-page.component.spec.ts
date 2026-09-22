@@ -13,7 +13,7 @@ import { of, Subject } from 'rxjs';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { Auth } from 'app/firebase/auth';
 import { AppThemes } from '@sports-alliance/sports-lib';
-import type { AssistantChatResponse, AssistantTrainingProposalPreview } from '@shared/assistant.types';
+import type { AssistantChatResponse, AssistantContentProposalPreview, AssistantTrainingProposalPreview } from '@shared/assistant.types';
 import { ASSISTANT_PROMPT_EXAMPLES } from '@shared/assistant.prompts';
 import { normalizeUserUnitSettings } from '@shared/unit-aware-display';
 import { AssistantQuotaService } from '../../services/assistant-quota.service';
@@ -86,6 +86,15 @@ const trainingProposal: AssistantTrainingProposalPreview = {
     summary: 'Garmin: enable ongoing workout delivery; 1 currently eligible, 0 with mapping warnings.' }],
 };
 
+const contentProposal: AssistantContentProposalPreview = {
+  proposalRef: 'content-proposal-1',
+  kind: 'update_activity_tags',
+  expiresAtMs: Date.now() + 60_000,
+  summary: 'Replace 1 current activity tag with 2.',
+  requiresConfirmation: true,
+  arguments: { activityRef: 'activity-ref', expectedTags: ['Easy'], tags: ['Quality', 'Reviewed'] },
+};
+
 describe('AssistantPageComponent', () => {
   let fixture: ComponentFixture<AssistantPageComponent>;
   let component: AssistantPageComponent;
@@ -94,6 +103,7 @@ describe('AssistantPageComponent', () => {
     sendMessage: vi.fn(),
     resetConversation: vi.fn(),
     applyTrainingProposal: vi.fn(),
+    applyContentProposal: vi.fn(),
     getErrorMessage: vi.fn(() => 'Friendly error'),
     getConversationUpdateErrorMessage: vi.fn(() => 'Friendly conversation error'),
   };
@@ -136,6 +146,9 @@ describe('AssistantPageComponent', () => {
     });
     assistantService.applyTrainingProposal.mockReset().mockResolvedValue({
       status: 'applied', scheduleRevision: 2, changes: [], providers: [],
+    });
+    assistantService.applyContentProposal.mockReset().mockResolvedValue({
+      status: 'applied', kind: 'update_activity_tags', message: 'Activity tags updated.',
     });
     assistantService.getErrorMessage.mockClear();
     quotaService.loadQuotaStatus.mockReset().mockResolvedValue(chatResponse.quota);
@@ -272,6 +285,72 @@ describe('AssistantPageComponent', () => {
     expect(assistantService.applyTrainingProposal).toHaveBeenLastCalledWith(expect.objectContaining({ confirm: false }));
     expect(component.pendingTrainingProposal()).toBeNull();
     expect(component.trainingProposalResult()).toContain('Nothing was changed');
+  });
+
+  it('reviews and explicitly applies or dismisses one content change', async () => {
+    component.conversation.set(chatResponse.conversation);
+    component.pendingContentProposal.set(contentProposal);
+    fixture.detectChanges();
+
+    const review = fixture.nativeElement.querySelector('.content-proposal') as HTMLElement;
+    expect(review.textContent).toContain('Review activity tag change');
+    expect(review.textContent).toContain('Current: Easy');
+    expect(review.textContent).toContain('New: Quality, Reviewed');
+    expect(review.textContent).toContain('Nothing changes until you apply');
+
+    component.applyingTrainingProposal.set(true);
+    fixture.detectChanges();
+    expect((review.querySelector('button') as HTMLButtonElement).disabled).toBe(true);
+    await component.applyPendingContentProposal();
+    expect(assistantService.applyContentProposal).not.toHaveBeenCalled();
+    component.applyingTrainingProposal.set(false);
+
+    await component.applyPendingContentProposal();
+    expect(assistantService.applyContentProposal).toHaveBeenLastCalledWith({
+      proposalRef: contentProposal.proposalRef,
+      conversationId: chatResponse.conversation.conversationId,
+      confirm: true,
+    });
+    expect(component.pendingContentProposal()).toBeNull();
+    expect(component.contentProposalResult()).toBe('Activity tags updated.');
+
+    component.pendingContentProposal.set(contentProposal);
+    await component.dismissPendingContentProposal();
+    expect(assistantService.applyContentProposal).toHaveBeenLastCalledWith(expect.objectContaining({ confirm: false }));
+    expect(component.contentProposalResult()).toContain('Nothing was changed');
+  });
+
+  it('shows every proposed Timeline note field before applying it', () => {
+    const noteProposal: AssistantContentProposalPreview = {
+      proposalRef: 'note-proposal-1',
+      kind: 'create_timeline_note',
+      expiresAtMs: Date.now() + 60_000,
+      summary: 'Create Timeline note “Recovery block”.',
+      requiresConfirmation: true,
+      arguments: {
+        mutationId: '6d59c596-ddf1-4f29-9ed4-b822e6067dd9',
+        category: 'injury_health',
+        title: 'Recovery block',
+        details: null,
+        startDate: '2026-09-22',
+        endDate: '2026-09-28',
+        timeZone: 'Europe/Helsinki',
+        showOnCharts: false,
+        color: 'orange',
+      },
+    };
+    component.conversation.set(chatResponse.conversation);
+    component.pendingContentProposal.set(noteProposal);
+    fixture.detectChanges();
+
+    const review = fixture.nativeElement.querySelector('.content-proposal') as HTMLElement;
+    expect(review.textContent).toContain('Title: Recovery block');
+    expect(review.textContent).toContain('Dates: 2026-09-22 – 2026-09-28');
+    expect(review.textContent).toContain('Category: Injury health');
+    expect(review.textContent).toContain('Details: None');
+    expect(review.textContent).toContain('Charts and calendar: Hidden');
+    expect(review.textContent).toContain('Color: Orange');
+    expect(review.textContent).toContain('Time zone: Europe/Helsinki');
   });
 
   it('restores a pending Training proposal while recovering a still-running response', async () => {
@@ -1186,6 +1265,8 @@ describe('AssistantPageComponent', () => {
       data: {
         locationAccess: 'coordinate_free',
         timelineNotesEnabled: false,
+        activityTagChangesEnabled: false,
+        timelineNoteChangesEnabled: false,
         trainingPlansEnabled: false,
         trainingPlanChangesEnabled: false,
         trainingDeliveryEnabled: false,
@@ -1212,7 +1293,7 @@ describe('AssistantPageComponent', () => {
       expect(assistantService.resetConversation).toHaveBeenCalledWith(
         'precise_activity',
         false,
-        null, false, false, false);
+        null, false, false, false, false, false);
     });
     fixture.detectChanges();
 
@@ -1340,7 +1421,7 @@ describe('AssistantPageComponent', () => {
     await component.resetConversation();
 
     expect(assistantService.resetConversation).toHaveBeenCalledWith(
-      'coordinate_free', false, 'conversation-1', false, false, false,
+      'coordinate_free', false, 'conversation-1', false, false, false, false, false,
     );
     expect(component.messages()).toEqual([]);
     expect(component.locationAccess()).toBe('coordinate_free');
@@ -1361,6 +1442,17 @@ describe('AssistantPageComponent', () => {
     expect(explore.textContent).toContain('Training read + 1 change');
   });
 
+  it('keeps enabled tag and note access visible without reopening the access panel', () => {
+    component.activityTagChangesEnabled.set(true);
+    component.timelineNotesEnabled.set(true);
+    component.timelineNoteChangesEnabled.set(true);
+    fixture.detectChanges();
+
+    const explore = fixture.nativeElement.querySelector('.assistant-explore-trigger') as HTMLElement;
+    expect(explore.textContent).toContain('Tag changes · Notes read/change');
+    expect(explore.querySelector('.assistant-content-status mat-icon')?.textContent).toContain('edit_note');
+  });
+
   it('changes Training consent independently, preserving notes, locations, drafts and single-owner haptics', async () => {
     component.locationAccess.set('precise_activity'); component.timelineNotesEnabled.set(true);
     component.promptControl.setValue('What is planned next week?');
@@ -1368,7 +1460,7 @@ describe('AssistantPageComponent', () => {
     const open = vi.spyOn(sheet, 'open').mockReturnValue({ afterDismissed: () => of({ kind: 'training_plans', enabled: true }) } as never);
     component.openExploreSheet(); await vi.waitFor(() => expect(component.trainingPlansEnabled()).toBe(true));
     expect(assistantService.resetConversation).toHaveBeenLastCalledWith(
-      'precise_activity', true, null, true, false, false,
+      'precise_activity', true, null, true, false, false, false, false,
     );
     expect(component.timelineNotesEnabled()).toBe(true); expect(component.locationAccess()).toBe('precise_activity');
     expect(component.promptControl.value).toBe('What is planned next week?');
@@ -1387,7 +1479,7 @@ describe('AssistantPageComponent', () => {
     component.openExploreSheet();
     await vi.waitFor(() => expect(component.timelineNotesEnabled()).toBe(true));
     expect(assistantService.resetConversation).toHaveBeenLastCalledWith(
-      'precise_activity', true, null, false, false, false,
+      'precise_activity', true, null, false, false, false, false, false,
     );
     expect(component.locationAccess()).toBe('precise_activity');
     expect(component.promptControl.value).toBe('Compare sleep and my notes.');
@@ -1401,7 +1493,7 @@ describe('AssistantPageComponent', () => {
     await vi.waitFor(() => expect(component.locationAccess()).toBe('coordinate_free'));
     expect(component.timelineNotesEnabled()).toBe(true);
     expect(assistantService.resetConversation).toHaveBeenLastCalledWith(
-      'coordinate_free', true, 'conversation-1', false, false, false,
+      'coordinate_free', true, 'conversation-1', false, false, false, false, false,
     );
     open.mockRestore();
   });
@@ -1437,7 +1529,7 @@ describe('AssistantPageComponent', () => {
     component.openExploreSheet();
     await vi.waitFor(() => expect(component.resetting()).toBe(false));
     expect(assistantService.resetConversation).toHaveBeenCalledExactlyOnceWith(
-      'precise_activity', true, 'conversation-1', false, false, false,
+      'precise_activity', true, 'conversation-1', false, false, false, false, false,
     );
     expect(component.timelineNotesEnabled()).toBe(false);
     expect(component.locationAccess()).toBe('coordinate_free');

@@ -68,6 +68,9 @@ export interface McpContentWriteInput {
   uid: string;
   connectionId: string;
   grantId?: string;
+  /** Set only by the in-process Assistant after binding a server-owned conversation. */
+  assistantConversationId?: string;
+  assistantProposalRef?: string;
   scopes: readonly string[];
   arguments: unknown;
 }
@@ -142,11 +145,49 @@ function assertInputScopes(input: McpContentWriteInput, requiredScopes: readonly
   }
 }
 
-function validateConnectionId(connectionId: string): void {
+function validateExternalConnectionId(connectionId: string): void {
   if (!connectionId || connectionId.length > 1_500 || connectionId.includes('/')
     || connectionId.startsWith('first-party-assistant-v1')) {
     invalid('This write is unavailable for the current connection.');
   }
+}
+
+function assistantAccessGeneration(data: admin.firestore.DocumentData, conversationId: string): string {
+  return JSON.stringify([
+    conversationId,
+    data.activityTagChangesEnabled === true,
+    data.timelineNotesEnabled === true,
+    data.timelineNoteChangesEnabled === true,
+  ]);
+}
+
+function assertAssistantConversationData(
+  input: McpContentWriteInput,
+  data: admin.firestore.DocumentData | undefined,
+  requiredScopes: readonly string[],
+  nowMs: number,
+): string {
+  const conversationId = input.assistantConversationId;
+  const expectedConnectionId = conversationId
+    ? `first-party-assistant-v1:${conversationId}`
+    : '';
+  const expiresAtMs = data?.expireAt && typeof data.expireAt.toMillis === 'function'
+    ? data.expireAt.toMillis()
+    : 0;
+  const requiresTags = requiredScopes.includes(ACTIVITY_TAGS_WRITE_SCOPE);
+  const requiresNotes = requiredScopes.includes(TIMELINE_NOTES_WRITE_SCOPE);
+  if (!conversationId || conversationId.length > 120
+    || input.connectionId !== expectedConnectionId
+    || !data || data.conversationId !== conversationId || expiresAtMs <= nowMs
+    || (requiresTags && data.activityTagChangesEnabled !== true)
+    || (requiresNotes && (data.timelineNotesEnabled !== true || data.timelineNoteChangesEnabled !== true))
+    || (input.assistantProposalRef !== undefined
+      && (data.pendingContentProposal?.proposalRef !== input.assistantProposalRef
+        || !Number.isSafeInteger(data.pendingContentProposal?.expiresAtMs)
+        || data.pendingContentProposal.expiresAtMs <= nowMs))) {
+    invalid('The Assistant data-access setting or pending change is no longer current. Review it again.');
+  }
+  return assistantAccessGeneration(data, conversationId);
 }
 
 function accessGeneration(data: admin.firestore.DocumentData): string {
@@ -174,38 +215,53 @@ function assertConnectionData(
 async function assertConnectionAuthorityInTransaction(
   deps: McpContentWriteDependencies,
   transaction: admin.firestore.Transaction,
-  uid: string,
-  connectionId: string,
-  grantId: string | undefined,
+  input: McpContentWriteInput,
   requiredScopes: readonly string[],
 ): Promise<void> {
-  validateConnectionId(connectionId);
+  if (input.assistantConversationId) {
+    const [conversation] = await transaction.getAll(
+      deps.db.collection('users').doc(input.uid).collection('assistantConversations').doc('active'),
+      { fieldMask: ['conversationId', 'expireAt', 'activityTagChangesEnabled', 'timelineNotesEnabled',
+        'timelineNoteChangesEnabled', 'pendingContentProposal'] },
+    );
+    assertAssistantConversationData(input, conversation.exists ? conversation.data() : undefined,
+      requiredScopes, deps.now());
+    return;
+  }
+  validateExternalConnectionId(input.connectionId);
   const [connection] = await transaction.getAll(
-    deps.db.collection('users').doc(uid).collection('mcpConnections').doc(connectionId),
+    deps.db.collection('users').doc(input.uid).collection('mcpConnections').doc(input.connectionId),
     { fieldMask: ['scopes', 'status', 'revokedAtMs', 'grantId', 'createdAtMs'] },
   );
-  assertConnectionData(connection.exists ? connection.data() : undefined, requiredScopes, grantId);
+  assertConnectionData(connection.exists ? connection.data() : undefined, requiredScopes, input.grantId);
 }
 
 async function readAccessGeneration(
   deps: McpContentWriteDependencies,
-  uid: string,
-  connectionId: string,
-  grantId: string | undefined,
+  input: McpContentWriteInput,
   requiredScopes: readonly string[],
 ): Promise<string> {
-  validateConnectionId(connectionId);
-  if ((await getUserDeletionGuardState(deps.db, uid)).shouldSkip) {
+  if ((await getUserDeletionGuardState(deps.db, input.uid)).shouldSkip) {
     invalid('This account is unavailable or being deleted.');
   }
+  if (input.assistantConversationId) {
+    const [conversation] = await deps.db.getAll(
+      deps.db.collection('users').doc(input.uid).collection('assistantConversations').doc('active'),
+      { fieldMask: ['conversationId', 'expireAt', 'activityTagChangesEnabled', 'timelineNotesEnabled',
+        'timelineNoteChangesEnabled', 'pendingContentProposal'] },
+    );
+    return assertAssistantConversationData(input, conversation.exists ? conversation.data() : undefined,
+      requiredScopes, deps.now());
+  }
+  validateExternalConnectionId(input.connectionId);
   const [connection] = await deps.db.getAll(
-    deps.db.collection('users').doc(uid).collection('mcpConnections').doc(connectionId),
+    deps.db.collection('users').doc(input.uid).collection('mcpConnections').doc(input.connectionId),
     { fieldMask: ['scopes', 'status', 'revokedAtMs', 'grantId', 'createdAtMs'] },
   );
   return assertConnectionData(
     connection.exists ? connection.data() : undefined,
     requiredScopes,
-    grantId,
+    input.grantId,
   );
 }
 
@@ -245,6 +301,9 @@ export async function updateMcpActivityTags(
   codec: McpContentWriteCodec,
   deps = defaultMcpContentWriteDependencies(),
 ) {
+  if (input.assistantConversationId && !input.assistantProposalRef) {
+    invalid('Review and confirm the current Assistant proposal before changing activity tags.');
+  }
   const requiredScopes = [ACTIVITY_DETAILS_READ_SCOPE, ACTIVITY_TAGS_WRITE_SCOPE];
   assertInputScopes(input, requiredScopes);
   const args = parseArguments(MCP_CONTENT_WRITE_INPUTS.update_activity_tags, input.arguments);
@@ -272,9 +331,7 @@ export async function updateMcpActivityTags(
     await assertConnectionAuthorityInTransaction(
       deps,
       transaction,
-      input.uid,
-      input.connectionId,
-      input.grantId,
+      input,
       requiredScopes,
     );
     const [activity] = await transaction.getAll(activityRef, { fieldMask: ['eventID'] });
@@ -317,9 +374,7 @@ export async function queryEditableMcpTimelineNotes(
   }
   const generation = await readAccessGeneration(
     deps,
-    input.uid,
-    input.connectionId,
-    input.grantId,
+    input,
     requiredScopes,
   );
   let state: z.infer<typeof EDIT_CURSOR_SCHEMA> = {
@@ -359,9 +414,7 @@ export async function queryEditableMcpTimelineNotes(
   const assertGenerationUnchanged = async () => {
     const current = await readAccessGeneration(
       deps,
-      input.uid,
-      input.connectionId,
-      input.grantId,
+      input,
       requiredScopes,
     );
     if (current !== generation) invalid('The MCP permission grant changed. Restart the note query.');
@@ -444,6 +497,9 @@ async function mutateTimelineNote(
   codec: McpContentWriteCodec,
   deps: McpContentWriteDependencies,
 ): Promise<TimelineNoteMutationResult> {
+  if (input.assistantConversationId && !input.assistantProposalRef) {
+    invalid('Review and confirm the current Assistant proposal before changing a Timeline note.');
+  }
   const requiredScopes = [MCP_TIMELINE_NOTES_SCOPE, TIMELINE_NOTES_WRITE_SCOPE];
   assertInputScopes(input, requiredScopes);
   const createArgs = tool === 'create_timeline_note'
@@ -478,9 +534,7 @@ async function mutateTimelineNote(
       transactionPrecondition: transaction => assertConnectionAuthorityInTransaction(
         deps,
         transaction,
-        input.uid,
-        input.connectionId,
-        input.grantId,
+        input,
         requiredScopes,
       ),
     });
@@ -531,6 +585,9 @@ export async function deleteMcpTimelineNote(
   codec: McpContentWriteCodec,
   deps = defaultMcpContentWriteDependencies(),
 ) {
+  if (input.assistantConversationId && !input.assistantProposalRef) {
+    invalid('Review and confirm the current Assistant proposal before deleting a Timeline note.');
+  }
   const requiredScopes = [MCP_TIMELINE_NOTES_SCOPE, TIMELINE_NOTES_WRITE_SCOPE];
   assertInputScopes(input, requiredScopes);
   const args = parseArguments(MCP_CONTENT_WRITE_INPUTS.delete_timeline_note, input.arguments);
@@ -545,9 +602,7 @@ export async function deleteMcpTimelineNote(
       transactionPrecondition: transaction => assertConnectionAuthorityInTransaction(
         deps,
         transaction,
-        input.uid,
-        input.connectionId,
-        input.grantId,
+        input,
         requiredScopes,
       ),
     });

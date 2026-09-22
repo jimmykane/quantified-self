@@ -46,15 +46,16 @@ The callable surface consists of:
   pending turn for the signed-in user.
 - `resetAssistantConversation`: replaces the active conversation generation with an explicit location-access mode so an
   older in-flight response cannot restore cleared content or cross a consent boundary.
-- `applyAssistantTrainingProposal`: applies or dismisses the one current bounded Training proposal after an explicit user
-  action; Gemini never receives or invokes this callable.
+- `applyAssistantTrainingProposal`: the deployed compatibility name for applying or dismissing the one current bounded
+  Training or content proposal after an explicit user action; Gemini never receives or invokes this callable. Content
+  proposals still execute through the existing MCP mutation services rather than a parallel callable or write path.
 
 All five require Firebase Authentication and App Check. Before a chat turn can reserve quota or send data to Gemini,
 the backend also verifies the required privacy, data, and Terms agreements in the server-authoritative legal document.
 Firestore rules deny browser access to `users/{uid}/assistantConversations/active`.
 
-Conversation replacement and Training-proposal application use an explicit 512 MiB runtime floor because both load the
-shared Assistant and Training contract graph. The internal MCP connection identity includes the server-owned conversation
+Conversation replacement and proposal application use an explicit 512 MiB runtime floor because both load the shared
+Assistant, MCP content-write, and Training contract graph. The internal MCP connection identity includes the server-owned conversation
 generation; Training reads recognize only the reserved fixed identity or its colon-delimited generation form, while
 external clients still require their OAuth connection record. These are runtime boundaries, not public MCP contracts.
 
@@ -82,7 +83,7 @@ The selected access mode is stored with the server-owned conversation. `beginTur
 fingerprints bind precise-location retries to that wider consent, changing the setting creates a new generation, and
 **New chat** always creates a coordinate-free generation. This prevents coordinate-bearing history from later being
 sent as part of a coordinate-free chat. Route-location scope, saved-route bounds, route geometry, route waypoints,
-original source files, arbitrary write tools, and dashboard settings remain unavailable in both modes. Coordinate-free chats can
+original source files, direct write tools, and dashboard settings remain unavailable in both modes. Coordinate-free chats can
 read bounded activity chart series but never their breadcrumb location stream. Precise-activity chats can request that
 existing location stream when an activity map is relevant.
 Detailed activity sample pagination remains an external MCP workflow. The first-party allowlist omits
@@ -127,40 +128,54 @@ change permissions as compact rows, explains the read dependency before enabling
 toggle keyboard- and screen-reader-labelled. A failed conversation replacement states that the previous conversation and
 access choices remain unchanged.
 
-## Optional Timeline notes context
+## Optional tags and Timeline notes
 
-**Examples & data access** includes an independent, default-off **Timeline notes** Material toggle. It discloses full
-private titles/details, including notes hidden from charts and potentially sensitive health or personal text. Changing
-any optional access replaces the active chat generation while preserving the other choices. **New chat**
-resets all optional access. Missing `timelineNotesEnabled` in older clients, stored chats, responses or pending requests means disabled.
-No contract version or generic permission framework is added.
+**Examples & data access** includes independent, default-off compact-row choices for **Activity tag changes** and
+**Timeline notes**. Timeline notes discloses full private titles/details, including notes hidden from charts and
+potentially sensitive health or personal text. Changing any optional access replaces the active chat generation while
+preserving the other choices. **New chat** resets all optional access. Missing `timelineNotesEnabled`,
+`activityTagChangesEnabled`, or `timelineNoteChangesEnabled` in older clients, stored chats, responses, or pending
+requests means disabled. No contract version or generic permission framework is added.
 
-The server stores the boolean with its active conversation. Enabling requires the existing reset path; a chat request
-cannot grant itself notes access. Requests and replay fingerprints bind enabled access, and `beginTurn` rejects a
-mismatched generation or setting. The runtime uses the server-owned state and rechecks the active generation and notes
-permission before and after each private notes tool call. Completion retains the existing generation/lease fence.
-The frontend validates response agreement, ignores account-switched responses, and never retries an originating
-account's call as a newly signed-in user. Pending recovery preserves the independent access choices.
-Permission resets carry the expected conversation ID (`null` means no unexpired conversation), checked in the same
-transaction as the replacement. Stale tabs and delayed retries cannot restore notes access through an unrelated location
-change. Legacy resets may omit the expectation only with notes and Training plans disabled. A conflict reloads the server's choices without
-automatically retrying the reset or discarding the draft. The composer is read-only during a reset; sheet results bind
-to their opening account and generation. Account loads clear old messages, pending questions and permissions before
-waiting for the replacement state, and old completions cannot clear a newer account's view.
+The server stores these booleans with its active conversation. Enabling requires the existing reset path; a chat request
+cannot grant itself access. Requests and replay fingerprints bind enabled access, and `beginTurn` rejects a mismatched
+generation or setting. The runtime rechecks the active generation and relevant permission before and after each private
+read or prepare call. Completion retains the existing generation/lease fence. The frontend validates response agreement,
+ignores account-switched responses, and never retries an originating account's call as a newly signed-in user. Pending
+recovery preserves the independent access choices. Permission resets carry the expected conversation ID (`null` means no
+unexpired conversation), checked in the same transaction as replacement. Stale tabs and delayed retries cannot restore
+access through an unrelated setting change. A conflict reloads the server's choices without automatically retrying the
+reset or discarding the draft. The composer is read-only during a reset; sheet results bind to their opening account and
+generation. Account loads clear old messages, pending questions, and permissions before waiting for replacement state,
+and old completions cannot clear a newer account's view.
 
-Only `query_timeline_notes` and `timeline-notes:read` are added when enabled. The external MCP server's separate
-`timeline-notes:write` and `activity-tags:write` grants and tools are deliberately excluded from the built-in Assistant.
-Existing grants/tools—including the absence
-of all-day Health and route locations—are unchanged. Notes may be consulted for direct questions or relevant Sleep,
-Training and measurement analysis, not automatically for every answer. Text remains untrusted user-reported context,
-not model instructions, diagnoses, causal proof or authorization. The existing metric/readiness/briefing contracts and
-calculations are unchanged; no note chart overlays are added to Assistant visuals.
+When Timeline notes read access is enabled, `query_timeline_notes` and `timeline-notes:read` are available. A separate
+default-off **Timeline note changes** child choice requires that read access and adds
+`query_editable_timeline_notes` plus local prepare-only create, update, and permanent-delete tools. Activity tag changes
+adds `query_activities_with_tags` plus one local prepare-only complete-replacement tool. The public MCP write tools are
+never exposed to Gemini. Before preparing an update or deletion, runtime code requires the exact note reference and
+revision from a current read; before preparing a tag replacement it requires the exact activity reference and current
+tag list. Stored titles, tags, notes, and other account data cannot authorize a change.
 
-Deterministic evidence stores compact note titles, categories and actual dates, not full details or raw tool responses.
-Answers can quote relevant details under the same seven-day conversation retention. Logs, analytics and errors must
-not contain private note text. Deployment, registered MCP app rescan/contract promotion, and local plugin sync remain
-separate approved release steps. Training planning permissions remain independent of this notes permission and use the
-conversation-bound proposal flow described above.
+Gemini may prepare at most one ten-minute content proposal per response. The app identifies the activity/date or note
+title and shows exact tag before/after values or note fields, including a clear permanent-deletion warning. Only an
+explicit **Apply change** or **Delete note** action invokes the existing Assistant apply endpoint. The backend rechecks
+the active conversation generation, relevant per-chat permission, exact proposal and expiry, owner, deletion fence, and
+optimistic concurrency preconditions inside the existing sanitized content mutation path. **Dismiss** changes nothing.
+A changed activity tag list, changed note revision, stale tab, access change, account switch, expired proposal, or new
+chat fails closed. A stable note-create mutation ID and existing idempotent/conflict semantics make uncertain retries
+safe. No provider is called and recorded activity metrics are never edited.
+
+Notes may be consulted for direct questions or relevant Sleep, Training, and measurement analysis, not automatically
+for every answer. Text remains untrusted user-reported context, not model instructions, diagnoses, causal proof, or
+authorization. Deterministic evidence stores compact note titles, categories, and actual dates, not full details or raw
+tool responses. Answers can quote relevant details under the same seven-day conversation retention. Logs, analytics,
+and errors must not contain private note text. The existing metric/readiness/briefing contracts and calculations are
+unchanged; no note chart overlays are added to Assistant visuals.
+
+Deployment remains a separate approved release step. The hosted MCP contract, registered-app digest, consent scopes,
+and external plugin are unchanged by this first-party Assistant addition. Training planning permissions remain
+independent of these content permissions and use their own conversation-bound proposal flow described above.
 
 ## Deterministic visual answers
 

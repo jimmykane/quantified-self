@@ -102,6 +102,35 @@ describe('Assistant MCP session', () => {
     } finally { await session.close(); }
   });
 
+  it('exposes content reads and prepare-only tools after per-chat consent', async () => {
+    let capturedAuth: AuthenticatedMcpRequest | null = null;
+    const session = await createAssistantMcpSession('ordinary-owner', 'https://quantified-self.io', {
+      createServer: auth => { capturedAuth = auth; return createTestServer(); },
+    }, 'coordinate_free', true, false, false, false, 'conversation-content', true, true);
+    try {
+      expect(session.tools.map(tool => tool.name)).toEqual(expect.arrayContaining([
+        'query_activities_with_tags', 'query_editable_timeline_notes', 'prepare_activity_tag_change',
+        'prepare_timeline_note_create', 'prepare_timeline_note_update', 'prepare_timeline_note_delete',
+      ]));
+      expect(session.tools.map(tool => tool.name)).not.toContain('update_activity_tags' as never);
+      expect(session.tools.map(tool => tool.name)).not.toContain('create_timeline_note' as never);
+      expect(capturedAuth).toMatchObject({
+        connectionId: 'first-party-assistant-v1:conversation-content',
+        assistantConversationId: 'conversation-content',
+        scopes: expect.arrayContaining([MCP_OAUTH_SCOPES.ActivityTagsWrite, MCP_OAUTH_SCOPES.TimelineNotesWrite]),
+      });
+      const prepared = await session.callTool('prepare_activity_tag_change', {
+        activityRef: 'activity-ref', expectedTags: ['Easy'], tags: ['Quality'],
+      });
+      expect(prepared.structuredContent).toMatchObject({
+        kind: 'update_activity_tags', requiresConfirmation: true,
+      });
+      await expect(session.callTool('prepare_timeline_note_delete', {
+        noteRef: 'note-ref', expectedRevision: 1,
+      })).rejects.toThrow('only one content change');
+    } finally { await session.close(); }
+  });
+
   it('resolves the complete curated boundary from the production MCP server', async () => {
     const session = await createAssistantMcpSession(
       'user-1',
@@ -214,6 +243,9 @@ describe('Assistant MCP session', () => {
 
     try {
       expect(session.tools.map(tool => tool.name)).toEqual(ASSISTANT_MCP_TOOL_NAMES.filter(name => name !== 'query_timeline_notes'
+        && name !== 'query_activities_with_tags'
+        && name !== 'query_editable_timeline_notes'
+        && !name.startsWith('prepare_')
         && !(TRAINING_PREVIEW_TOOLS as readonly string[]).includes(name)
         && !(TRAINING_READ_TOOLS as readonly string[]).includes(name)));
       expect(session.tools.map(tool => tool.name)).toContain(

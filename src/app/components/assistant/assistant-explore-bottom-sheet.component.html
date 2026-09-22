@@ -27,7 +27,7 @@
       <h3 id="assistant-data-access">Your data stays in your control</h3>
       <div>
         <mat-icon aria-hidden="true">verified_user</mat-icon>
-        <span>Answers use verified data requests. Optional Training changes are previewed for your review.</span>
+        <span>Answers use verified data requests. Optional content and Training changes are previewed for your review.</span>
       </div>
       <div>
         <mat-icon aria-hidden="true">route</mat-icon>
@@ -51,14 +51,42 @@
       </mat-slide-toggle>
     </section>
 
-    <section class="assistant-notes-access" aria-labelledby="assistant-timeline-notes-access">
-      <h3 id="assistant-timeline-notes-access">Timeline notes</h3>
-      <p id="assistant-timeline-notes-disclosure">Allow Gemini to read full private note titles and details when relevant, including notes hidden from charts. Notes may contain sensitive health or personal information.</p>
-      <p>Off by default. Changing access starts a new chat and keeps your other data-access choices. New chat turns all optional access off. Answers may quote relevant details in your saved conversation.</p>
-      <mat-slide-toggle [checked]="data.timelineNotesEnabled === true"
-        aria-label="Timeline notes access — changing this starts a new chat"
-        aria-describedby="assistant-timeline-notes-disclosure"
-        (change)="setTimelineNotes($event.checked)">Timeline notes</mat-slide-toggle>
+    <section class="assistant-notes-access" aria-labelledby="assistant-content-access">
+      <h3 id="assistant-content-access">Tags and Timeline notes</h3>
+      <p class="assistant-training-intro">Choose what the Assistant can do in this chat. Every change starts a new chat; New chat turns all optional access off.</p>
+      <div class="assistant-training-options">
+        <app-compact-row title="Activity tag changes" titleId="assistant-activity-tags-title"
+          icon="sell" density="compact">
+          <p id="assistant-activity-tags-summary" class="assistant-training-summary">Read current workout tags and prepare a complete replacement. Tags are shared by workouts in the same event. Nothing changes until you approve it.</p>
+          <mat-slide-toggle compactRowAction [checked]="data.activityTagChangesEnabled === true"
+            aria-label="Activity tag changes — changing this starts a new chat"
+            aria-describedby="assistant-activity-tags-summary"
+            (change)="setActivityTagChanges($event.checked)"></mat-slide-toggle>
+        </app-compact-row>
+
+        <app-compact-row title="Timeline notes" titleId="assistant-timeline-notes-title"
+          icon="event_note" iconTone="secondary" density="compact">
+          <p id="assistant-timeline-notes-summary" class="assistant-training-summary">Read full private note titles and details when relevant, including notes hidden from charts. Notes may contain sensitive health or personal information.</p>
+          <mat-slide-toggle compactRowAction [checked]="data.timelineNotesEnabled === true"
+            aria-label="Timeline notes access — changing this starts a new chat"
+            aria-describedby="assistant-timeline-notes-summary"
+            (change)="setTimelineNotes($event.checked)"></mat-slide-toggle>
+        </app-compact-row>
+
+        @if (data.timelineNotesEnabled !== true) {
+          <p class="assistant-training-dependency" role="note">Turn on Timeline notes before allowing note changes.</p>
+        }
+
+        <app-compact-row title="Timeline note changes" titleId="assistant-timeline-note-changes-title"
+          icon="edit_note" iconTone="tertiary" density="compact" [showDivider]="false">
+          <p id="assistant-timeline-note-changes-summary" class="assistant-training-summary">Prepare a note to create, edit or permanently delete. You review every change before it is applied.</p>
+          <mat-slide-toggle compactRowAction [checked]="data.timelineNoteChangesEnabled === true"
+            aria-label="Timeline note changes — changing this starts a new chat"
+            aria-describedby="assistant-timeline-note-changes-summary"
+            [disabled]="data.timelineNotesEnabled !== true"
+            (change)="setTimelineNoteChanges($event.checked)"></mat-slide-toggle>
+        </app-compact-row>
+      </div>
     </section>
 
     <section class="assistant-training-access" aria-labelledby="assistant-training-access">
