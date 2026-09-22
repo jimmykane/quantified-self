@@ -146,9 +146,10 @@ export interface PlannedWorkoutProviderMappingAssessmentV1 {
 }
 
 /**
- * Versioned provider research snapshot. Public delivery remains disabled until
- * each provider's documented contract and separately authorized live evidence
- * support the claimed lifecycle.
+ * Versioned provider research and rollout snapshot. A provider becomes public
+ * only after its documented contract and separately authorized live evidence
+ * support the claimed lifecycle; providers can remain in private rollout
+ * independently.
  */
 export const PLANNED_WORKOUT_PROVIDER_CAPABILITIES_V1: Readonly<
   Record<PlannedWorkoutProviderId, PlannedWorkoutProviderCapabilityV1>

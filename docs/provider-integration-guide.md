@@ -47,7 +47,7 @@ Garmin Sleep and Health history recovery must account for a moving provider mini
 
 Garmin stress-validation diagnostics use the existing WARNING with allowlisted family/field/reason, summary index, type, and bounded numeric-only values; never log raw provider strings or objects. Stress sample zeroes are numeric readings; daily average -2 is retained as a native-only availability code because its daily semantics are undocumented. Do not transfer sentinel meanings between summary families or let a recognized non-measurement code discard unrelated valid metrics. A fix does not recover an existing DLQ callback whose pull credentials were removed; use bounded Summary Resender recovery and verify replacement ingestion. See [Garmin delivery diagnostics](garmin-integration.md#delivery-and-trust-boundary) for the exact bound and metadata contract.
 
-### Structured-workout delivery proof (not production support)
+### Structured-workout remote verification evidence
 
 Remote verification (#703) reuses the Training delivery ledger, 25-item reconciliation pages, dispatcher and per-delivery
 lease. `check` is an idempotent, revision-checked command with a 15-minute coalescing window; it does not change consent.
@@ -60,7 +60,7 @@ for the full policy, request accounting, privacy, diagnostics and rollout contra
 | --- | --- | --- |
 | Garmin | Separate retained Workout/Schedule GETs, exact account/owner/date association checks. A controlled deletion proved that removing a calendar entry leaves its Workout present and makes the exact retained Schedule ID return 404. | Schedule-only negative classification and repair are enabled after two unchanged observations at least 15 minutes apart. Missing Workout remains inconclusive and cannot trigger recreation; its semantics/replacement recovery remain in #703/#645. |
 | COROS | Unavailable; no documented planned-resource read established. | Delivery support does not enable checking; do not substitute activity polling or blind republishing. |
-| Wahoo | Private #649 adapter independently checks app-owned Plan, dated Workout and association. | Positive-only retained-ID reads and bounded exact create recovery; empty/partial/unstable inventory and 404 never authorize absence or repair. workout_token is not POST idempotency. Production-account/device evidence remains pending. |
+| Wahoo | The public #649 adapter independently checks its app-owned Plan, dated Workout and association. | Positive-only retained-ID reads and bounded exact create recovery; empty/partial/unstable inventory and 404 never authorize absence or repair. `workout_token` is not POST idempotency. Production cloud CRUD/readback is proved; Wahoo app, ELEMNT and watch receipt remain provider-managed post-release observations, not claimed delivery evidence. |
 | Suunto | Private #650 adapter keeps positive owned Guide-record reads and resumable inventory internal to exact uncertain-create recovery. User-facing remote visibility checking is unavailable. | A Guide hidden or removed in Suunto can remain visible through the partner API. API presence proves only a retained cloud record, never app/watch visibility; 404/unstable inventory cannot prove deletion. Negative classification and automatic repair remain disabled by #710. |
 
 Inspection never claims device receipt or routinely overwrites provider edits. Stop sync prevents restoration. Pro,
@@ -142,8 +142,8 @@ The versioned research snapshot lives in `shared/planned-workout-providers.ts`; 
 `functions/src/training-plans/providers/`. Wahoo is the first provider with its public delivery flag enabled; Garmin,
 COROS and Suunto retain exact-UID production pilots in `shared/training-delivery-rollout.ts`. The same shared decision is
 enforced by both the production runtime and reactive frontend controls, independently of manual-planning availability.
-Every provider retains Pro, explicit consent,
-connection authority and `WORKOUT_IMPORT` checks. Legacy connections must reconnect rather than have permission inferred.
+Every provider retains Pro, explicit consent, connection authority and its provider-specific permission checks. Legacy
+connections must reconnect rather than have permission inferred.
 See the [private pilot operational boundary](training-workspace.md#private-garmin-production-pilot) for deployment,
 preflight and rollback for Garmin. Provider status is:
 

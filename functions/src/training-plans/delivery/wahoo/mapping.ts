@@ -27,7 +27,8 @@ export function wahooDurationSeconds(structure: WorkoutStructureV1): number | nu
 }
 /** Date-only QS scheduling is represented at local noon (not UTC midnight).
  * day_code is optional and deliberately omitted: the public epoch statement and
- * examples disagree. Device/date semantics remain an explicit private-pilot check. */
+ * examples disagree. Post-release observation must keep checking the resulting
+ * saved-time-zone calendar date without claiming a device receipt. */
 export function wahooStarts(localDate: string, zone: string): string {
   const nominal = Date.parse(`${localDate}T12:00:00Z`);
   const formatter = new Intl.DateTimeFormat('en-CA', { timeZone: zone, year: 'numeric', month: '2-digit', day: '2-digit',
