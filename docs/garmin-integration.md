@@ -132,10 +132,10 @@ unrelated Sports Lib activity types. Running and Cycling remain exact; every sub
 requires approval because Garmin does not receive the exact profile.
 Cycling-family folds retain the existing cycling-only secondary-target rule and device-support warning.
 
-Public Garmin planned-workout rollout remains disabled. A separate backend-enforced exact-UID private production pilot can
-use the existing app's explicit Send/plan consent flow; see the [pilot boundary](training-workspace.md#private-garmin-production-pilot).
-The pilot does not bypass Pro, current connection generations or `WORKOUT_IMPORT`; older connections must reconnect.
-It is independent of the Training UI allowlist and does not prove behavior on every compatible device or activity profile.
+Garmin planned-workout delivery is available to eligible connected Pro users through the app's explicit Send/plan
+consent flow; see the [public delivery boundary](training-workspace.md#garmin-public-delivery-boundary). There is no
+per-UID allowlist. Public admission does not bypass Pro, current connection generations or `WORKOUT_IMPORT`; older
+connections must reconnect. It does not prove behavior on every compatible device or activity profile.
 Relative targets require explicit degradation approval because
 the provider percentage fields do not transmit Quantified Self's stored reference snapshot. Secondary targets are
 rejected outside cycling and remain device-dependent for cycling. The #647 adapter now has synthetic HTTP and real
@@ -149,9 +149,9 @@ Past/completed copies remain protected, and provider-held copies may remain afte
 
 The detailed implementation and production-verification checklist lives in the
 [Training source of truth](training-workspace.md#garmin-workoutcalendar-adapter-647). Remaining request/response and
-schedule-list/404 behavior, representative device rendering and broader rollout work stay tracked in #645/#647/#655.
+schedule-list/404 behavior, representative device rendering and post-release observation stay tracked in #645/#647/#655.
 The retired #698 issue is not a launch gate. Completed-activity correlation remains #651. No new completion hook is implemented.
-Neither the adapter nor the offline proof authorizes a provider call, deployment, or production enablement.
+Neither the adapter nor the offline proof authorizes a provider call or deployment.
 
 ## Production configuration
 

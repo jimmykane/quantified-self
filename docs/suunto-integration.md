@@ -97,7 +97,7 @@ Training #650 reuses the existing Suunto OAuth client ID/secret, connected-user 
 as described by the [official Guides authentication workflow](https://apizone.suunto.com/how-to-use-suuntoplus-guides-api).
 The existing subscription must have Guides access; no separate Guides key or OAuth application is required by QS.
 Activity, route, Sleep and Health credential bindings remain unchanged. Guide delivery runs in the
-existing Training worker, not these Health queues. Its owner-only rollout, exact app-name configuration, rolling dated
+existing Training worker, not these Health queues. Its public connected-Pro availability, exact app-name configuration, rolling dated
 Guide window, truthful visibility messaging and positive cloud-record reads used only for uncertain-create recovery are documented in
 [Training workspace](training-workspace.md#suuntoplus-guide-delivery-650). A Guide hidden or removed in Suunto can remain
 visible through the partner API. Do not infer app/watch visibility from API acceptance or presence, or cloud deletion from

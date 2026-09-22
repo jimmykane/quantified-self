@@ -37,7 +37,7 @@ describe('Production Training delivery rollout', () => {
       .mockResolvedValueOnce(new Response(JSON.stringify({ error: null, payload: [] }), { status: 200 }));
     vi.stubGlobal('fetch', fetcher);
     const guard = vi.fn(async () => {});
-    const transport = runtime.transport('suunto', 'xcsAolLDDTWTgtRN9eYF3lW2YKL2')!;
+    const transport = runtime.transport('suunto', 'owner')!;
 
     expect(await transport.inspection!.inspect(inspection, guard)).toMatchObject({
       artifacts: [{ key: 'guide', state: 'unknown', authoritative: false }],
@@ -50,7 +50,7 @@ describe('Production Training delivery rollout', () => {
         }),
       }));
     }
-    expect(authorizeSuuntoGuideRequest).toHaveBeenCalledWith(runtime.db, 'xcsAolLDDTWTgtRN9eYF3lW2YKL2', inspection);
+    expect(authorizeSuuntoGuideRequest).toHaveBeenCalledWith(runtime.db, 'owner', inspection);
     expect(guard).toHaveBeenCalled();
   });
 
@@ -60,7 +60,7 @@ describe('Production Training delivery rollout', () => {
     vi.stubEnv('SUUNTOAPP_GUIDES_SUBSCRIPTION_KEY', 'unused-legacy-key');
     const fetcher = vi.fn();
     vi.stubGlobal('fetch', fetcher);
-    const transport = runtime.transport('suunto', 'xcsAolLDDTWTgtRN9eYF3lW2YKL2')!;
+    const transport = runtime.transport('suunto', 'owner')!;
     await expect(transport.inspection!.inspect(inspection, vi.fn(async () => {})))
       .rejects.toMatchObject({ kind: 'terminal', rejected: true });
     expect(authorizeSuuntoGuideRequest).not.toHaveBeenCalled();
@@ -71,10 +71,10 @@ describe('Production Training delivery rollout', () => {
     for (const key of ['SUUNTOAPP_CLIENT_ID', 'SUUNTOAPP_CLIENT_SECRET', 'SUUNTOAPP_SUBSCRIPTION_KEY']) vi.stubEnv(key, undefined);
     const fetcher = vi.fn();
     vi.stubGlobal('fetch', fetcher);
-    const transport = runtime.transport('suunto', 'xcsAolLDDTWTgtRN9eYF3lW2YKL2');
+    const transport = runtime.transport('suunto', 'owner');
     expect(transport).toMatchObject({ horizonDays: 6, withdrawOutsideHorizon: true });
     expect(transport?.inspection?.policy).toMatchObject({ mode: 'unavailable', authoritativeAbsenceKeys: [], repairReadyKeys: [] });
-    expect(runtime.transport('suunto', 'other')).toBeNull();
+    expect(runtime.transport('suunto', 'other')).toMatchObject({ horizonDays: 6, withdrawOutsideHorizon: true });
     expect(authorizeSuuntoGuideRequest).not.toHaveBeenCalled();
     expect(fetcher).not.toHaveBeenCalled();
   });
@@ -83,8 +83,8 @@ describe('Production Training delivery rollout', () => {
     vi.stubEnv('SUUNTOAPP_GUIDE_OWNER', owner);
     const fetcher = vi.fn();
     vi.stubGlobal('fetch', fetcher);
-    expect(runtime.transport('suunto', 'xcsAolLDDTWTgtRN9eYF3lW2YKL2')).toBeNull();
-    expect(runtime.transport('garmin', 'xcsAolLDDTWTgtRN9eYF3lW2YKL2')?.mappingVersion).toBeTruthy();
+    expect(runtime.transport('suunto', 'owner')).toBeNull();
+    expect(runtime.transport('garmin', 'owner')?.mappingVersion).toBeTruthy();
     expect(authorizeSuuntoGuideRequest).not.toHaveBeenCalled();
     expect(fetcher).not.toHaveBeenCalled();
   });
@@ -108,7 +108,7 @@ describe('Production Training delivery rollout', () => {
       externalId, localDate: workout.localDate, pinned: false,
     } }), { status: 201 }));
     vi.stubGlobal('fetch', fetcher);
-    const transport = runtime.transport('suunto', 'xcsAolLDDTWTgtRN9eYF3lW2YKL2')!;
+    const transport = runtime.transport('suunto', 'owner')!;
     const assessment = transport.assess(workout, inspection.destinationKey, inspection.timeZone);
     expect(assessment.level).toBe('exact');
     const operation: DeliveryOperation = {
@@ -128,22 +128,22 @@ describe('Production Training delivery rollout', () => {
     expect(checkpoint).toHaveBeenLastCalledWith(artifact, { version: 1, step: 'finished', state: 'accepted' });
   });
 
-  it('constructs only implemented adapters for the pilot UID', () => {
+  it('constructs every implemented adapter for an authenticated owner', () => {
     vi.stubEnv('SUUNTOAPP_GUIDE_OWNER', 'Fixture application');
     for (const provider of PLANNED_WORKOUT_PROVIDER_IDS) {
-      const transport = runtime.transport(provider, 'xcsAolLDDTWTgtRN9eYF3lW2YKL2');
+      const transport = runtime.transport(provider, 'owner');
       expect(transport?.mappingVersion).toBeTruthy();
     }
   });
 
   it('binds COROS only to the batch path and keeps remote checking unavailable', () => {
-    const transport = runtime.transport('coros', 'xcsAolLDDTWTgtRN9eYF3lW2YKL2');
+    const transport = runtime.transport('coros', 'owner');
     expect(transport).toMatchObject({ horizonDays: 365, batch: { maxSize: 30 } });
     expect(transport?.inspection).toBeUndefined();
-    expect(runtime.transport('coros', 'other')).toBeNull();
+    expect(runtime.transport('coros', 'other')).toMatchObject({ horizonDays: 365, batch: { maxSize: 30 } });
   });
   it('binds Wahoo publicly with the seven-day horizon and independent positive-only inspection', () => {
-    const transport = runtime.transport('wahoo', 'xcsAolLDDTWTgtRN9eYF3lW2YKL2');
+    const transport = runtime.transport('wahoo', 'owner');
     expect(transport).toMatchObject({ horizonDays: 6, withdrawOutsideHorizon: true });
     expect(transport?.inspection?.policy).toMatchObject({ required: ['plan', 'workout', 'association'], authoritativeAbsenceKeys: [], repairReadyKeys: [] });
     expect(runtime.transport('wahoo', 'other')).toMatchObject({ horizonDays: 6, withdrawOutsideHorizon: true });
@@ -154,10 +154,9 @@ describe('Production Training delivery rollout', () => {
       for (const provider of PLANNED_WORKOUT_PROVIDER_IDS) expect(runtime.transport(provider, '')).toBeNull();
   });
 
-  it.each(['another-user', ' xcsAolLDDTWTgtRN9eYF3lW2YKL2', 'xcsAolLDDTWTgtRN9eYF3lW2YKL2 '])(
-    'binds only the public Wahoo transport for another authenticated identity %s', uid => {
+  it.each(['another-user', ' owner', 'owner '])(
+    'binds every public provider transport for another authenticated identity %s', uid => {
       vi.stubEnv('SUUNTOAPP_GUIDE_OWNER', 'Fixture application');
-      expect(runtime.transport('wahoo', uid)).toMatchObject({ horizonDays: 6 });
-      for (const provider of ['garmin', 'coros', 'suunto'] as const) expect(runtime.transport(provider, uid)).toBeNull();
+      for (const provider of PLANNED_WORKOUT_PROVIDER_IDS) expect(runtime.transport(provider, uid)).not.toBeNull();
     });
 });

@@ -372,7 +372,7 @@ describe('HomeComponent', () => {
         expect(previews.every(preview => preview.nativeElement.querySelector(':scope > div[data-nosnippet]'))).toBe(true);
     });
 
-    it('presents Training Plans, MCP planning, and public Wahoo delivery with one focused CTA', () => {
+    it('presents Training Plans, MCP planning, and public provider delivery with one focused CTA', () => {
         const section = fixture.nativeElement.querySelector('.training-plans-section') as HTMLElement;
         const rows = section.querySelectorAll('app-compact-row');
         const links = section.querySelectorAll('a');
@@ -389,8 +389,7 @@ describe('HomeComponent', () => {
         expect(text).toContain('Plan Through MCP');
         expect(text).toContain('compatible MCP clients');
         expect(text).toContain('Optional Provider Delivery');
-        expect(text).toContain('Wahoo workout delivery is available to connected Pro members');
-        expect(text).toContain('Garmin, Suunto, and COROS delivery remain limited rollouts');
+        expect(text).toContain('Workout delivery to Garmin, COROS, Suunto, and Wahoo is available to connected Pro members');
         expect(text).toContain('never sends workouts by itself');
         expect(text).toContain('without adding them to recorded totals or Training analysis');
         expect(rows).toHaveLength(TRAINING_PLANS_HOME_CONTENT.rows.length);

@@ -51,12 +51,21 @@ describe('integration-pages.content', () => {
     });
   });
 
+  it.each([
+    ['garmin', 'Planned workouts to Garmin', 'Can I send planned Training workouts to Garmin?'],
+    ['suunto', 'Planned workouts as SuuntoPlus Guides', 'Can I send planned Training workouts to Suunto?'],
+    ['coros', 'Planned workouts to COROS', 'Can I send planned Training workouts to COROS?'],
+  ] as const)('documents public %s planned-workout delivery without claiming device receipt', (provider, flow, question) => {
+    const page = PROVIDER_INTEGRATION_PAGES[provider];
+    expect(page.syncFlows.some(item => item.title === flow)).toBe(true);
+    const answer = page.faqItems.find(item => item.question === question)?.answer;
+    expect(answer).toContain('Connected Pro members');
+    expect(answer).toMatch(/does not (confirm|prove)|not proof|acceptance does not/i);
+  });
+
   it('should keep Garmin and COROS SEO intent distinct from the Suunto sync page', () => {
-    expect(PROVIDER_INTEGRATION_ROUTE_DATA.garmin.title).toBe('Garmin Training Dashboard');
-    expect(PROVIDER_INTEGRATION_ROUTE_DATA.garmin.description).toContain('Garmin training dashboard');
-    expect(PROVIDER_INTEGRATION_ROUTE_DATA.garmin.description).toContain('routes sent to Garmin Connect');
-    expect(PROVIDER_INTEGRATION_ROUTE_DATA.garmin.description).toContain('GPX/FIT routes');
-    expect(PROVIDER_INTEGRATION_ROUTE_DATA.garmin.description).toContain('Garmin to Suunto activity sync');
+    expect(PROVIDER_INTEGRATION_ROUTE_DATA.garmin.title).toBe('Garmin Training Plans and Dashboard');
+    expect(PROVIDER_INTEGRATION_ROUTE_DATA.garmin.description).toContain('planned workouts to Garmin Connect');
     expect(PROVIDER_INTEGRATION_PAGES.garmin.highlights).toContain('Send saved routes to Garmin Connect');
     expect(PROVIDER_INTEGRATION_PAGES.garmin.syncFlows.find(flow => flow.title === 'Garmin history import')?.copy)
       .toContain('latest two years selected');
@@ -72,24 +81,19 @@ describe('integration-pages.content', () => {
     expect(PROVIDER_INTEGRATION_PAGES.garmin.faqItems.some(item => item.question === 'Can I upload a GPX or FIT route directly to Garmin?')).toBe(true);
     expect(PROVIDER_INTEGRATION_PAGES.garmin.faqItems.some(item => item.question === 'Can I send saved routes to Garmin Connect?')).toBe(true);
     expect(PROVIDER_INTEGRATION_ROUTE_DATA.garmin).not.toHaveProperty('keywords');
-    expect(PROVIDER_INTEGRATION_ROUTE_DATA.coros.description).toContain('centralized Garmin, Suunto, and COROS workout data');
-    expect(PROVIDER_INTEGRATION_ROUTE_DATA.coros.description).toContain('COROS to Suunto activity sync');
-    expect(PROVIDER_INTEGRATION_ROUTE_DATA.coros.description).toContain('activity delivery from Garmin, Suunto, or Wahoo');
+    expect(PROVIDER_INTEGRATION_ROUTE_DATA.coros.description).toContain('planned workouts to the COROS training calendar');
     expect(PROVIDER_INTEGRATION_PAGES.coros.highlights).toContain('Direct and saved route delivery to COROS');
     expect(PROVIDER_INTEGRATION_PAGES.coros.syncFlows.some(flow => flow.title === 'Send activities to COROS')).toBe(true);
     expect(PROVIDER_INTEGRATION_PAGES.coros.syncFlows.some(flow => flow.title === 'Send routes to COROS')).toBe(true);
     expect(PROVIDER_INTEGRATION_PAGES.coros.tools.some(tool => tool.title === 'GPX and FIT route delivery')).toBe(true);
     expect(PROVIDER_INTEGRATION_PAGES.coros.faqItems.some(item => item.question === 'Can I send routes to COROS?')).toBe(true);
     expect(PROVIDER_INTEGRATION_ROUTE_DATA.coros).not.toHaveProperty('keywords');
-    expect(PROVIDER_INTEGRATION_ROUTE_DATA.suunto.description).toContain('Sync Garmin and COROS activities to Suunto');
-    expect(PROVIDER_INTEGRATION_ROUTE_DATA.suunto.description).toContain('import Suunto routes');
-    expect(PROVIDER_INTEGRATION_ROUTE_DATA.suunto.description).toContain('send Suunto routes to Garmin');
+    expect(PROVIDER_INTEGRATION_ROUTE_DATA.suunto.description).toContain('planned workouts as SuuntoPlus Guides');
     expect(JSON.stringify(PROVIDER_INTEGRATION_PAGES)).not.toMatch(/\bprivate(?:ly)?\b/i);
     expect(JSON.stringify(PROVIDER_INTEGRATION_ROUTE_DATA)).not.toMatch(/\bprivate(?:ly)?\b/i);
-    expect(PROVIDER_INTEGRATION_ROUTE_DATA.suunto.description).toContain('GPX/FIT routes');
     expect(INTEGRATION_HUB_CARDS.find(card => card.slug === 'suunto')?.summary).toContain('send Suunto routes to Garmin');
     expect(INTEGRATION_HUB_CARDS.find(card => card.slug === 'suunto')?.highlights).toContain('Send Suunto routes to Garmin');
-    expect(PROVIDER_INTEGRATION_PAGES.suunto.h1).toBe('Suunto Integration for Activity and Route Sync');
+    expect(PROVIDER_INTEGRATION_PAGES.suunto.h1).toBe('Suunto Training Plans, Activity, and Route Sync');
     expect(PROVIDER_INTEGRATION_PAGES.suunto.highlights).toContain('Automatic and existing Suunto route imports');
     expect(PROVIDER_INTEGRATION_PAGES.suunto.highlights).toContain('Send Suunto routes to Garmin');
     expect(PROVIDER_INTEGRATION_PAGES.suunto.highlights).toContain('Send Suunto routes to Wahoo');

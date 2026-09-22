@@ -38,7 +38,7 @@ describe('help.content', () => {
     const section = HELP_SECTIONS.find(section => section.id === 'training-plans')!;
     const content = section.content;
     expect(section.summary).toContain('approval-gated MCP planning');
-    expect(section.summary).toContain('Wahoo or limited-rollout provider delivery');
+    expect(section.summary).toContain('opt-in provider delivery');
     expect(content).toContain('## Use Training Plans through MCP');
     expect(content).toContain('Training Plans uses independent MCP permissions');
     expect(content).toContain('The MCP update must be released, discovered by your client, and explicitly authorized');
@@ -46,14 +46,11 @@ describe('help.content', () => {
     expect(content).toContain('## Send workouts to connected providers');
     expect(section.links.some(link => link.label === 'MCP Connections')).toBe(true);
     expect(section.links.some(link => link.label === 'Connected services')).toBe(true);
-    expect(content).toContain('Wahoo workout delivery is available to connected Pro members');
-    expect(content).toContain('Garmin, Suunto, and COROS delivery remain limited rollouts');
-    expect(content).toContain('New COROS plan sync setup in the app is shown as **Coming soon**');
+    expect(content).toContain('Workout delivery to Garmin, COROS, Suunto, and Wahoo is available to connected Pro members');
     expect(content).toContain('Distance-based steps are not sent because Wahoo needs a total duration');
     expect(content).toContain('Older Wahoo connections may need **Reconnect Wahoo**');
     expect(content).toContain('Checks confirm the app-owned Plan, Workout and association; automatic missing-copy restoration is unavailable');
-    expect(content).toContain('Existing enabled COROS plan sync still follows its saved settings and plan status');
-    expect(content).toContain('Standalone **Send to COROS** remains available to eligible pilot accounts');
+    expect(content).toContain('Plan opt-in, standalone Send, per-workout exclusion, retry, copy status, and Stop sync are available');
     expect(content).toContain('COROS training calendar');
     expect(content).toContain('two-week watch window');
     expect(content).toContain('remote checking and automatic missing-copy restoration are unavailable');
@@ -581,8 +578,7 @@ describe('help.content', () => {
     expect(planningSection?.content).toContain('restoring plan history also restores its saved color');
     expect(HELP_SECTIONS.find(section => section.id === 'activity-calendar')?.content)
       .toContain('Standalone workouts stay neutral');
-    expect(planningSection?.content).toContain('Wahoo workout delivery is available to connected Pro members');
-    expect(planningSection?.content).toContain('New COROS plan sync setup in the app is shown as **Coming soon**');
+    expect(planningSection?.content).toContain('Workout delivery to Garmin, COROS, Suunto, and Wahoo is available to connected Pro members');
     expect(planningSection?.content).toContain('Wahoo supports time-based running and cycling workouts');
     expect(planningSection?.content).toContain('Scheduled for later');
     expect(planningSection?.content).toContain('**Sent to Suunto** means Suunto accepted the Guide for your account');

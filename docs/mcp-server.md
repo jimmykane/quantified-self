@@ -161,9 +161,9 @@ already stops a confirmed missing copy from counting as synced and represents re
 Artifact-specific inspection authority, retained provider IDs and repair evidence remain private; MCP performs no live
 provider check or repair and gains no tool, field, scope, consent or write authority.
 
-COROS Training delivery (#648) retains its backend private-rollout behavior with no wire-contract change. The temporary
-**Coming soon** plan-setup gate is browser-only, so explicit COROS proposals and `all_connected` continue to use the existing
-backend rollout and availability checks. The existing sync-status enum can report delivered, approval, retry, attention
+COROS Training delivery (#648) uses the public provider-readiness boundary with no wire-contract change. Explicit COROS
+proposals and `all_connected` use the same existing eligibility, proposal and approval checks as the other providers.
+The existing sync-status enum can report delivered, approval, retry, attention
 and completed states for COROS. Partner athlete/workout IDs, destination
 identity, batch journals, request outcomes, token authority and exact `planWorkoutId` evidence remain private and are
 rejected from browser/MCP projections. Plan totals continue to derive from individual workout statuses rather than a
@@ -179,13 +179,13 @@ link remain private and are rejected from MCP projections. The existing sanitize
 current link; #651 retains bounded fallback candidate discovery and approval-gated manual link/unlink/relink behavior.
 No private Wahoo identity or live check is introduced.
 
-Wahoo public Training delivery changes runtime availability, not the MCP wire contract. An already authorized client with
-`training-plans:read` and `training-delivery:write` may now preview an explicit Wahoo provider-delivery change for any
-eligible connected Pro owner instead of only the former UID allowlist. The same bounded proposal, native client approval,
-short expiry, owner/connection/grant/revision binding, compatibility review and separate apply call remain mandatory.
-`all_connected` includes Wahoo only when the connection and workout are currently eligible. No new tool, action, field,
-scope, consent default, provider identifier, plugin artifact or registered-client refresh is introduced; connecting Wahoo
-alone never creates delivery consent or sends a workout.
+Public Garmin, COROS, Wahoo and Suunto Training delivery changes runtime availability, not the MCP wire contract. An
+already authorized client with `training-plans:read` and `training-delivery:write` may preview an explicit delivery change
+for any eligible connected Pro owner; there is no per-UID provider allowlist. The same bounded proposal, native client
+approval, short expiry, owner/connection/grant/revision binding, compatibility review and separate apply call remain
+mandatory. `all_connected` includes only providers for which the connection, permissions, configuration and workout are
+currently eligible. No new tool, action, field, scope, consent default, provider identifier, plugin artifact or
+registered-client refresh is introduced; connecting a provider alone never creates delivery consent or sends a workout.
 
 ## Purpose and boundary
 

@@ -157,8 +157,8 @@ export const PLANNED_WORKOUT_PROVIDER_CAPABILITIES_V1: Readonly<
   garmin: {
     id: 'garmin',
     label: 'Garmin',
-    implementationState: 'private-rollout',
-    deliveryEnabled: false,
+    implementationState: 'enabled',
+    deliveryEnabled: true,
     deliveryModel: 'native-workout-and-schedule',
     requiredScopes: ['WORKOUT_IMPORT'],
     profile: {
@@ -178,14 +178,11 @@ export const PLANNED_WORKOUT_PROVIDER_CAPABILITIES_V1: Readonly<
       'Training API V2 accepts RUNNING or CYCLING but has no sub-sport field; exact QS profiles are delivered through their broad family.',
       'A secondary target is documented only for cycling and depends on device support.',
       'Production limits: 3000 application requests per rolling minute including OAuth; 1000 per account per rolling day excluding OAuth.',
+      'Cloud acceptance does not prove that Garmin Connect or a device received the workout.',
+      'Missing Workout classification and automatic recreation remain unavailable because retained-ID absence semantics are not authoritative.',
     ],
     completionCorrelation: 'Training API V2 does not document a completed-activity workout identifier.',
-    unresolvedGates: [
-      'Prove retained-ID missing/ownership response semantics and representative device behavior with the designated production account.',
-      'Verify broad-family workouts from each authored subtype on representative compatible activity profiles before claiming profile-level device support.',
-      'Confirm completion-correlation behavior outside the Training API contract.',
-      'Complete bounded production-account create, update, reschedule, delete, reconnect, and duplicate evidence before broader rollout.',
-    ],
+    unresolvedGates: [],
     evidence: [
       'Garmin Connect Developer Program Training API V2, version 1.0 (private partner document, May 2025)',
       'https://developer.garmin.com/gc-developer-program/training-api/',
@@ -195,8 +192,8 @@ export const PLANNED_WORKOUT_PROVIDER_CAPABILITIES_V1: Readonly<
   coros: {
     id: 'coros',
     label: 'COROS',
-    implementationState: 'private-rollout',
-    deliveryEnabled: false,
+    implementationState: 'enabled',
+    deliveryEnabled: true,
     deliveryModel: 'native-plan-workout-batches',
     requiredScopes: ['training-plan partner entitlement'],
     profile: {
@@ -208,13 +205,15 @@ export const PLANNED_WORKOUT_PROVIDER_CAPABILITIES_V1: Readonly<
       maxTargetsPerStep: 1,
     },
     scheduling: 'Partner workout IDs are pushed in dated batches through the Training Plan API.',
-    limits: ['At most 30 workouts per push.', 'Dates from today through one year ahead.'],
-    completionCorrelation: 'Completed workout payloads may carry planWorkoutId.',
-    unresolvedGates: [
-      'Confirm Training Plan entitlement; provider code 30009 means access is unavailable.',
-      'Confirm repeated-ID replacement and overlapping-window semantics with COROS.',
-      'Record authorized create, repeated-ID update, overlapping-window preservation, reschedule, eligible-delete, completion-correlation, and app/watch evidence before broader rollout.',
+    limits: [
+      'At most 30 workouts per push.',
+      'Dates from today through one year ahead.',
+      'The connected COROS application must have Training Plan entitlement; provider code 30009 is reported as unavailable.',
+      'COROS exposes no planned-workout read/list operation, so remote checking and automatic missing-copy restoration are unavailable.',
+      'Provider acceptance does not prove that the COROS app or a watch received the workout.',
     ],
+    completionCorrelation: 'Completed workout payloads may carry planWorkoutId.',
+    unresolvedGates: [],
     evidence: ['COROS API Reference V2.0.6 (partner document, February 2026)'],
   },
   wahoo: {
@@ -252,8 +251,8 @@ export const PLANNED_WORKOUT_PROVIDER_CAPABILITIES_V1: Readonly<
   suunto: {
     id: 'suunto',
     label: 'Suunto',
-    implementationState: 'private-rollout',
-    deliveryEnabled: false,
+    implementationState: 'enabled',
+    deliveryEnabled: true,
     deliveryModel: 'dated-guide',
     requiredScopes: ['SuuntoPlus Guides entitlement', 'Existing Suunto API subscription key with Guides access', 'Existing Suunto OAuth authorization'],
     profile: {
@@ -271,13 +270,12 @@ export const PLANNED_WORKOUT_PROVIDER_CAPABILITIES_V1: Readonly<
       'A Guide has 1–1000 steps; repeats allow 1–100 iterations and cannot nest.',
       'Guide availability and watch storage/pinning are device-dependent.',
       'This is individual Guide delivery, not native training-plan/calendar parity.',
+      'QS schedules today through today + 6 in the saved delivery time zone.',
+      'Cloud acceptance does not prove that a Guide is visible, selected, pinned or available on a watch.',
+      'Missing-Guide classification and automatic restoration remain unavailable because ownership-related 404s and offset listings do not prove deletion.',
     ],
     completionCorrelation: 'The Guide externalId can be recovered from matching SuuntoPlus FIT session arrays.',
-    unresolvedGates: [
-      'Verify app/watch selection and pin behavior through separately approved live use.',
-      'Authoritative missing-Guide detection is unavailable: ownership-related 404s and offset listings do not prove deletion.',
-      'Public rollout requires separate approval; today through today + 6 is QS scheduling policy.',
-    ],
+    unresolvedGates: [],
     evidence: [
       'https://apizone.suunto.com/how-to-use-suuntoplus-guides-api',
       'https://apizone.suunto.com/suuntoplus-guide-description',

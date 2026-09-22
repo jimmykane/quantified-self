@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { ActivityTypes } from '@sports-alliance/sports-lib';
 import { assessTrainingDeliveryMapping } from './mapping';
 import type { ScheduledWorkoutV1 } from '../../../../shared/training-plans';
@@ -12,10 +12,13 @@ describe('Training delivery mapping and production boundary', () => {
     expect(assessment.level).toBe('exact');
     expect(assessment.digest).toMatch(/^[a-f0-9]{64}$/);
   });
-  it('enables only the public Wahoo transport for an ordinary authenticated owner', () => {
+  it('enables every public provider transport for an ordinary authenticated owner', () => {
+    vi.stubEnv('SUUNTOAPP_GUIDE_OWNER', 'Fixture application');
     const runtime = productionDeliveryRuntime({} as never);
-    expect(runtime.transport('wahoo', 'owner')).toMatchObject({ mappingVersion: 'wahoo-plans-v4', horizonDays: 6 });
-    for (const provider of ['garmin', 'coros', 'suunto'] as const) expect(runtime.transport(provider, 'owner')).toBeNull();
+    for (const provider of ['garmin', 'coros', 'wahoo', 'suunto'] as const) {
+      expect(runtime.transport(provider, 'owner')).not.toBeNull();
+    }
+    vi.unstubAllEnvs();
   });
   it('captures serializer-specific losses, not only structure capability warnings', () => {
     const result = assessTrainingDeliveryMapping('suunto', { ...workout, title: 'Run 🏃🏽' }, 'destination', 'UTC');

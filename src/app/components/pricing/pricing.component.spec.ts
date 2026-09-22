@@ -338,7 +338,7 @@ describe('PricingComponent', () => {
             .match(/Manual training plans and standalone workouts/g)).toHaveLength(3);
     });
 
-    it('should show public Wahoo workout delivery and cross-device sync in the Pro plan feature list', async () => {
+    it('should show public provider workout delivery and cross-device sync in the Pro plan feature list', async () => {
         const paymentService = TestBed.inject(AppPaymentService);
         const userService = TestBed.inject(AppUserService);
         const proProduct: StripeProduct = {
@@ -371,7 +371,7 @@ describe('PricingComponent', () => {
         fixture.detectChanges();
 
         const content = fixture.nativeElement.textContent as string;
-        expect(content).toContain('Wahoo planned-workout delivery');
+        expect(content).toContain('Provider planned-workout delivery');
         expect(content).toContain('Cross-device sync');
         expect(content).toContain('Unlimited saved routes');
         expect(content.match(/MCP data access/g)).toHaveLength(2);

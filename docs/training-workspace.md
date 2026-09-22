@@ -375,10 +375,10 @@ free tier and require no provider connection, but that boundary belongs in suppo
 the feature's identity. The homepage, public page, and Help also make the separately permissioned MCP planning surface
 and opt-in provider delivery discoverable. They distinguish source implementation from released MCP client availability,
 and describe provider workout delivery as a distinct Pro capability with explicit actions, compatibility checks and
-provider-specific readiness. Wahoo is publicly described as available to connected Pro users; Garmin, COROS and Suunto
-remain limited rollouts. Public copy must say that connecting any provider never sends a planned workout. A provider
-page may describe workout delivery as available only after that provider's public delivery switch and release scope are
-approved. An implemented adapter, private pilot or connected account is not evidence of public availability.
+provider-specific readiness. Garmin, COROS, Suunto and Wahoo are available to eligible connected Pro users after
+explicit standalone-send or plan-sync consent. Public copy must say that connecting any provider never sends a planned
+workout and must describe each provider's actual scheduling window, mapping losses and verification limits. Cloud
+acceptance is not evidence that a workout appeared on a particular app or device.
 
 The page and homepage reuse `PlanScheduleCalendarComponent`, the canonical plan/workout parsers, plan appearance helper
 and Sports Lib-backed workout formatters through a deterministic synthetic recipe. One local reference date is captured
@@ -597,8 +597,8 @@ The sidenav Beta label is presentation-only and does not change access, routing,
 
 The common delivery implementation lives in `functions/src/training-plans/delivery/`, with browser-safe v1 contracts in
 `shared/training-provider-delivery.ts`. It is independent of schedule history and leaves the exact `WorkoutStructureV1`
-JSON and Sports Lib conversion/formatting boundary unchanged. Public provider switches remain disabled; a separate
-backend-enforced private Garmin production pilot is described below. The Garmin adapter is implemented and tested offline under #647; deterministic fakes
+JSON and Sports Lib conversion/formatting boundary unchanged. The implemented Garmin, COROS, Wahoo and Suunto adapters
+are publicly available to eligible connected Pro users; there is no per-UID provider allowlist. The Garmin adapter is implemented and tested offline under #647; deterministic fakes
 exist only in `delivery/test-support/`, are excluded from the Functions build, and have no browser/configuration switch.
 
 `previewTrainingProviderDelivery` and `mutateTrainingProviderDelivery` are focused, authenticated, App Check-enforced
@@ -885,16 +885,16 @@ likewise use `1 workout needs review` / `2 workouts need review`, and zero warni
 changes preserve the machine outcome codes/counts, sync totals and completed-activity totals. MCP impact: private
 diagnostics and English grammar add no read capability or data; existing `get_training_sync_status` projection,
 schemas, consent, plugin instructions and provider actions remain unchanged. No app rescan or plugin sync is needed.
-Production dashboards, alerts and broader rollout remain #655; ordinary Garmin integration checks remain #647/#703.
+Production dashboards, alerts, deployment and post-release observation remain #655; ordinary Garmin integration checks
+remain #647/#703.
 The separate certification/evaluation ticket #698 is retired; it is not an enablement prerequisite.
 
 ### Provider proof status
 
-`shared/planned-workout-providers.ts` is the versioned capability/research snapshot. Wahoo's public delivery switch is
-enabled; Garmin, COROS and Suunto retain exact-UID private production pilots backed by offline-tested transports. Offline
-verification does not constitute a real provider request or device result. New COROS plan-sync setup is temporarily
-hidden under #648 while standalone sends, existing enabled plan delivery and server reconciliation continue. Wahoo's
-deployment and post-release evidence remain tracked in #649. The
+`shared/planned-workout-providers.ts` is the versioned capability/research snapshot. Garmin, COROS, Wahoo and Suunto have
+their public delivery switches enabled and no exact-UID production gate. Offline verification does not constitute a real
+provider request or device result. COROS plan and standalone setup use the same public readiness boundary as the other
+providers. Deployment, provider entitlement and post-release/device evidence remain tracked in #647–#650 and #655. The
 ignored local Garmin Training API V2 and COROS API Reference PDFs remain evidence only and are never committed.
 
 Every serializer returns `exact`, `degraded`, or `unsupported`. Degraded output requires explicit approval. Current
@@ -965,18 +965,16 @@ removes only its matching link/evidence and requeues ordinary reconciliation. Fa
 remain #651. COROS has no documented planned-workout read/list endpoint, so it exposes no Check action, missing-copy
 inference or automatic recreation.
 
-The exact pilot UID remains enforced in the server runtime, so standalone sends and existing enabled COROS plan delivery,
-reconciliation and Stop sync continue. The browser has a narrower presentation/setup gate: it labels new COROS plan setup
-**Coming soon** and omits plan configuration and plan-workout resume actions while retaining read-only visibility of
-existing plan settings and statuses plus retry and Stop sync. Standalone **Send to COROS** remains available. This frontend-only
-gate does not affect COROS activity/history, Sleep, Health, FIT activity upload, activity sync, route delivery, backend
-delivery, or MCP behavior. Public delivery stays disabled. Ordinary authorized live evidence is still required for
+COROS standalone sends, new and existing plan delivery, reconciliation, Retry, resume and Stop sync use the same public
+readiness boundary as the other providers. There is no browser-only **Coming soon** gate and no backend UID allowlist.
+Connecting COROS alone still does not opt in or send a workout. Ordinary authorized live evidence is still required for
 Training entitlement, repeated-ID update, overlapping-window
 preservation, reschedule, eligible delete, completion callback/history correlation and COROS app/watch behavior before
-broader rollout. Implementation, tests or deployment do not constitute that evidence.
+those behaviors can be claimed as verified. Implementation, tests or deployment do not constitute that evidence.
 
-MCP impact: no wire-contract or behavior change. The browser-only setup gate is not consulted by MCP; the existing
-backend rollout, proposal availability and `all_connected` behavior remain unchanged. `get_planned_workout` still returns
+MCP impact: runtime availability expands for the existing `training-delivery:write` contract, but the wire contract does
+not change. An eligible connected COROS account may now be selected explicitly or through `all_connected` under the
+existing proposal, approval and apply flow. `get_planned_workout` still returns
 the exact authored Sports Lib activity type, while `get_training_sync_status` exposes only existing sanitized statuses
 and never the COROS payload. The existing Mountain Biking read fixture covers exact recipe preservation. No new scope,
 tool, registered schema, Assistant route or plugin update is needed.
@@ -1035,7 +1033,8 @@ preserves it in Guide JSON and private acceptance evidence. Reusing existing cre
 Existing readiness, Pro, consent and per-request authority guards remain unchanged. MCP impact: provider-internal
 configuration only; no authored recipe, safe read projection, consent, tool or wire-schema changes. Help was reviewed
 and needs no operator configuration instructions. Regression tests cover different configured names, generated ZIPs,
-retained ownership, missing/invalid configuration, credential laziness and non-pilot denial with mocked HTTP only. See
+retained ownership, missing/invalid configuration, credential laziness and public authenticated-owner readiness with
+mocked HTTP only. See
 [secret management](function-secret-management.md) before a separately approved deployment. No credentials or cloud
 configuration are created by this implementation.
 The former Guides-only subscription key is no longer read or required; any existing cloud secret is left untouched.
@@ -1122,16 +1121,15 @@ impact review is no-impact: only server-owned credential selection changes; reci
 Assistant routing and registered wire schemas stay unchanged. Help was reviewed and needs no credential-specific copy:
 users keep their existing Suunto connection and explicit workout/plan sync consent.
 
-#### Private Garmin production pilot
+#### Garmin public delivery boundary
 
-`shared/training-delivery-rollout.ts` contains a separate, exact-match Garmin pilot allowlist. It is independent of
-manual-planning availability. An empty pilot list disables the exception; it never means everyone. The
-production runtime selects the real Garmin adapter only when this per-user gate admits the identity. Callables use
-the authenticated UID, workers use server-owned job identity, and the worker rechecks transport readiness immediately
-before provider I/O. Request data cannot select a UID, destination, credential or test transport. Frontend readiness
-uses the same predicate and recomputes on sign-in, account switch and sign-out; showing controls does not grant consent.
+Garmin delivery is available to every eligible authenticated Pro user; `shared/training-delivery-rollout.ts` contains no
+per-UID allowlist. Callables use the authenticated UID, workers use server-owned job identity, and the worker rechecks
+transport readiness immediately before provider I/O. Request data cannot select a UID, destination, credential or test
+transport. Frontend readiness uses the same shared capability predicate and recomputes on sign-in, account switch and
+sign-out; showing controls does not grant consent.
 
-The pilot retains Auth/App Check, Pro/grace, explicit plan or standalone consent, compatibility approval, destination
+Public delivery retains Auth/App Check, Pro/grace, explicit plan or standalone consent, compatibility approval, destination
 authority, deletion fencing, and existing recovery/Stop rules. Legacy Garmin connections without current connection and
 credential generations or recorded `WORKOUT_IMPORT` must reconnect; do not fabricate permission or migrate consent.
 Connectivity's Garmin overview exposes per-account last-reported permission rows and a **Manage in Garmin** action.
@@ -1140,18 +1138,19 @@ Healthy connections use **Manage in Garmin**, not **Reconnect**, for permission 
 for connection recovery; an explicit disconnect is not needed for permission changes and disables other sync routes.
 An unknown snapshot is not a denied grant, and
 the display never authorizes delivery or changes consent. This permission-management UI is available to all connected
-Garmin users; the separate backend pilot UID restrictions are unchanged.
-Start approved provider testing with one explicitly sent future standalone workout, not an opted-in multi-workout plan.
+Garmin users. Start separately approved provider testing with one explicitly sent future standalone workout, not an
+opted-in multi-workout plan.
 
-Deployment requires separate explicit approval. Before activation, inspect only the pilot account's existing settings,
-ledger and queued work so previously recorded opt-ins cannot unexpectedly resume. Deploy the two delivery callables
+Deployment requires separate explicit approval. Before activation, inspect existing settings, ledger and queued work so
+previously recorded opt-ins cannot unexpectedly resume. Deploy the two delivery callables
 (`previewTrainingProviderDelivery`, `mutateTrainingProviderDelivery`) and `processTrainingDeliveryTask`, then the
 production frontend. Existing queue dispatchers and schedule/connection/entitlement marker writers do not select
-transports and need no change for this gate; no Rules/index/secret changes are introduced. To disable the pilot, clear
-the list and redeploy those backend functions and frontend. That blocks transport, including withdrawals, but preserves
-consent and evidence; use Stop while access is valid first if eligible provider copies must be removed. Deployment alone
-neither creates consent nor sends a workout. Ordinary integration checks remain #647/#703 and public rollout remains
-#655; #651 completion matching and #654 Sports Lib extraction are unchanged.
+transports and need no change for public admission; no Rules/index/secret changes are introduced. To disable Garmin
+delivery, set its shared capability state to disabled and redeploy the affected backend functions and frontend. That
+blocks transport, including withdrawals, but preserves consent and evidence; use Stop while access is valid first if
+eligible provider copies must be removed. Deployment alone neither creates consent nor sends a workout. Ordinary
+integration and post-release checks remain #647/#703/#655; #651 completion matching and #654 Sports Lib extraction are
+unchanged.
 
 ### Wahoo Plan and dated Workout delivery (#649)
 
@@ -3216,7 +3215,7 @@ project and never assume `localhost` means isolated data.
 In particular, Functions-only emulation does not emulate Firestore triggers, Cloud Tasks or Garmin. A local Training
 mutation against live Firestore can enqueue the deployed delivery worker; rebuilding local Functions will not update
 that worker. Use `npm run test:training-delivery` for bulk/failure stress tests: its demo Firestore project and injected
-synthetic transports cannot call Garmin. Real-account UI checks are bounded pilot operations requiring explicit scope;
+synthetic transports cannot call providers. Real-account UI checks are separately authorized provider operations;
 do not use a Functions-only environment for destructive or bulk tests.
 
 The Functions emulator sets `FUNCTIONS_EMULATOR=true`, which bypasses the manual callable App Check guard only inside

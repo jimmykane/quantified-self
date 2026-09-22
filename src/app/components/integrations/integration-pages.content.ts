@@ -80,12 +80,13 @@ export const PROVIDER_INTEGRATION_PAGES: Record<IntegrationProviderKey, Provider
     slug: 'garmin',
     label: 'Garmin',
     serviceName: ServiceNames.GarminAPI,
-    h1: 'Garmin Integration and Training Dashboard',
-    heroCopy: 'Connect Garmin to Quantified Self to keep Garmin activities, Sleep, and supported source-attributed Health summaries in one dashboard, send saved or selected GPX/FIT routes to Garmin Connect, and sync new Garmin activities to Suunto, Wahoo, or COROS.',
+    h1: 'Garmin Integration, Training Plans, and Dashboard',
+    heroCopy: 'Connect Garmin to Quantified Self to send planned workouts to Garmin Connect, keep Garmin activities, Sleep, and supported source-attributed Health summaries in one dashboard, deliver routes, and sync activities across services.',
     providerSources: ALL_PROVIDER_SOURCES,
-    summary: 'Use Quantified Self as a dashboard for Garmin activities, Sleep, and Health summaries, with history imports, direct and saved GPX/FIT routes sent to Garmin Connect, opt-in activity delivery, and multi-service workout history.',
+    summary: 'Use the Pro Garmin connection for planned-workout delivery, activity, Sleep and Health imports, direct and saved route delivery, cross-service activity sync, and multi-service training analysis.',
     highlights: [
       'Garmin training dashboard',
+      'Send planned workouts to Garmin Connect',
       'Garmin Sleep and Health summaries',
       'Send saved routes to Garmin Connect',
       'Send selected GPX/FIT routes to Garmin',
@@ -94,9 +95,14 @@ export const PROVIDER_INTEGRATION_PAGES: Record<IntegrationProviderKey, Provider
       'Garmin, Suunto, and COROS in one dashboard',
     ],
     syncEyebrow: 'Garmin Workflows',
-    syncTitle: 'Garmin activities, Sleep, Health, routes, and sync',
-    syncCopy: 'Connect Garmin once, keep permissions active, and choose whether to import Garmin history, receive supported Health summaries, send routes to Garmin Connect, or deliver Garmin activities to Suunto, Wahoo, or COROS.',
+    syncTitle: 'Garmin planned workouts, activities, Health, routes, and sync',
+    syncCopy: 'Connect Garmin once, allow Training when requested, then explicitly send a standalone workout or opt a plan into delivery. History, Health, routes, and activity sync remain separate choices.',
     syncFlows: [
+      {
+        icon: 'event_note',
+        title: 'Planned workouts to Garmin',
+        copy: 'Connected Pro members can explicitly send compatible running and cycling workouts or enable plan sync. Quantified Self creates the Garmin workout and calendar schedule separately; provider acceptance does not confirm a device download.',
+      },
       {
         icon: 'history',
         title: 'Garmin history import',
@@ -185,6 +191,10 @@ export const PROVIDER_INTEGRATION_PAGES: Record<IntegrationProviderKey, Provider
     ],
     faqItems: [
       {
+        question: 'Can I send planned Training workouts to Garmin?',
+        answer: 'Yes. Connected Pro members with Garmin Training permission can explicitly send a standalone workout or enable plan sync. Compatibility is checked before delivery, and Garmin cloud acceptance does not confirm that a device received the workout.',
+      },
+      {
         question: 'What can Quantified Self do with Garmin data?',
         answer: 'Quantified Self combines Garmin original files, maps, load metrics, grounded Assistant answers, exports, and optional Suunto or COROS workouts in one account.',
       },
@@ -216,12 +226,13 @@ export const PROVIDER_INTEGRATION_PAGES: Record<IntegrationProviderKey, Provider
     slug: 'suunto',
     label: 'Suunto',
     serviceName: ServiceNames.SuuntoApp,
-    h1: 'Suunto Integration for Activity and Route Sync',
-    heroCopy: 'Use Quantified Self as a training dashboard, automatically sync Garmin and COROS activities to Suunto, import Suunto routes, send Suunto routes to Garmin, Wahoo, or COROS, upload GPX or FIT routes, and import source-attributed 24/7 Health data.',
+    h1: 'Suunto Training Plans, Activity, and Route Sync',
+    heroCopy: 'Use Quantified Self to send planned workouts as dated SuuntoPlus Guides, sync activities and routes, import Suunto history, Sleep, and source-attributed 24/7 Health data, and keep training in one dashboard.',
     providerSources: ALL_PROVIDER_SOURCES,
-    summary: 'Sync Garmin and COROS workouts to Suunto, upload FIT activities and GPX/FIT routes, import existing Suunto routes, send Suunto routes to Garmin, Wahoo, or COROS, import Suunto history, and keep training data centralized.',
+    summary: 'Use the Pro Suunto connection for planned-workout Guide delivery, activity and route sync, history, Sleep and Health imports, and centralized training analysis.',
     highlights: [
       'Garmin to Suunto automatic activity sync',
+      'Send planned workouts as SuuntoPlus Guides',
       'COROS to Suunto and Wahoo automatic activity sync',
       'Suunto activity delivery to Wahoo and COROS',
       'Automatic and existing Suunto route imports',
@@ -232,9 +243,14 @@ export const PROVIDER_INTEGRATION_PAGES: Record<IntegrationProviderKey, Provider
       'Source-attributed Suunto 24/7 Health',
     ],
     syncEyebrow: 'Automatic Sync',
-    syncTitle: 'How to sync activities to Suunto and send Suunto routes to Garmin, Wahoo, or COROS',
-    syncCopy: 'Connect the source and destination services, turn on the sync you want, and keep the relevant service permissions active.',
+    syncTitle: 'Send planned workouts and sync activities and routes with Suunto',
+    syncCopy: 'Connect Suunto, then explicitly send a standalone workout or opt a plan into dated Guide delivery. Activity, route, Sleep, Health, and history workflows remain separate choices.',
     syncFlows: [
+      {
+        icon: 'event_note',
+        title: 'Planned workouts as SuuntoPlus Guides',
+        copy: 'Connected Pro members can send compatible workouts for today through the next six days. Later workouts wait until their dates approach. A sent Guide is not a native plan or proof of app or watch visibility.',
+      },
       {
         icon: 'sync_alt',
         title: 'Garmin to Suunto automatic activity sync',
@@ -338,6 +354,10 @@ export const PROVIDER_INTEGRATION_PAGES: Record<IntegrationProviderKey, Provider
     ],
     faqItems: [
       {
+        question: 'Can I send planned Training workouts to Suunto?',
+        answer: 'Yes. Connected Pro members can explicitly send a standalone workout or enable plan sync. Quantified Self sends dated SuuntoPlus Guides for today through the next six days; acceptance does not prove app visibility, selection, pinning, or watch availability.',
+      },
+      {
         question: 'How does Quantified Self combine Garmin, Suunto, and COROS data?',
         answer: 'Quantified Self keeps original files, maps, load metrics, grounded Assistant answers, and connected Garmin, Suunto, or COROS workflows under one account.',
       },
@@ -376,21 +396,27 @@ export const PROVIDER_INTEGRATION_PAGES: Record<IntegrationProviderKey, Provider
     slug: 'coros',
     label: 'COROS',
     serviceName: ServiceNames.COROSAPI,
-    h1: 'COROS Integration for Activity Sync and Route Delivery',
-    heroCopy: 'Connect COROS to Quantified Self, import recent COROS history, send FIT activities and GPX/FIT routes to COROS, and opt in to activity or saved-route delivery from your other connected services.',
+    h1: 'COROS Training Plans, Activity Sync, and Routes',
+    heroCopy: 'Connect COROS to Quantified Self to send planned workouts to your COROS training calendar, import recent history, deliver activities and routes, and analyze connected training together.',
     providerSources: ALL_PROVIDER_SOURCES,
-    summary: 'Connect COROS for recent history and sleep imports, two-way provider activity workflows, FIT activity delivery, GPX/FIT route and saved Suunto route delivery, and centralized multi-service training analysis.',
+    summary: 'Use the Pro COROS connection for planned-workout calendar delivery, recent activity, Sleep and Health history, activity and route workflows, and centralized multi-service training analysis.',
     highlights: [
       'COROS to Suunto automatic activity sync',
+      'Send planned workouts to the COROS training calendar',
       'Garmin, Suunto, and Wahoo activity delivery to COROS',
       'Direct and saved route delivery to COROS',
       'Recent COROS history imports',
       'COROS, Garmin, Suunto, and Wahoo in one dashboard',
     ],
     syncEyebrow: 'COROS Workflows',
-    syncTitle: 'COROS activity import, delivery, and route sync',
-    syncCopy: 'Connect one active COROS account, then choose each automatic activity or saved-route path you want. Route backfills can send existing saved routes without enabling future delivery.',
+    syncTitle: 'COROS planned workouts, activity delivery, and route sync',
+    syncCopy: 'Connect one active COROS account, then explicitly send a standalone workout or opt a plan into delivery. Activity and route paths remain separate choices.',
     syncFlows: [
+      {
+        icon: 'event_note',
+        title: 'Planned workouts to COROS',
+        copy: 'Connected Pro members can send compatible workouts up to one year ahead, individually or through plan sync. Quantified Self sends dated workouts rather than claiming a native QS-owned COROS plan, and acceptance does not confirm watch receipt.',
+      },
       {
         icon: 'sync_alt',
         title: 'COROS to Suunto automatic activity sync',
@@ -473,6 +499,10 @@ export const PROVIDER_INTEGRATION_PAGES: Record<IntegrationProviderKey, Provider
       },
     ],
     faqItems: [
+      {
+        question: 'Can I send planned Training workouts to COROS?',
+        answer: 'Yes. Connected Pro members can explicitly send a standalone workout or enable plan sync for compatible workouts. Provider acceptance does not confirm app or watch receipt, and the COROS API does not provide planned-workout reads for automatic missing-copy checks.',
+      },
       {
         question: 'How do I sync COROS data to Suunto automatically?',
         answer: 'Connect COROS and Suunto, turn on automatic activity sync in Connections, and keep both connections active so new COROS activities can be sent to Suunto.',
@@ -804,33 +834,33 @@ export const INTEGRATIONS_HUB_ROUTE_DATA: IntegrationRouteData = {
 
 export const PROVIDER_INTEGRATION_ROUTE_DATA: Record<IntegrationProviderKey, IntegrationRouteData> = {
   garmin: {
-    title: 'Garmin Training Dashboard',
+    title: 'Garmin Training Plans and Dashboard',
     preload: true,
     animation: 'Integrations',
-    description: 'Use Quantified Self as a Garmin training dashboard with history imports, direct and saved GPX/FIT routes sent to Garmin Connect, Garmin to Suunto activity sync, activity delivery to Wahoo or COROS, and grounded Assistant answers.',
+    description: 'Send planned workouts to Garmin Connect and use Quantified Self as a Garmin training dashboard with history imports, route delivery, activity sync, and grounded analysis.',
     jsonLd: providerWebPageJsonLd(
       PROVIDER_INTEGRATION_PAGES.garmin,
-      'Use Quantified Self as a Garmin training dashboard with history imports, direct and saved GPX/FIT routes sent to Garmin Connect, Garmin to Suunto activity sync, activity delivery to Wahoo or COROS, and grounded Assistant answers.'
+      'Send planned workouts to Garmin Connect and use Quantified Self as a Garmin training dashboard with history imports, route delivery, activity sync, and grounded analysis.'
     ),
   },
   suunto: {
-    title: 'Suunto Integration',
+    title: 'Suunto Training Plans, Activity, and Routes',
     preload: true,
     animation: 'Integrations',
-    description: 'Sync Garmin and COROS activities to Suunto, import Suunto routes, send Suunto routes to Garmin, Wahoo, or COROS, upload FIT activities and GPX/FIT routes, and centralize workout data.',
+    description: 'Send planned workouts as SuuntoPlus Guides, sync activities and routes, import Suunto history, Sleep and Health data, and centralize training.',
     jsonLd: providerWebPageJsonLd(
       PROVIDER_INTEGRATION_PAGES.suunto,
-      'Sync Garmin and COROS activities to Suunto, import Suunto routes, send Suunto routes to Garmin, Wahoo, or COROS, upload FIT activities and GPX/FIT routes, and centralize workout data.'
+      'Send planned workouts as SuuntoPlus Guides, sync activities and routes, import Suunto history, Sleep and Health data, and centralize training.'
     ),
   },
   coros: {
-    title: 'COROS Integration',
+    title: 'COROS Training Plans, Activity Sync, and Routes',
     preload: true,
     animation: 'Integrations',
-    description: 'Connect COROS for COROS to Suunto activity sync, activity delivery from Garmin, Suunto, or Wahoo, FIT activity uploads, route delivery, and centralized Garmin, Suunto, and COROS workout data.',
+    description: 'Send planned workouts to the COROS training calendar, import recent history, sync activities, deliver routes, and analyze connected training.',
     jsonLd: providerWebPageJsonLd(
       PROVIDER_INTEGRATION_PAGES.coros,
-      'Connect COROS for COROS to Suunto activity sync, activity delivery from Garmin, Suunto, or Wahoo, FIT activity uploads, route delivery, and centralized Garmin, Suunto, and COROS workout data.'
+      'Send planned workouts to the COROS training calendar, import recent history, sync activities, deliver routes, and analyze connected training.'
     ),
   },
   wahoo: {
