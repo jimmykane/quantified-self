@@ -56,6 +56,8 @@ describe('help.content', () => {
     expect(content).toContain('two-week watch window');
     expect(content).toContain('remote checking and automatic missing-copy restoration are unavailable');
     expect(content).toContain('These cosmetic adjustments happen automatically');
+    expect(content).toContain('requests removal of its prior Guide');
+    expect(content).not.toContain('removes its old Guide');
     expect(content).toContain('**Not sent · Needs review**');
     expect(content).toContain('**Exclude from plan sync**');
     expect(content).toContain('Opening Review never sends or approves anything by itself');

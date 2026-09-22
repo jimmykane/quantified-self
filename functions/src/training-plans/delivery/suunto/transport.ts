@@ -10,7 +10,7 @@ import { packageGuide, readGuideArchive } from './archive';
 import { assessSuuntoGuide, guideExternalId, guideMapping, SUUNTO_MAPPING_VERSION, validateGuideOwner } from './mapping';
 
 export const SUUNTO_INSPECTION_POLICY: InspectionPolicy = {
-  version: 'suunto-owned-guide-v1', mode: 'unavailable', required: ['guide'], confirmationDelayMs: 15 * 60_000,
+  version: 'suunto-owned-guide-v2', mode: 'unavailable', required: ['guide'], confirmationDelayMs: 15 * 60_000,
   // #710 / #645: Suunto can retain hidden Guides in the partner API. Presence
   // is cloud-record evidence only; 404 and offset inventory cannot prove absence.
   authoritativeAbsenceKeys: [], repairReadyKeys: [],

@@ -165,6 +165,7 @@ describe('Suunto Guide lifecycle — synthetic transport', () => {
     expect(await transport.inspection.inspect(request, guard)).toMatchObject({ artifacts: [{ state: 'present' }] });
     server.guides.delete(artifact.ids.guide);
     expect(await transport.inspection.inspect(request, guard)).toMatchObject({ artifacts: [{ state: 'unknown', authoritative: false }] });
+    expect(transport.inspection.policy.version).toBe('suunto-owned-guide-v2');
     expect(transport.inspection.policy.mode).toBe('unavailable');
     expect(transport.inspection.policy.authoritativeAbsenceKeys).toEqual([]);
     expect(transport.inspection.policy.repairReadyKeys).toEqual([]);

@@ -17,6 +17,7 @@ import { readSuuntoGuideCompletions, retainSuuntoGuideCompletions } from '../../
 import { suuntoFitFixture, suuntoMultiSessionFitFixture } from '../test-support/suunto-fit-fixture';
 import { guideExternalId } from './mapping';
 import type { TrainingDeliveryCommandV1 } from '../../../../../shared/training-provider-delivery';
+import { TRAINING_DELIVERY_VERIFICATIONS } from '../../../../../shared/training-provider-verification';
 
 describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Suunto worker with real Firestore, synthetic provider only', { timeout: 30_000 }, () => {
   const host = process.env.FIRESTORE_EMULATOR_HOST;
@@ -59,12 +60,19 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Suunto worker with real F
     }
     await db.terminate();
   });
-  it('delivers once under concurrent workers and checks cloud presence using retained account authority', async () => {
+  it('delivers once under concurrent workers while keeping visibility checks unavailable', async () => {
     await command('send'); await drain(); const row = await ledger();
     await Promise.all([processTrainingDelivery(runtime, uid, row.id), processTrainingDelivery(runtime, uid, row.id)]);
-    await drain(); expect(server.guides.size).toBe(1); expect((await ledger()).status).toBe('delivered');
+    await drain(); expect(server.guides.size).toBe(1);
+    expect(await ledger()).toMatchObject({ status: 'delivered', verification: { state: 'unsupported', missing: false } });
+    expect((await user().collection(TRAINING_DELIVERY_VERIFICATIONS).doc(row.id).get()).data())
+      .toMatchObject({ state: 'unsupported', canCheck: false, missing: false });
+    await expect(command('check')).rejects.toMatchObject({ code: 'failed-precondition' });
+    const guideReads = server.calls.filter(call => call.method === 'GET').length;
+    await db.collection(DELIVERY_QUEUE).doc(row.id).set({ uid, deliveryId: row.id, kind: 'verification', dueAtMs: 0 });
     await processTrainingVerification(runtime, uid, row.id);
-    expect((await ledger()).verification?.state).toBe('present');
+    expect((await db.collection(DELIVERY_QUEUE).doc(row.id).get()).exists).toBe(false);
+    expect(server.calls.filter(call => call.method === 'GET')).toHaveLength(guideReads);
   });
   it('does not select an account by discarding a malformed retained token', async () => {
     await db.collection('suuntoAppAccessTokens').doc(uid).collection('tokens').doc('second').set({ userName: 'second' });

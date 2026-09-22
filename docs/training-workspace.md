@@ -1055,7 +1055,8 @@ refresh and immediately before every HTTP request.
 
 Delivery covers today through today + 6 in the saved delivery zone, advancing through existing reconciliation. This is
 the agreed QS product window, **not an API quota**. Later workouts read **Scheduled for later**. Moving an already-sent
-future workout beyond that window withdraws its eligible Guide and retains consent for later delivery. Past and known
+future workout beyond that window requests withdrawal of its eligible Guide and retains consent for later delivery. QS
+does not infer app/watch removal from the retained cloud record. Past and known
 completed copies remain protected; Pro expiry preserves copies and consent while pausing updates. Stop still permits
 eligible removal. PUT retains the Guide identity and pinning preference; QS never pins/unpins or deletes past Guides.
 

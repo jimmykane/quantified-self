@@ -65,6 +65,17 @@ describe('Training delivery service summaries', () => {
     const [completed] = await buildTrainingDeliverySummaries({ ...input(), workouts: [workout('a')],
       settings: [suuntoSetting], statuses: [{ ...suuntoStatus('a'), status: 'completed' }] });
     expect(completed.detail).toBe('1 completed workout · sent Guide kept');
+    const [retained] = await buildTrainingDeliverySummaries({ ...input(), scope: 'workout', id: 'a', workouts: [workout('a')],
+      settings: [{ ...suuntoSetting, enabled: false }], statuses: [{ ...suuntoStatus('a'), status: 'stopped', differsFromQS: true }] });
+    expect(retained.label).toBe('Sending off · copy remains');
+    expect(retained.detail).toBe('A previously sent Guide remains; this status does not confirm current app or watch visibility');
+    expect(`${retained.label} ${retained.detail}`).not.toContain('sync');
+    const [empty] = await buildTrainingDeliverySummaries({ ...input(), workouts: [], settings: [suuntoSetting], statuses: [] });
+    expect(empty.label).toBe('Sending enabled · no workouts');
+    const [history] = await buildTrainingDeliverySummaries({ ...input(), workouts: [workout('a')], settings: [],
+      statuses: [suuntoStatus('old')] });
+    expect(history.label).toBe('Delivery history');
+    expect(history.detail).toContain('retained copy from earlier delivery');
   });
   it.each(['failed', 'unsupported', 'approval_required', 'needs_attention', 'reconnect_required', 'connection_repair', 'fresh_consent_required'] as const)(
     'keeps %s visible and does not count its retained copy as synced', async state => {

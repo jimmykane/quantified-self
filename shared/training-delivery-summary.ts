@@ -80,7 +80,10 @@ function countedOutcome(label: string, count: number): string {
     'Sync failed': ['sync failed', 'syncs failed'],
     'Send failed': ['send failed', 'sends failed'],
     'Sync stopped': ['sync stopped', 'syncs stopped'],
+    'Sending stopped': ['sending stopped', 'sending stopped'],
     'Sync off': ['not syncing', 'not syncing'],
+    'Sending off': ['not sending', 'not sending'],
+    'Sending off · copy remains': ['not sending · sent copy kept', 'not sending · sent copies kept'],
     'Sync unavailable': ['sync unavailable', 'syncs unavailable'],
     'Delivery unavailable': ['delivery unavailable', 'deliveries unavailable'],
     'Status unconfirmed': ['status unconfirmed', 'statuses unconfirmed'],
@@ -133,7 +136,9 @@ function workoutOutcome(workout: TrainingSyncWorkout, status: TrainingSyncStatus
   }
   if (workout.lifecycle === 'skipped') return outcome(status?.hasRemoteCopy ? 'Skipped · copy remains' : 'Skipped', false, false, 'skipped');
   if (plan && plan.lifecycle !== 'active') return outcome(status?.hasRemoteCopy ? 'Plan inactive · copy remains' : 'Plan inactive', false, false, 'plan_inactive');
-  if (setting && !setting.enabled) return outcome(status?.hasRemoteCopy ? 'Sync off · copy remains' : 'Sync off', false, false, 'sync_off');
+  if (setting && !setting.enabled) return outcome(status?.hasRemoteCopy
+    ? suunto ? 'Sending off · copy remains' : 'Sync off · copy remains'
+    : suunto ? 'Sending off' : 'Sync off', false, false, 'sync_off');
   if (!status) return outcome(setting?.enabled ? suunto ? 'Waiting to send' : 'Waiting to sync' : suunto ? 'Not sent' : 'Not synced',
     false, false, setting?.enabled ? 'waiting' : 'not_synced');
   switch (status.status) {
@@ -145,7 +150,7 @@ function workoutOutcome(workout: TrainingSyncWorkout, status: TrainingSyncStatus
     case 'paused_pro': return outcome('Paused · Pro required');
     case 'provider_unavailable': return outcome(suunto ? 'Delivery unavailable' : 'Sync unavailable');
     case 'removed': return outcome(status.hasRemoteCopy ? 'Removal unconfirmed' : suunto ? 'No active delivery' : 'Copy removed');
-    case 'stopped': return outcome(status.hasRemoteCopy ? 'Removal pending' : 'Sync stopped');
+    case 'stopped': return outcome(status.hasRemoteCopy ? 'Removal pending' : suunto ? 'Sending stopped' : 'Sync stopped');
     case 'paused_plan': return outcome(status.hasRemoteCopy ? 'Removal pending' : 'Plan inactive');
     default: return outcome('Status unconfirmed');
   }
@@ -206,7 +211,9 @@ export async function buildTrainingDeliverySummaries(input: {
     for (const outcome of outcomes) if (input.scope === 'plan' && outcome.label !== successLabel) notes.set(outcome.label, (notes.get(outcome.label) ?? 0) + 1);
     const detail = [...notes].map(([label, count]) => countedOutcome(label, count));
     if (input.scope === 'workout' && outcomes[0]?.copy && !outcomes[0].synced) {
-      detail.push('A sent copy remains; the latest sync is not confirmed');
+      detail.push(provider === 'suunto'
+        ? 'A previously sent Guide remains; this status does not confirm current app or watch visibility'
+        : 'A sent copy remains; the latest sync is not confirmed');
     }
     if (retained.length) detail.push(`${retained.length} retained ${retained.length === 1 ? 'copy' : 'copies'} from earlier ${provider === 'suunto' ? 'delivery' : 'sync'}; see details`);
     const earlierAttention = earlier.filter(record => ATTENTION.has(record.status)).length;
@@ -219,10 +226,12 @@ export async function buildTrainingDeliverySummaries(input: {
       label = `${provider === 'suunto' ? 'Sent' : 'Synced'} · ${label.toLowerCase()}`;
     }
     if (input.scope === 'workout' && !setting && retained.length) label = provider === 'suunto' ? 'Earlier sent copy' : 'Earlier synced copy';
-    if (historicalOnly) label = 'Sync history';
-    else if (input.scope === 'plan' && !workouts.length) label = setting?.enabled ? 'Sync enabled · no workouts' : 'Sync off · no workouts';
+    if (historicalOnly) label = provider === 'suunto' ? 'Delivery history' : 'Sync history';
+    else if (input.scope === 'plan' && !workouts.length) label = setting?.enabled
+      ? provider === 'suunto' ? 'Sending enabled · no workouts' : 'Sync enabled · no workouts'
+      : provider === 'suunto' ? 'Sending off · no workouts' : 'Sync off · no workouts';
     else if (input.scope === 'plan' && input.plan?.lifecycle !== 'active') label = `Plan inactive · ${countLabel}`;
-    else if (input.scope === 'plan' && setting && !setting.enabled) label = `Sync off · ${countLabel}`;
+    else if (input.scope === 'plan' && setting && !setting.enabled) label = `${provider === 'suunto' ? 'Sending off' : 'Sync off'} · ${countLabel}`;
     projection.state = historicalOnly ? 'history' : !workouts.length ? 'empty'
       : input.plan && input.plan.lifecycle !== 'active' ? 'inactive' : setting && !setting.enabled ? 'off' : 'current';
     projection.totalWorkouts = workouts.length; projection.syncedWorkouts = synced; projection.retainedCopies = retained.length;

@@ -116,8 +116,9 @@ the Health/Sleep paths in this document.
 Imported FIT files can retain QS-owned Guide/session correlations in the private event child
 `trainingCompletionEvidence/suunto`. Browsers and MCP cannot read it; event/account deletion removes it. It is evidence
 for future #651 matching, not an automatic completion decision. Original FITs and existing recorded activity totals
-are unchanged. Ordinary disconnect retains imported history and may leave provider-held Guides; Stop sync first if
-eligible future Guides should be removed while access remains valid. No new webhook endpoint is needed.
+are unchanged. Ordinary disconnect retains imported history and may leave provider-held Guides; use Stop sync first to
+request removal of eligible future Guides while access remains valid. API presence cannot verify their app/watch visibility
+after that request. No new webhook endpoint is needed.
 
 ### Sleep and Health
 
