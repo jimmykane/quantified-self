@@ -64,7 +64,9 @@ export async function downloadSuuntoFITFile(
 ): Promise<Buffer> {
   const response = await getBinaryResponse({
     headers: {
-      Accept: 'application/octet-stream',
+      // Suunto's FIT endpoint returns 500 for FIT-specific media types. Its
+      // content negotiation supports the wildcard request used by browsers.
+      Accept: '*/*',
       Authorization: toSuuntoAuthorizationHeader(accessToken),
       'Ocp-Apim-Subscription-Key': config.suuntoapp.subscription_key,
     },
