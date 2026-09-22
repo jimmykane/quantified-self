@@ -19,14 +19,14 @@ export const ASSISTANT_CONTENT_PROPOSAL_TOOLS = [
 export type AssistantContentProposalTool = typeof ASSISTANT_CONTENT_PROPOSAL_TOOLS[number];
 
 const TOOL_TO_KIND = {
-  prepare_activity_tag_change: 'update_activity_tags',
+  prepare_activity_tag_change: 'update_event_tags',
   prepare_timeline_note_create: 'create_timeline_note',
   prepare_timeline_note_update: 'update_timeline_note',
   prepare_timeline_note_delete: 'delete_timeline_note',
 } as const satisfies Record<AssistantContentProposalTool, AssistantContentProposalKind>;
 
 export const ASSISTANT_CONTENT_PROPOSAL_INPUTS = {
-  prepare_activity_tag_change: MCP_CONTENT_WRITE_INPUTS.update_activity_tags,
+  prepare_activity_tag_change: MCP_CONTENT_WRITE_INPUTS.update_event_tags,
   prepare_timeline_note_create: MCP_CONTENT_WRITE_INPUTS.create_timeline_note,
   prepare_timeline_note_update: MCP_CONTENT_WRITE_INPUTS.update_timeline_note,
   prepare_timeline_note_delete: MCP_CONTENT_WRITE_INPUTS.delete_timeline_note,
@@ -44,8 +44,8 @@ const defaultDependencies: AssistantContentProposalDependencies = {
 
 function summaryFor(kind: AssistantContentProposalKind, args: Record<string, unknown>): string {
   switch (kind) {
-    case 'update_activity_tags':
-      return `Replace ${Array.isArray(args.expectedTags) ? args.expectedTags.length : 0} current activity tag${Array.isArray(args.expectedTags) && args.expectedTags.length === 1 ? '' : 's'} with ${Array.isArray(args.tags) ? args.tags.length : 0}.`;
+    case 'update_event_tags':
+      return `Replace ${Array.isArray(args.expectedTags) ? args.expectedTags.length : 0} current event tag${Array.isArray(args.expectedTags) && args.expectedTags.length === 1 ? '' : 's'} with ${Array.isArray(args.tags) ? args.tags.length : 0}.`;
     case 'create_timeline_note':
       return `Create Timeline note “${args.title}”.`;
     case 'update_timeline_note':
@@ -64,7 +64,7 @@ function completeCreateArguments(args: z.infer<typeof MCP_CONTENT_WRITE_INPUTS.c
   };
 }
 
-function canonicalTagArguments(args: z.infer<typeof MCP_CONTENT_WRITE_INPUTS.update_activity_tags>) {
+function canonicalTagArguments(args: z.infer<typeof MCP_CONTENT_WRITE_INPUTS.update_event_tags>) {
   return {
     ...args,
     expectedTags: normalizeEventTags(args.expectedTags),
@@ -82,8 +82,8 @@ export function createAssistantContentProposal(
   const kind = TOOL_TO_KIND[tool];
   const args = kind === 'create_timeline_note'
     ? completeCreateArguments(parsed as z.infer<typeof MCP_CONTENT_WRITE_INPUTS.create_timeline_note>)
-    : kind === 'update_activity_tags'
-      ? canonicalTagArguments(parsed as z.infer<typeof MCP_CONTENT_WRITE_INPUTS.update_activity_tags>)
+    : kind === 'update_event_tags'
+      ? canonicalTagArguments(parsed as z.infer<typeof MCP_CONTENT_WRITE_INPUTS.update_event_tags>)
       : parsed;
   return {
     proposalRef: dependencies.createId(),

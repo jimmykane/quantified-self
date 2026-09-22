@@ -88,7 +88,7 @@ const trainingProposal: AssistantTrainingProposalPreview = {
 
 const contentProposal: AssistantContentProposalPreview = {
   proposalRef: 'content-proposal-1',
-  kind: 'update_activity_tags',
+  kind: 'update_event_tags',
   expiresAtMs: Date.now() + 60_000,
   summary: 'Replace 1 current activity tag with 2.',
   requiresConfirmation: true,
@@ -148,7 +148,7 @@ describe('AssistantPageComponent', () => {
       status: 'applied', scheduleRevision: 2, changes: [], providers: [],
     });
     assistantService.applyContentProposal.mockReset().mockResolvedValue({
-      status: 'applied', kind: 'update_activity_tags', message: 'Activity tags updated.',
+      status: 'applied', kind: 'update_event_tags', message: 'Event tags updated.',
     });
     assistantService.getErrorMessage.mockClear();
     quotaService.loadQuotaStatus.mockReset().mockResolvedValue(chatResponse.quota);
@@ -293,7 +293,7 @@ describe('AssistantPageComponent', () => {
     fixture.detectChanges();
 
     const review = fixture.nativeElement.querySelector('.content-proposal') as HTMLElement;
-    expect(review.textContent).toContain('Review activity tag change');
+    expect(review.textContent).toContain('Review event tag change');
     expect(review.textContent).toContain('Current: Easy');
     expect(review.textContent).toContain('New: Quality, Reviewed');
     expect(review.textContent).toContain('All workouts in the same event share these tags.');
@@ -313,7 +313,7 @@ describe('AssistantPageComponent', () => {
       confirm: true,
     });
     expect(component.pendingContentProposal()).toBeNull();
-    expect(component.contentProposalResult()).toBe('Activity tags updated.');
+    expect(component.contentProposalResult()).toBe('Event tags updated.');
 
     component.pendingContentProposal.set(contentProposal);
     await component.dismissPendingContentProposal();

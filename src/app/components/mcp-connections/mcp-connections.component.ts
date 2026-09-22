@@ -23,7 +23,7 @@ const CHANGE_SCOPES = new Set<McpScope>([
   'training-plans:write',
   'training-delivery:write',
   'timeline-notes:write',
-  'activity-tags:write',
+  'events:write',
 ]);
 
 interface McpConnection {

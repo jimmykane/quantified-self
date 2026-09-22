@@ -206,7 +206,7 @@ describe('McpAuthorizationComponent', () => {
       requestId: 'content-write-request',
       scopes: [
         'timeline-notes:read', 'timeline-notes:write',
-        'activity-details:read', 'activity-tags:write',
+        'activity-details:read', 'events:write',
       ],
       clientName: 'Content client', redirectUri: 'https://client.example/callback',
     } });
@@ -217,19 +217,19 @@ describe('McpAuthorizationComponent', () => {
     const component = fixture.componentInstance;
     expect(component.selectedScopes()).toEqual([
       'timeline-notes:read', 'timeline-notes:write',
-      'activity-details:read', 'activity-tags:write',
+      'activity-details:read', 'events:write',
     ]);
     expect(component.scopeOptions().find(option => option.scope === 'timeline-notes:write'))
       .toMatchObject({ selected: true, disabled: false, title: 'Change Timeline notes' });
-    expect(component.scopeOptions().find(option => option.scope === 'activity-tags:write'))
-      .toMatchObject({ selected: true, disabled: false, title: 'Change activity tags' });
+    expect(component.scopeOptions().find(option => option.scope === 'events:write'))
+      .toMatchObject({ selected: true, disabled: false, title: 'Change events' });
 
     component.toggleScope('timeline-notes:read', { checked: false } as never);
     component.toggleScope('activity-details:read', { checked: false } as never);
     expect(component.selectedScopes()).toEqual([]);
     expect(component.scopeOptions().find(option => option.scope === 'timeline-notes:write'))
       .toMatchObject({ selected: false, disabled: true });
-    expect(component.scopeOptions().find(option => option.scope === 'activity-tags:write'))
+    expect(component.scopeOptions().find(option => option.scope === 'events:write'))
       .toMatchObject({ selected: false, disabled: true });
   });
 

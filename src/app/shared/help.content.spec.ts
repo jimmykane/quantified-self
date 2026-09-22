@@ -1496,7 +1496,8 @@ describe('help.content', () => {
     expect(dataAndPrivacySection?.content).toContain('up to 25 explicitly selected canonical numeric Sports Lib metrics');
     expect(dataAndPrivacySection?.content).toContain('first-class body-measurement history');
     expect(dataAndPrivacySection?.content).toContain('Removing any parent removes its dependent children');
-    expect(dataAndPrivacySection?.content).toContain('**Change activity tags** is a separate child permission');
+    expect(dataAndPrivacySection?.content).toContain('**Change events** is a separate child permission');
+    expect(dataAndPrivacySection?.content).toContain('benchmark events are read-only');
     expect(dataAndPrivacySection?.content).toContain('bounded ranges up to 366 days');
     expect(dataAndPrivacySection?.content).toContain('identity-free day, week, or month values');
     expect(dataAndPrivacySection?.content).toContain('provider or manual canonical Health Weight point measurements');

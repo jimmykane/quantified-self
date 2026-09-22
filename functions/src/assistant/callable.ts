@@ -884,7 +884,7 @@ export async function runApplyAssistantContentProposal(
     throw mapAssistantError(error);
   }
   const proposal = current.pendingContentProposal;
-  const needsTags = proposal?.kind === 'update_activity_tags';
+  const needsTags = proposal?.kind === 'update_event_tags';
   const needsNotes = proposal?.kind === 'create_timeline_note'
     || proposal?.kind === 'update_timeline_note'
     || proposal?.kind === 'delete_timeline_note';
@@ -908,15 +908,18 @@ export async function runApplyAssistantContentProposal(
     assistantConversationId: conversationId,
     assistantProposalRef: proposalRef,
     scopes: needsTags
-      ? [MCP_OAUTH_SCOPES.ActivityDetailsRead, MCP_OAUTH_SCOPES.ActivityTagsWrite]
+      ? [MCP_OAUTH_SCOPES.ActivityDetailsRead, MCP_OAUTH_SCOPES.EventsWrite]
       : [MCP_OAUTH_SCOPES.TimelineNotesRead, MCP_OAUTH_SCOPES.TimelineNotesWrite],
     arguments: proposal.arguments,
   };
+  let eventTagsChanged: boolean | null = null;
   try {
     switch (proposal.kind) {
-      case 'update_activity_tags':
-        await dataService.updateActivityTags(writeInput);
+      case 'update_event_tags': {
+        const result = await dataService.updateEventTags(writeInput);
+        eventTagsChanged = result.changed;
         break;
+      }
       case 'create_timeline_note':
         await dataService.createTimelineNote(writeInput);
         break;
@@ -940,8 +943,10 @@ export async function runApplyAssistantContentProposal(
     return {
       status: 'applied',
       kind: proposal.kind,
-      message: proposal.kind === 'update_activity_tags'
-        ? 'Activity tags updated.'
+      message: proposal.kind === 'update_event_tags'
+        ? eventTagsChanged
+          ? 'Event tags updated.'
+          : 'Event tags already matched the requested list.'
         : proposal.kind === 'delete_timeline_note'
           ? 'Timeline note deleted.'
           : proposal.kind === 'create_timeline_note'

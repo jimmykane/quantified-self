@@ -173,7 +173,7 @@ export interface AssistantChatRequest {
 }
 
 export type AssistantContentProposalKind =
-  | 'update_activity_tags'
+  | 'update_event_tags'
   | 'create_timeline_note'
   | 'update_timeline_note'
   | 'delete_timeline_note';

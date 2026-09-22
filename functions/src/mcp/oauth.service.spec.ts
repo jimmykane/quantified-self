@@ -610,13 +610,16 @@ describe('MCP OAuth service', () => {
       MCP_OAUTH_SCOPES.TimelineNotesRead,
       MCP_OAUTH_SCOPES.TimelineNotesWrite,
     ])).toBe(true);
-    expect(hasValidMcpScopeDependencies([MCP_OAUTH_SCOPES.ActivityTagsWrite])).toBe(false);
+    expect(hasValidMcpScopeDependencies([MCP_OAUTH_SCOPES.EventsWrite])).toBe(false);
     expect(hasValidMcpScopeDependencies([
       MCP_OAUTH_SCOPES.ActivityDetailsRead,
-      MCP_OAUTH_SCOPES.ActivityTagsWrite,
+      MCP_OAUTH_SCOPES.EventsWrite,
     ])).toBe(true);
-    expect(() => normalizeOAuthScopes(MCP_OAUTH_SCOPES.ActivityTagsWrite)).toThrow(
+    expect(() => normalizeOAuthScopes(MCP_OAUTH_SCOPES.EventsWrite)).toThrow(
       'Dependent permissions require their matching parent read permission.',
+    );
+    expect(() => normalizeOAuthScopes('activity-details:read activity-tags:write')).toThrow(
+      'Only metrics:read',
     );
   });
 
@@ -1570,7 +1573,7 @@ describe('MCP OAuth service', () => {
 
   it('preserves explicit content-write consent and never expands it through refresh', async () => {
     for (const [parent, child] of [
-      [MCP_OAUTH_SCOPES.ActivityDetailsRead, MCP_OAUTH_SCOPES.ActivityTagsWrite],
+      [MCP_OAUTH_SCOPES.ActivityDetailsRead, MCP_OAUTH_SCOPES.EventsWrite],
       [MCP_OAUTH_SCOPES.TimelineNotesRead, MCP_OAUTH_SCOPES.TimelineNotesWrite],
     ] as const) {
       const store = createMemoryStore();
@@ -1657,13 +1660,13 @@ describe('MCP OAuth service', () => {
       .rejects.toMatchObject({ code: 'invalid_scope' });
   });
 
-  it('never adds note or tag changes through legacy consent fallback', async () => {
+  it('never adds note or event changes through legacy consent fallback', async () => {
     const store = createMemoryStore();
     let sequence = 0;
     const service = createMcpOAuthService({ store, fetchClientMetadata: async () => metadata(),
       now: () => 1_000, randomToken: () => `legacy-content-write-${++sequence}` });
     const start = await service.startAuthorization({ ...authorizationParams('c'.repeat(43)),
-      scope: 'metrics:read timeline-notes:read timeline-notes:write activity-details:read activity-tags:write' },
+      scope: 'metrics:read timeline-notes:read timeline-notes:write activity-details:read events:write' },
     'https://quantified-self.io');
     const approval = await service.decideAuthorization({
       uid: 'user-1', requestId: start.requestId, approved: true,

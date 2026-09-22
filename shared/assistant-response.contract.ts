@@ -184,14 +184,14 @@ export function isAssistantContentProposal(value: unknown): value is AssistantCo
   if (!isRecord(value)
     || !hasOnlyKeys(value, ['proposalRef', 'kind', 'expiresAtMs', 'summary', 'requiresConfirmation', 'arguments'])
     || !isBoundedString(value.proposalRef, 1, 120)
-    || !['update_activity_tags', 'create_timeline_note', 'update_timeline_note', 'delete_timeline_note']
+    || !['update_event_tags', 'create_timeline_note', 'update_timeline_note', 'delete_timeline_note']
       .includes(`${value.kind}`)
     || !Number.isSafeInteger(value.expiresAtMs) || Number(value.expiresAtMs) < 0
     || !isBoundedString(value.summary, 1, 500)
     || value.requiresConfirmation !== true
     || !isRecord(value.arguments)) return false;
   const args = value.arguments;
-  if (value.kind === 'update_activity_tags') {
+  if (value.kind === 'update_event_tags') {
     return hasOnlyKeys(args, ['activityRef', 'expectedTags', 'tags'])
       && isBoundedString(args.activityRef, 1, 512)
       && areTags(args.expectedTags)

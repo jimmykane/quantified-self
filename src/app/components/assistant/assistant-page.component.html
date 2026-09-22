@@ -187,7 +187,7 @@
       @if (contentProposalReview(); as review) {
         <section class="content-proposal" aria-labelledby="content-proposal-title">
           <div class="training-proposal-heading">
-            <mat-icon aria-hidden="true">{{ review.proposal.kind === 'update_activity_tags' ? 'sell' : 'edit_note' }}</mat-icon>
+            <mat-icon aria-hidden="true">{{ review.proposal.kind === 'update_event_tags' ? 'sell' : 'edit_note' }}</mat-icon>
             <div>
               <h2 id="content-proposal-title">{{ review.title }}</h2>
               <p>{{ review.proposal.summary }}</p>

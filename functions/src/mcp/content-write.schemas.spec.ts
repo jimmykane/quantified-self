@@ -14,7 +14,7 @@ const note = {
 
 describe('MCP focused content-write inputs', () => {
   it('accepts bounded explicit tag replacement and note mutations', () => {
-    expect(MCP_CONTENT_WRITE_INPUTS.update_activity_tags.safeParse({
+    expect(MCP_CONTENT_WRITE_INPUTS.update_event_tags.safeParse({
       activityRef: 'opaque-activity', expectedTags: ['Easy'], tags: ['Easy', 'Trail'],
     }).success).toBe(true);
     expect(MCP_CONTENT_WRITE_INPUTS.create_timeline_note.safeParse({
@@ -38,10 +38,10 @@ describe('MCP focused content-write inputs', () => {
     expect(MCP_CONTENT_WRITE_INPUTS.create_timeline_note.safeParse({
       ...note, title: 'Unsafe\u0000title', mutationId: '123e4567-e89b-42d3-a456-426614174000',
     }).success).toBe(false);
-    expect(MCP_CONTENT_WRITE_INPUTS.update_activity_tags.safeParse({
+    expect(MCP_CONTENT_WRITE_INPUTS.update_event_tags.safeParse({
       activityRef: 'opaque-activity', expectedTags: [], tags: Array.from({ length: 11 }, (_, index) => `tag-${index}`),
     }).success).toBe(false);
-    expect(MCP_CONTENT_WRITE_INPUTS.update_activity_tags.safeParse({
+    expect(MCP_CONTENT_WRITE_INPUTS.update_event_tags.safeParse({
       activityRef: 'opaque-activity', expectedTags: [], tags: ['Unsafe\u0000tag'],
     }).success).toBe(false);
   });

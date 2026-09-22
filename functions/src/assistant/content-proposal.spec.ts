@@ -45,6 +45,6 @@ describe('Assistant content proposals', () => {
       expectedTags: ['Easy'],
       tags: ['Quality Session', 'Trail'],
     });
-    expect(proposal.summary).toBe('Replace 1 current activity tag with 2.');
+    expect(proposal.summary).toBe('Replace 1 current event tag with 2.');
   });
 });

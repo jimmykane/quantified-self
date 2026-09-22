@@ -500,7 +500,7 @@ function createFixtureDataService(
         startDate: '2026-06-30', endDate: null, timeZone: 'Europe/Helsinki', effectiveEndDate: '2026-07-02' }],
       recordsScanned: 1, skippedRecords: 0, scanComplete: true, limitsReached: [], nextCursor: null,
     }),
-    updateActivityTags: vi.fn().mockResolvedValue({
+    updateEventTags: vi.fn().mockResolvedValue({
       activityRef: ACTIVITY_REF, tags: ['Race', 'Reviewed'], changed: true,
     }),
     queryEditableTimelineNotes: vi.fn().mockResolvedValue({
@@ -1300,7 +1300,7 @@ const successfulToolArguments: Record<
   apply_training_changes: { proposalRef: 'opaque-proposal-reference', permissionMode: 'schedule' },
   get_activity_description: { activityRef: 'opaque-activity-ref' },
   query_timeline_notes: { startDate: '2026-07-01', endDate: '2026-07-02' },
-  update_activity_tags: { activityRef: ACTIVITY_REF, expectedTags: ['Race'], tags: ['Race', 'Reviewed'] },
+  update_event_tags: { activityRef: ACTIVITY_REF, expectedTags: ['Race'], tags: ['Race', 'Reviewed'] },
   query_editable_timeline_notes: { startDate: '2026-07-01', endDate: '2026-07-02' },
   create_timeline_note: { mutationId: '123e4567-e89b-42d3-a456-426614174000', category: 'travel',
     title: 'Trip', startDate: '2026-07-01', endDate: '2026-07-02', timeZone: 'Europe/Helsinki',
@@ -2360,21 +2360,21 @@ describe.each<FixtureTransport>(['in-memory', 'legacy-http', 'modern-http'])('MC
     const service = createFixtureDataService();
     for (const scopes of [
       [MCP_OAUTH_SCOPES.ActivityDetailsRead],
-      [MCP_OAUTH_SCOPES.ActivityTagsWrite],
+      [MCP_OAUTH_SCOPES.EventsWrite],
       [MCP_OAUTH_SCOPES.TimelineNotesRead],
       [MCP_OAUTH_SCOPES.TimelineNotesWrite],
     ]) {
       const denied = await connectFixtureServer(service, scopes);
       connections.push(denied);
       const names = (await denied.client.listTools()).tools.map(tool => tool.name);
-      expect(names).not.toContain('update_activity_tags');
+      expect(names).not.toContain('update_event_tags');
       expect(names).not.toContain('query_editable_timeline_notes');
       expect(names).not.toContain('create_timeline_note');
     }
 
     const scopes = [
       MCP_OAUTH_SCOPES.ActivityDetailsRead,
-      MCP_OAUTH_SCOPES.ActivityTagsWrite,
+      MCP_OAUTH_SCOPES.EventsWrite,
       MCP_OAUTH_SCOPES.TimelineNotesRead,
       MCP_OAUTH_SCOPES.TimelineNotesWrite,
     ];
@@ -2385,29 +2385,29 @@ describe.each<FixtureTransport>(['in-memory', 'legacy-http', 'modern-http'])('MC
       .toMatchObject({ readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false });
     expect(tools.find(tool => tool.name === 'create_timeline_note')?.annotations)
       .toMatchObject({ readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false });
-    for (const name of ['update_activity_tags', 'update_timeline_note', 'delete_timeline_note']) {
+    for (const name of ['update_event_tags', 'update_timeline_note', 'delete_timeline_note']) {
       expect(tools.find(tool => tool.name === name)?.annotations)
         .toMatchObject({ readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: false });
     }
 
     const injected = await connection.client.callTool({
-      name: 'update_activity_tags',
-      arguments: { ...successfulToolArguments.update_activity_tags, uid: 'attacker', connectionId: 'attacker' },
+      name: 'update_event_tags',
+      arguments: { ...successfulToolArguments.update_event_tags, uid: 'attacker', connectionId: 'attacker' },
     });
     expect(injected.isError).toBe(true);
-    expect(service.updateActivityTags).not.toHaveBeenCalled();
+    expect(service.updateEventTags).not.toHaveBeenCalled();
 
-    service.updateActivityTags = vi.fn().mockResolvedValue({
+    service.updateEventTags = vi.fn().mockResolvedValue({
       activityRef: ACTIVITY_REF, tags: ['Race'], changed: true,
       eventId: 'private-event-canary',
     });
     const tagLeak = await connection.client.callTool({
-      name: 'update_activity_tags', arguments: successfulToolArguments.update_activity_tags,
+      name: 'update_event_tags', arguments: successfulToolArguments.update_event_tags,
     });
     expect(tagLeak.isError).toBe(true);
     expect(tagLeak).not.toHaveProperty('structuredContent');
     expect(JSON.stringify(tagLeak)).not.toContain('private-event-canary');
-    expect(service.updateActivityTags).toHaveBeenCalledWith(expect.objectContaining({
+    expect(service.updateEventTags).toHaveBeenCalledWith(expect.objectContaining({
       uid: 'user-1', connectionId: 'connection-1', grantId: 'grant-1', scopes,
     }));
 

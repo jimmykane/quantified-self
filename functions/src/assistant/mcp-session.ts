@@ -346,7 +346,7 @@ export async function createAssistantMcpSession(
         : []),
       MCP_OAUTH_SCOPES.RoutesRead,
       ...(timelineNotesEnabled ? [MCP_OAUTH_SCOPES.TimelineNotesRead] : []),
-      ...(activityTagChangesEnabled ? [MCP_OAUTH_SCOPES.ActivityTagsWrite] : []),
+      ...(activityTagChangesEnabled ? [MCP_OAUTH_SCOPES.EventsWrite] : []),
       ...(timelineNoteChangesEnabled ? [MCP_OAUTH_SCOPES.TimelineNotesWrite] : []),
       ...(trainingPlansEnabled ? [MCP_OAUTH_SCOPES.TrainingPlansRead] : []),
       ...(trainingPlanChangesEnabled ? [MCP_OAUTH_SCOPES.TrainingPlansWrite] : []),
