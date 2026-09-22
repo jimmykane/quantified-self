@@ -4,7 +4,7 @@ import { ServiceNames } from '@sports-alliance/sports-lib';
 import { createHistoryRun } from './model';
 import { advanceHistoryRun, type HistoryAdvanceDependencies } from './advance';
 const now = Date.parse('2026-09-14T12:00:00Z');
-function run() { return createHistoryRun('owner', ServiceNames.WahooAPI, { requested: true, rangePreset: '30_days', providerUserId: 'account', tokenPath: 'tokens/account', rootPath: 'tokens', credentialGeneration: 'credential', flowGeneration: 'flow' }, 'connection', now); }
+function run() { return createHistoryRun('owner', ServiceNames.WahooAPI, { requested: true, rangePreset: '30_days', providerUserId: 'account', tokenPath: 'tokens/account', rootPath: 'tokens', credentialGeneration: 'credential', runId: '11111111-1111-4111-8111-111111111111' }, 'connection', now); }
 function dependencies(): HistoryAdvanceDependencies { return { execute: vi.fn(async () => ({ count: 1, nextStartMs: now + 1000, nextPage: 1, childPaths: [] })), observe: vi.fn(async () => 'processed'), classify: () => ({ kind: 'retry', message: 'Please retry.' }) }; }
 describe('history continuation', () => {
   it('finishes an empty or fully persisted window and never runs it again', async () => {
@@ -24,6 +24,12 @@ describe('history continuation', () => {
     expect(job.steps[0].status).toBe(observed === 'failed' ? 'failed' : 'skipped');
     expect(job.steps[0].message).toContain(observed === 'failed' ? 'Retry failed imports' : 'Reconnect');
     if (observed === 'failed') expect(job.steps[0].childPaths).toEqual(['queue/item']);
+  });
+  it('keeps retry and reconnect guidance for mixed downstream failures', async () => {
+    const job = run(); job.steps[0].childPaths = ['queue/auth', 'queue/retry']; const deps = dependencies();
+    deps.observe = vi.fn(async () => 'mixed'); await advanceHistoryRun(job, deps, now);
+    expect(job.steps[0]).toMatchObject({ status: 'failed', done: true, retryCount: 0 });
+    expect(job.steps[0].message).toContain('reconnect');
   });
   it('records submission separately from ingestion for Garmin', async () => {
     const job = run(); job.steps[0].capability.completion = 'requested';

@@ -95,6 +95,8 @@ export abstract class ServicesAbstractComponentDirective implements OnDestroy, O
     if (this.connectionViewUserId !== this.user?.uid) {
       this.connectionViewUserId = this.user?.uid;
       this.connectionViewRevision++;
+      this.importRecentHistory = true;
+      this.importHistoryRange = CONNECTION_HISTORY_DEFAULT_RANGE;
       this.disconnectConfirmation?.close(false);
       this.disconnectConfirmation = undefined;
       this.serviceTokens = undefined;

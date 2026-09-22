@@ -2,7 +2,7 @@ import * as admin from 'firebase-admin';
 import { HttpsError } from 'firebase-functions/v2/https';
 import { getUserDeletionGuardStateInTransaction } from '../shared/user-deletion-guard';
 import { ACTIVE_OAUTH_CREDENTIAL_GENERATION_FIELD } from '../token-refresh-coordinator';
-import { CONNECTION_HISTORY_COLLECTION, type ConnectionHistoryRun } from './model';
+import { CONNECTION_HISTORY_COLLECTION, isConnectionHistoryRunId, type ConnectionHistoryRun } from './model';
 import { withHistoryExecution } from './context';
 
 /** Optional server-only execution context; never accepted from callable input. */
@@ -72,7 +72,7 @@ export function assertHistoryReservation(meta: Record<string, unknown> | undefin
 
 export async function withHistoryQueueExecution<T>(item: { connectionHistoryRunId?: string; userID?: string; firebaseUserID?: string }, operation: () => Promise<T>): Promise<T> {
   if (!item.connectionHistoryRunId) return operation();
-  if (!/^[a-f0-9]{64}$/.test(item.connectionHistoryRunId)) throw new HistoryLifecycleChangedError();
+  if (!isConnectionHistoryRunId(item.connectionHistoryRunId)) throw new HistoryLifecycleChangedError();
   const snapshot = await admin.firestore().collection(CONNECTION_HISTORY_COLLECTION).doc(item.connectionHistoryRunId).get();
   const run = snapshot.data() as ConnectionHistoryRun | undefined;
   if (!run || (item.firebaseUserID || item.userID) !== run.userID) throw new HistoryLifecycleChangedError();

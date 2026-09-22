@@ -3,7 +3,7 @@ import type { ConnectionHistoryRun, HistoryStep } from './model';
 
 export interface HistoryAdvanceDependencies {
   execute(step: HistoryStep): Promise<{ count: number; nextStartMs: number; nextPage: number; childPaths: string[] }>;
-  observe(paths: string[]): Promise<'pending' | 'processed' | 'failed' | 'skipped' | 'authorization'>;
+  observe(paths: string[]): Promise<'pending' | 'processed' | 'failed' | 'skipped' | 'authorization' | 'mixed'>;
   classify(error: unknown): { kind: 'split' | 'skip' | 'retry' | 'wait'; message: string; nextAllowedAtMs?: number; retryAt?: number };
 }
 /** One bounded unit, independently testable from Firebase and provider adapters. */
@@ -14,10 +14,12 @@ export async function advanceHistoryRun(run: ConnectionHistoryRun, deps: History
     if (step.childPaths.length) {
       const observed = await deps.observe(step.childPaths);
       if (observed === 'pending') { run.nextAttemptAt = now + 60_000; return; }
-      if (observed === 'failed') {
+      if (observed === 'failed' || observed === 'mixed') {
         // Child workers already exhausted their retry policy. Offer the owner a
         // retry immediately instead of spending another full parent retry cycle.
-        step.status = 'failed'; step.message = 'Some background imports failed. Retry failed imports to resume unfinished work.'; step.done = true;
+        step.status = 'failed'; step.message = observed === 'mixed'
+          ? 'Some background imports failed and another needs authorization. Retry unfinished work or reconnect.'
+          : 'Some background imports failed. Retry failed imports to resume unfinished work.'; step.done = true;
         run.nextAttemptAt = now + 2_000; run.processed = run.steps.every(x => x.done); run.updatedAtMs = now;
         return;
       }
