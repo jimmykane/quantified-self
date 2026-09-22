@@ -837,10 +837,10 @@ export const PROVIDER_INTEGRATION_ROUTE_DATA: Record<IntegrationProviderKey, Int
     title: 'Garmin Training Plans and Dashboard',
     preload: true,
     animation: 'Integrations',
-    description: 'Send planned workouts to Garmin Connect and use Quantified Self as a Garmin training dashboard with history imports, route delivery, activity sync, and grounded analysis.',
+    description: 'Send planned workouts to Garmin Connect and use Quantified Self for history imports, route delivery, activity sync, and grounded training analysis.',
     jsonLd: providerWebPageJsonLd(
       PROVIDER_INTEGRATION_PAGES.garmin,
-      'Send planned workouts to Garmin Connect and use Quantified Self as a Garmin training dashboard with history imports, route delivery, activity sync, and grounded analysis.'
+      'Send planned workouts to Garmin Connect and use Quantified Self for history imports, route delivery, activity sync, and grounded training analysis.'
     ),
   },
   suunto: {

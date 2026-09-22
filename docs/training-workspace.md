@@ -37,7 +37,8 @@ and explicit plan deletion. Plan deletion must be the sole proposal change, requ
 permanently-delete-workouts choice, and permanently removes the plan revision history. An interruption after its deletion
 lock is acquired keeps the proposal resumable so the same approved apply can finish idempotent finalization or cleanup.
 Permanent single-workout deletion and history restoration remain excluded. The latter allows plan delivery
-enablement and workout send/resume/stop/retry/check/approval. Delivery remains Pro, provider-connection and rollout gated.
+enablement and workout send/resume/stop/retry/check/approval. Delivery remains Pro and is gated by provider connection,
+permissions, configuration, compatibility and explicit consent.
 External clients prepare one strict proposal of at most 25 changes, then invoke the separately approval-gated
 `apply_training_changes` write tool. ChatGPT, Claude and other MCP hosts own their native tool-approval UI; QS does not
 use MCP elicitation for a second confirmation round. A host may let its user configure automatic tool approval, which QS
@@ -82,7 +83,7 @@ client must start OAuth authorization again and approve `training-plans:read` pl
 needed; a connection display can report status but cannot initiate that client-bound flow. The prior grant stays active
 until the new exchange succeeds, and a client may need a tool-catalog refresh or new chat afterward. The Assistant uses
 its own **Examples & data access** toggles instead, which start a fresh conversation. A missing delivery permission is
-separate from Pro, provider connection, rollout and compatibility gates.
+separate from Pro, provider connection, provider configuration and compatibility checks.
 
 The shared delivery-summary helper provides UI wording and MCP machine outcomes from the same current evidence. Whole-plan
 counts include every current non-deleted workout, with no success claim for incomplete scans, empty plans, stale evidence
@@ -577,17 +578,17 @@ Opening an editor pushes a browser-history entry. Back and Forward restore the p
 the selected plan and date, and Calendar-originated Back restores the open day detail. Cancel uses the recorded Plans
 return entry when available and otherwise replaces a direct deep link with its safe owner-scoped browse destination.
 Route changes may replace a draft, but live schedule and unit-setting updates do not. A pending save captures the owner
-and editor generation so a response arriving after Back navigation cannot reopen or overwrite the new screen. Training
-Planning is not live yet: `/plans` and the former query-parameter editor shapes are not registered and have no
-compatibility redirects. The sidebar entry sits beneath Training on a compact guide rail and carries a visible **Beta**
-status label.
+and editor generation so a response arriving after Back navigation cannot reopen or overwrite the new screen. The
+canonical route is `/training/plans`; `/plans` and the former query-parameter editor shapes are not registered and have
+no compatibility redirects. The sidebar entry sits beneath Training on a compact guide rail and carries a visible
+**Beta** status label.
 
 Training Planning has no UID presentation rollout. Every signed-in owner can open the authenticated `/training/plans`
 routes, use the sidebar entry, and see their planned-workout overlays/actions in Calendar, the dashboard tile and Today
 mini-calendar. Help documents Planning for everyone. The workspace still clears its editor on account changes, while a
 viewed calendar exposes planned workouts only when its owner matches the live signed-in account. Completed activities,
 Timeline notes and selectable dates remain unchanged. Firebase Rules, callables, owner-scoped reads, provider readiness
-flags and delivery entitlement enforcement are unchanged. #655 tracks the wider rollout, certification and release work.
+flags and delivery entitlement enforcement are unchanged. #655 tracks deployment, observability and release work.
 
 MCP impact: none. `training-plans:read` already applied to every consenting owner without a UID or Pro gate, so this
 presentation rollout changes no MCP tool, scope, consent, projection, schema, provider action or registered contract.
@@ -1039,7 +1040,8 @@ mocked HTTP only. See
 configuration are created by this implementation.
 The former Guides-only subscription key is no longer read or required; any existing cloud secret is left untouched.
 The operator-managed owner setting must be provisioned before a separately approved deployment of the two delivery
-callables and Training worker. No frontend release is required. This implementation does not set secret values or deploy.
+callables and Training worker. The public provider rollout also requires the matching frontend release; changing only
+the owner setting does not. This implementation does not set secret values or deploy.
 Documented APIM subscription-key rejection signatures are application configuration failures, not revoked user OAuth
 consent: they do not block the connection generation or request reconnect. After correcting the key, Retry uses the
 same connection and consent. Other 401 responses retain the OAuth reconnect behavior; raw error bodies are never exposed.
@@ -1112,8 +1114,8 @@ Verification combines synthetic HTTP/ZIP/FIT fixtures, real Firestore transactio
 MCP continues to read strict local delivery projections: Suunto counts derive from workouts, no watch receipt is inferred,
 and no private evidence, identifiers, provider actions or scopes enter the public contract. Registered wire schemas and
 bundled skills do not change. Actual app/watch CRUD and selection remain ordinary #650 integration tests requiring
-separate approval for live operations; synthetic fixtures do not claim those results. No deployment or public enablement
-is part of this change.
+separate approval for live operations; synthetic fixtures do not claim those results. Public source enablement is now
+complete, while deployment and real-provider operations still require separate approval.
 
 Credential-reuse verification covers the real runtime's retained-ID and inventory request headers with mocked HTTP,
 missing-key failure before OAuth/HTTP, unchanged exact-account refresh fencing, and compiled secret bindings. The MCP
@@ -1435,7 +1437,8 @@ edits and manual Retry, malformed/empty/asynchronous success responses, lost res
 changed-account reconnect, disconnect and account deletion. Run `npm run test:training-delivery` plus the existing Rules,
 secret registration and frontend suites. Ordinary integration tests still cover actual response/404 semantics,
 schedule-list wrapper/pagination, Training permission, CRUD/recovery and device rendering. These remain in #647/#703,
-not a separate certification programme or retired #698. #645 owns access/contract questions and #655 public rollout.
+not a separate certification programme or retired #698. #645 owns access/contract questions and #655 owns deployment,
+observability and post-release work.
 Synthetic tests alone do not constitute a real Garmin account or watch result.
 
 ### Product analytics

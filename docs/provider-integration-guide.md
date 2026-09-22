@@ -147,7 +147,7 @@ connections must reconnect rather than have permission inferred. See the
 [Garmin public delivery boundary](training-workspace.md#garmin-public-delivery-boundary) for deployment, preflight and
 rollback. Provider status is:
 
-| Provider | Proof state | Truthful model and current gate |
+| Provider | Availability | Truthful delivery model and remaining limits |
 | --- | --- | --- |
 | Garmin | `enabled` | Connected Pro users can explicitly deliver supported workouts through separate Workout and Workout Schedule lifecycle records after granting `WORKOUT_IMPORT`. The authored running/cycling profiles are supported, but the API receives only its broad `RUNNING` or `CYCLING` sport because the contract has no sub-sport field. Synthetic fixtures and real Firestore transactions are not device evidence. There is no provider read/list path for authoritative missing-copy repair, and exact-profile device behavior remains unproven; completion correlation is #651. |
 | COROS | `enabled` | Connected Pro users can explicitly deliver standalone workouts and plans. The runtime batches at most 30 dated workouts, retains stable partner IDs, applies per-item deletion outcomes, and links an exact returned `planWorkoutId`. COROS exposes no documented planned-workout read/list endpoint, so remote Check, missing-copy classification and automatic recreation remain unavailable. Provider entitlement (`30009`), repeated-ID replacement, overlapping-window behavior, reschedule/delete, callback/history correlation, and app/watch behavior still require separately authorized live evidence. |

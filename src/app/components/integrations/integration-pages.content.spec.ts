@@ -17,6 +17,8 @@ describe('integration-pages.content', () => {
       expect(page.tools.length).toBeGreaterThanOrEqual(3);
       expect(page.dashboardPoints.length).toBeGreaterThanOrEqual(3);
       expect(page.faqItems.length).toBeGreaterThanOrEqual(2);
+      expect(routeData.title.length, `${key} title`).toBeLessThanOrEqual(60);
+      expect(routeData.description.length, `${key} description`).toBeLessThanOrEqual(160);
       expect(routeData.jsonLd['@type']).toBe('WebPage');
       expect(routeData.jsonLd['url']).toBe(`https://quantified-self.io/integrations/${key}`);
     }

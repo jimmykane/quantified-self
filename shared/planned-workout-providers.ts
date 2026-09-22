@@ -146,10 +146,10 @@ export interface PlannedWorkoutProviderMappingAssessmentV1 {
 }
 
 /**
- * Versioned provider research and rollout snapshot. A provider becomes public
- * only after its documented contract and separately authorized live evidence
- * support the claimed lifecycle; providers can remain in private rollout
- * independently.
+ * Versioned provider capability and product-availability snapshot.
+ * `deliveryEnabled` controls public admission; `limits` and `evidence` must
+ * continue to state unverified cloud/device behavior truthfully. Enabled does
+ * not mean that a provider app or device receipt has been proved.
  */
 export const PLANNED_WORKOUT_PROVIDER_CAPABILITIES_V1: Readonly<
   Record<PlannedWorkoutProviderId, PlannedWorkoutProviderCapabilityV1>

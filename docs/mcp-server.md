@@ -2,8 +2,8 @@
 
 ## Training plans and planned workouts (#690)
 
-This is source implementation, not deployment, provider enablement, registered-client promotion or real-profile plugin
-installation. After a separately approved release, refresh the client catalog and explicitly reauthorize the independent
+This is source implementation, not deployment, registered-client promotion or real-profile plugin installation. After a
+separately approved release, refresh the client catalog and explicitly reauthorize the independent
 `training-plans:read` scope (**Training plans and planned workouts**). Metrics, activities, Timeline notes and provider
 permissions never grant it. Any consenting owner may use it, with no pilot UID or Pro gate; manual planning is available
 to every signed-in account.

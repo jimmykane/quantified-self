@@ -82,7 +82,8 @@ function wahooTransport(db: admin.firestore.Firestore, uid: string): TrainingDel
     recover: (operation, checkpoint, guard) => bound(operation).recover(operation, checkpoint, guard),
   };
 }
-/** No environment/browser-selectable fake. Provider rollout comes only from the shared capability decision. */
+/** No environment/browser-selectable fake. Public admission comes from the shared capability decision;
+ * provider credentials and configuration still fail closed in their own transport boundaries. */
 export function productionDeliveryRuntime(db = admin.firestore()): DeliveryRuntime {
   return {
     db, now: Date.now, hasPro: hasProAccess,
