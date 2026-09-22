@@ -77,7 +77,7 @@ describe('PublicFeaturePreviewComponent', () => {
     fixture.detectChanges();
 
     expect(element.querySelector('app-training-plans-preview')?.closest('div[data-nosnippet]')).toBe(wrapper);
-    expect(element.textContent).toContain('Autumn run + ride build');
+    expect(element.textContent).toContain('Run + ride build');
     expect(element.textContent).toContain('Threshold bike blocks');
     expect(selection).not.toHaveBeenCalled();
   });

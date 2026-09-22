@@ -310,10 +310,10 @@ describe('AppRoutingModule routes', () => {
 
   it('should define public Garmin, Suunto, COROS, and Wahoo provider integration routes', async () => {
     const expectedRoutes = [
-      { path: 'integrations/garmin', provider: 'garmin', descriptionText: 'Garmin training dashboard' },
-      { path: 'integrations/suunto', provider: 'suunto', descriptionText: 'Sync Garmin and COROS activities to Suunto' },
-      { path: 'integrations/coros', provider: 'coros', descriptionText: 'COROS to Suunto activity sync' },
-      { path: 'integrations/wahoo', provider: 'wahoo', descriptionText: 'Automatic FIT activity imports' },
+      { path: 'integrations/garmin', provider: 'garmin', descriptionText: 'planned workouts to Garmin Connect' },
+      { path: 'integrations/suunto', provider: 'suunto', descriptionText: 'planned workouts as SuuntoPlus Guides' },
+      { path: 'integrations/coros', provider: 'coros', descriptionText: 'planned workouts to the COROS training calendar' },
+      { path: 'integrations/wahoo', provider: 'wahoo', descriptionText: 'planned running and cycling workouts to Wahoo' },
     ];
 
     for (const expectedRoute of expectedRoutes) {
@@ -337,7 +337,7 @@ describe('AppRoutingModule routes', () => {
     }
 
     const garminRoute = routes.find(candidate => candidate.path === 'integrations/garmin');
-    expect((await resolvedRouteData(garminRoute))['title']).toBe('Garmin Training Dashboard');
+    expect((await resolvedRouteData(garminRoute))['title']).toBe('Garmin Training Plans and Dashboard');
   });
 
   it('should define public tools routes with compare workflow metadata', () => {
