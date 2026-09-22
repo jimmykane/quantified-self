@@ -1,5 +1,5 @@
 import { DatePipe, DecimalPipe, PercentPipe } from '@angular/common';
-import { DEFAULT_APP_LOCALE, getBrowserLocale, registerAppLocales } from './date-locale.config';
+import { DEFAULT_APP_LOCALE, getBrowserLocale, registerAppLocale } from './date-locale.config';
 import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
 
 describe('date-locale.config', () => {
@@ -105,8 +105,8 @@ describe('date-locale.config', () => {
         { locale: 'fr-FR', date: '21/09/2026', number: '1 234,56', percent: '12 %' },
         { locale: 'de-DE', date: '21.09.26', number: '1.234,56', percent: '12 %' },
         { locale: 'el-GR', date: '21/9/26', number: '1.234,56', percent: '12%' },
-    ])('registers matching Angular date and numeric patterns for $locale', ({ locale, date, number, percent }) => {
-        registerAppLocales();
+    ])('registers matching Angular date and numeric patterns for $locale', async ({ locale, date, number, percent }) => {
+        await registerAppLocale(locale);
         const timestamp = Date.UTC(2026, 8, 21, 12);
 
         expect(new DatePipe(locale).transform(timestamp, 'shortDate', 'UTC')).toBe(date);

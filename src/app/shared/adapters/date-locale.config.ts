@@ -1,46 +1,39 @@
 import { Provider, Optional } from '@angular/core';
 import { MAT_DATE_LOCALE } from '@angular/material/core';
 import { LoggerService } from '../../services/logger.service';
-
-// Day.js Locale Imports
-// We must import these manually to avoid bundling ALL locales (which would be huge).
-import 'dayjs/locale/en-gb';
-import 'dayjs/locale/de';
-import 'dayjs/locale/fr';
-import 'dayjs/locale/es';
-import 'dayjs/locale/it';
-import 'dayjs/locale/nl';
-import 'dayjs/locale/pl';
-import 'dayjs/locale/el';
-
 import { registerLocaleData } from '@angular/common';
-import localeEnGb from '@angular/common/locales/en-GB';
-import localeDe from '@angular/common/locales/de';
-import localeFr from '@angular/common/locales/fr';
-import localeEs from '@angular/common/locales/es';
-import localeIt from '@angular/common/locales/it';
-import localeNl from '@angular/common/locales/nl';
-import localePl from '@angular/common/locales/pl';
-import localeEl from '@angular/common/locales/el';
 import { getAppLocale } from './app-locale';
 
 export { DEFAULT_APP_LOCALE, SUPPORTED_LOCALES, getAppLocale, getBrowserLocale } from './app-locale';
 
-/**
- * Registers Angular locale data for all supported languages.
- * Should be called before bootstrap in main.ts.
- */
-export function registerAppLocales() {
-    // Angular ships en-US as its built-in locale. Register international English
-    // explicitly so en-GB does not silently inherit Angular's US date patterns.
-    registerLocaleData(localeEnGb);
-    registerLocaleData(localeDe);
-    registerLocaleData(localeFr);
-    registerLocaleData(localeEs);
-    registerLocaleData(localeIt);
-    registerLocaleData(localeNl);
-    registerLocaleData(localePl);
-    registerLocaleData(localeEl);
+type LocaleModule = { default: unknown };
+
+const localeRegistrationPromises = new Map<string, Promise<void>>();
+const localeLoaders: Readonly<Record<string, () => Promise<[LocaleModule, unknown]>>> = {
+    'en-GB': () => Promise.all([import('@angular/common/locales/en-GB'), import('dayjs/locale/en-gb')]),
+    'de-DE': () => Promise.all([import('@angular/common/locales/de'), import('dayjs/locale/de')]),
+    'fr-FR': () => Promise.all([import('@angular/common/locales/fr'), import('dayjs/locale/fr')]),
+    'es-ES': () => Promise.all([import('@angular/common/locales/es'), import('dayjs/locale/es')]),
+    'it-IT': () => Promise.all([import('@angular/common/locales/it'), import('dayjs/locale/it')]),
+    'nl-NL': () => Promise.all([import('@angular/common/locales/nl'), import('dayjs/locale/nl')]),
+    'pl-PL': () => Promise.all([import('@angular/common/locales/pl'), import('dayjs/locale/pl')]),
+    'el-GR': () => Promise.all([import('@angular/common/locales/el'), import('dayjs/locale/el')]),
+};
+
+/** Loads only the Angular and Day.js locale selected for this bootstrap. */
+export function registerAppLocale(locale: string = getAppLocale()): Promise<void> {
+    // Angular and Day.js both ship en-US as their built-in locale.
+    if (locale === 'en-US') return Promise.resolve();
+
+    const cachedRegistration = localeRegistrationPromises.get(locale);
+    if (cachedRegistration) return cachedRegistration;
+
+    const loadLocale = localeLoaders[locale] ?? localeLoaders['en-GB'];
+    const registration = loadLocale().then(([angularLocale]) => {
+        registerLocaleData(angularLocale.default);
+    });
+    localeRegistrationPromises.set(locale, registration);
+    return registration;
 }
 
 

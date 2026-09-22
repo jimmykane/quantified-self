@@ -82,6 +82,10 @@ assertNoHomeStartupSource(
 );
 assertNoStartupSource('Mapbox', /(?:^|\/)(?:mapbox-gl|mapbox-loader)(?:[./]|$)/);
 assertNoStartupSource(
+  'eager regional locale catalog',
+  /node_modules\/(?:dayjs\/locale|@angular\/common\/locales)\//,
+);
+assertNoStartupSource(
   'deferred Training examples and charts',
   /^src\/app\/components\/(?:public-seo\/training-explorer-preview\.(?:component|data)|training\/training-(?:readiness-trend|power-systems-trend|durability-trajectory)-chart\.component)\.ts$/,
 );
@@ -391,7 +395,7 @@ function assertTrainingPlansDocument(documentRef) {
   for (const expectedCopy of [
     'A standalone workout is first-class',
     'Plan directly, through MCP, or with provider delivery',
-    'Provider workout delivery is a separate Pro limited beta',
+    'Workout delivery to Garmin, COROS, Suunto, and Wahoo is available to connected Pro members',
     'Can I add a workout without creating a plan?',
     'Can I use an MCP client with Training Plans?',
   ]) {

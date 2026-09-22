@@ -136,7 +136,7 @@ presentation-only optimizations with no Training calculation, planning, or MCP c
 Current compatibility baseline:
 
 - Quantified Self derived-metric schema: `19`
-- `@sports-alliance/sports-lib`: `21.2.4`
+- `@sports-alliance/sports-lib`: `21.2.5`
 - Training sport groups: eight modeled benchmark families plus data-backed Fitness & Gym and Other training volume groups
 - Imported FTP/VO2 capacity disciplines: Running and Cycling only
 - Rolling power-system capacity: every exact canonical activity type with usable persisted power curves
@@ -3335,15 +3335,17 @@ sleep duration, score, HRV, and sleep-heart-rate aggregates it already consumes;
 changes. Existing normalized Sleep documents use the dedicated Health/Sleep scalar migration, not an activity reparse,
 and do not require a Training snapshot rebuild solely for this storage transition.
 
-The repository now pins Sports Lib `21.2.4`, and Functions pins FIT parser `6.1.1`. The 21.0.3 package-emission transition
+The repository now pins Sports Lib `21.2.5`, and Functions pins FIT parser `6.1.2`. The 21.0.3 package-emission transition
 remains module-preserving ESM and per-module CommonJS. Sports Lib 21.2.1 added nonnumeric, package-root FIT
-workout-reference classes and the bounded `readFITWorkoutReferences(...)` metadata reader. Sports Lib 21.2.4 keeps those
+workout-reference classes and the bounded `readFITWorkoutReferences(...)` metadata reader. Sports Lib 21.2.5 keeps those
 public classes, return shapes, numeric values, serialized event/route data, and representative FIT course output unchanged
-while delegating duplicate protocol tables, encoding, and selected-message reading to `fit-file-parser` 6.1.1. The
-lightweight raw reader enters the package-root workout-reference path without loading the full activity decoder or semantic
-profile; full activity and route imports remain lazy. It also retains 21.2.2's tolerance for irrelevant nonstandard vendor
+while consuming `fit-file-parser` 6.1.2's lightweight profile maps for the package-root workout-reference path. The
+bounded reader no longer pulls the parser's full semantic FIT profile into the public startup graph; full activity and
+route imports remain lazy and continue to own complete decoding. Sports Lib still delegates protocol tables, encoding,
+and selected-message reading to fit-parser rather than carrying duplicate mappings. It also retains 21.2.2's tolerance for irrelevant nonstandard vendor
 definitions on unrelated messages. No source reparse, derived-snapshot rebuild, schema bump, or persisted-data migration is
-required solely for 21.2.4. These values stay
+required solely for 21.2.5. This packaging-only update changes no Training formula, canonical metric, durability protocol,
+MCP tool, scope, projection, consent, provider action, or wire schema. These values stay
 outside default Event/Activity JSON, streams, metrics, MCP metric discovery and Training-derived calculations. New Garmin
 and Suunto FIT imports can retain private evidence; there is no Firestore activity-schema migration, derived-snapshot
 rebuild or global reparse requirement. A separately approved targeted source-backed reparse may be used only when a
@@ -3369,6 +3371,14 @@ VAM, or a corrected persisted parent terrain summary. The target follows the ins
 keep the automatic scanner disabled unless a separately approved operational campaign is intended. These values are
 not Training inputs, so this parser upgrade does not require a Training schema bump, derived-snapshot rebuild, or a
 synthetic Firestore migration.
+
+Issue #727 production-bundle verification used the unchanged `1440kb` initial budget. Sports Lib `21.2.4` with all
+supported Angular and Day.js locales eagerly registered produced `1.67 MB` raw / `371.92 kB` estimated transfer and
+failed by `232.08 kB`. Updating Sports Lib to `21.2.5` and FIT parser to `6.1.2` reduced that to `1.45 MB` raw /
+`341.73 kB` estimated transfer, still `6.08 kB` over budget. Loading only the resolved locale before application
+bootstrap produced `1.41 MB` raw / `333.91 kB` estimated transfer and passed the original budget. Locale preference
+changes already reload the bootstrap-scoped Angular locale; this split preserves that behavior while avoiding delivery
+of every supported locale to every user.
 
 A new parser-owned activity stat may additionally require a reparse; changing only the derived schema cannot create a
 missing activity stat or reconstruct a missing continuous stream.
