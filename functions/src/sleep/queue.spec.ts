@@ -29,6 +29,7 @@ const hoisted = vi.hoisted(() => ({
     upsertSleepSessions: vi.fn(),
     buildSleepSessionDocumentId: vi.fn(),
     replaceHealthSourceRecord: vi.fn(),
+    replaceHealthSourceRecords: vi.fn(),
     updateHealthSyncState: vi.fn(),
     enqueueSleepSyncTask: vi.fn(),
     enqueueGarminHealthBackfillTask: vi.fn(),
@@ -176,7 +177,9 @@ vi.mock('./writer', () => ({
 }));
 
 vi.mock('../health/writer', () => ({
+    HEALTH_SOURCE_RECORD_TRANSACTION_BATCH_SIZE: 8,
     replaceHealthSourceRecord: hoisted.replaceHealthSourceRecord,
+    replaceHealthSourceRecords: hoisted.replaceHealthSourceRecords,
     updateHealthSyncState: hoisted.updateHealthSyncState,
 }));
 
@@ -382,6 +385,16 @@ describe('sleep queue', () => {
             chunksWritten: 0,
             chunksDeleted: 0,
         });
+        hoisted.replaceHealthSourceRecords.mockImplementation(async (
+            _userID: string,
+            values: readonly unknown[],
+        ) => values.map((_, index) => ({
+            status: 'written',
+            sourceRecordId: `health-record-id-${index}`,
+            sourceRecord: null,
+            chunksWritten: 0,
+            chunksDeleted: 0,
+        })));
         hoisted.updateHealthSyncState.mockResolvedValue(true);
         hoisted.claimSleepQueueRevision.mockResolvedValue('claimed');
         hoisted.releaseSleepQueueRevision.mockResolvedValue(undefined);
@@ -5096,6 +5109,13 @@ describe('sleep queue', () => {
                     sourceRecordKey: '2026-08-26:0',
                 },
                 observedAtMs: Date.parse('2026-08-26T12:00:00.000Z'),
+            }, {
+                input: {
+                    provider: 'SuuntoApp',
+                    sourceRecordType: 'suunto_247_recovery',
+                    sourceRecordKey: '2026-08-26:0',
+                },
+                observedAtMs: Date.parse('2026-08-26T13:00:00.000Z'),
             }],
             lifecycleGuards,
         });
@@ -5119,9 +5139,13 @@ describe('sleep queue', () => {
 
         expect(result).toBe(QueueResult.Processed);
         expect(hoisted.processSuuntoHealthQueueItem).toHaveBeenCalled();
-        expect(hoisted.replaceHealthSourceRecord).toHaveBeenCalledWith(
+        expect(hoisted.replaceHealthSourceRecords).toHaveBeenCalledOnce();
+        expect(hoisted.replaceHealthSourceRecords).toHaveBeenCalledWith(
             healthUserID,
-            expect.objectContaining({ sourceRecordType: 'suunto_247_activity' }),
+            [
+                expect.objectContaining({ sourceRecordType: 'suunto_247_activity' }),
+                expect.objectContaining({ sourceRecordType: 'suunto_247_recovery' }),
+            ],
             expect.any(Number),
             expect.objectContaining({ ...lifecycleGuards, additionalRequiredDocumentFieldValues:
                 expect.arrayContaining([...lifecycleGuards.additionalRequiredDocumentFieldValues,
@@ -5148,7 +5172,7 @@ describe('sleep queue', () => {
         expect(update).toHaveBeenCalledWith(expect.objectContaining({
             resultStatus: 'success',
             sessionsWritten: 0,
-            healthRecordsWritten: 1,
+            healthRecordsWritten: 2,
         }));
     });
 
@@ -5188,7 +5212,7 @@ describe('sleep queue', () => {
             });
             if (failure === 'enqueue_failure') hoisted.enqueueSleepSyncTask.mockRejectedValueOnce(Error('unavailable'));
             if (failure === 'marker_failure') hoisted.markQueueItemDispatchedIfUserActive.mockRejectedValueOnce(Error('unavailable'));
-            if (failure === 'write_failure') hoisted.replaceHealthSourceRecord.mockRejectedValueOnce(Error('unavailable'));
+            if (failure === 'write_failure') hoisted.replaceHealthSourceRecords.mockRejectedValueOnce(Error('unavailable'));
             if (failure === 'checkpoint_failure') hoisted.transactionUpdate.mockImplementationOnce(() => { throw Error('unavailable'); });
 
             const result = await processSleepSyncQueueItem({ ...state, ref } as unknown as SleepSyncQueueItemInterface);

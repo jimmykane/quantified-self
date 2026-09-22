@@ -33,7 +33,12 @@ import {
     updateSleepSyncState,
     upsertSleepSessions,
 } from './writer';
-import { replaceHealthSourceRecord, updateHealthSyncState } from '../health/writer';
+import {
+    HEALTH_SOURCE_RECORD_TRANSACTION_BATCH_SIZE,
+    replaceHealthSourceRecord,
+    replaceHealthSourceRecords,
+    updateHealthSyncState,
+} from '../health/writer';
 import { getTokenData, TerminalServiceAuthError, TokenRefreshSkippedForDeletedUserError } from '../tokens';
 import * as requestPromise from '../request-helper';
 import { config } from '../config';
@@ -2618,8 +2623,14 @@ export async function processSleepSyncQueueItem(queueItem: SleepSyncQueueItemInt
                 )
                 : healthResults.length;
             while (healthResultIndex < batchEndIndex) {
-                const healthResult = healthResults[healthResultIndex];
-                let writeResult: Awaited<ReturnType<typeof replaceHealthSourceRecord>>;
+                const writeBatchEndIndex = isSuuntoHealthQueueItem(queueItem)
+                    ? Math.min(
+                        batchEndIndex,
+                        healthResultIndex + HEALTH_SOURCE_RECORD_TRANSACTION_BATCH_SIZE,
+                    )
+                    : healthResultIndex + 1;
+                const writeBatch = healthResults.slice(healthResultIndex, writeBatchEndIndex);
+                let writeResults: Awaited<ReturnType<typeof replaceHealthSourceRecords>>;
                 if (isSuuntoHealthQueueItem(queueItem)
                     && suuntoHealthLifecycleGuards
                     && suuntoAuthorityBaseline) {
@@ -2628,55 +2639,62 @@ export async function processSleepSyncQueueItem(queueItem: SleepSyncQueueItemInt
                         queueItem.providerUserId,
                         suuntoAuthorityBaseline,
                         suuntoHealthLifecycleGuards,
-                        guards => replaceHealthSourceRecord(
+                        guards => replaceHealthSourceRecords(
                             firebaseUserID,
-                            healthResult.input,
+                            writeBatch.map(healthResult => healthResult.input),
                             Date.now(),
                             healthStateGuardsForCurrentQueueRevision(queueItem, guards),
                         ),
-                        candidate => candidate.status === 'skipped_lifecycle_guard',
+                        candidates => candidates.some(
+                            candidate => candidate.status === 'skipped_lifecycle_guard',
+                        ),
                     );
-                    writeResult = writeAttempt.result;
+                    writeResults = writeAttempt.result;
                     suuntoHealthLifecycleGuards = writeAttempt.guards;
                 } else if (isGarminHealthQueueItem(queueItem) && garminHealthLifecycleGuards) {
-                    writeResult = await replaceHealthSourceRecord(
+                    writeResults = [await replaceHealthSourceRecord(
                         firebaseUserID,
-                        healthResult.input,
+                        writeBatch[0].input,
                         Date.now(),
                         garminHealthLifecycleGuards,
-                    );
+                    )];
                 } else {
-                    writeResult = await replaceHealthSourceRecord(
+                    writeResults = [await replaceHealthSourceRecord(
                         firebaseUserID,
-                        healthResult.input,
+                        writeBatch[0].input,
                         Date.now(),
                         corosHealthLifecycleGuards || {},
-                    );
+                    )];
                 }
-                if (writeResult.status === 'skipped_deleted_user') {
-                    return markQueueItemSkipped(queueItem, undefined, QUEUE_SKIPPED_REASONS.UserDeletedOrDeleting, {
-                        skippedContext: 'USER_DELETION_GUARD',
-                        sessionsWritten: result.written,
-                        sessionsSkipped: result.skipped,
-                        healthRecordsWritten,
-                        healthRecordsUnchanged,
-                        healthRecordsStale,
-                    });
+                if (writeResults.length !== writeBatch.length) {
+                    throw new Error('Health source-record batch returned an unexpected result count.');
                 }
-                if (writeResult.status === 'skipped_lifecycle_guard') {
-                    return markQueueItemSkipped(queueItem, undefined, 'provider_disconnected_during_sync', {
-                        skippedContext: 'PROVIDER_LIFECYCLE_GUARD',
-                        sessionsWritten: result.written,
-                        sessionsSkipped: result.skipped,
-                        healthRecordsWritten,
-                        healthRecordsUnchanged,
-                        healthRecordsStale,
-                    });
+                for (const writeResult of writeResults) {
+                    if (writeResult.status === 'skipped_deleted_user') {
+                        return markQueueItemSkipped(queueItem, undefined, QUEUE_SKIPPED_REASONS.UserDeletedOrDeleting, {
+                            skippedContext: 'USER_DELETION_GUARD',
+                            sessionsWritten: result.written,
+                            sessionsSkipped: result.skipped,
+                            healthRecordsWritten,
+                            healthRecordsUnchanged,
+                            healthRecordsStale,
+                        });
+                    }
+                    if (writeResult.status === 'skipped_lifecycle_guard') {
+                        return markQueueItemSkipped(queueItem, undefined, 'provider_disconnected_during_sync', {
+                            skippedContext: 'PROVIDER_LIFECYCLE_GUARD',
+                            sessionsWritten: result.written,
+                            sessionsSkipped: result.skipped,
+                            healthRecordsWritten,
+                            healthRecordsUnchanged,
+                            healthRecordsStale,
+                        });
+                    }
+                    if (writeResult.status === 'written') healthRecordsWritten += 1;
+                    if (writeResult.status === 'unchanged') healthRecordsUnchanged += 1;
+                    if (writeResult.status === 'stale') healthRecordsStale += 1;
+                    healthResultIndex += 1;
                 }
-                if (writeResult.status === 'written') healthRecordsWritten += 1;
-                if (writeResult.status === 'unchanged') healthRecordsUnchanged += 1;
-                if (writeResult.status === 'stale') healthRecordsStale += 1;
-                healthResultIndex += 1;
                 if (garminHealthContinuation
                     && healthResultIndex < healthResults.length
                     && Date.now() - processingStartedAtMs
