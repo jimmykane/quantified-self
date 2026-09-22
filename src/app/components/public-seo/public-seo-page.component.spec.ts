@@ -191,7 +191,8 @@ describe('PublicSeoPageComponent', () => {
     expect(text).toContain('Completed totals remain unchanged');
     expect(text).toContain('Plan directly, through MCP, or with provider delivery');
     expect(text).toContain('compatible MCP client can read your schedule');
-    expect(text).toContain('Workout delivery to Garmin, COROS, Suunto, and Wahoo is available to connected Pro members');
+    expect(text).toContain('Workout delivery to Garmin, Suunto, and Wahoo is available to connected Pro members');
+    expect(text).toContain('COROS standalone Send is available; new COROS plan sync setup in the app is coming soon');
     expect(text).toContain('Connecting a provider never sends a workout by itself');
     expect(text).toContain('Can I add a workout without creating a plan?');
     expect(text).toContain('Can I use an MCP client with Training Plans?');

@@ -84,7 +84,7 @@ export class TrainingDeliveryButtonComponent {
     && (this.summaryWorkouts() === null || this.readState().uid === this.users.user()?.uid)
     && ((this.scope() !== 'history' && this.delivery.anyReady()) || this.hasRecords()));
   readonly singleProvider = computed(() => {
-    const providers = PLANNED_WORKOUT_PROVIDER_IDS.filter(provider => this.delivery.isSetupAvailable(provider));
+    const providers = PLANNED_WORKOUT_PROVIDER_IDS.filter(provider => this.delivery.isSetupAvailable(provider, this.planDelivery()));
     return providers.length === 1 ? providers[0] : null;
   });
   readonly buttonLabel = computed(() => {

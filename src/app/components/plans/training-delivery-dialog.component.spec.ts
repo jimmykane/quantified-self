@@ -38,7 +38,8 @@ describe('Training provider delivery controls', () => {
   beforeEach(async () => {
     user.set({ uid: 'owner' }); user$.next(user()); close = vi.fn();
     haptics = { selection: vi.fn(), success: vi.fn(), error: vi.fn() };
-    service = { anyReady: () => false, isReady: vi.fn(() => false), isSetupAvailable: vi.fn(provider => service.isReady(provider)), watchPresence: vi.fn(() => of(true)),
+    service = { anyReady: () => false, isReady: vi.fn(() => false),
+      isSetupAvailable: vi.fn((provider, _planDelivery) => service.isReady(provider)), watchPresence: vi.fn(() => of(true)),
       watchScope: vi.fn(() => of({ settings: [], statuses: [status] })), createMutationId: vi.fn(() => 'mutation'),
       preview: vi.fn(async () => ({ schemaVersion: 1, available: true, connection: 'connected', hasPro: true,
         timeZone: 'Europe/Helsinki', effect: 'enable', settingsRevision: 0, eligibleCount: 1, warningCount: 0, issues: [], approvalDigest: null })),
@@ -93,6 +94,24 @@ describe('Training provider delivery controls', () => {
     expect(TestBed.inject(AppEventService).getEventMetaDataKeys).not.toHaveBeenCalled();
     expect(service.preview).not.toHaveBeenCalled(); expect(service.mutate).not.toHaveBeenCalled();
     expect(haptics.selection).not.toHaveBeenCalled();
+  });
+  it('labels COROS plan setup coming soon in the provider overview without starting delivery', () => {
+    TestBed.overrideProvider(MAT_DIALOG_DATA, { useValue: { scope: 'plan', id: 'p', title: 'Autumn build' } });
+    TestBed.overrideProvider(TrainingPlansService, { useValue: { watchSchedule: () => of({ state: { revision: 3 },
+      plans: [{ id: 'p', name: 'Autumn build', revision: 2, lifecycle: 'active' }], workouts: [],
+    }), watchWorkoutCompletions: () => of([]) } });
+    service.isReady.mockReturnValue(true);
+    service.isSetupAvailable.mockImplementation((provider, planDelivery) => provider !== 'coros' || !planDelivery);
+    service.watchScope.mockReturnValue(of({ settings: [], statuses: [] }));
+    const fixture = TestBed.createComponent(TrainingDeliveryDialogComponent); fixture.detectChanges();
+    const manage = fixture.nativeElement.querySelector('button[aria-label="Manage COROS sync"]') as HTMLButtonElement;
+    const row = manage.closest('app-compact-row')!;
+    expect(row.textContent).toContain('Plan sync coming soon');
+    expect(row.textContent).toContain('Standalone Send remains available');
+    manage.click(); fixture.detectChanges();
+    expect(fixture.nativeElement.textContent).toContain('New COROS plan sync setup is coming soon');
+    expect(fixture.nativeElement.textContent).not.toContain('Sync plan with COROS');
+    expect(service.preview).not.toHaveBeenCalled(); expect(service.mutate).not.toHaveBeenCalled();
   });
   it('shows provider sync state separately from workout status before Manage', () => {
     TestBed.overrideProvider(MAT_DIALOG_DATA, { useValue: { scope: 'plan', id: 'p', title: 'Winter build' } });
@@ -329,39 +348,95 @@ describe('Training provider delivery controls', () => {
     expect(service.preview).not.toHaveBeenCalled(); expect(service.mutate).not.toHaveBeenCalled();
     expect(fixture.nativeElement.textContent).toContain('Check queued');
   });
-  it('allows public COROS plan setup while keeping truthful calendar and watch guidance', async () => {
+  it('keeps existing COROS plan sync and copy help visible while new plan setup is coming soon', async () => {
     TestBed.overrideProvider(MAT_DIALOG_DATA, { useValue: { scope: 'plan', id: 'p', title: 'Autumn build' } });
     TestBed.overrideProvider(TrainingPlansService, { useValue: { watchSchedule: () => of({ state: { revision: 3 },
       plans: [{ id: 'p', name: 'Autumn build', revision: 2, lifecycle: 'active' }],
       workouts: [{ id: 'w', planId: 'p', title: 'Morning run', localDate: '2026-09-10', revision: 2, lifecycle: 'planned' }],
     }), watchWorkoutCompletions: () => of([]) } });
     service.isReady.mockImplementation(provider => provider === 'coros');
-    service.isSetupAvailable.mockImplementation(provider => provider === 'coros');
-    service.watchScope.mockReturnValue(of({ settings: [], statuses: [] }));
+    service.isSetupAvailable.mockImplementation((provider, planDelivery) => provider === 'coros' && !planDelivery);
+    service.watchScope.mockReturnValue(of({
+      settings: [{ provider: 'coros', enabled: true, timeZone: 'Europe/Helsinki' }],
+      statuses: [{ ...status, provider: 'coros', planId: 'p', status: 'needs_attention', differsFromQS: false,
+        lastAcceptedAtMs: 1000, lastAttemptAtMs: 1000 }],
+      verifications: [{ id: status.id, canCheck: false, state: 'unsupported', lastCheckedAtMs: null, missing: false }],
+    }));
     const fixture = TestBed.createComponent(TrainingDeliveryDialogComponent); fixture.detectChanges();
-    expect(fixture.nativeElement.textContent).not.toContain('coming soon');
-    expect(fixture.nativeElement.textContent).toContain('Sync plan with COROS');
+    expect(fixture.nativeElement.textContent).toContain('New COROS plan sync setup is coming soon');
+    expect(fixture.nativeElement.textContent).toContain('Sync could not be confirmed');
     expect([...fixture.nativeElement.querySelectorAll('button')].some((button: HTMLButtonElement) =>
       button.textContent?.trim() === 'Check COROS')).toBe(false);
     const guidance: HTMLElement = fixture.nativeElement.querySelector('#delivery-guidance-details');
-    expect(guidance.textContent).toContain('QS sends each upcoming workout to your COROS training calendar');
+    expect(guidance.textContent).toContain('Existing enabled plan sync still follows its saved settings and plan status');
+    expect(guidance.textContent).toContain('does not currently offer COROS plan configuration or plan-workout resume actions');
+    expect(guidance.textContent).toContain('Standalone Send to COROS remains available');
     expect(guidance.textContent).toContain('asks the connected app to remove upcoming synced workouts');
     expect(guidance.textContent).toContain('two-week watch window');
     expect(guidance.textContent).toContain('one training plan synced to a watch at a time');
     expect(service.check).not.toHaveBeenCalled();
-    await fixture.componentInstance.begin('coros', 'configure');
-    expect(fixture.componentInstance.draft()).toMatchObject({ provider: 'coros', action: 'configure' });
-    expect(service.preview).toHaveBeenCalledWith(expect.objectContaining({ provider: 'coros', action: 'configure' }), expect.any(Function));
+    expect(fixture.nativeElement.textContent).not.toContain('Sync plan with COROS');
+    expect(fixture.nativeElement.textContent).toContain('Retry plan sync');
+    expect(fixture.nativeElement.textContent).toContain('Stop plan sync');
+    expect(fixture.nativeElement.textContent).not.toContain('Plan sync settings');
+    const component = fixture.componentInstance;
+    await component.begin('coros', 'configure');
+    expect(component.draft()).toBeNull();
+    expect(service.preview).not.toHaveBeenCalled();
+    await component.begin('coros', 'retry');
+    expect(service.preview).toHaveBeenCalledWith(expect.objectContaining({ provider: 'coros', action: 'retry' }), expect.any(Function));
+  });
+  it.each(['configure', 'send'] as const)('blocks direct COROS plan %s setup', async action => {
+    TestBed.overrideProvider(MAT_DIALOG_DATA, { useValue: { scope: 'plan', id: 'p', title: 'Autumn build' } });
+    TestBed.overrideProvider(TrainingPlansService, { useValue: { watchSchedule: () => of({ state: { revision: 3 },
+      plans: [{ id: 'p', name: 'Autumn build', revision: 2, lifecycle: 'active' }], workouts: [],
+    }), watchWorkoutCompletions: () => of([]) } });
+    service.isReady.mockImplementation(provider => provider === 'coros');
+    service.isSetupAvailable.mockImplementation((provider, planDelivery) => provider === 'coros' && !planDelivery);
+    service.watchScope.mockReturnValue(of({ settings: [], statuses: [] }));
+    const fixture = TestBed.createComponent(TrainingDeliveryDialogComponent); fixture.detectChanges();
+    await fixture.componentInstance.begin('coros', action);
+    expect(fixture.componentInstance.draft()).toBeNull();
+    expect(service.preview).not.toHaveBeenCalled();
+  });
+  it('blocks direct COROS resume for a plan-bound workout', async () => {
+    TestBed.overrideProvider(TrainingPlansService, { useValue: { watchSchedule: () => of({ state: { revision: 3 },
+      plans: [{ id: 'p', name: 'Autumn build', revision: 2, lifecycle: 'active' }],
+      workouts: [{ id: 'w', planId: 'p', title: 'Morning run', localDate: '2026-09-10', revision: 2, lifecycle: 'planned' }],
+    }), watchWorkoutCompletions: () => of([]) } });
+    service.isReady.mockImplementation(provider => provider === 'coros');
+    service.isSetupAvailable.mockImplementation((provider, planDelivery) => provider === 'coros' && !planDelivery);
+    service.watchScope.mockReturnValue(of({ settings: [], statuses: [{ ...status, provider: 'coros', planId: 'p', status: 'stopped' }] }));
+    const fixture = TestBed.createComponent(TrainingDeliveryDialogComponent); fixture.detectChanges();
+    expect(fixture.nativeElement.textContent).not.toContain('Resume workout sync');
+    await fixture.componentInstance.begin('coros', 'resume');
+    expect(fixture.componentInstance.draft()).toBeNull();
+    expect(service.preview).not.toHaveBeenCalled();
+  });
+  it('does not auto-open COROS plan setup from a preselected provider hint', async () => {
+    TestBed.overrideProvider(MAT_DIALOG_DATA, { useValue: { scope: 'plan', id: 'p', title: 'Autumn build', initialProvider: 'coros' } });
+    TestBed.overrideProvider(TrainingPlansService, { useValue: { watchSchedule: () => of({ state: { revision: 3 },
+      plans: [{ id: 'p', name: 'Autumn build', revision: 2, lifecycle: 'active' }], workouts: [],
+    }), watchWorkoutCompletions: () => of([]) } });
+    service.isReady.mockImplementation(provider => provider === 'coros');
+    service.isSetupAvailable.mockImplementation((provider, planDelivery) => provider === 'coros' && !planDelivery);
+    service.watchScope.mockReturnValue(of({ settings: [], statuses: [] }));
+    const fixture = TestBed.createComponent(TrainingDeliveryDialogComponent); fixture.detectChanges();
+    await fixture.whenStable(); fixture.detectChanges();
+    expect(fixture.nativeElement.textContent).toContain('New COROS plan sync setup is coming soon');
+    expect(service.isSetupAvailable).toHaveBeenCalledWith('coros', true);
+    expect(fixture.componentInstance.draft()).toBeNull();
+    expect(service.preview).not.toHaveBeenCalled();
   });
   it('keeps standalone Send to COROS available for every eligible connected account', async () => {
     TestBed.overrideProvider(MAT_DIALOG_DATA, { useValue: { scope: 'workout', id: 'w', title: 'Morning run', initialProvider: 'coros' } });
     service.isReady.mockImplementation(provider => provider === 'coros');
-    service.isSetupAvailable.mockImplementation(provider => provider === 'coros');
+    service.isSetupAvailable.mockImplementation((provider, planDelivery) => provider === 'coros' && !planDelivery);
     service.watchScope.mockReturnValue(of({ settings: [], statuses: [] }));
     const fixture = TestBed.createComponent(TrainingDeliveryDialogComponent); fixture.detectChanges();
     await fixture.whenStable(); fixture.detectChanges();
     expect(fixture.nativeElement.textContent).not.toContain('COROS plan sync setup is coming soon');
-    expect(service.isSetupAvailable).toHaveBeenCalledWith('coros');
+    expect(service.isSetupAvailable).toHaveBeenCalledWith('coros', false);
     expect(fixture.componentInstance.draft()).toMatchObject({ provider: 'coros', action: 'send' });
     expect(service.preview).toHaveBeenCalledWith(expect.objectContaining({ provider: 'coros', action: 'send' }), expect.any(Function));
   });
@@ -1000,25 +1075,25 @@ describe('Training provider delivery controls', () => {
     expect(data.initialProvider).toBe(count === 1 ? 'garmin' : undefined);
     expect(service.mutate).not.toHaveBeenCalled();
   });
-  it('counts public COROS as a new plan setup destination', () => {
+  it('does not count backend-ready COROS as a new plan setup destination', () => {
     const open = vi.fn();
     TestBed.overrideComponent(TrainingDeliveryButtonComponent, { add: { providers: [{ provide: MatDialog, useValue: { open } }] } });
     service.anyReady = () => true; service.watchPresence.mockReturnValue(of(false));
     service.isReady.mockImplementation(provider => provider === 'garmin' || provider === 'coros');
-    service.isSetupAvailable.mockImplementation(provider => provider === 'garmin' || provider === 'coros');
+    service.isSetupAvailable.mockImplementation(provider => provider === 'garmin');
     const fixture = TestBed.createComponent(TrainingDeliveryButtonComponent);
     fixture.componentRef.setInput('scope', 'plan'); fixture.componentRef.setInput('entityId', 'p'); fixture.componentRef.setInput('title', 'Plan');
     fixture.detectChanges();
-    expect(fixture.nativeElement.textContent).toContain('Sync plan');
+    expect(fixture.nativeElement.textContent).toContain('Sync plan with Garmin');
     fixture.nativeElement.querySelector('button').click();
-    expect(open.mock.calls[0][1].data.initialProvider).toBeUndefined();
+    expect(open.mock.calls[0][1].data.initialProvider).toBe('garmin');
   });
   it('counts backend-ready COROS as a standalone workout destination', () => {
     const open = vi.fn();
     TestBed.overrideComponent(TrainingDeliveryButtonComponent, { add: { providers: [{ provide: MatDialog, useValue: { open } }] } });
     service.anyReady = () => true; service.watchPresence.mockReturnValue(of(false));
     service.isReady.mockImplementation(provider => provider === 'coros');
-    service.isSetupAvailable.mockImplementation(provider => provider === 'coros');
+    service.isSetupAvailable.mockImplementation((provider, planDelivery) => provider === 'coros' && !planDelivery);
     const fixture = TestBed.createComponent(TrainingDeliveryButtonComponent);
     fixture.componentRef.setInput('scope', 'workout'); fixture.componentRef.setInput('entityId', 'w');
     fixture.componentRef.setInput('title', 'Workout'); fixture.componentRef.setInput('standalone', true);

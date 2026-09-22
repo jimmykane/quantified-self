@@ -42,7 +42,7 @@ export const TRAINING_PLANS_HOME_CONTENT = {
       icon: 'sync',
       iconTone: 'primary',
       title: 'Optional Provider Delivery',
-      copy: 'Workout delivery to Garmin, COROS, Suunto, and Wahoo is available to connected Pro members through explicit plan opt-in or standalone Send actions. Connecting a provider never sends workouts by itself.',
+      copy: 'Workout delivery to Garmin, Suunto, and Wahoo is available to connected Pro members through explicit plan opt-in or standalone Send actions. COROS standalone Send is available; new COROS plan sync setup in the app is coming soon. Connecting a provider never sends workouts by itself.',
     },
     {
       icon: 'calendar_month',

@@ -121,7 +121,8 @@ describe('COROS connected-service policy', () => {
     expect(content).toContain('collision-checked partner workout identities');
     expect(content).toContain('exact returned COROS planWorkoutId');
     expect(content).toContain('Training sync can send a standalone workout');
-    expect(content).toContain('after explicit plan opt-in');
+    expect(content).toContain('New COROS plan-sync setup is currently labelled Coming soon in the app');
+    expect(content).toContain('existing saved plan opt-ins may continue');
     expect(content).toContain('Delivery records, copy status, retry, per-workout exclusion and Stop sync remain available');
     expect(content).toContain('automatically send new Garmin/Suunto/Wahoo FIT activities');
     expect(content).toContain('Eligible connected Pro users can also send');

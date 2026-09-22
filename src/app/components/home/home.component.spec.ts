@@ -389,7 +389,8 @@ describe('HomeComponent', () => {
         expect(text).toContain('Plan Through MCP');
         expect(text).toContain('compatible MCP clients');
         expect(text).toContain('Optional Provider Delivery');
-        expect(text).toContain('Workout delivery to Garmin, COROS, Suunto, and Wahoo is available to connected Pro members');
+        expect(text).toContain('Workout delivery to Garmin, Suunto, and Wahoo is available to connected Pro members');
+        expect(text).toContain('COROS standalone Send is available; new COROS plan sync setup in the app is coming soon');
         expect(text).toContain('never sends workouts by itself');
         expect(text).toContain('without adding them to recorded totals or Training analysis');
         expect(rows).toHaveLength(TRAINING_PLANS_HOME_CONTENT.rows.length);

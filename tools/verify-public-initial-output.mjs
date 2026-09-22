@@ -395,7 +395,8 @@ function assertTrainingPlansDocument(documentRef) {
   for (const expectedCopy of [
     'A standalone workout is first-class',
     'Plan directly, through MCP, or with provider delivery',
-    'Workout delivery to Garmin, COROS, Suunto, and Wahoo is available to connected Pro members',
+    'Workout delivery to Garmin, Suunto, and Wahoo is available to connected Pro members',
+    'COROS standalone Send is available; new COROS plan sync setup in the app is coming soon',
     'Can I add a workout without creating a plan?',
     'Can I use an MCP client with Training Plans?',
   ]) {

@@ -41,7 +41,7 @@ describe('Training delivery summaries on the workspace', () => {
     vi.stubGlobal('crypto', webcrypto); user.set({ uid: 'owner' }); user$.next(user());
     view$ = new BehaviorSubject<TrainingDeliveryView>({ settings: [setting], statuses: [status] });
     service = { watchSummaryScope: vi.fn(() => view$), watchPresence: vi.fn(() => of(true)), anyReady: vi.fn(() => false),
-      isReady: vi.fn(() => false), isSetupAvailable: vi.fn(provider => service.isReady(provider)) };
+      isReady: vi.fn(() => false), isSetupAvailable: vi.fn((provider, _planDelivery) => service.isReady(provider)) };
     open = vi.fn(); selection = vi.fn();
     TestBed.overrideComponent(ServiceSourceIconComponent, { set: { template: '' } });
     TestBed.overrideComponent(TrainingDeliveryButtonComponent, { add: { providers: [{ provide: MatDialog, useValue: { open } }] } });
