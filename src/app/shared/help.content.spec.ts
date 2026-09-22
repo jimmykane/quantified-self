@@ -47,13 +47,13 @@ describe('help.content', () => {
     expect(section.links.some(link => link.label === 'MCP Connections')).toBe(true);
     expect(section.links.some(link => link.label === 'Connected services')).toBe(true);
     expect(content).toContain('Workout delivery to Garmin, Suunto, and Wahoo is available to connected Pro members');
-    expect(content).toContain('COROS standalone Send is available; new COROS plan sync setup in the app is coming soon');
+    expect(content).toContain('New COROS plan sync and standalone Send actions are coming soon in the app');
     expect(content).toContain('Distance-based steps are not sent because Wahoo needs a total duration');
     expect(content).toContain('Older Wahoo connections may need **Reconnect Wahoo**');
     expect(content).toContain('Checks confirm the app-owned Plan, Workout and association; automatic missing-copy restoration is unavailable');
-    expect(content).toContain('New COROS plan sync setup is coming soon in the app');
-    expect(content).toContain('Existing enabled plan sync continues to follow its saved settings and plan status');
-    expect(content).toContain('plan configuration and plan-workout resume are hidden');
+    expect(content).toContain('COROS workout delivery is coming soon in the app');
+    expect(content).toContain('Existing saved COROS delivery state continues to follow its consent');
+    expect(content).toContain('New plan sync, plan-workout resume, and standalone Send actions are unavailable');
     expect(content).toContain('COROS training calendar');
     expect(content).toContain('two-week watch window');
     expect(content).toContain('remote checking and automatic missing-copy restoration are unavailable');
@@ -583,7 +583,7 @@ describe('help.content', () => {
     expect(HELP_SECTIONS.find(section => section.id === 'activity-calendar')?.content)
       .toContain('Standalone workouts stay neutral');
     expect(planningSection?.content).toContain('Workout delivery to Garmin, Suunto, and Wahoo is available to connected Pro members');
-    expect(planningSection?.content).toContain('COROS standalone Send is available; new COROS plan sync setup in the app is coming soon');
+    expect(planningSection?.content).toContain('New COROS plan sync and standalone Send actions are coming soon in the app');
     expect(planningSection?.content).toContain('Wahoo supports time-based running and cycling workouts');
     expect(planningSection?.content).toContain('Scheduled for later');
     expect(planningSection?.content).toContain('**Sent to Suunto** means Suunto accepted the Guide for your account');

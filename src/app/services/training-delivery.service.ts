@@ -29,13 +29,13 @@ export const TRAINING_DELIVERY_SAVE_TIMEOUT_MS = 70_000;
 // identities can exceed it; summaries must then explicitly withhold complete totals.
 export const TRAINING_DELIVERY_SUMMARY_LIMIT = TRAINING_PLAN_MAX_CURRENT_WORKOUTS * PLANNED_WORKOUT_PROVIDER_IDS.length + 1;
 
-/** Browser setup control only. `planDelivery` also covers a plan-bound workout resume. */
+/** Browser setup control only. COROS Training delivery setup is temporarily withheld for every scope. */
 export function isTrainingDeliverySetupAvailableInApp(
   provider: PlannedWorkoutProviderId,
   uid: string | null | undefined,
-  planDelivery: boolean,
+  _planDelivery: boolean,
 ): boolean {
-  return isTrainingProviderDeliveryEnabled(provider, uid) && !(provider === 'coros' && planDelivery);
+  return isTrainingProviderDeliveryEnabled(provider, uid) && provider !== 'coros';
 }
 
 @Injectable({ providedIn: 'root' })

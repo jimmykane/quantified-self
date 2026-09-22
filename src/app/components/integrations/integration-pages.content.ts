@@ -397,12 +397,12 @@ export const PROVIDER_INTEGRATION_PAGES: Record<IntegrationProviderKey, Provider
     label: 'COROS',
     serviceName: ServiceNames.COROSAPI,
     h1: 'COROS Training Plans, Activity Sync, and Routes',
-    heroCopy: 'Connect COROS to Quantified Self to send standalone planned workouts to your COROS training calendar, import recent history, deliver activities and routes, and analyze connected training together. New plan sync setup in the app is coming soon.',
+    heroCopy: 'Connect COROS to Quantified Self to import recent history, deliver activities and routes, and analyze connected training together. COROS planned-workout delivery is coming soon in the app.',
     providerSources: ALL_PROVIDER_SOURCES,
     summary: 'Use the Pro COROS connection for planned-workout calendar delivery, recent activity, Sleep and Health history, activity and route workflows, and centralized multi-service training analysis.',
     highlights: [
       'COROS to Suunto automatic activity sync',
-      'Send standalone planned workouts to the COROS training calendar',
+      'COROS planned-workout delivery coming soon',
       'Garmin, Suunto, and Wahoo activity delivery to COROS',
       'Direct and saved route delivery to COROS',
       'Recent COROS history imports',
@@ -410,12 +410,12 @@ export const PROVIDER_INTEGRATION_PAGES: Record<IntegrationProviderKey, Provider
     ],
     syncEyebrow: 'COROS Workflows',
     syncTitle: 'COROS planned workouts, activity delivery, and route sync',
-    syncCopy: 'Connect one active COROS account, then explicitly send a standalone workout. New COROS plan sync setup in the app is coming soon; activity and route paths remain separate choices.',
+    syncCopy: 'Connect one active COROS account for its available data, activity, and route workflows. New COROS plan sync and standalone Send actions are coming soon in the app.',
     syncFlows: [
       {
         icon: 'event_note',
         title: 'Planned workouts to COROS',
-        copy: 'Connected Pro members can send compatible standalone workouts up to one year ahead. New COROS plan sync setup in the app is coming soon; existing enabled plan sync continues to follow its saved settings. Quantified Self sends dated workouts rather than claiming a native QS-owned COROS plan, and acceptance does not confirm watch receipt.',
+        copy: 'New COROS plan sync and standalone Send actions are coming soon in the app. Existing saved COROS delivery state can continue to follow its consent, with delivery records and recovery controls still available. Quantified Self does not claim a native QS-owned COROS plan or treat provider acceptance as watch receipt.',
       },
       {
         icon: 'sync_alt',
@@ -501,7 +501,7 @@ export const PROVIDER_INTEGRATION_PAGES: Record<IntegrationProviderKey, Provider
     faqItems: [
       {
         question: 'Can I send planned Training workouts to COROS?',
-        answer: 'Yes. Connected Pro members can explicitly send a compatible standalone workout. New COROS plan sync setup in the app is coming soon, while existing enabled plan sync continues to follow its saved settings. Provider acceptance does not confirm app or watch receipt, and the COROS API does not provide planned-workout reads for automatic missing-copy checks.',
+        answer: 'Not yet from the app. New COROS plan sync and standalone Send actions are marked Coming soon, while existing saved delivery state can continue to follow its consent. Provider acceptance does not confirm app or watch receipt, and the COROS API does not provide planned-workout reads for automatic missing-copy checks.',
       },
       {
         question: 'How do I sync COROS data to Suunto automatically?',
@@ -857,10 +857,10 @@ export const PROVIDER_INTEGRATION_ROUTE_DATA: Record<IntegrationProviderKey, Int
     title: 'COROS Training Plans, Activity Sync, and Routes',
     preload: true,
     animation: 'Integrations',
-    description: 'Send standalone planned workouts to COROS, with plan sync coming soon, plus recent history, activity sync, route delivery, and training analysis.',
+    description: 'COROS planned-workout delivery is coming soon; use recent history, activity sync, route delivery, and training analysis now.',
     jsonLd: providerWebPageJsonLd(
       PROVIDER_INTEGRATION_PAGES.coros,
-      'Send standalone planned workouts to COROS, with plan sync coming soon, plus recent history, activity sync, route delivery, and training analysis.'
+      'COROS planned-workout delivery is coming soon; use recent history, activity sync, route delivery, and training analysis now.'
     ),
   },
   wahoo: {

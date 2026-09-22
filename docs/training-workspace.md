@@ -377,8 +377,8 @@ the feature's identity. The homepage, public page, and Help also make the separa
 and opt-in provider delivery discoverable. They distinguish source implementation from released MCP client availability,
 and describe provider workout delivery as a distinct Pro capability with explicit actions, compatibility checks and
 provider-specific readiness. Garmin, Suunto and Wahoo are available to eligible connected Pro users after explicit
-standalone-send or plan-sync consent. COROS standalone Send is available, while new COROS plan-sync setup in the browser
-is labelled **Coming soon**; existing saved plan sync and the backend remain active. Public copy must say that connecting
+standalone-send or plan-sync consent. New COROS plan sync, plan-workout resume and standalone Send actions in the browser
+are labelled **Coming soon**; existing saved delivery state and the backend remain active. Public copy must say that connecting
 any provider never sends a planned workout and must describe each provider's actual scheduling window, mapping losses
 and verification limits. Cloud acceptance is not evidence that a workout appeared on a particular app or device.
 
@@ -600,8 +600,8 @@ The sidenav Beta label is presentation-only and does not change access, routing,
 The common delivery implementation lives in `functions/src/training-plans/delivery/`, with browser-safe v1 contracts in
 `shared/training-provider-delivery.ts`. It is independent of schedule history and leaves the exact `WorkoutStructureV1`
 JSON and Sports Lib conversion/formatting boundary unchanged. The implemented Garmin, COROS, Wahoo and Suunto adapters
-have no per-UID provider allowlist. The browser temporarily withholds new COROS plan setup as described below without
-disabling its backend runtime, existing consent, standalone Send or recovery controls. The Garmin adapter is implemented and tested offline under #647; deterministic fakes
+have no per-UID provider allowlist. The browser temporarily withholds all new COROS Training delivery setup as described
+below without disabling its backend runtime, existing consent or recovery controls. The Garmin adapter is implemented and tested offline under #647; deterministic fakes
 exist only in `delivery/test-support/`, are excluded from the Functions build, and have no browser/configuration switch.
 
 `previewTrainingProviderDelivery` and `mutateTrainingProviderDelivery` are focused, authenticated, App Check-enforced
@@ -896,8 +896,8 @@ The separate certification/evaluation ticket #698 is retired; it is not an enabl
 
 `shared/planned-workout-providers.ts` is the versioned capability/research snapshot. Garmin, COROS, Wahoo and Suunto have
 their backend delivery switches enabled and no exact-UID production gate. Offline verification does not constitute a real
-provider request or device result. COROS standalone setup uses that public readiness boundary, while new browser plan
-setup is temporarily withheld under #648 without changing backend reconciliation or existing saved consent. Deployment,
+provider request or device result. The browser temporarily withholds all new COROS Training delivery setup under #648,
+including plan sync, plan-workout resume and standalone Send, without changing backend reconciliation or existing saved consent. Deployment,
 provider entitlement and post-release/device evidence remain tracked in #647–#650 and #655. The
 ignored local Garmin Training API V2 and COROS API Reference PDFs remain evidence only and are never committed.
 
@@ -969,16 +969,16 @@ removes only its matching link/evidence and requeues ordinary reconciliation. Fa
 remain #651. COROS has no documented planned-workout read/list endpoint, so it exposes no Check action, missing-copy
 inference or automatic recreation.
 
-COROS standalone sends and the backend delivery runtime use the same public readiness boundary as the other providers;
-there is no backend UID allowlist. The browser has a narrower presentation/setup gate: it labels new COROS plan setup
-**Coming soon** and omits plan configuration and plan-workout resume actions while retaining read-only visibility of
-existing plan settings and statuses plus Retry, copy status and Stop. Existing enabled plan delivery and reconciliation
-continue to follow saved consent. Connecting COROS alone still does not opt in or send a workout. Ordinary authorized
+COROS and the backend delivery runtime use the same public readiness boundary as the other providers; there is no backend
+UID allowlist. The browser has a narrower presentation/setup gate: it labels all new COROS Training delivery setup
+**Coming soon** and omits plan configuration, plan-workout resume and standalone Send actions while retaining visibility
+of existing saved settings and statuses plus Retry, copy status and Stop. Existing delivery and reconciliation continue
+to follow saved consent. Connecting COROS alone still does not opt in or send a workout. Ordinary authorized
 live evidence is still required for Training entitlement, repeated-ID update, overlapping-window
 preservation, reschedule, eligible delete, completion callback/history correlation and COROS app/watch behavior before
 those behaviors can be claimed as verified. Implementation, tests or deployment do not constitute that evidence.
 
-MCP impact: no wire-contract or behavior change. The browser-only setup gate is not consulted by MCP; the existing
+MCP impact: no wire-contract or behavior change. The browser-only setup gate, including the standalone-send block, is not consulted by MCP; the existing
 backend readiness, proposal availability and `all_connected` behavior remain unchanged. `get_planned_workout` still returns
 the exact authored Sports Lib activity type, while `get_training_sync_status` exposes only existing sanitized statuses
 and never the COROS payload. The existing Mountain Biking read fixture covers exact recipe preservation. No new scope,

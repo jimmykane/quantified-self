@@ -24,7 +24,7 @@ describe('TrainingDeliveryService boundary', () => {
     expect(service.isReady('garmin')).toBe(true);
     expect(service.isReady('coros')).toBe(true);
     expect(isTrainingDeliverySetupAvailableInApp('coros', user()?.uid, true)).toBe(false);
-    expect(isTrainingDeliverySetupAvailableInApp('coros', user()?.uid, false)).toBe(true);
+    expect(isTrainingDeliverySetupAvailableInApp('coros', user()?.uid, false)).toBe(false);
     expect(isTrainingDeliverySetupAvailableInApp('garmin', user()?.uid, true)).toBe(true);
     expect(service.isReady('suunto')).toBe(true);
     expect(service.isReady('wahoo')).toBe(true);

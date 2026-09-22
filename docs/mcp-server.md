@@ -163,6 +163,8 @@ provider check or repair and gains no tool, field, scope, consent or write autho
 
 COROS Training delivery (#648) uses the public provider-readiness boundary with no wire-contract change. Explicit COROS
 proposals and `all_connected` use the same existing eligibility, proposal and approval checks as the other providers.
+The browser currently labels new COROS plan sync and standalone Send actions **Coming soon**, but that presentation gate
+is not consulted by MCP and does not change its existing approval-gated delivery contract.
 The existing sync-status enum can report delivered, approval, retry, attention
 and completed states for COROS. Partner athlete/workout IDs, destination
 identity, batch journals, request outcomes, token authority and exact `planWorkoutId` evidence remain private and are

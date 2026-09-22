@@ -201,7 +201,7 @@ export class TrainingDeliveryDialogComponent {
       ? this.data.planSummaries?.().find(summary => summary.provider === provider)?.planFocus ?? null : null;
     const setupComingSoon = provider === 'coros' && ready && !setupAvailable && !setting && !statuses.length;
     const overviewState = !this.view().loaded ? 'Loading sync status…'
-      : setupComingSoon ? 'Plan sync coming soon'
+      : setupComingSoon ? 'Workout delivery coming soon'
       : this.data.scope === 'history' ? 'Sync history'
       : this.planBound() ? suppressed ? 'Excluded from plan sync' : 'Follows plan sync settings'
         : setting?.enabled ? planInactive ? 'Sync saved · plan inactive' : 'Sync enabled' : 'Sync off';
@@ -210,7 +210,7 @@ export class TrainingDeliveryDialogComponent {
       : this.data.scope === 'history' ? 'history'
       : this.planBound() ? suppressed ? 'sync_disabled' : 'link'
         : setting?.enabled ? planInactive ? 'pause_circle' : 'check_circle' : 'sync_disabled';
-    const overviewDetail = setupComingSoon ? 'Standalone Send remains available.'
+    const overviewDetail = setupComingSoon ? 'New plan sync and standalone Send actions are unavailable.'
       : planFocus ? [planFocus.label, planFocus.detail].filter(Boolean).join(' · ')
       : !statuses.length ? 'No workout sync status yet.'
       : statuses.length === 1 ? statuses[0].label

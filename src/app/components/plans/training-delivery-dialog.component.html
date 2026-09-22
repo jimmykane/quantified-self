@@ -134,8 +134,8 @@
           }
           @if (!row.setupAvailable) {
             @if (row.provider === 'coros' && row.ready) {
-              <p><strong>New COROS plan sync setup is coming soon.</strong></p>
-              <p class="delivery-caption">Existing enabled plan sync still follows its saved settings and plan status. Delivery records, retry, copy status, and Stop sync remain available here.</p>
+              <p><strong>COROS workout delivery is coming soon.</strong></p>
+              <p class="delivery-caption">New plan sync and standalone Send actions are unavailable. Existing saved delivery state, records, retry, copy status, and Stop sync remain available here.</p>
             } @else {
               <p>Workout sync unavailable. Existing copies and problems remain visible.</p>
             }
@@ -273,8 +273,8 @@
         @if (activeRow()?.setupAvailable) {
           <p>QS sends each upcoming workout to your COROS training calendar. The COROS app manages watch synchronization; Sent does not confirm that your watch received it.</p>
         } @else {
-          <p>New COROS plan sync setup is coming soon. Existing enabled plan sync still follows its saved settings and plan status, and its delivery records, retry, copy status, and Stop sync remain available here.</p>
-          <p>The app does not currently offer COROS plan configuration or plan-workout resume actions. Standalone Send to COROS remains available to eligible connected Pro members.</p>
+          <p>COROS workout delivery is coming soon in the app. New plan sync, plan-workout resume, and standalone Send actions are unavailable.</p>
+          <p>Existing saved COROS delivery state continues to follow its consent. Delivery records, retry, copy status, and Stop sync remain available here.</p>
         }
         <p>COROS documents a two-week watch window and one training plan synced to a watch at a time. QS does not claim or replace a native plan object, and automatic checking is unavailable.</p>
       }

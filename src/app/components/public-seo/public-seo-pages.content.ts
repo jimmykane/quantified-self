@@ -503,7 +503,7 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
           {
             icon: 'send',
             title: 'Opt in to provider delivery',
-            copy: 'Workout delivery to Garmin, Suunto, and Wahoo is available to connected Pro members through explicit Send and plan opt-in actions, compatibility checks, and provider-specific scheduling windows. COROS standalone Send is available; new COROS plan sync setup in the app is coming soon. Connecting a provider never sends a workout by itself.',
+            copy: 'Workout delivery to Garmin, Suunto, and Wahoo is available to connected Pro members through explicit Send and plan opt-in actions, compatibility checks, and provider-specific scheduling windows. New COROS plan sync and standalone Send actions are coming soon in the app. Connecting a provider never sends a workout by itself.',
           },
         ],
       },
@@ -523,7 +523,7 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
       },
       {
         question: 'Does connecting Garmin, COROS, Wahoo, or Suunto send my planned workouts?',
-        answer: 'No. Provider workout delivery is a separate Pro feature with explicit Send or plan opt-in actions. COROS currently supports standalone Send in the app while new plan sync setup is coming soon. Connecting a provider never sends a planned workout by itself.',
+        answer: 'No. Provider workout delivery is a separate Pro feature with explicit Send or plan opt-in actions. New COROS plan sync and standalone Send actions are coming soon in the app. Connecting a provider never sends a planned workout by itself.',
       },
       {
         question: 'Can I use an MCP client with Training Plans?',
