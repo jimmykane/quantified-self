@@ -1,7 +1,7 @@
 {
   "formatVersion": 1,
-  "candidateSha256": "335ae0e24aa32b363c64778cff0e30f90bdb3e69d6a00d7c7b078e0a5e3c7b7c",
+  "candidateSha256": "bc452e46db5c302d3deb872cb0a8e22c932d6b4ea207aa5c479fd65c3b537874",
   "lifecycleAction": "developer-refresh",
-  "summary": "Add Training reads and approved writes plus chronological workout queries, bounded bulk exact-completion reads, and local provider-compatibility assessment (#690; #652/#651). Retain sync summaries, scoped previews/native-approval apply, plan deletion disposition, recipe guidance, Health/Timeline/activity/readiness additions, RS256 private_key_jwt and PKCE.",
+  "summary": "Retain prior Training reads/writes, chronological and bulk completion reads, compatibility, Health/Timeline/activity/readiness, private_key_jwt and PKCE changes. Add separately consented activity-tag replacement and Timeline-note create/edit/delete with dependent scopes, optimistic concurrency, idempotency, native approval, bounded opaque projections, consent/docs/plugin guidance.",
   "rescanRequired": true
 }

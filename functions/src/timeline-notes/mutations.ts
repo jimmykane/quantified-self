@@ -10,7 +10,11 @@ import { getUserDeletionGuardStateInTransaction } from '../shared/user-deletion-
 export class TimelineNoteConflictError extends Error {}
 export class TimelineNoteUnavailableError extends Error {}
 export class TimelineNoteNotFoundError extends Error {}
-export interface TimelineNoteDependencies { db: admin.firestore.Firestore; now: () => number }
+export interface TimelineNoteDependencies {
+  db: admin.firestore.Firestore;
+  now: () => number;
+  transactionPrecondition?: (transaction: admin.firestore.Transaction) => Promise<void>;
+}
 const defaults = (): TimelineNoteDependencies => ({ db: admin.firestore(), now: Date.now });
 const FIELD_KEYS = ['category', 'title', 'details', 'startDate', 'endDate', 'timeZone', 'showOnCharts', 'color'];
 
@@ -60,6 +64,7 @@ export async function saveTimelineNote(uid: string, value: unknown, deps = defau
   return deps.db.runTransaction(async tx => {
     const guard = await getUserDeletionGuardStateInTransaction(deps.db, tx, uid, deps.now());
     if (guard.shouldSkip) throw new TimelineNoteUnavailableError();
+    await deps.transactionPrecondition?.(tx);
     const [snapshot, deletion] = await Promise.all([tx.get(ref), tx.get(removed)]);
     if (deletion.exists) throw new TimelineNoteNotFoundError();
     const current = snapshot.exists ? decodeTimelineNote(id, snapshot.data()) : null;
@@ -102,6 +107,7 @@ export async function deleteTimelineNote(uid: string, value: unknown, deps = def
   const removed = root.collection(TIMELINE_NOTE_DELETIONS_COLLECTION).doc(request.noteId);
   return deps.db.runTransaction(async tx => {
     if ((await getUserDeletionGuardStateInTransaction(deps.db, tx, uid, deps.now())).shouldSkip) throw new TimelineNoteUnavailableError();
+    await deps.transactionPrecondition?.(tx);
     const snapshot = await tx.get(ref);
     if (!snapshot.exists) {
       tx.set(removed, { deleted: true });

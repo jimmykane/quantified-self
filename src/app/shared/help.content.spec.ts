@@ -105,8 +105,9 @@ describe('help.content', () => {
   });
   it('makes optional full-text notes access discoverable without implying chart visibility is consent', () => {
     const content = HELP_SECTIONS.map(section => section.content).join(' ');
-    expect(content).toContain('**Timeline notes** is an independent read-only permission');
-    expect(content).toContain('It is selected by default when requested; uncheck it before approving to withhold access.');
+    expect(content).toContain('**Timeline notes** is an independent read permission');
+    expect(content).toContain('Both permissions are selected by default when requested; uncheck either before approving.');
+    expect(content).toContain('**Change Timeline notes** is a separate child permission');
     expect(content).toContain('Every requested permission starts checked, including permissions added later');
     expect(content).toContain('It is off by default. Changing optional access starts a fresh chat');
     expect(content).toContain('full private');
@@ -359,7 +360,7 @@ describe('help.content', () => {
     expect(dataAndPrivacySection?.content).toContain('exact case-insensitive tag matches');
     expect(dataAndPrivacySection?.content).toContain('personal, health, or location context');
     expect(dataAndPrivacySection?.content).toContain('untrusted labels');
-    expect(dataAndPrivacySection?.content).toContain('existing clients do not reauthorize');
+    expect(dataAndPrivacySection?.content).toContain('Existing clients must reauthorize for this new write permission');
     expect(dataAndPrivacySection?.content).toContain('The built-in Assistant is not expanded');
     expect(dataAndPrivacySection?.content).toContain('Oversized rankings fail');
     expect(dataAndPrivacySection?.content).toContain('jump count is not treated as jump quality');
@@ -1490,7 +1491,8 @@ describe('help.content', () => {
     );
     expect(dataAndPrivacySection?.content).toContain('up to 25 explicitly selected canonical numeric Sports Lib metrics');
     expect(dataAndPrivacySection?.content).toContain('first-class body-measurement history');
-    expect(dataAndPrivacySection?.content).toContain('Removing activity details also removes its descriptions and location permissions');
+    expect(dataAndPrivacySection?.content).toContain('Removing any parent removes its dependent children');
+    expect(dataAndPrivacySection?.content).toContain('**Change activity tags** is a separate child permission');
     expect(dataAndPrivacySection?.content).toContain('bounded ranges up to 366 days');
     expect(dataAndPrivacySection?.content).toContain('identity-free day, week, or month values');
     expect(dataAndPrivacySection?.content).toContain('provider or manual canonical Health Weight point measurements');

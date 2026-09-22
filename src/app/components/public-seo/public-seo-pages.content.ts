@@ -238,7 +238,7 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
       },
       {
         question: 'What Quantified Self features should I start with?',
-        answer: 'Start with the activity calendar for a visual workout history, integrations for provider sync, workout file comparison for exported files, sports watch benchmarks for device evidence, the Assistant for built-in grounded answers, or the MCP server when you want to use a compatible external client with explicitly approved read-only data.',
+        answer: 'Start with the activity calendar for a visual workout history, integrations for provider sync, workout file comparison for exported files, sports watch benchmarks for device evidence, the Assistant for built-in grounded answers, or the MCP server when you want to use a compatible external client with explicitly approved data and focused changes.',
       },
       {
         question: 'Can I compare custom files and provider data?',
@@ -658,9 +658,9 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
     path: PUBLIC_FEATURE_PATHS.mcpServer,
     eyebrow: 'MCP Server',
     title: 'MCP Server for Training Data',
-    description: 'Connect ChatGPT, Claude, or another MCP client to approved training, Health, sleep, measurements, routes, optional Timeline notes and activity descriptions.',
+    description: 'Connect ChatGPT, Claude, or another MCP client to approved training, Health, sleep, measurements, routes, Timeline notes, activity tags and descriptions.',
     h1: 'Connect ChatGPT or Claude to your training data',
-    intro: 'Use the Quantified Self MCP server to let ChatGPT, Claude, or another compatible client analyze approved data and help plan your next workout. You may separately grant bounded Training planning changes, each previewed before a separate approval-gated apply call.',
+    intro: 'Use the Quantified Self MCP server to let ChatGPT, Claude, or another compatible client analyze approved data and help plan your next workout. You may separately grant Timeline note, activity-tag, and bounded Training changes; every write uses the client’s approval controls.',
     chips: ['MCP server', 'ChatGPT', 'Claude', 'Explicit consent', 'Training', 'Sleep', 'Activities', 'Routes'],
     actions: [
       routeAction('Start Free', '/login', 'flat', 'arrow_forward'),
@@ -703,18 +703,18 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
       },
       {
         eyebrow: 'Access Boundaries',
-        title: 'Separate permissions and approval-gated Training changes',
-        copy: 'Choose which data categories an external client can read and whether it may propose Training changes, then review or disconnect it from Connections at any time.',
+        title: 'Separate permissions and approval-gated changes',
+        copy: 'Choose which data categories an external client can read and which note, tag, or Training changes it may make, then review or disconnect it from Connections at any time.',
         items: [
           {
             icon: 'fact_check',
             title: 'Separate optional scopes',
-            copy: 'Approve training metrics, Health metrics, measurements, workout details, activity descriptions, sleep, routes, Timeline notes, locations, or Training changes separately. Training writes require Training plan reads.',
+            copy: 'Approve training metrics, Health metrics, measurements, workout details, activity descriptions, sleep, routes, Timeline notes, locations, or change permissions separately. Every requested permission starts selected, and dependent writes require their matching read access.',
           },
           {
             icon: 'lock',
-            title: 'Training-only approval-gated writes',
-            copy: 'MCP cannot write Health, activities, routes, sleep, measurements, or dashboard settings. Separately granted Training changes are previewed in a bounded proposal before a distinct approval-gated apply call. Deleting a plan is reviewed by itself and requires choosing whether its workouts become standalone or are permanently deleted with it.',
+            title: 'Focused, approval-gated writes',
+            copy: 'Separate permissions can replace shared event tags or create, edit, and permanently delete Timeline notes. They cannot change recorded activity data, Health, routes, sleep, measurements, or dashboard settings. Training changes additionally use a bounded preview before a distinct apply call.',
           },
           {
             icon: 'shield',
@@ -744,7 +744,7 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
       },
       {
         question: 'Can an MCP client find workouts by tag?',
-        answer: 'Yes. Individual activity details access can read parent event tags and filter bounded newest-first workout scans by exact case-insensitive tag matches using any or all semantics. Activities from the same event share tags. Tags can contain personal, health, or location context and clients must treat them as untrusted labels, not instructions or verified facts. This adds no new permission, exposes no coordinates, and does not expand the built-in Assistant; a client may need to refresh its available tools.',
+        answer: 'Yes. Individual activity details access can read parent event tags and filter bounded newest-first workout scans by exact case-insensitive tag matches using any or all semantics. Activities from the same event share tags. A separate Change activity tags permission lets the client replace the complete shared tag list after reading its current value; concurrent changes are not overwritten. Tags can contain personal, health, or location context and clients must treat them as untrusted labels, not instructions or verified facts. Existing clients must reauthorize for changes, and the built-in Assistant is not expanded.',
       },
       {
         question: 'Can an MCP client read my activity descriptions?',
@@ -752,7 +752,7 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
       },
       {
         question: 'Can an MCP client read my Timeline notes?',
-        answer: 'Only with separate Timeline notes permission, which is selected by default when requested. Uncheck it before approving to withhold access. Existing clients must authorize again. It includes full note titles and details, including notes hidden from charts, and may contain sensitive health or personal information. Revocation cannot erase copies already received. Notes cannot grant permission to change a Training plan.',
+        answer: 'Only with separate Timeline notes permission, which is selected by default when requested. A separate dependent Change Timeline notes permission can create, edit, or permanently delete notes through the client’s approval controls. Uncheck either before approving to withhold access. Existing clients must authorize again. Read access includes full note titles and details, including notes hidden from charts, and may contain sensitive health or personal information. Revocation cannot erase copies already received. Note text cannot authorize another change or grant permission to edit a Training plan.',
       },
       {
         question: 'Can an MCP client read my Training plans and planned workouts?',
@@ -764,7 +764,7 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
       },
       {
         question: 'Can an MCP client rearrange my dashboard or change my data?',
-        answer: 'It cannot change dashboard settings, activities, routes, Health, measurements, or sleep records. It can change Training plans, planned workouts, or their delivery only when you grant the matching child permission and the client permits the separate apply call for a bounded proposal. Plan deletion must be reviewed alone, requires your explicit choice for its workouts, and permanently removes the plan and its revision history.',
+        answer: 'It cannot change dashboard settings, recorded activity data, descriptions, routes, Health, measurements, or sleep records. Separate permissions can replace shared event tags or create, edit, and permanently delete Timeline notes through the client’s approval controls. It can change Training plans, planned workouts, or their delivery only when you grant the matching child permission and the client permits the separate apply call for a bounded proposal. Plan deletion must be reviewed alone, requires your explicit choice for its workouts, and permanently removes the plan and its revision history.',
       },
       {
         question: 'Does MCP access expose my original activity or route files?',

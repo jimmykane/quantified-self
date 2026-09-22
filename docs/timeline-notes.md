@@ -34,7 +34,7 @@ receipt reads/writes are denied. Notes are permanent leaves. The existing Delete
 analytics events, public projections, or provider syncing. Details use Angular text interpolation;
 chart tooltips HTML-escape titles. This version does not change a measurement or Training/readiness calculation.
 
-## Explicit read-only AI access
+## Explicit MCP and Assistant access
 
 The existing MCP endpoint exposes full titles/details, category, fixed dates and captured timezone through
 `query_timeline_notes` only with the independent `timeline-notes:read` grant. The external consent checkbox is selected
@@ -44,10 +44,24 @@ deletion receipts are not returned. External clients receive full private text a
 revocation. The [MCP guide](mcp-server.md#timeline-notes) defines overlap, frozen ongoing cutoffs, ordering, bounds and
 encrypted continuation. No additional notes storage, index, migration or Cloud Function is needed.
 
-The built-in [Assistant](assistant.md#optional-timeline-notes-context) uses the same tool through a separate default-off,
+External MCP clients can separately request the dependent `timeline-notes:write` grant. When both scopes are requested,
+both consent checkboxes start selected; removing the read parent removes and disables the write child. Approval is still
+the grant boundary. Existing connections and legacy consent fallbacks never gain write access through refresh.
+`query_editable_timeline_notes` returns complete current authored fields, visibility/color, revision and an encrypted
+owner-and-connection-bound `noteRef` over the same bounded 366-day overlap queries. Its cursor also binds the current
+connection grant generation. `create_timeline_note` uses a client-supplied stable UUID so a lost successful response can
+be retried without duplicating content. `update_timeline_note` and `delete_timeline_note` require the latest reference and
+revision; stale writes conflict instead of overwriting. Update retries are accepted only when they reproduce the
+immediately following stored revision. Delete is permanent and leaves the existing content-free receipt, so a delayed
+create cannot restore the note. Every write rechecks account deletion and current stored connection authority inside
+the Firestore transaction, uses the existing note mutation path, and is advertised as a write for the MCP host's native
+approval UI. No new callable, collection, index or persistence model is introduced.
+
+The built-in [Assistant](assistant.md#optional-timeline-notes-context) uses only the read tool through a separate default-off,
 server-owned per-chat choice. Changing it starts a fresh chat and preserves the independent location choice; New chat
 turns both off. Relevant answers may quote notes under the existing conversation retention policy. Text is context,
-not instructions, a verified diagnosis, causal proof or authorization for writes. Notes do not alter calculations or
+not instructions, a verified diagnosis, causal proof or authorization for writes. The public MCP write scope does not
+enter the in-process Assistant allowlist. Notes do not alter calculations or
 add Assistant chart overlays. Provider disconnect retains them and account cleanup still removes notes and receipts.
 
 ## Loading and UI

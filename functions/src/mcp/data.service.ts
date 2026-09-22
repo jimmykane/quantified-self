@@ -197,6 +197,17 @@ import {
   McpActivityTagDocument,
 } from './activity-tags.service';
 import {
+  createMcpTimelineNote,
+  defaultMcpContentWriteDependencies,
+  deleteMcpTimelineNote,
+  McpContentWriteError,
+  queryEditableMcpTimelineNotes,
+  updateMcpActivityTags,
+  updateMcpTimelineNote,
+  type McpContentWriteDependencies,
+  type McpContentWriteInput,
+} from './content-write.service';
+import {
   MCP_DERIVED_PAYLOAD_SCHEMAS,
   MCP_TRAINING_METRIC_SCHEMA_VERSION,
   MCP_TRAINING_RECOVERY_VERSION,
@@ -375,6 +386,8 @@ type OpaqueValueKind =
   | 'training_read'
   | 'training_proposal'
   | 'timeline_notes_cursor'
+  | 'timeline_notes_edit_cursor'
+  | 'timeline_note_ref'
   | 'activity_ref'
   | 'route_ref'
   | 'activity_cursor'
@@ -495,6 +508,7 @@ export interface McpDataServiceDependencies {
   activitySamplesReads?: Pick<ActivitySamplesDependencies, 'activeOwner' | 'sourceVersions' | 'cache' | 'parseSource'>;
   activityDescriptionReads?: McpActivityDescriptionReads;
   timelineNotesReads?: McpTimelineNotesReads;
+  contentWriteDependencies?: McpContentWriteDependencies;
   trainingReads?: import('./training-plans.service').TrainingReads;
   healthReads?: McpHealthReadDependencies;
   now: () => number;
@@ -6006,6 +6020,36 @@ async function supplementAuthorizedSleep(
 export function createMcpDataService(
   dependencies: McpDataServiceDependencies = defaultDependencies,
 ) {
+  const contentWriteCodec = {
+    decodeActivityRef: decodeActivityReference,
+    encodeNoteRef: (value: Record<string, unknown>, uid: string, connectionId: string) =>
+      encodeOpaqueValue('timeline_note_ref', value, uid, connectionId),
+    decodeNoteRef: (value: string, uid: string, connectionId: string) =>
+      decodeOpaqueValue('timeline_note_ref', value, uid, connectionId, 'Timeline note reference'),
+    encodeEditCursor: (value: Record<string, unknown>, uid: string, connectionId: string) =>
+      encodeOpaqueValue('timeline_notes_edit_cursor', value, uid, connectionId),
+    decodeEditCursor: (value: string, uid: string, connectionId: string) =>
+      decodeOpaqueValue('timeline_notes_edit_cursor', value, uid, connectionId, 'pagination cursor'),
+  };
+  const runMcpContentWrite = async (
+    input: McpContentWriteInput,
+    operation: (
+      value: McpContentWriteInput,
+      codec: typeof contentWriteCodec,
+      deps: McpContentWriteDependencies,
+    ) => Promise<unknown>,
+    fallbackMessage: string,
+  ) => {
+    const deps = dependencies.contentWriteDependencies
+      ?? (dependencies === defaultDependencies ? defaultMcpContentWriteDependencies() : null);
+    if (!deps) throw new McpDataError('temporarily_unavailable', 'MCP content changes are unavailable.');
+    try {
+      return await operation(input, contentWriteCodec, deps);
+    } catch (error) {
+      if (error instanceof McpContentWriteError) throw new McpDataError(error.code, error.message);
+      throw new McpDataError('temporarily_unavailable', fallbackMessage);
+    }
+  };
   const fetchBoundedSafeSleepSessions = async (
     input: ListSleepVitalsInput,
   ): Promise<SafeSleepSession[]> => {
@@ -6271,6 +6315,34 @@ export function createMcpDataService(
         if (error instanceof McpTimelineNotesError) throw new McpDataError(error.code, error.message);
         throw new McpDataError('temporarily_unavailable', 'Timeline notes could not be read safely. Try again later.');
       }
+    },
+
+    async updateActivityTags(input: McpContentWriteInput) {
+      return runMcpContentWrite(
+        input,
+        updateMcpActivityTags,
+        'Activity tags could not be changed safely. Try again later.',
+      );
+    },
+
+    async queryEditableTimelineNotes(input: McpContentWriteInput) {
+      return runMcpContentWrite(
+        input,
+        queryEditableMcpTimelineNotes,
+        'Timeline notes could not be read safely. Try again later.',
+      );
+    },
+
+    async createTimelineNote(input: McpContentWriteInput) {
+      return runMcpContentWrite(input, createMcpTimelineNote, 'Timeline note could not be created safely. Try again later.');
+    },
+
+    async updateTimelineNote(input: McpContentWriteInput) {
+      return runMcpContentWrite(input, updateMcpTimelineNote, 'Timeline note could not be updated safely. Try again later.');
+    },
+
+    async deleteTimelineNote(input: McpContentWriteInput) {
+      return runMcpContentWrite(input, deleteMcpTimelineNote, 'Timeline note could not be deleted safely. Try again later.');
     },
 
     async queryHealthMetric(input: McpHealthInput) {

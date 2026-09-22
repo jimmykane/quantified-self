@@ -152,9 +152,8 @@ describe('HomeComponent', () => {
         expect(aiSectionText).toContain('see exactly what supports it.');
         expect(aiSectionText).toContain('Analyze with ChatGPT or Claude');
         expect(aiSectionText).toContain('analyze your training or prepare a bounded Training-plan proposal');
-        expect(aiSectionText).toContain('Training changes require separate access and your confirmation');
-        expect(aiSectionText).toContain('other account data stays read-only');
-        expect(aiSectionText).toContain('Location access remains separate.');
+        expect(aiSectionText).toContain('activity-tag, and Training changes each require separate access');
+        expect(aiSectionText).toContain('location access remains separate.');
         expect(aiSectionText).toContain('Connect ChatGPT or Claude');
         expect(aiSectionText).not.toContain('read-only sleep, readiness');
         expect(aiSectionText).not.toContain('complete training history');

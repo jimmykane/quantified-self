@@ -27,7 +27,10 @@ describe('McpConnectionsComponent', () => {
       'measurements:read',
       'sleep:read',
       'activity-details:read',
+      'activity-tags:write',
       'activity-location:read',
+      'timeline-notes:read',
+      'timeline-notes:write',
       'routes:read',
       'route-location:read',
     ] as McpScope[],
@@ -63,7 +66,7 @@ describe('McpConnectionsComponent', () => {
     }).compileComponents();
   });
 
-  it('lists every shared permission and distinguishes data from optional Training changes', async () => {
+  it('lists every shared permission and distinguishes data access from optional changes', async () => {
     const fixture = TestBed.createComponent(McpConnectionsComponent);
     fixture.detectChanges();
     await fixture.whenStable();
@@ -72,10 +75,12 @@ describe('McpConnectionsComponent', () => {
     const content = fixture.nativeElement.textContent as string;
     expect(content).toContain('Training Copilot');
     expect(content).toContain('Data access');
-    expect(content).toContain('Training changes');
+    expect(content).toContain('Changes');
     expect(content).toContain('Training plans and planned workouts');
     expect(content).toContain('Change Training plans and workouts');
     expect(content).toContain('Change planned-workout sync');
+    expect(content).toContain('Change Timeline notes');
+    expect(content).toContain('Change activity tags');
     expect(content).toContain('Activity and Training metrics');
     expect(content).toContain('Body measurements');
     expect(content).toContain('Health metrics');
@@ -84,7 +89,7 @@ describe('McpConnectionsComponent', () => {
     expect(content).toContain('Activity locations');
     expect(content).toContain('Saved-route summaries');
     expect(content).toContain('Saved-route locations and geometry');
-    expect(content).toContain('These apps can access only the data and Training changes you approve');
+    expect(content).toContain('These apps can access only the data and changes you approve');
     expect(content).toContain('Disconnect an app here to stop sharing');
     expect(content).toContain('Authorizing the same app again keeps its current connection active');
     expect(content).toContain('start authorization again in Training Copilot');
@@ -105,6 +110,12 @@ describe('McpConnectionsComponent', () => {
     expect(rows.find(permission => permission.scope === 'training-delivery:write')).toMatchObject({
       title: 'Change planned-workout sync', granted: true,
       parentTitle: 'Training plans and planned workouts',
+    });
+    expect(rows.find(permission => permission.scope === 'timeline-notes:write')).toMatchObject({
+      title: 'Change Timeline notes', granted: true, parentTitle: 'Timeline notes',
+    });
+    expect(rows.find(permission => permission.scope === 'activity-tags:write')).toMatchObject({
+      title: 'Change activity tags', granted: true, parentTitle: 'Individual activity details',
     });
     expect(fixture.nativeElement.querySelectorAll('app-compact-row')).toHaveLength(Object.keys(MCP_SCOPE_CONTENT).length);
     const states = Array.from(fixture.nativeElement.querySelectorAll<HTMLElement>('.mcp-connections__permission-state'));
@@ -216,7 +227,7 @@ describe('McpConnectionsComponent', () => {
     expect(content).toContain('Open supported links');
     expect(content).toContain('no active connection is created');
     expect(content).toContain('Authorization and data access');
-    expect(content).toContain('data and optional Training permissions');
+    expect(content).toContain('data access and optional change permissions');
 
     const iconDownloads = fixture.nativeElement.querySelectorAll<HTMLAnchorElement>(
       '.mcp-connections__icon-actions a',

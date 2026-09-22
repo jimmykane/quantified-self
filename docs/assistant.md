@@ -148,7 +148,9 @@ automatically retrying the reset or discarding the draft. The composer is read-o
 to their opening account and generation. Account loads clear old messages, pending questions and permissions before
 waiting for the replacement state, and old completions cannot clear a newer account's view.
 
-Only `query_timeline_notes` and `timeline-notes:read` are added when enabled. Existing grants/tools—including the absence
+Only `query_timeline_notes` and `timeline-notes:read` are added when enabled. The external MCP server's separate
+`timeline-notes:write` and `activity-tags:write` grants and tools are deliberately excluded from the built-in Assistant.
+Existing grants/tools—including the absence
 of all-day Health and route locations—are unchanged. Notes may be consulted for direct questions or relevant Sleep,
 Training and measurement analysis, not automatically for every answer. Text remains untrusted user-reported context,
 not model instructions, diagnoses, causal proof or authorization. The existing metric/readiness/briefing contracts and

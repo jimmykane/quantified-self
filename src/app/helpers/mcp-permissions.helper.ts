@@ -3,11 +3,13 @@ export type McpScope =
   | 'training-plans:write'
   | 'training-delivery:write'
   | 'timeline-notes:read'
+  | 'timeline-notes:write'
   | 'health:read'
   | 'metrics:read'
   | 'measurements:read'
   | 'sleep:read'
   | 'activity-details:read'
+  | 'activity-tags:write'
   | 'activity-descriptions:read'
   | 'activity-location:read'
   | 'routes:read'
@@ -16,8 +18,10 @@ export type McpScope =
 export const MCP_SCOPE_PARENTS: Partial<Record<McpScope, McpScope>> = {
   'training-plans:write': 'training-plans:read',
   'training-delivery:write': 'training-plans:read',
+  'timeline-notes:write': 'timeline-notes:read',
   'activity-location:read': 'activity-details:read',
   'activity-descriptions:read': 'activity-details:read',
+  'activity-tags:write': 'activity-details:read',
   'route-location:read': 'routes:read',
 };
 
@@ -43,7 +47,11 @@ export const MCP_SCOPE_CONTENT: Record<McpScope, {
   },
   'timeline-notes:read': {
     title: 'Timeline notes',
-    description: 'Read full private note titles and details, categories, dates and captured time zones, including notes hidden from charts. This text may contain sensitive health or personal information. Selected by default when requested; uncheck it before approving to keep notes private from this client. Existing connections must reauthorize. Revoking access cannot erase copies already received by the client. No notes or Training plans can be changed.',
+    description: 'Read full private note titles and details, categories, dates and captured time zones, including notes hidden from charts. This text may contain sensitive health or personal information. Selected by default when requested; uncheck it before approving to keep notes private from this client. Existing connections must reauthorize. Revoking access cannot erase copies already received by the client. Changing notes requires the separate Timeline notes changes permission.',
+  },
+  'timeline-notes:write': {
+    title: 'Change Timeline notes',
+    description: 'Create, edit, and permanently delete your Timeline notes. Selected by default when requested; uncheck it before approving to keep this client read-only. Changes use the client\'s native tool-approval controls, require the latest note revision for edits or deletion, and never change Health metrics, readiness, or Training plans. Deleted note text cannot be restored; Quantified Self retains only a content-free deletion receipt. Requires Timeline notes access.',
   },
   'health:read': {
     title: 'Health metrics',
@@ -64,6 +72,10 @@ export const MCP_SCOPE_CONTENT: Record<McpScope, {
   'activity-details:read': {
     title: 'Individual activity details',
     description: 'Read non-location activity summaries and their event tags, filter workouts by exact case-insensitive tags, and read laps, swim lengths, MTB jump measurements, selected activity metrics, bounded on-demand chart series, and paginated detailed samples for selected metrics from existing original files. Activities from the same event share tags. Tags can contain personal, health, or location context and are treated as untrusted labels. Detailed samples include every available elapsed-second value with missing readings marked. Exact locations and breadcrumb traces require the separate activity-location permission.',
+  },
+  'activity-tags:write': {
+    title: 'Change activity tags',
+    description: 'Replace the tags on a selected activity\'s parent event after reading its current tags. Selected by default when requested; uncheck it before approving to keep tags read-only. Sibling activities in the same event share the change. Updates use the client\'s native tool-approval controls and fail if the tags changed since they were read. This cannot edit activity data, descriptions, metrics, or provider records. Requires Individual activity details.',
   },
   'activity-location:read': {
     title: 'Activity locations',

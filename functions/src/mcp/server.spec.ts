@@ -9,6 +9,7 @@ import {
   McpBearerAuthenticationError,
   McpOAuthError,
   MCP_OAUTH_SCOPES,
+  type McpOAuthScope,
   rejectRepeatedOAuthParameters,
 } from './oauth.service';
 import {
@@ -263,6 +264,66 @@ describe('MCP HTTP scope enforcement', () => {
       method: 'tools/call',
       params: { name: 'query_activities_with_tags' },
     })).toEqual([MCP_OAUTH_SCOPES.ActivityDetailsRead]);
+  });
+
+  it('requires both parent reads and explicit content-change scopes before dispatch', () => {
+    expect(requiredScopesForRequest({ method: 'tools/call', params: {
+      name: 'update_activity_tags',
+    } })).toEqual([
+      MCP_OAUTH_SCOPES.ActivityDetailsRead,
+      MCP_OAUTH_SCOPES.ActivityTagsWrite,
+    ]);
+    for (const name of [
+      'query_editable_timeline_notes',
+      'create_timeline_note',
+      'update_timeline_note',
+      'delete_timeline_note',
+    ]) {
+      expect(requiredScopesForRequest({ method: 'tools/call', params: { name } })).toEqual([
+        MCP_OAUTH_SCOPES.TimelineNotesRead,
+        MCP_OAUTH_SCOPES.TimelineNotesWrite,
+      ]);
+    }
+  });
+
+  it('registers content changes only when their separate write scopes are present', async () => {
+    const list = async (scopes: McpOAuthScope[]) => {
+      const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+      const server = createMcpServer({
+        uid: 'user-1', clientId: 'https://client.example/mcp.json',
+        connectionId: 'connection-1', scopes,
+      }, 'https://quantified-self.io');
+      const client = new Client({ name: 'content-write-scope-client', version: '1.0.0' });
+      try {
+        await server.connect(serverTransport);
+        await client.connect(clientTransport);
+        return (await client.listTools()).tools.map(tool => tool.name);
+      } finally {
+        await client.close();
+        await server.close();
+      }
+    };
+    const readOnly = await list([
+      MCP_OAUTH_SCOPES.ActivityDetailsRead,
+      MCP_OAUTH_SCOPES.TimelineNotesRead,
+    ]);
+    expect(readOnly).not.toContain('update_activity_tags');
+    expect(readOnly).not.toContain('query_editable_timeline_notes');
+    expect(readOnly).not.toContain('create_timeline_note');
+
+    const writable = await list([
+      MCP_OAUTH_SCOPES.ActivityDetailsRead,
+      MCP_OAUTH_SCOPES.ActivityTagsWrite,
+      MCP_OAUTH_SCOPES.TimelineNotesRead,
+      MCP_OAUTH_SCOPES.TimelineNotesWrite,
+    ]);
+    expect(writable).toEqual(expect.arrayContaining([
+      'update_activity_tags',
+      'query_editable_timeline_notes',
+      'create_timeline_note',
+      'update_timeline_note',
+      'delete_timeline_note',
+    ]));
   });
 
   it('requires sleep scope for sleep tools', () => {
@@ -1445,7 +1506,7 @@ describe('MCP HTTP scope enforcement', () => {
         name: 'quantified-self',
         title: 'Quantified Self',
         version: '1.4.0',
-        description: 'Permission-scoped activity, Health, sleep, measurements, and Training access, including approval-gated Training changes when granted.',
+        description: 'Permission-scoped activity, Health, sleep, measurements, Timeline notes, and Training access, including explicitly authorized changes.',
         websiteUrl: 'https://beta.quantified-self.io',
         icons: [
           {

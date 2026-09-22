@@ -31,7 +31,8 @@ describe('Built-in Assistant policy', () => {
     expect(assistant).toContain('Timeline notes access is off by default');
     expect(assistant).toContain('full private');
     expect(external).toContain('Timeline notes permission');
-    expect(external).toContain('The checkbox is selected by default when requested; uncheck it before approving to withhold access.');
+    expect(external).toContain('Both checkboxes are selected by default when requested; uncheck either before approving.');
+    expect(external).toContain('separate dependent change grant');
     expect(external).toContain('Activity descriptions permission');
     expect(external).toContain('Like every requested MCP permission, the checkbox is selected by default');
     expect(external).toContain('Every requested current or future permission starts checked');
@@ -143,7 +144,7 @@ describe('MCP client access policy', () => {
     expect(topic?.title).toBe('MCP Client Access');
     expect(topic?.summary).toContain('body-measurement');
     expect(content).toContain('only the capabilities you approve');
-    expect(content).toContain('Training plan/workout and delivery changes require their separate permission');
+    expect(content).toContain('Training plan/workout and delivery changes additionally require a bounded preview');
     expect(content).toContain(
       'excludes precise latitude/longitude and first-class body-measurement metrics',
     );
@@ -153,7 +154,8 @@ describe('MCP client access policy', () => {
     expect(content).toContain('jump count is not treated as jump quality');
     expect(content).toContain('Metric permission');
     expect(content).toContain('Body-measurement permission');
-    expect(content).toContain('Activity locations depend on activity details');
+    expect(content).toContain('Activity locations and tag changes depend on activity details');
+    expect(content).toContain('Activity-tag changes');
     expect(content).toContain('bounded body-measurement history');
     expect(content).toContain('provider or manual canonical Health Weight point measurements');
     expect(content).toContain('Workout profile Weight is excluded because it is not a weigh-in');
