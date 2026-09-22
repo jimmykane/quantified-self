@@ -306,10 +306,10 @@ Provider webhook / polling / history work
 The shared Health writer may replace up to eight independent source records in one Firestore transaction so provider
 workers can reuse the same deletion, credential, connection, and queue-revision reads. The transaction remains bounded
 by the existing 4 MiB modeled write budget and a conservative 450-write ceiling. Duplicate source-record identities are
-kept in separate transactions so revisions stay ordered; byte- or operation-heavy groups split into smaller guarded
-transactions before committing. Every split rechecks the full lifecycle authority, and record-specific validation or
-revision conflicts fall back in input order so earlier valid records retain the same durable behavior as the original
-one-record writer.
+rejected before that transaction starts. The provider worker then splits duplicates, byte- or operation-heavy groups,
+and record-specific failures in input order. Each retry/rebase attempt invokes exactly one atomic transaction and every
+split transaction rechecks the full lifecycle authority, so a credential rotation cannot retry records committed by an
+earlier split. Earlier valid records retain the same durable behavior as the original one-record writer.
 
 Do not put wellness records into activity events or create a second provider-specific health schema. Keep the existing normalized Sleep model canonical and use the foundation's allowlisted Sleep references when a relationship is needed. COROS is the reference implementation for sharing one provider response between Sleep aggregates and Health daily/sample records without duplicating detailed samples. Suunto is the reference for keeping separately fetched 24/7 Activity/Recovery data distinct from workout FIT and Sleep while reusing a guarded queue worker. Garmin is the reference for accepting an unauthenticated availability ping, resolving unique provider accounts in bounded lookups, durably queueing compact UID-scoped batches of validated provider-hosted callbacks, dispatching newly created or replacement batch revisions immediately from a retryable Firestore trigger outside the acknowledgement path, and immediately dispatching their callback workers while retaining the scheduled dispatcher for recovery. Same-revision retry-state writes must leave retry timing to the existing Cloud Task backoff instead of creating a fresh task. Authenticated bounded pulls happen only in those workers. Large callback writes use digest-bound durable cursors and new queue revisions for timed handoff instead of rejecting a valid provider response or staging raw Health payloads in Firestore. When a documented timestamp-keyed feed returns complementary or corrected rows at the same timestamp without a provider revision, merge per metric in provider response order: a later non-null observation may replace an earlier value, but omission or a documented missing sentinel must not erase an available measurement.
 

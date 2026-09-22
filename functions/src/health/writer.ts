@@ -126,8 +126,19 @@ export class HealthLifecycleGuardReadError extends Error {
     }
 }
 
-class HealthSourceRecordBatchSplitRequiredError extends Error {
+export class HealthSourceRecordBatchSplitRequiredError extends Error {
     public readonly name = 'HealthSourceRecordBatchSplitRequiredError';
+
+    constructor() {
+        super('Health source-record batch must be split before writing.');
+    }
+}
+
+export function isHealthSourceRecordBatchSplittableError(error: unknown): boolean {
+    return error instanceof HealthSourceRecordBatchSplitRequiredError
+        || error instanceof HealthSourceRecordRevisionConflictError
+        || error instanceof HealthWriteSizeError
+        || error instanceof HealthWriteValidationError;
 }
 
 export interface BuiltHealthSourceRecordWrite {
@@ -545,35 +556,22 @@ function skippedHealthSourceRecordWriteResult(
     };
 }
 
-function partitionPreparedHealthSourceRecordWrites(
+function assertPreparedHealthSourceRecordBatchIsBounded(
     prepared: readonly PreparedHealthSourceRecordWrite[],
-): PreparedHealthSourceRecordWrite[][] {
-    const batches: PreparedHealthSourceRecordWrite[][] = [];
-    let batch: PreparedHealthSourceRecordWrite[] = [];
+): void {
+    if (prepared.length > HEALTH_SOURCE_RECORD_TRANSACTION_BATCH_SIZE) {
+        throw new HealthSourceRecordBatchSplitRequiredError();
+    }
     let batchBytes = 0;
-    let sourceRecordIds = new Set<string>();
-    const flush = () => {
-        if (batch.length === 0) return;
-        batches.push(batch);
-        batch = [];
-        batchBytes = 0;
-        sourceRecordIds = new Set<string>();
-    };
-
+    const sourceRecordIds = new Set<string>();
     for (const item of prepared) {
-        if (batch.length > 0 && (
-            batch.length >= HEALTH_SOURCE_RECORD_TRANSACTION_BATCH_SIZE
-            || batchBytes + item.writeBytes > HEALTH_MAX_WRITE_BYTES
-            || sourceRecordIds.has(item.sourceRecord.id)
-        )) {
-            flush();
+        if (sourceRecordIds.has(item.sourceRecord.id)
+            || batchBytes + item.writeBytes > HEALTH_MAX_WRITE_BYTES) {
+            throw new HealthSourceRecordBatchSplitRequiredError();
         }
-        batch.push(item);
         batchBytes += item.writeBytes;
         sourceRecordIds.add(item.sourceRecord.id);
     }
-    flush();
-    return batches;
 }
 
 async function replacePreparedHealthSourceRecordBatch(
@@ -762,36 +760,6 @@ async function replacePreparedHealthSourceRecordBatch(
     return results;
 }
 
-async function replacePreparedHealthSourceRecordBatchWithSplitting(
-    userID: string,
-    prepared: readonly PreparedHealthSourceRecordWrite[],
-    nowMs: number,
-    dependencies: HealthWriterDependencies,
-): Promise<HealthSourceRecordWriteResult[]> {
-    try {
-        return await replacePreparedHealthSourceRecordBatch(userID, prepared, nowMs, dependencies);
-    } catch (error) {
-        const mayBeRecordSpecific = error instanceof HealthSourceRecordBatchSplitRequiredError
-            || error instanceof HealthSourceRecordRevisionConflictError
-            || error instanceof HealthWriteValidationError;
-        if (!mayBeRecordSpecific || prepared.length === 1) throw error;
-        const midpoint = Math.ceil(prepared.length / 2);
-        const left = await replacePreparedHealthSourceRecordBatchWithSplitting(
-            userID,
-            prepared.slice(0, midpoint),
-            nowMs,
-            dependencies,
-        );
-        const right = await replacePreparedHealthSourceRecordBatchWithSplitting(
-            userID,
-            prepared.slice(midpoint),
-            nowMs,
-            dependencies,
-        );
-        return [...left, ...right];
-    }
-}
-
 export async function replaceHealthSourceRecords(
     userID: string,
     values: readonly unknown[],
@@ -801,6 +769,9 @@ export async function replaceHealthSourceRecords(
     validateWriteContext(userID, nowMs);
     validateRequiredExistingHealthLifecycleGuard(dependencies);
     if (values.length === 0) return [];
+    if (values.length > HEALTH_SOURCE_RECORD_TRANSACTION_BATCH_SIZE) {
+        throw new HealthSourceRecordBatchSplitRequiredError();
+    }
     const generateId = dependencies.generateId || generateIDFromParts;
     const prepared = await Promise.all(values.map(async value => {
         const built = await buildHealthSourceRecordWrite(userID, value, nowMs, generateId);
@@ -809,18 +780,8 @@ export async function replaceHealthSourceRecords(
             writeBytes: healthSourceRecordWriteBytes(built.sourceRecord, built.chunks),
         };
     }));
-    const results: HealthSourceRecordWriteResult[] = [];
-    const batches = partitionPreparedHealthSourceRecordWrites(prepared);
-    for (const batch of batches) {
-        results.push(...await replacePreparedHealthSourceRecordBatchWithSplitting(
-            userID,
-            batch,
-            nowMs,
-            dependencies,
-        ));
-    }
-
-    return results;
+    assertPreparedHealthSourceRecordBatchIsBounded(prepared);
+    return replacePreparedHealthSourceRecordBatch(userID, prepared, nowMs, dependencies);
 }
 
 export async function replaceHealthSourceRecord(
