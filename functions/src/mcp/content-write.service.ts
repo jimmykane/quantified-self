@@ -1,6 +1,8 @@
 import * as admin from 'firebase-admin';
 import { FieldPath, FieldValue } from 'firebase-admin/firestore';
+import { isDeepStrictEqual } from 'node:util';
 import { z } from 'zod';
+import type { AssistantContentProposalKind } from '../../../shared/assistant.types';
 import {
   getEventTags,
   normalizeEventTags,
@@ -166,6 +168,7 @@ function assertAssistantConversationData(
   data: admin.firestore.DocumentData | undefined,
   requiredScopes: readonly string[],
   nowMs: number,
+  expectedProposalKind?: AssistantContentProposalKind,
 ): string {
   const conversationId = input.assistantConversationId;
   const expectedConnectionId = conversationId
@@ -184,7 +187,10 @@ function assertAssistantConversationData(
     || (input.assistantProposalRef !== undefined
       && (data.pendingContentProposal?.proposalRef !== input.assistantProposalRef
         || !Number.isSafeInteger(data.pendingContentProposal?.expiresAtMs)
-        || data.pendingContentProposal.expiresAtMs <= nowMs))) {
+        || data.pendingContentProposal.expiresAtMs <= nowMs
+        || (expectedProposalKind !== undefined
+          && (data.pendingContentProposal?.kind !== expectedProposalKind
+            || !isDeepStrictEqual(data.pendingContentProposal?.arguments, input.arguments)))))) {
     invalid('The Assistant data-access setting or pending change is no longer current. Review it again.');
   }
   return assistantAccessGeneration(data, conversationId);
@@ -217,6 +223,7 @@ async function assertConnectionAuthorityInTransaction(
   transaction: admin.firestore.Transaction,
   input: McpContentWriteInput,
   requiredScopes: readonly string[],
+  expectedProposalKind?: AssistantContentProposalKind,
 ): Promise<void> {
   if (input.assistantConversationId) {
     const [conversation] = await transaction.getAll(
@@ -225,7 +232,7 @@ async function assertConnectionAuthorityInTransaction(
         'timelineNoteChangesEnabled', 'pendingContentProposal'] },
     );
     assertAssistantConversationData(input, conversation.exists ? conversation.data() : undefined,
-      requiredScopes, deps.now());
+      requiredScopes, deps.now(), expectedProposalKind);
     return;
   }
   validateExternalConnectionId(input.connectionId);
@@ -333,6 +340,7 @@ export async function updateMcpActivityTags(
       transaction,
       input,
       requiredScopes,
+      'update_activity_tags',
     );
     const [activity] = await transaction.getAll(activityRef, { fieldMask: ['eventID'] });
     if (!activity.exists || activity.get('eventID') !== reference.eventId) {
@@ -536,6 +544,7 @@ async function mutateTimelineNote(
         transaction,
         input,
         requiredScopes,
+        tool,
       ),
     });
     const result = {
@@ -604,6 +613,7 @@ export async function deleteMcpTimelineNote(
         transaction,
         input,
         requiredScopes,
+        'delete_timeline_note',
       ),
     });
     return MCP_CONTENT_WRITE_OUTPUTS.delete_timeline_note.parse({

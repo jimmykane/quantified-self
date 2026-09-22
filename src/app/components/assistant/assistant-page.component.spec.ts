@@ -296,6 +296,7 @@ describe('AssistantPageComponent', () => {
     expect(review.textContent).toContain('Review activity tag change');
     expect(review.textContent).toContain('Current: Easy');
     expect(review.textContent).toContain('New: Quality, Reviewed');
+    expect(review.textContent).toContain('All workouts in the same event share these tags.');
     expect(review.textContent).toContain('Nothing changes until you apply');
 
     component.applyingTrainingProposal.set(true);

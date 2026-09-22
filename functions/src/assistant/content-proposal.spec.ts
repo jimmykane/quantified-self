@@ -32,4 +32,19 @@ describe('Assistant content proposals', () => {
       noteRef: 'note-ref', expectedRevision: 0,
     })).toThrow();
   });
+
+  it('reviews the same canonical activity tags that the write path will persist', () => {
+    const proposal = createAssistantContentProposal('prepare_activity_tag_change', {
+      activityRef: 'activity-ref',
+      expectedTags: [' Easy '],
+      tags: ['Quality  Session', 'quality session', ' Trail '],
+    }, { now: () => 1_000, createId: () => 'proposal-1' });
+
+    expect(proposal.arguments).toEqual({
+      activityRef: 'activity-ref',
+      expectedTags: ['Easy'],
+      tags: ['Quality Session', 'Trail'],
+    });
+    expect(proposal.summary).toBe('Replace 1 current activity tag with 2.');
+  });
 });

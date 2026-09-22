@@ -160,8 +160,10 @@ tag list. Stored titles, tags, notes, and other account data cannot authorize a 
 Gemini may prepare at most one ten-minute content proposal per response. The app identifies the activity/date or note
 title and shows exact tag before/after values or note fields, including a clear permanent-deletion warning. Only an
 explicit **Apply change** or **Delete note** action invokes the existing Assistant apply endpoint. The backend rechecks
-the active conversation generation, relevant per-chat permission, exact proposal and expiry, owner, deletion fence, and
-optimistic concurrency preconditions inside the existing sanitized content mutation path. **Dismiss** changes nothing.
+the active conversation generation, relevant per-chat permission, exact proposal reference, operation kind, canonical
+payload and expiry, owner, deletion fence, and optimistic concurrency preconditions inside the existing sanitized
+content mutation path. **Dismiss** changes nothing. An unrelated follow-up keeps the current review card available until
+the user applies or dismisses it, the proposal expires, or the chat generation changes.
 A changed activity tag list, changed note revision, stale tab, access change, account switch, expired proposal, or new
 chat fails closed. A stable note-create mutation ID and existing idempotent/conflict semantics make uncertain retries
 safe. No provider is called and recorded activity metrics are never edited.

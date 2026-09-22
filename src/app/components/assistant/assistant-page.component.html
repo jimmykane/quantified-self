@@ -184,19 +184,19 @@
       </section>
       }
 
-      @if (pendingContentProposal(); as proposal) {
+      @if (contentProposalReview(); as review) {
         <section class="content-proposal" aria-labelledby="content-proposal-title">
           <div class="training-proposal-heading">
-            <mat-icon aria-hidden="true">{{ proposal.kind === 'update_activity_tags' ? 'sell' : 'edit_note' }}</mat-icon>
+            <mat-icon aria-hidden="true">{{ review.proposal.kind === 'update_activity_tags' ? 'sell' : 'edit_note' }}</mat-icon>
             <div>
-              <h2 id="content-proposal-title">{{ contentProposalTitle(proposal.kind) }}</h2>
-              <p>{{ proposal.summary }}</p>
+              <h2 id="content-proposal-title">{{ review.title }}</h2>
+              <p>{{ review.proposal.summary }}</p>
             </div>
           </div>
           <div class="training-proposal-list">
-            @for (detail of contentProposalDetails(proposal); track $index) {
+            @for (detail of review.details; track $index) {
               <div class="training-proposal-row">
-                <mat-icon aria-hidden="true">{{ proposal.kind === 'delete_timeline_note' ? 'warning' : 'arrow_forward' }}</mat-icon>
+                <mat-icon aria-hidden="true">{{ review.proposal.kind === 'delete_timeline_note' ? 'warning' : 'arrow_forward' }}</mat-icon>
                 <span>{{ detail }}</span>
               </div>
             }
@@ -206,7 +206,7 @@
             <button mat-flat-button type="button" [disabled]="proposalActionInProgress()"
               (click)="applyPendingContentProposal()">
               @if (applyingContentProposal()) { <mat-spinner diameter="18"></mat-spinner> } @else {
-                {{ proposal.kind === 'delete_timeline_note' ? 'Delete note' : 'Apply change' }}
+                {{ review.proposal.kind === 'delete_timeline_note' ? 'Delete note' : 'Apply change' }}
               }
             </button>
             <button mat-button type="button" [disabled]="proposalActionInProgress()"

@@ -208,21 +208,25 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)(
       const connectionId = `first-party-assistant-v1:${conversationId}`;
       await user.collection('activities').doc('activity-1').set({ eventID: 'event-1' });
       await user.collection('events').doc('event-1').set({ tags: ['Easy'] });
+      const proposalArguments = {
+        activityRef: `activity:${uid}:${connectionId}`,
+        expectedTags: ['Easy'], tags: ['Quality'],
+      };
       await user.collection('assistantConversations').doc('active').set({
         conversationId,
         expireAt: Timestamp.fromMillis(now() + 60_000),
         activityTagChangesEnabled: true,
         timelineNotesEnabled: false,
         timelineNoteChangesEnabled: false,
-        pendingContentProposal: { proposalRef: 'proposal-1', expiresAtMs: now() + 60_000 },
+        pendingContentProposal: {
+          proposalRef: 'proposal-1', kind: 'update_activity_tags',
+          expiresAtMs: now() + 60_000, arguments: proposalArguments,
+        },
       });
       const input = {
         uid, connectionId, assistantConversationId: conversationId,
         assistantProposalRef: 'proposal-1', scopes: activityScopes,
-        arguments: {
-          activityRef: `activity:${uid}:${connectionId}`,
-          expectedTags: ['Easy'], tags: ['Quality'],
-        },
+        arguments: proposalArguments,
       };
       await expect(updateMcpActivityTags(input, codec, deps)).resolves.toMatchObject({ changed: true });
       await expect(updateMcpActivityTags({
@@ -231,18 +235,38 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)(
         arguments: { ...input.arguments, expectedTags: ['Quality'], tags: ['Missing review'] },
       }, codec, deps)).rejects.toMatchObject({ code: 'invalid_request' });
       await user.collection('assistantConversations').doc('active').update({
-        pendingContentProposal: { proposalRef: 'proposal-1', expiresAtMs: now() },
+        pendingContentProposal: {
+          proposalRef: 'proposal-1', kind: 'update_activity_tags',
+          expiresAtMs: now() + 60_000,
+          arguments: { ...proposalArguments, expectedTags: ['Quality'], tags: ['Reviewed'] },
+        },
+      });
+      await expect(updateMcpActivityTags({
+        ...input,
+        arguments: { ...proposalArguments, expectedTags: ['Quality'], tags: ['Different payload'] },
+      }, codec, deps)).rejects.toMatchObject({ code: 'invalid_request' });
+      await user.collection('assistantConversations').doc('active').update({
+        pendingContentProposal: {
+          proposalRef: 'proposal-1', kind: 'update_activity_tags',
+          expiresAtMs: now(), arguments: proposalArguments,
+        },
       });
       await expect(updateMcpActivityTags({
         ...input,
         arguments: { ...input.arguments, expectedTags: ['Quality'], tags: ['Expired'] },
       }, codec, deps)).rejects.toMatchObject({ code: 'invalid_request' });
       await user.collection('assistantConversations').doc('active').update({
-        pendingContentProposal: { proposalRef: 'proposal-2', expiresAtMs: now() + 60_000 },
+        pendingContentProposal: {
+          proposalRef: 'proposal-2', kind: 'update_activity_tags',
+          expiresAtMs: now() + 60_000, arguments: proposalArguments,
+        },
       });
       await expect(updateMcpActivityTags(input, codec, deps)).rejects.toMatchObject({ code: 'invalid_request' });
       await user.collection('assistantConversations').doc('active').update({
-        pendingContentProposal: { proposalRef: 'proposal-1', expiresAtMs: now() + 60_000 },
+        pendingContentProposal: {
+          proposalRef: 'proposal-1', kind: 'update_activity_tags',
+          expiresAtMs: now() + 60_000, arguments: proposalArguments,
+        },
         activityTagChangesEnabled: false,
       });
       await expect(updateMcpActivityTags({

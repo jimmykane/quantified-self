@@ -111,6 +111,11 @@ export type AssistantTurnStart =
 
 export type AssistantRequestState = ReplayedAssistantTurn | PendingAssistantTurn;
 
+export interface CompletedAssistantTurn {
+  conversation: AssistantConversation;
+  pendingContentProposal?: AssistantContentProposalPreview;
+}
+
 export type AssistantConversationStoreErrorCode =
   | 'user_deleted'
   | 'conversation_changed'
@@ -157,7 +162,7 @@ export interface AssistantConversationStore {
     assistantMessage: AssistantMessage,
     pendingTrainingProposal?: AssistantTrainingProposalPreview,
     pendingContentProposal?: AssistantContentProposalPreview,
-  ) => Promise<AssistantConversation>;
+  ) => Promise<CompletedAssistantTurn>;
   clearTrainingProposal: (uid: string, conversationId: string, proposalRef: string) => Promise<void>;
   clearContentProposal: (uid: string, conversationId: string, proposalRef: string) => Promise<void>;
   releaseTurn: (uid: string, begunTurn: BegunAssistantTurn) => Promise<void>;
@@ -824,7 +829,12 @@ export function createAssistantConversationStore(
           );
         }
         transaction.set(conversationRef, updatedConversation);
-        return publicConversation;
+        return {
+          conversation: publicConversation,
+          ...(updatedConversation.pendingContentProposal
+            ? { pendingContentProposal: updatedConversation.pendingContentProposal }
+            : {}),
+        };
       });
     },
 

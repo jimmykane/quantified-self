@@ -4,6 +4,7 @@ import type {
   AssistantContentProposalKind,
   AssistantContentProposalPreview,
 } from '../../../shared/assistant.types';
+import { normalizeEventTags } from '../../../shared/event-tags';
 import { MCP_CONTENT_WRITE_INPUTS } from '../mcp/content-write.schemas';
 
 export const ASSISTANT_CONTENT_PROPOSAL_TTL_MS = 10 * 60 * 1_000;
@@ -63,6 +64,14 @@ function completeCreateArguments(args: z.infer<typeof MCP_CONTENT_WRITE_INPUTS.c
   };
 }
 
+function canonicalTagArguments(args: z.infer<typeof MCP_CONTENT_WRITE_INPUTS.update_activity_tags>) {
+  return {
+    ...args,
+    expectedTags: normalizeEventTags(args.expectedTags),
+    tags: normalizeEventTags(args.tags),
+  };
+}
+
 export function createAssistantContentProposal(
   tool: AssistantContentProposalTool,
   value: unknown,
@@ -73,7 +82,9 @@ export function createAssistantContentProposal(
   const kind = TOOL_TO_KIND[tool];
   const args = kind === 'create_timeline_note'
     ? completeCreateArguments(parsed as z.infer<typeof MCP_CONTENT_WRITE_INPUTS.create_timeline_note>)
-    : parsed;
+    : kind === 'update_activity_tags'
+      ? canonicalTagArguments(parsed as z.infer<typeof MCP_CONTENT_WRITE_INPUTS.update_activity_tags>)
+      : parsed;
   return {
     proposalRef: dependencies.createId(),
     kind,

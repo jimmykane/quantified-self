@@ -23,6 +23,8 @@ import {
   isAssistantLocationAccess,
   isValidAssistantRequestId,
   type AssistantChatRequest,
+  type AssistantContentProposalKind,
+  type AssistantContentProposalPreview,
   type AssistantConversation,
   type AssistantLocationAccess,
   type AssistantMessage,
@@ -69,6 +71,52 @@ interface AssistantPendingRequest extends AssistantChatRequest, RememberedAssist
 type RememberedAssistantRequest = AssistantPendingRequest | RememberedAssistantRequestId | {
   requestId: string;
 };
+
+interface AssistantContentProposalReview {
+  proposal: AssistantContentProposalPreview;
+  title: string;
+  details: string[];
+}
+
+function contentProposalTitle(kind: AssistantContentProposalKind): string {
+  if (kind === 'update_activity_tags') return 'Review activity tag change';
+  if (kind === 'delete_timeline_note') return 'Review permanent note deletion';
+  if (kind === 'create_timeline_note') return 'Review new Timeline note';
+  return 'Review Timeline note changes';
+}
+
+function contentProposalDetails(proposal: AssistantContentProposalPreview): string[] {
+  const args = proposal.arguments as Record<string, unknown>;
+  if (proposal.kind === 'update_activity_tags') {
+    const before = Array.isArray(args['expectedTags']) ? args['expectedTags'].join(', ') || 'No tags' : 'No tags';
+    const after = Array.isArray(args['tags']) ? args['tags'].join(', ') || 'No tags' : 'No tags';
+    return [
+      `Current: ${before}`,
+      `New: ${after}`,
+      'All workouts in the same event share these tags.',
+    ];
+  }
+  if (proposal.kind === 'delete_timeline_note') {
+    return ['The selected Timeline note and its text will be permanently deleted.'];
+  }
+  const dates = args['endDate'] === null
+    ? `${args['startDate']} – ongoing`
+    : args['startDate'] === args['endDate']
+      ? `${args['startDate']}`
+      : `${args['startDate']} – ${args['endDate']}`;
+  const readableChoice = (value: unknown): string => String(value)
+    .replaceAll('_', ' ')
+    .replace(/^./, firstCharacter => firstCharacter.toUpperCase());
+  return [
+    `Title: ${args['title']}`,
+    `Dates: ${dates}`,
+    `Category: ${readableChoice(args['category'])}`,
+    `Details: ${typeof args['details'] === 'string' && args['details'] ? args['details'] : 'None'}`,
+    `Charts and calendar: ${args['showOnCharts'] ? 'Shown' : 'Hidden'}`,
+    `Color: ${readableChoice(args['color'])}`,
+    `Time zone: ${args['timeZone']}`,
+  ];
+}
 
 @Component({
   selector: 'app-assistant-page',
@@ -128,7 +176,7 @@ export class AssistantPageComponent implements OnInit, OnDestroy {
   readonly trainingPlanChangesEnabled = signal(false);
   readonly trainingDeliveryEnabled = signal(false);
   readonly pendingTrainingProposal = signal<import('@shared/assistant.types').AssistantTrainingProposalPreview | null>(null);
-  readonly pendingContentProposal = signal<import('@shared/assistant.types').AssistantContentProposalPreview | null>(null);
+  readonly pendingContentProposal = signal<AssistantContentProposalPreview | null>(null);
   readonly applyingTrainingProposal = signal(false);
   readonly trainingProposalResult = signal<string | null>(null);
   readonly applyingContentProposal = signal(false);
@@ -136,6 +184,14 @@ export class AssistantPageComponent implements OnInit, OnDestroy {
   readonly proposalActionInProgress = computed(
     () => this.applyingTrainingProposal() || this.applyingContentProposal(),
   );
+  readonly contentProposalReview = computed<AssistantContentProposalReview | null>(() => {
+    const proposal = this.pendingContentProposal();
+    return proposal === null ? null : {
+      proposal,
+      title: contentProposalTitle(proposal.kind),
+      details: contentProposalDetails(proposal),
+    };
+  });
   readonly preciseActivityLocationsEnabled = computed(
     () => this.locationAccess() === 'precise_activity',
   );
@@ -694,44 +750,6 @@ export class AssistantPageComponent implements OnInit, OnDestroy {
     } finally {
       this.applyingContentProposal.set(false);
     }
-  }
-
-  contentProposalDetails(
-    proposal: import('@shared/assistant.types').AssistantContentProposalPreview,
-  ): string[] {
-    const args = proposal.arguments as Record<string, unknown>;
-    if (proposal.kind === 'update_activity_tags') {
-      const before = Array.isArray(args['expectedTags']) ? args['expectedTags'].join(', ') || 'No tags' : 'No tags';
-      const after = Array.isArray(args['tags']) ? args['tags'].join(', ') || 'No tags' : 'No tags';
-      return [`Current: ${before}`, `New: ${after}`];
-    }
-    if (proposal.kind === 'delete_timeline_note') {
-      return ['The selected Timeline note and its text will be permanently deleted.'];
-    }
-    const dates = args['endDate'] === null
-      ? `${args['startDate']} – ongoing`
-      : args['startDate'] === args['endDate']
-        ? `${args['startDate']}`
-        : `${args['startDate']} – ${args['endDate']}`;
-    const readableChoice = (value: unknown): string => String(value)
-      .replaceAll('_', ' ')
-      .replace(/^./, firstCharacter => firstCharacter.toUpperCase());
-    return [
-      `Title: ${args['title']}`,
-      `Dates: ${dates}`,
-      `Category: ${readableChoice(args['category'])}`,
-      `Details: ${typeof args['details'] === 'string' && args['details'] ? args['details'] : 'None'}`,
-      `Charts and calendar: ${args['showOnCharts'] ? 'Shown' : 'Hidden'}`,
-      `Color: ${readableChoice(args['color'])}`,
-      `Time zone: ${args['timeZone']}`,
-    ];
-  }
-
-  contentProposalTitle(kind: import('@shared/assistant.types').AssistantContentProposalKind): string {
-    if (kind === 'update_activity_tags') return 'Review activity tag change';
-    if (kind === 'delete_timeline_note') return 'Review permanent note deletion';
-    if (kind === 'create_timeline_note') return 'Review new Timeline note';
-    return 'Review Timeline note changes';
   }
 
   private async changeLocationAccess(

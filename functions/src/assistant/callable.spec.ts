@@ -71,7 +71,7 @@ function createDependencies() {
       history: [],
       locationAccess: 'coordinate_free',
     }),
-    completeTurn: vi.fn().mockResolvedValue(conversation),
+    completeTurn: vi.fn().mockResolvedValue({ conversation }),
     clearTrainingProposal: vi.fn().mockResolvedValue(undefined),
     clearContentProposal: vi.fn().mockResolvedValue(undefined),
     releaseTurn: vi.fn().mockResolvedValue(undefined),
@@ -421,6 +421,31 @@ describe('Assistant callable', () => {
       undefined,
       undefined,
     );
+  });
+
+  it('returns a proposal retained by the authoritative conversation completion', async () => {
+    const { dependencies, store, conversation } = createDependencies();
+    const proposal = {
+      proposalRef: 'content-proposal-retained',
+      kind: 'update_activity_tags' as const,
+      expiresAtMs: Date.parse('2026-08-03T12:10:00Z'),
+      summary: 'Change tags on Running from 2026-08-03.',
+      requiresConfirmation: true as const,
+      arguments: { activityRef: 'activity-ref', expectedTags: ['Easy'], tags: ['Quality'] },
+    };
+    vi.mocked(store.completeTurn).mockResolvedValue({
+      conversation,
+      pendingContentProposal: proposal,
+    });
+
+    await expect(runAssistantChat({
+      requestId: REQUEST_ID,
+      message: 'What else should I know?',
+      timeZone: 'Europe/Helsinki',
+      conversationId: 'conversation-1',
+    }, context, dependencies)).resolves.toMatchObject({
+      pendingContentProposal: proposal,
+    });
   });
 
   it('binds explicit precise activity-location access through idempotency and runtime', async () => {

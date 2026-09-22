@@ -683,7 +683,7 @@ export async function runAssistantChat(
       evidence: result.evidence,
       ...(result.visuals?.length ? { visuals: result.visuals } : {}),
     };
-    const conversation = await dependencies.conversationStore.completeTurn(
+    const completedTurn = await dependencies.conversationStore.completeTurn(
       uid,
       begunTurn,
       userMessage,
@@ -693,7 +693,7 @@ export async function runAssistantChat(
     );
     begunTurn = null;
     return {
-      conversation,
+      conversation: completedTurn.conversation,
       quota: finalizedQuota,
       ...(timelineNotesEnabled ? { timelineNotesEnabled: true } : {}),
       ...(activityTagChangesEnabled ? { activityTagChangesEnabled: true } : {}),
@@ -702,7 +702,9 @@ export async function runAssistantChat(
       ...(trainingPlanChangesEnabled ? { trainingPlanChangesEnabled: true } : {}),
       ...(trainingDeliveryEnabled ? { trainingDeliveryEnabled: true } : {}),
       ...(result.pendingTrainingProposal ? { pendingTrainingProposal: result.pendingTrainingProposal } : {}),
-      ...(result.pendingContentProposal ? { pendingContentProposal: result.pendingContentProposal } : {}),
+      ...(completedTurn.pendingContentProposal
+        ? { pendingContentProposal: completedTurn.pendingContentProposal }
+        : {}),
       pendingRequestId: null,
     };
   } catch (error) {
