@@ -91,8 +91,12 @@ describe('Wahoo connected-service policy', () => {
     expect(content).toContain('does not create or retain a Quantified Self activity');
     expect(content).toContain('Wahoo-to-Suunto or Wahoo-to-COROS activity sync');
     expect(content).toContain('authored workout recipe, title and scheduled date');
+    expect(content).toContain('Connected Pro users can explicitly enable plan sync or send a standalone workout');
     expect(content).toContain('Provider identifiers and operation receipts are retained server-side');
+    expect(content).toContain('not receipt by a Wahoo app, ELEMNT computer or watch');
     expect(content).toContain('does not import Wahoo-owned plans or grant assistants permission to send workouts');
+    expect(CONNECTED_SERVICES_POLICY_SECTION.topics.flatMap(candidate => candidate.content).join(' '))
+      .toContain('explicit QS-authored planned-workout');
   });
 });
 

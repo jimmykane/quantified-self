@@ -7,11 +7,15 @@ const workout: ScheduledWorkoutV1 = { schemaVersion: 1, id: 'w', planId: null, l
   title: 'Easy run', lifecycle: 'planned', createdAtMs: 1, updatedAtMs: 1, structure: { version: 1, sport: ActivityTypes.Running,
     nodes: [{ kind: 'step', id: 'a', purpose: 'work', ending: { kind: 'time', seconds: 600 }, targets: [] }] } };
 describe('Training delivery mapping and production boundary', () => {
-  it.each(['garmin', 'coros', 'wahoo', 'suunto'] as const)('%s uses serializer-level assessment without enabling transport', provider => {
+  it.each(['garmin', 'coros', 'wahoo', 'suunto'] as const)('%s uses serializer-level assessment independently of rollout', provider => {
     const assessment = assessTrainingDeliveryMapping(provider, workout, 'destination', 'UTC');
     expect(assessment.level).toBe('exact');
     expect(assessment.digest).toMatch(/^[a-f0-9]{64}$/);
-    expect(productionDeliveryRuntime({} as never).transport(provider, 'owner')).toBeNull();
+  });
+  it('enables only the public Wahoo transport for an ordinary authenticated owner', () => {
+    const runtime = productionDeliveryRuntime({} as never);
+    expect(runtime.transport('wahoo', 'owner')).toMatchObject({ mappingVersion: 'wahoo-plans-v4', horizonDays: 6 });
+    for (const provider of ['garmin', 'coros', 'suunto'] as const) expect(runtime.transport(provider, 'owner')).toBeNull();
   });
   it('captures serializer-specific losses, not only structure capability warnings', () => {
     const result = assessTrainingDeliveryMapping('suunto', { ...workout, title: 'Run 🏃🏽' }, 'destination', 'UTC');

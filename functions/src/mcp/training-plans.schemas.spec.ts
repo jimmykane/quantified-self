@@ -197,6 +197,8 @@ describe('Strict Training write proposal contract', () => {
       localDate: '2026-09-18', title: 'Easy run', structure: recipe({ kind: 'time', seconds: 1800 }) }).success).toBe(true);
     expect(TRAINING_CHANGE_SCHEMA.safeParse({ kind: 'provider-delivery', targetType: 'workout',
       target: { localKey: 'run' }, providers: 'all_connected', action: 'send', timeZone: 'Europe/Helsinki' }).success).toBe(true);
+    expect(TRAINING_CHANGE_SCHEMA.safeParse({ kind: 'provider-delivery', targetType: 'workout',
+      target: { ref: 'opaque' }, providers: ['wahoo'], action: 'send', timeZone: 'Europe/Helsinki' }).success).toBe(true);
     expect(TRAINING_CHANGE_SCHEMA.safeParse({ kind: 'delete-plan', plan: { ref: 'opaque' },
       workoutDisposition: 'convert-to-standalone' }).success).toBe(true);
     for (const forbidden of [

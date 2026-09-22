@@ -505,21 +505,27 @@ export const PROVIDER_INTEGRATION_PAGES: Record<IntegrationProviderKey, Provider
     slug: 'wahoo',
     label: 'Wahoo',
     serviceName: ServiceNames.WahooAPI,
-    h1: 'Wahoo Integration for Activity Sync and Training Analysis',
-    heroCopy: 'Connect Wahoo to Quantified Self to import new Wahoo-recorded workouts, queue FIT-backed history, sync retained Wahoo activities to Suunto or COROS, send FIT activities, GPX/FIT courses/routes, or saved Suunto routes to Wahoo, and analyze every connected activity together.',
+    h1: 'Wahoo Integration for Activity Sync, Training Plans, and Analysis',
+    heroCopy: 'Connect Wahoo to Quantified Self to import Wahoo-recorded workouts, send your planned running and cycling workouts, sync retained activities to Suunto or COROS, deliver FIT activities or routes to Wahoo, and analyze every connected activity together.',
     providerSources: ALL_PROVIDER_SOURCES,
-    summary: 'Use the Pro Wahoo connection for automatic workout imports, FIT-backed history, Wahoo-to-Suunto/COROS activity sync, direct FIT activity and GPX/FIT course/route delivery, saved Suunto route delivery, Garmin/COROS/Suunto-to-Wahoo activity sync, and multi-provider training analysis.',
+    summary: 'Use the Pro Wahoo connection for planned-workout delivery, automatic workout imports, FIT-backed history, activity and route delivery, and multi-provider training analysis.',
     highlights: [
       'Automatic Wahoo workout imports',
+      'Send planned running and cycling workouts to Wahoo',
       'FIT-backed Wahoo history import',
       'Wahoo-to-Suunto/COROS sync and FIT activity/GPX-FIT route delivery to Wahoo',
       'Send saved Suunto routes to Wahoo',
       'Wahoo, Garmin, Suunto, and COROS in one dashboard',
     ],
     syncEyebrow: 'Wahoo Workflows',
-    syncTitle: 'Import Wahoo workouts, sync them to Suunto or COROS, and send activities or routes to Wahoo',
-    syncCopy: 'Authorize Wahoo once to receive completed Wahoo workout summaries, then choose automatic or date-range Wahoo-to-Suunto/COROS sync, direct FIT activity or GPX/FIT course/route delivery, or Garmin, COROS, and Suunto activity sync to Wahoo.',
+    syncTitle: 'Send planned workouts and connect your Wahoo training history',
+    syncCopy: 'Authorize Wahoo once, then explicitly send a standalone workout or opt a plan into Wahoo delivery. You can also import completed workouts, sync retained activities, and send FIT activities or GPX/FIT routes.',
     syncFlows: [
+      {
+        icon: 'event_note',
+        title: 'Planned workouts to Wahoo',
+        copy: 'Connected Pro members can send compatible time-based running and cycling workouts for today through the next six days. Plan sync and each standalone Send action are off until you explicitly enable them.',
+      },
       {
         icon: 'sync',
         title: 'New workout imports',
@@ -568,7 +574,7 @@ export const PROVIDER_INTEGRATION_PAGES: Record<IntegrationProviderKey, Provider
     ],
     toolsEyebrow: 'Wahoo Tools',
     toolsTitle: 'FIT source files, Wahoo delivery, and provider-aware analysis',
-    toolsCopy: 'Wahoo-origin FIT activities can be delivered to Suunto or COROS after explicit opt-in. Wahoo also accepts direct FIT activity and GPX/FIT course/route delivery plus opt-in saved Suunto route delivery. Imported Wahoo routes sync to the Wahoo App and directly to an ELEMNT bike computer, not the ELEMNT App; sleep sync and plans are not forwarded.',
+    toolsCopy: 'Wahoo-origin FIT activities can be delivered to Suunto or COROS after explicit opt-in. Wahoo also accepts QS-authored planned workouts, direct FIT activity and GPX/FIT course/route delivery, plus opt-in saved Suunto route delivery. Wahoo-owned plans are not imported or forwarded between providers.',
     tools: [
       {
         icon: 'source',
@@ -628,7 +634,7 @@ export const PROVIDER_INTEGRATION_PAGES: Record<IntegrationProviderKey, Provider
       },
       {
         question: 'Can I send planned Training workouts to Wahoo?',
-        answer: 'Wahoo Training delivery is not generally available. A limited rollout supports time-based running and cycling workouts for today and the next six days, with explicit sync consent and plan/workout permissions. Cloud delivery does not confirm ELEMNT or watch receipt. Your workout editor is unchanged.',
+        answer: 'Yes. Connected Pro members can explicitly send compatible time-based running and cycling workouts for today and the next six days. Plan sync and standalone Send actions are off by default. Cloud delivery confirms the app-owned Wahoo Plan, Workout, and association, not receipt by an ELEMNT computer, watch, or app.',
       },
       {
         question: 'Does disconnecting Wahoo delete imported activities?',
@@ -655,8 +661,8 @@ export const PROVIDER_INTEGRATION_PAGES: Record<IntegrationProviderKey, Provider
         answer: 'Yes. In Wahoo Services, choose a GPX or FIT course or route file for direct delivery. In Suunto Services, you can also opt in to deliver saved Suunto routes to Wahoo automatically or send existing saved routes now. Quantified Self converts GPX and saved Suunto routes to FIT courses in memory; direct uploads are not stored as Quantified Self routes, while saved-route revisions update the corresponding Wahoo route. Reconnect Wahoo once if it was connected before route delivery was available. Wahoo routes sync to the Wahoo App and directly to an ELEMNT bike computer, not the ELEMNT App.',
       },
     ],
-    closingTitle: 'Connect Wahoo and keep completed workouts in context',
-    closingCopy: 'Import Wahoo FIT activities automatically, sync eligible retained Wahoo activities to Suunto or COROS, send the FIT activities or GPX/FIT courses/routes you choose directly to Wahoo, optionally deliver saved Suunto routes to Wahoo, add the history range you need, and analyze everything in the same archive.',
+    closingTitle: 'Connect Wahoo and keep planned and completed workouts together',
+    closingCopy: 'Send compatible planned workouts, import Wahoo FIT activities, sync retained activities to Suunto or COROS, deliver selected activities and routes to Wahoo, and analyze everything in the same archive.',
     relatedGuideActions: [
       { label: 'Import Activities to Wahoo', routerLink: '/guides/import-activities-to-wahoo' },
     ],
@@ -828,13 +834,13 @@ export const PROVIDER_INTEGRATION_ROUTE_DATA: Record<IntegrationProviderKey, Int
     ),
   },
   wahoo: {
-    title: 'Wahoo Activity Sync and Route Delivery',
+    title: 'Wahoo Training Plans, Activity Sync, and Routes',
     preload: true,
     animation: 'Integrations',
-    description: 'Automatic FIT activity imports, Wahoo-to-Suunto activity sync, activity sync to Wahoo, GPX/FIT and saved Suunto route delivery, and training analysis.',
+    description: 'Send planned running and cycling workouts to Wahoo, import FIT activities, sync activities, deliver routes, and analyze training in one place.',
     jsonLd: providerWebPageJsonLd(
       PROVIDER_INTEGRATION_PAGES.wahoo,
-      'Automatic FIT activity imports, Wahoo-to-Suunto activity sync, activity sync to Wahoo, GPX/FIT and saved Suunto route delivery, and training analysis.',
+      'Send planned running and cycling workouts to Wahoo, import FIT activities, sync activities, deliver routes, and analyze training in one place.',
     ),
   },
 };

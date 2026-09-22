@@ -219,8 +219,8 @@ export const PLANNED_WORKOUT_PROVIDER_CAPABILITIES_V1: Readonly<
   wahoo: {
     id: 'wahoo',
     label: 'Wahoo',
-    implementationState: 'private-rollout',
-    deliveryEnabled: false,
+    implementationState: 'enabled',
+    deliveryEnabled: true,
     deliveryModel: 'plan-library-plus-dated-workout',
     requiredScopes: ['plans_read', 'plans_write', 'workouts_read', 'workouts_write'],
     profile: {
@@ -237,14 +237,12 @@ export const PLANNED_WORKOUT_PROVIDER_CAPABILITIES_V1: Readonly<
       'Bike computers use only the first target in an interval.',
       'Relative heart-rate and threshold-speed targets are documented for treadmill workouts in the Wahoo app, not ELEMNT computers or RIVAL.',
       'Device-visible scheduling is documented as the current day plus six days.',
-      'Private delivery requires time-based steps throughout; distance endings cannot supply the required Workout duration without an estimate.',
+      'Delivery requires time-based steps throughout; distance endings cannot supply the required Workout duration without an estimate.',
+      'Cloud checks verify the app-owned Plan, Workout and association, not receipt by a Wahoo app, ELEMNT computer or watch.',
+      'Missing-copy classification and automatic restoration stay unavailable because Wahoo inventory and negative responses are not authoritative enough.',
     ],
     completionCorrelation: 'Exact Workout, Plan and app-supplied workout_token identifiers can link a Wahoo-recorded activity; third-party-origin activities remain excluded.',
-    unresolvedGates: [
-      'Confirm existing production-app scope access, same-app ownership, and saved-timezone starts behavior in the private pilot.',
-      'Complete production-account CRUD, reconnect, duplicate, and current-day-plus-six device tests; public delivery remains disabled.',
-      'Absence and repair remain unavailable until owned inventory and negative-response semantics are proved.',
-    ],
+    unresolvedGates: [],
     evidence: [
       'https://cloud-api.wahooligan.com/',
       'https://cloud-api.wahooligan.com/docs/plan-json-format.pdf',

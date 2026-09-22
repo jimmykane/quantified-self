@@ -34,22 +34,24 @@ describe('help.content', () => {
     expect(content).toContain('**YYYY-MM-DD**');
   });
 
-  it('distinguishes Training consent, expiry, disconnect and the private pilot boundary', () => {
+  it('distinguishes Training consent, expiry, disconnect and provider rollout boundaries', () => {
     const section = HELP_SECTIONS.find(section => section.id === 'training-plans')!;
     const content = section.content;
     expect(section.summary).toContain('approval-gated MCP planning');
-    expect(section.summary).toContain('private-beta provider delivery');
+    expect(section.summary).toContain('Wahoo or limited-rollout provider delivery');
     expect(content).toContain('## Use Training Plans through MCP');
     expect(content).toContain('Training Plans uses independent MCP permissions');
     expect(content).toContain('The MCP update must be released, discovered by your client, and explicitly authorized');
     expect(content).toContain('Previewing a change never contacts a provider');
-    expect(content).toContain('## Send workouts to connected providers (private beta)');
+    expect(content).toContain('## Send workouts to connected providers');
     expect(section.links.some(link => link.label === 'MCP Connections')).toBe(true);
     expect(section.links.some(link => link.label === 'Connected services')).toBe(true);
-    expect(content).toContain('Provider workout sync is restricted to the private rollout, not a public launch');
+    expect(content).toContain('Wahoo workout delivery is available to connected Pro members');
+    expect(content).toContain('Garmin, Suunto, and COROS delivery remain limited rollouts');
     expect(content).toContain('New COROS plan sync setup in the app is shown as **Coming soon**');
     expect(content).toContain('Distance-based steps are not sent because Wahoo needs a total duration');
-    expect(content).toContain('Checks confirm the Plan, Workout and association; automatic restoration is unavailable');
+    expect(content).toContain('Older Wahoo connections may need **Reconnect Wahoo**');
+    expect(content).toContain('Checks confirm the app-owned Plan, Workout and association; automatic missing-copy restoration is unavailable');
     expect(content).toContain('Existing enabled COROS plan sync still follows its saved settings and plan status');
     expect(content).toContain('Standalone **Send to COROS** remains available to eligible pilot accounts');
     expect(content).toContain('COROS training calendar');
@@ -579,9 +581,9 @@ describe('help.content', () => {
     expect(planningSection?.content).toContain('restoring plan history also restores its saved color');
     expect(HELP_SECTIONS.find(section => section.id === 'activity-calendar')?.content)
       .toContain('Standalone workouts stay neutral');
-    expect(planningSection?.content).toContain('Provider workout sync is restricted to the private rollout');
+    expect(planningSection?.content).toContain('Wahoo workout delivery is available to connected Pro members');
     expect(planningSection?.content).toContain('New COROS plan sync setup in the app is shown as **Coming soon**');
-    expect(planningSection?.content).toContain('Wahoo initially supports time-based running and cycling workouts');
+    expect(planningSection?.content).toContain('Wahoo supports time-based running and cycling workouts');
     expect(planningSection?.content).toContain('Scheduled for later');
     expect(planningSection?.content).toContain('**Sent to Suunto** means Suunto accepted the Guide for your account');
     expect(planningSection?.content).toContain('does not prove that the Guide is visible in the Suunto app');
@@ -1420,6 +1422,8 @@ describe('help.content', () => {
     expect(serviceConnectionsSection?.content).toContain('Garmin, COROS, or Suunto activities');
     expect(serviceConnectionsSection?.content).toContain('automatically send new Wahoo activities to Suunto');
     expect(serviceConnectionsSection?.content).toContain('Wahoo-origin FIT activities can be delivered to Suunto or COROS after explicit opt-in');
+    expect(serviceConnectionsSection?.content).toContain('Wahoo **Training** delivery is available to connected Pro members');
+    expect(serviceConnectionsSection?.content).toContain('Wahoo-owned plans are not imported');
     expect(serviceConnectionsSection?.links).toContainEqual(expect.objectContaining({
       target: '/guides/sync-wahoo-to-suunto',
     }));

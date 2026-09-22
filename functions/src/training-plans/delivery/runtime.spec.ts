@@ -142,16 +142,22 @@ describe('Production Training delivery rollout', () => {
     expect(transport?.inspection).toBeUndefined();
     expect(runtime.transport('coros', 'other')).toBeNull();
   });
-  it('binds Wahoo with the seven-day horizon and independent positive-only inspection', () => {
+  it('binds Wahoo publicly with the seven-day horizon and independent positive-only inspection', () => {
     const transport = runtime.transport('wahoo', 'xcsAolLDDTWTgtRN9eYF3lW2YKL2');
     expect(transport).toMatchObject({ horizonDays: 6, withdrawOutsideHorizon: true });
     expect(transport?.inspection?.policy).toMatchObject({ required: ['plan', 'workout', 'association'], authoritativeAbsenceKeys: [], repairReadyKeys: [] });
-    expect(runtime.transport('wahoo', 'other')).toBeNull();
+    expect(runtime.transport('wahoo', 'other')).toMatchObject({ horizonDays: 6, withdrawOutsideHorizon: true });
   });
 
-  it.each(['', 'another-user', ' xcsAolLDDTWTgtRN9eYF3lW2YKL2', 'xcsAolLDDTWTgtRN9eYF3lW2YKL2 '])(
-    'never binds a transport for non-pilot identity %s', uid => {
+  it('never binds any transport without an authenticated owner identity', () => {
       vi.stubEnv('SUUNTOAPP_GUIDE_OWNER', 'Fixture application');
-      for (const provider of PLANNED_WORKOUT_PROVIDER_IDS) expect(runtime.transport(provider, uid)).toBeNull();
+      for (const provider of PLANNED_WORKOUT_PROVIDER_IDS) expect(runtime.transport(provider, '')).toBeNull();
+  });
+
+  it.each(['another-user', ' xcsAolLDDTWTgtRN9eYF3lW2YKL2', 'xcsAolLDDTWTgtRN9eYF3lW2YKL2 '])(
+    'binds only the public Wahoo transport for another authenticated identity %s', uid => {
+      vi.stubEnv('SUUNTOAPP_GUIDE_OWNER', 'Fixture application');
+      expect(runtime.transport('wahoo', uid)).toMatchObject({ horizonDays: 6 });
+      for (const provider of ['garmin', 'coros', 'suunto'] as const) expect(runtime.transport(provider, uid)).toBeNull();
     });
 });

@@ -473,7 +473,7 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
     description: TRAINING_PLANS_SEO_CONTENT.description,
     h1: TRAINING_PLANS_SEO_CONTENT.h1,
     intro: TRAINING_PLANS_SEO_CONTENT.intro,
-    chips: ['Plans included', 'Standalone workouts', 'MCP planning', 'Provider delivery limited beta', 'Plan calendar', 'Completed totals stay separate'],
+    chips: ['Plans included', 'Standalone workouts', 'MCP planning', 'Wahoo delivery for Pro', 'Plan calendar', 'Completed totals stay separate'],
     actions: [
       routeAction('Start Free', '/login', 'flat', 'arrow_forward'),
       routeAction('Training Plans Help', '/help', 'stroked', undefined, 'training-plans'),
@@ -503,7 +503,7 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
           {
             icon: 'send',
             title: 'Opt in to provider delivery',
-            copy: 'Provider workout delivery is a separate Pro limited beta with explicit Send and plan opt-in actions, compatibility checks, and provider-specific rollout gates. Connecting a provider never sends a workout by itself.',
+            copy: 'Wahoo workout delivery is available to connected Pro members through explicit Send and plan opt-in actions, compatibility checks, and a seven-day delivery window. Garmin, Suunto, and COROS delivery remain limited rollouts. Connecting a provider never sends a workout by itself.',
           },
         ],
       },
@@ -523,7 +523,7 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
       },
       {
         question: 'Does connecting Garmin, COROS, Wahoo, or Suunto send my planned workouts?',
-        answer: 'No. Provider workout delivery is a separate Pro limited beta with explicit Send or plan opt-in actions. Connecting a provider never sends a planned workout by itself.',
+        answer: 'No. Wahoo workout delivery is a separate Pro feature with explicit Send or plan opt-in actions. Garmin, Suunto, and COROS delivery remain limited rollouts. Connecting a provider never sends a planned workout by itself.',
       },
       {
         question: 'Can I use an MCP client with Training Plans?',

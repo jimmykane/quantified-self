@@ -374,12 +374,11 @@ such as **Manual and free**. Plans and standalone structured workouts created in
 free tier and require no provider connection, but that boundary belongs in supporting copy and pricing rather than as
 the feature's identity. The homepage, public page, and Help also make the separately permissioned MCP planning surface
 and opt-in provider delivery discoverable. They distinguish source implementation from released MCP client availability,
-and describe provider workout delivery as a distinct Pro limited beta with explicit actions, compatibility checks and
-independent provider rollout gates. Authenticated Help names the private-rollout boundary directly. Public copy must say
-that connecting Garmin, COROS, Wahoo or Suunto never sends a planned workout. A provider page may describe workout
-delivery as available only after that provider's public delivery
-switch and release scope are approved. An implemented adapter, private pilot or connected account is not evidence of
-public availability.
+and describe provider workout delivery as a distinct Pro capability with explicit actions, compatibility checks and
+provider-specific readiness. Wahoo is publicly described as available to connected Pro users; Garmin, COROS and Suunto
+remain limited rollouts. Public copy must say that connecting any provider never sends a planned workout. A provider
+page may describe workout delivery as available only after that provider's public delivery switch and release scope are
+approved. An implemented adapter, private pilot or connected account is not evidence of public availability.
 
 The page and homepage reuse `PlanScheduleCalendarComponent`, the canonical plan/workout parsers, plan appearance helper
 and Sports Lib-backed workout formatters through a deterministic synthetic recipe. One local reference date is captured
@@ -891,11 +890,11 @@ The separate certification/evaluation ticket #698 is retired; it is not an enabl
 
 ### Provider proof status
 
-`shared/planned-workout-providers.ts` is the versioned capability/research snapshot. All four public delivery switches remain
-false. Garmin, COROS, Suunto and Wahoo have exact-UID private production pilots backed by offline-tested transports. Offline
-verification does not constitute a real provider request or device result. The UID-restricted runtime admits only the
-owner for each implemented adapter. New COROS plan-sync setup is temporarily hidden under #648 while standalone sends,
-existing enabled plan delivery and server reconciliation continue. Wahoo's production-account/device evidence remains pending in #649. The
+`shared/planned-workout-providers.ts` is the versioned capability/research snapshot. Wahoo's public delivery switch is
+enabled; Garmin, COROS and Suunto retain exact-UID private production pilots backed by offline-tested transports. Offline
+verification does not constitute a real provider request or device result. New COROS plan-sync setup is temporarily
+hidden under #648 while standalone sends, existing enabled plan delivery and server reconciliation continue. Wahoo's
+deployment and post-release evidence remain tracked in #649. The
 ignored local Garmin Training API V2 and COROS API Reference PDFs remain evidence only and are never committed.
 
 Every serializer returns `exact`, `degraded`, or `unsupported`. Degraded output requires explicit approval. Current
@@ -1156,8 +1155,9 @@ neither creates consent nor sends a workout. Ordinary integration checks remain 
 
 ### Wahoo Plan and dated Workout delivery (#649)
 
-Wahoo uses the same plan settings, standalone Send, Stop, Retry, approval, reconciliation, lease and private-UID
-rollout as the other providers. The editor and `WorkoutStructureV1` are unchanged. Delivery initially accepts the
+Wahoo uses the shared plan settings, standalone Send, Stop, Retry, approval, reconciliation and lease lifecycle. It is
+available to authenticated Pro users with a connected, correctly scoped Wahoo account and explicit plan/workout consent;
+there is no UID allowlist. The editor and `WorkoutStructureV1` are unchanged. Delivery accepts the
 documented Running/Cycling baseline with time endings throughout. Required Workout `minutes` is the exact sum of
 step seconds times total repeat passes divided by 60, including fractional minutes. Distance endings cannot supply
 that value without an estimate and are unsupported for delivery. The broader fixture serializer's distance/kilojoule
@@ -1234,18 +1234,18 @@ safe owner-visible status projections and cleanup.
 The 422 diagnostic enums are private operator logs only, so they do not change MCP tools, scopes, instructions, consent,
 registered schemas or plugin artifacts and require no registered-client refresh.
 
-Release gate: public `deliveryEnabled` stays false and the exact pilot UID is checked on frontend and backend. Prepare
-Functions `getWahooAPIAuthRequestTokenRedirectURI`, `requestAndSetWahooAPIAccessToken`, `previewTrainingProviderDelivery`,
-`mutateTrainingProviderDelivery`, `processTrainingDeliveryTask` and the production frontend for separately approved
-deployment. Do not redeploy unrelated infrastructure. #649 remains open until the user verifies reconnect, create,
-edit, reschedule, copy, Stop, target warnings and seven-day device behavior. Turning the pilot off blocks withdrawals
-too; use Stop while access is valid when cleanup is intended.
+Release state: public `deliveryEnabled` is true and no Wahoo UID allowlist remains. Frontend and backend use the same
+capability decision while retaining authentication, App Check, Pro, connection, scope, compatibility, explicit consent,
+revision and deletion fences. Deployment remains separately approved. The source-controlled provider flag is the rollback
+switch, but disabling it also blocks withdrawals; use Stop while access is valid when cleanup is intended. #649 remains
+open for deployment and post-release reconnect, create, edit, reschedule, copy, Stop, target-warning and device-horizon
+evidence. A physical device result is monitoring evidence, not a prerequisite for truthful cloud delivery.
 
 Release verification (2026-09-18): backend TypeScript and the focused Wahoo/provider suites pass. A separately authorized
 single-function pilot deployment created and read back one app-owned Plan, its dated Workout and their association through
 the production API. The live responses exposed the required description, non-empty target and whole-second timestamp
 behaviors documented above. The temporary diagnostic Plan was deleted by exact retained ID. Cloud acceptance still does
-not prove download to a physical Wahoo device, so device delivery remains a pilot check.
+not prove download to a Wahoo app, ELEMNT computer or watch; UI, Help and public copy preserve that limitation.
 
 ### Remote verification and repair (#703)
 

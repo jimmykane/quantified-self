@@ -22,14 +22,13 @@ describe('integration-pages.content', () => {
     }
   });
 
-  it('documents Wahoo FIT imports, activity and route delivery, Wahoo-to-Suunto sync, and retained imported activities after disconnect', () => {
-    expect(PROVIDER_INTEGRATION_ROUTE_DATA.wahoo.description).toContain('Automatic FIT activity imports');
-    expect(PROVIDER_INTEGRATION_ROUTE_DATA.wahoo.title).toBe('Wahoo Activity Sync and Route Delivery');
-    expect(PROVIDER_INTEGRATION_ROUTE_DATA.wahoo.description).toContain('activity sync to Wahoo');
-    expect(PROVIDER_INTEGRATION_ROUTE_DATA.wahoo.description).toContain('Wahoo-to-Suunto activity sync');
-    expect(PROVIDER_INTEGRATION_PAGES.wahoo.toolsCopy).toContain('accepts direct FIT activity and GPX/FIT course/route delivery');
-    expect(PROVIDER_INTEGRATION_PAGES.wahoo.toolsCopy).toContain('not the ELEMNT App');
-    expect(PROVIDER_INTEGRATION_PAGES.wahoo.toolsCopy).toContain('sleep sync and plans are not forwarded');
+  it('documents public Wahoo planned-workout, activity, and route delivery without claiming device receipt', () => {
+    expect(PROVIDER_INTEGRATION_ROUTE_DATA.wahoo.description).toContain('Send planned running and cycling workouts');
+    expect(PROVIDER_INTEGRATION_ROUTE_DATA.wahoo.title).toBe('Wahoo Training Plans, Activity Sync, and Routes');
+    expect(PROVIDER_INTEGRATION_ROUTE_DATA.wahoo.description).toContain('import FIT activities');
+    expect(PROVIDER_INTEGRATION_PAGES.wahoo.toolsCopy).toContain('QS-authored planned workouts');
+    expect(PROVIDER_INTEGRATION_PAGES.wahoo.toolsCopy).toContain('Wahoo-owned plans are not imported');
+    expect(PROVIDER_INTEGRATION_PAGES.wahoo.syncFlows.some(flow => flow.title === 'Planned workouts to Wahoo')).toBe(true);
     expect(PROVIDER_INTEGRATION_PAGES.wahoo.syncFlows.find(flow => flow.title === 'Direct GPX/FIT course/route delivery')?.copy)
       .toContain('send flow offers a reconnect action');
     expect(PROVIDER_INTEGRATION_PAGES.wahoo.syncFlows.some(flow => flow.title === 'Direct FIT activity delivery')).toBe(true);
@@ -39,9 +38,9 @@ describe('integration-pages.content', () => {
     expect(PROVIDER_INTEGRATION_PAGES.wahoo.faqItems.some(item => item.question === 'Can I sync Wahoo activities to Suunto automatically?')).toBe(true);
     expect(PROVIDER_INTEGRATION_PAGES.wahoo.faqItems.some(item => item.question === 'Can I send a route to Wahoo?')).toBe(true);
     const training = PROVIDER_INTEGRATION_PAGES.wahoo.faqItems.find(item => item.question === 'Can I send planned Training workouts to Wahoo?');
-    expect(training?.answer).toContain('not generally available');
+    expect(training?.answer).toContain('Connected Pro members');
     expect(training?.answer).toContain('time-based running and cycling');
-    expect(training?.answer).toContain('does not confirm ELEMNT or watch receipt');
+    expect(training?.answer).toContain('not receipt by an ELEMNT computer');
     expect(PROVIDER_INTEGRATION_PAGES.wahoo.faqItems.find(item => item.question === 'Can I send a route to Wahoo?')?.answer)
       .toContain('saved Suunto routes to Wahoo automatically');
     expect(PROVIDER_INTEGRATION_PAGES.wahoo.faqItems.find(item => item.question.includes('disconnecting'))?.answer)

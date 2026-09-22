@@ -75,6 +75,7 @@ describe('ServicesWahooComponent', () => {
     expect(component.isConnectedToService()).toBe(false);
     expect(component.connectButtonLabel).toBe('Reconnect');
     expect(component.connectionDescription).toContain('Reconnect Wahoo');
+    expect(component.connectionDescription).toContain('planned-workout delivery');
     expect(fixture.nativeElement.textContent).toContain('Wahoo rejected repeated token refreshes');
     expect(fixture.nativeElement.textContent).toContain('Reconnect');
     expect(Array.from(fixture.nativeElement.querySelectorAll('button'))
@@ -108,6 +109,7 @@ describe('ServicesWahooComponent', () => {
     expect(fixture.nativeElement.textContent).toContain('OAuth credentials are stored securely on the server.');
     expect(fixture.nativeElement.textContent).not.toContain('Wahoo account connected');
     expect(functionsService.call).not.toHaveBeenCalled();
+    expect(component.connectionDescription).toContain('send compatible planned workouts');
   });
 
   it('hydrates an existing connection account ID from the server-only token record once', async () => {

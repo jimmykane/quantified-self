@@ -1,6 +1,6 @@
 # Wahoo Integration
 
-Wahoo is a Pro-only integration. Quantified Self receives completed workout summaries through Wahoo webhooks, can request a user-selected range of workout history, can send retained Wahoo FIT activities to Suunto or COROS, can deliver FIT activities plus user-selected GPX or FIT courses/routes to Wahoo, and can opt in to send saved Suunto routes to Wahoo. GPX and saved Suunto routes are converted in memory to the FIT course Wahoo accepts. Private-rollout Training delivery sends QS-authored workouts as app-owned Plans and dated Workouts; it does not import Wahoo's plan library or forward plans/sleep between providers.
+Wahoo is a Pro-only integration. Quantified Self receives completed workout summaries through Wahoo webhooks, can request a user-selected range of workout history, can send retained Wahoo FIT activities to Suunto or COROS, can deliver FIT activities plus user-selected GPX or FIT courses/routes to Wahoo, and can opt in to send saved Suunto routes to Wahoo. GPX and saved Suunto routes are converted in memory to the FIT course Wahoo accepts. Training delivery lets connected Pro users explicitly send QS-authored workouts as app-owned Plans and dated Workouts; it does not import Wahoo's plan library or forward plans/sleep between providers.
 
 This is the Wahoo-specific architecture and release record. For the reusable implementation process, lifecycle requirements, operational checklist, and provider-wide pitfalls, see the [provider integration implementation guide](provider-integration-guide.md).
 
@@ -23,16 +23,17 @@ Workouts without an available FIT file are skipped. Wahoo records identified as 
 
 ## Data flow
 
-Training delivery uses the shared queue and exact-UID private pilot, not the activity uploader or a new queue. Its
+Training delivery uses the shared queue, not the activity uploader or a new queue. Its
 single detailed implementation and operational contract is [Wahoo Training delivery](training-workspace.md#wahoo-plan-and-dated-workout-delivery-649):
 time-based Running/Cycling, saved-zone seven-day window, separate Plan/Workout/association receipts, duplicate-safe
-recovery, positive-only cloud checks, scope migration, lifecycle fences and pending production-account/device checks.
+recovery, positive-only cloud checks, scope migration and lifecycle fences. Device receipt remains provider-managed and
+is never inferred from cloud acceptance.
 The production Plan validator requires `header.description` and a `targets` array on every non-repeat interval despite
 the published plan.json schema marking both optional. It also rejects an empty target array. QS supplies the bounded
 workout title and the documented full-domain RPE range 1–10 for an untargeted interval; it does not add another editor
 field or narrow intended effort. Production Plan create/delete returns HTTP 200; create also remains compatible with 201.
-The existing production app/account is the pilot target. Do not interpret the historical activity launch checklist
-below as a requirement to create a sandbox or apply for Wahoo-owned Plan-library entitlement.
+The existing production app/account supplied the app-owned Plan/Workout cloud proof. Do not interpret the historical
+activity launch checklist below as a requirement to create a sandbox or apply for Wahoo-owned Plan-library entitlement.
 
 1. The Pro user starts OAuth from **Services**. Callable Functions enforce authentication, App Check, and Pro access.
 2. The backend exchanges the code, reads the stable Wahoo user ID, and stores rotating credentials in `wahooAPIAccessTokens/{firebaseUid}/tokens/{wahooUserId}`. Starting authorization assigns a server-owned OAuth-flow generation; the callback claims that flow and may persist its token only while the generation still matches. A newer authorization attempt or explicit disconnect invalidates the generation before cleanup, so a delayed provider exchange cannot recreate a disconnected credential. Each successful OAuth write also assigns a server-side credential generation. A reconnect-required connection retains and pins exactly one Wahoo user ID; OAuth through another Wahoo account is rejected until the retained connection is explicitly disconnected. Activity uploads, route delivery, history, inbound webhooks, and workout processing all resolve that same pinned token. The shared OAuth lifecycle queries the composite token index and removes stale tokens for the same external account from other Quantified Self users, matching the other provider adapters.
@@ -87,5 +88,5 @@ Wahoo requires six composite indexes: one `tokens` collection-group index on `wa
 3. Register every production OAuth redirect URI and configure the production webhook URL/token in the Wahoo developer portal.
 4. Set the production credentials and exact FIT-file host allowlist.
 5. Deploy the Firestore indexes, Rules, queue TTL configuration, Functions, and Hosting artifacts through the normal release workflow.
-6. Exercise sandbox OAuth with activity and route write scopes, webhook, edited-workout deduplication, history pagination/rate limiting, automatic and manual Wahoo-to-Suunto/COROS delivery, destination-namespaced echo receipts, direct FIT activity delivery, direct FIT and GPX course/route create/update behavior, GPX conversion failures and output-size bounds, each source-to-Wahoo activity route, duplicate uploads, asynchronous activity-upload polling, disconnect, expired-Pro enforcement, and account deletion with test accounts.
-7. Monitor callable/webhook error rates, queue age/retries, skipped reasons, FIT download failures, Wahoo upload status failures, Wahoo 429 responses, and cleanup failures before enabling broadly.
+6. Exercise OAuth with activity, route, Plan and Workout scopes; webhook handling; edited-workout deduplication; history pagination/rate limiting; activity and route delivery; planned-workout create/update/reschedule/copy/Stop; duplicate recovery; saved-zone today/+6 behavior; disconnect; expired-Pro enforcement; and account deletion with authorized test accounts. Do not treat cloud acceptance as a device receipt.
+7. After the separately approved deployment, monitor callable/webhook error rates, Training delivery outcomes and queue age/retries, reconnect prompts, skipped reasons, FIT download failures, Wahoo upload status failures, Wahoo 429 responses, and cleanup failures. If rollback is needed, turn off the source-controlled Wahoo delivery flag; note that doing so also hides Stop/withdrawal actions until the flag is restored.

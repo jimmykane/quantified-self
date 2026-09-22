@@ -42,7 +42,7 @@ export const TRAINING_PLANS_HOME_CONTENT = {
       icon: 'sync',
       iconTone: 'primary',
       title: 'Optional Provider Delivery',
-      copy: 'Provider workout sync is a separate Pro limited beta with explicit plan opt-in or standalone Send actions. Connecting Garmin, Suunto, Wahoo, or COROS never sends workouts by itself.',
+      copy: 'Wahoo workout delivery is available to connected Pro members through explicit plan opt-in or standalone Send actions. Garmin, Suunto, and COROS delivery remain limited rollouts. Connecting a provider never sends workouts by itself.',
     },
     {
       icon: 'calendar_month',

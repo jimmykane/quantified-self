@@ -49,16 +49,16 @@ function oneStepStructure(overrides: Partial<WorkoutStructureV1['nodes'][number]
 }
 
 describe('planned-workout provider proof fixtures', () => {
-    it('keeps public provider delivery disabled while private rollout evidence is gathered', () => {
+    it('enables public Wahoo delivery while keeping the other providers in private rollout', () => {
         expect(Object.values(PLANNED_WORKOUT_PROVIDER_CAPABILITIES_V1)).toHaveLength(4);
-        expect(Object.values(PLANNED_WORKOUT_PROVIDER_CAPABILITIES_V1).every(capability => (
-            capability.deliveryEnabled === false
-        ))).toBe(true);
+        expect(PLANNED_WORKOUT_PROVIDER_CAPABILITIES_V1.wahoo.deliveryEnabled).toBe(true);
+        expect(isPlannedWorkoutProviderDeliveryEnabled('wahoo')).toBe(true);
         expect(isPlannedWorkoutProviderDeliveryEnabled('garmin')).toBe(false);
         expect(isPlannedWorkoutProviderDeliveryEnabled('coros')).toBe(false);
+        expect(isPlannedWorkoutProviderDeliveryEnabled('suunto')).toBe(false);
         expect(PLANNED_WORKOUT_PROVIDER_CAPABILITIES_V1.garmin.implementationState).toBe('private-rollout');
         expect(PLANNED_WORKOUT_PROVIDER_CAPABILITIES_V1.coros.implementationState).toBe('private-rollout');
-        expect(PLANNED_WORKOUT_PROVIDER_CAPABILITIES_V1.wahoo.implementationState).toBe('private-rollout');
+        expect(PLANNED_WORKOUT_PROVIDER_CAPABILITIES_V1.wahoo.implementationState).toBe('enabled');
         expect(PLANNED_WORKOUT_PROVIDER_CAPABILITIES_V1.suunto.implementationState).toBe('private-rollout');
         expect(PLANNED_WORKOUT_PROVIDER_CAPABILITIES_V1.suunto.profile?.sports)
             .toEqual(MANUAL_WORKOUT_EDITOR_SPORTS_V1);

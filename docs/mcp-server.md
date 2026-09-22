@@ -177,7 +177,15 @@ sanitized delivery status to `completed` only after the private Workout ID, Plan
 resolve one current account-bound delivery. Those identifiers, the account digest, workout-summary evidence and reverse
 link remain private and are rejected from MCP projections. The existing sanitized completion tools can report the exact
 current link; #651 retains bounded fallback candidate discovery and approval-gated manual link/unlink/relink behavior.
-No private Wahoo identity, live check or provider action is introduced.
+No private Wahoo identity or live check is introduced.
+
+Wahoo public Training delivery changes runtime availability, not the MCP wire contract. An already authorized client with
+`training-plans:read` and `training-delivery:write` may now preview an explicit Wahoo provider-delivery change for any
+eligible connected Pro owner instead of only the former UID allowlist. The same bounded proposal, native client approval,
+short expiry, owner/connection/grant/revision binding, compatibility review and separate apply call remain mandatory.
+`all_connected` includes Wahoo only when the connection and workout are currently eligible. No new tool, action, field,
+scope, consent default, provider identifier, plugin artifact or registered-client refresh is introduced; connecting Wahoo
+alone never creates delivery consent or sends a workout.
 
 ## Purpose and boundary
 

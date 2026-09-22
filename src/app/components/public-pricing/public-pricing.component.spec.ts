@@ -247,6 +247,17 @@ describe('buildPublicPricingCatalog', () => {
         }
     });
 
+    it('advertises Wahoo planned-workout delivery only on Pro', () => {
+        const catalog = buildPublicPricingCatalog(PAID_PRODUCTS);
+
+        expect(catalog.plans.find(plan => plan.role === 'pro')?.features.map(feature => feature.label))
+            .toContain('Wahoo planned-workout delivery');
+        for (const role of ['free', 'basic'] as const) {
+            expect(catalog.plans.find(plan => plan.role === role)?.features.map(feature => feature.label))
+                .not.toContain('Wahoo planned-workout delivery');
+        }
+    });
+
     it('does not advertise a yearly switch across different currencies', () => {
         const basicProduct = PAID_PRODUCTS[0];
         const monthlyPrice = basicProduct.prices?.[0];
