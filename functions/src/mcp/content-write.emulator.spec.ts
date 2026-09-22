@@ -13,7 +13,7 @@ import {
 } from './content-write.service';
 
 describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)(
-  'MCP activity-tag and Timeline-note changes with real Firestore transactions',
+  'MCP event-tag and Timeline-note changes with real Firestore transactions',
   { timeout: 30_000 },
   () => {
     const host = process.env.FIRESTORE_EMULATOR_HOST;

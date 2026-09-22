@@ -192,6 +192,34 @@ describe('Assistant callable', () => {
     expect(updateEventTags).toHaveBeenCalledOnce();
   });
 
+  it('reports when an accepted event-tag proposal was already satisfied', async () => {
+    const { store, conversation } = createDependencies();
+    const proposal = {
+      proposalRef: 'content-proposal-1',
+      kind: 'update_event_tags' as const,
+      expiresAtMs: Date.now() + 60_000,
+      summary: 'Keep the current activity tags.',
+      requiresConfirmation: true as const,
+      arguments: { activityRef: 'activity-ref', expectedTags: ['Quality'], tags: ['Quality'] },
+    };
+    vi.mocked(store.getActiveConversationState).mockResolvedValue({
+      conversation, pendingRequestId: null, locationAccess: 'coordinate_free',
+      activityTagChangesEnabled: true, pendingContentProposal: proposal,
+    });
+    const updateEventTags = vi.fn().mockResolvedValue({ changed: false, tags: ['Quality'] });
+
+    await expect(runApplyAssistantContentProposal({
+      proposalRef: proposal.proposalRef,
+      conversationId: conversation.conversationId,
+      confirm: true,
+    }, context, store, { updateEventTags } as never)).resolves.toEqual({
+      status: 'applied',
+      kind: 'update_event_tags',
+      message: 'Event tags already matched the requested list.',
+    });
+    expect(updateEventTags).toHaveBeenCalledOnce();
+  });
+
   it('dismisses a content proposal without calling a mutation service', async () => {
     const { store, conversation } = createDependencies();
     const proposal = {

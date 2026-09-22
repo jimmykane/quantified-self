@@ -6031,15 +6031,15 @@ export function createMcpDataService(
     decodeEditCursor: (value: string, uid: string, connectionId: string) =>
       decodeOpaqueValue('timeline_notes_edit_cursor', value, uid, connectionId, 'pagination cursor'),
   };
-  const runMcpContentWrite = async (
+  const runMcpContentWrite = async <T>(
     input: McpContentWriteInput,
     operation: (
       value: McpContentWriteInput,
       codec: typeof contentWriteCodec,
       deps: McpContentWriteDependencies,
-    ) => Promise<unknown>,
+    ) => Promise<T>,
     fallbackMessage: string,
-  ) => {
+  ): Promise<T> => {
     const deps = dependencies.contentWriteDependencies
       ?? (dependencies === defaultDependencies ? defaultMcpContentWriteDependencies() : null);
     if (!deps) throw new McpDataError('temporarily_unavailable', 'MCP content changes are unavailable.');

@@ -310,7 +310,7 @@ export async function updateMcpEventTags(
   deps = defaultMcpContentWriteDependencies(),
 ) {
   if (input.assistantConversationId && !input.assistantProposalRef) {
-    invalid('Review and confirm the current Assistant proposal before changing activity tags.');
+    invalid('Review and confirm the current Assistant proposal before changing event tags.');
   }
   const requiredScopes = [ACTIVITY_DETAILS_READ_SCOPE, EVENTS_WRITE_SCOPE];
   assertInputScopes(input, requiredScopes);
@@ -361,7 +361,7 @@ export async function updateMcpEventTags(
       return { activityRef: args.activityRef, tags, changed: false };
     }
     if (!sameTags(currentTags, expectedTags)) {
-      invalid('Activity tags changed since they were read. Read them again before updating.');
+      invalid('Event tags changed since they were read. Read them again before updating.');
     }
     transaction.update(eventRef, {
       ...sanitizeEventFirestoreWritePayload({ tags }),

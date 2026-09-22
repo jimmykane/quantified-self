@@ -912,11 +912,14 @@ export async function runApplyAssistantContentProposal(
       : [MCP_OAUTH_SCOPES.TimelineNotesRead, MCP_OAUTH_SCOPES.TimelineNotesWrite],
     arguments: proposal.arguments,
   };
+  let eventTagsChanged: boolean | null = null;
   try {
     switch (proposal.kind) {
-      case 'update_event_tags':
-        await dataService.updateEventTags(writeInput);
+      case 'update_event_tags': {
+        const result = await dataService.updateEventTags(writeInput);
+        eventTagsChanged = result.changed;
         break;
+      }
       case 'create_timeline_note':
         await dataService.createTimelineNote(writeInput);
         break;
@@ -941,7 +944,9 @@ export async function runApplyAssistantContentProposal(
       status: 'applied',
       kind: proposal.kind,
       message: proposal.kind === 'update_event_tags'
-        ? 'Event tags updated.'
+        ? eventTagsChanged
+          ? 'Event tags updated.'
+          : 'Event tags already matched the requested list.'
         : proposal.kind === 'delete_timeline_note'
           ? 'Timeline note deleted.'
           : proposal.kind === 'create_timeline_note'
