@@ -84,6 +84,7 @@ describe('integration-pages.content', () => {
     expect(PROVIDER_INTEGRATION_PAGES.garmin.faqItems.some(item => item.question === 'Can I send saved routes to Garmin Connect?')).toBe(true);
     expect(PROVIDER_INTEGRATION_ROUTE_DATA.garmin).not.toHaveProperty('keywords');
     expect(PROVIDER_INTEGRATION_ROUTE_DATA.coros.description).toContain('planned-workout delivery is coming soon');
+    expect(PROVIDER_INTEGRATION_PAGES.coros.summary).toContain('Planned-workout delivery is coming soon in the app');
     expect(PROVIDER_INTEGRATION_PAGES.coros.syncFlows.find(flow => flow.title === 'Planned workouts to COROS')?.copy)
       .toContain('New COROS plan sync and standalone Send actions are coming soon');
     expect(PROVIDER_INTEGRATION_PAGES.coros.highlights).toContain('Direct and saved route delivery to COROS');

@@ -399,7 +399,7 @@ export const PROVIDER_INTEGRATION_PAGES: Record<IntegrationProviderKey, Provider
     h1: 'COROS Training Plans, Activity Sync, and Routes',
     heroCopy: 'Connect COROS to Quantified Self to import recent history, deliver activities and routes, and analyze connected training together. COROS planned-workout delivery is coming soon in the app.',
     providerSources: ALL_PROVIDER_SOURCES,
-    summary: 'Use the Pro COROS connection for planned-workout calendar delivery, recent activity, Sleep and Health history, activity and route workflows, and centralized multi-service training analysis.',
+    summary: 'Use the Pro COROS connection for recent activity, Sleep and Health history, activity and route workflows, and centralized multi-service training analysis. Planned-workout delivery is coming soon in the app.',
     highlights: [
       'COROS to Suunto automatic activity sync',
       'COROS planned-workout delivery coming soon',
