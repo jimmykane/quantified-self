@@ -1,5 +1,4 @@
 import { GARMIN_HEALTH_SUMMARY_TYPES, type GarminHealthSummaryType } from '../garmin/health-summary-types';
-import { createHash } from 'node:crypto';
 import { ServiceNames } from '@sports-alliance/sports-lib';
 import { connectionHistoryRange, historyCapabilities, type ConnectionHistoryRangePreset, type HistoryCapability, type ConnectionHistoryStepStatus, type ConnectionHistoryStatusProjection } from '../../../shared/connection-history';
 
@@ -42,22 +41,21 @@ export interface ConnectionHistoryRun {
 export interface HistoryConnectionContext {
   requested: boolean;
   rangePreset: ConnectionHistoryRangePreset;
-  flowGeneration: string;
+  runId: string;
   tokenPath: string;
   rootPath: string;
   providerUserId: string;
   credentialGeneration: string;
 }
-// This is a document identity hash, not a password verifier. flowGeneration is
-// a server-generated randomUUID (beginOAuthFlowIfUserActive), never a password,
-// access token, OAuth state, or PKCE verifier. No credential is hashed here.
-export function historyRunId(userID: string, serviceName: ServiceNames, flowGeneration: string): string {
-  return createHash('sha256').update(JSON.stringify([userID, serviceName, flowGeneration])).digest('hex');
+export function isConnectionHistoryRunId(value: unknown): value is string {
+  return typeof value === 'string'
+    && /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(value);
 }
 export function createHistoryRun(userID: string, serviceName: ServiceNames, context: HistoryConnectionContext, connectionGeneration: string, nowMs: number): ConnectionHistoryRun {
+  if (!isConnectionHistoryRunId(context.runId)) throw new Error('Invalid connection history run identity.');
   const range = connectionHistoryRange(nowMs, serviceName, context.rangePreset);
   return {
-    id: historyRunId(userID, serviceName, context.flowGeneration), userID, serviceName,
+    id: context.runId, userID, serviceName,
     providerUserId: context.providerUserId, tokenPath: context.tokenPath, rootPath: context.rootPath,
     credentialGeneration: context.credentialGeneration, connectionGeneration, rangePreset: context.rangePreset, ...range,
     dateCreated: nowMs, updatedAtMs: nowMs, nextAttemptAt: nowMs, processed: false, revision: 0,

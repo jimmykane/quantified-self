@@ -41,13 +41,14 @@ import { processConnectionHistoryRun, observeHistoryChildren, dispatchConnection
 import { historyExecution } from './execution';
 import { currentHistoryExecution, withHistoryExecution } from './context';
 const now = Date.parse('2026-09-14T12:00:00Z');
+const runId = '11111111-1111-4111-8111-111111111111';
 let run: ConnectionHistoryRun;
 const path = () => `${CONNECTION_HISTORY_COLLECTION}/${run.id}`;
 const saved = () => mocks.rows.get(path()) as ConnectionHistoryRun;
 beforeEach(() => {
   mocks.replayFinalCommit = false; vi.restoreAllMocks(); vi.spyOn(Date, 'now').mockReturnValue(now); mocks.rows.clear();
   mocks.pro.mockReset().mockResolvedValue(true); mocks.depth.mockReset().mockResolvedValue(0); mocks.enqueue.mockReset().mockResolvedValue(true); mocks.appCheck.mockReset();
-  run = createHistoryRun('owner', ServiceNames.WahooAPI, { requested: true, rangePreset: '30_days', flowGeneration: 'flow', tokenPath: 'wahooAPIAccessTokens/owner/tokens/account', rootPath: 'wahooAPIAccessTokens/owner', providerUserId: 'account', credentialGeneration: 'credential' }, 'connection', now);
+  run = createHistoryRun('owner', ServiceNames.WahooAPI, { requested: true, rangePreset: '30_days', runId, tokenPath: 'wahooAPIAccessTokens/owner/tokens/account', rootPath: 'wahooAPIAccessTokens/owner', providerUserId: 'account', credentialGeneration: 'credential' }, 'connection', now);
   mocks.rows.set(path(), run); mocks.rows.set('users/owner', { uid: 'owner' });
   mocks.rows.set(run.rootPath, { activeOAuthCredentialGeneration: 'credential' }); mocks.rows.set(run.tokenPath, { tokenCredentialGeneration: 'credential' });
   mocks.rows.set(`users/owner/meta/${run.serviceName}`, { connectionState: 'connected', connectionStateGeneration: 'connection' });
@@ -114,6 +115,18 @@ describe('durable history coordinator', () => {
     expect(await observeHistoryChildren(['queue/missing'], run.id)).toBe('authorization');
     expect(await observeHistoryChildren(['queue/missing'], 'different-run')).toBe('failed');
     expect(await observeHistoryChildren(['otherQueue/missing'], run.id)).toBe('failed');
+  });
+  it('keeps mixed authorization and recoverable child failures retryable', async () => {
+    mocks.rows.set('failed_jobs/auth', { connectionHistoryRunId: run.id, originalCollection: 'queue', context: 'PERMISSION_MISSING' });
+    mocks.rows.set('failed_jobs/retry', { connectionHistoryRunId: run.id, originalCollection: 'queue', context: 'MAX_RETRY_REACHED' });
+    expect(await observeHistoryChildren(['queue/auth', 'queue/retry'], run.id)).toBe('mixed');
+    mocks.rows.set('queue/retry', { processed: true, resultStatus: 'failed' });
+    expect(await observeHistoryChildren(['queue/auth', 'queue/retry'], run.id)).toBe('mixed');
+  });
+  it('waits for live children before reporting another child authorization failure', async () => {
+    mocks.rows.set('failed_jobs/auth', { connectionHistoryRunId: run.id, originalCollection: 'queue', context: 'PERMISSION_MISSING' });
+    mocks.rows.set('queue/pending', { processed: false });
+    expect(await observeHistoryChildren(['queue/auth', 'queue/pending'], run.id)).toBe('pending');
   });
   it('keeps invocation contexts isolated and checks replacement credentials inside writes', async () => {
     const execution = historyExecution(run, []); expect(currentHistoryExecution()).toBeUndefined();

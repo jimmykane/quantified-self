@@ -1,6 +1,6 @@
 import { isConnectionHistoryAdmissionEnabled } from './connection-history/admission';
 import { parseImportHistoryRange, parseImportRecentHistory, type ConnectionHistoryRangePreset } from '../../shared/connection-history';
-import { OAUTH_HISTORY_FIELD, OAUTH_HISTORY_RANGE_FIELD, historyRunId } from './connection-history/model';
+import { OAUTH_HISTORY_FIELD, OAUTH_HISTORY_RANGE_FIELD, type HistoryConnectionContext } from './connection-history/model';
 import { ServiceNames } from '@sports-alliance/sports-lib';
 import { AccessToken } from 'simple-oauth2';
 import * as crypto from 'crypto';
@@ -945,6 +945,7 @@ export async function getAndSetServiceOAuth2AccessTokenForUser(
     throw error;
   }
 
+  let acceptedConnectionHistoryRunId: string | undefined;
   if (await hasProAccess(userID)) {
     if (!persistedOAuthCredentialGuard) {
       throw new Error(`Missing persisted ${serviceName} credential guard after OAuth token write.`);
@@ -976,6 +977,18 @@ export async function getAndSetServiceOAuth2AccessTokenForUser(
         `oauth_clear_disconnect_pending:${serviceName}`,
       );
     }
+    const shouldImportConnectionHistory = claimedOAuthFlowContext.data[OAUTH_HISTORY_FIELD] === true
+      && isConnectionHistoryAdmissionEnabled();
+    const connectionHistoryRunId = crypto.randomUUID();
+    const historyContext: HistoryConnectionContext = {
+      requested: shouldImportConnectionHistory,
+      rangePreset: parseImportHistoryRange(claimedOAuthFlowContext.data[OAUTH_HISTORY_RANGE_FIELD], serviceName),
+      runId: connectionHistoryRunId,
+      providerUserId: uniqueId || 'default',
+      tokenPath: persistedOAuthCredentialGuard.tokenRef.path,
+      rootPath: persistedOAuthCredentialGuard.rootGenerationGuard.documentRef.path,
+      credentialGeneration: persistedOAuthCredentialGuard.tokenCredentialGeneration,
+    };
     const didMarkConnected = (serviceName === ServiceNames.WahooAPI
       || serviceName === ServiceNames.COROSAPI
       || serviceName === ServiceNames.GarminAPI) && uniqueId
@@ -985,12 +998,7 @@ export async function getAndSetServiceOAuth2AccessTokenForUser(
         uniqueId,
         persistedOAuthCredentialGuard.rootGenerationGuard,
         persistedOAuthCredentialGuard.oauthFlowGenerationGuard,
-        { requested: claimedOAuthFlowContext.data[OAUTH_HISTORY_FIELD] === true && isConnectionHistoryAdmissionEnabled(),
-          rangePreset: parseImportHistoryRange(claimedOAuthFlowContext.data[OAUTH_HISTORY_RANGE_FIELD], serviceName),
-          flowGeneration: claimedOAuthFlowContext.generation,
-          providerUserId: uniqueId || 'default', tokenPath: persistedOAuthCredentialGuard.tokenRef.path,
-          rootPath: persistedOAuthCredentialGuard.rootGenerationGuard.documentRef.path,
-          credentialGeneration: persistedOAuthCredentialGuard.tokenCredentialGeneration },
+        historyContext,
       )
       : await markServiceConnected(
         userID,
@@ -998,12 +1006,7 @@ export async function getAndSetServiceOAuth2AccessTokenForUser(
         undefined,
         persistedOAuthCredentialGuard.rootGenerationGuard,
         persistedOAuthCredentialGuard.oauthFlowGenerationGuard,
-        { requested: claimedOAuthFlowContext.data[OAUTH_HISTORY_FIELD] === true && isConnectionHistoryAdmissionEnabled(),
-          rangePreset: parseImportHistoryRange(claimedOAuthFlowContext.data[OAUTH_HISTORY_RANGE_FIELD], serviceName),
-          flowGeneration: claimedOAuthFlowContext.generation,
-          providerUserId: uniqueId || 'default', tokenPath: persistedOAuthCredentialGuard.tokenRef.path,
-          rootPath: persistedOAuthCredentialGuard.rootGenerationGuard.documentRef.path,
-          credentialGeneration: persistedOAuthCredentialGuard.tokenCredentialGeneration },
+        historyContext,
       );
     if (!didMarkConnected) {
       logger.warn(`Skipping stale ${serviceName} OAuth callback for user ${userID} because a newer credential or account lifecycle transition won after token persistence.`);
@@ -1017,6 +1020,7 @@ export async function getAndSetServiceOAuth2AccessTokenForUser(
       }
       throw new OAuthServiceConnectionSkippedForDeletedUserError(userID, serviceName, `oauth_mark_connected:${serviceName}`);
     }
+    if (shouldImportConnectionHistory) acceptedConnectionHistoryRunId = connectionHistoryRunId;
   } else {
     const outcome = await deauthorizeServiceForSubscriptionEnforcement(userID, serviceName, {
       allowDisconnectPendingTokenUse: true,
@@ -1073,8 +1077,8 @@ export async function getAndSetServiceOAuth2AccessTokenForUser(
   return {
     connected: true,
     outcome: SERVICE_OAUTH_COMPLETION_OUTCOMES.Connected,
-    ...(claimedOAuthFlowContext.data[OAUTH_HISTORY_FIELD] === true && isConnectionHistoryAdmissionEnabled() ? {
-      historyImport: { runId: historyRunId(userID, serviceName, claimedOAuthFlowContext.generation) },
+    ...(acceptedConnectionHistoryRunId ? {
+      historyImport: { runId: acceptedConnectionHistoryRunId },
     } : {}),
   };
 }

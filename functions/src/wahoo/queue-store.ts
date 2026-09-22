@@ -164,6 +164,9 @@ export async function upsertWahooWorkoutQueueItem(
 
     const existingSnapshot = await transaction.get(ref);
     const existing = existingSnapshot.exists ? existingSnapshot.data() as Partial<WahooAPIWorkoutQueueItemInterface> : null;
+    if (existing?.firebaseUserID && existing.firebaseUserID !== input.firebaseUserID) {
+      throw new Error('Wahoo queue ownership is still changing. Retry after connection cleanup.');
+    }
     if (existing && !isNewerRevision(existing, input) && !replacesSupersededHistoryWork(existing, input)) {
       if ((existing as Record<string, unknown>).processed !== true) {
         const refreshed: Partial<WahooAPIWorkoutQueueItemInterface> = {};

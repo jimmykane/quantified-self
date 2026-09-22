@@ -19,7 +19,7 @@ import { createHistoryRun } from './model';
 import { executeHistoryOperation, HISTORY_ADAPTERS, historyAdmissionQueue } from './adapters';
 import type { HistoryExecution } from './execution';
 const now = Date.parse('2026-03-01T13:00:00+02:00');
-function run(service: ServiceNames) { return createHistoryRun('owner', service, { requested: true, rangePreset: '30_days', flowGeneration: 'flow', providerUserId: 'selected-account', tokenPath: 'private/exact/token', rootPath: 'private/root', credentialGeneration: 'credential' }, 'connection', now); }
+function run(service: ServiceNames) { return createHistoryRun('owner', service, { requested: true, rangePreset: '30_days', runId: '11111111-1111-4111-8111-111111111111', providerUserId: 'selected-account', tokenPath: 'private/exact/token', rootPath: 'private/root', credentialGeneration: 'credential' }, 'connection', now); }
 const execution = { runId: 'run', tokenPath: 'private/exact/token', providerUserId: 'selected-account', beforeRequest: mocks.before } as unknown as HistoryExecution;
 beforeEach(() => { vi.clearAllMocks(); mocks.meta = {}; mocks.healthEnabled.mockReturnValue(true); mocks.sleepEnabled.mockReturnValue(true);
   mocks.activity.mockResolvedValue({ successCount: 2, failureCount: 0 }); mocks.garminActivity.mockResolvedValue(undefined); mocks.wahoo.mockResolvedValue({ successCount: 2 });

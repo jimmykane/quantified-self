@@ -4,9 +4,13 @@ import { ServiceNames } from '@sports-alliance/sports-lib';
 import { connectionHistoryRange, historyCapabilities, historyRangeOptions, parseImportHistoryRange, parseImportRecentHistory } from '../../../shared/connection-history';
 import { isConnectionHistoryAdmissionEnabled } from './admission';
 import { CONNECTION_HISTORY_CAPABILITIES } from '../../../shared/connection-history';
-import { createHistoryRun, historyProjection, historyRunId } from './model';
+import { createHistoryRun, historyProjection, isConnectionHistoryRunId } from './model';
 
 describe('connection history contract', () => {
+  it('accepts only server-generated v4 run identities', () => {
+    expect(isConnectionHistoryRunId('11111111-1111-4111-8111-111111111111')).toBe(true);
+    expect(isConnectionHistoryRunId('flow')).toBe(false);
+  });
   it('has a server admission switch and retains manual entrypoints', () => {
     const previous = process.env.CONNECTION_HISTORY_IMPORT_ENABLED;
     try { process.env.CONNECTION_HISTORY_IMPORT_ENABLED = 'false'; expect(isConnectionHistoryAdmissionEnabled()).toBe(false);
@@ -14,7 +18,7 @@ describe('connection history contract', () => {
     } finally { if (previous === undefined) delete process.env.CONNECTION_HISTORY_IMPORT_ENABLED; else process.env.CONNECTION_HISTORY_IMPORT_ENABLED = previous; }
   });
   it('includes newly registered capabilities only in future runs, with no OAuth or UI orchestration change', () => {
-    const context = { requested: true, rangePreset: '30_days' as const, flowGeneration: 'flow', tokenPath: 'private/token', rootPath: 'private/root', providerUserId: 'account', credentialGeneration: 'credential' };
+    const context = { requested: true, rangePreset: '30_days' as const, runId: '11111111-1111-4111-8111-111111111111', tokenPath: 'private/token', rootPath: 'private/root', providerUserId: 'account', credentialGeneration: 'credential' };
     const existing = createHistoryRun('owner', ServiceNames.WahooAPI, context, 'connection', Date.now());
     const capabilities = CONNECTION_HISTORY_CAPABILITIES[ServiceNames.WahooAPI] as unknown as Array<any>;
     try { capabilities.push({ id: 'fixture', version: 1, resources: ['health'], cooldownGroup: 'sleep', completion: 'queued' });
@@ -69,9 +73,8 @@ describe('connection history contract', () => {
     expect(historyCapabilities(ServiceNames.WahooAPI).flatMap(x => x.resources)).toEqual(['activities']);
   });
   it('snapshots capabilities and hides account, credential, cursor and lease fields', () => {
-    const run = createHistoryRun('owner', ServiceNames.COROSAPI, { requested: true, rangePreset: 'maximum', flowGeneration: 'flow', tokenPath: 'private/token', rootPath: 'private/root', providerUserId: 'private-id', credentialGeneration: 'private-gen' }, 'connection', Date.parse('2026-09-14T12:00:00Z'));
-    expect(run.id).toBe(historyRunId('owner', ServiceNames.COROSAPI, 'flow'));
-    expect(run.id).not.toBe(historyRunId('owner', ServiceNames.COROSAPI, 'other'));
+    const run = createHistoryRun('owner', ServiceNames.COROSAPI, { requested: true, rangePreset: 'maximum', runId: '11111111-1111-4111-8111-111111111111', tokenPath: 'private/token', rootPath: 'private/root', providerUserId: 'private-id', credentialGeneration: 'private-gen' }, 'connection', Date.parse('2026-09-14T12:00:00Z'));
+    expect(run.id).toBe('11111111-1111-4111-8111-111111111111');
     expect(run.steps[0].capability).not.toBe(historyCapabilities(ServiceNames.COROSAPI)[0]);
     const projection = historyProjection(run);
     expect(JSON.stringify(projection)).not.toMatch(/private|credential|lease|nextStart|connectionGeneration/);

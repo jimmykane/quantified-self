@@ -301,7 +301,7 @@ describe('service-connection-meta', () => {
   });
 
   it('creates accepted history in the connected-state transaction and omits jobs for unchecked clients', async () => {
-    const context = { requested: true, rangePreset: '2_years' as const, flowGeneration: 'single-use-flow', tokenPath: 'private/owner/tokens/account',
+    const context = { requested: true, rangePreset: '2_years' as const, runId: '11111111-1111-4111-8111-111111111111', tokenPath: 'private/owner/tokens/account',
       rootPath: 'private/owner', providerUserId: 'account', credentialGeneration: 'credential' };
     await expect(markServiceConnected('user-1', ServiceNames.WahooAPI, 'account', undefined, undefined, context)).resolves.toBe(true);
     expect(hoisted.historyCreate).toHaveBeenCalledTimes(1);

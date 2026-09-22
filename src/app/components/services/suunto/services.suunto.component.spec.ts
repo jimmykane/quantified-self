@@ -160,6 +160,19 @@ describe('ServicesSuuntoComponent', () => {
         expect(component.reconnectRequested).toBe(false);
     });
 
+    it('restores default history consent when the signed-in user changes', async () => {
+        component.user = { uid: 'user-1', settings: {} } as typeof component.user;
+        await component.ngOnChanges();
+        component.importRecentHistory = false;
+        component.importHistoryRange = 'maximum';
+
+        component.user = { uid: 'user-2', settings: {} } as typeof component.user;
+        await component.ngOnChanges();
+
+        expect(component.importRecentHistory).toBe(true);
+        expect(component.importHistoryRange).toBe('30_days');
+    });
+
     it('exchanges a returned OAuth code and state', async () => {
         vi.spyOn(component['route'].snapshot.queryParamMap, 'get').mockImplementation((key: string) => ({
             state: 'state-token',

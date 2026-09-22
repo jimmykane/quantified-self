@@ -134,9 +134,14 @@ async function commitHistoryBatchForActiveUser(params: {
 
     for (let index = 0; index < queueWrites.length; index++) {
       const { workoutQueueItem, queueRef } = queueWrites[index];
+      const existingQueueData = existingQueueSnapshots[index]?.data() || {};
+      if (params.execution && existingQueueSnapshots[index]?.exists
+        && existingQueueData.firebaseUserID && existingQueueData.firebaseUserID !== params.userID) {
+        throw new Error('Provider queue ownership is still changing. Retry after connection cleanup.');
+      }
       // Preserve an existing canonical queue revision, including a webhook in flight.
       if (params.execution && existingQueueSnapshots[index]?.exists && !replacesSupersededHistoryWork(
-        existingQueueSnapshots[index].data() || {}, { connectionHistoryRunId: params.execution.runId, firebaseUserID: params.userID },
+        existingQueueData, { connectionHistoryRunId: params.execution.runId, firebaseUserID: params.userID },
       )) continue;
       const activeProcessingLease = params.serviceName === ServiceNames.COROSAPI
         ? getActiveRevisionProcessingLease(

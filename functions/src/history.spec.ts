@@ -501,7 +501,6 @@ describe('history', () => {
             ['older-run', 'uid', false, true],
             ['older-run', 'uid', true, false],
             ['current-run', 'uid', false, false],
-            ['older-run', 'another-owner', false, false],
             [undefined, 'uid', false, false],
         ])('replaces only unfinished superseded history work (%s, %s, %s)', async (oldRun, owner, processed, replace) => {
             hoisted.transactionGetAllMock.mockResolvedValue([{ exists: true, data: () => ({ connectionHistoryRunId: oldRun, firebaseUserID: owner, processed }) }]);
@@ -512,6 +511,16 @@ describe('history', () => {
             const writes = hoisted.batchSetMock.mock.calls.filter(([, data]) => data.connectionHistoryRunId);
             expect(writes).toHaveLength(replace ? 1 : 0);
             if (replace) expect(writes[0][1]).toMatchObject({ connectionHistoryRunId: 'current-run', firebaseUserID: 'uid', queueRevision: expect.any(String) });
+        });
+
+        it('retries a provider queue ownership transfer without overwriting the previous owner', async () => {
+            hoisted.transactionGetAllMock.mockResolvedValue([{ exists: true, data: () => ({ connectionHistoryRunId: 'older-run', firebaseUserID: 'another-owner', processed: false }) }]);
+            hoisted.getMock.mockResolvedValue({ id: 'token1' });
+            vi.mocked(requestHelper.get).mockResolvedValue(JSON.stringify({ payload: [{ workoutKey: 'workout' }] }));
+            const execution = { runId: 'current-run', tokenPath: 'token', providerUserId: 'account', cooldownStartedAtMs: Date.now(), requiredDocumentFieldValues: [], beforeRequest: vi.fn(), inTransaction: vi.fn(), onQueued: vi.fn() };
+            await expect(history.addHistoryToQueue('uid', ServiceNames.SuuntoApp, new Date('2026-09-01'), new Date('2026-09-02'), { execution }))
+                .rejects.toThrow('ownership is still changing');
+            expect(hoisted.batchSetMock.mock.calls.filter(([, data]) => data.connectionHistoryRunId)).toHaveLength(0);
         });
 
         it('preserves an active event-write lease when history advances the COROS revision', async () => {

@@ -1978,7 +1978,7 @@ describe('OAuth2', () => {
                     fieldName: 'oauthFlowGeneration',
                     expectedGeneration: 'oauth-flow-generation',
                 }),
-                expect.objectContaining({ requested: false, flowGeneration: 'oauth-flow-generation' }),
+                expect.objectContaining({ requested: false, runId: expect.any(String) }),
             );
         });
 
@@ -1995,9 +1995,12 @@ describe('OAuth2', () => {
                 const result = await getAndSetServiceOAuth2AccessTokenForUser(userID, ServiceNames.GarminAPI, redirectUri, code, 'some-state');
                 expect(result.connected).toBe(true);
                 expect(mockMarkServiceConnected.mock.calls[0][5]).toMatchObject({
-                    requested: enabled, rangePreset: '30_days', flowGeneration: 'oauth-flow-generation', providerUserId: 'mock-garmin-user', credentialGeneration: expect.any(String),
+                    requested: enabled, rangePreset: '30_days', runId: expect.any(String), providerUserId: 'mock-garmin-user', credentialGeneration: expect.any(String),
                 });
-                if (enabled) expect(result.historyImport?.runId).toMatch(/^[a-f0-9]{64}$/);
+                if (enabled) {
+                    expect(result.historyImport?.runId).toMatch(/^[0-9a-f-]{36}$/);
+                    expect(result.historyImport?.runId).toBe(mockMarkServiceConnected.mock.calls[0][5].runId);
+                }
                 else expect(result).not.toHaveProperty('historyImport');
                 expect(mockUpdate).toHaveBeenCalledWith(expect.objectContaining({
                     oauthImportRecentHistory: 'delete-sentinel',
@@ -2048,7 +2051,7 @@ describe('OAuth2', () => {
                     fieldName: 'oauthFlowGeneration',
                     expectedGeneration: 'oauth-flow-generation',
                 }),
-                expect.objectContaining({ requested: false, flowGeneration: 'oauth-flow-generation' }),
+                expect.objectContaining({ requested: false, runId: expect.any(String) }),
             );
             expect(mockClearServiceDisconnectPending.mock.invocationCallOrder[0])
                 .toBeLessThan(mockMarkServiceConnected.mock.invocationCallOrder[0]);
@@ -2104,7 +2107,7 @@ describe('OAuth2', () => {
                     fieldName: 'oauthFlowGeneration',
                     expectedGeneration: 'oauth-flow-generation',
                 }),
-                expect.objectContaining({ requested: false, flowGeneration: 'oauth-flow-generation' }),
+                expect.objectContaining({ requested: false, runId: expect.any(String) }),
             );
         });
 

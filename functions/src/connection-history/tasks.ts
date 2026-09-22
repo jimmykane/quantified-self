@@ -15,7 +15,7 @@ import { FUNCTION_SECRET_BINDINGS } from '../secrets';
 import { ALLOWED_CORS_ORIGINS, enforceAppCheck, hasProAccess } from '../utils';
 import { CLOUD_TASK_RETRY_CONFIG, MAX_PENDING_TASKS } from '../shared/queue-config';
 import { enqueueConnectionHistoryTask, getCloudTaskQueueDepthForQueue } from '../shared/cloud-tasks';
-import { CONNECTION_HISTORY_COLLECTION, historyProjection, type ConnectionHistoryRun } from './model';
+import { CONNECTION_HISTORY_COLLECTION, historyProjection, isConnectionHistoryRunId, type ConnectionHistoryRun } from './model';
 import { assertHistoryConnectionCurrent, assertHistoryReservation, historyExecution, HistoryLifecycleChangedError, HistoryUnavailableError } from './execution';
 import { executeHistoryOperation, HistorySkippedError, isHistoryWindowTooLarge } from './adapters';
 import { advanceHistoryRun } from './advance';
@@ -23,7 +23,6 @@ import { withHistoryExecution } from './context';
 
 const region = FUNCTIONS_MANIFEST.processConnectionHistoryTask.region;
 const refFor = (id: string) => admin.firestore().collection(CONNECTION_HISTORY_COLLECTION).doc(id);
-const validID = (id: unknown): id is string => typeof id === 'string' && /^[a-f0-9]{64}$/.test(id);
 
 export async function dispatchConnectionHistoryRun(run: ConnectionHistoryRun): Promise<void> {
   if (run.processed) return;
@@ -36,23 +35,29 @@ export async function dispatchConnectionHistoryRun(run: ConnectionHistoryRun): P
 }
 
 /** Missing rows never prove delivery. Failed rows are retried only through explicit owner action. */
-export async function observeHistoryChildren(paths: string[], runId?: string): Promise<'pending' | 'processed' | 'failed' | 'skipped' | 'authorization'> {
+export async function observeHistoryChildren(paths: string[], runId?: string): Promise<'pending' | 'processed' | 'failed' | 'skipped' | 'authorization' | 'mixed'> {
   if (!paths.length) return 'processed';
   const db = admin.firestore();
   const rows = await db.getAll(...paths.map(path => db.doc(path)));
   const missing = rows.filter(row => !row.exists);
+  const live = rows.filter(row => row.exists);
+  if (live.some(row => !row.data()?.processed)) return 'pending';
+  const liveFailure = live.some(row => row.data()?.resultStatus === 'failed');
   if (missing.length) {
     if (runId) {
       const dead = await db.getAll(...missing.map(row => db.collection('failed_jobs').doc(row.ref.id)));
       const authorizationContexts = new Set(['PERMISSION_MISSING', 'GARMIN_HEALTH_PERMISSION_MISSING', 'GARMIN_HEALTH_BACKFILL_PERMISSION_MISSING', 'GARMIN_HEALTH_BACKFILL_AUTH_REQUIRED', 'INVALID_GRANT', 'AUTH_RECONNECT_REQUIRED', 'NO_TOKEN_FOUND']);
-      if (dead.some((row, index) => row.data()?.connectionHistoryRunId === runId
-        && row.data()?.originalCollection === missing[index].ref.parent.id && authorizationContexts.has(row.data()?.context))) return 'authorization';
+      const authorizationFailures = dead.filter((row, index) => row.data()?.connectionHistoryRunId === runId
+        && row.data()?.originalCollection === missing[index].ref.parent.id && authorizationContexts.has(row.data()?.context)).length;
+      if (authorizationFailures > 0) {
+        if (authorizationFailures < missing.length || liveFailure) return 'mixed';
+        return 'authorization';
+      }
     }
     return 'failed';
   }
-  if (rows.some(row => !row.data()?.processed)) return 'pending';
-  if (rows.some(row => row.data()?.resultStatus === 'failed')) return 'failed';
-  if (rows.some(row => row.data()?.skippedReason || (row.data()?.resultStatus && row.data()?.resultStatus !== 'success'))) return 'skipped';
+  if (liveFailure) return 'failed';
+  if (live.some(row => row.data()?.skippedReason || (row.data()?.resultStatus && row.data()?.resultStatus !== 'success'))) return 'skipped';
   return 'processed';
 }
 
@@ -163,7 +168,7 @@ export async function processConnectionHistoryRun(id: string, revision: string):
 export const processConnectionHistoryTask = onTaskDispatched({ region, timeoutSeconds: 300, memory: '512MiB',
   secrets: FUNCTION_SECRET_BINDINGS.processConnectionHistoryTask, retryConfig: CLOUD_TASK_RETRY_CONFIG,
   rateLimits: { maxConcurrentDispatches: 1, maxDispatchesPerSecond: 1 } }, async request => {
-  if (!validID(request.data?.queueItemId) || typeof request.data?.queueRevision !== 'string') return;
+  if (!isConnectionHistoryRunId(request.data?.queueItemId) || typeof request.data?.queueRevision !== 'string') return;
   await processConnectionHistoryRun(request.data.queueItemId, request.data.queueRevision);
 });
 export const onConnectionHistoryImportWritten = onDocumentWritten({ region, document: `${CONNECTION_HISTORY_COLLECTION}/{runId}`, retry: true }, async event => {
@@ -186,7 +191,7 @@ export const recoverConnectionHistoryImports = onSchedule({ region, schedule: '*
 export const retryConnectionHistoryImport = onCall({ region, cors: ALLOWED_CORS_ORIGINS }, async request => {
   enforceAppCheck(request);
   if (!request.auth) throw new HttpsError('unauthenticated', 'Sign in to retry history.');
-  if (!validID(request.data?.runId)) throw new HttpsError('invalid-argument', 'Invalid history import.');
+  if (!isConnectionHistoryRunId(request.data?.runId)) throw new HttpsError('invalid-argument', 'Invalid history import.');
   if (!(await hasProAccess(request.auth.uid))) throw new HttpsError('permission-denied', 'History import requires Pro.');
   const db = admin.firestore();
   await db.runTransaction(async tx => {

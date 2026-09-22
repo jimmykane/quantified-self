@@ -161,9 +161,16 @@ describe('upsertWahooWorkoutQueueItem', () => {
       .resolves.toBe('superseded');
   });
 
-  it.each([true, false])('preserves completed or another owner’s prior history work (%s)', async completed => {
-    mocks.transactionGet.mockResolvedValue({ exists: true, data: () => ({ ...input, firebaseUserID: completed ? input.firebaseUserID : 'another-owner', connectionHistoryRunId: 'old-run', processed: completed }) });
+  it('preserves completed history work for the same owner', async () => {
+    mocks.transactionGet.mockResolvedValue({ exists: true, data: () => ({ ...input, connectionHistoryRunId: 'old-run', processed: true }) });
     await expect(upsertWahooWorkoutQueueItem({ ...input, connectionHistoryRunId: 'new-run' }, 'deferred')).resolves.toMatchObject({ queued: false });
+    expect(mocks.transactionSet).not.toHaveBeenCalled();
+  });
+
+  it('retries an ownership-transfer collision without overwriting the previous owner', async () => {
+    mocks.transactionGet.mockResolvedValue({ exists: true, data: () => ({ ...input, firebaseUserID: 'another-owner', connectionHistoryRunId: 'old-run', processed: false }) });
+    await expect(upsertWahooWorkoutQueueItem({ ...input, connectionHistoryRunId: 'new-run' }, 'deferred'))
+      .rejects.toThrow('ownership is still changing');
     expect(mocks.transactionSet).not.toHaveBeenCalled();
   });
 
