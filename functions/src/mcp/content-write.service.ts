@@ -67,6 +67,7 @@ type TimelineNoteMutationResult = z.infer<
 export interface McpContentWriteInput {
   uid: string;
   connectionId: string;
+  grantId?: string;
   scopes: readonly string[];
   arguments: unknown;
 }
@@ -126,6 +127,14 @@ function invalid(message: string): never {
   throw new McpContentWriteError('invalid_request', message);
 }
 
+function parseArguments<T extends z.ZodType>(schema: T, value: unknown): z.infer<T> {
+  const result = schema.safeParse(value);
+  if (!result.success) {
+    invalid('The content request is invalid. Review the tool schema and try again.');
+  }
+  return result.data;
+}
+
 function assertInputScopes(input: McpContentWriteInput, requiredScopes: readonly string[]): void {
   const missing = requiredScopes.filter(scope => !input.scopes.includes(scope));
   if (missing.length > 0) {
@@ -151,9 +160,11 @@ function accessGeneration(data: admin.firestore.DocumentData): string {
 function assertConnectionData(
   data: admin.firestore.DocumentData | undefined,
   requiredScopes: readonly string[],
+  expectedGrantId: string | undefined,
 ): string {
   if (!data || data.revokedAtMs != null || ![undefined, 'active'].includes(data.status)
     || !Array.isArray(data.scopes)
+    || data.grantId !== expectedGrantId
     || requiredScopes.some(scope => !data.scopes.includes(scope))) {
     invalid('This MCP connection no longer has the required permission. Reauthorize it and try again.');
   }
@@ -165,6 +176,7 @@ async function assertConnectionAuthorityInTransaction(
   transaction: admin.firestore.Transaction,
   uid: string,
   connectionId: string,
+  grantId: string | undefined,
   requiredScopes: readonly string[],
 ): Promise<void> {
   validateConnectionId(connectionId);
@@ -172,13 +184,14 @@ async function assertConnectionAuthorityInTransaction(
     deps.db.collection('users').doc(uid).collection('mcpConnections').doc(connectionId),
     { fieldMask: ['scopes', 'status', 'revokedAtMs', 'grantId', 'createdAtMs'] },
   );
-  assertConnectionData(connection.exists ? connection.data() : undefined, requiredScopes);
+  assertConnectionData(connection.exists ? connection.data() : undefined, requiredScopes, grantId);
 }
 
 async function readAccessGeneration(
   deps: McpContentWriteDependencies,
   uid: string,
   connectionId: string,
+  grantId: string | undefined,
   requiredScopes: readonly string[],
 ): Promise<string> {
   validateConnectionId(connectionId);
@@ -189,7 +202,11 @@ async function readAccessGeneration(
     deps.db.collection('users').doc(uid).collection('mcpConnections').doc(connectionId),
     { fieldMask: ['scopes', 'status', 'revokedAtMs', 'grantId', 'createdAtMs'] },
   );
-  return assertConnectionData(connection.exists ? connection.data() : undefined, requiredScopes);
+  return assertConnectionData(
+    connection.exists ? connection.data() : undefined,
+    requiredScopes,
+    grantId,
+  );
 }
 
 function sameTags(left: readonly string[], right: readonly string[]): boolean {
@@ -230,7 +247,7 @@ export async function updateMcpActivityTags(
 ) {
   const requiredScopes = [ACTIVITY_DETAILS_READ_SCOPE, ACTIVITY_TAGS_WRITE_SCOPE];
   assertInputScopes(input, requiredScopes);
-  const args = MCP_CONTENT_WRITE_INPUTS.update_activity_tags.parse(input.arguments);
+  const args = parseArguments(MCP_CONTENT_WRITE_INPUTS.update_activity_tags, input.arguments);
   let reference: { activityId: string; eventId: string };
   try {
     reference = codec.decodeActivityRef(args.activityRef, input.uid, input.connectionId);
@@ -257,6 +274,7 @@ export async function updateMcpActivityTags(
       transaction,
       input.uid,
       input.connectionId,
+      input.grantId,
       requiredScopes,
     );
     const [activity] = await transaction.getAll(activityRef, { fieldMask: ['eventID'] });
@@ -292,7 +310,7 @@ export async function queryEditableMcpTimelineNotes(
 ): Promise<EditableTimelineNotesResult> {
   const requiredScopes = [MCP_TIMELINE_NOTES_SCOPE, TIMELINE_NOTES_WRITE_SCOPE];
   assertInputScopes(input, requiredScopes);
-  const args = MCP_CONTENT_WRITE_INPUTS.query_editable_timeline_notes.parse(input.arguments);
+  const args = parseArguments(MCP_CONTENT_WRITE_INPUTS.query_editable_timeline_notes, input.arguments);
   if (args.endDate < args.startDate
     || Date.parse(args.endDate) - Date.parse(args.startDate) > 365 * 86_400_000) {
     invalid('Choose an inclusive window of at most 366 days.');
@@ -301,6 +319,7 @@ export async function queryEditableMcpTimelineNotes(
     deps,
     input.uid,
     input.connectionId,
+    input.grantId,
     requiredScopes,
   );
   let state: z.infer<typeof EDIT_CURSOR_SCHEMA> = {
@@ -338,7 +357,13 @@ export async function queryEditableMcpTimelineNotes(
   };
   let inputBytes = 0;
   const assertGenerationUnchanged = async () => {
-    const current = await readAccessGeneration(deps, input.uid, input.connectionId, requiredScopes);
+    const current = await readAccessGeneration(
+      deps,
+      input.uid,
+      input.connectionId,
+      input.grantId,
+      requiredScopes,
+    );
     if (current !== generation) invalid('The MCP permission grant changed. Restart the note query.');
   };
   const stop = async (reason: EditableTimelineNotesResult['limitsReached'][number]) => {
@@ -422,10 +447,10 @@ async function mutateTimelineNote(
   const requiredScopes = [MCP_TIMELINE_NOTES_SCOPE, TIMELINE_NOTES_WRITE_SCOPE];
   assertInputScopes(input, requiredScopes);
   const createArgs = tool === 'create_timeline_note'
-    ? MCP_CONTENT_WRITE_INPUTS.create_timeline_note.parse(input.arguments)
+    ? parseArguments(MCP_CONTENT_WRITE_INPUTS.create_timeline_note, input.arguments)
     : null;
   const updateArgs = tool === 'update_timeline_note'
-    ? MCP_CONTENT_WRITE_INPUTS.update_timeline_note.parse(input.arguments)
+    ? parseArguments(MCP_CONTENT_WRITE_INPUTS.update_timeline_note, input.arguments)
     : null;
   const noteId = updateArgs
     ? decodeNoteId(updateArgs.noteRef, input, codec)
@@ -455,6 +480,7 @@ async function mutateTimelineNote(
         transaction,
         input.uid,
         input.connectionId,
+        input.grantId,
         requiredScopes,
       ),
     });
@@ -467,7 +493,9 @@ async function mutateTimelineNote(
     return MCP_CONTENT_WRITE_OUTPUTS[tool].parse(result) as TimelineNoteMutationResult;
   } catch (error) {
     if (error instanceof TimelineNoteConflictError) {
-      invalid('The Timeline note changed since it was read. Read it again before updating.');
+      invalid(tool === 'create_timeline_note'
+        ? 'This mutationId was already used for different note content. Use a new UUID for a new note.'
+        : 'The Timeline note changed since it was read. Read it again before updating.');
     }
     if (error instanceof TimelineNoteNotFoundError) {
       throw new McpContentWriteError('detail_not_available', 'The Timeline note is no longer available.');
@@ -505,7 +533,7 @@ export async function deleteMcpTimelineNote(
 ) {
   const requiredScopes = [MCP_TIMELINE_NOTES_SCOPE, TIMELINE_NOTES_WRITE_SCOPE];
   assertInputScopes(input, requiredScopes);
-  const args = MCP_CONTENT_WRITE_INPUTS.delete_timeline_note.parse(input.arguments);
+  const args = parseArguments(MCP_CONTENT_WRITE_INPUTS.delete_timeline_note, input.arguments);
   const noteId = decodeNoteId(args.noteRef, input, codec);
   try {
     const result = await deleteTimelineNote(input.uid, {
@@ -519,6 +547,7 @@ export async function deleteMcpTimelineNote(
         transaction,
         input.uid,
         input.connectionId,
+        input.grantId,
         requiredScopes,
       ),
     });

@@ -45,4 +45,19 @@ describe('MCP focused content-write inputs', () => {
       activityRef: 'opaque-activity', expectedTags: [], tags: ['Unsafe\u0000tag'],
     }).success).toBe(false);
   });
+
+  it('requires every current authored field for a note replacement', () => {
+    const complete = {
+      ...note,
+      details: null,
+      noteRef: 'opaque-note',
+      expectedRevision: 2,
+    };
+    expect(MCP_CONTENT_WRITE_INPUTS.update_timeline_note.safeParse(complete).success).toBe(true);
+    for (const field of ['details', 'showOnCharts', 'color'] as const) {
+      const incomplete = { ...complete };
+      delete incomplete[field];
+      expect(MCP_CONTENT_WRITE_INPUTS.update_timeline_note.safeParse(incomplete).success).toBe(false);
+    }
+  });
 });

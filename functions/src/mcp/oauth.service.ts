@@ -1381,7 +1381,7 @@ export function normalizeOAuthScopes(value: unknown): McpOAuthScope[] {
   if (!hasValidMcpScopeDependencies(unique as McpOAuthScope[])) {
     throw new McpOAuthError(
       'invalid_scope',
-      'Location scopes require their matching activity-detail or saved-route scope.',
+      'Dependent permissions require their matching parent read permission.',
     );
   }
   return unique as McpOAuthScope[];
@@ -2437,6 +2437,7 @@ export function createMcpOAuthService(
         uid: token.uid,
         clientId: token.clientId,
         connectionId: token.connectionId,
+        grantId: token.grantId,
         scopes: token.scopes,
       };
     },

@@ -1,6 +1,6 @@
 {
   "formatVersion": 1,
-  "candidateSha256": "bc452e46db5c302d3deb872cb0a8e22c932d6b4ea207aa5c479fd65c3b537874",
+  "candidateSha256": "591f3b4d8c310e5dd04287fab787f38404a969e9c9e1b4cc765321ff61250eaa",
   "lifecycleAction": "developer-refresh",
   "summary": "Retain prior Training reads/writes, chronological and bulk completion reads, compatibility, Health/Timeline/activity/readiness, private_key_jwt and PKCE changes. Add separately consented activity-tag replacement and Timeline-note create/edit/delete with dependent scopes, optimistic concurrency, idempotency, native approval, bounded opaque projections, consent/docs/plugin guidance.",
   "rescanRequired": true

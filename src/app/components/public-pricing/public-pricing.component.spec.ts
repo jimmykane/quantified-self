@@ -229,7 +229,7 @@ describe('buildPublicPricingCatalog', () => {
         expect(catalog.plans.find((plan) => plan.id === 'inactive')).toBeUndefined();
     });
 
-    it('includes read-only MCP access in every plan', () => {
+    it('includes permission-scoped MCP access in every plan', () => {
         const catalog = buildPublicPricingCatalog(PAID_PRODUCTS);
 
         expect(catalog.plans).toHaveLength(3);

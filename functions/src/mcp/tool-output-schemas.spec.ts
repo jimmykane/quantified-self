@@ -1447,6 +1447,7 @@ async function connectFixtureServerForTransport(
     uid: 'user-1',
     clientId: 'https://client.example/client.json',
     connectionId: 'connection-1',
+    grantId: 'grant-1',
     scopes,
   }, 'https://quantified-self.io', dataService);
   const client = new Client({
@@ -2406,6 +2407,9 @@ describe.each<FixtureTransport>(['in-memory', 'legacy-http', 'modern-http'])('MC
     expect(tagLeak.isError).toBe(true);
     expect(tagLeak).not.toHaveProperty('structuredContent');
     expect(JSON.stringify(tagLeak)).not.toContain('private-event-canary');
+    expect(service.updateActivityTags).toHaveBeenCalledWith(expect.objectContaining({
+      uid: 'user-1', connectionId: 'connection-1', grantId: 'grant-1', scopes,
+    }));
 
     const editable = await createFixtureDataService().queryEditableTimelineNotes({
       uid: 'fixture', connectionId: 'fixture', scopes: [], arguments: {},

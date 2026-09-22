@@ -47,15 +47,26 @@ const timeZone = z.string().min(1).max(100).refine(value => {
   }
 }, 'Choose a valid IANA time zone.');
 
-export const MCP_TIMELINE_NOTE_FIELDS_INPUT = {
+const MCP_TIMELINE_NOTE_REQUIRED_FIELDS_INPUT = {
   category: z.enum(TIMELINE_NOTE_CATEGORIES),
   title,
-  details: details.nullable().optional(),
   startDate: date,
   endDate: date.nullable(),
   timeZone,
+} as const;
+
+export const MCP_TIMELINE_NOTE_FIELDS_INPUT = {
+  ...MCP_TIMELINE_NOTE_REQUIRED_FIELDS_INPUT,
+  details: details.nullable().optional(),
   showOnCharts: z.boolean().optional(),
   color: z.enum(TIMELINE_NOTE_COLORS).optional(),
+} as const;
+
+const MCP_TIMELINE_NOTE_COMPLETE_FIELDS_INPUT = {
+  ...MCP_TIMELINE_NOTE_REQUIRED_FIELDS_INPUT,
+  details: details.nullable(),
+  showOnCharts: z.boolean(),
+  color: z.enum(TIMELINE_NOTE_COLORS),
 } as const;
 
 const timelineNoteFieldsOutput = z.strictObject({
@@ -94,7 +105,7 @@ export const MCP_CONTENT_WRITE_INPUTS = {
   update_timeline_note: z.strictObject({
     noteRef: opaqueReference,
     expectedRevision: revision,
-    ...MCP_TIMELINE_NOTE_FIELDS_INPUT,
+    ...MCP_TIMELINE_NOTE_COMPLETE_FIELDS_INPUT,
   }),
   delete_timeline_note: z.strictObject({
     noteRef: opaqueReference,

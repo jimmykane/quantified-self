@@ -76,7 +76,7 @@ describe('AppRoutingModule routes', () => {
     expect(helpAbout).toContain('Send Suunto routes to Garmin');
     expect(helpAbout).toContain('Send GPX/FIT routes to Wahoo');
     expect(helpAbout).toContain('Sync past activities');
-    expect(helpAbout).toContain('Read-only MCP client access');
+    expect(helpAbout).toContain('Permission-scoped MCP client access and focused changes');
   });
 
   it('defines dedicated public privacy and terms routes for reviewer-readable legal pages', () => {

@@ -615,6 +615,9 @@ describe('MCP OAuth service', () => {
       MCP_OAUTH_SCOPES.ActivityDetailsRead,
       MCP_OAUTH_SCOPES.ActivityTagsWrite,
     ])).toBe(true);
+    expect(() => normalizeOAuthScopes(MCP_OAUTH_SCOPES.ActivityTagsWrite)).toThrow(
+      'Dependent permissions require their matching parent read permission.',
+    );
   });
 
   it('accepts each independent read scope', () => {
@@ -1591,8 +1594,9 @@ describe('MCP OAuth service', () => {
         code_verifier: verifier,
         resource,
       }, origin);
-      expect((await service.authenticateBearer(granted.access_token, resource)).scopes)
-        .toEqual([parent, child]);
+      const authenticatedGrant = await service.authenticateBearer(granted.access_token, resource);
+      expect(authenticatedGrant.scopes).toEqual([parent, child]);
+      expect(authenticatedGrant.grantId).toEqual(expect.any(String));
       const narrowed = await service.exchangeRefreshToken({
         grant_type: 'refresh_token', refresh_token: granted.refresh_token,
         client_id: metadata().client_id, resource, scope: parent,

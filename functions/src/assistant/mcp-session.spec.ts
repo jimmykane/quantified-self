@@ -75,7 +75,8 @@ describe('Assistant MCP session', () => {
     try {
       expect(session.tools.map(tool => tool.name)).toEqual([...ASSISTANT_BASE_MCP_TOOL_NAMES, ...TRAINING_READ_TOOLS]);
       expect(capturedAuth!.scopes).toContain(MCP_OAUTH_SCOPES.TrainingPlansRead);
-      for (const scope of [MCP_OAUTH_SCOPES.TimelineNotesRead, MCP_OAUTH_SCOPES.HealthRead,
+      for (const scope of [MCP_OAUTH_SCOPES.TimelineNotesRead, MCP_OAUTH_SCOPES.TimelineNotesWrite,
+        MCP_OAUTH_SCOPES.ActivityTagsWrite, MCP_OAUTH_SCOPES.HealthRead,
         MCP_OAUTH_SCOPES.ActivityLocationRead, MCP_OAUTH_SCOPES.RouteLocationRead]) {
         expect(capturedAuth!.scopes).not.toContain(scope);
       }
@@ -277,6 +278,8 @@ describe('Assistant MCP session', () => {
     try {
       expect(session.tools.map(tool => tool.name)).toContain('query_timeline_notes');
       expect(capturedAuth!.scopes).toContain(MCP_OAUTH_SCOPES.TimelineNotesRead);
+      expect(capturedAuth!.scopes).not.toContain(MCP_OAUTH_SCOPES.TimelineNotesWrite);
+      expect(capturedAuth!.scopes).not.toContain(MCP_OAUTH_SCOPES.ActivityTagsWrite);
       expect(capturedAuth!.scopes).not.toContain(MCP_OAUTH_SCOPES.HealthRead);
       expect(capturedAuth!.scopes).not.toContain(MCP_OAUTH_SCOPES.RouteLocationRead);
       expect(capturedAuth!.scopes.includes(MCP_OAUTH_SCOPES.ActivityLocationRead)).toBe(locationAccess === 'precise_activity');

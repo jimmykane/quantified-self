@@ -83,7 +83,10 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)(
     });
 
     afterAll(async () => {
-      for (const owner of users) await db.recursiveDelete(db.collection('users').doc(owner));
+      for (const owner of users) {
+        await db.recursiveDelete(db.collection('users').doc(owner));
+        await db.collection('userDeletionTombstones').doc(owner).delete();
+      }
       await db.terminate();
     });
 
@@ -92,7 +95,7 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)(
       await user.collection('activities').doc('activity-1').set({ eventID: 'event-1' });
       await user.collection('events').doc('event-1').set({ tags: ['Easy', 'Morning'] });
       const input = {
-        uid, connectionId: 'connection', scopes: activityScopes,
+        uid, connectionId: 'connection', grantId: 'grant-1', scopes: activityScopes,
         arguments: {
           activityRef: `activity:${uid}:connection`,
           expectedTags: ['Easy', 'Morning'],
@@ -114,7 +117,7 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)(
 
     it('creates, discovers, edits and permanently deletes a note with safe retries', async () => {
       const createInput = {
-        uid, connectionId: 'connection', scopes: noteScopes,
+        uid, connectionId: 'connection', grantId: 'grant-1', scopes: noteScopes,
         arguments: {
           category: 'travel', title: 'Altitude camp', details: 'Arrived in the evening.',
           startDate: '2026-09-20', endDate: '2026-09-24', timeZone: 'Europe/Helsinki',
@@ -123,9 +126,16 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)(
       };
       const created = await createMcpTimelineNote(createInput, codec, deps);
       await expect(createMcpTimelineNote(createInput, codec, deps)).resolves.toEqual(created);
+      await expect(createMcpTimelineNote({
+        ...createInput,
+        arguments: { ...createInput.arguments, title: 'Different content' },
+      }, codec, deps)).rejects.toMatchObject({
+        code: 'invalid_request',
+        message: 'This mutationId was already used for different note content. Use a new UUID for a new note.',
+      });
 
       const query = await queryEditableMcpTimelineNotes({
-        uid, connectionId: 'connection', scopes: noteScopes,
+        uid, connectionId: 'connection', grantId: 'grant-1', scopes: noteScopes,
         arguments: { startDate: '2026-09-01', endDate: '2026-09-30', limit: 25 },
       }, codec, deps);
       expect(query).toMatchObject({
@@ -137,7 +147,7 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)(
       });
 
       const updateInput = {
-        uid, connectionId: 'connection', scopes: noteScopes,
+        uid, connectionId: 'connection', grantId: 'grant-1', scopes: noteScopes,
         arguments: {
           noteRef: created.noteRef, expectedRevision: 1,
           category: 'travel', title: 'Altitude camp', details: null,
@@ -154,11 +164,11 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)(
       }, codec, deps)).rejects.toBeInstanceOf(McpContentWriteError);
 
       await expect(deleteMcpTimelineNote({
-        uid, connectionId: 'connection', scopes: noteScopes,
+        uid, connectionId: 'connection', grantId: 'grant-1', scopes: noteScopes,
         arguments: { noteRef: created.noteRef, expectedRevision: 2 },
       }, codec, deps)).resolves.toMatchObject({ operation: 'deleted', deleted: true });
       await expect(deleteMcpTimelineNote({
-        uid, connectionId: 'connection', scopes: noteScopes,
+        uid, connectionId: 'connection', grantId: 'grant-1', scopes: noteScopes,
         arguments: { noteRef: created.noteRef, expectedRevision: 2 },
       }, codec, deps)).resolves.toMatchObject({ operation: 'deleted', deleted: false });
       expect((await db.collection('users').doc(uid).collection('timelineNotes').get()).empty).toBe(true);
@@ -170,9 +180,16 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)(
       const user = db.collection('users').doc(uid);
       await user.collection('activities').doc('activity-1').set({ eventID: 'event-1' });
       await user.collection('events').doc('event-1').set({ tags: [] });
+      await user.collection('mcpConnections').doc('connection').update({ grantId: 'grant-replacement' });
+      await expect(updateMcpActivityTags({
+        uid, connectionId: 'connection', grantId: 'grant-1', scopes: activityScopes,
+        arguments: { activityRef: `activity:${uid}:connection`, expectedTags: [], tags: ['Private'] },
+      }, codec, deps)).rejects.toMatchObject({ code: 'invalid_request' });
+      expect((await user.collection('events').doc('event-1').get()).data()?.tags).toEqual([]);
+
       await user.collection('mcpConnections').doc('connection').update({ revokedAtMs: now(), status: 'revoked' });
       await expect(updateMcpActivityTags({
-        uid, connectionId: 'connection', scopes: activityScopes,
+        uid, connectionId: 'connection', grantId: 'grant-replacement', scopes: activityScopes,
         arguments: { activityRef: `activity:${uid}:connection`, expectedTags: [], tags: ['Private'] },
       }, codec, deps)).rejects.toMatchObject({ code: 'invalid_request' });
 
@@ -180,9 +197,47 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)(
         status: 'active', scopes: noteScopes, grantId: 'grant-2', createdAtMs: 2, revokedAtMs: null,
       });
       await expect(deleteMcpTimelineNote({
-        uid, connectionId: 'other', scopes: noteScopes,
+        uid, connectionId: 'other', grantId: 'grant-2', scopes: noteScopes,
         arguments: { noteRef: `note:${'a'.repeat(64)}:${uid}:connection`, expectedRevision: 1 },
       }, codec, deps)).rejects.toMatchObject({ code: 'invalid_request' });
+    });
+
+    it('rejects cross-owner references and fences every write during account deletion', async () => {
+      const user = db.collection('users').doc(uid);
+      await user.collection('activities').doc('activity-1').set({ eventID: 'event-1' });
+      await user.collection('events').doc('event-1').set({ tags: ['Original'] });
+
+      const otherUid = `mcp-content-write-${randomUUID()}`;
+      users.push(otherUid);
+      await db.collection('users').doc(otherUid).set({ test: true });
+      await db.collection('users').doc(otherUid).collection('mcpConnections').doc('connection').set({
+        status: 'active', scopes: noteScopes, grantId: 'grant-other', createdAtMs: 1, revokedAtMs: null,
+      });
+      await expect(deleteMcpTimelineNote({
+        uid: otherUid, connectionId: 'connection', grantId: 'grant-other', scopes: noteScopes,
+        arguments: { noteRef: `note:${'a'.repeat(64)}:${uid}:connection`, expectedRevision: 1 },
+      }, codec, deps)).rejects.toMatchObject({ code: 'invalid_request' });
+
+      await db.collection('userDeletionTombstones').doc(uid).set({
+        expireAt: now() + 60_000,
+      });
+      await expect(updateMcpActivityTags({
+        uid, connectionId: 'connection', grantId: 'grant-1', scopes: activityScopes,
+        arguments: {
+          activityRef: `activity:${uid}:connection`,
+          expectedTags: ['Original'],
+          tags: ['Changed'],
+        },
+      }, codec, deps)).rejects.toMatchObject({ code: 'invalid_request' });
+      await expect(createMcpTimelineNote({
+        uid, connectionId: 'connection', grantId: 'grant-1', scopes: noteScopes,
+        arguments: {
+          category: 'other', title: 'Blocked', startDate: '2026-09-22', endDate: '2026-09-22',
+          timeZone: 'Europe/Helsinki', mutationId: randomUUID(),
+        },
+      }, codec, deps)).rejects.toMatchObject({ code: 'invalid_request' });
+      expect((await user.collection('events').doc('event-1').get()).data()?.tags).toEqual(['Original']);
+      expect((await user.collection('timelineNotes').get()).empty).toBe(true);
     });
   },
 );

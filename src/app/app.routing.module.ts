@@ -220,7 +220,7 @@ const topLevelRoutes: Routes = [
           "Send Suunto routes to Wahoo",
           "Send GPX/FIT routes to Wahoo",
           "Sync past activities",
-          "Read-only MCP client access",
+          "Permission-scoped MCP client access and focused changes",
           "Garmin integration",
           "Suunto integration",
           "COROS integration",

@@ -357,6 +357,7 @@ export interface AuthenticatedMcpRequest {
   uid: string;
   clientId: string;
   connectionId: string;
+  grantId?: string;
   scopes: McpOAuthScope[];
 }
 
@@ -1017,7 +1018,8 @@ export function createMcpServer(
         outputSchema: outputSchemas.query_editable_timeline_notes,
         annotations: READ_ONLY_TOOL_ANNOTATIONS,
       }, input => runReadOnlyTool('query_editable_timeline_notes', () => dataService.queryEditableTimelineNotes({
-        arguments: input, uid: auth.uid, connectionId: auth.connectionId, scopes: auth.scopes,
+        arguments: input, uid: auth.uid, connectionId: auth.connectionId,
+        grantId: auth.grantId, scopes: auth.scopes,
       })));
       registerMcpTool(server, 'create_timeline_note', {
         title: 'Create Timeline note',
@@ -1026,7 +1028,8 @@ export function createMcpServer(
         outputSchema: outputSchemas.create_timeline_note,
         annotations: CONTENT_CREATE_TOOL_ANNOTATIONS,
       }, input => runContentWriteTool('create_timeline_note', () => dataService.createTimelineNote({
-        arguments: input, uid: auth.uid, connectionId: auth.connectionId, scopes: auth.scopes,
+        arguments: input, uid: auth.uid, connectionId: auth.connectionId,
+        grantId: auth.grantId, scopes: auth.scopes,
       })));
       registerMcpTool(server, 'update_timeline_note', {
         title: 'Update Timeline note',
@@ -1035,7 +1038,8 @@ export function createMcpServer(
         outputSchema: outputSchemas.update_timeline_note,
         annotations: CONTENT_UPDATE_TOOL_ANNOTATIONS,
       }, input => runContentWriteTool('update_timeline_note', () => dataService.updateTimelineNote({
-        arguments: input, uid: auth.uid, connectionId: auth.connectionId, scopes: auth.scopes,
+        arguments: input, uid: auth.uid, connectionId: auth.connectionId,
+        grantId: auth.grantId, scopes: auth.scopes,
       })));
       registerMcpTool(server, 'delete_timeline_note', {
         title: 'Delete Timeline note',
@@ -1044,7 +1048,8 @@ export function createMcpServer(
         outputSchema: outputSchemas.delete_timeline_note,
         annotations: CONTENT_UPDATE_TOOL_ANNOTATIONS,
       }, input => runContentWriteTool('delete_timeline_note', () => dataService.deleteTimelineNote({
-        arguments: input, uid: auth.uid, connectionId: auth.connectionId, scopes: auth.scopes,
+        arguments: input, uid: auth.uid, connectionId: auth.connectionId,
+        grantId: auth.grantId, scopes: auth.scopes,
       })));
     }
   }
@@ -1551,7 +1556,8 @@ export function createMcpServer(
         outputSchema: outputSchemas.update_activity_tags,
         annotations: CONTENT_UPDATE_TOOL_ANNOTATIONS,
       }, input => runContentWriteTool('update_activity_tags', () => dataService.updateActivityTags({
-        arguments: input, uid: auth.uid, connectionId: auth.connectionId, scopes: auth.scopes,
+        arguments: input, uid: auth.uid, connectionId: auth.connectionId,
+        grantId: auth.grantId, scopes: auth.scopes,
       })));
     }
 
