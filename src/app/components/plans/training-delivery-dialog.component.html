@@ -133,7 +133,12 @@
             @if (!planBound() && row.setting) { <p class="delivery-caption">Time zone: {{ row.setting.timeZone }}</p> }
           }
           @if (!row.setupAvailable) {
-            <p>Workout sync unavailable. Existing copies and problems remain visible.</p>
+            @if (row.provider === 'coros' && row.ready) {
+              <p><strong>New COROS plan sync setup is coming soon.</strong></p>
+              <p class="delivery-caption">Existing enabled plan sync still follows its saved settings and plan status. Delivery records, retry, copy status, and Stop sync remain available here.</p>
+            } @else {
+              <p>Workout sync unavailable. Existing copies and problems remain visible.</p>
+            }
           }
           @if (row.provider === 'suunto' && data.scope !== 'workout') {
             <p class="delivery-caption">Workouts for today and the next six days are sent as SuuntoPlus Guides. Later workouts are sent automatically as their dates approach.</p>
@@ -141,7 +146,11 @@
             <p class="delivery-caption">Hiding or removing a Guide in Suunto can leave its cloud record visible to partners, so QS never recreates it automatically from a cloud-presence check.</p>
           }
           @if (row.provider === 'coros' && data.scope !== 'workout') {
-            <p class="delivery-caption">Upcoming workouts are sent individually to your COROS training calendar. Sent does not confirm that a watch received them.</p>
+            @if (row.setupAvailable) {
+              <p class="delivery-caption">Upcoming workouts are sent individually to your COROS training calendar. Sent does not confirm that a watch received them.</p>
+            } @else {
+              <p class="delivery-caption">COROS plan delivery uses individual workouts rather than a QS-owned COROS plan.</p>
+            }
           }
           @if (row.provider === 'wahoo' && data.scope !== 'workout') {
             <p class="delivery-caption">Time-based running and cycling workouts for today and the next six days are sent to Wahoo. Later workouts wait until their dates approach. Sent confirms cloud delivery, not receipt on a device.</p>
@@ -261,7 +270,12 @@
         <p>Hiding or removing a Guide in Suunto can leave its cloud record visible to partners, so QS never recreates it automatically from a cloud-presence check.</p>
       }
       @if (showsCorosGuidance()) {
-        <p>QS sends each upcoming workout to your COROS training calendar. The COROS app manages watch synchronization; Sent does not confirm that your watch received it.</p>
+        @if (activeRow()?.setupAvailable) {
+          <p>QS sends each upcoming workout to your COROS training calendar. The COROS app manages watch synchronization; Sent does not confirm that your watch received it.</p>
+        } @else {
+          <p>New COROS plan sync setup is coming soon. Existing enabled plan sync still follows its saved settings and plan status, and its delivery records, retry, copy status, and Stop sync remain available here.</p>
+          <p>The app does not currently offer COROS plan configuration or plan-workout resume actions. Standalone Send to COROS remains available to eligible connected Pro members.</p>
+        }
         <p>COROS documents a two-week watch window and one training plan synced to a watch at a time. QS does not claim or replace a native plan object, and automatic checking is unavailable.</p>
       }
       @if (showsWahooGuidance()) {

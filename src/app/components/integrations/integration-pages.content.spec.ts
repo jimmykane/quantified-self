@@ -83,7 +83,10 @@ describe('integration-pages.content', () => {
     expect(PROVIDER_INTEGRATION_PAGES.garmin.faqItems.some(item => item.question === 'Can I upload a GPX or FIT route directly to Garmin?')).toBe(true);
     expect(PROVIDER_INTEGRATION_PAGES.garmin.faqItems.some(item => item.question === 'Can I send saved routes to Garmin Connect?')).toBe(true);
     expect(PROVIDER_INTEGRATION_ROUTE_DATA.garmin).not.toHaveProperty('keywords');
-    expect(PROVIDER_INTEGRATION_ROUTE_DATA.coros.description).toContain('planned workouts to the COROS training calendar');
+    expect(PROVIDER_INTEGRATION_ROUTE_DATA.coros.description).toContain('standalone planned workouts to COROS');
+    expect(PROVIDER_INTEGRATION_ROUTE_DATA.coros.description).toContain('plan sync coming soon');
+    expect(PROVIDER_INTEGRATION_PAGES.coros.syncFlows.find(flow => flow.title === 'Planned workouts to COROS')?.copy)
+      .toContain('New COROS plan sync setup in the app is coming soon');
     expect(PROVIDER_INTEGRATION_PAGES.coros.highlights).toContain('Direct and saved route delivery to COROS');
     expect(PROVIDER_INTEGRATION_PAGES.coros.syncFlows.some(flow => flow.title === 'Send activities to COROS')).toBe(true);
     expect(PROVIDER_INTEGRATION_PAGES.coros.syncFlows.some(flow => flow.title === 'Send routes to COROS')).toBe(true);

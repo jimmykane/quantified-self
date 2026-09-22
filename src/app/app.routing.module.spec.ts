@@ -312,7 +312,7 @@ describe('AppRoutingModule routes', () => {
     const expectedRoutes = [
       { path: 'integrations/garmin', provider: 'garmin', descriptionText: 'planned workouts to Garmin Connect' },
       { path: 'integrations/suunto', provider: 'suunto', descriptionText: 'planned workouts as SuuntoPlus Guides' },
-      { path: 'integrations/coros', provider: 'coros', descriptionText: 'planned workouts to the COROS training calendar' },
+      { path: 'integrations/coros', provider: 'coros', descriptionText: 'standalone planned workouts to COROS' },
       { path: 'integrations/wahoo', provider: 'wahoo', descriptionText: 'planned running and cycling workouts to Wahoo' },
     ];
 

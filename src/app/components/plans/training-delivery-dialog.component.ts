@@ -191,7 +191,7 @@ export class TrainingDeliveryDialogComponent {
       };
     }).sort((a, b) => (a.localDate ?? '9999-99-99').localeCompare(b.localDate ?? '9999-99-99') || a.id.localeCompare(b.id));
     const ready = this.delivery.isReady(provider);
-    const setupAvailable = this.delivery.isSetupAvailable(provider);
+    const setupAvailable = this.delivery.isSetupAvailable(provider, this.planDelivery());
     const attentionWorkoutCount = new Set(statuses.filter(item => ['approval_required', 'failed', 'needs_attention', 'unsupported',
       'reconnect_required', 'connection_repair', 'fresh_consent_required'].includes(item.status)).map(item => item.workoutId)).size;
     const statusWorkoutCount = new Set(statuses.map(item => item.workoutId)).size;
@@ -199,15 +199,19 @@ export class TrainingDeliveryDialogComponent {
     const planInactive = !!scopePlan && scopePlan.lifecycle !== 'active';
     const planFocus = this.data.scope === 'plan'
       ? this.data.planSummaries?.().find(summary => summary.provider === provider)?.planFocus ?? null : null;
+    const setupComingSoon = provider === 'coros' && ready && !setupAvailable && !setting && !statuses.length;
     const overviewState = !this.view().loaded ? 'Loading sync status…'
+      : setupComingSoon ? 'Plan sync coming soon'
       : this.data.scope === 'history' ? 'Sync history'
       : this.planBound() ? suppressed ? 'Excluded from plan sync' : 'Follows plan sync settings'
         : setting?.enabled ? planInactive ? 'Sync saved · plan inactive' : 'Sync enabled' : 'Sync off';
     const overviewIcon = !this.view().loaded ? 'sync'
+      : setupComingSoon ? 'schedule'
       : this.data.scope === 'history' ? 'history'
       : this.planBound() ? suppressed ? 'sync_disabled' : 'link'
         : setting?.enabled ? planInactive ? 'pause_circle' : 'check_circle' : 'sync_disabled';
-    const overviewDetail = planFocus ? [planFocus.label, planFocus.detail].filter(Boolean).join(' · ')
+    const overviewDetail = setupComingSoon ? 'Standalone Send remains available.'
+      : planFocus ? [planFocus.label, planFocus.detail].filter(Boolean).join(' · ')
       : !statuses.length ? 'No workout sync status yet.'
       : statuses.length === 1 ? statuses[0].label
         : attentionWorkoutCount ? `${statusWorkoutCount} ${statusWorkoutCount === 1 ? 'workout' : 'workouts'} · ${attentionWorkoutCount} ${attentionWorkoutCount === 1 ? 'needs' : 'need'} attention`
@@ -280,7 +284,7 @@ export class TrainingDeliveryDialogComponent {
       if (this.initialReviewHandled || !this.data.initialProvider || !this.canReview()) return;
       this.initialReviewHandled = true;
       const provider = this.data.initialProvider;
-      if (this.delivery.isSetupAvailable(provider) && this.canSend() && !this.planBound()
+      if (this.delivery.isSetupAvailable(provider, this.planDelivery()) && this.canSend() && !this.planBound()
         && !this.view().settings.some(item => item.provider === provider)
         && !this.statuses().some(item => item.provider === provider)) {
         this.closeOnCancel = true;
@@ -308,7 +312,7 @@ export class TrainingDeliveryDialogComponent {
       || (!this.canSend() && !['stop', 'retry'].includes(action))) return;
     const setting = this.view().settings.find(item => item.provider === provider);
     const setupAction = ['configure', 'send', 'resume'].includes(action);
-    if (setupAction && !this.delivery.isSetupAvailable(provider)) return;
+    if (setupAction && !this.delivery.isSetupAvailable(provider, this.planDelivery())) return;
     // Historical copies can still need consent for an old account. They must not
     // silently turn opening current settings into enabling delivery again.
     const editingSettings = !!setting?.enabled && !renewConsent && (action === 'configure' || action === 'send');
