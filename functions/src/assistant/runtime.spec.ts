@@ -279,7 +279,7 @@ describe('Assistant runtime', () => {
       ? { structuredContent: { activities: [{ activityRef, activityType: 'Running',
         startTimeMs: Date.parse('2026-09-21T23:30:00.000Z'), tags: ['Easy'] }], scanComplete: true } }
       : { structuredContent: { proposalRef: '5b5aa348-50a3-4e62-a1fd-46a7e6dd639f',
-        kind: 'update_activity_tags', expiresAtMs: Date.parse('2026-09-22T12:10:00.000Z'),
+        kind: 'update_event_tags', expiresAtMs: Date.parse('2026-09-22T12:10:00.000Z'),
         summary: 'Replace one current activity tag with one.', requiresConfirmation: true,
         arguments: { activityRef, expectedTags: ['Easy'], tags: ['Quality'] } } });
     const access = vi.fn().mockResolvedValue(undefined);
@@ -297,7 +297,7 @@ describe('Assistant runtime', () => {
       prompt: 'Replace Easy with Quality on that run.', timeZone: 'Europe/Helsinki', history: [],
       activityTagChangesEnabled: true, assertContentWriteAccess: access });
     expect(result.pendingContentProposal).toMatchObject({
-      kind: 'update_activity_tags',
+      kind: 'update_event_tags',
       summary: 'Change tags on Running from 2026-09-22.',
     });
     expect(access).toHaveBeenCalledTimes(4);

@@ -3,6 +3,7 @@ import { FieldPath, FieldValue } from 'firebase-admin/firestore';
 import { isDeepStrictEqual } from 'node:util';
 import { z } from 'zod';
 import type { AssistantContentProposalKind } from '../../../shared/assistant.types';
+import { isBenchmarkEvent } from '../../../shared/event-classification';
 import {
   getEventTags,
   normalizeEventTags,
@@ -29,7 +30,7 @@ import {
   getUserDeletionGuardStateInTransaction,
 } from '../shared/user-deletion-guard';
 import {
-  ACTIVITY_TAGS_WRITE_SCOPE,
+  EVENTS_WRITE_SCOPE,
   MCP_CONTENT_WRITE_INPUTS,
   MCP_CONTENT_WRITE_OUTPUTS,
   TIMELINE_NOTES_WRITE_SCOPE,
@@ -177,7 +178,7 @@ function assertAssistantConversationData(
   const expiresAtMs = data?.expireAt && typeof data.expireAt.toMillis === 'function'
     ? data.expireAt.toMillis()
     : 0;
-  const requiresTags = requiredScopes.includes(ACTIVITY_TAGS_WRITE_SCOPE);
+  const requiresTags = requiredScopes.includes(EVENTS_WRITE_SCOPE);
   const requiresNotes = requiredScopes.includes(TIMELINE_NOTES_WRITE_SCOPE);
   if (!conversationId || conversationId.length > 120
     || input.connectionId !== expectedConnectionId
@@ -303,7 +304,7 @@ function decodeNoteId(
   }
 }
 
-export async function updateMcpActivityTags(
+export async function updateMcpEventTags(
   input: McpContentWriteInput,
   codec: McpContentWriteCodec,
   deps = defaultMcpContentWriteDependencies(),
@@ -311,9 +312,9 @@ export async function updateMcpActivityTags(
   if (input.assistantConversationId && !input.assistantProposalRef) {
     invalid('Review and confirm the current Assistant proposal before changing activity tags.');
   }
-  const requiredScopes = [ACTIVITY_DETAILS_READ_SCOPE, ACTIVITY_TAGS_WRITE_SCOPE];
+  const requiredScopes = [ACTIVITY_DETAILS_READ_SCOPE, EVENTS_WRITE_SCOPE];
   assertInputScopes(input, requiredScopes);
-  const args = parseArguments(MCP_CONTENT_WRITE_INPUTS.update_activity_tags, input.arguments);
+  const args = parseArguments(MCP_CONTENT_WRITE_INPUTS.update_event_tags, input.arguments);
   let reference: { activityId: string; eventId: string };
   try {
     reference = codec.decodeActivityRef(args.activityRef, input.uid, input.connectionId);
@@ -340,17 +341,20 @@ export async function updateMcpActivityTags(
       transaction,
       input,
       requiredScopes,
-      'update_activity_tags',
+      'update_event_tags',
     );
     const [activity] = await transaction.getAll(activityRef, { fieldMask: ['eventID'] });
     if (!activity.exists || activity.get('eventID') !== reference.eventId) {
       throw new McpContentWriteError('detail_not_available', 'The activity is no longer available.');
     }
     const [event] = await transaction.getAll(eventRef, {
-      fieldMask: ['tags', 'benchmarkReviewTags'],
+      fieldMask: ['tags', 'benchmarkReviewTags', 'mergeType', 'isMerge'],
     });
     if (!event.exists) {
       throw new McpContentWriteError('detail_not_available', 'The activity event is no longer available.');
+    }
+    if (isBenchmarkEvent(event.data())) {
+      invalid('Benchmark events cannot be changed through MCP.');
     }
     const currentTags = getEventTags(event.data());
     if (sameTags(currentTags, tags)) {
@@ -365,7 +369,7 @@ export async function updateMcpActivityTags(
     });
     return { activityRef: args.activityRef, tags, changed: true };
   });
-  return MCP_CONTENT_WRITE_OUTPUTS.update_activity_tags.parse(result);
+  return MCP_CONTENT_WRITE_OUTPUTS.update_event_tags.parse(result);
 }
 
 export async function queryEditableMcpTimelineNotes(

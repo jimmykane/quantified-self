@@ -29,6 +29,8 @@ describe('Built-in Assistant policy', () => {
       .find(candidate => candidate.id === POLICIES_MCP_CLIENTS_FRAGMENT)?.content.join(' ') ?? '';
     expect(assistant).toContain('Timeline notes');
     expect(assistant).toContain('Timeline notes, Timeline note changes, and Activity tag changes are off by default');
+    expect(external).toContain('The separate Change events grant');
+    expect(external).toContain('benchmark events cannot be changed');
     expect(assistant).toContain('full private');
     expect(external).toContain('Timeline notes permission');
     expect(external).toContain('Both checkboxes are selected by default when requested; uncheck either before approving.');
@@ -154,8 +156,8 @@ describe('MCP client access policy', () => {
     expect(content).toContain('jump count is not treated as jump quality');
     expect(content).toContain('Metric permission');
     expect(content).toContain('Body-measurement permission');
-    expect(content).toContain('Activity locations and tag changes depend on activity details');
-    expect(content).toContain('Activity-tag changes');
+    expect(content).toContain('Activity locations and event changes depend on activity details');
+    expect(content).toContain('Event changes');
     expect(content).toContain('bounded body-measurement history');
     expect(content).toContain('provider or manual canonical Health Weight point measurements');
     expect(content).toContain('Workout profile Weight is excluded because it is not a weigh-in');

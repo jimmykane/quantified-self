@@ -214,7 +214,7 @@ export function createAssistantRequestFingerprint(
     fingerprint.update('\0').update(locationAccess);
   }
   if (timelineNotesEnabled) fingerprint.update('\0timeline-notes:read');
-  if (activityTagChangesEnabled) fingerprint.update('\0activity-tags:write');
+  if (activityTagChangesEnabled) fingerprint.update('\0events:write');
   if (timelineNoteChangesEnabled) fingerprint.update('\0timeline-notes:write');
   if (trainingPlansEnabled) fingerprint.update('\0training-plans:read');
   if (trainingPlanChangesEnabled) fingerprint.update('\0training-plans:write');

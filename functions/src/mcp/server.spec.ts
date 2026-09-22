@@ -268,10 +268,10 @@ describe('MCP HTTP scope enforcement', () => {
 
   it('requires both parent reads and explicit content-change scopes before dispatch', () => {
     expect(requiredScopesForRequest({ method: 'tools/call', params: {
-      name: 'update_activity_tags',
+      name: 'update_event_tags',
     } })).toEqual([
       MCP_OAUTH_SCOPES.ActivityDetailsRead,
-      MCP_OAUTH_SCOPES.ActivityTagsWrite,
+      MCP_OAUTH_SCOPES.EventsWrite,
     ]);
     for (const name of [
       'query_editable_timeline_notes',
@@ -307,18 +307,18 @@ describe('MCP HTTP scope enforcement', () => {
       MCP_OAUTH_SCOPES.ActivityDetailsRead,
       MCP_OAUTH_SCOPES.TimelineNotesRead,
     ]);
-    expect(readOnly).not.toContain('update_activity_tags');
+    expect(readOnly).not.toContain('update_event_tags');
     expect(readOnly).not.toContain('query_editable_timeline_notes');
     expect(readOnly).not.toContain('create_timeline_note');
 
     const writable = await list([
       MCP_OAUTH_SCOPES.ActivityDetailsRead,
-      MCP_OAUTH_SCOPES.ActivityTagsWrite,
+      MCP_OAUTH_SCOPES.EventsWrite,
       MCP_OAUTH_SCOPES.TimelineNotesRead,
       MCP_OAUTH_SCOPES.TimelineNotesWrite,
     ]);
     expect(writable).toEqual(expect.arrayContaining([
-      'update_activity_tags',
+      'update_event_tags',
       'query_editable_timeline_notes',
       'create_timeline_note',
       'update_timeline_note',

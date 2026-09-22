@@ -6,7 +6,7 @@ import {
   deleteMcpTimelineNote,
   McpContentWriteError,
   queryEditableMcpTimelineNotes,
-  updateMcpActivityTags,
+  updateMcpEventTags,
   updateMcpTimelineNote,
   type McpContentWriteCodec,
   type McpContentWriteDependencies,
@@ -22,7 +22,7 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)(
     }
     const db = new Firestore({ projectId: 'demo-mcp-content-writes' });
     const users: string[] = [];
-    const activityScopes = ['activity-details:read', 'activity-tags:write'];
+    const activityScopes = ['activity-details:read', 'events:write'];
     const noteScopes = ['timeline-notes:read', 'timeline-notes:write'];
     const now = () => Date.parse('2026-09-22T12:00:00Z');
     let uid: string;
@@ -93,7 +93,12 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)(
     it('replaces shared event tags idempotently and rejects a stale replacement', async () => {
       const user = db.collection('users').doc(uid);
       await user.collection('activities').doc('activity-1').set({ eventID: 'event-1' });
-      await user.collection('events').doc('event-1').set({ tags: ['Easy', 'Morning'] });
+      await user.collection('events').doc('event-1').set({
+        tags: ['Easy', 'Morning'],
+        benchmarkReviewTags: ['Legacy'],
+        mergeType: 'multi',
+        isMerge: true,
+      });
       const input = {
         uid, connectionId: 'connection', grantId: 'grant-1', scopes: activityScopes,
         arguments: {
@@ -103,16 +108,46 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)(
         },
       };
 
-      await expect(updateMcpActivityTags(input, codec, deps)).resolves.toEqual({
+      await expect(updateMcpEventTags(input, codec, deps)).resolves.toEqual({
         activityRef: `activity:${uid}:connection`, tags: ['Easy', 'Trail'], changed: true,
       });
-      await expect(updateMcpActivityTags(input, codec, deps)).resolves.toMatchObject({ changed: false });
-      expect((await user.collection('events').doc('event-1').get()).data()).toEqual({ tags: ['Easy', 'Trail'] });
+      await expect(updateMcpEventTags(input, codec, deps)).resolves.toMatchObject({ changed: false });
+      expect((await user.collection('events').doc('event-1').get()).data()).toEqual({
+        tags: ['Easy', 'Trail'],
+        mergeType: 'multi',
+        isMerge: true,
+      });
 
       await user.collection('events').doc('event-1').update({ tags: ['Coach'] });
-      await expect(updateMcpActivityTags(input, codec, deps)).rejects.toMatchObject({
+      await expect(updateMcpEventTags(input, codec, deps)).rejects.toMatchObject({
         code: 'invalid_request',
       });
+    });
+
+    it.each([
+      { mergeType: 'benchmark' },
+      { isMerge: true },
+    ])('rejects benchmark events without changing their tags: %j', async benchmarkFields => {
+      const user = db.collection('users').doc(uid);
+      await user.collection('activities').doc('activity-1').set({ eventID: 'event-1' });
+      await user.collection('events').doc('event-1').set({
+        tags: ['Benchmark'],
+        ...benchmarkFields,
+      });
+
+      await expect(updateMcpEventTags({
+        uid, connectionId: 'connection', grantId: 'grant-1', scopes: activityScopes,
+        arguments: {
+          activityRef: `activity:${uid}:connection`,
+          expectedTags: ['Benchmark'],
+          tags: ['Benchmark'],
+        },
+      }, codec, deps)).rejects.toMatchObject({
+        code: 'invalid_request',
+        message: 'Benchmark events cannot be changed through MCP.',
+      });
+      expect((await user.collection('events').doc('event-1').get()).data()?.tags)
+        .toEqual(['Benchmark']);
     });
 
     it('creates, discovers, edits and permanently deletes a note with safe retries', async () => {
@@ -181,14 +216,14 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)(
       await user.collection('activities').doc('activity-1').set({ eventID: 'event-1' });
       await user.collection('events').doc('event-1').set({ tags: [] });
       await user.collection('mcpConnections').doc('connection').update({ grantId: 'grant-replacement' });
-      await expect(updateMcpActivityTags({
+      await expect(updateMcpEventTags({
         uid, connectionId: 'connection', grantId: 'grant-1', scopes: activityScopes,
         arguments: { activityRef: `activity:${uid}:connection`, expectedTags: [], tags: ['Private'] },
       }, codec, deps)).rejects.toMatchObject({ code: 'invalid_request' });
       expect((await user.collection('events').doc('event-1').get()).data()?.tags).toEqual([]);
 
       await user.collection('mcpConnections').doc('connection').update({ revokedAtMs: now(), status: 'revoked' });
-      await expect(updateMcpActivityTags({
+      await expect(updateMcpEventTags({
         uid, connectionId: 'connection', grantId: 'grant-replacement', scopes: activityScopes,
         arguments: { activityRef: `activity:${uid}:connection`, expectedTags: [], tags: ['Private'] },
       }, codec, deps)).rejects.toMatchObject({ code: 'invalid_request' });
@@ -219,7 +254,7 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)(
         timelineNotesEnabled: false,
         timelineNoteChangesEnabled: false,
         pendingContentProposal: {
-          proposalRef: 'proposal-1', kind: 'update_activity_tags',
+          proposalRef: 'proposal-1', kind: 'update_event_tags',
           expiresAtMs: now() + 60_000, arguments: proposalArguments,
         },
       });
@@ -228,48 +263,48 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)(
         assistantProposalRef: 'proposal-1', scopes: activityScopes,
         arguments: proposalArguments,
       };
-      await expect(updateMcpActivityTags(input, codec, deps)).resolves.toMatchObject({ changed: true });
-      await expect(updateMcpActivityTags({
+      await expect(updateMcpEventTags(input, codec, deps)).resolves.toMatchObject({ changed: true });
+      await expect(updateMcpEventTags({
         ...input,
         assistantProposalRef: undefined,
         arguments: { ...input.arguments, expectedTags: ['Quality'], tags: ['Missing review'] },
       }, codec, deps)).rejects.toMatchObject({ code: 'invalid_request' });
       await user.collection('assistantConversations').doc('active').update({
         pendingContentProposal: {
-          proposalRef: 'proposal-1', kind: 'update_activity_tags',
+          proposalRef: 'proposal-1', kind: 'update_event_tags',
           expiresAtMs: now() + 60_000,
           arguments: { ...proposalArguments, expectedTags: ['Quality'], tags: ['Reviewed'] },
         },
       });
-      await expect(updateMcpActivityTags({
+      await expect(updateMcpEventTags({
         ...input,
         arguments: { ...proposalArguments, expectedTags: ['Quality'], tags: ['Different payload'] },
       }, codec, deps)).rejects.toMatchObject({ code: 'invalid_request' });
       await user.collection('assistantConversations').doc('active').update({
         pendingContentProposal: {
-          proposalRef: 'proposal-1', kind: 'update_activity_tags',
+          proposalRef: 'proposal-1', kind: 'update_event_tags',
           expiresAtMs: now(), arguments: proposalArguments,
         },
       });
-      await expect(updateMcpActivityTags({
+      await expect(updateMcpEventTags({
         ...input,
         arguments: { ...input.arguments, expectedTags: ['Quality'], tags: ['Expired'] },
       }, codec, deps)).rejects.toMatchObject({ code: 'invalid_request' });
       await user.collection('assistantConversations').doc('active').update({
         pendingContentProposal: {
-          proposalRef: 'proposal-2', kind: 'update_activity_tags',
+          proposalRef: 'proposal-2', kind: 'update_event_tags',
           expiresAtMs: now() + 60_000, arguments: proposalArguments,
         },
       });
-      await expect(updateMcpActivityTags(input, codec, deps)).rejects.toMatchObject({ code: 'invalid_request' });
+      await expect(updateMcpEventTags(input, codec, deps)).rejects.toMatchObject({ code: 'invalid_request' });
       await user.collection('assistantConversations').doc('active').update({
         pendingContentProposal: {
-          proposalRef: 'proposal-1', kind: 'update_activity_tags',
+          proposalRef: 'proposal-1', kind: 'update_event_tags',
           expiresAtMs: now() + 60_000, arguments: proposalArguments,
         },
         activityTagChangesEnabled: false,
       });
-      await expect(updateMcpActivityTags({
+      await expect(updateMcpEventTags({
         ...input,
         arguments: { ...input.arguments, expectedTags: ['Quality'], tags: ['Blocked'] },
       }, codec, deps)).rejects.toMatchObject({ code: 'invalid_request' });
@@ -295,7 +330,7 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)(
       await db.collection('userDeletionTombstones').doc(uid).set({
         expireAt: now() + 60_000,
       });
-      await expect(updateMcpActivityTags({
+      await expect(updateMcpEventTags({
         uid, connectionId: 'connection', grantId: 'grant-1', scopes: activityScopes,
         arguments: {
           activityRef: `activity:${uid}:connection`,

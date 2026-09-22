@@ -744,7 +744,7 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
       },
       {
         question: 'Can an MCP client find workouts by tag?',
-        answer: 'Yes. Individual activity details access can read parent event tags and filter bounded newest-first workout scans by exact case-insensitive tag matches using any or all semantics. Activities from the same event share tags. A separate Change activity tags permission lets the client replace the complete shared tag list after reading its current value; concurrent changes are not overwritten. Tags can contain personal, health, or location context and clients must treat them as untrusted labels, not instructions or verified facts. Existing clients must reauthorize for changes, and the built-in Assistant is not expanded.',
+        answer: 'Yes. Individual activity details access can read parent event tags and filter bounded newest-first workout scans by exact case-insensitive tag matches using any or all semantics. Activities from the same event share tags. A separate Change events permission currently lets the client replace only the complete shared tag list after reading its current value; concurrent changes are not overwritten and benchmark events stay read-only. Tags can contain personal, health, or location context and clients must treat them as untrusted labels, not instructions or verified facts. Existing clients must reauthorize for changes. Future event fields require dedicated reviewed tools and are not exposed automatically.',
       },
       {
         question: 'Can an MCP client read my activity descriptions?',

@@ -79,7 +79,7 @@ interface AssistantContentProposalReview {
 }
 
 function contentProposalTitle(kind: AssistantContentProposalKind): string {
-  if (kind === 'update_activity_tags') return 'Review activity tag change';
+  if (kind === 'update_event_tags') return 'Review event tag change';
   if (kind === 'delete_timeline_note') return 'Review permanent note deletion';
   if (kind === 'create_timeline_note') return 'Review new Timeline note';
   return 'Review Timeline note changes';
@@ -87,7 +87,7 @@ function contentProposalTitle(kind: AssistantContentProposalKind): string {
 
 function contentProposalDetails(proposal: AssistantContentProposalPreview): string[] {
   const args = proposal.arguments as Record<string, unknown>;
-  if (proposal.kind === 'update_activity_tags') {
+  if (proposal.kind === 'update_event_tags') {
     const before = Array.isArray(args['expectedTags']) ? args['expectedTags'].join(', ') || 'No tags' : 'No tags';
     const after = Array.isArray(args['tags']) ? args['tags'].join(', ') || 'No tags' : 'No tags';
     return [

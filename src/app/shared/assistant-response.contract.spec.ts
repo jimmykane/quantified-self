@@ -124,7 +124,7 @@ describe('Assistant response contract', () => {
     response.activityTagChangesEnabled = true;
     response.pendingContentProposal = {
       proposalRef: '5b5aa348-50a3-4e62-a1fd-46a7e6dd639f',
-      kind: 'update_activity_tags',
+      kind: 'update_event_tags',
       expiresAtMs: Date.parse('2026-09-22T12:10:00.000Z'),
       summary: 'Change tags on Running from 2026-09-21.',
       requiresConfirmation: true,

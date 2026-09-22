@@ -884,7 +884,7 @@ export async function runApplyAssistantContentProposal(
     throw mapAssistantError(error);
   }
   const proposal = current.pendingContentProposal;
-  const needsTags = proposal?.kind === 'update_activity_tags';
+  const needsTags = proposal?.kind === 'update_event_tags';
   const needsNotes = proposal?.kind === 'create_timeline_note'
     || proposal?.kind === 'update_timeline_note'
     || proposal?.kind === 'delete_timeline_note';
@@ -908,14 +908,14 @@ export async function runApplyAssistantContentProposal(
     assistantConversationId: conversationId,
     assistantProposalRef: proposalRef,
     scopes: needsTags
-      ? [MCP_OAUTH_SCOPES.ActivityDetailsRead, MCP_OAUTH_SCOPES.ActivityTagsWrite]
+      ? [MCP_OAUTH_SCOPES.ActivityDetailsRead, MCP_OAUTH_SCOPES.EventsWrite]
       : [MCP_OAUTH_SCOPES.TimelineNotesRead, MCP_OAUTH_SCOPES.TimelineNotesWrite],
     arguments: proposal.arguments,
   };
   try {
     switch (proposal.kind) {
-      case 'update_activity_tags':
-        await dataService.updateActivityTags(writeInput);
+      case 'update_event_tags':
+        await dataService.updateEventTags(writeInput);
         break;
       case 'create_timeline_note':
         await dataService.createTimelineNote(writeInput);
@@ -940,8 +940,8 @@ export async function runApplyAssistantContentProposal(
     return {
       status: 'applied',
       kind: proposal.kind,
-      message: proposal.kind === 'update_activity_tags'
-        ? 'Activity tags updated.'
+      message: proposal.kind === 'update_event_tags'
+        ? 'Event tags updated.'
         : proposal.kind === 'delete_timeline_note'
           ? 'Timeline note deleted.'
           : proposal.kind === 'create_timeline_note'

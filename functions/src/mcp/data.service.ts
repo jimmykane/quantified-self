@@ -202,7 +202,7 @@ import {
   deleteMcpTimelineNote,
   McpContentWriteError,
   queryEditableMcpTimelineNotes,
-  updateMcpActivityTags,
+  updateMcpEventTags,
   updateMcpTimelineNote,
   type McpContentWriteDependencies,
   type McpContentWriteInput,
@@ -6317,11 +6317,11 @@ export function createMcpDataService(
       }
     },
 
-    async updateActivityTags(input: McpContentWriteInput) {
+    async updateEventTags(input: McpContentWriteInput) {
       return runMcpContentWrite(
         input,
-        updateMcpActivityTags,
-        'Activity tags could not be changed safely. Try again later.',
+        updateMcpEventTags,
+        'Event tags could not be changed safely. Try again later.',
       );
     },
 

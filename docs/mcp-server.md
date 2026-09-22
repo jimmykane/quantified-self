@@ -485,8 +485,9 @@ The server implements OAuth authorization code with PKCE S256 and refresh-token 
 - `timeline-notes:write`, dependent on `timeline-notes:read`, for native-approval-gated create, edit and permanent delete;
 - `activity-details:read` for bounded non-location activity summaries, event tags and exact tag filtering, laps, swim
   lengths, MTB jump measurements, selected metrics, and on-demand chart series;
-- `activity-tags:write`, dependent on `activity-details:read`, for native-approval-gated replacement of a selected
-  activity's shared parent-event tags with optimistic concurrency;
+- `events:write`, dependent on `activity-details:read`, for focused native-approval-gated event-owned mutations. The
+  current tool only replaces a selected activity's shared parent-event tags with optimistic concurrency and excludes
+  benchmark events;
 - `activity-descriptions:read`, dependent on `activity-details:read`, for the full private parent event description shown in the QS.io event editor;
 - `activity-location:read`, dependent on `activity-details:read`, for exact activity start/end and jump coordinates,
   nearby activity search, and chart breadcrumbs;
@@ -494,7 +495,7 @@ The server implements OAuth authorization code with PKCE S256 and refresh-token 
 - `route-location:read`, dependent on `routes:read`, for exact bounds, preview geometry, nearby route search, segment
   endpoints, and waypoints.
 
-The location, activity-description, activity-tag-write and Timeline-note-write scopes cannot exist without their matching parent data scope. Consent disables a child until its parent is
+The location, activity-description, event-write and Timeline-note-write scopes cannot exist without their matching parent data scope. Consent disables a child until its parent is
 selected and removes the child when the parent is removed. Authorization approval, refresh narrowing, bearer
 validation, HTTP prechecks, and tool registration reject invalid child-only combinations. Activity and route location
 remain independent domains. Existing clients retain non-location data but must reconnect and approve a new location
@@ -734,7 +735,7 @@ The analytics and map entries follow the
 | `list_activities` | `activity-details:read`; locations add `activity-location:read` | Frozen compatibility tool for bounded newest-first activity scans |
 | `query_activities` | `activity-details:read`; locations add `activity-location:read` | Preferred bounded activity query with structurally exclusive explicit, relative, and unbounded date modes |
 | `query_activities_with_tags` | `activity-details:read` | Coordinate-free activity summaries with their parent event tags and optional exact case-insensitive `any`/`all` tag filtering |
-| `update_activity_tags` | `activity-details:read` + `activity-tags:write`; native client approval gate | Replaces the complete parent-event tag list after an exact current-tag precondition; sibling activities share the result |
+| `update_event_tags` | `activity-details:read` + `events:write`; native client approval gate | Replaces the complete parent-event tag list after an exact current-tag precondition; sibling activities share the result and benchmark events are excluded |
 | `find_activities_near_location` | `activity-details:read` + `activity-location:read` | Frozen compatibility tool for nearby activity scans |
 | `search_activities_near_location` | `activity-details:read` + `activity-location:read` | Preferred closed-world nearby activity search with structurally paired optional dates |
 | `list_activity_laps` | `activity-details:read` | Paginated allowlisted lap timing and performance fields |
@@ -1156,18 +1157,22 @@ reauthorization is required for reads. The built-in Assistant exposes this read 
 **Activity tag changes** choice is enabled, so it can verify the current complete tag list before preparing—but never
 directly applying—a change.
 
-`activity-tags:write` is a separate dependent permission for `update_activity_tags`. Both requested checkboxes start
+`events:write` is a separate dependent permission for focused event-owned changes. Both requested checkboxes start
 selected; removing Activity details removes and disables the child. Existing connections must reauthorize and refresh
-cannot add it. The client first resolves one opaque `activityRef` with `query_activities_with_tags`, then submits the
-complete current `expectedTags` and complete replacement `tags` list. The server decrypts the owner- and
-connection-bound reference, verifies the activity still belongs to the referenced parent event, and transactionally
-rechecks the stored active MCP grant and account-deletion fence. If the current normalized list differs from
-`expectedTags`, the write conflicts rather than overwriting a concurrent edit. Repeating an accepted replacement is a
-safe no-op. The canonical event field is written through the shared Firestore sanitizer and the legacy tag field is
-removed; sibling activities inherit the result because tags remain event-owned. No activity metrics, descriptions,
-source files, locations, provider records or remote services are touched. The focused write returns only the input
-opaque reference, normalized tags and whether storage changed, with no event/activity IDs. It uses the MCP host's native
-approval UI and does not add a callable, index, collection or background job.
+cannot add it. The only current mutation is `update_event_tags`: the client first resolves one opaque `activityRef`
+with `query_activities_with_tags`, then submits the complete current `expectedTags` and complete replacement `tags`
+list. The server decrypts the owner- and connection-bound reference, verifies the activity still belongs to the
+referenced parent event, and transactionally rechecks the stored active MCP grant and account-deletion fence. It also
+reads the event's merge classification and rejects both explicit and legacy benchmark-event shapes before accepting a
+change or no-op. If the current normalized list differs from `expectedTags`, the write conflicts rather than
+overwriting a concurrent edit. Repeating an accepted replacement is a safe no-op. The canonical event field is written
+through the same shared sanitizer as the UI and the legacy tag field is removed; sibling activities inherit the result
+because tags remain event-owned. No activity metrics, titles, descriptions, source files, locations, provider records
+or remote services are touched. The focused write returns only the input opaque reference, normalized tags and whether
+storage changed, with no event/activity IDs. It uses the MCP host's native approval UI and does not add a callable,
+index, collection or background job. Future title, description, or other event editing requires a dedicated strict
+tool, concurrency/approval contract, projection review, tests, and documentation; the broader permission name does not
+automatically expose newly stored event fields.
 
 One filtered call, including a tag-filtered call, scans at most 100 selected activity documents and can return fewer
 matches than requested.
