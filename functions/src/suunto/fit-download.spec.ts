@@ -51,7 +51,7 @@ describe('downloadSuuntoFITFile', () => {
 
     expect(mockGetBinaryResponse).toHaveBeenCalledWith(expect.objectContaining({
       headers: expect.objectContaining({
-        Accept: 'application/octet-stream',
+        Accept: '*/*',
         Authorization: 'Bearer raw-access-token',
         'Ocp-Apim-Subscription-Key': 'test-subscription-key',
       }),

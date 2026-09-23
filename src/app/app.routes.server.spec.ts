@@ -68,6 +68,7 @@ describe('serverRoutes', () => {
       'features/supported-activities',
       'features/activity-calendar',
       'features/training-analysis',
+      'features/training-plans',
       'features/training-dashboard',
       'features/activity-map',
       'features/health',
@@ -119,6 +120,7 @@ describe('serverRoutes', () => {
     expect(prerenderedPaths.has('features/supported-activities')).toBe(true);
     expect(prerenderedPaths.has('features/activity-calendar')).toBe(true);
     expect(prerenderedPaths.has('features/training-analysis')).toBe(true);
+    expect(prerenderedPaths.has('features/training-plans')).toBe(true);
     expect(prerenderedPaths.has('features/training-dashboard')).toBe(true);
     expect(prerenderedPaths.has('features/activity-map')).toBe(true);
     expect(prerenderedPaths.has('features/mcp-server')).toBe(true);

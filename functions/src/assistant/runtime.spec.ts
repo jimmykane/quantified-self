@@ -264,6 +264,91 @@ describe('Assistant runtime', () => {
     await expect(runtime.answer(request)).rejects.toThrow();
     expect(callTool).toHaveBeenCalledTimes(1);
   });
+
+  it('requires a current activity-tag read before preparing a clearly identified change', async () => {
+    const { session, callTool } = createSession();
+    const activityRef = 'opaque-activity-reference';
+    session.tools = [{
+      name: 'query_activities_with_tags', title: 'Activities with tags', description: 'Read current tags',
+      inputSchema: { type: 'object', properties: {} },
+    }, {
+      name: 'prepare_activity_tag_change', title: 'Prepare tags', description: 'Prepare a tag change',
+      inputSchema: { type: 'object', properties: {} },
+    }];
+    callTool.mockImplementation(async name => name === 'query_activities_with_tags'
+      ? { structuredContent: { activities: [{ activityRef, activityType: 'Running',
+        startTimeMs: Date.parse('2026-09-21T23:30:00.000Z'), tags: ['Easy'] }], scanComplete: true } }
+      : { structuredContent: { proposalRef: '5b5aa348-50a3-4e62-a1fd-46a7e6dd639f',
+        kind: 'update_event_tags', expiresAtMs: Date.parse('2026-09-22T12:10:00.000Z'),
+        summary: 'Replace one current activity tag with one.', requiresConfirmation: true,
+        arguments: { activityRef, expectedTags: ['Easy'], tags: ['Quality'] } } });
+    const access = vi.fn().mockResolvedValue(undefined);
+    const runtime = createAssistantRuntime({ createMcpSession: vi.fn().mockResolvedValue(session),
+      generateAnswer: async model => {
+        const prepare = model.tools.find(tool => tool.name === 'prepare_activity_tag_change')!;
+        await expect(prepare.execute({ activityRef, expectedTags: [], tags: ['Quality'] }))
+          .rejects.toThrow('Read the selected activity and its current tags');
+        expect(callTool).not.toHaveBeenCalled();
+        await model.tools.find(tool => tool.name === 'query_activities_with_tags')!.execute({});
+        await prepare.execute({ activityRef, expectedTags: ['Easy'], tags: ['Quality'] });
+        return { answer: 'Review the prepared activity tag change.', visualRequest: { chart: null, map: null } };
+      } });
+    const result = await runtime.answer({ uid: 'owner', appBaseUrl: 'https://quantified-self.io',
+      prompt: 'Replace Easy with Quality on that run.', timeZone: 'Europe/Helsinki', history: [],
+      activityTagChangesEnabled: true, assertContentWriteAccess: access });
+    expect(result.pendingContentProposal).toMatchObject({
+      kind: 'update_event_tags',
+      summary: 'Change tags on Running from 2026-09-22.',
+    });
+    expect(access).toHaveBeenCalledTimes(4);
+  });
+
+  it('keeps the prerequisite content reads available in bounded prompt workflows', async () => {
+    const workflow = ASSISTANT_PROMPT_EXAMPLES[0];
+    const { session } = createSession();
+    session.tools = [
+      ...workflow.toolWorkflow.map(name => ({
+        name,
+        title: name,
+        description: name,
+        inputSchema: { type: 'object' as const, properties: {} },
+      })),
+      { name: 'query_activities_with_tags', title: 'Tagged activities', description: 'Read tags',
+        inputSchema: { type: 'object', properties: {} } },
+      { name: 'prepare_activity_tag_change', title: 'Prepare tags', description: 'Prepare tag replacement',
+        inputSchema: { type: 'object', properties: {} } },
+      { name: 'query_editable_timeline_notes', title: 'Editable notes', description: 'Read editable notes',
+        inputSchema: { type: 'object', properties: {} } },
+      { name: 'prepare_timeline_note_update', title: 'Prepare note', description: 'Prepare note update',
+        inputSchema: { type: 'object', properties: {} } },
+    ];
+    const runtime = createAssistantRuntime({
+      createMcpSession: vi.fn().mockResolvedValue(session),
+      generateAnswer: async model => {
+        expect(model.tools.map(tool => tool.name)).toEqual(expect.arrayContaining([
+          'query_activities_with_tags',
+          'prepare_activity_tag_change',
+          'query_editable_timeline_notes',
+          'prepare_timeline_note_update',
+        ]));
+        for (const toolName of workflow.toolWorkflow) {
+          await model.tools.find(tool => tool.name === toolName)!.execute({});
+        }
+        return { answer: 'Here is the requested comparison.', visualRequest: { chart: null, map: null } };
+      },
+    });
+
+    await runtime.answer({
+      uid: 'owner',
+      appBaseUrl: 'https://quantified-self.io',
+      prompt: workflow.prompt,
+      timeZone: 'UTC',
+      history: [],
+      activityTagChangesEnabled: true,
+      timelineNoteChangesEnabled: true,
+      assertContentWriteAccess: vi.fn().mockResolvedValue(undefined),
+    });
+  });
   afterEach(() => {
     vi.restoreAllMocks();
   });
@@ -1405,7 +1490,7 @@ describe('Assistant runtime', () => {
       'user-1',
       'https://beta.quantified-self.io',
       'coordinate_free',
-      false, false, false, false, undefined);
+      false, false, false, false, undefined, false, false);
     expect(result.answer).toBe('Your readiness is 72 today.');
     expect(result.evidence).toEqual([expect.objectContaining({
       toolName: 'get_daily_report',
@@ -1795,7 +1880,7 @@ describe('Assistant runtime', () => {
       'user-1',
       'https://quantified-self.io',
       'precise_activity',
-      false, false, false, false, undefined);
+      false, false, false, false, undefined, false, false);
   });
 
   it('preserves an explicit model-selected timezone', async () => {

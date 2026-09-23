@@ -357,7 +357,7 @@ function documentData(snapshot: admin.firestore.DocumentSnapshot): Record<string
 async function readTrainingScheduleSnapshotInTransaction(
     transaction: admin.firestore.Transaction,
     userRef: admin.firestore.DocumentReference,
-    request: MutateTrainingScheduleRequestV1,
+    requests: readonly MutateTrainingScheduleRequestV1[],
 ): Promise<TrainingScheduleSnapshotV1> {
     const stateRef = userRef.collection('trainingPlanState').doc('current');
     const plansRef = userRef.collection(TRAINING_PLANS_COLLECTION_ID);
@@ -371,10 +371,14 @@ async function readTrainingScheduleSnapshotInTransaction(
         transaction.get(plansRef),
         transaction.get(currentWorkoutsQuery),
     ]);
-    const directWorkoutSnapshots = await Promise.all(getOperationWorkoutIds(request).map(workoutId => (
+    const workoutIds = [...new Set(requests.flatMap(getOperationWorkoutIds))];
+    const directWorkoutSnapshots = await Promise.all(workoutIds.map(workoutId => (
         transaction.get(workoutsRef.doc(workoutId))
     )));
-    const createdEntityIds = getOperationCreatedEntityIds(request);
+    const createdEntityIds = requests.flatMap(getOperationCreatedEntityIds)
+        .filter((entity, index, all) => all.findIndex(candidate => (
+            candidate.kind === entity.kind && candidate.id === entity.id
+        )) === index);
     const deletionTombstoneSnapshots = await Promise.all(createdEntityIds.map(entity => (
         transaction.get(deletionTombstonesRef.doc(
             trainingScheduleDeletionTombstoneDocumentId(entity.kind, entity.id),
@@ -416,26 +420,96 @@ export function trainingScheduleRevisionDocumentId(revision: number): string {
     return `${revision}`.padStart(10, '0');
 }
 
-export async function mutateTrainingScheduleForUser(
+export interface TrainingScheduleMutationOptions {
+    db?: admin.firestore.Firestore;
+    nowMs?: number;
+    transactionPrecondition?: (transaction: admin.firestore.Transaction) => Promise<void>;
+    transactionPostcondition?: (
+        transaction: admin.firestore.Transaction,
+        responses: readonly MutateTrainingScheduleResponseV1[],
+    ) => Promise<void> | void;
+    additionalWriteBudget?: number;
+}
+
+export class TrainingScheduleBatchWriteLimitError extends TrainingScheduleMutationError {
+    constructor() {
+        super(
+            'limit-exceeded',
+            'These changes produce too much revision history for one atomic batch. Apply them in smaller batches.',
+        );
+        this.name = 'TrainingScheduleBatchWriteLimitError';
+    }
+}
+
+interface AppliedBatchItem {
+    request: MutateTrainingScheduleRequestV1;
+    applied: AppliedTrainingScheduleMutationV1;
+    revisions: TrainingScheduleRevisionWritesV1;
+    nowMs: number;
+}
+
+function uniqueDocumentCount(values: readonly string[]): number {
+    return new Set(values).size;
+}
+
+function estimateBatchWriteCount(
+    items: readonly AppliedBatchItem[],
+    additionalWriteBudget: number,
+): number {
+    const final = items.length > 0 ? items[items.length - 1].applied.after : undefined;
+    if (!final) return additionalWriteBudget;
+    const affectedPlans = items.flatMap(item => item.applied.affectedPlanIds);
+    const changedWorkouts = items.flatMap(item => item.applied.changedWorkoutIds);
+    const permanentlyDeletedWorkouts = items.flatMap(item => item.applied.permanentlyDeletedWorkoutIds);
+    const invalidatedWorkouts = items.flatMap(item => (
+        [...item.applied.changedWorkoutIds, ...item.applied.permanentlyDeletedWorkoutIds].filter(id => (
+            item.applied.before.workouts.get(id)?.planId !== item.applied.after.workouts.get(id)?.planId
+            || item.applied.after.workouts.get(id)?.lifecycle === 'deleted'
+            || !item.applied.after.workouts.has(id)
+        ))
+    ));
+    const historyWrites = items.reduce((total, item) => total
+        + item.revisions.planRevisions.size
+        + [...item.revisions.planRevisionChunks.values()].reduce((sum, chunks) => sum + chunks.length, 0)
+        + item.revisions.standaloneWorkoutRevisions.size, 0);
+    return 2 // Final state plus one reconciliation marker.
+        + uniqueDocumentCount(affectedPlans.filter(id => final.plans.has(id)))
+        + uniqueDocumentCount(changedWorkouts.filter(id => final.workouts.has(id)))
+        + historyWrites
+        + uniqueDocumentCount(invalidatedWorkouts)
+        + uniqueDocumentCount(permanentlyDeletedWorkouts) * 3
+        + items.length // One idempotency receipt per newly applied request.
+        + additionalWriteBudget;
+}
+
+export async function mutateTrainingScheduleBatchForUser(
     uid: string,
-    request: MutateTrainingScheduleRequestV1,
-    options: {
-        db?: admin.firestore.Firestore;
-        nowMs?: number;
-        transactionPrecondition?: (transaction: admin.firestore.Transaction) => Promise<void>;
-    } = {},
-): Promise<MutateTrainingScheduleResponseV1> {
+    requests: readonly MutateTrainingScheduleRequestV1[],
+    options: TrainingScheduleMutationOptions = {},
+): Promise<MutateTrainingScheduleResponseV1[]> {
+    if (requests.length < 1 || requests.length > 25) {
+        throw new TrainingScheduleMutationError('limit-exceeded', 'Apply between 1 and 25 Training changes at once.');
+    }
+    if (new Set(requests.map(request => request.mutationId)).size !== requests.length) {
+        throw new TrainingScheduleMutationError('failed-precondition', 'Training mutation IDs must be unique within a batch.');
+    }
+    const additionalWriteBudget = options.additionalWriteBudget ?? 0;
+    if (!Number.isInteger(additionalWriteBudget) || additionalWriteBudget < 0) {
+        throw new TrainingScheduleMutationError('failed-precondition', 'The additional write budget must be a non-negative integer.');
+    }
     const db = options.db ?? admin.firestore();
     const nowMs = options.nowMs ?? Date.now();
-    const requestHash = hashTrainingScheduleMutationRequest(request);
     const userRef = db.collection('users').doc(uid);
     const stateRef = userRef.collection('trainingPlanState').doc('current');
-    const receiptRef = stateRef.collection(TRAINING_PLAN_MUTATION_RECEIPTS_COLLECTION_ID).doc(request.mutationId);
+    const receiptRefs = requests.map(request => (
+        stateRef.collection(TRAINING_PLAN_MUTATION_RECEIPTS_COLLECTION_ID).doc(request.mutationId)
+    ));
+    const requestHashes = requests.map(hashTrainingScheduleMutationRequest);
     const deletionTombstonesRef = stateRef.collection(
         TRAINING_SCHEDULE_DELETION_TOMBSTONES_COLLECTION_ID,
     );
 
-    const response = await db.runTransaction(async (transaction) => {
+    const responses = await db.runTransaction(async (transaction) => {
         const deletionGuard = await getUserDeletionGuardStateInTransaction(db, transaction, uid, nowMs);
         if (deletionGuard.shouldSkip) {
             throw new TrainingScheduleMutationError(
@@ -449,44 +523,86 @@ export async function mutateTrainingScheduleForUser(
         // A separate preflight check would leave a revocation race.
         await options.transactionPrecondition?.(transaction);
 
-        const receiptSnapshot = await transaction.get(receiptRef);
-        if (receiptSnapshot.exists) {
+        const receiptSnapshots = await Promise.all(receiptRefs.map(ref => transaction.get(ref)));
+        const storedResponses: MutateTrainingScheduleResponseV1[] = [];
+        let pendingStart = requests.length;
+        for (let index = 0; index < receiptSnapshots.length; index += 1) {
+            const receiptSnapshot = receiptSnapshots[index];
+            if (!receiptSnapshot.exists) {
+                pendingStart = Math.min(pendingStart, index);
+                continue;
+            }
+            if (pendingStart !== requests.length) {
+                throw new TrainingScheduleMutationError(
+                    'failed-precondition',
+                    'This Training batch has a non-contiguous receipt history and cannot be resumed safely.',
+                );
+            }
             const receipt = documentData(receiptSnapshot);
-            if (receipt.requestHash !== requestHash) {
+            if (receipt.requestHash !== requestHashes[index]) {
                 throw new TrainingScheduleMutationError(
                     'failed-precondition',
                     'This mutation ID was already used for a different request.',
                 );
             }
-            return parseStoredMutationResponse(receipt.response);
+            storedResponses.push(parseStoredMutationResponse(receipt.response));
+        }
+        if (pendingStart === requests.length) {
+            await options.transactionPostcondition?.(transaction, storedResponses);
+            return storedResponses;
         }
 
         await assertNoTrainingPlanDeletionInProgress(transaction, stateRef);
 
-        const snapshot = await readTrainingScheduleSnapshotInTransaction(transaction, userRef, request);
-        const applied = applyTrainingScheduleMutation(snapshot, request, nowMs);
-        const revisions = buildTrainingScheduleRevisionWrites(applied, request, nowMs);
-
-        stageTrainingDeliveryReconciliation(transaction, db, uid);
-        for (const id of [...applied.changedWorkoutIds, ...applied.permanentlyDeletedWorkoutIds]) {
-            if (applied.before.workouts.get(id)?.planId !== applied.after.workouts.get(id)?.planId
-                || applied.after.workouts.get(id)?.lifecycle === 'deleted' || !applied.after.workouts.has(id)) {
-                invalidateTrainingWorkoutConsent(transaction, db, uid, id);
-            }
+        const pendingRequests = requests.slice(pendingStart);
+        let snapshot = await readTrainingScheduleSnapshotInTransaction(transaction, userRef, pendingRequests);
+        const items: AppliedBatchItem[] = [];
+        pendingRequests.forEach((request, offset) => {
+            const operationNowMs = nowMs + pendingStart + offset;
+            const applied = applyTrainingScheduleMutation(snapshot, request, operationNowMs);
+            const revisions = buildTrainingScheduleRevisionWrites(applied, request, operationNowMs);
+            items.push({ request, applied, revisions, nowMs: operationNowMs });
+            snapshot = applied.after;
+        });
+        if (estimateBatchWriteCount(items, additionalWriteBudget) > FIRESTORE_TRANSACTION_WRITE_BUDGET) {
+            throw new TrainingScheduleBatchWriteLimitError();
         }
 
-        transaction.set(stateRef, cloneValue(applied.after.state));
-        for (const planId of applied.affectedPlanIds) {
-            const plan = applied.after.plans.get(planId);
+        stageTrainingDeliveryReconciliation(transaction, db, uid);
+        const invalidatedWorkoutIds = new Set<string>();
+        for (const item of items) {
+            for (const id of [...item.applied.changedWorkoutIds, ...item.applied.permanentlyDeletedWorkoutIds]) {
+                if (item.applied.before.workouts.get(id)?.planId !== item.applied.after.workouts.get(id)?.planId
+                    || item.applied.after.workouts.get(id)?.lifecycle === 'deleted'
+                    || !item.applied.after.workouts.has(id)) {
+                    invalidatedWorkoutIds.add(id);
+                }
+            }
+        }
+        invalidatedWorkoutIds.forEach(id => invalidateTrainingWorkoutConsent(transaction, db, uid, id));
+
+        const finalSnapshot = items[items.length - 1].applied.after;
+        transaction.set(stateRef, cloneValue(finalSnapshot.state));
+        const affectedPlanIds = new Set(items.flatMap(item => item.applied.affectedPlanIds));
+        for (const planId of affectedPlanIds) {
+            const plan = finalSnapshot.plans.get(planId);
             if (!plan) continue;
             const planRef = userRef.collection(TRAINING_PLANS_COLLECTION_ID).doc(planId);
             transaction.set(planRef, cloneValue(plan));
-            const revision = revisions.planRevisions.get(planId);
-            if (revision) {
+        }
+        const changedWorkoutIds = new Set(items.flatMap(item => item.applied.changedWorkoutIds));
+        for (const workoutId of changedWorkoutIds) {
+            const workout = finalSnapshot.workouts.get(workoutId);
+            if (!workout) continue;
+            transaction.set(userRef.collection(SCHEDULED_WORKOUTS_COLLECTION_ID).doc(workoutId), cloneValue(workout));
+        }
+        for (const item of items) {
+            for (const [planId, revision] of item.revisions.planRevisions) {
+                const planRef = userRef.collection(TRAINING_PLANS_COLLECTION_ID).doc(planId);
                 const revisionRef = planRef.collection(TRAINING_PLAN_REVISIONS_COLLECTION_ID)
                     .doc(trainingScheduleRevisionDocumentId(revision.revision));
                 transaction.create(revisionRef, cloneValue(revision));
-                for (const chunk of revisions.planRevisionChunks.get(planId) ?? []) {
+                for (const chunk of item.revisions.planRevisionChunks.get(planId) ?? []) {
                     transaction.create(
                         revisionRef.collection(TRAINING_PLAN_REVISION_CHUNKS_COLLECTION_ID)
                             .doc(trainingPlanRevisionChunkDocumentId(chunk.kind, chunk.chunkIndex)),
@@ -494,45 +610,57 @@ export async function mutateTrainingScheduleForUser(
                     );
                 }
             }
-        }
-        for (const workoutId of applied.changedWorkoutIds) {
-            const workout = applied.after.workouts.get(workoutId);
-            if (!workout) continue;
-            const workoutRef = userRef.collection(SCHEDULED_WORKOUTS_COLLECTION_ID).doc(workoutId);
-            transaction.set(workoutRef, cloneValue(workout));
-            const revision = revisions.standaloneWorkoutRevisions.get(workoutId);
-            if (revision) {
+            for (const [workoutId, revision] of item.revisions.standaloneWorkoutRevisions) {
+                const workoutRef = userRef.collection(SCHEDULED_WORKOUTS_COLLECTION_ID).doc(workoutId);
                 transaction.create(
                     workoutRef.collection(TRAINING_PLAN_REVISIONS_COLLECTION_ID).doc(trainingScheduleRevisionDocumentId(revision.revision)),
                     cloneValue(revision),
                 );
             }
         }
-        for (const workoutId of applied.permanentlyDeletedWorkoutIds) {
+        const permanentlyDeletedWorkoutIds = new Set(items.flatMap(item => item.applied.permanentlyDeletedWorkoutIds));
+        for (const workoutId of permanentlyDeletedWorkoutIds) {
+            const deletingItem = items.find(item => item.applied.permanentlyDeletedWorkoutIds.includes(workoutId))!;
             const tombstone = buildTrainingScheduleDeletionTombstone(
                 'workout',
                 workoutId,
-                request.mutationId,
-                nowMs,
+                deletingItem.request.mutationId,
+                deletingItem.nowMs,
             );
             transaction.create(deletionTombstonesRef.doc(tombstone.entityIdHash), tombstone);
             transaction.delete(userRef.collection(SCHEDULED_WORKOUTS_COLLECTION_ID).doc(workoutId));
             transaction.delete(userRef.collection(TRAINING_WORKOUT_COMPLETIONS_COLLECTION_ID).doc(workoutId));
         }
 
-        const receipt: StoredMutationReceiptV1 = {
-            schemaVersion: TRAINING_PLAN_SCHEMA_VERSION,
-            requestHash,
-            response: cloneValue(applied.response),
-            createdAtMs: nowMs,
-            expireAt: Timestamp.fromMillis(nowMs + MUTATION_RECEIPT_RETENTION_MS),
-        };
-        transaction.create(receiptRef, receipt);
-        return applied.response;
+        for (let offset = 0; offset < items.length; offset += 1) {
+            const item = items[offset];
+            const requestIndex = pendingStart + offset;
+            const receipt: StoredMutationReceiptV1 = {
+                schemaVersion: TRAINING_PLAN_SCHEMA_VERSION,
+                requestHash: requestHashes[requestIndex],
+                response: cloneValue(item.applied.response),
+                createdAtMs: item.nowMs,
+                expireAt: Timestamp.fromMillis(item.nowMs + MUTATION_RECEIPT_RETENTION_MS),
+            };
+            transaction.create(receiptRefs[requestIndex], receipt);
+        }
+        const nextResponses = [...storedResponses, ...items.map(item => item.applied.response)];
+        await options.transactionPostcondition?.(transaction, nextResponses);
+        return nextResponses;
     });
 
-    for (const workoutId of response.permanentlyDeletedWorkoutIds) {
+    const permanentlyDeletedWorkoutIds = new Set(responses.flatMap(response => response.permanentlyDeletedWorkoutIds));
+    for (const workoutId of permanentlyDeletedWorkoutIds) {
         await db.recursiveDelete(userRef.collection(SCHEDULED_WORKOUTS_COLLECTION_ID).doc(workoutId));
     }
-    return response;
+    return responses;
+}
+
+export async function mutateTrainingScheduleForUser(
+    uid: string,
+    request: MutateTrainingScheduleRequestV1,
+    options: TrainingScheduleMutationOptions = {},
+): Promise<MutateTrainingScheduleResponseV1> {
+    const responses = await mutateTrainingScheduleBatchForUser(uid, [request], options);
+    return responses[0];
 }

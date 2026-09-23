@@ -7,7 +7,7 @@
       <mat-icon mat-card-avatar class="mcp-connections__card-icon" aria-hidden="true">devices</mat-icon>
       <mat-card-title id="mcp-connections-title">MCP connections</mat-card-title>
       <mat-card-subtitle>
-        These apps can access only the data and Training changes you approve. Disconnect an app here to stop sharing—even
+        These apps can access only the data and changes you approve. Disconnect an app here to stop sharing—even
         if you already removed it from ChatGPT or another service. Authorizing the same app again keeps its current
         connection active until the new setup finishes.
       </mat-card-subtitle>
@@ -108,7 +108,7 @@
       <mat-icon mat-card-avatar class="mcp-connections__card-icon" aria-hidden="true">add_link</mat-icon>
       <mat-card-title id="mcp-chatgpt-setup-title">ChatGPT setup</mat-card-title>
       <mat-card-subtitle>
-        Add the Quantified Self endpoint and icon before authorizing the data and Training access you want.
+        Add the Quantified Self endpoint and icon before authorizing the data access and changes you want.
       </mat-card-subtitle>
     </mat-card-header>
     <mat-card-content>
@@ -157,7 +157,7 @@
         <ol class="mcp-connections__setup-steps">
           <li>Let ChatGPT scan the available tools.</li>
           <li>Sign in to Quantified Self when prompted.</li>
-          <li>Choose the data and optional Training permissions you want to grant.</li>
+          <li>Choose the data access and optional change permissions you want to grant.</li>
         </ol>
       </section>
 
@@ -185,7 +185,7 @@
     <mat-card-header>
       <mat-icon mat-card-avatar class="mcp-connections__card-icon" aria-hidden="true">verified_user</mat-icon>
       <mat-card-title id="mcp-authorization-title">Authorization and data access</mat-card-title>
-      <mat-card-subtitle>Choose the separate data and Training-change permissions you are comfortable granting.</mat-card-subtitle>
+      <mat-card-subtitle>Choose the separate data access and change permissions you are comfortable granting.</mat-card-subtitle>
     </mat-card-header>
     <mat-card-content>
       <ul class="mcp-connections__authorization-list" aria-label="Available MCP permissions">
@@ -208,7 +208,7 @@
           @if (permission.parentTitle) {
             <p>Requires {{ permission.parentTitle }} permission.</p>
           }
-          <p>Start authorization again in the app and approve this permission to grant access. Training changes still use a bounded preview and a separate approval-gated apply tool.</p>
+          <p>Start authorization again in the app and approve this permission to grant access. Change tools use your MCP client's native approval UI; Training changes also use a bounded preview and separate apply tool.</p>
         </mat-dialog-content>
         <mat-dialog-actions align="end">
           <button mat-button mat-dialog-close type="button" (click)="haptics.selection()">Close</button>

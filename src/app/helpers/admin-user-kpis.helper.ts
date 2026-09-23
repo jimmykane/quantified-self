@@ -6,6 +6,8 @@ import type {
     UserCountStats,
     UserGrowthTrendResponse,
 } from '../services/admin.service';
+import { getLocalDateTimeFormatter } from './date-time-format.helper';
+import { getNumberFormatter } from './number-format.helper';
 
 export type AdminUserKpiProfile = 'dashboard' | 'full';
 export type AdminUserKpiSeverity = 'ok' | 'warning' | 'error';
@@ -295,7 +297,9 @@ function countUpdatedSubtitle(computedAt: string | null | undefined): string | u
         return undefined;
     }
     const parsedDate = new Date(computedAt);
-    return Number.isNaN(parsedDate.getTime()) ? undefined : `Updated ${parsedDate.toLocaleString()}`;
+    return Number.isNaN(parsedDate.getTime())
+        ? undefined
+        : `Updated ${getLocalDateTimeFormatter().format(parsedDate)}`;
 }
 
 function connectedServiceSubtitle(
@@ -328,7 +332,7 @@ function userShareSubtitle(users: number | null, totalUsers: number, prefix?: st
     const share = Math.min(100, (normalizedUsers / normalizedTotalUsers) * 100);
     const displayShare = share > 0 && share < 0.1
         ? '<0.1'
-        : new Intl.NumberFormat('en-US', { maximumFractionDigits: 1 }).format(share);
+        : getNumberFormatter(undefined, { maximumFractionDigits: 1 }).format(share);
     return [prefix, `${displayShare}% of users`].filter((value): value is string => Boolean(value)).join(' · ');
 }
 

@@ -33,13 +33,15 @@ describe('Training delivery summaries on the workspace', () => {
     workoutId: 'w', planId: 'p', provider: 'garmin', status: 'delivered', hasRemoteCopy: true, differsFromQS: false,
     timeZone: 'Europe/Helsinki', approvalDigest: null, issues: [], lastAcceptedAtMs: 2, lastAttemptAtMs: 2, retryCount: 0, nextRetryAtMs: null, updatedAtMs: 3 };
   let view$: BehaviorSubject<TrainingDeliveryView>;
-  let service: { watchSummaryScope: ReturnType<typeof vi.fn>; watchPresence: ReturnType<typeof vi.fn>; anyReady: ReturnType<typeof vi.fn>; isReady: ReturnType<typeof vi.fn> };
+  let service: { watchSummaryScope: ReturnType<typeof vi.fn>; watchPresence: ReturnType<typeof vi.fn>; anyReady: ReturnType<typeof vi.fn>;
+    isReady: ReturnType<typeof vi.fn>; isSetupAvailable: ReturnType<typeof vi.fn> };
   let open: ReturnType<typeof vi.fn>;
   let selection: ReturnType<typeof vi.fn>;
   beforeEach(async () => {
     vi.stubGlobal('crypto', webcrypto); user.set({ uid: 'owner' }); user$.next(user());
     view$ = new BehaviorSubject<TrainingDeliveryView>({ settings: [setting], statuses: [status] });
-    service = { watchSummaryScope: vi.fn(() => view$), watchPresence: vi.fn(() => of(true)), anyReady: vi.fn(() => false), isReady: vi.fn(() => false) };
+    service = { watchSummaryScope: vi.fn(() => view$), watchPresence: vi.fn(() => of(true)), anyReady: vi.fn(() => false),
+      isReady: vi.fn(() => false), isSetupAvailable: vi.fn((provider, _planDelivery) => service.isReady(provider)) };
     open = vi.fn(); selection = vi.fn();
     TestBed.overrideComponent(ServiceSourceIconComponent, { set: { template: '' } });
     TestBed.overrideComponent(TrainingDeliveryButtonComponent, { add: { providers: [{ provide: MatDialog, useValue: { open } }] } });
@@ -160,7 +162,8 @@ describe('Training delivery summaries on the workspace', () => {
     expect(fixture.nativeElement.querySelectorAll('.delivery-plan-provider')).toHaveLength(4);
     const providerRows: HTMLElement[] = Array.from(fixture.nativeElement.querySelectorAll('.delivery-plan-provider'));
     for (const provider of ['Garmin Connect', 'COROS', 'Wahoo', 'Suunto App']) {
-      expect(providerRows.some(row => row.getAttribute('aria-label')?.includes(`${provider}: 1 of 2 upcoming workouts synced`))).toBe(true);
+      const state = provider === 'Suunto App' ? 'sent' : 'synced';
+      expect(providerRows.some(row => row.getAttribute('aria-label')?.includes(`${provider}: 1 of 2 upcoming workouts ${state}`))).toBe(true);
     }
     expect(buttons[0].getAttribute('aria-label')).toBe('View plan sync details');
     const visibleCounts: HTMLElement[] = Array.from(fixture.nativeElement.querySelectorAll('.delivery-plan-provider-count'));

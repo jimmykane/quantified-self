@@ -43,4 +43,29 @@ describe('Training remote check labels', () => {
       { state: 'confirmed_missing' } as TrainingVerificationV1,
       { workoutId: 'workout', provider: 'suunto' })).toBe('Missing from connected app');
   });
+  it('keeps Suunto cloud-record evidence separate from app and watch visibility', () => {
+    const status = { provider: 'suunto', status: 'delivered', workoutId: 'workout', hasRemoteCopy: true,
+      differsFromQS: false, lastAcceptedAtMs: 1000 } as TrainingDeliveryStatusV1;
+    expect(trainingVerificationLabel(status)).toBe('Sent to Suunto · app and watch visibility cannot be checked');
+    expect(trainingVerificationLabel(status, { state: 'present' } as TrainingVerificationV1))
+      .toBe('Sent to Suunto · app and watch visibility cannot be checked');
+    expect(trainingVerificationLabel(status, { state: 'unknown' } as TrainingVerificationV1))
+      .toBe('Sent to Suunto · app and watch visibility cannot be checked');
+    expect(trainingVerificationLabel(status, { state: 'confirmed_missing', missing: true } as TrainingVerificationV1))
+      .toBe('Sent to Suunto · app and watch visibility cannot be checked');
+    for (const label of [
+      trainingVerificationLabel(status),
+      trainingVerificationLabel(status, { state: 'present' } as TrainingVerificationV1),
+    ]) expect(label).not.toMatch(/available in|found in (the )?app|watch receipt/i);
+  });
+  it.each([
+    ['pending', 'Waiting to send'],
+    ['needs_attention', 'Send could not be confirmed — inspect before retrying'],
+    ['failed', 'Send failed'],
+    ['removed', 'No active Suunto Guide delivery'],
+    ['completed', 'Completed workout · sent Guide retained'],
+    ['provider_unavailable', 'Suunto workout delivery is unavailable'],
+  ] as const)('uses truthful Suunto wording for %s', (state, label) => {
+    expect(trainingVerificationLabel({ provider: 'suunto', status: state } as TrainingDeliveryStatusV1)).toBe(label);
+  });
 });

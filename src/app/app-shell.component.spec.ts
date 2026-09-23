@@ -10,6 +10,7 @@ import { AppAnalyticsService } from './services/app.analytics.service';
 import { SeoService } from './services/seo.service';
 import { AppIconService } from './services/app.icon.service';
 import { AppThemeService } from './services/app.theme.service';
+import { AppLocaleService } from './services/app.locale.service';
 import { AppWhatsNewService } from './services/app.whats-new.service';
 import { MatDialog } from '@angular/material/dialog';
 import { AppHapticsService } from './services/app.haptics.service';
@@ -87,6 +88,9 @@ describe('AppShellComponent', () => {
     const mockHapticsService = {
         selection: vi.fn()
     };
+    const mockLocaleService = {
+        reconcileAccountPreference: vi.fn()
+    };
 
 
     beforeEach(async () => {
@@ -95,6 +99,7 @@ describe('AppShellComponent', () => {
         mockRouter.url = '/';
         mockThemeService.themeChange$ = new Subject();
         mockAppAuthService.user$ = of(null);
+        mockLocaleService.reconcileAccountPreference.mockReset();
 
         await TestBed.configureTestingModule({
             declarations: [AppShellComponent],
@@ -116,6 +121,7 @@ describe('AppShellComponent', () => {
                 { provide: AppAnalyticsService, useValue: mockAnalyticsService },
                 { provide: SeoService, useValue: mockSeoService },
                 { provide: AppThemeService, useValue: mockThemeService },
+                { provide: AppLocaleService, useValue: mockLocaleService },
                 {
                     provide: AppUserService, useValue: {
                         updateUserProperties: vi.fn().mockReturnValue(Promise.resolve()),
@@ -154,6 +160,18 @@ describe('AppShellComponent', () => {
 
     it('should initialize analytics service', () => {
         expect(component['analyticsService']).toBeTruthy();
+    });
+
+    it('reconciles the regional format when an authenticated account hydrates', () => {
+        const user = { uid: 'locale-user', settings: { appSettings: { formatLocale: 'fr-FR' } } };
+        mockLocaleService.reconcileAccountPreference.mockReset();
+        mockAppAuthService.user$ = of(user);
+
+        const authenticatedFixture = TestBed.createComponent(AppShellComponent);
+        authenticatedFixture.detectChanges();
+
+        expect(mockLocaleService.reconcileAccountPreference).toHaveBeenCalledWith(user);
+        authenticatedFixture.destroy();
     });
 
     it('should keep prerendered public startup pages visible while browser auth resolves', () => {

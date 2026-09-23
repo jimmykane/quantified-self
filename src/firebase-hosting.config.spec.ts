@@ -328,12 +328,12 @@ describe('Firebase Hosting configuration', () => {
   });
 
   it('marks recently updated public discovery surfaces in sitemap', () => {
-    expect(sitemapLastmodForUrl(`${siteOrigin}/`)).toBe('2026-09-16');
+    expect(sitemapLastmodForUrl(`${siteOrigin}/`)).toBe('2026-09-22');
     expect(sitemapLastmodForUrl(`${siteOrigin}/features/health`)).toBe('2026-09-08');
     expect(sitemapLastmodForUrl(`${siteOrigin}/features`)).toBe('2026-09-02');
     expect(sitemapLastmodForUrl(`${siteOrigin}/features/activity-calendar`)).toBe('2026-08-04');
     expect(sitemapLastmodForUrl(`${siteOrigin}/features/ai-insights`)).toBe('2026-09-02');
-    expect(sitemapLastmodForUrl(`${siteOrigin}/features/mcp-server`)).toBe('2026-09-15');
+    expect(sitemapLastmodForUrl(`${siteOrigin}/features/mcp-server`)).toBe('2026-09-22');
     expect(sitemapLastmodForUrl(`${siteOrigin}/integrations`)).toBe('2026-09-02');
     expect(sitemapLastmodForUrl(`${siteOrigin}/integrations/garmin`)).toBe('2026-08-03');
     expect(sitemapLastmodForUrl(`${siteOrigin}/integrations/suunto`)).toBe('2026-08-03');
@@ -347,13 +347,14 @@ describe('Firebase Hosting configuration', () => {
     expect(sitemapLastmodForUrl(`${siteOrigin}/guides/sync-wahoo-to-suunto`)).toBe('2026-07-21');
     expect(sitemapLastmodForUrl(`${siteOrigin}/guides/centralize-garmin-suunto-coros-workout-data`)).toBe('2026-07-21');
     expect(sitemapLastmodForUrl(`${siteOrigin}/features/training-analysis`)).toBe('2026-09-16');
+    expect(sitemapLastmodForUrl(`${siteOrigin}/features/training-plans`)).toBe('2026-09-21');
     expect(sitemapLastmodForUrl(`${siteOrigin}/features/training-dashboard`)).toBe('2026-09-02');
     expect(sitemapLastmodForUrl(`${siteOrigin}/features/activity-map`)).toBe('2026-09-02');
     expect(sitemapLastmodForUrl(`${siteOrigin}/features/fit-gpx-tcx-file-analyzer`)).toBe('2026-09-02');
     expect(sitemapXml).not.toContain(`${siteOrigin}/features/workout-file-comparison`);
     expect(sitemapXml).not.toContain(`${siteOrigin}/features/sports-watch-benchmark`);
-    expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-09-16');
-    expect(sitemapLastmodForUrl(`${siteOrigin}/policies`)).toBe('2026-09-10');
+    expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-09-22');
+    expect(sitemapLastmodForUrl(`${siteOrigin}/policies`)).toBe('2026-09-22');
     expect(sitemapLastmodForUrl(`${siteOrigin}/privacy`)).toBe('2026-09-10');
     expect(sitemapLastmodForUrl(`${siteOrigin}/terms`)).toBe('2026-08-05');
   });

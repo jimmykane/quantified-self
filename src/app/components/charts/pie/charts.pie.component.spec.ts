@@ -11,7 +11,7 @@ import {
   PaceUnits,
   TimeIntervals
 } from '@sports-alliance/sports-lib';
-import { normalizeUserUnitSettings } from '@shared/unit-aware-display';
+import { formatUnitAwareDataValue, normalizeUserUnitSettings } from '@shared/unit-aware-display';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ChartsPieComponent } from './charts.pie.component';
 import { EChartsLoaderService } from '../../../services/echarts-loader.service';
@@ -31,6 +31,15 @@ type ResizeObserverRecord = {
   observe: ReturnType<typeof vi.fn>;
   disconnect: ReturnType<typeof vi.fn>;
 };
+
+function expectedRecoveryFinishMeta(finishTimeMs: number, compact = false): string {
+  const finishDate = new Date(finishTimeMs);
+  const date = finishDate.toLocaleDateString('en-US', {
+    weekday: 'short', day: 'numeric', month: 'short',
+  });
+  const time = finishDate.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+  return `Expected by:${compact ? '\n' : ' '}${date} · ${time}`;
+}
 
 describe('ChartsPieComponent', () => {
   let fixture: ComponentFixture<ChartsPieComponent>;
@@ -244,7 +253,7 @@ describe('ChartsPieComponent', () => {
     expect(option.graphic[0].children[2].style.text).toBe('Total per month');
   });
 
-  it('should override center summary with recovery-left and total recovery meta', async () => {
+  it('should align the recovery summary, finish date, legend, and recovery color', async () => {
     const nowMs = Date.UTC(2024, 0, 3, 12, 0, 0);
     const dateNowSpy = vi.spyOn(Date, 'now').mockReturnValue(nowMs);
     component.enableRecoveryNowMode = true;
@@ -264,23 +273,27 @@ describe('ChartsPieComponent', () => {
     await new Promise(resolve => setTimeout(resolve, 0));
 
     const option = mockLoader.setOption.mock.calls.at(-1)?.[1] as Record<string, any>;
-    const expectedRemaining = formatDashboardNumericValue(
+    const expectedRemaining = formatUnitAwareDataValue(
       DataDuration.type,
       4800,
-      undefined as any,
       component.userUnitSettings,
-    );
-    const expectedTotal = formatDashboardNumericValue(
-      DataDuration.type,
-      5400,
-      undefined as any,
-      component.userUnitSettings,
+      { compactDuration: true, stripRepeatedUnit: true },
     );
     const recoverySliceNames = option.series[0].data.map((entry: { name: string }) => entry.name);
     expect(option.graphic[0].children[0].style.text).toBe('Recovery left');
     expect(option.graphic[0].children[1].style.text).toBe(expectedRemaining);
-    expect(option.graphic[0].children[2].style.text).toBe(`Total recovery: ${expectedTotal}`);
-    expect(recoverySliceNames).toEqual(['Left now', 'Elapsed']);
+    expect(option.graphic[0].children[2].style.text).toBe(expectedRecoveryFinishMeta(nowMs + (4800 * 1000)));
+    expect(recoverySliceNames).toEqual(['Recovery left', 'Elapsed']);
+    expect(option.series[0].data[0].itemStyle.color).toBe('#ba1a1a');
+    const tooltip = option.tooltip.formatter({ data: option.series[0].data[0] });
+    expect(tooltip).toContain('Active total');
+    expect(tooltip).toContain('Expected by');
+    expect(tooltip).toContain(formatUnitAwareDataValue(
+      DataDuration.type,
+      5400,
+      component.userUnitSettings,
+      { compactDuration: true, stripRepeatedUnit: true },
+    ));
 
     dateNowSpy.mockRestore();
   });
@@ -301,7 +314,8 @@ describe('ChartsPieComponent', () => {
     expect(label.style.fontSize).toBeLessThan(ECHARTS_DASHBOARD_CHART_TITLE_FONT_SIZE);
     expect(value.style.fontSize).toBeLessThan(22);
     expect(value.style.text).toBe(formatDashboardNumericValue(DataDuration.type, 4 * 86400 - 100, undefined as any));
-    expect(meta.style.text).toBe(`Total recovery:\n${formatDashboardNumericValue(DataDuration.type, 4 * 86400 + 3500, undefined as any)}`);
+    expect(meta.style.text).toBe(expectedRecoveryFinishMeta(now + ((4 * 86400 - 100) * 1000), true));
+    expect(meta.style.fontSize).toBe(10);
     expect(meta.style.width).toBeLessThan(260 * 0.54);
     expect(meta.style.overflow).toBe('break');
     nowSpy.mockRestore();
@@ -371,20 +385,15 @@ describe('ChartsPieComponent', () => {
     await new Promise(resolve => setTimeout(resolve, 0));
 
     const option = mockLoader.setOption.mock.calls.at(-1)?.[1] as Record<string, any>;
-    const expectedRemaining = formatDashboardNumericValue(
+    const expectedRemaining = formatUnitAwareDataValue(
       DataDuration.type,
       3 * 3600,
-      undefined as any,
       component.userUnitSettings,
-    );
-    const expectedActiveTotal = formatDashboardNumericValue(
-      DataDuration.type,
-      5 * 3600,
-      undefined as any,
-      component.userUnitSettings,
+      { compactDuration: true, stripRepeatedUnit: true },
     );
     expect(option.graphic[0].children[1].style.text).toBe(expectedRemaining);
-    expect(option.graphic[0].children[2].style.text).toBe(`Total recovery: ${expectedActiveTotal}`);
+    expect(option.graphic[0].children[2].style.text)
+      .toBe(expectedRecoveryFinishMeta(nowMs + (3 * 3600 * 1000)));
     expect(option.series[0].data[0].value).toBe(3 * 3600);
     expect(option.series[0].data[1].value).toBe(2 * 3600);
 
@@ -410,7 +419,7 @@ describe('ChartsPieComponent', () => {
 
     const option = mockLoader.setOption.mock.calls.at(-1)?.[1] as Record<string, any>;
     expect(option.graphic[0].children[0].style.text).not.toBe('Recovery left');
-    expect(option.series[0].data.map((entry: { name: string }) => entry.name)).not.toEqual(['Left now', 'Elapsed']);
+    expect(option.series[0].data.map((entry: { name: string }) => entry.name)).not.toEqual(['Recovery left', 'Elapsed']);
   });
 
   it('should format pie center and tooltip values using passed unit settings', async () => {

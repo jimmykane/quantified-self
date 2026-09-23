@@ -490,6 +490,26 @@ mat-icon {
   width: 100%;
 }
 
+.activity-table-overlay {
+  --loading-overlay-top-offset: 56px;
+  --loading-shade-error-background: color-mix(in srgb, var(--mat-sys-surface-container-high) 76%, transparent);
+  --loading-shade-error-border: 1px solid color-mix(in srgb, var(--mat-sys-outline-variant) 78%, transparent);
+  --loading-shade-error-radius: 16px;
+  --loading-shade-error-padding: 18px 22px;
+  --loading-shade-error-blur: 16px;
+  --loading-shade-error-shadow: var(--qs-overlay-shadow);
+}
+
+.activity-table-no-data-row--hidden {
+  display: none;
+}
+
+@include bp.xsmall {
+  .activity-table-overlay {
+    --loading-shade-error-padding: 16px 18px;
+  }
+}
+
 /* Paginator styling to match glass theme */
 mat-paginator {
   background: transparent !important;

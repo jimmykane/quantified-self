@@ -118,8 +118,8 @@ describe('PublicSeoPageComponent', () => {
     expect(text).toContain('Recorded Health metrics');
     expect(text).toContain('separate Health permission');
     expect(text).toContain('Body Battery keeps its Garmin points scale');
-    expect(text).toContain('MCP cannot write Health, activities, routes, sleep, measurements, or dashboard settings');
-    expect(text).toContain('Training changes are previewed in a bounded proposal before a distinct approval-gated apply call');
+    expect(text).toContain('cannot change recorded activity data, Health, routes, sleep, measurements, or dashboard settings');
+    expect(text).toContain('Training changes additionally use a bounded preview before a distinct apply call');
     expect(text).toContain('body-weight history');
     expect(text).toContain('Sleep, readiness, and daily context');
     expect(text).toContain('Saved routes and optional locations');
@@ -133,7 +133,7 @@ describe('PublicSeoPageComponent', () => {
     expect(text).toContain('personal, health, or location context');
     expect(text).toContain('untrusted labels');
     expect(text).toContain('plan your next workout');
-    expect(text).toContain('Training-only approval-gated writes');
+    expect(text).toContain('Focused, approval-gated writes');
     expect(text).toContain('External clients have their own privacy and retention practices');
     expect(mcpFixture.debugElement.queryAll(By.directive(CompactRowComponent))).toHaveLength(9);
     expect(mcpFixture.nativeElement.querySelectorAll('.faq-item')).toHaveLength(PUBLIC_SEO_PAGES.mcpServer.faqItems.length);
@@ -163,12 +163,52 @@ describe('PublicSeoPageComponent', () => {
     expect(text).toContain('Week, Month, and Year views');
     expect(text).toContain('Duration-scaled activity circles');
     expect(text).toContain('independent from dashboard event-search filters');
-    expect(calendarFixture.debugElement.queryAll(By.directive(CompactRowComponent))).toHaveLength(6);
+    expect(calendarFixture.debugElement.queryAll(By.directive(CompactRowComponent))).toHaveLength(7);
     expect(calendarFixture.nativeElement.querySelectorAll('.faq-item')).toHaveLength(4);
     expect(hrefs).not.toContain('/calendar');
     expect(hrefs).toContain('/help#activity-calendar');
     expect(hrefs).toContain('/features/training-analysis');
+    expect(hrefs).toContain('/features/training-plans');
 
     calendarFixture.destroy();
+  });
+
+  it('renders Training Plans with visible MCP and provider-delivery boundaries', () => {
+    routeStub.snapshot.data.publicSeoPage = PUBLIC_SEO_PAGES.trainingPlans;
+
+    const plansFixture = TestBed.createComponent(PublicSeoPageComponent);
+    plansFixture.detectChanges();
+
+    const text = plansFixture.nativeElement.textContent as string;
+    const hrefs = Array.from(plansFixture.nativeElement.querySelectorAll('a'))
+      .map(link => (link as HTMLAnchorElement).getAttribute('href') ?? '');
+    const preview = plansFixture.debugElement.queryAll(By.directive(PublicFeaturePreviewComponent))
+      .find(candidate => candidate.componentInstance.previewKey() === 'training-plans');
+
+    expect(text).toContain('Plan running and cycling workouts your way');
+    expect(text).toContain('Standalone when that is all you need');
+    expect(text).toContain('Multiple plans, one active calendar');
+    expect(text).toContain('Completed totals remain unchanged');
+    expect(text).toContain('Plan directly, through MCP, or with provider delivery');
+    expect(text).toContain('compatible MCP client can read your schedule');
+    expect(text).toContain('Workout delivery to Garmin, Suunto, and Wahoo is available to connected Pro members');
+    expect(text).toContain('New COROS plan sync and standalone Send actions are coming soon in the app');
+    expect(text).toContain('Connecting a provider never sends a workout by itself');
+    expect(text).toContain('Can I add a workout without creating a plan?');
+    expect(text).toContain('Can I use an MCP client with Training Plans?');
+    expect(text).toContain('Plans and standalone structured workouts created in Quantified Self are available on the free tier');
+    expect(text).toContain('Connecting a provider never sends a workout by itself');
+    expect(text).not.toContain('Send to Garmin');
+    expect(text).not.toContain('Send to COROS');
+    expect(text).not.toContain('Send to Wahoo');
+    expect(text).not.toContain('Send to Suunto');
+    expect(plansFixture.nativeElement.querySelectorAll('.faq-item')).toHaveLength(6);
+    expect(preview).toBeTruthy();
+    expect(hrefs).toContain('/login');
+    expect(hrefs).toContain('/help#training-plans');
+    expect(hrefs).toContain('/features/activity-calendar');
+    expect(hrefs).toContain('/features/training-analysis');
+
+    plansFixture.destroy();
   });
 });

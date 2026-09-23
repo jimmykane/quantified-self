@@ -605,6 +605,22 @@ describe('MCP OAuth service', () => {
     ])).toBe(true);
     expect(hasValidMcpScopeDependencies([MCP_OAUTH_SCOPES.TrainingPlansWrite])).toBe(false);
     expect(hasValidMcpScopeDependencies([MCP_OAUTH_SCOPES.TrainingDeliveryWrite])).toBe(false);
+    expect(hasValidMcpScopeDependencies([MCP_OAUTH_SCOPES.TimelineNotesWrite])).toBe(false);
+    expect(hasValidMcpScopeDependencies([
+      MCP_OAUTH_SCOPES.TimelineNotesRead,
+      MCP_OAUTH_SCOPES.TimelineNotesWrite,
+    ])).toBe(true);
+    expect(hasValidMcpScopeDependencies([MCP_OAUTH_SCOPES.EventsWrite])).toBe(false);
+    expect(hasValidMcpScopeDependencies([
+      MCP_OAUTH_SCOPES.ActivityDetailsRead,
+      MCP_OAUTH_SCOPES.EventsWrite,
+    ])).toBe(true);
+    expect(() => normalizeOAuthScopes(MCP_OAUTH_SCOPES.EventsWrite)).toThrow(
+      'Dependent permissions require their matching parent read permission.',
+    );
+    expect(() => normalizeOAuthScopes('activity-details:read activity-tags:write')).toThrow(
+      'Only metrics:read',
+    );
   });
 
   it('accepts each independent read scope', () => {
@@ -1555,6 +1571,47 @@ describe('MCP OAuth service', () => {
     await expect(refresh(restored.refresh_token)).rejects.toMatchObject({ code: 'invalid_grant' });
   });
 
+  it('preserves explicit content-write consent and never expands it through refresh', async () => {
+    for (const [parent, child] of [
+      [MCP_OAUTH_SCOPES.ActivityDetailsRead, MCP_OAUTH_SCOPES.EventsWrite],
+      [MCP_OAUTH_SCOPES.TimelineNotesRead, MCP_OAUTH_SCOPES.TimelineNotesWrite],
+    ] as const) {
+      const store = createMemoryStore();
+      let sequence = 0;
+      const service = createMcpOAuthService({ store, fetchClientMetadata: async () => metadata(),
+        now: () => 1_000, randomToken: () => `content-write-fixture-${++sequence}` });
+      const origin = 'https://quantified-self.io';
+      const resource = `${origin}/mcp`;
+      const verifier = 'correct-verifier-value-with-at-least-43-characters';
+      const start = await service.startAuthorization({
+        ...authorizationParams(verifier), scope: `${parent} ${child}`,
+      }, origin);
+      const approval = await service.decideAuthorization({
+        uid: 'user-1', requestId: start.requestId, approved: true, grantedScopes: [parent, child],
+      });
+      const granted = await service.exchangeAuthorizationCode({
+        grant_type: 'authorization_code',
+        code: new URL(approval.redirectUri).searchParams.get('code')!,
+        client_id: metadata().client_id,
+        redirect_uri: metadata().redirect_uris[0],
+        code_verifier: verifier,
+        resource,
+      }, origin);
+      const authenticatedGrant = await service.authenticateBearer(granted.access_token, resource);
+      expect(authenticatedGrant.scopes).toEqual([parent, child]);
+      expect(authenticatedGrant.grantId).toEqual(expect.any(String));
+      const narrowed = await service.exchangeRefreshToken({
+        grant_type: 'refresh_token', refresh_token: granted.refresh_token,
+        client_id: metadata().client_id, resource, scope: parent,
+      }, origin);
+      expect((await service.authenticateBearer(narrowed.access_token, resource)).scopes).toEqual([parent]);
+      await expect(service.exchangeRefreshToken({
+        grant_type: 'refresh_token', refresh_token: narrowed.refresh_token,
+        client_id: metadata().client_id, resource, scope: `${parent} ${child}`,
+      }, origin)).rejects.toMatchObject({ code: 'invalid_scope' });
+    }
+  });
+
   it('supports a notes-only reauthorization, preserves its scope on refresh and enforces revocation', async () => {
     const store = createMemoryStore();
     let sequence = 0;
@@ -1601,6 +1658,24 @@ describe('MCP OAuth service', () => {
       scope: 'timeline-notes:read' }, 'https://quantified-self.io');
     await expect(service.decideAuthorization({ uid: 'user-1', requestId: notesOnly.requestId, approved: true }))
       .rejects.toMatchObject({ code: 'invalid_scope' });
+  });
+
+  it('never adds note or event changes through legacy consent fallback', async () => {
+    const store = createMemoryStore();
+    let sequence = 0;
+    const service = createMcpOAuthService({ store, fetchClientMetadata: async () => metadata(),
+      now: () => 1_000, randomToken: () => `legacy-content-write-${++sequence}` });
+    const start = await service.startAuthorization({ ...authorizationParams('c'.repeat(43)),
+      scope: 'metrics:read timeline-notes:read timeline-notes:write activity-details:read events:write' },
+    'https://quantified-self.io');
+    const approval = await service.decideAuthorization({
+      uid: 'user-1', requestId: start.requestId, approved: true,
+    });
+    const code = new URL(approval.redirectUri).searchParams.get('code')!;
+    expect(store.codes.get(hashOpaqueValue(code))?.scopes).toEqual([
+      MCP_OAUTH_SCOPES.MetricsRead,
+      MCP_OAUTH_SCOPES.ActivityDetailsRead,
+    ]);
   });
 
   it('supports a Training-plans-only reauthorization, preserves its scope on refresh and enforces revocation', async () => {

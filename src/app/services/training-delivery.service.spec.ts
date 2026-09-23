@@ -4,11 +4,11 @@ import { firstValueFrom } from 'rxjs';
 import { Firestore } from 'app/firebase/firestore';
 import { AppFunctionsService } from './app.functions.service';
 import { BrowserCompatibilityService } from './browser.compatibility.service';
-import { TRAINING_DELIVERY_PREVIEW_TIMEOUT_MS, TrainingDeliveryService } from './training-delivery.service';
+import { isTrainingDeliverySetupAvailableInApp, TRAINING_DELIVERY_PREVIEW_TIMEOUT_MS, TrainingDeliveryService } from './training-delivery.service';
 import { AppUserService } from './app.user.service';
 
 describe('TrainingDeliveryService boundary', () => {
-  it('reacts to pilot sign-in, account changes and sign-out without sending consent or delivery work', async () => {
+  it('reacts to public provider readiness, account changes and sign-out without sending consent or delivery work', async () => {
     const call = vi.fn(async (_name: string, _payload: unknown, _options?: { canExecute: () => boolean }) => ({ data: { schemaVersion: 1 } }));
     const user = signal<{ uid: string } | null>(null);
     TestBed.configureTestingModule({ providers: [TrainingDeliveryService,
@@ -19,19 +19,19 @@ describe('TrainingDeliveryService boundary', () => {
     const service = TestBed.inject(TrainingDeliveryService);
     expect(service.anyReady()).toBe(false);
     for (const provider of ['garmin', 'coros', 'wahoo', 'suunto'] as const) expect(service.isReady(provider)).toBe(false);
-    user.set({ uid: 'xcsAolLDDTWTgtRN9eYF3lW2YKL2' });
+    user.set({ uid: 'owner' });
     expect(service.anyReady()).toBe(true);
     expect(service.isReady('garmin')).toBe(true);
     expect(service.isReady('coros')).toBe(true);
+    expect(isTrainingDeliverySetupAvailableInApp('coros', user()?.uid, true)).toBe(false);
+    expect(isTrainingDeliverySetupAvailableInApp('coros', user()?.uid, false)).toBe(false);
+    expect(isTrainingDeliverySetupAvailableInApp('garmin', user()?.uid, true)).toBe(true);
     expect(service.isReady('suunto')).toBe(true);
     expect(service.isReady('wahoo')).toBe(true);
     user.set({ uid: 'another-user' });
-    expect(service.anyReady()).toBe(false);
-    expect(service.isReady('garmin')).toBe(false);
-    expect(service.isReady('coros')).toBe(false);
-    expect(service.isReady('suunto')).toBe(false);
-    expect(service.isReady('wahoo')).toBe(false);
-    user.set({ uid: 'xcsAolLDDTWTgtRN9eYF3lW2YKL2' });
+    expect(service.anyReady()).toBe(true);
+    for (const provider of ['garmin', 'coros', 'wahoo', 'suunto'] as const) expect(service.isReady(provider)).toBe(true);
+    user.set({ uid: 'owner' });
     user.set(null);
     expect(service.anyReady()).toBe(false);
     expect(call).not.toHaveBeenCalled();

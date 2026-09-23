@@ -6,6 +6,7 @@ import {
 import type { PublicSeoPageKey } from './public-seo-pages.paths';
 import type { PublicFeaturePreviewKey } from './public-feature-preview.types';
 import { HEALTH_FEATURE_CONTENT } from './health-feature.content';
+import { TRAINING_PLANS_PAGE_SECTIONS, TRAINING_PLANS_SEO_CONTENT } from './training-plans-page.content';
 
 export {
   PUBLIC_FEATURE_PATHS,
@@ -57,6 +58,9 @@ export interface PublicSeoPage {
   closingActions: readonly PublicSeoAction[];
   howToSteps?: readonly string[];
   featureList?: readonly string[];
+  socialImage?: string;
+  socialImageAlt?: string;
+  freeOfferDescription?: string;
 }
 
 export interface PublicSeoRouteData {
@@ -66,9 +70,13 @@ export interface PublicSeoRouteData {
   description: string;
   publicSeoPage: PublicSeoPage;
   jsonLd: Record<string, unknown>;
+  socialImage: string;
+  socialImageAlt: string;
 }
 
 const SITE_ORIGIN = 'https://quantified-self.io';
+const DEFAULT_SOCIAL_IMAGE = `${SITE_ORIGIN}/assets/images/og-image-v4.jpg`;
+const DEFAULT_SOCIAL_IMAGE_ALT = 'Quantified Self training charts and activity analysis';
 const STARTER_ACTIVITY_LIMIT = USAGE_LIMITS.free;
 const STARTER_ROUTE_LIMIT = ROUTE_USAGE_LIMITS.free;
 const FREE_ASSISTANT_REQUEST_LIMIT = ASSISTANT_REQUEST_LIMITS.free;
@@ -132,9 +140,10 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
     description: 'Bring Garmin, Suunto, COROS, Wahoo, and workout files together for training analysis, maps, dashboards, comparisons, and AI answers.',
     h1: 'Features for endurance training data',
     intro: 'Use Quantified Self to centralize provider activities, uploaded files, and saved routes, review workout history in an activity calendar, analyze training context, compare recordings, benchmark devices, and ask questions through the built-in Assistant or an MCP client you explicitly authorize.',
-    chips: ['Activity calendar', 'Training analysis', 'Supported activity types', 'Assistant', 'MCP server', 'Workout comparison', 'Route files', 'Benchmarks'],
+    chips: ['Activity calendar', 'Training analysis', 'Training plans', 'Supported activity types', 'Assistant', 'MCP server', 'Workout comparison', 'Route files', 'Benchmarks'],
     actions: [
       routeAction('Training Analysis', '/features/training-analysis', 'flat', 'arrow_forward'),
+      routeAction('Training Plans', '/features/training-plans'),
       routeAction('Training Dashboard', '/features/training-dashboard'),
       routeAction('Health', '/features/health'),
       routeAction('Activity Map', '/features/activity-map'),
@@ -161,6 +170,11 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
             icon: 'monitoring',
             title: 'Training analysis',
             copy: 'Compare current training with your usual workload, then inspect readiness, load, intensity, durability, sleep context, and selected historical builds.',
+          },
+          {
+            icon: 'edit_calendar',
+            title: 'Training plans',
+            copy: 'Create running and cycling plans or standalone structured workouts, then see them beside—not inside—your completed activity history.',
           },
           {
             icon: 'auto_awesome',
@@ -224,7 +238,7 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
       },
       {
         question: 'What Quantified Self features should I start with?',
-        answer: 'Start with the activity calendar for a visual workout history, integrations for provider sync, workout file comparison for exported files, sports watch benchmarks for device evidence, the Assistant for built-in grounded answers, or the MCP server when you want to use a compatible external client with explicitly approved read-only data.',
+        answer: 'Start with the activity calendar for a visual workout history, integrations for provider sync, workout file comparison for exported files, sports watch benchmarks for device evidence, the Assistant for built-in grounded answers, or the MCP server when you want to use a compatible external client with explicitly approved data and focused changes.',
       },
       {
         question: 'Can I compare custom files and provider data?',
@@ -232,7 +246,7 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
       },
       {
         question: 'Which features are available on the free plan?',
-        answer: `Manual uploads, core analysis, benchmark comparisons, and ${FREE_ASSISTANT_REQUEST_LIMIT} Assistant requests per calendar month are available on the free plan. Automatic provider sync and higher limits require a paid plan.`,
+        answer: `File uploads, training plans and standalone workouts, core analysis, benchmark comparisons, and ${FREE_ASSISTANT_REQUEST_LIMIT} Assistant requests per calendar month are available on the free plan. Automatic provider sync and higher limits require a paid plan.`,
       },
     ],
     closingTitle: 'Choose what you want to understand next',
@@ -247,13 +261,14 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
     path: PUBLIC_FEATURE_PATHS.activityCalendar,
     eyebrow: 'Activity Calendar',
     title: 'Activity Calendar for Endurance Training',
-    description: 'Review running, cycling, swimming, skiing, and other workouts in Week, Month, and Year calendar views with duration-scaled circles and period totals.',
+    description: 'Review completed running, cycling, swimming, skiing, and other workouts with separate planned overlays in selectable Week, Month, and Year calendar views.',
     h1: 'Activity calendar for endurance training',
-    intro: 'Turn Garmin, Suunto, COROS, Wahoo, and uploaded workout history into a visual calendar. Move between Week, Month, and Year views, scan duration-scaled activity groups, and open any active day for its recorded workouts.',
-    chips: ['Week view', 'Month view', 'Year view', 'Duration circles', 'Distance and ascent', 'Account activity data'],
+    intro: 'Turn Garmin, Suunto, COROS, Wahoo, and uploaded workout history into a visual calendar. Move between Week, Month, and Year views, select every day, and keep planned workouts visually separate from recorded activities and completed totals.',
+    chips: ['Week view', 'Month view', 'Year view', 'Every day selectable', 'Planned overlays', 'Completed totals stay separate'],
     actions: [
       routeAction('Start Free', '/login', 'flat', 'arrow_forward'),
       routeAction('Calendar Help', '/help', 'stroked', undefined, 'activity-calendar'),
+      routeAction('Training Plans', '/features/training-plans'),
     ],
     sections: [
       {
@@ -273,8 +288,8 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
           },
           {
             icon: 'event_note',
-            title: 'Day activity details',
-            copy: 'Select an active day to review its total duration, activity-group totals, and individual workouts without leaving calendar context.',
+            title: 'Every date stays selectable',
+            copy: 'Select an empty, planned, or completed day without leaving calendar context. Recorded activities and planned workouts keep separate rows and actions.',
           },
         ],
       },
@@ -298,13 +313,18 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
             title: 'Your week and summary settings',
             copy: 'Weekday order follows the configured start of week, units follow account preferences, and ascent or descent exclusions also apply to calendar summaries.',
           },
+          {
+            icon: 'edit_calendar',
+            title: 'Planned workouts remain an overlay',
+            copy: 'Standalone and active-plan workouts can appear on the calendar, including skipped workouts, but never increase completed distance, duration, ascent, load, or workout totals.',
+          },
         ],
       },
     ],
     faqItems: [
       {
         question: 'Which activities appear in the calendar?',
-        answer: 'The calendar uses normal activity events already imported or uploaded to your Quantified Self account. Merge and benchmark records are excluded so comparison artifacts do not inflate training days or totals.',
+        answer: 'Completed entries come from normal activities already imported or uploaded to your Quantified Self account. Standalone and active-plan workouts can appear as a separate planned overlay. Merge and benchmark records remain excluded from completed totals.',
       },
       {
         question: 'What do the calendar circle colors and sizes mean?',
@@ -324,6 +344,7 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
     closingActions: [
       routeAction('Start Free', '/login', 'flat', 'arrow_forward'),
       routeAction('Training Analysis', '/features/training-analysis'),
+      routeAction('Training Plans', '/features/training-plans'),
     ],
   },
   trainingAnalysis: {
@@ -440,7 +461,85 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
     closingActions: [
       routeAction('Start Free', '/login', 'flat', 'arrow_forward'),
       routeAction('Explore Integrations', '/integrations'),
+      routeAction('Plan Future Workouts', '/features/training-plans'),
       routeAction('Training Help', '/help', 'stroked', undefined, 'getting-started'),
+    ],
+  },
+  trainingPlans: {
+    key: 'trainingPlans',
+    path: PUBLIC_FEATURE_PATHS.trainingPlans,
+    eyebrow: 'Training Plans',
+    title: TRAINING_PLANS_SEO_CONTENT.title,
+    description: TRAINING_PLANS_SEO_CONTENT.description,
+    h1: TRAINING_PLANS_SEO_CONTENT.h1,
+    intro: TRAINING_PLANS_SEO_CONTENT.intro,
+    chips: ['Plans included', 'Standalone workouts', 'MCP planning', 'Provider delivery for Pro', 'Plan calendar', 'Completed totals stay separate'],
+    actions: [
+      routeAction('Start Free', '/login', 'flat', 'arrow_forward'),
+      routeAction('Training Plans Help', '/help', 'stroked', undefined, 'training-plans'),
+      routeAction('Activity Calendar', '/features/activity-calendar'),
+    ],
+    featureList: TRAINING_PLANS_SEO_CONTENT.featureList,
+    socialImage: `${SITE_ORIGIN}/assets/images/training-plans-social.png`,
+    socialImageAlt: TRAINING_PLANS_SEO_CONTENT.socialImageAlt,
+    freeOfferDescription: TRAINING_PLANS_SEO_CONTENT.freeOfferDescription,
+    sections: [
+      ...TRAINING_PLANS_PAGE_SECTIONS,
+      {
+        eyebrow: 'Connected on Your Terms',
+        title: 'Plan directly, through MCP, or with provider delivery',
+        copy: 'Training Plans works on its own. MCP planning and provider workout delivery are separately permissioned extensions, so you decide when another client or connected service participates.',
+        items: [
+          {
+            icon: 'edit_calendar',
+            title: 'Plan directly in Quantified Self',
+            copy: 'Create, schedule, edit, copy, move, skip, and restore workouts without connecting Garmin, COROS, Wahoo, Suunto, or any other service.',
+          },
+          {
+            icon: 'devices',
+            title: 'Bring an approved MCP client',
+            copy: 'With separate Training permissions, a compatible MCP client can read your schedule and prepare bounded plan, workout, or delivery changes for your approval. Client availability follows the separate MCP release and authorization flow.',
+          },
+          {
+            icon: 'send',
+            title: 'Opt in to provider delivery',
+            copy: 'Workout delivery to Garmin, Suunto, and Wahoo is available to connected Pro members through explicit Send and plan opt-in actions, compatibility checks, and provider-specific scheduling windows. New COROS plan sync and standalone Send actions are coming soon in the app. Connecting a provider never sends a workout by itself.',
+          },
+        ],
+      },
+    ],
+    faqItems: [
+      {
+        question: 'Can I add a workout without creating a plan?',
+        answer: 'Yes. Standalone workouts are first-class and free. Give the workout a date and structure now, then keep it standalone or attach it to a plan later.',
+      },
+      {
+        question: 'Which sports and workout steps can I create?',
+        answer: 'The current editor supports Running, Trail Running, Treadmill, Cycling, Mountain Biking, Indoor Cycling, E-Biking, and Hand Cycle. It supports time or distance steps, fixed repeats, and one absolute heart-rate, power, or pace target per step.',
+      },
+      {
+        question: 'Do planned workouts change completed activity totals or Training analysis?',
+        answer: 'No. Planned workouts remain separate from completed activities and never increase completed totals. Training analysis continues to use recorded activity evidence.',
+      },
+      {
+        question: 'Does connecting Garmin, COROS, Wahoo, or Suunto send my planned workouts?',
+        answer: 'No. Provider workout delivery is a separate Pro feature with explicit Send or plan opt-in actions. New COROS plan sync and standalone Send actions are coming soon in the app. Connecting a provider never sends a planned workout by itself.',
+      },
+      {
+        question: 'Can I use an MCP client with Training Plans?',
+        answer: 'The Training Plans MCP surface rolls out separately. When it is available in your client and you approve the independent Training permissions, the client can read your schedule and prepare bounded changes for a separate approval-gated apply step.',
+      },
+      {
+        question: 'Are Training Plans included on the free tier?',
+        answer: 'Yes. Plans and standalone structured workouts created in Quantified Self are available on the free tier and do not require a provider connection. Provider workout delivery remains a separate Pro capability.',
+      },
+    ],
+    closingTitle: 'Plan the next workout before it becomes history',
+    closingCopy: 'Start with one standalone workout or map out a dated running and cycling plan. Your completed activity history stays exactly where it belongs.',
+    closingActions: [
+      routeAction('Start Free', '/login', 'flat', 'arrow_forward'),
+      routeAction('Training Plans Help', '/help', 'stroked', undefined, 'training-plans'),
+      routeAction('Training Analysis', '/features/training-analysis'),
     ],
   },
   trainingDashboard: {
@@ -559,9 +658,9 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
     path: PUBLIC_FEATURE_PATHS.mcpServer,
     eyebrow: 'MCP Server',
     title: 'MCP Server for Training Data',
-    description: 'Connect ChatGPT, Claude, or another MCP client to approved training, Health, sleep, measurements, routes, optional Timeline notes and activity descriptions.',
+    description: 'Connect ChatGPT, Claude, or another MCP client to approved training, Health, sleep, measurements, routes, Timeline notes, activity tags and descriptions.',
     h1: 'Connect ChatGPT or Claude to your training data',
-    intro: 'Use the Quantified Self MCP server to let ChatGPT, Claude, or another compatible client analyze approved data and help plan your next workout. You may separately grant bounded Training planning changes, each previewed before a separate approval-gated apply call.',
+    intro: 'Use the Quantified Self MCP server to let ChatGPT, Claude, or another compatible client analyze approved data and help plan your next workout. You may separately grant Timeline note, activity-tag, and bounded Training changes; every write uses the client’s approval controls.',
     chips: ['MCP server', 'ChatGPT', 'Claude', 'Explicit consent', 'Training', 'Sleep', 'Activities', 'Routes'],
     actions: [
       routeAction('Start Free', '/login', 'flat', 'arrow_forward'),
@@ -604,18 +703,18 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
       },
       {
         eyebrow: 'Access Boundaries',
-        title: 'Separate permissions and approval-gated Training changes',
-        copy: 'Choose which data categories an external client can read and whether it may propose Training changes, then review or disconnect it from Connections at any time.',
+        title: 'Separate permissions and approval-gated changes',
+        copy: 'Choose which data categories an external client can read and which note, tag, or Training changes it may make, then review or disconnect it from Connections at any time.',
         items: [
           {
             icon: 'fact_check',
             title: 'Separate optional scopes',
-            copy: 'Approve training metrics, Health metrics, measurements, workout details, activity descriptions, sleep, routes, Timeline notes, locations, or Training changes separately. Training writes require Training plan reads.',
+            copy: 'Approve training metrics, Health metrics, measurements, workout details, activity descriptions, sleep, routes, Timeline notes, locations, or change permissions separately. Every requested permission starts selected, and dependent writes require their matching read access.',
           },
           {
             icon: 'lock',
-            title: 'Training-only approval-gated writes',
-            copy: 'MCP cannot write Health, activities, routes, sleep, measurements, or dashboard settings. Separately granted Training changes are previewed in a bounded proposal before a distinct approval-gated apply call.',
+            title: 'Focused, approval-gated writes',
+            copy: 'Separate permissions can replace shared event tags or create, edit, and permanently delete Timeline notes. They cannot change recorded activity data, Health, routes, sleep, measurements, or dashboard settings. Training changes additionally use a bounded preview before a distinct apply call.',
           },
           {
             icon: 'shield',
@@ -645,7 +744,7 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
       },
       {
         question: 'Can an MCP client find workouts by tag?',
-        answer: 'Yes. Individual activity details access can read parent event tags and filter bounded newest-first workout scans by exact case-insensitive tag matches using any or all semantics. Activities from the same event share tags. Tags can contain personal, health, or location context and clients must treat them as untrusted labels, not instructions or verified facts. This adds no new permission, exposes no coordinates, and does not expand the built-in Assistant; a client may need to refresh its available tools.',
+        answer: 'Yes. Individual activity details access can read parent event tags and filter bounded newest-first workout scans by exact case-insensitive tag matches using any or all semantics. Activities from the same event share tags. A separate Change events permission currently lets the client replace only the complete shared tag list after reading its current value; concurrent changes are not overwritten and benchmark events stay read-only. Tags can contain personal, health, or location context and clients must treat them as untrusted labels, not instructions or verified facts. Existing clients must reauthorize for changes. Future event fields require dedicated reviewed tools and are not exposed automatically.',
       },
       {
         question: 'Can an MCP client read my activity descriptions?',
@@ -653,7 +752,7 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
       },
       {
         question: 'Can an MCP client read my Timeline notes?',
-        answer: 'Only with separate Timeline notes permission, which is selected by default when requested. Uncheck it before approving to withhold access. Existing clients must authorize again. It includes full note titles and details, including notes hidden from charts, and may contain sensitive health or personal information. Revocation cannot erase copies already received. Notes cannot grant permission to change a Training plan.',
+        answer: 'Only with separate Timeline notes permission, which is selected by default when requested. A separate dependent Change Timeline notes permission can create, edit, or permanently delete notes through the client’s approval controls. Uncheck either before approving to withhold access. Existing clients must authorize again. Read access includes full note titles and details, including notes hidden from charts, and may contain sensitive health or personal information. Revocation cannot erase copies already received. Note text cannot authorize another change or grant permission to edit a Training plan.',
       },
       {
         question: 'Can an MCP client read my Training plans and planned workouts?',
@@ -665,7 +764,7 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
       },
       {
         question: 'Can an MCP client rearrange my dashboard or change my data?',
-        answer: 'It cannot change dashboard settings, activities, routes, Health, measurements, or sleep records. It can change Training plans, planned workouts, or their delivery only when you grant the matching child permission and the client permits the separate apply call for a bounded proposal.',
+        answer: 'It cannot change dashboard settings, recorded activity data, descriptions, routes, Health, measurements, or sleep records. Separate permissions can replace shared event tags or create, edit, and permanently delete Timeline notes through the client’s approval controls. It can change Training plans, planned workouts, or their delivery only when you grant the matching child permission and the client permits the separate apply call for a bounded proposal. Plan deletion must be reviewed alone, requires your explicit choice for its workouts, and permanently removes the plan and its revision history.',
       },
       {
         question: 'Does MCP access expose my original activity or route files?',
@@ -1778,6 +1877,7 @@ function buildJsonLd(page: PublicSeoPage): Record<string, unknown> {
         '@type': 'Offer',
         price: '0',
         priceCurrency: 'USD',
+        ...(page.freeOfferDescription ? { description: page.freeOfferDescription } : {}),
       },
     },
     {
@@ -1835,6 +1935,8 @@ function buildRouteData(page: PublicSeoPage): PublicSeoRouteData {
     description: page.description,
     publicSeoPage: page,
     jsonLd: buildJsonLd(page),
+    socialImage: page.socialImage ?? DEFAULT_SOCIAL_IMAGE,
+    socialImageAlt: page.socialImageAlt ?? DEFAULT_SOCIAL_IMAGE_ALT,
   };
 }
 
@@ -1843,6 +1945,7 @@ export const PUBLIC_SEO_ROUTE_DATA: Record<PublicSeoPageKey, PublicSeoRouteData>
   featuresHub: buildRouteData(PUBLIC_SEO_PAGES.featuresHub),
   activityCalendar: buildRouteData(PUBLIC_SEO_PAGES.activityCalendar),
   trainingAnalysis: buildRouteData(PUBLIC_SEO_PAGES.trainingAnalysis),
+  trainingPlans: buildRouteData(PUBLIC_SEO_PAGES.trainingPlans),
   trainingDashboard: buildRouteData(PUBLIC_SEO_PAGES.trainingDashboard),
   activityMap: buildRouteData(PUBLIC_SEO_PAGES.activityMap),
   mcpServer: buildRouteData(PUBLIC_SEO_PAGES.mcpServer),

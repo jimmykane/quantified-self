@@ -29,6 +29,8 @@ import { ECHARTS_GLOBAL_FONT_FAMILY, resolveEChartsThemeName } from '../../helpe
 import type { TrainingReadinessTrendPointViewModel } from '../../helpers/training-readiness.helper';
 import { EChartsLoaderService } from '../../services/echarts-loader.service';
 import { LoggerService } from '../../services/logger.service';
+import { getDateTimeFormatter } from '../../helpers/date-time-format.helper';
+import { getNumberFormatter } from '../../helpers/number-format.helper';
 
 type ChartOption = Parameters<EChartsType['setOption']>[0];
 
@@ -110,7 +112,7 @@ export class TrainingReadinessTrendChartComponent implements AfterViewInit, OnCh
     );
     const isMobileTooltipViewport = isEChartsMobileTooltipViewport();
     const pointsByIndex = this.points;
-    const dateFormatter = new Intl.DateTimeFormat(undefined, {
+    const dateFormatter = getDateTimeFormatter(undefined, {
       month: 'short',
       day: 'numeric',
       year: 'numeric',
@@ -215,7 +217,7 @@ export class TrainingReadinessTrendChartComponent implements AfterViewInit, OnCh
 }
 
 function formatScore(value: number): string {
-  return new Intl.NumberFormat(undefined, { maximumFractionDigits: 0 }).format(value);
+  return getNumberFormatter(undefined, { maximumFractionDigits: 0 }).format(value);
 }
 
 function capitalize(value: string): string {

@@ -16,9 +16,16 @@ import {
   type AssistantConversation,
   type AssistantEvidence,
   type AssistantMessage,
+  type AssistantContentProposalPreview,
   type AssistantTrainingProposalPreview,
   type AssistantVisual,
 } from './assistant.types';
+import { EVENT_TAG_LIMIT, EVENT_TAG_MAX_LENGTH } from './event-tags';
+import {
+  TIMELINE_NOTE_CATEGORIES,
+  TIMELINE_NOTE_COLORS,
+  TIMELINE_NOTE_LIMITS,
+} from './timeline-notes';
 
 export type AssistantValidationResult<T> =
   | { ok: true; data: T }
@@ -142,6 +149,70 @@ export function isAssistantTrainingProposal(value: unknown): value is AssistantT
     && Number.isSafeInteger(preview.warningCount) && Number(preview.warningCount) >= 0 && Number(preview.warningCount) <= 400
     && isBoundedString(preview.summary, 1, 500));
   return changesValid && providersValid && getUtf8ByteLength(value) <= 256 * 1024;
+}
+
+function isDateOnly(value: unknown): value is string {
+  if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const date = new Date(`${value}T00:00:00.000Z`);
+  return Number.isFinite(date.getTime()) && date.toISOString().slice(0, 10) === value;
+}
+
+function isUuid(value: unknown): value is string {
+  return typeof value === 'string'
+    && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
+}
+
+function areTags(value: unknown): value is string[] {
+  return Array.isArray(value)
+    && value.length <= EVENT_TAG_LIMIT
+    && value.every(tag => isBoundedString(tag, 1, EVENT_TAG_MAX_LENGTH));
+}
+
+function hasTimelineNoteFields(value: Record<string, unknown>): boolean {
+  return TIMELINE_NOTE_CATEGORIES.includes(value.category as never)
+    && isBoundedString(value.title, 1, TIMELINE_NOTE_LIMITS.title)
+    && (value.details === null || isBoundedString(value.details, 0, TIMELINE_NOTE_LIMITS.details))
+    && isDateOnly(value.startDate)
+    && (value.endDate === null || isDateOnly(value.endDate))
+    && (value.endDate === null || value.endDate >= value.startDate)
+    && isIanaTimeZone(value.timeZone)
+    && typeof value.showOnCharts === 'boolean'
+    && TIMELINE_NOTE_COLORS.includes(value.color as never);
+}
+
+export function isAssistantContentProposal(value: unknown): value is AssistantContentProposalPreview {
+  if (!isRecord(value)
+    || !hasOnlyKeys(value, ['proposalRef', 'kind', 'expiresAtMs', 'summary', 'requiresConfirmation', 'arguments'])
+    || !isBoundedString(value.proposalRef, 1, 120)
+    || !['update_event_tags', 'create_timeline_note', 'update_timeline_note', 'delete_timeline_note']
+      .includes(`${value.kind}`)
+    || !Number.isSafeInteger(value.expiresAtMs) || Number(value.expiresAtMs) < 0
+    || !isBoundedString(value.summary, 1, 500)
+    || value.requiresConfirmation !== true
+    || !isRecord(value.arguments)) return false;
+  const args = value.arguments;
+  if (value.kind === 'update_event_tags') {
+    return hasOnlyKeys(args, ['activityRef', 'expectedTags', 'tags'])
+      && isBoundedString(args.activityRef, 1, 512)
+      && areTags(args.expectedTags)
+      && areTags(args.tags);
+  }
+  if (value.kind === 'delete_timeline_note') {
+    return hasOnlyKeys(args, ['noteRef', 'expectedRevision'])
+      && isBoundedString(args.noteRef, 1, 512)
+      && Number.isSafeInteger(args.expectedRevision) && Number(args.expectedRevision) > 0;
+  }
+  const referenceKeys = value.kind === 'create_timeline_note'
+    ? ['mutationId']
+    : ['noteRef', 'expectedRevision'];
+  const allowedKeys = [...referenceKeys, 'category', 'title', 'details', 'startDate', 'endDate', 'timeZone',
+    'showOnCharts', 'color'];
+  const referenceValid = value.kind === 'create_timeline_note'
+    ? isUuid(args.mutationId)
+    : isBoundedString(args.noteRef, 1, 512)
+      && Number.isSafeInteger(args.expectedRevision) && Number(args.expectedRevision) > 0;
+  return hasOnlyKeys(args, allowedKeys) && referenceValid && hasTimelineNoteFields(args)
+    && getUtf8ByteLength(value) <= 80 * 1024;
 }
 
 function isIanaTimeZone(value: unknown): value is string {
@@ -350,8 +421,9 @@ export function validateAssistantChatResponse(
   if (!isRecord(value)) {
     return { ok: false, reason: 'response_not_object' };
   }
-  if (!hasOnlyKeys(value, ['conversation', 'quota', 'pendingRequestId', 'timelineNotesEnabled', 'trainingPlansEnabled',
-    'trainingPlanChangesEnabled', 'trainingDeliveryEnabled', 'pendingTrainingProposal'])) {
+  if (!hasOnlyKeys(value, ['conversation', 'quota', 'pendingRequestId', 'timelineNotesEnabled',
+    'activityTagChangesEnabled', 'timelineNoteChangesEnabled', 'trainingPlansEnabled',
+    'trainingPlanChangesEnabled', 'trainingDeliveryEnabled', 'pendingTrainingProposal', 'pendingContentProposal'])) {
     return { ok: false, reason: 'unexpected_response_fields' };
   }
   if (value.trainingPlansEnabled !== undefined && typeof value.trainingPlansEnabled !== 'boolean') return { ok: false, reason: 'invalid_training_plans_access' };
@@ -366,6 +438,18 @@ export function validateAssistantChatResponse(
   }
   if (value.timelineNotesEnabled !== undefined && typeof value.timelineNotesEnabled !== 'boolean') {
     return { ok: false, reason: 'invalid_timeline_notes_access' };
+  }
+  if (value.activityTagChangesEnabled !== undefined && typeof value.activityTagChangesEnabled !== 'boolean') {
+    return { ok: false, reason: 'invalid_activity_tag_changes_access' };
+  }
+  if (value.timelineNoteChangesEnabled !== undefined && typeof value.timelineNoteChangesEnabled !== 'boolean') {
+    return { ok: false, reason: 'invalid_timeline_note_changes_access' };
+  }
+  if (value.timelineNoteChangesEnabled === true && value.timelineNotesEnabled !== true) {
+    return { ok: false, reason: 'invalid_timeline_note_changes_dependency' };
+  }
+  if (value.pendingContentProposal !== undefined && !isAssistantContentProposal(value.pendingContentProposal)) {
+    return { ok: false, reason: 'invalid_content_proposal' };
   }
   const conversation = validateAssistantConversation(value.conversation);
   if (conversation.ok === false) {

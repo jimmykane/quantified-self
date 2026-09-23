@@ -66,6 +66,13 @@ describe('EventSearchComponent', () => {
     expect(component.secondaryDateRangeButtonLabel).toBe('More');
   });
 
+  it('uses activity language for merged rows and long-range loading', () => {
+    const { component } = createComponent();
+
+    expect(component.mergedEventsToggleLabel).toBe('Merged activities');
+    expect(component.mergedEventsToggleHint).toBe('Merged activities are excluded');
+  });
+
   it('should use a mobile grid for table toolbar date shortcuts so labels do not collide', () => {
     const styles = readFileSync(
       resolve(process.cwd(), 'src/app/components/event-search/event-search.component.scss'),
@@ -252,6 +259,12 @@ describe('EventSearchComponent', () => {
     } as any);
 
     expect(dialog.open).toHaveBeenCalledTimes(1);
+    expect(dialog.open).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
+      data: expect.objectContaining({
+        title: 'Load all activities?',
+        message: expect.stringContaining('every activity'),
+      }),
+    }));
     expect(searchSpy).toHaveBeenCalledTimes(1);
     expect(component.selectedDateRange).toBe(DateRanges.all);
     expect(hapticsService.selection).toHaveBeenCalledTimes(1);

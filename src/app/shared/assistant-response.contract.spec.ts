@@ -119,6 +119,45 @@ describe('Assistant response contract', () => {
     });
   });
 
+  it('accepts strict content proposals and rejects malformed or dependent access', () => {
+    const response = buildResponse();
+    response.activityTagChangesEnabled = true;
+    response.pendingContentProposal = {
+      proposalRef: '5b5aa348-50a3-4e62-a1fd-46a7e6dd639f',
+      kind: 'update_event_tags',
+      expiresAtMs: Date.parse('2026-09-22T12:10:00.000Z'),
+      summary: 'Change tags on Running from 2026-09-21.',
+      requiresConfirmation: true,
+      arguments: { activityRef: 'opaque-activity', expectedTags: ['Easy'], tags: ['Quality'] },
+    };
+    expect(validateAssistantChatResponse(response).ok).toBe(true);
+
+    const malformedCreate = buildResponse();
+    malformedCreate.timelineNotesEnabled = true;
+    malformedCreate.timelineNoteChangesEnabled = true;
+    malformedCreate.pendingContentProposal = {
+      proposalRef: 'proposal',
+      kind: 'create_timeline_note',
+      expiresAtMs: 1,
+      summary: 'Create Timeline note.',
+      requiresConfirmation: true,
+      arguments: { mutationId: 'not-a-uuid', category: 'other', title: 'Context', details: null,
+        startDate: '2026-09-22', endDate: '2026-09-22', timeZone: 'UTC', showOnCharts: true,
+        color: 'default' },
+    };
+    expect(validateAssistantChatResponse(malformedCreate)).toMatchObject({
+      ok: false,
+      reason: 'invalid_content_proposal',
+    });
+
+    const missingParent = buildResponse();
+    missingParent.timelineNoteChangesEnabled = true;
+    expect(validateAssistantChatResponse(missingParent)).toMatchObject({
+      ok: false,
+      reason: 'invalid_timeline_note_changes_dependency',
+    });
+  });
+
   it('rejects stored user messages beyond the request limit', () => {
     const response = buildResponse();
     response.conversation.messages[0].text = 'x'.repeat(1_001);

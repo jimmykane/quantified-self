@@ -112,4 +112,12 @@ describe('planned workout calendar overlay', () => {
     expect(overlay['2026-09-02'].entries.map(entry => entry.workout.id))
       .toEqual(['standalone', 'tempo']);
   });
+
+  it('projects exact completion links without changing the authored workout lifecycle', () => {
+    const authored = workout('tempo');
+    const day = buildPlannedWorkoutCalendarOverlay([authored], [PLAN], PLAN.id, [authored.id])['2026-09-02'];
+
+    expect(day.entries[0]).toMatchObject({ completed: true, workout: { id: 'tempo', lifecycle: 'planned' } });
+    expect(day.ariaLabel).toBe('1 completed workout, activity linked');
+  });
 });

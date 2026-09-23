@@ -2,7 +2,6 @@ import { describe, expect, it } from 'vitest';
 import type { Route } from '@angular/router';
 import { routes as appRoutes } from './app.routing.module';
 import { authGuard } from './authentication/app.auth.guard';
-import { trainingPlanningGuard } from './authentication/training-planning.guard';
 import { assistantGuard } from './authentication/assistant.guard';
 import { onboardingGuard } from './authentication/onboarding.guard';
 import { pricingRedirectGuard } from './authentication/pricing-redirect.guard';
@@ -77,7 +76,7 @@ describe('AppRoutingModule routes', () => {
     expect(helpAbout).toContain('Send Suunto routes to Garmin');
     expect(helpAbout).toContain('Send GPX/FIT routes to Wahoo');
     expect(helpAbout).toContain('Sync past activities');
-    expect(helpAbout).toContain('Read-only MCP client access');
+    expect(helpAbout).toContain('Permission-scoped MCP client access and focused changes');
   });
 
   it('defines dedicated public privacy and terms routes for reviewer-readable legal pages', () => {
@@ -183,7 +182,7 @@ describe('AppRoutingModule routes', () => {
     const planRoutes = routes.filter(route => route.path?.startsWith('training/plans'));
 
     expect(plansRoute).toBeTruthy();
-    expect(plansRoute?.canMatch).toEqual([authGuard, onboardingGuard, trainingPlanningGuard]);
+    expect(plansRoute?.canMatch).toEqual([authGuard, onboardingGuard]);
     expect(plansRoute?.loadComponent).toBeTypeOf('function');
     expect(plansRoute?.data).toMatchObject({
       title: 'Plans',
@@ -201,7 +200,7 @@ describe('AppRoutingModule routes', () => {
       'training/plans',
     ]);
     expect(planRoutes.every(route => route.canMatch?.[0] === authGuard && route.canMatch?.[1] === onboardingGuard
-      && route.canMatch?.[2] === trainingPlanningGuard)).toBe(true);
+      && route.canMatch?.length === 2)).toBe(true);
     expect(planRoutes.every(route => route.loadComponent instanceof Function)).toBe(true);
     expect(planRoutes.every(route => route.data?.['robots'] === 'noindex, follow')).toBe(true);
     expect(planRoutes.every(route => route.data?.['disableRouteAnimation'] === true)).toBe(true);
@@ -311,10 +310,10 @@ describe('AppRoutingModule routes', () => {
 
   it('should define public Garmin, Suunto, COROS, and Wahoo provider integration routes', async () => {
     const expectedRoutes = [
-      { path: 'integrations/garmin', provider: 'garmin', descriptionText: 'Garmin training dashboard' },
-      { path: 'integrations/suunto', provider: 'suunto', descriptionText: 'Sync Garmin and COROS activities to Suunto' },
-      { path: 'integrations/coros', provider: 'coros', descriptionText: 'COROS to Suunto activity sync' },
-      { path: 'integrations/wahoo', provider: 'wahoo', descriptionText: 'Automatic FIT activity imports' },
+      { path: 'integrations/garmin', provider: 'garmin', descriptionText: 'planned workouts to Garmin Connect' },
+      { path: 'integrations/suunto', provider: 'suunto', descriptionText: 'planned workouts as SuuntoPlus Guides' },
+      { path: 'integrations/coros', provider: 'coros', descriptionText: 'planned-workout delivery is coming soon' },
+      { path: 'integrations/wahoo', provider: 'wahoo', descriptionText: 'planned running and cycling workouts to Wahoo' },
     ];
 
     for (const expectedRoute of expectedRoutes) {
@@ -338,7 +337,7 @@ describe('AppRoutingModule routes', () => {
     }
 
     const garminRoute = routes.find(candidate => candidate.path === 'integrations/garmin');
-    expect((await resolvedRouteData(garminRoute))['title']).toBe('Garmin Training Dashboard');
+    expect((await resolvedRouteData(garminRoute))['title']).toBe('Garmin Training Plans and Dashboard');
   });
 
   it('should define public tools routes with compare workflow metadata', () => {
@@ -467,6 +466,12 @@ describe('AppRoutingModule routes', () => {
         descriptionText: 'training load, readiness, intensity, durability, sleep, power, and sport-specific trends',
       },
       {
+        path: PUBLIC_FEATURE_PATHS.trainingPlans,
+        title: 'Training Plans for Running and Cycling',
+        h1: 'Plan running and cycling workouts your way',
+        descriptionText: 'Create free running and cycling training plans or standalone structured workouts',
+      },
+      {
         path: PUBLIC_FEATURE_PATHS.trainingDashboard,
         title: 'Custom Training Dashboard for Endurance Athletes',
         h1: 'Build the training dashboard you need',
@@ -527,12 +532,18 @@ describe('AppRoutingModule routes', () => {
       expect(routeData['title']).toBe(expectedRoute.title);
       expect(routeData['description']).toContain(expectedRoute.descriptionText);
       expect(routeData['keywords']).toBeUndefined();
+      expect(routeData['socialImage']).toMatch(/^https:\/\/quantified-self\.io\/assets\/images\//);
+      expect(routeData['socialImageAlt']).toBeTypeOf('string');
       expect(page?.['h1']).toBe(expectedRoute.h1);
       expect(jsonLd?.['@type']).toBe('WebPage');
       expect(jsonLd?.['url']).toBe(`https://quantified-self.io/${expectedRoute.path}`);
 
       if (expectedRoute.path === PUBLIC_FEATURE_PATHS.hub) {
         expect(route?.pathMatch).toBe('full');
+      }
+
+      if (expectedRoute.path === PUBLIC_FEATURE_PATHS.trainingPlans) {
+        expect(routeData['socialImage']).toBe('https://quantified-self.io/assets/images/training-plans-social.png');
       }
     }
   });

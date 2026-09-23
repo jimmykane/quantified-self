@@ -1,6 +1,5 @@
 import { Component, Input, computed, inject } from '@angular/core';
 import { ProviderIconKey } from '@shared/provider-presentation';
-import { isTrainingPlanningUIAllowed } from '@shared/training-planning-rollout';
 import { AppUserService } from '../../../services/app.user.service';
 
 @Component({
@@ -11,7 +10,7 @@ import { AppUserService } from '../../../services/app.user.service';
 })
 export class ServiceConnectionStatusComponent {
     private readonly users = inject(AppUserService);
-    readonly hasTrainingPlanningUIAccess = computed(() => isTrainingPlanningUIAllowed(this.users.user()?.uid));
+    readonly hasTrainingPlanningUIAccess = computed(() => !!this.users.user()?.uid);
     @Input() serviceLabel = '';
     @Input() description = '';
     @Input() connected = false;

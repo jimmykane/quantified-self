@@ -1,10 +1,10 @@
-<h2 mat-dialog-title>Merge events</h2>
+<h2 mat-dialog-title>Merge activities</h2>
 <mat-dialog-content>
   <p class="dialog-intro">
-    Choose how the merged event should behave after it is created.
+    Choose how the merged activity should behave after it is created.
   </p>
 
-  <div class="merge-options" role="radiogroup" aria-label="Merge event behavior">
+  <div class="merge-options" role="radiogroup" aria-label="Merge activity behavior">
     <div class="qs-overlay-section option-card option-card-benchmark" role="radio"
       [class.selected]="selectedOption === 'benchmark'"
       [attr.aria-checked]="selectedOption === 'benchmark'"
@@ -22,7 +22,7 @@
         </mat-icon>
       </div>
       <div class="option-summary">
-        Creates a merged event flagged as a benchmark merge.
+        Creates a merged activity flagged as a benchmark merge.
       </div>
       <mat-chip-set class="option-chips" aria-label="Benchmark merge highlights">
         <mat-chip class="option-chip option-chip-secondary" disableRipple>
@@ -48,26 +48,26 @@
       <div class="option-header">
         <div>
           <div class="option-eyebrow">Best for normal analysis</div>
-          <div class="option-title">Create a new multi-activity event</div>
+          <div class="option-title">Create a new multi-activity</div>
         </div>
         <mat-icon class="option-indicator" aria-hidden="true">
           {{ selectedOption === 'multi' ? 'check_circle' : 'radio_button_unchecked' }}
         </mat-icon>
       </div>
       <div class="option-summary">
-        Creates a standard multi-activity event.
+        Creates a standard multi-activity.
       </div>
       <mat-chip-set class="option-chips" aria-label="Multi activity merge highlights">
         <mat-chip class="option-chip option-chip-primary" disableRipple>
           Included in stats
         </mat-chip>
         <mat-chip class="option-chip option-chip-primary" disableRipple>
-          Standard event behavior
+          Standard activity behavior
         </mat-chip>
       </mat-chip-set>
       <div class="option-detail">
         <span class="option-detail-title">What changes</span>
-        <span>Use this when you want one normal event that still behaves like any other multi-activity workout.</span>
+        <span>Use this when you want one normal activity that still behaves like any other multi-activity workout.</span>
       </div>
     </div>
   </div>
@@ -82,8 +82,8 @@
       <span>
         {{
         isMerging
-        ? 'Merging events…'
-        : 'Merge selected events'
+        ? 'Merging activities…'
+        : 'Merge selected activities'
         }}
       </span>
     </span>

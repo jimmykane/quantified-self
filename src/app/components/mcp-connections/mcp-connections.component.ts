@@ -19,9 +19,11 @@ const MCP_SCOPE_ENTRIES = Object.entries(MCP_SCOPE_CONTENT) as Array<[
   McpScope,
   typeof MCP_SCOPE_CONTENT[McpScope],
 ]>;
-const TRAINING_CHANGE_SCOPES = new Set<McpScope>([
+const CHANGE_SCOPES = new Set<McpScope>([
   'training-plans:write',
   'training-delivery:write',
+  'timeline-notes:write',
+  'events:write',
 ]);
 
 interface McpConnection {
@@ -95,13 +97,13 @@ export class McpConnectionsComponent implements OnInit {
           id: 'data',
           title: 'Data access',
           summary: 'Read permissions, including Training plans and planned workouts.',
-          permissions: permissions.filter(permission => !TRAINING_CHANGE_SCOPES.has(permission.scope)),
+          permissions: permissions.filter(permission => !CHANGE_SCOPES.has(permission.scope)),
         },
         {
-          id: 'training-changes',
-          title: 'Training changes',
-          summary: 'Optional changes still need a reviewed proposal and your client\'s native approval.',
-          permissions: permissions.filter(permission => TRAINING_CHANGE_SCOPES.has(permission.scope)),
+          id: 'changes',
+          title: 'Changes',
+          summary: 'Optional changes use your client\'s native approval. Training changes also require a reviewed proposal.',
+          permissions: permissions.filter(permission => CHANGE_SCOPES.has(permission.scope)),
         },
       ],
     };

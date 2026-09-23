@@ -1,4 +1,4 @@
-<button mat-icon-button [matMenuTriggerFor]="menu" (click)="$event.stopPropagation();" (menuOpened)="menuOpen($event)">
+<button mat-icon-button aria-label="Activity actions" [matMenuTriggerFor]="menu" (click)="$event.stopPropagation();" (menuOpened)="menuOpen($event)">
   <mat-icon>more_vert</mat-icon>
 </button>
 <mat-menu #menu="matMenu" class="qs-menu-panel">

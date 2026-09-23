@@ -2,10 +2,11 @@
 
 ## Training plans and planned workouts (#690)
 
-This is source implementation, not deployment, provider enablement, registered-client promotion or real-profile plugin
-installation. After a separately approved release, refresh the client catalog and explicitly reauthorize the independent
+This is source implementation, not deployment, registered-client promotion or real-profile plugin installation. After a
+separately approved release, refresh the client catalog and explicitly reauthorize the independent
 `training-plans:read` scope (**Training plans and planned workouts**). Metrics, activities, Timeline notes and provider
-permissions never grant it. Any consenting owner may use it, with no pilot UID or Pro gate; planning UI rollout is unchanged.
+permissions never grant it. Any consenting owner may use it, with no pilot UID or Pro gate; manual planning is available
+to every signed-in account.
 Authored titles/notes may contain sensitive personal information. Legacy omitted selections and refresh exclude this new
 grant. HTTP prechecks, tool registration and data reads enforce it. Revocation cannot erase copies already received.
 
@@ -13,14 +14,19 @@ grant. HTTP prechecks, tool registration and data reads enforce it. Revocation c
 | --- | --- |
 | `list_training_plans` | Optional name/lifecycle filters; active, paused and archived metadata |
 | `get_training_plan` | Metadata, range, revision and current workout count, without loading workouts |
-| `query_planned_workouts` | Inclusive dates; calendar-visible (default standalone + active plan), standalone, selected plan or all |
+| `query_planned_workouts` | Legacy document-ordered inclusive-date query retained for registered-client compatibility |
+| `query_planned_workouts_by_date` | Inclusive dates in ascending local-date and stable reference order; calendar-visible (default standalone + active plan), standalone, selected plan or all |
 | `get_planned_workout` | Complete validated v1 canonical recipe, notes and owner-unit display text |
 | `get_training_sync_status` | Existing local per-service evidence for a plan/workout; never a live provider check |
 | `get_planned_workout_completion` | Exact stored completion link only; never similarity inference |
+| `get_planned_workout_completions` | Exact stored completion links for up to 25 referenced workouts, preserving input order |
+| `assess_planned_workout_compatibility` | Safe local exact/degraded/unsupported mapping assessment for selected or all providers |
 
 References bind owner, connection, entity and creation time. Structural node IDs are public recipe fields, not document
-IDs. No app links are returned while planning UI remains restricted. Lists use document-ID order (not date order), default
-25/max 100 results, 25-record scan pages and 1,000 scanned records per call. Inclusive windows permit 366 days. Skipped
+IDs. No app links are returned from these planning projections. Plan lists and the legacy workout query use document-ID
+order. The additive chronological workout query orders by `localDate` and document ID, so bounded upcoming results cannot
+omit earlier matching dates merely because their document IDs sort later. Lists default to 25/max 100 results, use
+25-record scan pages and permit at most 1,000 scanned records per call. Inclusive windows permit 366 days. Skipped
 workouts are labelled, deleted excluded; historical dates read current authored records, not revisions. Explicit plan/all
 scopes include inactive plans. Cursors bind exact filters/limit, owner, connection and schedule revision; changed schedules
 require restarting. Dates remain calendar labels; no plan timezone is invented. Delivery retains its saved timezone.
@@ -28,6 +34,18 @@ Selected input includes every fetched page entry (even unused lookahead/tail ent
 once per fetch. It is bounded to 2 MiB, an individual record to 128 KiB and complete structured-plus-JSON-text responses to
 256 KiB. Oversized records fail without truncating instructions. Canonical values remain alongside Sports Lib display;
 manual/mixed-ending recipes receive no invented duration estimate.
+
+The bulk completion read accepts 1–25 unique opaque workout references and returns the same exact linked/unlinked
+projection as the single-workout tool in input order. It does not scan for similar activities. Completed-activity
+references remain independently gated by `activity-details:read`; provider/event/activity identities never leak when that
+grant is absent.
+
+Compatibility assessment reads one current stored recipe and applies the versioned local provider mapping rules. It
+returns only provider, exact/degraded/unsupported level, and bounded safe code/field/message issues. Wahoo's dated-workout
+duration requirement is included, so any non-time step makes delivery unsupported rather than prompting an invented
+duration. The assessment does not read a provider connection, Pro state, destination, mapping digest/version or delivery
+ledger; it does not contact providers, approve degradation, or promise provider-account/device readiness. The later
+delivery preview/apply remains authoritative.
 
 `training-plans.service.ts` owns explicit field masks and read-only Firestore snapshot transactions, not new persistence.
 Fresh schedule/account-deletion/plan-deletion fences run before and after results, as do external connection consent and
@@ -68,7 +86,18 @@ every proposal must keep per-call approval enabled in their client. ChatGPT's de
 native approval request. Claude users must not choose **Allow always**, and should disable Training write tools while
 using Research because Research may invoke connector tools without another approval. The server still requires the preview-created
 proposal and binds it to the owner, connection, grant, revision and expiry; replay returns its persisted terminal result.
-Permanent workout deletion, plan deletion and history restoration are deliberately absent.
+Plan deletion is available only as the sole proposal change and requires an explicit `convert-to-standalone` or
+`delete-workouts` choice. Its preview states that the plan and revision history are permanently removed, describes the
+workout effect, and warns that provider copies may remain when access is unavailable. If its resumable multi-transaction
+deletion or cleanup is interrupted after the lock is acquired, the proposal remains retryable and the same approved apply
+resumes the idempotent operation instead of recording a false terminal failure. Permanent single-workout deletion and
+history restoration remain deliberately absent.
+
+Compatible schedule operations are applied in one bounded Firestore transaction while retaining one immutable revision
+and idempotency receipt per operation. A write-budget overflow falls back to the existing sequential path; authority is
+still checked in every authored-write transaction. Apply diagnostics contain only operation counts, total/stage durations,
+terminal outcome and the slowest stage—never owner IDs, references, titles, notes or arguments. Applies taking at least
+five seconds emit one structured slow warning for operational investigation.
 
 Delivery actions resolve the destination account on the server and reuse the existing #646 command/reconciliation path.
 They never accept credentials or remote IDs. `all_connected` fans out only to connected, rollout-ready providers shown
@@ -132,20 +161,33 @@ already stops a confirmed missing copy from counting as synced and represents re
 Artifact-specific inspection authority, retained provider IDs and repair evidence remain private; MCP performs no live
 provider check or repair and gains no tool, field, scope, consent or write authority.
 
-COROS Training delivery (#648) is likewise an additive no-wire-change. The existing sync-status enum can report the
-same delivered, approval, retry, attention and completed states for COROS. Partner athlete/workout IDs, destination
+COROS Training delivery (#648) uses the public provider-readiness boundary with no wire-contract change. Explicit COROS
+proposals and `all_connected` use the same existing eligibility, proposal and approval checks as the other providers.
+The browser currently labels new COROS plan sync and standalone Send actions **Coming soon**, but that presentation gate
+is not consulted by MCP and does not change its existing approval-gated delivery contract.
+The existing sync-status enum can report delivered, approval, retry, attention
+and completed states for COROS. Partner athlete/workout IDs, destination
 identity, batch journals, request outcomes, token authority and exact `planWorkoutId` evidence remain private and are
 rejected from browser/MCP projections. Plan totals continue to derive from individual workout statuses rather than a
-claimed native plan object. The exact provider marker can update the existing private completion link, but exposing a
-completion link through MCP remains the focused #651 deferral. No new MCP scope, tool, provider action, schema,
-Assistant route or plugin metadata is introduced.
+claimed native plan object. The exact provider marker can update the existing private completion link, which the single
+and bounded bulk completion tools expose only as their sanitized current projection. Candidate discovery, fallback
+matching and manual link changes remain the focused #651 deferral. No provider identity, batch evidence or transport
+action is introduced.
 
 Wahoo exact completion correlation follows the same no-wire-change boundary. An imported activity can move its existing
 sanitized delivery status to `completed` only after the private Workout ID, Plan ID and deterministic `workout_token`
 resolve one current account-bound delivery. Those identifiers, the account digest, workout-summary evidence and reverse
-link remain private and are rejected from MCP projections. The separate safe **Activity linked** projection is still not
-part of MCP; #651 retains the bounded fallback/manual-link and linked/unlinked read review. No tool, scope, schema,
-Assistant route, provider action or bundled-plugin change is introduced.
+link remain private and are rejected from MCP projections. The existing sanitized completion tools can report the exact
+current link; #651 retains bounded fallback candidate discovery and approval-gated manual link/unlink/relink behavior.
+No private Wahoo identity or live check is introduced.
+
+Public Garmin, COROS, Wahoo and Suunto Training delivery changes runtime availability, not the MCP wire contract. An
+already authorized client with `training-plans:read` and `training-delivery:write` may preview an explicit delivery change
+for any eligible connected Pro owner; there is no per-UID provider allowlist. The same bounded proposal, native client
+approval, short expiry, owner/connection/grant/revision binding, compatibility review and separate apply call remain
+mandatory. `all_connected` includes only providers for which the connection, permissions, configuration and workout are
+currently eligible. No new tool, action, field, scope, consent default, provider identifier, plugin artifact or
+registered-client refresh is introduced; connecting a provider alone never creates delivery consent or sends a workout.
 
 ## Purpose and boundary
 
@@ -213,6 +255,13 @@ existing `activity-location:read` scope and preferred nearby-activity search too
 Changing that setting replaces the conversation generation, and New chat returns it to coordinate-free. It does not
 call the hosted endpoint or mint OAuth credentials, but it still uses the same registration,
 scope checks, input schemas, strict output schemas, projections, data-service budgets, and Sports Lib-backed catalogs.
+The internal connection identity carries the server-owned conversation generation so opaque Training references cannot
+cross chats. Training read authority recognizes that complete first-party identity directly and never looks for an
+external OAuth connection document. This reliability correction changes no hosted MCP tool, scope, schema or grant.
+Separate default-off per-chat choices can also add tag-aware activity reads, editable Timeline-note reads, and local
+prepare-only content tools. Gemini never receives the public tag/note write tools. An app-owned confirmation reuses the
+existing Assistant apply endpoint and the same sanitized MCP content mutation services, with the active generation,
+permission, exact proposal, expiry, owner, deletion fence, and optimistic precondition rechecked at the data boundary.
 Direct app URLs are removed before validated results reach Gemini, and generated answers cannot repeat exact opaque
 references or cursors returned by the current tool calls. The separate deterministic evidence projection can still
 offer a validated safe app link. The internal allowlist also includes the existing bounded activity chart catalog and
@@ -308,16 +357,17 @@ The bundled skills divide ownership deliberately:
 
 | Skill | Responsibility | Primary permission |
 | --- | --- | --- |
-| `analyze-quantified-self` | Comparisons that need two or more data domains | Every domain used by the comparison |
+| `analyze-quantified-self` | Comparisons that need two or more data domains; explicit Timeline-note changes | Every domain used by the comparison; optional `timeline-notes:write` with its read parent |
 | `analyze-quantified-self-training` | Current plans/planned workouts and sync summaries; recorded load, volume and Training-derived metrics | `training-plans:read` for planning; `metrics:read` for recorded metrics |
 | `analyze-quantified-self-sleep` | Sleep sessions, stages, duration, safe aggregate vitals, naps, and sleep-oriented trends | `sleep:read` |
 | `analyze-quantified-self-health` | Recorded all-day Health metrics and bounded representative sample trends | `health:read`; body composition also requires `measurements:read` |
 | `analyze-quantified-self-measurements` | Recorded body-measurement history and trends | `measurements:read` |
-| `analyze-quantified-self-activity` | Individual activities, subrecords, metrics, charts, optional descriptions and locations | `activity-details:read`; optional metric/description/location grants |
+| `analyze-quantified-self-activity` | Individual activities, subrecords, metrics, charts, optional descriptions/locations, and explicit shared-tag changes | `activity-details:read`; optional metric/description/location/tag-write grants |
 | `explore-quantified-self-routes` | Saved-route summaries, geometry, waypoints, and nearby searches | `routes:read`; optional `route-location:read` |
 
 All seven skills allow implicit or explicit invocation and declare the same hosted permission-scoped MCP dependency. Most
-domain tools are read-only; the Training skill can additionally use separately authorized preview and approval-gated apply tools. Their trigger
+domain tools are read-only; the Activity and cross-domain skills can use separately authorized focused tag/note writes,
+and the Training skill can use separately authorized preview and approval-gated apply tools. Their trigger
 descriptions keep single-domain work out of the cross-domain skill. Each `agents/openai.yaml` owns one matching
 skill-level starter prompt; the plugin manifest retains only three representative interface prompts because that field
 is intentionally bounded. Skills discover the authenticated server's live tools and catalogs rather than copying tool
@@ -432,8 +482,12 @@ The server implements OAuth authorization code with PKCE S256 and refresh-token 
 - `training-plans:write`, dependent on `training-plans:read`, for previewed, native-approval-gated safe plan/workout lifecycle changes;
 - `training-delivery:write`, dependent on `training-plans:read`, for previewed, native-approval-gated plan/workout provider delivery controls;
 - `timeline-notes:read` for full private Timeline note titles/details, category, fixed calendar dates and captured timezone;
+- `timeline-notes:write`, dependent on `timeline-notes:read`, for native-approval-gated create, edit and permanent delete;
 - `activity-details:read` for bounded non-location activity summaries, event tags and exact tag filtering, laps, swim
   lengths, MTB jump measurements, selected metrics, and on-demand chart series;
+- `events:write`, dependent on `activity-details:read`, for focused native-approval-gated event-owned mutations. The
+  current tool only replaces a selected activity's shared parent-event tags with optimistic concurrency and excludes
+  benchmark events;
 - `activity-descriptions:read`, dependent on `activity-details:read`, for the full private parent event description shown in the QS.io event editor;
 - `activity-location:read`, dependent on `activity-details:read`, for exact activity start/end and jump coordinates,
   nearby activity search, and chart breadcrumbs;
@@ -441,7 +495,7 @@ The server implements OAuth authorization code with PKCE S256 and refresh-token 
 - `route-location:read`, dependent on `routes:read`, for exact bounds, preview geometry, nearby route search, segment
   endpoints, and waypoints.
 
-The location scopes and activity-description scope cannot exist without their matching parent data scope. Consent disables a child until its parent is
+The location, activity-description, event-write and Timeline-note-write scopes cannot exist without their matching parent data scope. Consent disables a child until its parent is
 selected and removes the child when the parent is removed. Authorization approval, refresh narrowing, bearer
 validation, HTTP prechecks, and tool registration reject invalid child-only combinations. Activity and route location
 remain independent domains. Existing clients retain non-location data but must reconnect and approve a new location
@@ -639,10 +693,13 @@ The analytics and map entries follow the
 | --- | --- | --- |
 | `list_training_plans` | `training-plans:read` | Paginated current plan summaries across active, paused and archived lifecycles |
 | `get_training_plan` | `training-plans:read` | Current plan metadata and workout count without loading all workouts |
-| `query_planned_workouts` | `training-plans:read` | Bounded calendar-date summaries; standalone plus active plan by default |
+| `query_planned_workouts` | `training-plans:read` | Legacy document-ordered calendar-date summaries retained for compatible clients |
+| `query_planned_workouts_by_date` | `training-plans:read` | Chronological bounded calendar-date summaries; standalone plus active plan by default |
 | `get_planned_workout` | `training-plans:read` | Complete validated canonical v1 instructions plus owner-unit display text |
 | `get_training_sync_status` | `training-plans:read` | Existing local delivery evidence, with whole-plan counts only for complete reads |
 | `get_planned_workout_completion` | `training-plans:read`; optional activity ref also requires `activity-details:read` | Exact current persisted completion link; no inferred matching |
+| `get_planned_workout_completions` | `training-plans:read`; optional activity refs also require `activity-details:read` | Exact current completion links for 1–25 workouts in input order; no inferred matching |
+| `assess_planned_workout_compatibility` | `training-plans:read` | Local mapping fidelity for one current workout; no connection/provider call or delivery guarantee |
 | `preview_create_planned_workout` | `training-plans:read` + `training-plans:write`; optional delivery also requires `training-delivery:write` | Focused one-workout proposal with optional atomic initial send; server-owned local key |
 | `preview_training_changes` | `training-plans:read` plus the relevant Training write scope(s) | Strict bounded proposal with authored and per-provider effects; no authored mutation |
 | `apply_training_changes` | Same scopes bound into the proposal; native client approval gate | Idempotently applies a preview-created proposal and returns independent authored/provider outcomes |
@@ -671,9 +728,14 @@ The analytics and map entries follow the
 | `list_activity_types` | Authenticated client; no data scope | Static canonical Sports Lib activity types with group and indoor hints for activity and route filters; no account read |
 | `get_activity_description` | `activity-details:read` + `activity-descriptions:read` | Full private parent event description for one opaque activity reference; opt-in, bounded, no truncation |
 | `query_timeline_notes` | `timeline-notes:read` | Full private user-reported context overlapping inclusive calendar dates, including chart-hidden notes; bounded full-text continuation |
+| `query_editable_timeline_notes` | `timeline-notes:read` + `timeline-notes:write` | Complete current authored note fields with opaque reference and revision for an explicit edit or deletion |
+| `create_timeline_note` | `timeline-notes:read` + `timeline-notes:write`; native client approval gate | Idempotently creates one explicitly authored private note from a stable mutation UUID |
+| `update_timeline_note` | `timeline-notes:read` + `timeline-notes:write`; native client approval gate | Replaces one note at its expected revision; stale changes conflict |
+| `delete_timeline_note` | `timeline-notes:read` + `timeline-notes:write`; native client approval gate | Permanently removes one note at its expected revision and leaves a content-free deletion receipt |
 | `list_activities` | `activity-details:read`; locations add `activity-location:read` | Frozen compatibility tool for bounded newest-first activity scans |
 | `query_activities` | `activity-details:read`; locations add `activity-location:read` | Preferred bounded activity query with structurally exclusive explicit, relative, and unbounded date modes |
 | `query_activities_with_tags` | `activity-details:read` | Coordinate-free activity summaries with their parent event tags and optional exact case-insensitive `any`/`all` tag filtering |
+| `update_event_tags` | `activity-details:read` + `events:write`; native client approval gate | Replaces the complete parent-event tag list after an exact current-tag precondition; sibling activities share the result and benchmark events are excluded |
 | `find_activities_near_location` | `activity-details:read` + `activity-location:read` | Frozen compatibility tool for nearby activity scans |
 | `search_activities_near_location` | `activity-details:read` + `activity-location:read` | Preferred closed-world nearby activity search with structurally paired optional dates |
 | `list_activity_laps` | `activity-details:read` | Paginated allowlisted lap timing and performance fields |
@@ -688,9 +750,11 @@ The analytics and map entries follow the
 | `get_route_geometry` | `routes:read` + `route-location:read` | Bounded persisted `polyline5` preview geometry with explicit segment endpoints |
 | `list_route_waypoints` | `routes:read` + `route-location:read` | Bounded allowlisted waypoint coordinates parsed from the saved FIT/GPX source |
 
-Every read tool is annotated read-only, non-destructive, and idempotent. Training preview is non-destructive; Training
-apply is separately approval-gated, explicitly write-capable and may be destructive only in the recoverable
-soft-delete/stop-sync sense.
+Every read tool is annotated read-only, non-destructive, and idempotent. Note creation is write-capable,
+non-destructive and idempotent through its stable mutation UUID. Note update/delete and tag replacement are explicitly
+write-capable and destructive, use optimistic concurrency, and are idempotent for lost-response retries. Their MCP host
+owns the native approval UI. Training preview is non-destructive; Training apply is separately approval-gated,
+explicitly write-capable and may be destructive only in the recoverable soft-delete/stop-sync sense.
 The preferred `search_*_near_location` tools are
 closed-world: a place-name input can make a bounded Mapbox geocoding read, but it cannot write to Mapbox or change
 publicly visible internet state. The already-registered `find_*_near_location` variants retain their frozen
@@ -1087,9 +1151,28 @@ coordinates remain excluded. The existing authenticated app link still uses the 
 Tag text is untrusted user- or provider-assigned label data, never instructions, verified facts, diagnoses, or authority
 to act, and it can itself contain personal, health, or location context.
 Its complete MCP result, including structured content and the JSON-text copy, is limited to 256 KiB.
-This uses the existing `activity-details:read` grant, adds no Firestore index, write path, migration, or backfill, and
-does not expand the built-in Assistant allowlist. Existing external clients may need to refresh their tool catalog after
-the MCP release and registered-app rescan; no reauthorization is required.
+Tag reads use the existing `activity-details:read` grant and add no Firestore index, migration, or backfill. Existing
+external clients may need to refresh their tool catalog after the MCP release and registered-app rescan; no
+reauthorization is required for reads. The built-in Assistant exposes this read only after its independent per-chat
+**Activity tag changes** choice is enabled, so it can verify the current complete tag list before preparing—but never
+directly applying—a change.
+
+`events:write` is a separate dependent permission for focused event-owned changes. Both requested checkboxes start
+selected; removing Activity details removes and disables the child. Existing connections must reauthorize and refresh
+cannot add it. The only current mutation is `update_event_tags`: the client first resolves one opaque `activityRef`
+with `query_activities_with_tags`, then submits the complete current `expectedTags` and complete replacement `tags`
+list. The server decrypts the owner- and connection-bound reference, verifies the activity still belongs to the
+referenced parent event, and transactionally rechecks the stored active MCP grant and account-deletion fence. It also
+reads the event's merge classification and rejects both explicit and legacy benchmark-event shapes before accepting a
+change or no-op. If the current normalized list differs from `expectedTags`, the write conflicts rather than
+overwriting a concurrent edit. Repeating an accepted replacement is a safe no-op. The canonical event field is written
+through the same shared sanitizer as the UI and the legacy tag field is removed; sibling activities inherit the result
+because tags remain event-owned. No activity metrics, titles, descriptions, source files, locations, provider records
+or remote services are touched. The focused write returns only the input opaque reference, normalized tags and whether
+storage changed, with no event/activity IDs. It uses the MCP host's native approval UI and does not add a callable,
+index, collection or background job. Future title, description, or other event editing requires a dedicated strict
+tool, concurrency/approval contract, projection review, tests, and documentation; the broader permission name does not
+automatically expose newly stored event fields.
 
 One filtered call, including a tag-filtered call, scans at most 100 selected activity documents and can return fewer
 matches than requested.
@@ -1662,14 +1745,41 @@ consumed index position, phase, window and evaluation time, is bound to owner an
 The next unreturned note is not consumed. Repeat the date window with the cursor; limit may change. Account deletion is
 checked before reading and before releasing a result. Failures and logs never include note content or identity.
 
-The built-in Assistant grants this same tool only to a notes-enabled server-owned conversation, with generation checks
-before and after private reads. Notes are consulted for relevant questions, not every request. Their text is untrusted
-user-reported context, never instructions, verified diagnoses, causal proof or permission to act. Metric, Sleep,
-readiness and briefing outputs remain unchanged. See [Assistant](assistant.md) and [Timeline notes](timeline-notes.md).
+The dependent `timeline-notes:write` scope exposes four focused tools. When requested, it starts checked like every
+other permission; removing `timeline-notes:read` removes and disables it. Approval remains explicit. Existing
+connections, refresh, and legacy omitted-scope consent cannot acquire it silently.
 
-No new Function, storage, index, migration or write tool is introduced. Release the changed existing MCP/Assistant
-backend paths and consent UI before enabling access. Then separately approve the registered-app rescan, verify the live
-digest before contract promotion, and sync the changed local plugin. Preserve every earlier pending contract change.
+- `query_editable_timeline_notes` uses the same two indexed bounded scans but deliberately returns each note's complete
+  authored fields, visibility/color, current revision, and an encrypted owner-and-connection-bound `noteRef`. Its
+  continuation additionally binds the current stored grant generation, so reauthorization requires a fresh query.
+  The complete structured-plus-JSON-text result is capped at 256 KiB; text is never truncated.
+- `create_timeline_note` accepts explicit fields and a stable UUID `mutationId`. The existing deterministic owner-scoped
+  note ID makes a lost successful response retry idempotent, while a changed reuse conflicts.
+- `update_timeline_note` accepts the opaque reference, exact expected revision and complete authored fields. A concurrent
+  change conflicts; an identical lost-response retry is accepted only at the immediately following revision.
+- `delete_timeline_note` accepts the same reference/revision pair, permanently removes the content and retains the
+  existing content-free deletion receipt so delayed retries cannot recreate it.
+
+All three writes use the existing note mutation transactions, add the stored connection-authority read inside the same
+transaction, and retain the account-deletion fence. The client never supplies a raw document ID or UID. Outputs contain
+only the opaque reference, operation/revision/current public fields, or deletion result. Expected validation/conflict
+errors are safe and never log note text. The tools are accurately annotated as writes and depend on the MCP host's
+  native approval UI; no MCP elicitation, new callable, storage model, index or migration is introduced. Note content can
+  never authorize another mutation. The built-in Assistant deliberately receives none of these public write tools.
+
+The built-in Assistant grants the ordinary note read only to a notes-enabled server-owned conversation, with generation
+checks before and after private reads. Its separate note-change choice additionally exposes the editable read and local
+prepare-only tools. Gemini can prepare at most one short-lived change, which the app identifies and reviews before a
+human applies it. The existing content mutation service then rechecks the conversation generation, permission, exact
+proposal and expiry, owner/deletion fence, and current revision in its transaction. Notes are consulted for relevant
+questions, not every request. Their text is untrusted user-reported context, never instructions, verified diagnoses,
+causal proof or permission to act. Metric, Sleep, readiness and briefing outputs remain unchanged. See
+[Assistant](assistant.md) and [Timeline notes](timeline-notes.md).
+
+No new Function, storage, index, migration or callable is introduced. Release the changed existing MCP/OAuth backend
+paths and consent/Connections UI before enabling access. Then separately approve the registered-app rescan, verify the
+live digest before contract promotion, and sync the changed local plugin. Preserve every earlier pending contract
+change. This implementation and documentation do not deploy, rescan, promote, or install a real profile.
 
 The bundled cross-domain skill guides note-to-Health/Sleep comparisons with existing read tools: bounded
 before/during/after periods, captured timezones and provider/sleep-day conventions, same-response source separation,

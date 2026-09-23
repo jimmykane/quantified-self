@@ -4,8 +4,8 @@
   <div class="table-toolbar">
     <div class="table-toolbar-main">
       <mat-form-field appearance="outline" class="qs-search-field" subscriptSizing="dynamic">
-        <input matInput [value]="searchTerm" (input)="onSearchInput($event)" placeholder="Search events"
-          aria-label="Search events"
+        <input matInput [value]="searchTerm" (input)="onSearchInput($event)" placeholder="Search activities"
+          aria-label="Search activities"
           autocomplete="off">
         <mat-icon matSuffix *ngIf="!searchTerm">search</mat-icon>
         <button mat-icon-button matSuffix *ngIf="searchTerm" (click)="clearSearch()" aria-label="Clear">
@@ -32,14 +32,14 @@
       <div class="table-selection-toolbar" aria-live="polite">
         <div class="selection-summary">
           <mat-icon>check_circle</mat-icon>
-          <span>{{ selection.selected.length }} {{ selection.selected.length === 1 ? 'event' : 'events' }} selected</span>
+          <span>{{ selection.selected.length }} {{ selection.selected.length === 1 ? 'activity' : 'activities' }} selected</span>
         </div>
 
         <div class="selection-actions">
           <button mat-button
             class="bulk-action-button"
             [disabled]="isBulkTagSaving"
-            [attr.aria-label]="'Update tags on ' + selection.selected.length + ' selected events'"
+            [attr.aria-label]="'Update tags on ' + selection.selected.length + ' selected activities'"
             (click)="openBulkEventTagsDialog($event)">
             <span class="bulk-action-button-content">
               <mat-icon>sell</mat-icon>
@@ -50,7 +50,7 @@
           <button mat-button
             class="bulk-action-button"
             [disabled]="selection.selected.length < 2"
-            [attr.aria-label]="'Merge ' + selection.selected.length + ' ' + (selection.selected.length === 1 ? 'event' : 'events')"
+            [attr.aria-label]="'Merge ' + selection.selected.length + ' ' + (selection.selected.length === 1 ? 'activity' : 'activities')"
             (click)="$event.preventDefault(); $event.stopPropagation();mergeSelection($event)">
             <span class="bulk-action-button-content">
               <mat-icon>compare_arrows</mat-icon>
@@ -60,7 +60,7 @@
 
           <button mat-button
             class="bulk-action-button"
-            [attr.aria-label]="'Download CSV for ' + selection.selected.length + ' ' + (selection.selected.length === 1 ? 'event' : 'events')"
+            [attr.aria-label]="'Download CSV for ' + selection.selected.length + ' ' + (selection.selected.length === 1 ? 'activity' : 'activities')"
             (click)="$event.preventDefault(); $event.stopPropagation(); downloadAsCSV($event)">
             <span class="bulk-action-button-content">
               <mat-icon>csv</mat-icon>
@@ -70,7 +70,7 @@
 
           <button mat-button
             class="bulk-action-button"
-            [attr.aria-label]="'Download GPX for ' + selection.selected.length + ' ' + (selection.selected.length === 1 ? 'event' : 'events')"
+            [attr.aria-label]="'Download GPX for ' + selection.selected.length + ' ' + (selection.selected.length === 1 ? 'activity' : 'activities')"
             (click)="$event.preventDefault(); $event.stopPropagation(); downloadGPXSelection()">
             <span class="bulk-action-button-content">
               <mat-icon>file_download</mat-icon>
@@ -90,7 +90,7 @@
 
           <button mat-button color="warn"
             class="bulk-action-button"
-            [attr.aria-label]="'Delete ' + selection.selected.length + ' ' + (selection.selected.length === 1 ? 'event' : 'events')"
+            [attr.aria-label]="'Delete ' + selection.selected.length + ' ' + (selection.selected.length === 1 ? 'activity' : 'activities')"
             (click)="$event.preventDefault(); $event.stopPropagation();deleteSelection()">
             <span class="bulk-action-button-content">
               <mat-icon>delete</mat-icon>
@@ -113,9 +113,10 @@
   </div>
   }
 
-  <app-loading-overlay [isLoading]="isLoading" [hasError]="this.events && this.events.length === 0"
-    [errorMessage]="'No events yet'" [errorHint]="'Import activities or adjust filters to see rows'"
-    [errorIcon]="'table_rows'" [showSkeleton]="false" height="auto" borderRadius="12px">
+  <app-loading-overlay class="activity-table-overlay" [isLoading]="isLoading"
+    [hasError]="!isLoading && this.events && this.events.length === 0" [allowErrorPassthrough]="true"
+    [errorMessage]="'No activities yet'" [errorHint]="'Import an activity or change your filters'"
+    [errorIcon]="'directions_run'" [showSkeleton]="false" height="auto" minHeight="224px" borderRadius="12px">
     <div class="table-wrapper qs-scrollbar">
       <table mat-table [dataSource]="data" [trackBy]="trackByEventId" matSort [matSortActive]="tableSortActive"
         [matSortDirection]="tableSortDirection" matSortDisableClear>
@@ -129,7 +130,7 @@
           </th>
           }
           @if (isLast && showRowActions) {
-          <th mat-header-cell *matHeaderCellDef [attr.aria-label]="canManageEvents ? null : 'Event actions'">
+          <th mat-header-cell *matHeaderCellDef [attr.aria-label]="canManageEvents ? null : 'Activity actions'">
             @if (canManageEvents) {
             <app-event-table-actions [selectedDataTypes]="selectedColumns"
               (selectedDataTypesChange)="selectedColumnsChange($event)"></app-event-table-actions>
@@ -255,17 +256,18 @@
         </tr>
 
         <!-- Row shown when there is no matching data. -->
-        <tr class="mat-row" *matNoDataRow>
+        <tr class="mat-row activity-table-no-data-row" *matNoDataRow
+          [class.activity-table-no-data-row--hidden]="!isLoading && events?.length === 0">
           <td class="mat-cell" [attr.colspan]="displayedColumns.length">
-            <span *ngIf="searchTerm">No events found matching "{{searchTerm}}"</span>
-            <span *ngIf="!searchTerm && !isLoading">No events found</span>
+            <span *ngIf="searchTerm">No activities match "{{searchTerm}}"</span>
+            <span *ngIf="!searchTerm && !isLoading">No activities found</span>
           </td>
         </tr>
       </table>
     </div>
-
-    <mat-paginator (page)="pageChanges($event)" [length]="data ? data.data.length : 0"
-      [pageSize]="tablePageSize" [hidePageSize]="isBrowsePresentation" [showFirstLastButtons]="true"
-      [pageSizeOptions]="[10, 25, 50, 100, 250]"></mat-paginator>
   </app-loading-overlay>
+
+  <mat-paginator (page)="pageChanges($event)" [length]="data ? data.data.length : 0"
+    [pageSize]="tablePageSize" [hidePageSize]="isBrowsePresentation" [showFirstLastButtons]="true"
+    [pageSizeOptions]="[10, 25, 50, 100, 250]"></mat-paginator>
 </div>

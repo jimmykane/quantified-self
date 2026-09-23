@@ -2,20 +2,23 @@
   @if (summaries().length) {
     @if (scope() === 'plan') {
       <div class="delivery-plan-summary" role="group" aria-label="Plan sync by service">
-        <span class="delivery-plan-summary-heading">Plan sync</span>
+        <span class="delivery-plan-summary-heading"><span class="delivery-plan-heading-plan">Plan </span>sync</span>
         <span class="delivery-plan-providers">
           @for (summary of compactPlanSummaries(); track summary.provider) {
             <span class="delivery-plan-provider" role="group"
               [attr.aria-label]="summary.presentation.displayLabel + ': ' + (summary.planFocus?.label ?? summary.label) + '. '
                 + ((summary.planFocus?.detail || summary.detail) ? (summary.planFocus?.detail || summary.detail) + '.' : '')">
-              <app-service-source-icon [presentation]="summary.presentation" [showTooltip]="false" [iconHeight]="16" aria-hidden="true"></app-service-source-icon>
+              <app-service-source-icon class="delivery-plan-provider-icon--wide" [presentation]="summary.presentation"
+                [showTooltip]="false" [iconHeight]="16" aria-hidden="true"></app-service-source-icon>
+              <app-service-source-icon class="delivery-plan-provider-icon--compact" [presentation]="summary.presentation"
+                [showTooltip]="false" [iconWidth]="20" [iconHeight]="16" aria-hidden="true"></app-service-source-icon>
               <span class="delivery-plan-provider-count" aria-hidden="true">{{ summary.compactLabel }}</span>
             </span>
           }
         </span>
         <button mat-button appHapticTap type="button" class="delivery-plan-view" (click)="open()" [disabled]="disabled()"
           aria-label="View plan sync details">
-          View <mat-icon iconPositionEnd aria-hidden="true">chevron_right</mat-icon>
+          <span class="delivery-plan-view-label">View</span><mat-icon iconPositionEnd aria-hidden="true">chevron_right</mat-icon>
         </button>
       </div>
     } @else {

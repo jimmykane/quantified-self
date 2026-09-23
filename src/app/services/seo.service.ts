@@ -8,6 +8,8 @@ import { environment } from '../../environments/environment';
 import { HOME_SEO_JSON_LD } from '../shared/home-seo';
 
 const PRODUCTION_CANONICAL_ORIGIN = 'https://quantified-self.io';
+export const DEFAULT_SOCIAL_IMAGE_URL = `${PRODUCTION_CANONICAL_ORIGIN}/assets/images/og-image-v4.jpg`;
+export const DEFAULT_SOCIAL_IMAGE_ALT = 'Quantified Self training charts and activity analysis';
 
 @Injectable({
     providedIn: 'root'
@@ -72,9 +74,37 @@ export class SeoService implements OnDestroy {
         }
 
         this.updateRobotsTag(data['robots']);
+        this.updateSocialImageTags(data['socialImage'], data['socialImageAlt']);
 
         // URL
         this.updateOgUrl();
+    }
+
+    private updateSocialImageTags(image: unknown, imageAlt: unknown) {
+        const resolvedImage = this.resolveSocialImage(image);
+        const resolvedAlt = typeof imageAlt === 'string' && imageAlt.trim()
+            ? imageAlt.trim()
+            : DEFAULT_SOCIAL_IMAGE_ALT;
+        this.metaService.updateTag({ property: 'og:type', content: 'website' });
+        this.metaService.updateTag({ property: 'og:image', content: resolvedImage });
+        this.metaService.updateTag({ property: 'og:image:alt', content: resolvedAlt });
+        this.metaService.updateTag({ name: 'twitter:card', content: 'summary_large_image' });
+        this.metaService.updateTag({ name: 'twitter:image', content: resolvedImage });
+        this.metaService.updateTag({ name: 'twitter:image:alt', content: resolvedAlt });
+    }
+
+    private resolveSocialImage(image: unknown): string {
+        if (typeof image !== 'string' || !image.trim()) {
+            return DEFAULT_SOCIAL_IMAGE_URL;
+        }
+        try {
+            const parsed = new URL(image.trim(), PRODUCTION_CANONICAL_ORIGIN);
+            return parsed.protocol === 'https:'
+                ? parsed.toString()
+                : DEFAULT_SOCIAL_IMAGE_URL;
+        } catch {
+            return DEFAULT_SOCIAL_IMAGE_URL;
+        }
     }
 
     private updateRobotsTag(robots: unknown) {

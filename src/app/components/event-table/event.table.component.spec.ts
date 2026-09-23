@@ -148,7 +148,7 @@ describe('EventTableComponent', () => {
         };
         mockEventMergeService = {
             mergeEvents: vi.fn().mockResolvedValue({ eventId: 'merged-event' }),
-            getMergeErrorMessage: vi.fn().mockReturnValue('Could not merge events.'),
+            getMergeErrorMessage: vi.fn().mockReturnValue('Could not merge activities.'),
         };
 
         mockUserService = {
@@ -381,7 +381,7 @@ describe('EventTableComponent', () => {
             join(process.cwd(), 'src/app/components/event-table/event.table.component.html'),
             'utf8'
         );
-        expect(template).toContain("[attr.aria-label]=\"canManageEvents ? null : 'Event actions'\"");
+        expect(template).toContain("[attr.aria-label]=\"canManageEvents ? null : 'Activity actions'\"");
         expect(fixture.nativeElement.querySelector('app-event-table-actions')).toBeNull();
         expect(component.showRowActions).toBe(true);
 
@@ -402,7 +402,7 @@ describe('EventTableComponent', () => {
         const actionButtons = fixture.nativeElement.querySelectorAll('.table-selection-toolbar .bulk-action-button');
 
         expect(selectionToolbar).toBeTruthy();
-        expect(selectionToolbar.textContent).toContain('1 event selected');
+        expect(selectionToolbar.textContent).toContain('1 activity selected');
         expect(mainRow.contains(selectionToolbar)).toBe(false);
         expect(mainRow.querySelector('.selection-actions')).toBeNull();
         expect(actionButtons.length).toBe(7);
@@ -419,12 +419,12 @@ describe('EventTableComponent', () => {
         ) as HTMLButtonElement[];
 
         expect(actionButtons.map((button) => button.getAttribute('aria-label'))).toEqual([
-            'Update tags on 2 selected events',
-            'Merge 2 events',
-            'Download CSV for 2 events',
-            'Download GPX for 2 events',
+            'Update tags on 2 selected activities',
+            'Merge 2 activities',
+            'Download CSV for 2 activities',
+            'Download GPX for 2 activities',
             'Download original files',
-            'Delete 2 events',
+            'Delete 2 activities',
             'Clear selection',
         ]);
         expect(actionButtons.every((button) => !button.hasAttribute('mattooltip'))).toBe(true);
@@ -450,6 +450,26 @@ describe('EventTableComponent', () => {
         expect(styles).toMatch(/\.table-container\s*{[\s\S]*--qs-glass-panel-blur:\s*0px;/);
         expect(styles).toMatch(/\.table-container\s*{[\s\S]*backdrop-filter:\s*none;/);
         expect(styles).toMatch(/\.table-container\s*{[\s\S]*-webkit-backdrop-filter:\s*none;/);
+    });
+
+    it('should use activity language and keep the glass empty state clear of the paginator', () => {
+        const template = readFileSync(
+            join(process.cwd(), 'src/app/components/event-table/event.table.component.html'),
+            'utf8'
+        );
+        const styles = readFileSync(
+            join(process.cwd(), 'src/app/components/event-table/event.table.component.scss'),
+            'utf8'
+        );
+
+        expect(template).toContain('placeholder="Search activities"');
+        expect(template).toContain("[errorMessage]=\"'No activities yet'\"");
+        expect(template).toContain('[allowErrorPassthrough]="true"');
+        expect(template).toContain('activity-table-no-data-row--hidden');
+        expect(template).not.toContain('No events found');
+        expect(template.indexOf('</app-loading-overlay>')).toBeLessThan(template.indexOf('<mat-paginator'));
+        expect(styles).toMatch(/\.activity-table-overlay\s*{[\s\S]*--loading-shade-error-blur:\s*16px;/);
+        expect(styles).toMatch(/\.activity-table-overlay\s*{[\s\S]*--loading-shade-error-shadow:\s*var\(--qs-overlay-shadow\);/);
     });
 
     it('should clear the contextual table selection', () => {
@@ -528,7 +548,7 @@ describe('EventTableComponent', () => {
         (component as any).processChanges('spec_shared_state');
 
         expect((component.data.data[0] as any).Shared).toBe('Shared');
-        expect((component.data.data[0] as any)['Shared Title']).toContain('Anyone with the link can view this event');
+        expect((component.data.data[0] as any)['Shared Title']).toContain('Anyone with the link can view this activity');
         expect((component.data.data[0] as any)['sort.Shared']).toBe(1);
         expect((component.data.data[1] as any).Shared).toBe('');
         expect((component.data.data[1] as any)['Shared Title']).toBe('');
@@ -780,8 +800,8 @@ describe('EventTableComponent', () => {
         (component as any).processChanges('spec_tag_accessibility');
         const row = component.data.data[0] as any;
 
-        expect(row['Tag Action Label']).toBe('Edit event tags for Test Run');
-        expect(row['Tags Accessible Label']).toBe('Event tags for Test Run: Race, Long run, 2026');
+        expect(row['Tag Action Label']).toBe('Edit activity tags for Test Run');
+        expect(row['Tags Accessible Label']).toBe('Activity tags for Test Run: Race, Long run, 2026');
     });
 
     it('should provide compact mobile tag markup and stack toolbar filters on small screens', () => {
@@ -938,7 +958,7 @@ describe('EventTableComponent', () => {
         expect(mockDialog.open).not.toHaveBeenCalled();
         expect(mockEventTagService.applyBulkChanges).not.toHaveBeenCalled();
         expect(mockSnackBar.open).toHaveBeenCalledWith(
-            'Select up to 250 events to update tags.',
+            'Select up to 250 activities to update tags.',
             undefined,
             { duration: 3000 },
         );
@@ -976,7 +996,7 @@ describe('EventTableComponent', () => {
             'event-description',
             { description: 'Updated Description' }
         );
-        expect(mockSnackBar.open).toHaveBeenCalledWith('Event saved', undefined, { duration: 2000 });
+        expect(mockSnackBar.open).toHaveBeenCalledWith('Activity saved', undefined, { duration: 2000 });
     });
 
     it('should patch-save event name via updateEventProperties', async () => {
@@ -989,7 +1009,7 @@ describe('EventTableComponent', () => {
             'event-name',
             { name: 'Updated Name' }
         );
-        expect(mockSnackBar.open).toHaveBeenCalledWith('Event saved', undefined, { duration: 2000 });
+        expect(mockSnackBar.open).toHaveBeenCalledWith('Activity saved', undefined, { duration: 2000 });
     });
 
     it('should process rows with multisport fallback color and skip null events', () => {
@@ -1044,7 +1064,7 @@ describe('EventTableComponent', () => {
 
         await component.mergeSelection(new Event('click'));
 
-        expect(mockSnackBar.open).toHaveBeenCalledWith('Select at least two events to merge', undefined, { duration: 2000 });
+        expect(mockSnackBar.open).toHaveBeenCalledWith('Select at least two activities to merge', undefined, { duration: 2000 });
         expect(mockEventMergeService.mergeEvents).not.toHaveBeenCalled();
     });
 
@@ -1059,7 +1079,7 @@ describe('EventTableComponent', () => {
         await component.mergeSelection(new Event('click'));
 
         expect(mockSnackBar.open).toHaveBeenCalledWith(
-            'Selected events include identical source files. Deselect duplicates and try again.',
+            'Selected activities include identical source files. Deselect duplicates and try again.',
             undefined,
             { duration: 4000 }
         );
@@ -1091,7 +1111,7 @@ describe('EventTableComponent', () => {
         await component.mergeSelection(new Event('click'));
 
         expect(mockEventMergeService.mergeEvents).not.toHaveBeenCalled();
-        expect(mockSnackBar.open).toHaveBeenCalledWith('Not enough events to merge', undefined, { duration: 3000 });
+        expect(mockSnackBar.open).toHaveBeenCalledWith('Not enough activities to merge', undefined, { duration: 3000 });
         expect(mockDialog.open.mock.results[0].value.close).toHaveBeenCalledWith(null);
     });
 
@@ -1149,7 +1169,7 @@ describe('EventTableComponent', () => {
         expect(mockEventMergeService.mergeEvents).toHaveBeenCalledWith(['event1', 'event2'], 'benchmark');
         expect(mockEventMergeService.getMergeErrorMessage).not.toHaveBeenCalled();
         expect(mockSnackBar.open).toHaveBeenCalledWith(
-            'Events merged. Open the merged event from the table once it appears.',
+            'Activities merged. Open the merged activity from the table once it appears.',
             undefined,
             { duration: 5000 }
         );
@@ -1212,7 +1232,7 @@ describe('EventTableComponent', () => {
             expect(component.events.map((event: any) => event.getID())).toEqual(['event3']);
             expect(processChangesSpy).toHaveBeenCalledWith('after_delete_selection');
             expect(mockAnalyticsService.logEvent).toHaveBeenCalledWith('delete_events');
-            expect(mockSnackBar.open).toHaveBeenCalledWith('Events deleted', undefined, { duration: 2000 });
+            expect(mockSnackBar.open).toHaveBeenCalledWith('Activities deleted', undefined, { duration: 2000 });
         });
     });
 
@@ -1220,7 +1240,7 @@ describe('EventTableComponent', () => {
         it('should show message when no events are selected', async () => {
             component.selection.clear();
             await component.downloadOriginals();
-            expect(mockSnackBar.open).toHaveBeenCalledWith('No events selected', undefined, { duration: 2000 });
+            expect(mockSnackBar.open).toHaveBeenCalledWith('No activities selected', undefined, { duration: 2000 });
         });
 
         it('should show message when selected events have no original files', async () => {
@@ -1231,7 +1251,7 @@ describe('EventTableComponent', () => {
 
             await component.downloadOriginals();
 
-            expect(mockSnackBar.open).toHaveBeenCalledWith('No original files available for selected events', undefined, { duration: 3000 });
+            expect(mockSnackBar.open).toHaveBeenCalledWith('No original files available for selected activities', undefined, { duration: 3000 });
         });
 
         it('should download and zip files from events with originalFiles array', async () => {
@@ -1412,7 +1432,7 @@ describe('EventTableComponent', () => {
 
             await component.downloadGPXSelection();
 
-            expect(mockSnackBar.open).toHaveBeenCalledWith('No events selected', undefined, { duration: 2000 });
+            expect(mockSnackBar.open).toHaveBeenCalledWith('No activities selected', undefined, { duration: 2000 });
             expect(mockProcessingService.removeJob).toHaveBeenCalledWith('job-id');
         });
 
@@ -1493,7 +1513,7 @@ describe('EventTableComponent', () => {
             );
             expect(mockProcessingService.completeJob).toHaveBeenCalledWith('job-id', 'Downloaded 2 GPX files');
             expect(mockSnackBar.open).toHaveBeenCalledWith(
-                'Downloaded 2 GPX files. Skipped 1 event.',
+                'Downloaded 2 GPX files. Skipped 1 activity.',
                 undefined,
                 { duration: 4000 },
             );
@@ -1519,7 +1539,7 @@ describe('EventTableComponent', () => {
             );
             expect(mockProcessingService.completeJob).toHaveBeenCalledWith('job-id', 'Downloaded 1 GPX file');
             expect(mockSnackBar.open).toHaveBeenCalledWith(
-                'Downloaded 1 GPX file. Skipped 1 event.',
+                'Downloaded 1 GPX file. Skipped 1 activity.',
                 undefined,
                 { duration: 4000 },
             );
@@ -1540,7 +1560,7 @@ describe('EventTableComponent', () => {
             expect(mockFileService.downloadAsZip).not.toHaveBeenCalled();
             expect(mockProcessingService.failJob).toHaveBeenCalledWith('job-id', 'No GPX files exported');
             expect(mockSnackBar.open).toHaveBeenCalledWith(
-                'Could not export GPX for selected events',
+                'Could not export GPX for selected activities',
                 undefined,
                 { duration: 3000 },
             );

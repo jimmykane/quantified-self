@@ -6,9 +6,12 @@ import {
 import { ASSISTANT_PROMPT_EXAMPLES } from '@shared/assistant.prompts';
 import type { AssistantLocationAccess } from '@shared/assistant.types';
 import { SharedModule } from '../../modules/shared.module';
+import { CompactRowComponent } from '../shared/compact-row/compact-row.component';
 
 export interface AssistantExploreBottomSheetData {
   timelineNotesEnabled?: boolean;
+  activityTagChangesEnabled?: boolean;
+  timelineNoteChangesEnabled?: boolean;
   trainingPlansEnabled?: boolean;
   trainingPlanChangesEnabled?: boolean;
   trainingDeliveryEnabled?: boolean;
@@ -20,13 +23,15 @@ export type AssistantExploreBottomSheetResult =
   | { kind: 'training_plan_changes'; enabled: boolean }
   | { kind: 'training_delivery'; enabled: boolean }
   | { kind: 'timeline_notes'; enabled: boolean }
+  | { kind: 'activity_tag_changes'; enabled: boolean }
+  | { kind: 'timeline_note_changes'; enabled: boolean }
   | { kind: 'prompt'; prompt: string }
   | { kind: 'location_access'; locationAccess: AssistantLocationAccess };
 
 @Component({
   selector: 'app-assistant-explore-bottom-sheet',
   standalone: true,
-  imports: [SharedModule],
+  imports: [SharedModule, CompactRowComponent],
   templateUrl: './assistant-explore-bottom-sheet.component.html',
   styleUrls: ['./assistant-explore-bottom-sheet.component.scss'],
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -56,6 +61,16 @@ export class AssistantExploreBottomSheetComponent {
   setTimelineNotes(enabled: boolean): void {
     if (enabled === (this.data.timelineNotesEnabled === true)) return;
     this.bottomSheetRef.dismiss({ kind: 'timeline_notes', enabled });
+  }
+
+  setActivityTagChanges(enabled: boolean): void {
+    if (enabled === (this.data.activityTagChangesEnabled === true)) return;
+    this.bottomSheetRef.dismiss({ kind: 'activity_tag_changes', enabled });
+  }
+
+  setTimelineNoteChanges(enabled: boolean): void {
+    if (enabled === (this.data.timelineNoteChangesEnabled === true)) return;
+    this.bottomSheetRef.dismiss({ kind: 'timeline_note_changes', enabled });
   }
 
   setTrainingPlans(enabled: boolean): void {

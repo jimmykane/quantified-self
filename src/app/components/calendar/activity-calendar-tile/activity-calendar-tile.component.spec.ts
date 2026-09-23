@@ -1,4 +1,3 @@
-import { TRAINING_PLANNING_UI_ALLOWED_UIDS } from '@shared/training-planning-rollout';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { TestBed } from '@angular/core/testing';
@@ -19,13 +18,15 @@ import { ActivityCalendarTileComponent } from './activity-calendar-tile.componen
 import { STANDALONE_WORKOUT_COLOR, trainingPlanAppearance } from '../../../helpers/training-plan-appearance.helper';
 
 describe('ActivityCalendarTileComponent', () => {
+  const planningUserUid = 'planning-user';
   const user = {
-    uid: TRAINING_PLANNING_UI_ALLOWED_UIDS[0],
+    uid: planningUserUid,
     settings: { unitSettings: { startOfTheWeek: DaysOfTheWeek.Monday } },
   };
   let watchEvents: ReturnType<typeof vi.fn>;
   let openBottomSheet: ReturnType<typeof vi.fn>;
   let watchSchedule: ReturnType<typeof vi.fn>;
+  let watchWorkoutCompletions: ReturnType<typeof vi.fn>;
   let viewer: ReturnType<typeof signal<{ uid: string } | null>>;
   let viewer$: BehaviorSubject<{ uid: string } | null>;
   let dayDetailsNavigation: {
@@ -38,6 +39,7 @@ describe('ActivityCalendarTileComponent', () => {
     viewer$ = new BehaviorSubject<{ uid: string } | null>(user);
     watchEvents = vi.fn().mockReturnValue(of([createEvent()]));
     watchSchedule = vi.fn().mockReturnValue(of(emptySchedule()));
+    watchWorkoutCompletions = vi.fn().mockReturnValue(of([]));
     openBottomSheet = vi.fn().mockReturnValue({ afterDismissed: () => of(undefined) });
     dayDetailsNavigation = {
       restorationFor: vi.fn().mockReturnValue(null),
@@ -49,7 +51,7 @@ describe('ActivityCalendarTileComponent', () => {
         provideRouter([]),
         { provide: AppUserService, useValue: { user: viewer, user$: viewer$ } },
         { provide: ActivityCalendarService, useValue: { watchEvents } },
-        { provide: TrainingPlansService, useValue: { watchSchedule } },
+        { provide: TrainingPlansService, useValue: { watchSchedule, watchWorkoutCompletions } },
         { provide: CalendarDayDetailsNavigationService, useValue: dayDetailsNavigation },
       ],
     }).compileComponents();
@@ -69,7 +71,7 @@ describe('ActivityCalendarTileComponent', () => {
     expect(fixture.nativeElement.textContent).toContain('Activity calendar');
   });
 
-  it.each([false, true])('hides planning and stops its reads on account changes (mini calendar: %s)', async showNavigation => {
+  it.each([false, true])('hides planning for a different displayed account (mini calendar: %s)', async showNavigation => {
     const fixture = TestBed.createComponent(ActivityCalendarTileComponent);
     watchSchedule.mockReturnValue(of(scheduleForDate(currentLocalDate(2))));
     fixture.componentRef.setInput('user', { ...user, uid: 'another-user' });
@@ -144,7 +146,7 @@ describe('ActivityCalendarTileComponent', () => {
 
     expect(openBottomSheet).toHaveBeenCalledWith(expect.any(Function), expect.objectContaining({
       data: expect.objectContaining({
-        userId: TRAINING_PLANNING_UI_ALLOWED_UIDS[0],
+        userId: planningUserUid,
         unitSettings: user.settings.unitSettings,
       }),
     }));
@@ -309,6 +311,7 @@ describe('ActivityCalendarTileComponent', () => {
   it('shows active-plan and standalone workouts and passes them to empty-day details', async () => {
     const plannedDate = currentLocalDate(2);
     watchSchedule.mockReturnValue(of(scheduleForDate(plannedDate)));
+    watchWorkoutCompletions.mockReturnValue(of([{ workoutId: 'active-workout' }]));
     watchEvents.mockReturnValue(of([]));
     const fixture = TestBed.createComponent(ActivityCalendarTileComponent);
     fixture.componentRef.setInput('user', user);
@@ -326,9 +329,11 @@ describe('ActivityCalendarTileComponent', () => {
     fixture.componentInstance.openDay(day);
 
     const plannedWorkouts = (componentOpen.mock.calls[0][1] as {
-      data: { plannedWorkouts: Array<{ workout: { id: string } }> };
+      data: { plannedWorkouts: Array<{ workout: { id: string }; completed?: boolean }> };
     }).data.plannedWorkouts;
     expect(plannedWorkouts.map(entry => entry.workout.id)).toEqual(['active-workout', 'standalone-workout']);
+    expect(plannedWorkouts.find(entry => entry.workout.id === 'active-workout')?.completed).toBe(true);
+    expect(fixture.nativeElement.querySelector('.planned-workout-marker--completed')?.textContent?.trim()).toBe('task_alt');
   });
 
   it.each([false, true])('updates saved plan colors in the tile / Today picker (navigation: %s) without changing activities', async showNavigation => {

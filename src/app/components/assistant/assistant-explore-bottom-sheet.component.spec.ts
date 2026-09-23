@@ -60,16 +60,33 @@ describe('AssistantExploreBottomSheetComponent', () => {
   });
 
   it('offers independent default-off Training consent with an accessible disclosure', async () => {
-    const toggle = fixture.nativeElement.querySelector('[aria-describedby="assistant-training-plans-disclosure"]');
+    const toggle = fixture.nativeElement.querySelector('[aria-label^="Training plans access"]');
     expect(toggle).not.toBeNull();
     expect(fixture.nativeElement.textContent).toContain('sensitive health or personal information');
+    expect(fixture.nativeElement.textContent).toContain('choose what happens to its workouts');
+    expect(fixture.nativeElement.textContent).toContain('Turn on Training plans before allowing changes');
+    expect(fixture.nativeElement.querySelectorAll('.assistant-training-access app-compact-row')).toHaveLength(3);
+    const changeToggles = Array.from(fixture.nativeElement.querySelectorAll(
+      '[aria-label^="Training plan changes"], [aria-label^="Training delivery changes"]',
+    )) as HTMLButtonElement[];
+    expect(changeToggles).toHaveLength(2);
+    expect(changeToggles.every(changeToggle => changeToggle.disabled)).toBe(true);
+    for (const trainingToggle of Array.from(fixture.nativeElement.querySelectorAll(
+      '[aria-label^="Training"]',
+    )) as HTMLElement[]) {
+      const descriptionId = trainingToggle.getAttribute('aria-describedby');
+      expect(descriptionId).toBeTruthy();
+      expect(fixture.nativeElement.querySelector(`#${descriptionId}`)).not.toBeNull();
+    }
     component.setTrainingPlans(false); expect(bottomSheetRef.dismiss).not.toHaveBeenCalled();
     component.setTrainingPlans(true); expect(bottomSheetRef.dismiss).toHaveBeenCalledWith({ kind: 'training_plans', enabled: true });
     // Optional rendered-component artifact for phone/desktop light/dark layout QA. No account/API data.
     if (process.env.QS_TRAINING_CONSENT_QA_HTML) {
       const styles = readFileSync('dist/browser/styles.css', 'utf8');
       const sheet = TestBed.inject(MatBottomSheet);
-      sheet.open(AssistantExploreBottomSheetComponent, { data: { locationAccess: 'coordinate_free' } });
+      sheet.open(AssistantExploreBottomSheetComponent, {
+        data: { locationAccess: 'coordinate_free', trainingPlansEnabled: true },
+      });
       await fixture.whenStable();
       // This component stylesheet is plain CSS. TestBed omits styleUrl processing; include it for visual QA.
       const componentStyles = readFileSync('src/app/components/assistant/assistant-explore-bottom-sheet.component.scss', 'utf8')
@@ -108,6 +125,19 @@ describe('AssistantExploreBottomSheetComponent', () => {
     expect(bottomSheetRef.dismiss).not.toHaveBeenCalled();
     component.setTimelineNotes(true);
     expect(bottomSheetRef.dismiss).toHaveBeenCalledWith({ kind: 'timeline_notes', enabled: true });
+  });
+
+  it('keeps tag and note writes separate and disables note writes without note reads', () => {
+    const tagToggle = fixture.nativeElement.querySelector('[aria-label^="Activity tag changes"]') as HTMLButtonElement;
+    const noteWriteToggle = fixture.nativeElement.querySelector('[aria-label^="Timeline note changes"]') as HTMLButtonElement;
+    expect(tagToggle).not.toBeNull();
+    expect(noteWriteToggle.disabled).toBe(true);
+    expect(fixture.nativeElement.textContent).toContain('Nothing changes until you approve it');
+    expect(fixture.nativeElement.textContent).toContain('permanently delete');
+    component.setActivityTagChanges(true);
+    expect(bottomSheetRef.dismiss).toHaveBeenLastCalledWith({ kind: 'activity_tag_changes', enabled: true });
+    component.setTimelineNoteChanges(true);
+    expect(bottomSheetRef.dismiss).toHaveBeenLastCalledWith({ kind: 'timeline_note_changes', enabled: true });
   });
 
   it('closes without a prompt when dismissed explicitly', () => {

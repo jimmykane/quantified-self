@@ -29,5 +29,12 @@ export function classifyEventForTrainingMetrics(
 export function isBenchmarkEventForTrainingMetrics(
     eventData: Record<string, unknown> | null | undefined
 ): boolean {
+    return isBenchmarkEvent(eventData);
+}
+
+/** Shared persistence-level benchmark classification for non-Training boundaries. */
+export function isBenchmarkEvent(
+    eventData: Record<string, unknown> | null | undefined
+): boolean {
     return classifyEventForTrainingMetrics(eventData) === 'benchmark';
 }

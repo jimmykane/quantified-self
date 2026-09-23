@@ -11,6 +11,7 @@ import {
   UserUnitSettingsInterface,
 } from '@sports-alliance/sports-lib';
 import { isMergeOrBenchmarkEvent } from '../../../helpers/event-visibility.helper';
+import { getLocalDateTimeFormatter } from '../../../helpers/date-time-format.helper';
 
 type JumpTableColumn =
   | '#'
@@ -231,11 +232,11 @@ export class EventCardJumpsComponent implements OnChanges {
     }
 
     if (timestamp >= 1e12) {
-      return new Date(timestamp).toLocaleString();
+      return getLocalDateTimeFormatter().format(new Date(timestamp));
     }
 
     if (timestamp >= 1e9) {
-      return new Date(timestamp * 1000).toLocaleString();
+      return getLocalDateTimeFormatter().format(new Date(timestamp * 1000));
     }
 
     if (timestamp < 0) {

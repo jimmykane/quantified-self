@@ -150,12 +150,15 @@ The provider route ID is a deterministic digest of the Quantified Self user, act
 
 HTTP 408, 429, 5xx, and transient transport failures are retryable. Authentication failures require reconnect, and HTTP 403 or provider code `30009` is a permission-required failure. Invalid parameters, missing required distance, invalid provider responses, and rejected content are terminal and sanitized before reaching the browser or DLQ.
 
-## Training delivery private rollout
+## Training delivery
 
 The ignored local COROS API Reference V2.0.6 (February 2026) is available for development but is never committed. The
-versioned capability matrix, serializer and transport live under `functions/src/training-plans/`. Public COROS Training
-delivery remains disabled; the exact private UID is admitted independently by frontend readiness and the backend runtime.
-Connecting COROS alone never opts in, and implementation does not authorize a provider call or deployment.
+versioned capability matrix, serializer and transport live under `functions/src/training-plans/`. COROS Training delivery
+has no per-UID backend allowlist. The browser labels all new COROS Training delivery setup **Coming soon** under #648:
+plan sync, plan-workout resume and standalone Send are unavailable. Existing saved delivery state continues to follow its
+consent; retained delivery records, Retry, copy status and Stop remain available. This does not change COROS activity/history, Sleep, Health, FIT activity
+upload, activity sync, route delivery, backend reconciliation or MCP delivery behavior. Connecting COROS alone never opts
+in, and implementation does not authorize a provider call or deployment.
 
 The adapter sends form-encoded requests only to `POST /coros/tp/list/push` and
 `POST /coros/tp/workout/deleteById`, using the existing COROS OAuth client ID/secret and canonical pinned account.
@@ -187,8 +190,8 @@ requeues reconciliation. Fallback/manual matching and MCP completion-link exposu
 
 COROS documents no planned-workout read/list endpoint. There is no Check COROS action, deletion inference or automatic
 recreation. Separately authorized live evidence is still required for Training entitlement, repeated-ID update,
-overlapping-window preservation, reschedule, eligible delete, callback/history correlation and app/watch behavior before
-broader rollout; those findings remain in #645/#648. The user-facing watch behavior follows
+overlapping-window preservation, reschedule, eligible delete, callback/history correlation and app/watch behavior; those
+post-release findings remain in #645/#648. The user-facing watch behavior follows
 [COROS's Training Plan guidance](https://support.coros.com/hc/en-us/articles/360048955151-Creating-and-Using-Training-Plans).
 
 ## Security and lifecycle controls

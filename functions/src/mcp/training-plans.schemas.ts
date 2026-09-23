@@ -21,8 +21,11 @@ import { PLANNED_WORKOUT_PROVIDER_IDS } from '../../../shared/planned-workout-pr
 export const TRAINING_PLANS_SCOPE = 'training-plans:read';
 export const TRAINING_PLANS_WRITE_SCOPE = 'training-plans:write';
 export const TRAINING_DELIVERY_WRITE_SCOPE = 'training-delivery:write';
+export const TRAINING_READ_EXTENSION_TOOLS = ['query_planned_workouts_by_date',
+  'get_planned_workout_completions', 'assess_planned_workout_compatibility'] as const;
 export const TRAINING_READ_TOOLS = ['list_training_plans', 'get_training_plan', 'query_planned_workouts',
-  'get_planned_workout', 'get_training_sync_status', 'get_planned_workout_completion'] as const;
+  'get_planned_workout', 'get_training_sync_status', 'get_planned_workout_completion',
+  ...TRAINING_READ_EXTENSION_TOOLS] as const;
 export type TrainingReadTool = typeof TRAINING_READ_TOOLS[number];
 export const TRAINING_PREVIEW_TOOLS = ['preview_create_planned_workout', 'preview_training_changes'] as const;
 export const TRAINING_WRITE_TOOLS = [...TRAINING_PREVIEW_TOOLS, 'apply_training_changes'] as const;
@@ -36,14 +39,22 @@ const positive = z.number().positive();
 const nodeId = z.string().regex(/^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/);
 const lifecycle = z.enum(['active', 'paused', 'archived']);
 const pagination = { limit: z.number().int().min(1).max(100).default(25), cursor: z.string().min(1).max(8192).optional() };
+const workoutQuery = { startDate: trainingDate, endDate: trainingDate,
+  scope: z.enum(['calendar', 'standalone', 'plan', 'all']).default('calendar'), planRef: ref.optional(), ...pagination };
+const workoutRefs = z.array(ref).min(1).max(25)
+  .refine(values => new Set(values).size === values.length, 'Workout references must be unique.');
+const selectedProviders = z.array(z.enum(PLANNED_WORKOUT_PROVIDER_IDS)).min(1).max(PLANNED_WORKOUT_PROVIDER_IDS.length)
+  .refine(values => new Set(values).size === values.length, 'Providers must be unique.');
 export const TRAINING_READ_INPUTS = {
   list_training_plans: z.strictObject({ search: z.string().max(120).optional(), lifecycle: lifecycle.optional(), ...pagination }),
   get_training_plan: z.strictObject({ planRef: ref }),
-  query_planned_workouts: z.strictObject({ startDate: trainingDate, endDate: trainingDate,
-    scope: z.enum(['calendar', 'standalone', 'plan', 'all']).default('calendar'), planRef: ref.optional(), ...pagination }),
+  query_planned_workouts: z.strictObject(workoutQuery),
+  query_planned_workouts_by_date: z.strictObject(workoutQuery),
   get_planned_workout: z.strictObject({ workoutRef: ref }),
   get_training_sync_status: z.strictObject({ scope: z.enum(['plan', 'workout']), reference: ref }),
   get_planned_workout_completion: z.strictObject({ workoutRef: ref }),
+  get_planned_workout_completions: z.strictObject({ workoutRefs }),
+  assess_planned_workout_compatibility: z.strictObject({ workoutRef: ref, providers: selectedProviders.optional() }),
 };
 
 type WorkoutTargetVariantKey<T extends WorkoutTargetV1 = WorkoutTargetV1> = T extends WorkoutTargetV1
@@ -148,10 +159,31 @@ const workout = z.strictObject({ workoutRef: ref, planRef: ref.nullable(), title
   localDate: trainingDate, lifecycle: z.enum(['planned', 'skipped']), revision: count, createdAtMs: count, updatedAtMs: count });
 const envelope = { scheduleRevision: count, scanComplete: z.boolean(), recordsScanned: count.max(1000),
   nextCursor: z.string().max(8192).nullable(), limitsReached: z.array(z.enum(['limit', 'scan', 'bytes'])).max(3) };
+const completion = z.strictObject({
+  workoutRef: ref,
+  state: z.enum(['linked', 'unlinked']),
+  provider: z.enum(PLANNED_WORKOUT_PROVIDER_IDS).nullable(),
+  matchMethod: z.enum(['provider_marker', 'manual_confirmation']).nullable(),
+  timing: z.enum(['on_date', 'early', 'late', 'unknown']).nullable(),
+  scheduledDate: trainingDate,
+  workoutRevision: count,
+  linkedWorkoutRevision: count.nullable(),
+  workoutChangedSinceCompletion: z.boolean(),
+  activityStartAtMs: count.nullable(),
+  linkedAtMs: count.nullable(),
+  activityRef: ref.nullable(),
+});
+const compatibilityIssueCode = z.enum([
+  'provider_contract_unavailable', 'unsupported_sport', 'sport_profile_degraded', 'unsupported_ending',
+  'unsupported_target', 'purpose_degraded', 'multiple_targets_degraded', 'relative_target_degraded',
+  'relative_reference_conflict', 'relative_target_device_support_limited', 'scheduling_duration_unavailable',
+]);
 export const TRAINING_READ_OUTPUTS = {
   list_training_plans: z.strictObject({ ...envelope, plans: z.array(plan).max(100) }),
   get_training_plan: z.strictObject({ scheduleRevision: count, plan }),
   query_planned_workouts: z.strictObject({ ...envelope, startDate: trainingDate, endDate: trainingDate,
+    scope: z.enum(['calendar', 'standalone', 'plan', 'all']), workouts: z.array(workout).max(100) }),
+  query_planned_workouts_by_date: z.strictObject({ ...envelope, startDate: trainingDate, endDate: trainingDate,
     scope: z.enum(['calendar', 'standalone', 'plan', 'all']), workouts: z.array(workout).max(100) }),
   get_planned_workout: z.strictObject({ scheduleRevision: count, workout: workout.extend({
     structure: TRAINING_RECIPE_SCHEMA, displaySteps: z.array(z.strictObject({ nodeId,
@@ -165,21 +197,15 @@ export const TRAINING_READ_OUTPUTS = {
       hasRemoteCopy: z.boolean(), differsFromQS: z.boolean().nullable(), retainedCopies: count.max(1600).nullable(),
       lastAttemptAtMs: count.nullable(), lastAcceptedAtMs: count.nullable(), updatedAtMs: count.nullable(),
     })).max(4) }),
-  get_planned_workout_completion: z.strictObject({
-    scheduleRevision: count,
-    workoutRef: ref,
-    state: z.enum(['linked', 'unlinked']),
-    provider: z.enum(PLANNED_WORKOUT_PROVIDER_IDS).nullable(),
-    matchMethod: z.enum(['provider_marker', 'manual_confirmation']).nullable(),
-    timing: z.enum(['on_date', 'early', 'late', 'unknown']).nullable(),
-    scheduledDate: trainingDate,
-    workoutRevision: count,
-    linkedWorkoutRevision: count.nullable(),
-    workoutChangedSinceCompletion: z.boolean(),
-    activityStartAtMs: count.nullable(),
-    linkedAtMs: count.nullable(),
-    activityRef: ref.nullable(),
-  }),
+  get_planned_workout_completion: z.strictObject({ scheduleRevision: count, ...completion.shape }),
+  get_planned_workout_completions: z.strictObject({ scheduleRevision: count,
+    completions: z.array(completion).min(1).max(25) }),
+  assess_planned_workout_compatibility: z.strictObject({ scheduleRevision: count, workoutRef: ref,
+    assessments: z.array(z.strictObject({ provider: z.enum(PLANNED_WORKOUT_PROVIDER_IDS),
+      level: z.enum(['exact', 'degraded', 'unsupported']),
+      issues: z.array(z.strictObject({ severity: z.enum(['degraded', 'unsupported']), code: compatibilityIssueCode,
+        field: z.string().min(1).max(500), message: z.string().min(1).max(1000) })).max(20),
+    })).min(1).max(PLANNED_WORKOUT_PROVIDER_IDS.length) }),
 };
 export type TrainingReadResult = z.infer<typeof TRAINING_READ_OUTPUTS[TrainingReadTool]>;
 
@@ -204,6 +230,8 @@ export const TRAINING_CHANGE_SCHEMA = z.discriminatedUnion('kind', [
   z.strictObject({ kind: z.literal('set-plan-lifecycle'), plan: entityTarget,
     lifecycle: z.enum(['active', 'paused', 'archived']) }),
   z.strictObject({ kind: z.literal('shift-plan'), plan: entityTarget, days: z.number().int().min(-366).max(366).refine(days => days !== 0) }),
+  z.strictObject({ kind: z.literal('delete-plan'), plan: entityTarget,
+    workoutDisposition: z.enum(['convert-to-standalone', 'delete-workouts']) }),
   z.strictObject({ kind: z.literal('create-workout'), localKey, plan: optionalPlanTarget.default(null),
     localDate: trainingDate, title: z.string().trim().min(1).max(120), structure: TRAINING_RECIPE_SCHEMA }),
   z.strictObject({ kind: z.literal('update-workout'), workout: entityTarget, plan: optionalPlanTarget,

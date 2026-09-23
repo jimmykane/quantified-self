@@ -7,10 +7,13 @@ import {
 } from './conversation-store';
 import type { AssistantCallableDependencies } from './callable';
 import {
+  APPLY_ASSISTANT_TRAINING_PROPOSAL_OPTIONS,
   ASSISTANT_CALLABLE_OPTIONS,
+  RESET_ASSISTANT_CONVERSATION_OPTIONS,
   assertAssistantLegalAccess,
   resolveAssistantAppBaseUrl,
   runAssistantChat,
+  runApplyAssistantContentProposal,
   runApplyAssistantTrainingProposal,
   runGetAssistantConversation,
   runGetAssistantQuotaStatus,
@@ -68,8 +71,9 @@ function createDependencies() {
       history: [],
       locationAccess: 'coordinate_free',
     }),
-    completeTurn: vi.fn().mockResolvedValue(conversation),
+    completeTurn: vi.fn().mockResolvedValue({ conversation }),
     clearTrainingProposal: vi.fn().mockResolvedValue(undefined),
+    clearContentProposal: vi.fn().mockResolvedValue(undefined),
     releaseTurn: vi.fn().mockResolvedValue(undefined),
     resetConversation: vi.fn().mockResolvedValue(conversation),
   };
@@ -120,6 +124,123 @@ const context = {
 };
 
 describe('Assistant callable', () => {
+  it('applies a current content proposal through the existing mutation service and clears it', async () => {
+    const { store, conversation } = createDependencies();
+    const proposal = {
+      proposalRef: 'content-proposal-1',
+      kind: 'update_event_tags' as const,
+      expiresAtMs: Date.now() + 60_000,
+      summary: 'Replace one current activity tag with one.',
+      requiresConfirmation: true as const,
+      arguments: { activityRef: 'activity-ref', expectedTags: ['Easy'], tags: ['Quality'] },
+    };
+    vi.mocked(store.getActiveConversationState).mockResolvedValue({
+      conversation,
+      pendingRequestId: null,
+      locationAccess: 'coordinate_free',
+      activityTagChangesEnabled: true,
+      pendingContentProposal: proposal,
+    });
+    const updateEventTags = vi.fn().mockResolvedValue({ changed: true, tags: ['Quality'] });
+    const dataService = { updateEventTags };
+
+    await expect(runApplyAssistantContentProposal({
+      proposalRef: proposal.proposalRef,
+      conversationId: conversation.conversationId,
+      confirm: true,
+    }, context, store, dataService as never)).resolves.toEqual({
+      status: 'applied', kind: 'update_event_tags', message: 'Event tags updated.',
+    });
+    expect(updateEventTags).toHaveBeenCalledWith(expect.objectContaining({
+      connectionId: `first-party-assistant-v1:${conversation.conversationId}`,
+      assistantConversationId: conversation.conversationId,
+      assistantProposalRef: proposal.proposalRef,
+      arguments: proposal.arguments,
+    }));
+    expect(store.clearContentProposal).toHaveBeenCalledWith(
+      'user-1', conversation.conversationId, proposal.proposalRef,
+    );
+  });
+
+  it('reports an accepted idempotent content write even if proposal cleanup loses a race', async () => {
+    const { store, conversation } = createDependencies();
+    const proposal = {
+      proposalRef: 'content-proposal-1',
+      kind: 'update_event_tags' as const,
+      expiresAtMs: Date.now() + 60_000,
+      summary: 'Replace one current activity tag with one.',
+      requiresConfirmation: true as const,
+      arguments: { activityRef: 'activity-ref', expectedTags: ['Easy'], tags: ['Quality'] },
+    };
+    vi.mocked(store.getActiveConversationState).mockResolvedValue({
+      conversation, pendingRequestId: null, locationAccess: 'coordinate_free',
+      activityTagChangesEnabled: true, pendingContentProposal: proposal,
+    });
+    vi.mocked(store.clearContentProposal).mockRejectedValue(
+      new AssistantConversationStoreError('conversation_changed', 'A newer proposal is current.'),
+    );
+    const updateEventTags = vi.fn().mockResolvedValue({ changed: true, tags: ['Quality'] });
+
+    await expect(runApplyAssistantContentProposal({
+      proposalRef: proposal.proposalRef,
+      conversationId: conversation.conversationId,
+      confirm: true,
+    }, context, store, { updateEventTags } as never)).resolves.toMatchObject({
+      status: 'applied',
+      kind: 'update_event_tags',
+    });
+    expect(updateEventTags).toHaveBeenCalledOnce();
+  });
+
+  it('reports when an accepted event-tag proposal was already satisfied', async () => {
+    const { store, conversation } = createDependencies();
+    const proposal = {
+      proposalRef: 'content-proposal-1',
+      kind: 'update_event_tags' as const,
+      expiresAtMs: Date.now() + 60_000,
+      summary: 'Keep the current activity tags.',
+      requiresConfirmation: true as const,
+      arguments: { activityRef: 'activity-ref', expectedTags: ['Quality'], tags: ['Quality'] },
+    };
+    vi.mocked(store.getActiveConversationState).mockResolvedValue({
+      conversation, pendingRequestId: null, locationAccess: 'coordinate_free',
+      activityTagChangesEnabled: true, pendingContentProposal: proposal,
+    });
+    const updateEventTags = vi.fn().mockResolvedValue({ changed: false, tags: ['Quality'] });
+
+    await expect(runApplyAssistantContentProposal({
+      proposalRef: proposal.proposalRef,
+      conversationId: conversation.conversationId,
+      confirm: true,
+    }, context, store, { updateEventTags } as never)).resolves.toEqual({
+      status: 'applied',
+      kind: 'update_event_tags',
+      message: 'Event tags already matched the requested list.',
+    });
+    expect(updateEventTags).toHaveBeenCalledOnce();
+  });
+
+  it('dismisses a content proposal without calling a mutation service', async () => {
+    const { store, conversation } = createDependencies();
+    const proposal = {
+      proposalRef: 'content-proposal-1',
+      kind: 'delete_timeline_note' as const,
+      expiresAtMs: Date.now() + 60_000,
+      summary: 'Permanently delete the selected Timeline note.',
+      requiresConfirmation: true as const,
+      arguments: { noteRef: 'note-ref', expectedRevision: 2 },
+    };
+    vi.mocked(store.getActiveConversationState).mockResolvedValue({
+      conversation, pendingRequestId: null, locationAccess: 'coordinate_free', timelineNotesEnabled: true,
+      timelineNoteChangesEnabled: true, pendingContentProposal: proposal,
+    });
+    const deleteTimelineNote = vi.fn();
+    await expect(runApplyAssistantContentProposal({ proposalRef: proposal.proposalRef,
+      conversationId: conversation.conversationId, confirm: false }, context, store,
+    { deleteTimelineNote } as never)).resolves.toMatchObject({ status: 'dismissed' });
+    expect(deleteTimelineNote).not.toHaveBeenCalled();
+  });
+
   it('dismisses only the current server-owned Training proposal without applying it', async () => {
     const { store } = createDependencies();
     const proposal = { proposalRef: 'opaque-proposal', permissionMode: 'combined' as const,
@@ -268,6 +389,11 @@ describe('Assistant callable', () => {
     });
   });
 
+  it('gives conversation changes enough memory for the shared Assistant runtime', () => {
+    expect(RESET_ASSISTANT_CONVERSATION_OPTIONS.memory).toBe('512MiB');
+    expect(APPLY_ASSISTANT_TRAINING_PROPOSAL_OPTIONS.memory).toBe('512MiB');
+  });
+
   it('uses only allowlisted app origins for generated MCP links', () => {
     expect(resolveAssistantAppBaseUrl(context)).toBe('https://beta.quantified-self.io');
     expect(resolveAssistantAppBaseUrl({
@@ -300,7 +426,7 @@ describe('Assistant callable', () => {
       REQUEST_ID,
       createAssistantRequestFingerprint(REQUEST_ID, 'How am I today?'),
       'coordinate_free',
-      false, false, false, false);
+      false, false, false, false, false, false);
     expect(dependencies.finalizeQuota).toHaveBeenCalledWith(reservation);
     expect(dependencies.answer).toHaveBeenCalledWith(expect.objectContaining({
       uid: 'user-1',
@@ -321,7 +447,33 @@ describe('Assistant callable', () => {
       }),
       expect.objectContaining({ role: 'assistant', text: 'Your readiness is 72 today.' }),
       undefined,
+      undefined,
     );
+  });
+
+  it('returns a proposal retained by the authoritative conversation completion', async () => {
+    const { dependencies, store, conversation } = createDependencies();
+    const proposal = {
+      proposalRef: 'content-proposal-retained',
+      kind: 'update_event_tags' as const,
+      expiresAtMs: Date.parse('2026-08-03T12:10:00Z'),
+      summary: 'Change tags on Running from 2026-08-03.',
+      requiresConfirmation: true as const,
+      arguments: { activityRef: 'activity-ref', expectedTags: ['Easy'], tags: ['Quality'] },
+    };
+    vi.mocked(store.completeTurn).mockResolvedValue({
+      conversation,
+      pendingContentProposal: proposal,
+    });
+
+    await expect(runAssistantChat({
+      requestId: REQUEST_ID,
+      message: 'What else should I know?',
+      timeZone: 'Europe/Helsinki',
+      conversationId: 'conversation-1',
+    }, context, dependencies)).resolves.toMatchObject({
+      pendingContentProposal: proposal,
+    });
   });
 
   it('binds explicit precise activity-location access through idempotency and runtime', async () => {
@@ -352,7 +504,7 @@ describe('Assistant callable', () => {
         'precise_activity',
       ),
       'precise_activity',
-      false, false, false, false);
+      false, false, false, false, false, false);
     expect(dependencies.answer).toHaveBeenCalledWith(expect.objectContaining({
       prompt: 'Where was my biggest jump?',
       locationAccess: 'precise_activity',
@@ -375,7 +527,8 @@ describe('Assistant callable', () => {
       locationAccess: 'coordinate_free', timelineNotesEnabled: true, conversationId: 'conversation-1' };
     expect(await runAssistantChat(request, context, dependencies)).toMatchObject({ timelineNotesEnabled: true });
     expect(store.beginTurn).toHaveBeenCalledWith('user-1', 'conversation-1', REQUEST_ID,
-      createAssistantRequestFingerprint(REQUEST_ID, request.message, 'coordinate_free', true), 'coordinate_free', true, false, false, false);
+      createAssistantRequestFingerprint(REQUEST_ID, request.message, 'coordinate_free', true), 'coordinate_free', true,
+      false, false, false, false, false);
     vi.mocked(store.getActiveConversationState).mockResolvedValue({ conversation: { ...conversation, conversationId: 'new-chat' },
       pendingRequestId: null, locationAccess: 'coordinate_free', timelineNotesEnabled: false });
     await expect(runAssistantChat(request, context, dependencies)).rejects.toMatchObject({ code: 'aborted' });
@@ -393,7 +546,8 @@ describe('Assistant callable', () => {
     expect(dependencies.reserveQuota).not.toHaveBeenCalled();
     await expect(runResetAssistantConversation({ locationAccess: 'precise_activity', timelineNotesEnabled: true, conversationId: null }, context, store))
       .resolves.toMatchObject({ timelineNotesEnabled: true });
-    expect(store.resetConversation).toHaveBeenLastCalledWith('user-1', 'precise_activity', true, null, false, false, false);
+    expect(store.resetConversation).toHaveBeenLastCalledWith('user-1', 'precise_activity', true, null,
+      false, false, false, false, false);
   });
 
   it.each([undefined, '', ' ', 42, 'x'.repeat(121)])('rejects an unbound or malformed notes reset generation: %j', async conversationId => {
@@ -408,7 +562,8 @@ describe('Assistant callable', () => {
     vi.mocked(store.resetConversation).mockRejectedValue(new AssistantConversationStoreError('conversation_changed', 'Changed'));
     await expect(runResetAssistantConversation({ timelineNotesEnabled: true, conversationId: 'old-chat' }, context, store))
       .rejects.toMatchObject({ code: 'aborted' });
-    expect(store.resetConversation).toHaveBeenCalledWith('user-1', 'coordinate_free', true, 'old-chat', false, false, false);
+    expect(store.resetConversation).toHaveBeenCalledWith('user-1', 'coordinate_free', true, 'old-chat',
+      false, false, false, false, false);
   });
 
   it('persists bounded server-owned visuals with the assistant message', async () => {
@@ -451,6 +606,7 @@ describe('Assistant callable', () => {
       expect.objectContaining({
         visuals: [expect.objectContaining({ kind: 'chart' })],
       }),
+      undefined,
       undefined,
     );
   });
@@ -1060,7 +1216,7 @@ describe('Assistant callable', () => {
       'user-1',
       'precise_activity',
       false,
-      undefined, false, false, false);
+      undefined, false, false, false, false, false);
   });
 
   it('rejects an unknown reset location boundary without replacing the conversation', async () => {

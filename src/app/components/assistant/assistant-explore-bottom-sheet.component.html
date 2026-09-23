@@ -27,7 +27,7 @@
       <h3 id="assistant-data-access">Your data stays in your control</h3>
       <div>
         <mat-icon aria-hidden="true">verified_user</mat-icon>
-        <span>Answers use verified data requests. Optional Training changes are previewed for your review.</span>
+        <span>Answers use verified data requests. Optional content and Training changes are previewed for your review.</span>
       </div>
       <div>
         <mat-icon aria-hidden="true">route</mat-icon>
@@ -51,35 +51,80 @@
       </mat-slide-toggle>
     </section>
 
-    <section class="assistant-notes-access" aria-labelledby="assistant-timeline-notes-access">
-      <h3 id="assistant-timeline-notes-access">Timeline notes</h3>
-      <p id="assistant-timeline-notes-disclosure">Allow Gemini to read full private note titles and details when relevant, including notes hidden from charts. Notes may contain sensitive health or personal information.</p>
-      <p>Off by default. Changing access starts a new chat and keeps your other data-access choices. New chat turns all optional access off. Answers may quote relevant details in your saved conversation.</p>
-      <mat-slide-toggle [checked]="data.timelineNotesEnabled === true"
-        aria-label="Timeline notes access — changing this starts a new chat"
-        aria-describedby="assistant-timeline-notes-disclosure"
-        (change)="setTimelineNotes($event.checked)">Timeline notes</mat-slide-toggle>
+    <section class="assistant-notes-access" aria-labelledby="assistant-content-access">
+      <h3 id="assistant-content-access">Tags and Timeline notes</h3>
+      <p class="assistant-training-intro">Choose what the Assistant can do in this chat. Every change starts a new chat; New chat turns all optional access off.</p>
+      <div class="assistant-training-options">
+        <app-compact-row title="Activity tag changes" titleId="assistant-activity-tags-title"
+          icon="sell" density="compact">
+          <p id="assistant-activity-tags-summary" class="assistant-training-summary">Read current workout tags and prepare a complete replacement. Tags are shared by workouts in the same event. Nothing changes until you approve it.</p>
+          <mat-slide-toggle compactRowAction [checked]="data.activityTagChangesEnabled === true"
+            aria-label="Activity tag changes — changing this starts a new chat"
+            aria-describedby="assistant-activity-tags-summary"
+            (change)="setActivityTagChanges($event.checked)"></mat-slide-toggle>
+        </app-compact-row>
+
+        <app-compact-row title="Timeline notes" titleId="assistant-timeline-notes-title"
+          icon="event_note" iconTone="secondary" density="compact">
+          <p id="assistant-timeline-notes-summary" class="assistant-training-summary">Read full private note titles and details when relevant, including notes hidden from charts. Notes may contain sensitive health or personal information.</p>
+          <mat-slide-toggle compactRowAction [checked]="data.timelineNotesEnabled === true"
+            aria-label="Timeline notes access — changing this starts a new chat"
+            aria-describedby="assistant-timeline-notes-summary"
+            (change)="setTimelineNotes($event.checked)"></mat-slide-toggle>
+        </app-compact-row>
+
+        @if (data.timelineNotesEnabled !== true) {
+          <p class="assistant-training-dependency" role="note">Turn on Timeline notes before allowing note changes.</p>
+        }
+
+        <app-compact-row title="Timeline note changes" titleId="assistant-timeline-note-changes-title"
+          icon="edit_note" iconTone="tertiary" density="compact" [showDivider]="false">
+          <p id="assistant-timeline-note-changes-summary" class="assistant-training-summary">Prepare a note to create, edit or permanently delete. You review every change before it is applied.</p>
+          <mat-slide-toggle compactRowAction [checked]="data.timelineNoteChangesEnabled === true"
+            aria-label="Timeline note changes — changing this starts a new chat"
+            aria-describedby="assistant-timeline-note-changes-summary"
+            [disabled]="data.timelineNotesEnabled !== true"
+            (change)="setTimelineNoteChanges($event.checked)"></mat-slide-toggle>
+        </app-compact-row>
+      </div>
     </section>
 
-    <section class="assistant-notes-access" aria-labelledby="assistant-training-plans-access">
-      <h3 id="assistant-training-plans-access">Training plans</h3>
-      <p id="assistant-training-plans-disclosure">Allow Gemini to read your plans and planned workouts when relevant, including names, dates, workout instructions, step notes and existing service sync status. Authored text may contain sensitive health or personal information.</p>
-      <p>Off by default. Changing access starts a new chat and keeps your other choices. New chat turns all optional access off. Answers may quote relevant details.</p>
-      <mat-slide-toggle [checked]="data.trainingPlansEnabled === true"
-        aria-label="Training plans access — changing this starts a new chat"
-        aria-describedby="assistant-training-plans-disclosure"
-        (change)="setTrainingPlans($event.checked)">Training plans</mat-slide-toggle>
-      <div class="assistant-training-write-options">
-        <mat-slide-toggle [checked]="data.trainingPlanChangesEnabled === true"
-          aria-label="Training plan changes — changing this starts a new chat"
-          [disabled]="data.trainingPlansEnabled !== true"
-          (change)="setTrainingPlanChanges($event.checked)">Plan and workout changes</mat-slide-toggle>
-        <p>Lets the Assistant prepare create, edit, move, copy, skip, archive and other recoverable plan changes. You review one clear proposal before anything is applied.</p>
-        <mat-slide-toggle [checked]="data.trainingDeliveryEnabled === true"
-          aria-label="Training delivery changes — changing this starts a new chat"
-          [disabled]="data.trainingPlansEnabled !== true"
-          (change)="setTrainingDelivery($event.checked)">Planned-workout sync changes</mat-slide-toggle>
-        <p>Lets the Assistant prepare send, enable, stop, retry and mapping-approval actions for connected services. Pro and provider rollout rules still apply. You must confirm before anything changes.</p>
+    <section class="assistant-training-access" aria-labelledby="assistant-training-access">
+      <h3 id="assistant-training-access">Training access</h3>
+      <p class="assistant-training-intro">Choose what the Assistant can do in this chat. Every change starts a new chat; New chat turns all optional access off.</p>
+      <div class="assistant-training-options">
+        <app-compact-row title="Training plans" titleId="assistant-training-plans-title"
+          icon="event_note" density="compact">
+          <p id="assistant-training-plans-summary" class="assistant-training-summary">Read plan and workout names, dates, instructions, step notes and existing service sync status. Authored text may contain sensitive health or personal information.</p>
+          <mat-slide-toggle compactRowAction [checked]="data.trainingPlansEnabled === true"
+            aria-label="Training plans access — changing this starts a new chat"
+            aria-describedby="assistant-training-plans-summary"
+            (change)="setTrainingPlans($event.checked)"></mat-slide-toggle>
+        </app-compact-row>
+
+        @if (data.trainingPlansEnabled !== true) {
+          <p class="assistant-training-dependency" role="note">Turn on Training plans before allowing changes.</p>
+        }
+
+        <app-compact-row title="Plan and workout changes" titleId="assistant-training-plan-changes-title"
+          icon="edit_calendar" iconTone="secondary" density="compact">
+          <p id="assistant-training-plan-changes-summary" class="assistant-training-summary">Prepare create, edit, move, copy, skip and archive changes, including plan deletion after you choose what happens to its workouts. Nothing is applied without your approval.</p>
+          <mat-slide-toggle compactRowAction [checked]="data.trainingPlanChangesEnabled === true"
+            aria-label="Training plan changes — changing this starts a new chat"
+            aria-describedby="assistant-training-plan-changes-summary"
+            [disabled]="data.trainingPlansEnabled !== true"
+            (change)="setTrainingPlanChanges($event.checked)"></mat-slide-toggle>
+        </app-compact-row>
+
+        <app-compact-row title="Planned-workout sync changes" titleId="assistant-training-delivery-title"
+          icon="sync" iconTone="tertiary" density="compact" [showDivider]="false">
+          <p id="assistant-training-delivery-summary" class="assistant-training-summary">Prepare send, enable, stop, retry or mapping-approval actions. Pro and provider rollout rules still apply; you approve every change.</p>
+          <mat-slide-toggle compactRowAction [checked]="data.trainingDeliveryEnabled === true"
+            aria-label="Training delivery changes — changing this starts a new chat"
+            aria-describedby="assistant-training-delivery-summary"
+            [disabled]="data.trainingPlansEnabled !== true"
+            (change)="setTrainingDelivery($event.checked)"></mat-slide-toggle>
+        </app-compact-row>
       </div>
     </section>
 

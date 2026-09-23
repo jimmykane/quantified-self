@@ -53,8 +53,8 @@ export class EventSearchComponent extends LoadingAbstractDirective implements On
   @Input() compact = false;
   @Input() toolbarRangeLayout = false;
   @Input() mergedEventsToggleDisabled = false;
-  @Input() mergedEventsToggleLabel = 'Merged events';
-  @Input() mergedEventsToggleHint = 'Merged events are excluded';
+  @Input() mergedEventsToggleLabel = 'Merged activities';
+  @Input() mergedEventsToggleHint = 'Merged activities are excluded';
   @Input() dateRangesToShow: DateRanges[] = [
     DateRanges.thisWeek,
     DateRanges.lastWeek,
@@ -345,8 +345,8 @@ export class EventSearchComponent extends LoadingAbstractDirective implements On
 
     const dialogRef = this.dialog.open(ConfirmationDialogComponent, {
       data: {
-        title: 'Load all events?',
-        message: 'Selecting All may degrade app performance and increase loading times. Continue?',
+        title: 'Load all activities?',
+        message: 'Loading every activity may slow down the app and take longer. Continue?',
         confirmLabel: 'OK',
         cancelLabel: 'Cancel',
         confirmColor: 'warn',

@@ -42,11 +42,17 @@ const MCP_CONTRACT_PROFILE_DEFINITIONS: ReadonlyArray<{
   id: 'timeline-notes',
   scopes: [MCP_OAUTH_SCOPES.TimelineNotesRead],
 }, {
+  id: 'timeline-notes-write',
+  scopes: [MCP_OAUTH_SCOPES.TimelineNotesRead, MCP_OAUTH_SCOPES.TimelineNotesWrite],
+}, {
   id: 'health-measurements',
   scopes: [MCP_OAUTH_SCOPES.HealthRead, MCP_OAUTH_SCOPES.MeasurementsRead],
 }, {
   id: 'activity-details',
   scopes: [MCP_OAUTH_SCOPES.ActivityDetailsRead],
+}, {
+  id: 'events-write',
+  scopes: [MCP_OAUTH_SCOPES.ActivityDetailsRead, MCP_OAUTH_SCOPES.EventsWrite],
 }, {
   id: 'activity-descriptions',
   scopes: [MCP_OAUTH_SCOPES.ActivityDetailsRead, MCP_OAUTH_SCOPES.ActivityDescriptionsRead],

@@ -6,12 +6,9 @@ import { platformBrowserDynamic } from '@angular/platform-browser-dynamic';
 import { environment } from './environments/environment';
 import { AppThemes } from '@sports-alliance/sports-lib';
 import * as Sentry from '@sentry/angular';
-import { registerAppLocales } from './app/shared/adapters/date-locale.config';
+import { registerAppLocale } from './app/shared/adapters/date-locale.config';
 import { redirectFromFirebaseHostingAlias } from './app/shared/adapters/firebase-hosting-redirect';
 import { SYSTEM_THEME_PREFERENCE } from './app/models/app-theme-preference.type';
-
-// Register locales immediately
-registerAppLocales();
 
 redirectFromFirebaseHostingAlias(environment.localhost, environment.appUrl);
 
@@ -50,7 +47,7 @@ const followsSystem = !storedThemePreference || storedThemePreference === SYSTEM
 const shouldUseDarkTheme = storedThemePreference === AppThemes.Dark || (followsSystem && systemPrefersDark);
 document.body.classList.toggle('dark-theme', shouldUseDarkTheme);
 
-import('./app/app.module')
-  .then(x => platformBrowserDynamic().bootstrapModule(x.AppModule))
+Promise.all([registerAppLocale(), import('./app/app.module')])
+  .then(([, appModule]) => platformBrowserDynamic().bootstrapModule(appModule.AppModule))
   .catch(err => console.error(err));
 // platformBrowserDynamic().bootstrapModule(AppModule);

@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { HEALTH_FEATURE_CONTENT } from './health-feature.content';
+import { TRAINING_PLANS_HOME_CONTENT } from './training-plans-home.content';
+import { TRAINING_PLANS_PAGE_SECTIONS, TRAINING_PLANS_SEO_CONTENT } from './training-plans-page.content';
 import {
   PUBLIC_FEATURE_PATHS,
   PUBLIC_GUIDE_PATHS,
@@ -35,12 +37,26 @@ describe('public-seo-pages.content', () => {
     expect(row.copy).toContain('manual entries clearly labelled');
     expect(PUBLIC_SEO_PAGES.health.sections.find(section => section.preview === 'health-weight')?.copy).toBe(row.copy);
   });
+  it('centralizes Training Plans homepage, SEO metadata, and route-only sections', () => {
+    const page = PUBLIC_SEO_PAGES.trainingPlans;
+
+    expect(page.title).toBe(TRAINING_PLANS_SEO_CONTENT.title);
+    expect(page.h1).toBe(TRAINING_PLANS_SEO_CONTENT.h1);
+    expect(page.intro).toBe(TRAINING_PLANS_SEO_CONTENT.intro);
+    expect(page.description).toBe(TRAINING_PLANS_SEO_CONTENT.description);
+    expect(page.featureList).toBe(TRAINING_PLANS_SEO_CONTENT.featureList);
+    expect(page.socialImageAlt).toBe(TRAINING_PLANS_SEO_CONTENT.socialImageAlt);
+    expect(page.freeOfferDescription).toBe(TRAINING_PLANS_SEO_CONTENT.freeOfferDescription);
+    expect(page.sections.slice(0, TRAINING_PLANS_PAGE_SECTIONS.length)).toEqual(TRAINING_PLANS_PAGE_SECTIONS);
+    expect(TRAINING_PLANS_HOME_CONTENT.cta.routerLink).toBe(`/${page.path}`);
+  });
   it('defines distinct public feature and guide paths', () => {
     expect(PUBLIC_FEATURE_PATHS).toEqual({
       hub: 'features',
       health: 'features/health',
       activityCalendar: 'features/activity-calendar',
       trainingAnalysis: 'features/training-analysis',
+      trainingPlans: 'features/training-plans',
       trainingDashboard: 'features/training-dashboard',
       activityMap: 'features/activity-map',
       mcpServer: 'features/mcp-server',
@@ -72,6 +88,8 @@ describe('public-seo-pages.content', () => {
       expect(routeData.title).toBe(page.title);
       expect(routeData.description).toBe(page.description);
       expect(routeData.publicSeoPage).toBe(page);
+      expect(routeData.socialImage).toMatch(/^https:\/\/quantified-self\.io\/assets\/images\//);
+      expect(routeData.socialImageAlt.trim().length).toBeGreaterThan(0);
       expect(routeData).not.toHaveProperty('keywords');
       expect(routeData.jsonLd).toMatchObject({
         '@context': 'https://schema.org',
@@ -120,6 +138,29 @@ describe('public-seo-pages.content', () => {
     expect(PUBLIC_SEO_PAGES.trainingAnalysis.sections.map(section => section.preview)).toContain('training-readiness');
     expect(PUBLIC_SEO_PAGES.trainingAnalysis.sections.map(section => section.preview)).toContain('training-explorer');
 
+    const trainingPlans = PUBLIC_SEO_PAGES.trainingPlans;
+    expect(trainingPlans.title).toBe('Training Plans for Running and Cycling');
+    expect(trainingPlans.h1).toBe('Plan running and cycling workouts your way');
+    expect(trainingPlans.description).toBe('Create free running and cycling training plans or standalone structured workouts, schedule them by date, and keep them separate from completed activities.');
+    expect(trainingPlans.sections.some(section => section.preview === 'training-plans')).toBe(true);
+    expect(trainingPlans.sections.some(section => section.copy.includes('one active at a time'))).toBe(true);
+    expect(trainingPlans.sections.some(section => section.items.some(item => item.copy.includes('Trail Running')))).toBe(true);
+    expect(trainingPlans.sections.some(section => section.items.some(item => item.copy.includes('Hand Cycle')))).toBe(true);
+    expect(trainingPlans.sections.some(section => section.items.some(item => item.copy.includes('up to 100 total nodes')))).toBe(true);
+    expect(trainingPlans.sections.some(section => section.items.some(item => item.copy.includes('never adds distance')))).toBe(true);
+    expect(trainingPlans.sections.some(section => section.items.some(item => item.copy.includes('explicit Send and plan opt-in actions')))).toBe(true);
+    expect(trainingPlans.sections.some(section => section.items.some(item => item.copy.includes('compatible MCP client')))).toBe(true);
+    expect(trainingPlans.faqItems.some(item => item.question === 'Can I add a workout without creating a plan?')).toBe(true);
+    expect(trainingPlans.faqItems.some(item => item.question === 'Can I use an MCP client with Training Plans?')).toBe(true);
+    expect(trainingPlans.socialImage).toBe('https://quantified-self.io/assets/images/training-plans-social.png');
+    expect(trainingPlans.freeOfferDescription).toBe('Training plans and standalone structured workouts created in Quantified Self');
+    const trainingPlanEntities = PUBLIC_SEO_ROUTE_DATA.trainingPlans.jsonLd['mainEntity'] as Record<string, unknown>[];
+    const trainingPlanApplication = trainingPlanEntities.find(entity => entity['@type'] === 'SoftwareApplication');
+    const trainingPlanOffer = trainingPlanApplication?.['offers'] as Record<string, unknown>;
+    expect(trainingPlanOffer['price']).toBe('0');
+    expect(trainingPlanOffer['description']).toBe(trainingPlans.freeOfferDescription);
+    expect(trainingPlanEntities.find(entity => entity['@type'] === 'FAQPage')).toBeTruthy();
+
     expect(PUBLIC_SEO_PAGES.trainingDashboard.h1).toBe('Build the training dashboard you need');
     expect(PUBLIC_SEO_PAGES.trainingDashboard.sections.some(section => section.preview === 'dashboard')).toBe(true);
     expect(PUBLIC_SEO_PAGES.activityMap.h1).toBe('See workouts, trips, and destinations on one map');
@@ -147,13 +188,13 @@ describe('public-seo-pages.content', () => {
     expect(PUBLIC_SEO_PAGES.mcpServer.sections.some(section => (
       section.items?.some(item => item.copy.includes('recent training trends'))
     ))).toBe(true);
-    expect(PUBLIC_SEO_PAGES.mcpServer.description).toContain('measurements, routes, optional Timeline notes and activity descriptions');
+    expect(PUBLIC_SEO_PAGES.mcpServer.description).toContain('measurements, routes, Timeline notes, activity tags and descriptions');
     expect(PUBLIC_SEO_PAGES.mcpServer.faqItems.find(item => item.question.includes('read my activity descriptions'))?.answer)
       .toContain('description checkbox starts checked; uncheck it before approving to withhold access');
     expect(PUBLIC_SEO_PAGES.mcpServer.faqItems.find(item => item.question.includes('read my Timeline notes'))?.answer)
       .toContain('sensitive health or personal information');
     expect(PUBLIC_SEO_PAGES.mcpServer.faqItems.find(item => item.question.includes('read my Timeline notes'))?.answer)
-      .toContain('selected by default when requested. Uncheck it before approving to withhold access.');
+      .toContain('selected by default when requested. A separate dependent Change Timeline notes permission');
     expect(PUBLIC_SEO_PAGES.mcpServer.intro).toContain('plan your next workout');
     expect(PUBLIC_SEO_PAGES.mcpServer.sections.some(section => section.title === 'Ask about training, workouts, sleep, measurements, and routes')).toBe(true);
     expect(PUBLIC_SEO_PAGES.mcpServer.sections.some(section => section.copy.includes('disconnect it from Connections'))).toBe(true);
@@ -161,6 +202,8 @@ describe('public-seo-pages.content', () => {
     expect(PUBLIC_SEO_PAGES.mcpServer.sections.some(section => section.items.some(item => item.copy.includes('Find recent activities')))).toBe(true);
     expect(PUBLIC_SEO_PAGES.mcpServer.sections.some(section => section.items.some(item => item.copy.includes('saved routes by sport, name, or recency')))).toBe(true);
     expect(PUBLIC_SEO_PAGES.mcpServer.faqItems.some(item => item.question === 'Can an MCP client rearrange my dashboard or change my data?')).toBe(true);
+    expect(PUBLIC_SEO_PAGES.mcpServer.faqItems.find(item => item.question === 'Can an MCP client rearrange my dashboard or change my data?')?.answer)
+      .toContain('Plan deletion must be reviewed alone');
     expect(PUBLIC_SEO_PAGES.mcpServer.faqItems.some(item => item.question === 'Can I use the MCP server with ChatGPT or Claude?')).toBe(true);
     expect(PUBLIC_SEO_PAGES.mcpServer.faqItems.some(item => item.answer.includes('Granting one never exposes the other'))).toBe(true);
     expect(PUBLIC_SEO_PAGES.mcpServer.sections.some(section => section.preview === 'mcp-flow')).toBe(true);
@@ -283,6 +326,7 @@ describe('public-seo-pages.content', () => {
     expect(featureHubLinks).toContain('/features/activity-calendar');
     expect(featureHubLinks).toContain('/features/supported-activities');
     expect(featureHubLinks).toContain('/features/training-analysis');
+    expect(featureHubLinks).toContain('/features/training-plans');
     expect(featureHubLinks).toContain('/features/training-dashboard');
     expect(featureHubLinks).toContain('/features/activity-map');
     expect(featureHubLinks).toContain('/features/mcp-server');
@@ -310,6 +354,7 @@ describe('public-seo-pages.content', () => {
       PUBLIC_SEO_PAGES.featuresHub,
       PUBLIC_SEO_PAGES.activityCalendar,
       PUBLIC_SEO_PAGES.trainingAnalysis,
+      PUBLIC_SEO_PAGES.trainingPlans,
       PUBLIC_SEO_PAGES.trainingDashboard,
       PUBLIC_SEO_PAGES.health,
       PUBLIC_SEO_PAGES.activityMap,
@@ -332,6 +377,7 @@ describe('public-seo-pages.content', () => {
       PUBLIC_SEO_PAGES.featuresHub,
       PUBLIC_SEO_PAGES.activityCalendar,
       PUBLIC_SEO_PAGES.trainingAnalysis,
+      PUBLIC_SEO_PAGES.trainingPlans,
       PUBLIC_SEO_PAGES.trainingDashboard,
       PUBLIC_SEO_PAGES.health,
       PUBLIC_SEO_PAGES.activityMap,

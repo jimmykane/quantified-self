@@ -28,6 +28,12 @@
 
 .calendar-navigation-actions { margin-inline-start: auto; }
 
+.calendar-navigation-actions button:focus-visible,
+.calendar-workout:focus-visible {
+  outline: 2px solid var(--mat-sys-primary);
+  outline-offset: 2px;
+}
+
 .calendar-weekdays,
 .calendar-days {
   display: grid;
@@ -188,6 +194,11 @@
 
 .calendar-workout--skipped {
   text-decoration: line-through;
+}
+
+.calendar-workout--completed {
+  color: var(--plan-calendar-color);
+  font-weight: 600;
 }
 
 .calendar-hint {

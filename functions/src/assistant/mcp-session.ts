@@ -11,6 +11,13 @@ import type { McpDataErrorCode } from '../mcp/data.service';
 import { MCP_OAUTH_SCOPES } from '../mcp/oauth.service';
 import type { AssistantLocationAccess } from '../../../shared/assistant.types';
 import {
+  ASSISTANT_CONTENT_PROPOSAL_TOOLS,
+  assistantContentProposalInputJsonSchema,
+  createAssistantContentProposal,
+  isAssistantContentProposalTool,
+  type AssistantContentProposalTool,
+} from './content-proposal';
+import {
   AssistantMetricHistoryQueryError,
   mergeAssistantMetricHistoryResponses,
   splitAssistantMetricHistoryQuery,
@@ -51,6 +58,9 @@ export const ASSISTANT_MCP_TOOL_NAMES = [
   ...ASSISTANT_BASE_MCP_TOOL_NAMES,
   ...ASSISTANT_ACTIVITY_LOCATION_MCP_TOOL_NAMES,
   'query_timeline_notes',
+  'query_activities_with_tags',
+  'query_editable_timeline_notes',
+  ...ASSISTANT_CONTENT_PROPOSAL_TOOLS,
   ...TRAINING_READ_TOOLS,
   ...TRAINING_PREVIEW_TOOLS,
 ] as const;
@@ -132,6 +142,25 @@ interface AssistantMcpSessionDependencies {
 const ASSISTANT_TOOL_NAME_SET = new Set<string>(ASSISTANT_MCP_TOOL_NAMES);
 const ASSISTANT_CONNECTION_ID = 'first-party-assistant-v1';
 const ASSISTANT_CLIENT_ID = 'https://quantified-self.io/internal/assistant';
+
+const ASSISTANT_CONTENT_TOOL_COPY: Record<AssistantContentProposalTool, { title: string; description: string }> = {
+  prepare_activity_tag_change: {
+    title: 'Prepare an activity tag change',
+    description: 'Prepare a complete activity tag replacement for review in Quantified Self. First read the selected activity and pass its exact current tags as expectedTags. This never writes data.',
+  },
+  prepare_timeline_note_create: {
+    title: 'Prepare a Timeline note',
+    description: 'Prepare one new Timeline note from explicit user-provided content for review in Quantified Self. This never writes data.',
+  },
+  prepare_timeline_note_update: {
+    title: 'Prepare a Timeline note edit',
+    description: 'Prepare a complete replacement of one current Timeline note for review in Quantified Self. First read its current reference, revision and authored fields. This never writes data.',
+  },
+  prepare_timeline_note_delete: {
+    title: 'Prepare Timeline note deletion',
+    description: 'Prepare permanent deletion of one current Timeline note for review in Quantified Self. First read its current reference and revision. This never writes data.',
+  },
+};
 
 function recoverableAssistantToolError(message: string): AssistantRecoverableMcpToolError | null {
   let payload: unknown;
@@ -275,12 +304,27 @@ export async function createAssistantMcpSession(
   trainingPlanChangesEnabled = false,
   trainingDeliveryEnabled = false,
   conversationId?: string,
+  activityTagChangesEnabled = false,
+  timelineNoteChangesEnabled = false,
 ): Promise<AssistantMcpSession> {
+  if ((activityTagChangesEnabled || timelineNoteChangesEnabled) && !conversationId) {
+    throw new Error('Assistant content changes require a current conversation.');
+  }
+  if (timelineNoteChangesEnabled && !timelineNotesEnabled) {
+    throw new Error('Assistant Timeline note changes require Timeline notes access.');
+  }
   const activityLocationEnabled = locationAccess === 'precise_activity';
   const expectedToolNames: readonly AssistantMcpToolName[] = [
     ...ASSISTANT_BASE_MCP_TOOL_NAMES,
     ...(activityLocationEnabled ? ASSISTANT_ACTIVITY_LOCATION_MCP_TOOL_NAMES : []),
     ...(timelineNotesEnabled ? ['query_timeline_notes' as const] : []),
+    ...(activityTagChangesEnabled
+      ? ['query_activities_with_tags' as const, 'prepare_activity_tag_change' as const]
+      : []),
+    ...(timelineNoteChangesEnabled
+      ? ['query_editable_timeline_notes' as const, 'prepare_timeline_note_create' as const,
+          'prepare_timeline_note_update' as const, 'prepare_timeline_note_delete' as const]
+      : []),
     ...(trainingPlansEnabled ? TRAINING_READ_TOOLS : []),
     ...(trainingPlanChangesEnabled
       ? TRAINING_PREVIEW_TOOLS
@@ -302,10 +346,13 @@ export async function createAssistantMcpSession(
         : []),
       MCP_OAUTH_SCOPES.RoutesRead,
       ...(timelineNotesEnabled ? [MCP_OAUTH_SCOPES.TimelineNotesRead] : []),
+      ...(activityTagChangesEnabled ? [MCP_OAUTH_SCOPES.EventsWrite] : []),
+      ...(timelineNoteChangesEnabled ? [MCP_OAUTH_SCOPES.TimelineNotesWrite] : []),
       ...(trainingPlansEnabled ? [MCP_OAUTH_SCOPES.TrainingPlansRead] : []),
       ...(trainingPlanChangesEnabled ? [MCP_OAUTH_SCOPES.TrainingPlansWrite] : []),
       ...(trainingDeliveryEnabled ? [MCP_OAUTH_SCOPES.TrainingDeliveryWrite] : []),
     ],
+    ...(conversationId ? { assistantConversationId: conversationId } : {}),
   };
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
   const server = dependencies.createServer(auth, publicBaseUrl);
@@ -320,6 +367,15 @@ export async function createAssistantMcpSession(
     const listedTools = (await client.listTools()).tools;
     const listedToolsByName = new Map(listedTools.map(tool => [tool.name, tool]));
     const tools = expectedToolNames.flatMap((name) => {
+      if (isAssistantContentProposalTool(name)) {
+        const copy = ASSISTANT_CONTENT_TOOL_COPY[name];
+        return [{
+          name,
+          title: copy.title,
+          description: copy.description,
+          inputSchema: assistantContentProposalInputJsonSchema(name),
+        }];
+      }
       const tool = listedToolsByName.get(name);
       return tool ? [{
         name: tool.name as AssistantMcpToolName,
@@ -341,6 +397,7 @@ export async function createAssistantMcpSession(
       throw new Error(`Assistant MCP tools are unavailable: ${missingToolNames.join(', ')}`);
     }
 
+    let preparedContentProposalRef: string | null = null;
     return {
       // The Assistant keeps its compact evidence budget; detailed sample pagination is an external-client workflow.
       instructions: (client.getInstructions() || '').replace(MCP_ACTIVITY_SAMPLES_INSTRUCTIONS, '').trim(),
@@ -348,6 +405,14 @@ export async function createAssistantMcpSession(
       callTool: async (name, args) => {
         if (!isAssistantToolName(name) || !expectedToolNames.includes(name)) {
           throw new Error('The requested tool is not available to the Assistant.');
+        }
+        if (isAssistantContentProposalTool(name)) {
+          if (preparedContentProposalRef) {
+            throw new Error('The Assistant can prepare only one content change per response.');
+          }
+          const proposal = createAssistantContentProposal(name, args);
+          preparedContentProposalRef = proposal.proposalRef;
+          return { structuredContent: proposal as unknown as Record<string, unknown> };
         }
         let metricHistoryPages: Record<string, unknown>[] | null;
         try {

@@ -23,6 +23,9 @@ import { LoggerService } from '../../services/logger.service';
 import { CompactRowComponent } from '../shared/compact-row/compact-row.component';
 import { ProviderDataFlowMatrixComponent } from '../shared/provider-data-flow-matrix/provider-data-flow-matrix.component';
 import { PublicFeaturePreviewComponent } from '../public-seo/public-feature-preview.component';
+import { TRAINING_PLANS_HOME_CONTENT } from '../public-seo/training-plans-home.content';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 
 describe('HomeComponent', () => {
     let component: HomeComponent;
@@ -86,6 +89,14 @@ describe('HomeComponent', () => {
         expect(component).toBeTruthy();
     });
 
+    it('keeps homepage content visible when reduced motion is requested', () => {
+        const styles = readFileSync(resolve(process.cwd(), 'src/app/components/home/home.component.scss'), 'utf8');
+
+        expect(styles).toContain('@media (prefers-reduced-motion: reduce)');
+        expect(styles).toMatch(/\.animate-on-scroll,[\s\S]*?opacity:\s*1 !important;/);
+        expect(styles).toMatch(/\.hero-section \.hero-content > \*[\s\S]*?animation:\s*none !important;/);
+    });
+
     it('should redirect app-authenticated browser users from public home to dashboard', () => {
         userSubject.next({ uid: '123' });
 
@@ -141,9 +152,8 @@ describe('HomeComponent', () => {
         expect(aiSectionText).toContain('see exactly what supports it.');
         expect(aiSectionText).toContain('Analyze with ChatGPT or Claude');
         expect(aiSectionText).toContain('analyze your training or prepare a bounded Training-plan proposal');
-        expect(aiSectionText).toContain('Training changes require separate access and your confirmation');
-        expect(aiSectionText).toContain('other account data stays read-only');
-        expect(aiSectionText).toContain('Location access remains separate.');
+        expect(aiSectionText).toContain('activity-tag, and Training changes each require separate access');
+        expect(aiSectionText).toContain('location access remains separate.');
         expect(aiSectionText).toContain('Connect ChatGPT or Claude');
         expect(aiSectionText).not.toContain('read-only sleep, readiness');
         expect(aiSectionText).not.toContain('complete training history');
@@ -170,6 +180,9 @@ describe('HomeComponent', () => {
             if (section.classList.contains('health-section')) {
                 return 'health';
             }
+            if (section.classList.contains('training-plans-section')) {
+                return 'training-plans';
+            }
             if (section.classList.contains('features-section') && !section.classList.contains('ai-insights-section')) {
                 return 'performance';
             }
@@ -192,6 +205,7 @@ describe('HomeComponent', () => {
             'hero',
             'integrations',
             'performance',
+            'training-plans',
             'health',
             'ai-insights',
             'footprint',
@@ -235,6 +249,11 @@ describe('HomeComponent', () => {
         expect(providerMatrix.nativeElement.closest('div[data-nosnippet]')).toBeTruthy();
         expect(providerMatrix.nativeElement.querySelector('.provider-data-flow-matrix__mobile')).toBeNull();
         expect(providerMatrix.nativeElement.querySelectorAll('button')).toHaveLength(0);
+        const homeStyles = readFileSync(resolve(process.cwd(), 'src/app/components/home/home.component.scss'), 'utf8');
+        const matrixStyles = readFileSync(resolve(process.cwd(),
+            'src/app/components/shared/provider-data-flow-matrix/provider-data-flow-matrix.component.scss'), 'utf8');
+        expect(homeStyles).toMatch(/\.integration-capability-details\s*\{[^}]*min-width:\s*0[^}]*max-width:\s*100%/s);
+        expect(matrixStyles).toMatch(/\.provider-data-flow-matrix__scroll\s*\{[^}]*max-width:\s*100%[^}]*overflow-x:\s*auto/s);
         expect(text).toContain('Upload Your Own Files');
         expect(text).toContain('FIT, TCX, GPX, JSON, and SML activity files');
         expect(text).toContain('send FIT activities directly to Suunto, COROS, or Wahoo');
@@ -322,9 +341,9 @@ describe('HomeComponent', () => {
     it('uses the shared compact row primitive for every top-level homepage card', () => {
         const compactRows = fixture.nativeElement.querySelectorAll('app-compact-row');
 
-        expect(compactRows.length).toBe(15);
+        expect(compactRows.length).toBe(20);
         expect(fixture.nativeElement.querySelector('mat-card')).toBeNull();
-        expect(fixture.nativeElement.querySelectorAll('.compact-row-stack').length).toBe(6);
+        expect(fixture.nativeElement.querySelectorAll('.compact-row-stack').length).toBe(7);
         expect(Array.from(compactRows).every((row: Element) => row.querySelector('article.compact-row'))).toBe(true);
         expect(fixture.nativeElement.querySelector('app-public-feature-preview[previewkey="reviewer-benchmark"]')).toBeTruthy();
     });
@@ -340,6 +359,7 @@ describe('HomeComponent', () => {
             'training-explorer',
             'dashboard',
             'workout-analysis',
+            'training-plans',
             'health-sleep',
             'health-hrv',
             'health-weight',
@@ -349,6 +369,34 @@ describe('HomeComponent', () => {
             'reviewer-benchmark',
         ]);
         expect(previews.every(preview => preview.nativeElement.querySelector(':scope > div[data-nosnippet]'))).toBe(true);
+    });
+
+    it('presents Training Plans, MCP planning, and public provider delivery with one focused CTA', () => {
+        const section = fixture.nativeElement.querySelector('.training-plans-section') as HTMLElement;
+        const rows = section.querySelectorAll('app-compact-row');
+        const links = section.querySelectorAll('a');
+        const text = section.textContent ?? '';
+        const preview = fixture.debugElement.queryAll(By.directive(PublicFeaturePreviewComponent))
+            .find(candidate => candidate.componentInstance.previewKey() === 'training-plans');
+
+        expect(text).toContain(TRAINING_PLANS_HOME_CONTENT.title);
+        expect(text).toContain(TRAINING_PLANS_HOME_CONTENT.intro);
+        for (const row of TRAINING_PLANS_HOME_CONTENT.rows) {
+            expect(text).toContain(row.title);
+            expect(text).toContain(row.copy);
+        }
+        expect(text).toContain('Plan Through MCP');
+        expect(text).toContain('compatible MCP clients');
+        expect(text).toContain('Optional Provider Delivery');
+        expect(text).toContain('Workout delivery to Garmin, Suunto, and Wahoo is available to connected Pro members');
+        expect(text).toContain('New COROS plan sync and standalone Send actions are coming soon in the app');
+        expect(text).toContain('never sends workouts by itself');
+        expect(text).toContain('without adding them to recorded totals or Training analysis');
+        expect(rows).toHaveLength(TRAINING_PLANS_HOME_CONTENT.rows.length);
+        expect(links).toHaveLength(1);
+        expect(links[0].getAttribute('href')).toBe(TRAINING_PLANS_HOME_CONTENT.cta.routerLink);
+        expect(preview).toBeTruthy();
+        expect(preview?.nativeElement.querySelector(':scope > div[data-nosnippet]')).toBeTruthy();
     });
 
     it('should explain benchmark merge and hardware precision workflows', () => {

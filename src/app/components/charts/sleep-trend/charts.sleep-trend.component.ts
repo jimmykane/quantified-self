@@ -20,6 +20,7 @@ import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { AppChartSharedModule } from '../../../modules/app-chart-shared.module';
+import { getDateTimeFormatter } from '../../../helpers/date-time-format.helper';
 import type { EChartsType } from 'echarts/core';
 import {
   ECHARTS_CARTESIAN_IMMEDIATE_UPDATE_SETTINGS,
@@ -773,7 +774,7 @@ export class ChartsSleepTrendComponent implements AfterViewInit, OnChanges, OnDe
 
   private buildXAxisLabelFormatter(points: DashboardSleepTrendPoint[]): (value: string, index: number) => string {
     const currentWeekIndexes = this.getCurrentWeekPointIndexes(points);
-    const weekdayFormatter = new Intl.DateTimeFormat(undefined, { weekday: 'short' });
+    const weekdayFormatter = getDateTimeFormatter(undefined, { weekday: 'short' });
     return (value: string, index: number): string => {
       const point = points[index];
       if (!point || !currentWeekIndexes.has(index)) {
@@ -796,7 +797,7 @@ export class ChartsSleepTrendComponent implements AfterViewInit, OnChanges, OnDe
   }
 
   private formatDateTime(timestampMs: number): string {
-    return new Intl.DateTimeFormat(undefined, {
+    return getDateTimeFormatter(undefined, {
       month: 'short',
       day: 'numeric',
       hour: 'numeric',

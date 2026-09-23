@@ -42,6 +42,10 @@ Lib version or parser change, also use `.agent/skills/sports-lib-upgrade-and-rep
   `docs/training-workspace.md`; distinguish implementation from deployed/registered-client availability.
   Never forward whole records or automatically expose new stored fields. Preserve registered schemas using the
   compatible additive-tool lifecycle when a shape cannot safely change. Keep private delivery fields private.
+  Keep upcoming-session reads chronologically ordered by calendar date with a stable opaque continuation. Use bounded
+  bulk reads for exact completion reviews instead of forcing one tool call per workout. Provider-compatibility reads
+  may expose only versioned local exact/degraded/unsupported mapping issues; they must not read connection authority,
+  private mapping digests, ledgers or provider APIs, and must not imply approval, delivery or watch receipt.
   Keep every manually mirrored workout recipe discriminant behind an exhaustive compile-time coverage map and fixtures
   that JSON-round-trip each shared variant through public read and write validation. A shared-model addition must fail
   closed until its MCP schema, formatting, Assistant/plugin authoring guidance, contract digest and tests are reviewed;
@@ -72,6 +76,22 @@ Lib version or parser change, also use `.agent/skills/sports-lib-upgrade-and-rep
   Exact activity start/end and jump coordinates,
   nearby search, and chart breadcrumbs require dependent `activity-location:read` in addition to
   `activity-details:read`.
+- **Event-tag or Timeline-note mutation:** keep these focused writes separate from recorded activity data and
+  Training mutations. Event-tag replacement requires `events:write` plus `activity-details:read`, reads the selected
+  activity's current tags first, replaces the complete event-owned list with an exact optimistic-concurrency
+  precondition, rejects benchmark events, and reminds clients that sibling activities share the result. Timeline-note
+  create/edit/delete requires
+  `timeline-notes:write` plus `timeline-notes:read`, owner/connection-bound references, current revisions, an idempotent
+  create mutation ID, and permanent-delete disclosure. Both use existing sanitized persistence paths, recheck the
+  stored connection grant and account-deletion fence inside the transaction, advertise accurate write/destructive/
+  idempotency annotations, and rely on the MCP host's native approval UI. Never infer either write from user-authored
+  text, expose raw IDs/receipts, or add a parallel persistence path. The built-in Assistant may support the same safe
+  mutations only through separate default-off, server-owned per-chat choices: expose read-current-state and local
+  prepare-only tools to the model, store at most one short-lived proposal, show an app-owned review, and apply through
+  the existing sanitized mutation service after rechecking the conversation generation, permission, proposal identity,
+  expiry, optimistic precondition, deletion fence, and owner. Never expose the public write tools directly to the model
+  or let model-authored text bypass app confirmation. Reuse the existing Assistant apply endpoint rather than adding a
+  callable for each content mutation.
 - **On-demand activity chart stream:** add deliberate aliases and canonical units to
   `functions/src/mcp/activity-stream.service.ts` (re-exported by the chart service), request only the stream and Sports Lib derivation dependencies, and
   preserve the existing original-file-only workflow. Keep file, raw/decompressed byte, selected-sample, runtime,
@@ -112,12 +132,16 @@ Lib version or parser change, also use `.agent/skills/sports-lib-upgrade-and-rep
    `functions/src/mcp/data.service.ts` as the MCP projection boundary. Expand allowlists deliberately; do not return
    whole Firestore documents.
 5. Keep OAuth scopes least-privilege: `metrics:read`, `measurements:read`, `sleep:read`, `activity-details:read`, and
-   `routes:read` remain data grants. `activity-location:read` depends on activity details and `route-location:read`
-   depends on routes; the two location domains remain independent. Enforce those dependencies in consent, approval,
+   `routes:read` remain data grants. `activity-location:read` and `events:write` depend on activity details,
+   `timeline-notes:write` depends on Timeline-note reads, and `route-location:read` depends on routes; the domains remain
+   independent. Enforce those dependencies in consent, approval,
    refresh, bearer validation, HTTP prechecks, tool registration, and data reads. First-class measurement types must also be excluded from generic and
    per-activity metric paths so those tools cannot bypass `measurements:read`. Keep queries bounded, references/cursors
-   UID-and-connection-bound, and ordinary data tools read-only. Training mutation tools are the sole exception and must
-   preserve the strict preview/native-approval/idempotent-apply boundary above. Update OAuth metadata, consent, Settings, Help, policies, and
+   UID-and-connection-bound, and ordinary data tools read-only. The only focused non-Training mutations are explicitly
+   consented event-tag replacement and Timeline-note create/edit/delete, which must preserve the boundaries above. The
+   broader event grant does not expose titles, descriptions, or other event fields without a dedicated tool, approval
+   contract, projection review, tests, and documentation.
+   Training mutations must preserve the strict preview/native-approval/idempotent-apply boundary. Update OAuth metadata, consent, Settings, Help, policies, and
    `docs/mcp-server.md` when the user-visible contract moves.
 6. For every new Sports Lib detail or route field, update the named MCP allowlist, add a negative leakage test for nearby
    sensitive fields, confirm historical persistence/reparse expectations, review the Firestore query/index shape, and
@@ -173,6 +197,9 @@ Add or update focused tests for:
   source/sample/runtime/point/response/rate limit;
 - IANA timezone/DST bucketing;
 - scope denial and query limits;
+- content-write parent/scope isolation, stored-grant and deletion fencing, owner/connection reference replay denial,
+  event-tag sibling semantics, stale-tag conflicts, note create/update/delete idempotency and revision conflicts,
+  permanent-delete receipts, strict text/timezone validation, response bounds, and absence from the built-in Assistant;
 - consent initialization with every requested scope checked, independent-scope unchecking, parent/child removal, and
   approval as the only grant boundary.
 

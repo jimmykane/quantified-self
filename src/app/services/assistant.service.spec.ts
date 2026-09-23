@@ -197,6 +197,17 @@ describe('AssistantService', () => {
     ))).toContain('still in progress');
   });
 
+  it('uses conversation-specific copy for reset failures while preserving actionable errors', () => {
+    expect(service.getConversationUpdateErrorMessage(new AssistantError(
+      'INTERNAL',
+      'Function crashed.',
+    ))).toBe('The Assistant could not update this chat. Your conversation and data access settings are unchanged. Please try again.');
+    expect(service.getConversationUpdateErrorMessage(new AssistantError(
+      'APP_CHECK_REQUIRED',
+      'App verification failed.',
+    ))).toContain('App verification failed');
+  });
+
   it('loads and resets the server-owned active conversation', async () => {
     functionsService.call
       .mockResolvedValueOnce({

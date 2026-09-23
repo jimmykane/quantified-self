@@ -1,4 +1,5 @@
 import { Inject, LOCALE_ID, Pipe, PipeTransform } from '@angular/core';
+import { getNumberFormatter } from './number-format.helper';
 
 const COMPACT_COUNT_THRESHOLD = 10_000;
 
@@ -18,10 +19,10 @@ export function formatCompactCount(value: unknown, locale?: string | null): stri
 
   const resolvedLocale = locale || undefined;
   if (normalizedValue < COMPACT_COUNT_THRESHOLD) {
-    return new Intl.NumberFormat(resolvedLocale).format(normalizedValue);
+    return getNumberFormatter(resolvedLocale).format(normalizedValue);
   }
 
-  return new Intl.NumberFormat(resolvedLocale, {
+  return getNumberFormatter(resolvedLocale, {
     compactDisplay: 'short',
     maximumFractionDigits: 2,
     notation: 'compact',

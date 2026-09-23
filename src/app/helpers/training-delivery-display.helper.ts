@@ -27,7 +27,7 @@ export function trainingDeliveryLatestEvent(status: Pick<TrainingDeliveryStatusV
   timestamp: number; timestampLabel: string;
 } {
   if (status.lastAcceptedAtMs !== null && (status.lastAttemptAtMs === null || status.lastAcceptedAtMs >= status.lastAttemptAtMs)) {
-    return { timestamp: status.lastAcceptedAtMs, timestampLabel: 'Last confirmed' };
+    return { timestamp: status.lastAcceptedAtMs, timestampLabel: 'Last accepted' };
   }
   if (status.lastAttemptAtMs !== null) return { timestamp: status.lastAttemptAtMs, timestampLabel: 'Last attempt' };
   return { timestamp: status.updatedAtMs, timestampLabel: 'Updated' };
@@ -37,8 +37,12 @@ export function trainingDeliveryLatestEvent(status: Pick<TrainingDeliveryStatusV
 export function trainingDeliveryCopyMessage(status: TrainingDeliveryStatusV1): string | null {
   if (!status.differsFromQS) return null;
   if (status.status === 'paused_plan') return 'The plan is inactive. Eligible future copies are awaiting removal.';
-  if (status.lastAcceptedAtMs === null) return 'A sent workout exists, but sync is not fully confirmed yet.';
-  return 'Your latest changes are not confirmed in the connected app.';
+  if (status.lastAcceptedAtMs === null) return status.provider === 'suunto'
+    ? 'A Suunto Guide may exist, but acceptance of this delivery is not confirmed.'
+    : 'A sent workout exists, but sync is not fully confirmed yet.';
+  return status.provider === 'suunto'
+    ? 'Suunto accepted an earlier Guide, but the latest changes were not accepted.'
+    : 'Your latest changes are not confirmed in the connected app.';
 }
 
 export function trainingDeliveryCommandError(error: unknown, saving: boolean): string {

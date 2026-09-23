@@ -5,6 +5,7 @@ import {
     GARMIN_PLANNED_WORKOUT_SPORTS_V1,
     GARMIN_RUNNING_WORKOUT_SPORTS_V1,
     COROS_PLANNED_WORKOUT_SPORTS_V1,
+    PLANNED_WORKOUT_PROVIDER_IDS,
     PLANNED_WORKOUT_PROVIDER_CAPABILITIES_V1,
     assessPlannedWorkoutProviderMappingV1,
     isPlannedWorkoutProviderDeliveryEnabled,
@@ -49,17 +50,14 @@ function oneStepStructure(overrides: Partial<WorkoutStructureV1['nodes'][number]
 }
 
 describe('planned-workout provider proof fixtures', () => {
-    it('keeps public provider delivery disabled while private rollout evidence is gathered', () => {
+    it('enables public delivery for every implemented provider', () => {
         expect(Object.values(PLANNED_WORKOUT_PROVIDER_CAPABILITIES_V1)).toHaveLength(4);
-        expect(Object.values(PLANNED_WORKOUT_PROVIDER_CAPABILITIES_V1).every(capability => (
-            capability.deliveryEnabled === false
-        ))).toBe(true);
-        expect(isPlannedWorkoutProviderDeliveryEnabled('garmin')).toBe(false);
-        expect(isPlannedWorkoutProviderDeliveryEnabled('coros')).toBe(false);
-        expect(PLANNED_WORKOUT_PROVIDER_CAPABILITIES_V1.garmin.implementationState).toBe('private-rollout');
-        expect(PLANNED_WORKOUT_PROVIDER_CAPABILITIES_V1.coros.implementationState).toBe('private-rollout');
-        expect(PLANNED_WORKOUT_PROVIDER_CAPABILITIES_V1.wahoo.implementationState).toBe('private-rollout');
-        expect(PLANNED_WORKOUT_PROVIDER_CAPABILITIES_V1.suunto.implementationState).toBe('private-rollout');
+        for (const provider of PLANNED_WORKOUT_PROVIDER_IDS) {
+            expect(isPlannedWorkoutProviderDeliveryEnabled(provider)).toBe(true);
+            expect(PLANNED_WORKOUT_PROVIDER_CAPABILITIES_V1[provider]).toMatchObject({
+                implementationState: 'enabled', deliveryEnabled: true, unresolvedGates: [],
+            });
+        }
         expect(PLANNED_WORKOUT_PROVIDER_CAPABILITIES_V1.suunto.profile?.sports)
             .toEqual(MANUAL_WORKOUT_EDITOR_SPORTS_V1);
         expect(GARMIN_PLANNED_WORKOUT_SPORTS_V1).toEqual([

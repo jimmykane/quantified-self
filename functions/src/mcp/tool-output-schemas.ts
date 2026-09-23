@@ -44,10 +44,15 @@ import { EVENT_TAG_LIMIT, EVENT_TAG_MAX_LENGTH } from '../../../shared/event-tag
 import {
   MCP_TRAINING_METRIC_CATEGORIES,
 } from './training-metric-catalog';
+import {
+  MCP_CONTENT_WRITE_OUTPUTS,
+  MCP_CONTENT_WRITE_TOOLS,
+} from './content-write.schemas';
 
 export const PUBLIC_MCP_TOOL_NAMES = [
   ...TRAINING_READ_TOOLS,
   ...TRAINING_WRITE_TOOLS,
+  ...MCP_CONTENT_WRITE_TOOLS,
   'get_activity_description',
   'query_timeline_notes',
   'list_health_metrics',
@@ -1390,6 +1395,7 @@ export function createMcpOutputSchemaRegistry(scope: McpOutputSchemaScope) {
       description: z.string().max(MCP_ACTIVITY_DESCRIPTION_MAX_LENGTH).nullable(),
     }),
     query_timeline_notes: MCP_TIMELINE_NOTES_SCHEMA,
+    ...MCP_CONTENT_WRITE_OUTPUTS,
     ...TRAINING_READ_OUTPUTS,
     ...TRAINING_WRITE_OUTPUTS,
     list_measurement_types: z.strictObject({

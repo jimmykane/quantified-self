@@ -20,12 +20,14 @@ export const MCP_OAUTH_SCOPES = {
   MetricsRead: 'metrics:read',
   HealthRead: 'health:read',
   TimelineNotesRead: 'timeline-notes:read',
+  TimelineNotesWrite: 'timeline-notes:write',
   TrainingPlansRead: 'training-plans:read',
   TrainingPlansWrite: 'training-plans:write',
   TrainingDeliveryWrite: 'training-delivery:write',
   MeasurementsRead: 'measurements:read',
   SleepRead: 'sleep:read',
   ActivityDetailsRead: 'activity-details:read',
+  EventsWrite: 'events:write',
   ActivityDescriptionsRead: 'activity-descriptions:read',
   ActivityLocationRead: 'activity-location:read',
   RoutesRead: 'routes:read',
@@ -40,8 +42,12 @@ export function hasValidMcpScopeDependencies(
   const selected = new Set(scopes);
   return !(
     (selected.has(MCP_OAUTH_SCOPES.ActivityLocationRead)
-      || selected.has(MCP_OAUTH_SCOPES.ActivityDescriptionsRead))
+      || selected.has(MCP_OAUTH_SCOPES.ActivityDescriptionsRead)
+      || selected.has(MCP_OAUTH_SCOPES.EventsWrite))
     && !selected.has(MCP_OAUTH_SCOPES.ActivityDetailsRead)
+  ) && !(
+    selected.has(MCP_OAUTH_SCOPES.TimelineNotesWrite)
+    && !selected.has(MCP_OAUTH_SCOPES.TimelineNotesRead)
   ) && !(
     selected.has(MCP_OAUTH_SCOPES.RouteLocationRead)
     && !selected.has(MCP_OAUTH_SCOPES.RoutesRead)
@@ -1375,7 +1381,7 @@ export function normalizeOAuthScopes(value: unknown): McpOAuthScope[] {
   if (!hasValidMcpScopeDependencies(unique as McpOAuthScope[])) {
     throw new McpOAuthError(
       'invalid_scope',
-      'Location scopes require their matching activity-detail or saved-route scope.',
+      'Dependent permissions require their matching parent read permission.',
     );
   }
   return unique as McpOAuthScope[];
@@ -2122,10 +2128,12 @@ export function createMcpOAuthService(
       // permissions, but never implicitly opt them into authored notes, descriptions or planning data.
       const grantedScopes = normalizeOAuthScopes(input.grantedScopes
         ?? request.scopes.filter(scope => scope !== MCP_OAUTH_SCOPES.TimelineNotesRead
+          && scope !== MCP_OAUTH_SCOPES.TimelineNotesWrite
           && scope !== MCP_OAUTH_SCOPES.TrainingPlansRead
           && scope !== MCP_OAUTH_SCOPES.TrainingPlansWrite
           && scope !== MCP_OAUTH_SCOPES.TrainingDeliveryWrite
-          && scope !== MCP_OAUTH_SCOPES.ActivityDescriptionsRead));
+          && scope !== MCP_OAUTH_SCOPES.ActivityDescriptionsRead
+          && scope !== MCP_OAUTH_SCOPES.EventsWrite));
       if (grantedScopes.some(scope => !request.scopes.includes(scope))) {
         throw new McpOAuthError('invalid_scope', 'A scope was not included in the original request.');
       }
@@ -2429,6 +2437,7 @@ export function createMcpOAuthService(
         uid: token.uid,
         clientId: token.clientId,
         connectionId: token.connectionId,
+        grantId: token.grantId,
         scopes: token.scopes,
       };
     },

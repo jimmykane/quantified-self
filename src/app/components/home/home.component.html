@@ -176,6 +176,36 @@
     </div>
   </section>
 
+  <section class="features-section training-plans-section public-below-fold" aria-labelledby="home-training-plans-title">
+    <h2 id="home-training-plans-title" class="section-title animate-on-scroll">{{ trainingPlansFeature.title }}</h2>
+    <p class="section-subtitle animate-on-scroll">{{ trainingPlansFeature.intro }}</p>
+
+    <div class="compact-row-stack training-plans-row-stack">
+      @for (row of trainingPlansFeature.rows; track row.title; let last = $last) {
+        <app-compact-row
+          class="animate-on-scroll"
+          [icon]="row.icon"
+          [iconTone]="row.iconTone"
+          [title]="row.title"
+          [summary]="row.copy"
+          [showDivider]="!last"
+        ></app-compact-row>
+      }
+    </div>
+
+    <app-public-feature-preview
+      class="training-plans-home-preview animate-on-scroll"
+      [previewKey]="trainingPlansFeature.preview"
+    ></app-public-feature-preview>
+
+    <div class="section-actions animate-on-scroll">
+      <a mat-stroked-button [routerLink]="trainingPlansFeature.cta.routerLink">
+        {{ trainingPlansFeature.cta.label }}
+        <mat-icon iconPositionEnd>{{ trainingPlansFeature.cta.icon }}</mat-icon>
+      </a>
+    </div>
+  </section>
+
   <!-- Health: shared public content and deferred app chart renderers. -->
   <section class="features-section health-section public-below-fold" aria-labelledby="home-health-title">
     <h2 id="home-health-title" class="section-title animate-on-scroll">{{ healthFeature.title }}</h2>
@@ -244,7 +274,7 @@
         icon="devices"
         title="Analyze with ChatGPT or Claude"
         [showDivider]="false"
-        summary="Connect ChatGPT or Claude through permission-scoped MCP. Ask them to analyze your training or prepare a bounded Training-plan proposal grounded in your approved data. Training changes require separate access and your confirmation; other account data stays read-only. Location access remains separate."
+        summary="Connect ChatGPT or Claude through permission-scoped MCP. Ask them to analyze your training or prepare a bounded Training-plan proposal grounded in your approved data. Timeline note, activity-tag, and Training changes each require separate access and your client’s approval; location access remains separate."
       >
         <a
           compactRowAction

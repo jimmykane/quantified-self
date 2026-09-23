@@ -27,7 +27,7 @@ The current providers are intentionally not identical:
 | Garmin   | Activity/sleep import, production Health import/backfill, route delivery, and activity delivery to Suunto/Wahoo/COROS | Garmin Health uses one canonical Ping/Pull ingress for Sleep plus ten Health summary families; callback URLs are short-lived credentials. Every eligible connected Pro user's history request adds a durable, paced all-family Health cursor while the independent rollback switch is enabled. Summary Resender is reserved for bounded recovery. Garmin Connect route delivery requires Course Import permission. |
 | Suunto   | Activity/sleep/route import, production 24/7 Health, plus activity and saved-route source/destination workflows | Health independently reconciles Activity, daily statistics, and Recovery for active connected accounts in windows of at most 28 days using signed webhook refetches, bounded polling, and history work. Suunto receives GPX routes; activities can flow to Wahoo/COROS, while saved routes can flow to Garmin/Wahoo/COROS through shared queues. |
 | COROS    | Activity plus daily Health/Sleep import; asynchronous activity upload; activity delivery to/from supported providers; direct/saved GPX route delivery | Exactly one active COROS account is used. Daily Health reuses the Sleep poll/history queue, preserves aggregate Sleep through references, and stores bounded detailed HRV in Health. Activity upload is initialized then polled by 64-bit ID. Route push accepts bike/running GPX metadata and is available to eligible connected Pro users through one shared production-wide rollout gate. |
-| Wahoo    | Pro activity import, FIT activity delivery, direct/saved route delivery, and private Training delivery | Wahoo imports only FIT-backed Wahoo-recorded workouts; retained FITs can sync to Suunto/COROS. Private Training uses separate app-owned Plans and dated Workouts with a saved-zone seven-day horizon; exact returned Workout/Plan/token evidence can link the imported activity, while Wahoo-owned plans remain out of scope. |
+| Wahoo    | Pro activity import, FIT activity delivery, direct/saved route delivery, and Training workout delivery | Wahoo imports only FIT-backed Wahoo-recorded workouts; retained FITs can sync to Suunto/COROS. Connected Pro users can explicitly deliver QS-authored workouts as separate app-owned Plans and dated Workouts within a saved-zone seven-day horizon; exact returned Workout/Plan/token evidence can link the imported activity, while Wahoo-owned plans remain out of scope. |
 
 Treat this table as a high-level orientation, not a partner API specification. The public Help content and each `/integrations/<provider>` page define the user-facing supported scope.
 
@@ -47,7 +47,7 @@ Garmin Sleep and Health history recovery must account for a moving provider mini
 
 Garmin stress-validation diagnostics use the existing WARNING with allowlisted family/field/reason, summary index, type, and bounded numeric-only values; never log raw provider strings or objects. Stress sample zeroes are numeric readings; daily average -2 is retained as a native-only availability code because its daily semantics are undocumented. Do not transfer sentinel meanings between summary families or let a recognized non-measurement code discard unrelated valid metrics. A fix does not recover an existing DLQ callback whose pull credentials were removed; use bounded Summary Resender recovery and verify replacement ingestion. See [Garmin delivery diagnostics](garmin-integration.md#delivery-and-trust-boundary) for the exact bound and metadata contract.
 
-### Structured-workout delivery proof (not production support)
+### Structured-workout remote verification evidence
 
 Remote verification (#703) reuses the Training delivery ledger, 25-item reconciliation pages, dispatcher and per-delivery
 lease. `check` is an idempotent, revision-checked command with a 15-minute coalescing window; it does not change consent.
@@ -60,8 +60,8 @@ for the full policy, request accounting, privacy, diagnostics and rollout contra
 | --- | --- | --- |
 | Garmin | Separate retained Workout/Schedule GETs, exact account/owner/date association checks. A controlled deletion proved that removing a calendar entry leaves its Workout present and makes the exact retained Schedule ID return 404. | Schedule-only negative classification and repair are enabled after two unchanged observations at least 15 minutes apart. Missing Workout remains inconclusive and cannot trigger recreation; its semantics/replacement recovery remain in #703/#645. |
 | COROS | Unavailable; no documented planned-resource read established. | Delivery support does not enable checking; do not substitute activity polling or blind republishing. |
-| Wahoo | Private #649 adapter independently checks app-owned Plan, dated Workout and association. | Positive-only retained-ID reads and bounded exact create recovery; empty/partial/unstable inventory and 404 never authorize absence or repair. workout_token is not POST idempotency. Production-account/device evidence remains pending. |
-| Suunto | Private #650 adapter supports positive owned Guide reads and resumable inventory. | 404/unstable inventory cannot prove deletion; safe absence/repair tracked by #710. Unpinning/watch eviction never causes cloud recreation. |
+| Wahoo | The public #649 adapter independently checks its app-owned Plan, dated Workout and association. | Positive-only retained-ID reads and bounded exact create recovery; empty/partial/unstable inventory and 404 never authorize absence or repair. `workout_token` is not POST idempotency. Production cloud CRUD/readback is proved; Wahoo app, ELEMNT and watch receipt remain provider-managed post-release observations, not claimed delivery evidence. |
+| Suunto | The #650 adapter keeps positive owned Guide-record reads and resumable inventory internal to exact uncertain-create recovery. User-facing remote visibility checking is unavailable. | A Guide hidden or removed in Suunto can remain visible through the partner API. API presence proves only a retained cloud record, never app/watch visibility; 404/unstable inventory cannot prove deletion. Negative classification and automatic repair remain disabled by #710. |
 
 Inspection never claims device receipt or routinely overwrites provider edits. Stop sync prevents restoration. Pro,
 readiness, compatibility, exact connection, saved-zone date/completion eligibility and deletion are rechecked before
@@ -133,26 +133,27 @@ an independent blocked result rather than hiding the reason. Destination keys, c
 digests and attempt journals never enter MCP input or output. Provider delivery remains Pro-gated, and failure does not
 roll back an authored plan/workout mutation in the same confirmed proposal.
 
-Training planning currently has an explicit UID-based **frontend presentation** rollout across its routes, calendar
-actions/overlays, Help and planning-specific connection/deletion instructions. Other accounts retain normal provider
-controls and generic provider-copy retention warnings. This does not authorize transport work, alter disconnect or
-deletion behavior, or enable a provider. See the [Training workspace source of truth](training-workspace.md) for the
-shared gate and account-change behavior.
+Manual training planning is available to every signed-in account across its routes, calendar actions/overlays, Help and
+planning-specific connection/deletion instructions. This does not authorize transport work, alter disconnect or deletion
+behavior, or enable a provider. See the [Training workspace source of truth](training-workspace.md) for account-change
+behavior and the separate delivery boundaries.
 
 The versioned research snapshot lives in `shared/planned-workout-providers.ts`; pure fixture serializers live under
-`functions/src/training-plans/providers/`. Every public provider delivery flag is currently `false`. The separate
-exact-UID Garmin production pilot in `shared/training-delivery-rollout.ts` is enforced by both the production runtime
-and reactive frontend controls; it does not depend on the presentation-only allowlist. It retains Pro, explicit consent,
-connection authority and `WORKOUT_IMPORT` checks. Legacy connections must reconnect rather than have permission inferred.
-See the [private pilot operational boundary](training-workspace.md#private-garmin-production-pilot) for deployment,
-preflight and rollback. This is a controlled production pilot, not public rollout:
+`functions/src/training-plans/providers/`. Garmin, COROS, Wahoo and Suunto have their backend delivery flags enabled;
+`shared/training-delivery-rollout.ts` contains no per-UID allowlist. The browser separately labels all new COROS Training
+delivery setup **Coming soon**, withholding plan sync, plan-workout resume and standalone Send while keeping existing
+saved records, Retry, copy status and Stop available.
+Every provider retains Pro, explicit consent, connection authority, provider configuration and its provider-specific
+permission checks. Legacy connections must reconnect rather than have permission inferred. See the
+[Garmin public delivery boundary](training-workspace.md#garmin-public-delivery-boundary) for deployment, preflight and
+rollback. Provider status is:
 
-| Provider | Proof state | Truthful model and current gate |
+| Provider | Availability | Truthful delivery model and remaining limits |
 | --- | --- | --- |
-| Garmin | `private-rollout` | Training API V2 mapping plus an offline-tested HTTP adapter cover separate Workout/Workout Schedule CRUD, retained Long IDs, partial recovery, and `WORKOUT_IMPORT` repair. The authored running/cycling profiles are supported, but the API receives only its broad `RUNNING` or `CYCLING` sport because the contract has no sub-sport field. Real delivery is restricted to the explicit private pilot. Synthetic fixtures and real Firestore transactions are not device evidence. Exact-profile device behavior remains unproven; completion correlation is #651. |
-| COROS | `private-rollout` | The exact-UID runtime batches at most 30 dated workouts through the production-only Training transport, retains stable partner IDs, applies per-item deletion outcomes, and links the exact returned `planWorkoutId`. Public delivery and remote checking remain disabled. Entitlement, repeated-ID replacement, overlapping-window behavior, reschedule/delete, callback/history correlation, and app/watch behavior still require separately authorized live evidence. |
-| Wahoo | `private-rollout` | The exact-UID adapter delivers time-based Running/Cycling workouts as separate app-owned Plans and dated Workouts, with retained-ID recovery and independent Plan/Workout/association reads. The saved-zone window is today through today + 6; exact account-bound Workout/Plan/token evidence can link a returned recorded activity, while public delivery and automatic absence/repair remain disabled. Synthetic HTTP fixtures and real Firestore tests cover the implemented lifecycle; they do not establish deployment or device receipt. Production-account CRUD, reconnect, ownership, calendar-date and device acceptance remain pending in #649 using the existing production app/account; no sandbox is assumed. |
-| Suunto | `private-rollout` | One workout maps to a dated SuuntoPlus Guide, not a native plan. The Guide recommends the exact canonical running/cycling profile selected in QS, including Trail Running, Treadmill, Mountain Biking, Indoor Cycling, E-Biking/E-MTB, and Hand Cycle where the documented Suunto activity catalog provides an ID. ZIP/icon CRUD and exact external-ID recovery reuse existing OAuth and the existing Suunto API subscription key with Guides access; today through today + 6 is a QS product window. Synthetic HTTP/FIT and real Firestore tests cover lifecycle and private completion evidence. Actual app/watch operations remain ordinary #650 integration tests, not claimed from fixtures. Safe absence/repair remains #710. |
+| Garmin | `enabled` | Connected Pro users can explicitly deliver supported workouts through separate Workout and Workout Schedule lifecycle records after granting `WORKOUT_IMPORT`. The authored running/cycling profiles are supported, but the API receives only its broad `RUNNING` or `CYCLING` sport because the contract has no sub-sport field. Synthetic fixtures and real Firestore transactions are not device evidence. There is no provider read/list path for authoritative missing-copy repair, and exact-profile device behavior remains unproven; completion correlation is #651. |
+| COROS | `enabled` | The backend remains enabled without a UID allowlist, but the browser labels all new COROS Training delivery setup **Coming soon** under #648: plan sync, plan-workout resume and standalone Send are unavailable. Existing saved delivery state continues to follow its consent, with retained records, Retry, copy status and Stop still available. The runtime batches at most 30 dated workouts, retains stable partner IDs, applies per-item deletion outcomes, and links an exact returned `planWorkoutId`. COROS exposes no documented planned-workout read/list endpoint, so remote Check, missing-copy classification and automatic recreation remain unavailable. Provider entitlement (`30009`), repeated-ID replacement, overlapping-window behavior, reschedule/delete, callback/history correlation, and app/watch behavior still require separately authorized live evidence. |
+| Wahoo | `enabled` | Connected Pro users can explicitly deliver time-based Running/Cycling workouts as separate app-owned Plans and dated Workouts. The saved-zone window is today through today + 6. Retained-ID recovery and independent positive Plan/Workout/association reads protect retries, and exact account-bound Workout/Plan/token evidence can link a returned recorded activity. Production cloud CRUD/readback proved the app-owned artifact contract; this does not prove Wahoo app, ELEMNT or watch receipt. Missing-copy classification and automatic repair remain unavailable because Wahoo inventory and negative responses are not authoritative enough. #649 tracks deployment and post-release verification; no sandbox is assumed. |
+| Suunto | `enabled` | Connected Pro users can explicitly deliver one workout as a dated SuuntoPlus Guide, not a native plan. The Guide recommends the exact canonical running/cycling profile selected in QS, including Trail Running, Treadmill, Mountain Biking, Indoor Cycling, E-Biking/E-MTB, and Hand Cycle where the documented Suunto activity catalog provides an ID. ZIP/icon CRUD and exact external-ID recovery reuse existing OAuth and the existing Suunto API subscription key with Guides access; today through today + 6 is a QS product window. Actual app/watch visibility remains unknowable through the partner API and is not claimed from fixtures or positive cloud reads. #710 keeps negative classification and automatic repair disabled. |
 
 Garmin mapping follows the local ignored Training API V2 version 1.0 partner contract; the confidential PDF is evidence,
 not a repository artifact. Workout content and its date-only schedule remain separate artifacts because each has its own
@@ -227,11 +228,12 @@ budgets, new project or setup wizard are added.
 Fixture compatibility is not delivery readiness. Ordinary adapter tests cover create, update, reschedule, delete,
 exact duplicate, ambiguous retry, reconnect and provider-specific horizon behavior. Record actual live results only
 when separately authorized; do not introduce a separate certification process. The
-shared delivery ledger, reconciliation queue and gated UI are implemented in #646 and proved with an excluded test
-transport. COROS #648 adds a production-only batched boundary under the exact private UID without changing that common
-model. [Training delivery foundation](training-workspace.md#provider-delivery-foundation-646) is the detailed
+shared delivery ledger, reconciliation queue and capability-gated UI are implemented in #646 and proved with an excluded
+test transport. COROS #648 adds a production batched boundary for every eligible authenticated owner without changing
+that common model. [Training delivery foundation](training-workspace.md#provider-delivery-foundation-646) is the detailed
 source of truth for its contracts, operations, evidence and maintenance. Garmin's #647 adapter additionally runs through
-synthetic HTTP fixtures and real Firestore transactions; real transport remains unavailable outside the private allowlists.
+synthetic HTTP fixtures and real Firestore transactions; the public runtime still requires Pro, explicit consent,
+connection authority and `WORKOUT_IMPORT`.
 The [Garmin adapter boundary](training-workspace.md#garmin-workoutcalendar-adapter-647) documents the per-request authority
 guard, step journal, exact endpoints, request bounds, permission flow and remaining integration checks. In particular,
 Garmin's documented first workout POST has no external idempotency/lookup key: unknown acceptance remains blocked for
@@ -256,7 +258,7 @@ tests with the demo Firestore suite and synthetic transport, not just a localhos
 tests also distinguish empty successful reads from explicit 404 absence and asynchronous acknowledgement from
 completed mutation. Interrupted edits invalidate the old fully accepted payload digest, and provider-imposed retry
 deadlines survive authored changes and manual Retry; these are tested locally, not inferred live provider results.
-Garmin integration checks remain #647/#703; #645 owns contract questions and #655 production observability/rollout.
+Garmin integration checks remain #647/#703; #645 owns contract questions and #655 deployment and post-release observability.
 The separate #698 certification/evaluation issue is retired. Track deferred functionality in an epic subissue, not a
 code-only TODO, and do not silently narrow the epic's product scope.
 
@@ -569,12 +571,11 @@ The shared Services uploader accepts **GPX and FIT** source routes for every cur
 
 Apply the same request controls to every destination: authenticated App Check callables, Pro entitlement, explicit FIT/GPX filename allowlist, strict base64 decoding, a 20 MB source limit (including legacy gzip expansion), parsed-route validation, converted-output limit where an output file is generated, deletion/disconnect guards, and sanitized provider errors. Make the route format and retention behavior visible in Services, Help, privacy policy, and the public integration page.
 
-OAuth scope changes are migrations. Request the full supported scope for new connections, enforce the specific write scope immediately before outbound calls, and show existing users a clear reconnect action. Wahoo's direct and saved-route flows need both `routes_read` (idempotency lookup) and `routes_write` (create/update); its direct activity flow needs `workouts_write`. Private Training delivery adds `plans_read plans_write` and requires workout read/write access. The existing reconnect dialog uses purpose-specific route/Training copy and discards late redirects after account changes. Do not mark a read-only connection as generally disconnected when inbound imports remain valid.
+OAuth scope changes are migrations. Request the full supported scope for new connections, enforce the specific write scope immediately before outbound calls, and show existing users a clear reconnect action. Wahoo's direct and saved-route flows need both `routes_read` (idempotency lookup) and `routes_write` (create/update); its direct activity flow needs `workouts_write`. Wahoo Training delivery adds `plans_read plans_write` and requires workout read/write access. The existing reconnect dialog uses purpose-specific route/Training copy and discards late redirects after account changes. Do not mark a read-only connection as generally disconnected when inbound imports remain valid.
 
-Wahoo intentionally requests `plans_read` and `plans_write` for all new connections and reconnects, including non-pilot
-accounts, to reduce later reauthorization when Training availability expands. These remain explicitly requested provider
-permissions, not automatic Training consent: the exact-UID delivery gate, Pro eligibility and per-plan/workout opt-in
-still apply. Existing credentials are not assumed to gain the additional grants without reconnecting.
+Wahoo requests `plans_read` and `plans_write` for all new connections and reconnects. These remain explicitly requested
+provider permissions, not automatic Training consent: Pro eligibility and per-plan/workout opt-in still apply. Existing
+credentials are not assumed to gain the additional grants without reconnecting.
 
 When product behavior specifies a single active provider account, centralize token selection in one server helper and use it for imports, polling, history, direct uploads, shared workers, and route delivery. Pin the stable provider ID in safe connection metadata, use one deterministic migration choice for legacy multi-token roots, and fail closed if the pinned token disappears. A browser-only selection rule is insufficient.
 
@@ -604,7 +605,7 @@ Provider file URLs are external input even if they came from an authenticated pa
 
 Treat a successful HTTP status as transport success, not proof that a provider file is ready. Normalize only recognized wrappers and validate the complete FIT envelope—including its declared length—before invoking Sports Lib. Apply a decoded-body limit when the provider contract documents a safe maximum; do not invent one that could reject valid activity files. A provider-specific incomplete or placeholder response should remain retryable with a distinct exhausted-retry DLQ context. Diagnostics may retain only structural facts such as byte length, an allowlisted content-type category, and validation reason; never retain or log the response body. If a structurally valid FIT parses without a session, retry only when provider evidence supports a narrowly bounded not-ready case (for Suunto, a suspiciously small response); keep ordinary full-sized sessionless files terminal so permanent corruption does not consume the retry budget.
 
-Suunto FIT downloads in the queued sync worker use a 60-second provider deadline without a decoded-body cap because its contract does not establish a safe maximum. That worker has a 540-second runtime, leaving time for sanitized error handling after an abort.
+Suunto FIT downloads in the queued sync worker use a 60-second provider deadline without a decoded-body cap because its contract does not establish a safe maximum. The download explicitly sends `Accept: */*`: Suunto's endpoint returns 500 for FIT-specific media types but accepts the wildcard request. That worker has a 540-second runtime, leaving time for sanitized error handling after an abort.
 
 Do not use a provider's short-lived file URL as durable application data. Download it in the worker, validate it, and store the original file through the existing event/file flow so reprocessing, export, and sync use the owned copy.
 

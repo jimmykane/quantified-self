@@ -53,6 +53,7 @@ describe('public-startup-route', () => {
     expect(isPublicContentPath('/features/supported-activities')).toBe(true);
     expect(isPublicContentPath('/features/mcp-server')).toBe(true);
     expect(isPublicContentPath('/features/training-dashboard')).toBe(true);
+    expect(isPublicContentPath('/features/training-plans')).toBe(true);
     expect(isPublicContentPath('/features/activity-map')).toBe(true);
     expect(isPublicContentPath('/features/health')).toBe(true);
     expect(isPublicContentPath('/guides/import-activities-to-suunto')).toBe(true);

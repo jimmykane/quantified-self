@@ -27,6 +27,7 @@ import { MatDialog } from '@angular/material/dialog';
 import { ConfirmationDialogComponent } from '../confirmation-dialog/confirmation-dialog.component';
 import { POLICY_CONTENT } from '../../shared/policies.content';
 import { getAssistantRequestLimitForRole, getRouteUsageLimitForRole, getUsageLimitForRole } from '@shared/limits';
+import { getNumberFormatter } from '../../helpers/number-format.helper';
 
 const FREE_PRICE_ID = 'free_price';
 
@@ -822,7 +823,7 @@ export class PricingComponent implements OnInit, OnDestroy {
     private formatCurrencyFromMinor(amountMinor: number, currencyCode: string): string {
         const amountMajor = amountMinor / 100;
         const hasNoCents = amountMinor % 100 === 0;
-        const formatter = new Intl.NumberFormat(undefined, {
+        const formatter = getNumberFormatter(undefined, {
             style: 'currency',
             currency: currencyCode,
             minimumFractionDigits: hasNoCents ? 0 : 2,

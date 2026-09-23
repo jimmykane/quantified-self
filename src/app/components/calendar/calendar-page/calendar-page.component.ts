@@ -10,7 +10,6 @@ import { SharedModule } from '../../../modules/shared.module';
 import { AppUserService } from '../../../services/app.user.service';
 import { ActivityCalendarService } from '../../../services/activity-calendar.service';
 import { CalendarDayDetailsNavigationService } from '../../../services/calendar-day-details-navigation.service';
-import { isTrainingPlanningUIAllowed } from '@shared/training-planning-rollout';
 import {
   TrainingPlansService,
   selectCalendarVisibleScheduledWorkouts,
@@ -114,7 +113,7 @@ export class CalendarPageComponent {
   readonly familyVolumeTooltip = ACTIVITY_CALENDAR_VOLUME_TOOLTIP;
   readonly routeState = toSignal(this.routeState$, { initialValue: this.initialRouteState });
   readonly currentUser = computed(() => this.userService.user() as AppUserInterface | null);
-  readonly hasTrainingPlanningUIAccess = computed(() => isTrainingPlanningUIAllowed(this.currentUser()?.uid));
+  readonly hasTrainingPlanningUIAccess = computed(() => !!this.currentUser()?.uid);
   readonly eventState = toSignal(combineLatest([
     this.userService.user$,
     this.routeState$,
@@ -132,7 +131,7 @@ export class CalendarPageComponent {
     }),
   ), { initialValue: { status: 'loading', events: [] } as CalendarEventsState });
   readonly plansState = toSignal(this.userService.user$.pipe(
-    switchMap(user => isTrainingPlanningUIAllowed(user?.uid)
+    switchMap(user => user?.uid
       ? this.plansService.watchSchedule(user.uid).pipe(
         map(schedule => ({ status: 'ready', schedule }) as CalendarPlansState),
         startWith({ status: 'loading', schedule: null } as CalendarPlansState),
@@ -140,6 +139,14 @@ export class CalendarPageComponent {
       )
       : of({ status: 'ready', schedule: null } as CalendarPlansState)),
   ), { initialValue: { status: 'loading', schedule: null } as CalendarPlansState });
+  readonly workoutCompletions = toSignal(this.userService.user$.pipe(
+    switchMap(user => user?.uid
+      ? this.plansService.watchWorkoutCompletions(user.uid).pipe(
+        startWith([]),
+        catchError(() => of([])),
+      )
+      : of([])),
+  ), { initialValue: [] });
   readonly plannedWorkoutsByDate = computed<PlannedWorkoutCalendarOverlay>(() => {
     const schedule = this.plansState().schedule;
     if (!this.hasTrainingPlanningUIAccess() || !schedule) return {};
@@ -147,6 +154,7 @@ export class CalendarPageComponent {
       selectCalendarVisibleScheduledWorkouts(schedule),
       schedule.plans,
       schedule.state.activePlanId,
+      this.workoutCompletions().map(completion => completion.workoutId),
     );
   });
   readonly calendarModel = computed(() => {

@@ -247,6 +247,50 @@ describe('Assistant conversation store', () => {
       .rejects.toMatchObject({ code: 'conversation_changed' });
   });
 
+  it('binds content permissions and one expiring proposal to the active generation', async () => {
+    const harness = createFirestoreHarness(); let sequence = 0;
+    const store = createAssistantConversationStore({ db: () => harness.db as never,
+      now: () => new Date('2026-08-03T12:00:00Z'), createId: () => `content-${++sequence}`,
+      getDeletionGuard: async () => ({ userExists: true, deletionInProgress: false, shouldSkip: false }),
+    });
+    const chat = await store.resetConversation('owner', 'coordinate_free', true, null,
+      false, false, false, true, true);
+    const request = 'content-proposal-0001';
+    const fingerprint = createAssistantRequestFingerprint(request, 'Create a note', 'coordinate_free', true,
+      false, false, false, true, true);
+    const begun = requireStartedTurn(await store.beginTurn('owner', chat.conversationId, request, fingerprint,
+      'coordinate_free', true, false, false, false, true, true));
+    const proposal = { proposalRef: '5b5aa348-50a3-4e62-a1fd-46a7e6dd639f',
+      kind: 'create_timeline_note' as const, expiresAtMs: Date.parse('2026-08-03T12:10:00Z'),
+      summary: 'Create Timeline note “Travel”.', requiresConfirmation: true as const,
+      arguments: { mutationId: '11111111-1111-4111-8111-111111111111', category: 'travel' as const,
+        title: 'Travel', details: null, startDate: '2026-08-03', endDate: '2026-08-04',
+        timeZone: 'UTC', showOnCharts: true, color: 'default' as const } };
+    const completed = await store.completeTurn('owner', begun, message(request, 'user', 'Create a note'),
+      message('reply', 'assistant', 'Review the note.'), undefined, proposal);
+    expect(completed.pendingContentProposal).toEqual(proposal);
+    const followUpRequest = 'content-proposal-follow-up-0001';
+    const followUp = requireStartedTurn(await store.beginTurn(
+      'owner', chat.conversationId, followUpRequest,
+      createAssistantRequestFingerprint(followUpRequest, 'What else?', 'coordinate_free', true,
+        false, false, false, true, true),
+      'coordinate_free', true, false, false, false, true, true,
+    ));
+    const completedFollowUp = await store.completeTurn(
+      'owner', followUp, message(followUpRequest, 'user', 'What else?'),
+      message('follow-up-reply', 'assistant', 'The proposal is still waiting for review.'),
+    );
+    expect(completedFollowUp.pendingContentProposal).toEqual(proposal);
+    await expect(store.getActiveConversationState('owner')).resolves.toMatchObject({
+      timelineNotesEnabled: true,
+      activityTagChangesEnabled: true,
+      timelineNoteChangesEnabled: true,
+      pendingContentProposal: proposal,
+    });
+    await store.clearContentProposal('owner', chat.conversationId, proposal.proposalRef);
+    expect((await store.getActiveConversationState('owner')).pendingContentProposal).toBeUndefined();
+  });
+
   it('serializes turns and persists only a bounded completed history', async () => {
     const harness = createFirestoreHarness();
     let sequence = 0;
@@ -536,13 +580,13 @@ describe('Assistant conversation store', () => {
 
     const replayed = await store.beginTurn(
       'user-1',
-      completed.conversationId,
+      completed.conversation.conversationId,
       requestId,
     );
 
     expect(replayed).toEqual({
       kind: 'replayed',
-      conversation: completed,
+      conversation: completed.conversation,
       requestFingerprint: createAssistantRequestFingerprint(
         requestId,
         'Question once',
@@ -793,7 +837,7 @@ describe('Assistant conversation store', () => {
 
     await expect(store.beginTurn(
       'user-1',
-      completed.conversationId,
+      completed.conversation.conversationId,
       'assistant-response-original-0001',
     )).rejects.toMatchObject({ code: 'request_id_conflict' });
     expect(harness.documents.get(
@@ -864,7 +908,7 @@ describe('Assistant conversation store', () => {
       message('completed-user', 'user', 'Completed question'),
       message('completed-assistant', 'assistant', 'Completed answer'),
     );
-    expect(completed.expiresAt).toBe('2026-08-09T12:00:00.000Z');
+    expect(completed.conversation.expiresAt).toBe('2026-08-09T12:00:00.000Z');
   });
 
   it('keeps a nearly expired conversation alive for the pending-turn lease only', async () => {

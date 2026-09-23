@@ -229,12 +229,32 @@ describe('buildPublicPricingCatalog', () => {
         expect(catalog.plans.find((plan) => plan.id === 'inactive')).toBeUndefined();
     });
 
-    it('includes read-only MCP access in every plan', () => {
+    it('includes permission-scoped MCP access in every plan', () => {
         const catalog = buildPublicPricingCatalog(PAID_PRODUCTS);
 
         expect(catalog.plans).toHaveLength(3);
         for (const plan of catalog.plans) {
             expect(plan.features.map((feature) => feature.label)).toContain('MCP data access');
+        }
+    });
+
+    it('includes manual training plans and standalone workouts in every plan', () => {
+        const catalog = buildPublicPricingCatalog(PAID_PRODUCTS);
+
+        for (const plan of catalog.plans) {
+            expect(plan.features.map(feature => feature.label))
+                .toContain('Manual training plans and standalone workouts');
+        }
+    });
+
+    it('advertises provider planned-workout delivery only on Pro', () => {
+        const catalog = buildPublicPricingCatalog(PAID_PRODUCTS);
+
+        expect(catalog.plans.find(plan => plan.role === 'pro')?.features.map(feature => feature.label))
+            .toContain('Provider planned-workout delivery');
+        for (const role of ['free', 'basic'] as const) {
+            expect(catalog.plans.find(plan => plan.role === role)?.features.map(feature => feature.label))
+                .not.toContain('Provider planned-workout delivery');
         }
     });
 

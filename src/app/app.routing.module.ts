@@ -3,7 +3,6 @@ import { RouterModule } from '@angular/router';
 import type { Data, ResolveData, Route, Routes } from '@angular/router';
 import { NetworkAwarePreloadingStrategy } from './resolvers/network-aware-preloading.strategy';
 import { authGuard } from './authentication/app.auth.guard';
-import { trainingPlanningGuard } from './authentication/training-planning.guard';
 import { assistantGuard } from './authentication/assistant.guard';
 import { onboardingGuard } from './authentication/onboarding.guard';
 import { adminGuard } from './authentication/admin.guard';
@@ -25,7 +24,12 @@ import { PublicLayoutComponent } from './components/public-layout/public-layout.
 import { HOME_SEO_DESCRIPTION, HOME_SEO_JSON_LD } from './shared/home-seo';
 
 const SEO_RESOLVED_KEYS = ['title', 'description', 'jsonLd'] as const;
-const PUBLIC_SEO_RESOLVED_KEYS = [...SEO_RESOLVED_KEYS, 'publicSeoPage'] as const;
+const PUBLIC_SEO_RESOLVED_KEYS = [
+  ...SEO_RESOLVED_KEYS,
+  'publicSeoPage',
+  'socialImage',
+  'socialImageAlt',
+] as const;
 
 type IntegrationProviderKey = 'garmin' | 'suunto' | 'coros' | 'wahoo';
 
@@ -98,7 +102,7 @@ function trainingPlansRoute(
     loadComponent: () => import('./components/plans/plans-workspace.component')
       .then(module => module.PlansWorkspaceComponent),
     data: { ...TRAINING_PLANS_ROUTE_DATA, trainingPlansMode: mode, trainingPlansScope: scope, preload },
-    canMatch: [authGuard, onboardingGuard, trainingPlanningGuard],
+    canMatch: [authGuard, onboardingGuard],
   };
 }
 
@@ -216,7 +220,7 @@ const topLevelRoutes: Routes = [
           "Send Suunto routes to Wahoo",
           "Send GPX/FIT routes to Wahoo",
           "Sync past activities",
-          "Read-only MCP client access",
+          "Permission-scoped MCP client access and focused changes",
           "Garmin integration",
           "Suunto integration",
           "COROS integration",
@@ -384,6 +388,15 @@ const topLevelRoutes: Routes = [
     path: PUBLIC_FEATURE_PATHS.trainingAnalysis,
     loadComponent: () => import('./components/public-seo/public-seo-page.component').then(m => m.PublicSeoPageComponent),
     resolve: publicSeoRouteData('trainingAnalysis'),
+    data: {
+      preload: true,
+      animation: 'PublicSeo',
+    },
+  },
+  {
+    path: PUBLIC_FEATURE_PATHS.trainingPlans,
+    loadComponent: () => import('./components/public-seo/public-seo-page.component').then(m => m.PublicSeoPageComponent),
+    resolve: publicSeoRouteData('trainingPlans'),
     data: {
       preload: true,
       animation: 'PublicSeo',

@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { ActivityTypes } from '@sports-alliance/sports-lib';
 import { assessTrainingDeliveryMapping } from './mapping';
 import type { ScheduledWorkoutV1 } from '../../../../shared/training-plans';
@@ -7,11 +7,18 @@ const workout: ScheduledWorkoutV1 = { schemaVersion: 1, id: 'w', planId: null, l
   title: 'Easy run', lifecycle: 'planned', createdAtMs: 1, updatedAtMs: 1, structure: { version: 1, sport: ActivityTypes.Running,
     nodes: [{ kind: 'step', id: 'a', purpose: 'work', ending: { kind: 'time', seconds: 600 }, targets: [] }] } };
 describe('Training delivery mapping and production boundary', () => {
-  it.each(['garmin', 'coros', 'wahoo', 'suunto'] as const)('%s uses serializer-level assessment without enabling transport', provider => {
+  it.each(['garmin', 'coros', 'wahoo', 'suunto'] as const)('%s uses serializer-level assessment independently of rollout', provider => {
     const assessment = assessTrainingDeliveryMapping(provider, workout, 'destination', 'UTC');
     expect(assessment.level).toBe('exact');
     expect(assessment.digest).toMatch(/^[a-f0-9]{64}$/);
-    expect(productionDeliveryRuntime({} as never).transport(provider, 'owner')).toBeNull();
+  });
+  it('enables every public provider transport for an ordinary authenticated owner', () => {
+    vi.stubEnv('SUUNTOAPP_GUIDE_OWNER', 'Fixture application');
+    const runtime = productionDeliveryRuntime({} as never);
+    for (const provider of ['garmin', 'coros', 'wahoo', 'suunto'] as const) {
+      expect(runtime.transport(provider, 'owner')).not.toBeNull();
+    }
+    vi.unstubAllEnvs();
   });
   it('captures serializer-specific losses, not only structure capability warnings', () => {
     const result = assessTrainingDeliveryMapping('suunto', { ...workout, title: 'Run 🏃🏽' }, 'destination', 'UTC');

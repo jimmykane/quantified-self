@@ -7,6 +7,11 @@ const indexPath = path.join(outputDirectory, 'index.html');
 const prerenderManifestPath = path.join(path.dirname(outputDirectory), 'prerendered-routes.json');
 const sourceMapCache = new Map();
 const HOME_SIGNAL_PREVIEW_INCREMENTAL_STATIC_BUDGET_BYTES = 160 * 1024;
+const TRAINING_PLANS_ROUTE = '/features/training-plans';
+const TRAINING_PLANS_SOCIAL_IMAGE_PATH = path.join(
+  outputDirectory,
+  'assets/images/training-plans-social.png',
+);
 
 const prerenderedPageSourcePatterns = [
   /^src\/app\/components\/home\/home\.component\.ts$/,
@@ -57,7 +62,7 @@ const homeSignalPreviewIncrementalStaticAssets = homeSignalPreviewJavaScriptAsse
 
 assertNoHomeStartupSource(
   'route-only public page content',
-  /^src\/app\/components\/(?:features\/(?:workout-data-comparison-page|supported-activities-page)|integrations\/integration-pages|public-seo\/public-seo-pages)\.content\.ts$/,
+  /^src\/app\/components\/(?:features\/(?:workout-data-comparison-page|supported-activities-page)|integrations\/integration-pages|public-seo\/(?:public-seo-pages|training-plans-page))\.content\.ts$/,
 );
 assertNoHomeStartupSource(
   'unused event data runtime',
@@ -77,8 +82,16 @@ assertNoHomeStartupSource(
 );
 assertNoStartupSource('Mapbox', /(?:^|\/)(?:mapbox-gl|mapbox-loader)(?:[./]|$)/);
 assertNoStartupSource(
+  'eager regional locale catalog',
+  /node_modules\/(?:dayjs\/locale|@angular\/common\/locales)\//,
+);
+assertNoStartupSource(
   'deferred Training examples and charts',
   /^src\/app\/components\/(?:public-seo\/training-explorer-preview\.(?:component|data)|training\/training-(?:readiness-trend|power-systems-trend|durability-trajectory)-chart\.component)\.ts$/,
+);
+assertNoStartupSource(
+  'deferred Training Plans preview',
+  /^src\/app\/components\/public-seo\/training-plans-preview\.(?:component|data)\.ts$/,
 );
 const trainingPreviewAssets = findAssetsContainingSource(/^src\/app\/components\/public-seo\/training-explorer-preview\.component\.ts$/);
 assertNoSourceRecords(
@@ -86,6 +99,30 @@ assertNoSourceRecords(
   uniqueSourceRecords(collectStaticDependencyGraph(trainingPreviewAssets).flatMap(readSourceRecords)),
   /^src\/app\/(?:components\/training\/training-workspace\.component|modules\/training\.module|services\/dashboard-derived-metrics\.service)\.ts$/,
   'deferred public Training preview graph',
+);
+const trainingPlansPreviewAssets = findAssetsContainingSource(
+  /^src\/app\/components\/public-seo\/training-plans-preview\.component\.ts$/,
+);
+const trainingPlansPreviewSourceRecords = uniqueSourceRecords(
+  collectStaticDependencyGraph(trainingPlansPreviewAssets).flatMap(readSourceRecords),
+);
+assertNoSourceRecords(
+  'authenticated Training Plans or provider-delivery runtime',
+  trainingPlansPreviewSourceRecords,
+  /^src\/app\/(?:components\/plans\/(?:plans-workspace|training-delivery-(?:button|dialog))\.component|services\/training-(?:plans|delivery)\.service|helpers\/training-delivery-(?:display|rollout|summary)\.helper)\.ts$/,
+  'deferred public Training Plans preview graph',
+);
+assertNoSourceRecords(
+  'authentication, Firebase, or account-data runtime',
+  trainingPlansPreviewSourceRecords,
+  /(?:^|\/)(?:src\/app\/(?:authentication|firebase)\/|src\/app\/services\/app\.(?:functions|user)\.service\.ts$|shared\/user-profile-firestore\.ts$|node_modules\/(?:@angular\/fire|@firebase|firebase)\/)/,
+  'deferred public Training Plans preview graph',
+);
+assertNoSourceRecords(
+  'broad shared or Material module',
+  trainingPlansPreviewSourceRecords,
+  /^src\/app\/modules\/(?:shared|material)\.module\.ts$/,
+  'deferred public Training Plans preview graph',
 );
 assertNoStartupSource('dashboard upload UI', /\/components\/(?:dashboard\/dashboard-header-upload|upload\/upload-activities)\//);
 assertNoStartupSource(
@@ -115,6 +152,7 @@ assertNoSourceRecords(
   'deferred home signal preview graph',
 );
 assertNoInitialStylesheet('Mapbox', /mapboxgl-/);
+assertTrainingPlansSocialImage();
 assertPrerenderedDocuments();
 
 const homeStartupBytes = homeStartupJavaScriptAssets.reduce((total, asset) => (
@@ -297,6 +335,9 @@ function assertPrerenderedDocuments() {
     if (documentRef.querySelector('app-training-explorer-preview')) {
       throw new Error(`Prerendered route ${route} eagerly rendered the interactive Training examples.`);
     }
+    if (documentRef.querySelector('app-training-plans-preview')) {
+      throw new Error(`Prerendered route ${route} eagerly rendered the interactive Training Plans preview.`);
+    }
 
     const jsonLdScripts = [...documentRef.querySelectorAll('script[type="application/ld+json"]')];
     if (jsonLdScripts.length === 0) {
@@ -310,12 +351,81 @@ function assertPrerenderedDocuments() {
       }
     }
 
+    if (route === TRAINING_PLANS_ROUTE) {
+      assertTrainingPlansDocument(documentRef);
+    }
+
     dom.window.close();
   }
 
   console.log(
     `Verified ${documentPaths.length} prerendered pages: title, description, H1, valid JSON-LD, and public footer.`,
   );
+}
+
+function assertTrainingPlansDocument(documentRef) {
+  const expectedTitle = 'Training Plans for Running and Cycling - Quantified Self';
+  const expectedDescription = 'Create free running and cycling training plans or standalone structured workouts, schedule them by date, and keep them separate from completed activities.';
+  const expectedCanonical = `https://quantified-self.io${TRAINING_PLANS_ROUTE}`;
+  const expectedSocialImage = 'https://quantified-self.io/assets/images/training-plans-social.png';
+
+  if (documentRef.title !== expectedTitle) {
+    throw new Error(`Prerendered ${TRAINING_PLANS_ROUTE} has unexpected title: ${documentRef.title}`);
+  }
+  if (documentRef.querySelector('meta[name="description"]')?.getAttribute('content') !== expectedDescription) {
+    throw new Error(`Prerendered ${TRAINING_PLANS_ROUTE} has unexpected description.`);
+  }
+  if (documentRef.querySelector('h1')?.textContent?.trim() !== 'Plan running and cycling workouts your way') {
+    throw new Error(`Prerendered ${TRAINING_PLANS_ROUTE} has unexpected H1.`);
+  }
+  if (documentRef.querySelector('link[rel="canonical"]')?.getAttribute('href') !== expectedCanonical) {
+    throw new Error(`Prerendered ${TRAINING_PLANS_ROUTE} has an unexpected canonical URL.`);
+  }
+  for (const [selector, expectedValue] of [
+    ['meta[property="og:image"]', expectedSocialImage],
+    ['meta[name="twitter:image"]', expectedSocialImage],
+    ['meta[property="og:url"]', expectedCanonical],
+  ]) {
+    if (documentRef.querySelector(selector)?.getAttribute('content') !== expectedValue) {
+      throw new Error(`Prerendered ${TRAINING_PLANS_ROUTE} has unexpected metadata for ${selector}.`);
+    }
+  }
+
+  const pageText = documentRef.body.textContent?.replace(/\s+/g, ' ').trim() ?? '';
+  for (const expectedCopy of [
+    'A standalone workout is first-class',
+    'Plan directly, through MCP, or with provider delivery',
+    'Workout delivery to Garmin, Suunto, and Wahoo is available to connected Pro members',
+    'New COROS plan sync and standalone Send actions are coming soon in the app',
+    'Can I add a workout without creating a plan?',
+    'Can I use an MCP client with Training Plans?',
+  ]) {
+    if (!pageText.includes(expectedCopy)) {
+      throw new Error(`Prerendered ${TRAINING_PLANS_ROUTE} is missing visible copy: ${expectedCopy}`);
+    }
+  }
+  if (!documentRef.querySelector('footer.public-footer a[href="/features/training-plans"]')) {
+    throw new Error(`Prerendered ${TRAINING_PLANS_ROUTE} is missing the public Training Plans footer link.`);
+  }
+  if (/xcsAolLDDTWTgtRN9eYF3lW2YKL2|users\//.test(documentRef.documentElement.outerHTML)) {
+    throw new Error(`Prerendered ${TRAINING_PLANS_ROUTE} contains private account data.`);
+  }
+}
+
+function assertTrainingPlansSocialImage() {
+  if (!fs.existsSync(TRAINING_PLANS_SOCIAL_IMAGE_PATH)) {
+    throw new Error(`Expected Training Plans social image at ${TRAINING_PLANS_SOCIAL_IMAGE_PATH}.`);
+  }
+  const image = fs.readFileSync(TRAINING_PLANS_SOCIAL_IMAGE_PATH);
+  const pngSignature = '89504e470d0a1a0a';
+  if (image.subarray(0, 8).toString('hex') !== pngSignature) {
+    throw new Error('Training Plans social image is not a valid PNG.');
+  }
+  const width = image.readUInt32BE(16);
+  const height = image.readUInt32BE(20);
+  if (width !== 1200 || height !== 630) {
+    throw new Error(`Training Plans social image must be 1200x630, received ${width}x${height}.`);
+  }
 }
 
 function readPrerenderedRoutes() {

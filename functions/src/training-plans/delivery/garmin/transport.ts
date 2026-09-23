@@ -32,7 +32,7 @@ function matches(expected: unknown, actual: unknown): boolean {
   return expected === actual;
 }
 
-/** Training API V2 adapter. Production availability is restricted by the pilot gate.
+/** Training API V2 adapter. Production availability is controlled by the shared provider capability.
  * No external create key or workout-list endpoint is invented: a lost first-create ID
  * is deliberately unrecoverable automatically. QS identity lives in the private ledger. */
 export class GarminTrainingTransport implements TrainingDeliveryTransport {

@@ -1,5 +1,6 @@
 import type { ScheduledWorkoutV1, TrainingPlanV1 } from '@shared/training-plans';
 import { formatActivityCalendarDateParam, parseActivityCalendarDate } from './activity-calendar.helper';
+import { getDateTimeFormatter } from './date-time-format.helper';
 
 type PlanRange = Pick<TrainingPlanV1, 'id' | 'startLocalDate' | 'endLocalDate'>;
 
@@ -21,8 +22,8 @@ export function buildPlanScheduleMonth(
   const weekStart = Number.isInteger(options.startOfWeek) && options.startOfWeek! >= 0 && options.startOfWeek! <= 6
     ? options.startOfWeek! : 1;
   const gridStart = new Date(anchor.getFullYear(), anchor.getMonth(), 1 - (monthStart.getDay() - weekStart + 7) % 7);
-  const formatter = new Intl.DateTimeFormat(options.locale, { dateStyle: 'full' });
-  const weekdayFormatter = new Intl.DateTimeFormat(options.locale, { weekday: 'short' });
+  const formatter = getDateTimeFormatter(options.locale, { dateStyle: 'full' });
+  const weekdayFormatter = getDateTimeFormatter(options.locale, { weekday: 'short' });
   const byDate = new Map<string, ScheduledWorkoutV1[]>();
   for (const workout of workouts) {
     if (workout.planId !== plan.id || workout.lifecycle === 'deleted') continue;
@@ -62,8 +63,8 @@ export function buildPlanScheduleMonth(
   const monthKey = selected.slice(0, 7);
   const previousMonth = formatActivityCalendarDateParam(new Date(anchor.getFullYear(), anchor.getMonth() - 1, 1));
   return {
-    label: new Intl.DateTimeFormat(options.locale, { month: 'long', year: 'numeric' }).format(anchor),
-    weekStartLabel: new Intl.DateTimeFormat(options.locale, { weekday: 'long' }).format(gridStart),
+    label: getDateTimeFormatter(options.locale, { month: 'long', year: 'numeric' }).format(anchor),
+    weekStartLabel: getDateTimeFormatter(options.locale, { weekday: 'long' }).format(gridStart),
     weekdays: days.slice(0, 7).map((day, index) => ({
       label: day.weekday,
       dayOfWeek: day.dayOfWeek,

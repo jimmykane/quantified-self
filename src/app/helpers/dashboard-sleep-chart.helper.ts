@@ -10,6 +10,7 @@ import {
 } from '@shared/sleep';
 import type { AppDashboardSleepTrendRange } from '../models/app-user.interface';
 import { dashboardSleepTrendRangeDays } from './dashboard-sleep-range.helper';
+import { getDateTimeFormatter } from './date-time-format.helper';
 
 export interface DashboardSleepTrendPoint {
   sourceKey?: string;
@@ -128,7 +129,7 @@ function dateLabel(sleepDate: string): string {
   if (!Number.isFinite(parsed)) {
     return sleepDate || 'Sleep';
   }
-  return new Intl.DateTimeFormat(undefined, {
+  return getDateTimeFormatter(undefined, {
     weekday: 'short',
     month: 'short',
     day: 'numeric',

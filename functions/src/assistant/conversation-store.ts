@@ -9,9 +9,10 @@ import {
   type AssistantConversation,
   type AssistantLocationAccess,
   type AssistantMessage,
+  type AssistantContentProposalPreview,
   type AssistantTrainingProposalPreview,
 } from '../../../shared/assistant.types';
-import { validateAssistantConversation } from '../../../shared/assistant-response.contract';
+import { isAssistantContentProposal, validateAssistantConversation } from '../../../shared/assistant-response.contract';
 import { getUserDeletionGuardStateInTransaction } from '../shared/user-deletion-guard';
 import { TTL_CONFIG } from '../shared/ttl-config';
 import { TRAINING_WRITE_OUTPUTS } from '../mcp/training-plans.schemas';
@@ -35,10 +36,13 @@ interface AssistantPendingTurn {
 
 export interface AssistantActiveConversationState {
   timelineNotesEnabled?: boolean;
+  activityTagChangesEnabled?: boolean;
+  timelineNoteChangesEnabled?: boolean;
   trainingPlansEnabled?: boolean;
   trainingPlanChangesEnabled?: boolean;
   trainingDeliveryEnabled?: boolean;
   pendingTrainingProposal?: AssistantTrainingProposalPreview;
+  pendingContentProposal?: AssistantContentProposalPreview;
   conversation: AssistantConversation | null;
   pendingRequestId: string | null;
   locationAccess: AssistantLocationAccess;
@@ -52,10 +56,13 @@ interface AssistantReplayReceipt {
 
 interface StoredAssistantConversation {
   timelineNotesEnabled: boolean;
+  activityTagChangesEnabled: boolean;
+  timelineNoteChangesEnabled: boolean;
   trainingPlansEnabled: boolean;
   trainingPlanChangesEnabled: boolean;
   trainingDeliveryEnabled: boolean;
   pendingTrainingProposal: AssistantTrainingProposalPreview | null;
+  pendingContentProposal: AssistantContentProposalPreview | null;
   version: typeof ASSISTANT_CONVERSATION_VERSION;
   conversationId: string;
   messages: AssistantMessage[];
@@ -69,6 +76,8 @@ interface StoredAssistantConversation {
 
 export interface BegunAssistantTurn {
   timelineNotesEnabled?: boolean;
+  activityTagChangesEnabled?: boolean;
+  timelineNoteChangesEnabled?: boolean;
   trainingPlansEnabled?: boolean;
   trainingPlanChangesEnabled?: boolean;
   trainingDeliveryEnabled?: boolean;
@@ -84,6 +93,7 @@ export interface ReplayedAssistantTurn {
   conversation: AssistantConversation;
   requestFingerprint: string;
   pendingTrainingProposal?: AssistantTrainingProposalPreview;
+  pendingContentProposal?: AssistantContentProposalPreview;
 }
 
 export interface PendingAssistantTurn {
@@ -91,6 +101,7 @@ export interface PendingAssistantTurn {
   conversation: AssistantConversation;
   requestFingerprint: string;
   pendingTrainingProposal?: AssistantTrainingProposalPreview;
+  pendingContentProposal?: AssistantContentProposalPreview;
 }
 
 export type AssistantTurnStart =
@@ -99,6 +110,11 @@ export type AssistantTurnStart =
   | PendingAssistantTurn;
 
 export type AssistantRequestState = ReplayedAssistantTurn | PendingAssistantTurn;
+
+export interface CompletedAssistantTurn {
+  conversation: AssistantConversation;
+  pendingContentProposal?: AssistantContentProposalPreview;
+}
 
 export type AssistantConversationStoreErrorCode =
   | 'user_deleted'
@@ -136,6 +152,8 @@ export interface AssistantConversationStore {
     trainingPlansEnabled?: boolean,
     trainingPlanChangesEnabled?: boolean,
     trainingDeliveryEnabled?: boolean,
+    activityTagChangesEnabled?: boolean,
+    timelineNoteChangesEnabled?: boolean,
   ) => Promise<AssistantTurnStart>;
   completeTurn: (
     uid: string,
@@ -143,8 +161,10 @@ export interface AssistantConversationStore {
     userMessage: AssistantMessage,
     assistantMessage: AssistantMessage,
     pendingTrainingProposal?: AssistantTrainingProposalPreview,
-  ) => Promise<AssistantConversation>;
+    pendingContentProposal?: AssistantContentProposalPreview,
+  ) => Promise<CompletedAssistantTurn>;
   clearTrainingProposal: (uid: string, conversationId: string, proposalRef: string) => Promise<void>;
+  clearContentProposal: (uid: string, conversationId: string, proposalRef: string) => Promise<void>;
   releaseTurn: (uid: string, begunTurn: BegunAssistantTurn) => Promise<void>;
   resetConversation: (
     uid: string,
@@ -154,6 +174,8 @@ export interface AssistantConversationStore {
     trainingPlansEnabled?: boolean,
     trainingPlanChangesEnabled?: boolean,
     trainingDeliveryEnabled?: boolean,
+    activityTagChangesEnabled?: boolean,
+    timelineNoteChangesEnabled?: boolean,
   ) => Promise<AssistantConversation>;
 }
 
@@ -179,6 +201,8 @@ export function createAssistantRequestFingerprint(
   trainingPlansEnabled = false,
   trainingPlanChangesEnabled = false,
   trainingDeliveryEnabled = false,
+  activityTagChangesEnabled = false,
+  timelineNoteChangesEnabled = false,
 ): string {
   const fingerprint = createHash('sha256')
     .update(requestId)
@@ -190,6 +214,8 @@ export function createAssistantRequestFingerprint(
     fingerprint.update('\0').update(locationAccess);
   }
   if (timelineNotesEnabled) fingerprint.update('\0timeline-notes:read');
+  if (activityTagChangesEnabled) fingerprint.update('\0events:write');
+  if (timelineNoteChangesEnabled) fingerprint.update('\0timeline-notes:write');
   if (trainingPlansEnabled) fingerprint.update('\0training-plans:read');
   if (trainingPlanChangesEnabled) fingerprint.update('\0training-plans:write');
   if (trainingDeliveryEnabled) fingerprint.update('\0training-delivery:write');
@@ -210,6 +236,8 @@ function normalizeReplayReceipts(
   messages: AssistantMessage[],
   locationAccess: AssistantLocationAccess,
   timelineNotesEnabled: boolean,
+  activityTagChangesEnabled: boolean,
+  timelineNoteChangesEnabled: boolean,
   trainingPlansEnabled: boolean,
   trainingPlanChangesEnabled: boolean,
   trainingDeliveryEnabled: boolean,
@@ -258,6 +286,8 @@ function normalizeReplayReceipts(
         trainingPlansEnabled,
         trainingPlanChangesEnabled,
         trainingDeliveryEnabled,
+        activityTagChangesEnabled,
+        timelineNoteChangesEnabled,
       ),
       completedAtMs,
     });
@@ -327,6 +357,10 @@ function parseStoredConversation(
   const pendingTrainingProposal = parsedProposal.success && parsedProposal.data.expiresAtMs > nowMs
     ? parsedProposal.data
     : null;
+  const pendingContentProposal = isAssistantContentProposal(data.pendingContentProposal)
+    && data.pendingContentProposal.expiresAtMs > nowMs
+    ? data.pendingContentProposal
+    : null;
   return {
     version: ASSISTANT_CONVERSATION_VERSION,
     conversationId: data.conversationId,
@@ -336,16 +370,21 @@ function parseStoredConversation(
     expireAt: data.expireAt as Timestamp,
     locationAccess,
     timelineNotesEnabled: data.timelineNotesEnabled === true,
+    activityTagChangesEnabled: data.activityTagChangesEnabled === true,
+    timelineNoteChangesEnabled: data.timelineNoteChangesEnabled === true && data.timelineNotesEnabled === true,
     trainingPlansEnabled: data.trainingPlansEnabled === true,
     trainingPlanChangesEnabled: data.trainingPlanChangesEnabled === true && data.trainingPlansEnabled === true,
     trainingDeliveryEnabled: data.trainingDeliveryEnabled === true && data.trainingPlansEnabled === true,
     pendingTrainingProposal,
+    pendingContentProposal,
     pendingTurn,
     replayReceipts: normalizeReplayReceipts(
       data.replayReceipts,
       messages,
       locationAccess,
       data.timelineNotesEnabled === true,
+      data.activityTagChangesEnabled === true,
+      data.timelineNoteChangesEnabled === true && data.timelineNotesEnabled === true,
       data.trainingPlansEnabled === true,
       data.trainingPlanChangesEnabled === true && data.trainingPlansEnabled === true,
       data.trainingDeliveryEnabled === true && data.trainingPlansEnabled === true,
@@ -369,6 +408,8 @@ function createEmptyConversation(
   createId: () => string,
   locationAccess: AssistantLocationAccess = ASSISTANT_DEFAULT_LOCATION_ACCESS,
   timelineNotesEnabled = false,
+  activityTagChangesEnabled = false,
+  timelineNoteChangesEnabled = false,
   trainingPlansEnabled = false,
   trainingPlanChangesEnabled = false,
   trainingDeliveryEnabled = false,
@@ -383,10 +424,13 @@ function createEmptyConversation(
     expireAt: Timestamp.fromMillis(now.getTime() + ASSISTANT_CONVERSATION_RETENTION_MS),
     locationAccess,
     timelineNotesEnabled,
+    activityTagChangesEnabled,
+    timelineNoteChangesEnabled: timelineNotesEnabled && timelineNoteChangesEnabled,
     trainingPlansEnabled,
     trainingPlanChangesEnabled: trainingPlansEnabled && trainingPlanChangesEnabled,
     trainingDeliveryEnabled: trainingPlansEnabled && trainingDeliveryEnabled,
     pendingTrainingProposal: null,
+    pendingContentProposal: null,
     pendingTurn: null,
     replayReceipts: [],
   };
@@ -411,6 +455,9 @@ function toReplayedTurn(
     requestFingerprint: receipt.requestFingerprint,
     ...(conversation.pendingTrainingProposal
       ? { pendingTrainingProposal: conversation.pendingTrainingProposal }
+      : {}),
+    ...(conversation.pendingContentProposal
+      ? { pendingContentProposal: conversation.pendingContentProposal }
       : {}),
   };
 }
@@ -451,6 +498,9 @@ function findRequestStateInConversation(
       requestFingerprint,
       ...(conversation.pendingTrainingProposal
         ? { pendingTrainingProposal: conversation.pendingTrainingProposal }
+        : {}),
+      ...(conversation.pendingContentProposal
+        ? { pendingContentProposal: conversation.pendingContentProposal }
         : {}),
     };
   }
@@ -536,11 +586,16 @@ export function createAssistantConversationStore(
           : null,
         locationAccess: conversation.locationAccess,
         ...(conversation.timelineNotesEnabled ? { timelineNotesEnabled: true } : {}),
+        ...(conversation.activityTagChangesEnabled ? { activityTagChangesEnabled: true } : {}),
+        ...(conversation.timelineNoteChangesEnabled ? { timelineNoteChangesEnabled: true } : {}),
         ...(conversation.trainingPlansEnabled ? { trainingPlansEnabled: true } : {}),
         ...(conversation.trainingPlanChangesEnabled ? { trainingPlanChangesEnabled: true } : {}),
         ...(conversation.trainingDeliveryEnabled ? { trainingDeliveryEnabled: true } : {}),
         ...(conversation.pendingTrainingProposal
           ? { pendingTrainingProposal: conversation.pendingTrainingProposal }
+          : {}),
+        ...(conversation.pendingContentProposal
+          ? { pendingContentProposal: conversation.pendingContentProposal }
           : {}),
       };
     });
@@ -601,6 +656,8 @@ export function createAssistantConversationStore(
       trainingPlansEnabled = false,
       trainingPlanChangesEnabled = false,
       trainingDeliveryEnabled = false,
+      activityTagChangesEnabled = false,
+      timelineNoteChangesEnabled = false,
     ) => {
       const db = dependencies.db();
       const conversationRef = getConversationRef(db, uid);
@@ -626,6 +683,8 @@ export function createAssistantConversationStore(
         }
         if (conversation.locationAccess !== locationAccess
           || conversation.timelineNotesEnabled !== timelineNotesEnabled
+          || conversation.activityTagChangesEnabled !== activityTagChangesEnabled
+          || conversation.timelineNoteChangesEnabled !== timelineNoteChangesEnabled
           || conversation.trainingPlansEnabled !== trainingPlansEnabled
           || conversation.trainingPlanChangesEnabled !== trainingPlanChangesEnabled
           || conversation.trainingDeliveryEnabled !== trainingDeliveryEnabled) {
@@ -679,6 +738,8 @@ export function createAssistantConversationStore(
           history: [...updatedConversation.messages],
           locationAccess: updatedConversation.locationAccess,
           ...(updatedConversation.timelineNotesEnabled ? { timelineNotesEnabled: true } : {}),
+          ...(updatedConversation.activityTagChangesEnabled ? { activityTagChangesEnabled: true } : {}),
+          ...(updatedConversation.timelineNoteChangesEnabled ? { timelineNoteChangesEnabled: true } : {}),
           ...(updatedConversation.trainingPlansEnabled ? { trainingPlansEnabled: true } : {}),
           ...(updatedConversation.trainingPlanChangesEnabled ? { trainingPlanChangesEnabled: true } : {}),
           ...(updatedConversation.trainingDeliveryEnabled ? { trainingDeliveryEnabled: true } : {}),
@@ -692,6 +753,7 @@ export function createAssistantConversationStore(
       userMessage,
       assistantMessage,
       pendingTrainingProposal,
+      pendingContentProposal,
     ) => {
       const db = dependencies.db();
       const conversationRef = getConversationRef(db, uid);
@@ -730,6 +792,8 @@ export function createAssistantConversationStore(
               begunTurn.trainingPlansEnabled === true,
               begunTurn.trainingPlanChangesEnabled === true,
               begunTurn.trainingDeliveryEnabled === true,
+              begunTurn.activityTagChangesEnabled === true,
+              begunTurn.timelineNoteChangesEnabled === true,
             ),
             completedAtMs: nowMs,
           },
@@ -746,6 +810,7 @@ export function createAssistantConversationStore(
             expireAt: Timestamp.fromMillis(nowMs + ASSISTANT_CONVERSATION_RETENTION_MS),
             pendingTurn: null,
             pendingTrainingProposal: pendingTrainingProposal ?? conversation.pendingTrainingProposal,
+            pendingContentProposal: pendingContentProposal ?? conversation.pendingContentProposal,
           };
           publicConversation = toPublicConversation(updatedConversation);
           validation = validateAssistantConversation(publicConversation);
@@ -764,7 +829,12 @@ export function createAssistantConversationStore(
           );
         }
         transaction.set(conversationRef, updatedConversation);
-        return publicConversation;
+        return {
+          conversation: publicConversation,
+          ...(updatedConversation.pendingContentProposal
+            ? { pendingContentProposal: updatedConversation.pendingContentProposal }
+            : {}),
+        };
       });
     },
 
@@ -808,6 +878,24 @@ export function createAssistantConversationStore(
       });
     },
 
+    clearContentProposal: async (uid, conversationId, proposalRef) => {
+      const db = dependencies.db();
+      const conversationRef = getConversationRef(db, uid);
+      await db.runTransaction(async transaction => {
+        const nowMs = dependencies.now().getTime();
+        await assertUserCanPersist(dependencies, db, transaction, uid, nowMs);
+        const snapshot = await transaction.get(conversationRef);
+        const conversation = snapshot.exists ? parseStoredConversation(snapshot.data(), nowMs) : null;
+        if (!conversation || conversation.conversationId !== conversationId) {
+          throw new AssistantConversationStoreError('conversation_changed', 'The Assistant conversation changed.');
+        }
+        if (conversation.pendingContentProposal?.proposalRef !== proposalRef) {
+          throw new AssistantConversationStoreError('conversation_changed', 'The content proposal is no longer current.');
+        }
+        transaction.update(conversationRef, { pendingContentProposal: null });
+      });
+    },
+
     resetConversation: async (
       uid,
       locationAccess = ASSISTANT_DEFAULT_LOCATION_ACCESS,
@@ -816,6 +904,8 @@ export function createAssistantConversationStore(
       trainingPlansEnabled = false,
       trainingPlanChangesEnabled = false,
       trainingDeliveryEnabled = false,
+      activityTagChangesEnabled = false,
+      timelineNoteChangesEnabled = false,
     ) => {
       const db = dependencies.db();
       const conversationRef = getConversationRef(db, uid);
@@ -831,7 +921,8 @@ export function createAssistantConversationStore(
         const snapshot = await transaction.get(conversationRef);
         const stored = snapshot.exists ? parseStoredConversation(snapshot.data(), now.getTime()) : null;
         const currentId = stored && stored.expireAt.toMillis() > now.getTime() ? stored.conversationId : null;
-        if (((timelineNotesEnabled || trainingPlansEnabled || trainingPlanChangesEnabled || trainingDeliveryEnabled) && expectedConversationId === undefined)
+        if (((timelineNotesEnabled || activityTagChangesEnabled || timelineNoteChangesEnabled || trainingPlansEnabled
+          || trainingPlanChangesEnabled || trainingDeliveryEnabled) && expectedConversationId === undefined)
           || (expectedConversationId !== undefined && currentId !== expectedConversationId)) {
           throw new AssistantConversationStoreError(
             'conversation_changed',
@@ -843,6 +934,8 @@ export function createAssistantConversationStore(
           dependencies.createId,
           locationAccess,
           timelineNotesEnabled,
+          activityTagChangesEnabled,
+          timelineNoteChangesEnabled,
           trainingPlansEnabled,
           trainingPlanChangesEnabled,
           trainingDeliveryEnabled,

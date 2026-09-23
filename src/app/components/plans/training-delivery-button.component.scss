@@ -15,6 +15,7 @@
 .delivery-plan-providers { display: grid; grid-template-columns: repeat(4, max-content); gap: 6px 16px; min-width: 0; }
 .delivery-plan-provider { display: flex; align-items: center; gap: 6px; min-width: 0; }
 .delivery-plan-provider > app-service-source-icon { display: flex; min-width: 0; }
+.delivery-plan-provider > .delivery-plan-provider-icon--compact { display: none; }
 .delivery-plan-provider-count {
   flex: 0 0 auto;
   color: var(--mat-sys-on-surface-variant);
@@ -29,8 +30,26 @@
 .delivery-summary-detail { font: var(--mat-sys-body-small); color: var(--mat-sys-on-surface-variant); }
 
 @media (max-width: 520px) {
-  .delivery-plan-summary { grid-template-columns: minmax(0, 1fr) auto; gap: 6px 10px; }
-  .delivery-plan-summary-heading { grid-column: 1; }
-  .delivery-plan-providers { grid-column: 1 / -1; grid-row: 2; grid-template-columns: repeat(2, max-content); gap: 8px 16px; }
-  .delivery-plan-view { grid-column: 2; grid-row: 1; }
+  .delivery-plan-summary { grid-template-columns: auto minmax(0, 1fr) auto; gap: 6px; }
+  .delivery-plan-summary-heading { grid-column: 1; grid-row: 1; white-space: nowrap; }
+  .delivery-plan-providers {
+    display: flex;
+    grid-column: 2;
+    grid-row: 1;
+    align-items: center;
+    justify-content: space-between;
+    gap: 2px;
+    min-width: 0;
+  }
+  .delivery-plan-provider { flex: 0 1 auto; gap: 2px; }
+  .delivery-plan-provider > .delivery-plan-provider-icon--wide { display: none; }
+  .delivery-plan-provider > .delivery-plan-provider-icon--compact { display: flex; }
+  .delivery-plan-provider-count { font-size: 0.95rem; }
+  .delivery-plan-view { grid-column: 3; grid-row: 1; min-width: 0; padding-inline: 4px; }
+}
+
+@media (max-width: 360px) {
+  .delivery-plan-heading-plan,
+  .delivery-plan-view-label { display: none; }
+  .delivery-plan-view { min-width: 40px; }
 }

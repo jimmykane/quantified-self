@@ -47,6 +47,11 @@ describe('EventTagsBulkDialogComponent', () => {
     fixture.detectChanges();
   });
 
+  it('uses activity language for the selected rows', () => {
+    expect(fixture.nativeElement.textContent).toContain('Update activity tags');
+    expect(fixture.nativeElement.textContent).toContain('3 selected activities');
+  });
+
   it('stages separate add and remove changes and applies them', async () => {
     component.selectSuggestion('add', autocompleteEvent('Race'));
     component.selectSuggestion('remove', autocompleteEvent('Old'));

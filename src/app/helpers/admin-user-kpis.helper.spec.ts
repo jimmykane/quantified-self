@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { UserCountStats } from '../services/admin.service';
 import { buildAdminUserKpiCards } from './admin-user-kpis.helper';
+import { getLocalDateTimeFormatter } from './date-time-format.helper';
 
 function buildStats(overrides: Partial<UserCountStats> = {}): UserCountStats {
     return {
@@ -157,7 +158,8 @@ describe('admin user KPI helper', () => {
         }), null, null);
 
         expect(cards.find(card => card.id === 'events')?.subtitle).toBeUndefined();
-        expect(cards.find(card => card.id === 'routes')?.subtitle).toContain('Updated');
+        expect(cards.find(card => card.id === 'routes')?.subtitle)
+            .toBe(`Updated ${getLocalDateTimeFormatter().format(new Date('2026-06-01T10:00:00.000Z'))}`);
     });
 
     it('caps non-atomic shares and does not mark malformed values successful', () => {

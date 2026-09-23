@@ -72,10 +72,10 @@ export class ServicesWahooComponent extends ServicesAbstractComponentDirective {
 
   get connectionDescription(): string {
     return this.isReconnectRequired
-      ? 'Reconnect Wahoo to resume history imports, automatic activity sync, and route delivery.'
+      ? 'Reconnect Wahoo to resume history imports, planned-workout delivery, activity sync, and route delivery.'
       : this.isDisconnectPending
       ? 'Disconnect is pending while Wahoo finishes deauthorization. Imports are paused.'
-      : 'Imports Wahoo-recorded activities and can send FIT activities plus GPX or FIT routes to Wahoo.';
+      : 'Imports Wahoo-recorded activities and can send compatible planned workouts, FIT activities, and GPX or FIT routes to Wahoo.';
   }
 
   get shouldShowConnectAction(): boolean {

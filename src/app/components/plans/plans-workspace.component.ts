@@ -15,7 +15,6 @@ import {
   viewChild,
 } from '@angular/core';
 import { Location } from '@angular/common';
-import { isTrainingPlanningUIAllowed } from '@shared/training-planning-rollout';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { MatDialog } from '@angular/material/dialog';
 import { MatSnackBar } from '@angular/material/snack-bar';
@@ -192,9 +191,9 @@ export class PlansWorkspaceComponent {
   ];
 
   readonly currentUser = computed(() => this.userService.user() as AppUserInterface | null);
-  readonly hasTrainingPlanningUIAccess = computed(() => isTrainingPlanningUIAllowed(this.currentUser()?.uid));
+  readonly hasTrainingPlanningUIAccess = computed(() => !!this.currentUser()?.uid);
   readonly scheduleState = toSignal(this.userService.user$.pipe(
-    switchMap(user => isTrainingPlanningUIAllowed(user?.uid)
+    switchMap(user => user?.uid
       ? this.plansService.watchSchedule(user.uid).pipe(
         map(schedule => ({ status: 'ready', schedule, message: null }) as ScheduleLoadState),
         startWith({ status: 'loading', schedule: EMPTY_SCHEDULE, message: null } as ScheduleLoadState),
@@ -208,8 +207,11 @@ export class PlansWorkspaceComponent {
   ), { initialValue: { status: 'loading', schedule: EMPTY_SCHEDULE, message: null } as ScheduleLoadState });
   readonly schedule = computed(() => this.scheduleState().schedule);
   readonly completions = toSignal(this.userService.user$.pipe(
-    switchMap(user => isTrainingPlanningUIAllowed(user?.uid)
-      ? this.plansService.watchWorkoutCompletions(user.uid).pipe(catchError(() => of([])))
+    switchMap(user => user?.uid
+      ? this.plansService.watchWorkoutCompletions(user.uid).pipe(
+        startWith([] as TrainingWorkoutCompletionV1[]),
+        catchError(() => of([])),
+      )
       : of([])),
   ), { initialValue: [] as TrainingWorkoutCompletionV1[] });
   readonly completedWorkoutIds = computed(() => this.completions().map(completion => completion.workoutId));

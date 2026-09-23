@@ -11,7 +11,6 @@ import { of } from 'rxjs';
 import { ServiceConnectionStatusComponent } from './service-connection-status.component';
 import { signal } from '@angular/core';
 import { AppUserService } from '../../../services/app.user.service';
-import { TRAINING_PLANNING_UI_ALLOWED_UIDS } from '@shared/training-planning-rollout';
 
 describe('ServiceConnectionStatusComponent', () => {
     let component: ServiceConnectionStatusComponent;
@@ -19,7 +18,7 @@ describe('ServiceConnectionStatusComponent', () => {
     const viewer = signal<{ uid: string } | null>(null);
 
     beforeEach(async () => {
-        viewer.set({ uid: TRAINING_PLANNING_UI_ALLOWED_UIDS[0] });
+        viewer.set({ uid: 'planning-user' });
         await TestBed.configureTestingModule({
             declarations: [ServiceConnectionStatusComponent],
             imports: [
@@ -99,14 +98,14 @@ describe('ServiceConnectionStatusComponent', () => {
         expect(fixture.nativeElement.textContent).not.toContain('Disconnecting ends any planned-workout sync opt-in');
     });
 
-    it.each([null, { uid: 'another-user' }])('hides planning instructions without hiding connection or retention details for %s', user => {
+    it('keeps planning instructions visible for a signed-in user outside the former rollout', () => {
         component.providerIcon = 'garmin'; component.connected = true;
         fixture.detectChanges();
-        viewer.set(user); fixture.detectChanges();
-        expect(fixture.nativeElement.textContent).not.toContain('Training plans');
-        expect(fixture.nativeElement.textContent).not.toContain('Stop sync');
+        viewer.set({ uid: 'another-user' }); fixture.detectChanges();
+        expect(fixture.nativeElement.textContent).toContain('Training plans');
+        expect(fixture.nativeElement.textContent).toContain('Stop sync');
         expect(fixture.nativeElement.textContent).toContain('Connected');
-        expect(fixture.nativeElement.textContent).toContain('may remain there after disconnecting');
+        expect(fixture.nativeElement.textContent).toContain('leaves provider copies');
     });
 
     it('uses the app success green for connected status text', () => {

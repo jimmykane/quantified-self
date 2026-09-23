@@ -10,6 +10,8 @@ import {
   type AssistantChatResponse,
   type AssistantLocationAccess,
   type AssistantMessage,
+  type ApplyAssistantContentProposalRequest,
+  type ApplyAssistantContentProposalResponse,
   type AssistantQuotaStatusResponse,
   type ApplyAssistantTrainingProposalRequest,
   type ApplyAssistantTrainingProposalResponse,
@@ -47,6 +49,7 @@ import { FUNCTION_SECRET_BINDINGS } from '../secrets';
 import { applyTrainingChanges } from '../mcp/training-plans-write.service';
 import { MCP_OAUTH_SCOPES } from '../mcp/oauth.service';
 import { McpDataError } from '../mcp/data.service';
+import { createMcpDataService } from '../mcp/data.service';
 
 interface AssistantCallableContext {
   auth?: {
@@ -80,6 +83,8 @@ export interface AssistantCallableDependencies {
     timeZone: string;
     locationAccess: AssistantLocationAccess;
     timelineNotesEnabled?: boolean;
+    activityTagChangesEnabled?: boolean;
+    timelineNoteChangesEnabled?: boolean;
     trainingPlansEnabled?: boolean;
     trainingPlanChangesEnabled?: boolean;
     trainingDeliveryEnabled?: boolean;
@@ -87,6 +92,7 @@ export interface AssistantCallableDependencies {
     assertTrainingPlansAccess?: () => Promise<void>;
     assertTrainingWriteAccess?: () => Promise<void>;
     assertTimelineNotesAccess?: () => Promise<void>;
+    assertContentWriteAccess?: (kind: 'activity_tags' | 'timeline_notes') => Promise<void>;
     history: AssistantMessage[];
     onBillableAttempt: () => Promise<void>;
   }) => Promise<AssistantRuntimeResult>;
@@ -275,15 +281,23 @@ function parseAssistantChatRequest(value: unknown): AssistantChatRequest {
   const trainingPlansEnabled = parseOptionalDataAccess(data.trainingPlansEnabled, 'trainingPlansEnabled');
   const trainingPlanChangesEnabled = parseOptionalDataAccess(data.trainingPlanChangesEnabled, 'trainingPlanChangesEnabled');
   const trainingDeliveryEnabled = parseOptionalDataAccess(data.trainingDeliveryEnabled, 'trainingDeliveryEnabled');
+  const activityTagChangesEnabled = parseOptionalDataAccess(data.activityTagChangesEnabled, 'activityTagChangesEnabled');
+  const timelineNoteChangesEnabled = parseOptionalDataAccess(data.timelineNoteChangesEnabled, 'timelineNoteChangesEnabled');
+  const timelineNotesEnabled = parseOptionalDataAccess(data.timelineNotesEnabled, 'timelineNotesEnabled');
   if ((trainingPlanChangesEnabled || trainingDeliveryEnabled) && !trainingPlansEnabled) {
     throw new HttpsError('invalid-argument', 'Training plans read access is required before enabling Training changes.');
+  }
+  if (timelineNoteChangesEnabled && !timelineNotesEnabled) {
+    throw new HttpsError('invalid-argument', 'Timeline notes read access is required before enabling note changes.');
   }
   return {
     requestId: data.requestId,
     message,
     timeZone,
     locationAccess: parseAssistantLocationAccess(data.locationAccess),
-    timelineNotesEnabled: parseOptionalDataAccess(data.timelineNotesEnabled, 'timelineNotesEnabled'),
+    timelineNotesEnabled,
+    activityTagChangesEnabled,
+    timelineNoteChangesEnabled,
     trainingPlansEnabled,
     trainingPlanChangesEnabled,
     trainingDeliveryEnabled,
@@ -332,6 +346,8 @@ function assertRequestFingerprintMatchesInput(
     input.message,
     input.locationAccess,
     input.timelineNotesEnabled,
+    input.activityTagChangesEnabled,
+    input.timelineNoteChangesEnabled,
     input.trainingPlansEnabled,
     input.trainingPlanChangesEnabled,
     input.trainingDeliveryEnabled,
@@ -416,11 +432,16 @@ async function buildExistingRequestResponse(
   return {
     conversation: requestState.conversation,
     ...(input.timelineNotesEnabled ? { timelineNotesEnabled: true } : {}),
+    ...(input.activityTagChangesEnabled ? { activityTagChangesEnabled: true } : {}),
+    ...(input.timelineNoteChangesEnabled ? { timelineNoteChangesEnabled: true } : {}),
     ...(input.trainingPlansEnabled ? { trainingPlansEnabled: true } : {}),
     ...(input.trainingPlanChangesEnabled ? { trainingPlanChangesEnabled: true } : {}),
     ...(input.trainingDeliveryEnabled ? { trainingDeliveryEnabled: true } : {}),
     ...(requestState.pendingTrainingProposal
       ? { pendingTrainingProposal: requestState.pendingTrainingProposal }
+      : {}),
+    ...(requestState.pendingContentProposal
+      ? { pendingContentProposal: requestState.pendingContentProposal }
       : {}),
     quota,
     pendingRequestId: requestState.kind === 'pending'
@@ -469,6 +490,8 @@ export async function runAssistantChat(
       input.trainingPlansEnabled,
       input.trainingPlanChangesEnabled,
       input.trainingDeliveryEnabled,
+      input.activityTagChangesEnabled,
+      input.timelineNoteChangesEnabled,
     );
     const existingRequest = await dependencies.conversationStore.findRequestState(
       uid,
@@ -521,6 +544,8 @@ export async function runAssistantChat(
       input.trainingPlansEnabled,
       input.trainingPlanChangesEnabled,
       input.trainingDeliveryEnabled,
+      input.activityTagChangesEnabled,
+      input.timelineNoteChangesEnabled,
     );
     if (turnStart.kind === 'replayed') {
       assertRequestFingerprintMatchesInput(turnStart, input);
@@ -529,11 +554,16 @@ export async function runAssistantChat(
       return {
         conversation: turnStart.conversation,
         ...(input.timelineNotesEnabled ? { timelineNotesEnabled: true } : {}),
+        ...(input.activityTagChangesEnabled ? { activityTagChangesEnabled: true } : {}),
+        ...(input.timelineNoteChangesEnabled ? { timelineNoteChangesEnabled: true } : {}),
         ...(input.trainingPlansEnabled ? { trainingPlansEnabled: true } : {}),
         ...(input.trainingPlanChangesEnabled ? { trainingPlanChangesEnabled: true } : {}),
         ...(input.trainingDeliveryEnabled ? { trainingDeliveryEnabled: true } : {}),
         ...(turnStart.pendingTrainingProposal
           ? { pendingTrainingProposal: turnStart.pendingTrainingProposal }
+          : {}),
+        ...(turnStart.pendingContentProposal
+          ? { pendingContentProposal: turnStart.pendingContentProposal }
           : {}),
         quota,
         pendingRequestId: null,
@@ -546,11 +576,16 @@ export async function runAssistantChat(
       return {
         conversation: turnStart.conversation,
         ...(input.timelineNotesEnabled ? { timelineNotesEnabled: true } : {}),
+        ...(input.activityTagChangesEnabled ? { activityTagChangesEnabled: true } : {}),
+        ...(input.timelineNoteChangesEnabled ? { timelineNoteChangesEnabled: true } : {}),
         ...(input.trainingPlansEnabled ? { trainingPlansEnabled: true } : {}),
         ...(input.trainingPlanChangesEnabled ? { trainingPlanChangesEnabled: true } : {}),
         ...(input.trainingDeliveryEnabled ? { trainingDeliveryEnabled: true } : {}),
         ...(turnStart.pendingTrainingProposal
           ? { pendingTrainingProposal: turnStart.pendingTrainingProposal }
+          : {}),
+        ...(turnStart.pendingContentProposal
+          ? { pendingContentProposal: turnStart.pendingContentProposal }
           : {}),
         quota,
         pendingRequestId: input.requestId,
@@ -559,6 +594,8 @@ export async function runAssistantChat(
     begunTurn = turnStart;
     const notesConversationId = begunTurn.conversationId;
     const timelineNotesEnabled = begunTurn.timelineNotesEnabled === true;
+    const activityTagChangesEnabled = begunTurn.activityTagChangesEnabled === true;
+    const timelineNoteChangesEnabled = begunTurn.timelineNoteChangesEnabled === true;
     const trainingPlansEnabled = begunTurn.trainingPlansEnabled === true;
     const trainingPlanChangesEnabled = begunTurn.trainingPlanChangesEnabled === true;
     const trainingDeliveryEnabled = begunTurn.trainingDeliveryEnabled === true;
@@ -566,6 +603,10 @@ export async function runAssistantChat(
       throw new AssistantConversationStoreError('conversation_changed', 'The Assistant data-access setting changed.');
     }
     if (timelineNotesEnabled !== (input.timelineNotesEnabled === true)) {
+      throw new AssistantConversationStoreError('conversation_changed', 'The Assistant data-access setting changed.');
+    }
+    if (activityTagChangesEnabled !== (input.activityTagChangesEnabled === true)
+      || timelineNoteChangesEnabled !== (input.timelineNoteChangesEnabled === true)) {
       throw new AssistantConversationStoreError('conversation_changed', 'The Assistant data-access setting changed.');
     }
     if (trainingPlanChangesEnabled !== (input.trainingPlanChangesEnabled === true)
@@ -579,6 +620,8 @@ export async function runAssistantChat(
       timeZone: input.timeZone,
       locationAccess: input.locationAccess,
       timelineNotesEnabled,
+      activityTagChangesEnabled,
+      timelineNoteChangesEnabled,
       trainingPlansEnabled,
       trainingPlanChangesEnabled,
       trainingDeliveryEnabled,
@@ -601,6 +644,17 @@ export async function runAssistantChat(
       ...(timelineNotesEnabled ? { assertTimelineNotesAccess: async () => {
         const current = await dependencies.conversationStore.getActiveConversationState(uid);
         if (current.conversation?.conversationId !== notesConversationId || current.timelineNotesEnabled !== true) {
+          throw new AssistantConversationStoreError('conversation_changed', 'The Assistant data-access setting changed.');
+        }
+      } } : {}),
+      ...((activityTagChangesEnabled || timelineNoteChangesEnabled) ? { assertContentWriteAccess: async (
+        kind: 'activity_tags' | 'timeline_notes',
+      ) => {
+        const current = await dependencies.conversationStore.getActiveConversationState(uid);
+        const permitted = kind === 'activity_tags'
+          ? current.activityTagChangesEnabled === true
+          : current.timelineNotesEnabled === true && current.timelineNoteChangesEnabled === true;
+        if (current.conversation?.conversationId !== notesConversationId || !permitted) {
           throw new AssistantConversationStoreError('conversation_changed', 'The Assistant data-access setting changed.');
         }
       } } : {}),
@@ -629,22 +683,28 @@ export async function runAssistantChat(
       evidence: result.evidence,
       ...(result.visuals?.length ? { visuals: result.visuals } : {}),
     };
-    const conversation = await dependencies.conversationStore.completeTurn(
+    const completedTurn = await dependencies.conversationStore.completeTurn(
       uid,
       begunTurn,
       userMessage,
       assistantMessage,
       result.pendingTrainingProposal,
+      result.pendingContentProposal,
     );
     begunTurn = null;
     return {
-      conversation,
+      conversation: completedTurn.conversation,
       quota: finalizedQuota,
       ...(timelineNotesEnabled ? { timelineNotesEnabled: true } : {}),
+      ...(activityTagChangesEnabled ? { activityTagChangesEnabled: true } : {}),
+      ...(timelineNoteChangesEnabled ? { timelineNoteChangesEnabled: true } : {}),
       ...(trainingPlansEnabled ? { trainingPlansEnabled: true } : {}),
       ...(trainingPlanChangesEnabled ? { trainingPlanChangesEnabled: true } : {}),
       ...(trainingDeliveryEnabled ? { trainingDeliveryEnabled: true } : {}),
       ...(result.pendingTrainingProposal ? { pendingTrainingProposal: result.pendingTrainingProposal } : {}),
+      ...(completedTurn.pendingContentProposal
+        ? { pendingContentProposal: completedTurn.pendingContentProposal }
+        : {}),
       pendingRequestId: null,
     };
   } catch (error) {
@@ -711,23 +771,32 @@ export async function runResetAssistantConversation(
   const data = asRecord(value) as Partial<ResetAssistantConversationRequest>;
   const locationAccess = parseAssistantLocationAccess(data.locationAccess);
   const timelineNotesEnabled = parseOptionalDataAccess(data.timelineNotesEnabled, 'timelineNotesEnabled');
+  const activityTagChangesEnabled = parseOptionalDataAccess(data.activityTagChangesEnabled, 'activityTagChangesEnabled');
+  const timelineNoteChangesEnabled = parseOptionalDataAccess(data.timelineNoteChangesEnabled, 'timelineNoteChangesEnabled');
   const trainingPlansEnabled = parseOptionalDataAccess(data.trainingPlansEnabled, 'trainingPlansEnabled');
   const trainingPlanChangesEnabled = parseOptionalDataAccess(data.trainingPlanChangesEnabled, 'trainingPlanChangesEnabled');
   const trainingDeliveryEnabled = parseOptionalDataAccess(data.trainingDeliveryEnabled, 'trainingDeliveryEnabled');
   if ((trainingPlanChangesEnabled || trainingDeliveryEnabled) && !trainingPlansEnabled) {
     throw new HttpsError('invalid-argument', 'Training plans read access is required before enabling Training changes.');
   }
+  if (timelineNoteChangesEnabled && !timelineNotesEnabled) {
+    throw new HttpsError('invalid-argument', 'Timeline notes read access is required before enabling note changes.');
+  }
   const conversationId = typeof data.conversationId === 'string' ? data.conversationId.trim() : data.conversationId;
   if ((conversationId !== undefined && conversationId !== null
     && (typeof conversationId !== 'string' || !conversationId || conversationId.length > 120))
-    || ((timelineNotesEnabled || trainingPlansEnabled || trainingPlanChangesEnabled || trainingDeliveryEnabled) && conversationId === undefined)) {
+    || ((timelineNotesEnabled || activityTagChangesEnabled || timelineNoteChangesEnabled || trainingPlansEnabled
+      || trainingPlanChangesEnabled || trainingDeliveryEnabled) && conversationId === undefined)) {
     throw new HttpsError('invalid-argument', 'Provide the current conversationId or null before enabling optional data access.');
   }
   try {
     return {
       conversation: await conversationStore.resetConversation(uid, locationAccess, timelineNotesEnabled, conversationId,
-        trainingPlansEnabled, trainingPlanChangesEnabled, trainingDeliveryEnabled),
+        trainingPlansEnabled, trainingPlanChangesEnabled, trainingDeliveryEnabled,
+        activityTagChangesEnabled, timelineNoteChangesEnabled),
       ...(timelineNotesEnabled ? { timelineNotesEnabled: true } : {}),
+      ...(activityTagChangesEnabled ? { activityTagChangesEnabled: true } : {}),
+      ...(timelineNoteChangesEnabled ? { timelineNoteChangesEnabled: true } : {}),
       ...(trainingPlansEnabled ? { trainingPlansEnabled: true } : {}),
       ...(trainingPlanChangesEnabled ? { trainingPlanChangesEnabled: true } : {}),
       ...(trainingDeliveryEnabled ? { trainingDeliveryEnabled: true } : {}),
@@ -794,6 +863,103 @@ export async function runApplyAssistantTrainingProposal(
   }
 }
 
+export async function runApplyAssistantContentProposal(
+  value: unknown,
+  context: AssistantCallableContext | undefined,
+  conversationStore: AssistantConversationStore = assistantConversationStore,
+  dataService: ReturnType<typeof createMcpDataService> = createMcpDataService(),
+): Promise<ApplyAssistantContentProposalResponse> {
+  const uid = requireAuthenticatedUid(context);
+  const data = asRecord(value) as Partial<ApplyAssistantContentProposalRequest>;
+  const proposalRef = typeof data.proposalRef === 'string' ? data.proposalRef.trim() : '';
+  const conversationId = typeof data.conversationId === 'string' ? data.conversationId.trim() : '';
+  if (!proposalRef || proposalRef.length > 120 || !conversationId || conversationId.length > 120
+    || typeof data.confirm !== 'boolean') {
+    throw new HttpsError('invalid-argument', 'A valid current content proposal is required.');
+  }
+  let current;
+  try {
+    current = await conversationStore.getActiveConversationState(uid);
+  } catch (error) {
+    throw mapAssistantError(error);
+  }
+  const proposal = current.pendingContentProposal;
+  const needsTags = proposal?.kind === 'update_event_tags';
+  const needsNotes = proposal?.kind === 'create_timeline_note'
+    || proposal?.kind === 'update_timeline_note'
+    || proposal?.kind === 'delete_timeline_note';
+  if (current.conversation?.conversationId !== conversationId
+    || !proposal || proposal.proposalRef !== proposalRef
+    || (needsTags && current.activityTagChangesEnabled !== true)
+    || (needsNotes && (current.timelineNotesEnabled !== true || current.timelineNoteChangesEnabled !== true))) {
+    throw new HttpsError('aborted', 'The Assistant data-access setting changed. Review the change again.');
+  }
+  if (!data.confirm) {
+    try {
+      await conversationStore.clearContentProposal(uid, conversationId, proposalRef);
+    } catch (error) {
+      throw mapAssistantError(error);
+    }
+    return { status: 'dismissed', kind: proposal.kind, message: 'Nothing was changed.' };
+  }
+  const writeInput = {
+    uid,
+    connectionId: `first-party-assistant-v1:${conversationId}`,
+    assistantConversationId: conversationId,
+    assistantProposalRef: proposalRef,
+    scopes: needsTags
+      ? [MCP_OAUTH_SCOPES.ActivityDetailsRead, MCP_OAUTH_SCOPES.EventsWrite]
+      : [MCP_OAUTH_SCOPES.TimelineNotesRead, MCP_OAUTH_SCOPES.TimelineNotesWrite],
+    arguments: proposal.arguments,
+  };
+  let eventTagsChanged: boolean | null = null;
+  try {
+    switch (proposal.kind) {
+      case 'update_event_tags': {
+        const result = await dataService.updateEventTags(writeInput);
+        eventTagsChanged = result.changed;
+        break;
+      }
+      case 'create_timeline_note':
+        await dataService.createTimelineNote(writeInput);
+        break;
+      case 'update_timeline_note':
+        await dataService.updateTimelineNote(writeInput);
+        break;
+      case 'delete_timeline_note':
+        await dataService.deleteTimelineNote(writeInput);
+        break;
+    }
+    try {
+      await conversationStore.clearContentProposal(uid, conversationId, proposalRef);
+    } catch (error) {
+      // The content mutation is already accepted and is idempotent. Do not report
+      // it as failed merely because a newer proposal won the conversation race
+      // or the best-effort cleanup must be retried after a refresh.
+      logger.warn('[Assistant] Applied content proposal could not be cleared.', {
+        errorName: error instanceof Error ? error.name : 'unknown',
+      });
+    }
+    return {
+      status: 'applied',
+      kind: proposal.kind,
+      message: proposal.kind === 'update_event_tags'
+        ? eventTagsChanged
+          ? 'Event tags updated.'
+          : 'Event tags already matched the requested list.'
+        : proposal.kind === 'delete_timeline_note'
+          ? 'Timeline note deleted.'
+          : proposal.kind === 'create_timeline_note'
+            ? 'Timeline note created.'
+            : 'Timeline note updated.',
+    };
+  } catch (error) {
+    if (error instanceof HttpsError) throw error;
+    if (error instanceof McpDataError) throw new HttpsError('failed-precondition', error.message);
+    throw new HttpsError('internal', 'The content proposal could not be applied safely.');
+  }
+}
+
 export const ASSISTANT_CALLABLE_OPTIONS = {
   region: FUNCTIONS_MANIFEST.assistantChat.region,
   secrets: FUNCTION_SECRET_BINDINGS.assistantChat,
@@ -824,15 +990,29 @@ export const getAssistantConversation = onCall({
   memory: '512MiB',
 }, request => runGetAssistantConversation(request));
 
-export const resetAssistantConversation = onCall({
+export const RESET_ASSISTANT_CONVERSATION_OPTIONS = {
   region: FUNCTIONS_MANIFEST.resetAssistantConversation.region,
   cors: ALLOWED_CORS_ORIGINS,
   enforceAppCheck: true,
-}, request => runResetAssistantConversation(request.data, request));
+  memory: '512MiB' as const,
+};
 
-export const applyAssistantTrainingProposal = onCall({
+export const resetAssistantConversation = onCall(
+  RESET_ASSISTANT_CONVERSATION_OPTIONS,
+  request => runResetAssistantConversation(request.data, request),
+);
+
+export const APPLY_ASSISTANT_TRAINING_PROPOSAL_OPTIONS = {
   region: FUNCTIONS_MANIFEST.applyAssistantTrainingProposal.region,
   secrets: FUNCTION_SECRET_BINDINGS.applyAssistantTrainingProposal,
   cors: ALLOWED_CORS_ORIGINS,
   enforceAppCheck: true,
-}, request => runApplyAssistantTrainingProposal(request.data, request));
+  memory: '512MiB' as const,
+};
+
+export const applyAssistantTrainingProposal = onCall(
+  APPLY_ASSISTANT_TRAINING_PROPOSAL_OPTIONS,
+  request => ('permissionMode' in asRecord(request.data)
+    ? runApplyAssistantTrainingProposal(request.data, request)
+    : runApplyAssistantContentProposal(request.data, request)),
+);

@@ -11,6 +11,7 @@ export interface DashboardEChartsStyleTokens {
   tooltipTextColor: string;
   subtleBorderColor: string;
   trendLineColor: string;
+  errorColor: string;
   isCompactLayout: boolean;
   axisFontSize: number;
   tooltipTypography: DashboardEChartsTooltipTypography;
@@ -74,6 +75,10 @@ export function buildDashboardEChartsStyleTokens(
 ): DashboardEChartsStyleTokens {
   const isCompactLayout = chartWidth > 0 && chartWidth < compactWidth;
   const themeTokens = buildOfficialEChartsThemeTokens(darkTheme);
+  const errorColor = resolveDashboardCssColor(
+    '--mat-sys-error',
+    darkTheme ? '#ffb4ab' : '#ba1a1a',
+  );
   const tooltipTypography: DashboardEChartsTooltipTypography = {
     bodyFontSize: isCompactLayout ? 12 : 13,
     labelFontSize: isCompactLayout ? 11 : 12,
@@ -99,10 +104,21 @@ export function buildDashboardEChartsStyleTokens(
     tooltipTextColor: themeTokens.tooltipTextColor,
     subtleBorderColor: themeTokens.subtleBorderColor,
     trendLineColor: themeTokens.trendLineColor,
+    errorColor,
     isCompactLayout,
     axisFontSize: isCompactLayout ? 11 : 12,
     tooltipTypography,
   };
+}
+
+function resolveDashboardCssColor(variableName: string, fallback: string): string {
+  if (typeof window === 'undefined' || typeof document === 'undefined') {
+    return fallback;
+  }
+  const value = window.getComputedStyle(document.documentElement)
+    .getPropertyValue(variableName)
+    .trim();
+  return value && !value.startsWith('var(') ? value : fallback;
 }
 
 export function buildDashboardEChartsTooltipTextStyle(

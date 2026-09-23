@@ -13,6 +13,7 @@
 .preview-content { min-width: 0; }
 .preview-placeholder--readiness { min-height: 14rem; }
 .preview-placeholder--explorer { min-height: 30rem; }
+.preview-placeholder--training-plans { min-height: 46rem; }
 
 .preview-placeholder,
 .map-stage {
@@ -65,6 +66,10 @@
 }
 
 @media (max-width: 440px) {
+  .preview-placeholder--training-plans {
+    min-height: 42rem;
+  }
+
   .preview-placeholder--signals {
     min-height: 64rem;
   }

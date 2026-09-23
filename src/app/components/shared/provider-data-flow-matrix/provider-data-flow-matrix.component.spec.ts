@@ -49,6 +49,9 @@ describe('ProviderDataFlowMatrixComponent', () => {
 
     expect(fixture.nativeElement.querySelector('.provider-data-flow-matrix__table')).toBeTruthy();
     expect(fixture.nativeElement.querySelector('.provider-data-flow-matrix__mobile')).toBeNull();
+    const scrollRegion = fixture.nativeElement.querySelector('.provider-data-flow-matrix__scroll');
+    expect(scrollRegion.getAttribute('tabindex')).toBe('0');
+    expect(scrollRegion.getAttribute('aria-label')).toContain('scroll horizontally');
   });
 
   it('emits the selected live route and preserves active connection state', () => {

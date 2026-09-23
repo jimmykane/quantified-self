@@ -113,7 +113,7 @@ export class EventActionsComponent implements OnInit, OnDestroy {
     if (this.canReimportFromOriginalFile()) {
       return '';
     }
-    return 'No original source files available for this event';
+    return 'No original source files available for this activity';
   }
 
   public get isPubliclyShared(): boolean {
@@ -127,8 +127,8 @@ export class EventActionsComponent implements OnInit, OnDestroy {
 
     const eventID = this.event.getID();
     const confirmed = await this.confirmReprocessAction({
-      title: 'Share event publicly?',
-      message: 'Anyone with the link will be able to view this event, its activities, and every source-file object stored under this event folder while sharing is enabled.',
+      title: 'Share activity publicly?',
+      message: 'Anyone with the link will be able to view this activity and its source files while sharing is enabled.',
       confirmLabel: 'Share',
       confirmColor: 'primary',
     });
@@ -159,8 +159,8 @@ export class EventActionsComponent implements OnInit, OnDestroy {
 
     const eventID = this.event.getID();
     const confirmed = await this.confirmReprocessAction({
-      title: 'Stop sharing this event?',
-      message: 'The public event and comparison links will stop working. The event remains available to you.',
+      title: 'Stop sharing this activity?',
+      message: 'The public activity and comparison links will stop working. The activity remains available to you.',
       confirmLabel: 'Stop sharing',
       confirmColor: 'warn',
     });
@@ -221,8 +221,8 @@ export class EventActionsComponent implements OnInit, OnDestroy {
           onProgress: (progress) => this.updateReprocessJob(jobId, progress),
         });
 
-        this.processingService.completeJob(jobId, 'Activity and event statistics recalculated');
-        this.snackBar.open('Activity and event statistics have been recalculated', undefined, {
+        this.processingService.completeJob(jobId, 'Activity statistics recalculated');
+        this.snackBar.open('Activity statistics have been recalculated', undefined, {
           duration: 2000,
         });
         this.hapticsService.success();
@@ -311,7 +311,7 @@ export class EventActionsComponent implements OnInit, OnDestroy {
       case 'regenerating_stats':
         return 'Generating statistics...';
       case 'persisting':
-        return 'Saving event...';
+        return 'Saving activity...';
       case 'done':
         return 'Done';
       default:
@@ -322,7 +322,7 @@ export class EventActionsComponent implements OnInit, OnDestroy {
   private getReprocessErrorMessage(error: unknown, fallback: string): string {
     if (error instanceof ReprocessError) {
       if (error.code === 'NO_ORIGINAL_FILES') {
-        return 'No original source files found for this event.';
+        return 'No original source files found for this activity.';
       }
       if (error.code === 'MULTI_FILE_INCOMPLETE') {
         return 'Reimport failed because one or more source files could not be parsed.';
@@ -331,7 +331,7 @@ export class EventActionsComponent implements OnInit, OnDestroy {
         return 'Could not parse the original source file.';
       }
       if (error.code === 'PERSIST_FAILED') {
-        return 'Could not save the updated event after reprocessing.';
+        return 'Could not save the updated activity after reprocessing.';
       }
     }
     return fallback;
@@ -451,13 +451,13 @@ export class EventActionsComponent implements OnInit, OnDestroy {
         if (this.navigateAfterDelete) {
           await this.leaveDeletedEventRoute();
         }
-        this.snackBar.open('Event deleted', undefined, {
+        this.snackBar.open('Activity deleted', undefined, {
           duration: 2000,
         });
         this.hapticsService.success();
       } catch (error) {
         this.logger.error('[EventActionsComponent] Failed to delete event', error);
-        this.snackBar.open('Could not delete event', undefined, {
+        this.snackBar.open('Could not delete activity', undefined, {
           duration: 3000,
         });
         this.hapticsService.error();

@@ -5,12 +5,6 @@ service cloud.firestore {
       return request.auth != null && request.auth.token.admin == true;
     }
 
-    function isNonAnonymousOwner(userID) {
-      return request.auth != null
-        && request.auth.uid == userID
-        && request.auth.token.firebase.sign_in_provider != 'anonymous';
-    }
-
     // Make sure the uid of the requesting user matches name of the user
     // document. The wildcard expression {userId} makes the userId variable
     // available in rules.

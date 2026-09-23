@@ -39,6 +39,7 @@ describe('CalendarMonthPickerBottomSheetComponent', () => {
               plans: [],
               workouts: [],
             })),
+            watchWorkoutCompletions: vi.fn().mockReturnValue(of([])),
           },
         },
       ],

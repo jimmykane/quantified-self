@@ -323,21 +323,13 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Training delivery real Fi
     expect((await ledgers())[0]).toMatchObject({ status: 'delivered', lastAcceptedAtMs: lastSent,
       verification: { repairTimes: [] } });
   });
-  it('rejects non-pilot opt-in at the backend even with Pro and an authoritative connection', async () => {
+  it('admits non-allowlisted opt-in and stages reconciliation without contacting a provider during consent', async () => {
     runtime.transport = productionDeliveryRuntime(db).transport;
-    expect(await trainingDeliveryCommand(runtime, uid, command(), true)).toMatchObject({ available: false });
-    await expect(trainingDeliveryCommand(runtime, uid, command(), false)).rejects.toMatchObject({ code: 'failed-precondition' });
-    expect((await db.collection('users').doc(uid).collection('trainingDeliverySettings').get()).empty).toBe(true);
-    expect((await db.collection(DELIVERY_QUEUE).where('uid', '==', uid).get()).empty).toBe(true);
+    expect(await trainingDeliveryCommand(runtime, uid, command(), true)).toMatchObject({ available: true });
+    expect(await trainingDeliveryCommand(runtime, uid, command(), false)).toMatchObject({ provider: 'garmin', enabled: true });
+    expect((await db.collection('users').doc(uid).collection('trainingDeliverySettings').get()).empty).toBe(false);
+    expect((await db.collection(DELIVERY_QUEUE).where('uid', '==', uid).get()).empty).toBe(false);
     expect(await ledgers()).toEqual([]);
-  });
-  it('fences existing queued work for a non-pilot UID before any transport operation', async () => {
-    const ledger = await send();
-    runtime.transport = productionDeliveryRuntime(db).transport;
-    await processTrainingDelivery(runtime, uid, ledger.id);
-    expect(transport.calls).toHaveLength(0);
-    expect((await ledgers())[0]).toMatchObject({ status: 'provider_unavailable', actual: null, attempt: null });
-    expect((await db.collection(DELIVERY_QUEUE).doc(ledger.id).get()).exists).toBe(false);
   });
   it('replays receipts, rejects conflicts/reused IDs, and performs one create for duplicate concurrent tasks', async () => {
     const request = command();

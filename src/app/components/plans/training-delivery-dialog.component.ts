@@ -111,6 +111,7 @@ export class TrainingDeliveryDialogComponent {
   readonly stopLabel = computed(() => this.data.scope === 'plan' ? 'Stop plan sync'
     : this.planBound() && this.canSend() ? 'Exclude from plan sync' : 'Stop workout sync');
   readonly planBound = computed(() => this.schedule()?.workouts.find(workout => workout.id === this.data.id)?.planId != null && this.data.scope === 'workout');
+  readonly planDelivery = computed(() => this.data.scope === 'plan' || this.planBound());
   readonly canSend = computed(() => !!this.scopeRecord() && this.scopeRecord()!.lifecycle !== 'deleted');
   readonly canReview = computed(() => this.view().loaded && !this.view().error && !!this.schedule() && this.data.scope !== 'history'
     && (!!this.scopeRecord() || this.statuses().length > 0));
@@ -190,6 +191,7 @@ export class TrainingDeliveryDialogComponent {
       };
     }).sort((a, b) => (a.localDate ?? '9999-99-99').localeCompare(b.localDate ?? '9999-99-99') || a.id.localeCompare(b.id));
     const ready = this.delivery.isReady(provider);
+    const setupAvailable = this.delivery.isSetupAvailable(provider, this.planDelivery());
     const attentionWorkoutCount = new Set(statuses.filter(item => ['approval_required', 'failed', 'needs_attention', 'unsupported',
       'reconnect_required', 'connection_repair', 'fresh_consent_required'].includes(item.status)).map(item => item.workoutId)).size;
     const statusWorkoutCount = new Set(statuses.map(item => item.workoutId)).size;
@@ -197,15 +199,19 @@ export class TrainingDeliveryDialogComponent {
     const planInactive = !!scopePlan && scopePlan.lifecycle !== 'active';
     const planFocus = this.data.scope === 'plan'
       ? this.data.planSummaries?.().find(summary => summary.provider === provider)?.planFocus ?? null : null;
+    const setupComingSoon = provider === 'coros' && ready && !setupAvailable && !setting && !statuses.length;
     const overviewState = !this.view().loaded ? 'Loading sync status…'
+      : setupComingSoon ? 'Workout delivery coming soon'
       : this.data.scope === 'history' ? 'Sync history'
       : this.planBound() ? suppressed ? 'Excluded from plan sync' : 'Follows plan sync settings'
         : setting?.enabled ? planInactive ? 'Sync saved · plan inactive' : 'Sync enabled' : 'Sync off';
     const overviewIcon = !this.view().loaded ? 'sync'
+      : setupComingSoon ? 'schedule'
       : this.data.scope === 'history' ? 'history'
       : this.planBound() ? suppressed ? 'sync_disabled' : 'link'
         : setting?.enabled ? planInactive ? 'pause_circle' : 'check_circle' : 'sync_disabled';
-    const overviewDetail = planFocus ? [planFocus.label, planFocus.detail].filter(Boolean).join(' · ')
+    const overviewDetail = setupComingSoon ? 'New plan sync and standalone Send actions are unavailable.'
+      : planFocus ? [planFocus.label, planFocus.detail].filter(Boolean).join(' · ')
       : !statuses.length ? 'No workout sync status yet.'
       : statuses.length === 1 ? statuses[0].label
         : attentionWorkoutCount ? `${statusWorkoutCount} ${statusWorkoutCount === 1 ? 'workout' : 'workouts'} · ${attentionWorkoutCount} ${attentionWorkoutCount === 1 ? 'needs' : 'need'} attention`
@@ -213,9 +219,11 @@ export class TrainingDeliveryDialogComponent {
             ? `${statusWorkoutCount} ${statusWorkoutCount === 1 ? 'workout' : 'workouts'} · ${statuses[0].label}`
             : `${statusWorkoutCount} ${statusWorkoutCount === 1 ? 'workout' : 'workouts'} · different sync states`;
     return { provider, label: PLANNED_WORKOUT_PROVIDER_CAPABILITIES_V1[provider].label,
-      displayLabel: PROVIDER_PRESENTATIONS[provider].displayLabel, presentation: PROVIDER_PRESENTATIONS[provider], ready, setting, statuses,
+      displayLabel: PROVIDER_PRESENTATIONS[provider].displayLabel, presentation: PROVIDER_PRESENTATIONS[provider], ready, setupAvailable, setting, statuses,
       overviewState, overviewDetail, overviewIcon, overviewEnabled: overviewState === 'Sync enabled',
-      canCheck: statuses.some(status => status.verification?.canCheck),
+      // Suunto partner records can outlive app/watch visibility. Ignore stale
+      // canCheck projections and keep positive lookup internal to safe recovery.
+      canCheck: provider !== 'suunto' && statuses.some(status => status.verification?.canCheck),
       needsFreshConsent: statuses.some(status => status.status === 'fresh_consent_required'),
       // Current settings precede the asynchronously reconciled status after Resume.
       canResume: suppressed || (!inheritedSetting && statuses.some(status => status.status === 'stopped'
@@ -276,7 +284,7 @@ export class TrainingDeliveryDialogComponent {
       if (this.initialReviewHandled || !this.data.initialProvider || !this.canReview()) return;
       this.initialReviewHandled = true;
       const provider = this.data.initialProvider;
-      if (this.delivery.isReady(provider) && this.canSend() && !this.planBound()
+      if (this.delivery.isSetupAvailable(provider, this.planDelivery()) && this.canSend() && !this.planBound()
         && !this.view().settings.some(item => item.provider === provider)
         && !this.statuses().some(item => item.provider === provider)) {
         this.closeOnCancel = true;
@@ -303,9 +311,11 @@ export class TrainingDeliveryDialogComponent {
     if (this.busy() || !this.sameAccount() || !this.canReview() || this.data.scope === 'history'
       || (!this.canSend() && !['stop', 'retry'].includes(action))) return;
     const setting = this.view().settings.find(item => item.provider === provider);
+    const setupAction = ['configure', 'send', 'resume'].includes(action);
+    if (setupAction && !this.delivery.isSetupAvailable(provider, this.planDelivery())) return;
     // Historical copies can still need consent for an old account. They must not
     // silently turn opening current settings into enabling delivery again.
-    const editingSettings = !!setting?.enabled && (action === 'configure' || action === 'send') && !renewConsent;
+    const editingSettings = !!setting?.enabled && !renewConsent && (action === 'configure' || action === 'send');
     const timeZone = setting?.timeZone ?? Intl.DateTimeFormat().resolvedOptions().timeZone;
     this.clearTimeZoneReview(); this.confirmationAttempted.set(false);
     this.error.set(null); this.preview.set(null); this.notice.set(null);

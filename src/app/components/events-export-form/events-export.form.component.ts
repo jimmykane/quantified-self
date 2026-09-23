@@ -29,6 +29,13 @@ import { AppAnalyticsService } from '../../services/app.analytics.service';
 import { LoggerService } from '../../services/logger.service';
 import { resolveUnitAwareDisplayStat } from '@shared/unit-aware-display';
 
+function formatLocalDateKey(value: Date): string {
+  const year = value.getFullYear();
+  const month = `${value.getMonth() + 1}`.padStart(2, '0');
+  const day = `${value.getDate()}`.padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
 
 @Component({
   selector: 'app-export-events-form',
@@ -207,7 +214,7 @@ export class EventsExportFormComponent extends FormsAbstract {
 
       const row = [];
       if (this.user.settings.exportToCSVSettings.startDate) {
-        row.push(`"${event.startDate.toLocaleDateString()}"`);
+        row.push(`"${formatLocalDateKey(event.startDate)}"`);
       }
       if (this.user.settings.exportToCSVSettings.name) {
         row.push(`"${event.name}"`);
@@ -352,7 +359,7 @@ export class EventsExportFormComponent extends FormsAbstract {
     this.fileService.downloadFile((new Blob(
       [csvString],
       { type: 'data:text/csv;charset=utf-8' },
-    )), `${this.startDate.toLocaleDateString()}-${this.endDate.toLocaleDateString()}`, 'csv');
+    )), `${formatLocalDateKey(this.startDate)}-${formatLocalDateKey(this.endDate)}`, 'csv');
 
     await this.close(new Event('Done'));
 

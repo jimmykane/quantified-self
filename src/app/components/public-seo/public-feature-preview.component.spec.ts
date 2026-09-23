@@ -38,6 +38,7 @@ describe('PublicFeaturePreviewComponent', () => {
     ['training-signals', 'signals'],
     ['training-readiness', 'readiness'],
     ['training-explorer', 'explorer'],
+    ['training-plans', 'training-plans'],
     ['dashboard', 'dashboard'],
     ['workout-analysis', 'workout'],
     ['activity-map', 'map'],
@@ -62,6 +63,23 @@ describe('PublicFeaturePreviewComponent', () => {
     const blocks = await fixture.getDeferBlocks();
     await blocks[0].render(DeferBlockState.Complete);
     expect(element.querySelector('app-mcp-read-only-flow-preview')?.closest('div[data-nosnippet]')).toBe(wrapper);
+  });
+
+  it('hydrates the Training Plans fixture without account-data services', async () => {
+    const selection = vi.fn();
+    TestBed.overrideProvider(AppHapticsService, { useValue: { selection } });
+    const element = renderPlaceholder('training-plans');
+    const wrapper = element.querySelector('div[data-nosnippet]');
+    const blocks = await fixture.getDeferBlocks();
+    expect(blocks).toHaveLength(1);
+    await blocks[0].render(DeferBlockState.Complete);
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    expect(element.querySelector('app-training-plans-preview')?.closest('div[data-nosnippet]')).toBe(wrapper);
+    expect(element.textContent).toContain('Run + ride build');
+    expect(element.textContent).toContain('Threshold bike blocks');
+    expect(selection).not.toHaveBeenCalled();
   });
 
   it.each(['training-readiness', 'training-explorer'] as const)(

@@ -1,4 +1,3 @@
-import { TRAINING_PLANNING_UI_ALLOWED_UIDS } from '@shared/training-planning-rollout';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { signal } from '@angular/core';
@@ -21,6 +20,8 @@ import { AppEventColorService } from '../../../services/color/app.event.color.se
 import { CalendarDayDetailsNavigationService } from '../../../services/calendar-day-details-navigation.service';
 import type { PlannedWorkoutCalendarEntry } from '../../../helpers/planned-workout-calendar.helper';
 import { CalendarDayDetailsComponent, type CalendarDayDetailsData } from './calendar-day-details.component';
+
+const planningUserUid = 'planning-user';
 
 describe('CalendarDayDetailsComponent', () => {
   it.each(['another-user', null])('hides all planning UI for viewer %s, including a retained day sheet', async uid => {
@@ -63,11 +64,11 @@ describe('CalendarDayDetailsComponent', () => {
     expect(fixture.nativeElement.textContent).toContain('Running');
     expect(fixture.nativeElement.textContent).toContain('Morning run');
     expect(fixture.nativeElement.querySelector('.calendar-day-event-item')?.getAttribute('href'))
-      .toBe(`/user/${TRAINING_PLANNING_UI_ALLOWED_UIDS[0]}/event/event-1`);
+      .toBe(`/user/${planningUserUid}/event/event-1`);
     expect(fixture.nativeElement.querySelector('.calendar-family-volume-copy strong')?.textContent?.trim()).toBe('Running');
     expect(fixture.nativeElement.querySelector('.calendar-family-volume-value')?.textContent?.trim()).toBe('1h');
     expect(fixture.nativeElement.querySelector('.calendar-family-volume-row--link')?.getAttribute('href'))
-      .toBe(`/user/${TRAINING_PLANNING_UI_ALLOWED_UIDS[0]}/event/event-1`);
+      .toBe(`/user/${planningUserUid}/event/event-1`);
     expect(fixture.nativeElement.querySelector('.calendar-day-number')?.textContent?.trim()).toBe('1');
     expect(fixture.nativeElement.querySelector('.calendar-family-volume-count-value')?.textContent?.trim()).toBe('1');
     expect(fixture.nativeElement.querySelector('app-bottom-sheet-header h2')?.textContent?.trim())
@@ -100,6 +101,18 @@ describe('CalendarDayDetailsComponent', () => {
     ]);
     expect(fixture.nativeElement.textContent).toContain('No completed activities for this day.');
     expect(fixture.nativeElement.querySelector('[aria-labelledby="calendar-day-family-title"]')).toBeNull();
+  });
+
+  it('shows exact completion links as completed without adding them to recorded activity totals', async () => {
+    const fixture = await renderDayDetails([], { plannedWorkouts: [{
+      workout: createPlannedWorkout(),
+      planName: 'Autumn build',
+      completed: true,
+    }] });
+
+    expect(fixture.nativeElement.querySelector('.calendar-day-planned-item')?.textContent)
+      .toContain('Autumn build · Completed · activity linked');
+    expect(fixture.nativeElement.querySelector('.calendar-day-total')?.textContent).toContain('0 completed activities');
   });
 
   it('centers trailing navigation icons and keeps the rounded plan accent outside the Material row', async () => {
@@ -188,7 +201,7 @@ describe('CalendarDayDetailsComponent', () => {
     const bottomSheetRef = TestBed.inject(MatBottomSheetRef);
     const prepareReturn = vi.spyOn(navigation, 'prepareReturn');
 
-    fixture.componentInstance.prepareEventNavigation(['/user', TRAINING_PLANNING_UI_ALLOWED_UIDS[0], 'event', 'event-1']);
+    fixture.componentInstance.prepareEventNavigation(['/user', planningUserUid, 'event', 'event-1']);
 
     expect(prepareReturn).toHaveBeenCalledWith('/', '2026-08-03');
     expect(bottomSheetRef.dismiss).toHaveBeenCalledOnce();
@@ -322,7 +335,7 @@ async function renderDayDetails(eventOrEvents: EventInterface | EventInterface[]
   });
   const data: CalendarDayDetailsData = {
     day: model.months[0].days.find(day => day.dateKey === '2026-08-03'),
-    userId: TRAINING_PLANNING_UI_ALLOWED_UIDS[0],
+    userId: planningUserUid,
     locale: 'en-US',
     ...overrides,
   } as CalendarDayDetailsData;

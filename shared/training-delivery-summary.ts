@@ -72,13 +72,20 @@ function countedOutcome(label: string, count: number): string {
     'Needs approval': ['needs approval', 'need approval'],
     'Needs sync setup': ['needs sync setup', 'need sync setup'],
     'Sync unconfirmed': ['sync unconfirmed', 'syncs unconfirmed'],
+    'Send unconfirmed': ['send unconfirmed', 'sends unconfirmed'],
     'Copy removed': ['copy removed', 'copies removed'],
+    'No active delivery': ['no active delivery', 'no active deliveries'],
     'Removal pending': ['removal pending', 'removals pending'],
     'Removal unconfirmed': ['removal unconfirmed', 'removals unconfirmed'],
     'Sync failed': ['sync failed', 'syncs failed'],
+    'Send failed': ['send failed', 'sends failed'],
     'Sync stopped': ['sync stopped', 'syncs stopped'],
+    'Sending stopped': ['sending stopped', 'sending stopped'],
     'Sync off': ['not syncing', 'not syncing'],
+    'Sending off': ['not sending', 'not sending'],
+    'Sending off · copy remains': ['not sending · sent copy kept', 'not sending · sent copies kept'],
     'Sync unavailable': ['sync unavailable', 'syncs unavailable'],
+    'Delivery unavailable': ['delivery unavailable', 'deliveries unavailable'],
     'Status unconfirmed': ['status unconfirmed', 'statuses unconfirmed'],
     'Check connection': ['needs a connection check', 'need a connection check'],
     'Reconnect required': ['requires reconnection', 'require reconnection'],
@@ -90,6 +97,7 @@ function countedOutcome(label: string, count: number): string {
     'Sent · workout completed': ['sent · workout completed', 'sent · workouts completed'],
     'Past date · copy kept': ['past date · copy kept', 'past dates · copies kept'],
     'Completed in connected app · copy kept': ['completed in connected app · copy kept', 'completed in connected app · copies kept'],
+    'Completed workout · sent Guide kept': ['completed workout · sent Guide kept', 'completed workouts · sent Guides kept'],
   };
   // Lowercase only the leading letter, preserving names such as Pro and QS.
   return `${count} ${forms[label]?.[count === 1 ? 0 : 1] ?? label.charAt(0).toLowerCase() + label.slice(1)}`;
@@ -97,7 +105,9 @@ function countedOutcome(label: string, count: number): string {
 
 function workoutOutcome(workout: TrainingSyncWorkout, status: TrainingSyncStatus | undefined,
   setting: TrainingSyncSetting | undefined, plan: TrainingSyncPlan | null,
-  completion: TrainingSyncCompletion | undefined): Outcome {
+  completion: TrainingSyncCompletion | undefined, provider: PlannedWorkoutProviderId): Outcome {
+  const suunto = provider === 'suunto';
+  const sentLabel = suunto ? 'Sent to Suunto' : 'Synced';
   const outcome = (label: string, synced = false, attention = false,
     code: TrainingSyncOutcome = status?.status ?? 'not_synced'): Outcome => ({ label, code, synced, attention, copy: !!status?.hasRemoteCopy });
   // Independent live listeners may deliver authored data before the worker's new projection.
@@ -106,8 +116,8 @@ function workoutOutcome(workout: TrainingSyncWorkout, status: TrainingSyncStatus
   }
   if (status && ATTENTION.has(status.status)) {
     const labels: Partial<Record<TrainingDeliveryStatusV1['status'], string>> = {
-      unsupported: 'Not supported', approval_required: 'Needs approval', failed: 'Sync failed',
-      needs_attention: 'Sync unconfirmed', reconnect_required: 'Reconnect required',
+      unsupported: 'Not supported', approval_required: 'Needs approval', failed: suunto ? 'Send failed' : 'Sync failed',
+      needs_attention: suunto ? 'Send unconfirmed' : 'Sync unconfirmed', reconnect_required: 'Reconnect required',
       connection_repair: 'Check connection', fresh_consent_required: 'Needs sync setup',
     };
     return outcome(labels[status.status]!, false, true);
@@ -119,23 +129,28 @@ function workoutOutcome(workout: TrainingSyncWorkout, status: TrainingSyncStatus
   }
   if (status?.status === 'past' || status?.status === 'completed') {
     const skipped = workout.lifecycle === 'skipped';
-    const label = status.status === 'completed' ? 'Completed in connected app · copy kept' : 'Past date · copy kept';
+    const label = status.status === 'completed'
+      ? suunto ? 'Completed workout · sent Guide kept' : 'Completed in connected app · copy kept'
+      : 'Past date · copy kept';
     return outcome((skipped ? 'Skipped · ' : '') + label, confirmedCopy && !skipped);
   }
   if (workout.lifecycle === 'skipped') return outcome(status?.hasRemoteCopy ? 'Skipped · copy remains' : 'Skipped', false, false, 'skipped');
   if (plan && plan.lifecycle !== 'active') return outcome(status?.hasRemoteCopy ? 'Plan inactive · copy remains' : 'Plan inactive', false, false, 'plan_inactive');
-  if (setting && !setting.enabled) return outcome(status?.hasRemoteCopy ? 'Sync off · copy remains' : 'Sync off', false, false, 'sync_off');
-  if (!status) return outcome(setting?.enabled ? 'Waiting to sync' : 'Not synced', false, false, setting?.enabled ? 'waiting' : 'not_synced');
+  if (setting && !setting.enabled) return outcome(status?.hasRemoteCopy
+    ? suunto ? 'Sending off · copy remains' : 'Sync off · copy remains'
+    : suunto ? 'Sending off' : 'Sync off', false, false, 'sync_off');
+  if (!status) return outcome(setting?.enabled ? suunto ? 'Waiting to send' : 'Waiting to sync' : suunto ? 'Not sent' : 'Not synced',
+    false, false, setting?.enabled ? 'waiting' : 'not_synced');
   switch (status.status) {
     case 'delivered': return status.hasRemoteCopy && !status.differsFromQS && status.lastAcceptedAtMs !== null
-      ? outcome('Synced', true) : outcome('Sync unconfirmed', false, false, 'unconfirmed');
-    case 'pending': return outcome(status.hasRemoteCopy ? 'Updating' : 'Waiting to sync');
+      ? outcome(sentLabel, true) : outcome(suunto ? 'Send unconfirmed' : 'Sync unconfirmed', false, false, 'unconfirmed');
+    case 'pending': return outcome(status.hasRemoteCopy ? 'Updating' : suunto ? 'Waiting to send' : 'Waiting to sync');
     case 'retrying': return outcome('Retry scheduled');
     case 'outside_horizon': return outcome('Scheduled for later');
     case 'paused_pro': return outcome('Paused · Pro required');
-    case 'provider_unavailable': return outcome('Sync unavailable');
-    case 'removed': return outcome(status.hasRemoteCopy ? 'Removal unconfirmed' : 'Copy removed');
-    case 'stopped': return outcome(status.hasRemoteCopy ? 'Removal pending' : 'Sync stopped');
+    case 'provider_unavailable': return outcome(suunto ? 'Delivery unavailable' : 'Sync unavailable');
+    case 'removed': return outcome(status.hasRemoteCopy ? 'Removal unconfirmed' : suunto ? 'No active delivery' : 'Copy removed');
+    case 'stopped': return outcome(status.hasRemoteCopy ? 'Removal pending' : suunto ? 'Sending stopped' : 'Sync stopped');
     case 'paused_plan': return outcome(status.hasRemoteCopy ? 'Removal pending' : 'Plan inactive');
     default: return outcome('Status unconfirmed');
   }
@@ -151,6 +166,7 @@ export async function buildTrainingDeliverySummaries(input: {
     && (input.scope === 'plan' ? workout.planId === input.id : workout.id === input.id));
   const workoutIds = new Set(workouts.map(workout => workout.id));
   return (await Promise.all(PLANNED_WORKOUT_PROVIDER_IDS.map(async provider => {
+    const deliveryVerb = provider === 'suunto' ? 'sent' : 'synced';
     const settingScope = input.scope === 'plan' ? input.id : workouts[0]?.planId;
     const setting = input.settings.find(item => item.provider === provider && (settingScope
       ? item.scope === 'plan' && item.scopeId === settingScope
@@ -184,33 +200,38 @@ export async function buildTrainingDeliverySummaries(input: {
         return { label: 'Awaiting latest check', code: 'awaiting_latest_check' as const, synced: false, attention: false, copy: status.hasRemoteCopy };
       }
       return workoutOutcome(workout, status, setting, input.plan,
-        input.completions.find(completion => completion.workoutId === workout.id && completion.planId === workout.planId));
+        input.completions.find(completion => completion.workoutId === workout.id && completion.planId === workout.planId), provider);
     }));
     const earlier = records.filter(record => !matchedIds.has(record.id));
     const retained = earlier.filter(record => record.hasRemoteCopy);
     const synced = outcomes.filter(item => item.synced).length;
     const attention = outcomes.filter(item => item.attention).length;
     const notes = new Map<string, number>();
-    for (const outcome of outcomes) if (input.scope === 'plan' && outcome.label !== 'Synced') notes.set(outcome.label, (notes.get(outcome.label) ?? 0) + 1);
+    const successLabel = provider === 'suunto' ? 'Sent to Suunto' : 'Synced';
+    for (const outcome of outcomes) if (input.scope === 'plan' && outcome.label !== successLabel) notes.set(outcome.label, (notes.get(outcome.label) ?? 0) + 1);
     const detail = [...notes].map(([label, count]) => countedOutcome(label, count));
     if (input.scope === 'workout' && outcomes[0]?.copy && !outcomes[0].synced) {
-      detail.push('A sent copy remains; the latest sync is not confirmed');
+      detail.push(provider === 'suunto'
+        ? 'A previously sent Guide remains; this status does not confirm current app or watch visibility'
+        : 'A sent copy remains; the latest sync is not confirmed');
     }
-    if (retained.length) detail.push(`${retained.length} retained ${retained.length === 1 ? 'copy' : 'copies'} from earlier sync; see details`);
+    if (retained.length) detail.push(`${retained.length} retained ${retained.length === 1 ? 'copy' : 'copies'} from earlier ${provider === 'suunto' ? 'delivery' : 'sync'}; see details`);
     const earlierAttention = earlier.filter(record => ATTENTION.has(record.status)).length;
     if (earlierAttention) detail.push(`${earlierAttention} earlier ${earlierAttention === 1 ? 'delivery needs' : 'deliveries need'} attention`);
     // An out-of-scope retained record is history, not a current plan member.
     const historicalOnly = !setting && !records.some(record => workoutIds.has(record.workoutId));
-    const countLabel = `${synced} of ${workouts.length} ${workouts.length === 1 ? 'workout' : 'workouts'} synced`;
+    const countLabel = `${synced} of ${workouts.length} ${workouts.length === 1 ? 'workout' : 'workouts'} ${deliveryVerb}`;
     let label = input.scope === 'plan' ? countLabel : outcomes[0]?.label ?? 'Sync history';
-    if (input.scope === 'workout' && synced && label !== 'Synced' && !['past', 'completed'].includes(outcomes[0]?.code ?? '')) {
-      label = `Synced · ${label.toLowerCase()}`;
+    if (input.scope === 'workout' && synced && label !== successLabel && !['past', 'completed'].includes(outcomes[0]?.code ?? '')) {
+      label = `${provider === 'suunto' ? 'Sent' : 'Synced'} · ${label.toLowerCase()}`;
     }
-    if (input.scope === 'workout' && !setting && retained.length) label = 'Earlier synced copy';
-    if (historicalOnly) label = 'Sync history';
-    else if (input.scope === 'plan' && !workouts.length) label = setting?.enabled ? 'Sync enabled · no workouts' : 'Sync off · no workouts';
+    if (input.scope === 'workout' && !setting && retained.length) label = provider === 'suunto' ? 'Earlier sent copy' : 'Earlier synced copy';
+    if (historicalOnly) label = provider === 'suunto' ? 'Delivery history' : 'Sync history';
+    else if (input.scope === 'plan' && !workouts.length) label = setting?.enabled
+      ? provider === 'suunto' ? 'Sending enabled · no workouts' : 'Sync enabled · no workouts'
+      : provider === 'suunto' ? 'Sending off · no workouts' : 'Sync off · no workouts';
     else if (input.scope === 'plan' && input.plan?.lifecycle !== 'active') label = `Plan inactive · ${countLabel}`;
-    else if (input.scope === 'plan' && setting && !setting.enabled) label = `Sync off · ${countLabel}`;
+    else if (input.scope === 'plan' && setting && !setting.enabled) label = `${provider === 'suunto' ? 'Sending off' : 'Sync off'} · ${countLabel}`;
     projection.state = historicalOnly ? 'history' : !workouts.length ? 'empty'
       : input.plan && input.plan.lifecycle !== 'active' ? 'inactive' : setting && !setting.enabled ? 'off' : 'current';
     projection.totalWorkouts = workouts.length; projection.syncedWorkouts = synced; projection.retainedCopies = retained.length;
@@ -245,10 +266,10 @@ export async function buildTrainingDeliverySummaries(input: {
       if (laterCount && focusedCount) focusedDetail.push(`${laterCount} scheduled for later`);
       const focusedLabel = focusedCount === 0 ? laterCount ? `${laterCount} ${laterCount === 1 ? 'workout' : 'workouts'} scheduled for later` : 'No upcoming workouts'
         : laterCount ? focusedSynced === focusedCount
-          ? focusedCount === 1 ? 'Next workout synced' : `All ${focusedCount} workouts due soon synced`
-          : `${focusedSynced} of ${focusedCount} ${focusedCount === 1 ? 'workout' : 'workouts'} due soon synced`
-          : focusedSynced === focusedCount ? focusedCount === 1 ? 'Upcoming workout synced' : `All ${focusedCount} upcoming workouts synced`
-            : `${focusedSynced} of ${focusedCount} upcoming ${focusedCount === 1 ? 'workout' : 'workouts'} synced`;
+          ? focusedCount === 1 ? `Next workout ${deliveryVerb}` : `All ${focusedCount} workouts due soon ${deliveryVerb}`
+          : `${focusedSynced} of ${focusedCount} ${focusedCount === 1 ? 'workout' : 'workouts'} due soon ${deliveryVerb}`
+          : focusedSynced === focusedCount ? focusedCount === 1 ? `Upcoming workout ${deliveryVerb}` : `All ${focusedCount} upcoming workouts ${deliveryVerb}`
+            : `${focusedSynced} of ${focusedCount} upcoming ${focusedCount === 1 ? 'workout' : 'workouts'} ${deliveryVerb}`;
       planFocus = { totalWorkouts: focusedCount, syncedWorkouts: focusedSynced, earlierWorkouts: earlierCount,
         label: focusedLabel, detail: focusedDetail.join(' · ') };
     }

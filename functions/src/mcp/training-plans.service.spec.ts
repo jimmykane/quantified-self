@@ -32,15 +32,31 @@ function fixture() {
       page: async (collection, after, limit, filter) => Object.entries(collections[collection]).sort(([a], [b]) => a.localeCompare(b))
         .filter(([key, data]) => (!after || key > after) && (!filter || data[filter.field] === filter.value))
         .slice(0, limit).map(([id, data]) => ({ id, data })),
+      workoutDatePage: async (startDate, endDate, after, limit) => Object.entries(collections.scheduledWorkouts)
+        .sort(([leftId, left], [rightId, right]) => String(left.localDate).localeCompare(String(right.localDate))
+          || leftId.localeCompare(rightId))
+        .filter(([key, data]) => String(data.localDate) >= startDate && String(data.localDate) <= endDate
+          && (!after || String(data.localDate) > after.localDate
+            || (String(data.localDate) === after.localDate && key > after.id)))
+        .slice(0, limit).map(([id, data]) => ({ id, data })),
       units: async () => normalizeUserUnitSettings({ distanceUnits: DistanceUnits.Miles }),
     }),
   };
-  const run = (tool: TrainingReadTool, args: unknown = {}, scopes = [TRAINING_PLANS_SCOPE], connectionId = 'connection') =>
-    readTrainingPlans({ tool, arguments: args, uid: 'owner', connectionId, scopes }, reads, codec, 2);
+  const run = (tool: TrainingReadTool, args: unknown = {}, scopes = [TRAINING_PLANS_SCOPE], connectionId = 'connection', uid = 'owner') =>
+    readTrainingPlans({ tool, arguments: args, uid, connectionId, scopes }, reads, codec, 2);
   return { run, reads, codec, collections, change: () => revision++, delete: () => { deleted = true; }, calls: () => calls };
 }
 
 describe('Training plan MCP reads', () => {
+  it('keeps plan reads available to any consenting owner without a frontend rollout identity', async () => {
+    const f = fixture();
+    const result = TRAINING_READ_OUTPUTS.list_training_plans.parse(
+      await f.run('list_training_plans', {}, [TRAINING_PLANS_SCOPE], 'connection', 'ordinary-planning-owner'),
+    );
+
+    expect(result.plans.map(plan => plan.name)).toEqual(['Active', 'Paused', 'Archived']);
+  });
+
   it.each(['delivered', 'unsupported', 'outside_horizon', 'needs_attention', 'connection_repair', 'provider_unavailable', 'completed'])(
     'projects Wahoo %s without private Plan/Workout identities or device claims', async status => {
       const f = fixture(); f.collections.scheduledWorkouts = { w1: workout('p1') };
@@ -138,6 +154,31 @@ describe('Training plan MCP reads', () => {
     const all = TRAINING_READ_OUTPUTS.query_planned_workouts.parse(await f.run('query_planned_workouts', { ...args, scope: 'all' }));
     expect(all.workouts).toHaveLength(5);
   });
+  it('queries workouts chronologically with a stable same-date cursor instead of document order', async () => {
+    const f = fixture();
+    f.collections.scheduledWorkouts = {
+      a_late: workout('p1', '2026-09-20'),
+      z_early: workout('p1', '2026-09-10'),
+      b_same: workout(null, '2026-09-15'),
+      a_same: workout(null, '2026-09-15'),
+    };
+    const args = { startDate: '2026-09-01', endDate: '2026-09-30', limit: 2 };
+    const first = TRAINING_READ_OUTPUTS.query_planned_workouts_by_date.parse(
+      await f.run('query_planned_workouts_by_date', args),
+    );
+    expect(first.workouts.map(item => [item.localDate, item.planRef === null])).toEqual([
+      ['2026-09-10', false],
+      ['2026-09-15', true],
+    ]);
+    expect(first.scanComplete).toBe(false);
+    const second = TRAINING_READ_OUTPUTS.query_planned_workouts_by_date.parse(
+      await f.run('query_planned_workouts_by_date', { ...args, cursor: first.nextCursor }),
+    );
+    expect(second.workouts.map(item => item.localDate)).toEqual(['2026-09-15', '2026-09-20']);
+    expect(second.scanComplete).toBe(true);
+    f.change();
+    await expect(f.run('query_planned_workouts_by_date', { ...args, cursor: first.nextCursor })).rejects.toThrow('Restart');
+  });
   it('returns full validated Unicode recipes, canonical units and owner-unit display without estimates', async () => {
     const f = fixture(); const list = TRAINING_READ_OUTPUTS.query_planned_workouts.parse(await f.run('query_planned_workouts', { startDate: '2026-09-01', endDate: '2027-01-01' }));
     const result = TRAINING_READ_OUTPUTS.get_planned_workout.parse(await f.run('get_planned_workout', { workoutRef: list.workouts[0].workoutRef }));
@@ -196,6 +237,40 @@ describe('Training plan MCP reads', () => {
       'get_planned_workout_completion', { workoutRef },
     ));
     expect(changed.workoutChangedSinceCompletion).toBe(true);
+  });
+  it('returns bounded exact completion states in requested order without inferred matches', async () => {
+    const f = fixture();
+    const list = TRAINING_READ_OUTPUTS.query_planned_workouts_by_date.parse(await f.run(
+      'query_planned_workouts_by_date', { startDate: '2026-09-01', endDate: '2027-01-01' },
+    ));
+    const refs = list.workouts.slice(0, 2).map(item => item.workoutRef);
+    f.collections.trainingWorkoutCompletions.w1 = { schemaVersion: 1, workoutId: 'w1', planId: 'p1', provider: 'garmin',
+      matchMethod: 'provider_marker', eventId: 'private-event', activityId: 'private-activity', sourceSessionIndex: 0,
+      activityStartAtMs: 1_789_404_000_000, scheduledLocalDate: '2026-09-15', workoutRevisionAtLink: 1,
+      timing: 'on_date', linkedAtMs: 1_789_404_100_000, updatedAtMs: 1_789_404_100_000 };
+    const result = TRAINING_READ_OUTPUTS.get_planned_workout_completions.parse(await f.run(
+      'get_planned_workout_completions', { workoutRefs: refs },
+    ));
+    expect(result.completions.map(item => item.workoutRef)).toEqual(refs);
+    expect(result.completions.map(item => item.state)).toEqual(['linked', 'unlinked']);
+    expect(JSON.stringify(result)).not.toMatch(/private-event|private-activity/);
+    await expect(f.run('get_planned_workout_completions', { workoutRefs: [refs[0], refs[0]] }))
+      .rejects.toThrow('Invalid Training read arguments');
+  });
+  it('assesses safe provider mapping fidelity without connection or transport state', async () => {
+    const f = fixture();
+    const list = TRAINING_READ_OUTPUTS.query_planned_workouts_by_date.parse(await f.run(
+      'query_planned_workouts_by_date', { startDate: '2026-09-01', endDate: '2027-01-01' },
+    ));
+    const result = TRAINING_READ_OUTPUTS.assess_planned_workout_compatibility.parse(await f.run(
+      'assess_planned_workout_compatibility', { workoutRef: list.workouts[0].workoutRef, providers: ['garmin', 'wahoo'] },
+    ));
+    expect(result.assessments[0]).toMatchObject({ provider: 'garmin', level: 'exact', issues: [] });
+    expect(result.assessments[1]).toMatchObject({ provider: 'wahoo', level: 'unsupported' });
+    expect(result.assessments[1].issues).toContainEqual(expect.objectContaining({
+      code: 'scheduling_duration_unavailable', severity: 'unsupported', field: '$.nodes',
+    }));
+    expect(JSON.stringify(result)).not.toMatch(/destination|account|digest|mappingVersion|remote/);
   });
   it('binds continuations to filters and revisions and does not skip matching records', async () => {
     const f = fixture(); const first = TRAINING_READ_OUTPUTS.list_training_plans.parse(await f.run('list_training_plans', { limit: 1 }));

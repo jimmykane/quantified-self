@@ -3,21 +3,18 @@ import { ServiceNames } from '@sports-alliance/sports-lib';
 import { SleepSyncQueueItemInterface } from '../queue/queue-item.interface';
 import { config } from '../config';
 import * as requestPromise from '../request-helper';
-import { getServiceTokenRootDocumentRef } from '../service-token-store';
-import { shouldSkipQueueWorkForDeletedUser } from '../queue/user-deletion-skip';
 import { getTokenData, TokenRefreshSkippedForDeletedUserError } from '../tokens';
 import {
   ACTIVE_OAUTH_CREDENTIAL_GENERATION_FIELD,
   areTokenCredentialSnapshotsEqual,
-  doesOAuthCredentialGenerationAuthorizeToken,
   getTokenCredentialSnapshot,
   TokenCredentialSnapshot,
 } from '../token-refresh-coordinator';
 import { toSuuntoAuthorizationHeader } from './authorization-header';
 import {
   areSuuntoWebhookWriteLifecycleGuardsContinuous,
-  captureCurrentSuuntoWebhookWriteLifecycleGuards,
   getSuuntoWebhookWriteLifecycleAuthorityDigest,
+  validateCurrentSuuntoWebhookWriteLifecycle,
   type SuuntoWebhookWriteLifecycleGuards,
 } from './health-webhook-binding-lifecycle';
 import {
@@ -168,9 +165,28 @@ export async function captureSuuntoHealthWriteLifecycleGuards(
   expectedCredential: TokenCredentialSnapshot,
   authorityBaseline: SuuntoWebhookWriteLifecycleGuards,
 ): Promise<SuuntoHealthWriteLifecycleGuards> {
-  let currentAuthority: SuuntoWebhookWriteLifecycleGuards | null;
+  const currentAuthority = await captureCurrentSuuntoHealthLifecycle(
+    firebaseUserID,
+    tokenRef,
+    authorityBaseline,
+  );
+  if (!areTokenCredentialSnapshotsEqual(
+    currentAuthority.requiredExistingTokenCredential,
+    expectedCredential,
+  )) {
+    throw new SuuntoHealthAccountValidationError();
+  }
+  return currentAuthority;
+}
+
+async function captureCurrentSuuntoHealthLifecycle(
+  firebaseUserID: string,
+  tokenRef: admin.firestore.DocumentReference,
+  authorityBaseline: SuuntoWebhookWriteLifecycleGuards,
+): Promise<SuuntoHealthWriteLifecycleGuards> {
+  let validation: Awaited<ReturnType<typeof validateCurrentSuuntoWebhookWriteLifecycle>>;
   try {
-    currentAuthority = await captureCurrentSuuntoWebhookWriteLifecycleGuards(
+    validation = await validateCurrentSuuntoWebhookWriteLifecycle(
       admin.firestore(),
       firebaseUserID,
       tokenRef.id,
@@ -178,12 +194,38 @@ export async function captureSuuntoHealthWriteLifecycleGuards(
   } catch {
     throw new SuuntoHealthAccountValidationError();
   }
+  if (validation.status === 'user_deleted_or_deleting') {
+    throw new TokenRefreshSkippedForDeletedUserError(
+      firebaseUserID,
+      ServiceNames.SuuntoApp,
+      tokenRef.id,
+      'before_return',
+    );
+  }
+  const currentAuthority = validation.status === 'current' ? validation.guards : null;
   if (!currentAuthority
-    || !areSuuntoWebhookWriteLifecycleGuardsContinuous(authorityBaseline, currentAuthority)
-    || !areTokenCredentialSnapshotsEqual(
-      currentAuthority.requiredExistingTokenCredential,
-      expectedCredential,
-    )) {
+    || !areSuuntoWebhookWriteLifecycleGuardsContinuous(authorityBaseline, currentAuthority)) {
+    throw new SuuntoHealthAccountValidationError();
+  }
+  return currentAuthority;
+}
+
+async function captureSuuntoHealthLifecycleForAccessToken(
+  firebaseUserID: string,
+  tokenRef: admin.firestore.DocumentReference,
+  expectedAccessToken: string,
+  authorityBaseline: SuuntoWebhookWriteLifecycleGuards,
+): Promise<SuuntoHealthWriteLifecycleGuards> {
+  const currentAuthority = await captureCurrentSuuntoHealthLifecycle(
+    firebaseUserID,
+    tokenRef,
+    authorityBaseline,
+  );
+  const currentCredential = currentAuthority.requiredExistingTokenCredential;
+  if (!currentCredential.accessToken
+    || currentCredential.accessToken !== expectedAccessToken
+    || currentCredential.credentialGeneration
+      !== authorityBaseline.requiredExistingTokenCredential.credentialGeneration) {
     throw new SuuntoHealthAccountValidationError();
   }
   return currentAuthority;
@@ -200,28 +242,6 @@ function capturedTokenRootGeneration(
   return typeof value === 'string' && value.trim().length > 0 ? value.trim() : null;
 }
 
-async function assertCurrentTokenRootGeneration(
-  firebaseUserID: string,
-  expectedRootGeneration: string | null,
-): Promise<void> {
-  let tokenRootSnapshot: admin.firestore.DocumentSnapshot;
-  try {
-    tokenRootSnapshot = await getServiceTokenRootDocumentRef(
-      firebaseUserID,
-      ServiceNames.SuuntoApp,
-    ).get();
-  } catch {
-    throw new SuuntoHealthAccountValidationError();
-  }
-  if (!tokenRootSnapshot.exists
-    || !doesOAuthCredentialGenerationAuthorizeToken(
-      tokenRootSnapshot.data() as Record<string, unknown> | undefined,
-      expectedRootGeneration,
-    )) {
-    throw new SuuntoHealthAccountValidationError();
-  }
-}
-
 function assertLifecycleContinuity(
   initial: SuuntoHealthWriteLifecycleGuards,
   current: SuuntoHealthWriteLifecycleGuards,
@@ -233,39 +253,16 @@ function assertLifecycleContinuity(
   }
 }
 
-async function currentTokenCredential(
-  tokenRef: admin.firestore.DocumentReference,
-  expectedAccessToken: string,
-): Promise<TokenCredentialSnapshot> {
-  let snapshot: admin.firestore.DocumentSnapshot;
-  try {
-    snapshot = await tokenRef.get();
-  } catch {
-    throw new SuuntoHealthAccountValidationError();
-  }
-  if (!snapshot.exists) throw new SuuntoHealthAccountValidationError();
-  const credential = getTokenCredentialSnapshot(snapshot.data() as Record<string, unknown> | undefined);
-  if (!credential.accessToken || credential.accessToken !== expectedAccessToken) {
-    throw new SuuntoHealthAccountValidationError();
-  }
-  return credential;
-}
-
 async function assertCurrentLifecycle(
   firebaseUserID: string,
   tokenRef: admin.firestore.DocumentReference,
   expectedCredential: TokenCredentialSnapshot,
   initialGuards: SuuntoHealthWriteLifecycleGuards,
 ): Promise<SuuntoHealthWriteLifecycleGuards> {
-  const currentCredential = await currentTokenCredential(tokenRef, expectedCredential.accessToken);
-  if (!areTokenCredentialSnapshotsEqual(currentCredential, expectedCredential)) {
-    throw new SuuntoHealthAccountValidationError();
-  }
-  await assertCurrentTokenRootGeneration(firebaseUserID, capturedTokenRootGeneration(initialGuards));
   const currentGuards = await captureSuuntoHealthWriteLifecycleGuards(
     firebaseUserID,
     tokenRef,
-    currentCredential,
+    expectedCredential,
     initialGuards,
   );
   assertLifecycleContinuity(initialGuards, currentGuards);
@@ -305,26 +302,6 @@ function providerStatusCode(error: unknown): number | null {
     if (Number.isSafeInteger(parsed) && parsed >= 100 && parsed <= 599) return parsed;
   }
   return null;
-}
-
-async function assertUserActiveBeforeProviderRequest(
-  firebaseUserID: string,
-  queueItemID: string,
-  tokenDocumentID: string,
-): Promise<void> {
-  if (await shouldSkipQueueWorkForDeletedUser(
-    firebaseUserID,
-    ServiceNames.SuuntoApp,
-    queueItemID,
-    'before_sleep_provider_sync',
-  )) {
-    throw new TokenRefreshSkippedForDeletedUserError(
-      firebaseUserID,
-      ServiceNames.SuuntoApp,
-      tokenDocumentID,
-      'before_return',
-    );
-  }
 }
 
 function buildSuuntoHealthRequestWindows(startMs: number, endMs: number): SuuntoHealthRequestWindow[] {
@@ -375,30 +352,31 @@ export async function processSuuntoHealthQueueItem(
     throw new SuuntoHealthAccountValidationError();
   }
   const expectedRootGeneration = capturedTokenRootGeneration(initialGuards);
+  let lifecycleGuards = initialGuards;
+  let tokenCredential = initialGuards.requiredExistingTokenCredential;
+  const validateBeforeTokenRefreshRequest = async (): Promise<void> => {
+    onStage?.('lifecycle_check');
+    lifecycleGuards = await captureCurrentSuuntoHealthLifecycle(
+      firebaseUserID,
+      tokenSnapshot.ref,
+      initialGuards,
+    );
+    tokenCredential = lifecycleGuards.requiredExistingTokenCredential;
+    onLifecycleGuardsCaptured?.(lifecycleGuards);
+    onStage?.('token_refresh');
+  };
   onStage?.('token_refresh');
   const tokenData = await getTokenData(tokenSnapshot, ServiceNames.SuuntoApp, false, {
     opaqueTelemetry: true,
     expectedActiveOAuthCredentialGeneration: expectedRootGeneration,
+    beforeRefreshRequest: validateBeforeTokenRefreshRequest,
   });
   let accessToken = typeof tokenData.accessToken === 'string' ? tokenData.accessToken : '';
   const providerUserID = typeof tokenData.userName === 'string' ? tokenData.userName.trim() : '';
   if (!accessToken || providerUserID !== queueItem.providerUserId.trim()) {
     throw new SuuntoHealthAccountValidationError();
   }
-  onStage?.('lifecycle_check');
-  let tokenCredential = await currentTokenCredential(tokenSnapshot.ref, accessToken);
-  if (tokenCredential.credentialGeneration
-    !== initialGuards.requiredExistingTokenCredential.credentialGeneration) {
-    throw new SuuntoHealthAccountValidationError();
-  }
-  let lifecycleGuards = await captureSuuntoHealthWriteLifecycleGuards(
-    firebaseUserID,
-    tokenSnapshot.ref,
-    tokenCredential,
-    initialGuards,
-  );
-  assertLifecycleContinuity(initialGuards, lifecycleGuards);
-  onLifecycleGuardsCaptured?.(lifecycleGuards);
+  let resolvedAccessTokenNeedsValidation = true;
 
   let pullAttempts = 0;
   const pullDeadline = Date.now() + SUUNTO_HEALTH_PULL_BUDGET_MS;
@@ -409,13 +387,21 @@ export async function processSuuntoHealthQueueItem(
   };
   const fetchPayload = async (url: string, stage: SuuntoHealthFailureStage): Promise<unknown> => {
     onStage?.('lifecycle_check');
-    await assertUserActiveBeforeProviderRequest(firebaseUserID, queueItem.id, tokenSnapshot.id);
-    lifecycleGuards = await assertCurrentLifecycle(
-      firebaseUserID,
-      tokenSnapshot.ref,
-      tokenCredential,
-      initialGuards,
-    );
+    lifecycleGuards = resolvedAccessTokenNeedsValidation
+      ? await captureSuuntoHealthLifecycleForAccessToken(
+        firebaseUserID,
+        tokenSnapshot.ref,
+        accessToken,
+        initialGuards,
+      )
+      : await assertCurrentLifecycle(
+        firebaseUserID,
+        tokenSnapshot.ref,
+        tokenCredential,
+        initialGuards,
+      );
+    tokenCredential = lifecycleGuards.requiredExistingTokenCredential;
+    resolvedAccessTokenNeedsValidation = false;
     onLifecycleGuardsCaptured?.(lifecycleGuards);
     claimPullAttempt();
     try {
@@ -439,6 +425,7 @@ export async function processSuuntoHealthQueueItem(
     const refreshedToken = await getTokenData(tokenSnapshot, ServiceNames.SuuntoApp, true, {
       opaqueTelemetry: true,
       expectedActiveOAuthCredentialGeneration: expectedRootGeneration,
+      beforeRefreshRequest: validateBeforeTokenRefreshRequest,
     });
     const refreshedAccessToken = typeof refreshedToken.accessToken === 'string'
       ? refreshedToken.accessToken
@@ -450,28 +437,15 @@ export async function processSuuntoHealthQueueItem(
       throw new SuuntoHealthAccountValidationError();
     }
     onStage?.('lifecycle_check');
-    const refreshedCredential = await currentTokenCredential(tokenSnapshot.ref, refreshedAccessToken);
-    if (refreshedCredential.credentialGeneration
-      !== initialGuards.requiredExistingTokenCredential.credentialGeneration) {
-      throw new SuuntoHealthAccountValidationError();
-    }
     accessToken = refreshedAccessToken;
-    tokenCredential = refreshedCredential;
-    lifecycleGuards = await captureSuuntoHealthWriteLifecycleGuards(
+    lifecycleGuards = await captureSuuntoHealthLifecycleForAccessToken(
       firebaseUserID,
       tokenSnapshot.ref,
-      tokenCredential,
+      accessToken,
       initialGuards,
     );
-    assertLifecycleContinuity(initialGuards, lifecycleGuards);
-    onLifecycleGuardsCaptured?.(lifecycleGuards);
-    await assertUserActiveBeforeProviderRequest(firebaseUserID, queueItem.id, tokenSnapshot.id);
-    lifecycleGuards = await assertCurrentLifecycle(
-      firebaseUserID,
-      tokenSnapshot.ref,
-      tokenCredential,
-      initialGuards,
-    );
+    tokenCredential = lifecycleGuards.requiredExistingTokenCredential;
+    resolvedAccessTokenNeedsValidation = false;
     onLifecycleGuardsCaptured?.(lifecycleGuards);
     claimPullAttempt();
     try {

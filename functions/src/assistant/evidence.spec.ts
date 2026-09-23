@@ -282,6 +282,60 @@ describe('Assistant evidence', () => {
     expect(evidence.facts).toEqual([]);
   });
 
+  it('summarizes bulk exact completion evidence without retaining opaque references', () => {
+    const evidence = buildAssistantEvidence({
+      name: 'get_planned_workout_completions',
+      title: 'Check planned workout completions',
+    }, {
+      completions: [{ workoutRef: 'private-workout-1', state: 'linked', provider: 'garmin', timing: 'on_date',
+        scheduledDate: '2026-09-20', workoutChangedSinceCompletion: false, activityRef: 'private-activity' },
+      { workoutRef: 'private-workout-2', state: 'unlinked', provider: null, timing: null,
+        scheduledDate: '2026-09-21', workoutChangedSinceCompletion: false, activityRef: null }],
+    });
+    expect(evidence.summary).toBe('1 of 2 planned workouts have an exact stored completion link.');
+    expect(evidence.facts).toEqual([
+      { label: '2026-09-20', value: 'Linked via garmin; on date' },
+      { label: '2026-09-21', value: 'No exact stored completion link' },
+    ]);
+    expect(JSON.stringify(evidence)).not.toContain('private-');
+  });
+
+  it('summarizes compatibility as local mapping evidence rather than delivery success', () => {
+    const evidence = buildAssistantEvidence({
+      name: 'assess_planned_workout_compatibility',
+      title: 'Assess planned workout provider compatibility',
+    }, {
+      workoutRef: 'private-workout',
+      assessments: [{ provider: 'garmin', level: 'exact', issues: [] },
+        { provider: 'wahoo', level: 'unsupported', issues: [{ severity: 'unsupported',
+          code: 'scheduling_duration_unavailable', field: '$.nodes', message: 'Time-based steps are required.' }] }],
+    });
+    expect(evidence.summary).toBe('1 exact, 0 degraded, 1 unsupported local provider mappings; not a live provider check.');
+    expect(evidence.facts).toEqual([
+      { label: 'garmin', value: 'exact' },
+      { label: 'wahoo', value: 'unsupported: Time-based steps are required.' },
+    ]);
+    expect(JSON.stringify(evidence)).not.toContain('private-workout');
+  });
+
+  it('describes Suunto sync evidence as sent without claiming app or watch visibility', () => {
+    const evidence = buildAssistantEvidence({
+      name: 'get_training_sync_status',
+      title: 'Get Training sync status',
+    }, {
+      scanComplete: true,
+      services: [
+        { provider: 'suunto', state: 'current', syncedWorkouts: 2, totalWorkouts: 3 },
+        { provider: 'garmin', state: 'current', syncedWorkouts: 3, totalWorkouts: 3 },
+      ],
+    });
+    expect(evidence.facts).toEqual([
+      { label: 'suunto', value: 'current; 2 of 3 workouts sent; Suunto app/watch visibility unknown' },
+      { label: 'garmin', value: 'current; 3 of 3 workouts confirmed; not watch receipt' },
+    ]);
+    expect(evidence.facts[0].value).not.toMatch(/found in|available in/i);
+  });
+
   it('does not discover app links nested under denied provenance fields', () => {
     const evidence = buildAssistantEvidence({
       name: 'get_training_metric',

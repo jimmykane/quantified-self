@@ -21,6 +21,7 @@ import { vi, describe, it, expect, beforeEach } from 'vitest';
 import { BehaviorSubject, of } from 'rxjs';
 import { AppAnalyticsService } from '../../services/app.analytics.service';
 import { AppHapticsService } from '../../services/app.haptics.service';
+import { AppLocaleService } from '../../services/app.locale.service';
 import { SharedModule } from '../../modules/shared.module';
 import {
     ACTIVITIES_EXCLUDED_FROM_ASCENT,
@@ -47,6 +48,7 @@ describe('UserSettingsComponent', () => {
     let snackBarMock: { open: ReturnType<typeof vi.fn> };
     let queryParamMapSubject: BehaviorSubject<any>;
     let hapticsServiceMock: any;
+    let localeServiceMock: any;
 
     const mockUser: Partial<User> = {
         uid: 'test-uid',
@@ -130,6 +132,10 @@ describe('UserSettingsComponent', () => {
             warning: vi.fn(),
             error: vi.fn(),
         };
+        localeServiceMock = {
+            cachePreference: vi.fn().mockReturnValue('unchanged'),
+            reload: vi.fn(),
+        };
         clipboardMock = { copy: vi.fn(() => true) };
         snackBarMock = { open: vi.fn() };
 
@@ -155,6 +161,7 @@ describe('UserSettingsComponent', () => {
                 { provide: LoggerService, useValue: { error: vi.fn(), warn: vi.fn() } },
                 { provide: AppAnalyticsService, useValue: { logEvent: vi.fn() } },
                 { provide: AppHapticsService, useValue: hapticsServiceMock },
+                { provide: AppLocaleService, useValue: localeServiceMock },
                 { provide: Analytics, useValue: null },
             ],
             schemas: [NO_ERRORS_SCHEMA]
@@ -644,6 +651,110 @@ describe('UserSettingsComponent', () => {
             { label: 'Kilometers', value: DistanceUnits.Kilometers },
             { label: 'Miles', value: DistanceUnits.Miles },
         ]);
+    });
+
+    it('initializes missing regional formatting as Automatic', () => {
+        expect(component.userSettingsFormGroup.get('formatLocale').value).toBe('auto');
+        expect(component.selectedFormatLocaleLabel).toBe('Automatic (browser)');
+        expect(component.formatLocaleOptions).toHaveLength(10);
+        expect(component.formatLocaleOptions.map(option => option.value)).toEqual([
+            'auto', 'en-GB', 'en-US', 'de-DE', 'fr-FR', 'es-ES', 'it-IT', 'nl-NL', 'pl-PL', 'el-GR',
+        ]);
+        expect(component.formatLocaleOptions.every(option => option.preview.date && option.preview.number)).toBe(true);
+    });
+
+    it('renders regional formatting above the unit controls', () => {
+        component.activeSection = 'units';
+        fixture.detectChanges();
+
+        const regionalFormat = fixture.nativeElement.querySelector('.settings-regional-format');
+        const presetGroup = fixture.nativeElement.querySelector('mat-button-toggle-group');
+        expect(regionalFormat).toBeTruthy();
+        expect(regionalFormat.compareDocumentPosition(presetGroup) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+        expect(regionalFormat.textContent).toContain('Regional formatting');
+        expect(regionalFormat.textContent).toContain('exported dates stay separate');
+    });
+
+    it('keeps regional options and previews readable at the narrow settings breakpoint', () => {
+        const styles = readFileSync(
+            resolve(process.cwd(), 'src/app/components/user-settings/user-settings.component.scss'),
+            'utf8',
+        );
+
+        expect(styles).toMatch(/\.settings-regional-format mat-form-field\s*\{[^}]*flex:\s*0 1 auto/s);
+        expect(styles).toContain('width: min(100%, 390px)');
+        expect(styles).toMatch(/\.regional-format-option\s*\{[^}]*min-height:\s*64px/s);
+        expect(styles).toMatch(/\.regional-format-option__content\s*\{[^}]*grid-template-columns:\s*1fr/s);
+    });
+
+    it('uses selection haptics only when the regional format changes deliberately', () => {
+        expect(hapticsServiceMock.selection).not.toHaveBeenCalled();
+
+        component.onFormatLocaleChange();
+
+        expect(hapticsServiceMock.selection).toHaveBeenCalledOnce();
+    });
+
+    it('saves and applies a changed regional format', async () => {
+        const userService = TestBed.inject(AppUserService);
+        const updateUserPropertiesSpy = vi.spyOn(userService, 'updateUserProperties').mockResolvedValue(true as any);
+        localeServiceMock.cachePreference.mockReturnValue('updated');
+        component.userSettingsFormGroup.get('formatLocale').setValue('fr-FR');
+        component.userSettingsFormGroup.get('formatLocale').markAsDirty();
+
+        await component.onSubmit(new Event('submit'));
+
+        expect(updateUserPropertiesSpy).toHaveBeenCalledWith(
+            expect.objectContaining({ uid: 'test-uid' }),
+            expect.objectContaining({
+                settings: expect.objectContaining({
+                    appSettings: expect.objectContaining({ formatLocale: 'fr-FR' }),
+                }),
+            }),
+        );
+        expect(localeServiceMock.cachePreference).toHaveBeenCalledWith('fr-FR');
+        expect(localeServiceMock.reload).toHaveBeenCalledOnce();
+        expect(hapticsServiceMock.success).toHaveBeenCalledOnce();
+    });
+
+    it('does not reconcile or reload an unchanged regional format', async () => {
+        const userService = TestBed.inject(AppUserService);
+        vi.spyOn(userService, 'updateUserProperties').mockResolvedValue(true as any);
+
+        await component.onSubmit(new Event('submit'));
+
+        expect(localeServiceMock.cachePreference).not.toHaveBeenCalled();
+        expect(localeServiceMock.reload).not.toHaveBeenCalled();
+    });
+
+    it('reports when a saved regional format cannot be cached by the browser', async () => {
+        const userService = TestBed.inject(AppUserService);
+        vi.spyOn(userService, 'updateUserProperties').mockResolvedValue(true as any);
+        localeServiceMock.cachePreference.mockReturnValue('storage-unavailable');
+        component.userSettingsFormGroup.get('formatLocale').setValue('pl-PL');
+
+        await component.onSubmit(new Event('submit'));
+
+        expect(snackBarMock.open).toHaveBeenCalledWith(
+            'Settings saved, but this browser could not apply the regional format.',
+            undefined,
+            { duration: 5000 },
+        );
+        expect(hapticsServiceMock.warning).toHaveBeenCalledOnce();
+        expect(hapticsServiceMock.success).not.toHaveBeenCalled();
+        expect(localeServiceMock.reload).not.toHaveBeenCalled();
+    });
+
+    it('does not cache or reload a changed regional format when the account save fails', async () => {
+        const userService = TestBed.inject(AppUserService);
+        vi.spyOn(userService, 'updateUserProperties').mockRejectedValueOnce(new Error('offline'));
+        component.userSettingsFormGroup.get('formatLocale').setValue('el-GR');
+
+        await component.onSubmit(new Event('submit'));
+
+        expect(localeServiceMock.cachePreference).not.toHaveBeenCalled();
+        expect(localeServiceMock.reload).not.toHaveBeenCalled();
+        expect(hapticsServiceMock.error).toHaveBeenCalledOnce();
     });
 
     it('should apply a simple miles unit preset to advanced controls', () => {

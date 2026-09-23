@@ -40,7 +40,7 @@ export class EventTagsDialogComponent {
   readonly separatorKeysCodes = [ENTER, COMMA] as const;
   readonly tagLimit = EVENT_TAG_LIMIT;
   readonly tagMaxLength = EVENT_TAG_MAX_LENGTH;
-  readonly title = this.data.title || 'Event tags';
+  readonly title = this.data.title || 'Activity tags';
   readonly originalTags = normalizeEventTags(this.data.tags);
   readonly stagedTags = signal<string[]>(this.originalTags);
   readonly tagInput = signal('');

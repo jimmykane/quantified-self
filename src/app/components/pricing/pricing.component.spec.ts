@@ -306,7 +306,39 @@ describe('PricingComponent', () => {
         expect(component.getAssistantLimitLabel('pro')).toBe(`Assistant up to ${ASSISTANT_REQUEST_LIMITS.pro} requests per billing period`);
     });
 
-    it('should show cross-device sync in the Pro plan feature list without service names', async () => {
+    it('should include manual training planning in every membership tier', async () => {
+        const paymentService = TestBed.inject(AppPaymentService);
+        const products: StripeProduct[] = (['basic', 'pro'] as const).map((role, index) => ({
+            id: `product_${role}`,
+            active: true,
+            name: role,
+            description: role,
+            role,
+            images: [],
+            metadata: { role },
+            prices: [{
+                id: `price_${role}`,
+                active: true,
+                currency: 'usd',
+                unit_amount: (index + 1) * 500,
+                description: role,
+                type: 'recurring',
+                interval: 'month',
+                interval_count: 1,
+                trial_period_days: null,
+                recurring: { interval: 'month' as const },
+            }],
+        }));
+        vi.spyOn(paymentService, 'getProducts').mockReturnValue(of(products));
+
+        await component.ngOnInit();
+        fixture.detectChanges();
+
+        expect((fixture.nativeElement.textContent as string)
+            .match(/Manual training plans and standalone workouts/g)).toHaveLength(3);
+    });
+
+    it('should show public provider workout delivery and cross-device sync in the Pro plan feature list', async () => {
         const paymentService = TestBed.inject(AppPaymentService);
         const userService = TestBed.inject(AppUserService);
         const proProduct: StripeProduct = {
@@ -339,6 +371,7 @@ describe('PricingComponent', () => {
         fixture.detectChanges();
 
         const content = fixture.nativeElement.textContent as string;
+        expect(content).toContain('Provider planned-workout delivery');
         expect(content).toContain('Cross-device sync');
         expect(content).toContain('Unlimited saved routes');
         expect(content.match(/MCP data access/g)).toHaveLength(2);

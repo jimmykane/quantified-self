@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
     classifyEventForTrainingMetrics,
+    isBenchmarkEvent,
     isBenchmarkEventForTrainingMetrics,
 } from '../../../shared/event-classification';
 
@@ -22,6 +23,7 @@ describe('event training metrics classifier', () => {
     it('classifies benchmark merges as benchmark', () => {
         expect(classifyEventForTrainingMetrics({ mergeType: 'benchmark', isMerge: false })).toBe('benchmark');
         expect(classifyEventForTrainingMetrics({ mergeType: ' Benchmark ' })).toBe('benchmark');
+        expect(isBenchmarkEvent({ mergeType: 'benchmark' })).toBe(true);
         expect(isBenchmarkEventForTrainingMetrics({ mergeType: 'benchmark' })).toBe(true);
     });
 

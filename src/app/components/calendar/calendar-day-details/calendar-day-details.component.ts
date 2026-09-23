@@ -4,7 +4,6 @@ import { TIMELINE_NOTE_ICONS, timelineNoteColor } from '../../../helpers/timelin
 import { MAT_BOTTOM_SHEET_DATA, MatBottomSheetRef } from '@angular/material/bottom-sheet';
 import { Router } from '@angular/router';
 import { AppUserService } from '../../../services/app.user.service';
-import { isTrainingPlanningUIAllowed } from '@shared/training-planning-rollout';
 import type { EventInterface, UserUnitSettingsInterface } from '@sports-alliance/sports-lib';
 import {
   type ActivityCalendarDayViewModel,
@@ -26,6 +25,7 @@ import { ActivityCalendarVolumeListComponent } from '../activity-calendar-volume
 import { ActivityCalendarVolumeStatsComponent } from '../activity-calendar-volume-list/activity-calendar-volume-stats.component';
 import type { PlannedWorkoutCalendarEntry } from '../../../helpers/planned-workout-calendar.helper';
 import { formatManualWorkoutStructure } from '../../../helpers/planned-workout-editor.helper';
+import { getDateTimeFormatter } from '../../../helpers/date-time-format.helper';
 
 export interface CalendarDayDetailsData {
   day: ActivityCalendarDayViewModel;
@@ -80,9 +80,11 @@ export class CalendarDayDetailsComponent {
   private readonly navigation = inject(CalendarDayDetailsNavigationService);
   readonly data = inject<CalendarDayDetailsData>(MAT_BOTTOM_SHEET_DATA);
   private readonly users = inject(AppUserService);
-  readonly hasTrainingPlanningUIAccess = computed(() => this.users.user()?.uid === this.data.userId
-    && isTrainingPlanningUIAllowed(this.users.user()?.uid));
-  private readonly titleFormatter = new Intl.DateTimeFormat(this.data.locale, {
+  readonly hasTrainingPlanningUIAccess = computed(() => {
+    const viewerUid = this.users.user()?.uid;
+    return !!viewerUid && viewerUid === this.data.userId;
+  });
+  private readonly titleFormatter = getDateTimeFormatter(this.data.locale, {
     weekday: 'long',
     month: 'long',
     day: 'numeric',
@@ -106,7 +108,9 @@ export class CalendarDayDetailsComponent {
     sport: entry.workout.structure.sport,
     scopeLabel: entry.planName ?? 'Standalone',
     color: entry.color,
-    lifecycleLabel: entry.workout.lifecycle === 'skipped' ? 'Skipped' : 'Planned',
+    lifecycleLabel: entry.completed
+      ? 'Completed · activity linked'
+      : entry.workout.lifecycle === 'skipped' ? 'Skipped' : 'Planned',
     summary: formatManualWorkoutStructure(entry.workout.structure, this.data.unitSettings, this.data.locale),
   })));
 
@@ -153,7 +157,7 @@ export class CalendarDayDetailsComponent {
     const label = resolveActivityCalendarEventLabel(event);
     const activityTypeLabel = `${event?.getActivityTypesAsString?.() || 'Activity'}`.trim() || 'Activity';
     const timeLabel = startDate
-      ? new Intl.DateTimeFormat(this.data.locale, { hour: 'numeric', minute: '2-digit' }).format(startDate)
+      ? getDateTimeFormatter(this.data.locale, { hour: 'numeric', minute: '2-digit' }).format(startDate)
       : 'Time unavailable';
     const durationLabel = durationSeconds === null
       ? 'Duration unavailable'

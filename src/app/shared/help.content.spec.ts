@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { HELP_ACTIONS, HELP_SECTIONS, HelpSectionId, getHelpSectionsForUser } from './help.content';
-import { TRAINING_PLANNING_UI_ALLOWED_UIDS } from '@shared/training-planning-rollout';
+import { HELP_ACTIONS, HELP_SECTIONS, HelpSectionId } from './help.content';
 import { searchHelpSections } from '../helpers/help-search.helper';
 import { CONNECTED_SERVICES_POLICY_SECTION } from './policies.content';
 import { ROUTE_USAGE_LIMITS, USAGE_LIMITS } from '../../../shared/limits';
@@ -15,29 +14,52 @@ import {
 } from './policies.content';
 
 describe('help.content', () => {
-  it.each([undefined, null, '', 'another-user'])('omits pre-release planning from public/searchable help for %s', uid => {
-    const sections = getHelpSectionsForUser(uid);
-    const copy = JSON.stringify(sections);
-    expect(copy).not.toContain('/training/plans');
-    expect(sections.some(section => section.id === 'training-plans')).toBe(false);
-    expect(sections.some(section => section.id === 'training-analysis')).toBe(true);
-    expect(sections.some(section => section.id === 'plans-and-billing')).toBe(true);
-    expect(sections.some(section => section.id === 'activity-calendar')).toBe(true);
+  it('keeps Planning guidance public and searchable', () => {
+    const copy = JSON.stringify(HELP_SECTIONS);
+    expect(copy).toContain('/training/plans');
     expect(HELP_SECTIONS.some(section => section.id === 'training-plans')).toBe(true);
+    expect(HELP_SECTIONS.some(section => section.id === 'training-analysis')).toBe(true);
+    expect(HELP_SECTIONS.some(section => section.id === 'plans-and-billing')).toBe(true);
+    expect(HELP_SECTIONS.some(section => section.id === 'activity-calendar')).toBe(true);
   });
 
-  it('retains complete planning guidance for the allowlisted account', () => {
-    expect(getHelpSectionsForUser(TRAINING_PLANNING_UI_ALLOWED_UIDS[0])).toBe(HELP_SECTIONS);
+  it('documents regional formatting scope, precedence, and stable export dates', () => {
+    const content = HELP_SECTIONS.find(section => section.id === 'data-and-privacy')!.content.replace(/\s+/g, ' ');
+
+    expect(content).toContain('**Settings -> Units -> Regional formatting**');
+    expect(content).toContain('**Automatic (browser)** is the recommended default');
+    expect(content).toContain('saved to your account and follows you between devices');
+    expect(content).toContain('the app reloads once');
+    expect(content).toContain('does not change the app language, timezone, measurement units, start of week');
+    expect(content).toContain('**YYYY-MM-DD**');
   });
-  it('distinguishes Training consent, expiry, disconnect and the private pilot boundary', () => {
-    const content = HELP_SECTIONS.find(section => section.id === 'training-plans')!.content;
-    expect(content).toContain('Garmin, COROS, Suunto and Wahoo workout sync is restricted to the private rollout, not a public launch');
+
+  it('distinguishes Training consent, expiry, disconnect and provider rollout boundaries', () => {
+    const section = HELP_SECTIONS.find(section => section.id === 'training-plans')!;
+    const content = section.content;
+    expect(section.summary).toContain('approval-gated MCP planning');
+    expect(section.summary).toContain('opt-in provider delivery');
+    expect(content).toContain('## Use Training Plans through MCP');
+    expect(content).toContain('Training Plans uses independent MCP permissions');
+    expect(content).toContain('The MCP update must be released, discovered by your client, and explicitly authorized');
+    expect(content).toContain('Previewing a change never contacts a provider');
+    expect(content).toContain('## Send workouts to connected providers');
+    expect(section.links.some(link => link.label === 'MCP Connections')).toBe(true);
+    expect(section.links.some(link => link.label === 'Connected services')).toBe(true);
+    expect(content).toContain('Workout delivery to Garmin, Suunto, and Wahoo is available to connected Pro members');
+    expect(content).toContain('New COROS plan sync and standalone Send actions are coming soon in the app');
     expect(content).toContain('Distance-based steps are not sent because Wahoo needs a total duration');
-    expect(content).toContain('Checks confirm the Plan, Workout and association; automatic restoration is unavailable');
+    expect(content).toContain('Older Wahoo connections may need **Reconnect Wahoo**');
+    expect(content).toContain('Checks confirm the app-owned Plan, Workout and association; automatic missing-copy restoration is unavailable');
+    expect(content).toContain('COROS workout delivery is coming soon in the app');
+    expect(content).toContain('Existing saved COROS delivery state continues to follow its consent');
+    expect(content).toContain('New plan sync, plan-workout resume, and standalone Send actions are unavailable');
     expect(content).toContain('COROS training calendar');
     expect(content).toContain('two-week watch window');
     expect(content).toContain('remote checking and automatic missing-copy restoration are unavailable');
     expect(content).toContain('These cosmetic adjustments happen automatically');
+    expect(content).toContain('requests removal of its prior Guide');
+    expect(content).not.toContain('removes its old Guide');
     expect(content).toContain('**Not sent · Needs review**');
     expect(content).toContain('**Exclude from plan sync**');
     expect(content).toContain('Opening Review never sends or approves anything by itself');
@@ -53,7 +75,7 @@ describe('help.content', () => {
     expect(content).toContain('**Sync plan with Garmin**');
     expect(content).toContain('**Enable plan sync**');
     expect(content).toContain('**Workout sync status**');
-    expect(content).toContain("each service's logo and a compact synced/total count for workouts currently due for delivery");
+    expect(content).toContain("each service's logo and a compact sent/total count for Suunto");
     expect(content).toContain('small **View** action');
     expect(content).toContain('whether sync is enabled for each service');
     expect(content).toContain('one **Manage** action');
@@ -61,8 +83,9 @@ describe('help.content', () => {
     expect(content).toContain('These navigation actions do not enable sync or send anything');
     expect(content).toContain('individual workouts, not plans or edits');
     expect(content).toContain('**All 3 upcoming workouts synced · 2 earlier workouts**');
+    expect(content).toContain("Suunto's **All 3 upcoming workouts sent · 2 earlier workouts**");
     expect(content).toContain('prioritizes today and future workouts');
-    expect(content).toContain('Older-account copies do not count as current sync');
+    expect(content).toContain('Older-account copies do not count as current delivery');
     expect(content).toContain('not delivery to a device');
     expect(content).toContain('**Stop plan sync**');
     expect(content).toContain('**Stop workout sync**');
@@ -85,8 +108,9 @@ describe('help.content', () => {
   });
   it('makes optional full-text notes access discoverable without implying chart visibility is consent', () => {
     const content = HELP_SECTIONS.map(section => section.content).join(' ');
-    expect(content).toContain('**Timeline notes** is an independent read-only permission');
-    expect(content).toContain('It is selected by default when requested; uncheck it before approving to withhold access.');
+    expect(content).toContain('**Timeline notes** is an independent read permission');
+    expect(content).toContain('Both permissions are selected by default when requested; uncheck either before approving.');
+    expect(content).toContain('**Change Timeline notes** is a separate child permission');
     expect(content).toContain('Every requested permission starts checked, including permissions added later');
     expect(content).toContain('It is off by default. Changing optional access starts a fresh chat');
     expect(content).toContain('full private');
@@ -94,8 +118,8 @@ describe('help.content', () => {
     expect(searchHelpSections(HELP_SECTIONS, 'Timeline notes').map(section => section.id))
       .toEqual(expect.arrayContaining(['ai-insights', 'data-and-privacy']));
   });
-  it('explains independent Training read and approval-gated change access without promoting the private planning UI', () => {
-    const content = getHelpSectionsForUser('ordinary-user').map(section => section.content).join(' ');
+  it('explains independent Training read and approval-gated change access without expanding Assistant access', () => {
+    const content = HELP_SECTIONS.map(section => section.content).join(' ');
     expect(content).toContain('**Training planning (optional):**');
     expect(content).toContain('Gemini can prepare one bounded proposal but cannot apply it');
     expect(content).toContain('disable Training write tools while using Research');
@@ -339,8 +363,8 @@ describe('help.content', () => {
     expect(dataAndPrivacySection?.content).toContain('exact case-insensitive tag matches');
     expect(dataAndPrivacySection?.content).toContain('personal, health, or location context');
     expect(dataAndPrivacySection?.content).toContain('untrusted labels');
-    expect(dataAndPrivacySection?.content).toContain('existing clients do not reauthorize');
-    expect(dataAndPrivacySection?.content).toContain('The built-in Assistant is not expanded');
+    expect(dataAndPrivacySection?.content).toContain('Existing clients must reauthorize for this new write permission');
+    expect(dataAndPrivacySection?.content).toContain('separate default-off Activity tag changes choice');
     expect(dataAndPrivacySection?.content).toContain('Oversized rankings fail');
     expect(dataAndPrivacySection?.content).toContain('jump count is not treated as jump quality');
     expect(dataAndPrivacySection?.content).toContain('missing or insufficient-history states');
@@ -426,7 +450,7 @@ describe('help.content', () => {
   it('should document the Dashboard Today recovery countdown behavior', () => {
     const gettingStartedSection = HELP_SECTIONS.find(section => section.id === 'getting-started');
 
-    expect(gettingStartedSection?.content).toContain('estimated local finish time as Training');
+    expect(gettingStartedSection?.content).toContain('estimated local recovery day and time as Training');
     expect(gettingStartedSection?.content).toContain('remaining share of the active imported recovery estimates');
     expect(gettingStartedSection?.content).toContain('disappears when elapsed');
   });
@@ -541,12 +565,13 @@ describe('help.content', () => {
     });
   });
 
-  it('documents standalone manual planning, revision recovery, and truthful provider status', () => {
+  it('documents standalone planning, revision recovery, and truthful provider status', () => {
     const gettingStartedSection = HELP_SECTIONS.find(section => section.id === 'getting-started');
     const planningSection = HELP_SECTIONS.find(section => section.id === 'training-plans');
 
     expect(planningSection?.content).toContain('You do not need to create a plan first');
-    expect(planningSection?.content).toContain('Manual planning is available without a service connection');
+    expect(planningSection?.content).toContain('[Training Plans overview](/features/training-plans)');
+    expect(planningSection?.content).toContain('Plans and standalone workouts work without a service connection');
     expect(planningSection?.content).toContain('Settings -> Dashboard -> Start of the Week');
     expect(planningSection?.content).toContain('Its first weekday is marked and named below the grid');
     expect(planningSection?.content).toContain('Saturday and Sunday are subtly tinted wherever they fall in the week');
@@ -557,10 +582,16 @@ describe('help.content', () => {
     expect(planningSection?.content).toContain('restoring plan history also restores its saved color');
     expect(HELP_SECTIONS.find(section => section.id === 'activity-calendar')?.content)
       .toContain('Standalone workouts stay neutral');
-    expect(planningSection?.content).toContain('Garmin, COROS, Suunto and Wahoo workout sync is restricted to the private rollout');
-    expect(planningSection?.content).toContain('Wahoo initially supports time-based running and cycling workouts');
+    expect(planningSection?.content).toContain('Workout delivery to Garmin, Suunto, and Wahoo is available to connected Pro members');
+    expect(planningSection?.content).toContain('New COROS plan sync and standalone Send actions are coming soon in the app');
+    expect(planningSection?.content).toContain('Wahoo supports time-based running and cycling workouts');
     expect(planningSection?.content).toContain('Scheduled for later');
-    expect(planningSection?.content).toContain('Sent is not a watch receipt');
+    expect(planningSection?.content).toContain('**Sent to Suunto** means Suunto accepted the Guide for your account');
+    expect(planningSection?.content).toContain('does not prove that the Guide is visible in the Suunto app');
+    expect(planningSection?.content).toContain('leave its cloud record visible to partners');
+    expect(planningSection?.content).toContain('does not offer a Suunto visibility check');
+    expect(planningSection?.content).toContain('never recreates a Guide automatically');
+    expect(planningSection?.content).toContain('reconnecting is not required or recommended as a normal QS workflow');
     expect(planningSection?.content).toContain('**Completed · activity linked**');
     expect(planningSection?.content).toContain('**Sent · workout completed**');
     expect(planningSection?.content).toContain('**Past workout · previously sent**');
@@ -578,6 +609,12 @@ describe('help.content', () => {
       icon: 'event_note',
       kind: 'route',
       target: '/training/plans',
+    });
+    expect(planningSection?.links).toContainEqual({
+      label: 'Training Plans overview',
+      icon: 'travel_explore',
+      kind: 'route',
+      target: '/features/training-plans',
     });
     expect(gettingStartedSection?.content).toContain('[Training plans guide](/help#training-plans)');
   });
@@ -658,7 +695,7 @@ describe('help.content', () => {
     expect(trainingSection?.content).toContain('**Recovery left**');
     expect(trainingSection?.content).toContain('**Sleep history**');
     expect(trainingSection?.content).toContain('remains visible while sleep details are collapsed');
-    expect(trainingSection?.content).toContain('estimated local finish time');
+    expect(trainingSection?.content).toContain('estimated local recovery day and time');
     expect(trainingSection?.content).toContain('**Show sleep details**');
     expect(trainingSection?.content).toContain('omitted quietly when missing or elapsed');
     expect(trainingSection?.content).toContain('without changing the Training state');
@@ -1386,6 +1423,8 @@ describe('help.content', () => {
     expect(serviceConnectionsSection?.content).toContain('Garmin, COROS, or Suunto activities');
     expect(serviceConnectionsSection?.content).toContain('automatically send new Wahoo activities to Suunto');
     expect(serviceConnectionsSection?.content).toContain('Wahoo-origin FIT activities can be delivered to Suunto or COROS after explicit opt-in');
+    expect(serviceConnectionsSection?.content).toContain('Wahoo **Training** delivery is available to connected Pro members');
+    expect(serviceConnectionsSection?.content).toContain('Wahoo-owned plans are not imported');
     expect(serviceConnectionsSection?.links).toContainEqual(expect.objectContaining({
       target: '/guides/sync-wahoo-to-suunto',
     }));
@@ -1456,7 +1495,9 @@ describe('help.content', () => {
     );
     expect(dataAndPrivacySection?.content).toContain('up to 25 explicitly selected canonical numeric Sports Lib metrics');
     expect(dataAndPrivacySection?.content).toContain('first-class body-measurement history');
-    expect(dataAndPrivacySection?.content).toContain('Removing activity details also removes its descriptions and location permissions');
+    expect(dataAndPrivacySection?.content).toContain('Removing any parent removes its dependent children');
+    expect(dataAndPrivacySection?.content).toContain('**Change events** is a separate child permission');
+    expect(dataAndPrivacySection?.content).toContain('benchmark events are read-only');
     expect(dataAndPrivacySection?.content).toContain('bounded ranges up to 366 days');
     expect(dataAndPrivacySection?.content).toContain('identity-free day, week, or month values');
     expect(dataAndPrivacySection?.content).toContain('provider or manual canonical Health Weight point measurements');

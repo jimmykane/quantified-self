@@ -22,6 +22,7 @@ import {
   formatDashboardWeeklyAxisLabel,
   formatDashboardWeekRangeLabel,
 } from '../../helpers/dashboard-chart-data.helper';
+import { getNumberFormatter } from '../../helpers/number-format.helper';
 import type { DashboardDerivedMetricStatus } from '../../helpers/derived-metric-status.helper';
 import { isDerivedMetricPendingStatus } from '../../helpers/derived-metric-status.helper';
 import {
@@ -333,7 +334,7 @@ export class TrainingDurabilityTrajectoryChartComponent implements AfterViewInit
 }
 
 function formatNumber(value: number): string {
-  return new Intl.NumberFormat(undefined, { maximumFractionDigits: 1 }).format(value);
+  return getNumberFormatter(undefined, { maximumFractionDigits: 1 }).format(value);
 }
 
 function formatActivityCount(value: number): string {

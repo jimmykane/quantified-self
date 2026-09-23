@@ -1,4 +1,6 @@
 import { TestBed } from '@angular/core/testing';
+import { By } from '@angular/platform-browser';
+import { MatTooltip } from '@angular/material/tooltip';
 import { ActivityTypes } from '@sports-alliance/sports-lib';
 import type { ScheduledWorkoutV1, TrainingPlanV1 } from '@shared/training-plans';
 import { AppHapticsService } from '../../services/app.haptics.service';
@@ -41,7 +43,10 @@ describe('PlanScheduleCalendarComponent', () => {
     const date = fixture.nativeElement.querySelector('[data-plan-date="2026-09-08"]') as HTMLButtonElement;
     expect(date.disabled).toBe(true);
     expect(date.getAttribute('aria-label')).toContain('Outside this plan');
-    expect(fixture.nativeElement.querySelector('.calendar-workout')?.getAttribute('aria-label')).toBe(`Edit ${workout.title}, skipped`);
+    const workoutButton = fixture.debugElement.query(By.css('.calendar-workout'));
+    expect(fixture.componentInstance.workoutActionVerb()).toBe('Edit');
+    expect(workoutButton.nativeElement.getAttribute('aria-label')).toBe(`Edit ${workout.title}, skipped`);
+    expect(workoutButton.injector.get(MatTooltip).message).toBe(`${workout.title} · Skipped`);
     expect(fixture.nativeElement.querySelector('.calendar-workout--skipped')).toBeTruthy();
     fixture.componentInstance.selectDate('2026-09-09');
     fixture.componentInstance.selectDate(null);
@@ -51,6 +56,21 @@ describe('PlanScheduleCalendarComponent', () => {
     fixture.detectChanges();
     expect(fixture.componentInstance.selectedDate()).toBe('2026-09-12');
     expect(selection).toHaveBeenCalledOnce();
+  });
+
+  it('allows public previews to replace presentation copy without changing authenticated defaults', async () => {
+    const fixture = await render();
+    fixture.componentRef.setInput('workoutActionVerb', 'Preview');
+    fixture.componentRef.setInput('calendarHint', 'Choose a sample date; nothing is saved.');
+    fixture.detectChanges();
+
+    const workoutButton = fixture.debugElement.query(By.css('.calendar-workout'));
+    expect(workoutButton.nativeElement.getAttribute('aria-label')).toBe(`Preview ${workout.title}, skipped`);
+    expect(workoutButton.injector.get(MatTooltip).message).toBe(`Preview ${workout.title} · Skipped`);
+    expect(fixture.nativeElement.querySelector('.calendar-hint')?.textContent)
+      .toContain('Choose a sample date; nothing is saved.');
+    expect(fixture.nativeElement.querySelector('.calendar-hint')?.textContent)
+      .toContain('Weeks start on Monday. Saturday and Sunday are tinted.');
   });
 
   it('navigates months within the range and keeps arrow-key selection and focus together across months', async () => {
@@ -92,8 +112,9 @@ describe('PlanScheduleCalendarComponent', () => {
     fixture.componentRef.setInput('completedWorkoutIds', [workout.id]);
     fixture.detectChanges();
     const edit = fixture.nativeElement.querySelector('.calendar-workout') as HTMLButtonElement;
-    expect(edit.getAttribute('aria-label')).toBe(`Edit ${workout.title}, skipped, activity linked`);
-    expect(edit.textContent?.replace(/\s+/g, ' ').trim()).toBe(`Skipped · Linked · ${workout.title.trim()}`);
+    expect(edit.getAttribute('aria-label')).toBe(`Edit ${workout.title}, skipped, completed, activity linked`);
+    expect(edit.textContent?.replace(/\s+/g, ' ').trim()).toBe(`Skipped · Completed · ${workout.title.trim()}`);
+    expect(edit.classList).toContain('calendar-workout--completed');
     const count = fixture.nativeElement.querySelector('[data-plan-date="2026-09-12"] .calendar-day-count');
     expect(count?.querySelector('mat-icon')?.textContent?.trim()).toBe('task_alt');
     expect(workout.lifecycle).toBe('skipped');

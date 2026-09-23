@@ -15,6 +15,8 @@ import type { DashboardPreviewInput } from '../../helpers/dashboard-chart-previe
 import { TimelineNotesWorkspaceComponent } from '../timeline-notes/timeline-notes-workspace.component';
 import type { TimelineNoteChartContext } from '../../helpers/timeline-notes-chart.helper';
 import { DOCUMENT } from '@angular/common';
+import { getDateTimeFormatter } from '../../helpers/date-time-format.helper';
+import { getNumberFormatter } from '../../helpers/number-format.helper';
 import {
   ChangeDetectionStrategy,
   ChangeDetectorRef,
@@ -58,7 +60,6 @@ import {
 } from '../../helpers/dashboard-tile-view-model.helper';
 import {
   buildDashboardSleepTrendContext,
-  formatSleepDuration,
   type DashboardSleepTrendWindow,
 } from '../../helpers/dashboard-sleep-chart.helper';
 import {
@@ -84,9 +85,8 @@ import {
 import { AppSleepService } from '../../services/app.sleep.service';
 import type { DashboardFormPoint } from '../../helpers/dashboard-form.helper';
 import {
+  buildDashboardRecoveryPresentation,
   RECOVERY_NOW_REFRESH_INTERVAL_MS,
-  resolveActiveRecoveryTotalSeconds,
-  resolveRecoveryFinishTimeMs,
   resolveRemainingRecoverySeconds,
   type DashboardRecoveryNowContext,
 } from '../../helpers/dashboard-recovery-now.helper';
@@ -244,6 +244,7 @@ interface DashboardTodayReadinessViewModel {
   recoveryText: string;
   recoveryRemainingPercent: number | null;
   recoveryFinishTimeMs: number | null;
+  recoveryFinishText: string;
   loadBars: DashboardTodayHistoryBar[];
   overnightHeartRateBars: DashboardTodayHistoryBar[];
 }
@@ -281,6 +282,7 @@ function createEmptyDashboardTodayReadinessViewModel(loading = false): Dashboard
     recoveryText: '--',
     recoveryRemainingPercent: null,
     recoveryFinishTimeMs: null,
+    recoveryFinishText: '',
     loadBars: [],
     overnightHeartRateBars: [],
   };
@@ -581,14 +583,14 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
 
   private formatTodayDateSubtitle(date: Date): string {
     try {
-      return new Intl.DateTimeFormat(this.locale || undefined, {
+      return getDateTimeFormatter(this.locale || undefined, {
         weekday: 'long',
         year: 'numeric',
         month: 'long',
         day: 'numeric',
       }).format(date);
     } catch {
-      return new Intl.DateTimeFormat(undefined, {
+      return getDateTimeFormatter(undefined, {
         weekday: 'long',
         year: 'numeric',
         month: 'long',
@@ -1879,7 +1881,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
   }
 
   private formatSleepTrendWindowDate(timestampMs: number): string {
-    return new Intl.DateTimeFormat(undefined, {
+    return getDateTimeFormatter(undefined, {
       year: 'numeric',
       month: 'short',
       day: 'numeric',
@@ -1953,15 +1955,15 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
       sleepTrend,
       nowMs,
     });
-    const recoveryRemainingSeconds = resolveRemainingRecoverySeconds(this.derivedRecoveryNowContext, nowMs);
-    const activeRecoveryTotalSeconds = resolveActiveRecoveryTotalSeconds(this.derivedRecoveryNowContext, nowMs);
-    const recoveryRemainingPercent = recoveryRemainingSeconds !== null
-      && activeRecoveryTotalSeconds !== null
-      && activeRecoveryTotalSeconds > 0
-      ? (recoveryRemainingSeconds / activeRecoveryTotalSeconds) * 100
-      : null;
-    const recoveryText = formatSleepDuration(recoveryRemainingSeconds);
-    const recoveryFinishTimeMs = resolveRecoveryFinishTimeMs(this.derivedRecoveryNowContext, nowMs);
+    const recovery = buildDashboardRecoveryPresentation(this.derivedRecoveryNowContext, {
+      locale: this.locale,
+      nowMs,
+      unitSettings: this.user?.settings?.unitSettings,
+    });
+    const recoveryText = recovery?.remainingText ?? '--';
+    const recoveryRemainingPercent = recovery?.remainingPercent ?? null;
+    const recoveryFinishTimeMs = recovery?.finishTimeMs ?? null;
+    const recoveryFinishText = recovery?.finishText ?? '';
     const loadBars = buildDashboardTodayLoadBars(
       this.derivedFormPoints,
       this.dashboardTodayTrainingState.label,
@@ -1975,6 +1977,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
         recoveryText,
         recoveryRemainingPercent,
         recoveryFinishTimeMs,
+        recoveryFinishText,
         loadBars,
       };
     }
@@ -2014,6 +2017,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
       recoveryText,
       recoveryRemainingPercent,
       recoveryFinishTimeMs,
+      recoveryFinishText,
       loadBars,
       overnightHeartRateBars: buildDashboardTodayOvernightHeartRateBars(
         sleepTrend,
@@ -2049,7 +2053,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
       return '--';
     }
     const prefix = signed && value > 0 ? '+' : '';
-    return `${prefix}${new Intl.NumberFormat(this.locale, { maximumFractionDigits: 1 }).format(value)}`;
+    return `${prefix}${getNumberFormatter(this.locale, { maximumFractionDigits: 1 }).format(value)}`;
   }
 
   private formatDashboardTodayRatio(ratio: number | null | undefined): string {

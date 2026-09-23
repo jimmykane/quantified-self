@@ -31,6 +31,7 @@ import { PageHeaderComponent } from '../shared/page-header/page-header.component
 import { MetricIndicatorComponent } from '../shared/metric-indicator/metric-indicator.component';
 import { TrainingSummaryCardsComponent } from '../shared/training-summary/training-summary-cards.component';
 import { TrainingMetricGridComponent } from '../shared/training-summary/training-metric-grid.component';
+import { getDateTimeFormatter } from '../../helpers/date-time-format.helper';
 
 @Component({ selector: 'app-timeline-notes-workspace', standalone: true, template: '<button>Timeline notes</button>' })
 class TimelineNotesWorkspaceStubComponent { context = () => null; }
@@ -249,7 +250,7 @@ describe('TrainingWorkspaceComponent', () => {
     expect(recoveryContext?.querySelector('#training-recovery-context-title')?.textContent).toContain('Recovery context');
     expect(element.querySelector('.training-readiness-source')?.nextElementSibling).toBe(recoveryContext);
     expect(importedRecovery?.textContent).toContain('Recovery left');
-    expect(importedRecovery?.textContent).toContain('remaining · until');
+    expect(importedRecovery?.textContent).toContain('remaining · expected by');
     expect(importedRecovery?.textContent).toContain('Imported post-workout estimate');
     expect(importedRecovery?.textContent).toContain('separate from Readiness and Freshness');
     expect(sleepHistory?.querySelector('#training-recovery-history-title')?.textContent).toContain('Sleep history');
@@ -2529,21 +2530,14 @@ describe('TrainingWorkspaceComponent', () => {
       expect.objectContaining({ label: 'Pool pace', deltaText: '0:05 /100m slower', deltaTone: 'negative' }),
     ]));
 
-    const dateTimeFormat = vi.spyOn(Intl, 'DateTimeFormat').mockImplementation(() => ({
-      format: (value: Date) => value.toISOString().slice(0, 10),
-    } as unknown as Intl.DateTimeFormat));
-    try {
-      expect((component as any).formatTrainingBuildRange(Date.UTC(2026, 0, 1), Date.UTC(2026, 0, 2)))
-        .toBe('2026-01-01 – 2026-01-02');
-      expect(dateTimeFormat).toHaveBeenCalledWith(undefined, {
-        month: 'short',
-        day: 'numeric',
-        year: 'numeric',
-        timeZone: 'UTC',
-      });
-    } finally {
-      dateTimeFormat.mockRestore();
-    }
+    const rangeFormatter = getDateTimeFormatter(undefined, {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric',
+      timeZone: 'UTC',
+    });
+    expect((component as any).formatTrainingBuildRange(Date.UTC(2026, 0, 1), Date.UTC(2026, 0, 2)))
+      .toBe(`${rangeFormatter.format(new Date(Date.UTC(2026, 0, 1)))} – ${rangeFormatter.format(new Date(Date.UTC(2026, 0, 2)))}`);
   });
 
   it('keeps build sleep comparison compact until details are requested', async () => {

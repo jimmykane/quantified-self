@@ -1,4 +1,5 @@
 import { getDateTimeFormatter } from './date-time-format.helper';
+import { getNumberFormatter } from './number-format.helper';
 import {
   ChartDataCategoryTypes,
   ChartDataValueTypes,
@@ -14,7 +15,7 @@ import {
 } from '@sports-alliance/sports-lib';
 import * as weeknumber from 'weeknumber';
 import type { AggregatedChartRow } from './aggregated-chart-row.helper';
-import { getBrowserLocale } from '../shared/adapters/date-locale.config';
+import { getAppLocale } from '../shared/adapters/app-locale';
 import {
   normalizeUserUnitSettings,
   resolveUnitAwareDisplayStat,
@@ -69,10 +70,10 @@ function formatCompactAxisNumber(value: number): string {
 
   const absoluteValue = Math.abs(value);
   const maximumFractionDigits = absoluteValue >= 100 ? 0 : absoluteValue >= 10 ? 1 : 2;
-  return value.toLocaleString(undefined, {
+  return getNumberFormatter(undefined, {
     maximumFractionDigits,
     minimumFractionDigits: 0,
-  });
+  }).format(value);
 }
 
 function normalizeDashboardAxisUnit(unit: string): string {
@@ -99,6 +100,14 @@ function withOptionalTimeZone<T extends Intl.DateTimeFormatOptions>(
   timeZone?: string,
 ): T & Intl.DateTimeFormatOptions {
   return timeZone ? { ...options, timeZone } : options;
+}
+
+function formatDashboardDate(
+  date: Date,
+  locale: string,
+  options: Intl.DateTimeFormatOptions,
+): string {
+  return getDateTimeFormatter(locale, options).format(date);
 }
 
 function getZonedCalendarDate(date: Date, timeZone?: string): Date {
@@ -136,28 +145,32 @@ function formatDashboardDateByIntervalWithOptions(
 
   switch (resolveDashboardDisplayInterval(timeInterval)) {
     case TimeIntervals.Yearly:
-      return date.toLocaleDateString(options.locale, withOptionalTimeZone({ year: 'numeric' }, options.timeZone));
+      return formatDashboardDate(date, options.locale, withOptionalTimeZone({ year: 'numeric' }, options.timeZone));
     case TimeIntervals.Monthly:
-      return date.toLocaleDateString(options.locale, withOptionalTimeZone({ month: 'short', year: 'numeric' }, options.timeZone));
+      return formatDashboardDate(date, options.locale, withOptionalTimeZone({ month: 'short', year: 'numeric' }, options.timeZone));
     case TimeIntervals.Weekly: {
       const week = weeknumber.weekNumber(getZonedCalendarDate(date, options.timeZone));
-      const dateLabel = date.toLocaleDateString(
+      const dateLabel = formatDashboardDate(
+        date,
         options.locale,
         withOptionalTimeZone({ day: '2-digit', month: 'short', year: 'numeric' }, options.timeZone),
       );
       return `Week ${week} ${dateLabel}`;
     }
     case TimeIntervals.Daily:
-      return date.toLocaleDateString(
+      return formatDashboardDate(
+        date,
         options.locale,
         withOptionalTimeZone({ day: '2-digit', month: 'short', year: 'numeric' }, options.timeZone),
       );
     case TimeIntervals.Hourly: {
-      const timeLabel = date.toLocaleTimeString(
+      const timeLabel = formatDashboardDate(
+        date,
         options.locale,
         withOptionalTimeZone({ hour: '2-digit', minute: '2-digit', hour12: false }, options.timeZone),
       );
-      const dateLabel = date.toLocaleDateString(
+      const dateLabel = formatDashboardDate(
+        date,
         options.locale,
         withOptionalTimeZone({ day: '2-digit', month: 'short', year: 'numeric' }, options.timeZone),
       );
@@ -205,7 +218,7 @@ export function getDashboardAxisDateFormat(timeInterval: TimeIntervals): string 
 export function formatDashboardDateByInterval(
   value: number | Date,
   timeInterval: TimeIntervals,
-  locale = getBrowserLocale(),
+  locale = getAppLocale(),
   timeZone?: string,
 ): string {
   return formatDashboardDateByIntervalWithOptions(value, timeInterval, {
@@ -223,7 +236,7 @@ export function formatDashboardAxisDateByInterval(
   value: number | Date,
   timeInterval: TimeIntervals,
   compact = false,
-  locale = getBrowserLocale(),
+  locale = getAppLocale(),
   timeZone?: string,
 ): string {
   const date = toValidDate(value);
@@ -244,7 +257,8 @@ export function formatDashboardAxisDateByInterval(
     return `W${week}`;
   }
 
-  const dateLabel = date.toLocaleDateString(
+  const dateLabel = formatDashboardDate(
+    date,
     locale,
     withOptionalTimeZone({ day: '2-digit', month: 'short' }, timeZone),
   );
@@ -259,7 +273,7 @@ export function formatDashboardAxisDateByInterval(
 export function formatDashboardWeeklyAxisLabel(
   value: number | Date,
   compact = false,
-  locale = getBrowserLocale(),
+  locale = getAppLocale(),
   timeZone?: string,
 ): string {
   const date = toValidDate(value);
@@ -271,7 +285,8 @@ export function formatDashboardWeeklyAxisLabel(
     return formatDashboardAxisDateByInterval(date, TimeIntervals.Weekly, true, locale, timeZone);
   }
 
-  return date.toLocaleDateString(
+  return formatDashboardDate(
+    date,
     locale,
     withOptionalTimeZone({ day: 'numeric', month: 'short' }, timeZone),
   );
@@ -279,7 +294,7 @@ export function formatDashboardWeeklyAxisLabel(
 
 export function formatDashboardWeekRangeLabel(
   value: number | Date | string,
-  locale = getBrowserLocale(),
+  locale = getAppLocale(),
   timeZone?: string,
 ): string {
   const startDate = toValidDate(value);
@@ -290,8 +305,8 @@ export function formatDashboardWeekRangeLabel(
   const endDate = new Date(startDate.getTime() + (6 * SECONDS_PER_DAY * 1000));
   const week = weeknumber.weekNumber(getZonedCalendarDate(startDate, timeZone));
   const dateFormat = withOptionalTimeZone({ day: '2-digit', month: 'short', year: 'numeric' } as const, timeZone);
-  const startLabel = startDate.toLocaleDateString(locale, dateFormat);
-  const endLabel = endDate.toLocaleDateString(locale, dateFormat);
+  const startLabel = formatDashboardDate(startDate, locale, dateFormat);
+  const endLabel = formatDashboardDate(endDate, locale, dateFormat);
 
   return Number.isFinite(week)
     ? `Week ${week}, ${startLabel} - ${endLabel}`
@@ -301,7 +316,7 @@ export function formatDashboardWeekRangeLabel(
 export function formatDashboardDateRange(
   startValue: number | Date | string,
   endValue: number | Date | string,
-  locale = getBrowserLocale(),
+  locale = getAppLocale(),
   timeZone?: string,
 ): string {
   const startDate = toValidDate(startValue);
@@ -316,7 +331,7 @@ export function formatDashboardDateRange(
 export function formatDashboardBucketDateByInterval(
   value: number | Date,
   timeInterval: TimeIntervals,
-  locale = getBrowserLocale(),
+  locale = getAppLocale(),
   timeZone?: string,
 ): string {
   return formatDashboardDateByInterval(value, resolveDashboardDisplayInterval(timeInterval), locale, timeZone);
@@ -426,7 +441,7 @@ export function formatDashboardNumericValue(
 
   const data = getDashboardDataInstanceOrNull(chartDataType, numericValue, logger);
   if (!data) {
-    return Number(numericValue).toLocaleString(undefined, { maximumFractionDigits: 2 });
+    return getNumberFormatter(undefined, { maximumFractionDigits: 2 }).format(Number(numericValue));
   }
 
   return formatDashboardDataDisplay(data, unitSettings);

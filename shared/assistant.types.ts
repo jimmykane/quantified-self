@@ -1,3 +1,5 @@
+import type { TimelineNoteCategory, TimelineNoteColor } from './timeline-notes';
+
 export const ASSISTANT_CONVERSATION_VERSION = 1 as const;
 export const ASSISTANT_MAX_MESSAGE_CHARS = 1_000;
 export const ASSISTANT_MAX_RESPONSE_CHARS = 4_000;
@@ -158,6 +160,8 @@ export interface AssistantConversation {
 export interface AssistantChatRequest {
   /** Missing on older clients means disabled. Enabling requires a fresh server-owned chat. */
   timelineNotesEnabled?: boolean;
+  activityTagChangesEnabled?: boolean;
+  timelineNoteChangesEnabled?: boolean;
   trainingPlansEnabled?: boolean;
   trainingPlanChangesEnabled?: boolean;
   trainingDeliveryEnabled?: boolean;
@@ -166,6 +170,42 @@ export interface AssistantChatRequest {
   timeZone: string;
   locationAccess: AssistantLocationAccess;
   conversationId?: string;
+}
+
+export type AssistantContentProposalKind =
+  | 'update_event_tags'
+  | 'create_timeline_note'
+  | 'update_timeline_note'
+  | 'delete_timeline_note';
+
+export interface AssistantTimelineNoteFields {
+  category: TimelineNoteCategory;
+  title: string;
+  details: string | null;
+  startDate: string;
+  endDate: string | null;
+  timeZone: string;
+  showOnCharts: boolean;
+  color: TimelineNoteColor;
+}
+
+export type AssistantContentProposalArguments =
+  | {
+      activityRef: string;
+      expectedTags: string[];
+      tags: string[];
+    }
+  | ({ mutationId: string } & AssistantTimelineNoteFields)
+  | ({ noteRef: string; expectedRevision: number } & AssistantTimelineNoteFields)
+  | { noteRef: string; expectedRevision: number };
+
+export interface AssistantContentProposalPreview {
+  proposalRef: string;
+  kind: AssistantContentProposalKind;
+  expiresAtMs: number;
+  summary: string;
+  requiresConfirmation: true;
+  arguments: AssistantContentProposalArguments;
 }
 
 export interface AssistantTrainingProposalPreview {
@@ -191,10 +231,13 @@ export interface AssistantTrainingProposalPreview {
 
 export interface AssistantChatResponse {
   timelineNotesEnabled?: boolean;
+  activityTagChangesEnabled?: boolean;
+  timelineNoteChangesEnabled?: boolean;
   trainingPlansEnabled?: boolean;
   trainingPlanChangesEnabled?: boolean;
   trainingDeliveryEnabled?: boolean;
   pendingTrainingProposal?: AssistantTrainingProposalPreview;
+  pendingContentProposal?: AssistantContentProposalPreview;
   conversation: AssistantConversation;
   quota: AssistantQuotaStatus;
   pendingRequestId: string | null;
@@ -204,10 +247,13 @@ export type GetAssistantConversationRequest = Record<string, never>;
 
 export interface GetAssistantConversationResponse {
   timelineNotesEnabled?: boolean;
+  activityTagChangesEnabled?: boolean;
+  timelineNoteChangesEnabled?: boolean;
   trainingPlansEnabled?: boolean;
   trainingPlanChangesEnabled?: boolean;
   trainingDeliveryEnabled?: boolean;
   pendingTrainingProposal?: AssistantTrainingProposalPreview;
+  pendingContentProposal?: AssistantContentProposalPreview;
   conversation: AssistantConversation | null;
   pendingRequestId: string | null;
   locationAccess: AssistantLocationAccess;
@@ -217,6 +263,8 @@ export interface ResetAssistantConversationRequest {
   /** Expected active generation; null asserts there is no unexpired conversation. Missing is legacy, notes-off only. */
   conversationId?: string | null;
   timelineNotesEnabled?: boolean;
+  activityTagChangesEnabled?: boolean;
+  timelineNoteChangesEnabled?: boolean;
   trainingPlansEnabled?: boolean;
   trainingPlanChangesEnabled?: boolean;
   trainingDeliveryEnabled?: boolean;
@@ -225,6 +273,8 @@ export interface ResetAssistantConversationRequest {
 
 export interface ResetAssistantConversationResponse {
   timelineNotesEnabled?: boolean;
+  activityTagChangesEnabled?: boolean;
+  timelineNoteChangesEnabled?: boolean;
   trainingPlansEnabled?: boolean;
   trainingPlanChangesEnabled?: boolean;
   trainingDeliveryEnabled?: boolean;
@@ -243,4 +293,16 @@ export interface ApplyAssistantTrainingProposalResponse {
   scheduleRevision: number;
   changes: Array<{ index: number; kind: string; status: 'applied' | 'already_applied' | 'failed'; message: string }>;
   providers: Array<{ index: number; provider: 'garmin' | 'coros' | 'wahoo' | 'suunto'; status: 'queued' | 'applied' | 'already_applied' | 'blocked' | 'failed'; message: string }>;
+}
+
+export interface ApplyAssistantContentProposalRequest {
+  proposalRef: string;
+  conversationId: string;
+  confirm: boolean;
+}
+
+export interface ApplyAssistantContentProposalResponse {
+  status: 'applied' | 'dismissed';
+  kind: AssistantContentProposalKind;
+  message: string;
 }

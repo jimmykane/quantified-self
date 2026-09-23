@@ -74,6 +74,99 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Training MCP write propos
     ]);
   });
 
+  it('applies compatible authored changes together while preserving each revision', async () => {
+    const preview = await previewTrainingChanges({ uid, connectionId: 'connection', scopes,
+      arguments: { expectedScheduleRevision: 1, changes: [
+        { kind: 'create-plan', localKey: 'plan', name: 'Batch plan', startDate: '2026-09-18',
+          endDate: '2026-09-30', activate: false },
+        { kind: 'rename-plan', plan: { localKey: 'plan' }, name: 'Renamed batch plan' },
+        { kind: 'create-workout', localKey: 'run', plan: { localKey: 'plan' }, localDate: '2026-09-20',
+          title: 'Batch run', structure },
+      ] } }, deps);
+
+    const applied = await applyTrainingChanges({ uid, connectionId: 'connection', scopes,
+      arguments: { proposalRef: preview.proposalRef, permissionMode: 'schedule' } }, deps);
+
+    expect(applied.status).toBe('applied');
+    expect(applied.changes).toHaveLength(3);
+    const plan = (await db.collection('users').doc(uid).collection('trainingPlans').get()).docs[0];
+    expect(plan.data()).toMatchObject({ name: 'Renamed batch plan', revision: 3, workoutCount: 1 });
+    const revisions = await plan.ref.collection('revisions').get();
+    expect(revisions.docs.map(doc => doc.id)).toEqual(['0000000001', '0000000002', '0000000003']);
+    expect((await db.collection('users').doc(uid).collection('trainingPlanState').doc('current').get()).get('revision')).toBe(4);
+  });
+
+  it('previews and applies plan deletion only with an explicit workout disposition', async () => {
+    const createPreview = await previewTrainingChanges({ uid, connectionId: 'connection', scopes,
+      arguments: { expectedScheduleRevision: 1, changes: [
+        { kind: 'create-plan', localKey: 'plan', name: 'Temporary plan', startDate: '2026-09-18',
+          endDate: '2026-09-30', activate: false },
+        { kind: 'create-workout', localKey: 'run', plan: { localKey: 'plan' }, localDate: '2026-09-20',
+          title: 'Keep this run', structure },
+      ] } }, deps);
+    const created = await applyTrainingChanges({ uid, connectionId: 'connection', scopes,
+      arguments: { proposalRef: createPreview.proposalRef, permissionMode: 'schedule' } }, deps);
+    const planRef = created.createdReferences.find(reference => reference.kind === 'plan')!.reference;
+
+    await expect(previewTrainingChanges({ uid, connectionId: 'connection', scopes,
+      arguments: { expectedScheduleRevision: created.scheduleRevision, changes: [
+        { kind: 'delete-plan', plan: { ref: planRef }, workoutDisposition: 'convert-to-standalone' },
+        { kind: 'create-plan', localKey: 'other', name: 'Not allowed together', startDate: '2026-10-01',
+          endDate: '2026-10-02', activate: false },
+      ] } }, deps)).rejects.toThrow('only change');
+
+    const deletionPreview = await previewTrainingChanges({ uid, connectionId: 'connection', scopes,
+      arguments: { expectedScheduleRevision: created.scheduleRevision, changes: [
+        { kind: 'delete-plan', plan: { ref: planRef }, workoutDisposition: 'convert-to-standalone' },
+      ] } }, deps);
+    expect(deletionPreview.changes[0]).toMatchObject({ kind: 'delete-plan' });
+    expect(deletionPreview.changes[0].summary).toContain('revision history');
+    expect(deletionPreview.changes[0].summary).toContain('will become standalone');
+
+    const deleted = await applyTrainingChanges({ uid, connectionId: 'connection', scopes,
+      arguments: { proposalRef: deletionPreview.proposalRef, permissionMode: 'schedule' } }, deps);
+    expect(deleted).toMatchObject({ status: 'applied', changes: [{ kind: 'delete-plan', status: 'applied' }] });
+    expect((await db.collection('users').doc(uid).collection('trainingPlans').get()).empty).toBe(true);
+    expect((await db.collection('users').doc(uid).collection('scheduledWorkouts').get()).docs[0].data())
+      .toMatchObject({ title: 'Keep this run', planId: null });
+  });
+
+  it('permanently deletes plan workouts and replays the approved deletion idempotently', async () => {
+    const user = db.collection('users').doc(uid);
+    const createPreview = await previewTrainingChanges({ uid, connectionId: 'connection', scopes,
+      arguments: { expectedScheduleRevision: 1, changes: [
+        { kind: 'create-plan', localKey: 'plan', name: 'Disposable plan', startDate: '2026-09-18',
+          endDate: '2026-09-30', activate: false },
+        { kind: 'create-workout', localKey: 'run', plan: { localKey: 'plan' }, localDate: '2026-09-20',
+          title: 'Disposable run', structure },
+      ] } }, deps);
+    const created = await applyTrainingChanges({ uid, connectionId: 'connection', scopes,
+      arguments: { proposalRef: createPreview.proposalRef, permissionMode: 'schedule' } }, deps);
+    const planRef = created.createdReferences.find(reference => reference.kind === 'plan')!.reference;
+    const workouts = await user.collection('scheduledWorkouts').get();
+    const workoutId = workouts.docs[0].id;
+    await user.collection('trainingWorkoutCompletions').doc(workoutId).set({
+      schemaVersion: 1,
+      workoutId,
+      status: 'unmatched',
+    });
+
+    const deletionPreview = await previewTrainingChanges({ uid, connectionId: 'connection', scopes,
+      arguments: { expectedScheduleRevision: created.scheduleRevision, changes: [
+        { kind: 'delete-plan', plan: { ref: planRef }, workoutDisposition: 'delete-workouts' },
+      ] } }, deps);
+    expect(deletionPreview.changes[0].summary).toContain('permanently deleted');
+    const deletionInput = { uid, connectionId: 'connection', scopes,
+      arguments: { proposalRef: deletionPreview.proposalRef, permissionMode: 'schedule' as const } };
+    const deleted = await applyTrainingChanges(deletionInput, deps);
+
+    expect(deleted).toMatchObject({ status: 'applied', changes: [{ kind: 'delete-plan', status: 'applied' }] });
+    expect((await user.collection('trainingPlans').get()).empty).toBe(true);
+    expect((await user.collection('scheduledWorkouts').get()).empty).toBe(true);
+    expect((await user.collection('trainingWorkoutCompletions').get()).empty).toBe(true);
+    await expect(applyTrainingChanges(deletionInput, deps)).resolves.toEqual(deleted);
+  });
+
   it('previews focused standalone creation and provider delivery atomically', async () => {
     const preview = await previewCreatePlannedWorkout({
       uid,

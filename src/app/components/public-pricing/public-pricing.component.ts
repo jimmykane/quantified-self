@@ -230,6 +230,11 @@ function buildFeatures(role: PublicPlanRole): PublicPlanFeatureViewModel[] {
             iconClass: standardIconClass,
             label: 'MCP data access',
         },
+        {
+            icon: standardIcon,
+            iconClass: standardIconClass,
+            label: 'Manual training plans and standalone workouts',
+        },
     ];
 
     if (role === 'free') {
@@ -253,6 +258,7 @@ function buildFeatures(role: PublicPlanRole): PublicPlanFeatureViewModel[] {
     return [
         ...baseFeatures,
         { icon: standardIcon, iconClass: standardIconClass, label: 'Automatic activity imports from your watch' },
+        { icon: standardIcon, iconClass: standardIconClass, label: 'Provider planned-workout delivery' },
         { icon: standardIcon, iconClass: standardIconClass, label: 'Cross-device sync' },
         { icon: standardIcon, iconClass: standardIconClass, label: getAssistantLimitLabel(role) },
         { icon: 'favorite', iconClass: 'qs-color-warn', label: 'Helps fund faster feature releases' },
