@@ -1217,6 +1217,12 @@ may still be using an older tool catalog.
 4. Start a new chat or refresh the app's Quantified Self tools. If the Training choices are not offered, refresh or rescan
    the app's Quantified Self connection first.
 
+In ChatGPT, use **Settings -> Apps** (or **Plugins**) -> **Quantified Self** -> **Reconnect** when that action is shown.
+If the permission is missing from the approval screen or its tool is still absent afterward, refresh/rescan the app's
+actions or ask the workspace administrator to update them. Disconnect and connect again only when the client explicitly
+offers no reconnect action. Uninstall and reinstall is a last resort for a stale local plugin or app bundle, not the
+normal way to add a permission.
+
 Training delivery can still be unavailable after its permission is granted: it also requires Pro, a connected supported
 provider, and current rollout/compatibility approval. Do not disconnect an app just to add a permission.
 
