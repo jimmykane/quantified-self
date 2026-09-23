@@ -74,6 +74,11 @@ export class AdminMarketingComponent implements OnInit {
   }
 
   get canEdit(): boolean { return !this.selected || this.selected.status === 'draft'; }
+  get canRetryPreparation(): boolean {
+    if (this.selected?.status !== 'preparing') return false;
+    const started = Date.parse(this.selected.updatedAt);
+    return !Number.isFinite(started) || Date.now() - started >= 11 * 60_000;
+  }
   get remaining(): number { return this.list ? Math.max(0, this.list.dailyCap - this.list.usedToday) : 0; }
   get counts() { return this.selected?.stats; }
   get exclusions() { return this.selected?.exclusions; }

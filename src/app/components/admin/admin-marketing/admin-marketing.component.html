@@ -70,7 +70,7 @@
           <div class="actions">
             @if (canEdit) { <button mat-flat-button type="button" [disabled]="!!busy" (click)="save()">Save draft</button> }
             <button mat-stroked-button type="button" [disabled]="!!busy" (click)="showPreview()">Preview</button>
-            @if (selected?.status === 'draft') { <button mat-stroked-button type="button" [disabled]="!!busy" (click)="prepare()">Prepare audience</button> }
+            @if (selected?.status === 'draft' || canRetryPreparation) { <button mat-stroked-button type="button" [disabled]="!!busy" (click)="prepare()">{{ canRetryPreparation ? 'Retry preparation' : 'Prepare audience' }}</button> }
             @if (selected?.status === 'ready') {
               <button mat-stroked-button type="button" [disabled]="!!busy" (click)="sendTest()">Send test to me</button>
               <button mat-flat-button type="button" [disabled]="!!busy || selected?.lastTestState !== 'SUCCESS'" (click)="change('start')">Start sending</button>
@@ -96,6 +96,7 @@
             <span><strong>{{ counts?.failed }}</strong> failed</span>
             <span><strong>{{ counts?.skipped }}</strong> skipped</span>
           </div>
+          @if (selected.status === 'preparing') { <p>Audience preparation is in progress. If it times out, refresh after 11 minutes to retry.</p> }
           <p>SMTP acceptance does not confirm inbox delivery or opens. Failed messages need an explicit retry and use a new daily slot.</p>
           <p>Test email: {{ selected.lastTestState === 'SUCCESS' ? 'SMTP accepted' : (selected.lastTestState || 'none') }}</p>
           @if (selected.status !== 'draft' && exclusions) {

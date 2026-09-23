@@ -16,6 +16,15 @@ function setup(call = vi.fn(async () => ({ data: listing }))) {
 }
 
 describe('AdminMarketingComponent haptics', () => {
+  it('offers preparation recovery only after the server lease has expired', () => {
+    const { component } = setup();
+    component.selected = { status: 'preparing', updatedAt: new Date(Date.now() - 10 * 60_000).toISOString() } as MarketingCampaignView;
+    expect(component.canRetryPreparation).toBe(false);
+    component.selected = { status: 'preparing', updatedAt: new Date(Date.now() - 12 * 60_000).toISOString() } as MarketingCampaignView;
+    expect(component.canRetryPreparation).toBe(true);
+    component.selected = { status: 'ready', updatedAt: new Date(Date.now() - 12 * 60_000).toISOString() } as MarketingCampaignView;
+    expect(component.canRetryPreparation).toBe(false);
+  });
   it('is silent on initialization and unchanged selections', () => {
     const { component, haptics } = setup();
     component.newDraft();

@@ -4,7 +4,7 @@ import { randomUUID } from 'crypto';
 import type { Request, Response } from 'express';
 import { handleMarketingUnsubscribe } from './handlers';
 import { cleanupMarketingCampaignRecipients } from './cleanup';
-import { completeCampaignIfDrained, dispatchCampaigns, makeUnsubscribeToken, optOut, prepareCampaign, recordMailDelivery, reserveMail, saveCampaign, sendTest, setCampaignStatus, verifyUnsubscribeToken } from './service';
+import { completeCampaignIfDrained, dispatchCampaigns, listCampaigns, makeUnsubscribeToken, optOut, prepareCampaign, recordMailDelivery, reserveMail, saveCampaign, sendTest, setCampaignStatus, verifyUnsubscribeToken } from './service';
 import { utcDay } from './core';
 
 vi.unmock('firebase-admin');
@@ -73,6 +73,23 @@ describe.skipIf(!enabled)('marketing campaign durability (emulators)', () => {
     await recordMailDelivery(mailId, { ...mail.data(), delivery: { state: 'PENDING' } }, { ...mail.data(), delivery: { state: 'SUCCESS' } });
     const final = (await db.collection('marketingCampaigns').doc(created.id).get()).data()!;
     expect(final.stats).toMatchObject({ eligible: 2, pending: 0, queued: 0, accepted: 1, skipped: 1 });
+  });
+
+  it('recovers a timed-out audience preparation and replaces its partial snapshot', async () => {
+    const campaign = await saveCampaign(null, draft, 'admin');
+    const ref = db.collection('marketingCampaigns').doc(campaign.id);
+    await ref.update({ status: 'preparing', snapshotId: 'abandoned',
+      updatedAt: new Date(Date.now() - 12 * 60_000).toISOString() });
+    await ref.collection('recipients').doc('partial').set({ uid: 'partial', snapshotId: 'abandoned', status: 'pending' });
+
+    const prepared = await prepareCampaign(campaign.id);
+    expect(prepared.status).toBe('ready');
+    expect((await ref.get()).get('snapshotId')).not.toBe('abandoned');
+    expect((await ref.collection('recipients').doc('partial').get()).exists).toBe(false);
+
+    const fresh = await saveCampaign(null, draft, 'admin');
+    await db.collection('marketingCampaigns').doc(fresh.id).update({ status: 'preparing', updatedAt: new Date().toISOString() });
+    await expect(prepareCampaign(fresh.id)).rejects.toThrow('already in progress');
   });
 
   it('shows confirmation on GET, changes consent only on POST, and allows repeated POST', async () => {
@@ -151,6 +168,37 @@ describe.skipIf(!enabled)('marketing campaign durability (emulators)', () => {
     expect((await ref.get()).get('status')).toBe('completed');
   });
 
+  it('does not pause a resumed campaign while an earlier retry request finishes', async () => {
+    const campaign = await saveCampaign(null, draft, 'admin');
+    const ref = db.collection('marketingCampaigns').doc(campaign.id);
+    await ref.update({ status: 'paused', stats: { eligible: 2, pending: 0, queued: 0, accepted: 0, failed: 2, skipped: 0 } });
+    for (const uid of ['first', 'second']) {
+      await ref.collection('recipients').doc(uid).set({ uid, status: 'failed', attempt: 1 });
+    }
+    const originalTransaction = db.runTransaction.bind(db);
+    let secondStarted!: () => void;
+    let releaseSecond!: () => void;
+    const started = new Promise<void>(resolve => { secondStarted = resolve; });
+    const released = new Promise<void>(resolve => { releaseSecond = resolve; });
+    let calls = 0;
+    const transaction = vi.spyOn(db, 'runTransaction').mockImplementation(async (updateFunction, options) => {
+      calls++;
+      if (calls === 2) { secondStarted(); await released; }
+      return originalTransaction(updateFunction, options);
+    });
+    try {
+      const retry = setCampaignStatus(campaign.id, 'retry');
+      await started;
+      await setCampaignStatus(campaign.id, 'resume');
+      releaseSecond();
+      expect((await retry).status).toBe('running');
+      expect((await ref.get()).get('stats')).toMatchObject({ pending: 1, failed: 1 });
+    } finally {
+      releaseSecond();
+      transaction.mockRestore();
+    }
+  });
+
   it('removes account-deletion snapshots and skips work that was not accepted', async () => {
     const uid = `delete_${randomUUID().replace(/-/g, '')}`;
     const campaign = await saveCampaign(null, draft, 'admin');
@@ -176,6 +224,40 @@ describe.skipIf(!enabled)('marketing campaign durability (emulators)', () => {
     expect(mail.get('from')).toBe('Dimitrios from Quantified Self <updates@quantified-self.io>');
     expect((await db.doc(`marketingDispatchDays/${utcDay(new Date())}`).get()).get('used')).toBe(1);
     await expect(sendTest(campaign.id, user.uid, secret)).rejects.toThrow();
+  });
+
+  it('does not submit a test when the campaign starts while the admin lookup is in flight', async () => {
+    const user = await admin.auth().createUser({ email: `racing-admin-${randomUUID()}@example.com` });
+    const campaign = await saveCampaign(null, draft, user.uid);
+    const ref = db.collection('marketingCampaigns').doc(campaign.id);
+    const acceptedTestId = `marketing_test_${campaign.id}_accepted`;
+    await db.collection('mail').doc(acceptedTestId).set({ delivery: { state: 'SUCCESS' } });
+    await ref.update({ status: 'ready', lastTestMailId: acceptedTestId });
+    await db.doc('marketingControl/global').set({ dailyCap: 10 });
+    await db.doc(`marketingDispatchDays/${utcDay(new Date())}`).set({ used: 0 });
+
+    const auth = admin.auth();
+    const originalGetUser = auth.getUser.bind(auth);
+    let lookupStarted!: () => void;
+    let releaseLookup!: () => void;
+    const started = new Promise<void>(resolve => { lookupStarted = resolve; });
+    const released = new Promise<void>(resolve => { releaseLookup = resolve; });
+    const lookup = vi.spyOn(auth, 'getUser').mockImplementation(async uid => {
+      if (uid === user.uid) { lookupStarted(); await released; }
+      return originalGetUser(uid);
+    });
+    try {
+      const pendingTest = sendTest(campaign.id, user.uid, secret);
+      await started;
+      await setCampaignStatus(campaign.id, 'start');
+      releaseLookup();
+      await expect(pendingTest).rejects.toThrow('ready');
+      expect((await ref.get()).get('lastTestMailId')).toBe(acceptedTestId);
+      expect((await db.doc(`marketingDispatchDays/${utcDay(new Date())}`).get()).get('used')).toBe(0);
+    } finally {
+      releaseLookup();
+      lookup.mockRestore();
+    }
   });
 
   it('skips a recipient whose plan changes after the snapshot', async () => {
@@ -218,5 +300,32 @@ describe.skipIf(!enabled)('marketing campaign durability (emulators)', () => {
     await db.doc('marketingControl/global').update({ dailyCap: 2 });
     expect(await reserveMail(randomUUID(), { to: 'test@example.com', message: { subject: 'test', text: 'test' } })).toBe(true);
     expect((await db.doc(`marketingDispatchDays/${day}`).get()).get('used')).toBe(2);
+  });
+
+  it('dispatches campaigns beyond the first page of running campaigns', async () => {
+    const user = await admin.auth().createUser({ email: `paged-${randomUUID()}@example.com`, emailVerified: false });
+    await db.doc(`users/${user.uid}`).set({ test: true });
+    await db.doc(`users/${user.uid}/legal/agreements`).set({ acceptedMarketingPolicy: true });
+    const blockerStats = { eligible: 1, pending: 0, queued: 1, accepted: 0, failed: 0, skipped: 0 };
+    const batch = db.batch();
+    let oldestCampaignId = '';
+    for (let index = 0; index < 100; index++) {
+      const ref = db.collection('marketingCampaigns').doc();
+      if (index === 0) oldestCampaignId = ref.id;
+      batch.set(ref, { ...draft, status: 'running', stats: blockerStats,
+        createdAt: new Date(Date.UTC(2000, 0, 1, 0, index)).toISOString() });
+    }
+    await batch.commit();
+    const target = await saveCampaign(null, draft, 'admin');
+    const targetRef = db.collection('marketingCampaigns').doc(target.id);
+    await targetRef.update({ status: 'running', createdAt: '2099-01-01T00:00:00.000Z',
+      stats: { eligible: 1, pending: 1, queued: 0, accepted: 0, failed: 0, skipped: 0 } });
+    await targetRef.collection('recipients').doc(user.uid).set({ uid: user.uid, status: 'pending', attempt: 0 });
+    await db.doc('marketingControl/global').set({ dailyCap: 1 });
+    await db.doc(`marketingDispatchDays/${utcDay(new Date())}`).set({ used: 0 });
+
+    expect(await dispatchCampaigns(secret)).toBe(1);
+    expect((await targetRef.collection('recipients').doc(user.uid).get()).get('status')).toBe('queued');
+    expect((await listCampaigns()).campaigns.some(item => item.id === oldestCampaignId)).toBe(true);
   });
 });
