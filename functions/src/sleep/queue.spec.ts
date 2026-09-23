@@ -29,6 +29,8 @@ const hoisted = vi.hoisted(() => ({
     upsertSleepSessions: vi.fn(),
     buildSleepSessionDocumentId: vi.fn(),
     replaceHealthSourceRecord: vi.fn(),
+    replaceHealthSourceRecords: vi.fn(),
+    isHealthSourceRecordBatchSplittableError: vi.fn(() => false),
     updateHealthSyncState: vi.fn(),
     enqueueSleepSyncTask: vi.fn(),
     enqueueGarminHealthBackfillTask: vi.fn(),
@@ -176,7 +178,10 @@ vi.mock('./writer', () => ({
 }));
 
 vi.mock('../health/writer', () => ({
+    HEALTH_SOURCE_RECORD_TRANSACTION_BATCH_SIZE: 8,
+    isHealthSourceRecordBatchSplittableError: hoisted.isHealthSourceRecordBatchSplittableError,
     replaceHealthSourceRecord: hoisted.replaceHealthSourceRecord,
+    replaceHealthSourceRecords: hoisted.replaceHealthSourceRecords,
     updateHealthSyncState: hoisted.updateHealthSyncState,
 }));
 
@@ -382,6 +387,17 @@ describe('sleep queue', () => {
             chunksWritten: 0,
             chunksDeleted: 0,
         });
+        hoisted.replaceHealthSourceRecords.mockImplementation(async (
+            _userID: string,
+            values: readonly unknown[],
+        ) => values.map((_, index) => ({
+            status: 'written',
+            sourceRecordId: `health-record-id-${index}`,
+            sourceRecord: null,
+            chunksWritten: 0,
+            chunksDeleted: 0,
+        })));
+        hoisted.isHealthSourceRecordBatchSplittableError.mockReset().mockReturnValue(false);
         hoisted.updateHealthSyncState.mockResolvedValue(true);
         hoisted.claimSleepQueueRevision.mockResolvedValue('claimed');
         hoisted.releaseSleepQueueRevision.mockResolvedValue(undefined);
@@ -5096,6 +5112,13 @@ describe('sleep queue', () => {
                     sourceRecordKey: '2026-08-26:0',
                 },
                 observedAtMs: Date.parse('2026-08-26T12:00:00.000Z'),
+            }, {
+                input: {
+                    provider: 'SuuntoApp',
+                    sourceRecordType: 'suunto_247_recovery',
+                    sourceRecordKey: '2026-08-26:0',
+                },
+                observedAtMs: Date.parse('2026-08-26T13:00:00.000Z'),
             }],
             lifecycleGuards,
         });
@@ -5119,9 +5142,13 @@ describe('sleep queue', () => {
 
         expect(result).toBe(QueueResult.Processed);
         expect(hoisted.processSuuntoHealthQueueItem).toHaveBeenCalled();
-        expect(hoisted.replaceHealthSourceRecord).toHaveBeenCalledWith(
+        expect(hoisted.replaceHealthSourceRecords).toHaveBeenCalledOnce();
+        expect(hoisted.replaceHealthSourceRecords).toHaveBeenCalledWith(
             healthUserID,
-            expect.objectContaining({ sourceRecordType: 'suunto_247_activity' }),
+            [
+                expect.objectContaining({ sourceRecordType: 'suunto_247_activity' }),
+                expect.objectContaining({ sourceRecordType: 'suunto_247_recovery' }),
+            ],
             expect.any(Number),
             expect.objectContaining({ ...lifecycleGuards, additionalRequiredDocumentFieldValues:
                 expect.arrayContaining([...lifecycleGuards.additionalRequiredDocumentFieldValues,
@@ -5148,7 +5175,112 @@ describe('sleep queue', () => {
         expect(update).toHaveBeenCalledWith(expect.objectContaining({
             resultStatus: 'success',
             sessionsWritten: 0,
-            healthRecordsWritten: 1,
+            healthRecordsWritten: 2,
+        }));
+    });
+
+    it('rebases only the uncommitted half when a split Suunto Health batch sees credential rotation', async () => {
+        const healthUserID = 'suunto-health-user';
+        const tokenRef = {
+            path: `suuntoAppAccessTokens/${healthUserID}/tokens/suunto-user-1`,
+            parent: { parent: { id: healthUserID } },
+        };
+        const tokenSnapshot = {
+            id: 'suunto-user-1',
+            data: () => ({
+                userName: 'suunto-user-1',
+                accessToken: 'suunto-access-token',
+                tokenCredentialGeneration: 'suunto-credential-generation-1',
+            }),
+            ref: tokenRef,
+        };
+        const lifecycleGuards = {
+            requiredExistingDocumentRef: tokenRef,
+            requiredExistingTokenCredential: {
+                accessToken: 'suunto-access-token',
+                credentialGeneration: 'suunto-credential-generation-1',
+            },
+            requiredDocumentFieldValues: {
+                documentRef: { path: 'suuntoHealthWebhookAccountBindings/binding-1' },
+                expectedFields: { authorizationSource: 'oauth_callback' },
+            },
+            additionalRequiredDocumentFieldValues: [],
+        };
+        const rotatedGuards = {
+            ...lifecycleGuards,
+            requiredExistingTokenCredential: {
+                accessToken: 'rotated-access-token',
+                credentialGeneration: 'suunto-credential-generation-1',
+            },
+        };
+        const healthResults = [{
+            input: {
+                provider: 'SuuntoApp',
+                sourceRecordType: 'suunto_247_activity',
+                sourceRecordKey: '2026-08-26:0',
+            },
+            observedAtMs: Date.parse('2026-08-26T12:00:00.000Z'),
+        }, {
+            input: {
+                provider: 'SuuntoApp',
+                sourceRecordType: 'suunto_247_recovery',
+                sourceRecordKey: '2026-08-26:0',
+            },
+            observedAtMs: Date.parse('2026-08-26T13:00:00.000Z'),
+        }];
+        const writeResult = (sourceRecordId: string, status: 'written' | 'skipped_lifecycle_guard') => ({
+            status,
+            sourceRecordId,
+            sourceRecord: null,
+            chunksWritten: 0,
+            chunksDeleted: 0,
+        });
+        const splitRequired = new Error('split required');
+        hoisted.isHealthSourceRecordBatchSplittableError.mockImplementation(error => error === splitRequired);
+        hoisted.tokenRootGet.mockResolvedValue({ docs: [tokenSnapshot], empty: false });
+        hoisted.captureActiveSuuntoWebhookWriteLifecycleGuards.mockResolvedValue(lifecycleGuards);
+        hoisted.captureCurrentSuuntoWebhookWriteLifecycleGuards.mockResolvedValue(rotatedGuards);
+        hoisted.processSuuntoHealthQueueItem.mockResolvedValue({ healthResults, lifecycleGuards });
+        hoisted.replaceHealthSourceRecords
+            .mockRejectedValueOnce(splitRequired)
+            .mockResolvedValueOnce([writeResult('activity', 'written')])
+            .mockResolvedValueOnce([writeResult('recovery', 'skipped_lifecycle_guard')])
+            .mockResolvedValueOnce([writeResult('recovery', 'written')]);
+        const update = vi.fn().mockResolvedValue(undefined);
+
+        const result = await processSleepSyncQueueItem({
+            id: 'suunto-health-split-credential-rotation',
+            dateCreated: 1_700_000_000_000,
+            dispatchedToCloudTask: 1_700_000_000_500,
+            processed: false,
+            provider: 'SuuntoApp',
+            userID: healthUserID,
+            providerUserId: 'suunto-user-1',
+            retryCount: 0,
+            type: 'suunto_health_poll',
+            healthTrigger: 'webhook',
+            rangeStartMs: Date.parse('2026-08-26T00:00:00.000Z'),
+            rangeEndMs: Date.parse('2026-08-27T00:00:00.000Z'),
+            ref: { update } as unknown as NonNullable<SleepSyncQueueItemInterface['ref']>,
+        });
+
+        expect(result).toBe(QueueResult.Processed);
+        expect(hoisted.replaceHealthSourceRecords.mock.calls.map(call => (
+            (call[1] as Array<{ sourceRecordType: string }>).map(input => input.sourceRecordType)
+        ))).toEqual([
+            ['suunto_247_activity', 'suunto_247_recovery'],
+            ['suunto_247_activity'],
+            ['suunto_247_recovery'],
+            ['suunto_247_recovery'],
+        ]);
+        expect(hoisted.captureCurrentSuuntoWebhookWriteLifecycleGuards).toHaveBeenCalledOnce();
+        expect(hoisted.replaceHealthSourceRecords.mock.calls[3]?.[3]).toEqual(expect.objectContaining({
+            requiredExistingTokenCredential: rotatedGuards.requiredExistingTokenCredential,
+        }));
+        expect(update).toHaveBeenCalledWith(expect.objectContaining({
+            resultStatus: 'success',
+            healthRecordsWritten: 2,
+            healthRecordsUnchanged: 0,
         }));
     });
 
@@ -5188,7 +5320,7 @@ describe('sleep queue', () => {
             });
             if (failure === 'enqueue_failure') hoisted.enqueueSleepSyncTask.mockRejectedValueOnce(Error('unavailable'));
             if (failure === 'marker_failure') hoisted.markQueueItemDispatchedIfUserActive.mockRejectedValueOnce(Error('unavailable'));
-            if (failure === 'write_failure') hoisted.replaceHealthSourceRecord.mockRejectedValueOnce(Error('unavailable'));
+            if (failure === 'write_failure') hoisted.replaceHealthSourceRecords.mockRejectedValueOnce(Error('unavailable'));
             if (failure === 'checkpoint_failure') hoisted.transactionUpdate.mockImplementationOnce(() => { throw Error('unavailable'); });
 
             const result = await processSleepSyncQueueItem({ ...state, ref } as unknown as SleepSyncQueueItemInterface);
