@@ -42,7 +42,7 @@ export const TRAINING_PLANS_HOME_CONTENT = {
       icon: 'sync',
       iconTone: 'primary',
       title: 'Optional Provider Delivery',
-      copy: 'Workout delivery to Garmin, Suunto, and Wahoo is available to connected Pro members through explicit plan opt-in or standalone Send actions, subject to sport compatibility. Pool and open-water swimming map to distinct Suunto Guide activities; Garmin and Wahoo swim delivery are unavailable. New COROS plan sync and standalone Send actions are coming soon in the app. Connecting a provider never sends workouts by itself.',
+      copy: 'Workout delivery to Garmin, Suunto, and Wahoo is available to connected Pro members through explicit plan opt-in or standalone Send actions, subject to sport compatibility. Pool and open-water swimming map to distinct Suunto Guide activities; Garmin supports compatible target-free pool swims, while Garmin open-water and Wahoo swim delivery are unavailable. New COROS plan sync and standalone Send actions are coming soon in the app. Connecting a provider never sends workouts by itself.',
     },
     {
       icon: 'calendar_month',

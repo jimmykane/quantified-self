@@ -39,10 +39,6 @@ describe('Garmin workout/schedule lifecycle, synthetic HTTP only', () => {
   const recover = () => transport.recover(operation, checkpoint, guard);
   const writes = () => server.calls.filter(call => call.method !== 'GET');
   it('retains one workout identity across synthetic 25 m pool create, edit, reschedule and withdrawal', async () => {
-    const productionAssess = transport.assess.bind(transport);
-    vi.spyOn(transport, 'assess').mockImplementation((workout, destinationKey, timeZone) => ({
-      ...productionAssess(workout, destinationKey, timeZone), level: 'exact', issues: [],
-    }));
     const pool: ScheduledWorkoutV1 = { ...operation.workout!, title: 'Four 25 m lengths', structure: {
       version: 1, sport: ActivityTypes.Swimming, poolLength: { meters: 25, presentation: 'meters' },
       nodes: [{ kind: 'repeat', id: 'set', count: 4, steps: [
@@ -51,7 +47,7 @@ describe('Garmin workout/schedule lifecycle, synthetic HTTP only', () => {
       ] }],
     } };
     operation = { ...operation, workout: pool, digest: transport.assess(pool, operation.destinationKey, operation.timeZone).digest };
-    // Synthetic transport proof bypasses the public swim readiness gate; no provider API is contacted.
+    expect(transport.assess(pool, operation.destinationKey, operation.timeZone).level).toBe('exact');
     const created = (await execute())!;
     expect(server.workouts.get(created.ids.workout)).toMatchObject({
       sport: 'LAP_SWIMMING', poolLength: 25, poolLengthUnit: 'METER',

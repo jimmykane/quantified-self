@@ -949,11 +949,13 @@ cycling-only secondary-target field subject to its existing device-support warni
 Unsupported sports still fail closed. Existing Running/Cycling payloads and retained remote identities do not change,
 and no authored recipe, schedule history, Sports Lib type or provider ID is rewritten.
 
-Pool and open-water swimming are manually authorable. The #733 offline mapper now encodes pool swimming as
+Pool and open-water swimming are manually authorable. The #733 mapper encodes pool swimming as
 `LAP_SWIMMING` with an optional explicit physical pool length and target-free swim steps. It also supports an
 unspecified pool as the partner contract allows, although older devices may not. A 25 m step never configures the
-device pool by itself. Production pool delivery stays blocked pending Garmin account proof and an explicit readiness
-flip; open-water swimming remains unmapped. Never fold either swim profile to Running or Cycling.
+device pool by itself. Pool delivery is now admitted for explicitly consenting, eligible Garmin connections. A 25 m
+pool workout was created, edited, rescheduled, checked present, and withdrawn through the owner's Garmin cloud account
+on 23 September 2026 without retries. This proves Garmin cloud CRUD/readback, not app or watch receipt or exercise
+completion. Open-water swimming remains unmapped. Never fold either swim profile to Running or Cycling.
 COROS continues to map only target-free pool Swimming to `swim`; the current partner mapping does not justify
 open-water support. Wahoo's documented plan file remains running/cycling-only.
 
@@ -1443,9 +1445,11 @@ explicit null for unspecified), null segment pool fields, target-free swim steps
 `skipLastRestStep: true` for repeats. Swim time steps outside 1–59 minutes and all current HR/power/pace/cadence swim
 targets are rejected. Open-water swimming remains unmapped. Redacted fixtures and a synthetic lifecycle round trip
 cover a real 4 × 25 m set in a 25 m pool. Garmin permits unspecified pool size, although some older devices do not
-support it. This is not partner account, Garmin Connect, or watch proof: delivery admission remains blocked for pool
-swimming until #733's separately authorized account validation and explicit readiness flip. Running/cycling admission
-is unchanged. The frozen registered MCP v1 recipe omits the new field in its legacy workout read; #734 tracks additive
+support it. The owner-account cloud lifecycle proof on 23 September 2026 enabled pool-swim admission for eligible,
+explicitly consenting Garmin connections: create, repeat-count edit, date move, positive retained-record checks and
+Stop/withdrawal completed without retries. The checked workout and schedule were cloud records, not proof of Garmin
+app/watch download or completed-activity correlation. Running/cycling admission is unchanged. The frozen registered MCP
+v1 recipe omits the new field in its legacy workout read; #734 tracks additive
 MCP read/authoring coverage without changing existing tool schemas.
 
 `delivery/garmin/` binds the existing serializer to Training API V2. It creates workout content using the partner

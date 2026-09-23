@@ -154,7 +154,7 @@ field while continuing to return the workout and compatibility assessment. It ca
 pool-length read/authoring coverage is tracked in #734 under #583; no existing schema, mutation kind, tool, scope,
 consent, provider action, or private delivery evidence changes. Existing strict proposal/confirmation checks and
 provider compatibility assessment
-still govern writes; Garmin pool-swim delivery remains runtime-blocked pending account proof, Wahoo rejects swimming delivery, COROS accepts only target-free pool recipes at its backend
+still govern writes; Garmin accepts compatible, explicitly consented pool-swim delivery after owner-account cloud CRUD/readback proof (not watch receipt), Wahoo rejects swimming delivery, COROS accepts only target-free pool recipes at its backend
 while new browser Send/sync actions remain unavailable, and Suunto maps pool and open-water profiles to distinct Guide
 activity recommendations. Owner read fixtures cover both swim sport strings and metre-based steps; no widened consent or
 provider action is implied by this read-only presentation change.

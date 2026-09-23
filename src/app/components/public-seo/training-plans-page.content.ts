@@ -59,7 +59,7 @@ export const TRAINING_PLANS_PAGE_SECTIONS = [
       {
         icon: 'pool',
         title: 'Pool and open-water swimming',
-        copy: 'Create either Swimming or Open Water Swimming workouts with metre-based distance steps or timed steps. Suunto uses the matching Guide activity; Garmin and Wahoo do not support swim delivery here, and COROS open-water delivery is unavailable.',
+        copy: 'Create either Swimming or Open Water Swimming workouts with metre-based distance steps or timed steps. Suunto uses the matching Guide activity. Garmin supports compatible target-free pool swims with an optional pool length, but not open water; Wahoo swim delivery and COROS open-water delivery are unavailable. A Garmin cloud check is not proof of watch receipt.',
       },
       {
         icon: 'repeat',
