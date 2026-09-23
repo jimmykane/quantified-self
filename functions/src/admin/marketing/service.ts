@@ -375,53 +375,63 @@ export async function dispatchCampaigns(secret: string): Promise<number> {
       if (!available) break;
       const campaignRef = campaignDoc.ref;
       const draft = validateMarketingDraft(campaignDoc.data());
-      const recipientDocs = await campaignRef.collection('recipients').where('status', '==', 'pending').limit(available + 20).get();
-      for (const recipientDoc of recipientDocs.docs) {
-        if (!available) break;
-        const recipient = recipientDoc.data();
-        const uid = recipientDoc.id;
-        const user = await getAuth(uid);
-        if (!authAllowed(user)) { await skipRecipient(campaignRef, recipientDoc.ref, 'account-or-email'); continue; }
-        const guard = await getUserDeletionGuardState(db(), uid);
-        if (guard.shouldSkip) { await skipRecipient(campaignRef, recipientDoc.ref, 'deleted'); continue; }
-        const attempt = (recipient.attempt || 0) + 1;
-        const mailId = `marketing_${campaignDoc.id}_${uid}_${attempt}`;
-        const consentRef = db().doc(`users/${uid}/legal/agreements`);
-        const submittedMail = await db().runTransaction(async tx => {
-          const day = dayRef(utcDay(new Date()));
-          const mail = db().collection('mail').doc(mailId);
-          const [controlDoc, dayDoc, campaign, recipientNow, consent, latestGuard, subscriptions, existingMail] = await Promise.all([
-            tx.get(control()), tx.get(day), tx.get(campaignRef), tx.get(recipientDoc.ref), tx.get(consentRef),
-            getUserDeletionGuardStateInTransaction(db(), tx, uid),
-            tx.get(db().collection('customers').doc(uid).collection('subscriptions').where('status', 'in', [...ACTIVE_SUBSCRIPTION_STATUSES])),
-            tx.get(mail),
-          ]);
-          if (campaign.get('status') !== 'running' || recipientNow.get('status') !== 'pending' || existingMail.exists) return 'stale';
-          const latestCap = controlDoc.exists ? validDailyCap(controlDoc.get('dailyCap')) : DEFAULT_MARKETING_DAILY_CAP;
-          const used = dayDoc.get('used') || 0;
-          if (used >= latestCap) return 'capped';
-          let plan: MarketingPlan = 'free';
-          let latestCreated = -Infinity;
-          for (const doc of subscriptions.docs) {
-            const item = doc.data();
-            if ((item.role === 'pro' || item.role === 'basic') && timestampMs(item.created) > latestCreated) {
-              plan = item.role; latestCreated = timestampMs(item.created);
+      let lastRecipient: FirebaseFirestore.QueryDocumentSnapshot | undefined;
+      while (available) {
+        const pageSize = available + 20;
+        let recipientQuery = campaignRef.collection('recipients').where('status', '==', 'pending')
+          .orderBy(admin.firestore.FieldPath.documentId()).limit(pageSize);
+        if (lastRecipient) recipientQuery = recipientQuery.startAfter(lastRecipient);
+        const recipientDocs = await recipientQuery.get();
+        if (recipientDocs.empty) break;
+        for (const recipientDoc of recipientDocs.docs) {
+          if (!available) break;
+          const recipient = recipientDoc.data();
+          const uid = recipientDoc.id;
+          const user = await getAuth(uid);
+          if (!authAllowed(user)) { await skipRecipient(campaignRef, recipientDoc.ref, 'account-or-email'); continue; }
+          const guard = await getUserDeletionGuardState(db(), uid);
+          if (guard.shouldSkip) { await skipRecipient(campaignRef, recipientDoc.ref, 'deleted'); continue; }
+          const attempt = (recipient.attempt || 0) + 1;
+          const mailId = `marketing_${campaignDoc.id}_${uid}_${attempt}`;
+          const consentRef = db().doc(`users/${uid}/legal/agreements`);
+          const submittedMail = await db().runTransaction(async tx => {
+            const day = dayRef(utcDay(new Date()));
+            const mail = db().collection('mail').doc(mailId);
+            const [controlDoc, dayDoc, campaign, recipientNow, consent, latestGuard, subscriptions, existingMail] = await Promise.all([
+              tx.get(control()), tx.get(day), tx.get(campaignRef), tx.get(recipientDoc.ref), tx.get(consentRef),
+              getUserDeletionGuardStateInTransaction(db(), tx, uid),
+              tx.get(db().collection('customers').doc(uid).collection('subscriptions').where('status', 'in', [...ACTIVE_SUBSCRIPTION_STATUSES])),
+              tx.get(mail),
+            ]);
+            if (campaign.get('status') !== 'running' || recipientNow.get('status') !== 'pending' || existingMail.exists) return 'stale';
+            const latestCap = controlDoc.exists ? validDailyCap(controlDoc.get('dailyCap')) : DEFAULT_MARKETING_DAILY_CAP;
+            const used = dayDoc.get('used') || 0;
+            if (used >= latestCap) return 'capped';
+            let plan: MarketingPlan = 'free';
+            let latestCreated = -Infinity;
+            for (const doc of subscriptions.docs) {
+              const item = doc.data();
+              if ((item.role === 'pro' || item.role === 'basic') && timestampMs(item.created) > latestCreated) {
+                plan = item.role; latestCreated = timestampMs(item.created);
+              }
             }
-          }
-          if (!consent.exists || consent.get(ACCEPTED_MARKETING_POLICY_FIELD) !== true || latestGuard.shouldSkip ||
-              !selectedPlan(plan, draft.filters)) {
-            tx.update(recipientDoc.ref, { status: 'skipped', skippedReason: 'consent-account-or-plan', skippedAt: new Date().toISOString() });
-            tx.update(campaignRef, { stats: transitionStats(campaign.get('stats') as MarketingCampaignStats, 'pending', 'skipped') });
-            return 'skipped';
-          }
-          tx.set(day, { used: used + 1, updatedAt: new Date().toISOString() }, { merge: true });
-          tx.create(mail, mailPayload(draft, user.email!, user.displayName?.trim().split(/\s+/)[0] || '', uid, secret, campaignDoc.id, attempt));
-          tx.update(recipientDoc.ref, { status: 'queued', mailId, attempt, queuedAt: new Date().toISOString() });
-          tx.update(campaignRef, { stats: transitionStats(campaign.get('stats') as MarketingCampaignStats, 'pending', 'queued') });
-          return 'submitted';
-        });
-        if (submittedMail === 'capped') return submitted;
-        if (submittedMail === 'submitted') { submitted++; available--; }
+            if (!consent.exists || consent.get(ACCEPTED_MARKETING_POLICY_FIELD) !== true || latestGuard.shouldSkip ||
+                !selectedPlan(plan, draft.filters)) {
+              tx.update(recipientDoc.ref, { status: 'skipped', skippedReason: 'consent-account-or-plan', skippedAt: new Date().toISOString() });
+              tx.update(campaignRef, { stats: transitionStats(campaign.get('stats') as MarketingCampaignStats, 'pending', 'skipped') });
+              return 'skipped';
+            }
+            tx.set(day, { used: used + 1, updatedAt: new Date().toISOString() }, { merge: true });
+            tx.create(mail, mailPayload(draft, user.email!, user.displayName?.trim().split(/\s+/)[0] || '', uid, secret, campaignDoc.id, attempt));
+            tx.update(recipientDoc.ref, { status: 'queued', mailId, attempt, queuedAt: new Date().toISOString() });
+            tx.update(campaignRef, { stats: transitionStats(campaign.get('stats') as MarketingCampaignStats, 'pending', 'queued') });
+            return 'submitted';
+          });
+          if (submittedMail === 'capped') return submitted;
+          if (submittedMail === 'submitted') { submitted++; available--; }
+        }
+        lastRecipient = recipientDocs.docs[recipientDocs.docs.length - 1];
+        if (recipientDocs.size < pageSize) break;
       }
       await completeCampaignIfDrained(campaignRef);
     }

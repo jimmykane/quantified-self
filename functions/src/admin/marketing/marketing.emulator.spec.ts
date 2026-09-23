@@ -302,6 +302,37 @@ describe.skipIf(!enabled)('marketing campaign durability (emulators)', () => {
     expect((await db.doc(`marketingDispatchDays/${day}`).get()).get('used')).toBe(2);
   });
 
+  it('keeps the oldest campaign first after a full page of skipped recipients', async () => {
+    const user = await admin.auth().createUser({ uid: `valid_${randomUUID()}`, email: `oldest-${randomUUID()}@example.com`, emailVerified: false });
+    const newerUser = await admin.auth().createUser({ uid: `newer_${randomUUID()}`, email: `newer-${randomUUID()}@example.com`, emailVerified: false });
+    for (const recipient of [user, newerUser]) {
+      await db.doc(`users/${recipient.uid}`).set({ test: true });
+      await db.doc(`users/${recipient.uid}/legal/agreements`).set({ acceptedMarketingPolicy: true });
+    }
+    const older = await saveCampaign(null, draft, 'admin');
+    const newer = await saveCampaign(null, draft, 'admin');
+    const olderRef = db.collection('marketingCampaigns').doc(older.id);
+    const newerRef = db.collection('marketingCampaigns').doc(newer.id);
+    await olderRef.update({ status: 'running', createdAt: '1990-01-01T00:00:00.000Z',
+      stats: { eligible: 23, pending: 23, queued: 0, accepted: 0, failed: 0, skipped: 0 } });
+    await newerRef.update({ status: 'running', createdAt: '2099-01-01T00:00:00.000Z',
+      stats: { eligible: 1, pending: 1, queued: 0, accepted: 0, failed: 0, skipped: 0 } });
+    const batch = db.batch();
+    for (let index = 0; index < 22; index++) {
+      const uid = `missing_${String(index).padStart(2, '0')}`;
+      batch.set(olderRef.collection('recipients').doc(uid), { uid, status: 'pending', attempt: 0 });
+    }
+    batch.set(olderRef.collection('recipients').doc(user.uid), { uid: user.uid, status: 'pending', attempt: 0 });
+    batch.set(newerRef.collection('recipients').doc(newerUser.uid), { uid: newerUser.uid, status: 'pending', attempt: 0 });
+    await batch.commit();
+    await db.doc('marketingControl/global').set({ dailyCap: 1 });
+    await db.doc(`marketingDispatchDays/${utcDay(new Date())}`).set({ used: 0 });
+
+    expect(await dispatchCampaigns(secret)).toBe(1);
+    expect((await olderRef.collection('recipients').doc(user.uid).get()).get('status')).toBe('queued');
+    expect((await newerRef.collection('recipients').doc(newerUser.uid).get()).get('status')).toBe('pending');
+  });
+
   it('dispatches campaigns beyond the first page of running campaigns', async () => {
     const user = await admin.auth().createUser({ email: `paged-${randomUUID()}@example.com`, emailVerified: false });
     await db.doc(`users/${user.uid}`).set({ test: true });
