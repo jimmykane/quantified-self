@@ -174,9 +174,11 @@ const handle = (previewOnly: boolean) => async (request: CallableRequest<unknown
 };
 export const previewTrainingProviderDelivery = onCall({
   region: FUNCTIONS_MANIFEST.previewTrainingProviderDelivery.region,
+  memory: '512MiB',
   secrets: FUNCTION_SECRET_BINDINGS.previewTrainingProviderDelivery,
 }, handle(true));
 export const mutateTrainingProviderDelivery = onCall({
   region: FUNCTIONS_MANIFEST.mutateTrainingProviderDelivery.region,
+  memory: '512MiB',
   secrets: FUNCTION_SECRET_BINDINGS.mutateTrainingProviderDelivery,
 }, handle(false));

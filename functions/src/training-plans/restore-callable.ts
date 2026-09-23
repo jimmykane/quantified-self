@@ -27,6 +27,7 @@ function mapRestoreError(error: TrainingScheduleMutationError): HttpsError {
 
 export const restoreTrainingScheduleRevision = onCall({
     region: FUNCTIONS_MANIFEST.restoreTrainingScheduleRevision.region,
+    memory: '512MiB',
 }, async (request) => {
     if (!request.auth) throw new HttpsError('unauthenticated', 'The function must be called while authenticated.');
     enforceAppCheck(request);

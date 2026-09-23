@@ -21,6 +21,7 @@ function mapKnownError(error: unknown): HttpsError | null {
 
 export const getTrainingScheduleHistory = onCall({
     region: FUNCTIONS_MANIFEST.getTrainingScheduleHistory.region,
+    memory: '512MiB',
 }, async (request) => {
     if (!request.auth) throw new HttpsError('unauthenticated', 'The function must be called while authenticated.');
     enforceAppCheck(request);
@@ -41,6 +42,7 @@ export const getTrainingScheduleHistory = onCall({
 
 export const previewTrainingScheduleRestore = onCall({
     region: FUNCTIONS_MANIFEST.previewTrainingScheduleRestore.region,
+    memory: '512MiB',
 }, async (request) => {
     if (!request.auth) throw new HttpsError('unauthenticated', 'The function must be called while authenticated.');
     enforceAppCheck(request);

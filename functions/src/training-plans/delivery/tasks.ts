@@ -69,7 +69,8 @@ export const onTrainingDeliveryQueued = onDocumentWritten({
   await dispatchTrainingDeliveryJob(productionDeliveryRuntime(), event.params.jobId);
 });
 
-export const dispatchTrainingDelivery = onSchedule({ schedule: '* * * * *', region, timeoutSeconds: 120 }, async () => {
+export const dispatchTrainingDelivery = onSchedule({ schedule: '* * * * *', region, timeoutSeconds: 120,
+  memory: '512MiB' }, async () => {
   const runtime = productionDeliveryRuntime();
   const pending = await getCloudTaskQueueDepthForQueue(config.cloudtasks.trainingDeliveryQueue, true);
   if (pending >= MAX_PENDING_TASKS) return;
