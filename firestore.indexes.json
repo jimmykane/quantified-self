@@ -1,6 +1,10 @@
 {
   "indexes": [
     {
+      "collectionGroup": "marketingCampaigns", "queryScope": "COLLECTION",
+      "fields": [{ "fieldPath": "status", "order": "ASCENDING" }, { "fieldPath": "createdAt", "order": "ASCENDING" }]
+    },
+    {
       "collectionGroup": "trainingDeliveryQueue", "queryScope": "COLLECTION",
       "fields": [{ "fieldPath": "kind", "order": "ASCENDING" }, { "fieldPath": "dueAtMs", "order": "ASCENDING" }]
     },
@@ -1640,6 +1644,10 @@
     }
   ],
   "fieldOverrides": [
+    {
+      "collectionGroup": "recipients", "fieldPath": "uid", "ttl": false,
+      "indexes": [{ "order": "ASCENDING", "queryScope": "COLLECTION_GROUP" }]
+    },
     {
       "collectionGroup": "serviceDisconnectCleanup",
       "fieldPath": "*",

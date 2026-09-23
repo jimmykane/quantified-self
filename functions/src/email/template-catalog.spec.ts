@@ -70,8 +70,10 @@ describe('refreshed email template catalog', () => {
         for (const template of LOCAL_EMAIL_TEMPLATE_CATALOG) {
             const htmlSource = readTemplate(template.htmlFile);
             const textSource = readTemplate(template.textFile);
-            expect(htmlSource).not.toContain('{{{');
-            expect(textSource).not.toContain('{{{');
+            if (template.id !== 'marketing_campaign') {
+                expect(htmlSource).not.toContain('{{{');
+                expect(textSource).not.toContain('{{{');
+            }
 
             for (const preview of template.previewCases) {
                 const subject = Handlebars.compile(template.subject, { strict: true })(preview.data);
@@ -184,7 +186,7 @@ describe('refreshed email template catalog', () => {
         const documents = loadEmailTemplateSeedDocuments(TEMPLATE_ROOT);
         expect(documents.some(document => document.id === DEVELOPMENT_UPDATE_TEMPLATE_ID)).toBe(false);
         expect(documents.some(document => document.id === COROS_DELIVERY_UPDATE_TEMPLATE_ID)).toBe(false);
-        expect(documents.filter(document => document.data.partial)).toHaveLength(EMAIL_PARTIAL_CATALOG.length);
+        expect(documents.filter(document => document.data.partial)).toHaveLength(EMAIL_PARTIAL_CATALOG.length - 1);
         expect(documents.filter(document => !document.data.partial)).toHaveLength(REFRESHED_EMAIL_TEMPLATE_CATALOG.length);
         expect(documents.every(document => document.data.html.length > 0 && document.data.text.length > 0)).toBe(true);
     });

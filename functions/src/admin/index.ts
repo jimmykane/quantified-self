@@ -10,3 +10,5 @@ export {
     grantAdminSubscriptionGift,
     previewAdminSubscriptionGift,
 } from './handlers/subscription-gifts.handlers';
+
+export { listMarketingCampaigns, saveMarketingCampaign, cloneMarketingCampaign, previewMarketingCampaign, prepareMarketingCampaign, setMarketingDailyCap, sendMarketingTest, changeMarketingCampaignStatus, dispatchMarketingCampaigns, trackMarketingDelivery, marketingUnsubscribe } from './marketing/handlers';

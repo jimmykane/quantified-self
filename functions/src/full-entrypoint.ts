@@ -223,6 +223,9 @@ export {
   getFinancialStats,
   previewAdminSubscriptionGift,
   grantAdminSubscriptionGift,
+  listMarketingCampaigns, saveMarketingCampaign, cloneMarketingCampaign,
+  previewMarketingCampaign, prepareMarketingCampaign, setMarketingDailyCap, sendMarketingTest,
+  changeMarketingCampaignStatus, dispatchMarketingCampaigns, trackMarketingDelivery, marketingUnsubscribe,
 } from './admin';
 
 // Tasks

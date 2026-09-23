@@ -2339,6 +2339,28 @@ describe('Firestore Security Rules', () => {
         });
     });
 
+    describe('Marketing campaigns', () => {
+        it('keeps campaigns, recipient snapshots, control and daily usage server-only', async () => {
+            const paths = [
+                'marketingCampaigns/campaign1234567890',
+                'marketingCampaigns/campaign1234567890/recipients/user',
+                'marketingControl/global',
+                'marketingDispatchDays/2026-09-23',
+            ];
+            await testEnv.withSecurityRulesDisabled(async context => {
+                for (const path of paths) await context.firestore().doc(path).set({ test: true });
+            });
+            for (const context of [testEnv.unauthenticatedContext(), testEnv.authenticatedContext('owner'),
+                testEnv.authenticatedContext('admin', { admin: true })]) {
+                const db = context.firestore();
+                for (const path of paths) {
+                    await assertFails(db.doc(path).get());
+                    await assertFails(db.doc(path).set({ test: false }));
+                }
+            }
+        });
+    });
+
     describe('Admin Dashboard Snapshots', () => {
         const snapshotPath = 'adminDashboardSnapshots/2026-08-27';
 

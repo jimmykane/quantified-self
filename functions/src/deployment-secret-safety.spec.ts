@@ -41,8 +41,7 @@ describe('Function secret deployment safety', () => {
 
     expect(firebaseConfig.functions?.disallowLegacyRuntimeConfig).toBe(true);
     expect(firebaseConfig.functions?.predeploy).toEqual([
-      'rm -rf "$RESOURCE_DIR/lib"',
-      'node "$RESOURCE_DIR/node_modules/typescript/bin/tsc" --project "$RESOURCE_DIR/tsconfig.json"',
+      'npm --prefix "$RESOURCE_DIR" run build',
       'node "$RESOURCE_DIR/lib/functions/src/scripts/check-deployment-files.js" "$RESOURCE_DIR"',
       'node "$RESOURCE_DIR/lib/functions/src/scripts/check-entrypoint-loading.js"',
       'node "$RESOURCE_DIR/lib/functions/src/scripts/check-secret-bindings.js"',

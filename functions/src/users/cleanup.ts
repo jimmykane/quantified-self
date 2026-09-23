@@ -1,6 +1,7 @@
 import * as functions from 'firebase-functions/v1';
 import * as logger from 'firebase-functions/logger';
 import * as admin from 'firebase-admin';
+import { cleanupMarketingCampaignRecipients } from '../admin/marketing/cleanup';
 import { getServiceConfig } from '../OAuth2';
 import { GARMIN_API_TOKENS_COLLECTION_NAME, GARMIN_API_WORKOUT_QUEUE_COLLECTION_NAME } from '../garmin/constants';
 
@@ -1042,16 +1043,24 @@ export const cleanupUserAccounts = functions
         logger.error('[Cleanup] MCP OAuth cleanup did not complete; continuing remaining account cleanup before retry.', error);
     }
 
+    // Remove identifying campaign snapshots before cleaning mail.
+    const removedMarketingRecipients = await cleanupMarketingCampaignRecipients(admin.firestore(), uid);
+    logger.info(`[Cleanup] Removed ${removedMarketingRecipients} marketing campaign recipients for ${uid}`);
+
     // Cleanup Emails
+    let mailCleanupError: unknown = null;
     try {
         logger.info(`[Cleanup] Deleting emails for user ${uid}`);
         const db = admin.firestore();
         const mailCollection = db.collection('mail');
-        const batch = db.batch();
         let deletionCount = 0;
 
         // 1. Query by UID (toUids array)
         const uidSnapshot = await mailCollection.where('toUids', 'array-contains', uid).get();
+
+        // Campaign mail uses Auth email plus a UID marker without toUids,
+        // avoiding a duplicate recipient in the Trigger Email extension.
+        const marketingSnapshot = await mailCollection.where('marketing.uid', '==', uid).get();
 
         // 2. Query by Email (to field) - if email exists
         let emailSnapshot: admin.firestore.QuerySnapshot | null = null;
@@ -1074,23 +1083,30 @@ export const cleanupUserAccounts = functions
         };
 
         uidSnapshot.docs.forEach(addMailDocIfDeletable);
+        marketingSnapshot.docs.forEach(addMailDocIfDeletable);
         if (emailSnapshot) {
             emailSnapshot.docs.forEach(addMailDocIfDeletable);
         }
 
-        docsToDelete.forEach((ref) => {
-            batch.delete(ref);
-            deletionCount++;
-        });
+        // Mail documents are leaf records. A user can have more than 500
+        // campaign messages, so commit bounded batches to stay under Firestore's
+        // write limit and let the account-deletion trigger retry on failure.
+        const mailRefs = Array.from(docsToDelete.values());
+        for (let offset = 0; offset < mailRefs.length; offset += 400) {
+            const batch = db.batch();
+            for (const ref of mailRefs.slice(offset, offset + 400)) batch.delete(ref);
+            await batch.commit();
+            deletionCount += Math.min(400, mailRefs.length - offset);
+        }
 
         if (deletionCount > 0) {
-            await batch.commit();
             logger.info(`[Cleanup] Deleted ${deletionCount} email documents for user ${uid}`);
         } else {
             logger.info(`[Cleanup] No email documents found for user ${uid}`);
         }
 
     } catch (e) {
+        mailCleanupError = e;
         logger.error(`[Cleanup] Error deleting emails for ${uid}`, e);
     }
 
@@ -1099,6 +1115,12 @@ export const cleanupUserAccounts = functions
     // Disconnect may already have removed every credential. Its independent
     // cleanup records still own provider-only operational rows in that case.
     await cleanupServiceDisconnectTasksForUser(uid);
+
+    if (mailCleanupError) {
+        throw mailCleanupError instanceof Error
+            ? mailCleanupError
+            : new Error('Mail cleanup did not complete.');
+    }
 
     if (mcpOAuthCleanupFailed) {
         throw mcpOAuthCleanupError instanceof Error

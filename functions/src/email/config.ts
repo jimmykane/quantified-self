@@ -11,6 +11,8 @@ export const TRANSACTIONAL_EMAIL_FROM = 'Quantified Self <hello@quantified-self.
 export const TRANSACTIONAL_EMAIL_REPLY_TO = 'support@quantified-self.io';
 export const FOUNDER_EMAIL_FROM = 'Dimitrios from Quantified Self <hello@quantified-self.io>';
 export const FOUNDER_EMAIL_REPLY_TO = 'dimitrios@quantified-self.io';
+export const MARKETING_EMAIL_FROM = 'Dimitrios from Quantified Self <updates@quantified-self.io>';
+export const MARKETING_EMAIL_REPLY_TO = 'Dimitrios <dimitrios@quantified-self.io>';
 
 export const EMAIL_LINKS = {
     dashboard: 'https://quantified-self.io/dashboard',

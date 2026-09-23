@@ -551,6 +551,11 @@ service cloud.firestore {
       allow write: if false;
     }
 
+    // Marketing campaign content, recipient snapshots, cap and usage are backend-only.
+    match /marketingCampaigns/{document=**} { allow read, write: if false; }
+    match /marketingControl/{document=**} { allow read, write: if false; }
+    match /marketingDispatchDays/{document=**} { allow read, write: if false; }
+
     // Daily admin dashboard snapshots are exposed only through the
     // authenticated, App Check-protected admin callable.
     match /adminDashboardSnapshots/{snapshotDate} {
