@@ -1,4 +1,4 @@
-import { TrainingDeliveryTransportError } from '../contracts';
+import { TrainingDeliveryTransportError, type TrainingDeliveryTransportDiagnostics } from '../contracts';
 
 export interface SuuntoGuideRequest {
   method: 'GET' | 'POST' | 'PUT' | 'DELETE';
@@ -13,6 +13,7 @@ export class SuuntoGuideHttpError extends TrainingDeliveryTransportError {
 }
 // Local memory/time bounds, not Suunto quotas. One attempt; the existing worker owns retry/backoff.
 export const GUIDE_RESPONSE_BYTES = 2 * 1024 * 1024;
+const GUIDE_REJECTION_BYTES = 8 * 1024;
 export function guideId(value: unknown): string {
   if (typeof value !== 'string' || !/^[a-zA-Z0-9_-]{1,128}$/.test(value)) throw new TrainingDeliveryTransportError('uncertain');
   return value;
@@ -27,7 +28,7 @@ function valid(request: SuuntoGuideRequest): boolean {
   return /^\/v2\/guides\/files\/[a-zA-Z0-9_-]{1,128}$/.test(request.path)
     && (request.method !== 'PUT' || !!request.body);
 }
-async function readBounded(response: Response): Promise<Buffer> {
+async function readBounded(response: Response, limit = GUIDE_RESPONSE_BYTES): Promise<Buffer> {
   const reader = response.body?.getReader();
   if (!reader) return Buffer.alloc(0);
   const chunks: Uint8Array[] = []; let size = 0;
@@ -36,11 +37,49 @@ async function readBounded(response: Response): Promise<Buffer> {
       const { value, done } = await reader.read();
       if (done) break;
       size += value.byteLength;
-      if (size > GUIDE_RESPONSE_BYTES) { await reader.cancel(); throw new Error('response-limit'); }
+      if (size > limit) { await reader.cancel().catch(() => {}); throw new Error('response-limit'); }
       chunks.push(value);
     }
     return Buffer.concat(chunks);
   } finally { reader.releaseLock(); }
+}
+/** Suunto documents error.description for Guide validation failures. Interpret it
+ * only in memory as fixed structural categories; never log or retain its text. */
+function guideRejection(raw: Buffer): TrainingDeliveryTransportDiagnostics {
+  if (!raw.length) return { providerRejection: 'empty_response', providerResponseShape: 'empty' };
+  let envelope: Record<string, unknown>;
+  try { envelope = object(JSON.parse(raw.toString('utf8'))); }
+  catch { return { providerRejection: 'unknown_validation', providerResponseShape: 'text' }; }
+  const error = envelope.error && typeof envelope.error === 'object' && !Array.isArray(envelope.error)
+    ? envelope.error as Record<string, unknown> : null;
+  const description = typeof error?.description === 'string' ? error.description.toLowerCase().slice(0, GUIDE_REJECTION_BYTES) : '';
+  const field = /\b(repeat|repetitions?|times)\b/.test(description) ? 'guide_repeat'
+    : /\b(steps?|step[_ -]?type)\b/.test(description) ? 'guide_step'
+      : /\btransitions?\b/.test(description) ? 'guide_transition'
+        : /\b(fields?|field[_ -]?type|conditions?)\b/.test(description) ? 'guide_field'
+          : /\b(activities|activity|sport)\b/.test(description) ? 'guide_activity'
+            : /\b(owner|external[_ -]?id|title|subtitle|date)\b/.test(description) ? 'guide_metadata'
+              : /\b(zip|archive|file|image|icon|json)\b/.test(description) ? 'guide_archive' : undefined;
+  const validation = /invalid\s+step\s+type/.test(description) ? 'invalid_step_type'
+    : /(?:invalid|outside|range|greater|less|maximum|minimum).*\b(?:repeat|times)\b|\b(?:repeat|times)\b.*(?:invalid|outside|range|greater|less|maximum|minimum)/.test(description)
+      ? 'invalid_repeat_count'
+      : /(?:only|unsupported|invalid).*\b(?:child|nested|repeat.*step)\b|\bonly\b.*\bsteps?\b.*\brepeat\b/.test(description) ? 'invalid_child_step'
+        : /invalid\s+field\s+type/.test(description) ? 'invalid_field_type'
+          : /invalid\s+condition\s+type/.test(description) ? 'invalid_condition_type'
+            : /invalid\s+transition/.test(description) ? 'invalid_transition'
+              : /invalid\s+(?:guide\s+)?json/.test(description) ? 'invalid_guide_json' : 'unclassified';
+  const rejection = /\b(missing|required|must be present)\b/.test(description) ? 'missing_parameter'
+    : /\b(invalid|unsupported|not allowed|out of range|must be)\b/.test(description) ? 'invalid_parameter' : 'unknown_validation';
+  return { providerResponseShape: 'json', providerRejection: rejection, providerValidation: validation,
+    ...(field ? { providerField: field } : {}) };
+}
+async function guideRejectionDiagnostics(response: Response): Promise<TrainingDeliveryTransportDiagnostics> {
+  try { return guideRejection(await readBounded(response, GUIDE_REJECTION_BYTES)); }
+  catch (error) {
+    return error instanceof Error && error.message === 'response-limit'
+      ? { providerRejection: 'oversized_response', providerResponseShape: 'oversized' }
+      : { providerRejection: 'unreadable_response', providerResponseShape: 'unreadable' };
+  }
 }
 /** APIM authenticates the application subscription separately from the user's
  * OAuth token. A known key rejection cannot be fixed by reconnecting the user.
@@ -85,14 +124,15 @@ export function createSuuntoGuideClient(authorize: () => Promise<{ accessToken: 
         if (response.status === 401) {
           throw new SuuntoGuideHttpError(await rejectedSubscriptionKey(response) ? 'terminal' : 'auth', true);
         }
-        await response.body?.cancel();
+        const providerDiagnostics = response.status === 400 ? await guideRejectionDiagnostics(response) : {};
+        if (response.status !== 400) await response.body?.cancel().catch(() => {});
         const retry = response.headers.get('retry-after');
         const delay = retry && /^\d+$/.test(retry) ? Number(retry) * 1000 : retry ? Date.parse(retry) - now() : 0;
         const retryAfter = Number.isSafeInteger(delay) && delay > 0 && delay < Number.MAX_SAFE_INTEGER - now() ? delay : 0;
         if (response.status === 403) throw new SuuntoGuideHttpError('permission', true);
         if (response.status === 429) throw new SuuntoGuideHttpError('deferred', true, retryAfter);
         if (response.status === 408 || response.status >= 500) throw new SuuntoGuideHttpError(mutating ? 'uncertain' : 'retryable', false, retryAfter);
-        throw new SuuntoGuideHttpError('terminal', response.status >= 400 && response.status < 500);
+        throw new SuuntoGuideHttpError('terminal', response.status >= 400 && response.status < 500, 0, providerDiagnostics);
       }
       if (response.status !== (request.method === 'POST' ? 201 : 200)) throw new SuuntoGuideHttpError(mutating ? 'uncertain' : 'retryable', false);
       failurePhase = 'decode';
@@ -108,7 +148,8 @@ export function createSuuntoGuideClient(authorize: () => Promise<{ accessToken: 
       if (rows.some(row => object(row).username !== authority.account)) throw new Error('account');
       return { status: response.status, body: envelope.payload };
     } catch (error) {
-      if (error instanceof SuuntoGuideHttpError) throw new SuuntoGuideHttpError(error.kind, error.rejected, error.retryAfterMs, { httpStatus, failurePhase });
+      if (error instanceof SuuntoGuideHttpError) throw new SuuntoGuideHttpError(error.kind, error.rejected, error.retryAfterMs,
+        { ...error.diagnostics, httpStatus, failurePhase });
       throw new SuuntoGuideHttpError(mutating ? 'uncertain' : 'retryable', false, 0, { httpStatus, failurePhase });
     }
   };

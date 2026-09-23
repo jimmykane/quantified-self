@@ -86,13 +86,19 @@ export type TrainingDeliveryProviderRejection = 'application_not_approved' | 'pl
   | 'missing_parameter' | 'invalid_parameter' | 'unknown_validation' | 'empty_response'
   | 'oversized_response' | 'unreadable_response';
 export type TrainingDeliveryProviderField = 'plan_file' | 'plan_filename' | 'plan_external_id'
-  | 'plan_provider_updated_at' | 'plan_description' | 'plan_payload';
+  | 'plan_provider_updated_at' | 'plan_description' | 'plan_payload'
+  | 'guide_repeat' | 'guide_step' | 'guide_transition' | 'guide_field'
+  | 'guide_activity' | 'guide_metadata' | 'guide_archive';
+export type TrainingDeliveryProviderValidation = 'invalid_step_type' | 'invalid_repeat_count'
+  | 'invalid_child_step' | 'invalid_field_type' | 'invalid_condition_type'
+  | 'invalid_transition' | 'invalid_guide_json' | 'unclassified';
 export type TrainingDeliveryProviderResponseShape = 'empty' | 'json' | 'text' | 'oversized' | 'unreadable';
 export interface TrainingDeliveryTransportDiagnostics {
   httpStatus?: number;
   failurePhase?: 'request' | 'response' | 'decode' | 'contract';
   providerRejection?: TrainingDeliveryProviderRejection;
   providerField?: TrainingDeliveryProviderField;
+  providerValidation?: TrainingDeliveryProviderValidation;
   providerResponseShape?: TrainingDeliveryProviderResponseShape;
 }
 
@@ -121,7 +127,11 @@ export class TrainingDeliveryTransportError extends Error {
     const providerRejections: TrainingDeliveryProviderRejection[] = ['application_not_approved', 'plan_access_unavailable',
       'missing_parameter', 'invalid_parameter', 'unknown_validation', 'empty_response', 'oversized_response', 'unreadable_response'];
     const providerFields: TrainingDeliveryProviderField[] = ['plan_file', 'plan_filename', 'plan_external_id',
-      'plan_provider_updated_at', 'plan_description', 'plan_payload'];
+      'plan_provider_updated_at', 'plan_description', 'plan_payload', 'guide_repeat', 'guide_step',
+      'guide_transition', 'guide_field', 'guide_activity', 'guide_metadata', 'guide_archive'];
+    const providerValidations: TrainingDeliveryProviderValidation[] = ['invalid_step_type', 'invalid_repeat_count',
+      'invalid_child_step', 'invalid_field_type', 'invalid_condition_type', 'invalid_transition',
+      'invalid_guide_json', 'unclassified'];
     const providerResponseShapes: TrainingDeliveryProviderResponseShape[] = ['empty', 'json', 'text', 'oversized', 'unreadable'];
     this.diagnostics = {
       ...(Number.isInteger(diagnostics.httpStatus) && diagnostics.httpStatus! >= 100 && diagnostics.httpStatus! <= 599
@@ -132,6 +142,8 @@ export class TrainingDeliveryTransportError extends Error {
         ? { providerRejection: diagnostics.providerRejection } : {}),
       ...(providerFields.includes(diagnostics.providerField as TrainingDeliveryProviderField)
         ? { providerField: diagnostics.providerField } : {}),
+      ...(providerValidations.includes(diagnostics.providerValidation as TrainingDeliveryProviderValidation)
+        ? { providerValidation: diagnostics.providerValidation } : {}),
       ...(providerResponseShapes.includes(diagnostics.providerResponseShape as TrainingDeliveryProviderResponseShape)
         ? { providerResponseShape: diagnostics.providerResponseShape } : {}),
     };

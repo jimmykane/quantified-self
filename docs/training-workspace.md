@@ -876,6 +876,10 @@ delivery latency, `stale_suppressed` for obsolete work, and `recovered_acceptanc
 For HTTP failures, group by `jsonPayload.httpStatus` and `jsonPayload.failurePhase` to distinguish rejected responses
 from network uncertainty and response decoding. Legacy failure records lack these fields and cannot prove a specific
 provider response status after the fact.
+Suunto Guide HTTP 400 failures also include fixed `providerResponseShape`, `providerRejection`, optional
+`providerField` and `providerValidation` values. These are classifier outputs, not Suunto's free-text reason;
+`unclassified` means the safe log alone cannot establish the exact validation defect. This private diagnostic change
+has no MCP impact: it adds no tool, scope, provider action, owner-readable projection or wire-contract field.
 Garmin delivery/recovery additionally emits `garmin_response` for each returned HTTP result, with fixed `method` and
 `resource` (`workout`, `schedule`, `schedule-list`, or `unknown`) categories, HTTP status and `responseShape`.
 For object responses, only the types of the fixed `workoutId`, `scheduleId`, `ownerId` and `date` fields are recorded
@@ -1095,6 +1099,13 @@ memory bounds protect Functions, not provider capacity. Mutations journal start 
 revisions. Lost POST acknowledgement or 409 recovers only through exact app/account/external-ID and full-content proof;
 three 50-item inventory pages per attempt make recovery resumable. Empty/unstable listings never authorize another POST.
 Unknown recovery remains needs-attention, including Retry; accepted IDs survive newer edits and Stop.
+For HTTP 400 Guide rejections, the client reads at most 8 KiB of Suunto's documented error envelope and records only
+fixed response-shape, rejection, structural-field and validation categories in the existing `[TrainingDelivery]` failure
+event. The raw `error.description`, authored workout text, ZIP, account identifiers and response body are never logged or
+persisted. An unreadable or oversized error body remains a known terminal HTTP rejection, not an uncertain accepted
+create. Before replaying such a failure, inspect the exact ledger for `create/rejected` with no accepted artifact, current
+consent, saved-zone eligibility and unchanged account authority. Replay through the existing Retry/reconciliation journal,
+not an unjournaled direct POST; unknown acceptance or a retained remote ID is not safe to replay as a new create.
 
 Provider confirmation for #710 established that hiding or removing a Guide in the Suunto app can leave that Guide visible
 through the partner API. API acceptance and positive presence therefore prove neither app visibility, selection/pinning,

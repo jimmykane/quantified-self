@@ -25,6 +25,33 @@ describe('Suunto Guides HTTP isolation', () => {
     await expect(promise).rejects.toMatchObject({ kind, ...(status === 429 ? { rejected: true, retryAfterMs: 120_000 } : {}) });
     expect(fetcher).toHaveBeenCalledOnce();
   });
+  it('classifies a documented Guide validation response without exposing its private text', async () => {
+    const privateText = 'Athlete private workout title';
+    const fetcher = vi.fn(async () => new Response(JSON.stringify({ error: {
+      description: `Invalid step type: 'repeat' in ${privateText}` }, payload: null }), { status: 400 }));
+    const client = createSuuntoGuideClient(auth, key, fetcher);
+    try {
+      await client({ method: 'POST', path: '/v2/guides/files', body: Buffer.from('zip') }, vi.fn());
+      throw new Error('expected rejection');
+    } catch (error) {
+      expect(error).toMatchObject({ kind: 'terminal', rejected: true, message: 'terminal', diagnostics: {
+        httpStatus: 400, failurePhase: 'response', providerRejection: 'invalid_parameter',
+        providerField: 'guide_repeat', providerValidation: 'invalid_step_type', providerResponseShape: 'json',
+      } });
+      expect(JSON.stringify(error)).not.toContain(privateText);
+    }
+  });
+  it.each([
+    ['', { providerRejection: 'empty_response', providerResponseShape: 'empty' }],
+    ['not json: private workout title', { providerRejection: 'unknown_validation', providerResponseShape: 'text' }],
+    ['{"error":{"description":"Only fields steps are allowed in a repeat"}}',
+      { providerRejection: 'unknown_validation', providerField: 'guide_repeat', providerValidation: 'invalid_child_step', providerResponseShape: 'json' }],
+    ['x'.repeat(8 * 1024 + 1), { providerRejection: 'oversized_response', providerResponseShape: 'oversized' }],
+  ])('keeps a bounded classification for a rejected Guide body', async (body, diagnostics) => {
+    const client = createSuuntoGuideClient(auth, key, vi.fn(async () => new Response(body, { status: 400 })));
+    await expect(client({ method: 'POST', path: '/v2/guides/files', body: Buffer.from('zip') }, vi.fn()))
+      .rejects.toMatchObject({ kind: 'terminal', rejected: true, diagnostics: { httpStatus: 400, failurePhase: 'response', ...diagnostics } });
+  });
   it.each([404, 409])('does not equate %s with successful delivery/deletion', async status => {
     const client = createSuuntoGuideClient(auth, key, vi.fn(async () => new Response(null, { status })));
     expect(await client({ method: 'PUT', path: '/v2/guides/files/id', body: Buffer.from('zip') }, vi.fn())).toEqual({ status, body: null });

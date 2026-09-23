@@ -214,6 +214,10 @@ and pin state through PUT. Incoming workout-reference FIT metadata is now read t
 metadata-only reader. The public workout-reference classes, return shapes and numeric values remain unchanged, irrelevant
 nonstandard vendor definitions on unrelated messages do not poison usable correlation metadata, and the full FIT parser
 5.2.1 remains lazy for activity and route imports instead of entering application startup bundles.
+Guide HTTP 400 diagnostics classify only a bounded validation envelope into fixed structural categories; Suunto's
+free-text `error.description` and uploaded Guide content never enter logs or owner-visible status. An operator replay
+must use the existing delivery journal after proving definitive rejection and current consent/connection eligibility;
+it must never directly repeat an ambiguous create.
 QS still revalidates the exact connected account, filters its OAuth client owner and deterministic Guide external ID,
 and links only one unambiguous session marker
 to the matching scheduled workout. The private IDs/evidence never enter Event/Activity JSON; the owner sees only
