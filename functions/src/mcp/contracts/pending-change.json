@@ -1,7 +1,7 @@
 {
   "formatVersion": 1,
-  "candidateSha256": "b98d34a2362d4bb738bbd6a0e74a5fd6a3d666105eee5948ca6755c8255a632a",
+  "candidateSha256": "169285e11a2e45e2a0aa1e0fc3e37a26d25de227378eda8773046d1fe63919ba",
   "lifecycleAction": "developer-refresh",
-  "summary": "Retain prior Training reads/writes, chronological and bulk completion reads, compatibility, Health/Timeline/activity/readiness, private_key_jwt and PKCE changes. Add separately consented events:write tag replacement and Timeline-note create/edit/delete with dependent scopes, optimistic concurrency, benchmark-event exclusion, idempotency, native approval, bounded opaque projections, consent/docs/plugin guidance, and client-neutral missing-permission recovery instructions.",
+  "summary": "Retain prior Training, Health, Timeline, activity, readiness, OAuth and PKCE changes. Add event title read/edit and description edit (also requiring activity-descriptions:read) beside existing tag and Timeline-note edits. Preserve dependent scopes, exact-current-value checks, benchmark exclusion, native approval, bounded opaque outputs, consent and plugin guidance.",
   "rescanRequired": true
 }

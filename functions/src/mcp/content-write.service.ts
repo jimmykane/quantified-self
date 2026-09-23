@@ -2,6 +2,10 @@ import * as admin from 'firebase-admin';
 import { FieldPath, FieldValue } from 'firebase-admin/firestore';
 import { isDeepStrictEqual } from 'node:util';
 import { z } from 'zod';
+import {
+  MCP_ACTIVITY_DESCRIPTION_MAX_BYTES,
+  MCP_ACTIVITY_DESCRIPTION_MAX_LENGTH,
+} from './activity-description.service';
 import type { AssistantContentProposalKind } from '../../../shared/assistant.types';
 import { isBenchmarkEvent } from '../../../shared/event-classification';
 import {
@@ -43,6 +47,7 @@ import {
 } from './timeline-notes.service';
 
 const ACTIVITY_DETAILS_READ_SCOPE = 'activity-details:read';
+const ACTIVITY_DESCRIPTIONS_READ_SCOPE = 'activity-descriptions:read';
 const NOTE_REFERENCE_SCHEMA = z.strictObject({
   id: z.string().regex(/^[a-f0-9]{64}$/),
 });
@@ -370,6 +375,129 @@ export async function updateMcpEventTags(
     return { activityRef: args.activityRef, tags, changed: true };
   });
   return MCP_CONTENT_WRITE_OUTPUTS.update_event_tags.parse(result);
+}
+
+function decodeEventActivityReference(
+  input: McpContentWriteInput,
+  codec: McpContentWriteCodec,
+  activityRef: string,
+) {
+  try {
+    return codec.decodeActivityRef(activityRef, input.uid, input.connectionId);
+  } catch {
+    return invalid('The activity reference is invalid.');
+  }
+}
+
+function currentEventText(value: unknown, field: 'name' | 'description'): string | null {
+  if (value == null) return null;
+  if (typeof value !== 'string') {
+    throw new McpContentWriteError('detail_not_available', `The event ${field} is unavailable.`);
+  }
+  const withinLimit = field === 'name'
+    ? MCP_CONTENT_WRITE_OUTPUTS.get_event_title.shape.title.safeParse(value).success
+    : value.length <= MCP_ACTIVITY_DESCRIPTION_MAX_LENGTH
+      && Buffer.byteLength(value, 'utf8') <= MCP_ACTIVITY_DESCRIPTION_MAX_BYTES;
+  if (!withinLimit) {
+    invalid(`The event ${field} exceeds the MCP text limit. Edit it in Quantified Self.`);
+  }
+  return value;
+}
+
+export async function getMcpEventTitle(
+  input: McpContentWriteInput,
+  codec: McpContentWriteCodec,
+  deps = defaultMcpContentWriteDependencies(),
+) {
+  if (input.assistantConversationId) invalid('Event title reads are unavailable in the built-in Assistant.');
+  const requiredScopes = [ACTIVITY_DETAILS_READ_SCOPE, EVENTS_WRITE_SCOPE];
+  assertInputScopes(input, requiredScopes);
+  const args = parseArguments(MCP_CONTENT_WRITE_INPUTS.get_event_title, input.arguments);
+  const reference = decodeEventActivityReference(input, codec, args.activityRef);
+  await readAccessGeneration(deps, input, requiredScopes);
+  const user = deps.db.collection('users').doc(input.uid);
+  const [activity] = await deps.db.getAll(user.collection('activities').doc(reference.activityId), {
+    fieldMask: ['eventID'],
+  });
+  if (!activity.exists || activity.get('eventID') !== reference.eventId) {
+    throw new McpContentWriteError('detail_not_available', 'The activity is no longer available.');
+  }
+  const [event] = await deps.db.getAll(user.collection('events').doc(reference.eventId), {
+    fieldMask: ['name', 'mergeType', 'isMerge'],
+  });
+  if (!event.exists || isBenchmarkEvent(event.data())) {
+    throw new McpContentWriteError('detail_not_available', 'The activity event cannot be edited.');
+  }
+  const title = currentEventText(event.get('name'), 'name');
+  await readAccessGeneration(deps, input, requiredScopes);
+  return MCP_CONTENT_WRITE_OUTPUTS.get_event_title.parse({ activityRef: args.activityRef, title });
+}
+
+async function updateMcpEventText(
+  input: McpContentWriteInput,
+  codec: McpContentWriteCodec,
+  deps: McpContentWriteDependencies,
+  field: 'name' | 'description',
+  expected: string | null,
+  next: string | null,
+  activityRefValue: string,
+) {
+  if (input.assistantConversationId) invalid('Event text changes are unavailable in the built-in Assistant.');
+  const requiredScopes = [ACTIVITY_DETAILS_READ_SCOPE, EVENTS_WRITE_SCOPE,
+    ...(field === 'description' ? [ACTIVITY_DESCRIPTIONS_READ_SCOPE] : [])];
+  assertInputScopes(input, requiredScopes);
+  const reference = decodeEventActivityReference(input, codec, activityRefValue);
+  const user = deps.db.collection('users').doc(input.uid);
+  const activityRef = user.collection('activities').doc(reference.activityId);
+  const eventRef = user.collection('events').doc(reference.eventId);
+  return deps.db.runTransaction(async transaction => {
+    if ((await getUserDeletionGuardStateInTransaction(deps.db, transaction, input.uid, deps.now())).shouldSkip) {
+      invalid('This account is unavailable or being deleted.');
+    }
+    await assertConnectionAuthorityInTransaction(deps, transaction, input, requiredScopes);
+    const [activity] = await transaction.getAll(activityRef, { fieldMask: ['eventID'] });
+    if (!activity.exists || activity.get('eventID') !== reference.eventId) {
+      throw new McpContentWriteError('detail_not_available', 'The activity is no longer available.');
+    }
+    const [event] = await transaction.getAll(eventRef, { fieldMask: [field, 'mergeType', 'isMerge'] });
+    if (!event.exists) {
+      throw new McpContentWriteError('detail_not_available', 'The activity event is no longer available.');
+    }
+    if (isBenchmarkEvent(event.data())) invalid('Benchmark events cannot be changed through MCP.');
+    const current = currentEventText(event.get(field), field);
+    if (current === next) return { activityRef: activityRefValue, value: next, changed: false };
+    if (current !== expected) {
+      invalid(`The event ${field} changed since it was read. Read it again before updating.`);
+    }
+    transaction.update(eventRef, sanitizeEventFirestoreWritePayload({ [field]: next }));
+    return { activityRef: activityRefValue, value: next, changed: true };
+  });
+}
+
+export async function updateMcpEventTitle(
+  input: McpContentWriteInput,
+  codec: McpContentWriteCodec,
+  deps = defaultMcpContentWriteDependencies(),
+) {
+  const args = parseArguments(MCP_CONTENT_WRITE_INPUTS.update_event_title, input.arguments);
+  const result = await updateMcpEventText(input, codec, deps, 'name',
+    args.expectedTitle, args.title, args.activityRef);
+  return MCP_CONTENT_WRITE_OUTPUTS.update_event_title.parse({
+    activityRef: result.activityRef, title: result.value, changed: result.changed,
+  });
+}
+
+export async function updateMcpEventDescription(
+  input: McpContentWriteInput,
+  codec: McpContentWriteCodec,
+  deps = defaultMcpContentWriteDependencies(),
+) {
+  const args = parseArguments(MCP_CONTENT_WRITE_INPUTS.update_event_description, input.arguments);
+  const result = await updateMcpEventText(input, codec, deps, 'description',
+    args.expectedDescription, args.description, args.activityRef);
+  return MCP_CONTENT_WRITE_OUTPUTS.update_event_description.parse({
+    activityRef: result.activityRef, changed: result.changed,
+  });
 }
 
 export async function queryEditableMcpTimelineNotes(

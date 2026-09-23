@@ -43,7 +43,7 @@ export const MCP_SCOPE_CONTENT: Record<McpScope, {
   },
   'activity-descriptions:read': {
     title: 'Activity descriptions',
-    description: 'Read the full private event description shown in the QS.io event editor for a selected activity. Activities within the same event share this text. Requires Individual activity details. Selected by default when requested; uncheck it before approving to keep descriptions private from this client. Existing connections must reauthorize. Text may include sensitive health, personal or location information, even without Activity locations permission. Revoking access cannot erase copies already received. No descriptions can be changed.',
+    description: 'Read the full private event description shown in the QS.io event editor for a selected activity. Activities within the same event share this text. Requires Individual activity details. Selected by default when requested; uncheck it before approving to keep descriptions private from this client. Existing connections must reauthorize if this permission is missing. Text may include sensitive health, personal or location information, even without Activity locations permission. Revoking access cannot erase copies already received. Editing descriptions also requires Change events and your client\'s approval.',
   },
   'timeline-notes:read': {
     title: 'Timeline notes',
@@ -75,7 +75,7 @@ export const MCP_SCOPE_CONTENT: Record<McpScope, {
   },
   'events:write': {
     title: 'Change events',
-    description: 'Change event-owned details through focused tools. Currently this permission only replaces tags on a selected activity\'s parent event after reading its current tags. Selected by default when requested; uncheck it before approving to keep events read-only. Sibling activities share the change, concurrent edits fail, and benchmark events are excluded. This cannot currently edit titles, descriptions, activity data, metrics, or provider records. Requires Individual activity details.',
+    description: 'Change a selected activity\'s parent-event tags or title after reading the exact current value. Titles and tags may contain sensitive personal or health information. Description edits additionally require Activity descriptions permission. Selected by default when requested; uncheck it before approving to keep events read-only. Your client asks for approval before each edit. Sibling activities share the change, concurrent edits fail, and benchmark events are excluded. This cannot edit recorded activity data, metrics, or provider records. Requires Individual activity details.',
   },
   'activity-location:read': {
     title: 'Activity locations',

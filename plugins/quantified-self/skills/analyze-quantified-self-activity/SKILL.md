@@ -1,6 +1,6 @@
 ---
 name: analyze-quantified-self-activity
-description: Analyze one or more authorized Quantified Self activities and, when separately granted, change their shared event tags through MCP. Use for individual workouts, activity tags, activity descriptions, activity summaries, canonical metrics, laps, MTB jumps, swim lengths, pace or power charts, detailed workout samples, interval analysis, breadcrumb traces, or finding activities near a place; use the training skill for aggregate trends across many activities.
+description: Analyze one or more authorized Quantified Self activities and, when separately granted, change their shared event tags, title, or description through MCP. Use for individual workouts, activity renaming, activity tags, activity descriptions, activity summaries, canonical metrics, laps, MTB jumps, swim lengths, pace or power charts, detailed workout samples, interval analysis, breadcrumb traces, or finding activities near a place; use the training skill for aggregate trends across many activities.
 ---
 
 # Analyze Activity Performance
@@ -65,12 +65,19 @@ activities, resolve opaque public references and request only the detail needed 
 ## Permissions and Privacy
 
 - `activity-details:read` gates activity summaries, event tags and tag filtering, subrecords, non-location charts, and detailed samples. Reading tags adds no new grant.
-- `events:write` is a separate dependent grant for focused event-owned changes. Its current tool only replaces the
-  complete shared parent-event tag list. Existing connections must reauthorize; refresh cannot add it. Read current
-  tags through the tag-aware activity query, then call `update_event_tags` once with that complete list as `expectedTags`
-  and the complete replacement. The mutation conflicts on concurrent edits and rejects benchmark
-  events. It cannot currently edit activity values, titles, descriptions, locations, original files, provider records,
-  or another event.
+- `events:write` is a separate dependent grant for focused event-owned changes. A request to rename an activity,
+  run, ride, or workout means editing its parent event title; tags and descriptions are event-owned too. Existing
+  connections missing this grant must reauthorize; refresh cannot add it. Discover the focused tools from the live
+  catalog. Read current tags through the tag-aware activity query, then submit that complete list as `expectedTags`
+  and the complete replacement through the event-tag update tool. For a rename, read the current event title and
+  submit its exact `expectedTitle` through the title-update tool. For a description edit, first read the selected
+  activity's private event description and submit that exact text as `expectedDescription` through the description-
+  update tool; both `activity-descriptions:read` and `events:write` are required.
+  Do not infer missing title/description text from an activity summary. Each mutation conflicts on concurrent edits,
+  rejects benchmark events (even a no-op), and affects sibling activities sharing the event. Respect native client
+  approval and do not claim success until the write confirms it. These tools cannot edit recorded activity values,
+  locations, original files, provider records, or another event. If a grant is absent, explain reauthorization;
+  if a tool is absent despite grants, refresh the client catalog or installed plugin rather than repeating other tools.
 - Selected per-activity metrics also require `metrics:read`.
 - `activity-location:read` separately gates start and end positions, nearby-activity searches, jump coordinates, and
   breadcrumb traces. Reject an explicit location request rather than silently downgrading it.

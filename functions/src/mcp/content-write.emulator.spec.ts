@@ -4,9 +4,12 @@ import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 import {
   createMcpTimelineNote,
   deleteMcpTimelineNote,
+  getMcpEventTitle,
   McpContentWriteError,
   queryEditableMcpTimelineNotes,
   updateMcpEventTags,
+  updateMcpEventTitle,
+  updateMcpEventDescription,
   updateMcpTimelineNote,
   type McpContentWriteCodec,
   type McpContentWriteDependencies,
@@ -23,6 +26,7 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)(
     const db = new Firestore({ projectId: 'demo-mcp-content-writes' });
     const users: string[] = [];
     const activityScopes = ['activity-details:read', 'events:write'];
+    const descriptionScopes = [...activityScopes, 'activity-descriptions:read'];
     const noteScopes = ['timeline-notes:read', 'timeline-notes:write'];
     const now = () => Date.parse('2026-09-22T12:00:00Z');
     let uid: string;
@@ -59,7 +63,7 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)(
       const user = db.collection('users').doc(uid);
       await user.set({ test: true });
       await user.collection('mcpConnections').doc('connection').set({
-        status: 'active', scopes: [...activityScopes, ...noteScopes],
+        status: 'active', scopes: [...descriptionScopes, ...noteScopes],
         grantId: 'grant-1', createdAtMs: 1, revokedAtMs: null,
       });
       deps = {
@@ -121,6 +125,90 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)(
       await user.collection('events').doc('event-1').update({ tags: ['Coach'] });
       await expect(updateMcpEventTags(input, codec, deps)).rejects.toMatchObject({
         code: 'invalid_request',
+      });
+    });
+
+    it('edits the shared event title and description with exact current-value checks', async () => {
+      const user = db.collection('users').doc(uid);
+      await user.collection('activities').doc('activity-1').set({ eventID: 'event-1' });
+      await user.collection('activities').doc('sibling').set({ eventID: 'event-1' });
+      await user.collection('events').doc('event-1').set({
+        name: 'Morning run', description: 'Easy.', tags: ['Trail'],
+      });
+      const context = { uid, connectionId: 'connection', grantId: 'grant-1',
+        scopes: descriptionScopes };
+      const activityRef = `activity:${uid}:connection`;
+      await expect(getMcpEventTitle({ ...context, arguments: { activityRef } }, codec, deps))
+        .resolves.toEqual({ activityRef, title: 'Morning run' });
+      const rename = { ...context, arguments: {
+        activityRef, expectedTitle: 'Morning run', title: '  Evening ride  ',
+      } };
+      await expect(updateMcpEventTitle(rename, codec, deps)).resolves.toEqual({
+        activityRef, title: '  Evening ride  ', changed: true,
+      });
+      await expect(updateMcpEventTitle(rename, codec, deps)).resolves.toMatchObject({ changed: false });
+      await expect(updateMcpEventTitle({ ...context, arguments: {
+        activityRef, expectedTitle: 'Morning run', title: 'Stale edit',
+      } }, codec, deps)).rejects.toMatchObject({ code: 'invalid_request' });
+
+      const descriptionInput = { ...context, arguments: {
+        activityRef, expectedDescription: 'Easy.', description: 'Long run.\nFelt good 🚴',
+      } };
+      await expect(updateMcpEventDescription(descriptionInput, codec, deps)).resolves.toEqual({
+        activityRef, changed: true,
+      });
+      await expect(updateMcpEventDescription(descriptionInput, codec, deps))
+        .resolves.toMatchObject({ changed: false });
+      await expect(updateMcpEventDescription({ ...context, arguments: {
+        activityRef, expectedDescription: 'Easy.', description: 'Stale edit',
+      } }, codec, deps)).rejects.toMatchObject({ code: 'invalid_request' });
+      expect((await user.collection('events').doc('event-1').get()).data()).toEqual({
+        name: '  Evening ride  ', description: 'Long run.\nFelt good 🚴', tags: ['Trail'],
+      });
+      expect((await user.collection('activities').doc('sibling').get()).get('eventID')).toBe('event-1');
+    });
+
+    it('denies description edits without description access and any text edit to benchmarks', async () => {
+      const user = db.collection('users').doc(uid);
+      await user.collection('activities').doc('activity-1').set({ eventID: 'event-1' });
+      await user.collection('events').doc('event-1').set({ name: 'Benchmark', description: 'Private', mergeType: 'benchmark' });
+      const activityRef = `activity:${uid}:connection`;
+      await expect(updateMcpEventTitle({ uid, connectionId: 'connection', grantId: 'grant-1',
+        scopes: activityScopes, arguments: { activityRef, expectedTitle: 'Benchmark', title: 'Benchmark' },
+      }, codec, deps)).rejects.toMatchObject({ code: 'invalid_request' });
+      await expect(updateMcpEventDescription({ uid, connectionId: 'connection', grantId: 'grant-1',
+        scopes: activityScopes, arguments: { activityRef, expectedDescription: 'Private', description: 'New' },
+      }, codec, deps)).rejects.toMatchObject({ code: 'invalid_request' });
+      await expect(updateMcpEventDescription({ uid, connectionId: 'connection', grantId: 'grant-1',
+        scopes: descriptionScopes, arguments: { activityRef, expectedDescription: 'Private', description: 'Private' },
+      }, codec, deps)).rejects.toMatchObject({ code: 'invalid_request' });
+      expect((await user.collection('events').doc('event-1').get()).get('description')).toBe('Private');
+    });
+
+    it('rejects revoked grants, stale activity associations, cross-connection refs and deletion for text writes', async () => {
+      const user = db.collection('users').doc(uid);
+      await user.collection('activities').doc('activity-1').set({ eventID: 'event-1' });
+      await user.collection('events').doc('event-1').set({ name: 'Original', description: 'Private' });
+      const context = { uid, connectionId: 'connection', grantId: 'grant-1', scopes: descriptionScopes };
+      const activityRef = `activity:${uid}:connection`;
+      const rename = { ...context, arguments: { activityRef, expectedTitle: 'Original', title: 'New' } };
+      await expect(updateMcpEventTitle({ ...context, arguments: {
+        ...rename.arguments, activityRef: `activity:${uid}:other`,
+      } }, codec, deps)).rejects.toMatchObject({ code: 'invalid_request' });
+      await user.collection('activities').doc('activity-1').update({ eventID: 'event-2' });
+      await expect(updateMcpEventTitle(rename, codec, deps)).rejects.toMatchObject({ code: 'detail_not_available' });
+      await user.collection('activities').doc('activity-1').update({ eventID: 'event-1' });
+      await user.collection('mcpConnections').doc('connection').update({ status: 'revoked', revokedAtMs: now() });
+      await expect(getMcpEventTitle({ ...context, arguments: { activityRef } }, codec, deps))
+        .rejects.toMatchObject({ code: 'invalid_request' });
+      await expect(updateMcpEventTitle(rename, codec, deps)).rejects.toMatchObject({ code: 'invalid_request' });
+      await user.collection('mcpConnections').doc('connection').update({ status: 'active', revokedAtMs: null });
+      await db.collection('userDeletionTombstones').doc(uid).set({ expireAt: now() + 60_000 });
+      await expect(updateMcpEventDescription({ ...context, arguments: {
+        activityRef, expectedDescription: 'Private', description: 'New',
+      } }, codec, deps)).rejects.toMatchObject({ code: 'invalid_request' });
+      expect((await user.collection('events').doc('event-1').get()).data()).toEqual({
+        name: 'Original', description: 'Private',
       });
     });
 
