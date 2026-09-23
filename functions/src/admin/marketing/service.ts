@@ -1,7 +1,7 @@
 import * as admin from 'firebase-admin';
 import * as logger from 'firebase-functions/logger';
 import { HttpsError } from 'firebase-functions/v2/https';
-import { FieldValue } from 'firebase-admin/firestore';
+import { FieldPath, FieldValue } from 'firebase-admin/firestore';
 import { randomUUID, createHmac, timingSafeEqual } from 'crypto';
 import * as path from 'path';
 import type { MarketingAudienceExclusions, MarketingCampaignDraft, MarketingCampaignListResponse, MarketingCampaignStats, MarketingCampaignView, MarketingPlan, MarketingRecipientStatus } from '../../../../shared/admin-marketing';
@@ -379,7 +379,7 @@ export async function dispatchCampaigns(secret: string): Promise<number> {
       while (available) {
         const pageSize = available + 20;
         let recipientQuery = campaignRef.collection('recipients').where('status', '==', 'pending')
-          .orderBy(admin.firestore.FieldPath.documentId()).limit(pageSize);
+          .orderBy(FieldPath.documentId()).limit(pageSize);
         if (lastRecipient) recipientQuery = recipientQuery.startAfter(lastRecipient);
         const recipientDocs = await recipientQuery.get();
         if (recipientDocs.empty) break;
