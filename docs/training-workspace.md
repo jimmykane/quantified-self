@@ -417,9 +417,13 @@ strict codec rejects unknown fields and discriminants, unsupported versions or s
 negative values, non-positive endings/reference snapshots, inverted ranges, more than 100 nodes, repeat counts above
 100, nested repeats, and more than two targets per step. Its JSON output must remain Firestore-safe and must round-trip through stringify/parse without changing
 the persisted v1 value. The manual editor exposes canonical Running, Trail Running, Treadmill, Cycling, Mountain Biking,
-Indoor Cycling, E-Biking, and Hand Cycle sports plus date-only, time/distance, fixed-repeat, and single absolute
-HR/power/pace inputs. These are Sports Lib activity-type strings, not provider profile IDs. The shared contract remains
-broader so saved v1 data does not need a redesign when later UI slices are enabled.
+Indoor Cycling, E-Biking, Hand Cycle, and Swimming sports plus date-only, time/distance, fixed-repeat, and single absolute
+HR/power/pace inputs. Swimming is labelled Pool swimming in the editor: distance steps are entered in metres rather than
+kilometres, and pace targets follow the user's swim-pace preference (/100 m or /100 yd). Changing an unsaved editor
+sport converts displayed distances and paces without changing their canonical values. The v1 recipe has no pool-length
+field: a 25 m step does not assert a 25 m pool, and pool length must be selected on the device when needed. These are
+Sports Lib activity-type strings, not provider profile IDs. The shared contract remains broader so saved v1 data does
+not need a redesign when later UI slices are enabled.
 
 Do not add planned-workout `Data*` types, `DataStore` entries, FIT parser behavior, or MCP fields merely to share this
 recipe. Extract the neutral structure, codec, validator, and reusable analysis to Sports Lib only after Garmin and COROS
@@ -936,6 +940,11 @@ cycling-only secondary-target field subject to its existing device-support warni
 Unsupported sports still fail closed. Existing Running/Cycling payloads and retained remote identities do not change,
 and no authored recipe, schedule history, Sports Lib type or provider ID is rewritten.
 
+Pool swimming is manually authorable but remains unsupported by the Garmin adapter. The Training API's lap-swimming
+payload needs explicit pool length and swim-specific segment/target mapping; neither is present in the current v1
+recipe/serializer. Never fold Swimming to Running or Cycling, or claim that a 25 m step configures the device pool.
+That separate compatibility slice is tracked by #733 under epic #583; do not enable Garmin swim delivery before it passes.
+
 #### COROS Training delivery (#648)
 
 COROS reuses the shared ledger, reconciliation queue, consent, status and per-workout lease model. The existing minute
@@ -960,7 +969,11 @@ access is unavailable and never asks for reconnect; `5006` is authentication fai
 honoured when returned; this adapter adds no speculative quota or throttling layer.
 
 Upserts cover today through 365 days in the saved delivery time zone and carry deterministic LastModifiedDate values.
-Running, Cycling and Trail Running use the native COROS wire values `run`, `bike` and `trailRun`. Treadmill and cycling subtypes fold to `run`/`bike` only
+Running, Cycling, Trail Running and Swimming use the native COROS wire values `run`, `bike`, `trailRun` and `swim`.
+Swimming supports time, distance or manual-transition steps without intensity targets; the partner contract's swimming
+target is stroke, which the current recipe does not encode. HR, power, pace and cadence targets on Swimming therefore
+fail compatibility instead of being silently dropped. New COROS delivery actions remain **Coming soon** in the browser.
+Treadmill and cycling subtypes fold to `run`/`bike` only
 after explicit approval. Cycling cadence remains unsupported. Rounding, recovery-to-rest, frozen relative references and
 first-target-only mapping keep the existing payload-bound approval rules. Push success requires an accepted date range
 covering the submitted batch; delete success/failure lists are resolved per workout. Past and completed artifacts remain

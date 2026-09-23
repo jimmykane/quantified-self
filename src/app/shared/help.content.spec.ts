@@ -600,7 +600,9 @@ describe('help.content', () => {
     expect(planningSection?.content).toContain('**Past workout · previously sent**');
     expect(planningSection?.content).toContain('authorized MCP client can also author');
     expect(planningSection?.content).toContain('Enduro MTB, and Downhill Cycling profiles');
-    expect(planningSection?.content).toContain('keeps every authored profile unchanged in QS');
+    expect(planningSection?.content).toContain('Pool swimming');
+    expect(planningSection?.content).toContain('pool length');
+    expect(planningSection?.content).toContain('keeps every authored running/cycling profile unchanged in QS');
     expect(planningSection?.content).toContain('only its broad Running or Cycling family');
     expect(planningSection?.content).toContain('only one can be active');
     expect(planningSection?.content).toContain('Move a workout between plans or between a plan and **Standalone**');

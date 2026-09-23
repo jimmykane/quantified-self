@@ -2,12 +2,12 @@ import type { PublicFeaturePreviewKey } from './public-feature-preview.types';
 
 /** Concise metadata shared by the public Training Plans route and its structured data. */
 export const TRAINING_PLANS_SEO_CONTENT = {
-  title: 'Training Plans for Running and Cycling',
-  description: 'Create free running and cycling training plans or standalone structured workouts, schedule them by date, and keep them separate from completed activities.',
-  h1: 'Plan running and cycling workouts your way',
+  title: 'Training Plans for Running, Cycling & Pool Swimming',
+  description: 'Create free running, cycling, or pool-swim plans and standalone workouts. Schedule by date and keep planned sessions separate from completed activities.',
+  h1: 'Plan running, cycling, and pool-swim workouts your way',
   intro: 'Build a dated plan or start with one standalone workout. Work directly in Quantified Self, keep scheduled work separate from completed activities, and connect other tools only when you choose.',
   featureList: [
-    'Running and cycling training plans included on the free tier',
+    'Running, cycling, and pool-swim training plans included on the free tier',
     'Standalone structured workouts without a plan',
     'Dated plan calendars with colors, history, and shifting',
     'Planned-workout overlays kept separate from completed activity totals',
@@ -43,8 +43,8 @@ export const TRAINING_PLANS_PAGE_SECTIONS = [
   },
   {
     eyebrow: 'Structured Workouts',
-    title: 'Build the running and cycling workout you mean',
-    copy: 'The current editor supports the Running and Cycling families with date-only scheduling, time or distance steps, fixed repeats, and one absolute heart-rate, power, or pace target per step.',
+    title: 'Build the workout you mean',
+    copy: 'The current editor supports running, cycling, and pool swimming with date-only scheduling, time or distance steps, fixed repeats, and one absolute heart-rate, power, or pace target per step. Pool distance steps use metres and swim pace uses your /100 m or /100 yd setting; pool length is set on the device, not stored in the workout.',
     items: [
       {
         icon: 'directions_run',
@@ -55,6 +55,11 @@ export const TRAINING_PLANS_PAGE_SECTIONS = [
         icon: 'directions_bike',
         title: 'Cycling sports',
         copy: 'Create Cycling, Mountain Biking, Indoor Cycling, E-Biking, and Hand Cycle workouts using the same structure.',
+      },
+      {
+        icon: 'pool',
+        title: 'Pool swimming',
+        copy: 'Create a Swimming workout with metre-based distance steps or timed steps. Provider delivery depends on each provider’s swim-workout support.',
       },
       {
         icon: 'repeat',

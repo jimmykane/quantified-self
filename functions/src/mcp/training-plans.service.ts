@@ -249,11 +249,14 @@ export async function readTrainingPlans(input: TrainingReadInput, reads: Trainin
       const a = TRAINING_READ_INPUTS.get_planned_workout.parse(args.data);
       const doc = await resolve(a.workoutRef, 'workout', true);
       const summary = await projectWorkout(doc);
-      const structure = TRAINING_RECIPE_SCHEMA.parse(parseWorkoutStructureV1(doc.data.structure));
+      const canonicalStructure = parseWorkoutStructureV1(doc.data.structure);
+      const structure = TRAINING_RECIPE_SCHEMA.parse(canonicalStructure);
       const units = await view.units();
       const displaySteps = structure.nodes.flatMap(node => node.kind === 'step'
-        ? [{ nodeId: node.id, text: formatWorkoutStepV1(node, units) }]
-        : [{ nodeId: node.id, text: `Repeat ${node.count} times` }, ...node.steps.map(step => ({ nodeId: step.id, text: formatWorkoutStepV1(step, units) }))]);
+        ? [{ nodeId: node.id, text: formatWorkoutStepV1(node, units, undefined, canonicalStructure.sport) }]
+        : [{ nodeId: node.id, text: `Repeat ${node.count} times` }, ...node.steps.map(step => ({
+          nodeId: step.id, text: formatWorkoutStepV1(step, units, undefined, canonicalStructure.sport),
+        }))]);
       return { scheduleRevision: state.revision, workout: { ...summary, structure, displaySteps } };
     }
     if (input.tool === 'get_planned_workout_completion') {

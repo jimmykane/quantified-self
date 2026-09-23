@@ -9,10 +9,13 @@ import {
   DataPower,
   DataPowerWork,
   DataSpeed,
+  DataSwimDistance,
+  DataSwimPace,
   type UserUnitSettingsInterface,
 } from '@sports-alliance/sports-lib';
 import {
   resolveUnitAwareDisplayFromValue,
+  resolveUnitAwareDisplayStat,
   type UnitAwareStatDisplay,
 } from './unit-aware-display';
 
@@ -262,9 +265,11 @@ export const MANUAL_WORKOUT_EDITOR_CYCLING_SPORTS_V1 = [
   ActivityTypes.EBiking,
   ActivityTypes.Handcycle,
 ] as const;
+export const MANUAL_WORKOUT_EDITOR_SWIMMING_SPORTS_V1 = [ActivityTypes.Swimming] as const;
 export const MANUAL_WORKOUT_EDITOR_SPORTS_V1 = [
   ...MANUAL_WORKOUT_EDITOR_RUNNING_SPORTS_V1,
   ...MANUAL_WORKOUT_EDITOR_CYCLING_SPORTS_V1,
+  ...MANUAL_WORKOUT_EDITOR_SWIMMING_SPORTS_V1,
 ] as const;
 export type ManualWorkoutEditorSportV1 = typeof MANUAL_WORKOUT_EDITOR_SPORTS_V1[number];
 
@@ -905,10 +910,12 @@ function formatSpeedValue(
   metersPerSecond: number,
   presentation: WorkoutSpeedPresentationV1,
   unitSettings?: UserUnitSettingsInterface | null,
+  sport?: ActivityTypes,
 ): UnitAwareStatDisplay | null {
-  const paceSecondsPerKilometer = Math.round((1000 / metersPerSecond) * 1000) / 1000;
+  const isPoolSwim = sport === ActivityTypes.Swimming;
+  const paceSeconds = Math.round(((isPoolSwim ? 100 : 1000) / metersPerSecond) * 1000) / 1000;
   return presentation === 'pace'
-    ? resolveUnitAwareDisplayFromValue(DataPace.type, paceSecondsPerKilometer, unitSettings)
+    ? resolveUnitAwareDisplayFromValue(isPoolSwim ? DataSwimPace.type : DataPace.type, paceSeconds, unitSettings)
     : resolveUnitAwareDisplayFromValue(DataSpeed.type, metersPerSecond, unitSettings);
 }
 
@@ -916,12 +923,15 @@ export function formatWorkoutEndingV1(
   ending: WorkoutEndingV1,
   unitSettings?: UserUnitSettingsInterface | null,
   locale?: string,
+  sport?: ActivityTypes,
 ): string {
   switch (ending.kind) {
     case 'time':
       return resolveUnitAwareDisplayFromValue(DataDuration.type, ending.seconds, unitSettings)?.text ?? `${ending.seconds} s`;
     case 'distance':
-      return resolveUnitAwareDisplayFromValue(DataDistance.type, ending.meters, unitSettings)?.text ?? `${ending.meters} m`;
+      return (sport === ActivityTypes.Swimming
+        ? resolveUnitAwareDisplayStat(new DataSwimDistance(ending.meters), unitSettings)
+        : resolveUnitAwareDisplayFromValue(DataDistance.type, ending.meters, unitSettings))?.text ?? `${ending.meters} m`;
     case 'kilojoules':
       return resolveUnitAwareDisplayFromValue(DataPowerWork.type, ending.kilojoules, unitSettings)?.text
         ?? `${ending.kilojoules} kJ`;
@@ -941,6 +951,7 @@ export function formatWorkoutTargetV1(
   target: WorkoutTargetV1,
   unitSettings?: UserUnitSettingsInterface | null,
   locale?: string,
+  sport?: ActivityTypes,
 ): string {
   if (target.mode === 'absolute') {
     switch (target.kind) {
@@ -960,11 +971,13 @@ export function formatWorkoutTargetV1(
             target.presentation === 'pace' ? target.maximumMetersPerSecond : target.minimumMetersPerSecond,
             target.presentation,
             unitSettings,
+            sport,
           ),
           formatSpeedValue(
             target.presentation === 'pace' ? target.minimumMetersPerSecond : target.maximumMetersPerSecond,
             target.presentation,
             unitSettings,
+            sport,
           ),
         ) ?? `${target.minimumMetersPerSecond}–${target.maximumMetersPerSecond} m/s`;
       case 'cadence':
@@ -990,7 +1003,7 @@ export function formatWorkoutTargetV1(
       return `${percent} of ${reference} ${label}`;
     }
     case 'speed': {
-      const reference = formatSpeedValue(target.reference.metersPerSecond, target.presentation, unitSettings)?.text
+      const reference = formatSpeedValue(target.reference.metersPerSecond, target.presentation, unitSettings, sport)?.text
         ?? `${target.reference.metersPerSecond} m/s`;
       return `${percent} of ${reference} threshold ${target.presentation}`;
     }
@@ -1006,11 +1019,12 @@ export function formatWorkoutStepV1(
   step: WorkoutStepV1,
   unitSettings?: UserUnitSettingsInterface | null,
   locale?: string,
+  sport?: ActivityTypes,
 ): string {
   const purpose = step.purpose === 'other'
     ? 'Step'
     : `${step.purpose.charAt(0).toUpperCase()}${step.purpose.slice(1)}`;
-  const ending = formatWorkoutEndingV1(step.ending, unitSettings, locale);
-  const targets = step.targets.map(target => formatWorkoutTargetV1(target, unitSettings, locale));
+  const ending = formatWorkoutEndingV1(step.ending, unitSettings, locale, sport);
+  const targets = step.targets.map(target => formatWorkoutTargetV1(target, unitSettings, locale, sport));
   return [purpose, ending, ...targets].join(' · ');
 }

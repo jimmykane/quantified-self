@@ -714,7 +714,7 @@ describe('PlansWorkspaceComponent', () => {
     expect(haptics.selection).toHaveBeenCalledTimes(2);
   });
 
-  it('offers exact running and cycling profiles in two compact sport groups', async () => {
+  it('offers exact running, cycling, and pool-swimming profiles in sport groups', async () => {
     const fixture = await renderPlans();
     expect(fixture.componentInstance.sportOptionGroups).toEqual([
       {
@@ -735,7 +735,33 @@ describe('PlansWorkspaceComponent', () => {
           { value: ActivityTypes.Handcycle, label: 'Hand Cycle' },
         ],
       },
+      {
+        label: 'Swimming',
+        options: [{ value: ActivityTypes.Swimming, label: 'Pool swimming' }],
+      },
     ]);
+  });
+
+  it('edits pool-swim distance in metres and shows the swim-pace unit', async () => {
+    setRouteState({ mode: 'create', scope: 'standalone', date: '2026-09-24' });
+    const fixture = await renderPlans();
+    fixture.componentInstance.updateEditorField('sport', ActivityTypes.Swimming);
+    fixture.componentInstance.updateStep(0, null, 'endingKind', 'distance');
+    fixture.componentInstance.updateStep(0, null, 'endingValue', 100);
+    fixture.detectChanges();
+    expect(fixture.componentInstance.editorIsPoolSwimming()).toBe(true);
+    expect(fixture.nativeElement.textContent).toContain('Metres');
+    expect(fixture.componentInstance.editorPaceUnit()).toBe('min/100m');
+    fixture.componentInstance.updateEditorField('title', 'Pool test');
+    await fixture.componentInstance.saveWorkout();
+    expect(mutate).toHaveBeenCalledWith(expect.objectContaining({
+      operation: expect.objectContaining({
+        structure: expect.objectContaining({
+          sport: ActivityTypes.Swimming,
+          nodes: expect.arrayContaining([expect.objectContaining({ ending: { kind: 'distance', meters: 100 } })]),
+        }),
+      }),
+    }));
   });
 
   it('defaults a calendar add request to the active plan', async () => {

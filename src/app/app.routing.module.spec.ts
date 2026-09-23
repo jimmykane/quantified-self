@@ -467,9 +467,9 @@ describe('AppRoutingModule routes', () => {
       },
       {
         path: PUBLIC_FEATURE_PATHS.trainingPlans,
-        title: 'Training Plans for Running and Cycling',
-        h1: 'Plan running and cycling workouts your way',
-        descriptionText: 'Create free running and cycling training plans or standalone structured workouts',
+        title: 'Training Plans for Running, Cycling & Pool Swimming',
+        h1: 'Plan running, cycling, and pool-swim workouts your way',
+        descriptionText: 'Create free running, cycling, or pool-swim plans and standalone workouts',
       },
       {
         path: PUBLIC_FEATURE_PATHS.trainingDashboard,

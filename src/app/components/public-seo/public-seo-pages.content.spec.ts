@@ -139,16 +139,18 @@ describe('public-seo-pages.content', () => {
     expect(PUBLIC_SEO_PAGES.trainingAnalysis.sections.map(section => section.preview)).toContain('training-explorer');
 
     const trainingPlans = PUBLIC_SEO_PAGES.trainingPlans;
-    expect(trainingPlans.title).toBe('Training Plans for Running and Cycling');
-    expect(trainingPlans.h1).toBe('Plan running and cycling workouts your way');
-    expect(trainingPlans.description).toBe('Create free running and cycling training plans or standalone structured workouts, schedule them by date, and keep them separate from completed activities.');
+    expect(trainingPlans.title).toBe('Training Plans for Running, Cycling & Pool Swimming');
+    expect(trainingPlans.h1).toBe('Plan running, cycling, and pool-swim workouts your way');
+    expect(trainingPlans.description).toBe('Create free running, cycling, or pool-swim plans and standalone workouts. Schedule by date and keep planned sessions separate from completed activities.');
     expect(trainingPlans.sections.some(section => section.preview === 'training-plans')).toBe(true);
     expect(trainingPlans.sections.some(section => section.copy.includes('one active at a time'))).toBe(true);
     expect(trainingPlans.sections.some(section => section.items.some(item => item.copy.includes('Trail Running')))).toBe(true);
     expect(trainingPlans.sections.some(section => section.items.some(item => item.copy.includes('Hand Cycle')))).toBe(true);
+    expect(trainingPlans.sections.some(section => section.items.some(item => item.title === 'Pool swimming'))).toBe(true);
     expect(trainingPlans.sections.some(section => section.items.some(item => item.copy.includes('up to 100 total nodes')))).toBe(true);
     expect(trainingPlans.sections.some(section => section.items.some(item => item.copy.includes('never adds distance')))).toBe(true);
     expect(trainingPlans.sections.some(section => section.items.some(item => item.copy.includes('explicit Send and plan opt-in actions')))).toBe(true);
+    expect(trainingPlans.sections.some(section => section.items.some(item => item.copy.includes('Garmin and Wahoo swim delivery are unavailable')))).toBe(true);
     expect(trainingPlans.sections.some(section => section.items.some(item => item.copy.includes('compatible MCP client')))).toBe(true);
     expect(trainingPlans.faqItems.some(item => item.question === 'Can I add a workout without creating a plan?')).toBe(true);
     expect(trainingPlans.faqItems.some(item => item.question === 'Can I use an MCP client with Training Plans?')).toBe(true);

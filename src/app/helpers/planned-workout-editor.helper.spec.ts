@@ -1,8 +1,10 @@
-import { ActivityTypes } from '@sports-alliance/sports-lib';
+import { ActivityTypes, SwimPaceUnits } from '@sports-alliance/sports-lib';
 import { describe, expect, it } from 'vitest';
 import type { WorkoutStructureV1 } from '@shared/planned-workout';
+import { normalizeUserUnitSettings } from '@shared/unit-aware-display';
 import {
   createManualWorkoutEditorStep,
+  changeManualWorkoutEditorSport,
   manualWorkoutEditorToStructure,
   workoutStructureToManualEditor,
   type ManualWorkoutEditorValue,
@@ -43,6 +45,40 @@ describe('manual planned-workout editor conversion', () => {
     expect(manualWorkoutEditorToStructure(value).nodes[0]).toMatchObject({
       kind: 'repeat', count: 6, steps: [{ kind: 'step' }, { kind: 'step', purpose: 'recovery' }],
     });
+  });
+
+  it('keeps pool-swim distances in metres and pace in the selected swim unit', () => {
+    const units = normalizeUserUnitSettings({ swimPaceUnits: [SwimPaceUnits.MinutesPer100Yard] });
+    const value: ManualWorkoutEditorValue = {
+      title: 'Pool intervals', localDate: '2026-09-24', sport: ActivityTypes.Swimming,
+      nodes: [{
+        ...createManualWorkoutEditorStep('lengths'), endingKind: 'distance', endingValue: 100,
+        targetKind: 'pace', targetMinimum: 1.5, targetMaximum: 2,
+      }],
+    };
+    const structure = manualWorkoutEditorToStructure(value, units);
+    expect(structure.nodes[0]).toMatchObject({
+      ending: { kind: 'distance', meters: 100 },
+      targets: [{
+        minimumMetersPerSecond: 91.44 / 120,
+        maximumMetersPerSecond: 91.44 / 90,
+      }],
+    });
+    expect(workoutStructureToManualEditor(value.title, value.localDate, structure, units).nodes[0])
+      .toMatchObject({ endingValue: 100, targetMinimum: 1.5, targetMaximum: 2 });
+  });
+
+  it('preserves canonical distance and speed when switching to pool swimming', () => {
+    const running: ManualWorkoutEditorValue = {
+      title: 'Switch sport', localDate: '2026-09-24', sport: ActivityTypes.Running,
+      nodes: [{
+        ...createManualWorkoutEditorStep('work'), endingKind: 'distance', endingValue: 1,
+        targetKind: 'pace', targetMinimum: 4, targetMaximum: 5,
+      }],
+    };
+    const swimming = changeManualWorkoutEditorSport(running, ActivityTypes.Swimming);
+    expect(swimming.nodes[0]).toMatchObject({ endingValue: 1000, targetMinimum: 0.4, targetMaximum: 0.5 });
+    expect(manualWorkoutEditorToStructure(swimming).nodes).toEqual(manualWorkoutEditorToStructure(running).nodes);
   });
 
   it('converts pace ranges to ordered m/s while preserving pace presentation', () => {

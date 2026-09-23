@@ -3,6 +3,7 @@ import {
   DistanceUnits,
   PaceUnits,
   SpeedUnits,
+  SwimPaceUnits,
 } from '@sports-alliance/sports-lib';
 import { normalizeUserUnitSettings } from '@shared/unit-aware-display';
 import {
@@ -346,7 +347,6 @@ describe('planned workout compatibility', () => {
 
     expect(result.compatible).toBe(false);
     expect(result.issues.map(issue => issue.code)).toEqual([
-      'unsupported_sport',
       'unsupported_ending',
       'unsupported_target',
       'unsupported_relative_target',
@@ -388,5 +388,23 @@ describe('planned workout formatting', () => {
       maximumMetersPerSecond: 1000 / 240,
       presentation: 'pace',
     }, imperial)).toContain('min/m');
+  });
+
+  it('renders pool-swim distance and pace with Sports Lib swim units', () => {
+    const yards = normalizeUserUnitSettings({
+      distanceUnits: DistanceUnits.Miles,
+      swimPaceUnits: [SwimPaceUnits.MinutesPer100Yard],
+    });
+    expect(formatWorkoutEndingV1({ kind: 'distance', meters: 100 }, yards, undefined, ActivityTypes.Swimming))
+      .toBe('100 m');
+    const target = {
+      kind: 'speed', mode: 'absolute', presentation: 'pace',
+      minimumMetersPerSecond: 100 / 120,
+      maximumMetersPerSecond: 100 / 90,
+    } as const;
+    expect(formatWorkoutTargetV1(target, undefined, undefined, ActivityTypes.Swimming))
+      .toBe('01:30–02:00 min/100m');
+    expect(formatWorkoutTargetV1(target, yards, undefined, ActivityTypes.Swimming))
+      .toContain('min/100yd');
   });
 });

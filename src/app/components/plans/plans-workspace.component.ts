@@ -19,9 +19,11 @@ import { toSignal } from '@angular/core/rxjs-interop';
 import { MatDialog } from '@angular/material/dialog';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { ActivatedRoute, Router, type NavigationExtras } from '@angular/router';
+import { ActivityTypes, SwimPaceUnits } from '@sports-alliance/sports-lib';
 import {
   MANUAL_WORKOUT_EDITOR_CYCLING_SPORTS_V1,
   MANUAL_WORKOUT_EDITOR_RUNNING_SPORTS_V1,
+  MANUAL_WORKOUT_EDITOR_SWIMMING_SPORTS_V1,
 } from '@shared/planned-workout';
 import dayjs, { type Dayjs } from 'dayjs';
 import { catchError, combineLatest, map, of, startWith, switchMap } from 'rxjs';
@@ -51,6 +53,7 @@ import {
 import {
   createManualWorkoutEditorStep,
   createManualWorkoutEditorValue,
+  changeManualWorkoutEditorSport,
   formatManualWorkoutStructure,
   manualWorkoutEditorToStructure,
   workoutStructureToManualEditor,
@@ -177,6 +180,10 @@ export class PlansWorkspaceComponent {
       label: 'Cycling',
       options: MANUAL_WORKOUT_EDITOR_CYCLING_SPORTS_V1.map(value => ({ value, label: value })),
     },
+    {
+      label: 'Swimming',
+      options: MANUAL_WORKOUT_EDITOR_SWIMMING_SPORTS_V1.map(value => ({ value, label: 'Pool swimming' })),
+    },
   ];
   readonly purposeOptions = ['warmup', 'work', 'recovery', 'cooldown', 'rest', 'other'] as const;
   readonly endingOptions: ReadonlyArray<{ value: ManualWorkoutEnding; label: string }> = [
@@ -191,6 +198,11 @@ export class PlansWorkspaceComponent {
   ];
 
   readonly currentUser = computed(() => this.userService.user() as AppUserInterface | null);
+  readonly editorIsPoolSwimming = computed(() => this.editor()?.value.sport === ActivityTypes.Swimming);
+  readonly editorPaceUnit = computed(() => this.editorIsPoolSwimming()
+    ? this.currentUser()?.settings?.unitSettings?.swimPaceUnits?.[0] === SwimPaceUnits.MinutesPer100Yard
+      ? 'min/100yd' : 'min/100m'
+    : 'min/km');
   readonly hasTrainingPlanningUIAccess = computed(() => !!this.currentUser()?.uid);
   readonly scheduleState = toSignal(this.userService.user$.pipe(
     switchMap(user => user?.uid
@@ -720,7 +732,9 @@ export class PlansWorkspaceComponent {
         original: workout,
         originalWorkoutRevision: workout.revision,
         destinationPlanId: workout.planId,
-        value: workoutStructureToManualEditor(workout.title, workout.localDate, workout.structure),
+        value: workoutStructureToManualEditor(
+          workout.title, workout.localDate, workout.structure, this.currentUser()?.settings?.unitSettings,
+        ),
       });
       return true;
     } catch (error) {
@@ -779,7 +793,12 @@ export class PlansWorkspaceComponent {
   updateEditorField<K extends keyof ManualWorkoutEditorValue>(field: K, value: ManualWorkoutEditorValue[K]): void {
     if (this.busyAction() || this.editor()?.value[field] === value) return;
     if (field === 'sport') this.haptics.selection();
-    this.editor.update(session => session ? { ...session, value: { ...session.value, [field]: value } } : null);
+    this.editor.update(session => session ? {
+      ...session,
+      value: field === 'sport'
+        ? changeManualWorkoutEditorSport(session.value, value as ManualWorkoutSport, this.currentUser()?.settings?.unitSettings)
+        : { ...session.value, [field]: value },
+    } : null);
   }
 
   updateWorkoutDate(value: Dayjs | null): void {
@@ -896,7 +915,7 @@ export class PlansWorkspaceComponent {
     }
     let structure;
     try {
-      structure = manualWorkoutEditorToStructure(session.value);
+      structure = manualWorkoutEditorToStructure(session.value, this.currentUser()?.settings?.unitSettings);
       normalizeTrainingLocalDate(session.value.localDate);
     } catch (error) {
       this.showError(error);

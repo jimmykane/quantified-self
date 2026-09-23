@@ -1,4 +1,4 @@
-import { ActivityTypes, type UserUnitSettingsInterface } from '@sports-alliance/sports-lib';
+import { ActivityTypes, SwimPaceUnits, type UserUnitSettingsInterface } from '@sports-alliance/sports-lib';
 import {
   formatWorkoutStepV1,
   MANUAL_WORKOUT_EDITOR_SPORTS_V1,
@@ -69,16 +69,29 @@ export function createManualWorkoutEditorValue(
   };
 }
 
-function endingFromEditor(step: ManualWorkoutEditorStep): WorkoutEndingV1 {
+function distanceScale(sport: ManualWorkoutSport): number {
+  return sport === ActivityTypes.Swimming ? 1 : 1000;
+}
+
+function paceDistanceMeters(sport: ManualWorkoutSport, units?: UserUnitSettingsInterface | null): number {
+  if (sport !== ActivityTypes.Swimming) return 1000;
+  return units?.swimPaceUnits?.[0] === SwimPaceUnits.MinutesPer100Yard ? 91.44 : 100;
+}
+
+function endingFromEditor(step: ManualWorkoutEditorStep, sport: ManualWorkoutSport): WorkoutEndingV1 {
   if (!Number.isFinite(step.endingValue) || step.endingValue <= 0) {
     throw new Error('Every step needs a positive duration or distance.');
   }
   return step.endingKind === 'time'
     ? { kind: 'time', seconds: step.endingValue * 60 }
-    : { kind: 'distance', meters: step.endingValue * 1000 };
+    : { kind: 'distance', meters: step.endingValue * distanceScale(sport) };
 }
 
-function targetFromEditor(step: ManualWorkoutEditorStep): WorkoutTargetV1[] {
+function targetFromEditor(
+  step: ManualWorkoutEditorStep,
+  sport: ManualWorkoutSport,
+  units?: UserUnitSettingsInterface | null,
+): WorkoutTargetV1[] {
   if (step.targetKind === 'none') return [];
   if (typeof step.targetMinimum !== 'number' || typeof step.targetMaximum !== 'number') {
     throw new Error('Target ranges need two numeric values.');
@@ -92,13 +105,14 @@ function targetFromEditor(step: ManualWorkoutEditorStep): WorkoutTargetV1[] {
     if (minimum <= 0 || maximum <= 0) {
       throw new Error('Pace target ranges need two positive values.');
     }
-    const fasterMinutesPerKilometer = Math.min(minimum, maximum);
-    const slowerMinutesPerKilometer = Math.max(minimum, maximum);
+    const fasterPaceMinutes = Math.min(minimum, maximum);
+    const slowerPaceMinutes = Math.max(minimum, maximum);
+    const distanceMeters = paceDistanceMeters(sport, units);
     return [{
       kind: 'speed',
       mode: 'absolute',
-      minimumMetersPerSecond: 1000 / (slowerMinutesPerKilometer * 60),
-      maximumMetersPerSecond: 1000 / (fasterMinutesPerKilometer * 60),
+      minimumMetersPerSecond: distanceMeters / (slowerPaceMinutes * 60),
+      maximumMetersPerSecond: distanceMeters / (fasterPaceMinutes * 60),
       presentation: 'pace',
     }];
   }
@@ -111,21 +125,28 @@ function targetFromEditor(step: ManualWorkoutEditorStep): WorkoutTargetV1[] {
     : [{ kind: 'power', mode: 'absolute', minimumWatts: minimum, maximumWatts: maximum }];
 }
 
-function stepFromEditor(step: ManualWorkoutEditorStep): WorkoutStepV1 {
+function stepFromEditor(
+  step: ManualWorkoutEditorStep,
+  sport: ManualWorkoutSport,
+  units?: UserUnitSettingsInterface | null,
+): WorkoutStepV1 {
   const converted: WorkoutStepV1 = {
     kind: 'step',
     id: step.id,
     purpose: step.purpose,
-    ending: endingFromEditor(step),
-    targets: targetFromEditor(step),
+    ending: endingFromEditor(step, sport),
+    targets: targetFromEditor(step, sport, units),
   };
   return step.note === undefined ? converted : { ...converted, note: step.note };
 }
 
-export function manualWorkoutEditorToStructure(value: ManualWorkoutEditorValue): WorkoutStructureV1 {
+export function manualWorkoutEditorToStructure(
+  value: ManualWorkoutEditorValue,
+  units?: UserUnitSettingsInterface | null,
+): WorkoutStructureV1 {
   if (!value.nodes.length) throw new Error('Add at least one workout step.');
   const nodes: WorkoutNodeV1[] = value.nodes.map((node) => {
-    if (node.kind === 'step') return stepFromEditor(node);
+    if (node.kind === 'step') return stepFromEditor(node, value.sport, units);
     if (!Number.isSafeInteger(node.count) || node.count < 1 || node.count > 100) {
       throw new Error('Repeat counts must be between 1 and 100.');
     }
@@ -134,13 +155,17 @@ export function manualWorkoutEditorToStructure(value: ManualWorkoutEditorValue):
       kind: 'repeat',
       id: node.id,
       count: node.count,
-      steps: node.steps.map(stepFromEditor),
+      steps: node.steps.map(step => stepFromEditor(step, value.sport, units)),
     };
   });
   return parseWorkoutStructureV1({ version: 1, sport: value.sport, nodes });
 }
 
-function editorTarget(target: WorkoutTargetV1 | undefined): Pick<
+function editorTarget(
+  target: WorkoutTargetV1 | undefined,
+  sport: ManualWorkoutSport,
+  units?: UserUnitSettingsInterface | null,
+): Pick<
   ManualWorkoutEditorStep,
   'targetKind' | 'targetMinimum' | 'targetMaximum'
 > {
@@ -167,8 +192,8 @@ function editorTarget(target: WorkoutTargetV1 | undefined): Pick<
       }
       return {
         targetKind: 'pace',
-        targetMinimum: roundEditorNumber(1000 / target.maximumMetersPerSecond / 60),
-        targetMaximum: roundEditorNumber(1000 / target.minimumMetersPerSecond / 60),
+        targetMinimum: roundEditorNumber(paceDistanceMeters(sport, units) / target.maximumMetersPerSecond / 60),
+        targetMaximum: roundEditorNumber(paceDistanceMeters(sport, units) / target.minimumMetersPerSecond / 60),
       };
     case 'cadence':
       throw new Error('This workout uses a cadence target that the first manual editor cannot change.');
@@ -179,18 +204,22 @@ function roundEditorNumber(value: number): number {
   return Math.round(value * 1_000_000) / 1_000_000;
 }
 
-function editorStep(step: WorkoutStepV1): ManualWorkoutEditorStep {
+function editorStep(
+  step: WorkoutStepV1,
+  sport: ManualWorkoutSport,
+  units?: UserUnitSettingsInterface | null,
+): ManualWorkoutEditorStep {
   if (step.ending.kind !== 'time' && step.ending.kind !== 'distance') {
     throw new Error('This workout uses an ending that the first manual editor cannot change.');
   }
   if (step.targets.length > 1) throw new Error('This workout has more targets than the first manual editor supports.');
-  const target = editorTarget(step.targets[0]);
+  const target = editorTarget(step.targets[0], sport, units);
   return {
     kind: 'step',
     id: step.id,
     purpose: step.purpose,
     endingKind: step.ending.kind,
-    endingValue: step.ending.kind === 'time' ? step.ending.seconds / 60 : step.ending.meters / 1000,
+    endingValue: step.ending.kind === 'time' ? step.ending.seconds / 60 : step.ending.meters / distanceScale(sport),
     ...target,
     ...(step.note === undefined ? {} : { note: step.note }),
   };
@@ -200,6 +229,7 @@ export function workoutStructureToManualEditor(
   title: string,
   localDate: string,
   structure: WorkoutStructureV1,
+  units?: UserUnitSettingsInterface | null,
 ): ManualWorkoutEditorValue {
   if (!MANUAL_WORKOUT_EDITOR_SPORTS_V1.includes(structure.sport as ManualWorkoutEditorSportV1)) {
     throw new Error('This workout sport is not supported by the manual editor.');
@@ -209,8 +239,38 @@ export function workoutStructureToManualEditor(
     localDate,
     sport: structure.sport as ManualWorkoutEditorSportV1,
     nodes: structure.nodes.map(node => node.kind === 'step'
-      ? editorStep(node)
-      : { kind: 'repeat', id: node.id, count: node.count, steps: node.steps.map(editorStep) }),
+      ? editorStep(node, structure.sport as ManualWorkoutSport, units)
+      : { kind: 'repeat', id: node.id, count: node.count,
+        steps: node.steps.map(step => editorStep(step, structure.sport as ManualWorkoutSport, units)) }),
+  };
+}
+
+/** Preserve canonical distance and speed when switching editor sports. */
+export function changeManualWorkoutEditorSport(
+  value: ManualWorkoutEditorValue,
+  sport: ManualWorkoutSport,
+  units?: UserUnitSettingsInterface | null,
+): ManualWorkoutEditorValue {
+  if (value.sport === sport) return value;
+  const fromDistance = distanceScale(value.sport);
+  const toDistance = distanceScale(sport);
+  const paceRatio = paceDistanceMeters(sport, units) / paceDistanceMeters(value.sport, units);
+  const convert = (step: ManualWorkoutEditorStep): ManualWorkoutEditorStep => ({
+    ...step,
+    endingValue: step.endingKind === 'distance'
+      ? roundEditorNumber(step.endingValue * fromDistance / toDistance)
+      : step.endingValue,
+    targetMinimum: step.targetKind === 'pace' && step.targetMinimum !== null
+      ? roundEditorNumber(step.targetMinimum * paceRatio) : step.targetMinimum,
+    targetMaximum: step.targetKind === 'pace' && step.targetMaximum !== null
+      ? roundEditorNumber(step.targetMaximum * paceRatio) : step.targetMaximum,
+  });
+  return {
+    ...value,
+    sport,
+    nodes: value.nodes.map(node => node.kind === 'step'
+      ? convert(node)
+      : { ...node, steps: node.steps.map(convert) }),
   };
 }
 
@@ -220,6 +280,6 @@ export function formatManualWorkoutStructure(
   locale?: string,
 ): string[] {
   return structure.nodes.map(node => node.kind === 'step'
-    ? formatWorkoutStepV1(node, unitSettings, locale)
-    : `${node.count}× (${node.steps.map(step => formatWorkoutStepV1(step, unitSettings, locale)).join('; ')})`);
+    ? formatWorkoutStepV1(node, unitSettings, locale, structure.sport)
+    : `${node.count}× (${node.steps.map(step => formatWorkoutStepV1(step, unitSettings, locale, structure.sport)).join('; ')})`);
 }

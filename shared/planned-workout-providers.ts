@@ -50,6 +50,7 @@ export const SUUNTO_PLANNED_WORKOUT_SPORTS_V1 = [
   ActivityTypes.IndoorCycling,
   ActivityTypes.EBiking,
   ActivityTypes.Handcycle,
+  ActivityTypes.Swimming,
 ] as const;
 
 /**
@@ -102,6 +103,7 @@ export const COROS_PLANNED_WORKOUT_SPORTS_V1 = [
   ...COROS_FOLDED_RUNNING_WORKOUT_SPORTS_V1,
   ...COROS_NATIVE_CYCLING_WORKOUT_SPORTS_V1,
   ...COROS_FOLDED_CYCLING_WORKOUT_SPORTS_V1,
+  ActivityTypes.Swimming,
 ] as const;
 
 export type CorosWorkoutSportFamilyV1 = 'RUNNING' | 'CYCLING';
@@ -175,7 +177,7 @@ export const PLANNED_WORKOUT_PROVIDER_CAPABILITIES_V1: Readonly<
     limits: [
       'Single-sport workouts allow at most 100 total steps.',
       'Descriptions allow 1024 characters per workout and 512 characters per step.',
-      'Training API V2 accepts RUNNING or CYCLING but has no sub-sport field; exact QS profiles are delivered through their broad family.',
+      'The current QS mapper sends RUNNING or CYCLING without a sub-sport field. The API also defines LAP_SWIMMING, but QS does not yet encode its required pool length and swim-step mapping (#733).',
       'A secondary target is documented only for cycling and depends on device support.',
       'Production limits: 3000 application requests per rolling minute including OAuth; 1000 per account per rolling day excluding OAuth.',
       'Cloud acceptance does not prove that Garmin Connect or a device received the workout.',
@@ -208,6 +210,7 @@ export const PLANNED_WORKOUT_PROVIDER_CAPABILITIES_V1: Readonly<
     limits: [
       'At most 30 workouts per push.',
       'Dates from today through one year ahead.',
+      'Pool-swim time, distance, and manual steps must have no intensity target; the documented swimming target is stroke, which v1 does not encode.',
       'The connected COROS application must have Training Plan entitlement; provider code 30009 is reported as unavailable.',
       'COROS exposes no planned-workout read/list operation, so remote checking and automatic missing-copy restoration are unavailable.',
       'Provider acceptance does not prove that the COROS app or a watch received the workout.',
@@ -233,7 +236,7 @@ export const PLANNED_WORKOUT_PROVIDER_CAPABILITIES_V1: Readonly<
     },
     scheduling: 'Create an app-owned Plan record, then attach it to a dated Workout record.',
     limits: [
-      'The public plan.json schema is version 1.0.0 and supports running and cycling.',
+      'The public plan.json schema is version 1.0.0 and supports running and cycling, not swimming.',
       'Bike computers use only the first target in an interval.',
       'Relative heart-rate and threshold-speed targets are documented for treadmill workouts in the Wahoo app, not ELEMNT computers or RIVAL.',
       'Device-visible scheduling is documented as the current day plus six days.',
@@ -279,6 +282,7 @@ export const PLANNED_WORKOUT_PROVIDER_CAPABILITIES_V1: Readonly<
     evidence: [
       'https://apizone.suunto.com/how-to-use-suuntoplus-guides-api',
       'https://apizone.suunto.com/suuntoplus-guide-description',
+      'https://aspartnercontent.blob.core.windows.net/apizone/docs/Activities.pdf',
       'https://apizone.suunto.com/fit-description',
     ],
   },
@@ -444,6 +448,15 @@ export function assessPlannedWorkoutProviderMappingV1(
         code: 'unsupported_target',
         path: `${path}.targets`,
         message: 'The COROS partner contract documents cadence targets for running and trail running, not cycling.',
+      });
+    }
+
+    if (provider === 'coros' && structure.sport === ActivityTypes.Swimming && step.targets.length > 0) {
+      issues.push({
+        severity: 'unsupported',
+        code: 'unsupported_target',
+        path: `${path}.targets`,
+        message: 'The COROS partner contract documents swimming stroke targets, but this recipe does not encode stroke; heart-rate, power, pace, and cadence targets cannot be sent as swimming targets.',
       });
     }
 
