@@ -69,6 +69,7 @@ export const CLIENT_RENDERED_APP_ROUTES = [
   'login',
   'onboarding',
   'admin',
+  'admin/marketing',
   'admin/maintenance',
   'admin/users',
   'admin/changelog',

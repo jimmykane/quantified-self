@@ -97,6 +97,10 @@ const expectedMcpFunctionRewriteSources = [
   '/oauth/token',
   '/oauth/revoke',
 ];
+const unsubscribeFunctionRewrite = {
+  source: '/email/unsubscribe',
+  function: { functionId: 'marketingUnsubscribe', region: 'europe-west2' },
+};
 const siteOrigin = 'https://quantified-self.io';
 const betaNoIndexHeader = {
   key: 'X-Robots-Tag',
@@ -238,7 +242,10 @@ describe('Firebase Hosting configuration', () => {
 
       expect(target.public).toBe('dist/browser');
       expect(sources).toEqual(expectedCsrRewriteSources);
-      expect(functionRewrites.map(rewrite => rewrite.source)).toEqual(expectedMcpFunctionRewriteSources);
+      expect(functionRewrites.map(rewrite => rewrite.source)).toEqual([
+        ...expectedMcpFunctionRewriteSources,
+        unsubscribeFunctionRewrite.source,
+      ]);
       expect(new Set(rewrites.map(rewrite => rewrite.source)).size).toBe(rewrites.length);
       expect(sources).not.toContain('**');
       expect(sources).not.toContain('/**');
@@ -248,10 +255,9 @@ describe('Firebase Hosting configuration', () => {
         expect(rewrite.destination).toBe('/index.csr.html');
       }
       for (const rewrite of functionRewrites) {
-        expect(rewrite.function).toEqual({
-          functionId: 'mcpApi',
-          region: 'europe-west2',
-        });
+        expect(rewrite.function).toEqual(rewrite.source === unsubscribeFunctionRewrite.source
+          ? unsubscribeFunctionRewrite.function
+          : { functionId: 'mcpApi', region: 'europe-west2' });
       }
     }
   });
