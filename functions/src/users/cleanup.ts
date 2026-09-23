@@ -1048,11 +1048,11 @@ export const cleanupUserAccounts = functions
     logger.info(`[Cleanup] Removed ${removedMarketingRecipients} marketing campaign recipients for ${uid}`);
 
     // Cleanup Emails
+    let mailCleanupError: unknown = null;
     try {
         logger.info(`[Cleanup] Deleting emails for user ${uid}`);
         const db = admin.firestore();
         const mailCollection = db.collection('mail');
-        const batch = db.batch();
         let deletionCount = 0;
 
         // 1. Query by UID (toUids array)
@@ -1088,19 +1088,25 @@ export const cleanupUserAccounts = functions
             emailSnapshot.docs.forEach(addMailDocIfDeletable);
         }
 
-        docsToDelete.forEach((ref) => {
-            batch.delete(ref);
-            deletionCount++;
-        });
+        // Mail documents are leaf records. A user can have more than 500
+        // campaign messages, so commit bounded batches to stay under Firestore's
+        // write limit and let the account-deletion trigger retry on failure.
+        const mailRefs = Array.from(docsToDelete.values());
+        for (let offset = 0; offset < mailRefs.length; offset += 400) {
+            const batch = db.batch();
+            for (const ref of mailRefs.slice(offset, offset + 400)) batch.delete(ref);
+            await batch.commit();
+            deletionCount += Math.min(400, mailRefs.length - offset);
+        }
 
         if (deletionCount > 0) {
-            await batch.commit();
             logger.info(`[Cleanup] Deleted ${deletionCount} email documents for user ${uid}`);
         } else {
             logger.info(`[Cleanup] No email documents found for user ${uid}`);
         }
 
     } catch (e) {
+        mailCleanupError = e;
         logger.error(`[Cleanup] Error deleting emails for ${uid}`, e);
     }
 
@@ -1109,6 +1115,12 @@ export const cleanupUserAccounts = functions
     // Disconnect may already have removed every credential. Its independent
     // cleanup records still own provider-only operational rows in that case.
     await cleanupServiceDisconnectTasksForUser(uid);
+
+    if (mailCleanupError) {
+        throw mailCleanupError instanceof Error
+            ? mailCleanupError
+            : new Error('Mail cleanup did not complete.');
+    }
 
     if (mcpOAuthCleanupFailed) {
         throw mcpOAuthCleanupError instanceof Error

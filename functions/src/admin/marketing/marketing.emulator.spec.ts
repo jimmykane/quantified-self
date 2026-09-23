@@ -4,7 +4,7 @@ import { randomUUID } from 'crypto';
 import type { Request, Response } from 'express';
 import { handleMarketingUnsubscribe } from './handlers';
 import { cleanupMarketingCampaignRecipients } from './cleanup';
-import { dispatchCampaigns, makeUnsubscribeToken, optOut, prepareCampaign, recordMailDelivery, reserveMail, saveCampaign, sendTest, setCampaignStatus, verifyUnsubscribeToken } from './service';
+import { completeCampaignIfDrained, dispatchCampaigns, makeUnsubscribeToken, optOut, prepareCampaign, recordMailDelivery, reserveMail, saveCampaign, sendTest, setCampaignStatus, verifyUnsubscribeToken } from './service';
 import { utcDay } from './core';
 
 vi.unmock('firebase-admin');
@@ -133,6 +133,22 @@ describe.skipIf(!enabled)('marketing campaign durability (emulators)', () => {
     await dispatchCampaigns(secret);
     expect((await recipient.get()).get('mailId')).toBe(`marketing_${campaign.id}_${retryUser.uid}_2`);
     expect((await db.doc(`marketingDispatchDays/${utcDay(new Date())}`).get()).get('used')).toBe(1);
+  });
+
+  it('does not complete a campaign after it is paused or gains pending work', async () => {
+    const campaign = await saveCampaign(null, draft, 'admin');
+    const ref = db.collection('marketingCampaigns').doc(campaign.id);
+    await ref.update({ status: 'paused', stats: { eligible: 0, pending: 0, queued: 0, accepted: 0, failed: 0, skipped: 0 } });
+    await completeCampaignIfDrained(ref);
+    expect((await ref.get()).get('status')).toBe('paused');
+
+    await ref.update({ status: 'running', stats: { eligible: 1, pending: 1, queued: 0, accepted: 0, failed: 0, skipped: 0 } });
+    await completeCampaignIfDrained(ref);
+    expect((await ref.get()).get('status')).toBe('running');
+
+    await ref.update({ stats: { eligible: 1, pending: 0, queued: 0, accepted: 1, failed: 0, skipped: 0 } });
+    await completeCampaignIfDrained(ref);
+    expect((await ref.get()).get('status')).toBe('completed');
   });
 
   it('removes account-deletion snapshots and skips work that was not accepted', async () => {

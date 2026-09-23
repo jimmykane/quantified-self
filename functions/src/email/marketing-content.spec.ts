@@ -15,6 +15,10 @@ const draft = {
       { type: 'bulletList', content: [
         { type: 'listItem', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'One benefit' }] }] },
       ] },
+      { type: 'orderedList', content: [
+        { type: 'listItem', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'First step' }] }] },
+        { type: 'listItem', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Second step' }] }] },
+      ] },
     ],
   },
   cta: { label: 'Open QS', url: 'https://quantified-self.io' },
@@ -29,6 +33,9 @@ describe('marketing content', () => {
     expect(result.bodyHtml).not.toContain('<script>');
     expect(result.bodyHtml).toContain('<ul');
     expect(result.bodyText).toContain('One benefit');
+    expect(result.bodyText).toContain('• One benefit');
+    expect(result.bodyText).toContain('1. First step\n2. Second step');
+    expect(result.bodyText).toContain('feature (https://quantified-self.io/features)');
     expect(result.ctaHtml).toContain('https://quantified-self.io/');
   });
 

@@ -316,6 +316,15 @@ async function skipRecipient(campaignRef: FirebaseFirestore.DocumentReference, r
   });
 }
 
+export async function completeCampaignIfDrained(campaignRef: FirebaseFirestore.DocumentReference): Promise<void> {
+  await db().runTransaction(async tx => {
+    const campaign = await tx.get(campaignRef);
+    const stats = campaign.get('stats') as MarketingCampaignStats | undefined;
+    if (campaign.get('status') !== 'running' || !stats || stats.pending !== 0 || stats.queued !== 0) return;
+    tx.update(campaignRef, { status: 'completed', updatedAt: new Date().toISOString() });
+  });
+}
+
 export async function dispatchCampaigns(secret: string): Promise<number> {
   const today = utcDay(new Date());
   const [capDoc, usedDoc] = await Promise.all([control().get(), dayRef(today).get()]);
@@ -378,9 +387,7 @@ export async function dispatchCampaigns(secret: string): Promise<number> {
       if (submittedMail === 'capped') return submitted;
       if (submittedMail === 'submitted') { submitted++; available--; }
     }
-    const latest = await campaignRef.get();
-    const stats = latest.get('stats') as MarketingCampaignStats;
-    if (stats.pending === 0 && stats.queued === 0) await campaignRef.update({ status: 'completed', updatedAt: new Date().toISOString() });
+    await completeCampaignIfDrained(campaignRef);
   }
   return submitted;
 }

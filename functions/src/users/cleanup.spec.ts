@@ -526,6 +526,35 @@ describe('cleanupUserAccounts', () => {
         expect(batchMock.commit).toHaveBeenCalled();
     });
 
+    it('deletes a large campaign mail history in bounded batches', async () => {
+        const user = testEnv.auth.makeUserRecord({ uid: 'testUser123' });
+        const marketingDocs = Array.from({ length: 801 }, (_, index) => ({
+            id: `marketing-${index}`, ref: `mail-ref-${index}`, data: () => ({}),
+        }));
+        const getMock = vi.fn()
+            .mockResolvedValueOnce({ docs: [] })
+            .mockResolvedValueOnce({ docs: marketingDocs });
+        whereMock.mockReturnValue({ get: getMock });
+
+        await cleanupUserAccounts(user, { eventId: 'eventId' } as unknown as functions.EventContext);
+
+        expect(batchMock.delete).toHaveBeenCalledTimes(801);
+        expect(batchMock.commit).toHaveBeenCalledTimes(3);
+    });
+
+    it('requests an account cleanup retry after a campaign mail batch fails', async () => {
+        const user = testEnv.auth.makeUserRecord({ uid: 'testUser123' });
+        const getMock = vi.fn()
+            .mockResolvedValueOnce({ docs: [] })
+            .mockResolvedValueOnce({ docs: [{ id: 'marketing-mail', ref: 'mail-ref', data: () => ({}) }] });
+        whereMock.mockReturnValue({ get: getMock });
+        batchMock.commit.mockRejectedValueOnce(new Error('Mail batch failed'));
+
+        await expect(cleanupUserAccounts(user, { eventId: 'eventId' } as unknown as functions.EventContext))
+            .rejects.toThrow('Mail batch failed');
+        expect(firestoreMock().collection).toHaveBeenCalledWith('activitySyncQueue');
+    });
+
     it('should preserve account deletion confirmation emails during mail cleanup', async () => {
         const wrapped = cleanupUserAccounts;
         const uid = 'testUser123';

@@ -141,7 +141,8 @@ function renderNode(node: MarketingContentNode): { html: string; text: string } 
       if (mark.type === 'italic') html = `<em>${html}</em>`;
       if (mark.type === 'link') html = `<a href="${escapeHtml(mark.attrs?.href || '')}" style="color:#174ea6;">${html}</a>`;
     }
-    return { html, text: content };
+    const link = node.marks?.find(mark => mark.type === 'link')?.attrs?.href;
+    return { html, text: link && content.trim() !== link ? `${content} (${link})` : content };
   }
   if (node.type === 'hardBreak') return { html: '<br>', text: '\n' };
   const rendered = (node.content || []).map(renderNode);
@@ -149,9 +150,11 @@ function renderNode(node: MarketingContentNode): { html: string; text: string } 
   const innerText = rendered.map(item => item.text).join('');
   if (node.type === 'paragraph') return { html: `<p style="margin:0 0 24px;">${innerHtml}</p>`, text: `${innerText}\n\n` };
   if (node.type === 'heading') return { html: `<h2 style="font-family:Arial,Helvetica,sans-serif;font-size:20px;line-height:27px;margin:0 0 16px;">${innerHtml}</h2>`, text: `${innerText}\n\n` };
-  if (node.type === 'listItem') return { html: `<li style="margin:0 0 8px;">${innerHtml}</li>`, text: `• ${innerText.trim()}\n` };
-  if (node.type === 'bulletList') return { html: `<ul style="margin:0 0 24px;padding-left:24px;">${innerHtml}</ul>`, text: `${innerText}\n` };
-  return { html: `<ol style="margin:0 0 24px;padding-left:24px;">${innerHtml}</ol>`, text: `${innerText}\n` };
+  if (node.type === 'listItem') return { html: `<li style="margin:0 0 8px;">${innerHtml}</li>`, text: innerText.trim() };
+  if (node.type === 'bulletList') return { html: `<ul style="margin:0 0 24px;padding-left:24px;">${innerHtml}</ul>`,
+    text: `${rendered.map(item => `• ${item.text}\n`).join('')}\n` };
+  return { html: `<ol style="margin:0 0 24px;padding-left:24px;">${innerHtml}</ol>`,
+    text: `${rendered.map((item, index) => `${index + 1}. ${item.text}\n`).join('')}\n` };
 }
 
 export function renderMarketingContent(draft: MarketingCampaignDraft): { bodyHtml: string; bodyText: string; ctaHtml: string; ctaText: string } {
