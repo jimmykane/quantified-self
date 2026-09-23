@@ -128,7 +128,7 @@ describe('Assistant callable', () => {
     const { store, conversation } = createDependencies();
     const proposal = {
       proposalRef: 'content-proposal-1',
-      kind: 'update_activity_tags' as const,
+      kind: 'update_event_tags' as const,
       expiresAtMs: Date.now() + 60_000,
       summary: 'Replace one current activity tag with one.',
       requiresConfirmation: true as const,
@@ -141,17 +141,17 @@ describe('Assistant callable', () => {
       activityTagChangesEnabled: true,
       pendingContentProposal: proposal,
     });
-    const updateActivityTags = vi.fn().mockResolvedValue({ changed: true, tags: ['Quality'] });
-    const dataService = { updateActivityTags };
+    const updateEventTags = vi.fn().mockResolvedValue({ changed: true, tags: ['Quality'] });
+    const dataService = { updateEventTags };
 
     await expect(runApplyAssistantContentProposal({
       proposalRef: proposal.proposalRef,
       conversationId: conversation.conversationId,
       confirm: true,
     }, context, store, dataService as never)).resolves.toEqual({
-      status: 'applied', kind: 'update_activity_tags', message: 'Activity tags updated.',
+      status: 'applied', kind: 'update_event_tags', message: 'Event tags updated.',
     });
-    expect(updateActivityTags).toHaveBeenCalledWith(expect.objectContaining({
+    expect(updateEventTags).toHaveBeenCalledWith(expect.objectContaining({
       connectionId: `first-party-assistant-v1:${conversation.conversationId}`,
       assistantConversationId: conversation.conversationId,
       assistantProposalRef: proposal.proposalRef,
@@ -166,7 +166,7 @@ describe('Assistant callable', () => {
     const { store, conversation } = createDependencies();
     const proposal = {
       proposalRef: 'content-proposal-1',
-      kind: 'update_activity_tags' as const,
+      kind: 'update_event_tags' as const,
       expiresAtMs: Date.now() + 60_000,
       summary: 'Replace one current activity tag with one.',
       requiresConfirmation: true as const,
@@ -179,17 +179,45 @@ describe('Assistant callable', () => {
     vi.mocked(store.clearContentProposal).mockRejectedValue(
       new AssistantConversationStoreError('conversation_changed', 'A newer proposal is current.'),
     );
-    const updateActivityTags = vi.fn().mockResolvedValue({ changed: true, tags: ['Quality'] });
+    const updateEventTags = vi.fn().mockResolvedValue({ changed: true, tags: ['Quality'] });
 
     await expect(runApplyAssistantContentProposal({
       proposalRef: proposal.proposalRef,
       conversationId: conversation.conversationId,
       confirm: true,
-    }, context, store, { updateActivityTags } as never)).resolves.toMatchObject({
+    }, context, store, { updateEventTags } as never)).resolves.toMatchObject({
       status: 'applied',
-      kind: 'update_activity_tags',
+      kind: 'update_event_tags',
     });
-    expect(updateActivityTags).toHaveBeenCalledOnce();
+    expect(updateEventTags).toHaveBeenCalledOnce();
+  });
+
+  it('reports when an accepted event-tag proposal was already satisfied', async () => {
+    const { store, conversation } = createDependencies();
+    const proposal = {
+      proposalRef: 'content-proposal-1',
+      kind: 'update_event_tags' as const,
+      expiresAtMs: Date.now() + 60_000,
+      summary: 'Keep the current activity tags.',
+      requiresConfirmation: true as const,
+      arguments: { activityRef: 'activity-ref', expectedTags: ['Quality'], tags: ['Quality'] },
+    };
+    vi.mocked(store.getActiveConversationState).mockResolvedValue({
+      conversation, pendingRequestId: null, locationAccess: 'coordinate_free',
+      activityTagChangesEnabled: true, pendingContentProposal: proposal,
+    });
+    const updateEventTags = vi.fn().mockResolvedValue({ changed: false, tags: ['Quality'] });
+
+    await expect(runApplyAssistantContentProposal({
+      proposalRef: proposal.proposalRef,
+      conversationId: conversation.conversationId,
+      confirm: true,
+    }, context, store, { updateEventTags } as never)).resolves.toEqual({
+      status: 'applied',
+      kind: 'update_event_tags',
+      message: 'Event tags already matched the requested list.',
+    });
+    expect(updateEventTags).toHaveBeenCalledOnce();
   });
 
   it('dismisses a content proposal without calling a mutation service', async () => {
@@ -427,7 +455,7 @@ describe('Assistant callable', () => {
     const { dependencies, store, conversation } = createDependencies();
     const proposal = {
       proposalRef: 'content-proposal-retained',
-      kind: 'update_activity_tags' as const,
+      kind: 'update_event_tags' as const,
       expiresAtMs: Date.parse('2026-08-03T12:10:00Z'),
       summary: 'Change tags on Running from 2026-08-03.',
       requiresConfirmation: true as const,

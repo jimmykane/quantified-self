@@ -27,7 +27,7 @@ describe('McpConnectionsComponent', () => {
       'measurements:read',
       'sleep:read',
       'activity-details:read',
-      'activity-tags:write',
+      'events:write',
       'activity-location:read',
       'timeline-notes:read',
       'timeline-notes:write',
@@ -80,7 +80,7 @@ describe('McpConnectionsComponent', () => {
     expect(content).toContain('Change Training plans and workouts');
     expect(content).toContain('Change planned-workout sync');
     expect(content).toContain('Change Timeline notes');
-    expect(content).toContain('Change activity tags');
+    expect(content).toContain('Change events');
     expect(content).toContain('Activity and Training metrics');
     expect(content).toContain('Body measurements');
     expect(content).toContain('Health metrics');
@@ -114,8 +114,8 @@ describe('McpConnectionsComponent', () => {
     expect(rows.find(permission => permission.scope === 'timeline-notes:write')).toMatchObject({
       title: 'Change Timeline notes', granted: true, parentTitle: 'Timeline notes',
     });
-    expect(rows.find(permission => permission.scope === 'activity-tags:write')).toMatchObject({
-      title: 'Change activity tags', granted: true, parentTitle: 'Individual activity details',
+    expect(rows.find(permission => permission.scope === 'events:write')).toMatchObject({
+      title: 'Change events', granted: true, parentTitle: 'Individual activity details',
     });
     expect(fixture.nativeElement.querySelectorAll('app-compact-row')).toHaveLength(Object.keys(MCP_SCOPE_CONTENT).length);
     const states = Array.from(fixture.nativeElement.querySelectorAll<HTMLElement>('.mcp-connections__permission-state'));

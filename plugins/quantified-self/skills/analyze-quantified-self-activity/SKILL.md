@@ -65,9 +65,12 @@ activities, resolve opaque public references and request only the detail needed 
 ## Permissions and Privacy
 
 - `activity-details:read` gates activity summaries, event tags and tag filtering, subrecords, non-location charts, and detailed samples. Reading tags adds no new grant.
-- `activity-tags:write` is a separate dependent grant for replacing the complete shared parent-event tag list. Existing
-  connections must reauthorize; refresh cannot add it. It cannot edit activity values, descriptions, locations,
-  original files, provider records, or another event.
+- `events:write` is a separate dependent grant for focused event-owned changes. Its current tool only replaces the
+  complete shared parent-event tag list. Existing connections must reauthorize; refresh cannot add it. Read current
+  tags through the tag-aware activity query, then call `update_event_tags` once with that complete list as `expectedTags`
+  and the complete replacement. The mutation conflicts on concurrent edits and rejects benchmark
+  events. It cannot currently edit activity values, titles, descriptions, locations, original files, provider records,
+  or another event.
 - Selected per-activity metrics also require `metrics:read`.
 - `activity-location:read` separately gates start and end positions, nearby-activity searches, jump coordinates, and
   breadcrumb traces. Reject an explicit location request rather than silently downgrading it.

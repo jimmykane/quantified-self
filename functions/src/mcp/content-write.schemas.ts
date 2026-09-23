@@ -9,11 +9,11 @@ import {
   TIMELINE_NOTE_LIMITS,
 } from '../../../shared/timeline-notes';
 
-export const ACTIVITY_TAGS_WRITE_SCOPE = 'activity-tags:write';
+export const EVENTS_WRITE_SCOPE = 'events:write';
 export const TIMELINE_NOTES_WRITE_SCOPE = 'timeline-notes:write';
 
 export const MCP_CONTENT_WRITE_TOOLS = [
-  'update_activity_tags',
+  'update_event_tags',
   'query_editable_timeline_notes',
   'create_timeline_note',
   'update_timeline_note',
@@ -87,7 +87,7 @@ const timelineNoteMutationOutput = z.strictObject({
 });
 
 export const MCP_CONTENT_WRITE_INPUTS = {
-  update_activity_tags: z.strictObject({
+  update_event_tags: z.strictObject({
     activityRef: opaqueReference,
     expectedTags: tags.describe('Current tags from query_activities_with_tags. The write fails if they changed.'),
     tags: tags.describe(`Complete replacement list of at most ${EVENT_TAG_LIMIT} event tags.`),
@@ -114,7 +114,7 @@ export const MCP_CONTENT_WRITE_INPUTS = {
 } satisfies Record<McpContentWriteTool, z.ZodType>;
 
 export const MCP_CONTENT_WRITE_OUTPUTS = {
-  update_activity_tags: z.strictObject({
+  update_event_tags: z.strictObject({
     activityRef: opaqueReference,
     tags,
     changed: z.boolean(),

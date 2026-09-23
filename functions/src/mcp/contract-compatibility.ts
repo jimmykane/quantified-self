@@ -51,8 +51,8 @@ const MCP_CONTRACT_PROFILE_DEFINITIONS: ReadonlyArray<{
   id: 'activity-details',
   scopes: [MCP_OAUTH_SCOPES.ActivityDetailsRead],
 }, {
-  id: 'activity-tags-write',
-  scopes: [MCP_OAUTH_SCOPES.ActivityDetailsRead, MCP_OAUTH_SCOPES.ActivityTagsWrite],
+  id: 'events-write',
+  scopes: [MCP_OAUTH_SCOPES.ActivityDetailsRead, MCP_OAUTH_SCOPES.EventsWrite],
 }, {
   id: 'activity-descriptions',
   scopes: [MCP_OAUTH_SCOPES.ActivityDetailsRead, MCP_OAUTH_SCOPES.ActivityDescriptionsRead],

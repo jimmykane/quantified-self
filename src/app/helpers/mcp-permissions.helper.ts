@@ -9,7 +9,7 @@ export type McpScope =
   | 'measurements:read'
   | 'sleep:read'
   | 'activity-details:read'
-  | 'activity-tags:write'
+  | 'events:write'
   | 'activity-descriptions:read'
   | 'activity-location:read'
   | 'routes:read'
@@ -21,7 +21,7 @@ export const MCP_SCOPE_PARENTS: Partial<Record<McpScope, McpScope>> = {
   'timeline-notes:write': 'timeline-notes:read',
   'activity-location:read': 'activity-details:read',
   'activity-descriptions:read': 'activity-details:read',
-  'activity-tags:write': 'activity-details:read',
+  'events:write': 'activity-details:read',
   'route-location:read': 'routes:read',
 };
 
@@ -73,9 +73,9 @@ export const MCP_SCOPE_CONTENT: Record<McpScope, {
     title: 'Individual activity details',
     description: 'Read non-location activity summaries and their event tags, filter workouts by exact case-insensitive tags, and read laps, swim lengths, MTB jump measurements, selected activity metrics, bounded on-demand chart series, and paginated detailed samples for selected metrics from existing original files. Activities from the same event share tags. Tags can contain personal, health, or location context and are treated as untrusted labels. Detailed samples include every available elapsed-second value with missing readings marked. Exact locations and breadcrumb traces require the separate activity-location permission.',
   },
-  'activity-tags:write': {
-    title: 'Change activity tags',
-    description: 'Replace the tags on a selected activity\'s parent event after reading its current tags. Selected by default when requested; uncheck it before approving to keep tags read-only. Sibling activities in the same event share the change. Updates use the client\'s native tool-approval controls and fail if the tags changed since they were read. This cannot edit activity data, descriptions, metrics, or provider records. Requires Individual activity details.',
+  'events:write': {
+    title: 'Change events',
+    description: 'Change event-owned details through focused tools. Currently this permission only replaces tags on a selected activity\'s parent event after reading its current tags. Selected by default when requested; uncheck it before approving to keep events read-only. Sibling activities share the change, concurrent edits fail, and benchmark events are excluded. This cannot currently edit titles, descriptions, activity data, metrics, or provider records. Requires Individual activity details.',
   },
   'activity-location:read': {
     title: 'Activity locations',

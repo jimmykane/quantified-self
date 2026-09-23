@@ -76,10 +76,11 @@ Lib version or parser change, also use `.agent/skills/sports-lib-upgrade-and-rep
   Exact activity start/end and jump coordinates,
   nearby search, and chart breadcrumbs require dependent `activity-location:read` in addition to
   `activity-details:read`.
-- **Activity-tag or Timeline-note mutation:** keep these focused writes separate from recorded activity data and
-  Training mutations. Activity-tag replacement requires `activity-tags:write` plus `activity-details:read`, reads the
-  selected activity's current tags first, replaces the complete event-owned list with an exact optimistic-concurrency
-  precondition, and reminds clients that sibling activities share the result. Timeline-note create/edit/delete requires
+- **Event-tag or Timeline-note mutation:** keep these focused writes separate from recorded activity data and
+  Training mutations. Event-tag replacement requires `events:write` plus `activity-details:read`, reads the selected
+  activity's current tags first, replaces the complete event-owned list with an exact optimistic-concurrency
+  precondition, rejects benchmark events, and reminds clients that sibling activities share the result. Timeline-note
+  create/edit/delete requires
   `timeline-notes:write` plus `timeline-notes:read`, owner/connection-bound references, current revisions, an idempotent
   create mutation ID, and permanent-delete disclosure. Both use existing sanitized persistence paths, recheck the
   stored connection grant and account-deletion fence inside the transaction, advertise accurate write/destructive/
@@ -131,13 +132,15 @@ Lib version or parser change, also use `.agent/skills/sports-lib-upgrade-and-rep
    `functions/src/mcp/data.service.ts` as the MCP projection boundary. Expand allowlists deliberately; do not return
    whole Firestore documents.
 5. Keep OAuth scopes least-privilege: `metrics:read`, `measurements:read`, `sleep:read`, `activity-details:read`, and
-   `routes:read` remain data grants. `activity-location:read` and `activity-tags:write` depend on activity details,
+   `routes:read` remain data grants. `activity-location:read` and `events:write` depend on activity details,
    `timeline-notes:write` depends on Timeline-note reads, and `route-location:read` depends on routes; the domains remain
    independent. Enforce those dependencies in consent, approval,
    refresh, bearer validation, HTTP prechecks, tool registration, and data reads. First-class measurement types must also be excluded from generic and
    per-activity metric paths so those tools cannot bypass `measurements:read`. Keep queries bounded, references/cursors
    UID-and-connection-bound, and ordinary data tools read-only. The only focused non-Training mutations are explicitly
-   consented activity-tag replacement and Timeline-note create/edit/delete, which must preserve the boundaries above.
+   consented event-tag replacement and Timeline-note create/edit/delete, which must preserve the boundaries above. The
+   broader event grant does not expose titles, descriptions, or other event fields without a dedicated tool, approval
+   contract, projection review, tests, and documentation.
    Training mutations must preserve the strict preview/native-approval/idempotent-apply boundary. Update OAuth metadata, consent, Settings, Help, policies, and
    `docs/mcp-server.md` when the user-visible contract moves.
 6. For every new Sports Lib detail or route field, update the named MCP allowlist, add a negative leakage test for nearby
