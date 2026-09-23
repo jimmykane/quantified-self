@@ -1583,7 +1583,7 @@ export function createMcpServer(
         })));
         registerMcpTool(server, 'update_event_title', {
           title: 'Update event title',
-          description: 'Replace one parent-event title using the exact value from get_event_title as expectedTitle. An activity or workout rename changes its parent event, so sibling activities share the result. Native client approval is required; concurrent edits conflict and benchmark events are excluded.',
+          description: 'Replace one parent-event title using the exact value from get_event_title as expectedTitle. An activity or workout rename changes its parent event, so sibling activities share the result. The MCP host controls per-call approval; concurrent edits conflict and benchmark events are excluded.',
           inputSchema: MCP_CONTENT_WRITE_INPUTS.update_event_title,
           outputSchema: outputSchemas.update_event_title,
           annotations: CONTENT_UPDATE_TOOL_ANNOTATIONS,
@@ -1594,7 +1594,7 @@ export function createMcpServer(
         if (auth.scopes.includes(MCP_OAUTH_SCOPES.ActivityDescriptionsRead)) {
           registerMcpTool(server, 'update_event_description', {
             title: 'Update event description',
-            description: 'Replace one parent-event description using the exact value from get_activity_description as expectedDescription. Sibling activities share the result. Requires Activity descriptions as well as Change events permission. Native client approval is required; concurrent edits conflict and benchmark events are excluded.',
+            description: 'Replace one parent-event description using the exact value from get_activity_description as expectedDescription. Sibling activities share the result. Requires Activity descriptions as well as Change events permission. The MCP host controls per-call approval; concurrent edits conflict and benchmark events are excluded.',
             inputSchema: MCP_CONTENT_WRITE_INPUTS.update_event_description,
             outputSchema: outputSchemas.update_event_description,
             annotations: CONTENT_UPDATE_TOOL_ANNOTATIONS,

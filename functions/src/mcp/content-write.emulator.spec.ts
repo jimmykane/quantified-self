@@ -196,6 +196,8 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)(
         ...rename.arguments, activityRef: `activity:${uid}:other`,
       } }, codec, deps)).rejects.toMatchObject({ code: 'invalid_request' });
       await user.collection('activities').doc('activity-1').update({ eventID: 'event-2' });
+      await expect(getMcpEventTitle({ ...context, arguments: { activityRef } }, codec, deps))
+        .rejects.toMatchObject({ code: 'detail_not_available' });
       await expect(updateMcpEventTitle(rename, codec, deps)).rejects.toMatchObject({ code: 'detail_not_available' });
       await user.collection('activities').doc('activity-1').update({ eventID: 'event-1' });
       await user.collection('mcpConnections').doc('connection').update({ status: 'revoked', revokedAtMs: now() });

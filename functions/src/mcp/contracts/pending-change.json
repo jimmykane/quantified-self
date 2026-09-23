@@ -1,7 +1,7 @@
 {
   "formatVersion": 1,
-  "candidateSha256": "169285e11a2e45e2a0aa1e0fc3e37a26d25de227378eda8773046d1fe63919ba",
+  "candidateSha256": "9eeb2fba50c3afae64a236113d1fdd7e9eb94cfdf6f393215d26a73552ef58b4",
   "lifecycleAction": "developer-refresh",
-  "summary": "Retain prior Training, Health, Timeline, activity, readiness, OAuth and PKCE changes. Add event title read/edit and description edit (also requiring activity-descriptions:read) beside existing tag and Timeline-note edits. Preserve dependent scopes, exact-current-value checks, benchmark exclusion, native approval, bounded opaque outputs, consent and plugin guidance.",
+  "summary": "Retain prior Training, Health, Timeline, activity, readiness, OAuth and PKCE changes. Add event title read/edit and description edit (also requiring activity-descriptions:read) beside existing tag and Timeline-note edits. Preserve dependent scopes, exact-current-value checks, benchmark exclusion, host-controlled approval metadata, bounded opaque outputs, consent and plugin guidance.",
   "rescanRequired": true
 }

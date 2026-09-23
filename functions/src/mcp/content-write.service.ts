@@ -416,19 +416,25 @@ export async function getMcpEventTitle(
   const reference = decodeEventActivityReference(input, codec, args.activityRef);
   await readAccessGeneration(deps, input, requiredScopes);
   const user = deps.db.collection('users').doc(input.uid);
-  const [activity] = await deps.db.getAll(user.collection('activities').doc(reference.activityId), {
-    fieldMask: ['eventID'],
+  const title = await deps.db.runTransaction(async transaction => {
+    if ((await getUserDeletionGuardStateInTransaction(deps.db, transaction, input.uid, deps.now())).shouldSkip) {
+      invalid('This account is unavailable or being deleted.');
+    }
+    await assertConnectionAuthorityInTransaction(deps, transaction, input, requiredScopes);
+    const [activity] = await transaction.getAll(user.collection('activities').doc(reference.activityId), {
+      fieldMask: ['eventID'],
+    });
+    if (!activity.exists || activity.get('eventID') !== reference.eventId) {
+      throw new McpContentWriteError('detail_not_available', 'The activity is no longer available.');
+    }
+    const [event] = await transaction.getAll(user.collection('events').doc(reference.eventId), {
+      fieldMask: ['name', 'mergeType', 'isMerge'],
+    });
+    if (!event.exists || isBenchmarkEvent(event.data())) {
+      throw new McpContentWriteError('detail_not_available', 'The activity event cannot be edited.');
+    }
+    return currentEventText(event.get('name'), 'name');
   });
-  if (!activity.exists || activity.get('eventID') !== reference.eventId) {
-    throw new McpContentWriteError('detail_not_available', 'The activity is no longer available.');
-  }
-  const [event] = await deps.db.getAll(user.collection('events').doc(reference.eventId), {
-    fieldMask: ['name', 'mergeType', 'isMerge'],
-  });
-  if (!event.exists || isBenchmarkEvent(event.data())) {
-    throw new McpContentWriteError('detail_not_available', 'The activity event cannot be edited.');
-  }
-  const title = currentEventText(event.get('name'), 'name');
   await readAccessGeneration(deps, input, requiredScopes);
   return MCP_CONTENT_WRITE_OUTPUTS.get_event_title.parse({ activityRef: args.activityRef, title });
 }

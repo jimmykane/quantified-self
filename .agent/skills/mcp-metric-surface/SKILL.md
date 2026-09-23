@@ -141,9 +141,10 @@ Lib version or parser change, also use `.agent/skills/sports-lib-upgrade-and-rep
    refresh, bearer validation, HTTP prechecks, tool registration, and data reads. First-class measurement types must also be excluded from generic and
    per-activity metric paths so those tools cannot bypass `measurements:read`. Keep queries bounded, references/cursors
    UID-and-connection-bound, and ordinary data tools read-only. The only focused non-Training mutations are explicitly
-   consented event-tag replacement and Timeline-note create/edit/delete, which must preserve the boundaries above. The
-   broader event grant does not expose titles, descriptions, or other event fields without a dedicated tool, approval
-   contract, projection review, tests, and documentation.
+   consented parent-event tag, title, and description replacement and Timeline-note create/edit/delete, which must
+   preserve the boundaries above. The event grant does not automatically expose additional event fields: each field
+   requires a dedicated tool, approval contract, projection review, tests, and documentation. Description edits also
+   require the independent `activity-descriptions:read` grant.
    Training mutations must preserve the strict preview/native-approval/idempotent-apply boundary. Update OAuth metadata, consent, Settings, Help, policies, and
    `docs/mcp-server.md` when the user-visible contract moves.
 6. For every new Sports Lib detail or route field, update the named MCP allowlist, add a negative leakage test for nearby

@@ -510,8 +510,8 @@ The server implements OAuth authorization code with PKCE S256 and refresh-token 
 - `timeline-notes:write`, dependent on `timeline-notes:read`, for native-approval-gated create, edit and permanent delete;
 - `activity-details:read` for bounded non-location activity summaries, event tags and exact tag filtering, laps, swim
   lengths, MTB jump measurements, selected metrics, and on-demand chart series;
-- `events:write`, dependent on `activity-details:read`, for focused native-approval-gated parent-event tag and title
-  changes; description changes additionally require `activity-descriptions:read`. Exact current-value checks prevent
+- `events:write`, dependent on `activity-details:read`, for focused parent-event tag and title changes with
+  host-controlled approval; description changes additionally require `activity-descriptions:read`. Exact current-value checks prevent
   concurrent overwrites and benchmark events are excluded;
 - `activity-descriptions:read`, dependent on `activity-details:read`, for the full private parent event description shown in the QS.io event editor;
 - `activity-location:read`, dependent on `activity-details:read`, for exact activity start/end and jump coordinates,
@@ -760,10 +760,10 @@ The analytics and map entries follow the
 | `list_activities` | `activity-details:read`; locations add `activity-location:read` | Frozen compatibility tool for bounded newest-first activity scans |
 | `query_activities` | `activity-details:read`; locations add `activity-location:read` | Preferred bounded activity query with structurally exclusive explicit, relative, and unbounded date modes |
 | `query_activities_with_tags` | `activity-details:read` | Coordinate-free activity summaries with their parent event tags and optional exact case-insensitive `any`/`all` tag filtering |
-| `update_event_tags` | `activity-details:read` + `events:write`; native client approval gate | Replaces the complete parent-event tag list after an exact current-tag precondition; sibling activities share the result and benchmark events are excluded |
+| `update_event_tags` | `activity-details:read` + `events:write`; host-controlled approval | Replaces the complete parent-event tag list after an exact current-tag precondition; sibling activities share the result and benchmark events are excluded |
 | `get_event_title` | `activity-details:read` + `events:write` | Reads one editable parent-event title for an opaque activity reference before a rename; no internal event ID |
-| `update_event_title` | `activity-details:read` + `events:write`; native client approval gate | Replaces the parent-event title with an exact current-title precondition; sibling activities share the result and benchmark events are excluded |
-| `update_event_description` | `activity-details:read` + `activity-descriptions:read` + `events:write`; native client approval gate | Replaces the parent-event description with an exact current-description precondition from `get_activity_description`; returns no private text |
+| `update_event_title` | `activity-details:read` + `events:write`; host-controlled approval | Replaces the parent-event title with an exact current-title precondition; sibling activities share the result and benchmark events are excluded |
+| `update_event_description` | `activity-details:read` + `activity-descriptions:read` + `events:write`; host-controlled approval | Replaces the parent-event description with an exact current-description precondition from `get_activity_description`; returns no private text |
 | `find_activities_near_location` | `activity-details:read` + `activity-location:read` | Frozen compatibility tool for nearby activity scans |
 | `search_activities_near_location` | `activity-details:read` + `activity-location:read` | Preferred closed-world nearby activity search with structurally paired optional dates |
 | `list_activity_laps` | `activity-details:read` | Paginated allowlisted lap timing and performance fields |
@@ -1209,7 +1209,8 @@ reference and transaction checks as tag changes, recheck
 the parent association and benchmark classification, and write only the sanitized event field. A repeated accepted
 replacement is a no-op; a different current value conflicts. A description-write result contains no private text.
 Sibling activities share the new event title or description. No recorded activity metrics, source files, locations,
-provider records or remote services are touched. Native MCP client approval is required for each write. These tools
+provider records or remote services are touched. The MCP host controls per-call approval; users who want to inspect
+each edit must keep automatic approval disabled in that host. These tools
 are external-client only: the built-in Assistant's independent **Activity tag changes** choice still authorizes only
 tag proposals and does not expose title or description mutation. This adds no callable, index, collection or background
 job. Future editable event fields still require dedicated strict tools, projection and consent review, tests and docs;

@@ -75,7 +75,7 @@ export const MCP_SCOPE_CONTENT: Record<McpScope, {
   },
   'events:write': {
     title: 'Change events',
-    description: 'Change a selected activity\'s parent-event tags or title after reading the exact current value. Titles and tags may contain sensitive personal or health information. Description edits additionally require Activity descriptions permission. Selected by default when requested; uncheck it before approving to keep events read-only. Your client asks for approval before each edit. Sibling activities share the change, concurrent edits fail, and benchmark events are excluded. This cannot edit recorded activity data, metrics, or provider records. Requires Individual activity details.',
+    description: 'Change a selected activity\'s parent-event tags or title after reading the exact current value. Titles and tags may contain sensitive personal or health information. Description edits additionally require Activity descriptions permission. Selected by default when requested; uncheck it before approving to keep events read-only. Your MCP client controls per-edit approval; check its settings if you want to confirm every change. Sibling activities share the change, concurrent edits fail, and benchmark events are excluded. This cannot edit recorded activity data, metrics, or provider records. Requires Individual activity details.',
   },
   'activity-location:read': {
     title: 'Activity locations',
