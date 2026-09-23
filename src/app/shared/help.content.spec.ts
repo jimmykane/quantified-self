@@ -375,6 +375,8 @@ describe('help.content', () => {
     expect(dataAndPrivacySection?.content).toContain('Missing tools do not mean you have no plans, workouts, or recorded data.');
     expect(dataAndPrivacySection?.content).toContain('**Training plans and planned workouts**');
     expect(dataAndPrivacySection?.content).toContain('Do not disconnect an app just to add a permission.');
+    expect(dataAndPrivacySection?.content).toContain('**Quantified Self** -> **Reconnect**');
+    expect(dataAndPrivacySection?.content).toContain('Uninstall and reinstall is a last resort');
     expect(dataAndPrivacySection?.content).toContain('The built-in Assistant is separate');
     expect(dataAndPrivacySection?.content).toContain('### Android authorization handoff');
     expect(dataAndPrivacySection?.content).toContain('**Open supported links**');

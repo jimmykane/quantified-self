@@ -229,6 +229,10 @@ describe('MCP Function protocol compatibility', () => {
     }));
     expect(denied.status).toBe(403);
     expect(denied.headers.get('www-authenticate')).toContain('activity-location:read');
+    expect(await denied.json()).toEqual({
+      error: 'insufficient_scope',
+      error_description: 'The required Quantified Self permission is not granted. Reconnect or authorize this app again, approve the requested permission, then refresh tools or start a new chat.',
+    });
     expect(info).not.toHaveBeenCalled();
   });
 

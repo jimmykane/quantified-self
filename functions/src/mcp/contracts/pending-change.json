@@ -1,7 +1,7 @@
 {
   "formatVersion": 1,
-  "candidateSha256": "a25fc798533138c95d285753ea8823c97896516f8b8b5004e25b1997a86c7341",
+  "candidateSha256": "b98d34a2362d4bb738bbd6a0e74a5fd6a3d666105eee5948ca6755c8255a632a",
   "lifecycleAction": "developer-refresh",
-  "summary": "Retain prior Training reads/writes, chronological and bulk completion reads, compatibility, Health/Timeline/activity/readiness, private_key_jwt and PKCE changes. Add separately consented events:write tag replacement and Timeline-note create/edit/delete with dependent scopes, optimistic concurrency, benchmark-event exclusion, idempotency, native approval, bounded opaque projections, consent/docs/plugin guidance.",
+  "summary": "Retain prior Training reads/writes, chronological and bulk completion reads, compatibility, Health/Timeline/activity/readiness, private_key_jwt and PKCE changes. Add separately consented events:write tag replacement and Timeline-note create/edit/delete with dependent scopes, optimistic concurrency, benchmark-event exclusion, idempotency, native approval, bounded opaque projections, consent/docs/plugin guidance, and client-neutral missing-permission recovery instructions.",
   "rescanRequired": true
 }

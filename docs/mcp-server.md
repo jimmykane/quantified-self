@@ -307,6 +307,18 @@ compact permission names with individually labelled info buttons. Each opens a
 standard Material dialog using the same permission description as consent, with its parent requirement and authorization
 guidance. Details remain accessible by touch and keyboard without repeating all descriptions in the page.
 
+Server instructions make missing-tool recovery explicit for every authorized client. A model must not treat an absent
+scope-dependent tool as proof that the owner has no matching data, substitute another data domain, or suggest reconnecting
+a fitness provider. It should direct the owner to reconnect or start authorization again from the Quantified Self app in
+their MCP client, approve the named permission and any parent, finish authorization, and then start a new chat or refresh
+the tool catalog. If the permission or tool is still absent, the client or workspace administrator must refresh/rescan the
+app catalog. Disconnect/reconnect is only a fallback when the client offers no reconnect action; uninstall/reinstall is
+reserved for a stale local plugin/app bundle. The HTTP insufficient-scope response carries the same bounded, generic
+recovery direction without returning account, connection, or request data.
+The internal Assistant receives a different instruction: missing optional capabilities are enabled under
+**Examples & data access**, which starts a fresh server-owned chat. It must never direct the user to reconnect or
+reinstall the built-in Assistant.
+
 ## Public discovery and indexing
 
 The crawlable product overview lives at `/features/mcp-server`. It is a prerendered public page with route metadata,

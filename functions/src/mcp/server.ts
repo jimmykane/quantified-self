@@ -689,6 +689,10 @@ export function summarizeMcpOutputValidationIssues(
 
 export const MCP_ACTIVITY_SAMPLES_INSTRUCTIONS = 'Use existing activity summaries for ordinary workout overviews. Use get_activity_chart_data for a visual overview. For detailed samples, interval analysis or calculations, discover metrics with list_activity_chart_metrics and use get_activity_samples with only the needed metrics and elapsed-second range. Keep the same query and limit when following nextCursor; finish the requested range before claiming complete coverage. Null means a missing reading. Never calculate whole-activity averages, time in zones or correlations from downsampled chart points; prefer persisted summary metrics when they answer the question.';
 
+export const MCP_PERMISSION_RECOVERY_INSTRUCTIONS = 'If a requested Quantified Self capability has no matching advertised tool, do not interpret that as missing user data, substitute another data domain, or tell the user to reconnect a Garmin, Suunto, COROS, or Wahoo account. Explain that this MCP connection may lack the relevant Quantified Self permission or may have an older tool catalog. Guide the user to open the Quantified Self app or connection in their MCP client, choose Reconnect or start authorization again, approve the named permission and any required parent permission, complete authorization, then start a new chat or refresh the client tools. If the permission is absent from consent or the tool remains absent, ask the client or workspace administrator to refresh, rescan, or update the app catalog. Disconnect and connect again only when the client explicitly offers no reconnect path. Uninstall and reinstall is a last resort for a stale local plugin or app bundle, not the normal way to add permission.';
+
+export const ASSISTANT_PERMISSION_RECOVERY_INSTRUCTIONS = 'If a requested Quantified Self capability has no matching advertised tool, do not interpret that as missing user data or tell the user to reconnect an MCP app or fitness provider. Explain that the current built-in Assistant chat may not have that optional access. Guide the user to open Examples & data access, enable the matching choice and any required parent choice, and continue in the fresh chat that Quantified Self starts. Never suggest uninstalling the built-in Assistant.';
+
 function buildMcpServerInstructions(auth: AuthenticatedMcpRequest): string {
   const trainingChangesAvailable = auth.scopes.includes(MCP_OAUTH_SCOPES.TrainingPlansWrite)
     || auth.scopes.includes(MCP_OAUTH_SCOPES.TrainingDeliveryWrite);
@@ -797,6 +801,9 @@ function buildMcpServerInstructions(auth: AuthenticatedMcpRequest): string {
   instructions.push(
     'Absolute output fields ending in TimeMs, DateMs, DayMs, or AtMs, plus bucketStartMs, are Unix epoch milliseconds; convert them exactly before stating a calendar date and never substitute the current date. Measurement values such as HRV milliseconds and relative offsets such as jump timestampMs are not calendar timestamps.',
   );
+  instructions.push(auth.assistantConversationId
+    ? ASSISTANT_PERMISSION_RECOVERY_INSTRUCTIONS
+    : MCP_PERMISSION_RECOVERY_INSTRUCTIONS);
   return instructions.join(' ');
 }
 
@@ -2489,7 +2496,10 @@ export const mcpApi = onRequest(MCP_API_RUNTIME_OPTIONS, async (request, respons
       'WWW-Authenticate',
       `Bearer error="insufficient_scope", scope="${requiredScopes.join(' ')}", resource_metadata="${metadataUrl}"`,
     );
-    response.status(403).json({ error: 'insufficient_scope' });
+    response.status(403).json({
+      error: 'insufficient_scope',
+      error_description: 'The required Quantified Self permission is not granted. Reconnect or authorize this app again, approve the requested permission, then refresh tools or start a new chat.',
+    });
     return;
   }
   if (!supportsMcpTransportMethod(request.method)) {

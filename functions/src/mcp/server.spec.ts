@@ -13,6 +13,7 @@ import {
   rejectRepeatedOAuthParameters,
 } from './oauth.service';
 import {
+  ASSISTANT_PERMISSION_RECOVERY_INSTRUCTIONS,
   buildMcpAuthorizationServerMetadata,
   buildMcpProtectedResourceMetadata,
   classifyMcpBearerRejectionReason,
@@ -25,6 +26,7 @@ import {
   isMcpFormUrlEncodedContentType,
   isMcpRequestBodyWithinLimit,
   MCP_API_RUNTIME_OPTIONS,
+  MCP_PERMISSION_RECOVERY_INSTRUCTIONS,
   parseMcpBearerToken,
   parseMcpDateTime,
   parseMcpFormEncodedBody,
@@ -39,6 +41,59 @@ import {
 import { createMcpTransportHandler } from './transport';
 
 describe('MCP HTTP scope enforcement', () => {
+  it('advertises actionable permission recovery without treating missing tools as missing data', async () => {
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+    const server = createMcpServer({
+      uid: 'user-1',
+      clientId: 'https://client.example/mcp.json',
+      connectionId: 'connection-1',
+      scopes: [],
+    }, 'https://quantified-self.io');
+    const client = new Client({ name: 'permission-recovery-client', version: '1.0.0' });
+
+    try {
+      await server.connect(serverTransport);
+      await client.connect(clientTransport);
+      const instructions = client.getInstructions() || '';
+      expect(instructions).toContain(MCP_PERMISSION_RECOVERY_INSTRUCTIONS);
+      expect(instructions).toContain('choose Reconnect or start authorization again');
+      expect(instructions).toContain('start a new chat or refresh the client tools');
+      expect(instructions).toContain('Uninstall and reinstall is a last resort');
+      expect(instructions).toContain('do not interpret that as missing user data');
+      expect(instructions).toContain('or tell the user to reconnect a Garmin');
+      expect(instructions).not.toContain('disconnect and reinstall Quantified Self');
+    } finally {
+      await client.close();
+      await server.close();
+    }
+  });
+
+  it('routes built-in Assistant permission recovery to its own data-access controls', async () => {
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+    const server = createMcpServer({
+      uid: 'user-1',
+      clientId: 'first-party-assistant-v1',
+      connectionId: 'first-party-assistant-v1:conversation-1',
+      assistantConversationId: 'conversation-1',
+      scopes: [],
+    }, 'https://quantified-self.io');
+    const client = new Client({ name: 'assistant-permission-recovery-client', version: '1.0.0' });
+
+    try {
+      await server.connect(serverTransport);
+      await client.connect(clientTransport);
+      const instructions = client.getInstructions() || '';
+      expect(instructions).toContain(ASSISTANT_PERMISSION_RECOVERY_INSTRUCTIONS);
+      expect(instructions).toContain('open Examples & data access');
+      expect(instructions).toContain('fresh chat that Quantified Self starts');
+      expect(instructions).not.toContain('choose Reconnect or start authorization again');
+      expect(instructions).not.toContain('Uninstall and reinstall');
+    } finally {
+      await client.close();
+      await server.close();
+    }
+  });
+
   it('requires Health and Sleep before serving shared HRV ranges', () => {
     expect(requiredScopesForRequest({ method: 'tools/call', params: { name: 'get_hrv_personal_range' } }))
       .toEqual([MCP_OAUTH_SCOPES.HealthRead, MCP_OAUTH_SCOPES.SleepRead]);
