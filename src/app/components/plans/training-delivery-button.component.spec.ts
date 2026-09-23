@@ -102,7 +102,47 @@ describe('Training delivery summaries on the workspace', () => {
       expect(fixture.nativeElement.querySelector('.delivery-plan-provider').getAttribute('aria-label'))
         .toContain('No upcoming workouts. 1 earlier workout');
     });
+    expect(fixture.nativeElement.textContent).toContain('No workouts due for sync');
+    expect(fixture.nativeElement.querySelectorAll('.delivery-plan-provider-count')).toHaveLength(0);
     expect(service.watchSummaryScope).toHaveBeenCalledTimes(1);
+  });
+  it('replaces four meaningless dashes with one clear plan message while keeping service details', async () => {
+    const fixture = await render();
+    const providers = ['garmin', 'coros', 'wahoo', 'suunto'] as const;
+    view$.next({ settings: providers.map(provider => ({ ...setting, provider })), statuses: providers.map(provider => ({
+      ...status, provider, id: createHash('sha256').update(JSON.stringify(['owner', provider, 'safe', workout.id])).digest('hex'),
+    })) });
+    fixture.componentRef.setInput('summaryNowMs', Date.parse('2027-01-02T12:00:00Z'));
+    await vi.waitFor(() => { fixture.detectChanges();
+      expect(fixture.nativeElement.querySelectorAll('.delivery-plan-provider')).toHaveLength(4);
+      expect(fixture.nativeElement.textContent).toContain('No workouts due for sync');
+    });
+    expect(fixture.nativeElement.querySelectorAll('.delivery-plan-provider-count')).toHaveLength(0);
+    expect(fixture.nativeElement.querySelector('.delivery-plan-summary').textContent).not.toContain('—');
+    for (const item of fixture.nativeElement.querySelectorAll('.delivery-plan-provider') as NodeListOf<HTMLElement>) {
+      expect(item.getAttribute('aria-label')).toContain('No upcoming workouts. 1 earlier workout');
+    }
+    expect(fixture.nativeElement.querySelector('.delivery-plan-view')).not.toBeNull();
+  });
+  it('uses a short service-specific label when only one service has nothing due', async () => {
+    const fixture = await render();
+    view$.next({ settings: [setting, { ...setting, provider: 'suunto' }], statuses: [status, {
+      ...status, provider: 'suunto', status: 'outside_horizon', hasRemoteCopy: false,
+      id: createHash('sha256').update(JSON.stringify(['owner', 'suunto', 'safe', workout.id])).digest('hex'),
+    }] });
+    await vi.waitFor(() => { fixture.detectChanges();
+      expect(fixture.nativeElement.querySelectorAll('.delivery-plan-provider-count')).toHaveLength(2);
+    });
+    const counts: HTMLElement[] = Array.from(fixture.nativeElement.querySelectorAll('.delivery-plan-provider-count'));
+    expect(counts.map(item => item.textContent?.trim())).toEqual(['1/1', 'Later']);
+  });
+  it('distinguishes a genuinely empty plan from a plan with only earlier workouts', async () => {
+    const fixture = await render();
+    fixture.componentRef.setInput('summaryWorkouts', []);
+    await vi.waitFor(() => { fixture.detectChanges();
+      expect(fixture.nativeElement.textContent).toContain('No workouts in this plan');
+    });
+    expect(fixture.nativeElement.querySelectorAll('.delivery-plan-provider-count')).toHaveLength(0);
   });
   it('clears summaries immediately on account change/sign-out and tears down the old read', async () => {
     const fixture = await render();
@@ -192,5 +232,6 @@ describe('Training delivery summaries on the workspace', () => {
     expect(fixture.nativeElement.querySelector('.delivery-plan-provider').getAttribute('aria-label'))
       .toContain('Garmin Connect: Upcoming status incomplete');
     expect(fixture.nativeElement.querySelector('.delivery-plan-summary').textContent).not.toContain('Status incomplete');
+    expect(fixture.nativeElement.textContent).not.toContain('No workouts due for sync');
   });
 });

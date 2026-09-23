@@ -3,7 +3,8 @@
     @if (scope() === 'plan') {
       <div class="delivery-plan-summary" role="group" aria-label="Plan sync by service">
         <span class="delivery-plan-summary-heading"><span class="delivery-plan-heading-plan">Plan </span>sync</span>
-        <span class="delivery-plan-providers">
+        <span class="delivery-plan-providers" [class.delivery-plan-providers--idle]="planIdleMessage()">
+          @if (planIdleMessage(); as message) { <span class="delivery-plan-idle-message">{{ message }}</span> }
           @for (summary of compactPlanSummaries(); track summary.provider) {
             <span class="delivery-plan-provider" role="group"
               [attr.aria-label]="summary.presentation.displayLabel + ': ' + (summary.planFocus?.label ?? summary.label) + '. '
@@ -12,7 +13,7 @@
                 [showTooltip]="false" [iconHeight]="16" aria-hidden="true"></app-service-source-icon>
               <app-service-source-icon class="delivery-plan-provider-icon--compact" [presentation]="summary.presentation"
                 [showTooltip]="false" [iconWidth]="20" [iconHeight]="16" aria-hidden="true"></app-service-source-icon>
-              <span class="delivery-plan-provider-count" aria-hidden="true">{{ summary.compactLabel }}</span>
+              @if (!planIdleMessage()) { <span class="delivery-plan-provider-count" aria-hidden="true">{{ summary.compactLabel }}</span> }
             </span>
           }
         </span>

@@ -744,7 +744,11 @@ each service logo and the current/upcoming synced/total count visible without re
 action is the row's only click target; each provider indicator exposes its full name, current state and exception detail
 to assistive technology, and the dialog shows the same detail. At phone widths the provider indicators stay in one compact
 summary row between the heading and View action; at the narrowest widths the visible heading/action wording shortens while
-their accessible names remain complete. When more than one service is present, the dialog starts with compact service
+their accessible names remain complete. When every service has zero workouts currently due, the row instead shows one
+**No workouts due for sync** message with the service logos; an empty plan says **No workouts in this plan**. A service
+with no currently due workouts beside another service's count says **Later**, **None due** or **Empty** as appropriate,
+never a dash that could be mistaken for missing sync data. Incomplete scans still withhold an invented count and remain
+explicit in accessible details and the dialog. When more than one service is present, the dialog starts with compact service
 rows that show the
 destination logo, whether sync is enabled or saved for an inactive plan, a concise summary of the currently loaded workout
 statuses and one **Manage** action. Manage opens a focused service detail view; **All services** returns to the overview.
