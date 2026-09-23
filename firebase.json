@@ -9,6 +9,7 @@
         "**/node_modules/**"
       ],
       "headers": [
+        { "source": "/email/unsubscribe", "headers": [{ "key": "X-Robots-Tag", "value": "noindex, nofollow" }, { "key": "Cache-Control", "value": "no-store" }] },
         {
           "source": "/mcp/authorize",
           "headers": [
@@ -243,6 +244,10 @@
           }
         },
         {
+          "source": "/email/unsubscribe",
+          "function": { "functionId": "marketingUnsubscribe", "region": "europe-west2" }
+        },
+        {
           "source": "/login",
           "destination": "/index.csr.html"
         },
@@ -252,6 +257,10 @@
         },
         {
           "source": "/admin",
+          "destination": "/index.csr.html"
+        },
+        {
+          "source": "/admin/marketing",
           "destination": "/index.csr.html"
         },
         {
@@ -413,6 +422,7 @@
         "**/node_modules/**"
       ],
       "headers": [
+        { "source": "/email/unsubscribe", "headers": [{ "key": "X-Robots-Tag", "value": "noindex, nofollow" }, { "key": "Cache-Control", "value": "no-store" }] },
         {
           "source": "/mcp/authorize",
           "headers": [
@@ -550,6 +560,10 @@
           }
         },
         {
+          "source": "/email/unsubscribe",
+          "function": { "functionId": "marketingUnsubscribe", "region": "europe-west2" }
+        },
+        {
           "source": "/login",
           "destination": "/index.csr.html"
         },
@@ -559,6 +573,10 @@
         },
         {
           "source": "/admin",
+          "destination": "/index.csr.html"
+        },
+        {
+          "source": "/admin/marketing",
           "destination": "/index.csr.html"
         },
         {
@@ -714,8 +732,7 @@
   ],
   "functions": {
     "predeploy": [
-      "rm -rf \"$RESOURCE_DIR/lib\"",
-      "node \"$RESOURCE_DIR/node_modules/typescript/bin/tsc\" --project \"$RESOURCE_DIR/tsconfig.json\"",
+      "npm --prefix \"$RESOURCE_DIR\" run build",
       "node \"$RESOURCE_DIR/lib/functions/src/scripts/check-deployment-files.js\" \"$RESOURCE_DIR\"",
       "node \"$RESOURCE_DIR/lib/functions/src/scripts/check-entrypoint-loading.js\"",
       "node \"$RESOURCE_DIR/lib/functions/src/scripts/check-secret-bindings.js\""

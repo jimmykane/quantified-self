@@ -262,9 +262,9 @@ export const POLICY_CONTENT: PolicyItem[] = [
         subtitle: 'Optional',
         icon: 'mail_outline',
         content: [
-            '<strong>Promotional Emails:</strong> Receive occasional emails about new features, promotions, and special offers.',
-            '<strong>Unsubscribe Anytime:</strong> You can unsubscribe at any time from your account settings.',
-            '<strong>No Spam:</strong> We respect your inbox and only send relevant updates about the service.'
+            '<strong>Promotional Emails:</strong> With your optional opt-in, we may send occasional founder emails about new features, product updates, promotions, and offers. We use your email address and plan to choose relevant recipients.',
+            '<strong>Unsubscribe Anytime:</strong> Turn this off in account settings or use the unsubscribe link in any marketing email without signing in. The link opens a confirmation page; one-click email unsubscribe also works.',
+            '<strong>Sending Limit:</strong> Marketing messages are sent gradually under a daily global limit. Transactional account and subscription messages are separate.'
         ],
         checkboxLabel: 'I have read and agree to receive marketing emails and updates.',
         formControlName: POLICY_CONSENT_FORM_CONTROL_NAMES.marketing,

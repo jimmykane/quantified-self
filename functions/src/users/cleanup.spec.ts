@@ -1373,7 +1373,8 @@ describe('cleanupUserAccounts', () => {
 
         await wrapped(user, { eventId: 'eventId' } as unknown as functions.EventContext);
 
-        expect(collectionGroupMock).not.toHaveBeenCalled();
+        expect(collectionGroupMock).toHaveBeenCalledTimes(1);
+        expect(collectionGroupMock).toHaveBeenCalledWith('recipients');
         expect(recursiveDeleteMock).not.toHaveBeenCalledWith(expect.objectContaining({
             path: 'sleepSyncQueue/unassociated-provider-only-sleep',
         }));
@@ -1575,7 +1576,8 @@ describe('cleanupUserAccounts', () => {
 
         await wrapped(user, { eventId: 'eventId' } as unknown as functions.EventContext);
 
-        expect(collectionGroupMock).not.toHaveBeenCalled();
+        expect(collectionGroupMock).toHaveBeenCalledTimes(1);
+        expect(collectionGroupMock).toHaveBeenCalledWith('recipients');
         expect(recursiveDeleteMock).not.toHaveBeenCalledWith(expect.objectContaining({
             path: 'suuntoAppWorkoutQueue/other-user-provider-job',
         }));

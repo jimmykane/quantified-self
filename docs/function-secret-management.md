@@ -19,6 +19,7 @@ deployment and public enablement require separate approval.
 | Stripe | `STRIPE_SECRET_KEY`, `STRIPE_ADMIN_BILLING_KEY` |
 | Built-in Assistant | `GEMINI_API_KEY` |
 | Backend geocoding | `MAPBOX_ACCESS_TOKEN` |
+| Marketing unsubscribe | `MARKETING_UNSUBSCRIBE_SIGNING_KEY` |
 
 Training Guide delivery reuses `SUUNTOAPP_CLIENT_ID`, `SUUNTOAPP_CLIENT_SECRET`, the connected user's OAuth token,
 and `SUUNTOAPP_SUBSCRIPTION_KEY`. The [official Guides authentication instructions](https://apizone.suunto.com/how-to-use-suuntoplus-guides-api)
@@ -50,6 +51,8 @@ change is needed to configure the name. This implementation does not set a local
 deploy, or change existing rollout/consent gates.
 
 Do not put these values in `functions/.env`, workflow YAML, repository documentation, or service-account files. Secret existence can be checked with `firebase functions:secrets:get NAME`; do not print or retrieve values during routine validation.
+
+For admin marketing campaigns, generate a random high-entropy signing key and set it through the approved Secret Manager workflow before deployment: `firebase functions:secrets:set MARKETING_UNSUBSCRIBE_SIGNING_KEY --project <firebase-project-id>`. Bindings are limited to the test-send callable, campaign start/resume dispatcher, scheduled dispatcher, and public unsubscribe endpoint. The value-free local example includes the key; do not check in a real value. The signed endpoint handles no-login opt-outs, so losing the key invalidates unsubscribe links in previously sent emails. Rotate only with a migration plan. Provisioning and deployment need separate approval.
 
 ## Source-control guardrails
 

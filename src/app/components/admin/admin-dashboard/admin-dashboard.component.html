@@ -4,6 +4,8 @@
         subtitle="A live view of user growth, queue work, service availability, releases, and current-month billing.">
     </app-page-header>
 
+    <p><a mat-stroked-button routerLink="/admin/marketing"><mat-icon>campaign</mat-icon> Marketing campaigns</a></p>
+
     <section class="dashboard-section">
         <div class="health-grid">
             <mat-card class="overview-card" [class.status-error]="queueError() || healthSummary().queueErrors > 0"

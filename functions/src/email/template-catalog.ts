@@ -36,6 +36,7 @@ const FREE_AFTER_GRACE = {
 
 const TRANSACTIONAL_PARTIALS = ['email_transactional_header', 'email_transactional_footer'] as const;
 const FOUNDER_PARTIALS = ['email_founder_header', 'email_founder_footer'] as const;
+const MARKETING_PARTIALS = ['email_founder_header', 'email_marketing_footer'] as const;
 
 export const EMAIL_PARTIAL_CATALOG: readonly EmailPartialCatalogEntry[] = [
     {
@@ -52,6 +53,11 @@ export const EMAIL_PARTIAL_CATALOG: readonly EmailPartialCatalogEntry[] = [
         id: 'email_founder_header',
         htmlFile: 'partials/email_founder_header.hbs',
         textFile: 'partials/email_founder_header.txt.hbs',
+    },
+    {
+        id: 'email_marketing_footer',
+        htmlFile: 'partials/email_marketing_footer.hbs',
+        textFile: 'partials/email_marketing_footer.txt.hbs',
     },
     {
         id: 'email_founder_footer',
@@ -246,6 +252,14 @@ export const REFRESHED_EMAIL_TEMPLATE_CATALOG: readonly EmailTemplateCatalogEntr
  * the template explicitly.
  */
 export const MANUAL_CAMPAIGN_EMAIL_TEMPLATE_CATALOG: readonly EmailTemplateCatalogEntry[] = [
+    {
+        id: 'marketing_campaign',
+        subject: '{{subject}}',
+        htmlFile: 'marketing_campaign.hbs',
+        textFile: 'marketing_campaign.txt.hbs',
+        partials: MARKETING_PARTIALS,
+        previewCases: [{ name: 'sample', data: { subject: 'A note from Dimitrios', email_title: 'A note from Dimitrios', first_name: 'Ada', body_html: '<p>Hello from Quantified Self.</p>', body_text: 'Hello from Quantified Self.', cta_html: '', cta_text: '', product_url: 'https://quantified-self.io', settings_url: 'https://quantified-self.io/settings', unsubscribe_url: 'https://quantified-self.io/email/unsubscribe?token=preview' } }],
+    },
     {
         id: COROS_DELIVERY_UPDATE_TEMPLATE_ID,
         subject: 'New: send activities and routes to COROS',

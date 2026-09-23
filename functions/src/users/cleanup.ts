@@ -1,6 +1,7 @@
 import * as functions from 'firebase-functions/v1';
 import * as logger from 'firebase-functions/logger';
 import * as admin from 'firebase-admin';
+import { cleanupMarketingCampaignRecipients } from '../admin/marketing/cleanup';
 import { getServiceConfig } from '../OAuth2';
 import { GARMIN_API_TOKENS_COLLECTION_NAME, GARMIN_API_WORKOUT_QUEUE_COLLECTION_NAME } from '../garmin/constants';
 
@@ -1042,6 +1043,10 @@ export const cleanupUserAccounts = functions
         logger.error('[Cleanup] MCP OAuth cleanup did not complete; continuing remaining account cleanup before retry.', error);
     }
 
+    // Remove identifying campaign snapshots before cleaning mail.
+    const removedMarketingRecipients = await cleanupMarketingCampaignRecipients(admin.firestore(), uid);
+    logger.info(`[Cleanup] Removed ${removedMarketingRecipients} marketing campaign recipients for ${uid}`);
+
     // Cleanup Emails
     try {
         logger.info(`[Cleanup] Deleting emails for user ${uid}`);
@@ -1052,6 +1057,10 @@ export const cleanupUserAccounts = functions
 
         // 1. Query by UID (toUids array)
         const uidSnapshot = await mailCollection.where('toUids', 'array-contains', uid).get();
+
+        // Campaign mail uses Auth email plus a UID marker without toUids,
+        // avoiding a duplicate recipient in the Trigger Email extension.
+        const marketingSnapshot = await mailCollection.where('marketing.uid', '==', uid).get();
 
         // 2. Query by Email (to field) - if email exists
         let emailSnapshot: admin.firestore.QuerySnapshot | null = null;
@@ -1074,6 +1083,7 @@ export const cleanupUserAccounts = functions
         };
 
         uidSnapshot.docs.forEach(addMailDocIfDeletable);
+        marketingSnapshot.docs.forEach(addMailDocIfDeletable);
         if (emailSnapshot) {
             emailSnapshot.docs.forEach(addMailDocIfDeletable);
         }

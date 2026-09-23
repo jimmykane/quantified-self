@@ -1,0 +1,25 @@
+.workspace { display: grid; grid-template-columns: minmax(260px, 300px) minmax(0, 1fr); gap: 24px; align-items: start; }
+.sidebar, .main-column { display: grid; gap: 20px; min-width: 0; }
+mat-card-content { padding-top: 20px; }
+mat-form-field { width: 100%; }
+.field-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+.campaign-row { display: grid; width: 100%; gap: 4px; padding: 12px; text-align: left; border: 0; border-bottom: 1px solid var(--mat-sys-outline-variant); background: transparent; cursor: pointer; color: inherit; }
+.campaign-row.active { background: var(--mat-sys-secondary-container); }
+.campaign-row-content { display: grid; gap: 4px; text-align: left; }
+.campaign-row-content small { font-size: 13px; color: var(--mat-sys-on-surface-variant); }
+.toolbar, .link-row, .actions, .plans, .preview-tabs { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 12px 0; }
+.link-row mat-form-field { flex: 1 1 230px; }
+.editor-shell { min-height: 220px; border: 1px solid var(--mat-sys-outline); border-radius: 5px; padding: 14px 18px; background: var(--mat-sys-surface); }
+.editor-shell:focus { outline: 2px solid var(--mat-sys-primary); }
+.editor-shell p { margin: 0 0 12px; }
+.feedback { padding: 12px 16px; border-radius: 5px; background: var(--mat-sys-tertiary-container); }
+.feedback.error { background: var(--mat-sys-error-container); }
+.frozen { padding: 10px; background: var(--mat-sys-surface-container); }
+.stats { display: flex; flex-wrap: wrap; gap: 12px; }
+.stats span { display: grid; min-width: 110px; padding: 12px; background: var(--mat-sys-surface-container-low); border-radius: 5px; }
+.stats strong { font-size: 22px; }
+.preview-frame { max-width: 680px; margin: 16px auto; border: 1px solid var(--mat-sys-outline-variant); }
+.preview-frame.phone { max-width: 375px; }
+.preview-frame iframe { display: block; width: 100%; height: 750px; border: 0; }
+.text-preview { white-space: pre-wrap; overflow-wrap: anywhere; padding: 16px; background: var(--mat-sys-surface-container-low); }
+@media (max-width: 900px) { .workspace { grid-template-columns: 1fr; } .field-grid { grid-template-columns: 1fr; } }

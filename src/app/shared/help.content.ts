@@ -1185,6 +1185,10 @@ In Settings you can:
 - turn marketing emails on or off,
 - and customize charts, maps, units, and regional formatting.
 
+Marketing emails are occasional founder messages about product updates and offers. They go only to accounts that explicitly opt in. Your login provider and email verification state do not change this preference. Every marketing email includes an unsubscribe link: opening it shows a confirmation page, and confirming turns the preference off without signing in. Transactional account messages are separate.
+
+Admins can use [Marketing campaigns](/admin/marketing) to write and preview a message, select plans and inclusive UTC signup dates, prepare a fixed recipient list, send a test to their own email, and start, pause, resume, or clone a campaign. The test must be accepted by the mail service before sending starts. The global UTC daily limit counts tests and retries. The delivery view distinguishes queued, SMTP-accepted, failed, and skipped recipients; SMTP acceptance does not prove inbox delivery or opens.
+
 ### Regional formatting
 
 Open **Settings -> Units -> Regional formatting** to choose how the app displays dates, times, numbers, percentages,
