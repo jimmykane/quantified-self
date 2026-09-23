@@ -53,21 +53,24 @@ function guideRejection(raw: Buffer): TrainingDeliveryTransportDiagnostics {
   const error = envelope.error && typeof envelope.error === 'object' && !Array.isArray(envelope.error)
     ? envelope.error as Record<string, unknown> : null;
   const description = typeof error?.description === 'string' ? error.description.toLowerCase().slice(0, GUIDE_REJECTION_BYTES) : '';
-  const field = /\b(repeat|repetitions?|times)\b/.test(description) ? 'guide_repeat'
-    : /\b(steps?|step[_ -]?type)\b/.test(description) ? 'guide_step'
-      : /\btransitions?\b/.test(description) ? 'guide_transition'
-        : /\b(fields?|field[_ -]?type|conditions?)\b/.test(description) ? 'guide_field'
+  const field = /\btransitions?\b/.test(description) ? 'guide_transition'
+    : /\b(fields?|field[_ -]?type|conditions?)\b/.test(description) ? 'guide_field'
+      : /\b(repeat|repetitions?|times)\b/.test(description) ? 'guide_repeat'
+        : /\b(steps?|step[_ -]?type)\b/.test(description) ? 'guide_step'
           : /\b(activities|activity|sport)\b/.test(description) ? 'guide_activity'
             : /\b(owner|external[_ -]?id|title|subtitle|date)\b/.test(description) ? 'guide_metadata'
               : /\b(zip|archive|file|image|icon|json)\b/.test(description) ? 'guide_archive' : undefined;
   const validation = /invalid\s+step\s+type/.test(description) ? 'invalid_step_type'
-    : /(?:invalid|outside|range|greater|less|maximum|minimum).*\b(?:repeat|times)\b|\b(?:repeat|times)\b.*(?:invalid|outside|range|greater|less|maximum|minimum)/.test(description)
-      ? 'invalid_repeat_count'
-      : /(?:only|unsupported|invalid).*\b(?:child|nested|repeat.*step)\b|\bonly\b.*\bsteps?\b.*\brepeat\b/.test(description) ? 'invalid_child_step'
+    : /(?:only|unsupported|invalid).*\b(?:child|nested|repeat.*step)\b|\bonly\b.*\bsteps?\b.*\brepeat\b/.test(description) ? 'invalid_child_step'
         : /invalid\s+field\s+type/.test(description) ? 'invalid_field_type'
           : /invalid\s+condition\s+type/.test(description) ? 'invalid_condition_type'
             : /invalid\s+transition/.test(description) ? 'invalid_transition'
-              : /invalid\s+(?:guide\s+)?json/.test(description) ? 'invalid_guide_json' : 'unclassified';
+              : /\b(?:times|repeat\s+count|repetition\s+count)\b/.test(description)
+                && /\b(invalid|outside|range|greater|less|maximum|minimum|must|between)\b/.test(description)
+                ? 'invalid_repeat_count'
+                : /\b(repeat|repetitions?)\b/.test(description) && /\b(invalid|unsupported|not allowed)\b/.test(description)
+                  ? 'invalid_repeat_structure'
+                  : /invalid\s+(?:guide\s+)?json/.test(description) ? 'invalid_guide_json' : 'unclassified';
   const rejection = /\b(missing|required|must be present)\b/.test(description) ? 'missing_parameter'
     : /\b(invalid|unsupported|not allowed|out of range|must be)\b/.test(description) ? 'invalid_parameter' : 'unknown_validation';
   return { providerResponseShape: 'json', providerRejection: rejection, providerValidation: validation,

@@ -880,6 +880,8 @@ Suunto Guide HTTP 400 failures also include fixed `providerResponseShape`, `prov
 `providerField` and `providerValidation` values. These are classifier outputs, not Suunto's free-text reason;
 `unclassified` means the safe log alone cannot establish the exact validation defect. This private diagnostic change
 has no MCP impact: it adds no tool, scope, provider action, owner-readable projection or wire-contract field.
+`invalid_repeat_count` requires a `times`/count indication in the provider description; a more general invalid repeat
+reports `invalid_repeat_structure` and is not evidence that the authored repetition count is outside Suunto's range.
 Garmin delivery/recovery additionally emits `garmin_response` for each returned HTTP result, with fixed `method` and
 `resource` (`workout`, `schedule`, `schedule-list`, or `unknown`) categories, HTTP status and `responseShape`.
 For object responses, only the types of the fixed `workoutId`, `scheduleId`, `ownerId` and `date` fields are recorded

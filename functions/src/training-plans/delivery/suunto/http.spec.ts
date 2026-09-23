@@ -45,7 +45,11 @@ describe('Suunto Guides HTTP isolation', () => {
     ['', { providerRejection: 'empty_response', providerResponseShape: 'empty' }],
     ['not json: private workout title', { providerRejection: 'unknown_validation', providerResponseShape: 'text' }],
     ['{"error":{"description":"Only fields steps are allowed in a repeat"}}',
-      { providerRejection: 'unknown_validation', providerField: 'guide_repeat', providerValidation: 'invalid_child_step', providerResponseShape: 'json' }],
+      { providerRejection: 'unknown_validation', providerField: 'guide_field', providerValidation: 'invalid_child_step', providerResponseShape: 'json' }],
+    ['{"error":{"description":"Invalid repeat steps"}}',
+      { providerRejection: 'invalid_parameter', providerField: 'guide_repeat', providerValidation: 'invalid_repeat_structure', providerResponseShape: 'json' }],
+    ['{"error":{"description":"Repeat times must be between 1 and 100"}}',
+      { providerRejection: 'invalid_parameter', providerField: 'guide_repeat', providerValidation: 'invalid_repeat_count', providerResponseShape: 'json' }],
     ['x'.repeat(8 * 1024 + 1), { providerRejection: 'oversized_response', providerResponseShape: 'oversized' }],
   ])('keeps a bounded classification for a rejected Guide body', async (body, diagnostics) => {
     const client = createSuuntoGuideClient(auth, key, vi.fn(async () => new Response(body, { status: 400 })));
