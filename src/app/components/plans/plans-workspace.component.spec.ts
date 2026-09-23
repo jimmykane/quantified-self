@@ -871,6 +871,38 @@ describe('PlansWorkspaceComponent', () => {
     expect(haptics.selection).not.toHaveBeenCalled();
   });
 
+  it('commits a typed date before an immediate save, without requiring blur', async () => {
+    setRouteState({ mode: 'edit', workoutId: 'plan-workout' });
+    const fixture = await renderPlans();
+    fixture.debugElement.query(By.directive(MatDatepickerInput))
+      .triggerEventHandler('dateInput', { value: dayjs('2026-09-10') });
+
+    expect(fixture.componentInstance.editor()?.value.localDate).toBe('2026-09-10');
+    await fixture.componentInstance.saveWorkout();
+
+    expect(mutate).toHaveBeenCalledWith(expect.objectContaining({
+      operation: expect.objectContaining({ kind: 'update-workout', localDate: '2026-09-10' }),
+    }));
+  });
+
+  it('blocks saving a partially typed date instead of retaining the previous date', async () => {
+    setRouteState({ mode: 'edit', workoutId: 'plan-workout' });
+    const fixture = await renderPlans();
+    const snackBar = (fixture.componentInstance as unknown as { snackBar: MatSnackBar }).snackBar;
+    const invalidDateNotice = vi.spyOn(snackBar, 'open');
+    fixture.debugElement.query(By.directive(MatDatepickerInput))
+      .triggerEventHandler('dateInput', { value: null });
+    fixture.detectChanges();
+
+    expect(fixture.componentInstance.editor()?.value.localDate).toBe('2026-09-09');
+    expect(fixture.nativeElement.querySelector('.editor-save-actions button:last-child').disabled).toBe(true);
+    await fixture.componentInstance.saveWorkout();
+
+    expect(mutate).not.toHaveBeenCalled();
+    expect(invalidDateNotice).toHaveBeenCalledWith('Choose a valid workout date.', 'Dismiss', { duration: 7000 });
+    expect(haptics.error).toHaveBeenCalledOnce();
+  });
+
   it('does not silently retain the previous workout date after an invalid date-picker value', async () => {
     setRouteState({ mode: 'edit', workoutId: 'plan-workout' });
     const fixture = await renderPlans();

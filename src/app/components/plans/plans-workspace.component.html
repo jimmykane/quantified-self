@@ -307,6 +307,7 @@
             <mat-form-field>
               <mat-label>Date</mat-label>
               <input matInput required [matDatepicker]="workoutDatePicker" [ngModel]="workoutDatePickerValue()"
+                (dateInput)="updateWorkoutDateInput($event.value)"
                 (dateChange)="updateWorkoutDate($event.value)">
               <mat-datepicker-toggle matSuffix [for]="workoutDatePicker"></mat-datepicker-toggle>
               <mat-datepicker #workoutDatePicker (opened)="haptics.selection()"></mat-datepicker>
@@ -439,7 +440,7 @@
         <div class="form-actions editor-save-actions">
           <button appHapticTap mat-button type="button" (click)="cancelEditor()" [disabled]="busyAction() !== null">Cancel</button>
           <button appHapticTap mat-flat-button type="button" (click)="saveWorkout()"
-            [disabled]="busyAction() !== null || !session.value.title.trim() || !workoutDatePickerValue() || session.value.nodes.length === 0">
+            [disabled]="busyAction() !== null || !session.value.title.trim() || !workoutDatePickerValue() || workoutDateInputInvalid() || session.value.nodes.length === 0">
             <span class="button-content">
               @if (busyAction() === 'save-workout') {
                 <mat-spinner diameter="18"></mat-spinner>

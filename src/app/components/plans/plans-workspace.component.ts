@@ -253,6 +253,7 @@ export class PlansWorkspaceComponent {
   readonly deleteDisposition = signal<DeleteTrainingPlanRequestV1['workoutDisposition']>('convert-to-standalone');
   readonly editor = signal<WorkoutEditorSession | null>(null);
   readonly workoutDatePickerValue = computed(() => workoutDatePickerInput(this.editor()?.value.localDate ?? ''));
+  readonly workoutDateInputInvalid = signal(false);
   readonly busyAction = signal<string | null>(null);
   readonly historyPanel = signal<HistoryPanelState | null>(null);
   readonly deletedWorkoutsExpanded = signal(false);
@@ -708,6 +709,7 @@ export class PlansWorkspaceComponent {
 
   private startNewWorkoutEditor(destinationPlanId: string | null, localDate: string): void {
     this.editorGeneration += 1;
+    this.workoutDateInputInvalid.set(false);
     this.editor.set({
       mode: 'create',
       original: null,
@@ -732,6 +734,7 @@ export class PlansWorkspaceComponent {
       this.closeHistory();
       this.clearPlanActions();
       this.editorGeneration += 1;
+      this.workoutDateInputInvalid.set(false);
       this.editor.set({
         mode: 'edit',
         original: workout,
@@ -807,7 +810,16 @@ export class PlansWorkspaceComponent {
   }
 
   updateWorkoutDate(value: Dayjs | null): void {
-    this.updateEditorField('localDate', workoutLocalDate(value));
+    const localDate = workoutLocalDate(value);
+    this.workoutDateInputInvalid.set(!localDate);
+    this.updateEditorField('localDate', localDate);
+  }
+
+  updateWorkoutDateInput(value: Dayjs | null): void {
+    const localDate = workoutLocalDate(value);
+    this.workoutDateInputInvalid.set(!localDate);
+    // Preserve partial text until the user finishes typing or leaves the field.
+    if (localDate) this.updateEditorField('localDate', localDate);
   }
 
   updateEditorDestination(planId: string | null): void {
@@ -911,6 +923,10 @@ export class PlansWorkspaceComponent {
   async saveWorkout(): Promise<void> {
     const session = this.editor();
     if (!session) return;
+    if (this.workoutDateInputInvalid()) {
+      this.showError(new Error('Choose a valid workout date.'));
+      return;
+    }
     const generation = this.editorGeneration;
     const uid = this.currentUser()?.uid;
     const title = session.value.title.trim();
