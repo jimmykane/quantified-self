@@ -203,6 +203,7 @@ export class PlansWorkspaceComponent {
 
   readonly currentUser = computed(() => this.userService.user() as AppUserInterface | null);
   readonly editorIsSwimming = computed(() => isSwimmingWorkoutSportV1(this.editor()?.value.sport));
+  readonly editorIsPoolSwimming = computed(() => this.editor()?.value.sport === ActivityTypes.Swimming);
   readonly editorPaceUnit = computed(() => this.editorIsSwimming()
     ? this.currentUser()?.settings?.unitSettings?.swimPaceUnits?.[0] === SwimPaceUnits.MinutesPer100Yard
       ? 'min/100yd' : 'min/100m'
@@ -796,7 +797,7 @@ export class PlansWorkspaceComponent {
 
   updateEditorField<K extends keyof ManualWorkoutEditorValue>(field: K, value: ManualWorkoutEditorValue[K]): void {
     if (this.busyAction() || this.editor()?.value[field] === value) return;
-    if (field === 'sport') this.haptics.selection();
+    if (field === 'sport' || field === 'poolLengthUnit') this.haptics.selection();
     this.editor.update(session => session ? {
       ...session,
       value: field === 'sport'

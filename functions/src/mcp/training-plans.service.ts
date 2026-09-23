@@ -250,7 +250,11 @@ export async function readTrainingPlans(input: TrainingReadInput, reads: Trainin
       const doc = await resolve(a.workoutRef, 'workout', true);
       const summary = await projectWorkout(doc);
       const canonicalStructure = parseWorkoutStructureV1(doc.data.structure);
-      const structure = TRAINING_RECIPE_SCHEMA.parse(canonicalStructure);
+      // The registered v1 MCP recipe is frozen. Pool length needs an additive tool
+      // contract; preserve existing workout reads until that contract is promoted.
+      const legacyStructure = { ...canonicalStructure };
+      delete legacyStructure.poolLength;
+      const structure = TRAINING_RECIPE_SCHEMA.parse(legacyStructure);
       const units = await view.units();
       const displaySteps = structure.nodes.flatMap(node => node.kind === 'step'
         ? [{ nodeId: node.id, text: formatWorkoutStepV1(node, units, undefined, canonicalStructure.sport) }]

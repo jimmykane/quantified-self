@@ -17,6 +17,7 @@ import {
 import canonicalRunningFixture from './fixtures/canonical-running-v1.json';
 import expectedCorosFixture from './fixtures/coros-running-v1.json';
 import expectedGarminFixture from './fixtures/garmin-running-v1.json';
+import expectedGarminPoolFixture from './fixtures/garmin-pool-swimming-v1.json';
 import expectedSuuntoFixture from './fixtures/suunto-running-v1.json';
 import expectedWahooFixture from './fixtures/wahoo-running-v1.json';
 import { serializeCorosTrainingPlanV1 } from './coros-training-plan.serializer';
@@ -75,10 +76,11 @@ describe('planned-workout provider proof fixtures', () => {
             ActivityTypes.Velomobile,
             ActivityTypes['Enduro MTB'],
             ActivityTypes.DownhillCycling,
+            ActivityTypes.Swimming,
         ]);
         expect(GARMIN_PLANNED_WORKOUT_SPORTS_V1).toEqual(expect.arrayContaining(
             MANUAL_WORKOUT_EDITOR_SPORTS_V1.filter(sport =>
-                sport !== ActivityTypes.Swimming && sport !== ActivityTypes.OpenWaterSwimming),
+                sport !== ActivityTypes.OpenWaterSwimming),
         ));
         expect(PLANNED_WORKOUT_PROVIDER_CAPABILITIES_V1.garmin.profile?.sports)
             .toBe(GARMIN_PLANNED_WORKOUT_SPORTS_V1);
@@ -100,6 +102,55 @@ describe('planned-workout provider proof fixtures', () => {
             workoutId: 123456789,
             date: '2026-09-03',
         });
+    });
+
+    it('serializes a real 4 × 25 m pool set with 25 m pool length and last-rest skipping', () => {
+        const swimming: WorkoutStructureV1 = {
+            version: 1, sport: ActivityTypes.Swimming,
+            poolLength: { meters: 25, presentation: 'meters' },
+            nodes: [{ kind: 'repeat', id: 'set', count: 4, steps: [
+                { kind: 'step', id: 'length', purpose: 'work', ending: { kind: 'distance', meters: 25 }, targets: [] },
+                { kind: 'step', id: 'rest', purpose: 'rest', ending: { kind: 'time', seconds: 30 }, targets: [] },
+            ] }],
+        };
+        const result = serializeGarminWorkoutV1(swimming, {
+            name: 'Fixture 4 x 25 m pool swim', description: 'Redacted pool-swim contract fixture.', allowDegraded: false,
+        });
+        expect(result.level).toBe('exact');
+        expect(result.artifact).toEqual(expectedGarminPoolFixture);
+        expect(assessPlannedWorkoutProviderMappingV1('garmin', swimming).level).toBe('exact');
+        expect(assessPlannedWorkoutProviderMappingV1('coros', swimming)).toMatchObject({
+            level: 'degraded', issues: [expect.objectContaining({ path: '$.poolLength' })],
+        });
+        expect(assessPlannedWorkoutProviderMappingV1('suunto', swimming)).toMatchObject({
+            level: 'degraded', issues: [expect.objectContaining({ path: '$.poolLength' })],
+        });
+        expect(serializeGarminWorkoutV1({ ...swimming, poolLength: { meters: 22.86, presentation: 'yards' } }, {
+            name: '25-yard pool', allowDegraded: false,
+        }).artifact).toMatchObject({ poolLength: 25, poolLengthUnit: 'YARD' });
+    });
+
+    it('requires approval for unspecified Garmin pool size and rejects unmapped swim targets and time limits', () => {
+        const swimming: WorkoutStructureV1 = {
+            version: 1, sport: ActivityTypes.Swimming,
+            nodes: [{ kind: 'step', id: 'swim', purpose: 'work', ending: { kind: 'time', seconds: 600 }, targets: [] }],
+        };
+        expect(assessPlannedWorkoutProviderMappingV1('garmin', swimming)).toMatchObject({
+            level: 'degraded', issues: [expect.objectContaining({ path: '$.poolLength' })],
+        });
+        expect(() => serializeGarminWorkoutV1(swimming, { name: 'Unspecified pool', allowDegraded: false }))
+            .toThrow(expect.objectContaining({ code: 'degradation-confirmation-required' }));
+        expect(serializeGarminWorkoutV1(swimming, { name: 'Unspecified pool', allowDegraded: true }).artifact)
+            .toMatchObject({ sport: 'LAP_SWIMMING', poolLength: null, poolLengthUnit: null });
+        const targeted = { ...swimming, nodes: [{ ...swimming.nodes[0],
+            targets: [{ kind: 'heart-rate', mode: 'absolute', minimumBpm: 120, maximumBpm: 140 }],
+        }] };
+        expect(assessPlannedWorkoutProviderMappingV1('garmin', targeted)).toMatchObject({
+            level: 'unsupported', issues: expect.arrayContaining([expect.objectContaining({ code: 'unsupported_target' })]),
+        });
+        expect(assessPlannedWorkoutProviderMappingV1('garmin', {
+            ...swimming, nodes: [{ ...swimming.nodes[0], ending: { kind: 'time', seconds: 30 } }],
+        })).toMatchObject({ level: 'unsupported', issues: expect.arrayContaining([expect.objectContaining({ code: 'unsupported_ending' })]) });
     });
 
     it('matches the redacted COROS training-plan contract exactly', () => {
@@ -241,8 +292,8 @@ describe('planned-workout provider proof fixtures', () => {
             issues: [expect.objectContaining({ code: 'sport_profile_degraded' })],
         });
         expect(assessPlannedWorkoutProviderMappingV1('garmin', swimming)).toMatchObject({
-            level: 'unsupported',
-            issues: [expect.objectContaining({ code: 'unsupported_sport' })],
+            level: 'degraded',
+            issues: [expect.objectContaining({ path: '$.poolLength' })],
         });
         expect(assessPlannedWorkoutProviderMappingV1('wahoo', swimming)).toMatchObject({
             level: 'unsupported',

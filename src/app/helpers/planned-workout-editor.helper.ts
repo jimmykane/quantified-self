@@ -1,5 +1,6 @@
 import { ActivityTypes, SwimPaceUnits, type UserUnitSettingsInterface } from '@sports-alliance/sports-lib';
 import {
+  formatWorkoutEndingV1,
   formatWorkoutStepV1,
   isSwimmingWorkoutSportV1,
   MANUAL_WORKOUT_EDITOR_SPORTS_V1,
@@ -42,6 +43,8 @@ export interface ManualWorkoutEditorValue {
   title: string;
   localDate: string;
   sport: ManualWorkoutSport;
+  poolLengthValue?: number | null;
+  poolLengthUnit?: 'meters' | 'yards';
   nodes: ManualWorkoutEditorNode[];
 }
 
@@ -159,7 +162,13 @@ export function manualWorkoutEditorToStructure(
       steps: node.steps.map(step => stepFromEditor(step, value.sport, units)),
     };
   });
-  return parseWorkoutStructureV1({ version: 1, sport: value.sport, nodes });
+  const poolLength = value.sport === ActivityTypes.Swimming && value.poolLengthValue != null
+    ? {
+      meters: value.poolLengthUnit === 'yards' ? value.poolLengthValue * 0.9144 : value.poolLengthValue,
+      presentation: value.poolLengthUnit ?? 'meters',
+    }
+    : undefined;
+  return parseWorkoutStructureV1({ version: 1, sport: value.sport, ...(poolLength ? { poolLength } : {}), nodes });
 }
 
 function editorTarget(
@@ -239,6 +248,12 @@ export function workoutStructureToManualEditor(
     title,
     localDate,
     sport: structure.sport as ManualWorkoutEditorSportV1,
+    ...(structure.poolLength ? {
+      poolLengthValue: structure.poolLength.presentation === 'yards'
+        ? roundEditorNumber(structure.poolLength.meters / 0.9144)
+        : structure.poolLength.meters,
+      poolLengthUnit: structure.poolLength.presentation,
+    } : {}),
     nodes: structure.nodes.map(node => node.kind === 'step'
       ? editorStep(node, structure.sport as ManualWorkoutSport, units)
       : { kind: 'repeat', id: node.id, count: node.count,
@@ -269,6 +284,7 @@ export function changeManualWorkoutEditorSport(
   return {
     ...value,
     sport,
+    ...(sport === ActivityTypes.Swimming ? {} : { poolLengthValue: null }),
     nodes: value.nodes.map(node => node.kind === 'step'
       ? convert(node)
       : { ...node, steps: node.steps.map(convert) }),
@@ -280,7 +296,10 @@ export function formatManualWorkoutStructure(
   unitSettings?: UserUnitSettingsInterface | null,
   locale?: string,
 ): string[] {
-  return structure.nodes.map(node => node.kind === 'step'
+  const steps = structure.nodes.map(node => node.kind === 'step'
     ? formatWorkoutStepV1(node, unitSettings, locale, structure.sport)
     : `${node.count}× (${node.steps.map(step => formatWorkoutStepV1(step, unitSettings, locale, structure.sport)).join('; ')})`);
+  return structure.poolLength
+    ? [`Pool · ${formatWorkoutEndingV1({ kind: 'distance', meters: structure.poolLength.meters }, unitSettings, locale, structure.sport)}`, ...steps]
+    : steps;
 }

@@ -1,3 +1,4 @@
+import { ActivityTypes } from '@sports-alliance/sports-lib';
 import type { ScheduledWorkoutV1 } from '../../../../shared/training-plans';
 import type { PlannedWorkoutProviderId } from '../../../../shared/planned-workout-providers';
 import { hashTrainingScheduleRequestPayload } from '../persistence';
@@ -9,11 +10,18 @@ import { ProviderWorkoutMappingError } from '../providers/provider-mapping';
 import type { DeliveryAssessment } from './contracts';
 
 export const TRAINING_DELIVERY_MAPPING_VERSION = 'fixtures-v1';
+/** Offline mapping proof is not production provider/device evidence. Keep new swim sends off until #733 is verified. */
+export const GARMIN_POOL_SWIMMING_DELIVERY_READY = false;
 /** Fixture assessment is available without provider access; serialization is NOT delivery. */
 export function assessTrainingDeliveryMapping(provider: PlannedWorkoutProviderId, workout: ScheduledWorkoutV1,
   destinationKey: string, timeZone: string): DeliveryAssessment {
   const digest = hashTrainingScheduleRequestPayload({ provider, destinationKey, timeZone,
     mappingVersion: TRAINING_DELIVERY_MAPPING_VERSION, title: workout.title, localDate: workout.localDate, structure: workout.structure });
+  if (provider === 'garmin' && workout.structure.sport === ActivityTypes.Swimming
+    && !GARMIN_POOL_SWIMMING_DELIVERY_READY) {
+    return { level: 'unsupported', issues: ['Garmin pool-swim delivery is coming soon while provider account validation is pending (#733).'],
+      digest, mappingVersion: TRAINING_DELIVERY_MAPPING_VERSION };
+  }
   try {
     const options = { name: workout.title, allowDegraded: true };
     const result = provider === 'garmin' ? serializeGarminWorkoutV1(workout.structure, options)

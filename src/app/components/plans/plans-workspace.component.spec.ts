@@ -767,6 +767,29 @@ describe('PlansWorkspaceComponent', () => {
     }));
   });
 
+  it('saves a selected 25 m pool length separately from the swim step distance', async () => {
+    setRouteState({ mode: 'create', scope: 'standalone', date: '2026-09-24' });
+    const fixture = await renderPlans();
+    fixture.componentInstance.updateEditorField('sport', ActivityTypes.Swimming);
+    fixture.componentInstance.updateEditorField('poolLengthValue', 25);
+    fixture.componentInstance.updateEditorField('poolLengthUnit', 'meters');
+    fixture.componentInstance.updateStep(0, null, 'endingKind', 'distance');
+    fixture.componentInstance.updateStep(0, null, 'endingValue', 25);
+    fixture.componentInstance.updateEditorField('title', '25 m pool test');
+    fixture.detectChanges();
+    expect(fixture.nativeElement.textContent).toContain('Pool length (optional)');
+    await fixture.componentInstance.saveWorkout();
+    expect(mutate).toHaveBeenCalledWith(expect.objectContaining({
+      operation: expect.objectContaining({
+        structure: expect.objectContaining({
+          sport: ActivityTypes.Swimming,
+          poolLength: { meters: 25, presentation: 'meters' },
+          nodes: expect.arrayContaining([expect.objectContaining({ ending: { kind: 'distance', meters: 25 } })]),
+        }),
+      }),
+    }));
+  });
+
   it('edits open-water distance in metres and persists the distinct sport', async () => {
     setRouteState({ mode: 'create', scope: 'standalone', date: '2026-09-24' });
     const fixture = await renderPlans();

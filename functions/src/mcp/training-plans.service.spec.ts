@@ -234,6 +234,34 @@ describe('Training plan MCP reads', () => {
     expect(result.workout.displaySteps[0].text).toContain('25 m');
   });
 
+  it('keeps the registered v1 workout read usable for a saved pool length without widening its schema', async () => {
+    const f = fixture();
+    const list = TRAINING_READ_OUTPUTS.query_planned_workouts.parse(await f.run('query_planned_workouts', {
+      startDate: '2026-09-01', endDate: '2027-01-01',
+    }));
+    const original = f.reads.snapshot;
+    f.reads.snapshot = (uid, read) => original(uid, view => read({ ...view,
+      get: async (collection, id, detail) => {
+        const doc = await view.get(collection, id, detail);
+        return doc && detail ? { ...doc, data: { ...doc.data, structure: {
+          version: 1, sport: ActivityTypes.Swimming, poolLength: { meters: 25, presentation: 'meters' },
+          nodes: [{ kind: 'step', id: 'length', purpose: 'work', ending: { kind: 'distance', meters: 25 }, targets: [] }],
+        } } } : doc;
+      },
+    }));
+    const ref = list.workouts[0].workoutRef;
+    const result = TRAINING_READ_OUTPUTS.get_planned_workout.parse(await f.run('get_planned_workout', { workoutRef: ref }));
+    expect(result.workout.structure.sport).toBe(ActivityTypes.Swimming);
+    expect(result.workout.structure).not.toHaveProperty('poolLength');
+    const assessment = TRAINING_READ_OUTPUTS.assess_planned_workout_compatibility.parse(await f.run(
+      'assess_planned_workout_compatibility', { workoutRef: ref, providers: ['garmin', 'suunto'] },
+    ));
+    expect(assessment.assessments).toEqual(expect.arrayContaining([
+      expect.objectContaining({ provider: 'garmin', level: 'exact' }),
+      expect.objectContaining({ provider: 'suunto', level: 'degraded' }),
+    ]));
+  });
+
   it('reports only exact persisted completion and gates the activity reference independently', async () => {
     const f = fixture();
     const list = TRAINING_READ_OUTPUTS.query_planned_workouts.parse(await f.run('query_planned_workouts', {

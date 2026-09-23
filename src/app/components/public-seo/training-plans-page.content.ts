@@ -44,7 +44,7 @@ export const TRAINING_PLANS_PAGE_SECTIONS = [
   {
     eyebrow: 'Structured Workouts',
     title: 'Build the workout you mean',
-    copy: 'The current editor supports running, cycling, pool swimming, and open-water swimming with date-only scheduling, time or distance steps, fixed repeats, and one absolute heart-rate, power, or pace target per step. Swim distance steps use metres and swim pace uses your /100 m or /100 yd setting. Pool length is set on the device, not stored in a pool workout; open-water workouts have no pool length.',
+    copy: 'The current editor supports running, cycling, pool swimming, and open-water swimming with date-only scheduling, time or distance steps, fixed repeats, and one absolute heart-rate, power, or pace target per step. Swim distance steps use metres and swim pace uses your /100 m or /100 yd setting. Pool workouts can store an optional physical pool length in metres or yards, separately from step distance; open-water workouts have no pool length. Check the device pool setting where the provider does not receive it.',
     items: [
       {
         icon: 'directions_run',

@@ -137,6 +137,30 @@ describe('applyTrainingScheduleMutation', () => {
         expect(result.affectedPlanIds).toEqual([]);
     });
 
+    it('keeps the selected physical pool length through create and plan association', () => {
+        const poolStructure: ScheduledWorkoutV1['structure'] = {
+            version: 1, sport: ActivityTypes.Swimming,
+            poolLength: { meters: 25, presentation: 'meters' },
+            nodes: [{ kind: 'step', id: 'length', purpose: 'work', ending: { kind: 'distance', meters: 25 }, targets: [] }],
+        };
+        const selectedPlan = plan();
+        const created = applyTrainingScheduleMutation(snapshot([selectedPlan]), request({
+            kind: 'create-workout', workoutId: 'pool-1', planId: null, localDate: '2026-09-03',
+            title: 'Pool set', structure: poolStructure, confirmPlanRangeExtension: false,
+        }), NOW_MS);
+        expect(created.after.workouts.get('pool-1')?.structure).toEqual(poolStructure);
+        const attached = applyTrainingScheduleMutation(created.after, {
+            mutationId: 'attach-pool', expectedRevisions: [
+                { scope: 'state', id: 'current', revision: 8 },
+                { scope: 'workout', id: 'pool-1', revision: 1 },
+                { scope: 'plan', id: selectedPlan.id, revision: selectedPlan.revision },
+            ],
+            operation: { kind: 'move-workout', workoutId: 'pool-1', planId: selectedPlan.id,
+                localDate: '2026-09-04', confirmPlanRangeExtension: false },
+        }, NOW_MS + 1);
+        expect(attached.after.workouts.get('pool-1')?.structure).toEqual(poolStructure);
+    });
+
     it('activates a new plan and atomically pauses the previous active plan', () => {
         const oldPlan = plan();
         initial = snapshot([oldPlan], [], oldPlan.id);

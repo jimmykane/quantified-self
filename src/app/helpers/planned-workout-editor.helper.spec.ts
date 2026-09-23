@@ -1,10 +1,11 @@
-import { ActivityTypes, SwimPaceUnits } from '@sports-alliance/sports-lib';
+import { ActivityTypes, DistanceUnits, SwimPaceUnits } from '@sports-alliance/sports-lib';
 import { describe, expect, it } from 'vitest';
 import type { WorkoutStructureV1 } from '@shared/planned-workout';
 import { normalizeUserUnitSettings } from '@shared/unit-aware-display';
 import {
   createManualWorkoutEditorStep,
   changeManualWorkoutEditorSport,
+  formatManualWorkoutStructure,
   manualWorkoutEditorToStructure,
   workoutStructureToManualEditor,
   type ManualWorkoutEditorValue,
@@ -66,6 +67,34 @@ describe('manual planned-workout editor conversion', () => {
     });
     expect(workoutStructureToManualEditor(value.title, value.localDate, structure, units).nodes[0])
       .toMatchObject({ endingValue: 100, targetMinimum: 1.5, targetMaximum: 2 });
+  });
+
+  it('round-trips a selected 25 m or 25 yd pool without turning step distance into pool length', () => {
+    const value: ManualWorkoutEditorValue = {
+      title: 'Four lengths', localDate: '2026-09-24', sport: ActivityTypes.Swimming,
+      poolLengthValue: 25, poolLengthUnit: 'meters',
+      nodes: [{ kind: 'repeat', id: 'set', count: 4, steps: [{
+        ...createManualWorkoutEditorStep('length'), endingKind: 'distance', endingValue: 25,
+      }] }],
+    };
+    const meters = manualWorkoutEditorToStructure(value);
+    expect(meters.poolLength).toEqual({ meters: 25, presentation: 'meters' });
+    expect(meters.nodes[0]).toMatchObject({ count: 4, steps: [{ ending: { kind: 'distance', meters: 25 } }] });
+    expect(workoutStructureToManualEditor(value.title, value.localDate, meters)).toMatchObject({
+      poolLengthValue: 25, poolLengthUnit: 'meters',
+    });
+    expect(formatManualWorkoutStructure(meters)[0]).toBe('Pool · 25 m');
+    expect(formatManualWorkoutStructure(meters, normalizeUserUnitSettings({ distanceUnits: DistanceUnits.Miles }))[0])
+      .toBe('Pool · 25 m');
+
+    const yards = manualWorkoutEditorToStructure({ ...value, poolLengthUnit: 'yards' });
+    expect(yards.poolLength).toEqual({ meters: 22.86, presentation: 'yards' });
+    expect(workoutStructureToManualEditor(value.title, value.localDate, yards)).toMatchObject({
+      poolLengthValue: 25, poolLengthUnit: 'yards',
+    });
+    expect(changeManualWorkoutEditorSport(value, ActivityTypes.OpenWaterSwimming).poolLengthValue).toBeNull();
+    expect(manualWorkoutEditorToStructure(changeManualWorkoutEditorSport(value, ActivityTypes.OpenWaterSwimming)))
+      .not.toHaveProperty('poolLength');
   });
 
   it.each([ActivityTypes.Swimming, ActivityTypes.OpenWaterSwimming])('preserves canonical distance and speed when switching to %s', sport => {

@@ -100,6 +100,7 @@ describe('Strict public Training recipe v1', () => {
     expect(Object.keys(endingFixtures)).toEqual([...WORKOUT_ENDING_KINDS]);
     expect(Object.keys(MCP_WORKOUT_RECIPE_VARIANT_COVERAGE.targetModes)).toEqual(['absolute', 'relative']);
     expect([...new Set(Object.values(targetVariantFixtures).map(target => target.kind))]).toEqual([...WORKOUT_TARGET_KINDS]);
+    expect(MCP_WORKOUT_RECIPE_VARIANT_COVERAGE.deferredStructureFields).toEqual({ poolLength: 734 });
   });
 
   it.each(Object.entries(endingFixtures))('round-trips shared ending %s through public reads and writes', (_kind, ending) => {

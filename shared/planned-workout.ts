@@ -23,6 +23,8 @@ export const WORKOUT_STRUCTURE_VERSION = 1 as const;
 export const WORKOUT_STRUCTURE_MAX_NODES = 100;
 export const WORKOUT_STRUCTURE_MAX_REPEAT_COUNT = 100;
 export const WORKOUT_STRUCTURE_MAX_TARGETS_PER_STEP = 2;
+export const WORKOUT_POOL_LENGTH_MIN_METERS = 1;
+export const WORKOUT_POOL_LENGTH_MAX_METERS = 1000;
 
 const WORKOUT_NODE_ID_MAX_LENGTH = 128;
 const WORKOUT_NOTE_MAX_LENGTH = 500;
@@ -190,9 +192,16 @@ export interface WorkoutRepeatV1 {
 
 export type WorkoutNodeV1 = WorkoutStepV1 | WorkoutRepeatV1;
 
+/** A pool's physical length, independent of any step distance. */
+export interface WorkoutPoolLengthV1 {
+  meters: number;
+  presentation: 'meters' | 'yards';
+}
+
 export interface WorkoutStructureV1 {
   version: typeof WORKOUT_STRUCTURE_VERSION;
   sport: ActivityTypes;
+  poolLength?: WorkoutPoolLengthV1;
   nodes: WorkoutNodeV1[];
 }
 
@@ -361,9 +370,10 @@ function readPositiveNumber(
   path: string,
   context: ParseContext,
   validate?: (candidate: number) => boolean,
+  message = 'Expected a finite positive number.',
 ): number | null {
   if (typeof value !== 'number' || !Number.isFinite(value) || value <= 0 || validate?.(value) === false) {
-    pushIssue(context, 'invalid_value', path, 'Expected a finite positive number.');
+    pushIssue(context, 'invalid_value', path, message);
     return null;
   }
   return value;
@@ -746,7 +756,7 @@ export function parseWorkoutStructureV1(value: unknown): WorkoutStructureV1 {
   const context: ParseContext = { issues: [], ids: new Set(), nodeCount: 0, nodeLimitExceeded: false };
   const record = readRecord(value, '$', context);
   if (!record) throw new WorkoutStructureValidationError(context.issues);
-  rejectUnknownFields(record, ['version', 'sport', 'nodes'], '$', context);
+  rejectUnknownFields(record, ['version', 'sport', 'poolLength', 'nodes'], '$', context);
 
   if (record.version !== WORKOUT_STRUCTURE_VERSION) {
     pushIssue(
@@ -760,6 +770,23 @@ export function parseWorkoutStructureV1(value: unknown): WorkoutStructureV1 {
   const sport = ActivityTypesHelper.resolveActivityType(record.sport);
   if (!sport || sport === ActivityTypes.unknown) {
     pushIssue(context, 'invalid_value', '$.sport', 'Expected a supported canonical activity type or alias.');
+  }
+
+  let poolLength: WorkoutPoolLengthV1 | undefined;
+  if (record.poolLength !== undefined) {
+    const pool = readRecord(record.poolLength, '$.poolLength', context);
+    if (pool) {
+      rejectUnknownFields(pool, ['meters', 'presentation'], '$.poolLength', context);
+      const meters = readPositiveNumber(pool.meters, '$.poolLength.meters', context,
+        candidate => validDistance(candidate)
+          && candidate >= WORKOUT_POOL_LENGTH_MIN_METERS && candidate <= WORKOUT_POOL_LENGTH_MAX_METERS,
+        `Pool length must be between ${WORKOUT_POOL_LENGTH_MIN_METERS} and ${WORKOUT_POOL_LENGTH_MAX_METERS} metres.`);
+      const presentation = readEnum(pool.presentation, ['meters', 'yards'], '$.poolLength.presentation', context);
+      if (sport !== ActivityTypes.Swimming) {
+        pushIssue(context, 'invalid_value', '$.poolLength', 'Pool length is only valid for pool swimming.');
+      }
+      if (meters !== null && presentation) poolLength = { meters, presentation };
+    }
   }
 
   let nodes: WorkoutNodeV1[] = [];
@@ -784,7 +811,12 @@ export function parseWorkoutStructureV1(value: unknown): WorkoutStructureV1 {
     throw new WorkoutStructureValidationError(context.issues);
   }
 
-  return { version: WORKOUT_STRUCTURE_VERSION, sport, nodes };
+  return {
+    version: WORKOUT_STRUCTURE_VERSION,
+    sport,
+    ...(poolLength === undefined ? {} : { poolLength }),
+    nodes,
+  };
 }
 
 export function normalizeWorkoutStructureV1(value: unknown): WorkoutStructureV1 {

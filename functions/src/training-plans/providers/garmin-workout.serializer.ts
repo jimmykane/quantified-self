@@ -24,7 +24,7 @@ export type GarminWorkoutDurationTypeV1 = 'TIME' | 'DISTANCE' | 'OPEN' | 'FIXED_
 export type GarminWorkoutTargetTypeV1 = 'SPEED' | 'PACE' | 'HEART_RATE' | 'CADENCE' | 'POWER' | 'OPEN';
 
 interface GarminTargetFieldsV1 {
-    targetType: GarminWorkoutTargetTypeV1;
+    targetType: GarminWorkoutTargetTypeV1 | null;
     targetValue: null;
     targetValueLow: number | null;
     targetValueHigh: number | null;
@@ -54,7 +54,7 @@ export interface GarminWorkoutRepeatStepV1 {
     stepOrder: number;
     repeatType: 'REPEAT_UNTIL_STEPS_CMPLT';
     repeatValue: number;
-    skipLastRestStep: false;
+    skipLastRestStep: boolean;
     steps: GarminWorkoutStepV1[];
 }
 
@@ -65,6 +65,8 @@ export interface GarminWorkoutPayloadV1 {
     workoutName: string;
     description: string;
     sport: GarminWorkoutSportV1;
+    poolLength?: number | null;
+    poolLengthUnit?: 'METER' | 'YARD' | null;
     workoutProvider: 'Quantified Self';
     workoutSourceId: 'Quantified Self';
     isSessionTransitionEnabled: false;
@@ -205,10 +207,10 @@ function absoluteTargetRange(target: WorkoutTargetV1): {
     }
 }
 
-function primaryTargetFields(target: WorkoutTargetV1 | undefined): GarminTargetFieldsV1 {
+function primaryTargetFields(target: WorkoutTargetV1 | undefined, swimming: boolean): GarminTargetFieldsV1 {
     if (!target) {
         return {
-            targetType: 'OPEN',
+            targetType: swimming ? null : 'OPEN',
             targetValue: null,
             targetValueLow: null,
             targetValueHigh: null,
@@ -245,34 +247,35 @@ function secondaryTargetFields(target: WorkoutTargetV1 | undefined): GarminSecon
     };
 }
 
-function stepToGarmin(step: CanonicalWorkoutStepV1, stepOrder: number): GarminWorkoutStepV1 {
+function stepToGarmin(step: CanonicalWorkoutStepV1, stepOrder: number, swimming: boolean): GarminWorkoutStepV1 {
     return {
         type: 'WorkoutStep',
         stepOrder,
         intensity: purposeToGarmin(step.purpose),
         description: step.note ?? '',
         ...endingToGarmin(step.ending, step.purpose),
-        ...primaryTargetFields(step.targets[0]),
+        ...primaryTargetFields(step.targets[0], swimming),
         ...secondaryTargetFields(step.targets[1]),
     };
 }
 
 function structureToGarminNodes(structure: WorkoutStructureV1): GarminWorkoutNodeV1[] {
     let stepOrder = 0;
+    const swimming = structure.sport === ActivityTypes.Swimming;
     return structure.nodes.map(node => {
         stepOrder += 1;
-        if (node.kind === 'step') return stepToGarmin(node, stepOrder);
+        if (node.kind === 'step') return stepToGarmin(node, stepOrder, swimming);
         const repeatOrder = stepOrder;
         const steps = node.steps.map(step => {
             stepOrder += 1;
-            return stepToGarmin(step, stepOrder);
+            return stepToGarmin(step, stepOrder, swimming);
         });
         return {
             type: 'WorkoutRepeatStep',
             stepOrder: repeatOrder,
             repeatType: 'REPEAT_UNTIL_STEPS_CMPLT',
             repeatValue: node.count,
-            skipLastRestStep: false,
+            skipLastRestStep: swimming,
             steps,
         };
     });
@@ -303,11 +306,21 @@ export function serializeGarminWorkoutV1(
         allowDegraded: options.allowDegraded,
     });
     const sport = sportToGarmin(structure.sport);
+    const swimming = sport === 'LAP_SWIMMING';
+    const poolLength = structure.poolLength;
     const artifact: GarminWorkoutPayloadV1 = {
         ...(ownerId === undefined ? {} : { ownerId }),
         workoutName,
         description: truncateCodePoints(rawDescription, 1024),
         sport,
+        ...(swimming ? {
+            poolLength: poolLength
+                ? poolLength.presentation === 'yards'
+                    ? Math.round(poolLength.meters / 0.9144 * 1_000_000) / 1_000_000
+                    : poolLength.meters
+                : null,
+            poolLengthUnit: poolLength ? poolLength.presentation === 'yards' ? 'YARD' : 'METER' : null,
+        } as const : {}),
         workoutProvider: 'Quantified Self',
         workoutSourceId: 'Quantified Self',
         isSessionTransitionEnabled: false,

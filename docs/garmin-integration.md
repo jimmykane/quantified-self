@@ -119,7 +119,7 @@ unsent work when the account or view changes instead of letting a delayed retry 
 
 The ignored local Garmin Training API V2 version 1.0 partner contract is available for development, but it is never
 committed. `shared/planned-workout-providers.ts` and the pure serializer under
-`functions/src/training-plans/providers/` record redacted Running/Cycling payload fixtures for the portable v1 workout model.
+`functions/src/training-plans/providers/` record redacted Running/Cycling and pool-swim payload fixtures for the portable v1 workout model.
 Workout content and date-only Workout Schedule payloads are deliberately separate because Garmin assigns and manages
 their lifecycles independently. The proof covers fixed repeats, time/distance/manual steps, and absolute
 heart-rate/power/speed/pace/cadence ranges.
@@ -131,6 +131,12 @@ Enduro MTB and Downhill Cycling to `CYCLING`. These are explicit QS Training pro
 unrelated Sports Lib activity types. Running and Cycling remain exact; every subtype fold is a visible degradation that
 requires approval because Garmin does not receive the exact profile.
 Cycling-family folds retain the existing cycling-only secondary-target rule and device-support warning.
+The offline #733 extension maps pool Swimming exactly to `LAP_SWIMMING` with optional explicit pool length and
+target-free swim steps. Its synthetic fixture covers a 25 m pool and four 25 m repetitions with final-rest skipping;
+it does not establish Garmin Connect or watch behavior. Unspecified pool size is contract-valid but may not work on
+older devices. Open-water swimming and swim targets remain unmapped. Production pool-swim admission stays blocked
+until separately authorized account evidence and a deliberate readiness flip. #734 tracks the additive MCP contract
+for the new pool-length recipe field.
 
 Garmin planned-workout delivery is available to eligible connected Pro users through the app's explicit Send/plan
 consent flow; see the [public delivery boundary](training-workspace.md#garmin-public-delivery-boundary). There is no

@@ -148,10 +148,13 @@ not rewrite the authored sport just to satisfy a provider.
 
 Manual pool and open-water swimming support likewise leaves the MCP wire contract unchanged: the existing canonical sport
 enum already accepts `Swimming` and `Open Water Swimming`, and planned-workout read summaries format both swim profiles'
-distances in metres and pace using the owner's /100 m or /100 yd setting. No pool-length field, new mutation kind, tool,
-scope, consent, provider action, or private delivery evidence is exposed. Existing strict proposal/confirmation checks and
+distances in metres and pace using the owner's /100 m or /100 yd setting. The later #733 recipe adds an optional
+canonical pool length for pool swimming, but the registered v1 recipe remains frozen: its existing read omits that new
+field while continuing to return the workout and compatibility assessment. It cannot author the pool setting. Additive
+pool-length read/authoring coverage is tracked in #734 under #583; no existing schema, mutation kind, tool, scope,
+consent, provider action, or private delivery evidence changes. Existing strict proposal/confirmation checks and
 provider compatibility assessment
-still govern writes; Garmin and Wahoo reject swimming delivery, COROS accepts only target-free pool recipes at its backend
+still govern writes; Garmin pool-swim delivery remains runtime-blocked pending account proof, Wahoo rejects swimming delivery, COROS accepts only target-free pool recipes at its backend
 while new browser Send/sync actions remain unavailable, and Suunto maps pool and open-water profiles to distinct Guide
 activity recommendations. Owner read fixtures cover both swim sport strings and metre-based steps; no widened consent or
 provider action is implied by this read-only presentation change.

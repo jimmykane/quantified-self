@@ -11,6 +11,7 @@ import {
   type WorkoutNodeV1,
   type WorkoutSpeedPresentationV1,
   type WorkoutStepPurposeV1,
+  type WorkoutStructureV1,
   type WorkoutTargetModeV1,
   type WorkoutTargetV1,
 } from '../../../shared/planned-workout';
@@ -120,6 +121,10 @@ export const MCP_WORKOUT_RECIPE_VARIANT_COVERAGE = {
     pace: true,
     speed: true,
   } satisfies Record<WorkoutSpeedPresentationV1, true>,
+  // Registered v1 schemas cannot be widened in place; #734 owns the additive tool shape.
+  deferredStructureFields: {
+    poolLength: 734,
+  } satisfies Record<Exclude<keyof WorkoutStructureV1, 'version' | 'sport' | 'nodes'>, number>,
 } as const;
 
 const ending = z.discriminatedUnion('kind', [

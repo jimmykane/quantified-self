@@ -109,6 +109,22 @@ describe('planned workout v1 contract', () => {
     expect(JSON.stringify(deserializeWorkoutStructureV1(serialized))).toBe(serialized);
   });
 
+  it('stores an optional pool length in canonical metres without changing legacy recipes', () => {
+    const pool = parseWorkoutStructureV1({
+      version: 1, sport: ActivityTypes.Swimming,
+      poolLength: { meters: 25, presentation: 'meters' },
+      nodes: [{ kind: 'step', id: 'length', purpose: 'work', ending: { kind: 'distance', meters: 25 }, targets: [] }],
+    });
+    expect(deserializeWorkoutStructureV1(serializeWorkoutStructureV1(pool))).toEqual(pool);
+    expect(toFirestoreWorkoutStructureV1(pool)).toEqual(pool);
+    expect(parseWorkoutStructureV1(COMPLETE_STRUCTURE_INPUT)).not.toHaveProperty('poolLength');
+    expectValidationIssue({ ...pool, sport: ActivityTypes.OpenWaterSwimming }, 'invalid_value', '$.poolLength');
+    expectValidationIssue({ ...pool, poolLength: { meters: 0, presentation: 'meters' } }, 'invalid_value', '$.poolLength.meters');
+    expectValidationIssue({ ...pool, poolLength: { meters: 1001, presentation: 'meters' } }, 'invalid_value', '$.poolLength.meters');
+    expectValidationIssue({ ...pool, poolLength: { meters: 25, presentation: 'laps' } }, 'unknown_discriminant', '$.poolLength.presentation');
+    expectValidationIssue({ ...pool, poolLength: { meters: 25, presentation: 'meters', remoteId: 1 } }, 'unknown_field', '$.poolLength.remoteId');
+  });
+
   it('returns a detached Firestore-safe plain JSON value', () => {
     const normalized = parseWorkoutStructureV1(COMPLETE_STRUCTURE_INPUT);
     const firestoreValue = toFirestoreWorkoutStructureV1(normalized);

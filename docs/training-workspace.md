@@ -412,7 +412,9 @@ event-stat JSON. Sports Lib remains authoritative for activity types, canonical 
 formatting; Quantified Self owns workout ordering, provider compatibility, scheduling, lifecycle, history, entitlement,
 and localized UI language.
 
-`WorkoutStructureV1` has stable node IDs, ordered steps or one-level repeats, purposes, endings, and typed targets. The
+`WorkoutStructureV1` has stable node IDs, ordered steps or one-level repeats, purposes, endings, and typed targets. An
+optional pool-only `poolLength: { meters, presentation }` records physical pool size in canonical metres with the
+athlete's metre/yard presentation choice. It is independent of step distance and absent from legacy v1 JSON. The
 strict codec rejects unknown fields and discriminants, unsupported versions or sports, duplicate IDs, non-finite or
 negative values, non-positive endings/reference snapshots, inverted ranges, more than 100 nodes, repeat counts above
 100, nested repeats, and more than two targets per step. Its JSON output must remain Firestore-safe and must round-trip through stringify/parse without changing
@@ -420,9 +422,9 @@ the persisted v1 value. The manual editor exposes canonical Running, Trail Runni
 Indoor Cycling, E-Biking, Hand Cycle, Swimming (labelled Pool swimming), and Open Water Swimming sports plus date-only,
 time/distance, fixed-repeat, and single absolute HR/power/pace inputs. Both swim profiles enter distance steps in metres
 rather than kilometres, and pace targets follow the user's swim-pace preference (/100 m or /100 yd). Changing an unsaved
-editor sport converts displayed distances and paces without changing their canonical values. The v1 recipe has no
-pool-length field: a 25 m pool step does not assert a 25 m pool, pool length must be selected on the device when needed,
-and open-water swimming has no pool length. These are Sports Lib activity-type strings, not provider profile IDs.
+editor sport converts displayed distances and paces without changing their canonical values. The pool editor may
+select an optional physical length; a 25 m step alone never asserts a 25 m pool, and open-water swimming has no pool
+length. Other providers do not receive the selected length and require explicit degradation review. These are Sports Lib activity-type strings, not provider profile IDs.
 The shared contract remains broader so saved v1 data does
 not need a redesign when later UI slices are enabled.
 
@@ -947,11 +949,11 @@ cycling-only secondary-target field subject to its existing device-support warni
 Unsupported sports still fail closed. Existing Running/Cycling payloads and retained remote identities do not change,
 and no authored recipe, schedule history, Sports Lib type or provider ID is rewritten.
 
-Pool and open-water swimming are manually authorable but remain unsupported by the Garmin adapter. The Training API's
-lap-swimming payload needs explicit pool length and swim-specific segment/target mapping; neither is present in the
-current v1 recipe/serializer. Never fold either swim profile to Running or Cycling, or claim that a 25 m step configures
-the device pool. Garmin pool compatibility is tracked by #733 under epic #583; open-water mapping must also be proved
-before any Garmin swim delivery is enabled.
+Pool and open-water swimming are manually authorable. The #733 offline mapper now encodes pool swimming as
+`LAP_SWIMMING` with an optional explicit physical pool length and target-free swim steps. It also supports an
+unspecified pool as the partner contract allows, although older devices may not. A 25 m step never configures the
+device pool by itself. Production pool delivery stays blocked pending Garmin account proof and an explicit readiness
+flip; open-water swimming remains unmapped. Never fold either swim profile to Running or Cycling.
 COROS continues to map only target-free pool Swimming to `swim`; the current partner mapping does not justify
 open-water support. Wahoo's documented plan file remains running/cycling-only.
 
@@ -1421,6 +1423,16 @@ before the frontend. It neither authorizes a deployment nor changes any public p
 remains in the relevant adapter issues #647–#650, completion matching #651, Sports Lib extraction #654 and deployment/post-release operations #655.
 
 ### Garmin workout/calendar adapter (#647)
+
+The #733 pool-swim extension maps exact canonical Swimming to `LAP_SWIMMING`, with a root workout pool length (or
+explicit null for unspecified), null segment pool fields, target-free swim steps, `FIXED_REST` rest steps, and
+`skipLastRestStep: true` for repeats. Swim time steps outside 1–59 minutes and all current HR/power/pace/cadence swim
+targets are rejected. Open-water swimming remains unmapped. Redacted fixtures and a synthetic lifecycle round trip
+cover a real 4 × 25 m set in a 25 m pool. Garmin permits unspecified pool size, although some older devices do not
+support it. This is not partner account, Garmin Connect, or watch proof: delivery admission remains blocked for pool
+swimming until #733's separately authorized account validation and explicit readiness flip. Running/cycling admission
+is unchanged. The frozen registered MCP v1 recipe omits the new field in its legacy workout read; #734 tracks additive
+MCP read/authoring coverage without changing existing tool schemas.
 
 `delivery/garmin/` binds the existing serializer to Training API V2. It creates workout content using the partner
 contract's exact `POST /workoutportal/workout/v2` path; GET/PUT/DELETE use `/training-api/workout/v2/{workoutId}`.
