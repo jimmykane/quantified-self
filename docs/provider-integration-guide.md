@@ -223,11 +223,14 @@ Guide HTTP 400 diagnostics classify only a bounded validation envelope into fixe
 free-text `error.description` and uploaded Guide content never enter logs or owner-visible status. An operator replay
 must use the existing delivery journal after proving definitive rejection and current consent/connection eligibility;
 it must never directly repeat an ambiguous create.
-Four observed terminal repeat-containing Guides received HTTP 400 while non-repeat Guides succeeded. Their repeats
-were the final authored node; the published example instead continues into a FieldsStep, though its schema does not
-state that this is mandatory. The serializer supplies a non-timed final Guide screen for that shape, with synthetic
-real-account validation still pending. Do not treat the local fixture test as Suunto acceptance or retry affected users
-before the real validator confirms the mapping.
+Four observed repeat-containing Guides received terminal HTTP 400 while non-repeat Guides succeeded. A disposable
+synthetic real-account test isolated the rule: Suunto rejected the repeat ID and then a child FieldsStep ID, both as
+`Step id not allowed inside repeat`. With all IDs inside the repeat omitted, Suunto accepted the terminal repeat,
+returned its expected identity and one repeat step on readback, and confirmed deletion afterward. No extra final
+screen is required. The serializer keeps standalone step IDs and the stable Guide external ID. This synthetic proof
+does not establish that the four failed user workouts will all be accepted; inspect their exact ledgers and current
+consent before any replay. Deploying the changed mapping digest can itself queue definitively failed records, so
+deployment requires separate operational approval and monitoring.
 QS still revalidates the exact connected account, filters its OAuth client owner and deterministic Guide external ID,
 and links only one unambiguous session marker
 to the matching scheduled workout. The private IDs/evidence never enter Event/Activity JSON; the owner sees only

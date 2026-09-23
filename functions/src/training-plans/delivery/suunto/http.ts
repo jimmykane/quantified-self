@@ -60,7 +60,9 @@ function guideRejection(raw: Buffer): TrainingDeliveryTransportDiagnostics {
           : /\b(activities|activity|sport)\b/.test(description) ? 'guide_activity'
             : /\b(owner|external[_ -]?id|title|subtitle|date)\b/.test(description) ? 'guide_metadata'
               : /\b(zip|archive|file|image|icon|json)\b/.test(description) ? 'guide_archive' : undefined;
-  const validation = /invalid\s+step\s+type/.test(description) ? 'invalid_step_type'
+  const validation = /^invalid 'guide\.steps\.\d+(?:\.steps\.\d+)?\.id': step id not allowed inside repeat$/.test(description)
+    ? 'forbidden_repeat_step_id'
+    : /invalid\s+step\s+type/.test(description) ? 'invalid_step_type'
     : /(?:only|unsupported|invalid).*\b(?:child|nested|repeat.*step)\b|\bonly\b.*\bsteps?\b.*\brepeat\b/.test(description) ? 'invalid_child_step'
         : /invalid\s+field\s+type/.test(description) ? 'invalid_field_type'
           : /invalid\s+condition\s+type/.test(description) ? 'invalid_condition_type'

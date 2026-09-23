@@ -1110,6 +1110,20 @@ persisted. An unreadable or oversized error body remains a known terminal HTTP r
 create. Before replaying such a failure, inspect the exact ledger for `create/rejected` with no accepted artifact, current
 consent, saved-zone eligibility and unchanged account authority. Replay through the existing Retry/reconciliation journal,
 not an unjournaled direct POST; unknown acceptance or a retained remote ID is not safe to replay as a new create.
+The September 2026 HTTP 400 investigation found that all four then-failed Guides contained repeat nodes. A disposable
+synthetic Guide tested against the connected Suunto account rejected `guide.steps.0.id`, then
+`guide.steps.0.steps.0.id`, with `Step id not allowed inside repeat`. Omitting the repeat and child-step IDs was accepted
+(HTTP 201), read back with the expected identity and one repeat step, deleted (HTTP 200), and confirmed absent (GET 404).
+A terminal repeat was accepted without an extra final screen, disproving the earlier hypothesis. The serializer
+therefore omits IDs only inside repeats; standalone step IDs, authored
+steps, repeat count and stable Guide external ID remain unchanged. This proves the synthetic contract, not acceptance
+of the four real failed workouts. Before replay, inspect each ledger for definitive rejection, no accepted artifact,
+current consent/connection and eligible date. A serializer digest change may itself queue those failed deliveries on
+deployment; do not deploy merely to inspect the mapping. Future matching rejections emit the fixed private
+`forbidden_repeat_step_id` diagnostic without recording Suunto's free-text error or the Guide payload.
+MCP impact: this changes only private Suunto Guide JSON and its mapping digest. It adds no authored field, read
+projection, status enum, tool, scope, approval action, Assistant route or registered wire shape; existing delivery
+summaries continue to reflect only accepted provider artifacts.
 
 Provider confirmation for #710 established that hiding or removing a Guide in the Suunto app can leave that Guide visible
 through the partner API. API acceptance and positive presence therefore prove neither app visibility, selection/pinning,

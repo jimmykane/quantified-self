@@ -90,7 +90,7 @@ export type TrainingDeliveryProviderField = 'plan_file' | 'plan_filename' | 'pla
   | 'guide_repeat' | 'guide_step' | 'guide_transition' | 'guide_field'
   | 'guide_activity' | 'guide_metadata' | 'guide_archive';
 export type TrainingDeliveryProviderValidation = 'invalid_step_type' | 'invalid_repeat_count'
-  | 'invalid_repeat_structure' | 'invalid_child_step' | 'invalid_field_type' | 'invalid_condition_type'
+  | 'invalid_repeat_structure' | 'forbidden_repeat_step_id' | 'invalid_child_step' | 'invalid_field_type' | 'invalid_condition_type'
   | 'invalid_transition' | 'invalid_guide_json' | 'unclassified';
 export type TrainingDeliveryProviderResponseShape = 'empty' | 'json' | 'text' | 'oversized' | 'unreadable';
 export interface TrainingDeliveryTransportDiagnostics {
@@ -130,7 +130,7 @@ export class TrainingDeliveryTransportError extends Error {
       'plan_provider_updated_at', 'plan_description', 'plan_payload', 'guide_repeat', 'guide_step',
       'guide_transition', 'guide_field', 'guide_activity', 'guide_metadata', 'guide_archive'];
     const providerValidations: TrainingDeliveryProviderValidation[] = ['invalid_step_type', 'invalid_repeat_count',
-      'invalid_repeat_structure', 'invalid_child_step', 'invalid_field_type', 'invalid_condition_type', 'invalid_transition',
+      'invalid_repeat_structure', 'forbidden_repeat_step_id', 'invalid_child_step', 'invalid_field_type', 'invalid_condition_type', 'invalid_transition',
       'invalid_guide_json', 'unclassified'];
     const providerResponseShapes: TrainingDeliveryProviderResponseShape[] = ['empty', 'json', 'text', 'oversized', 'unreadable'];
     this.diagnostics = {

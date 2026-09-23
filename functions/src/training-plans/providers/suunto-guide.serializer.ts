@@ -31,7 +31,7 @@ export type SuuntoGuideFieldV1 =
     | { type: 'targetCadence'; min: number; max: number; title: string };
 
 export interface SuuntoGuideFieldsStepV1 {
-    id: string;
+    id?: string;
     type: 'fields';
     title: string;
     fields: SuuntoGuideFieldV1[];
@@ -39,7 +39,6 @@ export interface SuuntoGuideFieldsStepV1 {
 }
 
 export interface SuuntoGuideRepeatStepV1 {
-    id: string;
     type: 'repeat';
     times: number;
     steps: SuuntoGuideFieldsStepV1[];
@@ -356,10 +355,15 @@ function structureToSteps(structure: WorkoutStructureV1): SuuntoGuideStepV1[] {
     return structure.nodes.map(node => {
         if (node.kind === 'step') return stepToSuunto(node);
         return {
-            id: createStableProviderExternalId('suunto', `node:${node.id}`),
             type: 'repeat',
             times: node.count,
-            steps: node.steps.map(stepToSuunto),
+            // Suunto rejects id on a repeat and every FieldsStep inside it,
+            // even though its schema describes step ids as optional.
+            steps: node.steps.map(step => {
+                const fieldsStep = stepToSuunto(step);
+                delete fieldsStep.id;
+                return fieldsStep;
+            }),
         };
     });
 }
