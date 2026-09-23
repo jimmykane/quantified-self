@@ -56,9 +56,16 @@ describe('Function secret deployment safety', () => {
       '**/*service_account*.json',
       '**/*serviceAccount*.json',
       '**/*firebase-adminsdk*.json',
+      '*.csv',
+      '**/*.csv',
       '**/*.log',
       'emulator-export',
       'firestore_export',
+    ]));
+    const gcloudIgnore = readRepositoryFile('functions/.gcloudignore').split(/\r?\n/)
+      .map(line => line.trim()).filter(line => line && !line.startsWith('#'));
+    expect(gcloudIgnore).toEqual(expect.arrayContaining([
+      '.env*', '.secret*', '*.csv', '**/*.csv', '**/*.log', 'node_modules/',
     ]));
   });
 

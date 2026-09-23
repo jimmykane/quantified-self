@@ -749,6 +749,8 @@
       "**/*service_account*.json",
       "**/*serviceAccount*.json",
       "**/*firebase-adminsdk*.json",
+      "*.csv",
+      "**/*.csv",
       "**/*.log",
       "coverage",
       "tmp",
