@@ -38,10 +38,13 @@ export interface SuuntoGuideFieldsStepV1 {
     transitions: Array<{ condition: SuuntoGuideConditionV1 }>;
 }
 
+export type SuuntoGuideRepeatFieldsStepV1 = Omit<SuuntoGuideFieldsStepV1, 'id'> & { id?: never };
+
 export interface SuuntoGuideRepeatStepV1 {
+    id?: never;
     type: 'repeat';
     times: number;
-    steps: SuuntoGuideFieldsStepV1[];
+    steps: SuuntoGuideRepeatFieldsStepV1[];
 }
 
 export type SuuntoGuideStepV1 = SuuntoGuideFieldsStepV1 | SuuntoGuideRepeatStepV1;
@@ -361,8 +364,12 @@ function structureToSteps(structure: WorkoutStructureV1): SuuntoGuideStepV1[] {
             // even though its schema describes step ids as optional.
             steps: node.steps.map(step => {
                 const fieldsStep = stepToSuunto(step);
-                delete fieldsStep.id;
-                return fieldsStep;
+                return {
+                    type: fieldsStep.type,
+                    title: fieldsStep.title,
+                    fields: fieldsStep.fields,
+                    transitions: fieldsStep.transitions,
+                };
             }),
         };
     });
