@@ -601,6 +601,7 @@ describe('help.content', () => {
     expect(planningSection?.content).toContain('authorized MCP client can also author');
     expect(planningSection?.content).toContain('Enduro MTB, and Downhill Cycling profiles');
     expect(planningSection?.content).toContain('Pool swimming');
+    expect(planningSection?.content).toContain('Open-water swimming');
     expect(planningSection?.content).toContain('pool length');
     expect(planningSection?.content).toContain('keeps every authored running/cycling profile unchanged in QS');
     expect(planningSection?.content).toContain('only its broad Running or Cycling family');

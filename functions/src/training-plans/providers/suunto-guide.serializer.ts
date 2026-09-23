@@ -47,7 +47,7 @@ export interface SuuntoGuideRepeatStepV1 {
 
 export type SuuntoGuideStepV1 = SuuntoGuideFieldsStepV1 | SuuntoGuideRepeatStepV1;
 
-export type SuuntoGuideActivityIdV1 = 1 | 2 | 10 | 21 | 22 | 52 | 53 | 105 | 106 | 109;
+export type SuuntoGuideActivityIdV1 = 1 | 2 | 10 | 21 | 22 | 52 | 53 | 85 | 105 | 106 | 109;
 
 export interface SuuntoGuideJsonV1 {
     type: 'sequence';
@@ -94,6 +94,7 @@ const SUUNTO_GUIDE_ACTIVITY_IDS_BY_SPORT: ReadonlyMap<
     [ActivityTypes.EBiking, [105, 106]],
     [ActivityTypes.Handcycle, [109]],
     [ActivityTypes.Swimming, [21]],
+    [ActivityTypes.OpenWaterSwimming, [85]],
 ]);
 
 export function suuntoGuideActivityIdsForSport(

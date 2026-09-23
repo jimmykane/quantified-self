@@ -74,6 +74,21 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Suunto worker with real F
     expect((await db.collection(DELIVERY_QUEUE).doc(row.id).get()).exists).toBe(false);
     expect(server.calls.filter(call => call.method === 'GET')).toHaveLength(guideReads);
   });
+  it.each([
+    [ActivityTypes.Swimming, 21],
+    [ActivityTypes.OpenWaterSwimming, 85],
+  ] as const)('delivers %s with its distinct Suunto Guide activity', async (sport, activityId) => {
+    await user().collection('scheduledWorkouts').doc('w').update({
+      title: `${sport} QA`,
+      structure: { version: 1, sport, nodes: [{
+        kind: 'step', id: 'swim-distance', purpose: 'work',
+        ending: { kind: 'distance', meters: sport === ActivityTypes.Swimming ? 25 : 500 },
+        targets: [],
+      }] },
+    });
+    expect((await send()).status).toBe('delivered');
+    expect([...server.guides.values()][0].guide.activities).toEqual([activityId]);
+  });
   it('does not select an account by discarding a malformed retained token', async () => {
     await db.collection('suuntoAppAccessTokens').doc(uid).collection('tokens').doc('second').set({ userName: 'second' });
     await expect(command('send')).rejects.toMatchObject({ code: 'failed-precondition' });

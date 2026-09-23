@@ -77,7 +77,8 @@ describe('planned-workout provider proof fixtures', () => {
             ActivityTypes.DownhillCycling,
         ]);
         expect(GARMIN_PLANNED_WORKOUT_SPORTS_V1).toEqual(expect.arrayContaining(
-            MANUAL_WORKOUT_EDITOR_SPORTS_V1.filter(sport => sport !== ActivityTypes.Swimming),
+            MANUAL_WORKOUT_EDITOR_SPORTS_V1.filter(sport =>
+                sport !== ActivityTypes.Swimming && sport !== ActivityTypes.OpenWaterSwimming),
         ));
         expect(PLANNED_WORKOUT_PROVIDER_CAPABILITIES_V1.garmin.profile?.sports)
             .toBe(GARMIN_PLANNED_WORKOUT_SPORTS_V1);
@@ -168,6 +169,7 @@ describe('planned-workout provider proof fixtures', () => {
         [ActivityTypes.EBiking, [105, 106]],
         [ActivityTypes.Handcycle, [109]],
         [ActivityTypes.Swimming, [21]],
+        [ActivityTypes.OpenWaterSwimming, [85]],
     ] as const)('maps canonical %s to Suunto activity recommendations', (sport, activities) => {
         const result = serializeSuuntoGuideJsonV1({ ...oneStepStructure(), sport }, {
             name: `${sport} workout`,
@@ -299,6 +301,28 @@ describe('planned-workout provider proof fixtures', () => {
         expect(assessPlannedWorkoutProviderMappingV1('coros', targeted)).toMatchObject({
             level: 'unsupported', issues: [expect.objectContaining({ code: 'unsupported_target' })],
         });
+    });
+
+    it('maps open-water swimming only to the documented Suunto Guide profile', () => {
+        const structure: WorkoutStructureV1 = {
+            ...oneStepStructure({ ending: { kind: 'distance', meters: 500 } }),
+            sport: ActivityTypes.OpenWaterSwimming,
+        };
+        const result = serializeSuuntoGuideJsonV1(structure, {
+            name: 'Open-water test', owner: 'Quantified Self',
+            url: 'https://quantified-self.io/training/plans', localDate: '2026-09-24',
+            sourceWorkoutId: 'open-water-test', allowDegraded: false,
+        });
+        expect(result.level).toBe('exact');
+        expect(result.artifact.activities).toEqual([85]);
+        expect(result.artifact.steps[0]).toMatchObject({
+            type: 'fields', transitions: [{ condition: { type: 'stepDistance', value: 500 } }],
+        });
+        for (const provider of ['garmin', 'coros', 'wahoo'] as const) {
+            expect(assessPlannedWorkoutProviderMappingV1(provider, structure)).toMatchObject({
+                level: 'unsupported', issues: [expect.objectContaining({ code: 'unsupported_sport' })],
+            });
+        }
     });
 
     it.each([

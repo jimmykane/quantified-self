@@ -139,14 +139,16 @@ describe('public-seo-pages.content', () => {
     expect(PUBLIC_SEO_PAGES.trainingAnalysis.sections.map(section => section.preview)).toContain('training-explorer');
 
     const trainingPlans = PUBLIC_SEO_PAGES.trainingPlans;
-    expect(trainingPlans.title).toBe('Training Plans for Running, Cycling & Pool Swimming');
-    expect(trainingPlans.h1).toBe('Plan running, cycling, and pool-swim workouts your way');
-    expect(trainingPlans.description).toBe('Create free running, cycling, or pool-swim plans and standalone workouts. Schedule by date and keep planned sessions separate from completed activities.');
+    expect(trainingPlans.title).toBe('Training Plans for Running, Cycling & Swimming');
+    expect(trainingPlans.h1).toBe('Plan running, cycling, and swimming workouts your way');
+    expect(trainingPlans.description).toBe('Create free running, cycling, pool-swim, or open-water plans and standalone workouts. Schedule by date and keep plans separate from completed activities.');
     expect(trainingPlans.sections.some(section => section.preview === 'training-plans')).toBe(true);
     expect(trainingPlans.sections.some(section => section.copy.includes('one active at a time'))).toBe(true);
     expect(trainingPlans.sections.some(section => section.items.some(item => item.copy.includes('Trail Running')))).toBe(true);
     expect(trainingPlans.sections.some(section => section.items.some(item => item.copy.includes('Hand Cycle')))).toBe(true);
-    expect(trainingPlans.sections.some(section => section.items.some(item => item.title === 'Pool swimming'))).toBe(true);
+    expect(trainingPlans.sections.some(section => section.items.some(item => item.title === 'Pool and open-water swimming'))).toBe(true);
+    expect(trainingPlans.faqItems.find(item => item.question === 'Which sports and workout steps can I create?')?.answer)
+      .toContain('Open Water Swimming');
     expect(trainingPlans.sections.some(section => section.items.some(item => item.copy.includes('up to 100 total nodes')))).toBe(true);
     expect(trainingPlans.sections.some(section => section.items.some(item => item.copy.includes('never adds distance')))).toBe(true);
     expect(trainingPlans.sections.some(section => section.items.some(item => item.copy.includes('explicit Send and plan opt-in actions')))).toBe(true);

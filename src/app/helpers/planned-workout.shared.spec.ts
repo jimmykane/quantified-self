@@ -390,21 +390,21 @@ describe('planned workout formatting', () => {
     }, imperial)).toContain('min/m');
   });
 
-  it('renders pool-swim distance and pace with Sports Lib swim units', () => {
+  it.each([ActivityTypes.Swimming, ActivityTypes.OpenWaterSwimming])('renders %s distance and pace with Sports Lib swim units', sport => {
     const yards = normalizeUserUnitSettings({
       distanceUnits: DistanceUnits.Miles,
       swimPaceUnits: [SwimPaceUnits.MinutesPer100Yard],
     });
-    expect(formatWorkoutEndingV1({ kind: 'distance', meters: 100 }, yards, undefined, ActivityTypes.Swimming))
+    expect(formatWorkoutEndingV1({ kind: 'distance', meters: 100 }, yards, undefined, sport))
       .toBe('100 m');
     const target = {
       kind: 'speed', mode: 'absolute', presentation: 'pace',
       minimumMetersPerSecond: 100 / 120,
       maximumMetersPerSecond: 100 / 90,
     } as const;
-    expect(formatWorkoutTargetV1(target, undefined, undefined, ActivityTypes.Swimming))
+    expect(formatWorkoutTargetV1(target, undefined, undefined, sport))
       .toBe('01:30–02:00 min/100m');
-    expect(formatWorkoutTargetV1(target, yards, undefined, ActivityTypes.Swimming))
+    expect(formatWorkoutTargetV1(target, yards, undefined, sport))
       .toContain('min/100yd');
   });
 });

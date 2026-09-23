@@ -146,12 +146,15 @@ explicit folds cover the QS running and cycling Training profiles, including ind
 velomobile, Enduro MTB and Downhill Cycling. Every non-base profile remains an approval-bound degradation; clients must
 not rewrite the authored sport just to satisfy a provider.
 
-Manual Pool Swimming support likewise leaves the MCP wire contract unchanged: the existing canonical sport enum already
-accepts `Swimming`, and planned-workout read summaries now format swim distances in metres and swim pace using the
-owner's /100 m or /100 yd setting. No pool-length field, new mutation kind, tool, scope, consent, provider action, or
-private delivery evidence is exposed. Existing strict proposal/confirmation checks and provider compatibility assessment
-still govern writes; Garmin and Wahoo reject swimming delivery, COROS accepts only target-free swim recipes at its backend
-while new browser Send/sync actions remain unavailable, and Suunto maps Swimming to a Guide activity recommendation.
+Manual pool and open-water swimming support likewise leaves the MCP wire contract unchanged: the existing canonical sport
+enum already accepts `Swimming` and `Open Water Swimming`, and planned-workout read summaries format both swim profiles'
+distances in metres and pace using the owner's /100 m or /100 yd setting. No pool-length field, new mutation kind, tool,
+scope, consent, provider action, or private delivery evidence is exposed. Existing strict proposal/confirmation checks and
+provider compatibility assessment
+still govern writes; Garmin and Wahoo reject swimming delivery, COROS accepts only target-free pool recipes at its backend
+while new browser Send/sync actions remain unavailable, and Suunto maps pool and open-water profiles to distinct Guide
+activity recommendations. Owner read fixtures cover both swim sport strings and metre-based steps; no widened consent or
+provider action is implied by this read-only presentation change.
 
 Sports Lib 21.2.1 FIT workout-reference adoption and the first exact Suunto activity link add no MCP metric, scope,
 provider action or registered wire field. Private FIT references, account digests and reverse-link records are excluded.

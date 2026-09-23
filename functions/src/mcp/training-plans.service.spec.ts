@@ -209,7 +209,7 @@ describe('Training plan MCP reads', () => {
     expect(result.workout.structure.sport).toBe(ActivityTypes.MountainBiking);
   });
 
-  it('keeps pool swimming canonical while showing metre-based steps in the owner read', async () => {
+  it.each([ActivityTypes.Swimming, ActivityTypes.OpenWaterSwimming])('keeps %s canonical while showing metre-based steps in the owner read', async sport => {
     const f = fixture();
     const list = TRAINING_READ_OUTPUTS.query_planned_workouts.parse(await f.run('query_planned_workouts', {
       startDate: '2026-09-01', endDate: '2027-01-01',
@@ -220,7 +220,7 @@ describe('Training plan MCP reads', () => {
         const doc = await view.get(collection, id, detail);
         return doc && detail ? {
           ...doc,
-          data: { ...doc.data, structure: { ...structure, sport: ActivityTypes.Swimming,
+          data: { ...doc.data, structure: { ...structure, sport,
             nodes: [{ kind: 'step', id: 'step1', purpose: 'work',
               ending: { kind: 'distance', meters: 25 }, targets: [] }] } },
         } : doc;
@@ -230,7 +230,7 @@ describe('Training plan MCP reads', () => {
     const result = TRAINING_READ_OUTPUTS.get_planned_workout.parse(await f.run('get_planned_workout', {
       workoutRef: list.workouts[0].workoutRef,
     }));
-    expect(result.workout.structure.sport).toBe(ActivityTypes.Swimming);
+    expect(result.workout.structure.sport).toBe(sport);
     expect(result.workout.displaySteps[0].text).toContain('25 m');
   });
 

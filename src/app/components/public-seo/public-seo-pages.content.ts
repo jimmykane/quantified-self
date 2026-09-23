@@ -174,7 +174,7 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
           {
             icon: 'edit_calendar',
             title: 'Training plans',
-            copy: 'Create running, cycling, and pool-swim plans or standalone structured workouts, then see them beside—not inside—your completed activity history.',
+            copy: 'Create running, cycling, pool, and open-water plans or standalone structured workouts, then see them beside—not inside—your completed activity history.',
           },
           {
             icon: 'auto_awesome',
@@ -503,7 +503,7 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
           {
             icon: 'send',
             title: 'Opt in to provider delivery',
-            copy: 'Workout delivery to Garmin, Suunto, and Wahoo is available to connected Pro members through explicit Send and plan opt-in actions, compatibility checks, and provider-specific scheduling windows. Pool swimming currently maps to Suunto Guides; Garmin and Wahoo swim delivery are unavailable. New COROS plan sync and standalone Send actions are coming soon in the app. Connecting a provider never sends a workout by itself.',
+            copy: 'Workout delivery to Garmin, Suunto, and Wahoo is available to connected Pro members through explicit Send and plan opt-in actions, compatibility checks, and provider-specific scheduling windows. Pool and open-water swimming map to distinct Suunto Guide activities; Garmin and Wahoo swim delivery are unavailable. New COROS plan sync and standalone Send actions are coming soon in the app. Connecting a provider never sends a workout by itself.',
           },
         ],
       },
@@ -515,7 +515,7 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
       },
       {
         question: 'Which sports and workout steps can I create?',
-        answer: 'The current editor supports Running, Trail Running, Treadmill, Cycling, Mountain Biking, Indoor Cycling, E-Biking, Hand Cycle, and Pool Swimming. It supports time or distance steps, fixed repeats, and one absolute heart-rate, power, or pace target per step. Pool-swim distances use metres; pool length is set on the device.',
+        answer: 'The current editor supports Running, Trail Running, Treadmill, Cycling, Mountain Biking, Indoor Cycling, E-Biking, Hand Cycle, Pool Swimming, and Open Water Swimming. It supports time or distance steps, fixed repeats, and one absolute heart-rate, power, or pace target per step. Swim distances use metres; pool length is set on the device for pool workouts.',
       },
       {
         question: 'Do planned workouts change completed activity totals or Training analysis?',
@@ -535,7 +535,7 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
       },
     ],
     closingTitle: 'Plan the next workout before it becomes history',
-    closingCopy: 'Start with one standalone workout or map out a dated running, cycling, or pool-swim plan. Your completed activity history stays exactly where it belongs.',
+    closingCopy: 'Start with one standalone workout or map out a dated running, cycling, pool, or open-water plan. Your completed activity history stays exactly where it belongs.',
     closingActions: [
       routeAction('Start Free', '/login', 'flat', 'arrow_forward'),
       routeAction('Training Plans Help', '/help', 'stroked', undefined, 'training-plans'),

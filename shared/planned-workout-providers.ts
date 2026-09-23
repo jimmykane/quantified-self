@@ -51,6 +51,7 @@ export const SUUNTO_PLANNED_WORKOUT_SPORTS_V1 = [
   ActivityTypes.EBiking,
   ActivityTypes.Handcycle,
   ActivityTypes.Swimming,
+  ActivityTypes.OpenWaterSwimming,
 ] as const;
 
 /**

@@ -185,7 +185,7 @@ describe('PublicSeoPageComponent', () => {
     const preview = plansFixture.debugElement.queryAll(By.directive(PublicFeaturePreviewComponent))
       .find(candidate => candidate.componentInstance.previewKey() === 'training-plans');
 
-    expect(text).toContain('Plan running, cycling, and pool-swim workouts your way');
+    expect(text).toContain('Plan running, cycling, and swimming workouts your way');
     expect(text).toContain('Standalone when that is all you need');
     expect(text).toContain('Multiple plans, one active calendar');
     expect(text).toContain('Completed totals remain unchanged');

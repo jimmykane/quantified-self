@@ -24,6 +24,7 @@ import {
   MANUAL_WORKOUT_EDITOR_CYCLING_SPORTS_V1,
   MANUAL_WORKOUT_EDITOR_RUNNING_SPORTS_V1,
   MANUAL_WORKOUT_EDITOR_SWIMMING_SPORTS_V1,
+  isSwimmingWorkoutSportV1,
 } from '@shared/planned-workout';
 import dayjs, { type Dayjs } from 'dayjs';
 import { catchError, combineLatest, map, of, startWith, switchMap } from 'rxjs';
@@ -182,7 +183,10 @@ export class PlansWorkspaceComponent {
     },
     {
       label: 'Swimming',
-      options: MANUAL_WORKOUT_EDITOR_SWIMMING_SPORTS_V1.map(value => ({ value, label: 'Pool swimming' })),
+      options: MANUAL_WORKOUT_EDITOR_SWIMMING_SPORTS_V1.map(value => ({
+        value,
+        label: value === ActivityTypes.Swimming ? 'Pool swimming' : 'Open-water swimming',
+      })),
     },
   ];
   readonly purposeOptions = ['warmup', 'work', 'recovery', 'cooldown', 'rest', 'other'] as const;
@@ -198,8 +202,8 @@ export class PlansWorkspaceComponent {
   ];
 
   readonly currentUser = computed(() => this.userService.user() as AppUserInterface | null);
-  readonly editorIsPoolSwimming = computed(() => this.editor()?.value.sport === ActivityTypes.Swimming);
-  readonly editorPaceUnit = computed(() => this.editorIsPoolSwimming()
+  readonly editorIsSwimming = computed(() => isSwimmingWorkoutSportV1(this.editor()?.value.sport));
+  readonly editorPaceUnit = computed(() => this.editorIsSwimming()
     ? this.currentUser()?.settings?.unitSettings?.swimPaceUnits?.[0] === SwimPaceUnits.MinutesPer100Yard
       ? 'min/100yd' : 'min/100m'
     : 'min/km');

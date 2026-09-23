@@ -737,7 +737,10 @@ describe('PlansWorkspaceComponent', () => {
       },
       {
         label: 'Swimming',
-        options: [{ value: ActivityTypes.Swimming, label: 'Pool swimming' }],
+        options: [
+          { value: ActivityTypes.Swimming, label: 'Pool swimming' },
+          { value: ActivityTypes.OpenWaterSwimming, label: 'Open-water swimming' },
+        ],
       },
     ]);
   });
@@ -749,7 +752,7 @@ describe('PlansWorkspaceComponent', () => {
     fixture.componentInstance.updateStep(0, null, 'endingKind', 'distance');
     fixture.componentInstance.updateStep(0, null, 'endingValue', 100);
     fixture.detectChanges();
-    expect(fixture.componentInstance.editorIsPoolSwimming()).toBe(true);
+    expect(fixture.componentInstance.editorIsSwimming()).toBe(true);
     expect(fixture.nativeElement.textContent).toContain('Metres');
     expect(fixture.componentInstance.editorPaceUnit()).toBe('min/100m');
     fixture.componentInstance.updateEditorField('title', 'Pool test');
@@ -759,6 +762,28 @@ describe('PlansWorkspaceComponent', () => {
         structure: expect.objectContaining({
           sport: ActivityTypes.Swimming,
           nodes: expect.arrayContaining([expect.objectContaining({ ending: { kind: 'distance', meters: 100 } })]),
+        }),
+      }),
+    }));
+  });
+
+  it('edits open-water distance in metres and persists the distinct sport', async () => {
+    setRouteState({ mode: 'create', scope: 'standalone', date: '2026-09-24' });
+    const fixture = await renderPlans();
+    fixture.componentInstance.updateEditorField('sport', ActivityTypes.OpenWaterSwimming);
+    fixture.componentInstance.updateStep(0, null, 'endingKind', 'distance');
+    fixture.componentInstance.updateStep(0, null, 'endingValue', 500);
+    fixture.componentInstance.updateEditorField('title', 'Open-water test');
+    fixture.detectChanges();
+    expect(fixture.componentInstance.editorIsSwimming()).toBe(true);
+    expect(fixture.nativeElement.textContent).toContain('Metres');
+    expect(fixture.componentInstance.editorPaceUnit()).toBe('min/100m');
+    await fixture.componentInstance.saveWorkout();
+    expect(mutate).toHaveBeenCalledWith(expect.objectContaining({
+      operation: expect.objectContaining({
+        structure: expect.objectContaining({
+          sport: ActivityTypes.OpenWaterSwimming,
+          nodes: expect.arrayContaining([expect.objectContaining({ ending: { kind: 'distance', meters: 500 } })]),
         }),
       }),
     }));

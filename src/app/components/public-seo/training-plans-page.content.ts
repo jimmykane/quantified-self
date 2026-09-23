@@ -2,12 +2,12 @@ import type { PublicFeaturePreviewKey } from './public-feature-preview.types';
 
 /** Concise metadata shared by the public Training Plans route and its structured data. */
 export const TRAINING_PLANS_SEO_CONTENT = {
-  title: 'Training Plans for Running, Cycling & Pool Swimming',
-  description: 'Create free running, cycling, or pool-swim plans and standalone workouts. Schedule by date and keep planned sessions separate from completed activities.',
-  h1: 'Plan running, cycling, and pool-swim workouts your way',
+  title: 'Training Plans for Running, Cycling & Swimming',
+  description: 'Create free running, cycling, pool-swim, or open-water plans and standalone workouts. Schedule by date and keep plans separate from completed activities.',
+  h1: 'Plan running, cycling, and swimming workouts your way',
   intro: 'Build a dated plan or start with one standalone workout. Work directly in Quantified Self, keep scheduled work separate from completed activities, and connect other tools only when you choose.',
   featureList: [
-    'Running, cycling, and pool-swim training plans included on the free tier',
+    'Running, cycling, and swimming training plans included on the free tier',
     'Standalone structured workouts without a plan',
     'Dated plan calendars with colors, history, and shifting',
     'Planned-workout overlays kept separate from completed activity totals',
@@ -44,7 +44,7 @@ export const TRAINING_PLANS_PAGE_SECTIONS = [
   {
     eyebrow: 'Structured Workouts',
     title: 'Build the workout you mean',
-    copy: 'The current editor supports running, cycling, and pool swimming with date-only scheduling, time or distance steps, fixed repeats, and one absolute heart-rate, power, or pace target per step. Pool distance steps use metres and swim pace uses your /100 m or /100 yd setting; pool length is set on the device, not stored in the workout.',
+    copy: 'The current editor supports running, cycling, pool swimming, and open-water swimming with date-only scheduling, time or distance steps, fixed repeats, and one absolute heart-rate, power, or pace target per step. Swim distance steps use metres and swim pace uses your /100 m or /100 yd setting. Pool length is set on the device, not stored in a pool workout; open-water workouts have no pool length.',
     items: [
       {
         icon: 'directions_run',
@@ -58,8 +58,8 @@ export const TRAINING_PLANS_PAGE_SECTIONS = [
       },
       {
         icon: 'pool',
-        title: 'Pool swimming',
-        copy: 'Create a Swimming workout with metre-based distance steps or timed steps. Provider delivery depends on each provider’s swim-workout support.',
+        title: 'Pool and open-water swimming',
+        copy: 'Create either Swimming or Open Water Swimming workouts with metre-based distance steps or timed steps. Suunto uses the matching Guide activity; Garmin and Wahoo do not support swim delivery here, and COROS open-water delivery is unavailable.',
       },
       {
         icon: 'repeat',

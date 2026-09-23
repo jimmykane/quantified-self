@@ -47,10 +47,10 @@ describe('manual planned-workout editor conversion', () => {
     });
   });
 
-  it('keeps pool-swim distances in metres and pace in the selected swim unit', () => {
+  it.each([ActivityTypes.Swimming, ActivityTypes.OpenWaterSwimming])('keeps %s distances in metres and pace in the selected swim unit', sport => {
     const units = normalizeUserUnitSettings({ swimPaceUnits: [SwimPaceUnits.MinutesPer100Yard] });
     const value: ManualWorkoutEditorValue = {
-      title: 'Pool intervals', localDate: '2026-09-24', sport: ActivityTypes.Swimming,
+      title: 'Swim intervals', localDate: '2026-09-24', sport,
       nodes: [{
         ...createManualWorkoutEditorStep('lengths'), endingKind: 'distance', endingValue: 100,
         targetKind: 'pace', targetMinimum: 1.5, targetMaximum: 2,
@@ -68,7 +68,7 @@ describe('manual planned-workout editor conversion', () => {
       .toMatchObject({ endingValue: 100, targetMinimum: 1.5, targetMaximum: 2 });
   });
 
-  it('preserves canonical distance and speed when switching to pool swimming', () => {
+  it.each([ActivityTypes.Swimming, ActivityTypes.OpenWaterSwimming])('preserves canonical distance and speed when switching to %s', sport => {
     const running: ManualWorkoutEditorValue = {
       title: 'Switch sport', localDate: '2026-09-24', sport: ActivityTypes.Running,
       nodes: [{
@@ -76,7 +76,7 @@ describe('manual planned-workout editor conversion', () => {
         targetKind: 'pace', targetMinimum: 4, targetMaximum: 5,
       }],
     };
-    const swimming = changeManualWorkoutEditorSport(running, ActivityTypes.Swimming);
+    const swimming = changeManualWorkoutEditorSport(running, sport);
     expect(swimming.nodes[0]).toMatchObject({ endingValue: 1000, targetMinimum: 0.4, targetMaximum: 0.5 });
     expect(manualWorkoutEditorToStructure(swimming).nodes).toEqual(manualWorkoutEditorToStructure(running).nodes);
   });

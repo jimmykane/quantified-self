@@ -265,13 +265,20 @@ export const MANUAL_WORKOUT_EDITOR_CYCLING_SPORTS_V1 = [
   ActivityTypes.EBiking,
   ActivityTypes.Handcycle,
 ] as const;
-export const MANUAL_WORKOUT_EDITOR_SWIMMING_SPORTS_V1 = [ActivityTypes.Swimming] as const;
+export const MANUAL_WORKOUT_EDITOR_SWIMMING_SPORTS_V1 = [
+  ActivityTypes.Swimming,
+  ActivityTypes.OpenWaterSwimming,
+] as const;
 export const MANUAL_WORKOUT_EDITOR_SPORTS_V1 = [
   ...MANUAL_WORKOUT_EDITOR_RUNNING_SPORTS_V1,
   ...MANUAL_WORKOUT_EDITOR_CYCLING_SPORTS_V1,
   ...MANUAL_WORKOUT_EDITOR_SWIMMING_SPORTS_V1,
 ] as const;
 export type ManualWorkoutEditorSportV1 = typeof MANUAL_WORKOUT_EDITOR_SPORTS_V1[number];
+
+export function isSwimmingWorkoutSportV1(sport?: ActivityTypes): boolean {
+  return sport === ActivityTypes.Swimming || sport === ActivityTypes.OpenWaterSwimming;
+}
 
 export const INITIAL_MANUAL_WORKOUT_EDITOR_PROFILE_V1: WorkoutCompatibilityProfileV1 = {
   sports: MANUAL_WORKOUT_EDITOR_SPORTS_V1,
@@ -912,10 +919,10 @@ function formatSpeedValue(
   unitSettings?: UserUnitSettingsInterface | null,
   sport?: ActivityTypes,
 ): UnitAwareStatDisplay | null {
-  const isPoolSwim = sport === ActivityTypes.Swimming;
-  const paceSeconds = Math.round(((isPoolSwim ? 100 : 1000) / metersPerSecond) * 1000) / 1000;
+  const isSwim = isSwimmingWorkoutSportV1(sport);
+  const paceSeconds = Math.round(((isSwim ? 100 : 1000) / metersPerSecond) * 1000) / 1000;
   return presentation === 'pace'
-    ? resolveUnitAwareDisplayFromValue(isPoolSwim ? DataSwimPace.type : DataPace.type, paceSeconds, unitSettings)
+    ? resolveUnitAwareDisplayFromValue(isSwim ? DataSwimPace.type : DataPace.type, paceSeconds, unitSettings)
     : resolveUnitAwareDisplayFromValue(DataSpeed.type, metersPerSecond, unitSettings);
 }
 
@@ -929,7 +936,7 @@ export function formatWorkoutEndingV1(
     case 'time':
       return resolveUnitAwareDisplayFromValue(DataDuration.type, ending.seconds, unitSettings)?.text ?? `${ending.seconds} s`;
     case 'distance':
-      return (sport === ActivityTypes.Swimming
+      return (isSwimmingWorkoutSportV1(sport)
         ? resolveUnitAwareDisplayStat(new DataSwimDistance(ending.meters), unitSettings)
         : resolveUnitAwareDisplayFromValue(DataDistance.type, ending.meters, unitSettings))?.text ?? `${ending.meters} m`;
     case 'kilojoules':
