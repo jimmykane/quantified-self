@@ -81,6 +81,13 @@ field entirely. The existing
 retried unchanged after validation rejects it. Neither preview creates authored or provider state.
 `apply_training_changes` consumes the opaque proposal as a separately approval-gated write tool. ChatGPT, Claude and
 other MCP hosts own their native tool-approval UI; QS does not use MCP elicitation as a second confirmation round.
+For **Duplicate to…**, the existing `copy-workout` batch change takes an exact source reference, fresh proposal-local
+key, explicit destination date and destination plan reference or `null` for Standalone. Clients should read the exact
+source and current schedule revision, preserve its scope by default and ask if the source or date is ambiguous. The
+proposal preview and approval remain required, including an out-of-range plan extension. The copied workout is a fresh
+planned identity without a completion link or standalone delivery opt-in; an existing active-plan setting may later send
+it. This UI/Assistant guidance update adds no MCP tool, schema, scope, consent or provider action and preserves the
+registered wire contract.
 The host may let a user configure automatic tool approval, which the server cannot detect, so users who want to inspect
 every proposal must keep per-call approval enabled in their client. ChatGPT's destructive annotation triggers its
 native approval request. Claude users must not choose **Allow always**, and should disable Training write tools while

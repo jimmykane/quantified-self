@@ -18,6 +18,7 @@ import {
 import { buildActivityCalendarViewModel } from '../../../helpers/activity-calendar.helper';
 import { AppEventColorService } from '../../../services/color/app.event.color.service';
 import { CalendarDayDetailsNavigationService } from '../../../services/calendar-day-details-navigation.service';
+import { TrainingWorkoutDuplicateService } from '../../../services/training-workout-duplicate.service';
 import type { PlannedWorkoutCalendarEntry } from '../../../helpers/planned-workout-calendar.helper';
 import { CalendarDayDetailsComponent, type CalendarDayDetailsData } from './calendar-day-details.component';
 
@@ -101,6 +102,24 @@ describe('CalendarDayDetailsComponent', () => {
     ]);
     expect(fixture.nativeElement.textContent).toContain('No completed activities for this day.');
     expect(fixture.nativeElement.querySelector('[aria-labelledby="calendar-day-family-title"]')).toBeNull();
+  });
+
+  it('offers a separate duplicate action for planned workouts and returns the destination day', async () => {
+    const duplicate = vi.fn().mockResolvedValue({ kind: 'duplicated-workout', workoutId: 'copy',
+      planId: 'plan-1', localDate: '2026-08-10' });
+    const fixture = await renderDayDetails([], {
+      plannedWorkouts: [{ workout: createPlannedWorkout(), planName: 'Autumn build' }],
+      scheduleSource: () => null,
+    });
+    TestBed.inject(TrainingWorkoutDuplicateService).duplicate = duplicate;
+    const button = fixture.nativeElement.querySelector('[aria-label="Duplicate Tempo intervals to another day"]') as HTMLButtonElement;
+    expect(button).toBeTruthy();
+    expect(button.disabled).toBe(false);
+    button.click();
+    await fixture.whenStable();
+    expect(duplicate).toHaveBeenCalledWith(planningUserUid, expect.objectContaining({ id: 'workout-1' }), expect.any(Function));
+    expect(TestBed.inject(MatBottomSheetRef).dismiss).toHaveBeenCalledWith({ kind: 'duplicated-workout',
+      workoutId: 'copy', planId: 'plan-1', localDate: '2026-08-10' });
   });
 
   it('shows exact completion links as completed without adding them to recorded activity totals', async () => {
@@ -346,6 +365,7 @@ async function renderDayDetails(eventOrEvents: EventInterface | EventInterface[]
       { provide: MAT_BOTTOM_SHEET_DATA, useValue: data },
       { provide: AppUserService, useValue: { user: signal({ uid: data.userId }) } },
       { provide: MatBottomSheetRef, useValue: { dismiss: vi.fn() } },
+      { provide: TrainingWorkoutDuplicateService, useValue: { duplicate: vi.fn() } },
       {
         provide: AppEventColorService,
         useValue: {

@@ -36,6 +36,7 @@ import {
   TrainingPlansService,
   type CurrentTrainingScheduleV1,
 } from '../../services/training-plans.service';
+import { TrainingWorkoutDuplicateService } from '../../services/training-workout-duplicate.service';
 import { ConfirmationDialogComponent } from '../confirmation-dialog/confirmation-dialog.component';
 import { CompactRowComponent } from '../shared/compact-row/compact-row.component';
 import { PlanScheduleCalendarComponent } from './plan-schedule-calendar.component';
@@ -138,6 +139,8 @@ const EMPTY_SCHEDULE: CurrentTrainingScheduleV1 = {
 export class PlansWorkspaceComponent {
   private readonly userService = inject(AppUserService);
   private readonly plansService = inject(TrainingPlansService);
+  private readonly duplicateService = inject(TrainingWorkoutDuplicateService);
+  private readonly host = inject<ElementRef<HTMLElement>>(ElementRef);
   private readonly dialog = inject(MatDialog);
   private readonly snackBar = inject(MatSnackBar);
   private readonly route = inject(ActivatedRoute);
@@ -241,6 +244,7 @@ export class PlansWorkspaceComponent {
     this.destroyRef.onDestroy(() => globalThis.clearInterval(handle));
   });
   private readonly scheduleDateSelection = signal<{ uid: string; planId: string; localDate: string } | null>(null);
+  private readonly pendingDuplicateFocus = signal<{ uid: string; workoutId: string } | null>(null);
   readonly showPlanForm = signal(false);
   readonly planDraft = signal<PlanDraft>(defaultPlanDraft());
   readonly planColorOptions = TRAINING_PLAN_COLOR_OPTIONS;
@@ -271,9 +275,11 @@ export class PlansWorkspaceComponent {
   readonly planOptions = computed(() => {
     const plans = this.schedule().plans;
     const acknowledged = this.acknowledgedPlan();
-    return acknowledged && acknowledged.uid === this.currentUser()?.uid && !plans.some(plan => plan.id === acknowledged.plan.id)
-      ? [...plans, acknowledged.plan]
-      : plans;
+    if (!acknowledged || acknowledged.uid !== this.currentUser()?.uid) return plans;
+    const current = plans.find(plan => plan.id === acknowledged.plan.id);
+    if (current && current.revision >= acknowledged.plan.revision) return plans;
+    return current ? plans.map(plan => plan.id === acknowledged.plan.id ? acknowledged.plan : plan)
+      : [...plans, acknowledged.plan];
   });
   readonly activePlan = computed(() => this.schedule().plans.find(plan => (
     plan.id === this.schedule().state.activePlanId
@@ -347,6 +353,21 @@ export class PlansWorkspaceComponent {
       }
     }
   });
+  private readonly duplicateFocusEffect = afterRenderEffect(() => {
+    const pending = this.pendingDuplicateFocus();
+    this.displayedWorkoutRows();
+    if (!pending) return;
+    if (pending.uid !== this.currentUser()?.uid) {
+      this.pendingDuplicateFocus.set(null);
+      return;
+    }
+    const row = Array.from(this.host.nativeElement.querySelectorAll<HTMLElement>('[data-workout-id]'))
+      .find(candidate => candidate.dataset['workoutId'] === pending.workoutId);
+    if (!row) return;
+    row.focus();
+    row.scrollIntoView?.({ block: 'nearest' });
+    this.pendingDuplicateFocus.set(null);
+  });
 
   private readonly selectionEffect = effect(() => {
     const plans = this.planOptions();
@@ -360,7 +381,8 @@ export class PlansWorkspaceComponent {
     if (!acknowledged) return;
     if (acknowledged.uid !== this.currentUser()?.uid || (
       this.schedule().state.revision >= acknowledged.state.revision
-      && this.schedule().plans.some(plan => plan.id === acknowledged.plan.id)
+      && this.schedule().plans.some(plan => plan.id === acknowledged.plan.id
+        && plan.revision >= acknowledged.plan.revision)
     )) {
       this.acknowledgedPlan.set(null);
     }
@@ -980,26 +1002,30 @@ export class PlansWorkspaceComponent {
     this.snackBar.open('Workout updated.', 'Dismiss', { duration: 3000 });
   }
 
-  async copyWorkout(workout: ScheduledWorkoutV1): Promise<void> {
-    const workoutId = this.plansService.createEntityId('workout');
-    const planIds = workout.planId ? [workout.planId] : [];
-    const response = await this.runMutation({
-      mutationId: this.plansService.createMutationId('copy-workout'),
-      expectedRevisions: this.expectedRevisions({
-        workoutIds: [workout.id],
-        workoutRevisionOverrides: new Map([[workout.id, workout.revision]]),
-        planIds,
-      }),
-      operation: {
-        kind: 'copy-workout',
-        sourceWorkoutId: workout.id,
-        workoutId,
-        planId: workout.planId,
-        localDate: workout.localDate,
-        confirmPlanRangeExtension: false,
-      },
-    }, `copy-${workout.id}`);
-    if (response) this.snackBar.open('Workout copied.', 'Dismiss', { duration: 3000 });
+  async duplicateWorkout(workout: ScheduledWorkoutV1): Promise<void> {
+    const uid = this.currentUser()?.uid;
+    if (!uid || this.busyAction()) return;
+    this.busyAction.set(`copy-${workout.id}`);
+    try {
+      const result = await this.duplicateService.duplicate(uid, workout, () => {
+        if (this.currentUser()?.uid !== uid || this.scheduleState().status !== 'ready') return null;
+        const schedule = this.schedule();
+        const acknowledged = this.acknowledgedPlan();
+        const state = acknowledged?.uid === uid && acknowledged.state.revision > schedule.state.revision
+          ? acknowledged.state : schedule.state;
+        return { ...schedule, state, plans: this.planOptions() };
+      });
+      if (!result || this.destroyRef.destroyed || this.currentUser()?.uid !== uid) return;
+      if (result.acknowledgedPlan && result.acknowledgedState) {
+        this.acknowledgedPlan.set({ uid, plan: result.acknowledgedPlan, state: result.acknowledgedState });
+      }
+      this.selectWorkoutScope(result.planId, result.localDate);
+      this.pendingDuplicateFocus.set({ uid, workoutId: result.workoutId });
+      const route = this.browseRouteState();
+      this.navigateWorkspace(trainingPlansBrowseRoute(result.planId, result.planId === null), route, { replaceUrl: true });
+    } finally {
+      this.busyAction.set(null);
+    }
   }
 
   private selectWorkoutScope(planId: string | null, localDate: string): void {

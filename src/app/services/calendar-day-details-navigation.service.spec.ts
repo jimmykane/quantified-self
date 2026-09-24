@@ -18,6 +18,18 @@ describe('CalendarDayDetailsNavigationService', () => {
     service = TestBed.inject(CalendarDayDetailsNavigationService);
   });
 
+  it('opens a duplicated workout day once for the same owner and rejects stale or foreign destinations', () => {
+    expect(service.prepareWorkoutDestination('owner', '2027-01-02')).toBe(true);
+    expect(service.workoutDestinationFor('owner')).toBe('2027-01-02');
+    expect(service.consumeWorkoutDestination('owner', '2027-01-01')).toBe(false);
+    expect(service.consumeWorkoutDestination('owner', '2027-01-02')).toBe(true);
+    expect(service.workoutDestinationFor('owner')).toBeNull();
+    expect(service.prepareWorkoutDestination('owner', '2027-02-30')).toBe(false);
+    service.prepareWorkoutDestination('owner', '2027-01-03');
+    expect(service.workoutDestinationFor('other')).toBeNull();
+    expect(service.workoutDestinationFor('owner')).toBeNull();
+  });
+
   it('makes a calendar day restorable only after browser-back navigation', () => {
     expect(service.prepareReturn('/dashboard', '2026-08-20')).toBe(true);
 

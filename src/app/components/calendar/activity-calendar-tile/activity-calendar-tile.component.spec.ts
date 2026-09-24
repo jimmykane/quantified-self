@@ -4,6 +4,7 @@ import { TestBed } from '@angular/core/testing';
 import { signal } from '@angular/core';
 import { MatBottomSheet } from '@angular/material/bottom-sheet';
 import { provideRouter } from '@angular/router';
+import { Router } from '@angular/router';
 import { ActivityTypes, DataDuration, DaysOfTheWeek, type EventInterface } from '@sports-alliance/sports-lib';
 import { BehaviorSubject, of, Subject, throwError } from 'rxjs';
 import { AppUserService } from '../../../services/app.user.service';
@@ -32,6 +33,7 @@ describe('ActivityCalendarTileComponent', () => {
   let dayDetailsNavigation: {
     restorationFor: ReturnType<typeof vi.fn>;
     consumeRestoration: ReturnType<typeof vi.fn>;
+    prepareWorkoutDestination: ReturnType<typeof vi.fn>;
   };
 
   beforeEach(async () => {
@@ -44,6 +46,7 @@ describe('ActivityCalendarTileComponent', () => {
     dayDetailsNavigation = {
       restorationFor: vi.fn().mockReturnValue(null),
       consumeRestoration: vi.fn().mockReturnValue(true),
+      prepareWorkoutDestination: vi.fn().mockReturnValue(true),
     };
     await TestBed.configureTestingModule({
       imports: [ActivityCalendarTileComponent],
@@ -69,6 +72,20 @@ describe('ActivityCalendarTileComponent', () => {
     expect(fixture.nativeElement.querySelector('.activity-calendar--compact')).toBeTruthy();
     expect(fixture.nativeElement.querySelector('.activity-calendar-marker-stage--concentric')).toBeTruthy();
     expect(fixture.nativeElement.textContent).toContain('Activity calendar');
+  });
+
+  it.each([false, true])('opens the destination in full Calendar after a duplicate from a tile (navigation: %s)', async showNavigation => {
+    const duplicate = { kind: 'duplicated-workout', workoutId: 'copy', planId: null, localDate: currentLocalDate(5) };
+    openBottomSheet.mockReturnValue({ afterDismissed: () => of(duplicate) });
+    const navigate = vi.spyOn(TestBed.inject(Router), 'navigate').mockResolvedValue(true);
+    const fixture = TestBed.createComponent(ActivityCalendarTileComponent);
+    fixture.componentRef.setInput('user', user);
+    fixture.componentRef.setInput('showNavigation', showNavigation);
+    fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+    vi.spyOn(fixture.debugElement.injector.get(MatBottomSheet), 'open').mockImplementation(openBottomSheet);
+    fixture.componentInstance.openDay(fixture.componentInstance.calendarModel().months[0].days[5]);
+    expect(dayDetailsNavigation.prepareWorkoutDestination).toHaveBeenCalledWith(planningUserUid, duplicate.localDate);
+    expect(navigate).toHaveBeenCalledWith(['/calendar'], { queryParams: { view: 'month', date: duplicate.localDate } });
   });
 
   it.each([false, true])('hides planning for a different displayed account (mini calendar: %s)', async showNavigation => {

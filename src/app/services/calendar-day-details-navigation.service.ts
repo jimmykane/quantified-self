@@ -13,6 +13,7 @@ export interface CalendarDayDetailsRestoration {
 export class CalendarDayDetailsNavigationService {
   private pendingReturn: CalendarDayDetailsRestoration | null = null;
   private readonly restoration = signal<CalendarDayDetailsRestoration | null>(null);
+  private readonly destination = signal<{ ownerUid: string; dateKey: string; expiresAtMs: number } | null>(null);
 
   constructor(router: Router) {
     router.events.pipe(
@@ -32,6 +33,30 @@ export class CalendarDayDetailsNavigationService {
       dateKey: normalizedDateKey,
     };
     this.restoration.set(null);
+    return true;
+  }
+
+  prepareWorkoutDestination(ownerUid: string, dateKey: string): boolean {
+    const normalizedDateKey = normalizeDateKey(dateKey);
+    const normalizedUid = `${ownerUid || ''}`.trim();
+    if (!normalizedUid || !normalizedDateKey) return false;
+    this.destination.set({ ownerUid: normalizedUid, dateKey: normalizedDateKey, expiresAtMs: Date.now() + 60_000 });
+    return true;
+  }
+
+  workoutDestinationFor(ownerUid: string): string | null {
+    const destination = this.destination();
+    if (!destination) return null;
+    if (destination.ownerUid !== ownerUid || destination.expiresAtMs <= Date.now()) {
+      this.destination.set(null);
+      return null;
+    }
+    return destination.dateKey;
+  }
+
+  consumeWorkoutDestination(ownerUid: string, dateKey: string): boolean {
+    if (this.workoutDestinationFor(ownerUid) !== dateKey) return false;
+    this.destination.set(null);
     return true;
   }
 
