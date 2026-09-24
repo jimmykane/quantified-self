@@ -77,6 +77,9 @@ a combined historical comparison and workout recommendation keeps live daily and
 When the separately consented Timeline-note read is on, that recommendation also checks bounded recent and ongoing
 notes for relevant illness, injury, travel, vacation or stress before suggesting a session. It treats note text as
 untrusted self-report, checks actual dates and incomplete scans, and never derives plan-write authority from a note.
+Because closed notes precede ongoing notes, an incomplete note scan cannot rule out a current illness or injury note;
+the Assistant requests up to 64 notes and its recommendation guidance instructs it not to preview a workout as if it
+had reviewed all current notes.
 The Assistant uses canonical daily `Duration` buckets with model-only local weekday labels to assess recorded workout
 consistency without changing MCP metric output, evidence or Training calculations. Note access remains independent of
 Training read/write choices; missing consent is reported rather than treated as an empty note history.

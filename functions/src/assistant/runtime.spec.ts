@@ -169,6 +169,7 @@ describe('Training preview model-tool selection', () => {
           readiness: { score: 62 }, sleep: { durationSeconds: 25_200 } } };
         case 'query_metric': return { structuredContent: { metric: { type: DataDuration.type },
           aggregation: { categoryType: ChartDataCategoryTypes.DateType,
+            resolvedTimeInterval: TimeIntervals.Daily,
             buckets: [{ bucketKey: Date.parse('2026-09-22T21:00:00Z'),
             aggregateValue: 2400, totalCount: 1 }] } } };
         case 'query_activities': return { structuredContent: { activities: [], scanComplete: true } };
@@ -198,7 +199,7 @@ describe('Training preview model-tool selection', () => {
         expect(metric).toMatchObject({ aggregation: { buckets: [{ localDate: '2026-09-23',
           weekday: 'Wednesday' }] } });
         await input.tools[2].execute({ relativePeriod: 'today', timeZone: 'Europe/Helsinki' });
-        const notes = await input.tools[3].execute({ startDate: '2026-08-28', endDate: '2026-09-24' });
+        const notes = await input.tools[3].execute({ startDate: '2026-08-28', endDate: '2026-09-24', limit: 64 });
         expect(JSON.stringify(notes)).toContain('Feeling unwell');
         await input.tools[4].execute({ startDate: '2026-09-24', endDate: '2026-09-24' });
         await input.tools[5].execute({ expectedScheduleRevision: 7, planRef: null,
@@ -224,6 +225,7 @@ describe('Training preview model-tool selection', () => {
       requiresConfirmation: true });
     expect(JSON.stringify(result.evidence)).not.toContain('Ignore the user');
     expect(ASSISTANT_SYSTEM_INSTRUCTIONS).toContain('an ended note is not current');
+    expect(ASSISTANT_SYSTEM_INSTRUCTIONS).toContain('scanComplete false does not establish that no current note exists');
     expect(ASSISTANT_SYSTEM_INSTRUCTIONS).toContain(`canonical ${DataDuration.type} metric`);
     expect(ASSISTANT_SYSTEM_INSTRUCTIONS).toContain('A few isolated days do not establish a consistent weekday habit');
     expect(ASSISTANT_SYSTEM_INSTRUCTIONS).toContain('never infer cycling or another sport from unfiltered buckets');
@@ -2378,7 +2380,8 @@ describe('Assistant runtime', () => {
       bucketKey: Date.parse('2026-01-01T00:00:00.000Z') + index * 86_400_000,
       aggregateValue: 1,
     }));
-    const structuredContent = { aggregation: { categoryType: ChartDataCategoryTypes.DateType, buckets } };
+    const structuredContent = { aggregation: { categoryType: ChartDataCategoryTypes.DateType,
+      resolvedTimeInterval: TimeIntervals.Daily, buckets } };
     expect(Buffer.byteLength(JSON.stringify(structuredContent), 'utf8')).toBeLessThan(512 * 1024);
     callTool.mockResolvedValue({ structuredContent });
     const runtime = createAssistantRuntime({

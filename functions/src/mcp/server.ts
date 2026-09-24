@@ -715,8 +715,9 @@ function buildMcpServerInstructions(auth: AuthenticatedMcpRequest): string {
     );
   }
   if (auth.scopes.includes(MCP_OAUTH_SCOPES.ActivityDetailsRead)) {
-    const preferredActivityTool = auth.assistantConversationId ? 'query_activities' : 'list_activities';
-    const connectorGuidance = auth.assistantConversationId ? ''
+    const isBuiltInAssistant = auth.clientId === 'https://quantified-self.io/internal/assistant';
+    const preferredActivityTool = isBuiltInAssistant ? 'query_activities' : 'list_activities';
+    const connectorGuidance = isBuiltInAssistant ? ''
       : ' query_activities is an equivalent strict-date-mode tool for clients that support its oneOf schema; if a connector rejects that schema before the call, use list_activities with the same filters.';
     instructions.push(
       `For a workout, use list_activity_types if needed, then ${preferredActivityTool}; aggregate metrics do not contain individual records. Use relativePeriod plus timeZone for today or yesterday. For latest, omit dates; add activityTypes and limit 1 when named. For nearby history, use search_activities_near_location. Follow nextCursor until matched or scanComplete.${connectorGuidance}`,

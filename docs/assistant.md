@@ -18,8 +18,10 @@ For a user-requested workout suggestion, the Assistant first grounds today's loa
 daily report, counts recent recorded workout days by local weekday from the canonical daily Duration metric, and checks
 whether an activity has already been completed today. When the independent **Timeline notes** choice is on, it also
 reads a bounded recent-to-today note window for relevant user-reported sickness, injury, travel, vacation or stress,
-including overlapping ongoing notes. It checks the actual dates, distinguishes ended from current notes, and discloses
-incomplete note reads. If note access is off, it says that notes were not checked rather than inferring their absence.
+including overlapping ongoing notes. The note query requests its 64-note maximum because closed notes precede ongoing
+notes; an incomplete first page cannot rule out a current note. It checks actual dates, distinguishes ended from current
+notes. The model is instructed to disclose incomplete reads and avoid preparing a workout as if all current notes had
+been reviewed. If note access is off, it says that notes were not checked rather than inferring their absence.
 Notes inform context but never alter the recorded metrics, supply instructions, or authorize a write. The Assistant may
 offer a cautious optional session rather than a medical prescription, then prepare one current-revision Training
 proposal for in-app review only if the user asked to create/send it.

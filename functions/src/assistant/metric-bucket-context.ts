@@ -1,4 +1,4 @@
-import { ChartDataCategoryTypes } from '@sports-alliance/sports-lib';
+import { ChartDataCategoryTypes, TimeIntervals } from '@sports-alliance/sports-lib';
 
 /** Add date labels for Gemini without changing the validated MCP metric result. */
 type RecordValue = Record<string, unknown>;
@@ -11,6 +11,7 @@ function asRecord(value: unknown): RecordValue | null {
 function labelBuckets(aggregation: unknown, formatter: Intl.DateTimeFormat): unknown {
   const record = asRecord(aggregation);
   if (!record || record.categoryType !== ChartDataCategoryTypes.DateType
+    || record.resolvedTimeInterval !== TimeIntervals.Daily
     || !Array.isArray(record.buckets)) return aggregation;
   return { ...record, buckets: record.buckets.map(value => {
     const bucket = asRecord(value);
