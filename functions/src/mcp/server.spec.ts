@@ -1300,6 +1300,9 @@ describe('MCP HTTP scope enforcement', () => {
       expect(instructions).toContain(
         'relativePeriod plus timeZone for today or yesterday',
       );
+      expect(instructions).toContain('then list_activities');
+      expect(instructions).toContain('if a connector rejects that schema before the call, use list_activities');
+      expect(tools.map(tool => tool.name)).toContain('list_activities');
       expect(instructions).toContain(
         'add activityTypes and limit 1 when named',
       );

@@ -1,7 +1,7 @@
 {
   "formatVersion": 1,
-  "candidateSha256": "5965ccb5e8a28e2032cf9e8f8fc9e9014d3f6fa7624138ac14fecce1a70ad53b",
+  "candidateSha256": "d6cda0e40227666256aaf10ddd3b9f5bbc80da110c022ed004167ebbe1d7695c",
   "lifecycleAction": "developer-refresh",
-  "summary": "Retain prior Training, Health, Timeline, activity, OAuth and PKCE changes. Add event title/description edits, Strength Training details, and pool-length workout read/preview under existing permissions. Preserve dependent scopes, current-value checks, benchmark exclusion, native approval and strict outputs. Registered v1 recipe schemas stay frozen; focused strength and pool-length writes use approval-gated apply. Refresh the client catalog and bundled guidance.",
+  "summary": "Retain prior Training, Health, Timeline, activity, OAuth and PKCE changes. Add event title/description edits, Strength details, and pool-length read/preview under existing permissions. Preserve scope dependencies, current-value checks, benchmark exclusion, native approval, strict outputs and frozen v1 recipes. Focused writes remain approval-gated. Guide clients to list_activities if query_activities oneOf is rejected. Refresh the client catalog and bundled guidance.",
   "rescanRequired": true
 }

@@ -144,6 +144,29 @@ describe('Assistant MCP session', () => {
     } finally { await session.close(); }
   });
 
+  it('combines Training and Timeline-note reads only under their independent conversation choices', async () => {
+    const withNotes = await createAssistantMcpSession('ordinary-owner', 'https://quantified-self.io',
+      undefined, 'coordinate_free', true, true, true, true, 'combined-conversation');
+    const withoutNotes = await createAssistantMcpSession('ordinary-owner', 'https://quantified-self.io',
+      undefined, 'coordinate_free', false, true, true, true, 'training-only-conversation');
+    try {
+      expect(withNotes.tools.map(tool => tool.name)).toEqual(expect.arrayContaining([
+        'get_daily_report', 'query_metric', 'query_activities', 'query_timeline_notes',
+        'query_planned_workouts_by_date', 'preview_create_planned_workout',
+      ]));
+      expect(withNotes.instructions).toContain('then query_activities');
+      expect(withNotes.instructions).not.toContain('then list_activities');
+      expect(withNotes.tools.map(tool => tool.name)).not.toContain('apply_training_changes' as never);
+      expect(withNotes.tools.map(tool => tool.name)).not.toContain('update_timeline_note' as never);
+      expect(withoutNotes.tools.map(tool => tool.name)).not.toContain('query_timeline_notes');
+      await expect(withoutNotes.callTool('query_timeline_notes', {
+        startDate: '2026-09-01', endDate: '2026-09-24',
+      })).rejects.toThrow('not available');
+    } finally {
+      await Promise.all([withNotes.close(), withoutNotes.close()]);
+    }
+  });
+
   it('exposes content reads and prepare-only tools after per-chat consent', async () => {
     let capturedAuth: AuthenticatedMcpRequest | null = null;
     const session = await createAssistantMcpSession('ordinary-owner', 'https://quantified-self.io', {

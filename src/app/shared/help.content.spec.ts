@@ -14,6 +14,13 @@ import {
 } from './policies.content';
 
 describe('help.content', () => {
+  it('explains separately consented Timeline-note context for workout suggestions', () => {
+    const assistant = HELP_SECTIONS.find(section => section.id === 'ai-insights')?.content;
+    expect(assistant).toContain('notes about sickness, injury, travel, or vacation');
+    expect(assistant).toContain('Without it the Assistant cannot check notes');
+    expect(assistant).toContain('never change calculations, automatically send a workout');
+  });
+
   it('keeps Planning guidance public and searchable', () => {
     const copy = JSON.stringify(HELP_SECTIONS);
     expect(copy).toContain('/training/plans');

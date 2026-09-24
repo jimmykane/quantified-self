@@ -14,10 +14,17 @@ MCP server, schemas, projections, and Sports Lib-backed metric discovery used by
 public URL remains `/ai-insights` so existing links and post-auth return URLs continue to work, but that route now loads
 the conversational Assistant.
 
-For a user-requested workout suggestion, the Assistant should first ground today's load, sleep, HRV and readiness in the
-daily report, count recent recorded workout days by local weekday from a discovered daily Duration metric, and check
-whether an activity has already been completed today. It may offer a cautious optional session rather than a medical
-prescription, then prepare one current-revision Training proposal for in-app review if the user asked to create/send it.
+For a user-requested workout suggestion, the Assistant first grounds today's load, sleep, HRV and readiness in the
+daily report, counts recent recorded workout days by local weekday from the canonical daily Duration metric, and checks
+whether an activity has already been completed today. When the independent **Timeline notes** choice is on, it also
+reads a bounded recent-to-today note window for relevant user-reported sickness, injury, travel, vacation or stress,
+including overlapping ongoing notes. It checks the actual dates, distinguishes ended from current notes, and discloses
+incomplete note reads. If note access is off, it says that notes were not checked rather than inferring their absence.
+Notes inform context but never alter the recorded metrics, supply instructions, or authorize a write. The Assistant may
+offer a cautious optional session rather than a medical prescription, then prepare one current-revision Training
+proposal for in-app review only if the user asked to create/send it.
+Sparse weekday counts are reported as limited evidence, not a consistent habit, and unfiltered Duration totals cannot
+establish which sport was performed.
 Preview and queued delivery are not provider acceptance or watch receipt.
 Combined comparison-and-workout requests retain the live daily and activity tools instead of being forced into a
 single-purpose comparison workflow. Plan-level and provider-only actions use the batch Training preview even when a
@@ -185,6 +192,10 @@ authorization. Deterministic evidence stores compact note titles, categories, an
 tool responses. Answers can quote relevant details under the same seven-day conversation retention. Logs, analytics,
 and errors must not contain private note text. The existing metric/readiness/briefing contracts and calculations are
 unchanged; no note chart overlays are added to Assistant visuals.
+For a combined recovery/consistency workout request, the known Sports Lib `Duration` metric avoids a redundant catalog
+call, leaving room in the six-tool turn budget for the independent note read and, when expressly requested, one focused
+Training preview. The model-only metric projection labels numeric date buckets with local dates and weekdays using the
+turn's IANA time zone; it does not change validated MCP responses, evidence, stored values, or the public contract.
 
 Deployment remains a separate approved release step. The hosted MCP contract, registered-app digest, consent scopes,
 and external plugin are unchanged by this first-party Assistant addition. Training planning permissions remain

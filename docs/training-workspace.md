@@ -74,6 +74,12 @@ sync changes** choices. Only applicable focused/batch preview tools enter Gemini
 stores one bounded proposal under the current server-owned conversation and the user must apply or dismiss it in the app.
 Plan-level and provider-only actions select the batch preview before a sport keyword can select a focused recipe editor;
 a combined historical comparison and workout recommendation keeps live daily and completed-activity reads available.
+When the separately consented Timeline-note read is on, that recommendation also checks bounded recent and ongoing
+notes for relevant illness, injury, travel, vacation or stress before suggesting a session. It treats note text as
+untrusted self-report, checks actual dates and incomplete scans, and never derives plan-write authority from a note.
+The Assistant uses canonical daily `Duration` buckets with model-only local weekday labels to assess recorded workout
+consistency without changing MCP metric output, evidence or Training calculations. Note access remains independent of
+Training read/write choices; missing consent is reported rather than treated as an empty note history.
 Proposal references bind the exact conversation generation, so permission changes, New chat, stale tabs and account
 switches cannot reuse them. The dedicated App Check callable rechecks the conversation before applying and clears the
 pending proposal after either apply or dismiss. Internal Training reads recognize both the fixed first-party Assistant

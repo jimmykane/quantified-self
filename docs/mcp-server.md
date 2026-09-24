@@ -132,6 +132,12 @@ Plan-level and provider-only actions select the batch preview before sport-speci
 or pool-length change selects its focused preview. A combined comparison and workout recommendation retains live daily
 and completed-activity reads instead of inheriting a single-purpose analytical workflow. This is internal routing only:
 the public tool list, scopes, strict schemas and approval boundary do not change.
+The same combined recommendation may consult `query_timeline_notes` only under its separately enabled Assistant
+permission. Bounded recent/ongoing notes are dated, incomplete reads are disclosed, and user-authored text cannot
+instruct a provider or authorize a plan change. The internal model-only projection adds local date/weekday labels to
+numeric metric buckets using the request's IANA time zone, without changing the validated public metric response or
+registered contract. A known canonical `Duration` query leaves room within the six-call Assistant budget for notes
+and one expressly requested focused create preview.
 
 Every future planning feature must review MCP impact in the same PR: explicit projections, schemas, consent, bounds, units,
 Assistant/plugin guidance and tests. Record a no-impact rationale or a focused epic-linked Project 2 deferral. Maintaining
@@ -809,8 +815,8 @@ The analytics and map entries follow the
 | `create_timeline_note` | `timeline-notes:read` + `timeline-notes:write`; native client approval gate | Idempotently creates one explicitly authored private note from a stable mutation UUID |
 | `update_timeline_note` | `timeline-notes:read` + `timeline-notes:write`; native client approval gate | Replaces one note at its expected revision; stale changes conflict |
 | `delete_timeline_note` | `timeline-notes:read` + `timeline-notes:write`; native client approval gate | Permanently removes one note at its expected revision and leaves a content-free deletion receipt |
-| `list_activities` | `activity-details:read`; locations add `activity-location:read` | Frozen compatibility tool for bounded newest-first activity scans |
-| `query_activities` | `activity-details:read`; locations add `activity-location:read` | Preferred bounded activity query with structurally exclusive explicit, relative, and unbounded date modes |
+| `list_activities` | `activity-details:read`; locations add `activity-location:read` | Bounded newest-first activity scans; preferred across MCP hosts, including for today's completed workouts |
+| `query_activities` | `activity-details:read`; locations add `activity-location:read` | Equivalent activity query with structurally exclusive explicit, relative, and unbounded date modes for clients that support its `oneOf` schema |
 | `query_activities_with_tags` | `activity-details:read` | Coordinate-free activity summaries with their parent event tags and optional exact case-insensitive `any`/`all` tag filtering |
 | `update_event_tags` | `activity-details:read` + `events:write`; host-controlled approval | Replaces the complete parent-event tag list after an exact current-tag precondition; sibling activities share the result and benchmark events are excluded |
 | `get_event_title` | `activity-details:read` + `events:write` | Reads one editable parent-event title for an opaque activity reference before a rename; no internal event ID |
@@ -1105,7 +1111,7 @@ user asks for jump-level details. When reading those records, follow `nextCursor
 inspection is incomplete; the bounded built-in Assistant does not spend its required superlative workflow on redundant
 jump pagination. `jumpCount` is availability and volume evidence only; it never ranks jump quality.
 
-For a recent or latest jump detail request, use newest-first `query_activities`, choose the first returned activity with
+For a recent or latest jump detail request, use newest-first `list_activities`, choose the first returned activity with
 `jumpCount > 0`, then pass that opaque reference to `list_activity_jumps`. Continue the same query cursor only when the
 page contains no activity with jumps. With `activity-location:read`, only a jump-record coordinate may represent a jump
 on a map or in prose: an activity's start and end positions are distinct summary locations and must never be substituted.
@@ -1202,8 +1208,14 @@ cursors use authenticated encryption and are bound to the UID and MCP connection
 them. The separately requested direct app URL uses the existing `/user/{uid}/event/{eventId}` route and still requires
 the user's normal application sign-in; it contains no MCP credential or authorization bypass.
 
-Activity discovery metadata explicitly maps workout, exercise-session, today, yesterday, last, latest, most-recent, and
-named-sport requests to `query_activities`. `list_activity_types` returns the unique canonical Sports Lib activity types
+Activity discovery metadata maps workout, exercise-session, today, yesterday, last, latest, most-recent, and
+named-sport requests to `list_activities`. It has the same bounded, owner-scoped activity service as
+`query_activities` and avoids connectors that reject the latter's `oneOf` input before the request reaches QS.
+The existing strict tool remains available to compatible clients; a client-side schema rejection should fall back to
+`list_activities` with identical filters, never infer that the user has no completed workouts.
+The in-process built-in Assistant keeps `query_activities` in its curated allowlist because it does not use the
+affected external connector schema conversion.
+`list_activity_types` returns the unique canonical Sports Lib activity types
 plus their group and indoor hints; filters accept those values or aliases recognized by Sports Lib and canonicalize
 them before scanning. A request such as “latest run” therefore uses a server-side type filter with `limit: 1`, so a newer
 activity of another type is skipped instead of being mistaken for the requested workout.
