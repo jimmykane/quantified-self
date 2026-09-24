@@ -111,7 +111,8 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Training MCP write propos
     const workout = (await db.collection('users').doc(uid).collection('scheduledWorkouts').get()).docs[0];
     expect(workout.get('structure.poolLength')).toEqual(swim.poolLength);
     const workoutRef = created.createdReferences[0].reference;
-    const { poolLength: _selectedPoolLength, ...legacySwim } = swim;
+    const { poolLength: selectedPoolLength, ...legacySwim } = swim;
+    expect(selectedPoolLength).toEqual({ meters: 25, presentation: 'meters' });
     await expect(previewTrainingChanges({ uid, connectionId: 'connection', scopes,
       arguments: { expectedScheduleRevision: created.scheduleRevision, changes: [{ kind: 'update-workout',
         workout: { ref: workoutRef }, plan: null, localDate: '2026-09-18', title: 'Legacy edit',
