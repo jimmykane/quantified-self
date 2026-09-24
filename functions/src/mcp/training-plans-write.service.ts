@@ -456,6 +456,9 @@ function providerSummary(provider: PlannedWorkoutProviderId, action: StoredProvi
   if (availability === 'unavailable') return `${provider} workout delivery is not enabled for this account.`;
   if (availability === 'reconnect_required') return `${provider} must be reconnected before delivery can change.`;
   if (availability === 'connection_repair') return `${provider} connection access must be repaired before delivery can change.`;
+  if (action === 'send' && preview.approvalDigest) {
+    return `${provider}: enable workout delivery; mapping differences require separate approval before a copy can be sent.`;
+  }
   const effect = action === 'stop' ? 'stop sync and withdraw eligible future copies'
     : action === 'check' ? 'queue a remote-copy check'
       : action === 'retry' ? 'retry the current delivery state'
@@ -836,7 +839,7 @@ async function currentDeliveryCommand(
     provider: operation.provider, action, expectedScheduleRevision: operation.expectedScheduleRevision,
     expectedScopeRevision: operation.expectedScopeRevision, expectedSettingsRevision: operation.expectedSettingsRevision,
     ...(operation.timeZone ? { timeZone: operation.timeZone } : {}),
-    ...(operation.approvalDigest ? { approvalDigest: operation.approvalDigest } : {}) };
+    ...(action === 'approve' && operation.approvalDigest ? { approvalDigest: operation.approvalDigest } : {}) };
   if (action === 'check') {
     return await trainingDeliveryCommand(deps.runtime, uid, base, false,
       tx => assertAuthorityInTransaction(deps, tx, uid, connectionId, requiredScopes, expectedAccessGeneration,
@@ -1099,7 +1102,10 @@ async function applyTrainingChangesInternal(
           proposal.accessGeneration, current.ref, operation, `mcp-${current.id}-${index}`.slice(0, 128));
         providerResults.push({ index: operation.index, provider: operation.provider,
           status: operation.action === 'check' ? 'queued' : 'applied',
-          message: operation.action === 'check' ? 'Remote-copy verification was queued.' : 'Delivery preferences were updated and reconciliation was queued.' });
+          message: operation.action === 'check' ? 'Remote-copy verification was queued.'
+            : operation.action === 'send' && operation.approvalDigest
+              ? 'Delivery was enabled, but this workout needs separate mapping approval before a provider copy can be sent.'
+              : 'Delivery preferences were updated and reconciliation was queued.' });
       } catch (error) {
         providerResults.push({ index: operation.index, provider: operation.provider, status: 'blocked',
           message: publicErrorMessage(error) ?? 'Provider delivery is currently unavailable. Review its connection and try again.' });

@@ -111,6 +111,10 @@ They never accept credentials or remote IDs. `all_connected` fans out only to co
 by preview; explicit providers return independent blocked/success results. Pro, compatibility approval, horizon,
 connection, completion and provider readiness checks remain authoritative. Provider failure never rolls back authored
 schedule changes, and MCP itself makes no direct provider HTTP request.
+For a degraded standalone create-and-send (for example, Mountain Biking folded to Garmin Cycling), Send stores only
+delivery consent and queues reconciliation. It must not forward the mapping digest as approval. The public preview and
+apply result explain that a separate approval is needed; the current workout remains unsent until a new `approve`
+proposal binds the current destination and payload digest. An applied Send result is not a provider acceptance claim.
 
 The built-in Assistant exposes only the applicable focused/batch previews to Gemini. It prefers the focused tool for one
 new workout, including a one-workout create-and-send request, and the batch tool for other or genuinely multi-change

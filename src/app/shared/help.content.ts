@@ -214,6 +214,7 @@ See the public [Training Plans overview](/features/training-plans) for a walkthr
 - For Strength Training, the normal v1 workout read is only a compatibility summary. Use the separate strength-details read to inspect named exercises, sets, kilograms of external load, and rest. A separate strength preview accepts the complete prescription and derives the summary on the server; the same approval-gated apply still controls changes.
 - **Training plan and workout changes** and **Training provider delivery changes** are separate permissions. A client prepares one bounded proposal, then uses a distinct write call governed by the MCP host's approval controls. Keep automatic approval off when you want to inspect every change. The built-in Assistant uses separate in-app choices and can prepare a proposal, but it cannot apply one without your confirmation in Quantified Self.
 - Provider delivery proposed through MCP still requires Pro, an eligible connected provider, rollout readiness, compatibility approval, and the independent delivery permission. Previewing a change never contacts a provider, and one provider failure does not roll back an authored plan or workout.
+- If an MCP client creates and sends a workout whose sport needs simplification for Garmin, **Send** saves your choice to sync but does not approve that simplification or mean Garmin has the workout. Review the mapping difference and approve it separately before QS sends a copy.
 
 ## Send workouts to connected providers
 
