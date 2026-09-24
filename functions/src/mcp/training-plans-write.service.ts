@@ -5,6 +5,7 @@ import { Timestamp } from 'firebase-admin/firestore';
 import * as logger from 'firebase-functions/logger';
 import { HttpsError } from 'firebase-functions/v2/https';
 import { z } from 'zod';
+import { ActivityTypes } from '@sports-alliance/sports-lib';
 import {
   parseMutateTrainingScheduleRequestV1,
   parseDeleteTrainingPlanRequestV1,
@@ -19,6 +20,8 @@ import {
   type TrainingScheduleMutationOperationV1,
 } from '../../../shared/training-plans';
 import { parseWorkoutStructureV1 } from '../../../shared/planned-workout';
+import { parseStrengthWorkoutDetailsV1, projectStrengthWorkoutToV1,
+  strengthProjectionMatchesDetails, type StrengthWorkoutDetailsV1 } from '../../../shared/strength-workout';
 import { PLANNED_WORKOUT_PROVIDER_IDS, type PlannedWorkoutProviderId } from '../../../shared/planned-workout-providers';
 import { deliverySettingsId, normalizeDeliveryTimeZone, trainingDeliveryLocalDate, TrainingDeliveryContractError,
   type TrainingDeliveryAction, type TrainingDeliveryPreviewV1 } from '../../../shared/training-provider-delivery';
@@ -36,6 +39,7 @@ import type { DeliveryRuntime } from '../training-plans/delivery/contracts';
 import { decodeOpaqueValue, encodeOpaqueValue, McpDataError } from './data.service';
 import {
   TRAINING_CHANGE_SCHEMA,
+  TRAINING_STRENGTH_INTERNAL_CHANGE_SCHEMA,
   TRAINING_DELIVERY_WRITE_SCOPE,
   TRAINING_PLANS_SCOPE,
   TRAINING_PLANS_WRITE_SCOPE,
@@ -54,7 +58,7 @@ const referencePayload = z.strictObject({ kind: z.enum(['plan', 'workout']), id:
 const proposalPayload = z.strictObject({ kind: z.literal('proposal'), id: entityId,
   createdAtMs: z.number().int().nonnegative().safe() });
 
-type TrainingChange = z.infer<typeof TRAINING_CHANGE_SCHEMA>;
+type TrainingChange = z.infer<typeof TRAINING_CHANGE_SCHEMA> | z.infer<typeof TRAINING_STRENGTH_INTERNAL_CHANGE_SCHEMA>;
 type PreviewResult = z.infer<typeof TRAINING_WRITE_OUTPUTS.preview_training_changes>;
 type ApplyResult = z.infer<typeof TRAINING_WRITE_OUTPUTS.apply_training_changes>;
 
@@ -263,9 +267,20 @@ async function loadSnapshot(
       if (workout.id !== doc.id) unavailable();
       workouts.set(workout.id, workout);
     });
+    const strengthWorkouts = [...workouts.values()].filter(workout => workout.structure.sport === ActivityTypes.StrengthTraining);
+    const strengthDocs = strengthWorkouts.length ? await tx.getAll(...strengthWorkouts.map(workout =>
+      user.collection('scheduledWorkouts').doc(workout.id).collection('strengthDetails').doc('current'))) : [];
+    const strengthDetails = new Map<string, StrengthWorkoutDetailsV1>();
+    strengthDocs.forEach((doc, index) => {
+      if (!doc.exists) unavailable();
+      const details = parseStrengthWorkoutDetailsV1(doc.data());
+      const workout = strengthWorkouts[index];
+      if (details.workoutId !== workout.id || !strengthProjectionMatchesDetails(workout.structure, details)) unavailable();
+      strengthDetails.set(workout.id, details);
+    });
     return { accessGeneration: generation, snapshot: {
       state: stateDoc.exists ? parseTrainingPlanStateV1(stateDoc.data()) : createEmptyTrainingPlanState(),
-      plans, workouts,
+      plans, workouts, strengthDetails,
     } };
   }, { readOnly: true });
 }
@@ -404,10 +419,12 @@ function resolveScheduleOperation(
       if (locals.has(change.localKey)) invalid(`Duplicate localKey ${change.localKey}.`);
       const workoutId = safeEntityId('workout', randomId()); locals.set(change.localKey, { kind: 'workout', id: workoutId });
       return { kind: change.kind, workoutId, planId: plan(change.plan), localDate: change.localDate,
-        title: change.title, structure: parseWorkoutStructureV1(change.structure), confirmPlanRangeExtension: true };
+        title: change.title, structure: parseWorkoutStructureV1(change.structure),
+        ...('strength' in change ? { strength: change.strength } : {}), confirmPlanRangeExtension: true };
     }
     case 'update-workout': return { kind: change.kind, workoutId: workout(change.workout), planId: plan(change.plan),
-      localDate: change.localDate, title: change.title, structure: parseWorkoutStructureV1(change.structure), confirmPlanRangeExtension: true };
+      localDate: change.localDate, title: change.title, structure: parseWorkoutStructureV1(change.structure),
+      ...('strength' in change ? { strength: change.strength } : {}), confirmPlanRangeExtension: true };
     case 'move-workout': return { kind: change.kind, workoutId: workout(change.workout), planId: plan(change.plan),
       localDate: change.localDate, confirmPlanRangeExtension: true };
     case 'copy-workout': {
@@ -524,7 +541,8 @@ async function previewSimulatedProviderAvailability(
   const workouts = operation.targetType === 'workout'
     ? [workout!]
     : [...snapshot.workouts.values()].filter(item => item.planId === operation.targetId);
-  const assessments = workouts.map(item => transport?.assess(item, connection.destinationKey, timeZone));
+  const assessments = workouts.map(item => transport?.assess(item, connection.destinationKey, timeZone,
+    snapshot.strengthDetails?.get(item.id) ?? null));
   const warningCount = assessments.filter(item => item && item.level !== 'exact').length;
   const today = trainingDeliveryLocalDate(deps.now(), timeZone);
   const eligibleCount = workouts.filter(item => item.lifecycle === 'planned' && item.localDate >= today
@@ -568,10 +586,14 @@ function decodeProposalRef(value: string, uid: string, connectionId: string): { 
 export async function previewTrainingChanges(
   input: TrainingWriteInput,
   provided?: TrainingWriteDependencies,
+  strengthMode = false,
 ): Promise<PreviewResult> {
   const deps = provided ?? defaultDependencies();
   assertBytes(input.arguments);
-  const parsed = TRAINING_WRITE_INPUTS.preview_training_changes.safeParse(input.arguments);
+  const parsed = strengthMode
+    ? z.strictObject({ expectedScheduleRevision: z.number().int().nonnegative().safe(),
+      changes: z.array(TRAINING_STRENGTH_INTERNAL_CHANGE_SCHEMA).length(1) }).safeParse(input.arguments)
+    : TRAINING_WRITE_INPUTS.preview_training_changes.safeParse(input.arguments);
   if (!parsed.success) invalid('Invalid Training change proposal. Use the advertised operation schema and at most 25 changes.');
   assertProviderActionsLast(parsed.data.changes);
   const required = requiredScopes(parsed.data.changes);
@@ -731,6 +753,19 @@ export async function previewTrainingChanges(
     tx.create(deps.db.collection('users').doc(input.uid).collection(PROPOSALS).doc(proposalId), stored);
   });
   return preview;
+}
+
+/** Additive strength authoring path; the registered v1 recipe schema stays unchanged. */
+export async function previewStrengthWorkoutChange(
+  input: TrainingWriteInput, provided?: TrainingWriteDependencies,
+): Promise<PreviewResult> {
+  assertBytes(input.arguments);
+  const parsed = TRAINING_WRITE_INPUTS.preview_strength_workout_change.safeParse(input.arguments);
+  if (!parsed.success) invalid('Provide one complete, valid strength exercise prescription.');
+  const draft = parsed.data.change.strength;
+  const structure = projectStrengthWorkoutToV1({ ...draft, workoutId: 'preview', revision: 1 });
+  return previewTrainingChanges({ ...input, arguments: { expectedScheduleRevision: parsed.data.expectedScheduleRevision,
+    changes: [{ ...parsed.data.change, structure }] } }, provided, true);
 }
 
 /**

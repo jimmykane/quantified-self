@@ -1,7 +1,6 @@
 import { Injectable, inject } from '@angular/core';
 import { MatDialog } from '@angular/material/dialog';
 import { ConfirmationDialogComponent } from '../components/confirmation-dialog/confirmation-dialog.component';
-import { environment } from '../../environments/environment';
 import { Firestore, collection, collectionData, doc, docData, getDocsFromServer, limit, query, setDoc, where } from 'app/firebase/firestore';
 
 // ... (other imports)
@@ -9,7 +8,7 @@ import { Firestore, collection, collectionData, doc, docData, getDocsFromServer,
 
 import { Auth } from 'app/firebase/auth';
 import type { FirebaseUserType } from 'app/firebase/auth';
-import { Observable, catchError, from, switchMap, filter, take, map, of, retry, throwError, timeout, timer, firstValueFrom } from 'rxjs';
+import { EMPTY, Observable, catchError, from, mergeMap, switchMap, filter, take, map, merge, of, retry, throwError, timeout, timer, firstValueFrom } from 'rxjs';
 import { AppWindowService } from './app.window.service';
 import { LoggerService } from './logger.service';
 import { AppFunctionsService } from './app.functions.service';
@@ -80,6 +79,13 @@ interface CheckoutSessionDocumentData {
     error?: string | { message?: string };
 }
 
+export class CheckoutStartError extends Error {
+    constructor(message: string) {
+        super(message);
+        this.name = 'CheckoutStartError';
+    }
+}
+
 @Injectable({
     providedIn: 'root'
 })
@@ -90,6 +96,7 @@ export class AppPaymentService {
     private dialog = inject(MatDialog);
     private readonly userCancelledPortalMessage = 'User cancelled redirection to portal.';
     private readonly maxCheckoutRetryAttempts = 1;
+    private readonly checkoutSessionWaitMs = 60000;
     private readonly subscriptionReadRetryAttempts = 4;
     private readonly subscriptionReadRetryDelayMs = 750;
     private readonly subscriptionStatuses: StripeSubscription['status'][] = ['active', 'trialing', 'canceled', 'incomplete', 'incomplete_expired', 'past_due', 'unpaid'];
@@ -294,7 +301,7 @@ export class AppPaymentService {
     /**
      * Creates a checkout session and redirects the user to Stripe.
      */
-    async appendCheckoutSession(price: string | StripePrice, successUrl?: string, cancelUrl?: string): Promise<void> {
+    async appendCheckoutSession(price: string | StripePrice, successUrl?: string, cancelUrl?: string, canRedirect?: () => boolean): Promise<void> {
         const user = this.auth.currentUser;
         if (!user) {
             throw new Error('User must be authenticated to create a checkout session.');
@@ -302,7 +309,7 @@ export class AppPaymentService {
 
         const success = successUrl || `${this.windowService.currentDomain}/payment/success`;
         const cancel = cancelUrl || `${this.windowService.currentDomain}/payment/cancel`;
-        await this.appendCheckoutSessionWithAttempt(price, user.uid, success, cancel, user, 0);
+        await this.appendCheckoutSessionWithAttempt(price, user.uid, success, cancel, user, 0, canRedirect);
     }
 
     private async appendCheckoutSessionWithAttempt(
@@ -311,7 +318,8 @@ export class AppPaymentService {
         successUrl: string,
         cancelUrl: string,
         user: { getIdToken: (forceRefresh?: boolean) => Promise<string> },
-        attempt: number
+        attempt: number,
+        canRedirect?: () => boolean
     ): Promise<void> {
         this.assertCheckoutUserStillCurrent(userId);
         const checkoutInput = this.resolveCheckoutInput(price);
@@ -348,13 +356,14 @@ export class AppPaymentService {
             this.logger.error('Error waiting for checkout session URL:', error);
             const errorName = error instanceof Error ? error.name : '';
             if (errorName === 'TimeoutError') {
-                alert('Payment system is slow to respond. Please check if the popup was blocked or try again.');
-            } else {
-                alert('An error occurred starting the payment. Please try again.');
+                throw new CheckoutStartError('Checkout is taking longer than expected. Please try again. If the problem continues, contact support.');
             }
-            return;
+            throw new CheckoutStartError('An error occurred starting the payment. Please try again.');
         }
         this.assertCheckoutUserStillCurrent(userId);
+        if (canRedirect?.() === false) {
+            return;
+        }
 
         if (session.error) {
             const errorMessage = this.getCheckoutErrorMessage(session.error);
@@ -363,17 +372,15 @@ export class AppPaymentService {
             if (errorMessage.includes('No such customer') && attempt < this.maxCheckoutRetryAttempts) {
                 this.logger.log('Detected stale Stripe customer ID. Clearing and retrying...');
                 await this.functionsService.call<void, { success: boolean, cleaned: boolean }>('cleanupStripeCustomer');
-                await this.appendCheckoutSessionWithAttempt(price, userId, successUrl, cancelUrl, user, attempt + 1);
+                await this.appendCheckoutSessionWithAttempt(price, userId, successUrl, cancelUrl, user, attempt + 1, canRedirect);
                 return;
             }
 
-            alert(`Payment error: ${errorMessage}`);
-            return;
+            throw new CheckoutStartError(`Payment error: ${errorMessage}`);
         }
 
         if (!session.url) {
-            alert('An error occurred starting the payment. Please try again.');
-            return;
+            throw new CheckoutStartError('An error occurred starting the payment. Please try again.');
         }
 
         this.logger.log('Redirecting to Stripe:', session.url);
@@ -484,7 +491,7 @@ export class AppPaymentService {
             return true;
         } catch (error) {
             if (error instanceof Error && error.message === this.userCancelledPortalMessage) {
-                return true;
+                throw error;
             }
 
             this.logger.error('Error checking existing subscriptions:', error);
@@ -527,17 +534,44 @@ export class AppPaymentService {
 
     private async waitForCheckoutSessionUpdate(userId: string, checkoutSessionDocId: string): Promise<CheckoutSessionDocumentData> {
         const sessionRef = doc(this.firestore, `customers/${userId}/checkout_sessions/${checkoutSessionDocId}`);
+        let reportedServerReadFailure = false;
+        // A server read also recovers sessions when the live Firestore listener misses an extension update.
+        const serverUpdates$ = timer(5000, 10000).pipe(
+            mergeMap(() => from(this.readCheckoutSessionFromServer(userId, checkoutSessionDocId)).pipe(
+                catchError((error: unknown) => {
+                    if (!this.isRecoverableFirestoreReadError(error)) {
+                        return throwError(() => error);
+                    }
+                    if (!reportedServerReadFailure) {
+                        reportedServerReadFailure = true;
+                        this.logger.warn('[AppPaymentService] Checkout session server read failed; retrying.', {
+                            code: this.getErrorCode(error),
+                        });
+                    }
+                    return EMPTY;
+                })
+            ), 1)
+        );
         const session = await firstValueFrom(
-            docData(sessionRef).pipe(
+            merge(docData(sessionRef), serverUpdates$).pipe(
                 filter((sessionData): sessionData is CheckoutSessionDocumentData => {
                     const data = sessionData as CheckoutSessionDocumentData | null | undefined;
                     return !!data && (!!data.url || !!data.error);
                 }),
                 take(1),
-                timeout(15000)
+                timeout(this.checkoutSessionWaitMs)
             )
         );
         return session;
+    }
+
+    private async readCheckoutSessionFromServer(userId: string, checkoutSessionDocId: string): Promise<CheckoutSessionDocumentData | undefined> {
+        // The full SDK's getDocFromServer can reuse a stale watch/cache result. Lite reads through REST.
+        const { getFirestore, doc: liteDoc, getDoc } = await import('firebase/firestore/lite');
+        const liteFirestore = getFirestore(this.firestore.app);
+        const sessionRef = liteDoc(liteFirestore, `customers/${userId}/checkout_sessions/${checkoutSessionDocId}`);
+        const sessionSnapshot = await getDoc(sessionRef);
+        return sessionSnapshot.data() as CheckoutSessionDocumentData | undefined;
     }
 
     private getCheckoutErrorMessage(error: CheckoutSessionDocumentData['error']): string {
@@ -616,7 +650,7 @@ export class AppPaymentService {
             return throwError(() => error);
         }
 
-        if (!this.isRecoverableSubscriptionReadError(error)) {
+        if (!this.isRecoverableFirestoreReadError(error)) {
             return throwError(() => error);
         }
 
@@ -635,7 +669,7 @@ export class AppPaymentService {
 
         return from(user.getIdToken(true)).pipe(
             catchError((tokenError) => {
-                if (this.isRecoverableSubscriptionReadError(tokenError)) {
+                if (this.isRecoverableFirestoreReadError(tokenError)) {
                     this.logger.warn('[AppPaymentService] Auth refresh was temporarily unavailable; retrying the subscription read.', {
                         uid: user.uid,
                         code: this.getErrorCode(tokenError),
@@ -661,7 +695,7 @@ export class AppPaymentService {
         );
     }
 
-    private isRecoverableSubscriptionReadError(error: unknown): boolean {
+    private isRecoverableFirestoreReadError(error: unknown): boolean {
         const code = this.getErrorCode(error);
         return this.isPermissionDenied(error)
             || code === 'unauthenticated'

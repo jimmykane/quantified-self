@@ -22,7 +22,7 @@
         autocomplete="off"
         formControlName="canonicalValue"
         step="any"
-        [max]="maximumValue()"
+        [max]="maximumInputValue()"
         required>
       <span matTextSuffix>{{ valueUnit() }}</span>
       <mat-hint>{{ valueRangeHint() }}</mat-hint>

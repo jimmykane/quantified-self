@@ -42,4 +42,14 @@ describe('Training delivery mapping and production boundary', () => {
     expect(result.issues).toContain('Garmin receives Downhill Cycling as a Cycling workout because its Training API has no exact Downhill Cycling profile.');
     expect(downhill.structure.sport).toBe(ActivityTypes.DownhillCycling);
   });
+  it('admits an exact Garmin pool swim without changing another provider’s degradation', () => {
+    const pool: ScheduledWorkoutV1 = { ...workout, structure: {
+      version: 1, sport: ActivityTypes.Swimming, poolLength: { meters: 25, presentation: 'meters' },
+      nodes: [{ kind: 'step', id: 'length', purpose: 'work', ending: { kind: 'distance', meters: 25 }, targets: [] }],
+    } };
+    const result = assessTrainingDeliveryMapping('garmin', pool, 'destination', 'UTC');
+    expect(result.level).toBe('exact');
+    expect(result.issues).toEqual([]);
+    expect(assessTrainingDeliveryMapping('suunto', pool, 'destination', 'UTC').level).toBe('degraded');
+  });
 });

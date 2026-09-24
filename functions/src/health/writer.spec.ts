@@ -39,13 +39,16 @@ vi.mock('../shared/user-deletion-guard', () => ({
 }));
 
 import {
+    HealthSourceRecordBatchSplitRequiredError,
     HealthSourceRecordRevisionConflictError,
     HealthLifecycleGuardReadError,
     HealthWriteSizeError,
+    HEALTH_SOURCE_RECORD_TRANSACTION_BATCH_SIZE,
     assertHealthSourceRecordWriteSize,
     buildHealthSourceRecordWrite,
     markHealthProviderDisconnected,
     replaceHealthSourceRecord,
+    replaceHealthSourceRecords,
     updateHealthSyncState,
 } from './writer';
 
@@ -261,6 +264,105 @@ describe('health writer', () => {
         expect(fake.sets).toHaveBeenCalledTimes(2);
         expect(fake.deletes).not.toHaveBeenCalled();
         expect(hoisted.deletionGuard).toHaveBeenCalledOnce();
+    });
+
+    it('writes eight source records in one transaction with one read per shared lifecycle document', async () => {
+        const fake = fakeDatabase();
+        const tokenRef = { id: 'provider-account', path: 'tokens/provider-account' };
+        const queueRef = { id: 'queue-item', path: 'sleepSyncQueue/queue-item' };
+        fake.stored.set(tokenRef.path, {
+            accessToken: 'captured-token',
+            refreshToken: '',
+            expiresAt: 0,
+            dateCreated: 0,
+            dateRefreshed: 0,
+            tokenCredentialGeneration: 'captured-generation',
+            connectionState: 'connected',
+        });
+        fake.stored.set(queueRef.path, { queueRevision: 'revision-1' });
+        const inputs = Array.from(
+            { length: HEALTH_SOURCE_RECORD_TRANSACTION_BATCH_SIZE },
+            (_, index) => ({
+                ...validInput(),
+                sourceRecordKey: `2026-01-${String(index + 1).padStart(2, '0')}`,
+                sampleSeries: [],
+            }),
+        );
+
+        const results = await replaceHealthSourceRecords('user-1', inputs, 10_000, {
+            db: fake.db as never,
+            generateId: fakeId,
+            requiredExistingDocumentRef: tokenRef as never,
+            requiredExistingTokenCredential: tokenCredential('captured-token', 'captured-generation'),
+            requiredDocumentFieldValues: {
+                documentRef: tokenRef as never,
+                expectedFields: { connectionState: 'connected' },
+            },
+            additionalRequiredDocumentFieldValues: [{
+                documentRef: queueRef as never,
+                expectedFields: { queueRevision: 'revision-1' },
+            }],
+        });
+
+        expect(results).toHaveLength(HEALTH_SOURCE_RECORD_TRANSACTION_BATCH_SIZE);
+        expect(results.every(result => result.status === 'written')).toBe(true);
+        expect(fake.db.runTransaction).toHaveBeenCalledOnce();
+        expect(fake.sets).toHaveBeenCalledTimes(HEALTH_SOURCE_RECORD_TRANSACTION_BATCH_SIZE);
+        expect(fake.transaction.get.mock.calls.filter(([ref]) => ref.path === tokenRef.path)).toHaveLength(1);
+        expect(fake.transaction.get.mock.calls.filter(([ref]) => ref.path === queueRef.path)).toHaveLength(1);
+        expect(hoisted.deletionGuard).toHaveBeenCalledOnce();
+    });
+
+    it('rejects oversized record batches before starting a transaction', async () => {
+        const fake = fakeDatabase();
+        const inputs = Array.from(
+            { length: HEALTH_SOURCE_RECORD_TRANSACTION_BATCH_SIZE + 1 },
+            (_, index) => ({
+                ...validInput(),
+                sourceRecordKey: `2026-02-${String(index + 1).padStart(2, '0')}`,
+                sampleSeries: [],
+            }),
+        );
+
+        await expect(replaceHealthSourceRecords('user-1', inputs, 10_000, {
+            db: fake.db as never,
+            generateId: fakeId,
+        })).rejects.toBeInstanceOf(HealthSourceRecordBatchSplitRequiredError);
+
+        expect(fake.db.runTransaction).not.toHaveBeenCalled();
+        expect(hoisted.deletionGuard).not.toHaveBeenCalled();
+    });
+
+    it('rejects duplicate source identities before starting a batch transaction', async () => {
+        const fake = fakeDatabase();
+        const first = { ...validInput(), sampleSeries: [] };
+        const second = JSON.parse(JSON.stringify(first)) as Record<string, unknown>;
+        (second.revision as Record<string, unknown>).order = 2;
+        (second.revision as Record<string, unknown>).token = 'revision-2';
+
+        await expect(replaceHealthSourceRecords('user-1', [first, second], 10_000, {
+            db: fake.db as never,
+            generateId: fakeId,
+        })).rejects.toBeInstanceOf(HealthSourceRecordBatchSplitRequiredError);
+
+        expect(fake.db.runTransaction).not.toHaveBeenCalled();
+    });
+
+    it('keeps a conflicting record batch atomic', async () => {
+        const fake = fakeDatabase();
+        const first = { ...validInput(), sourceRecordKey: '2026-03-01', sampleSeries: [] };
+        const second = { ...validInput(), sourceRecordKey: '2026-03-02', sampleSeries: [] };
+        const conflicting = await buildHealthSourceRecordWrite('user-1', second, 9_000, fakeId);
+        conflicting.sourceRecord.source.revision.digest = 'different-digest';
+        fake.stored.set(sourceRecordPath(conflicting.sourceRecord.id), conflicting.sourceRecord);
+
+        await expect(replaceHealthSourceRecords('user-1', [first, second], 10_000, {
+            db: fake.db as never,
+            generateId: fakeId,
+        })).rejects.toBeInstanceOf(HealthSourceRecordRevisionConflictError);
+
+        expect(fake.db.runTransaction).toHaveBeenCalledOnce();
+        expect(fake.sets).not.toHaveBeenCalled();
     });
 
     it('length-encodes ID inputs so delimiter-bearing provider fields cannot collide', async () => {

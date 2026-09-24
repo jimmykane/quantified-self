@@ -23,6 +23,13 @@ describe('help.content', () => {
     expect(HELP_SECTIONS.some(section => section.id === 'activity-calendar')).toBe(true);
   });
 
+  it('explains the independent weight preference and canonical weigh-in storage', () => {
+    const copy = JSON.stringify(HELP_SECTIONS);
+    expect(copy).toContain('Weight input and display use your **Settings → Units → Weight** choice (kg or lb)');
+    expect(copy).toContain('saved measurements remain in canonical kg');
+    expect(copy).toContain('changing a distance preset does not reset that choice');
+  });
+
   it('documents regional formatting scope, precedence, and stable export dates', () => {
     const content = HELP_SECTIONS.find(section => section.id === 'data-and-privacy')!.content.replace(/\s+/g, ' ');
 
@@ -49,6 +56,7 @@ describe('help.content', () => {
     expect(content).toContain('Workout delivery to Garmin, Suunto, and Wahoo is available to connected Pro members');
     expect(content).toContain('New COROS plan sync and standalone Send actions are coming soon in the app');
     expect(content).toContain('Distance-based steps are not sent because Wahoo needs a total duration');
+    expect(content).toContain('Running and cycling distance steps use your chosen kilometres or miles');
     expect(content).toContain('Older Wahoo connections may need **Reconnect Wahoo**');
     expect(content).toContain('Checks confirm the app-owned Plan, Workout and association; automatic missing-copy restoration is unavailable');
     expect(content).toContain('COROS workout delivery is coming soon in the app');
@@ -76,6 +84,7 @@ describe('help.content', () => {
     expect(content).toContain('**Enable plan sync**');
     expect(content).toContain('**Workout sync status**');
     expect(content).toContain("each service's logo and a compact sent/total count for Suunto");
+    expect(content).toContain('**No workouts due for sync** instead of showing dashes');
     expect(content).toContain('small **View** action');
     expect(content).toContain('whether sync is enabled for each service');
     expect(content).toContain('one **Manage** action');
@@ -363,7 +372,8 @@ describe('help.content', () => {
     expect(dataAndPrivacySection?.content).toContain('exact case-insensitive tag matches');
     expect(dataAndPrivacySection?.content).toContain('personal, health, or location context');
     expect(dataAndPrivacySection?.content).toContain('untrusted labels');
-    expect(dataAndPrivacySection?.content).toContain('Existing clients must reauthorize for this new write permission');
+    expect(dataAndPrivacySection?.content).toContain('Existing clients missing a required grant must reauthorize');
+    expect(dataAndPrivacySection?.content).toContain('Editing the shared description additionally requires');
     expect(dataAndPrivacySection?.content).toContain('separate default-off Activity tag changes choice');
     expect(dataAndPrivacySection?.content).toContain('Oversized rankings fail');
     expect(dataAndPrivacySection?.content).toContain('jump count is not treated as jump quality');
@@ -375,6 +385,8 @@ describe('help.content', () => {
     expect(dataAndPrivacySection?.content).toContain('Missing tools do not mean you have no plans, workouts, or recorded data.');
     expect(dataAndPrivacySection?.content).toContain('**Training plans and planned workouts**');
     expect(dataAndPrivacySection?.content).toContain('Do not disconnect an app just to add a permission.');
+    expect(dataAndPrivacySection?.content).toContain('**Quantified Self** -> **Reconnect**');
+    expect(dataAndPrivacySection?.content).toContain('Uninstall and reinstall is a last resort');
     expect(dataAndPrivacySection?.content).toContain('The built-in Assistant is separate');
     expect(dataAndPrivacySection?.content).toContain('### Android authorization handoff');
     expect(dataAndPrivacySection?.content).toContain('**Open supported links**');
@@ -597,7 +609,10 @@ describe('help.content', () => {
     expect(planningSection?.content).toContain('**Past workout · previously sent**');
     expect(planningSection?.content).toContain('authorized MCP client can also author');
     expect(planningSection?.content).toContain('Enduro MTB, and Downhill Cycling profiles');
-    expect(planningSection?.content).toContain('keeps every authored profile unchanged in QS');
+    expect(planningSection?.content).toContain('Pool swimming');
+    expect(planningSection?.content).toContain('Open-water swimming');
+    expect(planningSection?.content).toContain('pool length');
+    expect(planningSection?.content).toContain('keeps every authored running/cycling profile unchanged in QS');
     expect(planningSection?.content).toContain('only its broad Running or Cycling family');
     expect(planningSection?.content).toContain('only one can be active');
     expect(planningSection?.content).toContain('Move a workout between plans or between a plan and **Standalone**');

@@ -8,7 +8,7 @@ import { MatIconModule } from '@angular/material/icon';
 import { MatChipsModule } from '@angular/material/chips';
 import { MatBadgeModule } from '@angular/material/badge';
 import { MatListModule } from '@angular/material/list';
-import { AppPaymentService, StripeProduct, StripeSubscription, StripePrice } from '../../services/app.payment.service';
+import { AppPaymentService, CheckoutStartError, StripeProduct, StripeSubscription, StripePrice } from '../../services/app.payment.service';
 import { AppAuthService } from '../../authentication/app.auth.service';
 import { AppUserService } from '../../services/app.user.service';
 import { AppAnalyticsService } from '../../services/app.analytics.service';
@@ -500,7 +500,7 @@ export class PricingComponent implements OnInit, OnDestroy {
         }
 
         const userWithRequiredPolicies = await this.getUserWithRequiredPolicies();
-        if (!userWithRequiredPolicies || this.isLoading) {
+        if (!userWithRequiredPolicies || this.isLoading || this.destroyed) {
             return;
         }
 
@@ -529,8 +529,11 @@ export class PricingComponent implements OnInit, OnDestroy {
                 typeof price !== 'string' ? price.currency : undefined,
                 typeof price !== 'string' ? price.unit_amount / 100 : undefined
             );
-            await this.paymentService.appendCheckoutSession(price);
+            await this.paymentService.appendCheckoutSession(price, undefined, undefined, () => !this.destroyed);
         } catch (error) {
+            if (this.destroyed) {
+                return;
+            }
             const errorMessage = (error as Error).message || '';
             if (errorMessage === 'User cancelled redirection to portal.') {
                 this.logger.log('User cancelled subscription management.');
@@ -539,8 +542,10 @@ export class PricingComponent implements OnInit, OnDestroy {
                 this.showSubscriptionRestoredDialog(role);
             } else {
                 this.haptics.error();
-                this.logger.error('Error starting checkout:', error);
-                alert('Failed to start checkout. Please try again.');
+                if (!(error instanceof CheckoutStartError)) {
+                    this.logger.error('Error starting checkout:', error);
+                }
+                alert(error instanceof CheckoutStartError ? error.message : 'Failed to start checkout. Please try again.');
             }
             this.setLoadingState(false);
         }

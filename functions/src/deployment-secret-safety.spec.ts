@@ -41,8 +41,7 @@ describe('Function secret deployment safety', () => {
 
     expect(firebaseConfig.functions?.disallowLegacyRuntimeConfig).toBe(true);
     expect(firebaseConfig.functions?.predeploy).toEqual([
-      'rm -rf "$RESOURCE_DIR/lib"',
-      'node "$RESOURCE_DIR/node_modules/typescript/bin/tsc" --project "$RESOURCE_DIR/tsconfig.json"',
+      'npm --prefix "$RESOURCE_DIR" run build',
       'node "$RESOURCE_DIR/lib/functions/src/scripts/check-deployment-files.js" "$RESOURCE_DIR"',
       'node "$RESOURCE_DIR/lib/functions/src/scripts/check-entrypoint-loading.js"',
       'node "$RESOURCE_DIR/lib/functions/src/scripts/check-secret-bindings.js"',
@@ -57,9 +56,16 @@ describe('Function secret deployment safety', () => {
       '**/*service_account*.json',
       '**/*serviceAccount*.json',
       '**/*firebase-adminsdk*.json',
+      '*.csv',
+      '**/*.csv',
       '**/*.log',
       'emulator-export',
       'firestore_export',
+    ]));
+    const gcloudIgnore = readRepositoryFile('functions/.gcloudignore').split(/\r?\n/)
+      .map(line => line.trim()).filter(line => line && !line.startsWith('#'));
+    expect(gcloudIgnore).toEqual(expect.arrayContaining([
+      '.env*', '.secret*', '*.csv', '**/*.csv', '**/*.log', 'node_modules/',
     ]));
   });
 

@@ -31,6 +31,7 @@ import {
     UserSummariesSettingsInterface,
     UserExportToCsvSettingsInterface,
     VerticalSpeedUnits,
+    WeightUnits,
     XAxisTypes,
     MapThemes,
     MapTypes,
@@ -338,6 +339,7 @@ export class AppUserUtilities {
         unitSettings.swimPaceUnits = AppUserUtilities.getDefaultSwimPaceUnits();
         unitSettings.verticalSpeedUnits = AppUserUtilities.getDefaultVerticalSpeedUnits();
         unitSettings.distanceUnits = AppUserUtilities.getDefaultDistanceUnits();
+        unitSettings.weightUnits = WeightUnits.Kilograms;
         unitSettings.startOfTheWeek = AppUserUtilities.getDefaultStartOfTheWeek();
         return unitSettings;
     }
@@ -536,6 +538,9 @@ export class AppUserUtilities {
             settings.unitSettings.distanceUnits,
             AppUserUtilities.getDefaultDistanceUnits(),
         );
+        settings.unitSettings.weightUnits = settings.unitSettings.weightUnits === WeightUnits.Pounds
+            ? WeightUnits.Pounds
+            : WeightUnits.Kilograms;
         settings.unitSettings.startOfTheWeek = isNumber(settings.unitSettings.startOfTheWeek) ? settings.unitSettings.startOfTheWeek : AppUserUtilities.getDefaultStartOfTheWeek();
 
         // Dashboard

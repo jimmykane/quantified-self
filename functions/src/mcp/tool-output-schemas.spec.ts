@@ -1,5 +1,5 @@
 import { ActivityTypes } from '@sports-alliance/sports-lib';
-import { TRAINING_READ_EXTENSION_TOOLS, TRAINING_READ_TOOLS, TRAINING_WRITE_TOOLS,
+import { TRAINING_READ_EXTENSION_TOOLS, TRAINING_READ_TOOLS, TRAINING_WRITE_TOOLS, TRAINING_WRITE_EXTENSION_TOOLS,
   type TrainingReadTool } from './training-plans.schemas';
 import { calculateReadinessScore as calculateCurrentReadinessScore, resolveReadinessConfidence } from '../../../shared/readiness';
 import { Client, InMemoryTransport, StreamableHTTPClientTransport } from '@modelcontextprotocol/client';
@@ -448,6 +448,9 @@ const trainingReadFixtures = {
  query_planned_workouts: { scheduleRevision: 1, scanComplete: true, recordsScanned: 1, limitsReached: [], nextCursor: null, startDate: '2026-07-01', endDate: '2026-07-02', scope: 'calendar', workouts: [{ workoutRef: 'opaque-workout-reference', planRef: null, title: 'Easy run', localDate: '2026-07-01', lifecycle: 'planned', revision: 1, createdAtMs: 1, updatedAtMs: 1 }] },
  query_planned_workouts_by_date: { scheduleRevision: 1, scanComplete: true, recordsScanned: 1, limitsReached: [], nextCursor: null, startDate: '2026-07-01', endDate: '2026-07-02', scope: 'calendar', workouts: [{ workoutRef: 'opaque-workout-reference', planRef: null, title: 'Easy run', localDate: '2026-07-01', lifecycle: 'planned', revision: 1, createdAtMs: 1, updatedAtMs: 1 }] },
  get_planned_workout: { scheduleRevision: 1, workout: { ...{ workoutRef: 'opaque-workout-reference', planRef: null, title: 'Easy run', localDate: '2026-07-01', lifecycle: 'planned', revision: 1, createdAtMs: 1, updatedAtMs: 1 }, structure: { version: 1, sport: ActivityTypes.Running, nodes: [{kind:'step', id:'step',purpose:'work',ending:{kind:'manual'},targets:[], note:'Untrusted text'}] }, displaySteps: [{nodeId:'step',text:'Work · Manual transition'}] } },
+ get_strength_workout_details: { scheduleRevision: 1, workoutRef: 'opaque-workout-reference',
+   details: { version: 1, revision: 1, exercises: [{ id: 'exercise-1', name: 'Squat',
+     sets: [{ id: 'set-1', ending: { kind: 'repetitions', repetitions: 5 }, externalLoadKg: 40, restAfterSeconds: 90 }] }] } },
  get_training_sync_status: { scheduleRevision: 1, scope: 'plan', reference:'opaque-plan-reference',scanComplete:true,checkedAtMs:1,services:[] },
  get_planned_workout_completion: { scheduleRevision: 1, workoutRef: 'opaque-workout-reference', state: 'unlinked',
    provider: null, matchMethod: null, timing: null, scheduledDate: '2026-07-01', workoutRevision: 1,
@@ -492,6 +495,7 @@ function createFixtureDataService(
     readTrainingPlans: vi.fn(async (input: { tool: TrainingReadTool }) => trainingReadFixtures[input.tool]),
     previewCreatePlannedWorkout: vi.fn().mockResolvedValue(trainingPreviewFixture),
     previewTrainingChanges: vi.fn().mockResolvedValue(trainingPreviewFixture),
+    previewStrengthWorkoutChange: vi.fn().mockResolvedValue(trainingPreviewFixture),
     applyTrainingChanges: vi.fn().mockResolvedValue(trainingApplyFixture),
     getActivityDescription: vi.fn().mockResolvedValue({ activityRef: 'opaque-activity-ref', description: 'Easy run. Felt tired.\nKeep this as reported context.' }),
     queryTimelineNotes: vi.fn().mockResolvedValue({
@@ -503,6 +507,9 @@ function createFixtureDataService(
     updateEventTags: vi.fn().mockResolvedValue({
       activityRef: ACTIVITY_REF, tags: ['Race', 'Reviewed'], changed: true,
     }),
+    getEventTitle: vi.fn().mockResolvedValue({ activityRef: ACTIVITY_REF, title: 'Morning run' }),
+    updateEventTitle: vi.fn().mockResolvedValue({ activityRef: ACTIVITY_REF, title: 'Evening run', changed: true }),
+    updateEventDescription: vi.fn().mockResolvedValue({ activityRef: ACTIVITY_REF, changed: true }),
     queryEditableTimelineNotes: vi.fn().mockResolvedValue({
       startDate: '2026-07-01', endDate: '2026-07-02',
       notes: [{ noteRef: 'opaque-note-reference', revision: 2, category: 'sickness',
@@ -1281,6 +1288,7 @@ const successfulToolArguments: Record<
   query_planned_workouts: { startDate: '2026-07-01', endDate: '2026-07-02' },
   query_planned_workouts_by_date: { startDate: '2026-07-01', endDate: '2026-07-02' },
   get_planned_workout: { workoutRef: 'opaque-workout-reference' },
+  get_strength_workout_details: { workoutRef: 'opaque-workout-reference' },
   get_training_sync_status: { scope: 'plan', reference: 'opaque-plan-reference' },
   get_planned_workout_completion: { workoutRef: 'opaque-workout-reference' },
   get_planned_workout_completions: { workoutRefs: ['opaque-workout-reference'] },
@@ -1297,10 +1305,18 @@ const successfulToolArguments: Record<
   preview_training_changes: { expectedScheduleRevision: 1, changes: [{
     kind: 'rename-plan', plan: { ref: 'opaque-plan-reference' }, name: 'Autumn build',
   }] },
+  preview_strength_workout_change: { expectedScheduleRevision: 1, change: {
+    kind: 'create-workout', localKey: 'strength', plan: null, localDate: '2026-07-02', title: 'Strength',
+    strength: { version: 1, exercises: [{ id: 'exercise-1', name: 'Squat', sets: [{ id: 'set-1',
+      ending: { kind: 'repetitions', repetitions: 5 }, externalLoadKg: 40, restAfterSeconds: 90 }] }] },
+  } },
   apply_training_changes: { proposalRef: 'opaque-proposal-reference', permissionMode: 'schedule' },
   get_activity_description: { activityRef: 'opaque-activity-ref' },
   query_timeline_notes: { startDate: '2026-07-01', endDate: '2026-07-02' },
   update_event_tags: { activityRef: ACTIVITY_REF, expectedTags: ['Race'], tags: ['Race', 'Reviewed'] },
+  get_event_title: { activityRef: ACTIVITY_REF },
+  update_event_title: { activityRef: ACTIVITY_REF, expectedTitle: 'Morning run', title: 'Evening run' },
+  update_event_description: { activityRef: ACTIVITY_REF, expectedDescription: 'Easy run.', description: 'Felt good.' },
   query_editable_timeline_notes: { startDate: '2026-07-01', endDate: '2026-07-02' },
   create_timeline_note: { mutationId: '123e4567-e89b-42d3-a456-426614174000', category: 'travel',
     title: 'Trip', startDate: '2026-07-01', endDate: '2026-07-02', timeZone: 'Europe/Helsinki',
@@ -1903,7 +1919,10 @@ describe.each<FixtureTransport>(['in-memory', 'legacy-http', 'modern-http'])('MC
     expect(Buffer.byteLength(JSON.stringify(planReadCore), 'utf8')).toBeLessThan(32 * 1024);
     expect(Buffer.byteLength(JSON.stringify(planReadExtensions), 'utf8')).toBeLessThan(12 * 1024);
     const planWriteTools = tools.filter(tool => (TRAINING_WRITE_TOOLS as readonly string[]).includes(tool.name));
-    expect(Buffer.byteLength(JSON.stringify(planWriteTools), 'utf8')).toBeLessThan(48 * 1024);
+    const planWriteExtensions = planWriteTools.filter(tool => (TRAINING_WRITE_EXTENSION_TOOLS as readonly string[]).includes(tool.name));
+    const planWriteCore = planWriteTools.filter(tool => !(TRAINING_WRITE_EXTENSION_TOOLS as readonly string[]).includes(tool.name));
+    expect(Buffer.byteLength(JSON.stringify(planWriteCore), 'utf8')).toBeLessThan(48 * 1024);
+    expect(Buffer.byteLength(JSON.stringify(planWriteExtensions), 'utf8')).toBeLessThan(12 * 1024);
     const applyTrainingChangesTool = tools.find(tool => tool.name === 'apply_training_changes');
     expect(applyTrainingChangesTool?.title).toBe('Apply previewed Training changes');
     expect(applyTrainingChangesTool?.annotations).toEqual({
@@ -2368,6 +2387,9 @@ describe.each<FixtureTransport>(['in-memory', 'legacy-http', 'modern-http'])('MC
       connections.push(denied);
       const names = (await denied.client.listTools()).tools.map(tool => tool.name);
       expect(names).not.toContain('update_event_tags');
+      expect(names).not.toContain('get_event_title');
+      expect(names).not.toContain('update_event_title');
+      expect(names).not.toContain('update_event_description');
       expect(names).not.toContain('query_editable_timeline_notes');
       expect(names).not.toContain('create_timeline_note');
     }
@@ -2375,6 +2397,7 @@ describe.each<FixtureTransport>(['in-memory', 'legacy-http', 'modern-http'])('MC
     const scopes = [
       MCP_OAUTH_SCOPES.ActivityDetailsRead,
       MCP_OAUTH_SCOPES.EventsWrite,
+      MCP_OAUTH_SCOPES.ActivityDescriptionsRead,
       MCP_OAUTH_SCOPES.TimelineNotesRead,
       MCP_OAUTH_SCOPES.TimelineNotesWrite,
     ];
@@ -2383,9 +2406,12 @@ describe.each<FixtureTransport>(['in-memory', 'legacy-http', 'modern-http'])('MC
     const tools = (await connection.client.listTools()).tools;
     expect(tools.find(tool => tool.name === 'query_editable_timeline_notes')?.annotations)
       .toMatchObject({ readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false });
+    expect(tools.find(tool => tool.name === 'get_event_title')?.annotations)
+      .toMatchObject({ readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false });
     expect(tools.find(tool => tool.name === 'create_timeline_note')?.annotations)
       .toMatchObject({ readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false });
-    for (const name of ['update_event_tags', 'update_timeline_note', 'delete_timeline_note']) {
+    for (const name of ['update_event_tags', 'update_event_title', 'update_event_description',
+      'update_timeline_note', 'delete_timeline_note']) {
       expect(tools.find(tool => tool.name === name)?.annotations)
         .toMatchObject({ readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: false });
     }
@@ -2396,6 +2422,29 @@ describe.each<FixtureTransport>(['in-memory', 'legacy-http', 'modern-http'])('MC
     });
     expect(injected.isError).toBe(true);
     expect(service.updateEventTags).not.toHaveBeenCalled();
+
+    for (const name of ['get_event_title', 'update_event_title', 'update_event_description'] as const) {
+      const rejected = await connection.client.callTool({
+        name, arguments: { ...successfulToolArguments[name], uid: 'attacker' },
+      });
+      expect(rejected.isError).toBe(true);
+    }
+    service.getEventTitle = vi.fn().mockResolvedValue({
+      activityRef: ACTIVITY_REF, title: 'Run', internalEventId: 'private-title-canary',
+    });
+    const titleLeak = await connection.client.callTool({
+      name: 'get_event_title', arguments: successfulToolArguments.get_event_title,
+    });
+    expect(titleLeak.isError).toBe(true);
+    expect(JSON.stringify(titleLeak)).not.toContain('private-title-canary');
+    service.updateEventDescription = vi.fn().mockResolvedValue({
+      activityRef: ACTIVITY_REF, changed: true, description: 'private-description-canary',
+    });
+    const descriptionLeak = await connection.client.callTool({
+      name: 'update_event_description', arguments: successfulToolArguments.update_event_description,
+    });
+    expect(descriptionLeak.isError).toBe(true);
+    expect(JSON.stringify(descriptionLeak)).not.toContain('private-description-canary');
 
     service.updateEventTags = vi.fn().mockResolvedValue({
       activityRef: ACTIVITY_REF, tags: ['Race'], changed: true,

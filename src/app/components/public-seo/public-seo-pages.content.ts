@@ -174,7 +174,7 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
           {
             icon: 'edit_calendar',
             title: 'Training plans',
-            copy: 'Create running and cycling plans or standalone structured workouts, then see them beside—not inside—your completed activity history.',
+            copy: 'Create running, cycling, pool, and open-water plans or standalone structured workouts, then see them beside—not inside—your completed activity history.',
           },
           {
             icon: 'auto_awesome',
@@ -503,7 +503,7 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
           {
             icon: 'send',
             title: 'Opt in to provider delivery',
-            copy: 'Workout delivery to Garmin, Suunto, and Wahoo is available to connected Pro members through explicit Send and plan opt-in actions, compatibility checks, and provider-specific scheduling windows. New COROS plan sync and standalone Send actions are coming soon in the app. Connecting a provider never sends a workout by itself.',
+            copy: 'Workout delivery to Garmin, Suunto, and Wahoo is available to connected Pro members through explicit Send and plan opt-in actions, compatibility checks, and provider-specific scheduling windows. Pool and open-water swimming map to distinct Suunto Guide activities; Garmin supports compatible target-free pool swims, while Garmin open-water and Wahoo swim delivery are unavailable. New COROS plan sync and standalone Send actions are coming soon in the app. Connecting a provider never sends a workout by itself.',
           },
         ],
       },
@@ -515,7 +515,7 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
       },
       {
         question: 'Which sports and workout steps can I create?',
-        answer: 'The current editor supports Running, Trail Running, Treadmill, Cycling, Mountain Biking, Indoor Cycling, E-Biking, and Hand Cycle. It supports time or distance steps, fixed repeats, and one absolute heart-rate, power, or pace target per step.',
+        answer: 'The interval editor supports Running, Trail Running, Treadmill, Cycling, Mountain Biking, Indoor Cycling, E-Biking, Hand Cycle, Pool Swimming, Open Water Swimming, Walking, Hiking, Rowing, and Indoor Rowing. It supports time or distance steps, fixed repeats, and one absolute heart-rate, power, or pace target per step. Swim and rowing distances use metres; rowing pace is a 500 m split. Pool workouts can save an optional pool length; compatible Garmin lap-swim delivery includes it, while Suunto Guides do not. Set the pool length on the device where needed. Open-water workouts have no pool length. The separate Strength Training editor supports named exercises, rep or timed sets, optional kg/lb external load, and rest.',
       },
       {
         question: 'Do planned workouts change completed activity totals or Training analysis?',
@@ -535,7 +535,7 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
       },
     ],
     closingTitle: 'Plan the next workout before it becomes history',
-    closingCopy: 'Start with one standalone workout or map out a dated running and cycling plan. Your completed activity history stays exactly where it belongs.',
+    closingCopy: 'Start with one standalone workout or map out a dated running, cycling, swimming, walking, hiking, or rowing plan. Your completed activity history stays exactly where it belongs.',
     closingActions: [
       routeAction('Start Free', '/login', 'flat', 'arrow_forward'),
       routeAction('Training Plans Help', '/help', 'stroked', undefined, 'training-plans'),
@@ -714,7 +714,7 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
           {
             icon: 'lock',
             title: 'Focused, approval-gated writes',
-            copy: 'Separate permissions can replace shared event tags or create, edit, and permanently delete Timeline notes. They cannot change recorded activity data, Health, routes, sleep, measurements, or dashboard settings. Training changes additionally use a bounded preview before a distinct apply call.',
+            copy: 'Separate permissions can replace shared event tags or titles, edit descriptions with an additional description grant, or create, edit, and permanently delete Timeline notes. They cannot change recorded activity data, Health, routes, sleep, measurements, or dashboard settings. Training changes additionally use a bounded preview before a distinct apply call.',
           },
           {
             icon: 'shield',
@@ -744,11 +744,11 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
       },
       {
         question: 'Can an MCP client find workouts by tag?',
-        answer: 'Yes. Individual activity details access can read parent event tags and filter bounded newest-first workout scans by exact case-insensitive tag matches using any or all semantics. Activities from the same event share tags. A separate Change events permission currently lets the client replace only the complete shared tag list after reading its current value; concurrent changes are not overwritten and benchmark events stay read-only. Tags can contain personal, health, or location context and clients must treat them as untrusted labels, not instructions or verified facts. Existing clients must reauthorize for changes. Future event fields require dedicated reviewed tools and are not exposed automatically.',
+        answer: 'Yes. Individual activity details access can read parent event tags and filter bounded newest-first workout scans by exact case-insensitive tag matches using any or all semantics. Activities from the same event share tags. A separate Change events permission lets an external client replace the complete shared tag list or title after reading its exact current value; concurrent changes are not overwritten and benchmark events stay read-only. Tags can contain personal, health, or location context and clients must treat them as untrusted labels, not instructions or verified facts. Existing clients missing the grant must reauthorize. Future event fields require dedicated reviewed tools and are not exposed automatically.',
       },
       {
         question: 'Can an MCP client read my activity descriptions?',
-        answer: 'Only when Activity descriptions and Individual activity details are approved. Like every requested permission, the description checkbox starts checked; uncheck it before approving to withhold access. Existing clients must authorize again. It returns the full event description for a selected activity; activities within one event share that text. Descriptions can contain sensitive health, personal or location information even without location permission. Revocation cannot erase received copies. Oversized text fails without truncation, and MCP cannot edit descriptions.',
+        answer: 'Only when Activity descriptions and Individual activity details are approved. Like every requested permission, the description checkbox starts checked; uncheck it before approving to withhold access. Existing clients missing that grant must authorize again. It returns the full event description for a selected activity; activities within one event share that text. Descriptions can contain sensitive health, personal or location information even without location permission. Revocation cannot erase received copies. Oversized text fails without truncation. An external client may edit the description only with the additional Change events grant and exact-current-text check; its host controls per-edit approval.',
       },
       {
         question: 'Can an MCP client read my Timeline notes?',
@@ -764,7 +764,7 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
       },
       {
         question: 'Can an MCP client rearrange my dashboard or change my data?',
-        answer: 'It cannot change dashboard settings, recorded activity data, descriptions, routes, Health, measurements, or sleep records. Separate permissions can replace shared event tags or create, edit, and permanently delete Timeline notes through the client’s approval controls. It can change Training plans, planned workouts, or their delivery only when you grant the matching child permission and the client permits the separate apply call for a bounded proposal. Plan deletion must be reviewed alone, requires your explicit choice for its workouts, and permanently removes the plan and its revision history.',
+        answer: 'It cannot change dashboard settings, recorded activity data, routes, Health, measurements, or sleep records. Separate permissions can replace shared event tags or titles, edit descriptions with additional description access, or create, edit, and permanently delete Timeline notes through the client’s approval controls. It can change Training plans, planned workouts, or their delivery only when you grant the matching child permission and the client permits the separate apply call for a bounded proposal. Plan deletion must be reviewed alone, requires your explicit choice for its workouts, and permanently removes the plan and its revision history.',
       },
       {
         question: 'Does MCP access expose my original activity or route files?',

@@ -9,13 +9,15 @@ import { MatDatepickerInput } from '@angular/material/datepicker';
 import { MatSelect } from '@angular/material/select';
 import { MatFormField } from '@angular/material/form-field';
 import { ActivatedRoute, Router, convertToParamMap, provideRouter, type Data, type ParamMap } from '@angular/router';
-import { ActivityTypes, DistanceUnits } from '@sports-alliance/sports-lib';
+import { ActivityTypes, DistanceUnits, PaceUnits, WeightUnits } from '@sports-alliance/sports-lib';
 import { normalizeUserUnitSettings } from '@shared/unit-aware-display';
+import { projectStrengthWorkoutToV1 } from '@shared/strength-workout';
 import dayjs from 'dayjs';
 import { BehaviorSubject, Subject, concat, defer, of, type Observable } from 'rxjs';
 import { AppUserService } from '../../services/app.user.service';
 import { AppHapticsService } from '../../services/app.haptics.service';
 import { TrainingDeliveryService } from '../../services/training-delivery.service';
+import { TrainingWorkoutDuplicateService } from '../../services/training-workout-duplicate.service';
 import { AppEventColorService } from '../../services/color/app.event.color.service';
 import {
   TrainingPlansService,
@@ -44,6 +46,7 @@ describe('PlansWorkspaceComponent', () => {
   let watchWorkoutCompletions: ReturnType<typeof vi.fn>;
   let mutate: ReturnType<typeof vi.fn>;
   let getHistory: ReturnType<typeof vi.fn>;
+  let getStrengthDetails: ReturnType<typeof vi.fn>;
   let previewRestore: ReturnType<typeof vi.fn>;
   let restoreSchedule: ReturnType<typeof vi.fn>;
   let deleteTrainingPlan: ReturnType<typeof vi.fn>;
@@ -79,6 +82,7 @@ describe('PlansWorkspaceComponent', () => {
       permanentlyDeletedWorkoutIds: [],
     }));
     getHistory = vi.fn();
+    getStrengthDetails = vi.fn();
     previewRestore = vi.fn();
     restoreSchedule = vi.fn();
     deleteTrainingPlan = vi.fn();
@@ -105,6 +109,7 @@ describe('PlansWorkspaceComponent', () => {
             createMutationId: vi.fn().mockReturnValue('mutation-1'),
             mutate,
             getHistory,
+            getStrengthDetails,
             previewRestore,
             restore: restoreSchedule,
             deletePlan: deleteTrainingPlan,
@@ -240,6 +245,46 @@ describe('PlansWorkspaceComponent', () => {
     expect(mutate).not.toHaveBeenCalled();
   });
 
+  it('selects the confirmed destination day after duplicating beyond the plan range', async () => {
+    const updatedPlan = { ...schedule.plans[0], endLocalDate: '2026-10-05', revision: 3 };
+    const duplicate = vi.fn().mockResolvedValue({ kind: 'duplicated-workout', workoutId: 'new-copy',
+      planId: 'active-plan', localDate: '2026-10-05', acknowledgedPlan: updatedPlan,
+      acknowledgedState: { ...schedule.state, revision: 5 } });
+    TestBed.overrideProvider(TrainingWorkoutDuplicateService, { useValue: { duplicate } });
+    const fixture = await renderPlans();
+    await fixture.componentInstance.duplicateWorkout(schedule.workouts[0]);
+    fixture.detectChanges();
+    expect(duplicate).toHaveBeenCalledWith(user.uid, expect.objectContaining({ id: 'plan-workout' }), expect.any(Function));
+    expect(fixture.componentInstance.planScheduleDate()).toBe('2026-10-05');
+    expect(fixture.componentInstance.selectedPlan()?.endLocalDate).toBe('2026-10-05');
+    expect(TestBed.inject(Router).navigate).toHaveBeenCalledWith(['/training/plans/plan', 'active-plan'],
+      expect.objectContaining({ queryParams: { date: '2026-10-05' } }));
+  });
+
+  it('keeps a duplicated standalone workout in Standalone', async () => {
+    const live = new BehaviorSubject(schedule);
+    watchSchedule.mockReturnValue(live);
+    const duplicate = vi.fn().mockResolvedValue({ kind: 'duplicated-workout', workoutId: 'new-copy',
+      planId: null, localDate: '2026-09-15' });
+    TestBed.overrideProvider(TrainingWorkoutDuplicateService, { useValue: { duplicate } });
+    const fixture = await renderPlans();
+    fixture.componentInstance.selectView('standalone');
+    await fixture.componentInstance.duplicateWorkout(schedule.workouts.find(workout => workout.planId === null)!);
+    fixture.detectChanges();
+    expect(fixture.componentInstance.view()).toBe('standalone');
+    expect(TestBed.inject(Router).navigate).toHaveBeenCalledWith(['/training/plans/standalone'],
+      expect.objectContaining({ queryParams: undefined }));
+    const copy = { ...schedule.workouts.find(workout => workout.planId === null)!, id: 'new-copy',
+      localDate: '2026-09-15', revision: 1 };
+    live.next({ ...schedule, workouts: [...schedule.workouts, copy] });
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+    const focusedRow = fixture.nativeElement.querySelector('[data-workout-id="new-copy"]') as HTMLElement;
+    expect(focusedRow).toBeTruthy();
+    expect(document.activeElement).toBe(focusedRow);
+  });
+
   it('renders a future paused plan and its skipped workout independently from active and standalone workouts', async () => {
     schedule.plans.push({ ...schedule.plans[0], id: 'paused', lifecycle: 'paused', startLocalDate: '2026-12-03', endLocalDate: '2026-12-20' });
     schedule.workouts.push({ ...schedule.workouts[0], id: 'paused-workout', planId: 'paused', localDate: '2026-12-03', lifecycle: 'skipped', title: 'Paused run' });
@@ -358,6 +403,82 @@ describe('PlansWorkspaceComponent', () => {
     };
     const fixture = await renderPlans();
     expect(fixture.nativeElement.querySelector('app-compact-row.workout-row .workout-summary')?.textContent).toContain(expected);
+  });
+
+  it.each([
+    { preference: {}, label: 'Kilometres', meters: 1000, pace: 'min/km' },
+    { preference: { distanceUnits: DistanceUnits.Miles, paceUnits: [PaceUnits.MinutesPerMile] },
+      label: 'Miles', meters: 1609.344, pace: 'min/mi' },
+  ])('uses $label and $pace in the editor and saves canonical values', async ({ preference, label, meters, pace }) => {
+    const unitUser = { ...user, settings: { unitSettings: normalizeUserUnitSettings(preference) } };
+    TestBed.overrideProvider(AppUserService, { useValue: { user: signal(unitUser), user$: of(unitUser) } });
+    setRouteState({ mode: 'create', scope: 'standalone', date: '2026-09-24' });
+    const fixture = await renderPlans();
+    fixture.componentInstance.updateEditorField('title', 'Distance test');
+    fixture.componentInstance.updateStep(0, null, 'endingKind', 'distance');
+    fixture.componentInstance.updateStep(0, null, 'endingValue', 1);
+    fixture.componentInstance.updateStep(0, null, 'targetKind', 'pace');
+    fixture.componentInstance.updateStep(0, null, 'targetMinimum', 4);
+    fixture.componentInstance.updateStep(0, null, 'targetMaximum', 5);
+    fixture.detectChanges();
+    expect(fixture.componentInstance.editorDistanceUnit()).toBe(label);
+    expect(fixture.componentInstance.editorPaceUnit()).toBe(pace);
+    expect(fixture.nativeElement.querySelector('.step-fields')?.textContent).toContain(label);
+    await fixture.componentInstance.saveWorkout();
+    expect(mutate).toHaveBeenCalledWith(expect.objectContaining({
+      operation: expect.objectContaining({
+        structure: expect.objectContaining({ nodes: [expect.objectContaining({
+          ending: { kind: 'distance', meters },
+          targets: [expect.objectContaining({
+            minimumMetersPerSecond: meters / 300,
+            maximumMetersPerSecond: meters / 240,
+          })],
+        })] }),
+      }),
+    }));
+  });
+
+  it('keeps an existing workout in its opening units and preserves metres on an unrelated edit', async () => {
+    const unitUser = signal({ ...user, settings: {
+      unitSettings: normalizeUserUnitSettings({ distanceUnits: DistanceUnits.Miles }),
+    } });
+    TestBed.overrideProvider(AppUserService, { useValue: { user: unitUser, user$: of(unitUser()) } });
+    schedule.workouts[0].structure = {
+      version: 1, sport: ActivityTypes.Running,
+      nodes: [{ kind: 'step', id: 'kilometer', purpose: 'work',
+        ending: { kind: 'distance', meters: 1000 }, targets: [] }],
+    };
+    const fixture = await renderPlans();
+    fixture.componentInstance.editWorkout(schedule.workouts[0]);
+    expect(fixture.componentInstance.editorDistanceUnit()).toBe('Miles');
+    expect(fixture.componentInstance.editor()?.value.nodes[0]).toMatchObject({ endingValue: 0.621371 });
+    unitUser.set({ ...unitUser(), settings: { unitSettings: normalizeUserUnitSettings({}) } });
+    fixture.detectChanges();
+    expect(fixture.componentInstance.editorDistanceUnit()).toBe('Miles');
+    fixture.componentInstance.updateEditorField('title', 'Updated title');
+    await fixture.componentInstance.saveWorkout();
+    expect(mutate).toHaveBeenCalledWith(expect.objectContaining({
+      operation: expect.objectContaining({ kind: 'update-workout',
+        structure: expect.objectContaining({ nodes: [expect.objectContaining({
+          ending: { kind: 'distance', meters: 1000 },
+        })] }),
+      }),
+    }));
+
+    unitUser.set({ ...unitUser(), settings: {
+      unitSettings: normalizeUserUnitSettings({ distanceUnits: DistanceUnits.Miles }),
+    } });
+    fixture.componentInstance.editWorkout(schedule.workouts[0]);
+    fixture.componentInstance.updateStep(0, null, 'endingValue', 1);
+    fixture.componentInstance.updateStep(0, null, 'endingValue', 0.621371);
+    await fixture.componentInstance.saveWorkout();
+    expect(mutate).toHaveBeenLastCalledWith(expect.objectContaining({
+      operation: expect.objectContaining({ kind: 'update-workout',
+        structure: expect.objectContaining({ nodes: [expect.objectContaining({
+          ending: { kind: 'distance', meters: 0.621371 * 1609.344 },
+        })] }),
+      }),
+    }));
   });
 
   it('uses compact rows for editable steps and repeats without nesting cards or changing edit actions', async () => {
@@ -714,7 +835,7 @@ describe('PlansWorkspaceComponent', () => {
     expect(haptics.selection).toHaveBeenCalledTimes(2);
   });
 
-  it('offers exact running and cycling profiles in two compact sport groups', async () => {
+  it('offers exact running, cycling, swimming, walking, hiking, and rowing profiles in sport groups', async () => {
     const fixture = await renderPlans();
     expect(fixture.componentInstance.sportOptionGroups).toEqual([
       {
@@ -735,7 +856,190 @@ describe('PlansWorkspaceComponent', () => {
           { value: ActivityTypes.Handcycle, label: 'Hand Cycle' },
         ],
       },
+      {
+        label: 'Swimming',
+        options: [
+          { value: ActivityTypes.Swimming, label: 'Pool swimming' },
+          { value: ActivityTypes.OpenWaterSwimming, label: 'Open-water swimming' },
+        ],
+      },
+      {
+        label: 'Walking & hiking',
+        options: [
+          { value: ActivityTypes.Walking, label: 'Walking' },
+          { value: ActivityTypes.Hiking, label: 'Hiking' },
+        ],
+      },
+      {
+        label: 'Rowing',
+        options: [
+          { value: ActivityTypes.Rowing, label: 'Rowing' },
+          { value: ActivityTypes.IndoorRowing, label: 'Indoor Rowing' },
+        ],
+      },
+      { label: 'Strength', options: [{ value: ActivityTypes.StrengthTraining, label: 'Strength Training' }] },
     ]);
+  });
+
+  it('creates an exercise-aware strength workout with reps, hold, load and rest', async () => {
+    setRouteState({ mode: 'create', scope: 'standalone', date: '2026-09-24' });
+    const fixture = await renderPlans();
+    const editor = fixture.componentInstance;
+    editor.updateEditorField('sport', ActivityTypes.StrengthTraining);
+    editor.updateEditorField('title', 'Gym session');
+    editor.updateStrengthExerciseName(0, 'Squat');
+    editor.updateStrengthSet(0, 0, 'value', 5);
+    editor.updateStrengthSet(0, 0, 'externalLoadKg', 80);
+    editor.updateStrengthSet(0, 0, 'restAfterSeconds', 120);
+    editor.addStrengthSet(0);
+    editor.updateStrengthSet(0, 1, 'kind', 'time');
+    editor.updateStrengthSet(0, 1, 'value', 30);
+    fixture.detectChanges();
+    expect(fixture.nativeElement.textContent).toContain('Exercises and sets');
+    expect(fixture.nativeElement.textContent).toContain('External load (kg, optional)');
+    await editor.saveWorkout();
+    expect(mutate).toHaveBeenCalledWith(expect.objectContaining({ operation: expect.objectContaining({
+      kind: 'create-workout', strength: expect.objectContaining({ exercises: [expect.objectContaining({
+        name: 'Squat', sets: [expect.objectContaining({ externalLoadKg: 80, restAfterSeconds: 120 }),
+          expect.objectContaining({ ending: { kind: 'time', seconds: 30 } })],
+      })] }), structure: expect.objectContaining({ sport: ActivityTypes.StrengthTraining }),
+    }) }));
+  });
+
+  it('loads a strength companion before editing and rejects a missing companion', async () => {
+    const strength = { version: 1 as const, workoutId: 'standalone-workout', revision: 1,
+      exercises: [{ id: 'squat', name: 'Squat', sets: [{ id: 'set-one',
+        ending: { kind: 'repetitions' as const, repetitions: 5 }, externalLoadKg: 80 }] }] };
+    schedule = { ...populatedSchedule(), workouts: populatedSchedule().workouts.map(workout => workout.id === 'standalone-workout'
+      ? { ...workout, structure: projectStrengthWorkoutToV1(strength) } : workout) };
+    getStrengthDetails.mockResolvedValue(strength);
+    setRouteState({ mode: 'edit', workoutId: 'standalone-workout' });
+    const fixture = await renderPlans();
+    await fixture.whenStable();
+    fixture.detectChanges();
+    expect(fixture.componentInstance.editor()?.strength?.exercises[0].sets[0].externalLoadKg).toBe(80);
+    expect(getStrengthDetails).toHaveBeenCalledWith('planning-user', 'standalone-workout');
+  });
+
+  it('uses the opening weight unit for strength input and preserves unchanged canonical kilograms', async () => {
+    const unitUser = signal({ ...user, settings: {
+      unitSettings: normalizeUserUnitSettings({ weightUnits: WeightUnits.Pounds }),
+    } });
+    TestBed.overrideProvider(AppUserService, { useValue: { user: unitUser, user$: of(unitUser()) } });
+    const strength = { version: 1 as const, workoutId: 'standalone-workout', revision: 1,
+      exercises: [{ id: 'squat', name: 'Squat', sets: [{ id: 'set-one',
+        ending: { kind: 'repetitions' as const, repetitions: 5 }, externalLoadKg: 80 }] }] };
+    schedule = { ...populatedSchedule(), workouts: populatedSchedule().workouts.map(workout => workout.id === 'standalone-workout'
+      ? { ...workout, structure: projectStrengthWorkoutToV1(strength) } : workout) };
+    getStrengthDetails.mockResolvedValue(strength);
+    setRouteState({ mode: 'edit', workoutId: 'standalone-workout' });
+    const fixture = await renderPlans();
+    await fixture.whenStable();
+    fixture.detectChanges();
+    const editor = fixture.componentInstance;
+    expect(editor.editorWeightUnit()).toBe('lb');
+    expect(fixture.nativeElement.textContent).toContain('External load (lb, optional)');
+    expect(editor.strengthLoadInputValue(80)).toBe(176.4);
+    unitUser.set({ ...unitUser(), settings: { unitSettings: normalizeUserUnitSettings({}) } });
+    editor.updateEditorField('title', 'Edited strength');
+    await editor.saveWorkout();
+    expect(mutate).toHaveBeenCalledWith(expect.objectContaining({ operation: expect.objectContaining({
+      strength: expect.objectContaining({ exercises: [expect.objectContaining({ sets: [
+        expect.objectContaining({ externalLoadKg: 80 }),
+      ] })] }),
+    }) }));
+
+  });
+
+  it('converts a new strength load from pounds to canonical kilograms', async () => {
+    const unitUser = { ...user, settings: {
+      unitSettings: normalizeUserUnitSettings({ weightUnits: WeightUnits.Pounds }),
+    } };
+    TestBed.overrideProvider(AppUserService, { useValue: { user: signal(unitUser), user$: of(unitUser) } });
+    setRouteState({ mode: 'create', scope: 'standalone', date: '2026-09-24' });
+    const fixture = await renderPlans();
+    const editor = fixture.componentInstance;
+    editor.updateEditorField('sport', ActivityTypes.StrengthTraining);
+    editor.updateStrengthSet(0, 0, 'externalLoadKg', 100);
+    expect(editor.editor()?.strength?.exercises[0].sets[0].externalLoadKg).toBeCloseTo(45.359237, 6);
+    expect(editor.strengthLoadInputValue(editor.editor()?.strength?.exercises[0].sets[0].externalLoadKg)).toBe(100);
+  });
+
+  it('edits pool-swim distance in metres and shows the swim-pace unit', async () => {
+    setRouteState({ mode: 'create', scope: 'standalone', date: '2026-09-24' });
+    const fixture = await renderPlans();
+    fixture.componentInstance.updateEditorField('sport', ActivityTypes.Swimming);
+    fixture.componentInstance.updateStep(0, null, 'endingKind', 'distance');
+    fixture.componentInstance.updateStep(0, null, 'endingValue', 100);
+    fixture.detectChanges();
+    expect(fixture.componentInstance.editorIsSwimming()).toBe(true);
+    expect(fixture.nativeElement.textContent).toContain('Metres');
+    expect(fixture.componentInstance.editorPaceUnit()).toBe('min/100m');
+    fixture.componentInstance.updateEditorField('title', 'Pool test');
+    await fixture.componentInstance.saveWorkout();
+    expect(mutate).toHaveBeenCalledWith(expect.objectContaining({
+      operation: expect.objectContaining({
+        structure: expect.objectContaining({
+          sport: ActivityTypes.Swimming,
+          nodes: expect.arrayContaining([expect.objectContaining({ ending: { kind: 'distance', meters: 100 } })]),
+        }),
+      }),
+    }));
+  });
+
+  it('labels rowing distance in metres and target pace per 500 m', async () => {
+    setRouteState({ mode: 'create', scope: 'standalone', date: '2026-09-24' });
+    const fixture = await renderPlans();
+    fixture.componentInstance.updateEditorField('sport', ActivityTypes.Rowing);
+    fixture.componentInstance.updateStep(0, null, 'endingKind', 'distance');
+    fixture.detectChanges();
+    expect(fixture.nativeElement.textContent).toContain('Metres');
+    expect(fixture.componentInstance.editorPaceUnit()).toBe('min/500m');
+  });
+
+  it('saves a selected 25 m pool length separately from the swim step distance', async () => {
+    setRouteState({ mode: 'create', scope: 'standalone', date: '2026-09-24' });
+    const fixture = await renderPlans();
+    fixture.componentInstance.updateEditorField('sport', ActivityTypes.Swimming);
+    fixture.componentInstance.updateEditorField('poolLengthValue', 25);
+    fixture.componentInstance.updateEditorField('poolLengthUnit', 'meters');
+    fixture.componentInstance.updateStep(0, null, 'endingKind', 'distance');
+    fixture.componentInstance.updateStep(0, null, 'endingValue', 25);
+    fixture.componentInstance.updateEditorField('title', '25 m pool test');
+    fixture.detectChanges();
+    expect(fixture.nativeElement.textContent).toContain('Pool length (optional)');
+    await fixture.componentInstance.saveWorkout();
+    expect(mutate).toHaveBeenCalledWith(expect.objectContaining({
+      operation: expect.objectContaining({
+        structure: expect.objectContaining({
+          sport: ActivityTypes.Swimming,
+          poolLength: { meters: 25, presentation: 'meters' },
+          nodes: expect.arrayContaining([expect.objectContaining({ ending: { kind: 'distance', meters: 25 } })]),
+        }),
+      }),
+    }));
+  });
+
+  it('edits open-water distance in metres and persists the distinct sport', async () => {
+    setRouteState({ mode: 'create', scope: 'standalone', date: '2026-09-24' });
+    const fixture = await renderPlans();
+    fixture.componentInstance.updateEditorField('sport', ActivityTypes.OpenWaterSwimming);
+    fixture.componentInstance.updateStep(0, null, 'endingKind', 'distance');
+    fixture.componentInstance.updateStep(0, null, 'endingValue', 500);
+    fixture.componentInstance.updateEditorField('title', 'Open-water test');
+    fixture.detectChanges();
+    expect(fixture.componentInstance.editorIsSwimming()).toBe(true);
+    expect(fixture.nativeElement.textContent).toContain('Metres');
+    expect(fixture.componentInstance.editorPaceUnit()).toBe('min/100m');
+    await fixture.componentInstance.saveWorkout();
+    expect(mutate).toHaveBeenCalledWith(expect.objectContaining({
+      operation: expect.objectContaining({
+        structure: expect.objectContaining({
+          sport: ActivityTypes.OpenWaterSwimming,
+          nodes: expect.arrayContaining([expect.objectContaining({ ending: { kind: 'distance', meters: 500 } })]),
+        }),
+      }),
+    }));
   });
 
   it('defaults a calendar add request to the active plan', async () => {
@@ -795,6 +1099,38 @@ describe('PlansWorkspaceComponent', () => {
     expect(fixture.componentInstance.editor()?.value.localDate).toBe('2027-01-03');
     expect((dateInput.value as { format(pattern: string): string }).format('YYYY-MM-DD')).toBe('2027-01-03');
     expect(haptics.selection).not.toHaveBeenCalled();
+  });
+
+  it('commits a typed date before an immediate save, without requiring blur', async () => {
+    setRouteState({ mode: 'edit', workoutId: 'plan-workout' });
+    const fixture = await renderPlans();
+    fixture.debugElement.query(By.directive(MatDatepickerInput))
+      .triggerEventHandler('dateInput', { value: dayjs('2026-09-10') });
+
+    expect(fixture.componentInstance.editor()?.value.localDate).toBe('2026-09-10');
+    await fixture.componentInstance.saveWorkout();
+
+    expect(mutate).toHaveBeenCalledWith(expect.objectContaining({
+      operation: expect.objectContaining({ kind: 'update-workout', localDate: '2026-09-10' }),
+    }));
+  });
+
+  it('blocks saving a partially typed date instead of retaining the previous date', async () => {
+    setRouteState({ mode: 'edit', workoutId: 'plan-workout' });
+    const fixture = await renderPlans();
+    const snackBar = (fixture.componentInstance as unknown as { snackBar: MatSnackBar }).snackBar;
+    const invalidDateNotice = vi.spyOn(snackBar, 'open');
+    fixture.debugElement.query(By.directive(MatDatepickerInput))
+      .triggerEventHandler('dateInput', { value: null });
+    fixture.detectChanges();
+
+    expect(fixture.componentInstance.editor()?.value.localDate).toBe('2026-09-09');
+    expect(fixture.nativeElement.querySelector('.editor-save-actions button:last-child').disabled).toBe(true);
+    await fixture.componentInstance.saveWorkout();
+
+    expect(mutate).not.toHaveBeenCalled();
+    expect(invalidDateNotice).toHaveBeenCalledWith('Choose a valid workout date.', 'Dismiss', { duration: 7000 });
+    expect(haptics.error).toHaveBeenCalledOnce();
   });
 
   it('does not silently retain the previous workout date after an invalid date-picker value', async () => {

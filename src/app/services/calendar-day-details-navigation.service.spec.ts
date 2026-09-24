@@ -1,21 +1,48 @@
+import { signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { NavigationStart, Router } from '@angular/router';
 import { Subject } from 'rxjs';
+import { AppUserService } from './app.user.service';
 import { CalendarDayDetailsNavigationService } from './calendar-day-details-navigation.service';
 
 describe('CalendarDayDetailsNavigationService', () => {
   let routerEvents: Subject<unknown>;
+  let currentUser: ReturnType<typeof signal<{ uid: string } | null>>;
   let service: CalendarDayDetailsNavigationService;
 
   beforeEach(() => {
     routerEvents = new Subject<unknown>();
+    currentUser = signal({ uid: 'owner' });
     TestBed.configureTestingModule({
       providers: [
         CalendarDayDetailsNavigationService,
         { provide: Router, useValue: { events: routerEvents.asObservable() } },
+        { provide: AppUserService, useValue: { user: currentUser } },
       ],
     });
     service = TestBed.inject(CalendarDayDetailsNavigationService);
+  });
+
+  it('opens a duplicated workout day once for the same owner and rejects stale or foreign destinations', () => {
+    expect(service.prepareWorkoutDestination('owner', '2027-01-02')).toBe(true);
+    expect(service.workoutDestinationFor('owner')).toBe('2027-01-02');
+    expect(service.consumeWorkoutDestination('owner', '2027-01-01')).toBe(false);
+    expect(service.consumeWorkoutDestination('owner', '2027-01-02')).toBe(true);
+    expect(service.workoutDestinationFor('owner')).toBeNull();
+    expect(service.prepareWorkoutDestination('owner', '2027-02-30')).toBe(false);
+    service.prepareWorkoutDestination('owner', '2027-01-03');
+    expect(service.workoutDestinationFor('other')).toBeNull();
+    expect(service.workoutDestinationFor('owner')).toBeNull();
+  });
+
+  it('forgets an unconsumed duplicate destination on sign-out, even if the same account returns', () => {
+    service.prepareWorkoutDestination('owner', '2027-01-02');
+    TestBed.tick();
+    currentUser.set(null);
+    TestBed.tick();
+    currentUser.set({ uid: 'owner' });
+    TestBed.tick();
+    expect(service.workoutDestinationFor('owner')).toBeNull();
   });
 
   it('makes a calendar day restorable only after browser-back navigation', () => {

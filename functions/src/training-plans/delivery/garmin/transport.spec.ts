@@ -38,6 +38,35 @@ describe('Garmin workout/schedule lifecycle, synthetic HTTP only', () => {
   const execute = () => transport.execute(operation, checkpoint, guard);
   const recover = () => transport.recover(operation, checkpoint, guard);
   const writes = () => server.calls.filter(call => call.method !== 'GET');
+  it('retains one workout identity across synthetic 25 m pool create, edit, reschedule and withdrawal', async () => {
+    const pool: ScheduledWorkoutV1 = { ...operation.workout!, title: 'Four 25 m lengths', structure: {
+      version: 1, sport: ActivityTypes.Swimming, poolLength: { meters: 25, presentation: 'meters' },
+      nodes: [{ kind: 'repeat', id: 'set', count: 4, steps: [
+        { kind: 'step', id: 'length', purpose: 'work', ending: { kind: 'distance', meters: 25 }, targets: [] },
+        { kind: 'step', id: 'rest', purpose: 'rest', ending: { kind: 'time', seconds: 30 }, targets: [] },
+      ] }],
+    } };
+    operation = { ...operation, workout: pool, digest: transport.assess(pool, operation.destinationKey, operation.timeZone).digest };
+    expect(transport.assess(pool, operation.destinationKey, operation.timeZone).level).toBe('exact');
+    const created = (await execute())!;
+    expect(server.workouts.get(created.ids.workout)).toMatchObject({
+      sport: 'LAP_SWIMMING', poolLength: 25, poolLengthUnit: 'METER',
+      segments: [{ steps: [{ skipLastRestStep: true }] }],
+    });
+    operation = nextOperation(operation, { title: 'Edited four lengths' });
+    const edited = (await execute())!;
+    expect(edited.ids.workout).toBe(created.ids.workout);
+    expect(edited.ids.schedule).toBe(created.ids.schedule);
+    operation = nextOperation(operation, { localDate: '2026-09-16' });
+    const rescheduled = (await execute())!;
+    expect(rescheduled.ids.workout).toBe(created.ids.workout);
+    expect(rescheduled.ids.schedule).toBe(created.ids.schedule);
+    expect(server.schedules.get(created.ids.schedule)).toMatchObject({ date: '2026-09-16' });
+    operation = { ...nextOperation(operation), kind: 'remove', workout: null };
+    expect(await execute()).toBeNull();
+    expect(server.workouts.size).toBe(0);
+    expect(server.schedules.size).toBe(0);
+  });
   const repair = async (missing: string[]) => {
     const original = structuredClone(operation.artifact!);
     transport = new GarminTrainingTransport(server.request, () => now,

@@ -94,12 +94,16 @@ function expectPublicReadWriteRoundTrip(input: WorkoutStructureV1): void {
 }
 
 describe('Strict public Training recipe v1', () => {
+  it.each([ActivityTypes.Walking, ActivityTypes.Hiking, ActivityTypes.Rowing, ActivityTypes.IndoorRowing])('round-trips %s through the frozen read and approval-gated proposal schema', sport => {
+    expectPublicReadWriteRoundTrip({ ...recipe({ kind: 'distance', meters: 500 }), sport });
+  });
   it('keeps every explicit shared recipe catalog exhaustive', () => {
     expect(MCP_WORKOUT_RECIPE_VARIANT_COVERAGE.version).toBe(1);
     expect(Object.keys(MCP_WORKOUT_RECIPE_VARIANT_COVERAGE.stepPurposes)).toEqual([...WORKOUT_STEP_PURPOSES]);
     expect(Object.keys(endingFixtures)).toEqual([...WORKOUT_ENDING_KINDS]);
     expect(Object.keys(MCP_WORKOUT_RECIPE_VARIANT_COVERAGE.targetModes)).toEqual(['absolute', 'relative']);
     expect([...new Set(Object.values(targetVariantFixtures).map(target => target.kind))]).toEqual([...WORKOUT_TARGET_KINDS]);
+    expect(MCP_WORKOUT_RECIPE_VARIANT_COVERAGE.deferredStructureFields).toEqual({ poolLength: 734 });
   });
 
   it.each(Object.entries(endingFixtures))('round-trips shared ending %s through public reads and writes', (_kind, ending) => {
@@ -215,5 +219,20 @@ describe('Strict Training write proposal contract', () => {
       changes: Array.from({ length: 25 }, () => change) }).success).toBe(true);
     expect(TRAINING_WRITE_INPUTS.preview_training_changes.safeParse({ expectedScheduleRevision: 1,
       changes: Array.from({ length: 26 }, () => change) }).success).toBe(false);
+  });
+
+  it('requires a complete strength draft in the additive preview and keeps v1 recipes frozen', () => {
+    const draft = { version: 1, exercises: [{ id: 'squat', name: 'Squat', sets: [{ id: 'set-one',
+      ending: { kind: 'repetitions', repetitions: 5 }, externalLoadKg: 80, restAfterSeconds: 120 }] }] };
+    const input = { expectedScheduleRevision: 1, change: { kind: 'create-workout', localKey: 'lift', plan: null,
+      localDate: '2026-09-30', title: 'Strength', strength: draft } };
+    expect(TRAINING_WRITE_INPUTS.preview_strength_workout_change.safeParse(input).success).toBe(true);
+    expect(TRAINING_WRITE_INPUTS.preview_strength_workout_change.safeParse({ ...input,
+      change: { ...input.change, structure: recipe({ kind: 'manual' }) } }).success).toBe(false);
+    expect(TRAINING_WRITE_INPUTS.preview_strength_workout_change.safeParse({ ...input,
+      change: { ...input.change, strength: { ...draft, exercises: [{ ...draft.exercises[0], sets: [
+        draft.exercises[0].sets[0], draft.exercises[0].sets[0] ] }] } } }).success).toBe(false);
+    expect(TRAINING_WRITE_INPUTS.preview_training_changes.safeParse({ expectedScheduleRevision: 1,
+      changes: [{ ...input.change, structure: recipe({ kind: 'manual' }) }] }).success).toBe(false);
   });
 });

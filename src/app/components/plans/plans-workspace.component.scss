@@ -252,6 +252,18 @@
   gap: 14px;
 }
 
+.strength-exercise-fields { display: grid; gap: 12px; min-width: 0; }
+.strength-exercise-fields > mat-form-field { max-width: 420px; }
+.strength-set-fields {
+  display: grid;
+  grid-template-columns: auto repeat(4, minmax(0, 1fr)) auto;
+  gap: 10px;
+  align-items: start;
+  min-width: 0;
+}
+.strength-set-fields > mat-form-field { min-width: 0; }
+.strength-set-number { padding-top: 16px; white-space: nowrap; font: var(--mat-sys-label-large); }
+
 .workout-step-editor {
   display: flex;
   align-items: start;
@@ -416,6 +428,8 @@ mat-card-actions button,
 }
 
 @media (max-width: 900px) {
+  .strength-set-fields { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .strength-set-number { grid-column: 1 / -1; padding-top: 0; }
   .plan-schedule-layout { grid-template-columns: minmax(0, 1fr); gap: 24px; }
 
   .plan-schedule-layout .workout-day-details {
@@ -438,6 +452,9 @@ mat-card-actions button,
 }
 
 @media (max-width: 600px) {
+  .strength-set-fields { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+  .strength-set-fields > mat-form-field { grid-column: 1 / -1; }
+  .strength-set-fields > button { justify-self: end; }
   .plans-view-navigation {
     flex-wrap: wrap;
     gap: 8px;

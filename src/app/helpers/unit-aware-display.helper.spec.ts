@@ -8,12 +8,14 @@ import {
   DataJumpDistance,
   DataPaceAvg,
   DataSpeedAvg,
+  DataWeight,
   DaysOfTheWeek,
   DistanceUnits,
   PaceUnits,
   SpeedUnits,
   SwimPaceUnits,
   VerticalSpeedUnits,
+  WeightUnits,
 } from '@sports-alliance/sports-lib';
 import {
   formatUnitAwareDataValue,
@@ -32,6 +34,7 @@ describe('unit-aware-display', () => {
       swimPaceUnits: [SwimPaceUnits.MinutesPer100Meter],
       verticalSpeedUnits: [VerticalSpeedUnits.MetersPerSecond],
       distanceUnits: DistanceUnits.Kilometers,
+      weightUnits: WeightUnits.Kilograms,
       startOfTheWeek: DaysOfTheWeek.Monday,
     });
   });
@@ -52,6 +55,7 @@ describe('unit-aware-display', () => {
       swimPaceUnits: [SwimPaceUnits.MinutesPer100Meter],
       verticalSpeedUnits: [VerticalSpeedUnits.MetersPerSecond],
       distanceUnits: DistanceUnits.Kilometers,
+      weightUnits: WeightUnits.Kilograms,
       startOfTheWeek: DaysOfTheWeek.Monday,
     });
   });
@@ -61,6 +65,19 @@ describe('unit-aware-display', () => {
       .toBe(DistanceUnits.Kilometers);
     expect(normalizeUserUnitSettings({ distanceUnits: 'Imperial' }).distanceUnits)
       .toBe(DistanceUnits.Miles);
+  });
+
+  it('normalizes weight independently of distance and uses Sports Lib for display', () => {
+    const pounds = normalizeUserUnitSettings({
+      distanceUnits: DistanceUnits.Kilometers,
+      weightUnits: WeightUnits.Pounds,
+    });
+    expect(pounds.weightUnits).toBe(WeightUnits.Pounds);
+    expect(formatUnitAwareDataValue(DataWeight.type, 80, pounds)).toBe('176.4 lb');
+    expect(normalizeUserUnitSettings({
+      distanceUnits: DistanceUnits.Miles,
+    }).weightUnits).toBe(WeightUnits.Kilograms);
+    expect(normalizeUserUnitSettings({ weightUnits: 'stones' }).weightUnits).toBe(WeightUnits.Kilograms);
   });
 
   it('should format pace values using the preferred pace units', () => {

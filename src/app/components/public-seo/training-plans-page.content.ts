@@ -2,12 +2,12 @@ import type { PublicFeaturePreviewKey } from './public-feature-preview.types';
 
 /** Concise metadata shared by the public Training Plans route and its structured data. */
 export const TRAINING_PLANS_SEO_CONTENT = {
-  title: 'Training Plans for Running and Cycling',
-  description: 'Create free running and cycling training plans or standalone structured workouts, schedule them by date, and keep them separate from completed activities.',
-  h1: 'Plan running and cycling workouts your way',
+  title: 'Training Plans for Running, Cycling & More',
+  description: 'Create free running, cycling, swimming, walking, hiking and rowing plans or standalone workouts. Schedule by date, separate from completed activities.',
+  h1: 'Plan workouts for running, cycling, swimming and more',
   intro: 'Build a dated plan or start with one standalone workout. Work directly in Quantified Self, keep scheduled work separate from completed activities, and connect other tools only when you choose.',
   featureList: [
-    'Running and cycling training plans included on the free tier',
+    'Running, cycling, swimming, walking, hiking, rowing and strength plans included on the free tier',
     'Standalone structured workouts without a plan',
     'Dated plan calendars with colors, history, and shifting',
     'Planned-workout overlays kept separate from completed activity totals',
@@ -43,8 +43,8 @@ export const TRAINING_PLANS_PAGE_SECTIONS = [
   },
   {
     eyebrow: 'Structured Workouts',
-    title: 'Build the running and cycling workout you mean',
-    copy: 'The current editor supports the Running and Cycling families with date-only scheduling, time or distance steps, fixed repeats, and one absolute heart-rate, power, or pace target per step.',
+    title: 'Build the workout you mean',
+    copy: 'The interval editor supports running, cycling, pool and open-water swimming, walking, hiking, rowing and indoor rowing with date-only scheduling, time or distance steps, fixed repeats, and one absolute heart-rate, power, or pace target per step. The separate strength editor supports ordered named exercises, individual sets with repetitions or timed holds, optional external load in your selected kg or lb unit, and optional rest after each set. Swim and rowing distance steps use metres. Rowing pace is a 500 m split; swim pace follows your /100 m or /100 yd setting. Pool workouts can store an optional physical pool length in metres or yards, separately from step distance; open-water workouts have no pool length.',
     items: [
       {
         icon: 'directions_run',
@@ -55,6 +55,21 @@ export const TRAINING_PLANS_PAGE_SECTIONS = [
         icon: 'directions_bike',
         title: 'Cycling sports',
         copy: 'Create Cycling, Mountain Biking, Indoor Cycling, E-Biking, and Hand Cycle workouts using the same structure.',
+      },
+      {
+        icon: 'pool',
+        title: 'Pool and open-water swimming',
+        copy: 'Create either Swimming or Open Water Swimming workouts with metre-based distance steps or timed steps. Suunto uses the matching Guide activity. Garmin supports compatible target-free pool swims with an optional pool length, but not open water; Wahoo swim delivery and COROS open-water delivery are unavailable. A Garmin cloud check is not proof of watch receipt.',
+      },
+      {
+        icon: 'hiking',
+        title: 'Walking, hiking, and rowing',
+        copy: 'Create Walking, Hiking, Rowing, or Indoor Rowing workouts. Suunto Guides recommend the matching exercise profile. Garmin, COROS, and Wahoo structured-workout delivery for these sports is unsupported under their current contracts. Guide acceptance does not prove app or watch visibility.',
+      },
+      {
+        icon: 'fitness_center',
+        title: 'Strength training',
+        copy: 'Build ordered exercises and sets with reps or timed holds, optional external load in your selected kg or lb unit, and rest. Suunto sends a degraded Gym Guide with manual rep transitions, never native strength tracking; Garmin and Wahoo delivery is unsupported. COROS strength remains Coming soon pending account proof.',
       },
       {
         icon: 'repeat',

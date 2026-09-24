@@ -10,14 +10,15 @@ const command = { schemaVersion: 1, mutationId: 'test-1', scope: 'workout', scop
 describe('Training delivery contracts', () => {
   it('keeps transport diagnostics allowlisted even with invalid or unexpected runtime fields', () => {
     const details = { httpStatus: 200, failurePhase: 'decode', providerRejection: 'invalid_parameter',
-      providerField: 'plan_file', providerResponseShape: 'json', body: 'private-payload', url: 'private-url' };
+      providerField: 'guide_repeat', providerValidation: 'invalid_step_type', providerResponseShape: 'json',
+      body: 'private-payload', url: 'private-url' };
     const error = new TrainingDeliveryTransportError('uncertain', 0, details as TrainingDeliveryTransportError['diagnostics']);
     expect(error.diagnostics).toEqual({ httpStatus: 200, failurePhase: 'decode', providerRejection: 'invalid_parameter',
-      providerField: 'plan_file', providerResponseShape: 'json' });
+      providerField: 'guide_repeat', providerValidation: 'invalid_step_type', providerResponseShape: 'json' });
     expect(JSON.stringify(error)).not.toContain('private');
     expect(new TrainingDeliveryTransportError('uncertain', 0,
       { httpStatus: 999, failurePhase: 'private', providerRejection: 'private', providerField: 'private',
-        providerResponseShape: 'private' } as unknown as TrainingDeliveryTransportError['diagnostics']).diagnostics).toEqual({});
+        providerValidation: 'private', providerResponseShape: 'private' } as unknown as TrainingDeliveryTransportError['diagnostics']).diagnostics).toEqual({});
   });
   it('round trips exact JSON without touching the workout recipe', () => {
     expect(parseTrainingDeliveryCommandV1(JSON.parse(JSON.stringify(command)))).toEqual(command);

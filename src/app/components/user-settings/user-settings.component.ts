@@ -25,7 +25,8 @@ import {
   SpeedUnits,
   SwimPaceUnits,
   UserUnitSettingsInterface,
-  VerticalSpeedUnits
+  VerticalSpeedUnits,
+  WeightUnits,
 } from '@sports-alliance/sports-lib';
 import { ACTIVITIES_EXCLUDED_FROM_ASCENT, ACTIVITIES_EXCLUDED_FROM_DESCENT } from '@sports-alliance/sports-lib';
 import { AppDashboardSettingsInterface } from '../../models/app-user.interface';
@@ -125,7 +126,7 @@ export class UserSettingsComponent implements OnChanges, OnDestroy, OnInit {
     {
       id: 'units',
       label: 'Units',
-      description: 'Distance, pace, and speed',
+      description: 'Distance, pace, speed, and weight',
       icon: 'straighten',
     },
     {
@@ -168,6 +169,10 @@ export class UserSettingsComponent implements OnChanges, OnDestroy, OnInit {
     { label: 'Kilometers', value: DistanceUnits.Kilometers },
     { label: 'Miles', value: DistanceUnits.Miles },
   ];
+  public readonly weightUnitOptions: Array<{ label: string; value: WeightUnits }> = [
+    { label: 'Kilograms (kg)', value: WeightUnits.Kilograms },
+    { label: 'Pounds (lb)', value: WeightUnits.Pounds },
+  ];
   public readonly unitPresetOptions = UNIT_SETUP_PRESET_OPTIONS;
   public readonly formatLocaleOptions = APP_FORMAT_LOCALE_OPTIONS.map(option => ({
     ...option,
@@ -208,6 +213,7 @@ export class UserSettingsComponent implements OnChanges, OnDestroy, OnInit {
     chartFillOpacity: 'Fill Intensity',
     startOfTheWeek: 'Start of the Week',
     distanceUnitsToUse: 'Distance Units',
+    weightUnitsToUse: 'Weight Units',
     speedUnitsToUse: 'Preferred Speed Units',
     paceUnitsToUse: 'Preferred Pace Units',
     swimPaceUnitsToUse: 'Swim Pace Preference',
@@ -355,6 +361,9 @@ export class UserSettingsComponent implements OnChanges, OnDestroy, OnInit {
       distanceUnitsToUse: new UntypedFormControl(settings.unitSettings.distanceUnits, [
         Validators.required,
       ]),
+      weightUnitsToUse: new UntypedFormControl(settings.unitSettings.weightUnits, [
+        Validators.required,
+      ]),
       speedUnitsToUse: new UntypedFormControl(settings.unitSettings.speedUnits, [
         Validators.required,
       ]),
@@ -457,6 +466,10 @@ export class UserSettingsComponent implements OnChanges, OnDestroy, OnInit {
     this.hapticsService.selection();
   }
 
+  onWeightUnitChange(): void {
+    this.hapticsService.selection();
+  }
+
   async onSubmit(event) {
     event.preventDefault();
     if (!this.userSettingsFormGroup.valid) {
@@ -551,6 +564,7 @@ export class UserSettingsComponent implements OnChanges, OnDestroy, OnInit {
             swimPaceUnits: this.userSettingsFormGroup.get('swimPaceUnitsToUse').value,
             verticalSpeedUnits: this.userSettingsFormGroup.get('verticalSpeedUnitsToUse').value,
             distanceUnits: this.userSettingsFormGroup.get('distanceUnitsToUse').value,
+            weightUnits: this.userSettingsFormGroup.get('weightUnitsToUse').value,
             startOfTheWeek: this.userSettingsFormGroup.get('startOfTheWeek').value,
           },
           dashboardSettings: <AppDashboardSettingsInterface>{
@@ -674,6 +688,7 @@ export class UserSettingsComponent implements OnChanges, OnDestroy, OnInit {
     const unitSettings = settings.unitSettings;
     return this.userSettingsFormGroup.get('startOfTheWeek')?.value !== unitSettings.startOfTheWeek
       || this.userSettingsFormGroup.get('distanceUnitsToUse')?.value !== unitSettings.distanceUnits
+      || this.userSettingsFormGroup.get('weightUnitsToUse')?.value !== unitSettings.weightUnits
       || !this.areFormArraysEqual(this.userSettingsFormGroup.get('speedUnitsToUse')?.value, unitSettings.speedUnits)
       || !this.areFormArraysEqual(this.userSettingsFormGroup.get('paceUnitsToUse')?.value, unitSettings.paceUnits)
       || !this.areFormArraysEqual(this.userSettingsFormGroup.get('swimPaceUnitsToUse')?.value, unitSettings.swimPaceUnits)

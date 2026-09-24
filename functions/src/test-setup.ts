@@ -318,9 +318,9 @@ vi.mock('@sports-alliance/sports-lib', async (importOriginal) => {
     DataAscent: { type: 'Ascent' },
     DataCriticalPower: { type: 'Critical Power' },
     DataDescent: { type: 'Descent' },
-    DataDistance: { type: 'Distance' },
+    DataDistance: actual.DataDistance,
     DataDurabilityEvidence: { type: 'Durability Evidence' },
-    DataDuration: { type: 'Duration' },
+    DataDuration: actual.DataDuration,
     DataFTP: { type: 'FTP' },
     DataHeartRateAvg: { type: 'Heart Rate Avg' },
     DataHeartRateZoneOneDuration: { type: 'Heart Rate Zone 1 Duration' },
@@ -342,7 +342,7 @@ vi.mock('@sports-alliance/sports-lib', async (importOriginal) => {
     // DataSwimDistance intentionally shares the canonical Distance stat key in
     // sports-lib. Keep the mock aligned so shared metric registries are tested
     // against the same persisted shape as production.
-    DataSwimDistance: { type: actual.DataSwimDistance.type },
+    DataSwimDistance: actual.DataSwimDistance,
     DataSwimPaceAvg: { type: 'Average Swim Pace' },
     // Manual Health writes validate VO2 max with the real canonical class.
     DataVO2Max: actual.DataVO2Max,

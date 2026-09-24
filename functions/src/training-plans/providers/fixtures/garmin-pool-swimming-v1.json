@@ -1,0 +1,60 @@
+{
+  "workoutName": "Fixture 4 x 25 m pool swim",
+  "description": "Redacted pool-swim contract fixture.",
+  "sport": "LAP_SWIMMING",
+  "poolLength": 25,
+  "poolLengthUnit": "METER",
+  "workoutProvider": "Quantified Self",
+  "workoutSourceId": "Quantified Self",
+  "isSessionTransitionEnabled": false,
+  "segments": [{
+    "segmentOrder": 1,
+    "sport": "LAP_SWIMMING",
+    "poolLength": null,
+    "poolLengthUnit": null,
+    "steps": [{
+      "type": "WorkoutRepeatStep",
+      "stepOrder": 1,
+      "repeatType": "REPEAT_UNTIL_STEPS_CMPLT",
+      "repeatValue": 4,
+      "skipLastRestStep": true,
+      "steps": [{
+        "type": "WorkoutStep",
+        "stepOrder": 2,
+        "intensity": "ACTIVE",
+        "description": "",
+        "durationType": "DISTANCE",
+        "durationValue": 25,
+        "durationValueType": "METER",
+        "targetType": null,
+        "targetValue": null,
+        "targetValueLow": null,
+        "targetValueHigh": null,
+        "targetValueType": null,
+        "secondaryTargetType": null,
+        "secondaryTargetValue": null,
+        "secondaryTargetValueLow": null,
+        "secondaryTargetValueHigh": null,
+        "secondaryTargetValueType": null
+      }, {
+        "type": "WorkoutStep",
+        "stepOrder": 3,
+        "intensity": "REST",
+        "description": "",
+        "durationType": "FIXED_REST",
+        "durationValue": 30,
+        "durationValueType": null,
+        "targetType": null,
+        "targetValue": null,
+        "targetValueLow": null,
+        "targetValueHigh": null,
+        "targetValueType": null,
+        "secondaryTargetType": null,
+        "secondaryTargetValue": null,
+        "secondaryTargetValueLow": null,
+        "secondaryTargetValueHigh": null,
+        "secondaryTargetValueType": null
+      }]
+    }]
+  }]
+}

@@ -24,12 +24,10 @@
       ]
     },
     {
-      "id": "qs-suunto-QOEl3Sis2am5LJuYjjrO_FpvHYCx-4ifBXnd4OaFPR4",
       "type": "repeat",
       "times": 3,
       "steps": [
         {
-          "id": "qs-suunto-1JegEtu7HBcXo2h_f8x8n_rQRjiarq7THcULNA8ceAQ",
           "type": "fields",
           "title": "Work",
           "fields": [
@@ -42,7 +40,6 @@
           ]
         },
         {
-          "id": "qs-suunto-FO7CjCYL0dGFE2Y04aTmFTaX_JkSP_JL_hikp9hWKP8",
           "type": "fields",
           "title": "Recovery",
           "fields": [

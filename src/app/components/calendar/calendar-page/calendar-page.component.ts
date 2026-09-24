@@ -37,6 +37,7 @@ import { ActivityCalendarVolumeListComponent } from '../activity-calendar-volume
 import {
   CalendarDayDetailsComponent,
   type CalendarDayDetailsData,
+  type CalendarDayDetailsResult,
 } from '../calendar-day-details/calendar-day-details.component';
 import { ActivityRangeTableSectionComponent } from '../../event-table/activity-range-table-section.component';
 import { TimelineNotesWorkspaceComponent } from '../../timeline-notes/timeline-notes-workspace.component';
@@ -250,6 +251,16 @@ export class CalendarPageComponent {
       this.openDay(day);
     }
   });
+  private readonly openDuplicatedDayEffect = effect(() => {
+    const uid = this.currentUser()?.uid;
+    if (!uid) return;
+    const dateKey = this.dayDetailsNavigation.workoutDestinationFor(uid);
+    if (!dateKey || formatActivityCalendarDateParam(this.routeState().anchorDate) !== dateKey
+      || this.eventState().status === 'loading') return;
+    const day = this.calendarModel().months.flatMap(month => month.days)
+      .find(candidate => candidate.dateKey === dateKey);
+    if (day && this.dayDetailsNavigation.consumeWorkoutDestination(uid, dateKey)) this.openDay(day);
+  });
 
   @HostListener('window:focus')
   refreshToday(): void {
@@ -294,7 +305,7 @@ export class CalendarPageComponent {
     // Keep an open sheet's notes live and owner-fenced through refreshes, edits, and account changes.
     const timelineNotes = computed(() => this.currentUser()?.uid === userId
       ? this.notesByDate().get(day.dateKey)?.notes ?? [] : []);
-    const sheet = this.bottomSheet.open<CalendarDayDetailsComponent, CalendarDayDetailsData, string>(CalendarDayDetailsComponent, {
+    const sheet = this.bottomSheet.open<CalendarDayDetailsComponent, CalendarDayDetailsData, CalendarDayDetailsResult>(CalendarDayDetailsComponent, {
       data: {
         day,
         userId,
@@ -312,10 +323,17 @@ export class CalendarPageComponent {
         plannedWorkouts: this.plannedWorkoutsByDate()[day.dateKey]?.entries ?? [],
         plannedWorkoutsSource: () => this.plannedWorkoutsByDate()[day.dateKey]?.entries ?? [],
         plannedWorkoutsStatusSource: () => this.plansState().status,
+        scheduleSource: () => this.currentUser()?.uid === userId ? this.plansState().schedule : null,
       },
     });
-    sheet.afterDismissed().pipe(takeUntilDestroyed(this.destroy)).subscribe(noteId => {
-      const note = timelineNotes().find(note => note.id === noteId);
+    sheet.afterDismissed().pipe(takeUntilDestroyed(this.destroy)).subscribe(result => {
+      if (result && typeof result !== 'string') {
+        if (this.currentUser()?.uid !== userId
+          || !this.dayDetailsNavigation.prepareWorkoutDestination(userId, result.localDate)) return;
+        this.navigateToState({ ...this.routeState(), anchorDate: parseActivityCalendarDate(result.localDate) });
+        return;
+      }
+      const note = timelineNotes().find(note => note.id === result);
       if (note && this.currentUser()?.uid === userId) this.notesWorkspace()?.context().select([note]);
     });
   }

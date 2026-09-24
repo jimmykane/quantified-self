@@ -17,6 +17,7 @@ import {
 import canonicalRunningFixture from './fixtures/canonical-running-v1.json';
 import expectedCorosFixture from './fixtures/coros-running-v1.json';
 import expectedGarminFixture from './fixtures/garmin-running-v1.json';
+import expectedGarminPoolFixture from './fixtures/garmin-pool-swimming-v1.json';
 import expectedSuuntoFixture from './fixtures/suunto-running-v1.json';
 import expectedWahooFixture from './fixtures/wahoo-running-v1.json';
 import { serializeCorosTrainingPlanV1 } from './coros-training-plan.serializer';
@@ -31,6 +32,7 @@ import {
 } from './provider-mapping';
 import { serializeSuuntoGuideJsonV1 } from './suunto-guide.serializer';
 import { serializeWahooPlanJsonV1 } from './wahoo-plan.serializer';
+import { wahooDurationSeconds } from '../delivery/wahoo/mapping';
 
 const RUNNING_FIXTURE = canonicalRunningFixture as WorkoutStructureV1;
 
@@ -59,7 +61,7 @@ describe('planned-workout provider proof fixtures', () => {
             });
         }
         expect(PLANNED_WORKOUT_PROVIDER_CAPABILITIES_V1.suunto.profile?.sports)
-            .toEqual(MANUAL_WORKOUT_EDITOR_SPORTS_V1);
+            .toEqual([...MANUAL_WORKOUT_EDITOR_SPORTS_V1, ActivityTypes.StrengthTraining]);
         expect(GARMIN_PLANNED_WORKOUT_SPORTS_V1).toEqual([
             ActivityTypes.Running,
             ActivityTypes.TrailRunning,
@@ -75,9 +77,15 @@ describe('planned-workout provider proof fixtures', () => {
             ActivityTypes.Velomobile,
             ActivityTypes['Enduro MTB'],
             ActivityTypes.DownhillCycling,
+            ActivityTypes.Swimming,
         ]);
         expect(GARMIN_PLANNED_WORKOUT_SPORTS_V1).toEqual(expect.arrayContaining(
-            [...MANUAL_WORKOUT_EDITOR_SPORTS_V1],
+            MANUAL_WORKOUT_EDITOR_SPORTS_V1.filter(sport =>
+                sport !== ActivityTypes.OpenWaterSwimming
+                && sport !== ActivityTypes.Walking
+                && sport !== ActivityTypes.Hiking
+                && sport !== ActivityTypes.Rowing
+                && sport !== ActivityTypes.IndoorRowing),
         ));
         expect(PLANNED_WORKOUT_PROVIDER_CAPABILITIES_V1.garmin.profile?.sports)
             .toBe(GARMIN_PLANNED_WORKOUT_SPORTS_V1);
@@ -99,6 +107,55 @@ describe('planned-workout provider proof fixtures', () => {
             workoutId: 123456789,
             date: '2026-09-03',
         });
+    });
+
+    it('serializes a real 4 × 25 m pool set with 25 m pool length and last-rest skipping', () => {
+        const swimming: WorkoutStructureV1 = {
+            version: 1, sport: ActivityTypes.Swimming,
+            poolLength: { meters: 25, presentation: 'meters' },
+            nodes: [{ kind: 'repeat', id: 'set', count: 4, steps: [
+                { kind: 'step', id: 'length', purpose: 'work', ending: { kind: 'distance', meters: 25 }, targets: [] },
+                { kind: 'step', id: 'rest', purpose: 'rest', ending: { kind: 'time', seconds: 30 }, targets: [] },
+            ] }],
+        };
+        const result = serializeGarminWorkoutV1(swimming, {
+            name: 'Fixture 4 x 25 m pool swim', description: 'Redacted pool-swim contract fixture.', allowDegraded: false,
+        });
+        expect(result.level).toBe('exact');
+        expect(result.artifact).toEqual(expectedGarminPoolFixture);
+        expect(assessPlannedWorkoutProviderMappingV1('garmin', swimming).level).toBe('exact');
+        expect(assessPlannedWorkoutProviderMappingV1('coros', swimming)).toMatchObject({
+            level: 'degraded', issues: [expect.objectContaining({ path: '$.poolLength' })],
+        });
+        expect(assessPlannedWorkoutProviderMappingV1('suunto', swimming)).toMatchObject({
+            level: 'degraded', issues: [expect.objectContaining({ path: '$.poolLength' })],
+        });
+        expect(serializeGarminWorkoutV1({ ...swimming, poolLength: { meters: 22.86, presentation: 'yards' } }, {
+            name: '25-yard pool', allowDegraded: false,
+        }).artifact).toMatchObject({ poolLength: 25, poolLengthUnit: 'YARD' });
+    });
+
+    it('requires approval for unspecified Garmin pool size and rejects unmapped swim targets and time limits', () => {
+        const swimming: WorkoutStructureV1 = {
+            version: 1, sport: ActivityTypes.Swimming,
+            nodes: [{ kind: 'step', id: 'swim', purpose: 'work', ending: { kind: 'time', seconds: 600 }, targets: [] }],
+        };
+        expect(assessPlannedWorkoutProviderMappingV1('garmin', swimming)).toMatchObject({
+            level: 'degraded', issues: [expect.objectContaining({ path: '$.poolLength' })],
+        });
+        expect(() => serializeGarminWorkoutV1(swimming, { name: 'Unspecified pool', allowDegraded: false }))
+            .toThrow(expect.objectContaining({ code: 'degradation-confirmation-required' }));
+        expect(serializeGarminWorkoutV1(swimming, { name: 'Unspecified pool', allowDegraded: true }).artifact)
+            .toMatchObject({ sport: 'LAP_SWIMMING', poolLength: null, poolLengthUnit: null });
+        const targeted = { ...swimming, nodes: [{ ...swimming.nodes[0],
+            targets: [{ kind: 'heart-rate', mode: 'absolute', minimumBpm: 120, maximumBpm: 140 }],
+        }] };
+        expect(assessPlannedWorkoutProviderMappingV1('garmin', targeted)).toMatchObject({
+            level: 'unsupported', issues: expect.arrayContaining([expect.objectContaining({ code: 'unsupported_target' })]),
+        });
+        expect(assessPlannedWorkoutProviderMappingV1('garmin', {
+            ...swimming, nodes: [{ ...swimming.nodes[0], ending: { kind: 'time', seconds: 30 } }],
+        })).toMatchObject({ level: 'unsupported', issues: expect.arrayContaining([expect.objectContaining({ code: 'unsupported_ending' })]) });
     });
 
     it('matches the redacted COROS training-plan contract exactly', () => {
@@ -158,6 +215,55 @@ describe('planned-workout provider proof fixtures', () => {
         expect(result.artifact).toEqual(expectedSuuntoFixture);
     });
 
+    it('maps a canonical one-mile step in metres without applying display units again', () => {
+        const slowerMetersPerSecond = 1609.344 / (5 * 60);
+        const fasterMetersPerSecond = 1609.344 / (4 * 60);
+        const structure: WorkoutStructureV1 = {
+            version: 1,
+            sport: ActivityTypes.Running,
+            nodes: [{ kind: 'step', id: 'mile', purpose: 'work',
+                ending: { kind: 'distance', meters: 1609.344 }, targets: [{
+                    kind: 'speed', mode: 'absolute', presentation: 'pace',
+                    minimumMetersPerSecond: slowerMetersPerSecond,
+                    maximumMetersPerSecond: fasterMetersPerSecond,
+                }] }],
+        };
+        const garmin = serializeGarminWorkoutV1(structure, {
+            name: 'One-mile step', allowDegraded: false,
+        });
+        expect(garmin.artifact.segments[0].steps[0]).toMatchObject({
+            durationType: 'DISTANCE', durationValue: 1609.344, durationValueType: 'METER',
+            targetType: 'PACE', targetValueLow: slowerMetersPerSecond, targetValueHigh: fasterMetersPerSecond,
+        });
+        const coros = serializeCorosTrainingPlanV1(structure, {
+            athleteId: 24680, sourceWorkoutId: 'mile-1', title: 'One-mile step',
+            localDate: '2026-09-03', lastModifiedDate: '2026-09-02T12:00:00.000', allowDegraded: true,
+        });
+        expect(coros.level).toBe('degraded');
+        expect(coros.artifact.Workouts[0].Structure[0]).toMatchObject({
+            Length: { Unit: 'Meter', Value: 1609 },
+            IntensityTarget: { Unit: 'RangeOfThresholdSpeed', MinValue: slowerMetersPerSecond, MaxValue: fasterMetersPerSecond },
+        });
+        const suunto = serializeSuuntoGuideJsonV1(structure, {
+            name: 'One-mile step', owner: 'Quantified Self', url: 'https://quantified-self.io/training/plans',
+            localDate: '2026-09-03', sourceWorkoutId: 'mile-1', allowDegraded: false,
+        });
+        expect(suunto.artifact.steps[0]).toMatchObject({
+            transitions: [{ condition: { type: 'stepDistance', value: 1609.344 } }],
+            fields: expect.arrayContaining([{
+                type: 'targetPace', min: slowerMetersPerSecond, max: fasterMetersPerSecond, title: 'Tgt pace',
+            }]),
+        });
+        // A Wahoo plan.json can encode distance, but dated Workout delivery requires a known duration.
+        expect(serializeWahooPlanJsonV1(structure, {
+            name: 'One-mile step', location: 'outdoor', allowDegraded: false,
+        }).artifact.intervals[0]).toMatchObject({
+            exit_trigger_type: 'distance', exit_trigger_value: 1609.344,
+            targets: [{ type: 'speed', low: slowerMetersPerSecond, high: fasterMetersPerSecond }],
+        });
+        expect(wahooDurationSeconds(structure)).toBeNull();
+    });
+
     it.each([
         [ActivityTypes.Running, [1]],
         [ActivityTypes.TrailRunning, [22]],
@@ -167,6 +273,12 @@ describe('planned-workout provider proof fixtures', () => {
         [ActivityTypes.IndoorCycling, [52]],
         [ActivityTypes.EBiking, [105, 106]],
         [ActivityTypes.Handcycle, [109]],
+        [ActivityTypes.Swimming, [21]],
+        [ActivityTypes.OpenWaterSwimming, [85]],
+        [ActivityTypes.Walking, [0]],
+        [ActivityTypes.Hiking, [11]],
+        [ActivityTypes.Rowing, [15]],
+        [ActivityTypes.IndoorRowing, [57]],
     ] as const)('maps canonical %s to Suunto activity recommendations', (sport, activities) => {
         const result = serializeSuuntoGuideJsonV1({ ...oneStepStructure(), sport }, {
             name: `${sport} workout`,
@@ -179,6 +291,16 @@ describe('planned-workout provider proof fixtures', () => {
 
         expect(result.level).toBe('exact');
         expect(result.artifact.activities).toEqual(activities);
+        expect(JSON.parse(JSON.stringify(result.artifact)).activities).toEqual(activities);
+    });
+
+    it.each([ActivityTypes.Walking, ActivityTypes.Hiking, ActivityTypes.Rowing, ActivityTypes.IndoorRowing])('%s remains unsupported for Garmin, COROS, and Wahoo delivery', sport => {
+        const structure = { ...oneStepStructure(), sport };
+        for (const provider of ['garmin', 'coros', 'wahoo'] as const) {
+            expect(assessPlannedWorkoutProviderMappingV1(provider, structure)).toMatchObject({
+                level: 'unsupported', issues: [expect.objectContaining({ code: 'unsupported_sport' })],
+            });
+        }
     });
 
     it.each([
@@ -238,6 +360,10 @@ describe('planned-workout provider proof fixtures', () => {
             issues: [expect.objectContaining({ code: 'sport_profile_degraded' })],
         });
         expect(assessPlannedWorkoutProviderMappingV1('garmin', swimming)).toMatchObject({
+            level: 'degraded',
+            issues: [expect.objectContaining({ path: '$.poolLength' })],
+        });
+        expect(assessPlannedWorkoutProviderMappingV1('wahoo', swimming)).toMatchObject({
             level: 'unsupported',
             issues: [expect.objectContaining({ code: 'unsupported_sport' })],
         });
@@ -253,6 +379,69 @@ describe('planned-workout provider proof fixtures', () => {
             level: 'unsupported',
             issues: [expect.objectContaining({ code: 'unsupported_sport' })],
         });
+    });
+
+    it('maps target-free pool swimming to COROS and Suunto without claiming unsupported targets', () => {
+        const swimming: WorkoutStructureV1 = {
+            version: 1,
+            sport: ActivityTypes.Swimming,
+            nodes: [{
+                kind: 'repeat', id: 'set', count: 4,
+                steps: [{
+                    kind: 'step', id: 'lengths', purpose: 'work',
+                    ending: { kind: 'distance', meters: 25 }, targets: [],
+                }],
+            }],
+        };
+        expect(assessPlannedWorkoutProviderMappingV1('coros', swimming).level).toBe('exact');
+        expect(assessPlannedWorkoutProviderMappingV1('suunto', swimming).level).toBe('exact');
+        const coros = serializeCorosTrainingPlanV1(swimming, {
+            athleteId: 24680, sourceWorkoutId: 'pool-test', title: 'Pool test',
+            localDate: '2026-09-24', lastModifiedDate: '2026-09-23T12:00:00', allowDegraded: false,
+        });
+        expect(coros.artifact.Workouts[0].WorkoutType).toBe('swim');
+        expect(coros.artifact.Workouts[0].Structure[0]).toMatchObject({
+            Type: 'Repetition', Steps: [{ Length: { Unit: 'Meter', Value: 25 }, IntensityTarget: [] }],
+        });
+        const suunto = serializeSuuntoGuideJsonV1(swimming, {
+            name: 'Pool test', owner: 'Quantified Self', url: 'https://quantified-self.io/training/plans',
+            localDate: '2026-09-24', sourceWorkoutId: 'pool-test', allowDegraded: false,
+        });
+        expect(suunto.artifact.activities).toEqual([21]);
+        expect(suunto.artifact.steps[0]).toMatchObject({ type: 'repeat' });
+        const targeted: WorkoutStructureV1 = {
+            ...swimming,
+            nodes: [{
+                kind: 'step', id: 'targeted', purpose: 'work',
+                ending: { kind: 'distance', meters: 100 },
+                targets: [{ kind: 'heart-rate', mode: 'absolute', minimumBpm: 120, maximumBpm: 140 }],
+            }],
+        };
+        expect(assessPlannedWorkoutProviderMappingV1('coros', targeted)).toMatchObject({
+            level: 'unsupported', issues: [expect.objectContaining({ code: 'unsupported_target' })],
+        });
+    });
+
+    it('maps open-water swimming only to the documented Suunto Guide profile', () => {
+        const structure: WorkoutStructureV1 = {
+            ...oneStepStructure({ ending: { kind: 'distance', meters: 500 } }),
+            sport: ActivityTypes.OpenWaterSwimming,
+        };
+        const result = serializeSuuntoGuideJsonV1(structure, {
+            name: 'Open-water test', owner: 'Quantified Self',
+            url: 'https://quantified-self.io/training/plans', localDate: '2026-09-24',
+            sourceWorkoutId: 'open-water-test', allowDegraded: false,
+        });
+        expect(result.level).toBe('exact');
+        expect(result.artifact.activities).toEqual([85]);
+        expect(result.artifact.steps[0]).toMatchObject({
+            type: 'fields', transitions: [{ condition: { type: 'stepDistance', value: 500 } }],
+        });
+        for (const provider of ['garmin', 'coros', 'wahoo'] as const) {
+            expect(assessPlannedWorkoutProviderMappingV1(provider, structure)).toMatchObject({
+                level: 'unsupported', issues: [expect.objectContaining({ code: 'unsupported_sport' })],
+            });
+        }
     });
 
     it.each([

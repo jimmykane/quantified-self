@@ -32,6 +32,7 @@ import { getQueueCleanupTombstoneDocumentRef } from './queue/cleanup-tombstone';
 
 export enum QueueResult {
     Processed = 'PROCESSED',
+    AcknowledgedStale = 'ACKNOWLEDGED_STALE',
     Skipped = 'SKIPPED',
     Deferred = 'DEFERRED',
     TokenRefreshDeferred = 'TOKEN_REFRESH_DEFERRED',

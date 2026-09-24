@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { WeightUnits } from '@sports-alliance/sports-lib';
 import type { DerivedBodyWeightTrendMetricPayload } from '@shared/derived-metrics';
 import {
   buildTrainingBodyWeightViewModel,
@@ -82,6 +83,14 @@ describe('training body-weight helper', () => {
     expect(model.series).toHaveLength(1);
     expect(model.series[0].sourceLabel).toBe('Manual');
     expect(model.sourceText).toContain('does not change Readiness');
+  });
+
+  it('formats body-weight context and changes in pounds without changing canonical chart points', () => {
+    const payload = createPayload();
+    const model = buildTrainingBodyWeightViewModel(payload, 'ready', { weightUnits: WeightUnits.Pounds }, 'en-US');
+    expect(model.latestWeightText).toBe('154.8 lb');
+    expect(model.change7dText).toContain('lb');
+    expect(model.chartPoints[27].weightKg).toBe(70.2);
   });
 
   it('does not claim a comparison when its source windows are sparse', () => {

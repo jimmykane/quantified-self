@@ -15,6 +15,7 @@ import {
   SpeedUnits,
   SwimPaceUnits,
   VerticalSpeedUnits,
+  WeightUnits,
 } from '@sports-alliance/sports-lib';
 
 describe('unit setup preset helper', () => {
@@ -77,6 +78,7 @@ describe('unit setup preset helper', () => {
       swimPaceUnits: [SwimPaceUnits.MinutesPer100Meter],
       verticalSpeedUnits: [VerticalSpeedUnits.MetersPerSecond],
       distanceUnits: DistanceUnits.Kilometers,
+      weightUnits: WeightUnits.Kilograms,
       startOfTheWeek: DaysOfTheWeek.Monday,
     });
   });
@@ -90,6 +92,7 @@ describe('unit setup preset helper', () => {
       swimPaceUnits: [SwimPaceUnits.MinutesPer100Yard],
       verticalSpeedUnits: [VerticalSpeedUnits.FeetPerSecond],
       distanceUnits: DistanceUnits.Miles,
+      weightUnits: WeightUnits.Kilograms,
       startOfTheWeek: DaysOfTheWeek.Monday,
     });
   });

@@ -11,7 +11,7 @@ const NO_TARGET = '__NO_TARGET__';
 // Exercise a property inherited from Object.prototype so the fallback check
 // also guards against accidental prototype-based routing.
 const UNKNOWN_TARGET = 'toString';
-const EXPECTED_FULL_EXPORT_COUNT = 153;
+const EXPECTED_FULL_EXPORT_COUNT = 164;
 
 interface ProbeResult {
   target: string | null;

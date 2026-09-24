@@ -13,6 +13,7 @@ import {
   rejectRepeatedOAuthParameters,
 } from './oauth.service';
 import {
+  ASSISTANT_PERMISSION_RECOVERY_INSTRUCTIONS,
   buildMcpAuthorizationServerMetadata,
   buildMcpProtectedResourceMetadata,
   classifyMcpBearerRejectionReason,
@@ -24,7 +25,9 @@ import {
   handleMcpRevocationRequest,
   isMcpFormUrlEncodedContentType,
   isMcpRequestBodyWithinLimit,
+  mcpToolRequestBodyLimit,
   MCP_API_RUNTIME_OPTIONS,
+  MCP_PERMISSION_RECOVERY_INSTRUCTIONS,
   parseMcpBearerToken,
   parseMcpDateTime,
   parseMcpFormEncodedBody,
@@ -39,6 +42,59 @@ import {
 import { createMcpTransportHandler } from './transport';
 
 describe('MCP HTTP scope enforcement', () => {
+  it('advertises actionable permission recovery without treating missing tools as missing data', async () => {
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+    const server = createMcpServer({
+      uid: 'user-1',
+      clientId: 'https://client.example/mcp.json',
+      connectionId: 'connection-1',
+      scopes: [],
+    }, 'https://quantified-self.io');
+    const client = new Client({ name: 'permission-recovery-client', version: '1.0.0' });
+
+    try {
+      await server.connect(serverTransport);
+      await client.connect(clientTransport);
+      const instructions = client.getInstructions() || '';
+      expect(instructions).toContain(MCP_PERMISSION_RECOVERY_INSTRUCTIONS);
+      expect(instructions).toContain('choose Reconnect or start authorization again');
+      expect(instructions).toContain('start a new chat or refresh the client tools');
+      expect(instructions).toContain('Uninstall and reinstall is a last resort');
+      expect(instructions).toContain('do not interpret that as missing user data');
+      expect(instructions).toContain('or tell the user to reconnect a Garmin');
+      expect(instructions).not.toContain('disconnect and reinstall Quantified Self');
+    } finally {
+      await client.close();
+      await server.close();
+    }
+  });
+
+  it('routes built-in Assistant permission recovery to its own data-access controls', async () => {
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+    const server = createMcpServer({
+      uid: 'user-1',
+      clientId: 'first-party-assistant-v1',
+      connectionId: 'first-party-assistant-v1:conversation-1',
+      assistantConversationId: 'conversation-1',
+      scopes: [],
+    }, 'https://quantified-self.io');
+    const client = new Client({ name: 'assistant-permission-recovery-client', version: '1.0.0' });
+
+    try {
+      await server.connect(serverTransport);
+      await client.connect(clientTransport);
+      const instructions = client.getInstructions() || '';
+      expect(instructions).toContain(ASSISTANT_PERMISSION_RECOVERY_INSTRUCTIONS);
+      expect(instructions).toContain('open Examples & data access');
+      expect(instructions).toContain('fresh chat that Quantified Self starts');
+      expect(instructions).not.toContain('choose Reconnect or start authorization again');
+      expect(instructions).not.toContain('Uninstall and reinstall');
+    } finally {
+      await client.close();
+      await server.close();
+    }
+  });
+
   it('requires Health and Sleep before serving shared HRV ranges', () => {
     expect(requiredScopesForRequest({ method: 'tools/call', params: { name: 'get_hrv_personal_range' } }))
       .toEqual([MCP_OAUTH_SCOPES.HealthRead, MCP_OAUTH_SCOPES.SleepRead]);
@@ -273,6 +329,18 @@ describe('MCP HTTP scope enforcement', () => {
       MCP_OAUTH_SCOPES.ActivityDetailsRead,
       MCP_OAUTH_SCOPES.EventsWrite,
     ]);
+    for (const name of ['get_event_title', 'update_event_title']) {
+      expect(requiredScopesForRequest({ method: 'tools/call', params: { name } })).toEqual([
+        MCP_OAUTH_SCOPES.ActivityDetailsRead, MCP_OAUTH_SCOPES.EventsWrite,
+      ]);
+    }
+    expect(requiredScopesForRequest({ method: 'tools/call', params: {
+      name: 'update_event_description',
+    } })).toEqual([
+      MCP_OAUTH_SCOPES.ActivityDetailsRead,
+      MCP_OAUTH_SCOPES.EventsWrite,
+      MCP_OAUTH_SCOPES.ActivityDescriptionsRead,
+    ]);
     for (const name of [
       'query_editable_timeline_notes',
       'create_timeline_note',
@@ -308,6 +376,9 @@ describe('MCP HTTP scope enforcement', () => {
       MCP_OAUTH_SCOPES.TimelineNotesRead,
     ]);
     expect(readOnly).not.toContain('update_event_tags');
+    expect(readOnly).not.toContain('get_event_title');
+    expect(readOnly).not.toContain('update_event_title');
+    expect(readOnly).not.toContain('update_event_description');
     expect(readOnly).not.toContain('query_editable_timeline_notes');
     expect(readOnly).not.toContain('create_timeline_note');
 
@@ -319,11 +390,44 @@ describe('MCP HTTP scope enforcement', () => {
     ]);
     expect(writable).toEqual(expect.arrayContaining([
       'update_event_tags',
+      'get_event_title',
+      'update_event_title',
       'query_editable_timeline_notes',
       'create_timeline_note',
       'update_timeline_note',
       'delete_timeline_note',
     ]));
+    expect(writable).not.toContain('update_event_description');
+    const descriptionWritable = await list([
+      MCP_OAUTH_SCOPES.ActivityDetailsRead,
+      MCP_OAUTH_SCOPES.EventsWrite,
+      MCP_OAUTH_SCOPES.ActivityDescriptionsRead,
+    ]);
+    expect(descriptionWritable).toContain('update_event_description');
+  });
+
+  it('keeps first-party Assistant event access limited to its existing tag workflow', async () => {
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+    const server = createMcpServer({
+      uid: 'user-1', clientId: 'first-party-assistant-v1',
+      connectionId: 'first-party-assistant-v1:conversation-1',
+      assistantConversationId: 'conversation-1',
+      scopes: [MCP_OAUTH_SCOPES.ActivityDetailsRead, MCP_OAUTH_SCOPES.EventsWrite,
+        MCP_OAUTH_SCOPES.ActivityDescriptionsRead],
+    }, 'https://quantified-self.io');
+    const client = new Client({ name: 'assistant-event-scope-client', version: '1.0.0' });
+    try {
+      await server.connect(serverTransport);
+      await client.connect(clientTransport);
+      const names = (await client.listTools()).tools.map(tool => tool.name);
+      expect(names).toContain('update_event_tags');
+      expect(names).not.toContain('get_event_title');
+      expect(names).not.toContain('update_event_title');
+      expect(names).not.toContain('update_event_description');
+    } finally {
+      await client.close();
+      await server.close();
+    }
   });
 
   it('requires sleep scope for sleep tools', () => {
@@ -387,6 +491,9 @@ describe('MCP HTTP scope enforcement', () => {
       },
     } })).toEqual([MCP_OAUTH_SCOPES.TrainingPlansRead, MCP_OAUTH_SCOPES.TrainingPlansWrite,
       MCP_OAUTH_SCOPES.TrainingDeliveryWrite]);
+    expect(requiredScopesForRequest({ method: 'tools/call', params: {
+      name: 'preview_strength_workout_change', arguments: { expectedScheduleRevision: 1 },
+    } })).toEqual([MCP_OAUTH_SCOPES.TrainingPlansRead, MCP_OAUTH_SCOPES.TrainingPlansWrite]);
     expect(requiredScopesForRequest({ method: 'tools/call', params: { name: 'preview_training_changes', arguments: {
       expectedScheduleRevision: 1, changes: [{ kind: 'rename-plan' }],
     } } })).toEqual([MCP_OAUTH_SCOPES.TrainingPlansRead, MCP_OAUTH_SCOPES.TrainingPlansWrite]);
@@ -722,11 +829,13 @@ describe('MCP HTTP scope enforcement', () => {
       'get_planned_workout',
       'get_planned_workout_completion',
       'get_planned_workout_completions',
+      'get_strength_workout_details',
       'get_training_plan',
       'get_training_sync_status',
       'list_activity_types',
       'list_training_plans',
       'preview_create_planned_workout',
+      'preview_strength_workout_change',
       'preview_training_changes',
       'query_planned_workouts',
       'query_planned_workouts_by_date',
@@ -754,7 +863,7 @@ describe('MCP HTTP scope enforcement', () => {
       MCP_OAUTH_SCOPES.TrainingPlansRead,
       MCP_OAUTH_SCOPES.TrainingPlansWrite,
     ]);
-    expect(writeInstructions).toContain('Construct workout recipes only from the advertised v1 schema');
+    expect(writeInstructions).toContain('Construct non-strength workout recipes only from the advertised v1 schema');
     expect(writeInstructions).toContain('query_planned_workouts_by_date');
     expect(writeInstructions).toContain('get_planned_workout_completions');
     expect(writeInstructions).toContain('local mapping assessment, not a live provider/account check');
@@ -1546,6 +1655,14 @@ describe('MCP HTTP scope enforcement', () => {
     expect(supportsMcpTransportMethod('DELETE')).toBe(false);
     expect(isMcpRequestBodyWithinLimit({ method: 'initialize' }, '24')).toBe(true);
     expect(isMcpRequestBodyWithinLimit({ payload: 'x'.repeat(70_000) }, undefined)).toBe(false);
+    expect(isMcpRequestBodyWithinLimit({ payload: 'x'.repeat(70_000) }, undefined, 320 * 1024)).toBe(true);
+    expect(isMcpRequestBodyWithinLimit({ payload: 'x'.repeat(330_000) }, undefined, 320 * 1024)).toBe(false);
+    expect(mcpToolRequestBodyLimit({ method: 'tools/call', params: { name: 'update_event_description' } }))
+      .toBe(320 * 1024);
+    expect(mcpToolRequestBodyLimit({ method: 'tools/call', params: { name: 'update_event_title' } }))
+      .toBe(64 * 1024);
+    expect(mcpToolRequestBodyLimit([{ method: 'tools/call', params: { name: 'update_event_description' } }]))
+      .toBe(64 * 1024);
     expect(isMcpRequestBodyWithinLimit({}, 'not-a-number')).toBe(false);
   });
 

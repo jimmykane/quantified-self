@@ -38,6 +38,7 @@ import { ActivityCalendarGridComponent } from '../activity-calendar-grid/activit
 import {
   CalendarDayDetailsComponent,
   type CalendarDayDetailsData,
+  type CalendarDayDetailsResult,
 } from '../calendar-day-details/calendar-day-details.component';
 import {
   buildPlannedWorkoutCalendarOverlay,
@@ -283,7 +284,7 @@ export class ActivityCalendarTileComponent {
       subscriptions.add(this.eventsSource().subscribe(state => eventState.set(state)));
       subscriptions.add(this.plansSource().subscribe(state => plansState.set(state)));
       subscriptions.add(this.completionsSource().subscribe(completions => workoutCompletions.set(completions)));
-      const sheet = this.bottomSheet.open<CalendarDayDetailsComponent, CalendarDayDetailsData, string>(CalendarDayDetailsComponent, {
+      const sheet = this.bottomSheet.open<CalendarDayDetailsComponent, CalendarDayDetailsData, CalendarDayDetailsResult>(CalendarDayDetailsComponent, {
         data: {
           day,
           userId,
@@ -295,10 +296,17 @@ export class ActivityCalendarTileComponent {
           plannedWorkouts: plannedWorkouts(),
           plannedWorkoutsSource: plannedWorkouts,
           plannedWorkoutsStatusSource: () => plansState().status,
+          scheduleSource: () => this.users.user()?.uid === userId ? plansState().schedule : null,
         },
       });
-      sheet.afterDismissed().pipe(take(1), finalize(release)).subscribe(noteId => {
-        const note = timelineNotes().find(note => note.id === noteId);
+      sheet.afterDismissed().pipe(take(1), finalize(release)).subscribe(result => {
+        if (result && typeof result !== 'string') {
+          if (this.users.user()?.uid !== userId
+            || !this.dayDetailsNavigation.prepareWorkoutDestination(userId, result.localDate)) return;
+          void this.router.navigate(['/calendar'], { queryParams: { view: 'month', date: result.localDate } });
+          return;
+        }
+        const note = timelineNotes().find(note => note.id === result);
         if (note) source?.()?.select([note]);
       });
     } catch (error) {

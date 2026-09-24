@@ -4,12 +4,15 @@ import type { PlannedWorkoutProviderId } from '../../../../shared/planned-workou
 import { hashTrainingScheduleRequestPayload } from '../persistence';
 import type { DeliveryContext, DeliveryIntent, DeliveryLedgerV1 } from './contracts';
 import type { ScheduledWorkoutV1 } from '../../../../shared/training-plans';
+import type { StrengthWorkoutDetailsV1 } from '../../../../shared/strength-workout';
 
 export function deliveryIdentity(uid: string, provider: PlannedWorkoutProviderId, account: string, workoutId: string): string {
   return createHash('sha256').update(JSON.stringify([uid, provider, account, workoutId])).digest('hex');
 }
-export function deliveryContentDigest(workout: ScheduledWorkoutV1 | null, timeZone: string): string | null {
-  return workout ? hashTrainingScheduleRequestPayload({ title: workout.title, localDate: workout.localDate, structure: workout.structure, timeZone }) : null;
+export function deliveryContentDigest(workout: ScheduledWorkoutV1 | null, timeZone: string,
+  strength?: StrengthWorkoutDetailsV1 | null): string | null {
+  return workout ? hashTrainingScheduleRequestPayload({ title: workout.title, localDate: workout.localDate,
+    structure: workout.structure, ...(strength ? { strength: strength.exercises } : {}), timeZone }) : null;
 }
 export function resolveDeliveryIntent(context: DeliveryContext, ledger?: DeliveryLedgerV1): DeliveryIntent {
   const { workout, connection, transport, nowMs } = context;
@@ -44,7 +47,7 @@ export function resolveDeliveryIntent(context: DeliveryContext, ledger?: Deliver
   if (!transport) return result('preserve', 'provider_unavailable');
   const days = (Date.parse(`${workout!.localDate}T00:00:00Z`) - Date.parse(`${today}T00:00:00Z`)) / 86_400_000;
   if (days > transport.horizonDays) return result(transport.withdrawOutsideHorizon ? 'absent' : 'preserve', 'outside_horizon');
-  const assessment = transport.assess(workout!, connection.destinationKey, timeZone);
+  const assessment = transport.assess(workout!, connection.destinationKey, timeZone, context.strength);
   if (assessment.level === 'unsupported') return result('preserve', 'unsupported', assessment.digest, assessment.issues);
   const approval = override?.approvedDigest ?? setting?.approvedDigest;
   if (assessment.level === 'degraded' && approval !== assessment.digest) {

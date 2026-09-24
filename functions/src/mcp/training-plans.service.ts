@@ -2,11 +2,13 @@ import * as admin from 'firebase-admin';
 import { FieldPath } from 'firebase-admin/firestore';
 import { z } from 'zod';
 import type { UserUnitSettingsInterface } from '@sports-alliance/sports-lib';
+import { ActivityTypes } from '@sports-alliance/sports-lib';
 import { formatWorkoutStepV1, parseWorkoutStructureV1 } from '../../../shared/planned-workout';
 import { buildTrainingDeliverySummaries } from '../../../shared/training-delivery-summary';
 import { assessPlannedWorkoutProviderMappingV1, PLANNED_WORKOUT_PROVIDER_IDS,
   type PlannedWorkoutProviderId } from '../../../shared/planned-workout-providers';
 import { parseTrainingWorkoutCompletionV1 } from '../../../shared/training-workout-completion';
+import { parseStrengthWorkoutDetailsV1, strengthProjectionMatchesDetails } from '../../../shared/strength-workout';
 import { isUserDeletionTombstoneActive } from '../shared/user-deletion-guard';
 import { TRAINING_PLANS_SCOPE, TRAINING_READ_INPUTS, TRAINING_READ_OUTPUTS, TRAINING_RECIPE_SCHEMA,
   trainingDate, type TrainingReadResult, type TrainingReadTool } from './training-plans.schemas';
@@ -50,6 +52,7 @@ interface WorkoutDateCursor { localDate: string; id: string }
 interface State { revision: number; activePlanId: string | null; accessGeneration?: string }
 export interface TrainingReadView {
   get(collection: Collection, id: string, structure?: boolean): Promise<Document | null>;
+  getStrengthDetails?(workoutId: string): Promise<Document | null>;
   page(collection: Collection, after: string | null, limit: number, filter?: Filter): Promise<Document[]>;
   workoutDatePage(startDate: string, endDate: string, after: WorkoutDateCursor | null, limit: number): Promise<Document[]>;
   units(): Promise<UserUnitSettingsInterface | null>;
@@ -98,6 +101,12 @@ export function createFirestoreTrainingReads(database: () => FirebaseFirestore.F
       async get(collection, documentId, structure = false) {
         const fields = [...MASKS[collection], ...(structure ? ['structure'] : [])];
         const [doc] = await transaction.getAll(user.collection(collection).doc(documentId), { fieldMask: fields });
+        return doc.exists ? { id: doc.id, data: doc.data()! } : null;
+      },
+      async getStrengthDetails(workoutId) {
+        const [doc] = await transaction.getAll(user.collection('scheduledWorkouts').doc(workoutId)
+          .collection('strengthDetails').doc('current'),
+        { fieldMask: ['version', 'workoutId', 'revision', 'exercises'] });
         return doc.exists ? { id: doc.id, data: doc.data()! } : null;
       },
       async page(collection, after, limit, filter) {
@@ -182,6 +191,11 @@ export async function readTrainingPlans(input: TrainingReadInput, reads: Trainin
         if (doc) measure(doc);
         return doc;
       },
+      async getStrengthDetails(workoutId) {
+        const doc = await source.getStrengthDetails?.(workoutId);
+        if (doc) measure(doc);
+        return doc ?? null;
+      },
       async page(collection, after, limit, filter) {
         const page = await source.page(collection, after, limit, filter);
         page.forEach(measure);
@@ -249,12 +263,37 @@ export async function readTrainingPlans(input: TrainingReadInput, reads: Trainin
       const a = TRAINING_READ_INPUTS.get_planned_workout.parse(args.data);
       const doc = await resolve(a.workoutRef, 'workout', true);
       const summary = await projectWorkout(doc);
-      const structure = TRAINING_RECIPE_SCHEMA.parse(parseWorkoutStructureV1(doc.data.structure));
+      const canonicalStructure = parseWorkoutStructureV1(doc.data.structure);
+      if (canonicalStructure.sport === ActivityTypes.StrengthTraining) {
+        const companion = await view.getStrengthDetails?.(doc.id);
+        if (!companion) throw unavailable();
+        const details = parseStrengthWorkoutDetailsV1(companion.data);
+        if (details.workoutId !== doc.id || !strengthProjectionMatchesDetails(canonicalStructure, details)) throw unavailable();
+      }
+      // The registered v1 MCP recipe is frozen. Pool length needs an additive tool
+      // contract; preserve existing workout reads until that contract is promoted.
+      const legacyStructure = { ...canonicalStructure };
+      delete legacyStructure.poolLength;
+      const structure = TRAINING_RECIPE_SCHEMA.parse(legacyStructure);
       const units = await view.units();
       const displaySteps = structure.nodes.flatMap(node => node.kind === 'step'
-        ? [{ nodeId: node.id, text: formatWorkoutStepV1(node, units) }]
-        : [{ nodeId: node.id, text: `Repeat ${node.count} times` }, ...node.steps.map(step => ({ nodeId: step.id, text: formatWorkoutStepV1(step, units) }))]);
+        ? [{ nodeId: node.id, text: formatWorkoutStepV1(node, units, undefined, canonicalStructure.sport) }]
+        : [{ nodeId: node.id, text: `Repeat ${node.count} times` }, ...node.steps.map(step => ({
+          nodeId: step.id, text: formatWorkoutStepV1(step, units, undefined, canonicalStructure.sport),
+        }))]);
       return { scheduleRevision: state.revision, workout: { ...summary, structure, displaySteps } };
+    }
+    if (input.tool === 'get_strength_workout_details') {
+      const a = TRAINING_READ_INPUTS.get_strength_workout_details.parse(args.data);
+      const doc = await resolve(a.workoutRef, 'workout', true);
+      const structure = parseWorkoutStructureV1(doc.data.structure);
+      if (structure.sport !== ActivityTypes.StrengthTraining) throw new TrainingReadError('invalid_request', 'This is not a strength workout.');
+      const companion = await view.getStrengthDetails?.(doc.id);
+      if (!companion) throw unavailable();
+      const details = parseStrengthWorkoutDetailsV1(companion.data);
+      if (details.workoutId !== doc.id || !strengthProjectionMatchesDetails(structure, details)) throw unavailable();
+      return { scheduleRevision: state.revision, workoutRef: a.workoutRef,
+        details: { version: details.version, revision: details.revision, exercises: details.exercises } };
     }
     if (input.tool === 'get_planned_workout_completion') {
       const a = TRAINING_READ_INPUTS.get_planned_workout_completion.parse(args.data);
@@ -269,9 +308,20 @@ export async function readTrainingPlans(input: TrainingReadInput, reads: Trainin
       const a = TRAINING_READ_INPUTS.assess_planned_workout_compatibility.parse(args.data);
       const doc = await resolve(a.workoutRef, 'workout', true);
       const structure = parseWorkoutStructureV1(doc.data.structure);
+      if (structure.sport === ActivityTypes.StrengthTraining) {
+        const companion = await view.getStrengthDetails?.(doc.id);
+        if (!companion) throw unavailable();
+        const details = parseStrengthWorkoutDetailsV1(companion.data);
+        if (details.workoutId !== doc.id || !strengthProjectionMatchesDetails(structure, details)) throw unavailable();
+      }
       const providers = a.providers ?? PLANNED_WORKOUT_PROVIDER_IDS;
       return { scheduleRevision: state.revision, workoutRef: a.workoutRef,
         assessments: providers.map(provider => {
+          if (structure.sport === ActivityTypes.StrengthTraining && provider === 'suunto') {
+            return { provider, level: 'degraded' as const, issues: [{ severity: 'degraded' as const,
+              code: 'strength_guide_degraded' as const, field: '$.strength',
+              message: 'Suunto receives a Gym Guide with exercise and set instructions. Repetitions require manual transitions and this is not native strength tracking.' }] };
+          }
           const assessment = assessDeliveryCompatibility(provider, structure);
           return { provider: assessment.provider, level: assessment.level,
             issues: assessment.issues.map(issue => ({ severity: issue.severity, code: issue.code,

@@ -4,7 +4,9 @@ import { ActivityTypes } from '@sports-alliance/sports-lib';
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 import type { DeliveryRuntime } from '../training-plans/delivery/contracts';
 import { FakeTrainingTransport } from '../training-plans/delivery/test-support/fake-transport';
+import { parseStrengthWorkoutDetailsV1 } from '../../../shared/strength-workout';
 import { applyTrainingChanges, previewCreatePlannedWorkout, previewTrainingChanges,
+  previewStrengthWorkoutChange,
   type TrainingWriteDependencies } from './training-plans-write.service';
 import { TRAINING_DELIVERY_WRITE_SCOPE, TRAINING_PLANS_SCOPE, TRAINING_PLANS_WRITE_SCOPE } from './training-plans.schemas';
 
@@ -72,6 +74,28 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Training MCP write propos
     expect(workouts.docs.map(doc => doc.data())).toEqual([
       expect.objectContaining({ title: 'Focused easy run', planId: null, lifecycle: 'planned' }),
     ]);
+  });
+
+  it('previews and applies a complete strength prescription without widening the v1 recipe tool', async () => {
+    const strength = { version: 1 as const, exercises: [{ id: 'squat', name: 'Back squat', sets: [{
+      id: 'set-one', ending: { kind: 'repetitions' as const, repetitions: 5 }, externalLoadKg: 80,
+      restAfterSeconds: 120,
+    }] }] };
+    const preview = await previewStrengthWorkoutChange({ uid, connectionId: 'connection', scopes,
+      arguments: { expectedScheduleRevision: 1, change: { kind: 'create-workout', localKey: 'lift', plan: null,
+        localDate: '2026-09-18', title: 'Strength day', strength } } }, deps);
+    expect(preview).toMatchObject({ permissionMode: 'schedule', requiresConfirmation: true,
+      changes: [{ kind: 'create-workout' }] });
+    const applied = await applyTrainingChanges({ uid, connectionId: 'connection', scopes,
+      arguments: { proposalRef: preview.proposalRef, permissionMode: 'schedule' } }, deps);
+    const workout = (await db.collection('users').doc(uid).collection('scheduledWorkouts').get()).docs[0];
+    expect(workout.data().structure.sport).toBe(ActivityTypes.StrengthTraining);
+    const companion = await workout.ref.collection('strengthDetails').doc('current').get();
+    expect(parseStrengthWorkoutDetailsV1(companion.data()).exercises[0].sets[0])
+      .toMatchObject({ externalLoadKg: 80, restAfterSeconds: 120 });
+    expect(applied.createdReferences).toEqual([expect.objectContaining({ localKey: 'lift', kind: 'workout' })]);
+    await expect(applyTrainingChanges({ uid, connectionId: 'connection', scopes,
+      arguments: { proposalRef: preview.proposalRef, permissionMode: 'schedule' } }, deps)).resolves.toEqual(applied);
   });
 
   it('applies compatible authored changes together while preserving each revision', async () => {
@@ -222,6 +246,84 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Training MCP write propos
       .toEqual([expect.objectContaining({ provider: 'garmin', enabled: true, scope: 'workout' })]);
     await expect(applyTrainingChanges(input, deps)).resolves.toEqual(applied);
     expect((await user.collection('scheduledWorkouts').get()).size).toBe(1);
+  });
+
+  it('previews and applies a different-date plan copy with a fresh planned identity and range extension', async () => {
+    const user = db.collection('users').doc(uid);
+    const setup = await previewTrainingChanges({ uid, connectionId: 'connection', scopes,
+      arguments: { expectedScheduleRevision: 1, changes: [
+        { kind: 'create-plan', localKey: 'plan', name: 'September', startDate: '2026-09-18',
+          endDate: '2026-09-30', activate: false },
+        { kind: 'create-workout', localKey: 'run', plan: { localKey: 'plan' }, localDate: '2026-09-20',
+          title: 'Easy run', structure },
+        { kind: 'set-workout-lifecycle', workout: { localKey: 'run' }, lifecycle: 'skipped' },
+      ] } }, deps);
+    const created = await applyTrainingChanges({ uid, connectionId: 'connection', scopes,
+      arguments: { proposalRef: setup.proposalRef, permissionMode: 'schedule' } }, deps);
+    const planRef = created.createdReferences.find(item => item.kind === 'plan')!.reference;
+    const workoutRef = created.createdReferences.find(item => item.kind === 'workout')!.reference;
+    const original = (await user.collection('scheduledWorkouts').get()).docs[0];
+    await user.collection('trainingWorkoutCompletions').doc(original.id).set({
+      schemaVersion: 1, workoutId: original.id, status: 'linked',
+    });
+
+    const preview = await previewTrainingChanges({ uid, connectionId: 'connection', scopes,
+      arguments: { expectedScheduleRevision: created.scheduleRevision, changes: [
+        { kind: 'copy-workout', sourceWorkout: { ref: workoutRef }, localKey: 'duplicate',
+          plan: { ref: planRef }, localDate: '2027-01-02' },
+      ] } }, deps);
+    expect(preview).toMatchObject({ permissionMode: 'schedule', requiresConfirmation: true,
+      changes: [{ kind: 'copy-workout', summary: expect.stringContaining('2027-01-02') }] });
+    expect(preview.changes[0].summary).toContain('The destination plan range will extend to 2026-09-18 through 2027-01-02.');
+    const input = { uid, connectionId: 'connection', scopes,
+      arguments: { proposalRef: preview.proposalRef, permissionMode: 'schedule' as const } };
+    const applied = await applyTrainingChanges(input, deps);
+    expect(applied.status).toBe('applied');
+    expect(applied.createdReferences).toEqual([expect.objectContaining({ localKey: 'duplicate', kind: 'workout' })]);
+    const workouts = (await user.collection('scheduledWorkouts').get()).docs;
+    expect(workouts).toHaveLength(2);
+    const duplicate = workouts.find(doc => doc.id !== original.id)!;
+    expect(duplicate.data()).toMatchObject({ title: 'Easy run', localDate: '2027-01-02',
+      planId: original.data().planId, lifecycle: 'planned', revision: 1 });
+    expect(duplicate.data().structure).toEqual(original.data().structure);
+    expect((await user.collection('trainingWorkoutCompletions').doc(duplicate.id).get()).exists).toBe(false);
+    expect((await original.ref.get()).data()).toMatchObject({ localDate: '2026-09-20', lifecycle: 'skipped' });
+    expect((await user.collection('trainingPlans').doc(original.data().planId).get()).get('endLocalDate'))
+      .toBe('2027-01-02');
+    await expect(applyTrainingChanges(input, deps)).resolves.toEqual(applied);
+    expect((await user.collection('scheduledWorkouts').get()).size).toBe(2);
+  });
+
+  it('does not inherit standalone delivery consent and rejects a copy after the source revision changes', async () => {
+    const user = db.collection('users').doc(uid);
+    const setup = await previewCreateAndSend();
+    const created = await applyTrainingChanges({ uid, connectionId: 'connection', scopes,
+      arguments: { proposalRef: setup.proposalRef, permissionMode: 'combined' } }, deps);
+    const workoutRef = created.createdReferences.find(item => item.kind === 'workout')!.reference;
+    const original = (await user.collection('scheduledWorkouts').get()).docs[0];
+    const copyArguments = { expectedScheduleRevision: created.scheduleRevision, changes: [
+      { kind: 'copy-workout', sourceWorkout: { ref: workoutRef }, localKey: 'duplicate',
+        plan: null, localDate: '2026-09-19' },
+    ] };
+    const stale = await previewTrainingChanges({ uid, connectionId: 'connection', scopes,
+      arguments: copyArguments }, deps);
+    await user.collection('scheduledWorkouts').doc(original.id).update({ revision: 2 });
+    const staleResult = await applyTrainingChanges({ uid, connectionId: 'connection', scopes,
+      arguments: { proposalRef: stale.proposalRef, permissionMode: 'schedule' } }, deps);
+    expect(staleResult).toMatchObject({ status: 'partially_applied', changes: [{ status: 'failed' }] });
+    expect((await user.collection('scheduledWorkouts').get()).size).toBe(1);
+
+    const fresh = await previewTrainingChanges({ uid, connectionId: 'connection', scopes,
+      arguments: copyArguments }, deps);
+    const applied = await applyTrainingChanges({ uid, connectionId: 'connection', scopes,
+      arguments: { proposalRef: fresh.proposalRef, permissionMode: 'schedule' } }, deps);
+    expect(applied.status).toBe('applied');
+    const duplicate = (await user.collection('scheduledWorkouts').get()).docs.find(doc => doc.id !== original.id)!;
+    expect(duplicate.data()).toMatchObject({ planId: null, localDate: '2026-09-19', lifecycle: 'planned' });
+    expect((await user.collection('trainingDeliverySettings').get()).docs)
+      .toHaveLength(1);
+    expect((await user.collection('trainingDeliverySettings').get()).docs[0].id)
+      .toContain(original.id);
   });
 
   it('keeps an authored workout when an explicitly selected provider is unavailable', async () => {

@@ -1,0 +1,121 @@
+<main class="marketing-page qs-workspace-page" aria-labelledby="marketing-title">
+  <app-page-header title="Marketing campaigns" titleId="marketing-title" eyebrow="Administration" leadingIcon="campaign"
+    subtitle="Create founder-style emails for people who opted in to marketing updates."></app-page-header>
+  @if (error) { <p class="feedback error" role="alert">{{ error }}</p> }
+  @if (notice) { <p class="feedback" role="status">{{ notice }}</p> }
+  <div class="workspace">
+    <aside class="sidebar">
+      <mat-card>
+        <mat-card-header><mat-card-title>Daily sending limit</mat-card-title></mat-card-header>
+        <mat-card-content>
+          <p>One global UTC-day limit across campaigns, test emails, and retries.</p>
+          <mat-form-field appearance="outline"><mat-label>Submissions per day</mat-label>
+            <input matInput type="number" min="1" max="1000" [(ngModel)]="cap" aria-label="Global marketing submissions per day">
+          </mat-form-field>
+          <button mat-stroked-button type="button" [disabled]="!!busy || cap === list?.dailyCap" (click)="changeCap()">Save limit</button>
+          @if (list) { <p>{{ list.usedToday }} used · {{ remaining }} available on {{ list.utcDate }} UTC</p> }
+        </mat-card-content>
+      </mat-card>
+      <mat-card>
+        <mat-card-header><mat-card-title>Campaigns</mat-card-title></mat-card-header>
+        <mat-card-content>
+          <button mat-flat-button type="button" (click)="newDraft()" [disabled]="!!busy"><mat-icon>add</mat-icon> New campaign</button>
+          <nav aria-label="Campaigns">
+            @for (campaign of list?.campaigns || []; track campaign.id) {
+              <button mat-button type="button" class="campaign-row" [disabled]="!!busy" [class.active]="selected?.id === campaign.id" (click)="choose(campaign)">
+                <span class="campaign-row-content"><strong>{{ campaign.name }}</strong><small>{{ campaign.status }} · {{ campaign.stats.eligible }} eligible</small></span>
+              </button>
+            }
+          </nav>
+        </mat-card-content>
+      </mat-card>
+    </aside>
+    <div class="main-column">
+      <mat-card>
+        <mat-card-header><mat-card-title>{{ selected ? selected.name : 'New campaign' }}</mat-card-title></mat-card-header>
+        <mat-card-content>
+          @if (selected && !canEdit) { <p class="frozen">Content and audience are frozen. Clone to make changes.</p> }
+          <div class="field-grid">
+            <mat-form-field appearance="outline"><mat-label>Internal name</mat-label><input matInput [(ngModel)]="draft.name" [disabled]="!canEdit" maxlength="120"></mat-form-field>
+            <mat-form-field appearance="outline"><mat-label>Email subject</mat-label><input matInput [(ngModel)]="draft.subject" [disabled]="!canEdit" maxlength="180"></mat-form-field>
+          </div>
+          <h3>Email body</h3>
+          <div class="toolbar" role="toolbar" aria-label="Email formatting">
+            <button mat-stroked-button type="button" [disabled]="!canEdit" (click)="format('bold')"><strong>B</strong></button>
+            <button mat-stroked-button type="button" [disabled]="!canEdit" (click)="format('italic')"><em>I</em></button>
+            <button mat-stroked-button type="button" [disabled]="!canEdit" (click)="heading()">Heading</button>
+            <button mat-stroked-button type="button" [disabled]="!canEdit" (click)="format('insertUnorderedList')">Bullets</button>
+            <button mat-stroked-button type="button" [disabled]="!canEdit" (click)="format('insertOrderedList')">Numbers</button>
+          </div>
+          <div class="link-row">
+            <mat-form-field appearance="outline"><mat-label>Link URL for selected text</mat-label><input matInput type="url" [(ngModel)]="linkUrl" [disabled]="!canEdit" placeholder="https://..."></mat-form-field>
+            <button mat-stroked-button type="button" [disabled]="!canEdit || !linkUrl" (click)="applyLink()">Add link</button>
+            <button mat-stroked-button type="button" [disabled]="!canEdit" (click)="removeLink()">Remove link</button>
+          </div>
+          <div #editorHost class="editor-shell" tabindex="0" (mouseup)="rememberSelection()" (keyup)="rememberSelection()" [attr.contenteditable]="canEdit" role="textbox" aria-multiline="true" aria-label="Campaign email body"><p></p></div>
+          <h3>Optional button</h3>
+          <div class="field-grid">
+            <mat-form-field appearance="outline"><mat-label>Button label</mat-label><input matInput [(ngModel)]="ctaLabel" [disabled]="!canEdit" maxlength="80"></mat-form-field>
+            <mat-form-field appearance="outline"><mat-label>HTTPS destination</mat-label><input matInput type="url" [(ngModel)]="ctaUrl" [disabled]="!canEdit"></mat-form-field>
+          </div>
+          <h3>Audience</h3>
+          <p>Enabled, non-admin users with an email and explicit marketing consent. Sign-up dates are inclusive in UTC. Login provider and email verification do not affect eligibility.</p>
+          <div class="plans">
+            @for (plan of plans; track plan) { <mat-checkbox [checked]="draft.filters.plans.includes(plan)" [disabled]="!canEdit" (change)="togglePlan(plan, $event.checked)">{{ plan | titlecase }}</mat-checkbox> }
+          </div>
+          <div class="field-grid">
+            <mat-form-field appearance="outline"><mat-label>Signed up from (UTC)</mat-label><input matInput type="date" [(ngModel)]="draft.filters.signupFrom" [disabled]="!canEdit"></mat-form-field>
+            <mat-form-field appearance="outline"><mat-label>Signed up through (UTC)</mat-label><input matInput type="date" [(ngModel)]="draft.filters.signupTo" [disabled]="!canEdit"></mat-form-field>
+          </div>
+          <div class="actions">
+            @if (canEdit) { <button mat-flat-button type="button" [disabled]="!!busy" (click)="save()">Save draft</button> }
+            <button mat-stroked-button type="button" [disabled]="!!busy" (click)="showPreview()">Preview</button>
+            @if (selected?.status === 'draft' || canRetryPreparation) { <button mat-stroked-button type="button" [disabled]="!!busy" (click)="prepare()">{{ canRetryPreparation ? 'Retry preparation' : 'Prepare audience' }}</button> }
+            @if (selected?.status === 'ready') {
+              <button mat-stroked-button type="button" [disabled]="!!busy" (click)="sendTest()">Send test to me</button>
+              <button mat-flat-button type="button" [disabled]="!!busy || selected?.lastTestState !== 'SUCCESS'" (click)="change('start')">Start sending</button>
+            }
+            @if (selected?.status === 'running') { <button mat-stroked-button type="button" [disabled]="!!busy" (click)="change('pause')">Pause</button> }
+            @if (selected?.status === 'paused') { <button mat-flat-button type="button" [disabled]="!!busy" (click)="change('resume')">Resume</button> }
+            @if (selected?.status === 'paused' || selected?.status === 'completed') {
+              <button mat-stroked-button type="button" [disabled]="!!busy || !selected?.stats?.failed" (click)="change('retry')">Retry failed</button>
+            }
+            @if (selected) { <button mat-stroked-button type="button" [disabled]="!!busy" (click)="clone()">Clone</button> }
+            <button mat-button type="button" [disabled]="!!busy" (click)="manualRefresh()">Refresh status</button>
+            @if (busy) { <mat-spinner diameter="24" aria-label="Working"></mat-spinner> }
+          </div>
+        </mat-card-content>
+      </mat-card>
+      @if (selected) {
+        <mat-card><mat-card-header><mat-card-title>Audience and delivery</mat-card-title></mat-card-header><mat-card-content>
+          <div class="stats">
+            <span><strong>{{ counts?.eligible }}</strong> eligible</span>
+            <span><strong>{{ counts?.pending }}</strong> remaining</span>
+            <span><strong>{{ counts?.queued }}</strong> queued</span>
+            <span><strong>{{ counts?.accepted }}</strong> SMTP accepted</span>
+            <span><strong>{{ counts?.failed }}</strong> failed</span>
+            <span><strong>{{ counts?.skipped }}</strong> skipped</span>
+          </div>
+          @if (selected.status === 'preparing') { <p>Audience preparation is in progress. If it times out, refresh after 11 minutes to retry.</p> }
+          <p>SMTP acceptance does not confirm inbox delivery or opens. Failed messages need an explicit retry and use a new daily slot.</p>
+          <p>Test email: {{ selected.lastTestState === 'SUCCESS' ? 'SMTP accepted' : (selected.lastTestState || 'none') }}</p>
+          @if (selected.status !== 'draft' && exclusions) {
+            <p>Excluded during preparation: {{ exclusions.noAuth }} missing Auth · {{ exclusions.disabledOrAdmin }} disabled/admin · {{ exclusions.noEmail }} without email · {{ exclusions.noProfile }} without profile · {{ exclusions.deletionMarked }} deleting · {{ exclusions.plan }} plan · {{ exclusions.signupDate }} signup date.</p>
+          }
+        </mat-card-content></mat-card>
+      }
+      @if (preview) {
+        <mat-card><mat-card-header><mat-card-title>Email preview</mat-card-title></mat-card-header><mat-card-content>
+          <p><strong>Subject:</strong> {{ preview.subject }}</p>
+          <mat-button-toggle-group class="preview-tabs" [value]="activePreview" (change)="changePreview($event.value)" aria-label="Preview width">
+            <mat-button-toggle value="desktop">Desktop</mat-button-toggle>
+            <mat-button-toggle value="phone">Phone</mat-button-toggle>
+            <mat-button-toggle value="text">Plain text</mat-button-toggle>
+          </mat-button-toggle-group>
+          @if (activePreview === 'text') { <pre class="text-preview">{{ preview.text }}</pre> }
+          @else { <div class="preview-frame" [class.phone]="activePreview === 'phone'"><iframe title="Rendered campaign email" sandbox="" [attr.srcdoc]="preview.html"></iframe></div> }
+        </mat-card-content></mat-card>
+      }
+    </div>
+  </div>
+</main>

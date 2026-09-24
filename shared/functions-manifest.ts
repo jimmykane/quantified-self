@@ -5,6 +5,15 @@ export const COROS_HISTORY_IMPORT_CLIENT_TIMEOUT_MS = 310_000;
 
 export const FUNCTIONS_MANIFEST = {
     // Admin Functions (europe-west2)
+    listMarketingCampaigns: { name: 'listMarketingCampaigns', region: 'europe-west2' },
+    saveMarketingCampaign: { name: 'saveMarketingCampaign', region: 'europe-west2' },
+    cloneMarketingCampaign: { name: 'cloneMarketingCampaign', region: 'europe-west2' },
+    previewMarketingCampaign: { name: 'previewMarketingCampaign', region: 'europe-west2' },
+    prepareMarketingCampaign: { name: 'prepareMarketingCampaign', region: 'europe-west2', clientTimeoutMs: 560_000 },
+    setMarketingDailyCap: { name: 'setMarketingDailyCap', region: 'europe-west2' },
+    sendMarketingTest: { name: 'sendMarketingTest', region: 'europe-west2' },
+    changeMarketingCampaignStatus: { name: 'changeMarketingCampaignStatus', region: 'europe-west2', clientTimeoutMs: 560_000 },
+
     listUsers: { name: 'listUsers', region: 'europe-west2' },
     getQueueStats: { name: 'getQueueStats', region: 'europe-west2' },
     setSportsLibReparseSettings: { name: 'setSportsLibReparseSettings', region: 'europe-west2' },

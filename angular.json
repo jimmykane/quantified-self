@@ -71,8 +71,8 @@
                 },
                 {
                   "type": "allScript",
-                  "maximumWarning": "12288kb",
-                  "maximumError": "12288kb"
+                  "maximumWarning": "12344kb",
+                  "maximumError": "12344kb"
                 },
                 {
                   "type": "anyComponentStyle",
@@ -114,8 +114,8 @@
                 },
                 {
                   "type": "allScript",
-                  "maximumWarning": "12288kb",
-                  "maximumError": "12288kb"
+                  "maximumWarning": "12344kb",
+                  "maximumError": "12344kb"
                 },
                 {
                   "type": "anyComponentStyle",

@@ -50,10 +50,17 @@ export const SUUNTO_PLANNED_WORKOUT_SPORTS_V1 = [
   ActivityTypes.IndoorCycling,
   ActivityTypes.EBiking,
   ActivityTypes.Handcycle,
+  ActivityTypes.Swimming,
+  ActivityTypes.OpenWaterSwimming,
+  ActivityTypes.Walking,
+  ActivityTypes.Hiking,
+  ActivityTypes.Rowing,
+  ActivityTypes.IndoorRowing,
+  ActivityTypes.StrengthTraining,
 ] as const;
 
 /**
- * Garmin Training API V2 accepts only broad RUNNING/CYCLING workout sports.
+ * Garmin Training API V2 accepts broad running/cycling and exact lap swimming.
  * Keep the exact authored QS sport, then fold these profiles at serialization.
  */
 export const GARMIN_RUNNING_WORKOUT_SPORTS_V1 = [
@@ -79,6 +86,7 @@ export const GARMIN_CYCLING_WORKOUT_SPORTS_V1 = [
 export const GARMIN_PLANNED_WORKOUT_SPORTS_V1 = [
   ...GARMIN_RUNNING_WORKOUT_SPORTS_V1,
   ...GARMIN_CYCLING_WORKOUT_SPORTS_V1,
+  ActivityTypes.Swimming,
 ] as const;
 
 export const COROS_NATIVE_RUNNING_WORKOUT_SPORTS_V1 = [
@@ -102,6 +110,7 @@ export const COROS_PLANNED_WORKOUT_SPORTS_V1 = [
   ...COROS_FOLDED_RUNNING_WORKOUT_SPORTS_V1,
   ...COROS_NATIVE_CYCLING_WORKOUT_SPORTS_V1,
   ...COROS_FOLDED_CYCLING_WORKOUT_SPORTS_V1,
+  ActivityTypes.Swimming,
 ] as const;
 
 export type CorosWorkoutSportFamilyV1 = 'RUNNING' | 'CYCLING';
@@ -114,11 +123,12 @@ export function corosWorkoutSportFamilyV1(sport: ActivityTypes): CorosWorkoutSpo
   return null;
 }
 
-export type GarminWorkoutSportFamilyV1 = 'RUNNING' | 'CYCLING';
+export type GarminWorkoutSportFamilyV1 = 'RUNNING' | 'CYCLING' | 'LAP_SWIMMING';
 
 export function garminWorkoutSportFamilyV1(sport: ActivityTypes): GarminWorkoutSportFamilyV1 | null {
   if ((GARMIN_RUNNING_WORKOUT_SPORTS_V1 as readonly ActivityTypes[]).includes(sport)) return 'RUNNING';
   if ((GARMIN_CYCLING_WORKOUT_SPORTS_V1 as readonly ActivityTypes[]).includes(sport)) return 'CYCLING';
+  if (sport === ActivityTypes.Swimming) return 'LAP_SWIMMING';
   return null;
 }
 
@@ -175,7 +185,8 @@ export const PLANNED_WORKOUT_PROVIDER_CAPABILITIES_V1: Readonly<
     limits: [
       'Single-sport workouts allow at most 100 total steps.',
       'Descriptions allow 1024 characters per workout and 512 characters per step.',
-      'Training API V2 accepts RUNNING or CYCLING but has no sub-sport field; exact QS profiles are delivered through their broad family.',
+      'Running and cycling sub-sports fold to broad families; pool swimming maps to LAP_SWIMMING. Open-water swimming is not mapped.',
+      'Unspecified pool length is permitted by the API but may not work on older devices. Swim intensity targets are not mapped.',
       'A secondary target is documented only for cycling and depends on device support.',
       'Production limits: 3000 application requests per rolling minute including OAuth; 1000 per account per rolling day excluding OAuth.',
       'Cloud acceptance does not prove that Garmin Connect or a device received the workout.',
@@ -208,6 +219,7 @@ export const PLANNED_WORKOUT_PROVIDER_CAPABILITIES_V1: Readonly<
     limits: [
       'At most 30 workouts per push.',
       'Dates from today through one year ahead.',
+      'Pool-swim time, distance, and manual steps must have no intensity target; the documented swimming target is stroke, which v1 does not encode.',
       'The connected COROS application must have Training Plan entitlement; provider code 30009 is reported as unavailable.',
       'COROS exposes no planned-workout read/list operation, so remote checking and automatic missing-copy restoration are unavailable.',
       'Provider acceptance does not prove that the COROS app or a watch received the workout.',
@@ -233,7 +245,7 @@ export const PLANNED_WORKOUT_PROVIDER_CAPABILITIES_V1: Readonly<
     },
     scheduling: 'Create an app-owned Plan record, then attach it to a dated Workout record.',
     limits: [
-      'The public plan.json schema is version 1.0.0 and supports running and cycling.',
+      'The public plan.json schema is version 1.0.0 and supports running and cycling, not swimming.',
       'Bike computers use only the first target in an interval.',
       'Relative heart-rate and threshold-speed targets are documented for treadmill workouts in the Wahoo app, not ELEMNT computers or RIVAL.',
       'Device-visible scheduling is documented as the current day plus six days.',
@@ -279,6 +291,7 @@ export const PLANNED_WORKOUT_PROVIDER_CAPABILITIES_V1: Readonly<
     evidence: [
       'https://apizone.suunto.com/how-to-use-suuntoplus-guides-api',
       'https://apizone.suunto.com/suuntoplus-guide-description',
+      'https://aspartnercontent.blob.core.windows.net/apizone/docs/Activities.pdf',
       'https://apizone.suunto.com/fit-description',
     ],
   },
@@ -348,6 +361,7 @@ export function assessPlannedWorkoutProviderMappingV1(
   } else if ((provider === 'garmin' || provider === 'coros')
     && structure.sport !== ActivityTypes.Running
     && structure.sport !== ActivityTypes.Cycling
+    && !(provider === 'garmin' && structure.sport === ActivityTypes.Swimming)
     && !(provider === 'coros' && structure.sport === ActivityTypes.TrailRunning)) {
     const family = provider === 'garmin'
       ? garminWorkoutSportFamilyV1(structure.sport)
@@ -359,6 +373,20 @@ export function assessPlannedWorkoutProviderMappingV1(
         code: 'sport_profile_degraded',
         path: '$.sport',
         message: `${PLANNED_WORKOUT_PROVIDER_CAPABILITIES_V1[provider].label} receives ${structure.sport} as a ${familyLabel} workout because its Training API has no exact ${structure.sport} profile.`,
+      });
+    }
+  }
+
+  if (structure.sport === ActivityTypes.Swimming) {
+    if (provider === 'garmin' && !structure.poolLength) {
+      issues.push({
+        severity: 'degraded', code: 'sport_profile_degraded', path: '$.poolLength',
+        message: 'Garmin receives an unspecified pool size; some older devices do not support it. Select a pool length for an exact pool setting.',
+      });
+    } else if (provider !== 'garmin' && structure.poolLength && profile?.sports?.includes(structure.sport)) {
+      issues.push({
+        severity: 'degraded', code: 'sport_profile_degraded', path: '$.poolLength',
+        message: `${PLANNED_WORKOUT_PROVIDER_CAPABILITIES_V1[provider].label} does not receive the selected pool length; set it on the device where needed.`,
       });
     }
   }
@@ -375,6 +403,22 @@ export function assessPlannedWorkoutProviderMappingV1(
         path: `${path}.ending`,
         message: `${step.ending.kind} endings are not supported by ${PLANNED_WORKOUT_PROVIDER_CAPABILITIES_V1[provider].label}.`,
       });
+    }
+
+    if (provider === 'garmin' && structure.sport === ActivityTypes.Swimming) {
+      if (step.targets.length > 0) {
+        issues.push({
+          severity: 'unsupported', code: 'unsupported_target', path: `${path}.targets`,
+          message: 'Garmin swim workouts do not accept primary targets; QS does not yet map swim-specific secondary targets.',
+        });
+      }
+      if (step.ending.kind === 'time' && step.purpose !== 'rest'
+        && (step.ending.seconds < 60 || step.ending.seconds > 3540)) {
+        issues.push({
+          severity: 'unsupported', code: 'unsupported_ending', path: `${path}.ending`,
+          message: 'Garmin swim time steps must be between 1 and 59 minutes.',
+        });
+      }
     }
 
     if (
@@ -409,7 +453,7 @@ export function assessPlannedWorkoutProviderMappingV1(
       });
     }
 
-    if (provider === 'garmin' && step.targets.length > 1) {
+    if (provider === 'garmin' && structure.sport !== ActivityTypes.Swimming && step.targets.length > 1) {
       if (garminWorkoutSportFamilyV1(structure.sport) !== 'CYCLING') {
         issues.push({
           severity: 'unsupported',
@@ -444,6 +488,15 @@ export function assessPlannedWorkoutProviderMappingV1(
         code: 'unsupported_target',
         path: `${path}.targets`,
         message: 'The COROS partner contract documents cadence targets for running and trail running, not cycling.',
+      });
+    }
+
+    if (provider === 'coros' && structure.sport === ActivityTypes.Swimming && step.targets.length > 0) {
+      issues.push({
+        severity: 'unsupported',
+        code: 'unsupported_target',
+        path: `${path}.targets`,
+        message: 'The COROS partner contract documents swimming stroke targets, but this recipe does not encode stroke; heart-rate, power, pace, and cadence targets cannot be sent as swimming targets.',
       });
     }
 

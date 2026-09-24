@@ -1,6 +1,7 @@
 import type { Firestore, Transaction } from 'firebase-admin/firestore';
 import type { PlannedWorkoutProviderId } from '../../../../shared/planned-workout-providers';
 import type { ScheduledWorkoutV1 } from '../../../../shared/training-plans';
+import type { StrengthWorkoutDetailsV1 } from '../../../../shared/strength-workout';
 import type { TrainingDeliveryStatus, TrainingDeliverySettingsV1 } from '../../../../shared/training-provider-delivery';
 import type { DeliveryRepair, RemoteInspection, VerificationEvidence } from './verification-contracts';
 
@@ -41,6 +42,7 @@ export interface DeliveryOperation {
   digest: string;
   contentDigest: string | null;
   workout: ScheduledWorkoutV1 | null;
+  strength?: StrengthWorkoutDetailsV1 | null;
   artifact: DeliveryArtifact | null;
   /** Internal transport journal. null proves a new operation has made no request;
    * absence is a legacy/unknown journal and must not authorize a non-idempotent retry. */
@@ -86,13 +88,19 @@ export type TrainingDeliveryProviderRejection = 'application_not_approved' | 'pl
   | 'missing_parameter' | 'invalid_parameter' | 'unknown_validation' | 'empty_response'
   | 'oversized_response' | 'unreadable_response';
 export type TrainingDeliveryProviderField = 'plan_file' | 'plan_filename' | 'plan_external_id'
-  | 'plan_provider_updated_at' | 'plan_description' | 'plan_payload';
+  | 'plan_provider_updated_at' | 'plan_description' | 'plan_payload'
+  | 'guide_repeat' | 'guide_step' | 'guide_transition' | 'guide_field'
+  | 'guide_activity' | 'guide_metadata' | 'guide_archive';
+export type TrainingDeliveryProviderValidation = 'invalid_step_type' | 'invalid_repeat_count'
+  | 'invalid_repeat_structure' | 'forbidden_repeat_step_id' | 'invalid_child_step' | 'invalid_field_type' | 'invalid_condition_type'
+  | 'invalid_transition' | 'invalid_guide_json' | 'unclassified';
 export type TrainingDeliveryProviderResponseShape = 'empty' | 'json' | 'text' | 'oversized' | 'unreadable';
 export interface TrainingDeliveryTransportDiagnostics {
   httpStatus?: number;
   failurePhase?: 'request' | 'response' | 'decode' | 'contract';
   providerRejection?: TrainingDeliveryProviderRejection;
   providerField?: TrainingDeliveryProviderField;
+  providerValidation?: TrainingDeliveryProviderValidation;
   providerResponseShape?: TrainingDeliveryProviderResponseShape;
 }
 
@@ -106,7 +114,8 @@ export interface TrainingDeliveryTransport {
   horizonDays: number;
   /** Provider/product policy: withdraw an existing upcoming copy when moved beyond its window. */
   withdrawOutsideHorizon?: boolean;
-  assess(workout: ScheduledWorkoutV1, destinationKey: string, timeZone: string): DeliveryAssessment;
+  assess(workout: ScheduledWorkoutV1, destinationKey: string, timeZone: string,
+    strength?: StrengthWorkoutDetailsV1 | null): DeliveryAssessment;
   canRemove(artifact: DeliveryArtifact, today: string): boolean;
   execute(operation: DeliveryOperation, checkpoint: DeliveryCheckpoint, guard: DeliveryRequestGuard): Promise<DeliveryArtifact | null>;
   recover(operation: DeliveryOperation, checkpoint: DeliveryCheckpoint, guard: DeliveryRequestGuard): Promise<DeliveryRecovery>;
@@ -121,7 +130,11 @@ export class TrainingDeliveryTransportError extends Error {
     const providerRejections: TrainingDeliveryProviderRejection[] = ['application_not_approved', 'plan_access_unavailable',
       'missing_parameter', 'invalid_parameter', 'unknown_validation', 'empty_response', 'oversized_response', 'unreadable_response'];
     const providerFields: TrainingDeliveryProviderField[] = ['plan_file', 'plan_filename', 'plan_external_id',
-      'plan_provider_updated_at', 'plan_description', 'plan_payload'];
+      'plan_provider_updated_at', 'plan_description', 'plan_payload', 'guide_repeat', 'guide_step',
+      'guide_transition', 'guide_field', 'guide_activity', 'guide_metadata', 'guide_archive'];
+    const providerValidations: TrainingDeliveryProviderValidation[] = ['invalid_step_type', 'invalid_repeat_count',
+      'invalid_repeat_structure', 'forbidden_repeat_step_id', 'invalid_child_step', 'invalid_field_type', 'invalid_condition_type', 'invalid_transition',
+      'invalid_guide_json', 'unclassified'];
     const providerResponseShapes: TrainingDeliveryProviderResponseShape[] = ['empty', 'json', 'text', 'oversized', 'unreadable'];
     this.diagnostics = {
       ...(Number.isInteger(diagnostics.httpStatus) && diagnostics.httpStatus! >= 100 && diagnostics.httpStatus! <= 599
@@ -132,6 +145,8 @@ export class TrainingDeliveryTransportError extends Error {
         ? { providerRejection: diagnostics.providerRejection } : {}),
       ...(providerFields.includes(diagnostics.providerField as TrainingDeliveryProviderField)
         ? { providerField: diagnostics.providerField } : {}),
+      ...(providerValidations.includes(diagnostics.providerValidation as TrainingDeliveryProviderValidation)
+        ? { providerValidation: diagnostics.providerValidation } : {}),
       ...(providerResponseShapes.includes(diagnostics.providerResponseShape as TrainingDeliveryProviderResponseShape)
         ? { providerResponseShape: diagnostics.providerResponseShape } : {}),
     };
@@ -206,6 +221,7 @@ export interface DeliveryIntent {
 }
 export interface DeliveryContext {
   workout: ScheduledWorkoutV1 | null;
+  strength?: StrengthWorkoutDetailsV1 | null;
   planActive: boolean;
   setting: TrainingDeliverySettingsV1 | null;
   override: TrainingDeliverySettingsV1 | null;

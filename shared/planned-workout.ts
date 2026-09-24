@@ -9,10 +9,15 @@ import {
   DataPower,
   DataPowerWork,
   DataSpeed,
+  DataSwimDistance,
+  DataSwimPace,
+  DistanceUnits,
   type UserUnitSettingsInterface,
 } from '@sports-alliance/sports-lib';
 import {
+  normalizeUserUnitSettings,
   resolveUnitAwareDisplayFromValue,
+  resolveUnitAwareDisplayStat,
   type UnitAwareStatDisplay,
 } from './unit-aware-display';
 
@@ -20,6 +25,8 @@ export const WORKOUT_STRUCTURE_VERSION = 1 as const;
 export const WORKOUT_STRUCTURE_MAX_NODES = 100;
 export const WORKOUT_STRUCTURE_MAX_REPEAT_COUNT = 100;
 export const WORKOUT_STRUCTURE_MAX_TARGETS_PER_STEP = 2;
+export const WORKOUT_POOL_LENGTH_MIN_METERS = 1;
+export const WORKOUT_POOL_LENGTH_MAX_METERS = 1000;
 
 const WORKOUT_NODE_ID_MAX_LENGTH = 128;
 const WORKOUT_NOTE_MAX_LENGTH = 500;
@@ -187,9 +194,16 @@ export interface WorkoutRepeatV1 {
 
 export type WorkoutNodeV1 = WorkoutStepV1 | WorkoutRepeatV1;
 
+/** A pool's physical length, independent of any step distance. */
+export interface WorkoutPoolLengthV1 {
+  meters: number;
+  presentation: 'meters' | 'yards';
+}
+
 export interface WorkoutStructureV1 {
   version: typeof WORKOUT_STRUCTURE_VERSION;
   sport: ActivityTypes;
+  poolLength?: WorkoutPoolLengthV1;
   nodes: WorkoutNodeV1[];
 }
 
@@ -262,11 +276,34 @@ export const MANUAL_WORKOUT_EDITOR_CYCLING_SPORTS_V1 = [
   ActivityTypes.EBiking,
   ActivityTypes.Handcycle,
 ] as const;
+export const MANUAL_WORKOUT_EDITOR_SWIMMING_SPORTS_V1 = [
+  ActivityTypes.Swimming,
+  ActivityTypes.OpenWaterSwimming,
+] as const;
+export const MANUAL_WORKOUT_EDITOR_WALKING_SPORTS_V1 = [
+  ActivityTypes.Walking,
+  ActivityTypes.Hiking,
+] as const;
+export const MANUAL_WORKOUT_EDITOR_ROWING_SPORTS_V1 = [
+  ActivityTypes.Rowing,
+  ActivityTypes.IndoorRowing,
+] as const;
 export const MANUAL_WORKOUT_EDITOR_SPORTS_V1 = [
   ...MANUAL_WORKOUT_EDITOR_RUNNING_SPORTS_V1,
   ...MANUAL_WORKOUT_EDITOR_CYCLING_SPORTS_V1,
+  ...MANUAL_WORKOUT_EDITOR_SWIMMING_SPORTS_V1,
+  ...MANUAL_WORKOUT_EDITOR_WALKING_SPORTS_V1,
+  ...MANUAL_WORKOUT_EDITOR_ROWING_SPORTS_V1,
 ] as const;
 export type ManualWorkoutEditorSportV1 = typeof MANUAL_WORKOUT_EDITOR_SPORTS_V1[number];
+
+export function isSwimmingWorkoutSportV1(sport?: ActivityTypes): boolean {
+  return sport === ActivityTypes.Swimming || sport === ActivityTypes.OpenWaterSwimming;
+}
+
+export function isRowingWorkoutSportV1(sport?: ActivityTypes): boolean {
+  return sport === ActivityTypes.Rowing || sport === ActivityTypes.IndoorRowing;
+}
 
 export const INITIAL_MANUAL_WORKOUT_EDITOR_PROFILE_V1: WorkoutCompatibilityProfileV1 = {
   sports: MANUAL_WORKOUT_EDITOR_SPORTS_V1,
@@ -349,9 +386,10 @@ function readPositiveNumber(
   path: string,
   context: ParseContext,
   validate?: (candidate: number) => boolean,
+  message = 'Expected a finite positive number.',
 ): number | null {
   if (typeof value !== 'number' || !Number.isFinite(value) || value <= 0 || validate?.(value) === false) {
-    pushIssue(context, 'invalid_value', path, 'Expected a finite positive number.');
+    pushIssue(context, 'invalid_value', path, message);
     return null;
   }
   return value;
@@ -734,7 +772,7 @@ export function parseWorkoutStructureV1(value: unknown): WorkoutStructureV1 {
   const context: ParseContext = { issues: [], ids: new Set(), nodeCount: 0, nodeLimitExceeded: false };
   const record = readRecord(value, '$', context);
   if (!record) throw new WorkoutStructureValidationError(context.issues);
-  rejectUnknownFields(record, ['version', 'sport', 'nodes'], '$', context);
+  rejectUnknownFields(record, ['version', 'sport', 'poolLength', 'nodes'], '$', context);
 
   if (record.version !== WORKOUT_STRUCTURE_VERSION) {
     pushIssue(
@@ -748,6 +786,23 @@ export function parseWorkoutStructureV1(value: unknown): WorkoutStructureV1 {
   const sport = ActivityTypesHelper.resolveActivityType(record.sport);
   if (!sport || sport === ActivityTypes.unknown) {
     pushIssue(context, 'invalid_value', '$.sport', 'Expected a supported canonical activity type or alias.');
+  }
+
+  let poolLength: WorkoutPoolLengthV1 | undefined;
+  if (record.poolLength !== undefined) {
+    const pool = readRecord(record.poolLength, '$.poolLength', context);
+    if (pool) {
+      rejectUnknownFields(pool, ['meters', 'presentation'], '$.poolLength', context);
+      const meters = readPositiveNumber(pool.meters, '$.poolLength.meters', context,
+        candidate => validDistance(candidate)
+          && candidate >= WORKOUT_POOL_LENGTH_MIN_METERS && candidate <= WORKOUT_POOL_LENGTH_MAX_METERS,
+        `Pool length must be between ${WORKOUT_POOL_LENGTH_MIN_METERS} and ${WORKOUT_POOL_LENGTH_MAX_METERS} metres.`);
+      const presentation = readEnum(pool.presentation, ['meters', 'yards'], '$.poolLength.presentation', context);
+      if (sport !== ActivityTypes.Swimming) {
+        pushIssue(context, 'invalid_value', '$.poolLength', 'Pool length is only valid for pool swimming.');
+      }
+      if (meters !== null && presentation) poolLength = { meters, presentation };
+    }
   }
 
   let nodes: WorkoutNodeV1[] = [];
@@ -772,7 +827,12 @@ export function parseWorkoutStructureV1(value: unknown): WorkoutStructureV1 {
     throw new WorkoutStructureValidationError(context.issues);
   }
 
-  return { version: WORKOUT_STRUCTURE_VERSION, sport, nodes };
+  return {
+    version: WORKOUT_STRUCTURE_VERSION,
+    sport,
+    ...(poolLength === undefined ? {} : { poolLength }),
+    nodes,
+  };
 }
 
 export function normalizeWorkoutStructureV1(value: unknown): WorkoutStructureV1 {
@@ -905,10 +965,21 @@ function formatSpeedValue(
   metersPerSecond: number,
   presentation: WorkoutSpeedPresentationV1,
   unitSettings?: UserUnitSettingsInterface | null,
+  sport?: ActivityTypes,
 ): UnitAwareStatDisplay | null {
-  const paceSecondsPerKilometer = Math.round((1000 / metersPerSecond) * 1000) / 1000;
+  const isSwim = isSwimmingWorkoutSportV1(sport);
+  if (presentation === 'pace' && isRowingWorkoutSportV1(sport)) {
+    const duration = resolveUnitAwareDisplayFromValue(DataDuration.type, 500 / metersPerSecond, unitSettings);
+    const distance = resolveUnitAwareDisplayFromValue(DataDistance.type, 500, {
+      ...normalizeUserUnitSettings(unitSettings), distanceUnits: DistanceUnits.Kilometers,
+    });
+    if (!duration || !distance) return null;
+    const unit = `/ ${distance.text}`;
+    return { type: DataDuration.type, value: duration.text, unit, text: `${duration.text} ${unit}` };
+  }
+  const paceSeconds = Math.round(((isSwim ? 100 : 1000) / metersPerSecond) * 1000) / 1000;
   return presentation === 'pace'
-    ? resolveUnitAwareDisplayFromValue(DataPace.type, paceSecondsPerKilometer, unitSettings)
+    ? resolveUnitAwareDisplayFromValue(isSwim ? DataSwimPace.type : DataPace.type, paceSeconds, unitSettings)
     : resolveUnitAwareDisplayFromValue(DataSpeed.type, metersPerSecond, unitSettings);
 }
 
@@ -916,12 +987,19 @@ export function formatWorkoutEndingV1(
   ending: WorkoutEndingV1,
   unitSettings?: UserUnitSettingsInterface | null,
   locale?: string,
+  sport?: ActivityTypes,
 ): string {
   switch (ending.kind) {
     case 'time':
       return resolveUnitAwareDisplayFromValue(DataDuration.type, ending.seconds, unitSettings)?.text ?? `${ending.seconds} s`;
     case 'distance':
-      return resolveUnitAwareDisplayFromValue(DataDistance.type, ending.meters, unitSettings)?.text ?? `${ending.meters} m`;
+      return (isSwimmingWorkoutSportV1(sport)
+        ? resolveUnitAwareDisplayStat(new DataSwimDistance(ending.meters), unitSettings)
+        : resolveUnitAwareDisplayFromValue(DataDistance.type, ending.meters,
+          isRowingWorkoutSportV1(sport)
+            ? { ...normalizeUserUnitSettings(unitSettings), distanceUnits: DistanceUnits.Kilometers }
+            : unitSettings))?.text
+        ?? `${ending.meters} m`;
     case 'kilojoules':
       return resolveUnitAwareDisplayFromValue(DataPowerWork.type, ending.kilojoules, unitSettings)?.text
         ?? `${ending.kilojoules} kJ`;
@@ -941,6 +1019,7 @@ export function formatWorkoutTargetV1(
   target: WorkoutTargetV1,
   unitSettings?: UserUnitSettingsInterface | null,
   locale?: string,
+  sport?: ActivityTypes,
 ): string {
   if (target.mode === 'absolute') {
     switch (target.kind) {
@@ -960,11 +1039,13 @@ export function formatWorkoutTargetV1(
             target.presentation === 'pace' ? target.maximumMetersPerSecond : target.minimumMetersPerSecond,
             target.presentation,
             unitSettings,
+            sport,
           ),
           formatSpeedValue(
             target.presentation === 'pace' ? target.minimumMetersPerSecond : target.maximumMetersPerSecond,
             target.presentation,
             unitSettings,
+            sport,
           ),
         ) ?? `${target.minimumMetersPerSecond}–${target.maximumMetersPerSecond} m/s`;
       case 'cadence':
@@ -990,7 +1071,7 @@ export function formatWorkoutTargetV1(
       return `${percent} of ${reference} ${label}`;
     }
     case 'speed': {
-      const reference = formatSpeedValue(target.reference.metersPerSecond, target.presentation, unitSettings)?.text
+      const reference = formatSpeedValue(target.reference.metersPerSecond, target.presentation, unitSettings, sport)?.text
         ?? `${target.reference.metersPerSecond} m/s`;
       return `${percent} of ${reference} threshold ${target.presentation}`;
     }
@@ -1006,11 +1087,12 @@ export function formatWorkoutStepV1(
   step: WorkoutStepV1,
   unitSettings?: UserUnitSettingsInterface | null,
   locale?: string,
+  sport?: ActivityTypes,
 ): string {
   const purpose = step.purpose === 'other'
     ? 'Step'
     : `${step.purpose.charAt(0).toUpperCase()}${step.purpose.slice(1)}`;
-  const ending = formatWorkoutEndingV1(step.ending, unitSettings, locale);
-  const targets = step.targets.map(target => formatWorkoutTargetV1(target, unitSettings, locale));
+  const ending = formatWorkoutEndingV1(step.ending, unitSettings, locale, sport);
+  const targets = step.targets.map(target => formatWorkoutTargetV1(target, unitSettings, locale, sport));
   return [purpose, ending, ...targets].join(' · ');
 }

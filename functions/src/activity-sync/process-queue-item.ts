@@ -672,6 +672,41 @@ function isSameActivitySyncProviderState(
         && isSameActivitySyncQueueItem(currentQueueItem, expectedQueueItem);
 }
 
+class UnclaimedActivitySyncQueueItemError extends Error {
+    constructor(queueItemId: string) {
+        super(`Activity sync queue item ${queueItemId} changed before provider upload but remains unclaimed; retrying the task.`);
+    }
+}
+
+async function handlePreUploadGuardFailure(
+    queueItem: ActivitySyncQueueItemInterface,
+    updateResult: QueueItemUserGuardedUpdateResult,
+): Promise<void> {
+    if (updateResult === QueueItemUserGuardedUpdateResult.SkippedDeletedUser) {
+        return;
+    }
+
+    const snapshot = await queueItem.ref!.get();
+    const currentQueueItem = snapshot.exists
+        ? snapshot.data() as Record<string, unknown> | undefined
+        : undefined;
+    const providerOperationStartedAt = Number(currentQueueItem?.providerOperationStartedAt);
+    if (
+        currentQueueItem?.processed === true
+        || (
+            currentQueueItem?.dispatchedToCloudTask === PROVIDER_OPERATION_IN_FLIGHT_QUEUE_DISPATCH_MARKER
+            && Number.isFinite(providerOperationStartedAt)
+            && providerOperationStartedAt > 0
+        )
+    ) {
+        return;
+    }
+
+    // A dispatch marker can change after enqueue but before this worker writes
+    // its fingerprint or provider claim. Do not acknowledge pending work.
+    throw new UnclaimedActivitySyncQueueItemError(queueItem.id);
+}
+
 async function ensureOutboundFingerprintBeforeProviderUpload(
     queueItem: ActivitySyncQueueItemInterface,
     fileBuffer: Buffer | undefined,
@@ -705,6 +740,7 @@ async function ensureOutboundFingerprintBeforeProviderUpload(
         isCurrent: currentQueueItem => isSameActivitySyncProviderState(currentQueueItem, expectedQueueItem),
     });
     if (updateResult !== QueueItemUserGuardedUpdateResult.Updated) {
+        await handlePreUploadGuardFailure(queueItem, updateResult);
         return false;
     }
     queueItem.outboundFingerprintID = fingerprints.exactFingerprintId;
@@ -872,6 +908,7 @@ async function markDestinationProviderOperationInFlight(
         isCurrent: currentQueueItem => isSameActivitySyncProviderState(currentQueueItem, expectedQueueItem),
     });
     if (updateResult !== QueueItemUserGuardedUpdateResult.Updated) {
+        await handlePreUploadGuardFailure(queueItem, updateResult);
         return false;
     }
     queueItem.dispatchedToCloudTask = PROVIDER_OPERATION_IN_FLIGHT_QUEUE_DISPATCH_MARKER;
@@ -1617,7 +1654,7 @@ export async function processActivitySyncQueueItem(
         }
 
         if (!(await ensureOutboundFingerprintBeforeProviderUpload(queueItem, fileBuffer))) {
-            return QueueResult.Processed;
+            return QueueResult.AcknowledgedStale;
         }
 
         const expectedWahooWorkoutType = await ensureExpectedWahooWorkoutTypeBeforeProviderUpload(queueItem);
@@ -1627,7 +1664,7 @@ export async function processActivitySyncQueueItem(
             expectedWahooWorkoutType,
         );
         if (!operationMarked) {
-            return QueueResult.Processed;
+            return QueueResult.AcknowledgedStale;
         }
 
         duringDestinationUpload = true;
@@ -1750,6 +1787,10 @@ export async function processActivitySyncQueueItem(
             successProcessedAt: Date.now(),
         });
     } catch (error) {
+        if (error instanceof UnclaimedActivitySyncQueueItemError) {
+            throw error;
+        }
+
         if (error instanceof ProviderOperationStillInFlightError) {
             logger.warn('[ActivitySync] Provider operation claim is still active; retrying without changing queue state.', {
                 queueItemId: queueItem.id,

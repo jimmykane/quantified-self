@@ -3,6 +3,7 @@ import {
   DistanceUnits,
   PaceUnits,
   SpeedUnits,
+  SwimPaceUnits,
 } from '@sports-alliance/sports-lib';
 import { normalizeUserUnitSettings } from '@shared/unit-aware-display';
 import {
@@ -106,6 +107,22 @@ describe('planned workout v1 contract', () => {
 
     expect(deserializeWorkoutStructureV1(serialized)).toEqual(normalized);
     expect(JSON.stringify(deserializeWorkoutStructureV1(serialized))).toBe(serialized);
+  });
+
+  it('stores an optional pool length in canonical metres without changing legacy recipes', () => {
+    const pool = parseWorkoutStructureV1({
+      version: 1, sport: ActivityTypes.Swimming,
+      poolLength: { meters: 25, presentation: 'meters' },
+      nodes: [{ kind: 'step', id: 'length', purpose: 'work', ending: { kind: 'distance', meters: 25 }, targets: [] }],
+    });
+    expect(deserializeWorkoutStructureV1(serializeWorkoutStructureV1(pool))).toEqual(pool);
+    expect(toFirestoreWorkoutStructureV1(pool)).toEqual(pool);
+    expect(parseWorkoutStructureV1(COMPLETE_STRUCTURE_INPUT)).not.toHaveProperty('poolLength');
+    expectValidationIssue({ ...pool, sport: ActivityTypes.OpenWaterSwimming }, 'invalid_value', '$.poolLength');
+    expectValidationIssue({ ...pool, poolLength: { meters: 0, presentation: 'meters' } }, 'invalid_value', '$.poolLength.meters');
+    expectValidationIssue({ ...pool, poolLength: { meters: 1001, presentation: 'meters' } }, 'invalid_value', '$.poolLength.meters');
+    expectValidationIssue({ ...pool, poolLength: { meters: 25, presentation: 'laps' } }, 'unknown_discriminant', '$.poolLength.presentation');
+    expectValidationIssue({ ...pool, poolLength: { meters: 25, presentation: 'meters', remoteId: 1 } }, 'unknown_field', '$.poolLength.remoteId');
   });
 
   it('returns a detached Firestore-safe plain JSON value', () => {
@@ -346,7 +363,6 @@ describe('planned workout compatibility', () => {
 
     expect(result.compatible).toBe(false);
     expect(result.issues.map(issue => issue.code)).toEqual([
-      'unsupported_sport',
       'unsupported_ending',
       'unsupported_target',
       'unsupported_relative_target',
@@ -388,5 +404,33 @@ describe('planned workout formatting', () => {
       maximumMetersPerSecond: 1000 / 240,
       presentation: 'pace',
     }, imperial)).toContain('min/m');
+  });
+
+  it.each([ActivityTypes.Swimming, ActivityTypes.OpenWaterSwimming])('renders %s distance and pace with Sports Lib swim units', sport => {
+    const yards = normalizeUserUnitSettings({
+      distanceUnits: DistanceUnits.Miles,
+      swimPaceUnits: [SwimPaceUnits.MinutesPer100Yard],
+    });
+    expect(formatWorkoutEndingV1({ kind: 'distance', meters: 100 }, yards, undefined, sport))
+      .toBe('100 m');
+    const target = {
+      kind: 'speed', mode: 'absolute', presentation: 'pace',
+      minimumMetersPerSecond: 100 / 120,
+      maximumMetersPerSecond: 100 / 90,
+    } as const;
+    expect(formatWorkoutTargetV1(target, undefined, undefined, sport))
+      .toBe('01:30–02:00 min/100m');
+    expect(formatWorkoutTargetV1(target, yards, undefined, sport))
+      .toContain('min/100yd');
+  });
+
+  it.each([ActivityTypes.Rowing, ActivityTypes.IndoorRowing])('renders %s as a 500 m split even with imperial distance settings', sport => {
+    const imperial = normalizeUserUnitSettings({ distanceUnits: DistanceUnits.Miles });
+    const ending = { kind: 'distance', meters: 500 } as const;
+    const target = { kind: 'speed', mode: 'absolute', presentation: 'pace',
+      minimumMetersPerSecond: 500 / 120, maximumMetersPerSecond: 500 / 105 } as const;
+    expect(formatWorkoutEndingV1(ending, imperial, undefined, sport)).toContain('500');
+    expect(formatWorkoutEndingV1(ending, imperial, undefined, sport)).toContain('m');
+    expect(formatWorkoutTargetV1(target, imperial, undefined, sport)).toContain('/ 500');
   });
 });

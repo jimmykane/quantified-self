@@ -2,6 +2,7 @@ import {
   parseWorkoutStructureV1,
   type WorkoutStructureV1,
 } from './planned-workout';
+import { parseStrengthWorkoutDraftV1, type StrengthWorkoutDraftV1 } from './strength-workout';
 
 export const TRAINING_PLAN_SCHEMA_VERSION = 1 as const;
 export const TRAINING_PLAN_MAX_DAYS = 366;
@@ -120,6 +121,7 @@ export interface CreateScheduledWorkoutMutationV1 {
   localDate: string;
   title: string;
   structure: WorkoutStructureV1;
+  strength?: StrengthWorkoutDraftV1;
   confirmPlanRangeExtension: boolean;
 }
 
@@ -130,6 +132,7 @@ export interface UpdateScheduledWorkoutMutationV1 {
   localDate: string;
   title: string;
   structure: WorkoutStructureV1;
+  strength?: StrengthWorkoutDraftV1;
   confirmPlanRangeExtension: boolean;
 }
 
@@ -594,7 +597,7 @@ export function parseMutateTrainingScheduleRequestV1(value: unknown): MutateTrai
     case 'create-workout': {
       rejectUnknownFields(
         operationRecord,
-        ['kind', 'workoutId', 'planId', 'localDate', 'title', 'structure', 'confirmPlanRangeExtension'],
+        ['kind', 'workoutId', 'planId', 'localDate', 'title', 'structure', 'strength', 'confirmPlanRangeExtension'],
         '$.operation',
       );
       operation = {
@@ -603,13 +606,14 @@ export function parseMutateTrainingScheduleRequestV1(value: unknown): MutateTrai
         ...parseWorkoutDestinationFields(operationRecord),
         title: readString(operationRecord.title, '$.operation.title', 120),
         structure: parseWorkoutStructureV1(operationRecord.structure),
+        ...(operationRecord.strength === undefined ? {} : { strength: parseStrengthWorkoutDraftV1(operationRecord.strength) }),
       };
       break;
     }
     case 'update-workout':
       rejectUnknownFields(
         operationRecord,
-        ['kind', 'workoutId', 'planId', 'localDate', 'title', 'structure', 'confirmPlanRangeExtension'],
+        ['kind', 'workoutId', 'planId', 'localDate', 'title', 'structure', 'strength', 'confirmPlanRangeExtension'],
         '$.operation',
       );
       operation = {
@@ -618,6 +622,7 @@ export function parseMutateTrainingScheduleRequestV1(value: unknown): MutateTrai
         ...parseWorkoutDestinationFields(operationRecord),
         title: readString(operationRecord.title, '$.operation.title', 120),
         structure: parseWorkoutStructureV1(operationRecord.structure),
+        ...(operationRecord.strength === undefined ? {} : { strength: parseStrengthWorkoutDraftV1(operationRecord.strength) }),
       };
       break;
     case 'move-workout':

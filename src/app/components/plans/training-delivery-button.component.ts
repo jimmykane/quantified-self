@@ -16,6 +16,14 @@ import { ServiceSourceIconComponent } from '../event-summary/service-source-icon
 interface DeliveryReadState { uid: string; hasRecords: boolean; view: TrainingDeliveryView | null; loaded: boolean; error: boolean; }
 const EMPTY_READ: DeliveryReadState = { uid: '', hasRecords: false, view: null, loaded: false, error: false };
 
+function compactPlanLabel(summary: TrainingDeliverySummary): string {
+  const focus = summary.planFocus;
+  if (!focus || focus.totalWorkouts === null || focus.syncedWorkouts === null) return '—';
+  if (focus.totalWorkouts > 0) return `${focus.syncedWorkouts}/${focus.totalWorkouts}`;
+  if (summary.projection.totalWorkouts === 0) return 'Empty';
+  return summary.projection.outcomes.some(outcome => outcome.status === 'outside_horizon') ? 'Later' : 'None due';
+}
+
 @Component({ selector: 'app-training-delivery-button', standalone: true, imports: [SharedModule, ServiceSourceIconComponent],
   templateUrl: './training-delivery-button.component.html', styleUrl: './training-delivery-button.component.scss',
   changeDetection: ChangeDetectionStrategy.OnPush })
@@ -74,11 +82,14 @@ export class TrainingDeliveryButtonComponent {
   })), { initialValue: { uid: '', rows: [] as TrainingDeliverySummary[], error: false } });
   readonly summaries = computed(() => this.summaryState().uid === this.users.user()?.uid ? this.summaryState().rows : []);
   readonly compactPlanSummaries = computed(() => this.summaries().map(summary => ({
-    ...summary,
-    compactLabel: summary.planFocus?.totalWorkouts && summary.planFocus.syncedWorkouts !== null
-      ? `${summary.planFocus.syncedWorkouts}/${summary.planFocus.totalWorkouts}`
-      : '—',
+    ...summary, compactLabel: compactPlanLabel(summary),
   })));
+  readonly planIdleMessage = computed(() => {
+    const summaries = this.compactPlanSummaries();
+    if (!summaries.length || summaries.some(summary => summary.planFocus?.totalWorkouts !== 0)) return null;
+    return summaries.every(summary => summary.projection.totalWorkouts === 0)
+      ? 'No workouts in this plan' : 'No workouts due for sync';
+  });
   private readonly planDelivery = computed(() => this.scope() === 'plan' || (this.scope() === 'workout' && !this.standalone()));
   readonly visible = computed(() => !!this.users.user()?.uid
     && (this.summaryWorkouts() === null || this.readState().uid === this.users.user()?.uid)

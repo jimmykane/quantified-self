@@ -20,7 +20,8 @@ import {
     SwimPaceUnits,
     ServiceNames,
     User,
-    VerticalSpeedUnits
+    VerticalSpeedUnits,
+    WeightUnits,
 } from '@sports-alliance/sports-lib';
 import { AppUserInterface } from '../../models/app-user.interface';
 import { Analytics } from 'app/firebase/analytics';
@@ -829,6 +830,7 @@ describe('DashboardComponent', () => {
     it('applies the miles unit setup preset and completes setup', async () => {
         (mockUser.settings.appSettings as any).unitSetupCompleted = false;
         (mockUser.settings.appSettings as any).otherAppSetting = 'stale-local-value';
+        (mockUser.settings.unitSettings as any).weightUnits = WeightUnits.Pounds;
         component.user = mockUser;
         component.selectedUnitSetupPreset = 'miles';
 
@@ -846,7 +848,8 @@ describe('DashboardComponent', () => {
                         speedUnits: [SpeedUnits.MilesPerHour],
                         paceUnits: [PaceUnits.MinutesPerMile],
                         swimPaceUnits: [SwimPaceUnits.MinutesPer100Yard],
-                        verticalSpeedUnits: [VerticalSpeedUnits.FeetPerSecond]
+                        verticalSpeedUnits: [VerticalSpeedUnits.FeetPerSecond],
+                        weightUnits: WeightUnits.Pounds,
                     })
                 }
             }

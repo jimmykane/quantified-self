@@ -462,6 +462,36 @@ describe('mutateTrainingScheduleForUser persistence', () => {
             .toMatchObject({ requestHash: hashTrainingScheduleMutationRequest(mutation) });
     });
 
+    it('keeps a 25 m Swimming workout on a paused test plan without activating it', async () => {
+        await mutateTrainingScheduleForUser('user-1', request({
+            kind: 'create-plan', planId: 'pool-test', name: 'Pool test',
+            startLocalDate: '2026-09-24', endLocalDate: '2026-10-01', activate: false,
+        }), { db: db as never, nowMs: NOW_MS });
+        const mutation: MutateTrainingScheduleRequestV1 = {
+            ...request({
+                kind: 'create-workout', workoutId: 'pool-25m', planId: 'pool-test',
+                localDate: '2026-09-24', title: 'Pool swim QA — 25 m step',
+                structure: { version: 1, sport: ActivityTypes.Swimming, nodes: [{
+                    kind: 'step', id: 'length', purpose: 'work',
+                    ending: { kind: 'distance', meters: 25 }, targets: [],
+                }] },
+                confirmPlanRangeExtension: false,
+            }),
+            expectedRevisions: [
+                { scope: 'state', id: 'current', revision: 1 },
+                { scope: 'plan', id: 'pool-test', revision: 1 },
+            ],
+        };
+        await mutateTrainingScheduleForUser('user-1', mutation, { db: db as never, nowMs: NOW_MS + 1 });
+
+        expect(db.read('users/user-1/trainingPlans/pool-test')).toMatchObject({ lifecycle: 'paused', workoutCount: 1 });
+        expect(db.read('users/user-1/trainingPlanState/current')).toMatchObject({ activePlanId: null });
+        expect(db.read('users/user-1/scheduledWorkouts/pool-25m')).toMatchObject({
+            planId: 'pool-test', structure: { sport: ActivityTypes.Swimming,
+                nodes: [{ ending: { kind: 'distance', meters: 25 } }] },
+        });
+    });
+
     it('returns the stored response for exact retries without creating another revision', async () => {
         const mutation = request({
             kind: 'create-workout',

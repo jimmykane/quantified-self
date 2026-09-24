@@ -4,6 +4,7 @@ import { AdminDashboardComponent } from '../components/admin/admin-dashboard/adm
 import { AdminMaintenanceComponent } from '../components/admin/admin-maintenance/admin-maintenance.component';
 import { AdminUserWorkspaceComponent } from '../components/admin/admin-user-workspace/admin-user-workspace.component';
 import { AdminChangelogComponent } from '../components/admin/admin-changelog/admin-changelog.component';
+import { AdminMarketingComponent } from '../components/admin/admin-marketing/admin-marketing.component';
 import { AdminQueueMonitorComponent } from '../components/admin/admin-queue-monitor/admin-queue-monitor.component';
 import { RouterModule, Routes } from '@angular/router';
 import { adminGuard } from '../authentication/admin.guard';
@@ -12,6 +13,11 @@ export const adminRoutes: Routes = [
     {
         path: '',
         component: AdminDashboardComponent,
+        canActivate: [adminGuard]
+    },
+    {
+        path: 'marketing',
+        component: AdminMarketingComponent,
         canActivate: [adminGuard]
     },
     {
@@ -100,6 +106,7 @@ export const adminRoutes: Routes = [
         CommonModule,
         RouterModule.forChild(adminRoutes),
         AdminDashboardComponent,
+        AdminMarketingComponent,
         AdminMaintenanceComponent,
         AdminUserWorkspaceComponent,
         AdminChangelogComponent,

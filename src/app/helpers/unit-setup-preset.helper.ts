@@ -10,6 +10,7 @@ import {
   SwimPaceUnits,
   UserUnitSettingsInterface,
   VerticalSpeedUnits,
+  WeightUnits,
 } from '@sports-alliance/sports-lib';
 import { AppUserInterface } from '../models/app-user.interface';
 
@@ -80,6 +81,7 @@ export function buildUnitSettingsForUnitSetupPreset(
     distanceUnits: preset === 'miles'
       ? DistanceUnits.Miles
       : DistanceUnits.Kilometers,
+    weightUnits: WeightUnits.Kilograms,
     startOfTheWeek: resolveStartOfTheWeekForUnitSetup(locale),
   };
 }

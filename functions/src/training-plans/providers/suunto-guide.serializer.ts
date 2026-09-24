@@ -8,9 +8,11 @@ import {
     type WorkoutTargetV1,
 } from '../../../../shared/planned-workout';
 import { normalizeTrainingLocalDate } from '../../../../shared/training-plans';
+import { parseStrengthWorkoutDetailsV1 } from '../../../../shared/strength-workout';
 import {
     createStableProviderExternalId,
     resolveProviderSerializationIssuesV1,
+    ProviderWorkoutMappingError,
     type ProviderSerializationIssueV1,
     type ProviderSerializationResultV1,
 } from './provider-mapping';
@@ -31,23 +33,25 @@ export type SuuntoGuideFieldV1 =
     | { type: 'targetCadence'; min: number; max: number; title: string };
 
 export interface SuuntoGuideFieldsStepV1 {
-    id: string;
+    id?: string;
     type: 'fields';
     title: string;
     fields: SuuntoGuideFieldV1[];
     transitions: Array<{ condition: SuuntoGuideConditionV1 }>;
 }
 
+export type SuuntoGuideRepeatFieldsStepV1 = Omit<SuuntoGuideFieldsStepV1, 'id'> & { id?: never };
+
 export interface SuuntoGuideRepeatStepV1 {
-    id: string;
+    id?: never;
     type: 'repeat';
     times: number;
-    steps: SuuntoGuideFieldsStepV1[];
+    steps: SuuntoGuideRepeatFieldsStepV1[];
 }
 
 export type SuuntoGuideStepV1 = SuuntoGuideFieldsStepV1 | SuuntoGuideRepeatStepV1;
 
-export type SuuntoGuideActivityIdV1 = 1 | 2 | 10 | 22 | 52 | 53 | 105 | 106 | 109;
+export type SuuntoGuideActivityIdV1 = 0 | 1 | 2 | 10 | 11 | 15 | 21 | 22 | 23 | 52 | 53 | 57 | 85 | 105 | 106 | 109;
 
 export interface SuuntoGuideJsonV1 {
     type: 'sequence';
@@ -93,6 +97,13 @@ const SUUNTO_GUIDE_ACTIVITY_IDS_BY_SPORT: ReadonlyMap<
     // and mountain e-biking profiles. Recommend the Guide for both.
     [ActivityTypes.EBiking, [105, 106]],
     [ActivityTypes.Handcycle, [109]],
+    [ActivityTypes.Swimming, [21]],
+    [ActivityTypes.OpenWaterSwimming, [85]],
+    [ActivityTypes.Walking, [0]],
+    [ActivityTypes.Hiking, [11]],
+    [ActivityTypes.Rowing, [15]],
+    [ActivityTypes.IndoorRowing, [57]],
+    [ActivityTypes.StrengthTraining, [23]],
 ]);
 
 export function suuntoGuideActivityIdsForSport(
@@ -354,10 +365,19 @@ function structureToSteps(structure: WorkoutStructureV1): SuuntoGuideStepV1[] {
     return structure.nodes.map(node => {
         if (node.kind === 'step') return stepToSuunto(node);
         return {
-            id: createStableProviderExternalId('suunto', `node:${node.id}`),
             type: 'repeat',
             times: node.count,
-            steps: node.steps.map(stepToSuunto),
+            // Suunto rejects id on a repeat and every FieldsStep inside it,
+            // even though its schema describes step ids as optional.
+            steps: node.steps.map(step => {
+                const fieldsStep = stepToSuunto(step);
+                return {
+                    type: fieldsStep.type,
+                    title: fieldsStep.title,
+                    fields: fieldsStep.fields,
+                    transitions: fieldsStep.transitions,
+                };
+            }),
         };
     });
 }
@@ -420,4 +440,35 @@ export function serializeSuuntoGuideJsonV1(
     };
 
     return { ...resolved, artifact };
+}
+
+/** A Gym Guide is an instruction sequence, not native rep/load tracking. */
+export function serializeSuuntoStrengthGuideV1(
+    detailsValue: unknown,
+    options: SerializeSuuntoGuideOptionsV1,
+): ProviderSerializationResultV1<SuuntoGuideJsonV1> {
+    const details = parseStrengthWorkoutDetailsV1(detailsValue);
+    const nodes: WorkoutStepV1[] = [];
+    details.exercises.forEach(exercise => exercise.sets.forEach((set, index) => {
+        const label = `${exercise.name} - set ${index + 1} - ${set.ending.kind === 'repetitions'
+            ? `${set.ending.repetitions} reps` : `${set.ending.seconds} seconds`}${set.externalLoadKg === undefined
+            ? '' : ` - ${set.externalLoadKg} kg`}`;
+        nodes.push({ kind: 'step', id: `set-${set.id}`, purpose: 'work',
+            ending: set.ending.kind === 'repetitions' ? { kind: 'manual' } : set.ending,
+            targets: [], note: label });
+        if (set.restAfterSeconds !== undefined) {
+            nodes.push({ kind: 'step', id: `rest-${set.id}`, purpose: 'rest',
+                ending: { kind: 'time', seconds: set.restAfterSeconds }, targets: [] });
+        }
+    }));
+    const base = serializeSuuntoGuideJsonV1({ version: 1, sport: ActivityTypes.StrengthTraining, nodes }, {
+        ...options, allowDegraded: true,
+    });
+    const manualIssue: ProviderSerializationIssueV1 = {
+        severity: 'degraded', code: 'manual_strength_repetitions', path: '$.steps',
+        message: 'Suunto Gym Guides show exercise/set instructions and require manual transitions for repetitions; they do not count reps or track load natively.',
+    };
+    const issues = [manualIssue, ...base.issues];
+    if (!options.allowDegraded) throw new ProviderWorkoutMappingError('suunto', 'degradation-confirmation-required', issues);
+    return { ...base, level: 'degraded', issues };
 }

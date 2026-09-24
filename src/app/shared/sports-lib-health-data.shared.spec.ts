@@ -9,7 +9,7 @@ import {
     type HealthMetricId,
     type HealthMetricValue,
 } from '@shared/health';
-import { DistanceUnits } from '@sports-alliance/sports-lib';
+import { DistanceUnits, WeightUnits } from '@sports-alliance/sports-lib';
 import { normalizeUserUnitSettings } from '@shared/unit-aware-display';
 import {
     decodeHealthMetricSportsLibData,
@@ -125,6 +125,12 @@ describe('Sports Lib Health and sleep storage codec', () => {
             normalizeUserUnitSettings({ distanceUnits: DistanceUnits.Miles }),
         )).toEqual({ value: '6.22', unit: 'mi' });
 
+        expect(formatCanonicalHealthMetricSportsLibValue(
+            HEALTH_METRIC_IDS.BodyWeight,
+            80,
+            normalizeUserUnitSettings({ distanceUnits: DistanceUnits.Kilometers, weightUnits: WeightUnits.Pounds }),
+        )).toEqual({ value: '176.4', unit: 'lb' });
+
         expect(formatCanonicalSleepMetricSportsLibValue(
             SLEEP_SPORTS_LIB_METRIC_FIELDS.Duration,
             (8 * 60 * 60) + (19 * 60),
@@ -151,6 +157,20 @@ describe('Sports Lib Health and sleep storage codec', () => {
             canonical: undefined,
         };
         expect((decodeHealthMetricSportsLibData(newOnly) as HealthMetricValue).canonical).toEqual(legacy.canonical);
+    });
+
+    it('keeps Weight JSON canonical in kilograms even when display preference is pounds', () => {
+        const metric = {
+            ...healthMetric(HEALTH_METRIC_IDS.BodyWeight),
+            canonical: { value: 80, unit: 'kg' },
+        } as HealthMetricValue;
+        const encoded = encodeHealthMetricSportsLibData(metric) as HealthMetricValue;
+        expect(encoded.sportsLibData?.metrics.value).toEqual({ Weight: 80 });
+        expect(formatCanonicalHealthMetricSportsLibValue(
+            HEALTH_METRIC_IDS.BodyWeight, 80,
+            normalizeUserUnitSettings({ weightUnits: WeightUnits.Pounds }),
+        )).toEqual({ value: '176.4', unit: 'lb' });
+        expect(decodeHealthMetricSportsLibData(encoded).canonical).toEqual({ value: 80, unit: 'kg' });
     });
 
     it('round-trips a Health goal independently from its value', () => {
