@@ -15,7 +15,7 @@ import {
   type WorkoutTargetV1,
 } from '@shared/planned-workout';
 
-export type ManualWorkoutSport = ManualWorkoutEditorSportV1;
+export type ManualWorkoutSport = ManualWorkoutEditorSportV1 | ActivityTypes.StrengthTraining;
 export type ManualWorkoutEnding = 'time' | 'distance';
 export type ManualWorkoutTarget = 'none' | 'heart-rate' | 'power' | 'pace';
 
@@ -150,6 +150,9 @@ export function manualWorkoutEditorToStructure(
   value: ManualWorkoutEditorValue,
   units?: UserUnitSettingsInterface | null,
 ): WorkoutStructureV1 {
+  if (value.sport === ActivityTypes.StrengthTraining) {
+    throw new Error('Strength Training requires its exercise-aware editor.');
+  }
   if (!value.nodes.length) throw new Error('Add at least one workout step.');
   const nodes: WorkoutNodeV1[] = value.nodes.map((node) => {
     if (node.kind === 'step') return stepFromEditor(node, value.sport, units);

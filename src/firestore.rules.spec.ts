@@ -1561,6 +1561,8 @@ describe('Firestore Security Rules', () => {
                     await userRef.collection('scheduledWorkouts').doc('workout-1').set({
                         id: 'workout-1', planId: 'plan-1', localDate: '2026-09-02', lifecycle: 'planned',
                     });
+                    await userRef.collection('scheduledWorkouts').doc('workout-1')
+                        .collection('strengthDetails').doc('current').set({ version: 1, privatePrescription: true });
                     await userRef.collection('trainingPlans').doc('plan-1')
                         .collection('revisions').doc('0000000001').set({ privateDelta: true });
                     await userRef.collection('trainingPlans').doc('plan-1')
@@ -1595,6 +1597,20 @@ describe('Firestore Security Rules', () => {
                 const ownerPath = `users/${userId}/scheduledWorkouts/workout-1`;
                 await assertFails(testEnv.authenticatedContext(otherId).firestore().doc(ownerPath).get());
                 await assertFails(testEnv.unauthenticatedContext().firestore().doc(ownerPath).get());
+            });
+
+            it('allows only owner reads of current strength details and denies every browser write', async () => {
+                await seedCurrentTrainingData();
+                const path = `users/${userId}/scheduledWorkouts/workout-1/strengthDetails/current`;
+                const owner = testEnv.authenticatedContext(userId).firestore();
+                const other = testEnv.authenticatedContext(otherId).firestore();
+                await assertSucceeds(owner.doc(path).get());
+                await assertFails(other.doc(path).get());
+                await assertFails(testEnv.unauthenticatedContext().firestore().doc(path).get());
+                await assertFails(owner.doc(path).set({ version: 1, forged: true }));
+                await assertFails(owner.doc(path).update({ forged: true }));
+                await assertFails(owner.doc(path).delete());
+                await assertFails(owner.doc(`users/${userId}/scheduledWorkouts/workout-1/strengthDetails/private`).get());
             });
 
             it('denies every direct browser create, update, and delete', async () => {

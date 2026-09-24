@@ -130,7 +130,7 @@ async function claimBatch(runtime: DeliveryRuntime, uid: string, seedId: string,
       ledger.desiredGeneration += changed ? 1 : 0;
       ledger.desiredDigest = intent.digest; ledger.desired = intent.desired; ledger.status = intent.status;
       ledger.issues = intent.issues; ledger.approvalDigest = intent.approvalDigest; ledger.timeZone = intent.timeZone;
-      ledger.contentDigest = deliveryContentDigest(workout, intent.timeZone);
+      ledger.contentDigest = deliveryContentDigest(workout, intent.timeZone, context.strength);
       const kind = queuedDeliveryOperation(ledger);
       if (!kind) {
         deferredWrites.push(() => { writeDelivery(runtime, tx, uid, ledger); tx.delete(job.ref); });
@@ -158,7 +158,9 @@ async function claimBatch(runtime: DeliveryRuntime, uid: string, seedId: string,
       prepared.push({ ledger, operation: { id: randomUUID(), kind, deliveryId: ledger.id,
         generation: ledger.desiredGeneration, connectionGeneration: context.connection.generation,
         destinationKey, timeZone: intent.timeZone, digest: intent.digest, contentDigest: ledger.contentDigest,
-        workout: kind === 'upsert' ? workout : null, artifact: ledger.actual, progress: null } });
+        workout: kind === 'upsert' ? workout : null,
+        ...(kind === 'upsert' && context.strength ? { strength: context.strength } : {}),
+        artifact: ledger.actual, progress: null } });
     }
 
     const abandonedBatches = await Promise.all([...abandonedBatchIds]

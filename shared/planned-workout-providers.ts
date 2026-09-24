@@ -56,6 +56,7 @@ export const SUUNTO_PLANNED_WORKOUT_SPORTS_V1 = [
   ActivityTypes.Hiking,
   ActivityTypes.Rowing,
   ActivityTypes.IndoorRowing,
+  ActivityTypes.StrengthTraining,
 ] as const;
 
 /**

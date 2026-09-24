@@ -1,6 +1,7 @@
 import type { Firestore, Transaction } from 'firebase-admin/firestore';
 import type { PlannedWorkoutProviderId } from '../../../../shared/planned-workout-providers';
 import type { ScheduledWorkoutV1 } from '../../../../shared/training-plans';
+import type { StrengthWorkoutDetailsV1 } from '../../../../shared/strength-workout';
 import type { TrainingDeliveryStatus, TrainingDeliverySettingsV1 } from '../../../../shared/training-provider-delivery';
 import type { DeliveryRepair, RemoteInspection, VerificationEvidence } from './verification-contracts';
 
@@ -41,6 +42,7 @@ export interface DeliveryOperation {
   digest: string;
   contentDigest: string | null;
   workout: ScheduledWorkoutV1 | null;
+  strength?: StrengthWorkoutDetailsV1 | null;
   artifact: DeliveryArtifact | null;
   /** Internal transport journal. null proves a new operation has made no request;
    * absence is a legacy/unknown journal and must not authorize a non-idempotent retry. */
@@ -112,7 +114,8 @@ export interface TrainingDeliveryTransport {
   horizonDays: number;
   /** Provider/product policy: withdraw an existing upcoming copy when moved beyond its window. */
   withdrawOutsideHorizon?: boolean;
-  assess(workout: ScheduledWorkoutV1, destinationKey: string, timeZone: string): DeliveryAssessment;
+  assess(workout: ScheduledWorkoutV1, destinationKey: string, timeZone: string,
+    strength?: StrengthWorkoutDetailsV1 | null): DeliveryAssessment;
   canRemove(artifact: DeliveryArtifact, today: string): boolean;
   execute(operation: DeliveryOperation, checkpoint: DeliveryCheckpoint, guard: DeliveryRequestGuard): Promise<DeliveryArtifact | null>;
   recover(operation: DeliveryOperation, checkpoint: DeliveryCheckpoint, guard: DeliveryRequestGuard): Promise<DeliveryRecovery>;
@@ -218,6 +221,7 @@ export interface DeliveryIntent {
 }
 export interface DeliveryContext {
   workout: ScheduledWorkoutV1 | null;
+  strength?: StrengthWorkoutDetailsV1 | null;
   planActive: boolean;
   setting: TrainingDeliverySettingsV1 | null;
   override: TrainingDeliverySettingsV1 | null;

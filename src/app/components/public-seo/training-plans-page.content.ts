@@ -7,7 +7,7 @@ export const TRAINING_PLANS_SEO_CONTENT = {
   h1: 'Plan workouts for running, cycling, swimming and more',
   intro: 'Build a dated plan or start with one standalone workout. Work directly in Quantified Self, keep scheduled work separate from completed activities, and connect other tools only when you choose.',
   featureList: [
-    'Running, cycling, swimming, walking, hiking and rowing plans included on the free tier',
+    'Running, cycling, swimming, walking, hiking, rowing and strength plans included on the free tier',
     'Standalone structured workouts without a plan',
     'Dated plan calendars with colors, history, and shifting',
     'Planned-workout overlays kept separate from completed activity totals',
@@ -44,7 +44,7 @@ export const TRAINING_PLANS_PAGE_SECTIONS = [
   {
     eyebrow: 'Structured Workouts',
     title: 'Build the workout you mean',
-    copy: 'The current editor supports running, cycling, pool and open-water swimming, walking, hiking, rowing and indoor rowing with date-only scheduling, time or distance steps, fixed repeats, and one absolute heart-rate, power, or pace target per step. Swim and rowing distance steps use metres. Rowing pace is a 500 m split; swim pace follows your /100 m or /100 yd setting. Pool workouts can store an optional physical pool length in metres or yards, separately from step distance; open-water workouts have no pool length. Check the device pool setting where the provider does not receive it.',
+    copy: 'The interval editor supports running, cycling, pool and open-water swimming, walking, hiking, rowing and indoor rowing with date-only scheduling, time or distance steps, fixed repeats, and one absolute heart-rate, power, or pace target per step. The separate strength editor supports ordered named exercises, individual sets with repetitions or timed holds, optional external load in kilograms, and optional rest after each set. Swim and rowing distance steps use metres. Rowing pace is a 500 m split; swim pace follows your /100 m or /100 yd setting. Pool workouts can store an optional physical pool length in metres or yards, separately from step distance; open-water workouts have no pool length.',
     items: [
       {
         icon: 'directions_run',
@@ -65,6 +65,11 @@ export const TRAINING_PLANS_PAGE_SECTIONS = [
         icon: 'hiking',
         title: 'Walking, hiking, and rowing',
         copy: 'Create Walking, Hiking, Rowing, or Indoor Rowing workouts. Suunto Guides recommend the matching exercise profile. Garmin, COROS, and Wahoo structured-workout delivery for these sports is unsupported under their current contracts. Guide acceptance does not prove app or watch visibility.',
+      },
+      {
+        icon: 'fitness_center',
+        title: 'Strength training',
+        copy: 'Build ordered exercises and sets with reps or timed holds, optional external load in kilograms, and rest. Suunto sends a degraded Gym Guide with manual rep transitions, never native strength tracking; Garmin and Wahoo delivery is unsupported. COROS strength remains Coming soon pending account proof.',
       },
       {
         icon: 'repeat',

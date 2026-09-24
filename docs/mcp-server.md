@@ -167,6 +167,18 @@ formatting; compatibility remains provider-local, with Suunto Guide activity rec
 Garmin/COROS/Wahoo results. Provider IDs and transport evidence remain private. This is a no-wire-impact extension;
 it does not authorize a new provider action or count a planned workout as completed training.
 
+Strength Training uses an owner-scoped versioned companion with ordered exercises and sets, optional external load in
+canonical kilograms, and optional rest seconds. The old v1 recipe is a derived compatibility summary, not a complete
+prescription. The additive `get_strength_workout_details` read uses only `training-plans:read`, resolves the same
+connection-bound opaque workout reference, validates its companion against the stored projection and fails closed if
+missing or mismatched. `preview_strength_workout_change` requires `training-plans:write` plus the parent read grant,
+accepts one complete create/update draft, derives the v1 summary server-side and uses the existing
+owner/grant/revision/expiry-bound proposal and approval-gated `apply_training_changes`. No provider action or wider
+consent is added. Exercise names are untrusted user text. Suunto Gym Guide compatibility is degraded because reps
+need manual transitions; COROS new-send remains Coming soon, and Garmin/Wahoo are unsupported. New additive tools need
+a client catalog refresh after release; the registered v1 recipe input/output stays unchanged. Sports Lib mass-unit
+preferences and lb display are tracked in #743; current external-load display is kilograms only.
+
 Sports Lib 21.2.1 FIT workout-reference adoption and the first exact Suunto activity link add no MCP metric, scope,
 provider action or registered wire field. Private FIT references, account digests and reverse-link records are excluded.
 Existing sync status may truthfully become `completed` after an account-bound Guide marker is accepted, using the status

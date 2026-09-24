@@ -8,6 +8,7 @@ import {
     type WorkoutTargetV1,
 } from '../../../../shared/planned-workout';
 import { normalizeTrainingLocalDate } from '../../../../shared/training-plans';
+import { parseStrengthWorkoutDetailsV1, type StrengthWorkoutDetailsV1 } from '../../../../shared/strength-workout';
 import {
     COROS_FOLDED_CYCLING_WORKOUT_SPORTS_V1,
     COROS_FOLDED_RUNNING_WORKOUT_SPORTS_V1,
@@ -19,7 +20,7 @@ import {
     type ProviderSerializationResultV1,
 } from './provider-mapping';
 
-export type CorosWorkoutTypeV1 = 'run' | 'bike' | 'trailRun' | 'swim';
+export type CorosWorkoutTypeV1 = 'run' | 'bike' | 'trailRun' | 'swim' | 'strength';
 export type CorosIntensityClassV1 = 'WarmUp' | 'CoolDown' | 'Active' | 'Rest';
 export type CorosIntensityTargetUnitV1 =
     | 'PercentOfFtp'
@@ -28,12 +29,14 @@ export type CorosIntensityTargetUnitV1 =
     | 'RangeOfFtp'
     | 'RangeOfCandence'
     | 'RangeOfThresholdHr'
-    | 'RangeOfThresholdSpeed';
+    | 'RangeOfThresholdSpeed'
+    | 'ValueOfEquipmentWeight';
 export type CorosLengthV1 =
     | { Unit: 'Second'; Value: number }
     | { Unit: 'Meter'; Value: number }
     | { Unit: 'EndManually' }
-    | { Unit: 'Repetition'; Value: number };
+    | { Unit: 'Repetition'; Value: number }
+    | { Unit: 'Reps'; Value: number };
 export type CorosIntensityTargetV1 = [] | {
     Unit: CorosIntensityTargetUnitV1;
     Value?: number;
@@ -50,6 +53,7 @@ export interface CorosTrainingStepV1 {
     ThresholdHr: number;
     ThresholdSpeed: number;
     Length: Exclude<CorosLengthV1, { Unit: 'Repetition' }>;
+    Rest?: { Unit: 'Second'; Value: number };
     IntensityTarget: CorosIntensityTargetV1;
 }
 
@@ -119,6 +123,7 @@ function normalizeCorosLocalDateTime(value: string): string {
 }
 
 function sportToCoros(sport: ActivityTypes): CorosWorkoutTypeV1 {
+    if (sport === ActivityTypes.StrengthTraining) return 'strength';
     if (sport === ActivityTypes.Swimming) return 'swim';
     if (sport === ActivityTypes.Running) return 'run';
     if (sport === ActivityTypes.TrailRunning) return 'trailRun';
@@ -400,5 +405,42 @@ export function serializeCorosTrainingPlanV1(
             EndDate: localDate,
             Workouts: [workout],
         },
+    };
+}
+
+/** Contract fixture mapper only until COROS strength push/update/delete is account-proved. */
+export function serializeCorosStrengthPlanV1(
+    detailsValue: unknown,
+    options: SerializeCorosTrainingPlanOptionsV1,
+): ProviderSerializationResultV1<CorosTrainingPlanPushDataV1> {
+    const details: StrengthWorkoutDetailsV1 = parseStrengthWorkoutDetailsV1(detailsValue);
+    const athleteId = positiveCorosInteger(options.athleteId, 'COROS athlete ID');
+    const workoutId = options.workoutId !== undefined
+        ? positiveCorosInteger(options.workoutId, 'COROS workout ID')
+        : createStableProviderIntegerId('coros', requiredText(options.sourceWorkoutId ?? details.workoutId, 'COROS source workout ID'));
+    const localDate = normalizeTrainingLocalDate(options.localDate);
+    const structure: CorosTrainingStepV1[] = details.exercises.flatMap(exercise => exercise.sets.map((set, index) => ({
+        Type: 'Step' as const,
+        IntensityClass: 'Active' as const,
+        Name: exercise.name,
+        Description: `Set ${index + 1}`,
+        Ftp: 0,
+        ThresholdHr: 0,
+        ThresholdSpeed: 0,
+        Length: set.ending.kind === 'repetitions'
+            ? { Unit: 'Reps' as const, Value: set.ending.repetitions }
+            : { Unit: 'Second' as const, Value: set.ending.seconds },
+        ...(set.restAfterSeconds === undefined ? {} : { Rest: { Unit: 'Second' as const, Value: set.restAfterSeconds } }),
+        IntensityTarget: set.externalLoadKg === undefined
+            ? [] as []
+            : { Unit: 'ValueOfEquipmentWeight' as const, Value: set.externalLoadKg },
+    })));
+    return {
+        provider: 'coros', level: 'exact', issues: [],
+        artifact: { AthleteId: athleteId, StartDate: localDate, EndDate: localDate,
+            Workouts: [{ LastModifiedDate: normalizeCorosLocalDateTime(options.lastModifiedDate),
+                Title: requiredText(options.title, 'COROS workout title'), Id: workoutId, WorkoutDay: localDate,
+                WorkoutType: 'strength', Structure: structure,
+                ...(options.description?.trim() ? { Description: options.description.trim() } : {}) }] },
     };
 }

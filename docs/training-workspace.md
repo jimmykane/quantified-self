@@ -440,6 +440,24 @@ implies workout delivery support. Synthetic serializer and demo-emulator accepta
 watch or completed-activity behavior. Account-side proof remains in #738 and #739 under #583 and needs separately
 approved Functions deployment and provider operations.
 
+Strength Training is one exact Sports Lib sport with a separate exercise-aware editor. Its strict `StrengthWorkoutDetailsV1`
+companion lives at `users/{uid}/scheduledWorkouts/{workoutId}/strengthDetails/current` and contains ordered exercises,
+individual repetition or timed-hold sets, optional external load in canonical kilograms, and optional rest seconds.
+Only server mutation paths write it. `ScheduledWorkoutV1.structure` stays a valid v1, server-derived compatibility
+summary so older clients remain readable; that summary is never sufficient to edit or deliver strength. Create,
+update, copy, transfer, history/checkpoint, restore, plan deletion/conversion, account deletion and delivery load the
+companion and fail closed on missing or mismatched data. The companion content revision changes only with prescription
+edits; schedule shifts preserve it. The current Sports Lib DataWeight displays kilograms but has no owner mass-unit
+preference or lb formatter; #743 tracks that dependency rather than deriving load units from distance settings.
+
+Suunto maps strength to a dated Gym (`23`) Guide containing exercise/set instructions. Rep sets use manual transitions,
+so mapping is degraded, requires explicit approval, and is not native strength tracking. COROS has a contract fixture
+for strength Reps/Second, optional Rest and fixed equipment weight in kilograms, but browser new-send remains Coming
+soon until entitlement and account-side push/update/delete proof (#741). Garmin and Wahoo strength delivery are
+unsupported. No live provider acceptance, app/watch receipt or completed-activity link is claimed from isolated
+emulator tests. The additive MCP strength read and preview use existing independent Training permissions; the registered
+v1 recipe tool remains only a compatibility summary. See `docs/mcp-server.md` for the exact wire boundary.
+
 Do not add planned-workout `Data*` types, `DataStore` entries, FIT parser behavior, or MCP fields merely to share this
 recipe. Extract the neutral structure, codec, validator, and reusable analysis to Sports Lib only after Garmin and COROS
 pass separately authorized create/update/reschedule/delete round trips, Wahoo and Suunto mapping fixtures are complete, the provider adapters

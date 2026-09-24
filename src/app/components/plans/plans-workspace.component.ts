@@ -83,6 +83,13 @@ import {
   type TrainingScheduleRevisionScope,
 } from '@shared/training-plans';
 import type { TrainingWorkoutCompletionV1 } from '@shared/training-workout-completion';
+import {
+  parseStrengthWorkoutDraftV1,
+  projectStrengthWorkoutToV1,
+  strengthProjectionMatchesDetails,
+  type StrengthSetV1,
+  type StrengthWorkoutDraftV1,
+} from '@shared/strength-workout';
 
 type PlansView = 'plans' | 'standalone';
 
@@ -98,6 +105,8 @@ interface WorkoutEditorSession {
   originalWorkoutRevision: number | null;
   destinationPlanId: string | null;
   value: ManualWorkoutEditorValue;
+  strength: StrengthWorkoutDraftV1 | null;
+  strengthLoading: boolean;
 }
 
 interface WorkoutRow {
@@ -139,6 +148,7 @@ const EMPTY_SCHEDULE: CurrentTrainingScheduleV1 = {
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class PlansWorkspaceComponent {
+  readonly strengthSport = ActivityTypes.StrengthTraining;
   private readonly userService = inject(AppUserService);
   private readonly plansService = inject(TrainingPlansService);
   private readonly dialog = inject(MatDialog);
@@ -199,6 +209,7 @@ export class PlansWorkspaceComponent {
       label: 'Rowing',
       options: MANUAL_WORKOUT_EDITOR_ROWING_SPORTS_V1.map(value => ({ value, label: value })),
     },
+    { label: 'Strength', options: [{ value: ActivityTypes.StrengthTraining, label: 'Strength Training' }] },
   ];
   readonly purposeOptions = ['warmup', 'work', 'recovery', 'cooldown', 'rest', 'other'] as const;
   readonly endingOptions: ReadonlyArray<{ value: ManualWorkoutEnding; label: string }> = [
@@ -214,6 +225,7 @@ export class PlansWorkspaceComponent {
 
   readonly currentUser = computed(() => this.userService.user() as AppUserInterface | null);
   readonly editorIsSwimming = computed(() => isSwimmingWorkoutSportV1(this.editor()?.value.sport));
+  readonly editorIsStrength = computed(() => this.editor()?.value.sport === ActivityTypes.StrengthTraining);
   readonly editorIsRowing = computed(() => isRowingWorkoutSportV1(this.editor()?.value.sport));
   readonly editorIsPoolSwimming = computed(() => this.editor()?.value.sport === ActivityTypes.Swimming);
   readonly editorPaceUnit = computed(() => this.editorIsSwimming()
@@ -728,6 +740,8 @@ export class PlansWorkspaceComponent {
       originalWorkoutRevision: null,
       destinationPlanId,
       value: createManualWorkoutEditorValue(localDate, this.nextNodeId('step')),
+      strength: null,
+      strengthLoading: false,
     });
   }
 
@@ -747,15 +761,37 @@ export class PlansWorkspaceComponent {
       this.clearPlanActions();
       this.editorGeneration += 1;
       this.workoutDateInputInvalid.set(false);
+      const strength = workout.structure.sport === ActivityTypes.StrengthTraining;
       this.editor.set({
         mode: 'edit',
         original: workout,
         originalWorkoutRevision: workout.revision,
         destinationPlanId: workout.planId,
-        value: workoutStructureToManualEditor(
-          workout.title, workout.localDate, workout.structure, this.currentUser()?.settings?.unitSettings,
-        ),
+        value: strength
+          ? { ...createManualWorkoutEditorValue(workout.localDate), title: workout.title,
+            sport: ActivityTypes.StrengthTraining, nodes: [] }
+          : workoutStructureToManualEditor(
+            workout.title, workout.localDate, workout.structure, this.currentUser()?.settings?.unitSettings,
+          ),
+        strength: null,
+        strengthLoading: strength,
       });
+      if (strength) {
+        const generation = this.editorGeneration;
+        const uid = this.currentUser()?.uid;
+        if (!uid) throw new Error('Sign in to edit this strength workout.');
+        void this.plansService.getStrengthDetails(uid, workout.id).then(details => {
+          if (this.destroyRef.destroyed || generation !== this.editorGeneration || uid !== this.currentUser()?.uid) return;
+          if (!strengthProjectionMatchesDetails(workout.structure, details)) throw new Error('Strength prescription and summary do not match.');
+          this.editor.update(session => session && session.original?.id === workout.id ? {
+            ...session, strength: { version: details.version, exercises: details.exercises }, strengthLoading: false,
+          } : session);
+        }).catch(error => {
+          if (generation !== this.editorGeneration || this.destroyRef.destroyed) return;
+          this.editor.update(session => session ? { ...session, strengthLoading: false } : session);
+          this.showError(error);
+        });
+      }
       return true;
     } catch (error) {
       this.showError(error);
@@ -812,13 +848,82 @@ export class PlansWorkspaceComponent {
 
   updateEditorField<K extends keyof ManualWorkoutEditorValue>(field: K, value: ManualWorkoutEditorValue[K]): void {
     if (this.busyAction() || this.editor()?.value[field] === value) return;
+    if (field === 'sport' && this.editor()?.mode === 'edit'
+      && (this.editor()?.value.sport === ActivityTypes.StrengthTraining || value === ActivityTypes.StrengthTraining)) return;
     if (field === 'sport' || field === 'poolLengthUnit') this.haptics.selection();
-    this.editor.update(session => session ? {
-      ...session,
-      value: field === 'sport'
-        ? changeManualWorkoutEditorSport(session.value, value as ManualWorkoutSport, this.currentUser()?.settings?.unitSettings)
-        : { ...session.value, [field]: value },
-    } : null);
+    this.editor.update(session => {
+      if (!session) return null;
+      if (field !== 'sport') return { ...session, value: { ...session.value, [field]: value } };
+      const sport = value as ManualWorkoutSport;
+      if (sport === ActivityTypes.StrengthTraining) return {
+        ...session,
+        value: { ...session.value, sport, nodes: [], poolLengthValue: null },
+        strength: { version: 1, exercises: [{ id: this.nextNodeId('exercise'), name: '',
+          sets: [{ id: this.nextNodeId('set'), ending: { kind: 'repetitions', repetitions: 8 } }] }] } as StrengthWorkoutDraftV1,
+      };
+      const manual = session.value.sport === ActivityTypes.StrengthTraining
+        ? { ...session.value, sport, nodes: [createManualWorkoutEditorStep(this.nextNodeId('step'))] }
+        : changeManualWorkoutEditorSport(session.value, sport, this.currentUser()?.settings?.unitSettings);
+      return { ...session, value: manual, strength: null };
+    });
+  }
+
+  addStrengthExercise(): void {
+    this.editor.update(session => session?.strength ? { ...session, strength: {
+      ...session.strength, exercises: [...session.strength.exercises, { id: this.nextNodeId('exercise'), name: '',
+        sets: [{ id: this.nextNodeId('set'), ending: { kind: 'repetitions' as const, repetitions: 8 } }] }],
+    } } : session);
+  }
+
+  removeStrengthExercise(index: number): void {
+    this.editor.update(session => session?.strength ? { ...session, strength: {
+      ...session.strength, exercises: session.strength.exercises.filter((_, candidate) => candidate !== index),
+    } } : session);
+  }
+
+  updateStrengthExerciseName(index: number, name: string): void {
+    this.editor.update(session => session?.strength ? { ...session, strength: {
+      ...session.strength, exercises: session.strength.exercises.map((exercise, candidate) =>
+        candidate === index ? { ...exercise, name } : exercise),
+    } } : session);
+  }
+
+  addStrengthSet(exerciseIndex: number): void {
+    this.editor.update(session => session?.strength ? { ...session, strength: {
+      ...session.strength, exercises: session.strength.exercises.map((exercise, candidate) => candidate === exerciseIndex
+        ? { ...exercise, sets: [...exercise.sets, { id: this.nextNodeId('set'),
+          ending: { kind: 'repetitions' as const, repetitions: 8 } }] }
+        : exercise),
+    } } : session);
+  }
+
+  removeStrengthSet(exerciseIndex: number, setIndex: number): void {
+    this.editor.update(session => session?.strength ? { ...session, strength: {
+      ...session.strength, exercises: session.strength.exercises.map((exercise, candidate) => candidate === exerciseIndex
+        ? { ...exercise, sets: exercise.sets.filter((_, index) => index !== setIndex) }
+        : exercise),
+    } } : session);
+  }
+
+  updateStrengthSet(exerciseIndex: number, setIndex: number,
+    field: 'kind' | 'value' | 'externalLoadKg' | 'restAfterSeconds', value: unknown): void {
+    if (this.busyAction()) return;
+    if (field === 'kind') this.haptics.selection();
+    this.editor.update(session => session?.strength ? { ...session, strength: {
+      ...session.strength, exercises: session.strength.exercises.map((exercise, candidate) => candidate === exerciseIndex
+        ? { ...exercise, sets: exercise.sets.map((set, index): StrengthSetV1 => {
+          if (index !== setIndex) return set;
+          if (field === 'kind') return { ...set, ending: value === 'time'
+            ? { kind: 'time', seconds: 30 } : { kind: 'repetitions', repetitions: 8 } };
+          if (field === 'value') return { ...set, ending: set.ending.kind === 'time'
+            ? { kind: 'time', seconds: Number(value) }
+            : { kind: 'repetitions', repetitions: Number(value) } };
+          const next = { ...set };
+          if (value === '' || value === null) delete next[field];
+          else next[field] = Number(value);
+          return next;
+        }) } : exercise),
+    } } : session);
   }
 
   updateWorkoutDate(value: Dayjs | null): void {
@@ -948,7 +1053,10 @@ export class PlansWorkspaceComponent {
     }
     let structure;
     try {
-      structure = manualWorkoutEditorToStructure(session.value, this.currentUser()?.settings?.unitSettings);
+      structure = session.value.sport === ActivityTypes.StrengthTraining
+        ? projectStrengthWorkoutToV1({ ...parseStrengthWorkoutDraftV1(session.strength),
+          workoutId: session.original?.id ?? 'draft', revision: 1 })
+        : manualWorkoutEditorToStructure(session.value, this.currentUser()?.settings?.unitSettings);
       normalizeTrainingLocalDate(session.value.localDate);
     } catch (error) {
       this.showError(error);
@@ -968,6 +1076,7 @@ export class PlansWorkspaceComponent {
           localDate: session.value.localDate,
           title,
           structure,
+          ...(session.strength ? { strength: session.strength } : {}),
           confirmPlanRangeExtension: false,
         },
       }, 'save-workout');
@@ -996,6 +1105,7 @@ export class PlansWorkspaceComponent {
         localDate: session.value.localDate,
         title,
         structure,
+        ...(session.strength ? { strength: session.strength } : {}),
         confirmPlanRangeExtension: false,
       },
     }, 'save-workout');
@@ -1268,7 +1378,7 @@ export class PlansWorkspaceComponent {
     this.snackBar.open(errorMessage(error), 'Dismiss', { duration: 7000 });
   }
 
-  private nextNodeId(prefix: 'step' | 'repeat'): string {
+  private nextNodeId(prefix: 'step' | 'repeat' | 'exercise' | 'set'): string {
     this.nodeSequence += 1;
     return `${prefix}-${Date.now().toString(36)}-${this.nodeSequence}`;
   }

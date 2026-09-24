@@ -15,6 +15,7 @@ import { DELIVERY_LEDGER, DELIVERY_RECEIPTS, DELIVERY_SCOPES, DELIVERY_STATE, ty
 import { deliveryIdentity } from './intent';
 import { assessTrainingDeliveryMapping } from './mapping';
 import { stageTrainingDeliveryReconciliation } from './marker';
+import { readStrengthDetailsForDelivery } from './store';
 import { productionDeliveryRuntime } from './runtime';
 import type { TrainingVerificationReceiptV1 } from '../../../../shared/training-provider-verification';
 import { VERIFICATION_COALESCE_MS } from './verification-contracts';
@@ -107,7 +108,8 @@ export async function trainingDeliveryCommand(runtime: DeliveryRuntime, uid: str
       .docs.map(doc => parseScheduledWorkoutV1(doc.data()));
     if (workouts.length > 400) throw new HttpsError('resource-exhausted', 'Plan exceeds the delivery limit.');
     const today = trainingDeliveryLocalDate(runtime.now(), timeZone);
-    const assessments = workouts.map(item => transport?.assess(item, connection.destinationKey, timeZone)
+    const strengths = await Promise.all(workouts.map(item => readStrengthDetailsForDelivery(tx, user, item)));
+    const assessments = workouts.map((item, index) => transport?.assess(item, connection.destinationKey, timeZone, strengths[index])
       ?? assessTrainingDeliveryMapping(command.provider, item, connection.destinationKey, timeZone));
     const preview: TrainingDeliveryPreviewV1 = { schemaVersion: 1, available: !!transport,
       connection: connection.state, hasPro: pro, timeZone,

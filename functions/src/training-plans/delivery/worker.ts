@@ -75,7 +75,7 @@ export async function processTrainingDelivery(runtime: DeliveryRuntime, uid: str
     ledger.issues = intent.issues;
     ledger.approvalDigest = intent.approvalDigest;
     ledger.timeZone = intent.timeZone;
-    ledger.contentDigest = deliveryContentDigest(workout, intent.timeZone);
+    ledger.contentDigest = deliveryContentDigest(workout, intent.timeZone, context.strength);
     const recover = !!ledger.attempt;
     if (!ledger.attempt) {
       const kind = intent.desired === 'present' && ledger.acceptedDigest !== intent.digest ? 'upsert'
@@ -107,7 +107,9 @@ export async function processTrainingDelivery(runtime: DeliveryRuntime, uid: str
       ledger.attempt = { id: randomUUID(), kind, deliveryId: id, generation: ledger.desiredGeneration,
         connectionGeneration: context.connection.generation, destinationKey: ledger.destinationKey,
         timeZone: intent.timeZone, digest: intent.digest, contentDigest: ledger.contentDigest,
-        workout: kind === 'upsert' ? workout : null, artifact: ledger.actual ?? (kind === 'remove' ? ledger.repair?.original ?? null : null), progress: null,
+        workout: kind === 'upsert' ? workout : null,
+        ...(kind === 'upsert' && context.strength ? { strength: context.strength } : {}),
+        artifact: ledger.actual ?? (kind === 'remove' ? ledger.repair?.original ?? null : null), progress: null,
         ...(ledger.repair ? { repair: ledger.repair } : {}) };
       tx.create(ledgerRef.collection('attempts').doc(ledger.attempt.id), {
         schemaVersion: 1, operation: ledger.attempt, state: 'started', startedAtMs: runtime.now(),

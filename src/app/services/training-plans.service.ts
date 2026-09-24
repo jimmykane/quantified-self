@@ -5,6 +5,7 @@ import {
   collectionData,
   doc,
   docData,
+  getDoc,
 } from 'app/firebase/firestore';
 import { combineLatest, map, Observable, of, shareReplay } from 'rxjs';
 import {
@@ -31,6 +32,12 @@ import {
   type TrainingScheduleRestorePreviewV1,
 } from '@shared/training-plans';
 import { AppFunctionsService } from './app.functions.service';
+import {
+  STRENGTH_DETAILS_COLLECTION_ID,
+  STRENGTH_DETAILS_DOCUMENT_ID,
+  parseStrengthWorkoutDetailsV1,
+  type StrengthWorkoutDetailsV1,
+} from '@shared/strength-workout';
 import { BrowserCompatibilityService } from './browser.compatibility.service';
 import {
   TRAINING_WORKOUT_COMPLETIONS_COLLECTION_ID,
@@ -138,6 +145,15 @@ export class TrainingPlansService {
     );
     this.completionStreams.set(uid, completions$);
     return completions$;
+  }
+
+  async getStrengthDetails(userId: string, workoutId: string): Promise<StrengthWorkoutDetailsV1> {
+    const snapshot = await getDoc(doc(this.firestore, 'users', userId, SCHEDULED_WORKOUTS_COLLECTION_ID,
+      workoutId, STRENGTH_DETAILS_COLLECTION_ID, STRENGTH_DETAILS_DOCUMENT_ID));
+    if (!snapshot.exists()) throw new Error('The strength prescription is missing. Reload before editing this workout.');
+    const details = parseStrengthWorkoutDetailsV1(snapshot.data());
+    if (details.workoutId !== workoutId) throw new Error('The strength prescription does not match this workout.');
+    return details;
   }
 
   createMutationId(prefix: string): string {

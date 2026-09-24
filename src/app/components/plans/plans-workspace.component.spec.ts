@@ -11,6 +11,7 @@ import { MatFormField } from '@angular/material/form-field';
 import { ActivatedRoute, Router, convertToParamMap, provideRouter, type Data, type ParamMap } from '@angular/router';
 import { ActivityTypes, DistanceUnits } from '@sports-alliance/sports-lib';
 import { normalizeUserUnitSettings } from '@shared/unit-aware-display';
+import { projectStrengthWorkoutToV1 } from '@shared/strength-workout';
 import dayjs from 'dayjs';
 import { BehaviorSubject, Subject, concat, defer, of, type Observable } from 'rxjs';
 import { AppUserService } from '../../services/app.user.service';
@@ -44,6 +45,7 @@ describe('PlansWorkspaceComponent', () => {
   let watchWorkoutCompletions: ReturnType<typeof vi.fn>;
   let mutate: ReturnType<typeof vi.fn>;
   let getHistory: ReturnType<typeof vi.fn>;
+  let getStrengthDetails: ReturnType<typeof vi.fn>;
   let previewRestore: ReturnType<typeof vi.fn>;
   let restoreSchedule: ReturnType<typeof vi.fn>;
   let deleteTrainingPlan: ReturnType<typeof vi.fn>;
@@ -79,6 +81,7 @@ describe('PlansWorkspaceComponent', () => {
       permanentlyDeletedWorkoutIds: [],
     }));
     getHistory = vi.fn();
+    getStrengthDetails = vi.fn();
     previewRestore = vi.fn();
     restoreSchedule = vi.fn();
     deleteTrainingPlan = vi.fn();
@@ -105,6 +108,7 @@ describe('PlansWorkspaceComponent', () => {
             createMutationId: vi.fn().mockReturnValue('mutation-1'),
             mutate,
             getHistory,
+            getStrengthDetails,
             previewRestore,
             restore: restoreSchedule,
             deletePlan: deleteTrainingPlan,
@@ -756,7 +760,48 @@ describe('PlansWorkspaceComponent', () => {
           { value: ActivityTypes.IndoorRowing, label: 'Indoor Rowing' },
         ],
       },
+      { label: 'Strength', options: [{ value: ActivityTypes.StrengthTraining, label: 'Strength Training' }] },
     ]);
+  });
+
+  it('creates an exercise-aware strength workout with reps, hold, load and rest', async () => {
+    setRouteState({ mode: 'create', scope: 'standalone', date: '2026-09-24' });
+    const fixture = await renderPlans();
+    const editor = fixture.componentInstance;
+    editor.updateEditorField('sport', ActivityTypes.StrengthTraining);
+    editor.updateEditorField('title', 'Gym session');
+    editor.updateStrengthExerciseName(0, 'Squat');
+    editor.updateStrengthSet(0, 0, 'value', 5);
+    editor.updateStrengthSet(0, 0, 'externalLoadKg', 80);
+    editor.updateStrengthSet(0, 0, 'restAfterSeconds', 120);
+    editor.addStrengthSet(0);
+    editor.updateStrengthSet(0, 1, 'kind', 'time');
+    editor.updateStrengthSet(0, 1, 'value', 30);
+    fixture.detectChanges();
+    expect(fixture.nativeElement.textContent).toContain('Exercises and sets');
+    expect(fixture.nativeElement.textContent).toContain('External load (kg, optional)');
+    await editor.saveWorkout();
+    expect(mutate).toHaveBeenCalledWith(expect.objectContaining({ operation: expect.objectContaining({
+      kind: 'create-workout', strength: expect.objectContaining({ exercises: [expect.objectContaining({
+        name: 'Squat', sets: [expect.objectContaining({ externalLoadKg: 80, restAfterSeconds: 120 }),
+          expect.objectContaining({ ending: { kind: 'time', seconds: 30 } })],
+      })] }), structure: expect.objectContaining({ sport: ActivityTypes.StrengthTraining }),
+    }) }));
+  });
+
+  it('loads a strength companion before editing and rejects a missing companion', async () => {
+    const strength = { version: 1 as const, workoutId: 'standalone-workout', revision: 1,
+      exercises: [{ id: 'squat', name: 'Squat', sets: [{ id: 'set-one',
+        ending: { kind: 'repetitions' as const, repetitions: 5 }, externalLoadKg: 80 }] }] };
+    schedule = { ...populatedSchedule(), workouts: populatedSchedule().workouts.map(workout => workout.id === 'standalone-workout'
+      ? { ...workout, structure: projectStrengthWorkoutToV1(strength) } : workout) };
+    getStrengthDetails.mockResolvedValue(strength);
+    setRouteState({ mode: 'edit', workoutId: 'standalone-workout' });
+    const fixture = await renderPlans();
+    await fixture.whenStable();
+    fixture.detectChanges();
+    expect(fixture.componentInstance.editor()?.strength?.exercises[0].sets[0].externalLoadKg).toBe(80);
+    expect(getStrengthDetails).toHaveBeenCalledWith('planning-user', 'standalone-workout');
   });
 
   it('edits pool-swim distance in metres and shows the swim-pace unit', async () => {

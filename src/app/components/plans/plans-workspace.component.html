@@ -320,7 +320,8 @@
                 @for (group of sportOptionGroups; track group.label) {
                   <mat-optgroup [label]="group.label">
                     @for (sport of group.options; track sport.value) {
-                      <mat-option [value]="sport.value">{{ sport.label }}</mat-option>
+                      <mat-option [value]="sport.value"
+                        [disabled]="session.mode === 'edit' && (sport.value === strengthSport || session.value.sport === strengthSport) && sport.value !== session.value.sport">{{ sport.label }}</mat-option>
                     }
                   </mat-optgroup>
                 }
@@ -373,6 +374,82 @@
             }
           </fieldset>
 
+          @if (editorIsStrength()) {
+            <section class="workout-nodes" aria-labelledby="strength-exercises-title">
+              <div class="workout-nodes-heading">
+                <div>
+                  <h2 id="strength-exercises-title">Exercises and sets</h2>
+                  <p>List each exercise in order. Repetitions, timed holds, load, and rest stay with this workout.</p>
+                </div>
+                <button appHapticTap mat-stroked-button type="button" (click)="addStrengthExercise()"
+                  [disabled]="busyAction() !== null || session.strengthLoading">
+                  <mat-icon aria-hidden="true">add</mat-icon><span>Add exercise</span>
+                </button>
+              </div>
+              @if (session.strengthLoading) {
+                <p role="status">Loading exercise prescription…</p>
+              } @else if (session.strength; as strength) {
+                @for (exercise of strength.exercises; track exercise.id; let exerciseIndex = $index; let lastExercise = $last) {
+                  <app-compact-row class="workout-node-row" layout="stacked" density="compact"
+                    [title]="exercise.name || 'Exercise ' + (exerciseIndex + 1)"
+                    [titleId]="'strength-exercise-' + exercise.id" [showDivider]="!lastExercise">
+                    <button compactRowAction appHapticTap mat-icon-button type="button" matTooltip="Remove exercise"
+                      [attr.aria-label]="'Remove exercise ' + (exerciseIndex + 1)" (click)="removeStrengthExercise(exerciseIndex)"
+                      [disabled]="busyAction() !== null || strength.exercises.length === 1">
+                      <mat-icon aria-hidden="true">delete</mat-icon>
+                    </button>
+                    <div class="strength-exercise-fields">
+                      <mat-form-field subscriptSizing="dynamic">
+                        <mat-label>Exercise name</mat-label>
+                        <input matInput maxlength="80" [ngModel]="exercise.name"
+                          (ngModelChange)="updateStrengthExerciseName(exerciseIndex, $event)">
+                      </mat-form-field>
+                      @for (set of exercise.sets; track set.id; let setIndex = $index) {
+                        <div class="strength-set-fields" [attr.aria-label]="exercise.name + ' set ' + (setIndex + 1)">
+                          <span class="strength-set-number">Set {{ setIndex + 1 }}</span>
+                          <mat-form-field subscriptSizing="dynamic">
+                            <mat-label>Set type</mat-label>
+                            <mat-select [value]="set.ending.kind"
+                              (selectionChange)="updateStrengthSet(exerciseIndex, setIndex, 'kind', $event.value)">
+                              <mat-option value="repetitions">Repetitions</mat-option>
+                              <mat-option value="time">Timed hold</mat-option>
+                            </mat-select>
+                          </mat-form-field>
+                          <mat-form-field subscriptSizing="dynamic">
+                            <mat-label>{{ set.ending.kind === 'time' ? 'Seconds' : 'Reps' }}</mat-label>
+                            <input matInput type="number" min="1" step="1"
+                              [ngModel]="set.ending.kind === 'time' ? set.ending.seconds : set.ending.repetitions"
+                              (ngModelChange)="updateStrengthSet(exerciseIndex, setIndex, 'value', $event)">
+                          </mat-form-field>
+                          <mat-form-field subscriptSizing="dynamic">
+                            <mat-label>External load (kg, optional)</mat-label>
+                            <input matInput type="number" min="0" step="0.5" [ngModel]="set.externalLoadKg ?? null"
+                              (ngModelChange)="updateStrengthSet(exerciseIndex, setIndex, 'externalLoadKg', $event)">
+                          </mat-form-field>
+                          <mat-form-field subscriptSizing="dynamic">
+                            <mat-label>Rest after (seconds, optional)</mat-label>
+                            <input matInput type="number" min="1" step="1" [ngModel]="set.restAfterSeconds ?? null"
+                              (ngModelChange)="updateStrengthSet(exerciseIndex, setIndex, 'restAfterSeconds', $event)">
+                          </mat-form-field>
+                          <button appHapticTap mat-icon-button type="button" matTooltip="Remove set"
+                            [attr.aria-label]="'Remove set ' + (setIndex + 1) + ' of ' + exercise.name"
+                            (click)="removeStrengthSet(exerciseIndex, setIndex)" [disabled]="busyAction() !== null || exercise.sets.length === 1">
+                            <mat-icon aria-hidden="true">remove_circle</mat-icon>
+                          </button>
+                        </div>
+                      }
+                      <button appHapticTap mat-button type="button" (click)="addStrengthSet(exerciseIndex)"
+                        [disabled]="busyAction() !== null">
+                        <mat-icon aria-hidden="true">add</mat-icon><span>Add set</span>
+                      </button>
+                    </div>
+                  </app-compact-row>
+                }
+              } @else {
+                <p role="alert">Exercise details are unavailable. Reload before editing this workout.</p>
+              }
+            </section>
+          } @else {
           <section class="workout-nodes" aria-labelledby="workout-steps-title">
             <div class="workout-nodes-heading">
               <div>
@@ -431,6 +508,7 @@
               </app-compact-row>
             }
           </section>
+          }
           </fieldset>
           @if (savedEditorWorkout(); as workout) {
             <app-training-delivery-button scope="workout" [entityId]="workout.id" [title]="workout.title"
@@ -440,7 +518,7 @@
         <div class="form-actions editor-save-actions">
           <button appHapticTap mat-button type="button" (click)="cancelEditor()" [disabled]="busyAction() !== null">Cancel</button>
           <button appHapticTap mat-flat-button type="button" (click)="saveWorkout()"
-            [disabled]="busyAction() !== null || !session.value.title.trim() || !workoutDatePickerValue() || workoutDateInputInvalid() || session.value.nodes.length === 0">
+            [disabled]="busyAction() !== null || !session.value.title.trim() || !workoutDatePickerValue() || workoutDateInputInvalid() || (editorIsStrength() ? session.strengthLoading || !session.strength : session.value.nodes.length === 0)">
             <span class="button-content">
               @if (busyAction() === 'save-workout') {
                 <mat-spinner diameter="18"></mat-spinner>

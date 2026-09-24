@@ -1,4 +1,5 @@
 import type { ScheduledWorkoutV1 } from '../../../../../shared/training-plans';
+import type { StrengthWorkoutDetailsV1 } from '../../../../../shared/strength-workout';
 import { normalizeTrainingLocalDate } from '../../../../../shared/training-plans';
 import { trainingDeliveryLocalDate } from '../../../../../shared/training-provider-delivery';
 import { hashTrainingScheduleRequestPayload } from '../../persistence';
@@ -40,7 +41,9 @@ export class SuuntoGuideTransport implements TrainingDeliveryTransport {
           nextCursor: !matching.length && rows.length === 50 ? String(offset + 50) : null } };
     } };
   }
-  assess(workout: ScheduledWorkoutV1, destination: string, zone: string) { return assessSuuntoGuide(workout, destination, zone, this.owner); }
+  assess(workout: ScheduledWorkoutV1, destination: string, zone: string, strength?: StrengthWorkoutDetailsV1 | null) {
+    return assessSuuntoGuide(workout, destination, zone, this.owner, strength);
+  }
   canRemove(artifact: DeliveryArtifact, today: string): boolean { return !artifact.completed && artifact.localDate >= today; }
   private offset(value: string): number {
     if (!/^(0|[1-9]\d{0,6})$/.test(value)) throw new TrainingDeliveryTransportError('uncertain');
@@ -122,9 +125,9 @@ export class SuuntoGuideTransport implements TrainingDeliveryTransport {
       }
       await this.save(operation, checkpoint, null, 'finished', 'accepted'); return null;
     }
-    const assessment = this.assess(operation.workout!, operation.destinationKey, operation.timeZone);
+    const assessment = this.assess(operation.workout!, operation.destinationKey, operation.timeZone, operation.strength);
     if (assessment.digest !== operation.digest || assessment.level === 'unsupported') throw new TrainingDeliveryTransportError('terminal');
-    const payload = guideMapping(operation.workout!, operation.destinationKey, this.owner).artifact;
+    const payload = guideMapping(operation.workout!, operation.destinationKey, this.owner, operation.strength).artifact;
     if (operation.artifact) {
       const raw = await this.read(operation.artifact, guard);
       if (!raw || (raw.localDate !== operation.artifact.localDate && raw.localDate !== payload.localDate)) throw new TrainingDeliveryTransportError('uncertain');
@@ -150,7 +153,7 @@ export class SuuntoGuideTransport implements TrainingDeliveryTransport {
   }
   private async discover(operation: DeliveryOperation, checkpoint: DeliveryCheckpoint, guard: DeliveryRequestGuard, offset: number): Promise<DeliveryRecovery> {
     if (!operation.workout) return { kind: 'uncertain' };
-    const expected = guideMapping(operation.workout, operation.destinationKey, this.owner).artifact;
+    const expected = guideMapping(operation.workout, operation.destinationKey, this.owner, operation.strength).artifact;
     // Resume after three pages, retaining an uncertain-create journal. Empty/unstable
     // coverage NEVER changes it to not-accepted and never authorizes another POST.
     for (let page = 0; page < 3; page++, offset += 50) {
@@ -183,7 +186,7 @@ export class SuuntoGuideTransport implements TrainingDeliveryTransport {
     if (!operation.artifact) return { kind: 'uncertain' };
     const raw = await this.read(operation.artifact, guard);
     if (!raw) return { kind: 'uncertain' }; // Even DELETE 404 does not prove owned absence.
-    if (progress.step === 'update' && operation.workout && equal(raw, guideMapping(operation.workout, operation.destinationKey, this.owner).artifact)) {
+    if (progress.step === 'update' && operation.workout && equal(raw, guideMapping(operation.workout, operation.destinationKey, this.owner, operation.strength).artifact)) {
       const artifact = { ...operation.artifact, localDate: operation.workout.localDate };
       await this.save(operation, checkpoint, artifact, 'finished', 'accepted'); return { kind: 'accepted', artifact };
     }

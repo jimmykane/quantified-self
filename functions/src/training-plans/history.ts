@@ -1,5 +1,11 @@
 import * as admin from 'firebase-admin';
 import { gunzipSync } from 'node:zlib';
+import { ActivityTypes } from '@sports-alliance/sports-lib';
+import {
+    parseStrengthWorkoutDetailsV1,
+    strengthProjectionMatchesDetails,
+    type StrengthWorkoutDetailsV1,
+} from '../../../shared/strength-workout';
 import {
     SCHEDULED_WORKOUTS_COLLECTION_ID,
     TRAINING_PLAN_REVISIONS_COLLECTION_ID,
@@ -37,6 +43,20 @@ const MAX_HISTORY_LIMIT = 50;
 export interface ReconstructedTrainingPlanRevisionV1 {
     plan: TrainingPlanV1;
     workouts: Map<string, ScheduledWorkoutV1>;
+    strengthDetails?: Map<string, StrengthWorkoutDetailsV1>;
+}
+
+function checkedStrength(workout: ScheduledWorkoutV1 | null, candidate: unknown, path: string): StrengthWorkoutDetailsV1 | null {
+    if (!workout || workout.structure.sport !== ActivityTypes.StrengthTraining) {
+        if (candidate !== undefined && candidate !== null) throw new Error(`${path} has strength details without Strength Training.`);
+        return null;
+    }
+    if (candidate === undefined || candidate === null) throw new Error(`${path} is missing strength details.`);
+    const details = parseStrengthWorkoutDetailsV1(candidate);
+    if (details.workoutId !== workout.id || !strengthProjectionMatchesDetails(workout.structure, details)) {
+        throw new Error(`${path} has mismatched strength details.`);
+    }
+    return details;
 }
 
 function asRecord(value: unknown, path: string): Record<string, unknown> {
@@ -196,13 +216,27 @@ function parsePlanRevision(value: unknown): TrainingPlanRevisionDocumentV1 {
 
 function parseWorkoutDelta(value: unknown, path: string): TrainingPlanWorkoutDeltaV1 {
     const record = asRecord(value, path);
-    rejectUnknownFields(record, ['workoutId', 'before', 'after'], path);
+    rejectUnknownFields(record, ['workoutId', 'before', 'after', 'strengthBefore', 'strengthAfter'], path);
     if (typeof record.workoutId !== 'string') throw new Error('Invalid workout delta ID.');
     const before = record.before === null ? null : parseScheduledWorkoutV1(record.before);
     const after = record.after === null ? null : parseScheduledWorkoutV1(record.after);
     if (before?.id !== undefined && before.id !== record.workoutId) throw new Error('Workout delta before ID mismatch.');
     if (after?.id !== undefined && after.id !== record.workoutId) throw new Error('Workout delta after ID mismatch.');
-    return { workoutId: record.workoutId, before, after };
+    const strengthBefore = checkedStrength(before, record.strengthBefore, `${path}.strengthBefore`);
+    const strengthAfter = checkedStrength(after, record.strengthAfter, `${path}.strengthAfter`);
+    return { workoutId: record.workoutId, before, after,
+        ...(strengthBefore || strengthAfter ? { strengthBefore, strengthAfter } : {}) };
+}
+
+function parsePlanCheckpointWorkout(value: unknown): { workout: ScheduledWorkoutV1; strength: StrengthWorkoutDetailsV1 | null } {
+    const record = asRecord(value, '$checkpoint.workout');
+    if (Object.prototype.hasOwnProperty.call(record, 'workout')) {
+        rejectUnknownFields(record, ['workout', 'strength'], '$checkpoint.workout');
+        const workout = parseScheduledWorkoutV1(record.workout);
+        return { workout, strength: checkedStrength(workout, record.strength, '$checkpoint.strength') };
+    }
+    const workout = parseScheduledWorkoutV1(value);
+    return { workout, strength: checkedStrength(workout, undefined, '$checkpoint.strength') };
 }
 
 async function readRevisionChunkPayload<T>(params: {
@@ -261,7 +295,7 @@ async function readRevisionChunkPayload<T>(params: {
 function parseStandaloneRevision(value: unknown): StandaloneWorkoutRevisionDocumentV1 {
     const record = asRecord(value, '$revision');
     rejectUnknownFields(record, [
-        'schemaVersion', 'revision', 'mutationId', 'operationKind', 'createdAtMs', 'snapshot',
+        'schemaVersion', 'revision', 'mutationId', 'operationKind', 'createdAtMs', 'snapshot', 'strength',
     ], '$revision');
     if (record.schemaVersion !== TRAINING_PLAN_SCHEMA_VERSION) throw new Error('Unsupported workout revision schema.');
     if (typeof record.mutationId !== 'string' || typeof record.operationKind !== 'string') {
@@ -271,13 +305,16 @@ function parseStandaloneRevision(value: unknown): StandaloneWorkoutRevisionDocum
     if (!Number.isSafeInteger(createdAtMs) || createdAtMs < 0) {
         throw new Error('Invalid workout revision timestamp.');
     }
+    const snapshot = parseScheduledWorkoutV1(record.snapshot);
+    const strength = checkedStrength(snapshot, record.strength, '$revision.strength');
     return {
         schemaVersion: TRAINING_PLAN_SCHEMA_VERSION,
         revision: readPositiveInteger(record.revision, '$revision.revision'),
         mutationId: record.mutationId,
         operationKind: record.operationKind,
         createdAtMs,
-        snapshot: parseScheduledWorkoutV1(record.snapshot),
+        snapshot,
+        ...(strength ? { strength } : {}),
     };
 }
 
@@ -361,14 +398,18 @@ export async function readPlanSnapshotAtRevision(
         kind: 'checkpoint-workouts',
         itemCount: checkpointRevision.checkpoint.workoutCount,
         chunkCount: checkpointRevision.checkpoint.workoutChunkCount,
-        parseItem: value => parseScheduledWorkoutV1(value),
+        parseItem: parsePlanCheckpointWorkout,
     });
-    const workouts = new Map(checkpointWorkouts.map((workout) => {
+    const workouts = new Map(checkpointWorkouts.map(({ workout }) => {
         if (workout.planId !== planId || workout.lifecycle === 'deleted') {
             throw new Error('The plan checkpoint contains an invalid workout.');
         }
         return [workout.id, workout];
     }));
+    const strengthDetails = new Map<string, StrengthWorkoutDetailsV1>();
+    checkpointWorkouts.forEach(({ workout, strength }) => {
+        if (strength) strengthDetails.set(workout.id, strength);
+    });
 
     const followingRevisionNumbers = Array.from(
         { length: targetRevision - target.checkpointRevision },
@@ -396,21 +437,24 @@ export async function readPlanSnapshotAtRevision(
             workoutDeltas.forEach((delta) => {
                 if (delta.after?.planId === planId && delta.after.lifecycle !== 'deleted') {
                     workouts.set(delta.workoutId, delta.after);
+                    if (delta.strengthAfter) strengthDetails.set(delta.workoutId, delta.strengthAfter);
+                    else strengthDetails.delete(delta.workoutId);
                 } else {
                     workouts.delete(delta.workoutId);
+                    strengthDetails.delete(delta.workoutId);
                 }
             });
         }
     }
-    return { plan, workouts };
+    return { plan, workouts, strengthDetails };
 }
 
-export async function readStandaloneWorkoutAtRevision(
+export async function readStandaloneWorkoutRevisionAt(
     db: admin.firestore.Firestore,
     uid: string,
     workoutId: string,
     targetRevision: number,
-): Promise<ScheduledWorkoutV1> {
+): Promise<{ workout: ScheduledWorkoutV1; strength: StrengthWorkoutDetailsV1 | null }> {
     const revisionRef = db.collection('users').doc(uid)
         .collection(SCHEDULED_WORKOUTS_COLLECTION_ID).doc(workoutId)
         .collection(TRAINING_PLAN_REVISIONS_COLLECTION_ID)
@@ -419,7 +463,16 @@ export async function readStandaloneWorkoutAtRevision(
     if (!snapshot.exists) throw new TrainingScheduleMutationError('not-found', 'The requested workout revision was not found.');
     const revision = parseStandaloneRevision(documentData(snapshot));
     if (revision.revision !== targetRevision) throw new Error('Workout revision document ID mismatch.');
-    return revision.snapshot;
+    return { workout: revision.snapshot, strength: revision.strength ?? null };
+}
+
+export async function readStandaloneWorkoutAtRevision(
+    db: admin.firestore.Firestore,
+    uid: string,
+    workoutId: string,
+    targetRevision: number,
+): Promise<ScheduledWorkoutV1> {
+    return (await readStandaloneWorkoutRevisionAt(db, uid, workoutId, targetRevision)).workout;
 }
 
 function valuesEqual(left: unknown, right: unknown): boolean {

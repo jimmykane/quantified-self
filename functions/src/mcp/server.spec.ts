@@ -442,6 +442,9 @@ describe('MCP HTTP scope enforcement', () => {
       },
     } })).toEqual([MCP_OAUTH_SCOPES.TrainingPlansRead, MCP_OAUTH_SCOPES.TrainingPlansWrite,
       MCP_OAUTH_SCOPES.TrainingDeliveryWrite]);
+    expect(requiredScopesForRequest({ method: 'tools/call', params: {
+      name: 'preview_strength_workout_change', arguments: { expectedScheduleRevision: 1 },
+    } })).toEqual([MCP_OAUTH_SCOPES.TrainingPlansRead, MCP_OAUTH_SCOPES.TrainingPlansWrite]);
     expect(requiredScopesForRequest({ method: 'tools/call', params: { name: 'preview_training_changes', arguments: {
       expectedScheduleRevision: 1, changes: [{ kind: 'rename-plan' }],
     } } })).toEqual([MCP_OAUTH_SCOPES.TrainingPlansRead, MCP_OAUTH_SCOPES.TrainingPlansWrite]);
@@ -777,11 +780,13 @@ describe('MCP HTTP scope enforcement', () => {
       'get_planned_workout',
       'get_planned_workout_completion',
       'get_planned_workout_completions',
+      'get_strength_workout_details',
       'get_training_plan',
       'get_training_sync_status',
       'list_activity_types',
       'list_training_plans',
       'preview_create_planned_workout',
+      'preview_strength_workout_change',
       'preview_training_changes',
       'query_planned_workouts',
       'query_planned_workouts_by_date',
@@ -809,7 +814,7 @@ describe('MCP HTTP scope enforcement', () => {
       MCP_OAUTH_SCOPES.TrainingPlansRead,
       MCP_OAUTH_SCOPES.TrainingPlansWrite,
     ]);
-    expect(writeInstructions).toContain('Construct workout recipes only from the advertised v1 schema');
+    expect(writeInstructions).toContain('Construct non-strength workout recipes only from the advertised v1 schema');
     expect(writeInstructions).toContain('query_planned_workouts_by_date');
     expect(writeInstructions).toContain('get_planned_workout_completions');
     expect(writeInstructions).toContain('local mapping assessment, not a live provider/account check');

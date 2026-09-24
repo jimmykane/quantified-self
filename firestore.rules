@@ -320,6 +320,13 @@ service cloud.firestore {
           allow read: if isOwner();
           allow write: if false;
 
+          // Full strength prescription is owner-readable. Only the server may
+          // derive and persist its V1 workout projection and companion together.
+          match /strengthDetails/{detailsID} {
+            allow read: if isOwner() && detailsID == 'current';
+            allow write: if false;
+          }
+
           match /{document=**} {
             allow read, write: if false;
           }

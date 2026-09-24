@@ -18,6 +18,7 @@ import { suuntoFitFixture, suuntoMultiSessionFitFixture } from '../test-support/
 import { guideExternalId } from './mapping';
 import type { TrainingDeliveryCommandV1 } from '../../../../../shared/training-provider-delivery';
 import { TRAINING_DELIVERY_VERIFICATIONS } from '../../../../../shared/training-provider-verification';
+import { projectStrengthWorkoutToV1 } from '../../../../../shared/strength-workout';
 
 describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Suunto worker with real Firestore, synthetic provider only', { timeout: 30_000 }, () => {
   const host = process.env.FIRESTORE_EMULATOR_HOST;
@@ -92,6 +93,46 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Suunto worker with real F
     });
     expect((await send()).status).toBe('delivered');
     expect([...server.guides.values()][0].guide.activities).toEqual([activityId]);
+  });
+  it('approves degraded Gym Guide delivery and updates one retained copy after strength load changes', async () => {
+    const details = { version: 1 as const, workoutId: 'w', revision: 1, exercises: [{ id: 'squat', name: 'Back squat', sets: [
+      { id: 'set-one', ending: { kind: 'repetitions' as const, repetitions: 5 }, externalLoadKg: 80, restAfterSeconds: 120 },
+    ] }] };
+    await user().collection('scheduledWorkouts').doc('w').update({ title: 'Strength QA',
+      structure: projectStrengthWorkoutToV1(details) });
+    await user().collection('scheduledWorkouts').doc('w').collection('strengthDetails').doc('current').set(details);
+    await command('send'); await drain();
+    expect((await ledger()).status).toBe('approval_required');
+    expect(server.calls.some(call => call.method === 'POST')).toBe(false);
+    const approve = async (workoutRevision: number) => {
+      const current = await ledger();
+      const setting = await user().collection('trainingDeliverySettings').doc('workout_w_suunto').get();
+      await trainingDeliveryCommand(runtime, uid, { schemaVersion: 1, mutationId: randomUUID(), scope: 'workout', scopeId: 'w',
+        provider: 'suunto', action: 'approve', expectedScheduleRevision: 1,
+        expectedScopeRevision: workoutRevision, expectedSettingsRevision: setting.data()?.revision ?? 0,
+        approvalDigest: current.approvalDigest }, false);
+      await drain();
+    };
+    await approve(1);
+    const row = await ledger();
+    await processTrainingDelivery(runtime, uid, row.id); await drain();
+    expect((await ledger()).status).toBe('delivered');
+    expect(server.guides.size).toBe(1);
+    expect([...server.guides.values()][0].guide.activities).toEqual([23]);
+    expect(JSON.stringify([...server.guides.values()][0].guide.steps)).toContain('80 kg');
+    const revised = { ...details, revision: 2, exercises: [{ ...details.exercises[0], sets: [
+      { ...details.exercises[0].sets[0], externalLoadKg: 85 },
+    ] }] };
+    const batch = db.batch();
+    batch.update(user().collection('scheduledWorkouts').doc('w'), { revision: 2, updatedAtMs: now + 1 });
+    batch.set(user().collection('scheduledWorkouts').doc('w').collection('strengthDetails').doc('current'), revised);
+    await batch.commit(); await mark();
+    expect((await ledger()).status).toBe('approval_required');
+    await approve(2);
+    await processTrainingDelivery(runtime, uid, row.id); await drain();
+    expect(server.guides.size).toBe(1);
+    expect(JSON.stringify([...server.guides.values()][0].guide.steps)).toContain('85 kg');
+    expect(server.calls.filter(call => call.method === 'POST')).toHaveLength(1);
   });
   it('does not select an account by discarding a malformed retained token', async () => {
     await db.collection('suuntoAppAccessTokens').doc(uid).collection('tokens').doc('second').set({ userName: 'second' });

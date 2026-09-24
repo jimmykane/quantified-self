@@ -2,6 +2,14 @@ import * as admin from 'firebase-admin';
 import { retireTrainingPlanDeliverySettings, stageTrainingDeliveryReconciliation } from './delivery/marker';
 import { TRAINING_WORKOUT_COMPLETIONS_COLLECTION_ID } from '../../../shared/training-workout-completion';
 import { Timestamp } from 'firebase-admin/firestore';
+import { ActivityTypes } from '@sports-alliance/sports-lib';
+import {
+    STRENGTH_DETAILS_COLLECTION_ID,
+    STRENGTH_DETAILS_DOCUMENT_ID,
+    parseStrengthWorkoutDetailsV1,
+    strengthProjectionMatchesDetails,
+    type StrengthWorkoutDetailsV1,
+} from '../../../shared/strength-workout';
 import {
     SCHEDULED_WORKOUTS_COLLECTION_ID,
     TRAINING_PLAN_DELETION_LOCKS_COLLECTION_ID,
@@ -118,6 +126,12 @@ export function applyTrainingPlanDeletion(
     const convertedWorkouts = new Map<string, ScheduledWorkoutV1>();
     const permanentlyDeletedWorkoutIds: string[] = [];
     for (const current of planWorkouts) {
+        if (current.structure.sport === ActivityTypes.StrengthTraining) {
+            const details = before.strengthDetails?.get(current.id);
+            if (!details || details.workoutId !== current.id || !strengthProjectionMatchesDetails(current.structure, details)) {
+                throw new TrainingScheduleMutationError('failed-precondition', `Strength details are missing or mismatched for ${current.id}.`);
+            }
+        }
         if (request.workoutDisposition === 'convert-to-standalone') {
             const converted = parseScheduledWorkoutV1({
                 ...current,
@@ -158,6 +172,28 @@ export function applyTrainingPlanDeletion(
             permanentlyDeletedWorkoutIds,
         },
     };
+}
+
+async function readStrengthDetailsForPlanWorkouts(
+    transaction: admin.firestore.Transaction,
+    workoutsRef: admin.firestore.CollectionReference,
+    workouts: Map<string, ScheduledWorkoutV1>,
+): Promise<Map<string, StrengthWorkoutDetailsV1>> {
+    const strengthWorkouts = [...workouts.values()].filter(workout => workout.structure.sport === ActivityTypes.StrengthTraining);
+    const snapshots = await Promise.all(strengthWorkouts.map(workout => transaction.get(
+        workoutsRef.doc(workout.id).collection(STRENGTH_DETAILS_COLLECTION_ID).doc(STRENGTH_DETAILS_DOCUMENT_ID),
+    )));
+    const details = new Map<string, StrengthWorkoutDetailsV1>();
+    snapshots.forEach((snapshot, index) => {
+        const workout = strengthWorkouts[index];
+        if (!snapshot.exists) throw new TrainingScheduleMutationError('failed-precondition', `Strength details are missing for ${workout.id}.`);
+        const parsed = parseStrengthWorkoutDetailsV1(documentData(snapshot));
+        if (parsed.workoutId !== workout.id || !strengthProjectionMatchesDetails(workout.structure, parsed)) {
+            throw new TrainingScheduleMutationError('failed-precondition', `Strength details are mismatched for ${workout.id}.`);
+        }
+        details.set(workout.id, parsed);
+    });
+    return details;
 }
 
 function parseStoredDeleteResponse(value: unknown): DeleteTrainingPlanResponseV1 {
@@ -327,6 +363,9 @@ async function ensurePlanDeletionLock(
             return { kind: 'pending', lock };
         }
         const snapshot = snapshotFromDocuments(stateSnapshot, planSnapshot, workoutSnapshots.docs);
+        snapshot.strengthDetails = await readStrengthDetailsForPlanWorkouts(
+            transaction, userRef.collection(SCHEDULED_WORKOUTS_COLLECTION_ID), snapshot.workouts,
+        );
         const applied = applyTrainingPlanDeletion(snapshot, request, nowMs);
         const plan = snapshot.plans.get(request.planId)!;
         const lock: PlanDeletionLockV1 = {
@@ -381,6 +420,23 @@ async function prepareStandaloneRevisionSnapshots(
         }
         return convertedWorkoutForLock(current, lock);
     });
+    const strengthRefs = converted
+        .filter(workout => workout.structure.sport === ActivityTypes.StrengthTraining)
+        .map(workout => workoutsRef.doc(workout.id).collection(STRENGTH_DETAILS_COLLECTION_ID).doc(STRENGTH_DETAILS_DOCUMENT_ID));
+    const strengthSnapshots = strengthRefs.length > 0 ? await db.getAll(...strengthRefs) : [];
+    const strengthById = new Map<string, StrengthWorkoutDetailsV1>();
+    strengthSnapshots.forEach((snapshot) => {
+        if (!snapshot.exists) throw new TrainingScheduleMutationError('failed-precondition', 'A locked strength prescription is missing.');
+        const details = parseStrengthWorkoutDetailsV1(documentData(snapshot));
+        strengthById.set(details.workoutId, details);
+    });
+    converted.forEach(workout => {
+        if (workout.structure.sport !== ActivityTypes.StrengthTraining) return;
+        const details = strengthById.get(workout.id);
+        if (!details || !strengthProjectionMatchesDetails(workout.structure, details)) {
+            throw new TrainingScheduleMutationError('failed-precondition', `Strength details are mismatched for ${workout.id}.`);
+        }
+    });
     const revisionRefs = converted.map(workout => workoutsRef.doc(workout.id)
         .collection(TRAINING_PLAN_REVISIONS_COLLECTION_ID)
         .doc(trainingScheduleRevisionDocumentId(workout.revision)));
@@ -403,6 +459,7 @@ async function prepareStandaloneRevisionSnapshots(
                 operationKind: 'delete-plan-convert-workouts',
                 createdAtMs: lock.createdAtMs,
                 snapshot: workout,
+                ...(strengthById.has(workout.id) ? { strength: strengthById.get(workout.id)! } : {}),
             };
             if (!snapshot.exists) {
                 transaction.create(revisionRefs[index], revision);
@@ -606,6 +663,7 @@ async function finalizePlanDeletion(
             throw new TrainingScheduleMutationError('failed-precondition', 'The plan-deletion lock is unavailable.');
         }
         const snapshot = snapshotFromDocuments(stateSnapshot, planSnapshot, workoutSnapshots.docs);
+        snapshot.strengthDetails = await readStrengthDetailsForPlanWorkouts(transaction, workoutsRef, snapshot.workouts);
         const currentPlan = snapshot.plans.get(request.planId)!;
         if (currentPlan.revision !== lock.planRevision) {
             throw new TrainingScheduleMutationError('revision-conflict', 'The locked plan changed during deletion.');

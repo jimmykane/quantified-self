@@ -2,6 +2,14 @@ import { createHash } from 'node:crypto';
 import { gzipSync } from 'node:zlib';
 import * as admin from 'firebase-admin';
 import { Timestamp } from 'firebase-admin/firestore';
+import { ActivityTypes } from '@sports-alliance/sports-lib';
+import {
+    STRENGTH_DETAILS_COLLECTION_ID,
+    STRENGTH_DETAILS_DOCUMENT_ID,
+    parseStrengthWorkoutDetailsV1,
+    strengthProjectionMatchesDetails,
+    type StrengthWorkoutDetailsV1,
+} from '../../../shared/strength-workout';
 import {
     SCHEDULED_WORKOUTS_COLLECTION_ID,
     TRAINING_PLAN_MUTATION_RECEIPTS_COLLECTION_ID,
@@ -41,6 +49,13 @@ export interface TrainingPlanWorkoutDeltaV1 {
     workoutId: string;
     before: ScheduledWorkoutV1 | null;
     after: ScheduledWorkoutV1 | null;
+    strengthBefore?: StrengthWorkoutDetailsV1 | null;
+    strengthAfter?: StrengthWorkoutDetailsV1 | null;
+}
+
+export interface TrainingPlanWorkoutCheckpointV1 {
+    workout: ScheduledWorkoutV1;
+    strength: StrengthWorkoutDetailsV1;
 }
 
 export interface TrainingPlanRevisionDocumentV1 {
@@ -84,6 +99,7 @@ export interface StandaloneWorkoutRevisionDocumentV1 {
     operationKind: string;
     createdAtMs: number;
     snapshot: ScheduledWorkoutV1;
+    strength?: StrengthWorkoutDetailsV1;
 }
 
 export type TrainingScheduleDeletionTombstoneKindV1 = 'plan' | 'workout';
@@ -157,11 +173,21 @@ function valuesEqual(left: unknown, right: unknown): boolean {
     return stableJson(left) === stableJson(right);
 }
 
-function workoutsForPlan(snapshot: TrainingScheduleSnapshotV1, planId: string): ScheduledWorkoutV1[] {
+function requireStrengthDetails(snapshot: TrainingScheduleSnapshotV1, workout: ScheduledWorkoutV1): StrengthWorkoutDetailsV1 {
+    const details = snapshot.strengthDetails?.get(workout.id);
+    if (!details || !strengthProjectionMatchesDetails(workout.structure, details)) {
+        throw new TrainingScheduleMutationError('failed-precondition', `Strength details are missing or mismatched for ${workout.id}.`);
+    }
+    return details;
+}
+
+function workoutsForPlan(snapshot: TrainingScheduleSnapshotV1, planId: string): Array<ScheduledWorkoutV1 | TrainingPlanWorkoutCheckpointV1> {
     return [...snapshot.workouts.values()]
         .filter(workout => workout.planId === planId && workout.lifecycle !== 'deleted')
-        .map(cloneValue)
-        .sort((left, right) => left.localDate.localeCompare(right.localDate) || left.id.localeCompare(right.id));
+        .sort((left, right) => left.localDate.localeCompare(right.localDate) || left.id.localeCompare(right.id))
+        .map(workout => workout.structure.sport === ActivityTypes.StrengthTraining
+            ? { workout: cloneValue(workout), strength: cloneValue(requireStrengthDetails(snapshot, workout)) }
+            : cloneValue(workout));
 }
 
 function encodeRevisionChunks(
@@ -223,6 +249,12 @@ export function buildTrainingScheduleRevisionWrites(
                 workoutId,
                 before: cloneValue(applied.before.workouts.get(workoutId) ?? null),
                 after: cloneValue(applied.after.workouts.get(workoutId) ?? null),
+                ...(applied.before.strengthDetails?.has(workoutId) || applied.after.strengthDetails?.has(workoutId)
+                    ? {
+                        strengthBefore: cloneValue(applied.before.strengthDetails?.get(workoutId) ?? null),
+                        strengthAfter: cloneValue(applied.after.strengthDetails?.get(workoutId) ?? null),
+                    }
+                    : {}),
             }))
             .filter(delta => !valuesEqual(delta.before, delta.after))
             .sort((left, right) => left.workoutId.localeCompare(right.workoutId));
@@ -273,12 +305,16 @@ export function buildTrainingScheduleRevisionWrites(
             operationKind: request.operation.kind,
             createdAtMs: nowMs,
             snapshot: cloneValue(afterWorkout),
+            ...(applied.after.strengthDetails?.has(workoutId)
+                ? { strength: cloneValue(applied.after.strengthDetails.get(workoutId)!) }
+                : {}),
         });
     }
 
     const estimatedWriteCount = 3
         + applied.affectedPlanIds.length * 2
         + applied.changedWorkoutIds.length
+        + applied.changedWorkoutIds.filter(id => !valuesEqual(applied.before.strengthDetails?.get(id), applied.after.strengthDetails?.get(id))).length
         + applied.changedWorkoutIds.filter(id => applied.before.workouts.get(id)?.planId !== applied.after.workouts.get(id)?.planId
             || applied.after.workouts.get(id)?.lifecycle === 'deleted').length
         // Tombstone, workout root, and owner-visible completion projection.
@@ -407,12 +443,28 @@ async function readTrainingScheduleSnapshotInTransaction(
         workouts.set(workout.id, workout);
     });
 
+    const strengthWorkouts = [...workouts.values()].filter(workout => workout.structure.sport === ActivityTypes.StrengthTraining);
+    const strengthSnapshots = await Promise.all(strengthWorkouts.map(workout => transaction.get(
+        workoutsRef.doc(workout.id).collection(STRENGTH_DETAILS_COLLECTION_ID).doc(STRENGTH_DETAILS_DOCUMENT_ID),
+    )));
+    const strengthDetails = new Map<string, StrengthWorkoutDetailsV1>();
+    strengthSnapshots.forEach((strengthSnapshot, index) => {
+        const workout = strengthWorkouts[index];
+        if (!strengthSnapshot.exists) throw new TrainingScheduleMutationError('failed-precondition', `Strength details are missing for ${workout.id}.`);
+        const details = parseStrengthWorkoutDetailsV1(documentData(strengthSnapshot));
+        if (details.workoutId !== workout.id || !strengthProjectionMatchesDetails(workout.structure, details)) {
+            throw new TrainingScheduleMutationError('failed-precondition', `Strength details are mismatched for ${workout.id}.`);
+        }
+        strengthDetails.set(workout.id, details);
+    });
+
     return {
         state: stateSnapshot.exists
             ? parseTrainingPlanStateV1(documentData(stateSnapshot))
             : createEmptyTrainingPlanState(),
         plans,
         workouts,
+        strengthDetails,
     };
 }
 
@@ -475,6 +527,9 @@ function estimateBatchWriteCount(
     return 2 // Final state plus one reconciliation marker.
         + uniqueDocumentCount(affectedPlans.filter(id => final.plans.has(id)))
         + uniqueDocumentCount(changedWorkouts.filter(id => final.workouts.has(id)))
+        + uniqueDocumentCount(changedWorkouts.filter(id => items.some(item => !valuesEqual(
+            item.applied.before.strengthDetails?.get(id), item.applied.after.strengthDetails?.get(id),
+        )) && final.strengthDetails?.has(id)))
         + historyWrites
         + uniqueDocumentCount(invalidatedWorkouts)
         + uniqueDocumentCount(permanentlyDeletedWorkouts) * 3
@@ -594,7 +649,15 @@ export async function mutateTrainingScheduleBatchForUser(
         for (const workoutId of changedWorkoutIds) {
             const workout = finalSnapshot.workouts.get(workoutId);
             if (!workout) continue;
-            transaction.set(userRef.collection(SCHEDULED_WORKOUTS_COLLECTION_ID).doc(workoutId), cloneValue(workout));
+            const workoutRef = userRef.collection(SCHEDULED_WORKOUTS_COLLECTION_ID).doc(workoutId);
+            transaction.set(workoutRef, cloneValue(workout));
+            const strength = finalSnapshot.strengthDetails?.get(workoutId);
+            if (strength && items.some(item => !valuesEqual(
+                item.applied.before.strengthDetails?.get(workoutId), item.applied.after.strengthDetails?.get(workoutId),
+            ))) transaction.set(
+                workoutRef.collection(STRENGTH_DETAILS_COLLECTION_ID).doc(STRENGTH_DETAILS_DOCUMENT_ID),
+                cloneValue(strength),
+            );
         }
         for (const item of items) {
             for (const [planId, revision] of item.revisions.planRevisions) {

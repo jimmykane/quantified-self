@@ -1,4 +1,5 @@
 import { ActivityTypes } from '@sports-alliance/sports-lib';
+import { projectStrengthWorkoutToV1, type StrengthWorkoutDraftV1 } from '../../../shared/strength-workout';
 import { beforeEach, describe, expect, it } from 'vitest';
 import {
     TRAINING_PLAN_MAX_CURRENT_WORKOUTS,
@@ -95,6 +96,61 @@ describe('applyTrainingScheduleMutation', () => {
 
     beforeEach(() => {
         initial = snapshot();
+    });
+
+    it('keeps exercise-aware strength details paired through create, move, copy, and edit', () => {
+        const strength: StrengthWorkoutDraftV1 = { version: 1, exercises: [{ id: 'squat', name: 'Squat', sets: [
+            { id: 'set-a', ending: { kind: 'repetitions', repetitions: 5 }, externalLoadKg: 80, restAfterSeconds: 90 },
+        ] }] };
+        const structure = projectStrengthWorkoutToV1({ ...strength, workoutId: 'lift', revision: 1 });
+        const created = applyTrainingScheduleMutation(initial, request({ kind: 'create-workout', workoutId: 'lift',
+            planId: null, localDate: '2026-09-03', title: 'Lift', structure, strength,
+            confirmPlanRangeExtension: false }), NOW_MS);
+        expect(created.after.strengthDetails?.get('lift')).toMatchObject({ workoutId: 'lift', revision: 1,
+            exercises: [{ sets: [{ externalLoadKg: 80, restAfterSeconds: 90 }] }] });
+        const moved = applyTrainingScheduleMutation(created.after, {
+            mutationId: 'move-lift', expectedRevisions: [
+                { scope: 'state', id: 'current', revision: 8 }, { scope: 'workout', id: 'lift', revision: 1 },
+            ], operation: { kind: 'move-workout', workoutId: 'lift', planId: null, localDate: '2026-09-04',
+                confirmPlanRangeExtension: false },
+        }, NOW_MS + 1);
+        expect(moved.after.strengthDetails?.get('lift')?.revision).toBe(1);
+        const copied = applyTrainingScheduleMutation(moved.after, {
+            mutationId: 'copy-lift', expectedRevisions: [
+                { scope: 'state', id: 'current', revision: 9 }, { scope: 'workout', id: 'lift', revision: 2 },
+            ], operation: { kind: 'copy-workout', sourceWorkoutId: 'lift', workoutId: 'copy-lift', planId: null,
+                localDate: '2026-09-05', confirmPlanRangeExtension: false },
+        }, NOW_MS + 2);
+        expect(copied.after.strengthDetails?.get('copy-lift')).toMatchObject({ workoutId: 'copy-lift', revision: 1,
+            exercises: [{ sets: [{ externalLoadKg: 80 }] }] });
+        expect(() => applyTrainingScheduleMutation(copied.after, {
+            mutationId: 'unsafe-lift', expectedRevisions: [
+                { scope: 'state', id: 'current', revision: 10 }, { scope: 'workout', id: 'lift', revision: 2 },
+            ], operation: { kind: 'update-workout', workoutId: 'lift', planId: null,
+                localDate: '2026-09-04', title: 'Unsafe', structure, confirmPlanRangeExtension: false },
+        }, NOW_MS + 3)).toThrow('complete exercise prescription');
+        const revisedStrength: StrengthWorkoutDraftV1 = { ...strength, exercises: [{ ...strength.exercises[0], sets: [
+            { ...strength.exercises[0].sets[0], externalLoadKg: 85 },
+        ] }] };
+        const edited = applyTrainingScheduleMutation(copied.after, {
+            mutationId: 'edit-lift', expectedRevisions: [
+                { scope: 'state', id: 'current', revision: 10 }, { scope: 'workout', id: 'lift', revision: 2 },
+            ], operation: { kind: 'update-workout', workoutId: 'lift', planId: null,
+                localDate: '2026-09-04', title: 'Heavier',
+                structure: projectStrengthWorkoutToV1({ ...revisedStrength, workoutId: 'lift', revision: 2 }),
+                strength: revisedStrength, confirmPlanRangeExtension: false },
+        }, NOW_MS + 3);
+        expect(edited.after.strengthDetails?.get('lift')?.revision).toBe(2);
+        expect(edited.after.strengthDetails?.get('lift')?.exercises[0].sets[0].externalLoadKg).toBe(85);
+        const renamed = applyTrainingScheduleMutation(edited.after, {
+            mutationId: 'rename-lift', expectedRevisions: [
+                { scope: 'state', id: 'current', revision: 11 }, { scope: 'workout', id: 'lift', revision: 3 },
+            ], operation: { kind: 'update-workout', workoutId: 'lift', planId: null,
+                localDate: '2026-09-04', title: 'Renamed',
+                structure: projectStrengthWorkoutToV1({ ...revisedStrength, workoutId: 'lift', revision: 2 }),
+                strength: revisedStrength, confirmPlanRangeExtension: false },
+        }, NOW_MS + 4);
+        expect(renamed.after.strengthDetails?.get('lift')?.revision).toBe(2);
     });
 
     it('revisions only the chosen plan when changing its color, including stale-revision rejection', () => {

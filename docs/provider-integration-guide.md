@@ -155,6 +155,15 @@ Wahoo structured-workout delivery are unsupported for those sports under current
 recorded-activity support. The new Suunto mappings have serializer and isolated demo-emulator evidence only; live
 cloud CRUD and app/watch visibility are not yet claimed. See #738 and #739 for separately approved account proof.
 
+Strength Training has a separate exercise-aware prescription with ordered names and sets, reps or timed holds,
+optional fixed external load in kilograms and optional rest after each set. Its v1 steps are only a compatibility
+projection; delivery validates the owner-scoped companion. Suunto maps it to a Gym (`23`) Guide with manual transitions
+for rep sets. This is degraded and requires explicit approval, not native strength tracking. The COROS partner contract
+describes strength Reps/Second, Rest and fixed equipment weight in kilograms, and QS has a serializer fixture, but
+new COROS Send/sync remains Coming soon until entitlement and account-side push/update/delete proof. Garmin and Wahoo
+strength delivery are unsupported. Suunto strength has demo-emulator evidence, not live app/watch proof. See #740,
+#741 and the Sports Lib mass-unit dependency #743.
+
 | Provider | Availability | Truthful delivery model and remaining limits |
 | --- | --- | --- |
 | Garmin | `enabled` | Connected Pro users can explicitly deliver compatible running/cycling or pool-swimming workouts through separate Workout and Workout Schedule lifecycle records after granting `WORKOUT_IMPORT`. Running/cycling sub-sports still fold to broad `RUNNING`/`CYCLING`; pool swimming maps to `LAP_SWIMMING` with optional explicit pool length and target-free swim steps. Owner-account cloud create/edit/reschedule/readback/withdrawal passed on 23 September 2026 without retries. Open-water swimming is unmapped. Cloud acceptance and positive retained-record checks are not app/watch receipt or completed-activity evidence. There is no authoritative missing-copy repair from negative reads; device behavior remains unproven and completion correlation is #651. |

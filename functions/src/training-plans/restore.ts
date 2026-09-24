@@ -1,6 +1,14 @@
 import * as admin from 'firebase-admin';
 import { invalidateTrainingWorkoutConsent, stageTrainingDeliveryReconciliation } from './delivery/marker';
 import { Timestamp } from 'firebase-admin/firestore';
+import { ActivityTypes } from '@sports-alliance/sports-lib';
+import {
+    STRENGTH_DETAILS_COLLECTION_ID,
+    STRENGTH_DETAILS_DOCUMENT_ID,
+    parseStrengthWorkoutDetailsV1,
+    strengthProjectionMatchesDetails,
+    type StrengthWorkoutDetailsV1,
+} from '../../../shared/strength-workout';
 import {
     SCHEDULED_WORKOUTS_COLLECTION_ID,
     TRAINING_PLAN_MUTATION_RECEIPTS_COLLECTION_ID,
@@ -24,7 +32,7 @@ import { getUserDeletionGuardStateInTransaction } from '../shared/user-deletion-
 import {
     parsePreviewTrainingScheduleRestoreRequest,
     readPlanSnapshotAtRevision,
-    readStandaloneWorkoutAtRevision,
+    readStandaloneWorkoutRevisionAt,
     type ReconstructedTrainingPlanRevisionV1,
 } from './history';
 import {
@@ -220,7 +228,23 @@ export function applyPlanRevisionRestore(
             createdAtMs: current.createdAtMs,
             updatedAtMs: nowMs,
         });
-        if (!logicalValuesEqual(current, restored)) {
+        if (restored.structure.sport === ActivityTypes.StrengthTraining) {
+            const source = desired.strengthDetails?.get(workoutId);
+            if (!source || !strengthProjectionMatchesDetails(restored.structure, source)) {
+                throw new TrainingScheduleMutationError('failed-precondition', `Strength history is missing for ${workoutId}.`);
+            }
+            const currentDetails = before.strengthDetails?.get(workoutId);
+            after.strengthDetails!.set(workoutId, parseStrengthWorkoutDetailsV1({
+                ...source,
+                revision: JSON.stringify(currentDetails?.exercises) === JSON.stringify(source.exercises)
+                    ? (currentDetails?.revision ?? source.revision)
+                    : (currentDetails?.revision ?? 0) + 1,
+            }));
+        }
+        if (!logicalValuesEqual(current, restored)
+            || (restored.structure.sport === ActivityTypes.StrengthTraining
+                && JSON.stringify(before.strengthDetails?.get(workoutId)?.exercises)
+                    !== JSON.stringify(desired.strengthDetails?.get(workoutId)?.exercises))) {
             after.workouts.set(workoutId, restored);
             changedWorkoutIds.add(workoutId);
         }
@@ -288,6 +312,7 @@ export function applyStandaloneRevisionRestore(
     desired: ScheduledWorkoutV1,
     request: RestoreTrainingScheduleRevisionRequestV1,
     nowMs: number,
+    desiredStrength?: StrengthWorkoutDetailsV1 | null,
 ): AppliedTrainingScheduleRestoreV1 {
     if (request.scope.kind !== 'workout' || desired.id !== request.scope.id || desired.planId !== null) {
         throw new TrainingScheduleMutationError('failed-precondition', 'The requested revision is not a standalone workout state.');
@@ -312,6 +337,17 @@ export function applyStandaloneRevisionRestore(
         createdAtMs: current.createdAtMs,
         updatedAtMs: nowMs,
     });
+    if (restored.structure.sport === ActivityTypes.StrengthTraining) {
+        if (!desiredStrength || !strengthProjectionMatchesDetails(restored.structure, desiredStrength)) {
+            throw new TrainingScheduleMutationError('failed-precondition', 'Strength history is missing or mismatched.');
+        }
+        after.strengthDetails!.set(current.id, parseStrengthWorkoutDetailsV1({
+            ...desiredStrength,
+            revision: JSON.stringify(before.strengthDetails?.get(current.id)?.exercises) === JSON.stringify(desiredStrength.exercises)
+                ? (before.strengthDetails?.get(current.id)?.revision ?? desiredStrength.revision)
+                : (before.strengthDetails?.get(current.id)?.revision ?? 0) + 1,
+        }));
+    }
     after.workouts.set(current.id, restored);
     const restoredCurrentWorkoutCount = currentWorkoutCount(after.workouts);
     if (restoredCurrentWorkoutCount > TRAINING_PLAN_MAX_CURRENT_WORKOUTS) {
@@ -369,7 +405,21 @@ async function readCurrentScheduleForRestore(
         const parsed = parseScheduledWorkoutV1(documentData(snapshot));
         workouts.set(parsed.id, parsed);
     });
-    return { state: parseTrainingPlanStateV1(documentData(stateSnapshot)), plans, workouts };
+    const strengthWorkouts = [...workouts.values()].filter(workout => workout.structure.sport === ActivityTypes.StrengthTraining);
+    const strengthSnapshots = await Promise.all(strengthWorkouts.map(workout => transaction.get(
+        workoutsRef.doc(workout.id).collection(STRENGTH_DETAILS_COLLECTION_ID).doc(STRENGTH_DETAILS_DOCUMENT_ID),
+    )));
+    const strengthDetails = new Map<string, StrengthWorkoutDetailsV1>();
+    strengthSnapshots.forEach((detailsSnapshot, index) => {
+        const workout = strengthWorkouts[index];
+        if (!detailsSnapshot.exists) throw new TrainingScheduleMutationError('failed-precondition', `Strength details are missing for ${workout.id}.`);
+        const details = parseStrengthWorkoutDetailsV1(documentData(detailsSnapshot));
+        if (details.workoutId !== workout.id || !strengthProjectionMatchesDetails(workout.structure, details)) {
+            throw new TrainingScheduleMutationError('failed-precondition', `Strength details are mismatched for ${workout.id}.`);
+        }
+        strengthDetails.set(workout.id, details);
+    });
+    return { state: parseTrainingPlanStateV1(documentData(stateSnapshot)), plans, workouts, strengthDetails };
 }
 
 function parseStoredRestoreResponse(value: unknown): RestoreTrainingScheduleRevisionResponseV1 {
@@ -456,8 +506,8 @@ export async function restoreTrainingScheduleRevisionForUser(
     const desiredPlan = request.scope.kind === 'plan'
         ? await readPlanSnapshotAtRevision(db, uid, request.scope.id, request.targetRevision)
         : null;
-    const desiredWorkout = request.scope.kind === 'workout'
-        ? await readStandaloneWorkoutAtRevision(db, uid, request.scope.id, request.targetRevision)
+    const desiredWorkoutRevision = request.scope.kind === 'workout'
+        ? await readStandaloneWorkoutRevisionAt(db, uid, request.scope.id, request.targetRevision)
         : null;
     const desiredWorkoutIds = desiredPlan ? [...desiredPlan.workouts.keys()] : [request.scope.id];
 
@@ -478,7 +528,7 @@ export async function restoreTrainingScheduleRevisionForUser(
         const snapshot = await readCurrentScheduleForRestore(transaction, userRef, desiredWorkoutIds);
         const restored = desiredPlan
             ? applyPlanRevisionRestore(snapshot, desiredPlan, request, nowMs)
-            : applyStandaloneRevisionRestore(snapshot, desiredWorkout!, request, nowMs);
+            : applyStandaloneRevisionRestore(snapshot, desiredWorkoutRevision!.workout, request, nowMs, desiredWorkoutRevision!.strength);
         const revisionRequest = {
             mutationId: request.mutationId,
             operation: { kind: request.scope.kind === 'plan' ? 'restore-plan-revision' : 'restore-workout-revision' },
@@ -514,6 +564,11 @@ export async function restoreTrainingScheduleRevisionForUser(
             const workoutRef = userRef.collection(SCHEDULED_WORKOUTS_COLLECTION_ID).doc(workoutId);
             const workout = restored.applied.after.workouts.get(workoutId)!;
             transaction.set(workoutRef, workout);
+            const strength = restored.applied.after.strengthDetails?.get(workoutId);
+            if (strength && JSON.stringify(restored.applied.before.strengthDetails?.get(workoutId)) !== JSON.stringify(strength)) transaction.set(
+                workoutRef.collection(STRENGTH_DETAILS_COLLECTION_ID).doc(STRENGTH_DETAILS_DOCUMENT_ID),
+                strength,
+            );
             const revision = revisions.standaloneWorkoutRevisions.get(workoutId);
             if (revision) transaction.create(
                 workoutRef.collection(TRAINING_PLAN_REVISIONS_COLLECTION_ID)

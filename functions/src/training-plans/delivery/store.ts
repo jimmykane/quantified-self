@@ -1,5 +1,11 @@
 import { randomUUID } from 'node:crypto';
 import { FieldPath, type Transaction } from 'firebase-admin/firestore';
+import { ActivityTypes } from '@sports-alliance/sports-lib';
+import {
+  STRENGTH_DETAILS_COLLECTION_ID, STRENGTH_DETAILS_DOCUMENT_ID,
+  parseStrengthWorkoutDetailsV1, strengthProjectionMatchesDetails,
+  type StrengthWorkoutDetailsV1,
+} from '../../../../shared/strength-workout';
 import { PLANNED_WORKOUT_PROVIDER_IDS, type PlannedWorkoutProviderId } from '../../../../shared/planned-workout-providers';
 import { parseScheduledWorkoutV1, type ScheduledWorkoutV1 } from '../../../../shared/training-plans';
 import { deliverySettingsId, TRAINING_DELIVERY_PAGE_SIZE, TRAINING_DELIVERY_SETTINGS, TRAINING_DELIVERY_STATUSES,
@@ -11,12 +17,27 @@ import { deliveryContentDigest, deliveryIdentity, resolveDeliveryIntent } from '
 import { reconciliationJobId } from './marker';
 import { TRAINING_DELIVERY_VERIFICATIONS } from '../../../../shared/training-provider-verification';
 import { readVerificationRequest, stageVerification } from './verification-queue';
+import { TrainingScheduleMutationError } from '../mutation';
+
+export async function readStrengthDetailsForDelivery(tx: Transaction,
+  user: FirebaseFirestore.DocumentReference, workout: ScheduledWorkoutV1): Promise<StrengthWorkoutDetailsV1 | null> {
+  if (workout.structure.sport !== ActivityTypes.StrengthTraining) return null;
+  const snapshot = await tx.get(user.collection('scheduledWorkouts').doc(workout.id)
+    .collection(STRENGTH_DETAILS_COLLECTION_ID).doc(STRENGTH_DETAILS_DOCUMENT_ID));
+  if (!snapshot.exists) throw new TrainingScheduleMutationError('failed-precondition', 'Strength prescription is missing.');
+  const details = parseStrengthWorkoutDetailsV1(snapshot.data());
+  if (details.workoutId !== workout.id || !strengthProjectionMatchesDetails(workout.structure, details)) {
+    throw new TrainingScheduleMutationError('failed-precondition', 'Strength prescription and summary do not match.');
+  }
+  return details;
+}
 
 export async function readDeliveryContext(runtime: DeliveryRuntime, tx: Transaction, uid: string,
   workout: ScheduledWorkoutV1 | null, provider: PlannedWorkoutProviderId, hasPro: boolean,
   retainedWorkoutId?: string): Promise<DeliveryContext> {
   const user = runtime.db.collection('users').doc(uid);
   const connection = await runtime.connection(tx, uid, provider);
+  const strength = workout ? await readStrengthDetailsForDelivery(tx, user, workout) : null;
   const workoutId = workout?.id ?? retainedWorkoutId;
   const [overrideDoc, settingDoc, scopeDoc, planDoc] = workoutId ? await Promise.all([
     tx.get(user.collection(TRAINING_DELIVERY_SETTINGS).doc(deliverySettingsId('workout', workoutId, provider))),
@@ -25,7 +46,7 @@ export async function readDeliveryContext(runtime: DeliveryRuntime, tx: Transact
     workout?.planId ? tx.get(user.collection('trainingPlans').doc(workout.planId)) : null,
   ]) : [null, null, null, null];
   const override = (overrideDoc?.data() ?? null) as TrainingDeliverySettingsV1 | null;
-  return { workout, planActive: planDoc?.data()?.lifecycle === 'active',
+  return { workout, strength, planActive: planDoc?.data()?.lifecycle === 'active',
     setting: workout?.planId ? (settingDoc?.data() ?? null) as TrainingDeliverySettingsV1 | null : override,
     override, scopeGeneration: scopeDoc?.data()?.generation ?? 0, connection, hasPro,
     transport: runtime.transport(provider, uid), nowMs: runtime.now() };
@@ -87,7 +108,7 @@ function reconcileRecord(runtime: DeliveryRuntime, context: DeliveryContext, uid
     settingsRevision: settingRevision, desired: intent.desired, status: intent.status, timeZone: intent.timeZone,
     issues: intent.issues, approvalDigest: intent.approvalDigest,
     actual: previous?.actual ?? null, acceptedDigest: previous?.acceptedDigest ?? null,
-    contentDigest: deliveryContentDigest(context.workout, intent.timeZone), acceptedContentDigest: previous?.acceptedContentDigest ?? null,
+    contentDigest: deliveryContentDigest(context.workout, intent.timeZone, context.strength), acceptedContentDigest: previous?.acceptedContentDigest ?? null,
     attempt: previous?.attempt ?? null, lease: previous?.lease ?? null,
     retries: changed || retried ? 0 : previous.retries,
     retryAtMs: Math.max(changed || retried ? 0 : previous.retryAtMs, previous?.providerNotBeforeMs ?? 0),
