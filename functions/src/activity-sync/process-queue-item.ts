@@ -690,9 +690,14 @@ async function handlePreUploadGuardFailure(
     const currentQueueItem = snapshot.exists
         ? snapshot.data() as Record<string, unknown> | undefined
         : undefined;
+    const providerOperationStartedAt = Number(currentQueueItem?.providerOperationStartedAt);
     if (
         currentQueueItem?.processed === true
-        || currentQueueItem?.dispatchedToCloudTask === PROVIDER_OPERATION_IN_FLIGHT_QUEUE_DISPATCH_MARKER
+        || (
+            currentQueueItem?.dispatchedToCloudTask === PROVIDER_OPERATION_IN_FLIGHT_QUEUE_DISPATCH_MARKER
+            && Number.isFinite(providerOperationStartedAt)
+            && providerOperationStartedAt > 0
+        )
     ) {
         return;
     }

@@ -510,6 +510,22 @@ describe('activity-sync/process-queue-item', () => {
     expect(mockUploadActivityFileToSuunto).not.toHaveBeenCalled();
   });
 
+  it('does not treat an in-flight marker without a claim timestamp as a durable claim', async () => {
+    delete baseQueueItem.outboundFingerprintID;
+    baseQueueItem.ref = createMockActivitySyncQueueItemRef({
+      ...baseQueueItem,
+      dispatchedToCloudTask: PROVIDER_OPERATION_IN_FLIGHT_QUEUE_DISPATCH_MARKER,
+      providerOperationStartedAt: null,
+    });
+    mockUpdateQueueItemIfUserActive.mockResolvedValueOnce('not_current');
+
+    await expect(processActivitySyncQueueItem(baseQueueItem))
+      .rejects.toThrow('changed before provider upload but remains unclaimed; retrying the task');
+
+    expect(mockUploadActivityFileToSuunto).not.toHaveBeenCalled();
+    expect(mockIncreaseRetryCountForQueueItem).not.toHaveBeenCalled();
+  });
+
   it('marks queue item processed and writes success metadata when upload succeeds', async () => {
     const result = await processActivitySyncQueueItem(baseQueueItem);
 
