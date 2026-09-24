@@ -12,7 +12,7 @@ interface TrainingPlansHomeRow {
 /** Compact Training Plans discovery content rendered on the public homepage. */
 export const TRAINING_PLANS_HOME_CONTENT = {
   title: 'Plan What Comes Next',
-  intro: 'Build structured running, cycling, pool, and open-water workouts, organize them into dated plans or keep them standalone, and choose how you want to manage and deliver them.',
+  intro: 'Build structured running, cycling, swimming, walking, hiking, or rowing workouts, organize them into dated plans or keep them standalone, and choose how you want to manage and deliver them.',
   preview: 'training-plans' satisfies PublicFeaturePreviewKey,
   cta: {
     label: 'Explore Training Plans',
@@ -30,7 +30,7 @@ export const TRAINING_PLANS_HOME_CONTENT = {
       icon: 'repeat',
       iconTone: 'secondary',
       title: 'Structured Workouts',
-      copy: 'Build running, cycling, pool, or open-water sessions with time or distance steps, fixed repeats, and absolute heart-rate, power, or pace targets.',
+      copy: 'Build running, cycling, swimming, walking, hiking, or rowing sessions with time or distance steps, fixed repeats, and absolute heart-rate, power, or pace targets.',
     },
     {
       icon: 'devices',

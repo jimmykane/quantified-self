@@ -234,6 +234,38 @@ describe('Training plan MCP reads', () => {
     expect(result.workout.displaySteps[0].text).toContain('25 m');
   });
 
+  it.each([ActivityTypes.Walking, ActivityTypes.Hiking, ActivityTypes.Rowing, ActivityTypes.IndoorRowing])('keeps %s canonical in the planned-workout read', async sport => {
+    const f = fixture();
+    const list = TRAINING_READ_OUTPUTS.query_planned_workouts.parse(await f.run('query_planned_workouts', {
+      startDate: '2026-09-01', endDate: '2027-01-01',
+    }));
+    const original = f.reads.snapshot;
+    f.reads.snapshot = (uid, read) => original(uid, view => read({ ...view,
+      get: async (collection, id, detail) => {
+        const doc = await view.get(collection, id, detail);
+        return doc && detail ? { ...doc,
+          data: { ...doc.data, structure: { ...structure, sport,
+            nodes: [{ kind: 'step', id: 'step1', purpose: 'work',
+              ending: { kind: 'distance', meters: 500 },
+              targets: sport === ActivityTypes.Rowing || sport === ActivityTypes.IndoorRowing
+                ? [{ kind: 'speed', mode: 'absolute', presentation: 'pace',
+                  minimumMetersPerSecond: 500 / 120, maximumMetersPerSecond: 500 / 105 }]
+                : [] }] } },
+        } : doc;
+      },
+    }));
+    const result = TRAINING_READ_OUTPUTS.get_planned_workout.parse(await f.run('get_planned_workout', {
+      workoutRef: list.workouts[0].workoutRef,
+    }));
+    expect(result.workout.structure.sport).toBe(sport);
+    expect(result.workout.displaySteps[0].text).toContain(
+      sport === ActivityTypes.Rowing || sport === ActivityTypes.IndoorRowing ? '500' : 'mi',
+    );
+    if (sport === ActivityTypes.Rowing || sport === ActivityTypes.IndoorRowing) {
+      expect(result.workout.displaySteps[0].text).toContain('/ 500');
+    }
+  });
+
   it('keeps the registered v1 workout read usable for a saved pool length without widening its schema', async () => {
     const f = fixture();
     const list = TRAINING_READ_OUTPUTS.query_planned_workouts.parse(await f.run('query_planned_workouts', {

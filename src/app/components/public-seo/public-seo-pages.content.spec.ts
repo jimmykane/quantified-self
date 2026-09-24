@@ -139,9 +139,9 @@ describe('public-seo-pages.content', () => {
     expect(PUBLIC_SEO_PAGES.trainingAnalysis.sections.map(section => section.preview)).toContain('training-explorer');
 
     const trainingPlans = PUBLIC_SEO_PAGES.trainingPlans;
-    expect(trainingPlans.title).toBe('Training Plans for Running, Cycling & Swimming');
-    expect(trainingPlans.h1).toBe('Plan running, cycling, and swimming workouts your way');
-    expect(trainingPlans.description).toBe('Create free running, cycling, pool-swim, or open-water plans and standalone workouts. Schedule by date and keep plans separate from completed activities.');
+    expect(trainingPlans.title).toBe('Training Plans for Running, Cycling & More');
+    expect(trainingPlans.h1).toBe('Plan workouts for running, cycling, swimming and more');
+    expect(trainingPlans.description).toBe('Create free running, cycling, swimming, walking, hiking and rowing plans or standalone workouts. Schedule by date, separate from completed activities.');
     expect(trainingPlans.sections.some(section => section.preview === 'training-plans')).toBe(true);
     expect(trainingPlans.sections.some(section => section.copy.includes('one active at a time'))).toBe(true);
     expect(trainingPlans.sections.some(section => section.items.some(item => item.copy.includes('Trail Running')))).toBe(true);
@@ -149,6 +149,7 @@ describe('public-seo-pages.content', () => {
     expect(trainingPlans.sections.some(section => section.items.some(item => item.title === 'Pool and open-water swimming'))).toBe(true);
     const supportedWorkoutFaq = trainingPlans.faqItems.find(item => item.question === 'Which sports and workout steps can I create?')?.answer;
     expect(supportedWorkoutFaq).toContain('Open Water Swimming');
+    expect(supportedWorkoutFaq).toContain('Indoor Rowing');
     expect(supportedWorkoutFaq).toContain('compatible Garmin lap-swim delivery includes it');
     expect(supportedWorkoutFaq).toContain('Suunto Guides do not');
     expect(supportedWorkoutFaq).toContain('Open-water workouts have no pool length');

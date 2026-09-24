@@ -11,9 +11,11 @@ import {
   DataSpeed,
   DataSwimDistance,
   DataSwimPace,
+  DistanceUnits,
   type UserUnitSettingsInterface,
 } from '@sports-alliance/sports-lib';
 import {
+  normalizeUserUnitSettings,
   resolveUnitAwareDisplayFromValue,
   resolveUnitAwareDisplayStat,
   type UnitAwareStatDisplay,
@@ -278,15 +280,29 @@ export const MANUAL_WORKOUT_EDITOR_SWIMMING_SPORTS_V1 = [
   ActivityTypes.Swimming,
   ActivityTypes.OpenWaterSwimming,
 ] as const;
+export const MANUAL_WORKOUT_EDITOR_WALKING_SPORTS_V1 = [
+  ActivityTypes.Walking,
+  ActivityTypes.Hiking,
+] as const;
+export const MANUAL_WORKOUT_EDITOR_ROWING_SPORTS_V1 = [
+  ActivityTypes.Rowing,
+  ActivityTypes.IndoorRowing,
+] as const;
 export const MANUAL_WORKOUT_EDITOR_SPORTS_V1 = [
   ...MANUAL_WORKOUT_EDITOR_RUNNING_SPORTS_V1,
   ...MANUAL_WORKOUT_EDITOR_CYCLING_SPORTS_V1,
   ...MANUAL_WORKOUT_EDITOR_SWIMMING_SPORTS_V1,
+  ...MANUAL_WORKOUT_EDITOR_WALKING_SPORTS_V1,
+  ...MANUAL_WORKOUT_EDITOR_ROWING_SPORTS_V1,
 ] as const;
 export type ManualWorkoutEditorSportV1 = typeof MANUAL_WORKOUT_EDITOR_SPORTS_V1[number];
 
 export function isSwimmingWorkoutSportV1(sport?: ActivityTypes): boolean {
   return sport === ActivityTypes.Swimming || sport === ActivityTypes.OpenWaterSwimming;
+}
+
+export function isRowingWorkoutSportV1(sport?: ActivityTypes): boolean {
+  return sport === ActivityTypes.Rowing || sport === ActivityTypes.IndoorRowing;
 }
 
 export const INITIAL_MANUAL_WORKOUT_EDITOR_PROFILE_V1: WorkoutCompatibilityProfileV1 = {
@@ -952,6 +968,15 @@ function formatSpeedValue(
   sport?: ActivityTypes,
 ): UnitAwareStatDisplay | null {
   const isSwim = isSwimmingWorkoutSportV1(sport);
+  if (presentation === 'pace' && isRowingWorkoutSportV1(sport)) {
+    const duration = resolveUnitAwareDisplayFromValue(DataDuration.type, 500 / metersPerSecond, unitSettings);
+    const distance = resolveUnitAwareDisplayFromValue(DataDistance.type, 500, {
+      ...normalizeUserUnitSettings(unitSettings), distanceUnits: DistanceUnits.Kilometers,
+    });
+    if (!duration || !distance) return null;
+    const unit = `/ ${distance.text}`;
+    return { type: DataDuration.type, value: duration.text, unit, text: `${duration.text} ${unit}` };
+  }
   const paceSeconds = Math.round(((isSwim ? 100 : 1000) / metersPerSecond) * 1000) / 1000;
   return presentation === 'pace'
     ? resolveUnitAwareDisplayFromValue(isSwim ? DataSwimPace.type : DataPace.type, paceSeconds, unitSettings)
@@ -970,7 +995,11 @@ export function formatWorkoutEndingV1(
     case 'distance':
       return (isSwimmingWorkoutSportV1(sport)
         ? resolveUnitAwareDisplayStat(new DataSwimDistance(ending.meters), unitSettings)
-        : resolveUnitAwareDisplayFromValue(DataDistance.type, ending.meters, unitSettings))?.text ?? `${ending.meters} m`;
+        : resolveUnitAwareDisplayFromValue(DataDistance.type, ending.meters,
+          isRowingWorkoutSportV1(sport)
+            ? { ...normalizeUserUnitSettings(unitSettings), distanceUnits: DistanceUnits.Kilometers }
+            : unitSettings))?.text
+        ?? `${ending.meters} m`;
     case 'kilojoules':
       return resolveUnitAwareDisplayFromValue(DataPowerWork.type, ending.kilojoules, unitSettings)?.text
         ?? `${ending.kilojoules} kJ`;

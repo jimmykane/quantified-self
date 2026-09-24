@@ -3,6 +3,7 @@ import {
   formatWorkoutEndingV1,
   formatWorkoutStepV1,
   isSwimmingWorkoutSportV1,
+  isRowingWorkoutSportV1,
   MANUAL_WORKOUT_EDITOR_SPORTS_V1,
   parseWorkoutStructureV1,
   type ManualWorkoutEditorSportV1,
@@ -74,10 +75,11 @@ export function createManualWorkoutEditorValue(
 }
 
 function distanceScale(sport: ManualWorkoutSport): number {
-  return isSwimmingWorkoutSportV1(sport) ? 1 : 1000;
+  return isSwimmingWorkoutSportV1(sport) || isRowingWorkoutSportV1(sport) ? 1 : 1000;
 }
 
 function paceDistanceMeters(sport: ManualWorkoutSport, units?: UserUnitSettingsInterface | null): number {
+  if (isRowingWorkoutSportV1(sport)) return 500;
   if (!isSwimmingWorkoutSportV1(sport)) return 1000;
   return units?.swimPaceUnits?.[0] === SwimPaceUnits.MinutesPer100Yard ? 91.44 : 100;
 }

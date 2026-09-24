@@ -423,4 +423,14 @@ describe('planned workout formatting', () => {
     expect(formatWorkoutTargetV1(target, yards, undefined, sport))
       .toContain('min/100yd');
   });
+
+  it.each([ActivityTypes.Rowing, ActivityTypes.IndoorRowing])('renders %s as a 500 m split even with imperial distance settings', sport => {
+    const imperial = normalizeUserUnitSettings({ distanceUnits: DistanceUnits.Miles });
+    const ending = { kind: 'distance', meters: 500 } as const;
+    const target = { kind: 'speed', mode: 'absolute', presentation: 'pace',
+      minimumMetersPerSecond: 500 / 120, maximumMetersPerSecond: 500 / 105 } as const;
+    expect(formatWorkoutEndingV1(ending, imperial, undefined, sport)).toContain('500');
+    expect(formatWorkoutEndingV1(ending, imperial, undefined, sport)).toContain('m');
+    expect(formatWorkoutTargetV1(target, imperial, undefined, sport)).toContain('/ 500');
+  });
 });

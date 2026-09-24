@@ -364,8 +364,8 @@ function assertPrerenderedDocuments() {
 }
 
 function assertTrainingPlansDocument(documentRef) {
-  const expectedTitle = 'Training Plans for Running, Cycling & Swimming - Quantified Self';
-  const expectedDescription = 'Create free running, cycling, pool-swim, or open-water plans and standalone workouts. Schedule by date and keep plans separate from completed activities.';
+  const expectedTitle = 'Training Plans for Running, Cycling & More - Quantified Self';
+  const expectedDescription = 'Create free running, cycling, swimming, walking, hiking and rowing plans or standalone workouts. Schedule by date, separate from completed activities.';
   const expectedCanonical = `https://quantified-self.io${TRAINING_PLANS_ROUTE}`;
   const expectedSocialImage = 'https://quantified-self.io/assets/images/training-plans-social.png';
 
@@ -375,7 +375,7 @@ function assertTrainingPlansDocument(documentRef) {
   if (documentRef.querySelector('meta[name="description"]')?.getAttribute('content') !== expectedDescription) {
     throw new Error(`Prerendered ${TRAINING_PLANS_ROUTE} has unexpected description.`);
   }
-  if (documentRef.querySelector('h1')?.textContent?.trim() !== 'Plan running, cycling, and swimming workouts your way') {
+  if (documentRef.querySelector('h1')?.textContent?.trim() !== 'Plan workouts for running, cycling, swimming and more') {
     throw new Error(`Prerendered ${TRAINING_PLANS_ROUTE} has unexpected H1.`);
   }
   if (documentRef.querySelector('link[rel="canonical"]')?.getAttribute('href') !== expectedCanonical) {

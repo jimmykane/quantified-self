@@ -94,6 +94,9 @@ function expectPublicReadWriteRoundTrip(input: WorkoutStructureV1): void {
 }
 
 describe('Strict public Training recipe v1', () => {
+  it.each([ActivityTypes.Walking, ActivityTypes.Hiking, ActivityTypes.Rowing, ActivityTypes.IndoorRowing])('round-trips %s through the frozen read and approval-gated proposal schema', sport => {
+    expectPublicReadWriteRoundTrip({ ...recipe({ kind: 'distance', meters: 500 }), sport });
+  });
   it('keeps every explicit shared recipe catalog exhaustive', () => {
     expect(MCP_WORKOUT_RECIPE_VARIANT_COVERAGE.version).toBe(1);
     expect(Object.keys(MCP_WORKOUT_RECIPE_VARIANT_COVERAGE.stepPurposes)).toEqual([...WORKOUT_STEP_PURPOSES]);

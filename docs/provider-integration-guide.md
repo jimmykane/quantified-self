@@ -148,6 +148,13 @@ permission checks. Legacy connections must reconnect rather than have permission
 [Garmin public delivery boundary](training-workspace.md#garmin-public-delivery-boundary) for deployment, preflight and
 rollback. Provider status is:
 
+The v1 manual editor also accepts exact Walking, Hiking, Rowing, and Indoor Rowing sports. Suunto's catalog maps them
+to Guide activity IDs `0`, `11`, `15`, and `57` respectively; `0` is a valid activity ID, never a missing value.
+Rowing distance is authored in metres and pace as a 500 m split while canonical speed remains m/s. Garmin, COROS and
+Wahoo structured-workout delivery are unsupported for those sports under current contracts, regardless of their
+recorded-activity support. The new Suunto mappings have serializer and isolated demo-emulator evidence only; live
+cloud CRUD and app/watch visibility are not yet claimed. See #738 and #739 for separately approved account proof.
+
 | Provider | Availability | Truthful delivery model and remaining limits |
 | --- | --- | --- |
 | Garmin | `enabled` | Connected Pro users can explicitly deliver compatible running/cycling or pool-swimming workouts through separate Workout and Workout Schedule lifecycle records after granting `WORKOUT_IMPORT`. Running/cycling sub-sports still fold to broad `RUNNING`/`CYCLING`; pool swimming maps to `LAP_SWIMMING` with optional explicit pool length and target-free swim steps. Owner-account cloud create/edit/reschedule/readback/withdrawal passed on 23 September 2026 without retries. Open-water swimming is unmapped. Cloud acceptance and positive retained-record checks are not app/watch receipt or completed-activity evidence. There is no authoritative missing-copy repair from negative reads; device behavior remains unproven and completion correlation is #651. |

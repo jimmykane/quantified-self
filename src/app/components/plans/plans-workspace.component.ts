@@ -24,6 +24,9 @@ import {
   MANUAL_WORKOUT_EDITOR_CYCLING_SPORTS_V1,
   MANUAL_WORKOUT_EDITOR_RUNNING_SPORTS_V1,
   MANUAL_WORKOUT_EDITOR_SWIMMING_SPORTS_V1,
+  MANUAL_WORKOUT_EDITOR_WALKING_SPORTS_V1,
+  MANUAL_WORKOUT_EDITOR_ROWING_SPORTS_V1,
+  isRowingWorkoutSportV1,
   isSwimmingWorkoutSportV1,
 } from '@shared/planned-workout';
 import dayjs, { type Dayjs } from 'dayjs';
@@ -188,6 +191,14 @@ export class PlansWorkspaceComponent {
         label: value === ActivityTypes.Swimming ? 'Pool swimming' : 'Open-water swimming',
       })),
     },
+    {
+      label: 'Walking & hiking',
+      options: MANUAL_WORKOUT_EDITOR_WALKING_SPORTS_V1.map(value => ({ value, label: value })),
+    },
+    {
+      label: 'Rowing',
+      options: MANUAL_WORKOUT_EDITOR_ROWING_SPORTS_V1.map(value => ({ value, label: value })),
+    },
   ];
   readonly purposeOptions = ['warmup', 'work', 'recovery', 'cooldown', 'rest', 'other'] as const;
   readonly endingOptions: ReadonlyArray<{ value: ManualWorkoutEnding; label: string }> = [
@@ -203,11 +214,12 @@ export class PlansWorkspaceComponent {
 
   readonly currentUser = computed(() => this.userService.user() as AppUserInterface | null);
   readonly editorIsSwimming = computed(() => isSwimmingWorkoutSportV1(this.editor()?.value.sport));
+  readonly editorIsRowing = computed(() => isRowingWorkoutSportV1(this.editor()?.value.sport));
   readonly editorIsPoolSwimming = computed(() => this.editor()?.value.sport === ActivityTypes.Swimming);
   readonly editorPaceUnit = computed(() => this.editorIsSwimming()
     ? this.currentUser()?.settings?.unitSettings?.swimPaceUnits?.[0] === SwimPaceUnits.MinutesPer100Yard
       ? 'min/100yd' : 'min/100m'
-    : 'min/km');
+    : this.editorIsRowing() ? 'min/500m' : 'min/km');
   readonly hasTrainingPlanningUIAccess = computed(() => !!this.currentUser()?.uid);
   readonly scheduleState = toSignal(this.userService.user$.pipe(
     switchMap(user => user?.uid

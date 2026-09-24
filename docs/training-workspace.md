@@ -428,6 +428,18 @@ length. Other providers do not receive the selected length and require explicit 
 The shared contract remains broader so saved v1 data does
 not need a redesign when later UI slices are enabled.
 
+Walking and Hiking retain their exact Sports Lib activity strings in the same v1 time/distance/repeat editor. Rowing and
+Indoor Rowing also reuse v1: distance entry is metres, a pace target is entered and displayed as minutes per 500 m,
+and stored speed remains m/s. Rowing distance and split display use Sports Lib duration/distance primitives with a
+fixed 500 m sport-specific denominator, including when the owner's general distance preference is miles. No new
+planned-workout `Data*` type or event metric is introduced. Suunto Guide activity recommendations are Walking `0`,
+Hiking `11`, Rowing `15`, and Indoor Rowing `57`. The zero ID is retained as a real value in JSON and transport;
+Garmin, COROS, and Wahoo are unsupported for structured-workout delivery of these four sports under current contracts.
+The current browser, provider and MCP paths retain the authored sport; a provider's recorded-activity support never
+implies workout delivery support. Synthetic serializer and demo-emulator acceptance does not prove Suunto cloud, app,
+watch or completed-activity behavior. Account-side proof remains in #738 and #739 under #583 and needs separately
+approved Functions deployment and provider operations.
+
 Do not add planned-workout `Data*` types, `DataStore` entries, FIT parser behavior, or MCP fields merely to share this
 recipe. Extract the neutral structure, codec, validator, and reusable analysis to Sports Lib only after Garmin and COROS
 pass separately authorized create/update/reschedule/delete round trips, Wahoo and Suunto mapping fixtures are complete, the provider adapters
@@ -1028,7 +1040,8 @@ text is not tested against watch fonts. This is a formatting policy, not a claim
 
 The same mapping keeps the authored canonical sport and translates it to Suunto's documented Guide `activities`
 recommendations: Running `1`, Trail Running `22`, Treadmill `53`, Cycling `2`, Mountain Biking `10`, Indoor Cycling
-`52`, E-Biking `105` plus E-MTB `106`, Hand Cycle `109`, pool Swimming `21`, and Openwater swimming `85`.
+`52`, E-Biking `105` plus E-MTB `106`, Hand Cycle `109`, pool Swimming `21`, Openwater swimming `85`, Walking `0`,
+Hiking `11`, Rowing `15`, and Indoor Rowing `57`.
 The swim IDs follow Suunto's [activity catalog](https://aspartnercontent.blob.core.windows.net/apizone/docs/Activities.pdf)
 and are recommended Guide exercise profiles, not proof of watch delivery or workout completion. E-Biking uses both
 Suunto profiles because Sports Lib has one canonical E-Biking type while Suunto splits road and mountain e-biking.

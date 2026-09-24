@@ -69,6 +69,24 @@ describe('manual planned-workout editor conversion', () => {
       .toMatchObject({ endingValue: 100, targetMinimum: 1.5, targetMaximum: 2 });
   });
 
+  it.each([ActivityTypes.Rowing, ActivityTypes.IndoorRowing])('keeps %s distance in metres and pace as a 500 m split', sport => {
+    const value: ManualWorkoutEditorValue = {
+      title: 'Row intervals', localDate: '2026-09-24', sport,
+      nodes: [{
+        ...createManualWorkoutEditorStep('interval'), endingKind: 'distance', endingValue: 500,
+        targetKind: 'pace', targetMinimum: 1.75, targetMaximum: 2,
+      }],
+    };
+    const structure = manualWorkoutEditorToStructure(value);
+    expect(structure).toMatchObject({ sport, nodes: [{
+      ending: { kind: 'distance', meters: 500 },
+      targets: [{ minimumMetersPerSecond: 500 / 120, maximumMetersPerSecond: 500 / 105 }],
+    }] });
+    expect(workoutStructureToManualEditor(value.title, value.localDate, structure).nodes[0])
+      .toMatchObject({ endingValue: 500, targetMinimum: 1.75, targetMaximum: 2 });
+    expect(formatManualWorkoutStructure(structure).join(' ')).toContain('500');
+  });
+
   it('round-trips a selected 25 m or 25 yd pool without turning step distance into pool length', () => {
     const value: ManualWorkoutEditorValue = {
       title: 'Four lengths', localDate: '2026-09-24', sport: ActivityTypes.Swimming,

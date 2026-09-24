@@ -714,7 +714,7 @@ describe('PlansWorkspaceComponent', () => {
     expect(haptics.selection).toHaveBeenCalledTimes(2);
   });
 
-  it('offers exact running, cycling, and pool-swimming profiles in sport groups', async () => {
+  it('offers exact running, cycling, swimming, walking, hiking, and rowing profiles in sport groups', async () => {
     const fixture = await renderPlans();
     expect(fixture.componentInstance.sportOptionGroups).toEqual([
       {
@@ -742,6 +742,20 @@ describe('PlansWorkspaceComponent', () => {
           { value: ActivityTypes.OpenWaterSwimming, label: 'Open-water swimming' },
         ],
       },
+      {
+        label: 'Walking & hiking',
+        options: [
+          { value: ActivityTypes.Walking, label: 'Walking' },
+          { value: ActivityTypes.Hiking, label: 'Hiking' },
+        ],
+      },
+      {
+        label: 'Rowing',
+        options: [
+          { value: ActivityTypes.Rowing, label: 'Rowing' },
+          { value: ActivityTypes.IndoorRowing, label: 'Indoor Rowing' },
+        ],
+      },
     ]);
   });
 
@@ -765,6 +779,16 @@ describe('PlansWorkspaceComponent', () => {
         }),
       }),
     }));
+  });
+
+  it('labels rowing distance in metres and target pace per 500 m', async () => {
+    setRouteState({ mode: 'create', scope: 'standalone', date: '2026-09-24' });
+    const fixture = await renderPlans();
+    fixture.componentInstance.updateEditorField('sport', ActivityTypes.Rowing);
+    fixture.componentInstance.updateStep(0, null, 'endingKind', 'distance');
+    fixture.detectChanges();
+    expect(fixture.nativeElement.textContent).toContain('Metres');
+    expect(fixture.componentInstance.editorPaceUnit()).toBe('min/500m');
   });
 
   it('saves a selected 25 m pool length separately from the swim step distance', async () => {

@@ -77,6 +77,10 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Suunto worker with real F
   it.each([
     [ActivityTypes.Swimming, 21],
     [ActivityTypes.OpenWaterSwimming, 85],
+    [ActivityTypes.Walking, 0],
+    [ActivityTypes.Hiking, 11],
+    [ActivityTypes.Rowing, 15],
+    [ActivityTypes.IndoorRowing, 57],
   ] as const)('delivers %s with its distinct Suunto Guide activity', async (sport, activityId) => {
     await user().collection('scheduledWorkouts').doc('w').update({
       title: `${sport} QA`,

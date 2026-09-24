@@ -159,6 +159,14 @@ while new browser Send/sync actions remain unavailable, and Suunto maps pool and
 activity recommendations. Owner read fixtures cover both swim sport strings and metre-based steps; no widened consent or
 provider action is implied by this read-only presentation change.
 
+Walking, Hiking, Rowing, and Indoor Rowing keep their exact canonical Sports Lib sport strings in the existing v1
+planned-workout reads and approval-gated proposals. Rowing speed remains m/s and owner-facing pace is a 500 m split;
+row distance is displayed in metres. The strict registered v1 recipe already permits these sport strings, so no
+tool, schema, scope, consent or mutation kind changes. Focused read fixtures cover exact sport retention and unit
+formatting; compatibility remains provider-local, with Suunto Guide activity recommendations and explicit unsupported
+Garmin/COROS/Wahoo results. Provider IDs and transport evidence remain private. This is a no-wire-impact extension;
+it does not authorize a new provider action or count a planned workout as completed training.
+
 Sports Lib 21.2.1 FIT workout-reference adoption and the first exact Suunto activity link add no MCP metric, scope,
 provider action or registered wire field. Private FIT references, account digests and reverse-link records are excluded.
 Existing sync status may truthfully become `completed` after an account-bound Guide marker is accepted, using the status

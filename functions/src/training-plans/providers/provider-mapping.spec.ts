@@ -80,7 +80,11 @@ describe('planned-workout provider proof fixtures', () => {
         ]);
         expect(GARMIN_PLANNED_WORKOUT_SPORTS_V1).toEqual(expect.arrayContaining(
             MANUAL_WORKOUT_EDITOR_SPORTS_V1.filter(sport =>
-                sport !== ActivityTypes.OpenWaterSwimming),
+                sport !== ActivityTypes.OpenWaterSwimming
+                && sport !== ActivityTypes.Walking
+                && sport !== ActivityTypes.Hiking
+                && sport !== ActivityTypes.Rowing
+                && sport !== ActivityTypes.IndoorRowing),
         ));
         expect(PLANNED_WORKOUT_PROVIDER_CAPABILITIES_V1.garmin.profile?.sports)
             .toBe(GARMIN_PLANNED_WORKOUT_SPORTS_V1);
@@ -221,6 +225,10 @@ describe('planned-workout provider proof fixtures', () => {
         [ActivityTypes.Handcycle, [109]],
         [ActivityTypes.Swimming, [21]],
         [ActivityTypes.OpenWaterSwimming, [85]],
+        [ActivityTypes.Walking, [0]],
+        [ActivityTypes.Hiking, [11]],
+        [ActivityTypes.Rowing, [15]],
+        [ActivityTypes.IndoorRowing, [57]],
     ] as const)('maps canonical %s to Suunto activity recommendations', (sport, activities) => {
         const result = serializeSuuntoGuideJsonV1({ ...oneStepStructure(), sport }, {
             name: `${sport} workout`,
@@ -233,6 +241,16 @@ describe('planned-workout provider proof fixtures', () => {
 
         expect(result.level).toBe('exact');
         expect(result.artifact.activities).toEqual(activities);
+        expect(JSON.parse(JSON.stringify(result.artifact)).activities).toEqual(activities);
+    });
+
+    it.each([ActivityTypes.Walking, ActivityTypes.Hiking, ActivityTypes.Rowing, ActivityTypes.IndoorRowing])('%s remains unsupported for Garmin, COROS, and Wahoo delivery', sport => {
+        const structure = { ...oneStepStructure(), sport };
+        for (const provider of ['garmin', 'coros', 'wahoo'] as const) {
+            expect(assessPlannedWorkoutProviderMappingV1(provider, structure)).toMatchObject({
+                level: 'unsupported', issues: [expect.objectContaining({ code: 'unsupported_sport' })],
+            });
+        }
     });
 
     it.each([
