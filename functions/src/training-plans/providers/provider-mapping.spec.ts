@@ -60,7 +60,7 @@ describe('planned-workout provider proof fixtures', () => {
             });
         }
         expect(PLANNED_WORKOUT_PROVIDER_CAPABILITIES_V1.suunto.profile?.sports)
-            .toEqual(MANUAL_WORKOUT_EDITOR_SPORTS_V1);
+            .toEqual([...MANUAL_WORKOUT_EDITOR_SPORTS_V1, ActivityTypes.StrengthTraining]);
         expect(GARMIN_PLANNED_WORKOUT_SPORTS_V1).toEqual([
             ActivityTypes.Running,
             ActivityTypes.TrailRunning,

@@ -8,7 +8,7 @@ import { hashTrainingScheduleRequestPayload } from '../../persistence';
 import type { DeliveryAssessment } from '../contracts';
 
 // Adding a previously unsupported sport must not churn digests for existing Guides.
-export const SUUNTO_MAPPING_VERSION = 'suunto-guides-v1';
+export const SUUNTO_MAPPING_VERSION = 'suunto-guides-v2';
 // Destination already incorporates Firebase UID + provider account. Do not reuse
 // a plain workout ID: two QS users may legitimately connect the same Suunto account.
 export function guideExternalId(destination: string, workoutId: string): string {
