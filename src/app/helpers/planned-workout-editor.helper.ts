@@ -156,6 +156,9 @@ function targetFromEditor(
     if (minimum <= 0 || maximum <= 0) {
       throw new Error('Pace target ranges need two positive values.');
     }
+    if (minimum > maximum) {
+      throw new Error('Faster pace must not exceed slower pace.');
+    }
     return [{
       kind: 'speed',
       mode: 'absolute',
@@ -263,7 +266,8 @@ function editorTarget(
 }
 
 function roundEditorNumber(value: number): number {
-  return Math.round(value * 1_000_000) / 1_000_000;
+  const rounded = Math.round(value * 1_000_000) / 1_000_000;
+  return Number.isFinite(rounded) && (rounded !== 0 || value === 0) ? rounded : value;
 }
 
 function editorStep(

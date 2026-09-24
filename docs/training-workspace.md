@@ -430,7 +430,9 @@ their pace-target inputs independently follow the first selected `paceUnits` pre
 captures normalized units when opened so a settings update in another tab cannot reinterpret an unsaved number. Existing
 metre and m/s values display at readable precision but retain their exact canonical values on an unchanged edit;
 newly typed values convert to canonical metres and m/s before the existing schedule mutation. One international mile
-is 1609.344 metres. No recipe field, schedule history or stored workout requires migration. Garmin and Suunto consume
+is 1609.344 metres. Pace inputs require the Faster value to be no greater than the Slower value; the editor does not
+silently reorder an inverted range. Tiny positive canonical values remain positive when displayed for editing rather
+than rounding to zero. No recipe field, schedule history or stored workout requires migration. Garmin and Suunto consume
 canonical metres directly; COROS applies its existing documented integer-metre rounding and degradation approval;
 Wahoo's dated Workout delivery still rejects distance-ended recipes because its required duration is unknown.
 MCP impact: no tool, scope, schema, consent, projection or proposal shape changes. Existing MCP planning reads/writes

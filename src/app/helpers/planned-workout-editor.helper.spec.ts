@@ -8,6 +8,7 @@ import {
   formatManualWorkoutStructure,
   manualWorkoutEditorToStructure,
   workoutStructureToManualEditor,
+  type ManualWorkoutEditorStep,
   type ManualWorkoutEditorValue,
 } from './planned-workout-editor.helper';
 
@@ -65,6 +66,18 @@ describe('manual planned-workout editor conversion', () => {
     });
     expect(manualWorkoutEditorToStructure(changeManualWorkoutEditorSport(editor, ActivityTypes.Swimming, units), units))
       .toMatchObject({ sport: ActivityTypes.Swimming, nodes: structure.nodes });
+  });
+
+  it('keeps a positive sub-millimetre canonical distance editable instead of rounding its input to zero', () => {
+    const units = normalizeUserUnitSettings({ distanceUnits: DistanceUnits.Miles });
+    const structure: WorkoutStructureV1 = {
+      version: 1, sport: ActivityTypes.Running,
+      nodes: [{ kind: 'step', id: 'tiny', purpose: 'work',
+        ending: { kind: 'distance', meters: 0.000001 }, targets: [] }],
+    };
+    const editor = workoutStructureToManualEditor('Tiny distance', '2026-09-03', structure, units);
+    expect((editor.nodes[0] as ManualWorkoutEditorStep).endingValue).toBeGreaterThan(0);
+    expect(manualWorkoutEditorToStructure(editor, units)).toEqual(structure);
   });
 
   it('lets an unfinished numeric draft change sports without saving an invalid step', () => {
@@ -256,6 +269,17 @@ describe('manual planned-workout editor conversion', () => {
       targetMaximum: 150,
     }];
     expect(() => manualWorkoutEditorToStructure(value)).toThrow('minimum must not exceed');
+
+    value.nodes = [{
+      ...createManualWorkoutEditorStep('work'),
+      targetKind: 'pace',
+      targetMinimum: 5,
+      targetMaximum: 4,
+    }];
+    expect(() => manualWorkoutEditorToStructure(value)).toThrow('Faster pace must not exceed slower pace');
+    expect(() => manualWorkoutEditorToStructure(value, normalizeUserUnitSettings({
+      paceUnits: [PaceUnits.MinutesPerMile],
+    }))).toThrow('Faster pace must not exceed slower pace');
   });
 
   it('preserves step notes and accepts canonical zero-watt bounds', () => {
