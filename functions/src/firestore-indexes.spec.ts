@@ -33,6 +33,20 @@ function loadFirestoreIndexes(): FirestoreIndexesConfig {
 }
 
 describe('firestore indexes', () => {
+    it('adds marketing recipient cleanup lookup without disabling default collection indexes', () => {
+        const config = loadFirestoreIndexes();
+        expect(config.fieldOverrides).toContainEqual({
+            collectionGroup: 'recipients',
+            fieldPath: 'uid',
+            ttl: false,
+            indexes: [
+                { order: 'ASCENDING', queryScope: 'COLLECTION' },
+                { order: 'DESCENDING', queryScope: 'COLLECTION' },
+                { arrayConfig: 'CONTAINS', queryScope: 'COLLECTION' },
+                { order: 'ASCENDING', queryScope: 'COLLECTION_GROUP' },
+            ],
+        });
+    });
     it('supports durable explicit-disconnect recovery without indexing cleanup payloads', () => {
         const config = loadFirestoreIndexes();
         expect(config.fieldOverrides).toContainEqual({ collectionGroup: 'serviceDisconnectCleanup', fieldPath: '*', indexes: [] });
