@@ -8,6 +8,7 @@ import { pricingRedirectGuard } from './authentication/pricing-redirect.guard';
 import { toolsCompareAuthResolver } from './resolvers/tools-compare-auth.resolver';
 import { lazyRouteResolver } from './resolvers/lazy-route.resolver';
 import { PUBLIC_FEATURE_PATHS, PUBLIC_GUIDE_PATHS } from './components/public-seo/public-seo-pages.paths';
+import { TRAINING_PLANS_SEO_CONTENT } from './components/public-seo/training-plans-page.content';
 import {
   LEGACY_WORKOUT_DATA_COMPARISON_PATHS,
   WORKOUT_DATA_COMPARISON_PATH,
@@ -467,9 +468,9 @@ describe('AppRoutingModule routes', () => {
       },
       {
         path: PUBLIC_FEATURE_PATHS.trainingPlans,
-        title: 'Training Plans for Running, Cycling & Swimming',
-        h1: 'Plan running, cycling, and swimming workouts your way',
-        descriptionText: 'Create free running, cycling, pool-swim, or open-water plans and standalone workouts',
+        title: TRAINING_PLANS_SEO_CONTENT.title,
+        h1: TRAINING_PLANS_SEO_CONTENT.h1,
+        descriptionText: TRAINING_PLANS_SEO_CONTENT.description,
       },
       {
         path: PUBLIC_FEATURE_PATHS.trainingDashboard,
