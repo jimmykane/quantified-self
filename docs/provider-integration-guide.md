@@ -85,6 +85,11 @@ Training planning uses a stricter launch boundary than activity or route deliver
 authoring is free and independent of connected services. Any future provider synchronization is Pro, explicit, and
 directional: a plan needs per-provider opt-in, while a standalone workout needs a user-selected Send action. A provider
 connection alone never opts workouts into delivery.
+The manual editor converts the owner's kilometre/mile step distances and separately selected pace units into canonical
+metres and m/s before writing `WorkoutStructureV1`. Provider serializers must use only those stored canonical values:
+never infer input units from the account preference or convert a distance a second time. Garmin and Suunto accept
+metres, COROS applies its existing integer-metre mapping with approval for loss, and Wahoo's dated delivery continues
+to reject distance-ended recipes when a required total duration cannot be established.
 
 The Training UI checks availability and compatibility automatically on entering sync consent. With one ready provider,
 **Sync plan with Garmin** → **Enable plan sync** (plan) or **Send to Garmin** → **Send workout** (standalone) is the normal path;
@@ -156,13 +161,14 @@ recorded-activity support. The new Suunto mappings have serializer and isolated 
 cloud CRUD and app/watch visibility are not yet claimed. See #738 and #739 for separately approved account proof.
 
 Strength Training has a separate exercise-aware prescription with ordered names and sets, reps or timed holds,
-optional fixed external load in kilograms and optional rest after each set. Its v1 steps are only a compatibility
+optional fixed external load stored in kilograms and optional rest after each set. The app editor follows the owner's
+kg/lb preference through Sports Lib 21.3.0; provider payloads still use canonical kilograms. Its v1 steps are only a compatibility
 projection; delivery validates the owner-scoped companion. Suunto maps it to a Gym (`23`) Guide with manual transitions
 for rep sets. This is degraded and requires explicit approval, not native strength tracking. The COROS partner contract
 describes strength Reps/Second, Rest and fixed equipment weight in kilograms, and QS has a serializer fixture, but
 new COROS Send/sync remains Coming soon until entitlement and account-side push/update/delete proof. Garmin and Wahoo
-strength delivery are unsupported. Suunto strength has demo-emulator evidence, not live app/watch proof. See #740,
-#741 and the Sports Lib mass-unit dependency #743.
+strength delivery are unsupported. Suunto strength has demo-emulator evidence, not live app/watch proof. See #740
+and #741 for remaining account-side delivery proof.
 
 | Provider | Availability | Truthful delivery model and remaining limits |
 | --- | --- | --- |

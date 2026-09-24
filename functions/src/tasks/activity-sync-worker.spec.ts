@@ -71,6 +71,7 @@ vi.mock('../queue/user-deletion-skip', () => ({
 vi.mock('../queue-utils', () => ({
   QueueResult: {
     Processed: 'PROCESSED',
+    AcknowledgedStale: 'ACKNOWLEDGED_STALE',
     Skipped: 'SKIPPED',
     Deferred: 'DEFERRED',
     ProviderStatusPending: 'PROVIDER_STATUS_PENDING',
@@ -126,6 +127,25 @@ describe('processActivitySyncTask', () => {
       processed: false,
       userID: 'user-1',
     }));
+  });
+
+  it('acknowledges a stale delivery without claiming it was processed', async () => {
+    mockQueueGet.mockResolvedValueOnce({
+      exists: true,
+      id: 'queue-item-1',
+      ref: { path: 'activitySyncQueue/queue-item-1' },
+      data: () => ({ processed: false, userID: 'user-1' }),
+    });
+    mockProcessActivitySyncQueueItem.mockResolvedValueOnce('ACKNOWLEDGED_STALE');
+
+    await expect(invokeWorker({ data: { queueItemId: 'queue-item-1' } })).resolves.toBeUndefined();
+
+    expect(mockLoggerInfo).toHaveBeenCalledWith(
+      '[ActivitySyncTaskWorker] Acknowledged stale delivery for item queue-item-1; this worker did not mark it processed.',
+    );
+    expect(mockLoggerInfo).not.toHaveBeenCalledWith(
+      '[ActivitySyncTaskWorker] Successfully processed item queue-item-1',
+    );
   });
 
   it('returns without processing when queue item is already processed', async () => {

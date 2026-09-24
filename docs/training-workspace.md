@@ -136,11 +136,25 @@ presentation-only optimizations with no Training calculation, planning, or MCP c
 Current compatibility baseline:
 
 - Quantified Self derived-metric schema: `19`
-- `@sports-alliance/sports-lib`: `21.2.5`
+- `@sports-alliance/sports-lib`: `21.3.0`
 - Training sport groups: eight modeled benchmark families plus data-backed Fitness & Gym and Other training volume groups
 - Imported FTP/VO2 capacity disciplines: Running and Cycling only
 - Rolling power-system capacity: every exact canonical activity type with usable persisted power curves
 - Calendar boundaries: UTC unless a section explicitly says otherwise
+
+Sports Lib 21.3.0 adds an independent `weightUnits` preference. Quantified Self defaults legacy accounts to kg,
+lets the athlete choose kg or lb in Settings → Units, and uses Sports Lib `DataWeight` for body-weight and planned
+strength external-load display and for converting manual lb inputs back to canonical kg. A distance preset never changes
+the weight choice. Health observations, Training trend points, MCP body-measurement values, and future strength
+external loads remain stored as kg; editing an unchanged rounded lb value preserves its original kg value.
+This upgrade changes no persisted Sports Lib metric JSON, derived-metric schema, planned-workout recipe, or MCP
+wire contract. It needs no event/route reparse, Training recomputation, or Firestore migration. The version-based
+reparse target does advance to 21.3.0, so do not enable a runtime reparse scan merely for this display/input change.
+The package adds about 5.17 kB to the production total-script output; production and beta `allScript` budgets
+move together from 12,320 to 12,328 kB while the 1,440 kB initial budget remains unchanged. The combined
+sports/strength feature raises the production and beta `allScript` budget to 12,344 kB (from the expansion
+branch's 12,336 kB); the 1,440 kB initial budget is unchanged. The strength editor snapshots weight units when opened,
+retains exact canonical kg for an unchanged rounded lb display, and converts edited lb input through Sports Lib.
 
 ## Product Contract
 
@@ -425,6 +439,21 @@ rather than kilometres, and pace targets follow the user's swim-pace preference 
 editor sport converts displayed distances and paces without changing their canonical values. The pool editor may
 select an optional physical length; a 25 m step alone never asserts a 25 m pool, and open-water swimming has no pool
 length. Other providers do not receive the selected length and require explicit degradation review. These are Sports Lib activity-type strings, not provider profile IDs.
+Running and cycling distance-step inputs follow the owner's `distanceUnits` preference (kilometres or miles), while
+their pace-target inputs independently follow the first selected `paceUnits` preference (min/km or min/mi). The editor
+captures normalized units when opened so a settings update in another tab cannot reinterpret an unsaved number. Existing
+metre and m/s values display at readable precision but retain their exact canonical values on an unchanged edit;
+newly typed values convert to canonical metres and m/s before the existing schedule mutation. One international mile
+is 1609.344 metres. Sports Lib 21.3 supplies the owner-unit display formatters, but no matching inverse editor API
+for distance, swim distance, or pace; QS keeps exact metre/yard/mile input conversion rather than using a rounded
+display value or Sports Lib's approximate metres-to-miles helper for canonical storage. Pace inputs require the Faster
+value to be no greater than the Slower value; the editor does not silently reorder an inverted range. Tiny positive canonical values remain positive when displayed for editing rather
+than rounding to zero. No recipe field, schedule history or stored workout requires migration. Garmin and Suunto consume
+canonical metres directly; COROS applies its existing documented integer-metre rounding and degradation approval;
+Wahoo's dated Workout delivery still rejects distance-ended recipes because its required duration is unknown.
+MCP impact: no tool, scope, schema, consent, projection or proposal shape changes. Existing MCP planning reads/writes
+already use canonical metres and m/s plus Sports Lib owner-unit formatting, and provider actions still use the same
+saved recipe and approval path.
 The shared contract remains broader so saved v1 data does
 not need a redesign when later UI slices are enabled.
 
@@ -447,8 +476,9 @@ Only server mutation paths write it. `ScheduledWorkoutV1.structure` stays a vali
 summary so older clients remain readable; that summary is never sufficient to edit or deliver strength. Create,
 update, copy, transfer, history/checkpoint, restore, plan deletion/conversion, account deletion and delivery load the
 companion and fail closed on missing or mismatched data. The companion content revision changes only with prescription
-edits; schedule shifts preserve it. The current Sports Lib DataWeight displays kilograms but has no owner mass-unit
-preference or lb formatter; #743 tracks that dependency rather than deriving load units from distance settings.
+edits; schedule shifts preserve it. Sports Lib `DataWeight` uses the owner's independent kg/lb preference for
+external-load display and converts edited pounds back to canonical kilograms; changing distance units does not
+change load units. An unchanged rounded pound display preserves its stored kilogram value.
 
 Suunto maps strength to a dated Gym (`23`) Guide containing exercise/set instructions. Rep sets use manual transitions,
 so mapping is degraded, requires explicit approval, and is not native strength tracking. COROS has a contract fixture
@@ -502,9 +532,23 @@ packed Sports Lib package. That gate is tracked by GitHub issue #654 under epic 
 
 ### UI and calendar contract
 
-`/training/plans` provides Plans and Standalone views plus create, edit, copy, move/associate, skip, delete, permanent delete,
+`/training/plans` provides Plans and Standalone views plus create, edit, duplicate, move/associate, skip, delete, permanent delete,
 history/restore, activation, pause, archive, and date-shift actions. Calendar-originated creation defaults to the active
 plan when one exists and provides an explicit standalone action; without an active plan it defaults to standalone.
+
+**Duplicate to…** is a date-picker action on plan/standalone workout rows and the planned-workout section of Calendar
+day details. It defaults to the source calendar day, supports same-day and cross-year copies, and keeps the source's
+scope. A plan destination outside its range uses explicit range-extension confirmation before any write. It calls the
+existing revision-checked `copy-workout` mutation with fresh workout/mutation IDs; the duplicate starts planned with no
+completion link or inherited standalone provider consent. Existing active-plan opt-in can deliver the new workout.
+Success selects the destination day in Plans or Calendar, or focuses the new Standalone row. Dashboard/Today day details
+route to that day in full Calendar. A cancelled picker or range confirmation does not mutate the schedule; source and
+completed-activity totals are unchanged. The one-shot Calendar destination is owner-bound and cleared on sign-out.
+The compact dialog uses the account week-start preference, app scrollbar
+styling and action haptics. MCP impact: no new tool, schema, field, scope or provider action. The existing strict
+`copy-workout` preview/apply operation already covers same-scope duplication; Assistant and bundled guidance now route
+explicit duplication to it, with exact-source/revision reads and native or app-owned confirmation. Firestore-emulator
+tests cover copy identity, scope, range extension, revision conflict and idempotent apply.
 
 The workspace presents one scope selector and one contextual **Add workout** action. The selected plan's name, lifecycle,
 and date range appear once; there is no separate overview strip or repeated plan/standalone heading. An account without
@@ -3438,7 +3482,7 @@ sleep duration, score, HRV, and sleep-heart-rate aggregates it already consumes;
 changes. Existing normalized Sleep documents use the dedicated Health/Sleep scalar migration, not an activity reparse,
 and do not require a Training snapshot rebuild solely for this storage transition.
 
-The repository now pins Sports Lib `21.2.5`, and Functions pins FIT parser `6.1.2`. The 21.0.3 package-emission transition
+At the #727 package transition, the repository pinned Sports Lib `21.2.5`, and Functions pinned FIT parser `6.1.2`. The 21.0.3 package-emission transition
 remains module-preserving ESM and per-module CommonJS. Sports Lib 21.2.1 added nonnumeric, package-root FIT
 workout-reference classes and the bounded `readFITWorkoutReferences(...)` metadata reader. Sports Lib 21.2.5 keeps those
 public classes, return shapes, numeric values, serialized event/route data, and representative FIT course output unchanged

@@ -34,7 +34,8 @@ import {
     DataStamina,
     SwimPaceUnits,
     User,
-    VerticalSpeedUnits
+    VerticalSpeedUnits,
+    WeightUnits,
 } from '@sports-alliance/sports-lib';
 
 
@@ -607,6 +608,34 @@ describe('UserSettingsComponent', () => {
         );
     });
 
+    it('saves pounds independently and keeps them when applying a distance preset', async () => {
+        const userService = TestBed.inject(AppUserService);
+        const updateUserPropertiesSpy = vi.spyOn(userService, 'updateUserProperties').mockResolvedValue(true as any);
+        component.ngOnChanges();
+        expect(component.userSettingsFormGroup.get('weightUnitsToUse').value).toBe(WeightUnits.Kilograms);
+        component.userSettingsFormGroup.get('weightUnitsToUse').setValue(WeightUnits.Pounds);
+        component.onUnitPresetChange('miles');
+        expect(component.userSettingsFormGroup.get('weightUnitsToUse').value).toBe(WeightUnits.Pounds);
+        await component.onSubmit(new Event('submit'));
+        expect(updateUserPropertiesSpy).toHaveBeenCalledWith(
+            expect.objectContaining({ uid: 'test-uid' }),
+            expect.objectContaining({ settings: expect.objectContaining({
+                unitSettings: expect.objectContaining({ weightUnits: WeightUnits.Pounds, distanceUnits: DistanceUnits.Miles }),
+            }) }),
+        );
+    });
+
+    it('keeps weight-unit hydration silent and gives one selection feedback for a deliberate choice', () => {
+        component.activeSection = 'units';
+        fixture.detectChanges();
+        expect(hapticsServiceMock.selection).not.toHaveBeenCalled();
+
+        const weightSelect = fixture.debugElement.query(By.css('mat-select[formControlName="weightUnitsToUse"]'));
+        expect(weightSelect).toBeTruthy();
+        weightSelect.triggerEventHandler('selectionChange', { value: WeightUnits.Pounds });
+        expect(hapticsServiceMock.selection).toHaveBeenCalledOnce();
+    });
+
     it('should complete unit setup when saving a changed unit preference', async () => {
         const userService = TestBed.inject(AppUserService);
         const updateUserPropertiesSpy = vi.spyOn(userService, 'updateUserProperties').mockResolvedValue(true as any);
@@ -784,6 +813,7 @@ describe('UserSettingsComponent', () => {
         expect(presetGroup.hasAttribute('hideSingleSelectionIndicator')).toBe(true);
         expect(fixture.nativeElement.querySelector('mat-expansion-panel')).toBeFalsy();
         expect(fixture.nativeElement.textContent).toContain('Fine-tune units');
+        expect(fixture.nativeElement.textContent).toContain('Health and Training body weight');
         expect(fixture.nativeElement.textContent).toContain('first preference also selects dive depth and rate units');
         expect(formFields.length).toBeGreaterThanOrEqual(5);
         expect(fixture.nativeElement.querySelector('.unit-simple-settings')).toBeFalsy();

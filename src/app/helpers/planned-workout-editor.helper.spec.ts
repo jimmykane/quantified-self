@@ -1,4 +1,4 @@
-import { ActivityTypes, DistanceUnits, SwimPaceUnits } from '@sports-alliance/sports-lib';
+import { ActivityTypes, DistanceUnits, PaceUnits, SwimPaceUnits } from '@sports-alliance/sports-lib';
 import { describe, expect, it } from 'vitest';
 import type { WorkoutStructureV1 } from '@shared/planned-workout';
 import { normalizeUserUnitSettings } from '@shared/unit-aware-display';
@@ -8,6 +8,7 @@ import {
   formatManualWorkoutStructure,
   manualWorkoutEditorToStructure,
   workoutStructureToManualEditor,
+  type ManualWorkoutEditorStep,
   type ManualWorkoutEditorValue,
 } from './planned-workout-editor.helper';
 
@@ -26,6 +27,120 @@ describe('manual planned-workout editor conversion', () => {
 
     expect(structure.nodes[0]).toMatchObject({ ending: { kind: 'time', seconds: 750 } });
     expect(structure.nodes[1]).toMatchObject({ ending: { kind: 'distance', meters: 5000 } });
+  });
+
+  it.each([ActivityTypes.Running, ActivityTypes.Cycling])('saves and reopens %s miles as the same canonical metres', sport => {
+    const units = normalizeUserUnitSettings({ distanceUnits: DistanceUnits.Miles });
+    const value: ManualWorkoutEditorValue = {
+      title: 'Mile repeats', localDate: '2026-09-03', sport,
+      nodes: [{ kind: 'repeat', id: 'repeats', count: 2, steps: [{
+        ...createManualWorkoutEditorStep('mile'), endingKind: 'distance', endingValue: 1,
+      }] }],
+    };
+    const structure = manualWorkoutEditorToStructure(value, units);
+    expect(structure.nodes[0]).toMatchObject({
+      steps: [{ ending: { kind: 'distance', meters: 1609.344 } }],
+    });
+    expect(workoutStructureToManualEditor(value.title, value.localDate, structure, units).nodes)
+      .toMatchObject(value.nodes);
+    expect(manualWorkoutEditorToStructure(
+      workoutStructureToManualEditor(value.title, value.localDate, structure, units), units,
+    )).toEqual(structure);
+    expect(workoutStructureToManualEditor(value.title, value.localDate, structure).nodes[0])
+      .toMatchObject({ steps: [{ endingValue: 1.609344 }] });
+  });
+
+  it('shows a readable fractional mile while preserving the exact saved distance on an unchanged edit', () => {
+    const units = normalizeUserUnitSettings({ distanceUnits: DistanceUnits.Miles });
+    const structure: WorkoutStructureV1 = {
+      version: 1, sport: ActivityTypes.Running,
+      nodes: [{ kind: 'step', id: 'kilometer', purpose: 'work',
+        ending: { kind: 'distance', meters: 1000 }, targets: [] }],
+    };
+    const editor = workoutStructureToManualEditor('Existing', '2026-09-03', structure, units);
+    expect(editor.nodes[0]).toMatchObject({ endingValue: 0.621371 });
+    expect(manualWorkoutEditorToStructure(editor, units)).toEqual(structure);
+    const changed = { ...editor, nodes: [{ ...editor.nodes[0], endingValue: 1 } as ManualWorkoutEditorValue['nodes'][number]] };
+    expect(manualWorkoutEditorToStructure(changed, units).nodes[0]).toMatchObject({
+      ending: { kind: 'distance', meters: 1609.344 },
+    });
+    expect(manualWorkoutEditorToStructure(changeManualWorkoutEditorSport(editor, ActivityTypes.Swimming, units), units))
+      .toMatchObject({ sport: ActivityTypes.Swimming, nodes: structure.nodes });
+  });
+
+  it('keeps a positive sub-millimetre canonical distance editable instead of rounding its input to zero', () => {
+    const units = normalizeUserUnitSettings({ distanceUnits: DistanceUnits.Miles });
+    const structure: WorkoutStructureV1 = {
+      version: 1, sport: ActivityTypes.Running,
+      nodes: [{ kind: 'step', id: 'tiny', purpose: 'work',
+        ending: { kind: 'distance', meters: 0.000001 }, targets: [] }],
+    };
+    const editor = workoutStructureToManualEditor('Tiny distance', '2026-09-03', structure, units);
+    expect((editor.nodes[0] as ManualWorkoutEditorStep).endingValue).toBeGreaterThan(0);
+    expect(manualWorkoutEditorToStructure(editor, units)).toEqual(structure);
+  });
+
+  it('lets an unfinished numeric draft change sports without saving an invalid step', () => {
+    const units = normalizeUserUnitSettings({ distanceUnits: DistanceUnits.Miles });
+    const value: ManualWorkoutEditorValue = {
+      title: 'Draft', localDate: '2026-09-03', sport: ActivityTypes.Running,
+      nodes: [{ ...createManualWorkoutEditorStep('draft'), endingValue: 0 }],
+    };
+    expect(changeManualWorkoutEditorSport(value, ActivityTypes.Cycling, units).nodes[0])
+      .toMatchObject({ endingValue: 0 });
+    expect(() => manualWorkoutEditorToStructure(value, units)).toThrow('positive duration or distance');
+  });
+
+  it('keeps distance and pace preferences independent in the editor', () => {
+    const units = normalizeUserUnitSettings({
+      distanceUnits: DistanceUnits.Miles,
+      paceUnits: [PaceUnits.MinutesPerMile],
+    });
+    const value: ManualWorkoutEditorValue = {
+      title: 'Mile tempo', localDate: '2026-09-03', sport: ActivityTypes.Running,
+      nodes: [{
+        ...createManualWorkoutEditorStep('tempo'), endingKind: 'distance', endingValue: 1,
+        targetKind: 'pace', targetMinimum: 4, targetMaximum: 5,
+      }],
+    };
+    const structure = manualWorkoutEditorToStructure(value, units);
+    expect(structure.nodes[0]).toMatchObject({
+      ending: { kind: 'distance', meters: 1609.344 },
+      targets: [{
+        kind: 'speed', mode: 'absolute', presentation: 'pace',
+        minimumMetersPerSecond: 1609.344 / 300,
+        maximumMetersPerSecond: 1609.344 / 240,
+      }],
+    });
+    expect(workoutStructureToManualEditor(value.title, value.localDate, structure, units).nodes[0])
+      .toMatchObject({ endingValue: 1, targetMinimum: 4, targetMaximum: 5 });
+    const metricPace = normalizeUserUnitSettings({ distanceUnits: DistanceUnits.Miles });
+    expect(manualWorkoutEditorToStructure(value, metricPace).nodes[0]).toMatchObject({
+      ending: { kind: 'distance', meters: 1609.344 },
+      targets: [{ minimumMetersPerSecond: 1000 / 300, maximumMetersPerSecond: 1000 / 240 }],
+    });
+  });
+
+  it('keeps canonical speed exact when a rounded mile pace is reopened or the sport changes', () => {
+    const units = normalizeUserUnitSettings({
+      distanceUnits: DistanceUnits.Miles,
+      paceUnits: [PaceUnits.MinutesPerMile],
+      swimPaceUnits: [SwimPaceUnits.MinutesPer100Yard],
+    });
+    const structure: WorkoutStructureV1 = {
+      version: 1, sport: ActivityTypes.Running,
+      nodes: [{ kind: 'step', id: 'pace', purpose: 'work',
+        ending: { kind: 'distance', meters: 1000 },
+        targets: [{ kind: 'speed', mode: 'absolute', presentation: 'pace',
+          minimumMetersPerSecond: 3.123456, maximumMetersPerSecond: 4.654321 }],
+      }],
+    };
+    const editor = workoutStructureToManualEditor('Existing pace', '2026-09-03', structure, units);
+    expect(manualWorkoutEditorToStructure(editor, units)).toEqual(structure);
+    const swimEditor = changeManualWorkoutEditorSport(editor, ActivityTypes.Swimming, units);
+    expect(manualWorkoutEditorToStructure(swimEditor, units).nodes).toEqual(structure.nodes);
+    const changed = { ...editor, nodes: [{ ...editor.nodes[0], targetMinimum: 4 } as ManualWorkoutEditorValue['nodes'][number]] };
+    expect(manualWorkoutEditorToStructure(changed, units).nodes).not.toEqual(structure.nodes);
   });
 
   it('creates fixed repeats without nested repeat nodes', () => {
@@ -172,6 +287,17 @@ describe('manual planned-workout editor conversion', () => {
       targetMaximum: 150,
     }];
     expect(() => manualWorkoutEditorToStructure(value)).toThrow('minimum must not exceed');
+
+    value.nodes = [{
+      ...createManualWorkoutEditorStep('work'),
+      targetKind: 'pace',
+      targetMinimum: 5,
+      targetMaximum: 4,
+    }];
+    expect(() => manualWorkoutEditorToStructure(value)).toThrow('Faster pace must not exceed slower pace');
+    expect(() => manualWorkoutEditorToStructure(value, normalizeUserUnitSettings({
+      paceUnits: [PaceUnits.MinutesPerMile],
+    }))).toThrow('Faster pace must not exceed slower pace');
   });
 
   it('preserves step notes and accepts canonical zero-watt bounds', () => {

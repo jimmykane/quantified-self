@@ -150,6 +150,8 @@ describe('public-seo-pages.content', () => {
     const supportedWorkoutFaq = trainingPlans.faqItems.find(item => item.question === 'Which sports and workout steps can I create?')?.answer;
     expect(supportedWorkoutFaq).toContain('Open Water Swimming');
     expect(supportedWorkoutFaq).toContain('Indoor Rowing');
+    expect(supportedWorkoutFaq).toContain('separate Strength Training editor');
+    expect(supportedWorkoutFaq).toContain('kg/lb external load');
     expect(supportedWorkoutFaq).toContain('compatible Garmin lap-swim delivery includes it');
     expect(supportedWorkoutFaq).toContain('Suunto Guides do not');
     expect(supportedWorkoutFaq).toContain('Open-water workouts have no pool length');

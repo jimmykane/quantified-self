@@ -23,6 +23,13 @@ describe('help.content', () => {
     expect(HELP_SECTIONS.some(section => section.id === 'activity-calendar')).toBe(true);
   });
 
+  it('explains the independent weight preference and canonical weigh-in storage', () => {
+    const copy = JSON.stringify(HELP_SECTIONS);
+    expect(copy).toContain('Weight input and display use your **Settings → Units → Weight** choice (kg or lb)');
+    expect(copy).toContain('saved measurements remain in canonical kg');
+    expect(copy).toContain('changing a distance preset does not reset that choice');
+  });
+
   it('documents regional formatting scope, precedence, and stable export dates', () => {
     const content = HELP_SECTIONS.find(section => section.id === 'data-and-privacy')!.content.replace(/\s+/g, ' ');
 
@@ -49,6 +56,7 @@ describe('help.content', () => {
     expect(content).toContain('Workout delivery to Garmin, Suunto, and Wahoo is available to connected Pro members');
     expect(content).toContain('New COROS plan sync and standalone Send actions are coming soon in the app');
     expect(content).toContain('Distance-based steps are not sent because Wahoo needs a total duration');
+    expect(content).toContain('Running and cycling distance steps use your chosen kilometres or miles');
     expect(content).toContain('Older Wahoo connections may need **Reconnect Wahoo**');
     expect(content).toContain('Checks confirm the app-owned Plan, Workout and association; automatic missing-copy restoration is unavailable');
     expect(content).toContain('COROS workout delivery is coming soon in the app');
@@ -364,7 +372,8 @@ describe('help.content', () => {
     expect(dataAndPrivacySection?.content).toContain('exact case-insensitive tag matches');
     expect(dataAndPrivacySection?.content).toContain('personal, health, or location context');
     expect(dataAndPrivacySection?.content).toContain('untrusted labels');
-    expect(dataAndPrivacySection?.content).toContain('Existing clients must reauthorize for this new write permission');
+    expect(dataAndPrivacySection?.content).toContain('Existing clients missing a required grant must reauthorize');
+    expect(dataAndPrivacySection?.content).toContain('Editing the shared description additionally requires');
     expect(dataAndPrivacySection?.content).toContain('separate default-off Activity tag changes choice');
     expect(dataAndPrivacySection?.content).toContain('Oversized rankings fail');
     expect(dataAndPrivacySection?.content).toContain('jump count is not treated as jump quality');

@@ -1,4 +1,4 @@
-import { ActivityTypes } from '@sports-alliance/sports-lib';
+import { ActivityTypes, WeightUnits } from '@sports-alliance/sports-lib';
 import { describe, expect, it } from 'vitest';
 import {
   formatStrengthLoadKg,
@@ -58,5 +58,6 @@ describe('strength prescription contract', () => {
   it('uses Sports Lib weight formatting with account units', () => {
     expect(formatStrengthLoadKg(80)).toContain('kg');
     expect(formatStrengthLoadKg(80)).toBe('80.0 kg');
+    expect(formatStrengthLoadKg(80, { weightUnits: WeightUnits.Pounds })).toBe('176.4 lb');
   });
 });

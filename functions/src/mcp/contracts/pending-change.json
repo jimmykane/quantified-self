@@ -1,7 +1,7 @@
 {
   "formatVersion": 1,
-  "candidateSha256": "df2964629d9bc9e344e43736d94807eeccc4c36df54b3e76de300f0931288478",
+  "candidateSha256": "010b9ea47d092ea1a01e246de383b25a72c4ad7d823eb3e5eb663941543a3c4c",
   "lifecycleAction": "developer-refresh",
-  "summary": "Retain prior Training, Health, Timeline, activity, readiness, private_key_jwt, PKCE and content-write changes. Add owner-scoped Strength Training details read and complete-prescription preview tools under existing Training permissions. Keep the registered v1 recipe unchanged; all strength writes still use the approval-gated apply. Update consent guidance, plugin routing, strict output fixtures, and client catalog refresh notes.",
+  "summary": "Retain prior Training, Health, Timeline, activity, OAuth and PKCE changes. Add event title/description edits under existing activity permissions and Strength Training details read/preview under existing Training permissions. Preserve dependent scopes, exact-current-value checks, benchmark exclusion, host-controlled approval and strict outputs. The registered v1 recipe stays a summary; strength writes require approval-gated apply. Refresh the client catalog and bundled guidance.",
   "rescanRequired": true
 }

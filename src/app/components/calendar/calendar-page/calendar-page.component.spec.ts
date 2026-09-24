@@ -19,7 +19,7 @@ import type { TimelineNote } from '@shared/timeline-notes';
 import type { WorkoutStructureV1 } from '@shared/planned-workout';
 import { AppTimelineNotesService } from '../../../services/app.timeline-notes.service';
 import { AppHapticsService } from '../../../services/app.haptics.service';
-import type { CalendarDayDetailsData } from '../calendar-day-details/calendar-day-details.component';
+import type { CalendarDayDetailsData, CalendarDayDetailsResult } from '../calendar-day-details/calendar-day-details.component';
 import { AppUserService } from '../../../services/app.user.service';
 import { ActivityCalendarService } from '../../../services/activity-calendar.service';
 import { CalendarDayDetailsNavigationService } from '../../../services/calendar-day-details-navigation.service';
@@ -55,7 +55,7 @@ describe('CalendarPageComponent', () => {
   let navigate: ReturnType<typeof vi.fn>;
   let watchEvents: ReturnType<typeof vi.fn>;
   let openBottomSheet: ReturnType<typeof vi.fn>;
-  let dismissed: Subject<string | undefined>;
+  let dismissed: Subject<CalendarDayDetailsResult | undefined>;
   const note: TimelineNote = { id: 'a'.repeat(64), category: 'travel', title: 'A trip', startDate: '2026-08-04', endDate: '2026-08-05', timeZone: 'UTC', revision: 1, createdAtMs: 1, updatedAtMs: 1 };
   const notesService = { uid: signal<string | null>(planningUserUid), showOnCharts: signal(true), changes$: new Subject<void>(), loadRange: vi.fn(), cachedRange: vi.fn(() => null), invalidate: vi.fn(), isOwner: (uid: string) => notesService.uid() === uid };
   const haptics = { selection: vi.fn() };
@@ -65,7 +65,11 @@ describe('CalendarPageComponent', () => {
   let dayDetailsNavigation: {
     restorationFor: ReturnType<typeof vi.fn>;
     consumeRestoration: ReturnType<typeof vi.fn>;
+    workoutDestinationFor: ReturnType<typeof vi.fn>;
+    consumeWorkoutDestination: ReturnType<typeof vi.fn>;
+    prepareWorkoutDestination: ReturnType<typeof vi.fn>;
   };
+  let pendingDestination: ReturnType<typeof signal<string | null>>;
 
   beforeEach(async () => {
     queryParams = new BehaviorSubject(convertToParamMap({ view: 'month', date: '2026-08-03' }));
@@ -79,9 +83,13 @@ describe('CalendarPageComponent', () => {
     haptics.selection.mockClear(); dialogs.open.mockClear();
     watchSchedule = vi.fn().mockReturnValue(of(emptySchedule()));
     watchWorkoutCompletions = vi.fn().mockReturnValue(of([]));
+    pendingDestination = signal<string | null>(null);
     dayDetailsNavigation = {
       restorationFor: vi.fn().mockReturnValue(null),
       consumeRestoration: vi.fn().mockReturnValue(true),
+      workoutDestinationFor: vi.fn().mockImplementation(() => pendingDestination()),
+      consumeWorkoutDestination: vi.fn().mockImplementation(() => { pendingDestination.set(null); return true; }),
+      prepareWorkoutDestination: vi.fn().mockImplementation((_uid, date) => { pendingDestination.set(date); return true; }),
     };
     await TestBed.configureTestingModule({
       imports: [CalendarPageComponent],
@@ -337,6 +345,24 @@ describe('CalendarPageComponent', () => {
     }));
     expect((componentOpen.mock.calls[0][1] as { data: { plannedWorkouts: Array<{ workout: { id: string } }> } })
       .data.plannedWorkouts.map(entry => entry.workout.id)).not.toContain('inactive-workout');
+  });
+
+  it('moves to the duplicated workout date and reopens its Calendar day details', async () => {
+    const fixture = TestBed.createComponent(CalendarPageComponent);
+    fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+    const componentBottomSheet = (fixture.componentInstance as unknown as { bottomSheet: MatBottomSheet }).bottomSheet;
+    vi.spyOn(componentBottomSheet, 'open').mockImplementation(openBottomSheet);
+    const sourceDay = fixture.componentInstance.calendarModel().months[0].days.find(day => day.dateKey === '2026-08-03')!;
+    fixture.componentInstance.openDay(sourceDay);
+    dismissed.next({ kind: 'duplicated-workout', workoutId: 'copy', planId: null, localDate: '2026-08-10' });
+    expect(dayDetailsNavigation.prepareWorkoutDestination).toHaveBeenCalledWith(planningUserUid, '2026-08-10');
+    expect(navigate).toHaveBeenCalledWith([], expect.objectContaining({ queryParams: { view: 'month', date: '2026-08-10' } }));
+    queryParams.next(convertToParamMap({ view: 'month', date: '2026-08-10' }));
+    fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+    expect(fixture.componentInstance.routeState().anchorDate.getDate()).toBe(10);
+    expect(fixture.componentInstance.eventState().status).toBe('ready');
+    expect(dayDetailsNavigation.consumeWorkoutDestination).toHaveBeenCalledWith(planningUserUid, '2026-08-10');
+    expect(openBottomSheet.mock.calls.at(-1)?.[1].data.day.dateKey).toBe('2026-08-10');
   });
 
   it('reopens day details after returning from an event route', async () => {

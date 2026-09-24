@@ -1,6 +1,7 @@
 import { ElementRef } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { describe, expect, it, vi } from 'vitest';
+import { WeightUnits } from '@sports-alliance/sports-lib';
 import type { TrainingBodyWeightTrendPointViewModel } from '../../helpers/training-body-weight.helper';
 import { getOrCreateEChartsTooltipHost } from '../../helpers/echarts-tooltip-host.helper';
 import { getViewportConstrainedTooltipPosition } from '../../helpers/echarts-tooltip-position.helper';
@@ -87,6 +88,10 @@ describe('TrainingBodyWeightTrendChartComponent', () => {
       triggerOn: 'mousemove|click',
     }));
     expect(option.tooltip.formatter([{ dataIndex: 0 }])).toContain('70.5 kg');
+    component.unitSettings = { weightUnits: WeightUnits.Pounds };
+    const poundsOption = (component as any).buildOption();
+    expect(poundsOption.tooltip.formatter([{ dataIndex: 0 }])).toContain('155.4 lb');
+    expect(poundsOption.yAxis.axisLabel.formatter(70.5)).toBe('155.4');
     expect(option.tooltip.formatter([{ dataIndex: 1 }])).toContain('No measurement');
   });
 });

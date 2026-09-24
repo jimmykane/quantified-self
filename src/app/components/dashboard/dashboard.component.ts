@@ -16,7 +16,7 @@ import {
 import { DateRanges } from '@sports-alliance/sports-lib';
 import { Search } from '../event-search/event-search.component';
 import { AppUserService } from '../../services/app.user.service';
-import { DaysOfTheWeek } from '@sports-alliance/sports-lib';
+import { DaysOfTheWeek, WeightUnits } from '@sports-alliance/sports-lib';
 import { catchError, distinctUntilChanged, filter, map, switchMap, take, tap } from 'rxjs/operators';
 import { AppAnalyticsService } from '../../services/app.analytics.service';
 import { LoggerService } from '../../services/logger.service';
@@ -556,6 +556,10 @@ export class DashboardComponent implements OnInit, OnDestroy {
 
     try {
       const nextUnitSettings = buildUnitSettingsForUnitSetupPreset(this.selectedUnitSetupPreset);
+      // The distance setup prompt must not overwrite a separately chosen weight unit.
+      nextUnitSettings.weightUnits = this.user.settings?.unitSettings?.weightUnits === WeightUnits.Pounds
+        ? WeightUnits.Pounds
+        : WeightUnits.Kilograms;
       const unitSetupCompletedAppSettings = {
         unitSetupCompleted: true,
       };

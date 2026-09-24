@@ -422,8 +422,8 @@
                               (ngModelChange)="updateStrengthSet(exerciseIndex, setIndex, 'value', $event)">
                           </mat-form-field>
                           <mat-form-field subscriptSizing="dynamic">
-                            <mat-label>External load (kg, optional)</mat-label>
-                            <input matInput type="number" min="0" step="0.5" [ngModel]="set.externalLoadKg ?? null"
+                            <mat-label>External load ({{ editorWeightUnit() }}, optional)</mat-label>
+                            <input matInput type="number" min="0" step="any" [ngModel]="strengthLoadInputValue(set.externalLoadKg)"
                               (ngModelChange)="updateStrengthSet(exerciseIndex, setIndex, 'externalLoadKg', $event)">
                           </mat-form-field>
                           <mat-form-field subscriptSizing="dynamic">
@@ -551,8 +551,9 @@
           </mat-select>
         </mat-form-field>
         <mat-form-field subscriptSizing="dynamic">
-          <mat-label>{{ step.endingKind === 'time' ? 'Minutes' : (editorIsSwimming() || editorIsRowing()) ? 'Metres' : 'Kilometres' }}</mat-label>
-          <input matInput type="number" min="0.01" step="0.01" [ngModel]="step.endingValue"
+          <mat-label>{{ step.endingKind === 'time' ? 'Minutes' : editorDistanceUnit() }}</mat-label>
+          <input matInput type="number" [attr.min]="step.endingKind === 'distance' ? 0 : 0.01"
+            [attr.step]="step.endingKind === 'distance' ? 'any' : '0.01'" [ngModel]="step.endingValue"
             (ngModelChange)="updateStep(nodeIndex, stepIndex, 'endingValue', +$event)">
         </mat-form-field>
         <mat-form-field subscriptSizing="dynamic">
@@ -566,12 +567,14 @@
         @if (step.targetKind !== 'none') {
           <mat-form-field subscriptSizing="dynamic">
             <mat-label>{{ step.targetKind === 'pace' ? 'Faster ' + editorPaceUnit() : 'Minimum' }}</mat-label>
-            <input matInput type="number" [min]="step.targetKind === 'pace' ? 0.01 : 0" step="0.01" [ngModel]="step.targetMinimum"
+            <input matInput type="number" min="0"
+              [attr.step]="step.targetKind === 'pace' ? 'any' : '0.01'" [ngModel]="step.targetMinimum"
               (ngModelChange)="updateStep(nodeIndex, stepIndex, 'targetMinimum', $event)">
           </mat-form-field>
           <mat-form-field subscriptSizing="dynamic">
             <mat-label>{{ step.targetKind === 'pace' ? 'Slower ' + editorPaceUnit() : 'Maximum' }}</mat-label>
-            <input matInput type="number" [min]="step.targetKind === 'pace' ? 0.01 : 0" step="0.01" [ngModel]="step.targetMaximum"
+            <input matInput type="number" min="0"
+              [attr.step]="step.targetKind === 'pace' ? 'any' : '0.01'" [ngModel]="step.targetMaximum"
               (ngModelChange)="updateStep(nodeIndex, stepIndex, 'targetMaximum', $event)">
           </mat-form-field>
         }
@@ -620,7 +623,9 @@
       } @else {
         <div class="workout-rows">
           @for (row of displayedWorkoutRows(); track row.workout.id; let lastWorkout = $last) {
-            <app-compact-row class="workout-row" layout="stacked" density="compact"
+            <app-compact-row class="workout-row" layout="stacked" density="compact" tabindex="-1"
+              [attr.data-workout-id]="row.workout.id"
+              [attr.aria-label]="'Workout ' + row.workout.title"
               [title]="row.workout.title" [titleId]="'scheduled-workout-' + row.workout.id"
               [headingLevel]="view() === 'plans' ? 4 : 3" [showDivider]="!lastWorkout">
               <div class="workout-row-meta">
@@ -664,8 +669,8 @@
                   }
                 </button>
                 <mat-menu #workoutActionsMenu="matMenu" class="qs-menu-panel">
-                  <button appHapticTap mat-menu-item type="button" (click)="copyWorkout(row.workout)">
-                    <mat-icon aria-hidden="true">content_copy</mat-icon><span>Copy workout</span>
+                  <button appHapticTap mat-menu-item type="button" (click)="duplicateWorkout(row.workout)">
+                    <mat-icon aria-hidden="true">content_copy</mat-icon><span>Duplicate to…</span>
                   </button>
                   <button appHapticTap mat-menu-item type="button" (click)="setWorkoutSkipped(row.workout, row.workout.lifecycle !== 'skipped')">
                     <mat-icon aria-hidden="true">{{ row.workout.lifecycle === 'skipped' ? 'undo' : 'skip_next' }}</mat-icon>

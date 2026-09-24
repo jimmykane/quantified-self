@@ -44,7 +44,7 @@ export const TRAINING_PLANS_PAGE_SECTIONS = [
   {
     eyebrow: 'Structured Workouts',
     title: 'Build the workout you mean',
-    copy: 'The interval editor supports running, cycling, pool and open-water swimming, walking, hiking, rowing and indoor rowing with date-only scheduling, time or distance steps, fixed repeats, and one absolute heart-rate, power, or pace target per step. The separate strength editor supports ordered named exercises, individual sets with repetitions or timed holds, optional external load in kilograms, and optional rest after each set. Swim and rowing distance steps use metres. Rowing pace is a 500 m split; swim pace follows your /100 m or /100 yd setting. Pool workouts can store an optional physical pool length in metres or yards, separately from step distance; open-water workouts have no pool length.',
+    copy: 'The interval editor supports running, cycling, pool and open-water swimming, walking, hiking, rowing and indoor rowing with date-only scheduling, time or distance steps, fixed repeats, and one absolute heart-rate, power, or pace target per step. The separate strength editor supports ordered named exercises, individual sets with repetitions or timed holds, optional external load in your selected kg or lb unit, and optional rest after each set. Swim and rowing distance steps use metres. Rowing pace is a 500 m split; swim pace follows your /100 m or /100 yd setting. Pool workouts can store an optional physical pool length in metres or yards, separately from step distance; open-water workouts have no pool length.',
     items: [
       {
         icon: 'directions_run',
@@ -69,7 +69,7 @@ export const TRAINING_PLANS_PAGE_SECTIONS = [
       {
         icon: 'fitness_center',
         title: 'Strength training',
-        copy: 'Build ordered exercises and sets with reps or timed holds, optional external load in kilograms, and rest. Suunto sends a degraded Gym Guide with manual rep transitions, never native strength tracking; Garmin and Wahoo delivery is unsupported. COROS strength remains Coming soon pending account proof.',
+        copy: 'Build ordered exercises and sets with reps or timed holds, optional external load in your selected kg or lb unit, and rest. Suunto sends a degraded Gym Guide with manual rep transitions, never native strength tracking; Garmin and Wahoo delivery is unsupported. COROS strength remains Coming soon pending account proof.',
       },
       {
         icon: 'repeat',

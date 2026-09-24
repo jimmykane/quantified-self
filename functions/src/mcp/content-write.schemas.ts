@@ -8,12 +8,19 @@ import {
   TIMELINE_NOTE_COLORS,
   TIMELINE_NOTE_LIMITS,
 } from '../../../shared/timeline-notes';
+import {
+  MCP_ACTIVITY_DESCRIPTION_MAX_BYTES,
+  MCP_ACTIVITY_DESCRIPTION_MAX_LENGTH,
+} from './activity-description.service';
 
 export const EVENTS_WRITE_SCOPE = 'events:write';
 export const TIMELINE_NOTES_WRITE_SCOPE = 'timeline-notes:write';
 
 export const MCP_CONTENT_WRITE_TOOLS = [
   'update_event_tags',
+  'get_event_title',
+  'update_event_title',
+  'update_event_description',
   'query_editable_timeline_notes',
   'create_timeline_note',
   'update_timeline_note',
@@ -31,6 +38,19 @@ const hasSupportedText = (value: string) => ![...value].some(character => {
 const tag = z.string().trim().min(1).max(EVENT_TAG_MAX_LENGTH)
   .refine(hasSupportedText, 'Tags contain unsupported characters.');
 const tags = z.array(tag).max(EVENT_TAG_LIMIT);
+export const MCP_EVENT_TITLE_MAX_LENGTH = 512;
+const storedEventTitle = z.string().max(MCP_EVENT_TITLE_MAX_LENGTH)
+  .refine(value => Buffer.byteLength(value, 'utf8') <= 2_048);
+const eventTitle = storedEventTitle.refine(
+  value => hasSupportedText(value) && !/[\r\n]/.test(value),
+  'An event title must be one line without unsupported characters.',
+);
+const storedEventDescription = z.string().max(MCP_ACTIVITY_DESCRIPTION_MAX_LENGTH)
+  .refine(value => Buffer.byteLength(value, 'utf8') <= MCP_ACTIVITY_DESCRIPTION_MAX_BYTES);
+const eventDescription = storedEventDescription.refine(
+  hasSupportedText,
+  'The event description contains unsupported characters.',
+);
 const revision = z.number().int().min(1).max(Number.MAX_SAFE_INTEGER - 1);
 const mutationId = z.uuid();
 const title = z.string().max(TIMELINE_NOTE_LIMITS.title)
@@ -92,6 +112,17 @@ export const MCP_CONTENT_WRITE_INPUTS = {
     expectedTags: tags.describe('Current tags from query_activities_with_tags. The write fails if they changed.'),
     tags: tags.describe(`Complete replacement list of at most ${EVENT_TAG_LIMIT} event tags.`),
   }),
+  get_event_title: z.strictObject({ activityRef: opaqueReference }),
+  update_event_title: z.strictObject({
+    activityRef: opaqueReference,
+    expectedTitle: storedEventTitle.nullable().describe('Exact current event title from get_event_title.'),
+    title: eventTitle.nullable().describe('New parent-event title, or null to clear it.'),
+  }),
+  update_event_description: z.strictObject({
+    activityRef: opaqueReference,
+    expectedDescription: storedEventDescription.nullable().describe('Exact current text from get_activity_description.'),
+    description: eventDescription.nullable().describe('New parent-event description, or null to clear it.'),
+  }),
   query_editable_timeline_notes: z.strictObject({
     startDate: date,
     endDate: date,
@@ -117,6 +148,19 @@ export const MCP_CONTENT_WRITE_OUTPUTS = {
   update_event_tags: z.strictObject({
     activityRef: opaqueReference,
     tags,
+    changed: z.boolean(),
+  }),
+  get_event_title: z.strictObject({
+    activityRef: opaqueReference,
+    title: storedEventTitle.nullable(),
+  }),
+  update_event_title: z.strictObject({
+    activityRef: opaqueReference,
+    title: storedEventTitle.nullable(),
+    changed: z.boolean(),
+  }),
+  update_event_description: z.strictObject({
+    activityRef: opaqueReference,
     changed: z.boolean(),
   }),
   query_editable_timeline_notes: z.strictObject({

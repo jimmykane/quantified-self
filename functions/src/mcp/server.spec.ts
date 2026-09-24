@@ -25,6 +25,7 @@ import {
   handleMcpRevocationRequest,
   isMcpFormUrlEncodedContentType,
   isMcpRequestBodyWithinLimit,
+  mcpToolRequestBodyLimit,
   MCP_API_RUNTIME_OPTIONS,
   MCP_PERMISSION_RECOVERY_INSTRUCTIONS,
   parseMcpBearerToken,
@@ -328,6 +329,18 @@ describe('MCP HTTP scope enforcement', () => {
       MCP_OAUTH_SCOPES.ActivityDetailsRead,
       MCP_OAUTH_SCOPES.EventsWrite,
     ]);
+    for (const name of ['get_event_title', 'update_event_title']) {
+      expect(requiredScopesForRequest({ method: 'tools/call', params: { name } })).toEqual([
+        MCP_OAUTH_SCOPES.ActivityDetailsRead, MCP_OAUTH_SCOPES.EventsWrite,
+      ]);
+    }
+    expect(requiredScopesForRequest({ method: 'tools/call', params: {
+      name: 'update_event_description',
+    } })).toEqual([
+      MCP_OAUTH_SCOPES.ActivityDetailsRead,
+      MCP_OAUTH_SCOPES.EventsWrite,
+      MCP_OAUTH_SCOPES.ActivityDescriptionsRead,
+    ]);
     for (const name of [
       'query_editable_timeline_notes',
       'create_timeline_note',
@@ -363,6 +376,9 @@ describe('MCP HTTP scope enforcement', () => {
       MCP_OAUTH_SCOPES.TimelineNotesRead,
     ]);
     expect(readOnly).not.toContain('update_event_tags');
+    expect(readOnly).not.toContain('get_event_title');
+    expect(readOnly).not.toContain('update_event_title');
+    expect(readOnly).not.toContain('update_event_description');
     expect(readOnly).not.toContain('query_editable_timeline_notes');
     expect(readOnly).not.toContain('create_timeline_note');
 
@@ -374,11 +390,44 @@ describe('MCP HTTP scope enforcement', () => {
     ]);
     expect(writable).toEqual(expect.arrayContaining([
       'update_event_tags',
+      'get_event_title',
+      'update_event_title',
       'query_editable_timeline_notes',
       'create_timeline_note',
       'update_timeline_note',
       'delete_timeline_note',
     ]));
+    expect(writable).not.toContain('update_event_description');
+    const descriptionWritable = await list([
+      MCP_OAUTH_SCOPES.ActivityDetailsRead,
+      MCP_OAUTH_SCOPES.EventsWrite,
+      MCP_OAUTH_SCOPES.ActivityDescriptionsRead,
+    ]);
+    expect(descriptionWritable).toContain('update_event_description');
+  });
+
+  it('keeps first-party Assistant event access limited to its existing tag workflow', async () => {
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+    const server = createMcpServer({
+      uid: 'user-1', clientId: 'first-party-assistant-v1',
+      connectionId: 'first-party-assistant-v1:conversation-1',
+      assistantConversationId: 'conversation-1',
+      scopes: [MCP_OAUTH_SCOPES.ActivityDetailsRead, MCP_OAUTH_SCOPES.EventsWrite,
+        MCP_OAUTH_SCOPES.ActivityDescriptionsRead],
+    }, 'https://quantified-self.io');
+    const client = new Client({ name: 'assistant-event-scope-client', version: '1.0.0' });
+    try {
+      await server.connect(serverTransport);
+      await client.connect(clientTransport);
+      const names = (await client.listTools()).tools.map(tool => tool.name);
+      expect(names).toContain('update_event_tags');
+      expect(names).not.toContain('get_event_title');
+      expect(names).not.toContain('update_event_title');
+      expect(names).not.toContain('update_event_description');
+    } finally {
+      await client.close();
+      await server.close();
+    }
   });
 
   it('requires sleep scope for sleep tools', () => {
@@ -1606,6 +1655,14 @@ describe('MCP HTTP scope enforcement', () => {
     expect(supportsMcpTransportMethod('DELETE')).toBe(false);
     expect(isMcpRequestBodyWithinLimit({ method: 'initialize' }, '24')).toBe(true);
     expect(isMcpRequestBodyWithinLimit({ payload: 'x'.repeat(70_000) }, undefined)).toBe(false);
+    expect(isMcpRequestBodyWithinLimit({ payload: 'x'.repeat(70_000) }, undefined, 320 * 1024)).toBe(true);
+    expect(isMcpRequestBodyWithinLimit({ payload: 'x'.repeat(330_000) }, undefined, 320 * 1024)).toBe(false);
+    expect(mcpToolRequestBodyLimit({ method: 'tools/call', params: { name: 'update_event_description' } }))
+      .toBe(320 * 1024);
+    expect(mcpToolRequestBodyLimit({ method: 'tools/call', params: { name: 'update_event_title' } }))
+      .toBe(64 * 1024);
+    expect(mcpToolRequestBodyLimit([{ method: 'tools/call', params: { name: 'update_event_description' } }]))
+      .toBe(64 * 1024);
     expect(isMcpRequestBodyWithinLimit({}, 'not-a-number')).toBe(false);
   });
 

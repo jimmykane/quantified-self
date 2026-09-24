@@ -19,7 +19,7 @@ import { toSignal } from '@angular/core/rxjs-interop';
 import { MatDialog } from '@angular/material/dialog';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { ActivatedRoute, Router, type NavigationExtras } from '@angular/router';
-import { ActivityTypes, SwimPaceUnits } from '@sports-alliance/sports-lib';
+import { ActivityTypes, DataWeight, DistanceUnits, PaceUnits, SwimPaceUnits, WeightUnits, type UserUnitSettingsInterface } from '@sports-alliance/sports-lib';
 import {
   MANUAL_WORKOUT_EDITOR_CYCLING_SPORTS_V1,
   MANUAL_WORKOUT_EDITOR_RUNNING_SPORTS_V1,
@@ -29,6 +29,7 @@ import {
   isRowingWorkoutSportV1,
   isSwimmingWorkoutSportV1,
 } from '@shared/planned-workout';
+import { normalizeUserUnitSettings } from '@shared/unit-aware-display';
 import dayjs, { type Dayjs } from 'dayjs';
 import { catchError, combineLatest, map, of, startWith, switchMap } from 'rxjs';
 import type { AppUserInterface } from '../../models/app-user.interface';
@@ -39,6 +40,7 @@ import {
   TrainingPlansService,
   type CurrentTrainingScheduleV1,
 } from '../../services/training-plans.service';
+import { TrainingWorkoutDuplicateService } from '../../services/training-workout-duplicate.service';
 import { ConfirmationDialogComponent } from '../confirmation-dialog/confirmation-dialog.component';
 import { CompactRowComponent } from '../shared/compact-row/compact-row.component';
 import { PlanScheduleCalendarComponent } from './plan-schedule-calendar.component';
@@ -104,6 +106,7 @@ interface WorkoutEditorSession {
   original: ScheduledWorkoutV1 | null;
   originalWorkoutRevision: number | null;
   destinationPlanId: string | null;
+  unitSettings: UserUnitSettingsInterface;
   value: ManualWorkoutEditorValue;
   strength: StrengthWorkoutDraftV1 | null;
   strengthLoading: boolean;
@@ -151,6 +154,8 @@ export class PlansWorkspaceComponent {
   readonly strengthSport = ActivityTypes.StrengthTraining;
   private readonly userService = inject(AppUserService);
   private readonly plansService = inject(TrainingPlansService);
+  private readonly duplicateService = inject(TrainingWorkoutDuplicateService);
+  private readonly host = inject<ElementRef<HTMLElement>>(ElementRef);
   private readonly dialog = inject(MatDialog);
   private readonly snackBar = inject(MatSnackBar);
   private readonly route = inject(ActivatedRoute);
@@ -228,10 +233,15 @@ export class PlansWorkspaceComponent {
   readonly editorIsStrength = computed(() => this.editor()?.value.sport === ActivityTypes.StrengthTraining);
   readonly editorIsRowing = computed(() => isRowingWorkoutSportV1(this.editor()?.value.sport));
   readonly editorIsPoolSwimming = computed(() => this.editor()?.value.sport === ActivityTypes.Swimming);
+  readonly editorWeightUnit = computed(() => this.editor()?.unitSettings.weightUnits === WeightUnits.Pounds ? 'lb' : 'kg');
+  readonly editorDistanceUnit = computed(() => this.editorIsSwimming() || this.editorIsRowing()
+    ? 'Metres'
+    : this.editor()?.unitSettings.distanceUnits === DistanceUnits.Miles ? 'Miles' : 'Kilometres');
   readonly editorPaceUnit = computed(() => this.editorIsSwimming()
-    ? this.currentUser()?.settings?.unitSettings?.swimPaceUnits?.[0] === SwimPaceUnits.MinutesPer100Yard
+    ? this.editor()?.unitSettings.swimPaceUnits[0] === SwimPaceUnits.MinutesPer100Yard
       ? 'min/100yd' : 'min/100m'
-    : this.editorIsRowing() ? 'min/500m' : 'min/km');
+    : this.editorIsRowing() ? 'min/500m'
+      : this.editor()?.unitSettings.paceUnits[0] === PaceUnits.MinutesPerMile ? 'min/mi' : 'min/km');
   readonly hasTrainingPlanningUIAccess = computed(() => !!this.currentUser()?.uid);
   readonly scheduleState = toSignal(this.userService.user$.pipe(
     switchMap(user => user?.uid
@@ -265,6 +275,7 @@ export class PlansWorkspaceComponent {
     this.destroyRef.onDestroy(() => globalThis.clearInterval(handle));
   });
   private readonly scheduleDateSelection = signal<{ uid: string; planId: string; localDate: string } | null>(null);
+  private readonly pendingDuplicateFocus = signal<{ uid: string; workoutId: string } | null>(null);
   readonly showPlanForm = signal(false);
   readonly planDraft = signal<PlanDraft>(defaultPlanDraft());
   readonly planColorOptions = TRAINING_PLAN_COLOR_OPTIONS;
@@ -296,9 +307,11 @@ export class PlansWorkspaceComponent {
   readonly planOptions = computed(() => {
     const plans = this.schedule().plans;
     const acknowledged = this.acknowledgedPlan();
-    return acknowledged && acknowledged.uid === this.currentUser()?.uid && !plans.some(plan => plan.id === acknowledged.plan.id)
-      ? [...plans, acknowledged.plan]
-      : plans;
+    if (!acknowledged || acknowledged.uid !== this.currentUser()?.uid) return plans;
+    const current = plans.find(plan => plan.id === acknowledged.plan.id);
+    if (current && current.revision >= acknowledged.plan.revision) return plans;
+    return current ? plans.map(plan => plan.id === acknowledged.plan.id ? acknowledged.plan : plan)
+      : [...plans, acknowledged.plan];
   });
   readonly activePlan = computed(() => this.schedule().plans.find(plan => (
     plan.id === this.schedule().state.activePlanId
@@ -372,6 +385,21 @@ export class PlansWorkspaceComponent {
       }
     }
   });
+  private readonly duplicateFocusEffect = afterRenderEffect(() => {
+    const pending = this.pendingDuplicateFocus();
+    this.displayedWorkoutRows();
+    if (!pending) return;
+    if (pending.uid !== this.currentUser()?.uid) {
+      this.pendingDuplicateFocus.set(null);
+      return;
+    }
+    const row = Array.from(this.host.nativeElement.querySelectorAll<HTMLElement>('[data-workout-id]'))
+      .find(candidate => candidate.dataset['workoutId'] === pending.workoutId);
+    if (!row) return;
+    row.focus();
+    row.scrollIntoView?.({ block: 'nearest' });
+    this.pendingDuplicateFocus.set(null);
+  });
 
   private readonly selectionEffect = effect(() => {
     const plans = this.planOptions();
@@ -385,7 +413,8 @@ export class PlansWorkspaceComponent {
     if (!acknowledged) return;
     if (acknowledged.uid !== this.currentUser()?.uid || (
       this.schedule().state.revision >= acknowledged.state.revision
-      && this.schedule().plans.some(plan => plan.id === acknowledged.plan.id)
+      && this.schedule().plans.some(plan => plan.id === acknowledged.plan.id
+        && plan.revision >= acknowledged.plan.revision)
     )) {
       this.acknowledgedPlan.set(null);
     }
@@ -739,6 +768,7 @@ export class PlansWorkspaceComponent {
       original: null,
       originalWorkoutRevision: null,
       destinationPlanId,
+      unitSettings: normalizeUserUnitSettings(this.currentUser()?.settings?.unitSettings),
       value: createManualWorkoutEditorValue(localDate, this.nextNodeId('step')),
       strength: null,
       strengthLoading: false,
@@ -762,16 +792,18 @@ export class PlansWorkspaceComponent {
       this.editorGeneration += 1;
       this.workoutDateInputInvalid.set(false);
       const strength = workout.structure.sport === ActivityTypes.StrengthTraining;
+      const unitSettings = normalizeUserUnitSettings(this.currentUser()?.settings?.unitSettings);
       this.editor.set({
         mode: 'edit',
         original: workout,
         originalWorkoutRevision: workout.revision,
         destinationPlanId: workout.planId,
+        unitSettings,
         value: strength
           ? { ...createManualWorkoutEditorValue(workout.localDate), title: workout.title,
             sport: ActivityTypes.StrengthTraining, nodes: [] }
           : workoutStructureToManualEditor(
-            workout.title, workout.localDate, workout.structure, this.currentUser()?.settings?.unitSettings,
+            workout.title, workout.localDate, workout.structure, unitSettings,
           ),
         strength: null,
         strengthLoading: strength,
@@ -863,7 +895,7 @@ export class PlansWorkspaceComponent {
       };
       const manual = session.value.sport === ActivityTypes.StrengthTraining
         ? { ...session.value, sport, nodes: [createManualWorkoutEditorStep(this.nextNodeId('step'))] }
-        : changeManualWorkoutEditorSport(session.value, sport, this.currentUser()?.settings?.unitSettings);
+        : changeManualWorkoutEditorSport(session.value, sport, session.unitSettings);
       return { ...session, value: manual, strength: null };
     });
   }
@@ -920,10 +952,20 @@ export class PlansWorkspaceComponent {
             : { kind: 'repetitions', repetitions: Number(value) } };
           const next = { ...set };
           if (value === '' || value === null) delete next[field];
-          else next[field] = Number(value);
+          else next[field] = field === 'externalLoadKg'
+            ? DataWeight.fromDisplayValue(Number(value), session.unitSettings.weightUnits ?? WeightUnits.Kilograms).getValue()
+            : Number(value);
           return next;
         }) } : exercise),
     } } : session);
+  }
+
+  strengthLoadInputValue(kilograms: number | undefined): number | null {
+    if (kilograms === undefined) return null;
+    const units = this.editor()?.unitSettings.weightUnits ?? WeightUnits.Kilograms;
+    return units === WeightUnits.Pounds
+      ? Number(new DataWeight(kilograms, WeightUnits.Pounds).getDisplayValue())
+      : kilograms;
   }
 
   updateWorkoutDate(value: Dayjs | null): void {
@@ -1019,7 +1061,12 @@ export class PlansWorkspaceComponent {
         const isSelection = ['purpose', 'endingKind', 'targetKind'].includes(field);
         if (stepIndex === null && node.kind === 'step') {
           if (isSelection && node[field as keyof ManualWorkoutEditorStep] !== value) this.haptics.selection();
-          return { ...node, [field]: value } as ManualWorkoutEditorStep;
+          return { ...node, [field]: value,
+            ...((field === 'endingKind' || field === 'endingValue') && value !== node[field]
+              ? { sourceDistance: undefined } : {}),
+            ...((field === 'targetKind' || field === 'targetMinimum' || field === 'targetMaximum') && value !== node[field]
+              ? { sourcePace: undefined } : {}),
+          } as ManualWorkoutEditorStep;
         }
         if (stepIndex !== null && node.kind === 'repeat') {
           return {
@@ -1027,7 +1074,12 @@ export class PlansWorkspaceComponent {
             steps: node.steps.map((step, candidate) => {
               if (candidate !== stepIndex) return step;
               if (isSelection && step[field as keyof ManualWorkoutEditorStep] !== value) this.haptics.selection();
-              return { ...step, [field]: value } as ManualWorkoutEditorStep;
+              return { ...step, [field]: value,
+                ...((field === 'endingKind' || field === 'endingValue') && value !== step[field]
+                  ? { sourceDistance: undefined } : {}),
+                ...((field === 'targetKind' || field === 'targetMinimum' || field === 'targetMaximum') && value !== step[field]
+                  ? { sourcePace: undefined } : {}),
+              } as ManualWorkoutEditorStep;
             }),
           };
         }
@@ -1056,7 +1108,7 @@ export class PlansWorkspaceComponent {
       structure = session.value.sport === ActivityTypes.StrengthTraining
         ? projectStrengthWorkoutToV1({ ...parseStrengthWorkoutDraftV1(session.strength),
           workoutId: session.original?.id ?? 'draft', revision: 1 })
-        : manualWorkoutEditorToStructure(session.value, this.currentUser()?.settings?.unitSettings);
+        : manualWorkoutEditorToStructure(session.value, session.unitSettings);
       normalizeTrainingLocalDate(session.value.localDate);
     } catch (error) {
       this.showError(error);
@@ -1118,26 +1170,30 @@ export class PlansWorkspaceComponent {
     this.snackBar.open('Workout updated.', 'Dismiss', { duration: 3000 });
   }
 
-  async copyWorkout(workout: ScheduledWorkoutV1): Promise<void> {
-    const workoutId = this.plansService.createEntityId('workout');
-    const planIds = workout.planId ? [workout.planId] : [];
-    const response = await this.runMutation({
-      mutationId: this.plansService.createMutationId('copy-workout'),
-      expectedRevisions: this.expectedRevisions({
-        workoutIds: [workout.id],
-        workoutRevisionOverrides: new Map([[workout.id, workout.revision]]),
-        planIds,
-      }),
-      operation: {
-        kind: 'copy-workout',
-        sourceWorkoutId: workout.id,
-        workoutId,
-        planId: workout.planId,
-        localDate: workout.localDate,
-        confirmPlanRangeExtension: false,
-      },
-    }, `copy-${workout.id}`);
-    if (response) this.snackBar.open('Workout copied.', 'Dismiss', { duration: 3000 });
+  async duplicateWorkout(workout: ScheduledWorkoutV1): Promise<void> {
+    const uid = this.currentUser()?.uid;
+    if (!uid || this.busyAction()) return;
+    this.busyAction.set(`copy-${workout.id}`);
+    try {
+      const result = await this.duplicateService.duplicate(uid, workout, () => {
+        if (this.currentUser()?.uid !== uid || this.scheduleState().status !== 'ready') return null;
+        const schedule = this.schedule();
+        const acknowledged = this.acknowledgedPlan();
+        const state = acknowledged?.uid === uid && acknowledged.state.revision > schedule.state.revision
+          ? acknowledged.state : schedule.state;
+        return { ...schedule, state, plans: this.planOptions() };
+      });
+      if (!result || this.destroyRef.destroyed || this.currentUser()?.uid !== uid) return;
+      if (result.acknowledgedPlan && result.acknowledgedState) {
+        this.acknowledgedPlan.set({ uid, plan: result.acknowledgedPlan, state: result.acknowledgedState });
+      }
+      this.selectWorkoutScope(result.planId, result.localDate);
+      this.pendingDuplicateFocus.set({ uid, workoutId: result.workoutId });
+      const route = this.browseRouteState();
+      this.navigateWorkspace(trainingPlansBrowseRoute(result.planId, result.planId === null), route, { replaceUrl: true });
+    } finally {
+      this.busyAction.set(null);
+    }
   }
 
   private selectWorkoutScope(planId: string | null, localDate: string): void {

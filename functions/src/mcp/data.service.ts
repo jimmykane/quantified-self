@@ -200,9 +200,12 @@ import {
   createMcpTimelineNote,
   defaultMcpContentWriteDependencies,
   deleteMcpTimelineNote,
+  getMcpEventTitle,
   McpContentWriteError,
   queryEditableMcpTimelineNotes,
+  updateMcpEventDescription,
   updateMcpEventTags,
+  updateMcpEventTitle,
   updateMcpTimelineNote,
   type McpContentWriteDependencies,
   type McpContentWriteInput,
@@ -6327,6 +6330,21 @@ export function createMcpDataService(
         updateMcpEventTags,
         'Event tags could not be changed safely. Try again later.',
       );
+    },
+
+    async getEventTitle(input: McpContentWriteInput) {
+      return runMcpContentWrite(input, getMcpEventTitle,
+        'The event title could not be read safely. Try again later.');
+    },
+
+    async updateEventTitle(input: McpContentWriteInput) {
+      return runMcpContentWrite(input, updateMcpEventTitle,
+        'The event title could not be changed safely. Try again later.');
+    },
+
+    async updateEventDescription(input: McpContentWriteInput) {
+      return runMcpContentWrite(input, updateMcpEventDescription,
+        'The event description could not be changed safely. Try again later.');
     },
 
     async queryEditableTimelineNotes(input: McpContentWriteInput) {

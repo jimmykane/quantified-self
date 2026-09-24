@@ -100,6 +100,13 @@ and its revision history are permanently removed. Permanent single-workout delet
 A standalone create may be followed by send to explicit providers or all connected providers. Plan sync means
 automatic per-workout delivery while active, not a native provider plan. Delivery remains Pro, connection, rollout,
 horizon and compatibility gated.
+For **duplicate to another day**, identify the exact source workout and read its current revision and scope. Ask when
+either the source or destination date is ambiguous. Use the existing `copy-workout` change with a fresh proposal-local
+key and an explicit `YYYY-MM-DD` date; preserve the source plan or standalone scope unless the user requests a transfer.
+The new workout starts planned, without the source's completion link or standalone Send consent. An active plan's
+existing sync setting may independently deliver its copy; never infer new provider consent from duplication. Preview
+the proposed copy and leave apply to the external client's native approval, or to Quantified Self's app-owned
+confirmation for its built-in Assistant.
 Before proposing delivery when mapping fidelity matters, use the advertised read-only compatibility assessment for the
 current workout and relevant providers. Preserve its exact/degraded/unsupported result and structured issues. This is
 local mapping evidence, not a live connection check, Pro/readiness result, approval, delivery guarantee or watch receipt.

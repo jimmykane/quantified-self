@@ -507,6 +507,9 @@ function createFixtureDataService(
     updateEventTags: vi.fn().mockResolvedValue({
       activityRef: ACTIVITY_REF, tags: ['Race', 'Reviewed'], changed: true,
     }),
+    getEventTitle: vi.fn().mockResolvedValue({ activityRef: ACTIVITY_REF, title: 'Morning run' }),
+    updateEventTitle: vi.fn().mockResolvedValue({ activityRef: ACTIVITY_REF, title: 'Evening run', changed: true }),
+    updateEventDescription: vi.fn().mockResolvedValue({ activityRef: ACTIVITY_REF, changed: true }),
     queryEditableTimelineNotes: vi.fn().mockResolvedValue({
       startDate: '2026-07-01', endDate: '2026-07-02',
       notes: [{ noteRef: 'opaque-note-reference', revision: 2, category: 'sickness',
@@ -1311,6 +1314,9 @@ const successfulToolArguments: Record<
   get_activity_description: { activityRef: 'opaque-activity-ref' },
   query_timeline_notes: { startDate: '2026-07-01', endDate: '2026-07-02' },
   update_event_tags: { activityRef: ACTIVITY_REF, expectedTags: ['Race'], tags: ['Race', 'Reviewed'] },
+  get_event_title: { activityRef: ACTIVITY_REF },
+  update_event_title: { activityRef: ACTIVITY_REF, expectedTitle: 'Morning run', title: 'Evening run' },
+  update_event_description: { activityRef: ACTIVITY_REF, expectedDescription: 'Easy run.', description: 'Felt good.' },
   query_editable_timeline_notes: { startDate: '2026-07-01', endDate: '2026-07-02' },
   create_timeline_note: { mutationId: '123e4567-e89b-42d3-a456-426614174000', category: 'travel',
     title: 'Trip', startDate: '2026-07-01', endDate: '2026-07-02', timeZone: 'Europe/Helsinki',
@@ -2381,6 +2387,9 @@ describe.each<FixtureTransport>(['in-memory', 'legacy-http', 'modern-http'])('MC
       connections.push(denied);
       const names = (await denied.client.listTools()).tools.map(tool => tool.name);
       expect(names).not.toContain('update_event_tags');
+      expect(names).not.toContain('get_event_title');
+      expect(names).not.toContain('update_event_title');
+      expect(names).not.toContain('update_event_description');
       expect(names).not.toContain('query_editable_timeline_notes');
       expect(names).not.toContain('create_timeline_note');
     }
@@ -2388,6 +2397,7 @@ describe.each<FixtureTransport>(['in-memory', 'legacy-http', 'modern-http'])('MC
     const scopes = [
       MCP_OAUTH_SCOPES.ActivityDetailsRead,
       MCP_OAUTH_SCOPES.EventsWrite,
+      MCP_OAUTH_SCOPES.ActivityDescriptionsRead,
       MCP_OAUTH_SCOPES.TimelineNotesRead,
       MCP_OAUTH_SCOPES.TimelineNotesWrite,
     ];
@@ -2396,9 +2406,12 @@ describe.each<FixtureTransport>(['in-memory', 'legacy-http', 'modern-http'])('MC
     const tools = (await connection.client.listTools()).tools;
     expect(tools.find(tool => tool.name === 'query_editable_timeline_notes')?.annotations)
       .toMatchObject({ readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false });
+    expect(tools.find(tool => tool.name === 'get_event_title')?.annotations)
+      .toMatchObject({ readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false });
     expect(tools.find(tool => tool.name === 'create_timeline_note')?.annotations)
       .toMatchObject({ readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false });
-    for (const name of ['update_event_tags', 'update_timeline_note', 'delete_timeline_note']) {
+    for (const name of ['update_event_tags', 'update_event_title', 'update_event_description',
+      'update_timeline_note', 'delete_timeline_note']) {
       expect(tools.find(tool => tool.name === name)?.annotations)
         .toMatchObject({ readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: false });
     }
@@ -2409,6 +2422,29 @@ describe.each<FixtureTransport>(['in-memory', 'legacy-http', 'modern-http'])('MC
     });
     expect(injected.isError).toBe(true);
     expect(service.updateEventTags).not.toHaveBeenCalled();
+
+    for (const name of ['get_event_title', 'update_event_title', 'update_event_description'] as const) {
+      const rejected = await connection.client.callTool({
+        name, arguments: { ...successfulToolArguments[name], uid: 'attacker' },
+      });
+      expect(rejected.isError).toBe(true);
+    }
+    service.getEventTitle = vi.fn().mockResolvedValue({
+      activityRef: ACTIVITY_REF, title: 'Run', internalEventId: 'private-title-canary',
+    });
+    const titleLeak = await connection.client.callTool({
+      name: 'get_event_title', arguments: successfulToolArguments.get_event_title,
+    });
+    expect(titleLeak.isError).toBe(true);
+    expect(JSON.stringify(titleLeak)).not.toContain('private-title-canary');
+    service.updateEventDescription = vi.fn().mockResolvedValue({
+      activityRef: ACTIVITY_REF, changed: true, description: 'private-description-canary',
+    });
+    const descriptionLeak = await connection.client.callTool({
+      name: 'update_event_description', arguments: successfulToolArguments.update_event_description,
+    });
+    expect(descriptionLeak.isError).toBe(true);
+    expect(JSON.stringify(descriptionLeak)).not.toContain('private-description-canary');
 
     service.updateEventTags = vi.fn().mockResolvedValue({
       activityRef: ACTIVITY_REF, tags: ['Race'], changed: true,
