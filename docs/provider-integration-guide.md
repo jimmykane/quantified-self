@@ -85,6 +85,11 @@ Training planning uses a stricter launch boundary than activity or route deliver
 authoring is free and independent of connected services. Any future provider synchronization is Pro, explicit, and
 directional: a plan needs per-provider opt-in, while a standalone workout needs a user-selected Send action. A provider
 connection alone never opts workouts into delivery.
+The manual editor converts the owner's kilometre/mile step distances and separately selected pace units into canonical
+metres and m/s before writing `WorkoutStructureV1`. Provider serializers must use only those stored canonical values:
+never infer input units from the account preference or convert a distance a second time. Garmin and Suunto accept
+metres, COROS applies its existing integer-metre mapping with approval for loss, and Wahoo's dated delivery continues
+to reject distance-ended recipes when a required total duration cannot be established.
 
 The Training UI checks availability and compatibility automatically on entering sync consent. With one ready provider,
 **Sync plan with Garmin** → **Enable plan sync** (plan) or **Send to Garmin** → **Send workout** (standalone) is the normal path;

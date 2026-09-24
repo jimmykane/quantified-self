@@ -49,6 +49,7 @@ describe('help.content', () => {
     expect(content).toContain('Workout delivery to Garmin, Suunto, and Wahoo is available to connected Pro members');
     expect(content).toContain('New COROS plan sync and standalone Send actions are coming soon in the app');
     expect(content).toContain('Distance-based steps are not sent because Wahoo needs a total duration');
+    expect(content).toContain('Running and cycling distance steps use your chosen kilometres or miles');
     expect(content).toContain('Older Wahoo connections may need **Reconnect Wahoo**');
     expect(content).toContain('Checks confirm the app-owned Plan, Workout and association; automatic missing-copy restoration is unavailable');
     expect(content).toContain('COROS workout delivery is coming soon in the app');

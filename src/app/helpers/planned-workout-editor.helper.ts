@@ -1,4 +1,4 @@
-import { ActivityTypes, SwimPaceUnits, type UserUnitSettingsInterface } from '@sports-alliance/sports-lib';
+import { ActivityTypes, DistanceUnits, PaceUnits, SwimPaceUnits, type UserUnitSettingsInterface } from '@sports-alliance/sports-lib';
 import {
   formatWorkoutEndingV1,
   formatWorkoutStepV1,
@@ -28,6 +28,15 @@ export interface ManualWorkoutEditorStep {
   targetMinimum: number | null;
   targetMaximum: number | null;
   note?: string;
+  /** Editor-only: keep the exact saved metres when a rounded unit conversion was not edited. */
+  sourceDistance?: { editorValue: number; meters: number };
+  /** Editor-only: keep the exact saved speed range when displayed pace was not edited. */
+  sourcePace?: {
+    editorMinimum: number;
+    editorMaximum: number;
+    minimumMetersPerSecond: number;
+    maximumMetersPerSecond: number;
+  };
 }
 
 export interface ManualWorkoutEditorRepeat {
@@ -73,22 +82,60 @@ export function createManualWorkoutEditorValue(
   };
 }
 
-function distanceScale(sport: ManualWorkoutSport): number {
-  return isSwimmingWorkoutSportV1(sport) ? 1 : 1000;
+const METERS_PER_MILE = 1609.344;
+
+function distanceScale(sport: ManualWorkoutSport, units?: UserUnitSettingsInterface | null): number {
+  if (isSwimmingWorkoutSportV1(sport)) return 1;
+  return units?.distanceUnits === DistanceUnits.Miles ? METERS_PER_MILE : 1000;
 }
 
 function paceDistanceMeters(sport: ManualWorkoutSport, units?: UserUnitSettingsInterface | null): number {
-  if (!isSwimmingWorkoutSportV1(sport)) return 1000;
+  if (!isSwimmingWorkoutSportV1(sport)) {
+    return units?.paceUnits?.[0] === PaceUnits.MinutesPerMile ? METERS_PER_MILE : 1000;
+  }
   return units?.swimPaceUnits?.[0] === SwimPaceUnits.MinutesPer100Yard ? 91.44 : 100;
 }
 
-function endingFromEditor(step: ManualWorkoutEditorStep, sport: ManualWorkoutSport): WorkoutEndingV1 {
+function distanceMetersFromEditor(
+  step: ManualWorkoutEditorStep,
+  sport: ManualWorkoutSport,
+  units?: UserUnitSettingsInterface | null,
+): number {
+  return step.sourceDistance?.editorValue === step.endingValue
+    ? step.sourceDistance.meters : step.endingValue * distanceScale(sport, units);
+}
+
+function paceSpeedRangeFromEditor(
+  step: ManualWorkoutEditorStep,
+  minimum: number,
+  maximum: number,
+  sport: ManualWorkoutSport,
+  units?: UserUnitSettingsInterface | null,
+): { minimumMetersPerSecond: number; maximumMetersPerSecond: number } {
+  if (step.sourcePace?.editorMinimum === minimum && step.sourcePace.editorMaximum === maximum) {
+    return {
+      minimumMetersPerSecond: step.sourcePace.minimumMetersPerSecond,
+      maximumMetersPerSecond: step.sourcePace.maximumMetersPerSecond,
+    };
+  }
+  const distanceMeters = paceDistanceMeters(sport, units);
+  return {
+    minimumMetersPerSecond: distanceMeters / (Math.max(minimum, maximum) * 60),
+    maximumMetersPerSecond: distanceMeters / (Math.min(minimum, maximum) * 60),
+  };
+}
+
+function endingFromEditor(
+  step: ManualWorkoutEditorStep,
+  sport: ManualWorkoutSport,
+  units?: UserUnitSettingsInterface | null,
+): WorkoutEndingV1 {
   if (!Number.isFinite(step.endingValue) || step.endingValue <= 0) {
     throw new Error('Every step needs a positive duration or distance.');
   }
   return step.endingKind === 'time'
     ? { kind: 'time', seconds: step.endingValue * 60 }
-    : { kind: 'distance', meters: step.endingValue * distanceScale(sport) };
+    : { kind: 'distance', meters: distanceMetersFromEditor(step, sport, units) };
 }
 
 function targetFromEditor(
@@ -109,14 +156,10 @@ function targetFromEditor(
     if (minimum <= 0 || maximum <= 0) {
       throw new Error('Pace target ranges need two positive values.');
     }
-    const fasterPaceMinutes = Math.min(minimum, maximum);
-    const slowerPaceMinutes = Math.max(minimum, maximum);
-    const distanceMeters = paceDistanceMeters(sport, units);
     return [{
       kind: 'speed',
       mode: 'absolute',
-      minimumMetersPerSecond: distanceMeters / (slowerPaceMinutes * 60),
-      maximumMetersPerSecond: distanceMeters / (fasterPaceMinutes * 60),
+      ...paceSpeedRangeFromEditor(step, minimum, maximum, sport, units),
       presentation: 'pace',
     }];
   }
@@ -138,7 +181,7 @@ function stepFromEditor(
     kind: 'step',
     id: step.id,
     purpose: step.purpose,
-    ending: endingFromEditor(step, sport),
+    ending: endingFromEditor(step, sport, units),
     targets: targetFromEditor(step, sport, units),
   };
   return step.note === undefined ? converted : { ...converted, note: step.note };
@@ -177,7 +220,7 @@ function editorTarget(
   units?: UserUnitSettingsInterface | null,
 ): Pick<
   ManualWorkoutEditorStep,
-  'targetKind' | 'targetMinimum' | 'targetMaximum'
+  'targetKind' | 'targetMinimum' | 'targetMaximum' | 'sourcePace'
 > {
   if (!target || target.mode !== 'absolute') {
     if (!target) return { targetKind: 'none', targetMinimum: null, targetMaximum: null };
@@ -196,15 +239,24 @@ function editorTarget(
         targetMinimum: target.minimumWatts,
         targetMaximum: target.maximumWatts,
       };
-    case 'speed':
+    case 'speed': {
       if (target.presentation !== 'pace') {
         throw new Error('This workout uses a speed target that the first manual editor cannot change.');
       }
+      const targetMinimum = roundEditorNumber(paceDistanceMeters(sport, units) / target.maximumMetersPerSecond / 60);
+      const targetMaximum = roundEditorNumber(paceDistanceMeters(sport, units) / target.minimumMetersPerSecond / 60);
       return {
         targetKind: 'pace',
-        targetMinimum: roundEditorNumber(paceDistanceMeters(sport, units) / target.maximumMetersPerSecond / 60),
-        targetMaximum: roundEditorNumber(paceDistanceMeters(sport, units) / target.minimumMetersPerSecond / 60),
+        targetMinimum,
+        targetMaximum,
+        sourcePace: {
+          editorMinimum: targetMinimum,
+          editorMaximum: targetMaximum,
+          minimumMetersPerSecond: target.minimumMetersPerSecond,
+          maximumMetersPerSecond: target.maximumMetersPerSecond,
+        },
       };
+    }
     case 'cadence':
       throw new Error('This workout uses a cadence target that the first manual editor cannot change.');
   }
@@ -224,12 +276,18 @@ function editorStep(
   }
   if (step.targets.length > 1) throw new Error('This workout has more targets than the first manual editor supports.');
   const target = editorTarget(step.targets[0], sport, units);
+  const endingValue = step.ending.kind === 'time'
+    ? step.ending.seconds / 60
+    : roundEditorNumber(step.ending.meters / distanceScale(sport, units));
   return {
     kind: 'step',
     id: step.id,
     purpose: step.purpose,
     endingKind: step.ending.kind,
-    endingValue: step.ending.kind === 'time' ? step.ending.seconds / 60 : step.ending.meters / distanceScale(sport),
+    endingValue,
+    ...(step.ending.kind === 'distance' ? {
+      sourceDistance: { editorValue: endingValue, meters: step.ending.meters },
+    } : {}),
     ...target,
     ...(step.note === undefined ? {} : { note: step.note }),
   };
@@ -268,19 +326,44 @@ export function changeManualWorkoutEditorSport(
   units?: UserUnitSettingsInterface | null,
 ): ManualWorkoutEditorValue {
   if (value.sport === sport) return value;
-  const fromDistance = distanceScale(value.sport);
-  const toDistance = distanceScale(sport);
+  const toDistance = distanceScale(sport, units);
   const paceRatio = paceDistanceMeters(sport, units) / paceDistanceMeters(value.sport, units);
-  const convert = (step: ManualWorkoutEditorStep): ManualWorkoutEditorStep => ({
-    ...step,
-    endingValue: step.endingKind === 'distance'
-      ? roundEditorNumber(step.endingValue * fromDistance / toDistance)
-      : step.endingValue,
-    targetMinimum: step.targetKind === 'pace' && step.targetMinimum !== null
-      ? roundEditorNumber(step.targetMinimum * paceRatio) : step.targetMinimum,
-    targetMaximum: step.targetKind === 'pace' && step.targetMaximum !== null
-      ? roundEditorNumber(step.targetMaximum * paceRatio) : step.targetMaximum,
-  });
+  const convert = (step: ManualWorkoutEditorStep): ManualWorkoutEditorStep => {
+    const meters = step.endingKind === 'distance'
+      ? distanceMetersFromEditor(step, value.sport, units) : null;
+    const endingValue = meters !== null ? roundEditorNumber(meters / toDistance) : step.endingValue;
+    const canConvertPace = step.targetKind === 'pace'
+      && typeof step.targetMinimum === 'number' && Number.isFinite(step.targetMinimum) && step.targetMinimum > 0
+      && typeof step.targetMaximum === 'number' && Number.isFinite(step.targetMaximum) && step.targetMaximum > 0;
+    const sourceSpeed = canConvertPace
+      ? paceSpeedRangeFromEditor(step, step.targetMinimum!, step.targetMaximum!, value.sport, units)
+      : null;
+    const targetMinimum = canConvertPace
+      ? roundEditorNumber(paceDistanceMeters(sport, units) / sourceSpeed!.maximumMetersPerSecond / 60)
+      : step.targetKind === 'pace' && step.targetMinimum !== null
+        ? roundEditorNumber(step.targetMinimum * paceRatio) : step.targetMinimum;
+    const targetMaximum = canConvertPace
+      ? roundEditorNumber(paceDistanceMeters(sport, units) / sourceSpeed!.minimumMetersPerSecond / 60)
+      : step.targetKind === 'pace' && step.targetMaximum !== null
+        ? roundEditorNumber(step.targetMaximum * paceRatio) : step.targetMaximum;
+    return {
+      ...step,
+      endingValue,
+      ...(meters !== null ? {
+        sourceDistance: { editorValue: endingValue, meters },
+      } : {}),
+      targetMinimum,
+      targetMaximum,
+      ...(sourceSpeed && typeof targetMinimum === 'number' && typeof targetMaximum === 'number' ? {
+        sourcePace: {
+          editorMinimum: targetMinimum,
+          editorMaximum: targetMaximum,
+          minimumMetersPerSecond: sourceSpeed.minimumMetersPerSecond,
+          maximumMetersPerSecond: sourceSpeed.maximumMetersPerSecond,
+        },
+      } : { sourcePace: undefined }),
+    };
+  };
   return {
     ...value,
     sport,

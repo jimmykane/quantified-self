@@ -19,13 +19,14 @@ import { toSignal } from '@angular/core/rxjs-interop';
 import { MatDialog } from '@angular/material/dialog';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { ActivatedRoute, Router, type NavigationExtras } from '@angular/router';
-import { ActivityTypes, SwimPaceUnits } from '@sports-alliance/sports-lib';
+import { ActivityTypes, DistanceUnits, PaceUnits, SwimPaceUnits, type UserUnitSettingsInterface } from '@sports-alliance/sports-lib';
 import {
   MANUAL_WORKOUT_EDITOR_CYCLING_SPORTS_V1,
   MANUAL_WORKOUT_EDITOR_RUNNING_SPORTS_V1,
   MANUAL_WORKOUT_EDITOR_SWIMMING_SPORTS_V1,
   isSwimmingWorkoutSportV1,
 } from '@shared/planned-workout';
+import { normalizeUserUnitSettings } from '@shared/unit-aware-display';
 import dayjs, { type Dayjs } from 'dayjs';
 import { catchError, combineLatest, map, of, startWith, switchMap } from 'rxjs';
 import type { AppUserInterface } from '../../models/app-user.interface';
@@ -94,6 +95,7 @@ interface WorkoutEditorSession {
   original: ScheduledWorkoutV1 | null;
   originalWorkoutRevision: number | null;
   destinationPlanId: string | null;
+  unitSettings: UserUnitSettingsInterface;
   value: ManualWorkoutEditorValue;
 }
 
@@ -204,10 +206,13 @@ export class PlansWorkspaceComponent {
   readonly currentUser = computed(() => this.userService.user() as AppUserInterface | null);
   readonly editorIsSwimming = computed(() => isSwimmingWorkoutSportV1(this.editor()?.value.sport));
   readonly editorIsPoolSwimming = computed(() => this.editor()?.value.sport === ActivityTypes.Swimming);
+  readonly editorDistanceUnit = computed(() => this.editorIsSwimming()
+    ? 'Metres'
+    : this.editor()?.unitSettings.distanceUnits === DistanceUnits.Miles ? 'Miles' : 'Kilometres');
   readonly editorPaceUnit = computed(() => this.editorIsSwimming()
-    ? this.currentUser()?.settings?.unitSettings?.swimPaceUnits?.[0] === SwimPaceUnits.MinutesPer100Yard
+    ? this.editor()?.unitSettings.swimPaceUnits[0] === SwimPaceUnits.MinutesPer100Yard
       ? 'min/100yd' : 'min/100m'
-    : 'min/km');
+    : this.editor()?.unitSettings.paceUnits[0] === PaceUnits.MinutesPerMile ? 'min/mi' : 'min/km');
   readonly hasTrainingPlanningUIAccess = computed(() => !!this.currentUser()?.uid);
   readonly scheduleState = toSignal(this.userService.user$.pipe(
     switchMap(user => user?.uid
@@ -715,6 +720,7 @@ export class PlansWorkspaceComponent {
       original: null,
       originalWorkoutRevision: null,
       destinationPlanId,
+      unitSettings: normalizeUserUnitSettings(this.currentUser()?.settings?.unitSettings),
       value: createManualWorkoutEditorValue(localDate, this.nextNodeId('step')),
     });
   }
@@ -735,13 +741,15 @@ export class PlansWorkspaceComponent {
       this.clearPlanActions();
       this.editorGeneration += 1;
       this.workoutDateInputInvalid.set(false);
+      const unitSettings = normalizeUserUnitSettings(this.currentUser()?.settings?.unitSettings);
       this.editor.set({
         mode: 'edit',
         original: workout,
         originalWorkoutRevision: workout.revision,
         destinationPlanId: workout.planId,
+        unitSettings,
         value: workoutStructureToManualEditor(
-          workout.title, workout.localDate, workout.structure, this.currentUser()?.settings?.unitSettings,
+          workout.title, workout.localDate, workout.structure, unitSettings,
         ),
       });
       return true;
@@ -804,7 +812,7 @@ export class PlansWorkspaceComponent {
     this.editor.update(session => session ? {
       ...session,
       value: field === 'sport'
-        ? changeManualWorkoutEditorSport(session.value, value as ManualWorkoutSport, this.currentUser()?.settings?.unitSettings)
+        ? changeManualWorkoutEditorSport(session.value, value as ManualWorkoutSport, session.unitSettings)
         : { ...session.value, [field]: value },
     } : null);
   }
@@ -902,7 +910,12 @@ export class PlansWorkspaceComponent {
         const isSelection = ['purpose', 'endingKind', 'targetKind'].includes(field);
         if (stepIndex === null && node.kind === 'step') {
           if (isSelection && node[field as keyof ManualWorkoutEditorStep] !== value) this.haptics.selection();
-          return { ...node, [field]: value } as ManualWorkoutEditorStep;
+          return { ...node, [field]: value,
+            ...((field === 'endingKind' || field === 'endingValue') && value !== node[field]
+              ? { sourceDistance: undefined } : {}),
+            ...((field === 'targetKind' || field === 'targetMinimum' || field === 'targetMaximum') && value !== node[field]
+              ? { sourcePace: undefined } : {}),
+          } as ManualWorkoutEditorStep;
         }
         if (stepIndex !== null && node.kind === 'repeat') {
           return {
@@ -910,7 +923,12 @@ export class PlansWorkspaceComponent {
             steps: node.steps.map((step, candidate) => {
               if (candidate !== stepIndex) return step;
               if (isSelection && step[field as keyof ManualWorkoutEditorStep] !== value) this.haptics.selection();
-              return { ...step, [field]: value } as ManualWorkoutEditorStep;
+              return { ...step, [field]: value,
+                ...((field === 'endingKind' || field === 'endingValue') && value !== step[field]
+                  ? { sourceDistance: undefined } : {}),
+                ...((field === 'targetKind' || field === 'targetMinimum' || field === 'targetMaximum') && value !== step[field]
+                  ? { sourcePace: undefined } : {}),
+              } as ManualWorkoutEditorStep;
             }),
           };
         }
@@ -936,7 +954,7 @@ export class PlansWorkspaceComponent {
     }
     let structure;
     try {
-      structure = manualWorkoutEditorToStructure(session.value, this.currentUser()?.settings?.unitSettings);
+      structure = manualWorkoutEditorToStructure(session.value, session.unitSettings);
       normalizeTrainingLocalDate(session.value.localDate);
     } catch (error) {
       this.showError(error);

@@ -32,6 +32,7 @@ import {
 } from './provider-mapping';
 import { serializeSuuntoGuideJsonV1 } from './suunto-guide.serializer';
 import { serializeWahooPlanJsonV1 } from './wahoo-plan.serializer';
+import { wahooDurationSeconds } from '../delivery/wahoo/mapping';
 
 const RUNNING_FIXTURE = canonicalRunningFixture as WorkoutStructureV1;
 
@@ -208,6 +209,55 @@ describe('planned-workout provider proof fixtures', () => {
         expect(result.level).toBe('exact');
         expect(result.issues).toEqual([]);
         expect(result.artifact).toEqual(expectedSuuntoFixture);
+    });
+
+    it('maps a canonical one-mile step in metres without applying display units again', () => {
+        const slowerMetersPerSecond = 1609.344 / (5 * 60);
+        const fasterMetersPerSecond = 1609.344 / (4 * 60);
+        const structure: WorkoutStructureV1 = {
+            version: 1,
+            sport: ActivityTypes.Running,
+            nodes: [{ kind: 'step', id: 'mile', purpose: 'work',
+                ending: { kind: 'distance', meters: 1609.344 }, targets: [{
+                    kind: 'speed', mode: 'absolute', presentation: 'pace',
+                    minimumMetersPerSecond: slowerMetersPerSecond,
+                    maximumMetersPerSecond: fasterMetersPerSecond,
+                }] }],
+        };
+        const garmin = serializeGarminWorkoutV1(structure, {
+            name: 'One-mile step', allowDegraded: false,
+        });
+        expect(garmin.artifact.segments[0].steps[0]).toMatchObject({
+            durationType: 'DISTANCE', durationValue: 1609.344, durationValueType: 'METER',
+            targetType: 'PACE', targetValueLow: slowerMetersPerSecond, targetValueHigh: fasterMetersPerSecond,
+        });
+        const coros = serializeCorosTrainingPlanV1(structure, {
+            athleteId: 24680, sourceWorkoutId: 'mile-1', title: 'One-mile step',
+            localDate: '2026-09-03', lastModifiedDate: '2026-09-02T12:00:00.000', allowDegraded: true,
+        });
+        expect(coros.level).toBe('degraded');
+        expect(coros.artifact.Workouts[0].Structure[0]).toMatchObject({
+            Length: { Unit: 'Meter', Value: 1609 },
+            IntensityTarget: { Unit: 'RangeOfThresholdSpeed', MinValue: slowerMetersPerSecond, MaxValue: fasterMetersPerSecond },
+        });
+        const suunto = serializeSuuntoGuideJsonV1(structure, {
+            name: 'One-mile step', owner: 'Quantified Self', url: 'https://quantified-self.io/training/plans',
+            localDate: '2026-09-03', sourceWorkoutId: 'mile-1', allowDegraded: false,
+        });
+        expect(suunto.artifact.steps[0]).toMatchObject({
+            transitions: [{ condition: { type: 'stepDistance', value: 1609.344 } }],
+            fields: expect.arrayContaining([{
+                type: 'targetPace', min: slowerMetersPerSecond, max: fasterMetersPerSecond, title: 'Tgt pace',
+            }]),
+        });
+        // A Wahoo plan.json can encode distance, but dated Workout delivery requires a known duration.
+        expect(serializeWahooPlanJsonV1(structure, {
+            name: 'One-mile step', location: 'outdoor', allowDegraded: false,
+        }).artifact.intervals[0]).toMatchObject({
+            exit_trigger_type: 'distance', exit_trigger_value: 1609.344,
+            targets: [{ type: 'speed', low: slowerMetersPerSecond, high: fasterMetersPerSecond }],
+        });
+        expect(wahooDurationSeconds(structure)).toBeNull();
     });
 
     it.each([

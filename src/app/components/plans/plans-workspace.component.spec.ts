@@ -9,7 +9,7 @@ import { MatDatepickerInput } from '@angular/material/datepicker';
 import { MatSelect } from '@angular/material/select';
 import { MatFormField } from '@angular/material/form-field';
 import { ActivatedRoute, Router, convertToParamMap, provideRouter, type Data, type ParamMap } from '@angular/router';
-import { ActivityTypes, DistanceUnits } from '@sports-alliance/sports-lib';
+import { ActivityTypes, DistanceUnits, PaceUnits } from '@sports-alliance/sports-lib';
 import { normalizeUserUnitSettings } from '@shared/unit-aware-display';
 import dayjs from 'dayjs';
 import { BehaviorSubject, Subject, concat, defer, of, type Observable } from 'rxjs';
@@ -358,6 +358,82 @@ describe('PlansWorkspaceComponent', () => {
     };
     const fixture = await renderPlans();
     expect(fixture.nativeElement.querySelector('app-compact-row.workout-row .workout-summary')?.textContent).toContain(expected);
+  });
+
+  it.each([
+    { preference: {}, label: 'Kilometres', meters: 1000, pace: 'min/km' },
+    { preference: { distanceUnits: DistanceUnits.Miles, paceUnits: [PaceUnits.MinutesPerMile] },
+      label: 'Miles', meters: 1609.344, pace: 'min/mi' },
+  ])('uses $label and $pace in the editor and saves canonical values', async ({ preference, label, meters, pace }) => {
+    const unitUser = { ...user, settings: { unitSettings: normalizeUserUnitSettings(preference) } };
+    TestBed.overrideProvider(AppUserService, { useValue: { user: signal(unitUser), user$: of(unitUser) } });
+    setRouteState({ mode: 'create', scope: 'standalone', date: '2026-09-24' });
+    const fixture = await renderPlans();
+    fixture.componentInstance.updateEditorField('title', 'Distance test');
+    fixture.componentInstance.updateStep(0, null, 'endingKind', 'distance');
+    fixture.componentInstance.updateStep(0, null, 'endingValue', 1);
+    fixture.componentInstance.updateStep(0, null, 'targetKind', 'pace');
+    fixture.componentInstance.updateStep(0, null, 'targetMinimum', 4);
+    fixture.componentInstance.updateStep(0, null, 'targetMaximum', 5);
+    fixture.detectChanges();
+    expect(fixture.componentInstance.editorDistanceUnit()).toBe(label);
+    expect(fixture.componentInstance.editorPaceUnit()).toBe(pace);
+    expect(fixture.nativeElement.querySelector('.step-fields')?.textContent).toContain(label);
+    await fixture.componentInstance.saveWorkout();
+    expect(mutate).toHaveBeenCalledWith(expect.objectContaining({
+      operation: expect.objectContaining({
+        structure: expect.objectContaining({ nodes: [expect.objectContaining({
+          ending: { kind: 'distance', meters },
+          targets: [expect.objectContaining({
+            minimumMetersPerSecond: meters / 300,
+            maximumMetersPerSecond: meters / 240,
+          })],
+        })] }),
+      }),
+    }));
+  });
+
+  it('keeps an existing workout in its opening units and preserves metres on an unrelated edit', async () => {
+    const unitUser = signal({ ...user, settings: {
+      unitSettings: normalizeUserUnitSettings({ distanceUnits: DistanceUnits.Miles }),
+    } });
+    TestBed.overrideProvider(AppUserService, { useValue: { user: unitUser, user$: of(unitUser()) } });
+    schedule.workouts[0].structure = {
+      version: 1, sport: ActivityTypes.Running,
+      nodes: [{ kind: 'step', id: 'kilometer', purpose: 'work',
+        ending: { kind: 'distance', meters: 1000 }, targets: [] }],
+    };
+    const fixture = await renderPlans();
+    fixture.componentInstance.editWorkout(schedule.workouts[0]);
+    expect(fixture.componentInstance.editorDistanceUnit()).toBe('Miles');
+    expect(fixture.componentInstance.editor()?.value.nodes[0]).toMatchObject({ endingValue: 0.621371 });
+    unitUser.set({ ...unitUser(), settings: { unitSettings: normalizeUserUnitSettings({}) } });
+    fixture.detectChanges();
+    expect(fixture.componentInstance.editorDistanceUnit()).toBe('Miles');
+    fixture.componentInstance.updateEditorField('title', 'Updated title');
+    await fixture.componentInstance.saveWorkout();
+    expect(mutate).toHaveBeenCalledWith(expect.objectContaining({
+      operation: expect.objectContaining({ kind: 'update-workout',
+        structure: expect.objectContaining({ nodes: [expect.objectContaining({
+          ending: { kind: 'distance', meters: 1000 },
+        })] }),
+      }),
+    }));
+
+    unitUser.set({ ...unitUser(), settings: {
+      unitSettings: normalizeUserUnitSettings({ distanceUnits: DistanceUnits.Miles }),
+    } });
+    fixture.componentInstance.editWorkout(schedule.workouts[0]);
+    fixture.componentInstance.updateStep(0, null, 'endingValue', 1);
+    fixture.componentInstance.updateStep(0, null, 'endingValue', 0.621371);
+    await fixture.componentInstance.saveWorkout();
+    expect(mutate).toHaveBeenLastCalledWith(expect.objectContaining({
+      operation: expect.objectContaining({ kind: 'update-workout',
+        structure: expect.objectContaining({ nodes: [expect.objectContaining({
+          ending: { kind: 'distance', meters: 0.621371 * 1609.344 },
+        })] }),
+      }),
+    }));
   });
 
   it('uses compact rows for editable steps and repeats without nesting cards or changing edit actions', async () => {

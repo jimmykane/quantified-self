@@ -425,6 +425,17 @@ rather than kilometres, and pace targets follow the user's swim-pace preference 
 editor sport converts displayed distances and paces without changing their canonical values. The pool editor may
 select an optional physical length; a 25 m step alone never asserts a 25 m pool, and open-water swimming has no pool
 length. Other providers do not receive the selected length and require explicit degradation review. These are Sports Lib activity-type strings, not provider profile IDs.
+Running and cycling distance-step inputs follow the owner's `distanceUnits` preference (kilometres or miles), while
+their pace-target inputs independently follow the first selected `paceUnits` preference (min/km or min/mi). The editor
+captures normalized units when opened so a settings update in another tab cannot reinterpret an unsaved number. Existing
+metre and m/s values display at readable precision but retain their exact canonical values on an unchanged edit;
+newly typed values convert to canonical metres and m/s before the existing schedule mutation. One international mile
+is 1609.344 metres. No recipe field, schedule history or stored workout requires migration. Garmin and Suunto consume
+canonical metres directly; COROS applies its existing documented integer-metre rounding and degradation approval;
+Wahoo's dated Workout delivery still rejects distance-ended recipes because its required duration is unknown.
+MCP impact: no tool, scope, schema, consent, projection or proposal shape changes. Existing MCP planning reads/writes
+already use canonical metres and m/s plus Sports Lib owner-unit formatting, and provider actions still use the same
+saved recipe and approval path.
 The shared contract remains broader so saved v1 data does
 not need a redesign when later UI slices are enabled.
 

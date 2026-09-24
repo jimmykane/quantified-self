@@ -473,8 +473,9 @@
           </mat-select>
         </mat-form-field>
         <mat-form-field subscriptSizing="dynamic">
-          <mat-label>{{ step.endingKind === 'time' ? 'Minutes' : editorIsSwimming() ? 'Metres' : 'Kilometres' }}</mat-label>
-          <input matInput type="number" min="0.01" step="0.01" [ngModel]="step.endingValue"
+          <mat-label>{{ step.endingKind === 'time' ? 'Minutes' : editorDistanceUnit() }}</mat-label>
+          <input matInput type="number" [attr.min]="step.endingKind === 'distance' ? 0 : 0.01"
+            [attr.step]="step.endingKind === 'distance' ? 'any' : '0.01'" [ngModel]="step.endingValue"
             (ngModelChange)="updateStep(nodeIndex, stepIndex, 'endingValue', +$event)">
         </mat-form-field>
         <mat-form-field subscriptSizing="dynamic">
@@ -488,12 +489,14 @@
         @if (step.targetKind !== 'none') {
           <mat-form-field subscriptSizing="dynamic">
             <mat-label>{{ step.targetKind === 'pace' ? 'Faster ' + editorPaceUnit() : 'Minimum' }}</mat-label>
-            <input matInput type="number" [min]="step.targetKind === 'pace' ? 0.01 : 0" step="0.01" [ngModel]="step.targetMinimum"
+            <input matInput type="number" min="0"
+              [attr.step]="step.targetKind === 'pace' ? 'any' : '0.01'" [ngModel]="step.targetMinimum"
               (ngModelChange)="updateStep(nodeIndex, stepIndex, 'targetMinimum', $event)">
           </mat-form-field>
           <mat-form-field subscriptSizing="dynamic">
             <mat-label>{{ step.targetKind === 'pace' ? 'Slower ' + editorPaceUnit() : 'Maximum' }}</mat-label>
-            <input matInput type="number" [min]="step.targetKind === 'pace' ? 0.01 : 0" step="0.01" [ngModel]="step.targetMaximum"
+            <input matInput type="number" min="0"
+              [attr.step]="step.targetKind === 'pace' ? 'any' : '0.01'" [ngModel]="step.targetMaximum"
               (ngModelChange)="updateStep(nodeIndex, stepIndex, 'targetMaximum', $event)">
           </mat-form-field>
         }
