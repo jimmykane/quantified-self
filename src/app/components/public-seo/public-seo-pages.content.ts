@@ -515,7 +515,7 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
       },
       {
         question: 'Which sports and workout steps can I create?',
-        answer: 'The current editor supports Running, Trail Running, Treadmill, Cycling, Mountain Biking, Indoor Cycling, E-Biking, Hand Cycle, Pool Swimming, and Open Water Swimming. It supports time or distance steps, fixed repeats, and one absolute heart-rate, power, or pace target per step. Swim distances use metres; pool length is set on the device for pool workouts.',
+        answer: 'The current editor supports Running, Trail Running, Treadmill, Cycling, Mountain Biking, Indoor Cycling, E-Biking, Hand Cycle, Pool Swimming, and Open Water Swimming. It supports time or distance steps, fixed repeats, and one absolute heart-rate, power, or pace target per step. Swim distances use metres. Pool workouts can save an optional pool length; compatible Garmin lap-swim delivery includes it, while Suunto Guides do not. Set the pool length on the device where needed. Open-water workouts have no pool length.',
       },
       {
         question: 'Do planned workouts change completed activity totals or Training analysis?',

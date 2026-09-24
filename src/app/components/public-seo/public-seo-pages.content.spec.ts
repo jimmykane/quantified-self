@@ -147,8 +147,11 @@ describe('public-seo-pages.content', () => {
     expect(trainingPlans.sections.some(section => section.items.some(item => item.copy.includes('Trail Running')))).toBe(true);
     expect(trainingPlans.sections.some(section => section.items.some(item => item.copy.includes('Hand Cycle')))).toBe(true);
     expect(trainingPlans.sections.some(section => section.items.some(item => item.title === 'Pool and open-water swimming'))).toBe(true);
-    expect(trainingPlans.faqItems.find(item => item.question === 'Which sports and workout steps can I create?')?.answer)
-      .toContain('Open Water Swimming');
+    const supportedWorkoutFaq = trainingPlans.faqItems.find(item => item.question === 'Which sports and workout steps can I create?')?.answer;
+    expect(supportedWorkoutFaq).toContain('Open Water Swimming');
+    expect(supportedWorkoutFaq).toContain('compatible Garmin lap-swim delivery includes it');
+    expect(supportedWorkoutFaq).toContain('Suunto Guides do not');
+    expect(supportedWorkoutFaq).toContain('Open-water workouts have no pool length');
     expect(trainingPlans.sections.some(section => section.items.some(item => item.copy.includes('up to 100 total nodes')))).toBe(true);
     expect(trainingPlans.sections.some(section => section.items.some(item => item.copy.includes('never adds distance')))).toBe(true);
     expect(trainingPlans.sections.some(section => section.items.some(item => item.copy.includes('explicit Send and plan opt-in actions')))).toBe(true);
