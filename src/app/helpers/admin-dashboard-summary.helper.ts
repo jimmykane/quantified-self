@@ -125,6 +125,28 @@ export function buildAdminDashboardQueueRows(stats: QueueStats | null): AdminDas
             maxLagMs: stats.activitySync?.advanced?.maxLagMs,
             chips: countChip('Manual review', stats.activitySync?.manualReconciliationRequired),
         }),
+        ...(stats.trainingDelivery ? [buildQueueRow({
+            id: 'training-delivery',
+            label: 'Training Delivery',
+            icon: 'event_repeat',
+            route: '/admin/queues/training-delivery',
+            pendingDb: stats.trainingDelivery?.jobs.due,
+            cloudTasks: queues?.trainingDelivery?.pending,
+            completed: stats.trainingDelivery?.outcomes.delivered,
+            completedLabel: 'Sent copies',
+            problemCount: normalizeCount(stats.trainingDelivery?.outcomes.failed)
+                + normalizeCount(stats.trainingDelivery?.outcomes.needsAttention),
+            problemLabel: 'Failed / Review',
+            dead: 0,
+            deadLabel: 'Dead',
+            maxLagMs: stats.trainingDelivery?.jobs.oldestDueLagMs,
+            chips: [
+                ...countChip('Scheduled jobs', stats.trainingDelivery?.jobs.total),
+                ...countChip('Retrying', stats.trainingDelivery?.outcomes.retrying),
+                ...(stats.trainingDelivery && !stats.trainingDelivery.jobsAvailable ? ['Job counts unavailable'] : []),
+                ...(stats.trainingDelivery && !stats.trainingDelivery.statusCountsAvailable ? ['Outcome counts unavailable'] : []),
+            ],
+        })] : []),
         buildQueueRow({
             id: 'route-delivery-sync',
             label: 'Route Delivery',

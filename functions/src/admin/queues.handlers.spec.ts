@@ -291,6 +291,12 @@ describe('getQueueStats Cloud Function', () => {
         expect(result.succeeded).toBe(20);
         expect(result.stuck).toBe(20);
         expect(result.providers).toHaveLength(4);
+        expect(result.trainingDelivery).toMatchObject({
+            jobsAvailable: true,
+            statusCountsAvailable: true,
+            jobs: { total: 5, due: 5, delivery: 5, verification: 5, reconcile: 5 },
+            outcomes: { delivered: 5, retrying: 5, failed: 5, needsAttention: 5 },
+        });
 
         // Check DLQ stats
         expect(result.dlq).toBeDefined();
@@ -309,6 +315,7 @@ describe('getQueueStats Cloud Function', () => {
             pending: 73,
             queues: {
                 workout: expectedQueueStats('processWorkoutTask', 42),
+                trainingDelivery: expectedQueueStats('processTrainingDeliveryTask', 0),
                 activitySync: expectedQueueStats('processActivitySyncTask', 0),
                 routeDeliverySync: expectedQueueStats('processRouteDeliverySyncTask', 0),
                 routeSync: expectedQueueStats('processRouteSyncTask', 4),
@@ -687,6 +694,7 @@ describe('getQueueStats Cloud Function', () => {
     it('should handle single-queue Cloud Task stats error and return safe defaults for that queue', async () => {
         mockGetCloudTaskQueueDepthForQueue
             .mockResolvedValueOnce(42)
+            .mockResolvedValueOnce(0)
             .mockRejectedValueOnce(new Error('Queue depth error'))
             .mockResolvedValueOnce(3)
             .mockResolvedValueOnce(8)
@@ -699,6 +707,7 @@ describe('getQueueStats Cloud Function', () => {
             pending: 76,
             queues: {
                 workout: expectedQueueStats('processWorkoutTask', 42),
+                trainingDelivery: expectedQueueStats('processTrainingDeliveryTask', 0),
                 activitySync: expectedQueueStats('processActivitySyncTask', 0, 'UNKNOWN', null),
                 routeDeliverySync: expectedQueueStats('processRouteDeliverySyncTask', 3),
                 routeSync: expectedQueueStats('processRouteSyncTask', 8),

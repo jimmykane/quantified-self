@@ -47,6 +47,7 @@ import { getDisabledSleepProviders } from '../../sleep/provider-flags';
 import { SLEEP_PROVIDERS, SleepProvider } from '../../../../shared/sleep';
 import { enqueueSportsLibReparseHeavyTask } from '../../shared/cloud-tasks';
 import { getUserDeletionGuardState, getUserDeletionGuardStateInTransaction } from '../../shared/user-deletion-guard';
+import { getTrainingDeliveryQueueStats } from './training-delivery-queue.stats';
 
 const SPORTS_LIB_REPARSE_JOBS_COLLECTION = 'sportsLibReparseJobs';
 const SPORTS_LIB_ROUTE_REPARSE_JOBS_COLLECTION = 'sportsLibRouteReparseJobs';
@@ -157,6 +158,7 @@ export const getQueueStats = onAdminCall<GetQueueStatsRequest, QueueStatsRespons
         const db = admin.firestore();
         const {
             workoutQueue,
+            trainingDeliveryQueue,
             activitySyncQueue,
             routeDeliverySyncQueue,
             routeSyncQueue,
@@ -170,6 +172,7 @@ export const getQueueStats = onAdminCall<GetQueueStatsRequest, QueueStatsRespons
         } = config.cloudtasks;
         const [
             workoutCloudTaskStats,
+            trainingDeliveryCloudTaskStats,
             activitySyncCloudTaskStats,
             routeDeliverySyncCloudTaskStats,
             routeSyncCloudTaskStats,
@@ -182,6 +185,7 @@ export const getQueueStats = onAdminCall<GetQueueStatsRequest, QueueStatsRespons
             derivedMetricsCloudTaskStats,
         ] = await Promise.all([
             getAdminCloudTaskQueueStats(workoutQueue),
+            getAdminCloudTaskQueueStats(trainingDeliveryQueue),
             getAdminCloudTaskQueueStats(activitySyncQueue),
             getAdminCloudTaskQueueStats(routeDeliverySyncQueue),
             getAdminCloudTaskQueueStats(routeSyncQueue),
@@ -195,6 +199,7 @@ export const getQueueStats = onAdminCall<GetQueueStatsRequest, QueueStatsRespons
         ]);
         const reparseCloudTaskDepth = sportsLibReparseCloudTaskStats.pending + sportsLibReparseHeavyCloudTaskStats.pending;
         const totalCloudTaskDepth = workoutCloudTaskStats.pending
+            + trainingDeliveryCloudTaskStats.pending
             + activitySyncCloudTaskStats.pending
             + routeDeliverySyncCloudTaskStats.pending
             + routeSyncCloudTaskStats.pending
@@ -205,6 +210,7 @@ export const getQueueStats = onAdminCall<GetQueueStatsRequest, QueueStatsRespons
             + derivedMetricsIngressCloudTaskStats.pending
             + derivedMetricsCloudTaskStats.pending;
         const reparseJobsCollection = db.collection(SPORTS_LIB_REPARSE_JOBS_COLLECTION);
+        const trainingDeliveryStats = getTrainingDeliveryQueueStats(db, Date.now());
         const routeReparseJobsCollection = db.collection(SPORTS_LIB_ROUTE_REPARSE_JOBS_COLLECTION);
 
         const [
@@ -1085,6 +1091,7 @@ export const getQueueStats = onAdminCall<GetQueueStatsRequest, QueueStatsRespons
                 pending: totalCloudTaskDepth,
                 queues: {
                     workout: workoutCloudTaskStats,
+                    trainingDelivery: trainingDeliveryCloudTaskStats,
                     activitySync: activitySyncCloudTaskStats,
                     routeDeliverySync: routeDeliverySyncCloudTaskStats,
                     routeSync: routeSyncCloudTaskStats,
@@ -1188,6 +1195,7 @@ export const getQueueStats = onAdminCall<GetQueueStatsRequest, QueueStatsRespons
                     topErrors: activitySyncTopErrors,
                 },
             },
+            trainingDelivery: await trainingDeliveryStats,
             routeDeliverySync: {
                 pending: routeDeliverySyncPending,
                 succeeded: routeDeliverySyncSucceeded,

@@ -251,6 +251,7 @@ vi.mock('../../config', () => ({
     config: {
         cloudtasks: {
             workoutQueue: 'processWorkoutTask',
+            trainingDeliveryQueue: 'processTrainingDeliveryTask',
             activitySyncQueue: 'processActivitySyncTask',
             routeDeliverySyncQueue: 'processRouteDeliverySyncTask',
             routeSyncQueue: 'processRouteSyncTask',

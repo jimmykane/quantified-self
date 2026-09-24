@@ -35,6 +35,7 @@ export interface CloudTaskQueueStats {
 
 export interface CloudTaskQueueBreakdown {
     workout: CloudTaskQueueStats;
+    trainingDelivery: CloudTaskQueueStats;
     activitySync: CloudTaskQueueStats;
     routeDeliverySync: CloudTaskQueueStats;
     routeSync: CloudTaskQueueStats;
@@ -241,6 +242,34 @@ export interface SleepSyncQueueStats extends SyncPipelineQueueStats {
     providers: SleepSyncProviderQueueStats[];
 }
 
+/** Jobs are transient work; outcomes are current per-workout projections, not completed queue jobs. */
+export interface TrainingDeliveryQueueStats {
+    jobsAvailable: boolean;
+    jobs: {
+        total: number;
+        due: number;
+        reconcile: number;
+        delivery: number;
+        verification: number;
+        oldestDueLagMs: number;
+    };
+    statusCountsAvailable: boolean;
+    outcomes: {
+        delivered: number;
+        retrying: number;
+        failed: number;
+        needsAttention: number;
+    };
+    providers: {
+        provider: string;
+        queued: number;
+        delivered: number;
+        retrying: number;
+        failed: number;
+        needsAttention: number;
+    }[];
+}
+
 export interface AdminQueueProviderStats {
     name: string;
     pending: number;
@@ -264,6 +293,7 @@ export interface AdminQueueStatsResponse {
     derivedMetrics: DerivedMetricsStats;
     advanced: QueueAdvancedStats;
     activitySync: ActivitySyncQueueStats;
+    trainingDelivery: TrainingDeliveryQueueStats;
     routeDeliverySync: RouteDeliverySyncQueueStats;
     routeSync: RouteSyncQueueStats;
     sleepSync: SleepSyncQueueStats;
@@ -271,7 +301,7 @@ export interface AdminQueueStatsResponse {
 
 export type AdminQueueStatsSnapshot = Omit<
     AdminQueueStatsResponse,
-    'cloudTasks' | 'dlq' | 'reparse' | 'routeReparse' | 'derivedMetrics' | 'advanced' | 'activitySync' | 'sleepSync'
+    'cloudTasks' | 'dlq' | 'reparse' | 'routeReparse' | 'derivedMetrics' | 'advanced' | 'activitySync' | 'sleepSync' | 'trainingDelivery'
 > & {
     cloudTasks?: {
         pending: number;
@@ -283,6 +313,7 @@ export type AdminQueueStatsSnapshot = Omit<
     derivedMetrics?: DerivedMetricsStats;
     advanced?: QueueAdvancedStats;
     activitySync?: ActivitySyncQueueStats;
+    trainingDelivery?: TrainingDeliveryQueueStats;
     routeDeliverySync?: RouteDeliverySyncQueueStats;
     routeSync?: RouteSyncQueueStats;
     sleepSync?: SleepSyncQueueStats;

@@ -3381,6 +3381,21 @@ Derived metrics also require the Cloud Tasks emulator configuration used by this
 `CLOUD_TASKS_EMULATOR_HOST` is set, task lookup and queue statistics stay local and must not fall through to the production
 Cloud Tasks API.
 
+### Training delivery queue monitoring
+
+Admin Queue Monitoring includes **Training Delivery** at `/admin/queues/training-delivery`. Its Firestore job count
+includes delivery, remote verification and recurring reconciliation markers; **Due now** and oldest overdue lag exclude
+future-dated work. The separate Cloud Tasks depth is dispatch backlog, not the number of workouts synced. Current
+workout outcomes are aggregate counts over `trainingDeliveryStatuses`: delivered records with a retained remote copy,
+retrying, failed and needs review, with per-service breakdowns. A completed queue job does not imply provider acceptance.
+The admin callable uses only
+bounded Firestore aggregate queries, never returns ledger evidence, remote IDs, credentials or raw rejection bodies,
+and keeps the other queues available if Training indexes are missing. The collection-group status indexes in
+`firestore.indexes.json` must be deployed before outcome counts become available. Queue monitoring is read-only;
+it neither retries deliveries nor enables a provider. Production dashboards and alerts remain a separate rollout
+concern. MCP impact: none—the new counts are admin-only and do not change Training reads, mutations, scopes, consent,
+user-visible delivery projections or provider actions.
+
 ### Sports-lib reparse observability
 
 Admin reparse status reports automatic scanning separately from Cloud Tasks queue state. `automaticScanEnabled` controls

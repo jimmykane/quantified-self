@@ -9,6 +9,35 @@
     margin-bottom: 2rem;
 }
 
+.training-delivery-note,
+.training-delivery-warning {
+    color: var(--mat-sys-on-surface-variant);
+    line-height: 1.45;
+}
+
+.training-delivery-warning {
+    padding: 0.75rem 1rem;
+    border: 1px solid var(--mat-sys-outline-variant);
+    border-radius: 0.75rem;
+}
+
+.training-delivery-breakdown,
+.training-delivery-provider-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem 1.25rem;
+    padding: 0.75rem 0;
+    border-bottom: 1px solid var(--mat-sys-outline-variant);
+}
+
+.training-delivery-providers {
+    margin-top: 1.5rem;
+}
+
+.training-delivery-provider-row strong {
+    min-width: 6rem;
+}
+
 .reparse-settings-card {
     margin-bottom: 1.5rem;
     padding: 1.25rem;

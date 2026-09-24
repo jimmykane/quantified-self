@@ -44,6 +44,7 @@ describe('admin-dashboard-summary helper', () => {
                 pending: 16,
                 queues: {
                     workout: { queueId: 'workout', pending: 3 },
+                    trainingDelivery: { queueId: 'training', pending: 2 },
                     activitySync: { queueId: 'activity', pending: 0 },
                     routeDeliverySync: { queueId: 'delivery', pending: 1 },
                     routeSync: { queueId: 'route', pending: 0 },
@@ -69,6 +70,13 @@ describe('admin-dashboard-summary helper', () => {
                 dead: 0,
                 dlqByContext: [],
                 advanced: { throughput: 7, maxLagMs: 0, retryHistogram: { '0-3': 0, '4-7': 0, '8-9': 0 }, topErrors: [] },
+            },
+            trainingDelivery: {
+                jobsAvailable: true,
+                jobs: { total: 9, due: 2, reconcile: 3, delivery: 4, verification: 2, oldestDueLagMs: 30_000 },
+                statusCountsAvailable: true,
+                outcomes: { delivered: 7, retrying: 1, failed: 2, needsAttention: 1 },
+                providers: [],
             },
             routeDeliverySync: {
                 pending: 1,
@@ -144,6 +152,7 @@ describe('admin-dashboard-summary helper', () => {
         expect(rows.map(row => row.id)).toEqual([
             'workout',
             'activity-sync',
+            'training-delivery',
             'route-delivery-sync',
             'route-sync',
             'sleep-sync',
@@ -157,6 +166,14 @@ describe('admin-dashboard-summary helper', () => {
             problemLabel: 'Stuck / Manual',
             severity: 'error',
             chips: ['Manual review: 2'],
+        }));
+        expect(rows.find(row => row.id === 'training-delivery')).toEqual(expect.objectContaining({
+            pendingDb: 2,
+            cloudTasks: 2,
+            completed: 7,
+            problemCount: 3,
+            severity: 'error',
+            chips: ['Scheduled jobs: 9', 'Retrying: 1'],
         }));
         expect(rows.find(row => row.id === 'route-delivery-sync')).toEqual(expect.objectContaining({
             problemCount: 3,
