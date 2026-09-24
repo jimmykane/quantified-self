@@ -72,6 +72,8 @@ validation and the public recipe coverage gate remain identical.
 The built-in Assistant has separate default-off **Training plans**, **Plan and workout changes**, and **Planned-workout
 sync changes** choices. Only applicable focused/batch preview tools enter Gemini context. The model cannot apply changes; Quantified Self
 stores one bounded proposal under the current server-owned conversation and the user must apply or dismiss it in the app.
+Plan-level and provider-only actions select the batch preview before a sport keyword can select a focused recipe editor;
+a combined historical comparison and workout recommendation keeps live daily and completed-activity reads available.
 Proposal references bind the exact conversation generation, so permission changes, New chat, stale tabs and account
 switches cannot reuse them. The dedicated App Check callable rechecks the conversation before applying and clears the
 pending proposal after either apply or dismiss. Internal Training reads recognize both the fixed first-party Assistant

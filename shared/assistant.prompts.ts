@@ -306,6 +306,12 @@ export function findAssistantPromptWorkflow(
   prompt: string,
 ): AssistantPromptWorkflow | null {
   const normalizedPrompt = normalizeExamplePrompt(prompt);
+  // The fixed comparison workflows deliberately expose only their bounded
+  // analysis tools. A combined workout recommendation needs the broader live
+  // readiness, completed-activity, and planning reads instead.
+  if (/\b(?:suggest|recommend|propose|create|add|schedule)\b[\s\S]{0,100}\b(?:workout|session|ride|run)\b/u.test(normalizedPrompt)) {
+    return null;
+  }
   if (
     isMtbRecordJumpPrompt(normalizedPrompt)
     && isJumpDetailOrLocationPrompt(normalizedPrompt)

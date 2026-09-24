@@ -19,6 +19,9 @@ daily report, count recent recorded workout days by local weekday from a discove
 whether an activity has already been completed today. It may offer a cautious optional session rather than a medical
 prescription, then prepare one current-revision Training proposal for in-app review if the user asked to create/send it.
 Preview and queued delivery are not provider acceptance or watch receipt.
+Combined comparison-and-workout requests retain the live daily and activity tools instead of being forced into a
+single-purpose comparison workflow. Plan-level and provider-only actions use the batch Training preview even when a
+strength or pool workout is mentioned; one authored strength or pool-length change uses its focused preview.
 
 ## Request architecture
 

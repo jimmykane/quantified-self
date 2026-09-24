@@ -70,11 +70,35 @@ describe('Training preview model-tool selection', () => {
       .toBe('preview_create_planned_workout');
     expect(selectAssistantTrainingPreviewTool('Create a plan with three workouts.'))
       .toBe('preview_training_changes');
+    expect(selectAssistantTrainingPreviewTool('Create a new training plan with two strength workouts.'))
+      .toBe('preview_training_changes');
+    expect(selectAssistantTrainingPreviewTool('Add one workout to my plan and sync it to Garmin.'))
+      .toBe('preview_create_planned_workout');
+    expect(selectAssistantTrainingPreviewTool('Suggest one workout based on my plan sync status.'))
+      .toBe('preview_create_planned_workout');
+    expect(selectAssistantTrainingPreviewTool('Create one workout for today; do not update any other workouts.'))
+      .toBe('preview_create_planned_workout');
+    expect(selectAssistantTrainingPreviewTool('Create one workout for today and update my existing workout.'))
+      .toBe('preview_training_changes');
+    expect(selectAssistantTrainingPreviewTool('Sync my plan to Garmin.'))
+      .toBe('preview_training_changes');
+    expect(selectAssistantTrainingPreviewTool('Enable Garmin sync for my strength workout plan.'))
+      .toBe('preview_training_changes');
+    expect(selectAssistantTrainingPreviewTool('Send my existing strength workout to Suunto.'))
+      .toBe('preview_training_changes');
+    expect(selectAssistantTrainingPreviewTool('Change sync settings for my strength workout.'))
+      .toBe('preview_training_changes');
+    expect(selectAssistantTrainingPreviewTool('Stop sync for my 25 m pool swim.'))
+      .toBe('preview_training_changes');
     expect(selectAssistantTrainingPreviewTool('Edit my workout and send the update to Garmin.'))
       .toBe('preview_training_changes');
     expect(selectAssistantTrainingPreviewTool('Add a pool swim with a 25 m pool length.'))
       .toBe('preview_planned_workout_v2_change');
+    expect(selectAssistantTrainingPreviewTool('Update my pool swim and preserve its 25 m pool length.'))
+      .toBe('preview_planned_workout_v2_change');
     expect(selectAssistantTrainingPreviewTool('Create a strength workout with four sets.'))
+      .toBe('preview_strength_workout_change');
+    expect(selectAssistantTrainingPreviewTool('Edit my strength workout sets.'))
       .toBe('preview_strength_workout_change');
   });
 
@@ -100,6 +124,33 @@ describe('Training preview model-tool selection', () => {
     expect(modelTools).toContain('preview_create_planned_workout');
     expect(modelTools.filter(name => name.startsWith('preview_'))).toEqual(['preview_create_planned_workout']);
     expect(session.tools.map(tool => tool.name)).toContain('preview_training_changes');
+  });
+
+  it('keeps daily and activity evidence available for a combined comparison and workout request', async () => {
+    const prompt = 'Compare my cycling load, sleep and HRV over the last six weeks, then suggest one workout for today and send it to Garmin and Suunto.';
+    expect(findAssistantPromptWorkflow(prompt)).toBeNull();
+    const { session } = createSession();
+    session.tools.push(...(['query_activities', 'preview_create_planned_workout',
+      'preview_training_changes'] as const).map(name => ({
+      name, title: name, description: name, inputSchema: { type: 'object' as const, properties: {} },
+    })));
+    let modelTools: string[] = [];
+    const runtime = createAssistantRuntime({
+      createMcpSession: vi.fn().mockResolvedValue(session),
+      generateAnswer: async input => {
+        modelTools = input.tools.map(tool => tool.name);
+        expect(input.workflow).toBeNull();
+        await input.tools.find(tool => tool.name === 'get_daily_report')!.execute({ timeZone: 'Europe/Helsinki' });
+        return { answer: 'I can suggest a workout after reviewing today\'s signals.',
+          visualRequest: { chart: null, map: null } };
+      },
+    });
+    await runtime.answer({ uid: 'owner', appBaseUrl: 'https://quantified-self.io', prompt,
+      timeZone: 'Europe/Helsinki', history: [], trainingPlansEnabled: true,
+      trainingPlanChangesEnabled: true, trainingDeliveryEnabled: true });
+    expect(modelTools).toEqual(expect.arrayContaining(['get_daily_report', 'query_activities',
+      'preview_create_planned_workout']));
+    expect(modelTools).not.toContain('preview_training_changes');
   });
 });
 

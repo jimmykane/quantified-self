@@ -287,17 +287,32 @@ function buildAssistantModelInputSchema(
 }
 
 export function selectAssistantTrainingPreviewTool(prompt: string): typeof TRAINING_PREVIEW_TOOLS[number] {
-  const question = prompt.toLowerCase();
-  if (/\b(strength|gym|resistance)\b/u.test(question)
+  // A safety qualifier such as "do not update anything else" is not another
+  // requested mutation and should not force a one-workout create into batch.
+  const question = prompt.toLowerCase().replace(
+    /\b(?:don't|do not|never|without)\s+(?:(?:also|any|other|existing)\s+){0,3}(?:edit|update|move|copy|duplicate|delete|skip|archive|rename|change|modify)\b/gu,
+    '',
+  );
+  const createsPlan = /\b(create|add|build|make)\s+(?:(?:a|an|new|my|the)\s+){0,3}(?:training\s+)?plan\b/u.test(question);
+  const changesPlan = /\b(rename|archive|activate|pause|delete|shift)\b[\s\S]{0,40}\b(?:training\s+)?plan\b/u.test(question)
+    || /\b(?:sync|send)\s+(?:(?:my|the|this|that|a|training)\s+){0,3}plans?\b/u.test(question)
+    || /\b(?:enable|disable|stop|start)\b[\s\S]{0,30}\b(?:plan\s+sync|sync[\s\S]{0,20}\bplans?)\b/u.test(question);
+  const multipleWorkouts = /\b(multiple|several|two|three|four|many|[2-9])\s+(?:(?:different|planned)\s+)?workouts\b/u.test(question);
+  // A special recipe editor cannot perform a provider-only action or a plan
+  // mutation. Select those operations before matching sport words in context.
+  if (createsPlan || changesPlan || multipleWorkouts) return 'preview_training_changes';
+  const authorsWorkout = /\b(create|add|schedule|make|build|draft|propose|suggest|edit|update|modify|change)\b/u.test(question);
+  const deliveryOnly = /\b(send|sync|enable|stop|retry|approve)\b/u.test(question) && !authorsWorkout;
+  const changesDeliverySettings = /\b(change|edit|update|modify)\s+(?:(?:the|my|existing)\s+)?(?:sync|delivery|provider)\b/u.test(question);
+  if (deliveryOnly || changesDeliverySettings) return 'preview_training_changes';
+  if (authorsWorkout && /\b(strength|gym|resistance)\b/u.test(question)
     && /\b(workout|session|exercise|set|reps?)\b/u.test(question)) {
     return 'preview_strength_workout_change';
   }
-  if (/\b(pool|swim|swimming)\b/u.test(question)
+  if (authorsWorkout && /\b(pool|swim|swimming)\b/u.test(question)
     && /\b(pool length|pool size|25\s*m(?:etre|eter)?|25\s*yd|yards?)\b/u.test(question)) {
     return 'preview_planned_workout_v2_change';
   }
-  const createsPlan = /\b(create|add|build|make)\s+(?:a\s+|new\s+|my\s+)?(?:training\s+)?plan\b/u.test(question);
-  const multipleWorkouts = /\b(multiple|several|two|three|four|many)\s+(?:planned\s+)?workouts\b/u.test(question);
   const changesExisting = /\b(edit|update|move|copy|duplicate|delete|skip|archive|rename)\b/u.test(question);
   const createsWorkout = /\b(create|add|schedule|make|build|draft|propose|suggest)\b[\s\S]{0,100}\b(workout|session|ride|run)\b/u.test(question)
     || /\b(?:new|one|a|an|standalone)\s+(?:planned\s+)?workout\b[\s\S]{0,70}\b(send|sync)\b/u.test(question);

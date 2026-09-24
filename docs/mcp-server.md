@@ -128,6 +128,10 @@ unapproved writes. Include the full optional-permission tool catalogue in schema
 or content input changes; otherwise one incompatible declaration can prevent every Assistant answer before a tool runs.
 The Assistant selects one relevant Training preview per turn rather than advertising all four deeply nested proposals
 to Gemini together; public MCP clients continue to see all tools under their independent grants.
+Plan-level and provider-only actions select the batch preview before sport-specific recipe wording; one authored strength
+or pool-length change selects its focused preview. A combined comparison and workout recommendation retains live daily
+and completed-activity reads instead of inheriting a single-purpose analytical workflow. This is internal routing only:
+the public tool list, scopes, strict schemas and approval boundary do not change.
 
 Every future planning feature must review MCP impact in the same PR: explicit projections, schemas, consent, bounds, units,
 Assistant/plugin guidance and tests. Record a no-impact rationale or a focused epic-linked Project 2 deferral. Maintaining
