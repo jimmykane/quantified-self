@@ -2,14 +2,14 @@ import { Injectable, inject } from '@angular/core';
 import { MatDialog } from '@angular/material/dialog';
 import { ConfirmationDialogComponent } from '../components/confirmation-dialog/confirmation-dialog.component';
 import { environment } from '../../environments/environment';
-import { Firestore, collection, collectionData, doc, docData, getDocsFromServer, limit, query, setDoc, where } from 'app/firebase/firestore';
+import { Firestore, collection, collectionData, doc, docData, getDocFromServer, getDocsFromServer, limit, query, setDoc, where } from 'app/firebase/firestore';
 
 // ... (other imports)
 
 
 import { Auth } from 'app/firebase/auth';
 import type { FirebaseUserType } from 'app/firebase/auth';
-import { Observable, catchError, from, switchMap, filter, take, map, of, retry, throwError, timeout, timer, firstValueFrom } from 'rxjs';
+import { EMPTY, Observable, catchError, exhaustMap, from, switchMap, filter, take, map, merge, of, retry, throwError, timeout, timer, firstValueFrom } from 'rxjs';
 import { AppWindowService } from './app.window.service';
 import { LoggerService } from './logger.service';
 import { AppFunctionsService } from './app.functions.service';
@@ -80,6 +80,13 @@ interface CheckoutSessionDocumentData {
     error?: string | { message?: string };
 }
 
+export class CheckoutStartError extends Error {
+    constructor(message: string) {
+        super(message);
+        this.name = 'CheckoutStartError';
+    }
+}
+
 @Injectable({
     providedIn: 'root'
 })
@@ -90,6 +97,7 @@ export class AppPaymentService {
     private dialog = inject(MatDialog);
     private readonly userCancelledPortalMessage = 'User cancelled redirection to portal.';
     private readonly maxCheckoutRetryAttempts = 1;
+    private readonly checkoutSessionWaitMs = 60000;
     private readonly subscriptionReadRetryAttempts = 4;
     private readonly subscriptionReadRetryDelayMs = 750;
     private readonly subscriptionStatuses: StripeSubscription['status'][] = ['active', 'trialing', 'canceled', 'incomplete', 'incomplete_expired', 'past_due', 'unpaid'];
@@ -348,11 +356,9 @@ export class AppPaymentService {
             this.logger.error('Error waiting for checkout session URL:', error);
             const errorName = error instanceof Error ? error.name : '';
             if (errorName === 'TimeoutError') {
-                alert('Payment system is slow to respond. Please check if the popup was blocked or try again.');
-            } else {
-                alert('An error occurred starting the payment. Please try again.');
+                throw new CheckoutStartError('Checkout is taking longer than expected. Please try again. If the problem continues, contact support.');
             }
-            return;
+            throw new CheckoutStartError('An error occurred starting the payment. Please try again.');
         }
         this.assertCheckoutUserStillCurrent(userId);
 
@@ -367,13 +373,11 @@ export class AppPaymentService {
                 return;
             }
 
-            alert(`Payment error: ${errorMessage}`);
-            return;
+            throw new CheckoutStartError(`Payment error: ${errorMessage}`);
         }
 
         if (!session.url) {
-            alert('An error occurred starting the payment. Please try again.');
-            return;
+            throw new CheckoutStartError('An error occurred starting the payment. Please try again.');
         }
 
         this.logger.log('Redirecting to Stripe:', session.url);
@@ -484,7 +488,7 @@ export class AppPaymentService {
             return true;
         } catch (error) {
             if (error instanceof Error && error.message === this.userCancelledPortalMessage) {
-                return true;
+                throw error;
             }
 
             this.logger.error('Error checking existing subscriptions:', error);
@@ -527,14 +531,21 @@ export class AppPaymentService {
 
     private async waitForCheckoutSessionUpdate(userId: string, checkoutSessionDocId: string): Promise<CheckoutSessionDocumentData> {
         const sessionRef = doc(this.firestore, `customers/${userId}/checkout_sessions/${checkoutSessionDocId}`);
+        // A server read also recovers sessions when the live Firestore listener misses an extension update.
+        const serverUpdates$ = timer(5000, 10000).pipe(
+            exhaustMap(() => from(getDocFromServer(sessionRef)).pipe(
+                map(snapshot => snapshot.data() as CheckoutSessionDocumentData | undefined),
+                catchError(() => EMPTY)
+            ))
+        );
         const session = await firstValueFrom(
-            docData(sessionRef).pipe(
+            merge(docData(sessionRef), serverUpdates$).pipe(
                 filter((sessionData): sessionData is CheckoutSessionDocumentData => {
                     const data = sessionData as CheckoutSessionDocumentData | null | undefined;
                     return !!data && (!!data.url || !!data.error);
                 }),
                 take(1),
-                timeout(15000)
+                timeout(this.checkoutSessionWaitMs)
             )
         );
         return session;

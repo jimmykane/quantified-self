@@ -1,7 +1,7 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { PricingComponent } from './pricing.component';
 import { AppUserService } from '../../services/app.user.service';
-import { AppPaymentService, StripePrice, StripeProduct, StripeSubscription } from '../../services/app.payment.service';
+import { AppPaymentService, CheckoutStartError, StripePrice, StripeProduct, StripeSubscription } from '../../services/app.payment.service';
 import { AppAuthService } from '../../authentication/app.auth.service';
 import { Subject, of, throwError } from 'rxjs';
 import { Auth } from 'app/firebase/auth';
@@ -1371,6 +1371,24 @@ describe('PricingComponent', () => {
             expect(haptics.error).toHaveBeenCalledTimes(isError ? 1 : 0);
             expect(haptics.success).not.toHaveBeenCalled();
             expect(alert).toHaveBeenCalledTimes(isError ? 1 : 0);
+            alert.mockRestore();
+        });
+
+        it('clears checkout progress and shows the timeout message', async () => {
+            const alert = vi.spyOn(window, 'alert').mockImplementation(() => undefined);
+            const message = 'Checkout is taking longer than expected. Please try again.';
+            vi.spyOn(TestBed.inject(AppPaymentService), 'appendCheckoutSession')
+                .mockRejectedValue(new CheckoutStartError(message));
+
+            await component.subscribe(prices[3]);
+            fixture.detectChanges();
+
+            expect(component.isLoading).toBe(false);
+            expect(component.loadingPriceId).toBeNull();
+            expect(getButtons().every(button => !button.disabled && button.getAttribute('aria-busy') === 'false')).toBe(true);
+            expect(haptics.error).toHaveBeenCalledTimes(1);
+            expect(alert).toHaveBeenCalledOnce();
+            expect(alert).toHaveBeenCalledWith(message);
             alert.mockRestore();
         });
     });

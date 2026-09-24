@@ -1,5 +1,5 @@
 import { TestBed } from '@angular/core/testing';
-import { AppPaymentService } from './app.payment.service';
+import { AppPaymentService, CheckoutStartError } from './app.payment.service';
 import { Firestore } from 'app/firebase/firestore';
 import { Auth } from 'app/firebase/auth';
 import { Functions } from 'app/firebase/functions';
@@ -7,7 +7,7 @@ import { MatDialog } from '@angular/material/dialog';
 import { FirebaseApp } from 'app/firebase/app';
 import { AppWindowService } from './app.window.service';
 import { AppFunctionsService } from './app.functions.service';
-import { defer, firstValueFrom, Observable, of, Subject, throwError } from 'rxjs';
+import { defer, firstValueFrom, NEVER, Observable, of, Subject, throwError } from 'rxjs';
 import { vi, describe, it, expect, beforeEach } from 'vitest';
 
 const { mockHttpsCallableFromURL } = vi.hoisted(() => {
@@ -29,6 +29,7 @@ vi.mock('app/firebase/functions', async () => {
 const {
     mockSetDoc,
     mockGetDoc,
+    mockGetDocFromServer,
     mockGetDocsFromServer,
     mockLimit,
     mockDocData,
@@ -42,6 +43,7 @@ const {
     return {
         mockSetDoc: vi.fn(),
         mockGetDoc: vi.fn(),
+        mockGetDocFromServer: vi.fn(),
         mockGetDocsFromServer: vi.fn(),
         mockLimit: vi.fn(),
         mockDocData: vi.fn(),
@@ -61,6 +63,7 @@ vi.mock('app/firebase/firestore', async () => {
         ...actual,
         setDoc: mockSetDoc,
         getDoc: mockGetDoc,
+        getDocFromServer: mockGetDocFromServer,
         getDocsFromServer: mockGetDocsFromServer,
         limit: mockLimit,
         collection: mockCollection,
@@ -123,6 +126,7 @@ describe('AppPaymentService', () => {
             exists: () => false,
             data: () => undefined
         });
+        mockGetDocFromServer.mockResolvedValue({ data: () => undefined });
         mockLimit.mockImplementation((value: number) => value);
         mockRunInInjectionContext.mockImplementation((injector: any, fn: any) => fn());
 
@@ -499,7 +503,7 @@ describe('AppPaymentService', () => {
             expect(mockSetDoc).not.toHaveBeenCalled();
         });
 
-        it('should exit checkout when user cancels manage-subscription prompt', async () => {
+        it('should signal cancellation when user dismisses the manage-subscription prompt', async () => {
             const dialog = TestBed.inject(MatDialog);
             vi.spyOn(dialog, 'open').mockReturnValue({
                 afterClosed: () => of(false)
@@ -508,7 +512,7 @@ describe('AppPaymentService', () => {
                 docs: [{ id: 'sub_active', data: () => ({ status: 'active' }) }]
             });
 
-            await service.appendCheckoutSession('price_123');
+            await expect(service.appendCheckoutSession('price_123')).rejects.toThrow('User cancelled redirection to portal.');
 
             expect(mockSetDoc).not.toHaveBeenCalled();
         });
@@ -611,18 +615,90 @@ describe('AppPaymentService', () => {
         });
 
         it('should stop retrying after max retry attempts for stale customer errors', async () => {
-            const alertSpy = vi.spyOn(window, 'alert').mockImplementation(() => undefined);
             mockDocData
                 .mockReturnValueOnce(of({ error: { message: 'No such customer: cus_123' } }))
                 .mockReturnValueOnce(of({ error: { message: 'No such customer: cus_456' } }));
 
-            await service.appendCheckoutSession('price_123');
+            await expect(service.appendCheckoutSession('price_123')).rejects.toThrow('Payment error: No such customer: cus_456');
 
             expect(mockSetDoc).toHaveBeenCalledTimes(2);
             const cleanupCalls = mockFunctionsService.call.mock.calls.filter(call => call[0] === 'cleanupStripeCustomer');
             expect(cleanupCalls).toHaveLength(1);
-            expect(alertSpy).toHaveBeenCalledWith(expect.stringContaining('No such customer'));
-            alertSpy.mockRestore();
+        });
+
+        it('accepts a checkout URL that arrives after the old 15-second deadline', async () => {
+            vi.useFakeTimers();
+            try {
+                const checkoutSession$ = new Subject<{ url: string }>();
+                mockDocData.mockReturnValueOnce(checkoutSession$.asObservable());
+
+                const checkoutPromise = service.appendCheckoutSession('price_123');
+                await vi.advanceTimersByTimeAsync(15001);
+                expect(mockSetDoc).toHaveBeenCalledTimes(1);
+                checkoutSession$.next({ url: 'http://stripe.com/checkout' });
+
+                await expect(checkoutPromise).resolves.toBeUndefined();
+            } finally {
+                vi.useRealTimers();
+            }
+        });
+
+        it('recovers a checkout URL from the server when the listener misses the update', async () => {
+            vi.useFakeTimers();
+            try {
+                mockDocData.mockReturnValueOnce(NEVER);
+                mockGetDocFromServer.mockResolvedValueOnce({ data: () => ({ url: 'http://stripe.com/checkout' }) });
+
+                const checkoutPromise = service.appendCheckoutSession('price_123');
+                await vi.advanceTimersByTimeAsync(5001);
+
+                await expect(checkoutPromise).resolves.toBeUndefined();
+                expect(mockGetDocFromServer).toHaveBeenCalledTimes(1);
+                expect(mockGetDocFromServer.mock.calls[0][0]).toEqual({
+                    id: 'test_session_id_1',
+                    path: 'customers/test_user_uid/checkout_sessions/test_session_id_1'
+                });
+            } finally {
+                vi.useRealTimers();
+            }
+        });
+
+        it('does not use a server-recovered checkout URL after the account changes', async () => {
+            vi.useFakeTimers();
+            try {
+                mockDocData.mockReturnValueOnce(NEVER);
+                mockGetDocFromServer.mockResolvedValueOnce({ data: () => ({ url: 'http://stripe.com/old-user-checkout' }) });
+
+                const checkoutPromise = service.appendCheckoutSession('price_123');
+                const expectation = expect(checkoutPromise).rejects.toThrow('Authenticated user changed while checkout was being prepared.');
+                await vi.advanceTimersByTimeAsync(1);
+                mockAuth.currentUser = {
+                    uid: 'different_user_uid',
+                    getIdToken: vi.fn().mockResolvedValue('different-token')
+                };
+                await vi.advanceTimersByTimeAsync(5000);
+
+                await expectation;
+                expect(mockGetDocFromServer).toHaveBeenCalledTimes(1);
+            } finally {
+                vi.useRealTimers();
+            }
+        });
+
+        it('reports a checkout timeout after the full wait window', async () => {
+            vi.useFakeTimers();
+            try {
+                mockDocData.mockReturnValueOnce(NEVER);
+                const checkoutPromise = service.appendCheckoutSession('price_123');
+                const expectation = expect(checkoutPromise).rejects.toThrow(CheckoutStartError);
+
+                await vi.advanceTimersByTimeAsync(60001);
+
+                await expectation;
+                expect(mockSetDoc).toHaveBeenCalledTimes(1);
+            } finally {
+                vi.useRealTimers();
+            }
         });
 
     });
