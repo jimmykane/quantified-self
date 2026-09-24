@@ -1027,6 +1027,10 @@ Garmin receives the same broad family at the workout and segment levels. Cycling
 cycling-only secondary-target field subject to its existing device-support warning; running-family folds may not.
 Unsupported sports still fail closed. Existing Running/Cycling payloads and retained remote identities do not change,
 and no authored recipe, schedule history, Sports Lib type or provider ID is rewritten.
+MCP create-and-send keeps the authored subtype and establishes standalone delivery consent, but a degraded Garmin fold
+does not count as approved by that Send action. The workout remains unsent with a mapping-review requirement until a
+separate current-digest approval is confirmed. MCP previews and apply results must make that distinction explicit;
+neither an applied consent result nor a queued reconciliation means Garmin accepted a copy.
 
 Pool and open-water swimming are manually authorable. The #733 mapper encodes pool swimming as
 `LAP_SWIMMING` with an optional explicit physical pool length and target-free swim steps. It also supports an

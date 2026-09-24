@@ -261,6 +261,38 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Training MCP write propos
     ]);
   });
 
+  it('creates a degraded standalone workout without treating Send as mapping approval', async () => {
+    transport!.level = 'degraded';
+    const preview = await previewCreatePlannedWorkout({ uid, connectionId: 'connection', scopes,
+      arguments: { expectedScheduleRevision: 1, localDate: '2026-09-18', title: 'Mountain ride',
+        structure: { ...structure, sport: ActivityTypes.MountainBiking },
+        delivery: { providers: ['garmin'], timeZone: 'Europe/Helsinki' } } }, deps);
+    expect(preview.providerPreviews).toEqual([expect.objectContaining({ provider: 'garmin',
+      warningCount: 1, summary: expect.stringContaining('separate approval') })]);
+
+    const applied = await applyTrainingChanges({ uid, connectionId: 'connection', scopes,
+      arguments: { proposalRef: preview.proposalRef, permissionMode: 'combined' } }, deps);
+    expect(applied.status).toBe('applied');
+    expect(applied.providers).toEqual([expect.objectContaining({ provider: 'garmin', status: 'applied',
+      message: expect.stringContaining('separate mapping approval') })]);
+    const user = db.collection('users').doc(uid);
+    const workouts = await user.collection('scheduledWorkouts').get();
+    expect(workouts.size).toBe(1);
+    const setting = user.collection('trainingDeliverySettings').doc(`workout_${workouts.docs[0].id}_garmin`);
+    expect((await setting.get()).data()).toMatchObject({ enabled: true, approvedDigest: null });
+
+    const approvalPreview = await previewTrainingChanges({ uid, connectionId: 'connection', scopes,
+      arguments: { expectedScheduleRevision: applied.scheduleRevision, changes: [
+        { kind: 'provider-delivery', targetType: 'workout',
+          target: { ref: applied.createdReferences[0].reference }, providers: ['garmin'], action: 'approve' },
+      ] } }, deps);
+    const approved = await applyTrainingChanges({ uid, connectionId: 'connection', scopes,
+      arguments: { proposalRef: approvalPreview.proposalRef, permissionMode: 'delivery' } }, deps);
+    expect(approved.status).toBe('applied');
+    expect((await setting.get()).get('approvedDigest')).toMatch(/^[a-f0-9]{64}$/);
+    expect((await user.collection('scheduledWorkouts').get()).size).toBe(1);
+  });
+
   it('creates a standalone workout, fans out only to ready providers and applies idempotently', async () => {
     const preview = await previewCreateAndSend();
     expect(preview.providerPreviews.map(item => [item.provider, item.availability])).toEqual([

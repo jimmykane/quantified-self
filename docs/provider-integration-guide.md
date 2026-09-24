@@ -137,6 +137,9 @@ approval UI; QS does not use MCP elicitation as an additional confirmation round
 an independent blocked result rather than hiding the reason. Destination keys, credentials, artifact IDs, approval
 digests and attempt journals never enter MCP input or output. Provider delivery remains Pro-gated, and failure does not
 roll back an authored plan/workout mutation in the same confirmed proposal.
+For a newly authored workout with a degraded mapping (such as Mountain Biking to Garmin Cycling), MCP Send establishes
+consent without approving the loss of sport detail. A separate, current-digest approval is required before transport;
+an applied Send result must not be described as a provider-side copy.
 
 Manual training planning is available to every signed-in account across its routes, calendar actions/overlays, Help and
 planning-specific connection/deletion instructions. This does not authorize transport work, alter disconnect or deletion
