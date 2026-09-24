@@ -14,6 +14,12 @@ MCP server, schemas, projections, and Sports Lib-backed metric discovery used by
 public URL remains `/ai-insights` so existing links and post-auth return URLs continue to work, but that route now loads
 the conversational Assistant.
 
+For a user-requested workout suggestion, the Assistant should first ground today's load, sleep, HRV and readiness in the
+daily report, count recent recorded workout days by local weekday from a discovered daily Duration metric, and check
+whether an activity has already been completed today. It may offer a cautious optional session rather than a medical
+prescription, then prepare one current-revision Training proposal for in-app review if the user asked to create/send it.
+Preview and queued delivery are not provider acceptance or watch receipt.
+
 ## Request architecture
 
 ```text
@@ -251,6 +257,18 @@ signatures—are replayed unchanged before the validated tool responses. At the 
 measurement names, Sports Lib metric and activity-group labels, and local date-only ranges are normalized
 before authoritative MCP validation. The nearby-location input union is also projected into the narrower object shape
 accepted by Gemini function declarations; this does not change or bypass the public MCP contract.
+
+All first-party model-facing input schemas now resolve MCP-local references and flatten unions into typed Gemini
+properties, including Training recipes and optional content changes. The projection retains discriminator values and
+labels variant-dependent required fields for model guidance; it is intentionally not an authorization or validation
+schema. The original strict MCP schema still validates every invocation, including cross-field date modes and workout
+variants. Numeric literals become typed values with a descriptive allowed value, and oversized catalog enums become
+discovery guidance; Gemini rejects those declarations while MCP still validates the exact values. Session setup fails
+closed if an input cannot be projected. Gemini receives only the most relevant Training preview for the current question
+(focused workout create, batch lifecycle, strength, or pool-length edit), because combining all four nested preview
+schemas with the full read catalogue exceeds its accepted tool request. The authorized in-process MCP session remains
+complete. Regression coverage walks every tool with all optional permissions enabled and checks that Gemini cannot
+receive an undefined required property, array item, or non-string enum.
 
 Raw chart-stream labels are also normalized to their persisted summary family when an aggregate or per-activity
 summary read requires it. For example, an average/minimum/maximum `Temperature` selection resolves to Sports Lib's

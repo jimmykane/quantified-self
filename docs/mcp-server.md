@@ -122,6 +122,12 @@ requests. One bounded proposal is stored with the current conversation and
 rendered in a compact review surface; a separate Auth + App Check callable applies or dismisses it after the user's click.
 The opaque reference and data-boundary authorization include the conversation generation and its three independent
 Training toggles. New chat and permission changes invalidate stale proposals.
+Its model-facing Genkit schema is a typed projection of the strict MCP input, not a replacement wire contract: local
+references and recipe/change unions are made legible to Gemini, while MCP still rejects invalid variants and
+unapproved writes. Include the full optional-permission tool catalogue in schema-compatibility tests when a Training
+or content input changes; otherwise one incompatible declaration can prevent every Assistant answer before a tool runs.
+The Assistant selects one relevant Training preview per turn rather than advertising all four deeply nested proposals
+to Gemini together; public MCP clients continue to see all tools under their independent grants.
 
 Every future planning feature must review MCP impact in the same PR: explicit projections, schemas, consent, bounds, units,
 Assistant/plugin guidance and tests. Record a no-impact rationale or a focused epic-linked Project 2 deferral. Maintaining

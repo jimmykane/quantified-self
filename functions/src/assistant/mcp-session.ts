@@ -22,6 +22,7 @@ import {
   mergeAssistantMetricHistoryResponses,
   splitAssistantMetricHistoryQuery,
 } from './metric-history-query';
+import { projectGeminiToolInputSchema } from './gemini-tool-schema';
 
 export const ASSISTANT_BASE_MCP_TOOL_NAMES = [
   'list_activity_types',
@@ -294,6 +295,17 @@ function projectAssistantInputSchema(
   };
 }
 
+function projectAssistantGeminiSchema(
+  name: AssistantMcpToolName,
+  schema: AssistantMcpToolDefinition['inputSchema'],
+): AssistantMcpToolDefinition['inputSchema'] {
+  try {
+    return projectGeminiToolInputSchema(schema);
+  } catch (error) {
+    throw new Error(`Assistant tool ${name} has an incompatible model input schema: ${error instanceof Error ? error.message : 'unknown error'}`);
+  }
+}
+
 export async function createAssistantMcpSession(
   uid: string,
   publicBaseUrl: string,
@@ -373,7 +385,7 @@ export async function createAssistantMcpSession(
           name,
           title: copy.title,
           description: copy.description,
-          inputSchema: assistantContentProposalInputJsonSchema(name),
+          inputSchema: projectAssistantGeminiSchema(name, assistantContentProposalInputJsonSchema(name)),
         }];
       }
       const tool = listedToolsByName.get(name);
@@ -381,11 +393,11 @@ export async function createAssistantMcpSession(
         name: tool.name as AssistantMcpToolName,
         title: tool.title || tool.name,
         description: tool.description || tool.title || tool.name,
-        inputSchema: projectAssistantInputSchema(
+        inputSchema: projectAssistantGeminiSchema(name, projectAssistantInputSchema(
           name,
           tool.inputSchema as AssistantMcpToolDefinition['inputSchema'],
           activityLocationEnabled,
-        ),
+        )),
         ...(tool.outputSchema
           ? { outputSchema: tool.outputSchema as AssistantMcpToolDefinition['outputSchema'] }
           : {}),

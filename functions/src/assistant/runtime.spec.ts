@@ -19,6 +19,7 @@ import {
   generateAssistantModelAnswer,
   getAssistantRuntimeErrorReason,
   getAssistantRuntimeErrorToolName,
+  selectAssistantTrainingPreviewTool,
   type AssistantRuntimeTool,
 } from './runtime';
 import type {
@@ -60,6 +61,47 @@ function createSession() {
   };
   return { session, callTool, close };
 }
+
+describe('Training preview model-tool selection', () => {
+  it('keeps a single focused preview for a workout recommendation with Garmin and Suunto delivery', () => {
+    expect(selectAssistantTrainingPreviewTool('Review sleep, HRV and load, then suggest one standalone workout for today and sync it to Garmin and Suunto.'))
+      .toBe('preview_create_planned_workout');
+    expect(selectAssistantTrainingPreviewTool('Suggest whether another workout today is sensible. If it is, propose one standalone workout for today and delivery to Garmin and Suunto, but leave any change for my in-app review.'))
+      .toBe('preview_create_planned_workout');
+    expect(selectAssistantTrainingPreviewTool('Create a plan with three workouts.'))
+      .toBe('preview_training_changes');
+    expect(selectAssistantTrainingPreviewTool('Edit my workout and send the update to Garmin.'))
+      .toBe('preview_training_changes');
+    expect(selectAssistantTrainingPreviewTool('Add a pool swim with a 25 m pool length.'))
+      .toBe('preview_planned_workout_v2_change');
+    expect(selectAssistantTrainingPreviewTool('Create a strength workout with four sets.'))
+      .toBe('preview_strength_workout_change');
+  });
+
+  it('advertises only the selected preview to Gemini while retaining authorized MCP tools', async () => {
+    const { session } = createSession();
+    session.tools.push(...(['preview_create_planned_workout', 'preview_training_changes',
+      'preview_strength_workout_change', 'preview_planned_workout_v2_change'] as const).map(name => ({
+      name, title: name, description: name, inputSchema: { type: 'object' as const, properties: {} },
+    })));
+    let modelTools: string[] = [];
+    const runtime = createAssistantRuntime({
+      createMcpSession: vi.fn().mockResolvedValue(session),
+      generateAnswer: async input => {
+        modelTools = input.tools.map(tool => tool.name);
+        await input.tools.find(tool => tool.name === 'get_daily_report')!.execute({ timeZone: 'Europe/Helsinki' });
+        return { answer: 'A light optional recovery session is reasonable.', visualRequest: { chart: null, map: null } };
+      },
+    });
+    await runtime.answer({ uid: 'owner', appBaseUrl: 'https://quantified-self.io',
+      prompt: 'Suggest one standalone workout for today and sync it to Garmin and Suunto.',
+      timeZone: 'Europe/Helsinki', history: [], trainingPlansEnabled: true,
+      trainingPlanChangesEnabled: true, trainingDeliveryEnabled: true });
+    expect(modelTools).toContain('preview_create_planned_workout');
+    expect(modelTools.filter(name => name.startsWith('preview_'))).toEqual(['preview_create_planned_workout']);
+    expect(session.tools.map(tool => tool.name)).toContain('preview_training_changes');
+  });
+});
 
 function createRecentJumpSession() {
   const latestJumpActivityRef = 'opaque-latest-jump-activity-reference';

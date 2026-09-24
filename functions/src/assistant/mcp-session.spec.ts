@@ -67,6 +67,46 @@ function createTestServer(options: {
 }
 
 describe('Assistant MCP session', () => {
+  it('projects every enabled MCP input into a Gemini-compatible typed schema without weakening MCP validation', async () => {
+    const session = await createAssistantMcpSession('schema-owner', 'https://quantified-self.io',
+      undefined, 'precise_activity', true, true, true, true, 'schema-conversation', true, true);
+    try {
+      const visit = (value: unknown, path: string): void => {
+        expect(value, path).toMatchObject({ type: expect.any(String) });
+        const schema = value as { type: string; properties?: Record<string, unknown>; required?: string[];
+          items?: unknown; enum?: unknown[] };
+        for (const enumValue of schema.enum ?? []) expect(typeof enumValue, path).toBe('string');
+        if (schema.type === 'object') {
+          expect(schema.properties, path).toBeDefined();
+          for (const name of schema.required ?? []) {
+            expect(schema.properties, `${path}.required.${name}`).toHaveProperty(name);
+          }
+          for (const [name, child] of Object.entries(schema.properties ?? {})) visit(child, `${path}.${name}`);
+        } else if (schema.type === 'array') {
+          expect(schema.items, `${path}.items`).toBeDefined();
+          visit(schema.items, `${path}[]`);
+        }
+      };
+      for (const tool of session.tools) visit(tool.inputSchema, tool.name);
+      const tags = session.tools.find(tool => tool.name === 'prepare_activity_tag_change')!;
+      expect((tags.inputSchema.properties as Record<string, { type?: string }>).tags.type).toBe('array');
+      const create = session.tools.find(tool => tool.name === 'preview_create_planned_workout')!;
+      const structure = (create.inputSchema.properties as Record<string, Record<string, unknown>>).structure;
+      const nodes = (structure.properties as Record<string, { items: Record<string, unknown> }>).nodes;
+      expect((structure.properties as Record<string, unknown>).sport).toMatchObject({ type: 'string',
+        description: expect.stringContaining('exact supported catalog value') });
+      expect((structure.properties as Record<string, { enum?: string[] }>).sport.enum).toBeUndefined();
+      expect((structure.properties as Record<string, unknown>).version).toMatchObject({ type: 'number',
+        description: 'Allowed value: 1.' });
+      expect((structure.properties as Record<string, { enum?: unknown[] }>).version.enum).toBeUndefined();
+      expect(((nodes.items.properties as Record<string, { enum?: string[] }>).kind.enum)).toEqual(['step', 'repeat']);
+      const ending = (nodes.items.properties as Record<string, { properties: Record<string, { description?: string }> }>).ending;
+      expect(ending.properties.seconds.description).toContain('Required for time');
+      const batch = session.tools.find(tool => tool.name === 'preview_training_changes')!;
+      expect((batch.inputSchema.properties as Record<string, { items: { type: string } }>).changes.items.type).toBe('object');
+    } finally { await session.close(); }
+  });
+
   it('adds only Training plan reads after independent consent, without notes, Health or location grants', async () => {
     let capturedAuth: AuthenticatedMcpRequest | null = null;
     const session = await createAssistantMcpSession('ordinary-owner', 'https://quantified-self.io', {

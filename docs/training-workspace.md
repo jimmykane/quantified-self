@@ -419,6 +419,14 @@ Training plan read/write contract, release lifecycle, and independent consent re
 
 ### Canonical workout boundary
 
+The built-in Assistant presents the existing strict MCP recipe and change inputs through a Gemini-compatible typed
+projection. This is model guidance only: the unchanged MCP schema and shared `WorkoutStructureV1` validator remain
+authoritative for every proposal. When extending a node, ending, target, or change variant, verify both the MCP
+contract and the all-permissions Assistant tool-schema regression test so an incompatible declaration cannot block
+unrelated Assistant reads. It advertises only one context-selected Training proposal tool to Gemini per turn, while
+the first-party MCP session retains every authorized tool. This repair adds no Training permission, provider action,
+or stored field.
+
 Quantified Self currently owns the versioned planned-workout contract in `shared/planned-workout.ts`. It stores only
 plain canonical primitives: Sports Lib `ActivityTypes` strings, seconds, metres, bpm, watts, metres per second, rpm,
 kilojoules, percentage points, and positive repetition counts. It does not persist Sports Lib class instances or
