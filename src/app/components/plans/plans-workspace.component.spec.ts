@@ -16,6 +16,7 @@ import { BehaviorSubject, Subject, concat, defer, of, type Observable } from 'rx
 import { AppUserService } from '../../services/app.user.service';
 import { AppHapticsService } from '../../services/app.haptics.service';
 import { TrainingDeliveryService } from '../../services/training-delivery.service';
+import { TrainingWorkoutDuplicateService } from '../../services/training-workout-duplicate.service';
 import { AppEventColorService } from '../../services/color/app.event.color.service';
 import {
   TrainingPlansService,
@@ -238,6 +239,46 @@ describe('PlansWorkspaceComponent', () => {
     fixture.detectChanges();
     expect(fixture.componentInstance.planScheduleDate()).toBe('2026-09-10');
     expect(mutate).not.toHaveBeenCalled();
+  });
+
+  it('selects the confirmed destination day after duplicating beyond the plan range', async () => {
+    const updatedPlan = { ...schedule.plans[0], endLocalDate: '2026-10-05', revision: 3 };
+    const duplicate = vi.fn().mockResolvedValue({ kind: 'duplicated-workout', workoutId: 'new-copy',
+      planId: 'active-plan', localDate: '2026-10-05', acknowledgedPlan: updatedPlan,
+      acknowledgedState: { ...schedule.state, revision: 5 } });
+    TestBed.overrideProvider(TrainingWorkoutDuplicateService, { useValue: { duplicate } });
+    const fixture = await renderPlans();
+    await fixture.componentInstance.duplicateWorkout(schedule.workouts[0]);
+    fixture.detectChanges();
+    expect(duplicate).toHaveBeenCalledWith(user.uid, expect.objectContaining({ id: 'plan-workout' }), expect.any(Function));
+    expect(fixture.componentInstance.planScheduleDate()).toBe('2026-10-05');
+    expect(fixture.componentInstance.selectedPlan()?.endLocalDate).toBe('2026-10-05');
+    expect(TestBed.inject(Router).navigate).toHaveBeenCalledWith(['/training/plans/plan', 'active-plan'],
+      expect.objectContaining({ queryParams: { date: '2026-10-05' } }));
+  });
+
+  it('keeps a duplicated standalone workout in Standalone', async () => {
+    const live = new BehaviorSubject(schedule);
+    watchSchedule.mockReturnValue(live);
+    const duplicate = vi.fn().mockResolvedValue({ kind: 'duplicated-workout', workoutId: 'new-copy',
+      planId: null, localDate: '2026-09-15' });
+    TestBed.overrideProvider(TrainingWorkoutDuplicateService, { useValue: { duplicate } });
+    const fixture = await renderPlans();
+    fixture.componentInstance.selectView('standalone');
+    await fixture.componentInstance.duplicateWorkout(schedule.workouts.find(workout => workout.planId === null)!);
+    fixture.detectChanges();
+    expect(fixture.componentInstance.view()).toBe('standalone');
+    expect(TestBed.inject(Router).navigate).toHaveBeenCalledWith(['/training/plans/standalone'],
+      expect.objectContaining({ queryParams: undefined }));
+    const copy = { ...schedule.workouts.find(workout => workout.planId === null)!, id: 'new-copy',
+      localDate: '2026-09-15', revision: 1 };
+    live.next({ ...schedule, workouts: [...schedule.workouts, copy] });
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+    const focusedRow = fixture.nativeElement.querySelector('[data-workout-id="new-copy"]') as HTMLElement;
+    expect(focusedRow).toBeTruthy();
+    expect(document.activeElement).toBe(focusedRow);
   });
 
   it('renders a future paused plan and its skipped workout independently from active and standalone workouts', async () => {
