@@ -478,12 +478,13 @@ plan when one exists and provides an explicit standalone action; without an acti
 
 **Duplicate to…** is a date-picker action on plan/standalone workout rows and the planned-workout section of Calendar
 day details. It defaults to the source calendar day, supports same-day and cross-year copies, and keeps the source's
-scope. A plan destination outside its range uses the existing explicit range-extension confirmation. It calls the
+scope. A plan destination outside its range uses explicit range-extension confirmation before any write. It calls the
 existing revision-checked `copy-workout` mutation with fresh workout/mutation IDs; the duplicate starts planned with no
 completion link or inherited standalone provider consent. Existing active-plan opt-in can deliver the new workout.
 Success selects the destination day in Plans or Calendar, or focuses the new Standalone row. Dashboard/Today day details
 route to that day in full Calendar. A cancelled picker or range confirmation does not mutate the schedule; source and
-completed-activity totals are unchanged. The compact dialog uses the account week-start preference, app scrollbar
+completed-activity totals are unchanged. The one-shot Calendar destination is owner-bound and cleared on sign-out.
+The compact dialog uses the account week-start preference, app scrollbar
 styling and action haptics. MCP impact: no new tool, schema, field, scope or provider action. The existing strict
 `copy-workout` preview/apply operation already covers same-scope duplication; Assistant and bundled guidance now route
 explicit duplication to it, with exact-source/revision reads and native or app-owned confirmation. Firestore-emulator

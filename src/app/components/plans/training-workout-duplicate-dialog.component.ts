@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { MatButtonModule } from '@angular/material/button';
 import { DateAdapter, MAT_DATE_FORMATS, MAT_DATE_LOCALE } from '@angular/material/core';
@@ -62,16 +62,16 @@ export class TrainingWorkoutDuplicateDialogComponent {
   private readonly dialogRef = inject(MatDialogRef<TrainingWorkoutDuplicateDialogComponent, string | undefined>);
   readonly selected = signal<Dayjs | null>(dayjs(this.data.localDate));
 
-  get localDate(): string | null { return duplicateWorkoutLocalDate(this.selected()); }
-  get extendsPlan(): boolean {
-    const date = this.localDate;
+  readonly localDate = computed(() => duplicateWorkoutLocalDate(this.selected()));
+  readonly extendsPlan = computed(() => {
+    const date = this.localDate();
     const range = this.data.planRange;
     return !!date && !!range && (date < range.startLocalDate || date > range.endLocalDate);
-  }
+  });
 
   setDate(value: Dayjs | null): void { this.selected.set(value); }
   confirm(): void {
-    const date = this.localDate;
+    const date = this.localDate();
     if (date) this.dialogRef.close(date);
   }
 }

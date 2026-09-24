@@ -2,7 +2,7 @@ import { Injectable, inject } from '@angular/core';
 import { MatDialog } from '@angular/material/dialog';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { firstValueFrom } from 'rxjs';
-import { normalizeTrainingLocalDate, type ExpectedTrainingScheduleRevision,
+import { isTrainingLocalDateWithinPlan, normalizeTrainingLocalDate, type ExpectedTrainingScheduleRevision,
   type MutateTrainingScheduleRequestV1, type MutateTrainingScheduleResponseV1,
   type ScheduledWorkoutV1, type TrainingPlanV1 } from '@shared/training-plans';
 import { ConfirmationDialogComponent } from '../components/confirmation-dialog/confirmation-dialog.component';
@@ -56,12 +56,30 @@ export class TrainingWorkoutDuplicateService {
     try { localDate = normalizeTrainingLocalDate(date); }
     catch { return this.fail('Choose a valid workout date.'); }
 
-    const schedule = getSchedule();
-    const current = schedule?.workouts.find(workout => workout.id === source.id);
-    const plan = source.planId ? schedule?.plans.find(item => item.id === source.planId) : null;
+    let schedule = getSchedule();
+    let current = schedule?.workouts.find(workout => workout.id === source.id);
+    let plan = source.planId ? schedule?.plans.find(item => item.id === source.planId) : null;
     if (!schedule || !current || current.lifecycle === 'deleted' || current.revision !== source.revision
       || current.planId !== source.planId || (source.planId && !plan)) {
       return this.fail('This workout changed while you were choosing a date. Reload it and try again.');
+    }
+    let confirmPlanRangeExtension = false;
+    if (plan && !isTrainingLocalDateWithinPlan(localDate, plan)) {
+      const confirmedPlanRevision = plan.revision;
+      const confirmed = await firstValueFrom(this.dialog.open(ConfirmationDialogComponent, {
+        data: { title: 'Extend plan dates?',
+          message: `This date is outside ${plan.name}'s current range. Extend the plan to include ${localDate} and duplicate the workout?`,
+          confirmText: 'Extend and duplicate' },
+      }).afterClosed());
+      if (confirmed !== true || this.users.user()?.uid !== ownerUid) return null;
+      confirmPlanRangeExtension = true;
+      schedule = getSchedule();
+      current = schedule?.workouts.find(workout => workout.id === source.id);
+      plan = schedule?.plans.find(item => item.id === source.planId);
+      if (!schedule || !current || current.lifecycle === 'deleted' || current.revision !== source.revision
+        || current.planId !== source.planId || !plan || plan.revision !== confirmedPlanRevision) {
+        return this.fail('This workout or plan changed while you were confirming the plan dates. Reload it and try again.');
+      }
     }
     const workoutId = this.plans.createEntityId('workout');
     const expectedRevisions: ExpectedTrainingScheduleRevision[] = [
@@ -74,7 +92,7 @@ export class TrainingWorkoutDuplicateService {
       expectedRevisions,
       operation: {
         kind: 'copy-workout', sourceWorkoutId: source.id, workoutId,
-        planId: source.planId, localDate, confirmPlanRangeExtension: false,
+        planId: source.planId, localDate, confirmPlanRangeExtension,
       },
     };
     let response: MutateTrainingScheduleResponseV1;
@@ -82,20 +100,8 @@ export class TrainingWorkoutDuplicateService {
       response = await this.plans.mutate(request);
     } catch (error) {
       const message = duplicateErrorMessage(error);
-      if (!/requires extending/i.test(message)) return this.fail(message);
-      if (this.users.user()?.uid !== ownerUid) return null;
-      const confirmed = await firstValueFrom(this.dialog.open(ConfirmationDialogComponent, {
-        data: { title: 'Extend plan dates?',
-          message: `This date is outside ${plan?.name ?? 'the plan'}'s current range. Extend the plan to include ${localDate} and duplicate the workout?`,
-          confirmText: 'Extend and duplicate' },
-      }).afterClosed());
-      if (confirmed !== true || this.users.user()?.uid !== ownerUid) return null;
-      try {
-        response = await this.plans.mutate({ ...request, operation: {
-          kind: 'copy-workout', sourceWorkoutId: source.id, workoutId, planId: source.planId,
-          localDate, confirmPlanRangeExtension: true,
-        } });
-      } catch (retryError) { return this.fail(duplicateErrorMessage(retryError)); }
+      return this.fail(/requires extending/i.test(message)
+        ? 'The plan dates changed. Choose the date again to review the new range.' : message);
     }
     if (this.users.user()?.uid !== ownerUid) return null;
     this.haptics.success();

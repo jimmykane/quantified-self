@@ -59,8 +59,8 @@
               <mat-icon>chevron_right</mat-icon>
             </span>
           </a>
-          <button mat-icon-button appHapticTap type="button" matTooltip="Duplicate to another day"
-            [attr.aria-label]="'Duplicate ' + planned.title + ' to another day'"
+          <button mat-icon-button appHapticTap type="button" matTooltip="Duplicate to…"
+            [attr.aria-label]="'Duplicate ' + planned.title + ' to a chosen date'"
             [disabled]="duplicatingId() !== null || !data.scheduleSource" (click)="duplicateWorkout(planned.workout)">
             @if (duplicatingId() === planned.id) { <mat-spinner diameter="18" aria-hidden="true"></mat-spinner> }
             @else { <mat-icon aria-hidden="true">content_copy</mat-icon> }

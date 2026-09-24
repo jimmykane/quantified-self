@@ -48,6 +48,8 @@ describe('TrainingWorkoutDuplicateService', () => {
   });
 
   it('duplicates to a chosen date in the same plan with a fresh identity and revision checks', async () => {
+    dialogOpen.mockReturnValueOnce({ afterClosed: () => of('2027-01-02') })
+      .mockReturnValueOnce({ afterClosed: () => of(true) });
     const result = await service.duplicate('owner', source, () => schedule);
     expect(result).toMatchObject({ kind: 'duplicated-workout', workoutId: 'new-copy', localDate: '2027-01-02', planId: 'plan',
       acknowledgedPlan: { id: 'plan' }, acknowledgedState: { revision: 7 } });
@@ -59,18 +61,18 @@ describe('TrainingWorkoutDuplicateService', () => {
       { scope: 'workout', id: 'source', revision: 3 },
       { scope: 'plan', id: 'plan', revision: 4 },
     ], operation: { kind: 'copy-workout', sourceWorkoutId: 'source', workoutId: 'new-copy',
-      planId: 'plan', localDate: '2027-01-02', confirmPlanRangeExtension: false } });
+      planId: 'plan', localDate: '2027-01-02', confirmPlanRangeExtension: true } });
+    expect(mutate).toHaveBeenCalledOnce();
     expect(haptics.success).toHaveBeenCalledOnce();
     expect(source.lifecycle).toBe('skipped');
   });
 
-  it('reuses the same receipt and workout ID after explicit plan-range confirmation', async () => {
-    mutate.mockRejectedValueOnce(new Error('Copy requires extending the plan date range.'));
+  it('asks before one range-extending mutation instead of sending an expected failure', async () => {
     dialogOpen.mockReturnValueOnce({ afterClosed: () => of('2027-01-02') })
       .mockReturnValueOnce({ afterClosed: () => of(true) });
     await service.duplicate('owner', source, () => schedule);
-    expect(mutate).toHaveBeenCalledTimes(2);
-    expect(mutate.mock.calls[1][0]).toMatchObject({ mutationId: 'copy-receipt',
+    expect(mutate).toHaveBeenCalledOnce();
+    expect(mutate.mock.calls[0][0]).toMatchObject({ mutationId: 'copy-receipt',
       operation: { workoutId: 'new-copy', confirmPlanRangeExtension: true } });
     expect(dialogOpen.mock.calls[1][1].data.confirmText).toBe('Extend and duplicate');
     expect(dialogOpen.mock.calls[1][1].data.message).toContain('Extend the plan to include 2027-01-02');
@@ -83,12 +85,33 @@ describe('TrainingWorkoutDuplicateService', () => {
       confirmPlanRangeExtension: false });
 
     mutate.mockClear();
-    mutate.mockRejectedValueOnce(new Error('Copy requires extending the plan date range.'));
     dialogOpen.mockReturnValueOnce({ afterClosed: () => of('2027-01-02') })
       .mockReturnValueOnce({ afterClosed: () => of(false) });
     expect(await service.duplicate('owner', source, () => schedule)).toBeNull();
-    expect(mutate).toHaveBeenCalledOnce();
+    expect(mutate).not.toHaveBeenCalled();
     expect(haptics.success).toHaveBeenCalledOnce();
+  });
+
+  it('does not copy a workout changed while range confirmation is open', async () => {
+    dialogOpen.mockReturnValueOnce({ afterClosed: () => of('2027-01-02') })
+      .mockReturnValueOnce({ afterClosed: () => {
+        schedule = { ...schedule, workouts: [{ ...source, revision: source.revision + 1 }] };
+        return of(true);
+      } });
+    expect(await service.duplicate('owner', source, () => schedule)).toBeNull();
+    expect(mutate).not.toHaveBeenCalled();
+    expect(haptics.error).toHaveBeenCalledOnce();
+  });
+
+  it('does not extend a plan whose range changed while confirmation is open', async () => {
+    dialogOpen.mockReturnValueOnce({ afterClosed: () => of('2027-01-02') })
+      .mockReturnValueOnce({ afterClosed: () => {
+        schedule = { ...schedule, plans: [{ ...schedule.plans[0], revision: 5, startLocalDate: '2026-11-01' }] };
+        return of(true);
+      } });
+    expect(await service.duplicate('owner', source, () => schedule)).toBeNull();
+    expect(mutate).not.toHaveBeenCalled();
+    expect(haptics.error).toHaveBeenCalledOnce();
   });
 
   it('does not write after cancellation, a changed source, or account switch', async () => {

@@ -1,7 +1,8 @@
-import { Injectable, signal } from '@angular/core';
+import { Injectable, effect, inject, signal } from '@angular/core';
 import { NavigationStart, Router } from '@angular/router';
 import { filter } from 'rxjs';
 import { isTrainingPlansUrl } from '../helpers/training-plans-navigation.helper';
+import { AppUserService } from './app.user.service';
 
 export interface CalendarDayDetailsRestoration {
   sourceUrl: string;
@@ -11,11 +12,16 @@ export interface CalendarDayDetailsRestoration {
 
 @Injectable({ providedIn: 'root' })
 export class CalendarDayDetailsNavigationService {
+  private readonly users = inject(AppUserService);
   private pendingReturn: CalendarDayDetailsRestoration | null = null;
   private readonly restoration = signal<CalendarDayDetailsRestoration | null>(null);
   private readonly destination = signal<{ ownerUid: string; dateKey: string; expiresAtMs: number } | null>(null);
 
   constructor(router: Router) {
+    effect(() => {
+      const destination = this.destination();
+      if (destination && this.users.user()?.uid !== destination.ownerUid) this.destination.set(null);
+    });
     router.events.pipe(
       filter((event): event is NavigationStart => event instanceof NavigationStart),
     ).subscribe(event => this.handleNavigationStart(event));

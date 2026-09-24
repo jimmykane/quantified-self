@@ -258,6 +258,8 @@ describe('PlansWorkspaceComponent', () => {
   });
 
   it('keeps a duplicated standalone workout in Standalone', async () => {
+    const live = new BehaviorSubject(schedule);
+    watchSchedule.mockReturnValue(live);
     const duplicate = vi.fn().mockResolvedValue({ kind: 'duplicated-workout', workoutId: 'new-copy',
       planId: null, localDate: '2026-09-15' });
     TestBed.overrideProvider(TrainingWorkoutDuplicateService, { useValue: { duplicate } });
@@ -268,6 +270,15 @@ describe('PlansWorkspaceComponent', () => {
     expect(fixture.componentInstance.view()).toBe('standalone');
     expect(TestBed.inject(Router).navigate).toHaveBeenCalledWith(['/training/plans/standalone'],
       expect.objectContaining({ queryParams: undefined }));
+    const copy = { ...schedule.workouts.find(workout => workout.planId === null)!, id: 'new-copy',
+      localDate: '2026-09-15', revision: 1 };
+    live.next({ ...schedule, workouts: [...schedule.workouts, copy] });
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+    const focusedRow = fixture.nativeElement.querySelector('[data-workout-id="new-copy"]') as HTMLElement;
+    expect(focusedRow).toBeTruthy();
+    expect(document.activeElement).toBe(focusedRow);
   });
 
   it('renders a future paused plan and its skipped workout independently from active and standalone workouts', async () => {

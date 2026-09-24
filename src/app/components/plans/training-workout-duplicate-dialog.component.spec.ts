@@ -25,7 +25,7 @@ describe('TrainingWorkoutDuplicateDialogComponent', () => {
   it('uses the saved local date, owner week start, and warns about extending the plan', () => {
     const fixture = TestBed.createComponent(TrainingWorkoutDuplicateDialogComponent);
     fixture.detectChanges();
-    expect(fixture.componentInstance.localDate).toBe('2026-12-31');
+    expect(fixture.componentInstance.localDate()).toBe('2026-12-31');
     expect(fixture.debugElement.injector.get(DateAdapter).getFirstDayOfWeek()).toBe(6);
     expect(fixture.nativeElement.textContent).toContain('Long ride');
     fixture.componentInstance.setDate(dayjs('2027-01-02'));

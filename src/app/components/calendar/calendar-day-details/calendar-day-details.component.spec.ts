@@ -112,7 +112,7 @@ describe('CalendarDayDetailsComponent', () => {
       scheduleSource: () => null,
     });
     TestBed.inject(TrainingWorkoutDuplicateService).duplicate = duplicate;
-    const button = fixture.nativeElement.querySelector('[aria-label="Duplicate Tempo intervals to another day"]') as HTMLButtonElement;
+    const button = fixture.nativeElement.querySelector('[aria-label="Duplicate Tempo intervals to a chosen date"]') as HTMLButtonElement;
     expect(button).toBeTruthy();
     expect(button.disabled).toBe(false);
     button.click();

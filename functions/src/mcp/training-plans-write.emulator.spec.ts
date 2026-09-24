@@ -250,6 +250,7 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Training MCP write propos
       ] } }, deps);
     expect(preview).toMatchObject({ permissionMode: 'schedule', requiresConfirmation: true,
       changes: [{ kind: 'copy-workout', summary: expect.stringContaining('2027-01-02') }] });
+    expect(preview.changes[0].summary).toContain('The destination plan range will extend to 2026-09-18 through 2027-01-02.');
     const input = { uid, connectionId: 'connection', scopes,
       arguments: { proposalRef: preview.proposalRef, permissionMode: 'schedule' as const } };
     const applied = await applyTrainingChanges(input, deps);
