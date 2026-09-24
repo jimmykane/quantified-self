@@ -99,9 +99,14 @@ export class ManualHealthMeasurementDialogComponent {
   readonly diastolicUnit = formatCanonicalHealthMetricSportsLibValue(HEALTH_METRIC_IDS.BloodPressureDiastolic, 1, this.data.unitSettings)?.unit || '';
   readonly pulseUnit = formatCanonicalHealthMetricSportsLibValue(HEALTH_METRIC_IDS.PulseRate, 1, this.data.unitSettings)?.unit || '';
   readonly maximumValue = computed(() => MANUAL_HEALTH_VALUE_MAXIMUMS[this.selectedMetric()]);
-  readonly maximumInputValue = computed(() => this.selectedMetric() === HEALTH_METRIC_IDS.BodyWeight
-    ? Number(formatCanonicalHealthMetricSportsLibValue(HEALTH_METRIC_IDS.BodyWeight, this.maximumValue(), this.data.unitSettings)?.value)
-    : this.maximumValue());
+  readonly maximumInputValue = computed(() => {
+    if (this.selectedMetric() !== HEALTH_METRIC_IDS.BodyWeight) return this.maximumValue();
+    const displayMaximum = this.maximumValue() / DataWeight.fromDisplayValue(1, this.weightUnits).getValue();
+    // The inverse conversion can round one ULP above the canonical maximum.
+    return DataWeight.fromDisplayValue(displayMaximum, this.weightUnits).getValue() <= this.maximumValue()
+      ? displayMaximum
+      : displayMaximum - displayMaximum * Number.EPSILON;
+  });
   readonly pressureMaximum = MANUAL_HEALTH_VALUE_MAXIMUMS[HEALTH_METRIC_IDS.BloodPressureDiastolic];
   readonly pulseMaximum = MANUAL_HEALTH_VALUE_MAXIMUMS[HEALTH_METRIC_IDS.PulseRate];
   readonly valueRangeHint = computed(() => measurementRangeHint(this.selectedMetric(), this.data.unitSettings));
@@ -290,6 +295,10 @@ function measurementRangeHint(
   const lower = formatCanonicalHealthMetricSportsLibValue(metricId, 0, unitSettings);
   const upper = formatCanonicalHealthMetricSportsLibValue(metricId, MANUAL_HEALTH_VALUE_MAXIMUMS[metricId], unitSettings);
   if (!lower || !upper) return 'Enter a positive number within the supported range.';
+  if (metricId === HEALTH_METRIC_IDS.BodyWeight
+    && normalizeUserUnitSettings(unitSettings).weightUnits === WeightUnits.Pounds) {
+    return `Enter a number above ${lower.value} and up to about ${upper.value} ${upper.unit}.`;
+  }
   return `Enter a number above ${lower.value} and up to ${[upper.value, upper.unit].filter(Boolean).join(' ')}.`;
 }
 

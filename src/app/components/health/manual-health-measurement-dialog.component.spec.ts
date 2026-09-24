@@ -233,6 +233,13 @@ describe('ManualHealthMeasurementDialogComponent', () => {
     expect(dialogRef.close).toHaveBeenCalledWith(expect.objectContaining({
       canonicalValue: DataWeight.fromDisplayValue(180, WeightUnits.Pounds).getValue(),
     }));
+    expect(component.valueRangeHint()).toContain('up to about 2204.6 lb');
+    expect(component.maximumInputValue()).toBeGreaterThan(2204.61);
+    expect(DataWeight.fromDisplayValue(component.maximumInputValue(), WeightUnits.Pounds).getValue()).toBeLessThanOrEqual(1000);
+    component.form.controls.canonicalValue.setValue(component.maximumInputValue());
+    expect(component.form.controls.canonicalValue.valid).toBe(true);
+    component.form.controls.canonicalValue.setValue(2204.61);
+    expect(component.form.controls.canonicalValue.valid).toBe(true);
     component.form.controls.canonicalValue.setValue(2204.7);
     expect(component.form.controls.canonicalValue.hasError('max')).toBe(true);
   });

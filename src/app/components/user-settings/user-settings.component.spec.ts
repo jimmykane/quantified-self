@@ -625,6 +625,17 @@ describe('UserSettingsComponent', () => {
         );
     });
 
+    it('keeps weight-unit hydration silent and gives one selection feedback for a deliberate choice', () => {
+        component.activeSection = 'units';
+        fixture.detectChanges();
+        expect(hapticsServiceMock.selection).not.toHaveBeenCalled();
+
+        const weightSelect = fixture.debugElement.query(By.css('mat-select[formControlName="weightUnitsToUse"]'));
+        expect(weightSelect).toBeTruthy();
+        weightSelect.triggerEventHandler('selectionChange', { value: WeightUnits.Pounds });
+        expect(hapticsServiceMock.selection).toHaveBeenCalledOnce();
+    });
+
     it('should complete unit setup when saving a changed unit preference', async () => {
         const userService = TestBed.inject(AppUserService);
         const updateUserPropertiesSpy = vi.spyOn(userService, 'updateUserProperties').mockResolvedValue(true as any);
