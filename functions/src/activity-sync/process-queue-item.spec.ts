@@ -23,8 +23,13 @@ interface MockActivitySyncDlqParams {
   context?: string;
 }
 
-function createMockActivitySyncQueueItemRef(): MockActivitySyncQueueItemRef {
-  return {} as unknown as MockActivitySyncQueueItemRef;
+function createMockActivitySyncQueueItemRef(currentQueueItem?: Record<string, unknown>): MockActivitySyncQueueItemRef {
+  return {
+    get: vi.fn().mockResolvedValue({
+      exists: currentQueueItem !== undefined,
+      data: () => currentQueueItem,
+    }),
+  } as unknown as MockActivitySyncQueueItemRef;
 }
 
 const {
@@ -165,6 +170,7 @@ vi.mock('../queue-utils', () => ({
   ),
   QueueResult: {
     Processed: 'PROCESSED',
+    AcknowledgedStale: 'ACKNOWLEDGED_STALE',
     Skipped: 'SKIPPED',
     Deferred: 'DEFERRED',
     ProviderStatusPending: 'PROVIDER_STATUS_PENDING',
@@ -454,6 +460,72 @@ describe('activity-sync/process-queue-item', () => {
       .toBeLessThan(mockUploadActivityFileToSuunto.mock.invocationCallOrder[0]);
   });
 
+  it('retries when the dispatch marker changes after enqueue but the item remains unclaimed', async () => {
+    delete baseQueueItem.outboundFingerprintID;
+    const dispatchedAtMs = Date.now();
+    baseQueueItem.ref = createMockActivitySyncQueueItemRef({
+      ...baseQueueItem,
+      processed: false,
+      dispatchedToCloudTask: dispatchedAtMs,
+    });
+    mockUpdateQueueItemIfUserActive.mockResolvedValueOnce('not_current');
+
+    await expect(processActivitySyncQueueItem(baseQueueItem))
+      .rejects.toThrow('changed before provider upload but remains unclaimed; retrying the task');
+
+    const fingerprintGuard = mockUpdateQueueItemIfUserActive.mock.calls[0]?.[0];
+    expect(fingerprintGuard.phase).toBe('before_activity_sync_outbound_fingerprint_marker');
+    expect(fingerprintGuard.isCurrent({ ...baseQueueItem, dispatchedToCloudTask: dispatchedAtMs })).toBe(false);
+    expect(mockUploadActivityFileToSuunto).not.toHaveBeenCalled();
+    expect(mockIncreaseRetryCountForQueueItem).not.toHaveBeenCalled();
+    expect(mockMoveToDeadLetterQueue).not.toHaveBeenCalled();
+
+    const retryQueueItem = { ...baseQueueItem, dispatchedToCloudTask: dispatchedAtMs };
+    await expect(processActivitySyncQueueItem(retryQueueItem)).resolves.toBe(QueueResult.Processed);
+    expect(mockUploadActivityFileToSuunto).toHaveBeenCalledOnce();
+  });
+
+  it('acknowledges a stale fingerprint write only after another worker processed the item', async () => {
+    delete baseQueueItem.outboundFingerprintID;
+    baseQueueItem.ref = createMockActivitySyncQueueItemRef({ ...baseQueueItem, processed: true });
+    mockUpdateQueueItemIfUserActive.mockResolvedValueOnce('not_current');
+
+    await expect(processActivitySyncQueueItem(baseQueueItem)).resolves.toBe(QueueResult.AcknowledgedStale);
+
+    expect(mockUploadActivityFileToSuunto).not.toHaveBeenCalled();
+    expect(mockIncreaseRetryCountForQueueItem).not.toHaveBeenCalled();
+  });
+
+  it('acknowledges a stale fingerprint write after another worker durably claimed the upload', async () => {
+    delete baseQueueItem.outboundFingerprintID;
+    baseQueueItem.ref = createMockActivitySyncQueueItemRef({
+      ...baseQueueItem,
+      dispatchedToCloudTask: PROVIDER_OPERATION_IN_FLIGHT_QUEUE_DISPATCH_MARKER,
+      providerOperationStartedAt: Date.now(),
+    });
+    mockUpdateQueueItemIfUserActive.mockResolvedValueOnce('not_current');
+
+    await expect(processActivitySyncQueueItem(baseQueueItem)).resolves.toBe(QueueResult.AcknowledgedStale);
+
+    expect(mockUploadActivityFileToSuunto).not.toHaveBeenCalled();
+  });
+
+  it('does not treat an in-flight marker without a claim timestamp as a durable claim', async () => {
+    delete baseQueueItem.outboundFingerprintID;
+    baseQueueItem.ref = createMockActivitySyncQueueItemRef({
+      ...baseQueueItem,
+      dispatchedToCloudTask: PROVIDER_OPERATION_IN_FLIGHT_QUEUE_DISPATCH_MARKER,
+      providerOperationStartedAt: null,
+    });
+    mockUpdateQueueItemIfUserActive.mockResolvedValueOnce('not_current');
+
+    await expect(processActivitySyncQueueItem(baseQueueItem))
+      .rejects.toThrow('changed before provider upload but remains unclaimed; retrying the task');
+
+    expect(mockUploadActivityFileToSuunto).not.toHaveBeenCalled();
+    expect(mockIncreaseRetryCountForQueueItem).not.toHaveBeenCalled();
+  });
+
   it('marks queue item processed and writes success metadata when upload succeeds', async () => {
     const result = await processActivitySyncQueueItem(baseQueueItem);
 
@@ -561,16 +633,36 @@ describe('activity-sync/process-queue-item', () => {
   });
 
   it('does not call the provider when another worker already claimed this dispatch', async () => {
+    baseQueueItem.ref = createMockActivitySyncQueueItemRef({
+      ...baseQueueItem,
+      dispatchedToCloudTask: PROVIDER_OPERATION_IN_FLIGHT_QUEUE_DISPATCH_MARKER,
+      providerOperationStartedAt: Date.now(),
+    });
     mockUpdateQueueItemIfUserActive.mockResolvedValueOnce('not_current');
 
     const result = await processActivitySyncQueueItem(baseQueueItem);
 
-    expect(result).toBe(QueueResult.Processed);
+    expect(result).toBe(QueueResult.AcknowledgedStale);
     expect(mockUpdateQueueItemIfUserActive).toHaveBeenCalledOnce();
     expect(mockUploadActivityFileToSuunto).not.toHaveBeenCalled();
     expect(mockUploadActivityFileToWahoo).not.toHaveBeenCalled();
     expect(mockSetActivitySyncSuccessMetadata).not.toHaveBeenCalled();
     expect(mockUpdateToProcessed).not.toHaveBeenCalled();
+  });
+
+  it('retries a stale provider claim when only the dispatch marker changed', async () => {
+    const dispatchedAtMs = Date.now();
+    baseQueueItem.ref = createMockActivitySyncQueueItemRef({
+      ...baseQueueItem,
+      dispatchedToCloudTask: dispatchedAtMs,
+    });
+    mockUpdateQueueItemIfUserActive.mockResolvedValueOnce('not_current');
+
+    await expect(processActivitySyncQueueItem(baseQueueItem))
+      .rejects.toThrow('changed before provider upload but remains unclaimed; retrying the task');
+
+    expect(mockUploadActivityFileToSuunto).not.toHaveBeenCalled();
+    expect(mockIncreaseRetryCountForQueueItem).not.toHaveBeenCalled();
   });
 
   it('persists a fresh Suunto upload ID through the guarded queue write before blob delivery continues', async () => {

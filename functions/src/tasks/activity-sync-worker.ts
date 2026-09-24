@@ -218,6 +218,9 @@ export const processActivitySyncTask = onTaskDispatched({
             case QueueResult.Processed:
                 logger.info(`[ActivitySyncTaskWorker] Successfully processed item ${queueItemId}`);
                 break;
+            case QueueResult.AcknowledgedStale:
+                logger.info(`[ActivitySyncTaskWorker] Acknowledged stale delivery for item ${queueItemId}; this worker did not mark it processed.`);
+                break;
             case QueueResult.Skipped:
                 logger.error(`[ActivitySyncTaskWorker] Item ${queueItemId} requires manual reconciliation; stopping automatic retries.`);
                 break;

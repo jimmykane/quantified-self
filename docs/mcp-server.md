@@ -81,6 +81,13 @@ field entirely. The existing
 retried unchanged after validation rejects it. Neither preview creates authored or provider state.
 `apply_training_changes` consumes the opaque proposal as a separately approval-gated write tool. ChatGPT, Claude and
 other MCP hosts own their native tool-approval UI; QS does not use MCP elicitation as a second confirmation round.
+For **Duplicate to…**, the existing `copy-workout` batch change takes an exact source reference, fresh proposal-local
+key, explicit destination date and destination plan reference or `null` for Standalone. Clients should read the exact
+source and current schedule revision, preserve its scope by default and ask if the source or date is ambiguous. The
+proposal preview and approval remain required, including an out-of-range plan extension. The copied workout is a fresh
+planned identity without a completion link or standalone delivery opt-in; an existing active-plan setting may later send
+it. This UI/Assistant guidance update adds no MCP tool, schema, scope, consent or provider action and preserves the
+registered wire contract.
 The host may let a user configure automatic tool approval, which the server cannot detect, so users who want to inspect
 every proposal must keep per-call approval enabled in their client. ChatGPT's destructive annotation triggers its
 native approval request. Claude users must not choose **Allow always**, and should disable Training write tools while
@@ -272,7 +279,7 @@ The internal connection identity carries the server-owned conversation generatio
 cross chats. Training read authority recognizes that complete first-party identity directly and never looks for an
 external OAuth connection document. This reliability correction changes no hosted MCP tool, scope, schema or grant.
 Separate default-off per-chat choices can also add tag-aware activity reads, editable Timeline-note reads, and local
-prepare-only content tools. Gemini never receives the public tag/note write tools. An app-owned confirmation reuses the
+prepare-only content tools. Gemini never receives the public event/note write tools. An app-owned confirmation reuses the
 existing Assistant apply endpoint and the same sanitized MCP content mutation services, with the active generation,
 permission, exact proposal, expiry, owner, deletion fence, and optimistic precondition rechecked at the data boundary.
 Direct app URLs are removed before validated results reach Gemini, and generated answers cannot repeat exact opaque
@@ -391,7 +398,7 @@ The bundled skills divide ownership deliberately:
 | `explore-quantified-self-routes` | Saved-route summaries, geometry, waypoints, and nearby searches | `routes:read`; optional `route-location:read` |
 
 All seven skills allow implicit or explicit invocation and declare the same hosted permission-scoped MCP dependency. Most
-domain tools are read-only; the Activity and cross-domain skills can use separately authorized focused tag/note writes,
+domain tools are read-only; the Activity and cross-domain skills can use separately authorized focused event/note writes,
 and the Training skill can use separately authorized preview and approval-gated apply tools. Their trigger
 descriptions keep single-domain work out of the cross-domain skill. Each `agents/openai.yaml` owns one matching
 skill-level starter prompt; the plugin manifest retains only three representative interface prompts because that field
@@ -510,9 +517,9 @@ The server implements OAuth authorization code with PKCE S256 and refresh-token 
 - `timeline-notes:write`, dependent on `timeline-notes:read`, for native-approval-gated create, edit and permanent delete;
 - `activity-details:read` for bounded non-location activity summaries, event tags and exact tag filtering, laps, swim
   lengths, MTB jump measurements, selected metrics, and on-demand chart series;
-- `events:write`, dependent on `activity-details:read`, for focused native-approval-gated event-owned mutations. The
-  current tool only replaces a selected activity's shared parent-event tags with optimistic concurrency and excludes
-  benchmark events;
+- `events:write`, dependent on `activity-details:read`, for focused parent-event tag and title changes with
+  host-controlled approval; description changes additionally require `activity-descriptions:read`. Exact current-value checks prevent
+  concurrent overwrites and benchmark events are excluded;
 - `activity-descriptions:read`, dependent on `activity-details:read`, for the full private parent event description shown in the QS.io event editor;
 - `activity-location:read`, dependent on `activity-details:read`, for exact activity start/end and jump coordinates,
   nearby activity search, and chart breadcrumbs;
@@ -760,7 +767,10 @@ The analytics and map entries follow the
 | `list_activities` | `activity-details:read`; locations add `activity-location:read` | Frozen compatibility tool for bounded newest-first activity scans |
 | `query_activities` | `activity-details:read`; locations add `activity-location:read` | Preferred bounded activity query with structurally exclusive explicit, relative, and unbounded date modes |
 | `query_activities_with_tags` | `activity-details:read` | Coordinate-free activity summaries with their parent event tags and optional exact case-insensitive `any`/`all` tag filtering |
-| `update_event_tags` | `activity-details:read` + `events:write`; native client approval gate | Replaces the complete parent-event tag list after an exact current-tag precondition; sibling activities share the result and benchmark events are excluded |
+| `update_event_tags` | `activity-details:read` + `events:write`; host-controlled approval | Replaces the complete parent-event tag list after an exact current-tag precondition; sibling activities share the result and benchmark events are excluded |
+| `get_event_title` | `activity-details:read` + `events:write` | Reads one editable parent-event title for an opaque activity reference before a rename; no internal event ID |
+| `update_event_title` | `activity-details:read` + `events:write`; host-controlled approval | Replaces the parent-event title with an exact current-title precondition; sibling activities share the result and benchmark events are excluded |
+| `update_event_description` | `activity-details:read` + `activity-descriptions:read` + `events:write`; host-controlled approval | Replaces the parent-event description with an exact current-description precondition from `get_activity_description`; returns no private text |
 | `find_activities_near_location` | `activity-details:read` + `activity-location:read` | Frozen compatibility tool for nearby activity scans |
 | `search_activities_near_location` | `activity-details:read` + `activity-location:read` | Preferred closed-world nearby activity search with structurally paired optional dates |
 | `list_activity_laps` | `activity-details:read` | Paginated allowlisted lap timing and performance fields |
@@ -1183,8 +1193,8 @@ reauthorization is required for reads. The built-in Assistant exposes this read 
 directly applying—a change.
 
 `events:write` is a separate dependent permission for focused event-owned changes. Both requested checkboxes start
-selected; removing Activity details removes and disables the child. Existing connections must reauthorize and refresh
-cannot add it. The only current mutation is `update_event_tags`: the client first resolves one opaque `activityRef`
+selected; removing Activity details removes and disables the child. Existing connections missing it must reauthorize;
+refresh cannot add it. For `update_event_tags`, the client first resolves one opaque `activityRef`
 with `query_activities_with_tags`, then submits the complete current `expectedTags` and complete replacement `tags`
 list. The server decrypts the owner- and connection-bound reference, verifies the activity still belongs to the
 referenced parent event, and transactionally rechecks the stored active MCP grant and account-deletion fence. It also
@@ -1192,12 +1202,26 @@ reads the event's merge classification and rejects both explicit and legacy benc
 change or no-op. If the current normalized list differs from `expectedTags`, the write conflicts rather than
 overwriting a concurrent edit. Repeating an accepted replacement is a safe no-op. The canonical event field is written
 through the same shared sanitizer as the UI and the legacy tag field is removed; sibling activities inherit the result
-because tags remain event-owned. No activity metrics, titles, descriptions, source files, locations, provider records
-or remote services are touched. The focused write returns only the input opaque reference, normalized tags and whether
-storage changed, with no event/activity IDs. It uses the MCP host's native approval UI and does not add a callable,
-index, collection or background job. Future title, description, or other event editing requires a dedicated strict
-tool, concurrency/approval contract, projection review, tests, and documentation; the broader permission name does not
-automatically expose newly stored event fields.
+because tags remain event-owned. The focused write returns only the input opaque reference, normalized tags and whether
+storage changed, with no event/activity IDs.
+
+An activity/workout rename edits the parent event's `name` through `update_event_title`. The client first reads
+`get_event_title` and submits its exact `expectedTitle`. A description edit first reads the full private text with
+`get_activity_description` and submits its exact `expectedDescription` to `update_event_description`; it requires
+the additional `activity-descriptions:read` grant. Missing/null values can be cleared with `null`; text is not trimmed.
+Title inputs are limited to 512 UTF-16 code units/2 KiB UTF-8 and one line; descriptions to 65,536 code units/64 KiB
+UTF-8. The description-update HTTP request alone allows up to 320 KiB for both exact-old and new text, including JSON
+escaping; the ordinary MCP and OAuth request caps remain unchanged. Both use the same owner/connection-bound activity
+reference and transaction checks as tag changes, recheck
+the parent association and benchmark classification, and write only the sanitized event field. A repeated accepted
+replacement is a no-op; a different current value conflicts. A description-write result contains no private text.
+Sibling activities share the new event title or description. No recorded activity metrics, source files, locations,
+provider records or remote services are touched. The MCP host controls per-call approval; users who want to inspect
+each edit must keep automatic approval disabled in that host. These tools
+are external-client only: the built-in Assistant's independent **Activity tag changes** choice still authorizes only
+tag proposals and does not expose title or description mutation. This adds no callable, index, collection or background
+job. Future editable event fields still require dedicated strict tools, projection and consent review, tests and docs;
+the broader permission name does not automatically expose newly stored fields.
 
 One filtered call, including a tag-filtered call, scans at most 100 selected activity documents and can return fewer
 matches than requested.

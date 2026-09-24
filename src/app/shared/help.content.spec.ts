@@ -365,7 +365,8 @@ describe('help.content', () => {
     expect(dataAndPrivacySection?.content).toContain('exact case-insensitive tag matches');
     expect(dataAndPrivacySection?.content).toContain('personal, health, or location context');
     expect(dataAndPrivacySection?.content).toContain('untrusted labels');
-    expect(dataAndPrivacySection?.content).toContain('Existing clients must reauthorize for this new write permission');
+    expect(dataAndPrivacySection?.content).toContain('Existing clients missing a required grant must reauthorize');
+    expect(dataAndPrivacySection?.content).toContain('Editing the shared description additionally requires');
     expect(dataAndPrivacySection?.content).toContain('separate default-off Activity tag changes choice');
     expect(dataAndPrivacySection?.content).toContain('Oversized rankings fail');
     expect(dataAndPrivacySection?.content).toContain('jump count is not treated as jump quality');

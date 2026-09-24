@@ -545,7 +545,9 @@
       } @else {
         <div class="workout-rows">
           @for (row of displayedWorkoutRows(); track row.workout.id; let lastWorkout = $last) {
-            <app-compact-row class="workout-row" layout="stacked" density="compact"
+            <app-compact-row class="workout-row" layout="stacked" density="compact" tabindex="-1"
+              [attr.data-workout-id]="row.workout.id"
+              [attr.aria-label]="'Workout ' + row.workout.title"
               [title]="row.workout.title" [titleId]="'scheduled-workout-' + row.workout.id"
               [headingLevel]="view() === 'plans' ? 4 : 3" [showDivider]="!lastWorkout">
               <div class="workout-row-meta">
@@ -589,8 +591,8 @@
                   }
                 </button>
                 <mat-menu #workoutActionsMenu="matMenu" class="qs-menu-panel">
-                  <button appHapticTap mat-menu-item type="button" (click)="copyWorkout(row.workout)">
-                    <mat-icon aria-hidden="true">content_copy</mat-icon><span>Copy workout</span>
+                  <button appHapticTap mat-menu-item type="button" (click)="duplicateWorkout(row.workout)">
+                    <mat-icon aria-hidden="true">content_copy</mat-icon><span>Duplicate to…</span>
                   </button>
                   <button appHapticTap mat-menu-item type="button" (click)="setWorkoutSkipped(row.workout, row.workout.lifecycle !== 'skipped')">
                     <mat-icon aria-hidden="true">{{ row.workout.lifecycle === 'skipped' ? 'undo' : 'skip_next' }}</mat-icon>
