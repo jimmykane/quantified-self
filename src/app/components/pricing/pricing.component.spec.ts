@@ -1391,6 +1391,24 @@ describe('PricingComponent', () => {
             expect(alert).toHaveBeenCalledWith(message);
             alert.mockRestore();
         });
+
+        it('does not show a checkout error after the pricing page is destroyed', async () => {
+            const alert = vi.spyOn(window, 'alert').mockImplementation(() => undefined);
+            let rejectCheckout!: (error: Error) => void;
+            const pendingCheckout = new Promise<void>((_resolve, reject) => { rejectCheckout = reject; });
+            vi.spyOn(TestBed.inject(AppPaymentService), 'appendCheckoutSession')
+                .mockReturnValue(pendingCheckout);
+
+            const checkoutPromise = component.subscribe(prices[3]);
+            await vi.waitFor(() => expect(rejectCheckout).toBeDefined());
+            fixture.destroy();
+            rejectCheckout(new Error('Network unavailable'));
+            await checkoutPromise;
+
+            expect(alert).not.toHaveBeenCalled();
+            expect(haptics.error).not.toHaveBeenCalled();
+            alert.mockRestore();
+        });
     });
 
     it('should show a spinner inside the onboarding Continue for Free CTA while selecting free', () => {

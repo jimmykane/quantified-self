@@ -30,7 +30,6 @@ export {
   FieldPath,
   getCountFromServer,
   getDoc,
-  getDocFromServer,
   getDocs,
   getDocsFromCache,
   getDocsFromServer,

@@ -7,6 +7,7 @@ import { MatDialog } from '@angular/material/dialog';
 import { FirebaseApp } from 'app/firebase/app';
 import { AppWindowService } from './app.window.service';
 import { AppFunctionsService } from './app.functions.service';
+import { LoggerService } from './logger.service';
 import { defer, firstValueFrom, NEVER, Observable, of, Subject, throwError } from 'rxjs';
 import { vi, describe, it, expect, beforeEach } from 'vitest';
 
@@ -29,7 +30,6 @@ vi.mock('app/firebase/functions', async () => {
 const {
     mockSetDoc,
     mockGetDoc,
-    mockGetDocFromServer,
     mockGetDocsFromServer,
     mockLimit,
     mockDocData,
@@ -43,7 +43,6 @@ const {
     return {
         mockSetDoc: vi.fn(),
         mockGetDoc: vi.fn(),
-        mockGetDocFromServer: vi.fn(),
         mockGetDocsFromServer: vi.fn(),
         mockLimit: vi.fn(),
         mockDocData: vi.fn(),
@@ -56,6 +55,9 @@ const {
     };
 });
 
+const liteFirestore = vi.hoisted(() => ({ getFirestore: vi.fn(), doc: vi.fn(), getDoc: vi.fn() }));
+vi.mock('firebase/firestore/lite', () => liteFirestore);
+
 // Mock the module
 vi.mock('app/firebase/firestore', async () => {
     const actual = await vi.importActual('app/firebase/firestore');
@@ -63,7 +65,6 @@ vi.mock('app/firebase/firestore', async () => {
         ...actual,
         setDoc: mockSetDoc,
         getDoc: mockGetDoc,
-        getDocFromServer: mockGetDocFromServer,
         getDocsFromServer: mockGetDocsFromServer,
         limit: mockLimit,
         collection: mockCollection,
@@ -81,7 +82,7 @@ const mockFirebaseApp = {};
 const mockWindowService = {
     currentDomain: 'http://localhost:4200'
 };
-const mockFirestore = {}; // The service injects the class token
+const mockFirestore = { app: mockFirebaseApp }; // The service injects the class token
 const mockAuth = {
     currentUser: {
         uid: 'test_user_uid',
@@ -126,7 +127,9 @@ describe('AppPaymentService', () => {
             exists: () => false,
             data: () => undefined
         });
-        mockGetDocFromServer.mockResolvedValue({ data: () => undefined });
+        liteFirestore.getFirestore.mockReturnValue('lite-firestore');
+        liteFirestore.doc.mockImplementation((_firestore: unknown, path: string) => path);
+        liteFirestore.getDoc.mockResolvedValue({ data: () => undefined });
         mockLimit.mockImplementation((value: number) => value);
         mockRunInInjectionContext.mockImplementation((injector: any, fn: any) => fn());
 
@@ -646,18 +649,72 @@ describe('AppPaymentService', () => {
         it('recovers a checkout URL from the server when the listener misses the update', async () => {
             vi.useFakeTimers();
             try {
-                mockDocData.mockReturnValueOnce(NEVER);
-                mockGetDocFromServer.mockResolvedValueOnce({ data: () => ({ url: 'http://stripe.com/checkout' }) });
+                mockDocData.mockReturnValueOnce(of(undefined));
+                liteFirestore.getDoc.mockResolvedValueOnce({ data: () => ({ url: 'http://stripe.com/checkout' }) });
 
                 const checkoutPromise = service.appendCheckoutSession('price_123');
                 await vi.advanceTimersByTimeAsync(5001);
 
                 await expect(checkoutPromise).resolves.toBeUndefined();
-                expect(mockGetDocFromServer).toHaveBeenCalledTimes(1);
-                expect(mockGetDocFromServer.mock.calls[0][0]).toEqual({
-                    id: 'test_session_id_1',
-                    path: 'customers/test_user_uid/checkout_sessions/test_session_id_1'
-                });
+                expect(liteFirestore.getFirestore).toHaveBeenCalledWith(mockFirebaseApp);
+                expect(liteFirestore.doc).toHaveBeenCalledWith(
+                    'lite-firestore',
+                    'customers/test_user_uid/checkout_sessions/test_session_id_1'
+                );
+                expect(liteFirestore.getDoc).toHaveBeenCalledWith('customers/test_user_uid/checkout_sessions/test_session_id_1');
+            } finally {
+                vi.useRealTimers();
+            }
+        });
+
+        it('keeps polling when the extension has not written a URL yet', async () => {
+            vi.useFakeTimers();
+            try {
+                mockDocData.mockReturnValueOnce(of(undefined));
+                liteFirestore.getDoc
+                    .mockResolvedValueOnce({ data: () => ({ price: 'price_123' }) })
+                    .mockResolvedValueOnce({ data: () => ({ url: 'http://stripe.com/checkout' }) });
+
+                const checkoutPromise = service.appendCheckoutSession('price_123');
+                await vi.advanceTimersByTimeAsync(15001);
+
+                await expect(checkoutPromise).resolves.toBeUndefined();
+                expect(liteFirestore.getDoc).toHaveBeenCalledTimes(2);
+            } finally {
+                vi.useRealTimers();
+            }
+        });
+
+        it('fails promptly when the independent server read has an unexpected error', async () => {
+            vi.useFakeTimers();
+            try {
+                mockDocData.mockReturnValueOnce(of(undefined));
+                liteFirestore.getDoc.mockRejectedValueOnce(new Error('Invalid Firestore app'));
+
+                const checkoutPromise = service.appendCheckoutSession('price_123');
+                const expectation = expect(checkoutPromise).rejects.toThrow(CheckoutStartError);
+                await vi.advanceTimersByTimeAsync(5001);
+
+                await expectation;
+                expect(liteFirestore.getDoc).toHaveBeenCalledTimes(1);
+            } finally {
+                vi.useRealTimers();
+            }
+        });
+
+        it('retries a temporary server read failure and uses a later checkout URL', async () => {
+            vi.useFakeTimers();
+            try {
+                mockDocData.mockReturnValueOnce(of(undefined));
+                liteFirestore.getDoc
+                    .mockRejectedValueOnce(Object.assign(new Error('Service unavailable'), { code: 'unavailable' }))
+                    .mockResolvedValueOnce({ data: () => ({ url: 'http://stripe.com/checkout' }) });
+
+                const checkoutPromise = service.appendCheckoutSession('price_123');
+                await vi.advanceTimersByTimeAsync(15001);
+
+                await expect(checkoutPromise).resolves.toBeUndefined();
+                expect(liteFirestore.getDoc).toHaveBeenCalledTimes(2);
             } finally {
                 vi.useRealTimers();
             }
@@ -667,7 +724,7 @@ describe('AppPaymentService', () => {
             vi.useFakeTimers();
             try {
                 mockDocData.mockReturnValueOnce(NEVER);
-                mockGetDocFromServer.mockResolvedValueOnce({ data: () => ({ url: 'http://stripe.com/old-user-checkout' }) });
+                liteFirestore.getDoc.mockResolvedValueOnce({ data: () => ({ url: 'http://stripe.com/old-user-checkout' }) });
 
                 const checkoutPromise = service.appendCheckoutSession('price_123');
                 const expectation = expect(checkoutPromise).rejects.toThrow('Authenticated user changed while checkout was being prepared.');
@@ -679,10 +736,25 @@ describe('AppPaymentService', () => {
                 await vi.advanceTimersByTimeAsync(5000);
 
                 await expectation;
-                expect(mockGetDocFromServer).toHaveBeenCalledTimes(1);
+                expect(liteFirestore.getDoc).toHaveBeenCalledTimes(1);
             } finally {
                 vi.useRealTimers();
             }
+        });
+
+        it('does not redirect after the caller leaves the page', async () => {
+            const checkoutSession$ = new Subject<{ url: string }>();
+            mockDocData.mockReturnValueOnce(checkoutSession$.asObservable());
+            const redirectLog = vi.spyOn(TestBed.inject(LoggerService), 'log');
+            let canRedirect = true;
+
+            const checkoutPromise = service.appendCheckoutSession('price_123', undefined, undefined, () => canRedirect);
+            await vi.waitFor(() => expect(mockSetDoc).toHaveBeenCalledTimes(1));
+            canRedirect = false;
+            checkoutSession$.next({ url: 'http://stripe.com/checkout' });
+
+            await expect(checkoutPromise).resolves.toBeUndefined();
+            expect(redirectLog).not.toHaveBeenCalledWith('Redirecting to Stripe:', 'http://stripe.com/checkout');
         });
 
         it('reports a checkout timeout after the full wait window', async () => {

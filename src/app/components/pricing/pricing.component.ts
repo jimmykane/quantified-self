@@ -500,7 +500,7 @@ export class PricingComponent implements OnInit, OnDestroy {
         }
 
         const userWithRequiredPolicies = await this.getUserWithRequiredPolicies();
-        if (!userWithRequiredPolicies || this.isLoading) {
+        if (!userWithRequiredPolicies || this.isLoading || this.destroyed) {
             return;
         }
 
@@ -529,8 +529,11 @@ export class PricingComponent implements OnInit, OnDestroy {
                 typeof price !== 'string' ? price.currency : undefined,
                 typeof price !== 'string' ? price.unit_amount / 100 : undefined
             );
-            await this.paymentService.appendCheckoutSession(price);
+            await this.paymentService.appendCheckoutSession(price, undefined, undefined, () => !this.destroyed);
         } catch (error) {
+            if (this.destroyed) {
+                return;
+            }
             const errorMessage = (error as Error).message || '';
             if (errorMessage === 'User cancelled redirection to portal.') {
                 this.logger.log('User cancelled subscription management.');
