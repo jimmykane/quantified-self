@@ -203,7 +203,7 @@
 
     <div class="pipeline-section" *ngIf="showTrainingDeliverySection">
         <h3 class="pipeline-title"><mat-icon>event_repeat</mat-icon> Training Delivery</h3>
-        <p class="training-delivery-note">Queue records schedule and dispatch work. Delivery states below come from current workouts, not completed queue jobs.</p>
+        <p class="training-delivery-note">Queue records schedule and dispatch work. Delivery states count workout delivery records, including retained older records, not completed queue jobs.</p>
         <p class="training-delivery-warning" *ngIf="!loading && !stats?.trainingDelivery?.jobsAvailable" role="status">
             Training delivery job counts are unavailable. Other queues remain visible.
         </p>
@@ -215,7 +215,7 @@
             </mat-card>
             <mat-card class="app-stat-card status-info">
                 <div class="app-stat-header"><mat-icon>cloud_queue</mat-icon><span>Cloud Tasks</span></div>
-                <div class="app-stat-value">{{ stats?.cloudTasks?.queues?.trainingDelivery?.pending ?? '—' }}</div>
+                <div class="app-stat-value">{{ stats?.cloudTasks?.queues?.trainingDelivery?.state === 'UNKNOWN' ? '—' : (stats?.cloudTasks?.queues?.trainingDelivery?.pending ?? '—') }}</div>
                 <span class="stat-subtitle">{{ stats?.cloudTasks?.queues?.trainingDelivery?.state || 'Unknown queue state' }}</span>
             </mat-card>
             <mat-card class="app-stat-card status-pending">
@@ -234,7 +234,7 @@
         </p>
         <div class="stats-grid" *ngIf="stats?.trainingDelivery?.statusCountsAvailable">
             <mat-card class="app-stat-card status-success">
-                <div class="app-stat-header"><mat-icon>check_circle</mat-icon><span>Sent copies</span></div>
+                <div class="app-stat-header"><mat-icon>check_circle</mat-icon><span>Delivered</span></div>
                 <div class="app-stat-value">{{ stats?.trainingDelivery?.outcomes?.delivered }}</div>
             </mat-card>
             <mat-card class="app-stat-card status-pending">
@@ -257,7 +257,7 @@
                 <strong>{{ item.provider === 'coros' ? 'COROS' : (item.provider | titlecase) }}</strong>
                 <span *ngIf="stats?.trainingDelivery?.jobsAvailable">{{ item.queued }} queued</span>
                 <ng-container *ngIf="stats?.trainingDelivery?.statusCountsAvailable">
-                    <span>{{ item.delivered }} sent</span>
+                    <span>{{ item.delivered }} delivered</span>
                     <span>{{ item.retrying }} retrying</span>
                     <span>{{ item.failed + item.needsAttention }} need review</span>
                 </ng-container>

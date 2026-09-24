@@ -1661,14 +1661,17 @@ describe('AdminQueueStatsComponent', () => {
             component.loading = false;
             component.queueView = 'training-delivery';
             component.stats = { pending: 0, succeeded: 0, stuck: 0, providers: [], cloudTasks: {
-                pending: 2, queues: { trainingDelivery: { queueId: 'processTrainingDeliveryTask', pending: 2 } },
+                pending: 2, queues: { trainingDelivery: { queueId: 'processTrainingDeliveryTask', pending: 2, state: 'UNKNOWN' } },
             } };
             fixture.detectChanges();
             const host: HTMLElement = fixture.nativeElement;
             expect(host.textContent).toContain('Training delivery job counts are unavailable');
             expect(host.textContent).toContain('Current workout delivery counts are unavailable');
             expect(host.textContent).toContain('Cloud Tasks');
-            expect(host.textContent).not.toContain('0 sent');
+            const cloudTasksCard = [...host.querySelectorAll('.app-stat-card')]
+                .find(card => card.textContent?.includes('Cloud Tasks'));
+            expect(cloudTasksCard?.querySelector('.app-stat-value')?.textContent?.trim()).toBe('—');
+            expect(host.textContent).not.toContain('0 delivered');
             component.queueView = 'all';
             fixture.detectChanges();
             expect(host.textContent).not.toContain('Training delivery job counts are unavailable');

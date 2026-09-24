@@ -242,7 +242,7 @@ export interface SleepSyncQueueStats extends SyncPipelineQueueStats {
     providers: SleepSyncProviderQueueStats[];
 }
 
-/** Jobs are transient work; outcomes are current per-workout projections, not completed queue jobs. */
+/** Jobs are transient work; outcomes count per-delivery projections, including retained older identities. */
 export interface TrainingDeliveryQueueStats {
     jobsAvailable: boolean;
     jobs: {
