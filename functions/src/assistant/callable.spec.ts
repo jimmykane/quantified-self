@@ -6,6 +6,7 @@ import {
   type AssistantConversationStore,
 } from './conversation-store';
 import type { AssistantCallableDependencies } from './callable';
+import { AssistantTrainingMetricsPreparingError } from './mcp-session';
 import {
   APPLY_ASSISTANT_TRAINING_PROPOSAL_OPTIONS,
   ASSISTANT_CALLABLE_OPTIONS,
@@ -95,6 +96,7 @@ function createDependencies() {
     reserveQuota: vi.fn().mockResolvedValue(reservation),
     finalizeQuota: vi.fn().mockResolvedValue(quota),
     releaseQuota: vi.fn().mockResolvedValue(quota),
+    refundQuotaForPreparation: vi.fn().mockResolvedValue(quota),
     conversationStore: store,
     answer: vi.fn().mockImplementation(async (
       input: Parameters<AssistantCallableDependencies['answer']>[0],
@@ -449,6 +451,27 @@ describe('Assistant callable', () => {
       undefined,
       undefined,
     );
+  });
+
+  it('releases a pending Training preparation turn and refunds its allowance', async () => {
+    const { dependencies, store, reservation } = createDependencies();
+    vi.mocked(dependencies.answer).mockImplementation(async input => {
+      await input.onBillableAttempt();
+      throw new AssistantTrainingMetricsPreparingError(5);
+    });
+    await expect(runAssistantChat({
+      requestId: REQUEST_ID,
+      message: 'How is my Training load?',
+      timeZone: 'Europe/Helsinki',
+      conversationId: 'conversation-1',
+    }, context, dependencies)).rejects.toMatchObject({
+      code: 'unavailable',
+      details: { reason: 'training_metrics_preparing', retryAfterSeconds: 5 },
+    });
+    expect(dependencies.answer).toHaveBeenCalledTimes(1);
+    expect(dependencies.refundQuotaForPreparation).toHaveBeenCalledWith(reservation);
+    expect(store.releaseTurn).toHaveBeenCalledOnce();
+    expect(store.completeTurn).not.toHaveBeenCalled();
   });
 
   it('returns a proposal retained by the authoritative conversation completion', async () => {

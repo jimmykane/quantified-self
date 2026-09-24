@@ -24,7 +24,10 @@ vi.mock('firebase-functions/v2/https', () => ({
 
 import {
     decideDerivedMetricsFreshness,
+    prepareDerivedMetricsForUser,
+    resolveDerivedMetricKindsToQueue,
     resolveDerivedMetricSnapshotPayloadValidity,
+    resolveReadyDerivedMetricKinds,
 } from './ensure-derived-metrics';
 
 type SnapshotShape = {
@@ -86,6 +89,39 @@ describe('decideDerivedMetricsFreshness', () => {
             metricKindsToQueue: [],
             reason: 'fresh',
         });
+    });
+
+    it('reports only independently fresh snapshots as ready and waits for in-flight work', () => {
+        const metricKinds = [DERIVED_METRIC_KINDS.FormNow, DERIVED_METRIC_KINDS.FormPlus7d];
+        const input = {
+            ...baseInput,
+            metricKinds,
+            metricSnapshotsByKind: buildMetricSnapshots({
+                [DERIVED_METRIC_KINDS.FormPlus7d]: { asOfDayMs: Date.UTC(2026, 3, 14) },
+            }),
+        };
+        expect(resolveReadyDerivedMetricKinds(input)).toEqual([DERIVED_METRIC_KINDS.FormNow]);
+        expect(resolveReadyDerivedMetricKinds({ ...input, coordinatorStatus: 'processing' })).toEqual([]);
+    });
+
+    it('adds an unscheduled stale kind while another kind is processing', () => {
+        const input = {
+            ...baseInput,
+            metricKinds: [DERIVED_METRIC_KINDS.FormNow, DERIVED_METRIC_KINDS.FormPlus7d],
+            coordinatorStatus: 'processing' as const,
+            coordinatorStartedAtMs: nowMs - 1_000,
+            coordinatorUpdatedAtMs: nowMs - 1_000,
+            metricSnapshotsByKind: buildMetricSnapshots({
+                [DERIVED_METRIC_KINDS.FormPlus7d]: { status: 'building' },
+            }),
+        };
+        expect(resolveDerivedMetricKindsToQueue({
+            input, generation: 5, scheduledMetricKinds: [DERIVED_METRIC_KINDS.FormNow],
+        })).toEqual([DERIVED_METRIC_KINDS.FormPlus7d]);
+        expect(resolveDerivedMetricKindsToQueue({
+            input, generation: 5,
+            scheduledMetricKinds: [DERIVED_METRIC_KINDS.FormNow, DERIVED_METRIC_KINDS.FormPlus7d],
+        })).toEqual([]);
     });
 
     it('queues only calendar-sensitive stale kinds when asOfDay is behind today', () => {
@@ -351,5 +387,55 @@ describe('decideDerivedMetricsFreshness', () => {
             DERIVED_METRIC_KINDS.TrainingDurability,
             currentPayload,
         )).toBe(true);
+    });
+});
+
+describe('prepareDerivedMetricsForUser', () => {
+    const kind = DERIVED_METRIC_KINDS.FormNow;
+    const nowMs = Date.UTC(2026, 3, 15, 12);
+    const readyInput = {
+        metricKinds: [kind], nowMs, coordinatorStatus: 'idle' as const,
+        coordinatorCompletedAtMs: nowMs - 1_000, coordinatorRequestedAtMs: nowMs - 2_000,
+        coordinatorStartedAtMs: nowMs - 2_000, coordinatorUpdatedAtMs: nowMs - 1_000,
+        coordinatorEventMutationVersion: 1, latestEventUpdatedAtMs: null,
+        metricSnapshotsByKind: buildMetricSnapshots({
+            [kind]: { builtFromEventMutationVersion: 1, asOfDayMs: Date.UTC(2026, 3, 15) },
+        }),
+    };
+
+    it('returns a ready snapshot after joining the existing queue once', async () => {
+        const ensure = vi.fn().mockResolvedValue({ accepted: true, queued: false, generation: 3, metricKinds: [kind] });
+        const readProbe = vi.fn()
+            .mockResolvedValueOnce({ generation: 3, scheduledMetricKinds: [kind], input: { ...readyInput, coordinatorStatus: 'processing' } })
+            .mockResolvedValueOnce({ generation: 3, scheduledMetricKinds: [], input: readyInput });
+        const result = await prepareDerivedMetricsForUser('owner', [kind], 5_000, {
+            ensure, readProbe, now: () => nowMs, sleep: vi.fn().mockResolvedValue(undefined),
+        });
+        expect(result).toEqual({ status: 'ready', metricKinds: [kind], readyMetricKinds: [kind], retryAfterSeconds: null });
+        expect(ensure).toHaveBeenCalledOnce();
+        expect(readProbe).toHaveBeenCalledTimes(2);
+    });
+
+    it('returns retry guidance after the bounded wait without queueing again', async () => {
+        let currentMs = nowMs;
+        const ensure = vi.fn().mockResolvedValue({ accepted: true, queued: true, generation: 3, metricKinds: [kind] });
+        const readProbe = vi.fn().mockResolvedValue({ generation: 3, scheduledMetricKinds: [kind],
+            input: { ...readyInput, coordinatorStatus: 'processing' } });
+        const result = await prepareDerivedMetricsForUser('owner', [kind], 2_000, {
+            ensure, readProbe, now: () => currentMs,
+            sleep: vi.fn().mockImplementation(async (ms: number) => { currentMs += ms; }),
+        });
+        expect(result).toEqual({ status: 'preparing', metricKinds: [kind], readyMetricKinds: [], retryAfterSeconds: 5 });
+        expect(ensure).toHaveBeenCalledOnce();
+    });
+
+    it('reports unavailable when the queue rejects the request', async () => {
+        const ensure = vi.fn().mockResolvedValue({ accepted: false, queued: false, generation: null, metricKinds: [kind] });
+        const readProbe = vi.fn();
+        const result = await prepareDerivedMetricsForUser('owner', [kind], 5_000, {
+            ensure, readProbe, now: () => nowMs, sleep: vi.fn(),
+        });
+        expect(result.status).toBe('unavailable');
+        expect(readProbe).not.toHaveBeenCalled();
     });
 });

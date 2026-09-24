@@ -9,6 +9,8 @@ import { onRequest, Request } from 'firebase-functions/v2/https';
 import * as logger from 'firebase-functions/logger';
 import { isIP } from 'node:net';
 import { z } from 'zod';
+import { DERIVED_METRIC_KINDS } from '../../../shared/derived-metrics';
+import { prepareDerivedMetricsForUser } from '../derived-metrics/ensure-derived-metrics';
 import { SLEEP_PROVIDERS } from '../../../shared/sleep';
 import { EVENT_TAG_LIMIT, EVENT_TAG_MAX_LENGTH } from '../../../shared/event-tags';
 import {
@@ -606,6 +608,13 @@ const READ_ONLY_TOOL_ANNOTATIONS = {
   openWorldHint: false,
 } as const;
 
+const PREPARE_METRICS_TOOL_ANNOTATIONS = {
+  readOnlyHint: false,
+  destructiveHint: false,
+  idempotentHint: true,
+  openWorldHint: false,
+} as const;
+
 const READ_ONLY_LOCATION_TOOL_ANNOTATIONS = {
   ...READ_ONLY_TOOL_ANNOTATIONS,
   openWorldHint: true,
@@ -784,7 +793,7 @@ function buildMcpServerInstructions(auth: AuthenticatedMcpRequest): string {
   }
   if (auth.scopes.includes(MCP_OAUTH_SCOPES.MetricsRead)) {
     instructions.push(
-      'Use list_training_metrics before assuming a Training-derived metric is unavailable, then use get_training_metric only when its status is ready. Use list_metrics and query_metric for activity and other numeric event metrics; use query_metrics to compare up to four over one bounded range. Use get_training_metric with body_weight_trend only for the ready 28-day Training snapshot.',
+      'Use list_training_metrics to discover Training-derived kinds. Call prepare_training_metrics for the selected kinds before get_training_metric; if preparation is still pending, retry preparation later, then read the ready snapshots. Use list_metrics and query_metric for activity and other numeric event metrics; use query_metrics to compare up to four over one bounded range. Use get_training_metric with body_weight_trend only for the ready 28-day Training snapshot.',
     );
   }
   if (auth.scopes.includes(MCP_OAUTH_SCOPES.SleepRead)) {
@@ -813,6 +822,7 @@ export function createMcpServer(
   auth: AuthenticatedMcpRequest,
   publicBaseUrl: string,
   dataService: ReturnType<typeof createMcpDataService> = defaultDataService,
+  preparationService: typeof prepareDerivedMetricsForUser = prepareDerivedMetricsForUser,
 ): McpServer {
   const measurementToolsAvailable = auth.scopes.includes(
     MCP_OAUTH_SCOPES.MeasurementsRead,
@@ -1322,6 +1332,17 @@ export function createMcpServer(
       'get_training_metric',
       () => dataService.getTrainingMetric(auth.uid, input.metricKind),
     ));
+
+    registerMcpTool(server, 'prepare_training_metrics', {
+      title: 'Prepare Training metrics',
+      description: 'Request or join preparation of one to eight Training-derived snapshots. Returns readiness, never metric values. If preparing, retry this tool after the suggested delay, then call get_training_metric.',
+      inputSchema: z.object({
+        metricKinds: z.array(z.enum(DERIVED_METRIC_KINDS)).min(1).max(8),
+      }).strict(),
+      outputSchema: outputSchemas.prepare_training_metrics,
+      annotations: PREPARE_METRICS_TOOL_ANNOTATIONS,
+    }, input => runReadOnlyTool('prepare_training_metrics', () =>
+      preparationService(auth.uid, Array.from(new Set(input.metricKinds)))));
   }
 
   if (auth.scopes.includes(MCP_OAUTH_SCOPES.SleepRead)) {
@@ -2177,6 +2198,7 @@ export function requiredScopesForRequest(body: unknown): McpOAuthScope[] {
     'query_metrics',
     'list_training_metrics',
     'get_training_metric',
+    'prepare_training_metrics',
   ].includes(toolName)) {
     return [MCP_OAUTH_SCOPES.MetricsRead];
   }

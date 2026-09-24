@@ -779,6 +779,7 @@ The analytics and map entries follow the
 | `query_metric` | `metrics:read` | One event-stat aggregation by local date interval or activity type |
 | `query_metrics` | `metrics:read` | Up to four event-stat aggregations over one shared bounded read, date range, grouping, timezone, and activity filter |
 | `list_training_metrics` | `metrics:read` | Human-readable Training metric catalog with current snapshot availability metadata but no payloads or provenance |
+| `prepare_training_metrics` | `metrics:read` | Queue or join preparation for one to eight registered Training snapshots and return readiness with retry guidance, without metric values |
 | `get_training_metric` | `metrics:read` | One ready, redacted Training-derived snapshot |
 | `get_activity_metrics` | `metrics:read` + `activity-details:read` | Up to 25 explicitly selected canonical numeric Sports Lib metrics for one referenced activity |
 | `get_activity_overview` | `metrics:read` + `activity-details:read` | Coordinate-free activity type plus actual metric, detail, and chart-source availability |
@@ -1472,6 +1473,15 @@ descriptors, validates the snapshot entry type and metric identity, and reports 
 `missing`, or `schema_mismatch`. It never returns a snapshot payload, backend error text, event identity, or source
 provenance. Clients should use it before deciding that a Training metric is unavailable, and call
 `get_training_metric` only for a ready kind.
+
+For a current or missing snapshot, call `prepare_training_metrics` with one to eight catalog kinds. The tool runs the
+same freshness check as the Training route, queues only stale kinds through the existing coordinator, waits at most
+five seconds, and returns `ready`, `preparing`, or `unavailable`, plus the kinds already ready and a retry delay when
+preparing. It is idempotent but can queue backend work (`readOnlyHint: false`, `destructiveHint: false`). Retry this
+tool after the suggested delay while it is preparing; once ready, call the unchanged `get_training_metric` read.
+The response exposes neither snapshot values nor private worker state. A failed or disabled queue reports
+`unavailable` rather than inventing a ready value. Existing clients need a deployed server update and tool-catalog
+refresh to discover this additive tool; the pending contract record does not make it available by itself.
 
 Training calculation, schema, invalidation, rebuild, and extension guidance remains in
 [`training-workspace.md`](training-workspace.md). Adding a kind requires its normal derived pipeline, exact safe MCP

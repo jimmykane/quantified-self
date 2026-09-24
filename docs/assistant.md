@@ -405,6 +405,12 @@ The Assistant reuses the existing request ledger and role limits. A reservation 
 creation, tool discovery, and other non-billable setup runs. It is finalized immediately before the first Gemini model
 or MCP tool attempt; a defensive completion fallback prevents a grounded answer from being committed uncharged. A
 setup failure therefore releases the reservation, while a failed model or tool attempt still consumes the request.
+For Training-derived reads, the Assistant first calls `prepare_training_metrics`. If the snapshot is still preparing
+after the bounded wait, the turn is released without a stored user or Assistant message, the finalized allowance is
+refunded idempotently, and the page retains the question with a clear retry message. Completed answers and other
+failed model or tool attempts keep the existing allowance behavior. The per-period server-only
+`billableReservationMap` tracks at most the role's request limit and prevents a duplicate refund; it has a
+single-field index exemption. This does not schedule a background Assistant reply or email.
 Loading or resetting a conversation does not consume quota. Usage documents are read directly by period ID, so their
 server-only fields and dynamic reservation map are exempt from automatic single-field indexing. `periodEnd`
 deliberately remains indexed because the admin fallback orders historical usage by that field when no current

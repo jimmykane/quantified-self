@@ -17,8 +17,9 @@ use the live metric catalog instead of assuming that a metric or Training-derive
    If several live metrics plausibly match a broad term such as load, use their returned metadata and units to explain
    the choices and ask which interpretation the user wants; never merge unlike candidates.
 3. Use one shared bounded aggregate request when comparing up to four activity metrics over the same range, grouping,
-   timezone, and activity filters. Use a ready Training snapshot only when its documented window and freshness match
-   the question.
+   timezone, and activity filters. For a Training-derived snapshot, use the advertised preparation capability for the
+   selected catalog kind before reading it. If preparation is pending, retry after its returned delay; read only after
+   it reports ready. Use a ready Training snapshot only when its documented window and freshness match the question.
 4. Preserve the returned aggregation, interval, units, sample counts, missing buckets, and snapshot freshness.
 5. Compare totals only with totals and rates or averages only with compatible values. Do not combine unlike activity
    types unless the user requests an overall view.
@@ -45,6 +46,7 @@ use the live metric catalog instead of assuming that a metric or Training-derive
   or turn the result into a workout prescription.
 - Treat an unsupported metric, a supported but not-ready Training snapshot, missing permission, and incomplete page as
   distinct outcomes. Do not conclude that a Training capability is unsupported before checking its catalog status.
+  A pending preparation is not an empty metric; do not claim a result or repeatedly call the read tool while it builds.
 - Do not use a current Training-derived body-weight snapshot as historical weigh-in data.
 - Describe training and recovery patterns without medical diagnosis or unsupported causal claims.
 

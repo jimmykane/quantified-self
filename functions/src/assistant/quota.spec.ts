@@ -54,6 +54,12 @@ function releaseAssistantQuotaReservation(
   return quotaSubject.releaseAssistantQuotaReservation(...args);
 }
 
+function refundAssistantQuotaForPreparation(
+  ...args: Parameters<AssistantQuotaApi['refundAssistantQuotaForPreparation']>
+): ReturnType<AssistantQuotaApi['refundAssistantQuotaForPreparation']> {
+  return quotaSubject.refundAssistantQuotaForPreparation(...args);
+}
+
 const FIXED_NOW_ISO = '2026-03-19T12:00:00.000Z';
 const PERIOD_START = '2026-03-01T00:00:00.000Z';
 const PERIOD_END = '2026-04-01T00:00:00.000Z';
@@ -109,9 +115,9 @@ class FakeTransaction {
   set(
     docRef: FakeDocumentReference,
     data: Record<string, unknown>,
-    options?: { merge?: boolean },
+    options?: { merge?: boolean; mergeFields?: string[] },
   ): void {
-    this.db.setDocument(docRef.path, data, options?.merge === true);
+    this.db.setDocument(docRef.path, data, options?.merge === true || !!options?.mergeFields);
   }
 }
 
@@ -219,6 +225,16 @@ describe('Assistant quota', () => {
     expect(finalizedStatus.remainingCount).toBe(99);
     expect(quotaStatus.successfulRequestCount).toBe(1);
     expect(quotaStatus.remainingCount).toBe(99);
+  });
+
+  it('refunds a pending preparation once while preserving other finalized requests', async () => {
+    const first = await reserveAssistantQuotaForRequest('user-1');
+    await finalizeAssistantQuotaReservation(first);
+    const second = await reserveAssistantQuotaForRequest('user-1');
+    await finalizeAssistantQuotaReservation(second);
+    expect((await refundAssistantQuotaForPreparation(first)).successfulRequestCount).toBe(1);
+    expect((await refundAssistantQuotaForPreparation(first)).successfulRequestCount).toBe(1);
+    expect((await getAssistantQuotaStatus('user-1')).successfulRequestCount).toBe(1);
   });
 
   it('does not consume quota twice when a reservation is finalized again', async () => {

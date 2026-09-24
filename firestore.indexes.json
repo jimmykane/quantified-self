@@ -2019,6 +2019,12 @@
     },
     {
       "collectionGroup": "assistantUsage",
+      "fieldPath": "billableReservationMap",
+      "ttl": false,
+      "indexes": []
+    },
+    {
+      "collectionGroup": "assistantUsage",
       "fieldPath": "lastSuccessfulRequestAt",
       "ttl": false,
       "indexes": []

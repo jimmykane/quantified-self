@@ -1367,6 +1367,7 @@ const successfulToolArguments: Record<
   get_training_metric: {
     metricKind: DERIVED_METRIC_KINDS.Form,
   },
+  prepare_training_metrics: { metricKinds: [DERIVED_METRIC_KINDS.Form] },
   list_sleep_vitals: {
     start: '2026-07-01T00:00:00.000Z',
     end: '2026-07-02T00:00:00.000Z',
@@ -1477,7 +1478,9 @@ async function connectFixtureServerForTransport(
     connectionId: 'connection-1',
     grantId: 'grant-1',
     scopes,
-  }, 'https://quantified-self.io', dataService);
+  }, 'https://quantified-self.io', dataService, async (_uid, metricKinds) => ({
+    status: 'ready', metricKinds, readyMetricKinds: metricKinds, retryAfterSeconds: null,
+  }));
   const client = new Client({
     name: 'output-contract-test-client',
     version: '1.0.0',

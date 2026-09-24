@@ -26,6 +26,7 @@ import {
   finalizeAssistantQuotaReservation,
   getAssistantQuotaStatus as getAssistantQuotaStatusForUser,
   releaseAssistantQuotaReservation,
+  refundAssistantQuotaForPreparation,
   reserveAssistantQuotaForRequest,
   type AssistantQuotaReservation,
   type AssistantUserRoleContext,
@@ -50,6 +51,7 @@ import { applyTrainingChanges } from '../mcp/training-plans-write.service';
 import { MCP_OAUTH_SCOPES } from '../mcp/oauth.service';
 import { McpDataError } from '../mcp/data.service';
 import { createMcpDataService } from '../mcp/data.service';
+import { AssistantTrainingMetricsPreparingError } from './mcp-session';
 
 interface AssistantCallableContext {
   auth?: {
@@ -75,6 +77,7 @@ export interface AssistantCallableDependencies {
   reserveQuota: typeof reserveAssistantQuotaForRequest;
   finalizeQuota: typeof finalizeAssistantQuotaReservation;
   releaseQuota: typeof releaseAssistantQuotaReservation;
+  refundQuotaForPreparation: typeof refundAssistantQuotaForPreparation;
   conversationStore: AssistantConversationStore;
   answer: (input: {
     uid: string;
@@ -123,6 +126,7 @@ const defaultDependencies: AssistantCallableDependencies = {
   reserveQuota: reserveAssistantQuotaForRequest,
   finalizeQuota: finalizeAssistantQuotaReservation,
   releaseQuota: releaseAssistantQuotaReservation,
+  refundQuotaForPreparation: refundAssistantQuotaForPreparation,
   conversationStore: assistantConversationStore,
   answer: input => assistantRuntime.answer(input),
   createId: () => randomUUID(),
@@ -360,6 +364,9 @@ function assertRequestFingerprintMatchesInput(
 }
 
 function isRetryableGroundedAnswerError(error: unknown): boolean {
+  if (error instanceof AssistantTrainingMetricsPreparingError) {
+    return false;
+  }
   if (error instanceof AssistantConversationStoreError) {
     return false;
   }
@@ -461,6 +468,7 @@ export async function runAssistantChat(
   let reservation: AssistantQuotaReservation | null = null;
   let begunTurn: BegunAssistantTurn | null = null;
   let finalizedQuota: AssistantQuotaStatusResponse | null = null;
+  let finalizedReservation: AssistantQuotaReservation | null = null;
   let finalizeQuotaPromise: Promise<AssistantQuotaStatusResponse> | null = null;
   const finalizeQuotaForBillableAttempt = async (): Promise<void> => {
     if (finalizedQuota) {
@@ -473,6 +481,7 @@ export async function runAssistantChat(
       const activeReservation = reservation;
       finalizeQuotaPromise = dependencies.finalizeQuota(activeReservation).then(quota => {
         finalizedQuota = quota;
+        finalizedReservation = activeReservation;
         reservation = null;
         return quota;
       });
@@ -725,6 +734,15 @@ export async function runAssistantChat(
           errorName: releaseError instanceof Error ? releaseError.name : 'unknown',
         });
       }
+    }
+    if (error instanceof AssistantTrainingMetricsPreparingError) {
+      if (finalizedReservation) {
+        await dependencies.refundQuotaForPreparation(finalizedReservation);
+      }
+      throw new HttpsError('unavailable', 'Training metrics are still preparing. Try again shortly.', {
+        reason: 'training_metrics_preparing',
+        retryAfterSeconds: error.retryAfterSeconds,
+      });
     }
     const mappedError = mapAssistantError(error);
     if (mappedError.code === 'unavailable') {
