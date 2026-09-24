@@ -6,7 +6,7 @@ import { MAT_DIALOG_DATA, MatDialogRef } from '@angular/material/dialog';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { HEALTH_METRIC_IDS } from '@shared/health';
 import { DataWeight, DataBodyFat, DataBloodPressureSystolic, DataBloodPressureDiastolic, DataPulseRate,
-  DataMuscleMass, DataBodyWater, DataBoneMass, DataBloodOxygenSaturation, DistanceUnits, PaceUnits, SpeedUnits } from '@sports-alliance/sports-lib';
+  DataMuscleMass, DataBodyWater, DataBoneMass, DataBloodOxygenSaturation, DistanceUnits, PaceUnits, SpeedUnits, WeightUnits } from '@sports-alliance/sports-lib';
 import { MANUAL_HEALTH_METRIC_IDS, MANUAL_HEALTH_VALUE_MAXIMUMS } from '@shared/manual-health';
 import { formatCanonicalHealthMetricSportsLibValue } from '@shared/sports-lib-health-data';
 import { getDefaultUserUnitSettings } from '@shared/unit-aware-display';
@@ -212,6 +212,53 @@ describe('ManualHealthMeasurementDialogComponent', () => {
     expect(Number(fixture.nativeElement.querySelector('input[type="number"]').value)).toBe(80);
     component.submit();
     expect(dialogRef.close).toHaveBeenCalledWith(expect.objectContaining({ canonicalValue: 80 }));
+  });
+
+  it('converts pound input to canonical kilograms and preserves the exact stored value on unchanged edit', async () => {
+    const unitSettings = { ...getDefaultUserUnitSettings(), weightUnits: WeightUnits.Pounds };
+    const component = await create({
+      metricId: HEALTH_METRIC_IDS.BodyWeight,
+      unitSettings,
+      existing: { canonicalValue: 80.123, observedAtMs: Date.UTC(2026, 0, 1, 10), timezoneOffsetSeconds: 0 },
+    });
+    fixture.detectChanges();
+    expect(component.valueUnit()).toBe('lb');
+    expect(component.form.controls.canonicalValue.value).toBe(176.6);
+    component.submit();
+    expect(dialogRef.close).toHaveBeenCalledWith(expect.objectContaining({ canonicalValue: 80.123 }));
+
+    dialogRef.close.mockClear();
+    component.form.controls.canonicalValue.setValue(180);
+    component.submit();
+    expect(dialogRef.close).toHaveBeenCalledWith(expect.objectContaining({
+      canonicalValue: DataWeight.fromDisplayValue(180, WeightUnits.Pounds).getValue(),
+    }));
+    component.form.controls.canonicalValue.setValue(2204.7);
+    expect(component.form.controls.canonicalValue.hasError('max')).toBe(true);
+  });
+
+  it('saves a new pound weigh-in in kilograms without changing other measurement units', async () => {
+    const component = await create({
+      metricId: HEALTH_METRIC_IDS.BodyWeight,
+      unitSettings: { ...getDefaultUserUnitSettings(), weightUnits: WeightUnits.Pounds },
+    });
+    component.form.patchValue({ canonicalValue: 150, observedDate: '2026-06-01', observedTime: '08:30' });
+    component.submit();
+    expect(dialogRef.close).toHaveBeenCalledWith(expect.objectContaining({
+      canonicalValue: DataWeight.fromDisplayValue(150, WeightUnits.Pounds).getValue(),
+    }));
+  });
+
+  it.each([WeightUnits.Kilograms, WeightUnits.Pounds])('keeps tiny existing weigh-ins editable in %s', async weightUnits => {
+    const component = await create({
+      metricId: HEALTH_METRIC_IDS.BodyWeight,
+      unitSettings: { ...getDefaultUserUnitSettings(), weightUnits },
+      existing: { canonicalValue: 0.01, observedAtMs: Date.UTC(2026, 0, 1, 10), timezoneOffsetSeconds: 0 },
+    });
+    expect(component.form.controls.canonicalValue.value).toBeGreaterThan(0);
+    expect(component.form.controls.canonicalValue.valid).toBe(true);
+    component.submit();
+    expect(dialogRef.close).toHaveBeenCalledWith(expect.objectContaining({ canonicalValue: 0.01 }));
   });
 
   it('preserves an existing measurement timezone while editing VO2 context and method', async () => {

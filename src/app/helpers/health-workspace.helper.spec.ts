@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { DistanceUnits } from '@sports-alliance/sports-lib';
+import { DistanceUnits, WeightUnits } from '@sports-alliance/sports-lib';
 import {
   HEALTH_COVERAGE_STATUSES,
   HEALTH_METRIC_CATALOG,
@@ -972,6 +972,10 @@ describe('Health workspace helpers', () => {
       valueText: '72.0 kg',
       observedText: 'Aug 2, 2026',
     });
+    expect(selectWorkoutWeightContextFallback(
+      corosOnly, [workout], [HEALTH_PROVIDERS.COROSAPI],
+      normalizeUserUnitSettings({ weightUnits: WeightUnits.Pounds }),
+    )?.valueText).toBe('158.7 lb');
     expect(JSON.stringify(fallback)).not.toContain('opaque-workout-account');
   });
 

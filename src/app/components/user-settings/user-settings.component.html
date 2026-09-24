@@ -323,6 +323,16 @@
                   </mat-form-field>
 
                   <mat-form-field appearance="outline" subscriptSizing="dynamic">
+                    <mat-label>Weight</mat-label>
+                    <mat-select formControlName="weightUnitsToUse" (selectionChange)="onWeightUnitChange()">
+                      @for (unit of weightUnitOptions; track unit.value) {
+                      <mat-option [value]="unit.value">{{ unit.label }}</mat-option>
+                      }
+                    </mat-select>
+                    <mat-hint>Health and Training body weight; independent of distance.</mat-hint>
+                  </mat-form-field>
+
+                  <mat-form-field appearance="outline" subscriptSizing="dynamic">
                     <mat-label>Speed</mat-label>
                     <mat-select formControlName="speedUnitsToUse" multiple>
                       @for (unit of speedUnits | keyvalue; track unit.key) {

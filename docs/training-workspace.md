@@ -136,11 +136,25 @@ presentation-only optimizations with no Training calculation, planning, or MCP c
 Current compatibility baseline:
 
 - Quantified Self derived-metric schema: `19`
-- `@sports-alliance/sports-lib`: `21.2.5`
+- `@sports-alliance/sports-lib`: `21.3.0`
 - Training sport groups: eight modeled benchmark families plus data-backed Fitness & Gym and Other training volume groups
 - Imported FTP/VO2 capacity disciplines: Running and Cycling only
 - Rolling power-system capacity: every exact canonical activity type with usable persisted power curves
 - Calendar boundaries: UTC unless a section explicitly says otherwise
+
+Sports Lib 21.3.0 adds an independent `weightUnits` preference. Quantified Self defaults legacy accounts to kg,
+lets the athlete choose kg or lb in Settings → Units, and uses Sports Lib `DataWeight` for body-weight display
+and for converting manual lb weigh-ins back to canonical kg. Future planned external-load displays can use the same
+adapter when #740 is implemented. A distance preset never changes
+the weight choice. Health observations, Training trend points, MCP body-measurement values, and future strength
+external loads remain stored as kg; editing an unchanged rounded lb value preserves its original kg value.
+This upgrade changes no persisted Sports Lib metric JSON, derived-metric schema, planned-workout recipe, or MCP
+wire contract. It needs no event/route reparse, Training recomputation, or Firestore migration. The version-based
+reparse target does advance to 21.3.0, so do not enable a runtime reparse scan merely for this display/input change.
+The package adds about 5.17 kB to the production total-script output; production and beta `allScript` budgets
+move together from 12,320 to 12,328 kB while the 1,440 kB initial budget remains unchanged.
+Exercise-aware strength authoring and its external-load UI remain dependent on #740; #743 tracks the remaining
+strength acceptance work.
 
 ## Product Contract
 
@@ -430,8 +444,10 @@ their pace-target inputs independently follow the first selected `paceUnits` pre
 captures normalized units when opened so a settings update in another tab cannot reinterpret an unsaved number. Existing
 metre and m/s values display at readable precision but retain their exact canonical values on an unchanged edit;
 newly typed values convert to canonical metres and m/s before the existing schedule mutation. One international mile
-is 1609.344 metres. Pace inputs require the Faster value to be no greater than the Slower value; the editor does not
-silently reorder an inverted range. Tiny positive canonical values remain positive when displayed for editing rather
+is 1609.344 metres. Sports Lib 21.3 supplies the owner-unit display formatters, but no matching inverse editor API
+for distance, swim distance, or pace; QS keeps exact metre/yard/mile input conversion rather than using a rounded
+display value or Sports Lib's approximate metres-to-miles helper for canonical storage. Pace inputs require the Faster
+value to be no greater than the Slower value; the editor does not silently reorder an inverted range. Tiny positive canonical values remain positive when displayed for editing rather
 than rounding to zero. No recipe field, schedule history or stored workout requires migration. Garmin and Suunto consume
 canonical metres directly; COROS applies its existing documented integer-metre rounding and degradation approval;
 Wahoo's dated Workout delivery still rejects distance-ended recipes because its required duration is unknown.
@@ -3434,7 +3450,7 @@ sleep duration, score, HRV, and sleep-heart-rate aggregates it already consumes;
 changes. Existing normalized Sleep documents use the dedicated Health/Sleep scalar migration, not an activity reparse,
 and do not require a Training snapshot rebuild solely for this storage transition.
 
-The repository now pins Sports Lib `21.2.5`, and Functions pins FIT parser `6.1.2`. The 21.0.3 package-emission transition
+At the #727 package transition, the repository pinned Sports Lib `21.2.5`, and Functions pinned FIT parser `6.1.2`. The 21.0.3 package-emission transition
 remains module-preserving ESM and per-module CommonJS. Sports Lib 21.2.1 added nonnumeric, package-root FIT
 workout-reference classes and the bounded `readFITWorkoutReferences(...)` metadata reader. Sports Lib 21.2.5 keeps those
 public classes, return shapes, numeric values, serialized event/route data, and representative FIT course output unchanged

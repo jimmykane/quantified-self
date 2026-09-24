@@ -16,6 +16,7 @@ import {
     DataStamina,
     DataStrokeRate,
     DistanceUnits,
+    WeightUnits,
     TileTypes,
     TimeIntervals
 } from '@sports-alliance/sports-lib';
@@ -39,6 +40,16 @@ describe('AppUserUtilities', () => {
 
     it('should default chart fill opacity to zero', () => {
         expect(AppUserUtilities.getDefaultChartFillOpacity()).toBe(0);
+    });
+
+    it('defaults and preserves weight units independently of distance units', () => {
+        expect(AppUserUtilities.getDefaultUserUnitSettings().weightUnits).toBe(WeightUnits.Kilograms);
+        const legacy = AppUserUtilities.fillMissingAppSettings({ settings: { unitSettings: { distanceUnits: DistanceUnits.Miles } } } as any);
+        expect(legacy.unitSettings.weightUnits).toBe(WeightUnits.Kilograms);
+        const pounds = AppUserUtilities.fillMissingAppSettings({ settings: { unitSettings: { distanceUnits: DistanceUnits.Kilometers, weightUnits: WeightUnits.Pounds } } } as any);
+        expect(pounds.unitSettings.weightUnits).toBe(WeightUnits.Pounds);
+        const invalid = AppUserUtilities.fillMissingAppSettings({ settings: { unitSettings: { weightUnits: 'stones' } } } as any);
+        expect(invalid.unitSettings.weightUnits).toBe(WeightUnits.Kilograms);
     });
 
     it('should ignore legacy chart fill opacity until the new version marker is set', () => {

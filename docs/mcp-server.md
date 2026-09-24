@@ -176,6 +176,12 @@ consent, enum or provider action, and no event/activity/provider identifier ente
 authorized `get_planned_workout_completion` read remains the only Training MCP surface that reports the completion
 provider and optional opaque activity reference.
 
+Sports Lib 21.3.0 adds an optional kg/lb display preference, not a new MCP metric or wire unit. Existing
+`measurements:read` body-weight results and Training-derived `weightKg` fields remain canonical kilograms;
+the Health UI display may use pounds when selected. No tool, schema, scope, consent, provider action,
+or bundled skill changes. Planned external-load authoring and its MCP details remain part of #740/#743, not this
+dependency adoption.
+
 Garmin schedule-only remote repair also preserves the registered MCP contract. The existing sanitized delivery status
 already stops a confirmed missing copy from counting as synced and represents restoration as a non-success outcome.
 Artifact-specific inspection authority, retained provider IDs and repair evidence remain private; MCP performs no live

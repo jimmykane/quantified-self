@@ -21,7 +21,8 @@ import {
   type ManualVo2Method,
 } from '@shared/manual-health';
 import { formatCanonicalHealthMetricSportsLibValue } from '@shared/sports-lib-health-data';
-import type { UserUnitSettingsInterface } from '@sports-alliance/sports-lib';
+import { DataWeight, WeightUnits, type UserUnitSettingsInterface } from '@sports-alliance/sports-lib';
+import { normalizeUserUnitSettings } from '@shared/unit-aware-display';
 import { APP_STORAGE } from '../../services/storage/app.storage.token';
 import { AppHapticsService } from '../../services/app.haptics.service';
 
@@ -85,6 +86,7 @@ export class ManualHealthMeasurementDialogComponent {
     { id: HEALTH_METRIC_IDS.BloodOxygenSaturation, label: 'Blood oxygen (SpO₂)', description: 'Record a blood oxygen saturation reading and the time it was measured.' },
   ] as const;
   readonly selectedMetric = signal(this.data.metricId);
+  private readonly weightUnits = normalizeUserUnitSettings(this.data.unitSettings).weightUnits ?? WeightUnits.Kilograms;
   private readonly selectedOption = computed(() => this.metricOptions.find(option => option.id === this.selectedMetric())!);
   readonly isVo2 = computed(() => this.selectedMetric() === HEALTH_METRIC_IDS.Vo2Max);
   readonly isBloodPressure = computed(() => this.selectedMetric() === HEALTH_METRIC_IDS.BloodPressureSystolic);
@@ -97,6 +99,9 @@ export class ManualHealthMeasurementDialogComponent {
   readonly diastolicUnit = formatCanonicalHealthMetricSportsLibValue(HEALTH_METRIC_IDS.BloodPressureDiastolic, 1, this.data.unitSettings)?.unit || '';
   readonly pulseUnit = formatCanonicalHealthMetricSportsLibValue(HEALTH_METRIC_IDS.PulseRate, 1, this.data.unitSettings)?.unit || '';
   readonly maximumValue = computed(() => MANUAL_HEALTH_VALUE_MAXIMUMS[this.selectedMetric()]);
+  readonly maximumInputValue = computed(() => this.selectedMetric() === HEALTH_METRIC_IDS.BodyWeight
+    ? Number(formatCanonicalHealthMetricSportsLibValue(HEALTH_METRIC_IDS.BodyWeight, this.maximumValue(), this.data.unitSettings)?.value)
+    : this.maximumValue());
   readonly pressureMaximum = MANUAL_HEALTH_VALUE_MAXIMUMS[HEALTH_METRIC_IDS.BloodPressureDiastolic];
   readonly pulseMaximum = MANUAL_HEALTH_VALUE_MAXIMUMS[HEALTH_METRIC_IDS.PulseRate];
   readonly valueRangeHint = computed(() => measurementRangeHint(this.selectedMetric(), this.data.unitSettings));
@@ -108,10 +113,16 @@ export class ManualHealthMeasurementDialogComponent {
   readonly todayDate = latestEditableCalendarDate(this.data.existing);
   private readonly initialObservedDate = measurementDateValue(this.data.existing);
   private readonly initialObservedTime = measurementTimeValue(this.data.existing);
+  // The form control is a display-unit draft; the result remains canonical.
+  private readonly initialWeightDisplayValue = this.data.existing && this.data.metricId === HEALTH_METRIC_IDS.BodyWeight
+    ? this.weightUnits === WeightUnits.Kilograms
+      ? this.data.existing.canonicalValue
+      : this.existingWeightInPounds(this.data.existing.canonicalValue)
+    : null;
   readonly form = this.formBuilder.nonNullable.group({
     canonicalValue: [
-      this.data.existing?.canonicalValue ?? null as number | null,
-      [Validators.required, positiveFiniteMeasurement, Validators.max(this.maximumValue())],
+      this.initialWeightDisplayValue ?? this.data.existing?.canonicalValue ?? null as number | null,
+      [Validators.required, positiveFiniteMeasurement, Validators.max(this.maximumInputValue())],
     ],
     diastolicValue: [this.data.existing?.diastolicValue ?? null as number | null,
       this.isBloodPressure() ? [Validators.required, positiveFiniteMeasurement, Validators.max(this.pressureMaximum)] : []],
@@ -141,7 +152,7 @@ export class ManualHealthMeasurementDialogComponent {
     this.selectedMetric.set(metricId);
     this.submitError.set(null);
     this.form.controls.canonicalValue.setValidators([
-      Validators.required, positiveFiniteMeasurement, Validators.max(this.maximumValue()),
+      Validators.required, positiveFiniteMeasurement, Validators.max(this.maximumInputValue()),
     ]);
     this.form.controls.diastolicValue.setValidators(this.isBloodPressure()
       ? [Validators.required, positiveFiniteMeasurement, Validators.max(this.pressureMaximum)] : []);
@@ -182,7 +193,12 @@ export class ManualHealthMeasurementDialogComponent {
       this.haptics.error();
       return;
     }
-    const canonicalValue = Number(value.canonicalValue);
+    const inputValue = Number(value.canonicalValue);
+    const canonicalValue = this.selectedMetric() === HEALTH_METRIC_IDS.BodyWeight
+      ? this.data.existing && inputValue === this.initialWeightDisplayValue
+        ? this.data.existing.canonicalValue
+        : DataWeight.fromDisplayValue(inputValue, this.weightUnits).getValue()
+      : inputValue;
     if (!Number.isFinite(canonicalValue) || canonicalValue <= 0 || canonicalValue > this.maximumValue()) {
       this.submitError.set(`Enter a ${this.valueLabel().toLowerCase()} within the supported range.`);
       this.haptics.error();
@@ -225,6 +241,14 @@ export class ManualHealthMeasurementDialogComponent {
       case 'field_test': return 'Field test';
       case 'other_estimate': return 'Other estimate';
     }
+  }
+
+  private existingWeightInPounds(kilograms: number): number {
+    const rounded = Number(formatCanonicalHealthMetricSportsLibValue(
+      HEALTH_METRIC_IDS.BodyWeight, kilograms, this.data.unitSettings,
+    )?.value);
+    // Sports Lib's one-decimal display can round a valid tiny reading to zero.
+    return rounded > 0 ? rounded : kilograms / DataWeight.fromDisplayValue(1, WeightUnits.Pounds).getValue();
   }
 
   private initialVo2Context(): ManualVo2Context {

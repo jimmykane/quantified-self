@@ -15,6 +15,7 @@ import {
   SwimPaceUnits,
   type UserUnitSettingsInterface,
   VerticalSpeedUnits,
+  WeightUnits,
 } from '@sports-alliance/sports-lib';
 
 const SECONDS_PER_DAY = 24 * 60 * 60;
@@ -143,6 +144,7 @@ export function getDefaultUserUnitSettings(): UserUnitSettingsInterface {
     swimPaceUnits: [SwimPaceUnits.MinutesPer100Meter],
     verticalSpeedUnits: [VerticalSpeedUnits.MetersPerSecond],
     distanceUnits: DistanceUnits.Kilometers,
+    weightUnits: WeightUnits.Kilograms,
     startOfTheWeek: DaysOfTheWeek.Monday,
   };
 }
@@ -190,6 +192,11 @@ export function normalizeUserUnitSettings(raw: unknown): UserUnitSettingsInterfa
     distanceUnits: normalizeDistanceUnits(
       rawSettings.distanceUnits,
       defaults.distanceUnits ?? DistanceUnits.Kilometers,
+    ),
+    weightUnits: normalizeEnumValue(
+      rawSettings.weightUnits,
+      getValidEnumValues(WeightUnits),
+      WeightUnits.Kilograms,
     ),
     startOfTheWeek,
   };
