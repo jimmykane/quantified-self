@@ -60,4 +60,28 @@ describe('MCP focused content-write inputs', () => {
       expect(MCP_CONTENT_WRITE_INPUTS.update_timeline_note.safeParse(incomplete).success).toBe(false);
     }
   });
+
+  it('bounds event title and description edits without normalizing authored whitespace', () => {
+    expect(MCP_CONTENT_WRITE_INPUTS.update_event_title.parse({
+      activityRef: 'opaque-activity', expectedTitle: null, title: '  Hill repeats  ',
+    }).title).toBe('  Hill repeats  ');
+    expect(MCP_CONTENT_WRITE_INPUTS.update_event_description.safeParse({
+      activityRef: 'opaque-activity', expectedDescription: null,
+      description: 'Windy descent\nFelt good.',
+    }).success).toBe(true);
+    expect(MCP_CONTENT_WRITE_INPUTS.update_event_title.safeParse({
+      activityRef: 'opaque-activity', expectedTitle: null, title: 'Bad\nname',
+    }).success).toBe(false);
+    expect(MCP_CONTENT_WRITE_INPUTS.update_event_description.safeParse({
+      activityRef: 'opaque-activity', expectedDescription: null,
+      description: 'x'.repeat(65_537),
+    }).success).toBe(false);
+    expect(MCP_CONTENT_WRITE_INPUTS.update_event_description.safeParse({
+      activityRef: 'opaque-activity', expectedDescription: null,
+      description: '😀'.repeat(17_000),
+    }).success).toBe(false);
+    expect(MCP_CONTENT_WRITE_INPUTS.update_event_title.safeParse({
+      activityRef: 'opaque-activity', expectedTitle: null, title: 'Run', uid: 'attacker',
+    }).success).toBe(false);
+  });
 });

@@ -155,7 +155,9 @@ default-off **Timeline note changes** child choice requires that read access and
 adds `query_activities_with_tags` plus one local prepare-only complete-replacement tool. The public MCP write tools are
 never exposed to Gemini. Before preparing an update or deletion, runtime code requires the exact note reference and
 revision from a current read; before preparing a tag replacement it requires the exact activity reference and current
-tag list. Stored titles, tags, notes, and other account data cannot authorize a change.
+tag list. Stored titles, tags, notes, and other account data cannot authorize a change. The external MCP event-title
+and event-description tools are not registered for first-party Assistant conversations: **Activity tag changes** does
+not grant either edit, and private description access remains a separate decision.
 
 Gemini may prepare at most one ten-minute content proposal per response. The app identifies the activity/date or note
 title and shows exact tag before/after values or note fields, including a clear permanent-deletion warning. Only an
