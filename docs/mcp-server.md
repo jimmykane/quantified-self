@@ -153,15 +153,19 @@ explicit folds cover the QS running and cycling Training profiles, including ind
 velomobile, Enduro MTB and Downhill Cycling. Every non-base profile remains an approval-bound degradation; clients must
 not rewrite the authored sport just to satisfy a provider.
 
-Manual pool and open-water swimming support likewise leaves the MCP wire contract unchanged: the existing canonical sport
-enum already accepts `Swimming` and `Open Water Swimming`, and planned-workout read summaries format both swim profiles'
-distances in metres and pace using the owner's /100 m or /100 yd setting. The later #733 recipe adds an optional
-canonical pool length for pool swimming, but the registered v1 recipe remains frozen: its existing read omits that new
-field while continuing to return the workout and compatibility assessment. It cannot author the pool setting. Additive
-pool-length read/authoring coverage is tracked in #734 under #583; no existing schema, mutation kind, tool, scope,
-consent, provider action, or private delivery evidence changes. Existing strict proposal/confirmation checks and
-provider compatibility assessment
-still govern writes; Garmin accepts compatible, explicitly consented pool-swim delivery after owner-account cloud CRUD/readback proof (not watch receipt), Wahoo rejects swimming delivery, COROS accepts only target-free pool recipes at its backend
+Manual pool and open-water swimming use the exact canonical sport strings `Swimming` and `Open Water Swimming`.
+Planned-workout summaries format swim distances in metres and pace with the owner's /100 m or /100 yd setting.
+The #733 recipe's optional physical pool length is independent of a distance step. The registered v1 read and write
+schemas stay frozen and omit it. The additive `get_planned_workout_v2` read returns an authored
+`poolLength: { meters, presentation }` for pool swims under the existing `training-plans:read` grant, without inferring
+one from step distance. `preview_planned_workout_v2_change` accepts one complete non-strength create/update with optional
+pool length under the existing parent read plus `training-plans:write` grants. It shares the owner-, connection-,
+grant-, revision- and expiry-bound proposal and approval-gated `apply_training_changes` path; it has no provider
+action. A registered v1 edit of a workout with selected pool length fails rather than clearing that setting. Invalid
+or non-pool lengths fail strict validation, and older pool recipes remain readable with length absent. These additive
+tools are the local implementation of #734 under #583; they need deployment and client catalog refresh before use.
+No existing schema, mutation kind, scope, consent, provider action or private delivery evidence changes. Existing
+provider compatibility assessment still governs writes; Garmin accepts compatible, explicitly consented pool-swim delivery after owner-account cloud CRUD/readback proof (not watch receipt), Wahoo rejects swimming delivery, COROS accepts only target-free pool recipes at its backend
 while new browser Send/sync actions remain unavailable, and Suunto maps pool and open-water profiles to distinct Guide
 activity recommendations. Owner read fixtures cover both swim sport strings and metre-based steps; no widened consent or
 provider action is implied by this read-only presentation change.

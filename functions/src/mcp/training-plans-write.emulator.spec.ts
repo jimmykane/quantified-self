@@ -6,7 +6,7 @@ import type { DeliveryRuntime } from '../training-plans/delivery/contracts';
 import { FakeTrainingTransport } from '../training-plans/delivery/test-support/fake-transport';
 import { parseStrengthWorkoutDetailsV1 } from '../../../shared/strength-workout';
 import { applyTrainingChanges, previewCreatePlannedWorkout, previewTrainingChanges,
-  previewStrengthWorkoutChange,
+  previewStrengthWorkoutChange, previewPlannedWorkoutV2Change,
   type TrainingWriteDependencies } from './training-plans-write.service';
 import { TRAINING_DELIVERY_WRITE_SCOPE, TRAINING_PLANS_SCOPE, TRAINING_PLANS_WRITE_SCOPE } from './training-plans.schemas';
 
@@ -96,6 +96,39 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Training MCP write propos
     expect(applied.createdReferences).toEqual([expect.objectContaining({ localKey: 'lift', kind: 'workout' })]);
     await expect(applyTrainingChanges({ uid, connectionId: 'connection', scopes,
       arguments: { proposalRef: preview.proposalRef, permissionMode: 'schedule' } }, deps)).resolves.toEqual(applied);
+  });
+
+  it('creates and edits a selected pool length through v2 without a v1 edit silently clearing it', async () => {
+    const swim = { version: 1 as const, sport: ActivityTypes.Swimming,
+      poolLength: { meters: 25, presentation: 'meters' as const },
+      nodes: [{ id: 'length', kind: 'step' as const, purpose: 'work' as const,
+        ending: { kind: 'distance' as const, meters: 100 }, targets: [] }] };
+    const createdPreview = await previewPlannedWorkoutV2Change({ uid, connectionId: 'connection', scopes,
+      arguments: { expectedScheduleRevision: 1, change: { kind: 'create-workout', localKey: 'swim', plan: null,
+        localDate: '2026-09-18', title: '25 m pool', structure: swim } } }, deps);
+    const created = await applyTrainingChanges({ uid, connectionId: 'connection', scopes,
+      arguments: { proposalRef: createdPreview.proposalRef, permissionMode: 'schedule' } }, deps);
+    const workout = (await db.collection('users').doc(uid).collection('scheduledWorkouts').get()).docs[0];
+    expect(workout.get('structure.poolLength')).toEqual(swim.poolLength);
+    const workoutRef = created.createdReferences[0].reference;
+    const { poolLength: _selectedPoolLength, ...legacySwim } = swim;
+    await expect(previewTrainingChanges({ uid, connectionId: 'connection', scopes,
+      arguments: { expectedScheduleRevision: created.scheduleRevision, changes: [{ kind: 'update-workout',
+        workout: { ref: workoutRef }, plan: null, localDate: '2026-09-18', title: 'Legacy edit',
+        structure: legacySwim }] } }, deps)).rejects.toThrow('without silently clearing');
+    const updateInput = { uid, connectionId: 'connection', scopes,
+      arguments: { expectedScheduleRevision: created.scheduleRevision, change: { kind: 'update-workout',
+        workout: { ref: workoutRef }, plan: null, localDate: '2026-09-19', title: '25 yd pool',
+        structure: { ...swim, poolLength: { meters: 22.86, presentation: 'yards' } } } } };
+    const updatedPreview = await previewPlannedWorkoutV2Change(updateInput, deps);
+    const updated = await applyTrainingChanges({ uid, connectionId: 'connection', scopes,
+      arguments: { proposalRef: updatedPreview.proposalRef, permissionMode: 'schedule' } }, deps);
+    expect((await workout.ref.get()).get('structure.poolLength')).toEqual({ meters: 22.86, presentation: 'yards' });
+    await expect(applyTrainingChanges({ uid, connectionId: 'connection', scopes,
+      arguments: { proposalRef: updatedPreview.proposalRef, permissionMode: 'schedule' } }, deps)).resolves.toEqual(updated);
+    await expect(previewPlannedWorkoutV2Change(updateInput, deps)).rejects.toThrow('schedule changed');
+    await expect(previewPlannedWorkoutV2Change({ ...updateInput,
+      scopes: [TRAINING_PLANS_SCOPE] }, deps)).rejects.toThrow('permission');
   });
 
   it('applies compatible authored changes together while preserving each revision', async () => {

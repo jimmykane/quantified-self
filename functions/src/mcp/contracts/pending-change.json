@@ -1,7 +1,7 @@
 {
   "formatVersion": 1,
-  "candidateSha256": "010b9ea47d092ea1a01e246de383b25a72c4ad7d823eb3e5eb663941543a3c4c",
+  "candidateSha256": "5965ccb5e8a28e2032cf9e8f8fc9e9014d3f6fa7624138ac14fecce1a70ad53b",
   "lifecycleAction": "developer-refresh",
-  "summary": "Retain prior Training, Health, Timeline, activity, OAuth and PKCE changes. Add event title/description edits under existing activity permissions and Strength Training details read/preview under existing Training permissions. Preserve dependent scopes, exact-current-value checks, benchmark exclusion, host-controlled approval and strict outputs. The registered v1 recipe stays a summary; strength writes require approval-gated apply. Refresh the client catalog and bundled guidance.",
+  "summary": "Retain prior Training, Health, Timeline, activity, OAuth and PKCE changes. Add event title/description edits, Strength Training details, and pool-length workout read/preview under existing permissions. Preserve dependent scopes, current-value checks, benchmark exclusion, native approval and strict outputs. Registered v1 recipe schemas stay frozen; focused strength and pool-length writes use approval-gated apply. Refresh the client catalog and bundled guidance.",
   "rescanRequired": true
 }

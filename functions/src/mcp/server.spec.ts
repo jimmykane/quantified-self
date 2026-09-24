@@ -494,6 +494,12 @@ describe('MCP HTTP scope enforcement', () => {
     expect(requiredScopesForRequest({ method: 'tools/call', params: {
       name: 'preview_strength_workout_change', arguments: { expectedScheduleRevision: 1 },
     } })).toEqual([MCP_OAUTH_SCOPES.TrainingPlansRead, MCP_OAUTH_SCOPES.TrainingPlansWrite]);
+    expect(requiredScopesForRequest({ method: 'tools/call', params: {
+      name: 'get_planned_workout_v2', arguments: { workoutRef: 'opaque' },
+    } })).toEqual([MCP_OAUTH_SCOPES.TrainingPlansRead]);
+    expect(requiredScopesForRequest({ method: 'tools/call', params: {
+      name: 'preview_planned_workout_v2_change', arguments: { expectedScheduleRevision: 1 },
+    } })).toEqual([MCP_OAUTH_SCOPES.TrainingPlansRead, MCP_OAUTH_SCOPES.TrainingPlansWrite]);
     expect(requiredScopesForRequest({ method: 'tools/call', params: { name: 'preview_training_changes', arguments: {
       expectedScheduleRevision: 1, changes: [{ kind: 'rename-plan' }],
     } } })).toEqual([MCP_OAUTH_SCOPES.TrainingPlansRead, MCP_OAUTH_SCOPES.TrainingPlansWrite]);
@@ -829,12 +835,14 @@ describe('MCP HTTP scope enforcement', () => {
       'get_planned_workout',
       'get_planned_workout_completion',
       'get_planned_workout_completions',
+      'get_planned_workout_v2',
       'get_strength_workout_details',
       'get_training_plan',
       'get_training_sync_status',
       'list_activity_types',
       'list_training_plans',
       'preview_create_planned_workout',
+      'preview_planned_workout_v2_change',
       'preview_strength_workout_change',
       'preview_training_changes',
       'query_planned_workouts',
@@ -863,7 +871,9 @@ describe('MCP HTTP scope enforcement', () => {
       MCP_OAUTH_SCOPES.TrainingPlansRead,
       MCP_OAUTH_SCOPES.TrainingPlansWrite,
     ]);
-    expect(writeInstructions).toContain('Construct non-strength workout recipes only from the advertised v1 schema');
+    expect(writeInstructions).toContain('Construct non-strength workout recipes using stable unique node IDs');
+    expect(writeInstructions).toContain('use get_planned_workout_v2 to read an authored pool length');
+    expect(writeInstructions).toContain('use preview_planned_workout_v2_change for one create/update');
     expect(writeInstructions).toContain('query_planned_workouts_by_date');
     expect(writeInstructions).toContain('get_planned_workout_completions');
     expect(writeInstructions).toContain('local mapping assessment, not a live provider/account check');

@@ -451,9 +451,14 @@ value to be no greater than the Slower value; the editor does not silently reord
 than rounding to zero. No recipe field, schedule history or stored workout requires migration. Garmin and Suunto consume
 canonical metres directly; COROS applies its existing documented integer-metre rounding and degradation approval;
 Wahoo's dated Workout delivery still rejects distance-ended recipes because its required duration is unknown.
-MCP impact: no tool, scope, schema, consent, projection or proposal shape changes. Existing MCP planning reads/writes
-already use canonical metres and m/s plus Sports Lib owner-unit formatting, and provider actions still use the same
-saved recipe and approval path.
+MCP impact: #734 adds `get_planned_workout_v2` and `preview_planned_workout_v2_change` while preserving registered v1
+schemas. The read uses existing Training plans consent and includes only an authored pool length in canonical metres
+plus its metre/yard presentation; a distance step never implies pool size. The focused create/update preview uses
+the existing Training plans write grant and revision-bound, approval-gated proposal/apply flow without provider
+delivery. A v1 edit of a selected-length swim is rejected rather than silently dropping the pool setting. Existing
+pool swims without an authored length remain valid; open-water recipes cannot carry one. No new scope, consent,
+provider action, storage migration or recorded-event metric is introduced. Deployment and client catalog refresh
+are separate from local code verification.
 The shared contract remains broader so saved v1 data does
 not need a redesign when later UI slices are enabled.
 
@@ -1524,8 +1529,8 @@ support it. The owner-account cloud lifecycle proof on 23 September 2026 enabled
 explicitly consenting Garmin connections: create, repeat-count edit, date move, positive retained-record checks and
 Stop/withdrawal completed without retries. The checked workout and schedule were cloud records, not proof of Garmin
 app/watch download or completed-activity correlation. Running/cycling admission is unchanged. The frozen registered MCP
-v1 recipe omits the new field in its legacy workout read; #734 tracks additive
-MCP read/authoring coverage without changing existing tool schemas.
+v1 recipe omits the new field in its legacy workout read. #734 adds a separate full-workout read and focused
+create/update preview for authored pool length without changing existing tool schemas; see the MCP boundary above.
 
 `delivery/garmin/` binds the existing serializer to Training API V2. It creates workout content using the partner
 contract's exact `POST /workoutportal/workout/v2` path; GET/PUT/DELETE use `/training-api/workout/v2/{workoutId}`.

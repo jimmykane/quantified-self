@@ -448,6 +448,11 @@ const trainingReadFixtures = {
  query_planned_workouts: { scheduleRevision: 1, scanComplete: true, recordsScanned: 1, limitsReached: [], nextCursor: null, startDate: '2026-07-01', endDate: '2026-07-02', scope: 'calendar', workouts: [{ workoutRef: 'opaque-workout-reference', planRef: null, title: 'Easy run', localDate: '2026-07-01', lifecycle: 'planned', revision: 1, createdAtMs: 1, updatedAtMs: 1 }] },
  query_planned_workouts_by_date: { scheduleRevision: 1, scanComplete: true, recordsScanned: 1, limitsReached: [], nextCursor: null, startDate: '2026-07-01', endDate: '2026-07-02', scope: 'calendar', workouts: [{ workoutRef: 'opaque-workout-reference', planRef: null, title: 'Easy run', localDate: '2026-07-01', lifecycle: 'planned', revision: 1, createdAtMs: 1, updatedAtMs: 1 }] },
  get_planned_workout: { scheduleRevision: 1, workout: { ...{ workoutRef: 'opaque-workout-reference', planRef: null, title: 'Easy run', localDate: '2026-07-01', lifecycle: 'planned', revision: 1, createdAtMs: 1, updatedAtMs: 1 }, structure: { version: 1, sport: ActivityTypes.Running, nodes: [{kind:'step', id:'step',purpose:'work',ending:{kind:'manual'},targets:[], note:'Untrusted text'}] }, displaySteps: [{nodeId:'step',text:'Work · Manual transition'}] } },
+ get_planned_workout_v2: { scheduleRevision: 1, workout: { workoutRef: 'opaque-workout-reference', planRef: null,
+   title: 'Pool swim', localDate: '2026-07-01', lifecycle: 'planned', revision: 1, createdAtMs: 1, updatedAtMs: 1,
+   structure: { version: 1, sport: ActivityTypes.Swimming, poolLength: { meters: 25, presentation: 'meters' },
+     nodes: [{ kind: 'step', id: 'step', purpose: 'work', ending: { kind: 'distance', meters: 1000 }, targets: [] }] },
+   displaySteps: [{ nodeId: 'step', text: 'Work · 1 km' }] } },
  get_strength_workout_details: { scheduleRevision: 1, workoutRef: 'opaque-workout-reference',
    details: { version: 1, revision: 1, exercises: [{ id: 'exercise-1', name: 'Squat',
      sets: [{ id: 'set-1', ending: { kind: 'repetitions', repetitions: 5 }, externalLoadKg: 40, restAfterSeconds: 90 }] }] } },
@@ -496,6 +501,7 @@ function createFixtureDataService(
     previewCreatePlannedWorkout: vi.fn().mockResolvedValue(trainingPreviewFixture),
     previewTrainingChanges: vi.fn().mockResolvedValue(trainingPreviewFixture),
     previewStrengthWorkoutChange: vi.fn().mockResolvedValue(trainingPreviewFixture),
+    previewPlannedWorkoutV2Change: vi.fn().mockResolvedValue(trainingPreviewFixture),
     applyTrainingChanges: vi.fn().mockResolvedValue(trainingApplyFixture),
     getActivityDescription: vi.fn().mockResolvedValue({ activityRef: 'opaque-activity-ref', description: 'Easy run. Felt tired.\nKeep this as reported context.' }),
     queryTimelineNotes: vi.fn().mockResolvedValue({
@@ -1288,6 +1294,7 @@ const successfulToolArguments: Record<
   query_planned_workouts: { startDate: '2026-07-01', endDate: '2026-07-02' },
   query_planned_workouts_by_date: { startDate: '2026-07-01', endDate: '2026-07-02' },
   get_planned_workout: { workoutRef: 'opaque-workout-reference' },
+  get_planned_workout_v2: { workoutRef: 'opaque-workout-reference' },
   get_strength_workout_details: { workoutRef: 'opaque-workout-reference' },
   get_training_sync_status: { scope: 'plan', reference: 'opaque-plan-reference' },
   get_planned_workout_completion: { workoutRef: 'opaque-workout-reference' },
@@ -1309,6 +1316,11 @@ const successfulToolArguments: Record<
     kind: 'create-workout', localKey: 'strength', plan: null, localDate: '2026-07-02', title: 'Strength',
     strength: { version: 1, exercises: [{ id: 'exercise-1', name: 'Squat', sets: [{ id: 'set-1',
       ending: { kind: 'repetitions', repetitions: 5 }, externalLoadKg: 40, restAfterSeconds: 90 }] }] },
+  } },
+  preview_planned_workout_v2_change: { expectedScheduleRevision: 1, change: {
+    kind: 'create-workout', localKey: 'pool-swim', plan: null, localDate: '2026-07-02', title: 'Pool swim',
+    structure: { version: 1, sport: 'Swimming', poolLength: { meters: 25, presentation: 'meters' },
+      nodes: [{ kind: 'step', id: 'swim', purpose: 'work', ending: { kind: 'distance', meters: 1000 }, targets: [] }] },
   } },
   apply_training_changes: { proposalRef: 'opaque-proposal-reference', permissionMode: 'schedule' },
   get_activity_description: { activityRef: 'opaque-activity-ref' },
@@ -1914,15 +1926,21 @@ describe.each<FixtureTransport>(['in-memory', 'legacy-http', 'modern-http'])('MC
     expect(Buffer.byteLength(JSON.stringify(contentWriteTools), 'utf8')).toBeLessThan(20 * 1024);
     // Keep the frozen surface's budget; each additive family has its own explicit bound.
     const planTools = tools.filter(tool => (TRAINING_READ_TOOLS as readonly string[]).includes(tool.name));
-    const planReadExtensions = planTools.filter(tool => (TRAINING_READ_EXTENSION_TOOLS as readonly string[]).includes(tool.name));
+    const planReadExtensions = planTools.filter(tool => (TRAINING_READ_EXTENSION_TOOLS as readonly string[]).includes(tool.name)
+      && tool.name !== 'get_planned_workout_v2');
+    const planReadV2 = planTools.filter(tool => tool.name === 'get_planned_workout_v2');
     const planReadCore = planTools.filter(tool => !(TRAINING_READ_EXTENSION_TOOLS as readonly string[]).includes(tool.name));
     expect(Buffer.byteLength(JSON.stringify(planReadCore), 'utf8')).toBeLessThan(32 * 1024);
     expect(Buffer.byteLength(JSON.stringify(planReadExtensions), 'utf8')).toBeLessThan(12 * 1024);
+    expect(Buffer.byteLength(JSON.stringify(planReadV2), 'utf8')).toBeLessThan(20 * 1024);
     const planWriteTools = tools.filter(tool => (TRAINING_WRITE_TOOLS as readonly string[]).includes(tool.name));
-    const planWriteExtensions = planWriteTools.filter(tool => (TRAINING_WRITE_EXTENSION_TOOLS as readonly string[]).includes(tool.name));
+    const planWriteExtensions = planWriteTools.filter(tool => (TRAINING_WRITE_EXTENSION_TOOLS as readonly string[]).includes(tool.name)
+      && tool.name !== 'preview_planned_workout_v2_change');
+    const planWriteV2 = planWriteTools.filter(tool => tool.name === 'preview_planned_workout_v2_change');
     const planWriteCore = planWriteTools.filter(tool => !(TRAINING_WRITE_EXTENSION_TOOLS as readonly string[]).includes(tool.name));
     expect(Buffer.byteLength(JSON.stringify(planWriteCore), 'utf8')).toBeLessThan(48 * 1024);
     expect(Buffer.byteLength(JSON.stringify(planWriteExtensions), 'utf8')).toBeLessThan(12 * 1024);
+    expect(Buffer.byteLength(JSON.stringify(planWriteV2), 'utf8')).toBeLessThan(20 * 1024);
     const applyTrainingChangesTool = tools.find(tool => tool.name === 'apply_training_changes');
     expect(applyTrainingChangesTool?.title).toBe('Apply previewed Training changes');
     expect(applyTrainingChangesTool?.annotations).toEqual({

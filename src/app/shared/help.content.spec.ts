@@ -56,7 +56,7 @@ describe('help.content', () => {
     expect(content).toContain('Workout delivery to Garmin, Suunto, and Wahoo is available to connected Pro members');
     expect(content).toContain('New COROS plan sync and standalone Send actions are coming soon in the app');
     expect(content).toContain('Distance-based steps are not sent because Wahoo needs a total duration');
-    expect(content).toContain('Running and cycling distance steps use your chosen kilometres or miles');
+    expect(content).toContain('Running/cycling distance follows your km or mile preference');
     expect(content).toContain('Older Wahoo connections may need **Reconnect Wahoo**');
     expect(content).toContain('Checks confirm the app-owned Plan, Workout and association; automatic missing-copy restoration is unavailable');
     expect(content).toContain('COROS workout delivery is coming soon in the app');
@@ -607,18 +607,20 @@ describe('help.content', () => {
     expect(planningSection?.content).toContain('**Completed · activity linked**');
     expect(planningSection?.content).toContain('**Sent · workout completed**');
     expect(planningSection?.content).toContain('**Past workout · previously sent**');
-    expect(planningSection?.content).toContain('authorized MCP client can also author');
-    expect(planningSection?.content).toContain('Enduro MTB, and Downhill Cycling profiles');
+    expect(planningSection?.content).toContain('Authorized MCP clients can also author');
+    expect(planningSection?.content).toContain('Enduro MTB and Downhill Cycling');
     expect(planningSection?.content).toContain('Pool swimming');
     expect(planningSection?.content).toContain('Open-water swimming');
     expect(planningSection?.content).toContain('pool length');
-    expect(planningSection?.content).toContain('keeps every authored running/cycling profile unchanged in QS');
-    expect(planningSection?.content).toContain('only its broad Running or Cycling family');
+    expect(planningSection?.content).toContain('Garmin receives broad Running/Cycling families');
+    expect(planningSection?.content).toContain('with a review warning');
     expect(planningSection?.content).toContain('only one can be active');
     expect(planningSection?.content).toContain('Move a workout between plans or between a plan and **Standalone**');
     expect(planningSection?.content).toContain('Ordinary deletion is recoverable from history');
     expect(planningSection?.content).toContain('Every visible date');
     expect(planningSection?.content).toContain('Planned workouts and completed activities are separate');
+    expect(planningSection?.content).toContain('Separate MCP read/preview tools support an authored pool length');
+    expect(planningSection?.content).toContain('A pool length only appears');
     expect(planningSection?.links).toContainEqual({
       label: 'Open Plans',
       icon: 'event_note',
