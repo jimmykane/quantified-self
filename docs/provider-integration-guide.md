@@ -414,8 +414,8 @@ Complete these shared changes early. Exhaustive unions and switch statements are
 2. Publish the required sports-lib version before making the application depend on it. Do not leave an application lockfile pointing at an unpublished package version.
 3. Add provider labels, source/destination branding, and icon keys to `shared/provider-presentation.ts`. Use source attribution for imported data and destination branding for connection or sending surfaces.
 4. Add Function names and the correct region to `shared/functions-manifest.ts`; export every deployed entry point from
-   `functions/src/full-entrypoint.ts`. Add a direct loader in `functions/src/function-target-loader.ts` only when the
-   endpoint has passed the benchmark, discovery, metadata, rollout, and rollback process in
+   `functions/src/full-entrypoint.ts`. Add a direct owner-module loader in `functions/src/function-target-loader.ts`
+   and verify its benchmark, discovery, metadata, rollout, and rollback process as described in
    [Firebase Functions target-aware entrypoint loading](functions-entrypoint-loading.md).
 5. Add the environment configuration in `functions/src/config.ts`. Match established providers by requiring credentials when the integration runs; add a feature gate only when an explicitly approved staged rollout or operational requirement needs one. Update the configuration table in `README.md` with names only—never values, secrets, or production URLs.
 6. Add approved SVG assets and register them through the existing icon/presentation path. Confirm partner brand requirements before release.

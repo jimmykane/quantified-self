@@ -33,8 +33,9 @@ The target map also isolates all 11 exports from `functions/src/admin/marketing/
 when the updated email is not part of a marketing campaign. Its existing 256 MiB memory limit is unchanged; this routing
 change needs a separately approved deployment and production memory check. The map also isolates
 `projectEventTagCatalog` directly from its event-tag trigger module, preserving its `users/{uid}/events/{eventId}`
-Firestore written-event trigger, retry behavior and 256 MiB limit. Other functions continue through the complete
-entrypoint.
+Firestore written-event trigger, retry behavior and 256 MiB limit. The four connection history endpoints load directly
+from their coordinator module, preserving the task queue, Firestore trigger, recovery schedule, callable, pacing,
+retry policy, and secret bindings. Other functions continue through the complete entrypoint.
 
 ## Verification
 
@@ -46,7 +47,7 @@ npm --prefix functions run entrypoint:check
 
 The check builds the Functions package and verifies:
 
-- discovery exposes all 165 application exports;
+- discovery exposes all 169 application exports;
 - both Firebase discovery modes ignore an inherited optimized `FUNCTION_TARGET`;
 - an unknown target exposes the same complete export set;
 - a discovered Gen 1 target retains the complete entrypoint fallback;
@@ -59,6 +60,8 @@ The check builds the Functions package and verifies:
   region and secret bindings.
 - the isolated event-tag catalog endpoint retains its Firestore trigger path and type, retry setting, region, 256 MiB
   memory limit and absence of secrets.
+- the isolated connection history endpoints retain their task pacing and retry policy, Firestore trigger, recovery
+  schedule, callable type, region, runtime limits, and secret bindings.
 
 CI runs the compiled check after the Functions build. Firebase Functions predeploy first rejects forbidden local
 credential, environment and operational files, then runs the compiled entrypoint check and secret-binding validation.
@@ -105,6 +108,11 @@ memory guarantee; keep its memory limit unchanged for rollout measurement.
 Three isolated Node 20.19.3 runs on 2026-09-25 measured 216.6 MiB median RSS, 954 ms import time and 3,108 modules
 for the complete entrypoint, versus 62.2 MiB RSS, 83 ms and 264 modules for isolated `projectEventTagCatalog`. This
 suggests about 154 MiB less local startup RSS. Production memory and retry logs must confirm the rollout.
+
+One local Node 20.19.3 cold-import run on 2026-09-25 measured 216.9 MiB RSS, 1,034 ms, and 3,118 modules for the
+complete entrypoint. Each of the four isolated connection history targets loaded the same 1,535-module coordinator
+graph in 385–399 ms and used 124.5–125.3 MiB RSS. This single-run comparison checks that direct loading avoids the
+complete graph; production memory and cold-start monitoring remain necessary before changing runtime limits.
 
 ## Adding another optimized target
 
