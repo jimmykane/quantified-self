@@ -57,9 +57,9 @@ activity on that local date before writing the existing completion and private
 reverse link. Ambiguity remains unlinked, with no similarity fallback or activity-metric rewrite. The current v1
 completion projection has one recorded source per workout: the first exact link committed wins, and a second provider
 recording remains a normal completed activity without replacing it. COROS, Wahoo and Suunto also require the current
-workout plan/date to match the retained provider occurrence before a new link; a later delivery update can make a
-rescheduled occurrence eligible. Same-account reconnects retain exact matching, while stale credentials and different
-owners do not. Provider acceptance is never watch receipt or proof every target was met.
+workout plan to match its ledger association and its date to match the retained provider copy before a new link. A later
+delivery update can make a rescheduled occurrence eligible. Same-account reconnects retain exact matching, while stale
+credentials and different owners do not. Provider acceptance is never watch receipt or proof every target was met.
 
 Remote verification (#703) reuses the Training delivery ledger, 25-item reconciliation pages, dispatcher and per-delivery
 lease. `check` is an idempotent, revision-checked command with a 15-minute coalescing window; it does not change consent.
