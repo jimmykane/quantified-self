@@ -1,7 +1,7 @@
 {
   "formatVersion": 1,
-  "candidateSha256": "010b9ea47d092ea1a01e246de383b25a72c4ad7d823eb3e5eb663941543a3c4c",
+  "candidateSha256": "372665be8237d6ebaf515fcd7b28c7f1e4fb9bb86bed39d73f74a022bcbf5b3a",
   "lifecycleAction": "developer-refresh",
-  "summary": "Retain prior Training, Health, Timeline, activity, OAuth and PKCE changes. Add event title/description edits under existing activity permissions and Strength Training details read/preview under existing Training permissions. Preserve dependent scopes, exact-current-value checks, benchmark exclusion, host-controlled approval and strict outputs. The registered v1 recipe stays a summary; strength writes require approval-gated apply. Refresh the client catalog and bundled guidance.",
+  "summary": "Retain prior Training, Health, Timeline, activity, OAuth and PKCE additions, including event edits, Strength details, and pool-length reads/previews under existing permissions. Add metrics:read preparation for one to eight Training-derived snapshots with bounded wait and retry guidance. Keep get_training_metric unchanged and preserve strict outputs, consent, native approval and provider boundaries. Refresh the registered client catalog after deployment and bundled guidance separately.",
   "rescanRequired": true
 }

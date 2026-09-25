@@ -365,6 +365,8 @@ describe('Assistant runtime', () => {
     );
     expect(ASSISTANT_SYSTEM_INSTRUCTIONS).toContain('copy-workout change in preview_training_changes');
     expect(ASSISTANT_SYSTEM_INSTRUCTIONS).toContain('Never infer a Send action or plan-sync opt-in');
+    expect(ASSISTANT_SYSTEM_INSTRUCTIONS).toContain('get_planned_workout_v2 for an authored pool-swim length');
+    expect(ASSISTANT_SYSTEM_INSTRUCTIONS).toContain('preview_planned_workout_v2_change for one pool-swim create/update');
     expect(ASSISTANT_SYSTEM_INSTRUCTIONS).toContain(
       'do not silently limit the trend to a recent year',
     );

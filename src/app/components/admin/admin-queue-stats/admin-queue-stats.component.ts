@@ -31,7 +31,7 @@ import {
 import { validateSportsLibReparseTargetUid } from '../../../../../shared/admin-queue-stats';
 import { getLocalDateTimeFormatter } from '../../../helpers/date-time-format.helper';
 
-export type AdminQueueStatsView = 'all' | 'workout' | 'activity-sync' | 'route-delivery-sync' | 'route-sync' | 'sleep-sync' | 'reparse' | 'route-reparse' | 'derived';
+export type AdminQueueStatsView = 'all' | 'workout' | 'activity-sync' | 'training-delivery' | 'route-delivery-sync' | 'route-sync' | 'sleep-sync' | 'reparse' | 'route-reparse' | 'derived';
 
 type ReparseFailureRowView = ReparseFailurePreview & {
     outcome: 'active_failure' | 'historical_failure' | 'superseded';
@@ -749,6 +749,10 @@ export class AdminQueueStatsComponent implements OnInit, OnChanges, OnDestroy, A
 
     get showActivitySyncSection(): boolean {
         return this.queueView === 'all' || this.queueView === 'activity-sync';
+    }
+
+    get showTrainingDeliverySection(): boolean {
+        return this.queueView === 'training-delivery' || (this.queueView === 'all' && !!this.stats?.trainingDelivery);
     }
 
     get showRouteDeliverySyncSection(): boolean {

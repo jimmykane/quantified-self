@@ -32,6 +32,7 @@ export const ASSISTANT_BASE_MCP_TOOL_NAMES = [
   'query_metrics',
   'list_training_metrics',
   'get_training_metric',
+  'prepare_training_metrics',
   'list_sleep_vitals',
   'list_sleep_sessions',
   'get_sleep_trend',
@@ -102,7 +103,7 @@ const ASSISTANT_TOOL_ERROR_GUIDANCE: Record<
   invalid_request: 'Use the advertised input schema. Discover canonical activity types before filtering activity data.',
   invalid_metric: 'Discover the supported metric before selecting it.',
   invalid_timezone: 'Use the current IANA time zone supplied with this request.',
-  metric_not_ready: 'Use a currently ready Training-derived metric or explain that it is not ready.',
+  metric_not_ready: 'Call prepare_training_metrics for this kind first; when it reports ready, read the snapshot.',
   detail_not_available: 'Select another available record or explain that this detail is unavailable.',
   query_too_large: 'Use a valid, narrower date range. Long activity-metric histories are paged automatically by the Assistant.',
 };
@@ -119,6 +120,13 @@ export class AssistantRecoverableMcpToolError extends Error {
   ) {
     super('The Assistant MCP tool needs corrected input.');
     this.name = 'AssistantRecoverableMcpToolError';
+  }
+}
+
+export class AssistantTrainingMetricsPreparingError extends Error {
+  constructor(readonly retryAfterSeconds: number) {
+    super('Training metrics are still preparing.');
+    this.name = 'AssistantTrainingMetricsPreparingError';
   }
 }
 
@@ -218,6 +226,15 @@ async function callAssistantMcpTool(
     || !result.structuredContent
     || typeof result.structuredContent !== 'object') {
     throw new Error(`The ${name} tool returned no structured result.`);
+  }
+  const structuredContent = result.structuredContent as Record<string, unknown>;
+  if (name === 'prepare_training_metrics'
+    && structuredContent.status === 'preparing') {
+    throw new AssistantTrainingMetricsPreparingError(
+      typeof structuredContent.retryAfterSeconds === 'number'
+        ? structuredContent.retryAfterSeconds
+        : 5,
+    );
   }
   return {
     structuredContent: result.structuredContent as Record<string, unknown>,
@@ -398,6 +415,7 @@ export async function createAssistantMcpSession(
     }
 
     let preparedContentProposalRef: string | null = null;
+    const readyTrainingKinds = new Set<string>();
     return {
       // The Assistant keeps its compact evidence budget; detailed sample pagination is an external-client workflow.
       instructions: (client.getInstructions() || '').replace(MCP_ACTIVITY_SAMPLES_INSTRUCTIONS, '').trim(),
@@ -405,6 +423,12 @@ export async function createAssistantMcpSession(
       callTool: async (name, args) => {
         if (!isAssistantToolName(name) || !expectedToolNames.includes(name)) {
           throw new Error('The requested tool is not available to the Assistant.');
+        }
+        if (name === 'get_training_metric' && !readyTrainingKinds.has(`${args.metricKind || ''}`)) {
+          throw new AssistantRecoverableMcpToolError(
+            'metric_not_ready',
+            'Call prepare_training_metrics for this metricKind first, then retry this read when it reports ready.',
+          );
         }
         if (isAssistantContentProposalTool(name)) {
           if (preparedContentProposalRef) {
@@ -427,7 +451,14 @@ export async function createAssistantMcpSession(
           throw error;
         }
         if (!metricHistoryPages) {
-          return callAssistantMcpTool(client, name, args);
+          const response = await callAssistantMcpTool(client, name, args);
+          if (name === 'prepare_training_metrics') {
+            for (const kind of Array.isArray(response.structuredContent.readyMetricKinds)
+              ? response.structuredContent.readyMetricKinds : []) {
+              if (typeof kind === 'string') readyTrainingKinds.add(kind);
+            }
+          }
+          return response;
         }
         const responses: Record<string, unknown>[] = [];
         for (const page of metricHistoryPages) {

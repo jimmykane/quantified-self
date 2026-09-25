@@ -11,6 +11,7 @@ import { parseTrainingWorkoutCompletionV1 } from '../../../shared/training-worko
 import { parseStrengthWorkoutDetailsV1, strengthProjectionMatchesDetails } from '../../../shared/strength-workout';
 import { isUserDeletionTombstoneActive } from '../shared/user-deletion-guard';
 import { TRAINING_PLANS_SCOPE, TRAINING_READ_INPUTS, TRAINING_READ_OUTPUTS, TRAINING_RECIPE_SCHEMA,
+  TRAINING_RECIPE_WITH_POOL_SCHEMA,
   trainingDate, type TrainingReadResult, type TrainingReadTool } from './training-plans.schemas';
 
 export const TRAINING_READ_LIMITS = { page: 25, scan: 1000, inputBytes: 2 * 1024 * 1024,
@@ -259,8 +260,8 @@ export async function readTrainingPlans(input: TrainingReadInput, reads: Trainin
       const a = TRAINING_READ_INPUTS.get_training_plan.parse(args.data);
       return { scheduleRevision: state.revision, plan: projectPlan(await resolve(a.planRef, 'plan')) };
     }
-    if (input.tool === 'get_planned_workout') {
-      const a = TRAINING_READ_INPUTS.get_planned_workout.parse(args.data);
+    if (input.tool === 'get_planned_workout' || input.tool === 'get_planned_workout_v2') {
+      const a = TRAINING_READ_INPUTS[input.tool].parse(args.data);
       const doc = await resolve(a.workoutRef, 'workout', true);
       const summary = await projectWorkout(doc);
       const canonicalStructure = parseWorkoutStructureV1(doc.data.structure);
@@ -270,11 +271,13 @@ export async function readTrainingPlans(input: TrainingReadInput, reads: Trainin
         const details = parseStrengthWorkoutDetailsV1(companion.data);
         if (details.workoutId !== doc.id || !strengthProjectionMatchesDetails(canonicalStructure, details)) throw unavailable();
       }
-      // The registered v1 MCP recipe is frozen. Pool length needs an additive tool
-      // contract; preserve existing workout reads until that contract is promoted.
+      // Existing registered clients retain the frozen v1 projection. The additive
+      // wire-v2 read returns the selected physical pool length when one was authored.
       const legacyStructure = { ...canonicalStructure };
       delete legacyStructure.poolLength;
-      const structure = TRAINING_RECIPE_SCHEMA.parse(legacyStructure);
+      const structure = input.tool === 'get_planned_workout_v2'
+        ? TRAINING_RECIPE_WITH_POOL_SCHEMA.parse(canonicalStructure)
+        : TRAINING_RECIPE_SCHEMA.parse(legacyStructure);
       const units = await view.units();
       const displaySteps = structure.nodes.flatMap(node => node.kind === 'step'
         ? [{ nodeId: node.id, text: formatWorkoutStepV1(node, units, undefined, canonicalStructure.sport) }]

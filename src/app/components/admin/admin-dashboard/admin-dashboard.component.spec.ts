@@ -22,6 +22,9 @@ import { AppWhatsNewService, ChangelogPost } from '../../../services/app.whats-n
 import { AppThemeService } from '../../../services/app.theme.service';
 import { EChartsLoaderService } from '../../../services/echarts-loader.service';
 import { AdminUserAnalyticsStore } from '../../../services/admin-user-analytics.store';
+import { AppHapticsService } from '../../../services/app.haptics.service';
+import { HapticTapDirective } from '../../../directives/haptic-tap.directive';
+import { By } from '@angular/platform-browser';
 
 describe('AdminDashboardComponent', () => {
     let fixture: ComponentFixture<AdminDashboardComponent>;
@@ -284,6 +287,7 @@ describe('AdminDashboardComponent', () => {
                 { provide: AppWhatsNewService, useValue: whatsNewServiceSpy },
                 { provide: LoggerService, useValue: loggerSpy },
                 { provide: AdminUserAnalyticsStore, useValue: userAnalyticsSpy },
+                { provide: AppHapticsService, useValue: { selection: vi.fn(), success: vi.fn(), error: vi.fn(), warning: vi.fn() } },
                 { provide: AppThemeService, useValue: { getAppTheme: () => of(AppThemes.Normal) } },
                 {
                     provide: EChartsLoaderService,
@@ -361,6 +365,53 @@ describe('AdminDashboardComponent', () => {
         expect(text).toContain('Database backlog');
         expect(text).toContain('Tasks queued');
         expect(text).toContain('processing health');
+    });
+
+    it('links Training delivery to its admin queue with one selection feedback', () => {
+        adminServiceSpy.getQueueStats.mockReturnValue(of({
+            ...mockQueueStats,
+            trainingDelivery: {
+                jobsAvailable: true,
+                jobs: { total: 5, due: 2, reconcile: 1, delivery: 3, verification: 1, oldestDueLagMs: 1000 },
+                statusCountsAvailable: true,
+                outcomes: { delivered: 4, retrying: 0, failed: 0, needsAttention: 0 },
+                providers: [],
+            },
+        }));
+        createComponent();
+        expect(component.queueRows().find(row => row.id === 'training-delivery')).toEqual(expect.objectContaining({
+            route: '/admin/queues/training-delivery', pendingDb: 2, completed: 4,
+        }));
+        const button = fixture.debugElement.query(By.css('button[aria-label="Open Training Delivery queue"]'));
+        expect(TestBed.inject(AppHapticsService).selection).not.toHaveBeenCalled();
+        button.injector.get(HapticTapDirective).onHostClick();
+        expect(TestBed.inject(AppHapticsService).selection).toHaveBeenCalledOnce();
+    });
+
+    it('renders unavailable Training counts as dashes on desktop and mobile', () => {
+        adminServiceSpy.getQueueStats.mockReturnValue(of({
+            ...mockQueueStats,
+            cloudTasks: { pending: 0, queues: { trainingDelivery: {
+                queueId: 'processTrainingDeliveryTask', pending: 0, state: 'UNKNOWN', enabled: null,
+            } } },
+            trainingDelivery: {
+                jobsAvailable: false,
+                jobs: { total: 0, due: 0, reconcile: 0, delivery: 0, verification: 0, oldestDueLagMs: 0 },
+                statusCountsAvailable: false,
+                outcomes: { delivered: 0, retrying: 0, failed: 0, needsAttention: 0 },
+                providers: [],
+            },
+        }));
+        createComponent();
+        const row = component.queueRows().find(item => item.id === 'training-delivery');
+        expect(row?.severity).toBe('warning');
+        const tableRow = [...(fixture.nativeElement as HTMLElement).querySelectorAll('tr.mat-mdc-row')]
+            .find(element => element.textContent?.includes('Training Delivery'));
+        const card = [...(fixture.nativeElement as HTMLElement).querySelectorAll('.queue-card')]
+            .find(element => element.textContent?.includes('Training Delivery'));
+        expect(tableRow?.textContent).toContain('—');
+        expect(card?.textContent).toContain('—');
+        expect(tableRow?.textContent).toContain('Outcome counts unavailable');
     });
 
     it('should provide actionable at-a-glance status summaries', () => {

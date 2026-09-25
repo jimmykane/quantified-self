@@ -311,6 +311,12 @@ describe('Training plan MCP reads', () => {
     const result = TRAINING_READ_OUTPUTS.get_planned_workout.parse(await f.run('get_planned_workout', { workoutRef: ref }));
     expect(result.workout.structure.sport).toBe(ActivityTypes.Swimming);
     expect(result.workout.structure).not.toHaveProperty('poolLength');
+    const additive = TRAINING_READ_OUTPUTS.get_planned_workout_v2.parse(await f.run('get_planned_workout_v2', { workoutRef: ref }));
+    expect(additive.workout.structure.poolLength).toEqual({ meters: 25, presentation: 'meters' });
+    expect(additive.workout.displaySteps[0].text).toContain('25 m');
+    expect(JSON.stringify(additive)).not.toMatch(/private|providerId|destinationKey|approvalDigest|ledger/);
+    await expect(f.run('get_planned_workout_v2', { workoutRef: ref }, ['metrics:read'])).rejects.toThrow('permission');
+    await expect(f.run('get_planned_workout_v2', { workoutRef: ref }, undefined, 'other-connection')).rejects.toThrow('connection');
     const assessment = TRAINING_READ_OUTPUTS.assess_planned_workout_compatibility.parse(await f.run(
       'assess_planned_workout_compatibility', { workoutRef: ref, providers: ['garmin', 'suunto'] },
     ));
@@ -318,6 +324,27 @@ describe('Training plan MCP reads', () => {
       expect.objectContaining({ provider: 'garmin', level: 'exact' }),
       expect.objectContaining({ provider: 'suunto', level: 'degraded' }),
     ]));
+  });
+
+  it('does not infer a pool length from a legacy pool distance step in the additive read', async () => {
+    const f = fixture();
+    const list = TRAINING_READ_OUTPUTS.query_planned_workouts.parse(await f.run('query_planned_workouts', {
+      startDate: '2026-09-01', endDate: '2027-01-01',
+    }));
+    const original = f.reads.snapshot;
+    f.reads.snapshot = (uid, read) => original(uid, view => read({ ...view,
+      get: async (collection, id, detail) => {
+        const doc = await view.get(collection, id, detail);
+        return doc && detail ? { ...doc, data: { ...doc.data, structure: {
+          version: 1, sport: ActivityTypes.Swimming,
+          nodes: [{ kind: 'step', id: 'length', purpose: 'work', ending: { kind: 'distance', meters: 25 }, targets: [] }],
+        } } } : doc;
+      },
+    }));
+    const result = TRAINING_READ_OUTPUTS.get_planned_workout_v2.parse(await f.run('get_planned_workout_v2', {
+      workoutRef: list.workouts[0].workoutRef,
+    }));
+    expect(result.workout.structure).not.toHaveProperty('poolLength');
   });
 
   it('reports only exact persisted completion and gates the activity reference independently', async () => {

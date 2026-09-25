@@ -3590,7 +3590,23 @@ const MCP_PROJECTED_TRAINING_METRIC_KINDS = new Set<DerivedMetricKind>([
   DERIVED_METRIC_KINDS.BodyWeightTrend,
 ]);
 
-function redactDerivedPayload(
+function parseMcpTrainingMetricPayload(metricKind: DerivedMetricKind, payload: unknown): unknown | null {
+  if (payload === null || payload === undefined) {
+    return null;
+  }
+  const projectedPayload = MCP_PROJECTED_TRAINING_METRIC_KINDS.has(metricKind)
+    ? projectDerivedMetricPayloadForMcp(metricKind, payload)
+    : payload;
+  const parsed = MCP_DERIVED_PAYLOAD_SCHEMAS[metricKind]
+    .safeParse(redactDerivedPayload(projectedPayload));
+  return parsed.success ? parsed.data : null;
+}
+
+export function isMcpTrainingMetricPayloadReadable(metricKind: DerivedMetricKind, payload: unknown): boolean {
+  return parseMcpTrainingMetricPayload(metricKind, payload) !== null;
+}
+
+export function redactDerivedPayload(
   value: unknown,
   parentKey = '',
   inheritedEventIdentityContext = false,
@@ -6298,6 +6314,10 @@ export function createMcpDataService(
       const { previewStrengthWorkoutChange } = await import('./training-plans-write.service');
       return previewStrengthWorkoutChange(input);
     },
+    async previewPlannedWorkoutV2Change(input: import('./training-plans-write.service').TrainingWriteInput) {
+      const { previewPlannedWorkoutV2Change } = await import('./training-plans-write.service');
+      return previewPlannedWorkoutV2Change(input);
+    },
 
     async previewCreatePlannedWorkout(input: import('./training-plans-write.service').TrainingWriteInput) {
       const { previewCreatePlannedWorkout } = await import('./training-plans-write.service');
@@ -6510,18 +6530,9 @@ export function createMcpDataService(
         throw new McpDataError('metric_not_ready', 'The requested Training-derived metric is not ready.');
       }
 
-      const projectedPayload = projectDerivedMetricPayloadForMcp(
-        metricKind,
-        snapshot.payload,
-      );
-      const redactedPayload = redactDerivedPayload(projectedPayload);
-      let safePayload = redactedPayload;
-      if (MCP_PROJECTED_TRAINING_METRIC_KINDS.has(metricKind)) {
-        const parsedPayload = MCP_DERIVED_PAYLOAD_SCHEMAS[metricKind].safeParse(redactedPayload);
-        if (!parsedPayload.success) {
-          throw new McpDataError('metric_not_ready', 'The requested Training-derived metric is not ready.');
-        }
-        safePayload = parsedPayload.data;
+      const safePayload = parseMcpTrainingMetricPayload(metricKind, snapshot.payload);
+      if (safePayload === null) {
+        throw new McpDataError('metric_not_ready', 'The requested Training-derived metric is not ready.');
       }
 
       return {

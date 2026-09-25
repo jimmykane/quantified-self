@@ -1631,6 +1631,53 @@ describe('AdminQueueStatsComponent', () => {
         });
     });
 
+    describe('Training Delivery Section', () => {
+        it('distinguishes transient jobs from workout outcomes and isolates the view', () => {
+            component.loading = false;
+            component.queueView = 'training-delivery';
+            component.stats = {
+                pending: 0, succeeded: 0, stuck: 0, providers: [],
+                cloudTasks: { pending: 2, queues: { trainingDelivery: { queueId: 'processTrainingDeliveryTask', pending: 2, state: 'RUNNING' } } },
+                trainingDelivery: {
+                    jobsAvailable: true,
+                    jobs: { total: 10, due: 3, reconcile: 4, delivery: 5, verification: 1, oldestDueLagMs: 90_000 },
+                    statusCountsAvailable: true,
+                    outcomes: { delivered: 6, retrying: 1, failed: 2, needsAttention: 1 },
+                    providers: [{ provider: 'garmin', queued: 3, delivered: 5, retrying: 0, failed: 1, needsAttention: 0 }],
+                },
+            };
+            fixture.detectChanges();
+            const host: HTMLElement = fixture.nativeElement;
+            expect(host.textContent).toContain('Jobs in Firestore');
+            expect(host.textContent).toContain('Due now');
+            expect(host.textContent).toContain('Oldest overdue 1m 30s');
+            expect(host.textContent).toContain('Remote checks: 1');
+            expect(host.textContent).toContain('Garmin');
+            expect(host.textContent).toContain('3 queued');
+            expect(host.textContent).not.toContain('Workout Ingestion');
+        });
+
+        it('shows an unavailable state rather than zero outcomes for an older backend or missing index', () => {
+            component.loading = false;
+            component.queueView = 'training-delivery';
+            component.stats = { pending: 0, succeeded: 0, stuck: 0, providers: [], cloudTasks: {
+                pending: 2, queues: { trainingDelivery: { queueId: 'processTrainingDeliveryTask', pending: 2, state: 'UNKNOWN' } },
+            } };
+            fixture.detectChanges();
+            const host: HTMLElement = fixture.nativeElement;
+            expect(host.textContent).toContain('Training delivery job counts are unavailable');
+            expect(host.textContent).toContain('Current workout delivery counts are unavailable');
+            expect(host.textContent).toContain('Cloud Tasks');
+            const cloudTasksCard = [...host.querySelectorAll('.app-stat-card')]
+                .find(card => card.textContent?.includes('Cloud Tasks'));
+            expect(cloudTasksCard?.querySelector('.app-stat-value')?.textContent?.trim()).toBe('—');
+            expect(host.textContent).not.toContain('0 delivered');
+            component.queueView = 'all';
+            fixture.detectChanges();
+            expect(host.textContent).not.toContain('Training delivery job counts are unavailable');
+        });
+    });
+
     describe('Derived Section', () => {
         it('should render coordinator cards and derived failures table', () => {
             component.loading = false;

@@ -44,6 +44,7 @@ describe('admin-dashboard-summary helper', () => {
                 pending: 16,
                 queues: {
                     workout: { queueId: 'workout', pending: 3 },
+                    trainingDelivery: { queueId: 'training', pending: 2 },
                     activitySync: { queueId: 'activity', pending: 0 },
                     routeDeliverySync: { queueId: 'delivery', pending: 1 },
                     routeSync: { queueId: 'route', pending: 0 },
@@ -69,6 +70,13 @@ describe('admin-dashboard-summary helper', () => {
                 dead: 0,
                 dlqByContext: [],
                 advanced: { throughput: 7, maxLagMs: 0, retryHistogram: { '0-3': 0, '4-7': 0, '8-9': 0 }, topErrors: [] },
+            },
+            trainingDelivery: {
+                jobsAvailable: true,
+                jobs: { total: 9, due: 2, reconcile: 3, delivery: 4, verification: 2, oldestDueLagMs: 30_000 },
+                statusCountsAvailable: true,
+                outcomes: { delivered: 7, retrying: 1, failed: 2, needsAttention: 1 },
+                providers: [],
             },
             routeDeliverySync: {
                 pending: 1,
@@ -144,6 +152,7 @@ describe('admin-dashboard-summary helper', () => {
         expect(rows.map(row => row.id)).toEqual([
             'workout',
             'activity-sync',
+            'training-delivery',
             'route-delivery-sync',
             'route-sync',
             'sleep-sync',
@@ -157,6 +166,14 @@ describe('admin-dashboard-summary helper', () => {
             problemLabel: 'Stuck / Manual',
             severity: 'error',
             chips: ['Manual review: 2'],
+        }));
+        expect(rows.find(row => row.id === 'training-delivery')).toEqual(expect.objectContaining({
+            pendingDb: 2,
+            cloudTasks: 2,
+            completed: 7,
+            problemCount: 3,
+            severity: 'error',
+            chips: ['Scheduled jobs: 9', 'Retrying: 1'],
         }));
         expect(rows.find(row => row.id === 'route-delivery-sync')).toEqual(expect.objectContaining({
             problemCount: 3,
@@ -190,6 +207,71 @@ describe('admin-dashboard-summary helper', () => {
             'Total: 7',
         ]);
         expect(rows.find(row => row.id === 'derived-metrics')?.problemLabel).toBe('Stale');
+    });
+
+    it('marks unavailable Training aggregates as unknown rather than healthy zeroes', () => {
+        const rows = buildAdminDashboardQueueRows({
+            pending: 0, succeeded: 0, stuck: 0, providers: [],
+            cloudTasks: { pending: 0, queues: {
+                trainingDelivery: { queueId: 'processTrainingDeliveryTask', pending: 0, state: 'UNKNOWN', enabled: null },
+            } },
+            trainingDelivery: {
+                jobsAvailable: false,
+                jobs: { total: 0, due: 0, reconcile: 0, delivery: 0, verification: 0, oldestDueLagMs: 0 },
+                statusCountsAvailable: false,
+                outcomes: { delivered: 0, retrying: 0, failed: 0, needsAttention: 0 },
+                providers: [],
+            },
+        });
+        const row = rows.find(item => item.id === 'training-delivery');
+        expect(row).toEqual(expect.objectContaining({
+            pendingDb: null, cloudTasks: null, completed: null, problemCount: null,
+            maxLagLabel: '-', severity: 'warning',
+            chips: ['Job counts unavailable', 'Outcome counts unavailable', 'Cloud Tasks unavailable'],
+        }));
+        expect(buildAdminDashboardHealthSummary(rows, [], {
+            total: 0, published: 0, drafts: 0, latestTitle: null, latestDate: null,
+        }, null).queueWarnings).toBe(1);
+    });
+
+    it('keeps available Training metrics when only outcome counts are unavailable', () => {
+        const rows = buildAdminDashboardQueueRows({
+            pending: 0, succeeded: 0, stuck: 0, providers: [],
+            cloudTasks: { pending: 2, queues: {
+                trainingDelivery: { queueId: 'processTrainingDeliveryTask', pending: 2, state: 'RUNNING', enabled: true },
+            } },
+            trainingDelivery: {
+                jobsAvailable: true,
+                jobs: { total: 8, due: 3, reconcile: 2, delivery: 5, verification: 1, oldestDueLagMs: 10_000 },
+                statusCountsAvailable: false,
+                outcomes: { delivered: 0, retrying: 0, failed: 0, needsAttention: 0 },
+                providers: [],
+            },
+        });
+        expect(rows.find(item => item.id === 'training-delivery')).toEqual(expect.objectContaining({
+            pendingDb: 3, cloudTasks: 2, completed: null, problemCount: null,
+            maxLagLabel: '10s', severity: 'warning',
+            chips: ['Scheduled jobs: 8', 'Outcome counts unavailable'],
+        }));
+    });
+
+    it('warns when Training dispatch is paused despite healthy aggregate counts', () => {
+        const rows = buildAdminDashboardQueueRows({
+            pending: 0, succeeded: 0, stuck: 0, providers: [],
+            cloudTasks: { pending: 0, queues: {
+                trainingDelivery: { queueId: 'processTrainingDeliveryTask', pending: 0, state: 'PAUSED', enabled: false },
+            } },
+            trainingDelivery: {
+                jobsAvailable: true,
+                jobs: { total: 1, due: 0, reconcile: 1, delivery: 0, verification: 0, oldestDueLagMs: 0 },
+                statusCountsAvailable: true,
+                outcomes: { delivered: 0, retrying: 0, failed: 0, needsAttention: 0 },
+                providers: [],
+            },
+        });
+        expect(rows.find(item => item.id === 'training-delivery')).toEqual(expect.objectContaining({
+            severity: 'warning', chips: ['Scheduled jobs: 1', 'Cloud Tasks paused'],
+        }));
     });
 
     it('builds maintenance and changelog summaries', () => {

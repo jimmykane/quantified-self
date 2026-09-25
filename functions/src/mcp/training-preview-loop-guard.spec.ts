@@ -46,6 +46,22 @@ describe('Training preview loop guard', () => {
       },
     } })).toBeNull();
     expect(invalidTrainingPreviewTool({ method: 'tools/call', params: {
+      name: 'preview_planned_workout_v2_change',
+      arguments: { expectedScheduleRevision: 1, change: {
+        kind: 'create-workout', localKey: 'pool', localDate: '2026-09-19', title: 'Pool swim',
+        structure: { ...validStructure, sport: 'Swimming', poolLength: {
+          meters: 25, presentation: 'meters', unexpected: 'private value',
+        } },
+      } },
+    } })).toMatchObject({ toolName: 'preview_planned_workout_v2_change', validationIssues: expect.any(Array) });
+    expect(invalidTrainingPreviewTool({ method: 'tools/call', params: {
+      name: 'preview_planned_workout_v2_change',
+      arguments: { expectedScheduleRevision: 1, change: {
+        kind: 'create-workout', localKey: 'pool', localDate: '2026-09-19', title: 'Pool swim',
+        structure: { ...validStructure, sport: 'Swimming', poolLength: { meters: 25, presentation: 'meters' } },
+      } },
+    } })).toBeNull();
+    expect(invalidTrainingPreviewTool({ method: 'tools/call', params: {
       name: 'query_planned_workouts', arguments: {},
     } })).toBeNull();
   });

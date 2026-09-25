@@ -40,6 +40,7 @@ import { decodeOpaqueValue, encodeOpaqueValue, McpDataError } from './data.servi
 import {
   TRAINING_CHANGE_SCHEMA,
   TRAINING_STRENGTH_INTERNAL_CHANGE_SCHEMA,
+  TRAINING_WORKOUT_V2_CHANGE_SCHEMA,
   TRAINING_DELIVERY_WRITE_SCOPE,
   TRAINING_PLANS_SCOPE,
   TRAINING_PLANS_WRITE_SCOPE,
@@ -58,7 +59,8 @@ const referencePayload = z.strictObject({ kind: z.enum(['plan', 'workout']), id:
 const proposalPayload = z.strictObject({ kind: z.literal('proposal'), id: entityId,
   createdAtMs: z.number().int().nonnegative().safe() });
 
-type TrainingChange = z.infer<typeof TRAINING_CHANGE_SCHEMA> | z.infer<typeof TRAINING_STRENGTH_INTERNAL_CHANGE_SCHEMA>;
+type TrainingChange = z.infer<typeof TRAINING_CHANGE_SCHEMA> | z.infer<typeof TRAINING_STRENGTH_INTERNAL_CHANGE_SCHEMA>
+  | z.infer<typeof TRAINING_WORKOUT_V2_CHANGE_SCHEMA>;
 type PreviewResult = z.infer<typeof TRAINING_WRITE_OUTPUTS.preview_training_changes>;
 type ApplyResult = z.infer<typeof TRAINING_WRITE_OUTPUTS.apply_training_changes>;
 
@@ -456,6 +458,9 @@ function providerSummary(provider: PlannedWorkoutProviderId, action: StoredProvi
   if (availability === 'unavailable') return `${provider} workout delivery is not enabled for this account.`;
   if (availability === 'reconnect_required') return `${provider} must be reconnected before delivery can change.`;
   if (availability === 'connection_repair') return `${provider} connection access must be repaired before delivery can change.`;
+  if (action === 'send' && preview.approvalDigest) {
+    return `${provider}: enable workout delivery; mapping differences require separate approval before a copy can be sent.`;
+  }
   const effect = action === 'stop' ? 'stop sync and withdraw eligible future copies'
     : action === 'check' ? 'queue a remote-copy check'
       : action === 'retry' ? 'retry the current delivery state'
@@ -586,14 +591,17 @@ function decodeProposalRef(value: string, uid: string, connectionId: string): { 
 export async function previewTrainingChanges(
   input: TrainingWriteInput,
   provided?: TrainingWriteDependencies,
-  strengthMode = false,
+  recipeMode: 'legacy' | 'strength' | 'v2' = 'legacy',
 ): Promise<PreviewResult> {
   const deps = provided ?? defaultDependencies();
   assertBytes(input.arguments);
-  const parsed = strengthMode
+  const parsed = recipeMode === 'strength'
     ? z.strictObject({ expectedScheduleRevision: z.number().int().nonnegative().safe(),
       changes: z.array(TRAINING_STRENGTH_INTERNAL_CHANGE_SCHEMA).length(1) }).safeParse(input.arguments)
-    : TRAINING_WRITE_INPUTS.preview_training_changes.safeParse(input.arguments);
+    : recipeMode === 'v2'
+      ? z.strictObject({ expectedScheduleRevision: z.number().int().nonnegative().safe(),
+        changes: z.array(TRAINING_WORKOUT_V2_CHANGE_SCHEMA).length(1) }).safeParse(input.arguments)
+      : TRAINING_WRITE_INPUTS.preview_training_changes.safeParse(input.arguments);
   if (!parsed.success) invalid('Invalid Training change proposal. Use the advertised operation schema and at most 25 changes.');
   assertProviderActionsLast(parsed.data.changes);
   const required = requiredScopes(parsed.data.changes);
@@ -638,6 +646,12 @@ export async function previewTrainingChanges(
       publicChanges.push({ index, kind: change.kind,
         summary: `Permanently delete plan “${plan.name}” and its revision history. ${workoutEffect} Provider copies may remain when provider access is unavailable.` });
       return;
+    }
+    if (recipeMode === 'legacy' && change.kind === 'update-workout') {
+      const workoutId = resolveReference(change.workout, 'workout', input, simulated, locals);
+      if (simulated.workouts.get(workoutId)?.structure.poolLength) {
+        invalid('This workout has an authored pool length. Read its v2 recipe and use the v2 preview to edit it without silently clearing that selection.');
+      }
     }
     const operation = resolveScheduleOperation(change, input, simulated, locals, deps.randomId);
     const request = parseMutateTrainingScheduleRequestV1({ mutationId: `mcp-proposal-${index}-${deps.randomId()}`,
@@ -765,7 +779,21 @@ export async function previewStrengthWorkoutChange(
   const draft = parsed.data.change.strength;
   const structure = projectStrengthWorkoutToV1({ ...draft, workoutId: 'preview', revision: 1 });
   return previewTrainingChanges({ ...input, arguments: { expectedScheduleRevision: parsed.data.expectedScheduleRevision,
-    changes: [{ ...parsed.data.change, structure }] } }, provided, true);
+    changes: [{ ...parsed.data.change, structure }] } }, provided, 'strength');
+}
+
+/** Additive full-recipe path; existing registered v1 create/update shapes remain frozen. */
+export async function previewPlannedWorkoutV2Change(
+  input: TrainingWriteInput, provided?: TrainingWriteDependencies,
+): Promise<PreviewResult> {
+  assertBytes(input.arguments);
+  const parsed = TRAINING_WRITE_INPUTS.preview_planned_workout_v2_change.safeParse(input.arguments);
+  if (!parsed.success) invalid('Provide one complete, valid planned workout v2 create or update.');
+  if (parsed.data.change.structure.sport === ActivityTypes.StrengthTraining) {
+    invalid('Use the strength workout preview for the complete exercise and set prescription.');
+  }
+  return previewTrainingChanges({ ...input, arguments: { expectedScheduleRevision: parsed.data.expectedScheduleRevision,
+    changes: [parsed.data.change] } }, provided, 'v2');
 }
 
 /**
@@ -836,7 +864,7 @@ async function currentDeliveryCommand(
     provider: operation.provider, action, expectedScheduleRevision: operation.expectedScheduleRevision,
     expectedScopeRevision: operation.expectedScopeRevision, expectedSettingsRevision: operation.expectedSettingsRevision,
     ...(operation.timeZone ? { timeZone: operation.timeZone } : {}),
-    ...(operation.approvalDigest ? { approvalDigest: operation.approvalDigest } : {}) };
+    ...(action === 'approve' && operation.approvalDigest ? { approvalDigest: operation.approvalDigest } : {}) };
   if (action === 'check') {
     return await trainingDeliveryCommand(deps.runtime, uid, base, false,
       tx => assertAuthorityInTransaction(deps, tx, uid, connectionId, requiredScopes, expectedAccessGeneration,
@@ -1099,7 +1127,10 @@ async function applyTrainingChangesInternal(
           proposal.accessGeneration, current.ref, operation, `mcp-${current.id}-${index}`.slice(0, 128));
         providerResults.push({ index: operation.index, provider: operation.provider,
           status: operation.action === 'check' ? 'queued' : 'applied',
-          message: operation.action === 'check' ? 'Remote-copy verification was queued.' : 'Delivery preferences were updated and reconciliation was queued.' });
+          message: operation.action === 'check' ? 'Remote-copy verification was queued.'
+            : operation.action === 'send' && operation.approvalDigest
+              ? 'Delivery was enabled, but this workout needs separate mapping approval before a provider copy can be sent.'
+              : 'Delivery preferences were updated and reconciliation was queued.' });
       } catch (error) {
         providerResults.push({ index: operation.index, provider: operation.provider, status: 'blocked',
           message: publicErrorMessage(error) ?? 'Provider delivery is currently unavailable. Review its connection and try again.' });

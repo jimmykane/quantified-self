@@ -24,6 +24,22 @@
       ]
     },
     {
+      "collectionGroup": "trainingDeliveryStatuses", "queryScope": "COLLECTION_GROUP",
+      "fields": [{ "fieldPath": "status", "order": "ASCENDING" }]
+    },
+    {
+      "collectionGroup": "trainingDeliveryStatuses", "queryScope": "COLLECTION_GROUP",
+      "fields": [{ "fieldPath": "provider", "order": "ASCENDING" }, { "fieldPath": "status", "order": "ASCENDING" }]
+    },
+    {
+      "collectionGroup": "trainingDeliveryStatuses", "queryScope": "COLLECTION_GROUP",
+      "fields": [{ "fieldPath": "status", "order": "ASCENDING" }, { "fieldPath": "hasRemoteCopy", "order": "ASCENDING" }]
+    },
+    {
+      "collectionGroup": "trainingDeliveryStatuses", "queryScope": "COLLECTION_GROUP",
+      "fields": [{ "fieldPath": "provider", "order": "ASCENDING" }, { "fieldPath": "status", "order": "ASCENDING" }, { "fieldPath": "hasRemoteCopy", "order": "ASCENDING" }]
+    },
+    {
       "collectionGroup": "trainingDeliverySettings",
       "queryScope": "COLLECTION",
       "fields": [

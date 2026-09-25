@@ -451,9 +451,14 @@ value to be no greater than the Slower value; the editor does not silently reord
 than rounding to zero. No recipe field, schedule history or stored workout requires migration. Garmin and Suunto consume
 canonical metres directly; COROS applies its existing documented integer-metre rounding and degradation approval;
 Wahoo's dated Workout delivery still rejects distance-ended recipes because its required duration is unknown.
-MCP impact: no tool, scope, schema, consent, projection or proposal shape changes. Existing MCP planning reads/writes
-already use canonical metres and m/s plus Sports Lib owner-unit formatting, and provider actions still use the same
-saved recipe and approval path.
+MCP impact: #734 adds `get_planned_workout_v2` and `preview_planned_workout_v2_change` while preserving registered v1
+schemas. The read uses existing Training plans consent and includes only an authored pool length in canonical metres
+plus its metre/yard presentation; a distance step never implies pool size. The focused create/update preview uses
+the existing Training plans write grant and revision-bound, approval-gated proposal/apply flow without provider
+delivery. A v1 edit of a selected-length swim is rejected rather than silently dropping the pool setting. Existing
+pool swims without an authored length remain valid; open-water recipes cannot carry one. No new scope, consent,
+provider action, storage migration or recorded-event metric is introduced. Deployment and client catalog refresh
+are separate from local code verification.
 The shared contract remains broader so saved v1 data does
 not need a redesign when later UI slices are enabled.
 
@@ -1022,6 +1027,10 @@ Garmin receives the same broad family at the workout and segment levels. Cycling
 cycling-only secondary-target field subject to its existing device-support warning; running-family folds may not.
 Unsupported sports still fail closed. Existing Running/Cycling payloads and retained remote identities do not change,
 and no authored recipe, schedule history, Sports Lib type or provider ID is rewritten.
+MCP create-and-send keeps the authored subtype and establishes standalone delivery consent, but a degraded Garmin fold
+does not count as approved by that Send action. The workout remains unsent with a mapping-review requirement until a
+separate current-digest approval is confirmed. MCP previews and apply results must make that distinction explicit;
+neither an applied consent result nor a queued reconciliation means Garmin accepted a copy.
 
 Pool and open-water swimming are manually authorable. The #733 mapper encodes pool swimming as
 `LAP_SWIMMING` with an optional explicit physical pool length and target-free swim steps. It also supports an
@@ -1524,8 +1533,8 @@ support it. The owner-account cloud lifecycle proof on 23 September 2026 enabled
 explicitly consenting Garmin connections: create, repeat-count edit, date move, positive retained-record checks and
 Stop/withdrawal completed without retries. The checked workout and schedule were cloud records, not proof of Garmin
 app/watch download or completed-activity correlation. Running/cycling admission is unchanged. The frozen registered MCP
-v1 recipe omits the new field in its legacy workout read; #734 tracks additive
-MCP read/authoring coverage without changing existing tool schemas.
+v1 recipe omits the new field in its legacy workout read. #734 adds a separate full-workout read and focused
+create/update preview for authored pool length without changing existing tool schemas; see the MCP boundary above.
 
 `delivery/garmin/` binds the existing serializer to Training API V2. It creates workout content using the partner
 contract's exact `POST /workoutportal/workout/v2` path; GET/PUT/DELETE use `/training-api/workout/v2/{workoutId}`.
@@ -3201,6 +3210,19 @@ ready/building/failed/stale/missing/schema-mismatch. It never returns payloads, 
 device/provider provenance. Clients should use it before `get_training_metric` so a missing or rebuilding snapshot is
 not mistaken for an unsupported Training capability.
 
+`prepare_training_metrics` is the shared on-demand freshness path for MCP, the built-in Assistant, and future
+backend callers. It accepts one to eight registered kinds under `metrics:read`, probes the same coordinator,
+snapshot payload/schema, source mutation revision, latest event update, and UTC-day checks as the Training route's
+`ensureDerivedMetrics` callable, and joins or queues only the affected kinds through the existing coordinator.
+`ready` requires the exact current snapshot schema and a payload that passes the same strict redacted MCP read
+contract for every kind, whether or not that kind needs an additional public projection.
+It polls for at most five seconds. Its strict response contains only `ready`, `preparing`, or `unavailable`, the
+requested and ready kind lists, and a retry delay; it never returns a metric payload, worker error, or source identity.
+An in-flight coordinator is not treated as a ready snapshot. Clients retry preparation after a `preparing` result
+and then call the unchanged `get_training_metric` read. Repeated preparation joins queued work without creating a
+new generation. A future email worker can call the same authenticated backend service without opening `/training`;
+this change adds no email job or sending behavior.
+
 The explicitly named live `get_current_readiness` tool is not a derived-snapshot projection. It requires both
 Training-metric and sleep grants, reads the ready Form/Form Now/Ramp snapshots plus one bounded normalized sleep query,
 rebuilds the same current UTC-day zero-load decay used by Dashboard Today, and calls the shared readiness evaluator. It
@@ -3375,6 +3397,21 @@ failure from blocking a loopback Training refresh; it does not weaken deployed e
 Derived metrics also require the Cloud Tasks emulator configuration used by this repository. When
 `CLOUD_TASKS_EMULATOR_HOST` is set, task lookup and queue statistics stay local and must not fall through to the production
 Cloud Tasks API.
+
+### Training delivery queue monitoring
+
+Admin Queue Monitoring includes **Training Delivery** at `/admin/queues/training-delivery`. Its Firestore job count
+includes delivery, remote verification and recurring reconciliation markers; **Due now** and oldest overdue lag exclude
+future-dated work. The separate Cloud Tasks depth is dispatch backlog, not the number of workouts synced. Current
+workout outcomes are aggregate counts over `trainingDeliveryStatuses`: delivered records with a retained remote copy,
+retrying, failed and needs review, with per-service breakdowns. A completed queue job does not imply provider acceptance.
+The admin callable uses only
+bounded Firestore aggregate queries, never returns ledger evidence, remote IDs, credentials or raw rejection bodies,
+and keeps the other queues available if Training indexes are missing. The collection-group status indexes in
+`firestore.indexes.json` must be deployed before outcome counts become available. Queue monitoring is read-only;
+it neither retries deliveries nor enables a provider. Production dashboards and alerts remain a separate rollout
+concern. MCP impact: none—the new counts are admin-only and do not change Training reads, mutations, scopes, consent,
+user-visible delivery projections or provider actions.
 
 ### Sports-lib reparse observability
 

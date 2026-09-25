@@ -74,6 +74,7 @@ import {
   McpDataError,
   McpDataServiceDependencies,
   projectDerivedMetricPayloadForMcp,
+  redactDerivedPayload,
   resolveMcpActivitySourcePath,
   resolveMcpRouteSourcePath,
   SAFE_ACTIVITY_LOCATION_FIELDS,
@@ -4894,13 +4895,8 @@ describe('MCP data service', () => {
     expect(JSON.stringify(all)).not.toContain('private-error');
   });
 
-  it('returns ready Training snapshots without event or activity identifiers and labels', async () => {
-    vi.mocked(dependencies.fetchDerivedSnapshot).mockResolvedValue({
-      status: 'ready',
-      schemaVersion: DERIVED_METRIC_SCHEMA_VERSION,
-      updatedAtMs: 123,
-      sourceEventCount: 3,
-      payload: {
+  it('redacts nested event and activity identifiers and labels before schema validation', () => {
+    const payload = {
         score: 88,
         sourceEventIds: ['event-1'],
         event: {
@@ -4939,16 +4935,10 @@ describe('MCP data service', () => {
           }],
         },
         activityLabel: 'Private label',
-      },
-    });
+    };
+    const redactedPayload = redactDerivedPayload(payload);
 
-    const result = await createMcpDataService(dependencies).getTrainingMetric(
-      'user-1',
-      DERIVED_METRIC_KINDS.FormNow,
-    );
-
-    expect(result.schemaVersion).toBe(MCP_TRAINING_METRIC_SCHEMA_VERSION);
-    expect(result.payload).toEqual({
+    expect(redactedPayload).toEqual({
       score: 88,
       event: {
         value: 42,
@@ -4975,8 +4965,8 @@ describe('MCP data service', () => {
         }],
       },
     });
-    expect(JSON.stringify(result.payload)).not.toContain('event-3');
-    expect(JSON.stringify(result.payload)).not.toContain('sourceFingerprint');
+    expect(JSON.stringify(redactedPayload)).not.toContain('event-3');
+    expect(JSON.stringify(redactedPayload)).not.toContain('sourceFingerprint');
   });
 
   it('keeps exact durability supporting-workout start times in the workspace only', async () => {
@@ -5481,13 +5471,8 @@ describe('MCP data service', () => {
     expect(serialized).not.toContain('manual-health-measurement');
   });
 
-  it('preserves current Training power-system diagnostics while removing the source fingerprint', async () => {
-    vi.mocked(dependencies.fetchDerivedSnapshot).mockResolvedValue({
-      status: 'ready',
-      schemaVersion: DERIVED_METRIC_SCHEMA_VERSION,
-      updatedAtMs: 123,
-      sourceEventCount: 4,
-      payload: {
+  it('preserves power-system diagnostics while redacting the source fingerprint', () => {
+    const payload = {
         dayBoundary: 'UTC',
         asOfDayMs: Date.parse('2026-07-20T00:00:00.000Z'),
         policyVersion: 1,
@@ -5520,18 +5505,10 @@ describe('MCP data service', () => {
             },
           },
         }],
-      },
-    });
+    };
+    const redactedPayload = redactDerivedPayload(payload);
 
-    const result = await createMcpDataService(dependencies).getTrainingMetric(
-      'user-1',
-      DERIVED_METRIC_KINDS.TrainingPowerSystems,
-    );
-
-    expect(result).toMatchObject({
-      metricKind: DERIVED_METRIC_KINDS.TrainingPowerSystems,
-      schemaVersion: MCP_TRAINING_METRIC_SCHEMA_VERSION,
-      payload: {
+    expect(redactedPayload).toMatchObject({
         activityTypes: [{
           current: {
             status: 'partial',
@@ -5556,10 +5533,9 @@ describe('MCP data service', () => {
             },
           },
         }],
-      },
     });
-    expect(JSON.stringify(result.payload)).not.toContain('sourceFingerprint');
-    expect(JSON.stringify(result.payload)).not.toContain('private-input-fingerprint');
+    expect(JSON.stringify(redactedPayload)).not.toContain('sourceFingerprint');
+    expect(JSON.stringify(redactedPayload)).not.toContain('private-input-fingerprint');
   });
 
   it.each([
@@ -5583,6 +5559,21 @@ describe('MCP data service', () => {
     )).rejects.toMatchObject<McpDataError>({
       code: 'metric_not_ready',
     });
+  });
+
+  it('treats a malformed unprojected Training snapshot as not ready', async () => {
+    vi.mocked(dependencies.fetchDerivedSnapshot).mockResolvedValue({
+      status: 'ready',
+      schemaVersion: DERIVED_METRIC_SCHEMA_VERSION,
+      updatedAtMs: 123,
+      sourceEventCount: 3,
+      payload: { score: 88 },
+    });
+
+    await expect(createMcpDataService(dependencies).getTrainingMetric(
+      'user-1',
+      DERIVED_METRIC_KINDS.Form,
+    )).rejects.toMatchObject<McpDataError>({ code: 'metric_not_ready' });
   });
 
   it('calculates current readiness with Dashboard-parity load, HRV, and overnight-HR evidence', async () => {

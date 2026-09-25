@@ -65,6 +65,7 @@ export const PUBLIC_MCP_TOOL_NAMES = [
   'query_metrics',
   'list_training_metrics',
   'get_training_metric',
+  'prepare_training_metrics',
   'list_sleep_vitals',
   'list_sleep_sessions',
   'query_sleep_summary',
@@ -1449,6 +1450,12 @@ export function createMcpOutputSchemaRegistry(scope: McpOutputSchemaScope) {
       metrics: trainingMetricCatalog,
     }),
     get_training_metric: trainingMetricOutput,
+    prepare_training_metrics: z.strictObject({
+      status: z.enum(['ready', 'preparing', 'unavailable']),
+      metricKinds: z.array(z.enum(DERIVED_METRIC_KINDS)).min(1).max(8),
+      readyMetricKinds: z.array(z.enum(DERIVED_METRIC_KINDS)).max(8),
+      retryAfterSeconds: z.number().int().min(1).max(60).nullable(),
+    }),
     list_sleep_vitals: z.strictObject({
       matchedSessionCount: count,
       vitals: z.array(sleepVitalAvailability),

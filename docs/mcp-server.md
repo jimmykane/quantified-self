@@ -111,6 +111,10 @@ They never accept credentials or remote IDs. `all_connected` fans out only to co
 by preview; explicit providers return independent blocked/success results. Pro, compatibility approval, horizon,
 connection, completion and provider readiness checks remain authoritative. Provider failure never rolls back authored
 schedule changes, and MCP itself makes no direct provider HTTP request.
+For a degraded standalone create-and-send (for example, Mountain Biking folded to Garmin Cycling), Send stores only
+delivery consent and queues reconciliation. It must not forward the mapping digest as approval. The public preview and
+apply result explain that a separate approval is needed; the current workout remains unsent until a new `approve`
+proposal binds the current destination and payload digest. An applied Send result is not a provider acceptance claim.
 
 The built-in Assistant exposes only the applicable focused/batch previews to Gemini. It prefers the focused tool for one
 new workout, including a one-workout create-and-send request, and the batch tool for other or genuinely multi-change
@@ -153,15 +157,19 @@ explicit folds cover the QS running and cycling Training profiles, including ind
 velomobile, Enduro MTB and Downhill Cycling. Every non-base profile remains an approval-bound degradation; clients must
 not rewrite the authored sport just to satisfy a provider.
 
-Manual pool and open-water swimming support likewise leaves the MCP wire contract unchanged: the existing canonical sport
-enum already accepts `Swimming` and `Open Water Swimming`, and planned-workout read summaries format both swim profiles'
-distances in metres and pace using the owner's /100 m or /100 yd setting. The later #733 recipe adds an optional
-canonical pool length for pool swimming, but the registered v1 recipe remains frozen: its existing read omits that new
-field while continuing to return the workout and compatibility assessment. It cannot author the pool setting. Additive
-pool-length read/authoring coverage is tracked in #734 under #583; no existing schema, mutation kind, tool, scope,
-consent, provider action, or private delivery evidence changes. Existing strict proposal/confirmation checks and
-provider compatibility assessment
-still govern writes; Garmin accepts compatible, explicitly consented pool-swim delivery after owner-account cloud CRUD/readback proof (not watch receipt), Wahoo rejects swimming delivery, COROS accepts only target-free pool recipes at its backend
+Manual pool and open-water swimming use the exact canonical sport strings `Swimming` and `Open Water Swimming`.
+Planned-workout summaries format swim distances in metres and pace with the owner's /100 m or /100 yd setting.
+The #733 recipe's optional physical pool length is independent of a distance step. The registered v1 read and write
+schemas stay frozen and omit it. The additive `get_planned_workout_v2` read returns an authored
+`poolLength: { meters, presentation }` for pool swims under the existing `training-plans:read` grant, without inferring
+one from step distance. `preview_planned_workout_v2_change` accepts one complete non-strength create/update with optional
+pool length under the existing parent read plus `training-plans:write` grants. It shares the owner-, connection-,
+grant-, revision- and expiry-bound proposal and approval-gated `apply_training_changes` path; it has no provider
+action. A registered v1 edit of a workout with selected pool length fails rather than clearing that setting. Invalid
+or non-pool lengths fail strict validation, and older pool recipes remain readable with length absent. These additive
+tools are the local implementation of #734 under #583; they need deployment and client catalog refresh before use.
+No existing schema, mutation kind, scope, consent, provider action or private delivery evidence changes. Existing
+provider compatibility assessment still governs writes; Garmin accepts compatible, explicitly consented pool-swim delivery after owner-account cloud CRUD/readback proof (not watch receipt), Wahoo rejects swimming delivery, COROS accepts only target-free pool recipes at its backend
 while new browser Send/sync actions remain unavailable, and Suunto maps pool and open-water profiles to distinct Guide
 activity recommendations. Owner read fixtures cover both swim sport strings and metre-based steps; no widened consent or
 provider action is implied by this read-only presentation change.
@@ -771,6 +779,7 @@ The analytics and map entries follow the
 | `query_metric` | `metrics:read` | One event-stat aggregation by local date interval or activity type |
 | `query_metrics` | `metrics:read` | Up to four event-stat aggregations over one shared bounded read, date range, grouping, timezone, and activity filter |
 | `list_training_metrics` | `metrics:read` | Human-readable Training metric catalog with current snapshot availability metadata but no payloads or provenance |
+| `prepare_training_metrics` | `metrics:read` | Queue or join preparation for one to eight registered Training snapshots and return readiness with retry guidance, without metric values |
 | `get_training_metric` | `metrics:read` | One ready, redacted Training-derived snapshot |
 | `get_activity_metrics` | `metrics:read` + `activity-details:read` | Up to 25 explicitly selected canonical numeric Sports Lib metrics for one referenced activity |
 | `get_activity_overview` | `metrics:read` + `activity-details:read` | Coordinate-free activity type plus actual metric, detail, and chart-source availability |
@@ -1464,6 +1473,15 @@ descriptors, validates the snapshot entry type and metric identity, and reports 
 `missing`, or `schema_mismatch`. It never returns a snapshot payload, backend error text, event identity, or source
 provenance. Clients should use it before deciding that a Training metric is unavailable, and call
 `get_training_metric` only for a ready kind.
+
+For a current or missing snapshot, call `prepare_training_metrics` with one to eight catalog kinds. The tool runs the
+same freshness check as the Training route, queues only stale kinds through the existing coordinator, waits at most
+five seconds, and returns `ready`, `preparing`, or `unavailable`, plus the kinds already ready and a retry delay when
+preparing. It is idempotent but can queue backend work (`readOnlyHint: false`, `destructiveHint: false`). Retry this
+tool after the suggested delay while it is preparing; once ready, call the unchanged `get_training_metric` read.
+The response exposes neither snapshot values nor private worker state. A failed or disabled queue reports
+`unavailable` rather than inventing a ready value. Existing clients need a deployed server update and tool-catalog
+refresh to discover this additive tool; the pending contract record does not make it available by itself.
 
 Training calculation, schema, invalidation, rebuild, and extension guidance remains in
 [`training-workspace.md`](training-workspace.md). Adding a kind requires its normal derived pipeline, exact safe MCP

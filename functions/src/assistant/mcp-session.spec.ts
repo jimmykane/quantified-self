@@ -11,10 +11,12 @@ import {
   ASSISTANT_BASE_MCP_TOOL_NAMES,
   ASSISTANT_MCP_TOOL_NAMES,
   AssistantRecoverableMcpToolError,
+  AssistantTrainingMetricsPreparingError,
   createAssistantMcpSession,
 } from './mcp-session';
 import { MCP_OAUTH_SCOPES } from '../mcp/oauth.service';
 import type { AuthenticatedMcpRequest } from '../mcp/server';
+import { createMcpServer } from '../mcp/server';
 
 function createTestServer(options: {
   errorTool?: typeof ASSISTANT_MCP_TOOL_NAMES[number];
@@ -67,6 +69,22 @@ function createTestServer(options: {
 }
 
 describe('Assistant MCP session', () => {
+  it('turns pending metric preparation into a retry state and blocks premature reads', async () => {
+    const session = await createAssistantMcpSession('user-1', 'https://quantified-self.io', {
+      createServer: auth => createMcpServer(auth, 'https://quantified-self.io', undefined,
+        async (_uid, metricKinds) => ({
+          status: 'preparing', metricKinds, readyMetricKinds: [], retryAfterSeconds: 5,
+        })),
+    });
+    try {
+      await expect(session.callTool('get_training_metric', { metricKind: 'form' }))
+        .rejects.toBeInstanceOf(AssistantRecoverableMcpToolError);
+      await expect(session.callTool('prepare_training_metrics', { metricKinds: ['form'] }))
+        .rejects.toBeInstanceOf(AssistantTrainingMetricsPreparingError);
+    } finally {
+      await session.close();
+    }
+  });
   it('adds only Training plan reads after independent consent, without notes, Health or location grants', async () => {
     let capturedAuth: AuthenticatedMcpRequest | null = null;
     const session = await createAssistantMcpSession('ordinary-owner', 'https://quantified-self.io', {
@@ -74,6 +92,7 @@ describe('Assistant MCP session', () => {
     }, 'coordinate_free', false, true);
     try {
       expect(session.tools.map(tool => tool.name)).toEqual([...ASSISTANT_BASE_MCP_TOOL_NAMES, ...TRAINING_READ_TOOLS]);
+      expect(session.tools.map(tool => tool.name)).toContain('get_planned_workout_v2');
       expect(capturedAuth!.scopes).toContain(MCP_OAUTH_SCOPES.TrainingPlansRead);
       for (const scope of [MCP_OAUTH_SCOPES.TimelineNotesRead, MCP_OAUTH_SCOPES.TimelineNotesWrite,
         MCP_OAUTH_SCOPES.EventsWrite, MCP_OAUTH_SCOPES.HealthRead,
@@ -95,6 +114,7 @@ describe('Assistant MCP session', () => {
     try {
       expect(session.tools.map(tool => tool.name)).toContain('preview_training_changes');
       expect(session.tools.map(tool => tool.name)).toContain('preview_create_planned_workout');
+      expect(session.tools.map(tool => tool.name)).toContain('preview_planned_workout_v2_change');
       expect(session.tools.map(tool => tool.name)).not.toContain('apply_training_changes' as never);
       expect(capturedAuth).toMatchObject({ connectionId: 'first-party-assistant-v1:conversation-123',
         scopes: expect.arrayContaining([MCP_OAUTH_SCOPES.TrainingPlansRead, MCP_OAUTH_SCOPES.TrainingPlansWrite,
@@ -245,7 +265,7 @@ describe('Assistant MCP session', () => {
       expect(session.tools.map(tool => tool.name)).toEqual(ASSISTANT_MCP_TOOL_NAMES.filter(name => name !== 'query_timeline_notes'
         && name !== 'query_activities_with_tags'
         && name !== 'query_editable_timeline_notes'
-        && !name.startsWith('prepare_')
+        && (!name.startsWith('prepare_') || name === 'prepare_training_metrics')
         && !(TRAINING_PREVIEW_TOOLS as readonly string[]).includes(name)
         && !(TRAINING_READ_TOOLS as readonly string[]).includes(name)));
       expect(session.tools.map(tool => tool.name)).toContain(

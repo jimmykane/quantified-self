@@ -6,7 +6,7 @@ import type { DeliveryRuntime } from '../training-plans/delivery/contracts';
 import { FakeTrainingTransport } from '../training-plans/delivery/test-support/fake-transport';
 import { parseStrengthWorkoutDetailsV1 } from '../../../shared/strength-workout';
 import { applyTrainingChanges, previewCreatePlannedWorkout, previewTrainingChanges,
-  previewStrengthWorkoutChange,
+  previewStrengthWorkoutChange, previewPlannedWorkoutV2Change,
   type TrainingWriteDependencies } from './training-plans-write.service';
 import { TRAINING_DELIVERY_WRITE_SCOPE, TRAINING_PLANS_SCOPE, TRAINING_PLANS_WRITE_SCOPE } from './training-plans.schemas';
 
@@ -96,6 +96,40 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Training MCP write propos
     expect(applied.createdReferences).toEqual([expect.objectContaining({ localKey: 'lift', kind: 'workout' })]);
     await expect(applyTrainingChanges({ uid, connectionId: 'connection', scopes,
       arguments: { proposalRef: preview.proposalRef, permissionMode: 'schedule' } }, deps)).resolves.toEqual(applied);
+  });
+
+  it('creates and edits a selected pool length through v2 without a v1 edit silently clearing it', async () => {
+    const swim = { version: 1 as const, sport: ActivityTypes.Swimming,
+      poolLength: { meters: 25, presentation: 'meters' as const },
+      nodes: [{ id: 'length', kind: 'step' as const, purpose: 'work' as const,
+        ending: { kind: 'distance' as const, meters: 100 }, targets: [] }] };
+    const createdPreview = await previewPlannedWorkoutV2Change({ uid, connectionId: 'connection', scopes,
+      arguments: { expectedScheduleRevision: 1, change: { kind: 'create-workout', localKey: 'swim', plan: null,
+        localDate: '2026-09-18', title: '25 m pool', structure: swim } } }, deps);
+    const created = await applyTrainingChanges({ uid, connectionId: 'connection', scopes,
+      arguments: { proposalRef: createdPreview.proposalRef, permissionMode: 'schedule' } }, deps);
+    const workout = (await db.collection('users').doc(uid).collection('scheduledWorkouts').get()).docs[0];
+    expect(workout.get('structure.poolLength')).toEqual(swim.poolLength);
+    const workoutRef = created.createdReferences[0].reference;
+    const { poolLength: selectedPoolLength, ...legacySwim } = swim;
+    expect(selectedPoolLength).toEqual({ meters: 25, presentation: 'meters' });
+    await expect(previewTrainingChanges({ uid, connectionId: 'connection', scopes,
+      arguments: { expectedScheduleRevision: created.scheduleRevision, changes: [{ kind: 'update-workout',
+        workout: { ref: workoutRef }, plan: null, localDate: '2026-09-18', title: 'Legacy edit',
+        structure: legacySwim }] } }, deps)).rejects.toThrow('without silently clearing');
+    const updateInput = { uid, connectionId: 'connection', scopes,
+      arguments: { expectedScheduleRevision: created.scheduleRevision, change: { kind: 'update-workout',
+        workout: { ref: workoutRef }, plan: null, localDate: '2026-09-19', title: '25 yd pool',
+        structure: { ...swim, poolLength: { meters: 22.86, presentation: 'yards' } } } } };
+    const updatedPreview = await previewPlannedWorkoutV2Change(updateInput, deps);
+    const updated = await applyTrainingChanges({ uid, connectionId: 'connection', scopes,
+      arguments: { proposalRef: updatedPreview.proposalRef, permissionMode: 'schedule' } }, deps);
+    expect((await workout.ref.get()).get('structure.poolLength')).toEqual({ meters: 22.86, presentation: 'yards' });
+    await expect(applyTrainingChanges({ uid, connectionId: 'connection', scopes,
+      arguments: { proposalRef: updatedPreview.proposalRef, permissionMode: 'schedule' } }, deps)).resolves.toEqual(updated);
+    await expect(previewPlannedWorkoutV2Change(updateInput, deps)).rejects.toThrow('schedule changed');
+    await expect(previewPlannedWorkoutV2Change({ ...updateInput,
+      scopes: [TRAINING_PLANS_SCOPE] }, deps)).rejects.toThrow('permission');
   });
 
   it('applies compatible authored changes together while preserving each revision', async () => {
@@ -225,6 +259,38 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Training MCP write propos
     expect(applied.providers).toEqual([
       expect.objectContaining({ provider: 'garmin', status: 'applied' }),
     ]);
+  });
+
+  it('creates a degraded standalone workout without treating Send as mapping approval', async () => {
+    transport!.level = 'degraded';
+    const preview = await previewCreatePlannedWorkout({ uid, connectionId: 'connection', scopes,
+      arguments: { expectedScheduleRevision: 1, localDate: '2026-09-18', title: 'Mountain ride',
+        structure: { ...structure, sport: ActivityTypes.MountainBiking },
+        delivery: { providers: ['garmin'], timeZone: 'Europe/Helsinki' } } }, deps);
+    expect(preview.providerPreviews).toEqual([expect.objectContaining({ provider: 'garmin',
+      warningCount: 1, summary: expect.stringContaining('separate approval') })]);
+
+    const applied = await applyTrainingChanges({ uid, connectionId: 'connection', scopes,
+      arguments: { proposalRef: preview.proposalRef, permissionMode: 'combined' } }, deps);
+    expect(applied.status).toBe('applied');
+    expect(applied.providers).toEqual([expect.objectContaining({ provider: 'garmin', status: 'applied',
+      message: expect.stringContaining('separate mapping approval') })]);
+    const user = db.collection('users').doc(uid);
+    const workouts = await user.collection('scheduledWorkouts').get();
+    expect(workouts.size).toBe(1);
+    const setting = user.collection('trainingDeliverySettings').doc(`workout_${workouts.docs[0].id}_garmin`);
+    expect((await setting.get()).data()).toMatchObject({ enabled: true, approvedDigest: null });
+
+    const approvalPreview = await previewTrainingChanges({ uid, connectionId: 'connection', scopes,
+      arguments: { expectedScheduleRevision: applied.scheduleRevision, changes: [
+        { kind: 'provider-delivery', targetType: 'workout',
+          target: { ref: applied.createdReferences[0].reference }, providers: ['garmin'], action: 'approve' },
+      ] } }, deps);
+    const approved = await applyTrainingChanges({ uid, connectionId: 'connection', scopes,
+      arguments: { proposalRef: approvalPreview.proposalRef, permissionMode: 'delivery' } }, deps);
+    expect(approved.status).toBe('applied');
+    expect((await setting.get()).get('approvedDigest')).toMatch(/^[a-f0-9]{64}$/);
+    expect((await user.collection('scheduledWorkouts').get()).size).toBe(1);
   });
 
   it('creates a standalone workout, fans out only to ready providers and applies idempotently', async () => {
