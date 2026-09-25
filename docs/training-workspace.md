@@ -3214,6 +3214,7 @@ not mistaken for an unsupported Training capability.
 backend callers. It accepts one to eight registered kinds under `metrics:read`, probes the same coordinator,
 snapshot payload/schema, source mutation revision, latest event update, and UTC-day checks as the Training route's
 `ensureDerivedMetrics` callable, and joins or queues only the affected kinds through the existing coordinator.
+`ready` requires the exact current snapshot schema and a payload that passes the same projected MCP read contract.
 It polls for at most five seconds. Its strict response contains only `ready`, `preparing`, or `unavailable`, the
 requested and ready kind lists, and a retry delay; it never returns a metric payload, worker error, or source identity.
 An in-flight coordinator is not treated as a ready snapshot. Clients retry preparation after a `preparing` result

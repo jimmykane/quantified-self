@@ -24,6 +24,7 @@ vi.mock('firebase-functions/v2/https', () => ({
 
 import {
     decideDerivedMetricsFreshness,
+    isDerivedMetricSnapshotReadableByMcp,
     prepareDerivedMetricsForUser,
     resolveDerivedMetricKindsToQueue,
     resolveDerivedMetricSnapshotPayloadValidity,
@@ -170,6 +171,38 @@ describe('decideDerivedMetricsFreshness', () => {
             metricKindsToQueue: [DERIVED_METRIC_KINDS.FormNow],
             reason: 'schema_version_mismatch',
         });
+    });
+
+    it('does not report a future schema version ready before MCP can read it', () => {
+        const input = {
+            ...baseInput,
+            metricSnapshotsByKind: buildMetricSnapshots({
+                [DERIVED_METRIC_KINDS.FormNow]: { schemaVersion: DERIVED_METRIC_SCHEMA_VERSION + 1 },
+            }),
+        };
+        expect(decideDerivedMetricsFreshness(input).reason).toBe('schema_version_mismatch');
+        expect(resolveReadyDerivedMetricKinds(input)).toEqual([]);
+    });
+
+    it('does not report a null payload ready before MCP can read it', () => {
+        expect(resolveDerivedMetricSnapshotPayloadValidity(DERIVED_METRIC_KINDS.FormNow, null)).toBe(false);
+        const input = {
+            ...baseInput,
+            metricSnapshotsByKind: buildMetricSnapshots({
+                [DERIVED_METRIC_KINDS.FormNow]: { payloadValid: false },
+            }),
+        };
+        expect(decideDerivedMetricsFreshness(input).reason).toBe('invalid_metric_payload');
+        expect(resolveReadyDerivedMetricKinds(input)).toEqual([]);
+    });
+
+    it('rejects a projected payload that the MCP Training read cannot serve', () => {
+        expect(resolveDerivedMetricSnapshotPayloadValidity(
+            DERIVED_METRIC_KINDS.TrainingSummary, {},
+        )).toBe(true);
+        expect(isDerivedMetricSnapshotReadableByMcp(
+            DERIVED_METRIC_KINDS.TrainingSummary, {},
+        )).toBe(false);
     });
 
     it('queues hard- and calendar-stale snapshots together in request order', () => {

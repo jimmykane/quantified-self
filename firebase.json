@@ -284,6 +284,10 @@
           "destination": "/index.csr.html"
         },
         {
+          "source": "/admin/queues/training-delivery",
+          "destination": "/index.csr.html"
+        },
+        {
           "source": "/admin/queues/route-delivery-sync",
           "destination": "/index.csr.html"
         },
@@ -597,6 +601,10 @@
         },
         {
           "source": "/admin/queues/activity-sync",
+          "destination": "/index.csr.html"
+        },
+        {
+          "source": "/admin/queues/training-delivery",
           "destination": "/index.csr.html"
         },
         {

@@ -3590,6 +3590,18 @@ const MCP_PROJECTED_TRAINING_METRIC_KINDS = new Set<DerivedMetricKind>([
   DERIVED_METRIC_KINDS.BodyWeightTrend,
 ]);
 
+export function isMcpTrainingMetricPayloadReadable(metricKind: DerivedMetricKind, payload: unknown): boolean {
+  if (payload === null || payload === undefined) {
+    return false;
+  }
+  if (!MCP_PROJECTED_TRAINING_METRIC_KINDS.has(metricKind)) {
+    return true;
+  }
+  const projectedPayload = projectDerivedMetricPayloadForMcp(metricKind, payload);
+  return MCP_DERIVED_PAYLOAD_SCHEMAS[metricKind]
+    .safeParse(redactDerivedPayload(projectedPayload)).success;
+}
+
 function redactDerivedPayload(
   value: unknown,
   parentKey = '',

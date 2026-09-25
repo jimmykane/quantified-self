@@ -17,6 +17,7 @@ import {
     type DerivedMetricKind,
 } from '../../../shared/derived-metrics';
 import { normalizeDerivedTrainingReadinessMetricPayload } from '../../../shared/training-readiness-metric';
+import { isMcpTrainingMetricPayloadReadable } from '../mcp/data.service';
 import { markDerivedMetricsDirtyAndMaybeQueue } from './derived-metrics.service';
 
 const DERIVED_METRICS_STUCK_QUEUED_THRESHOLD_MS = 10 * 60 * 1000;
@@ -197,7 +198,7 @@ export function decideDerivedMetricsFreshness(input: DerivedMetricsFreshnessInpu
             hardStaleKinds.push(metricKind);
             continue;
         }
-        if (!Number.isFinite(snapshot.schemaVersion) || (snapshot.schemaVersion as number) < DERIVED_METRIC_SCHEMA_VERSION) {
+        if (snapshot.schemaVersion !== DERIVED_METRIC_SCHEMA_VERSION) {
             hardStaleKinds.push(metricKind);
             continue;
         }
@@ -244,8 +245,7 @@ export function decideDerivedMetricsFreshness(input: DerivedMetricsFreshnessInpu
         );
         const hasSchemaVersionMismatch = hardStaleKinds.some((kind) => {
             const snapshot = input.metricSnapshotsByKind[kind];
-            return !Number.isFinite(snapshot?.schemaVersion)
-                || (snapshot?.schemaVersion as number) < DERIVED_METRIC_SCHEMA_VERSION;
+            return snapshot?.schemaVersion !== DERIVED_METRIC_SCHEMA_VERSION;
         });
         const hasMissingSnapshotMutationVersion = hardStaleKinds.some(
             kind => !Number.isFinite(input.metricSnapshotsByKind[kind]?.builtFromEventMutationVersion),
@@ -319,7 +319,7 @@ async function readDerivedMetricsProbe(uid: string, metricKinds: DerivedMetricKi
             schemaVersion: toFiniteNumber(snapshotData.schemaVersion),
             builtFromEventMutationVersion: toFiniteNumber(snapshotData.builtFromEventMutationVersion),
             asOfDayMs: toFiniteNumber(payload.asOfDayMs),
-            payloadValid: resolveDerivedMetricSnapshotPayloadValidity(metricKind, snapshotData.payload),
+            payloadValid: isDerivedMetricSnapshotReadableByMcp(metricKind, snapshotData.payload),
         };
         return result;
     }, {} as DerivedMetricsFreshnessInput['metricSnapshotsByKind']);
@@ -457,6 +457,9 @@ export function resolveDerivedMetricSnapshotPayloadValidity(
     metricKind: DerivedMetricKind,
     payload: unknown,
 ): boolean {
+    if (payload === null || payload === undefined) {
+        return false;
+    }
     if (metricKind === DERIVED_METRIC_KINDS.TrainingDurability) {
         return hasTrainingDurabilitySupportingEventStartTimes(payload);
     }
@@ -470,6 +473,11 @@ export function resolveDerivedMetricSnapshotPayloadValidity(
         return source?.recoveryVersion === DERIVED_TRAINING_BUILD_COMPARISON_RECOVERY_VERSION;
     }
     return true;
+}
+
+export function isDerivedMetricSnapshotReadableByMcp(metricKind: DerivedMetricKind, payload: unknown): boolean {
+    return resolveDerivedMetricSnapshotPayloadValidity(metricKind, payload)
+        && isMcpTrainingMetricPayloadReadable(metricKind, payload);
 }
 
 function hasTrainingDurabilitySupportingEventStartTimes(payload: unknown): boolean {
