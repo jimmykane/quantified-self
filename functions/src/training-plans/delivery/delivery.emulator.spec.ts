@@ -530,6 +530,40 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Training delivery real Fi
     expect(transport.artifacts.size).toBe(0);
     expect(transport.calls.at(-1)).toMatchObject({ kind: 'remove', allowPastRemoval: true });
   });
+  it('keeps plan cleanup authorized across a temporary disconnect after conversion to standalone', async () => {
+    await createPlan(); await moveToPlan('p'); await configurePlan(); await drain();
+    const ledger = (await ledgers())[0]; await processTrainingDelivery(runtime, uid, ledger.id);
+    now = Date.parse('2026-09-12T10:00:00Z');
+    await deleteTrainingPlanForUser(uid, { mutationId: randomUUID(), planId: 'p',
+      expectedRevisions: await revisions(), workoutDisposition: 'convert-to-standalone',
+      confirmPlanDeletion: true, removePastProviderCopies: true }, { db, nowMs: now });
+    connectionState = 'reconnect_required';
+    await drain();
+    expect((await ledgers())[0]).toMatchObject({ planId: null, desired: 'preserve',
+      pastCleanup: { scope: 'plan', scopeId: 'p' } });
+    expect(transport.artifacts.size).toBe(1);
+
+    connectionState = 'connected'; await mark(); await drain();
+    expect((await ledgers())[0]).toMatchObject({ desired: 'absent', pastCleanup: { scope: 'plan', scopeId: 'p' } });
+    await processTrainingDelivery(runtime, uid, ledger.id);
+    expect(transport.calls.at(-1)).toMatchObject({ kind: 'remove', allowPastRemoval: true });
+    expect(transport.artifacts.size).toBe(0);
+  });
+  it('respects a later workout deletion that declines a former plan cleanup opt-in', async () => {
+    await createPlan(); await moveToPlan('p'); await configurePlan(); await drain();
+    const ledger = (await ledgers())[0]; await processTrainingDelivery(runtime, uid, ledger.id);
+    now = Date.parse('2026-09-12T10:00:00Z');
+    await deleteTrainingPlanForUser(uid, { mutationId: randomUUID(), planId: 'p',
+      expectedRevisions: await revisions(), workoutDisposition: 'convert-to-standalone',
+      confirmPlanDeletion: true, removePastProviderCopies: true }, { db, nowMs: now });
+    connectionState = 'reconnect_required'; await drain();
+    await editSchedule({ kind: 'delete-workout', workoutId: 'w' });
+    connectionState = 'connected'; await mark(); await drain();
+    expect((await ledgers())[0]).toMatchObject({ desired: 'preserve', status: 'past' });
+    await processTrainingDelivery(runtime, uid, ledger.id);
+    expect(transport.calls.filter(call => call.kind === 'remove')).toHaveLength(0);
+    expect(transport.artifacts.size).toBe(1);
+  });
   it('never withdraws a copy already marked completed despite past deletion opt-in', async () => {
     const ledger = await delivered();
     const ref = db.collection('users').doc(uid).collection(DELIVERY_LEDGER).doc(ledger.id);

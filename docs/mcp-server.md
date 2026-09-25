@@ -95,7 +95,9 @@ using Research because Research may invoke connector tools without another appro
 proposal and binds it to the owner, connection, grant, revision and expiry; replay returns its persisted terminal result.
 Plan deletion is available only as the sole proposal change and requires an explicit `convert-to-standalone` or
 `delete-workouts` choice. Its preview states that the plan and revision history are permanently removed, describes the
-workout effect, and warns that provider copies may remain when access is unavailable. If its resumable multi-transaction
+workout effect, and states that eligible future provider copies may withdraw, while past provider copies and recorded
+activities remain. MCP deletion does not offer the manual UI's separate past-copy cleanup opt-in. If its resumable
+multi-transaction
 deletion or cleanup is interrupted after the lock is acquired, the proposal remains retryable and the same approved apply
 resumes the idempotent operation instead of recording a false terminal failure. Permanent single-workout deletion and
 history restoration remain deliberately absent.

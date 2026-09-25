@@ -354,7 +354,7 @@ function describeOperation(operation: TrainingScheduleMutationOperationV1): stri
     case 'move-workout': return `Move the workout to ${operation.localDate}${operation.planId ? ' in the selected plan' : ' as a standalone workout'}.`;
     case 'copy-workout': return `Copy the workout to ${operation.localDate}${operation.planId ? ' in the selected plan' : ' as a standalone workout'}.`;
     case 'set-workout-lifecycle': return `${operation.lifecycle === 'skipped' ? 'Mark' : 'Restore'} the workout ${operation.lifecycle === 'skipped' ? 'as skipped' : 'to planned'}.`;
-    case 'delete-workout': return 'Move the workout to recoverable history.';
+    case 'delete-workout': return 'Move the workout to recoverable history. Eligible future provider copies may withdraw; past provider copies remain. Recorded activities are not deleted.';
     case 'permanently-delete-workout': return 'Permanently delete the workout.';
   }
 }
@@ -644,7 +644,7 @@ export async function previewTrainingChanges(
         ? `${currentWorkoutCount} current workout${currentWorkoutCount === 1 ? '' : 's'} will become standalone.`
         : `${currentWorkoutCount} current workout${currentWorkoutCount === 1 ? '' : 's'} will also be permanently deleted.`;
       publicChanges.push({ index, kind: change.kind,
-        summary: `Permanently delete plan “${plan.name}” and its revision history. ${workoutEffect} Provider copies may remain when provider access is unavailable.` });
+        summary: `Permanently delete plan “${plan.name}” and its revision history. ${workoutEffect} Eligible future provider copies may withdraw; past provider copies remain. Recorded activities are not deleted.` });
       return;
     }
     if (recipeMode === 'legacy' && change.kind === 'update-workout') {

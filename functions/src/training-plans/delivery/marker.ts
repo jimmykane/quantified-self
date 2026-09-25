@@ -42,20 +42,28 @@ export async function readPastCleanupAuthorization(tx: Transaction, db: Firestor
   if (workout?.lifecycle === 'deleted' || !workout) {
     const snapshot = await tx.get(pastCleanupRef(db, uid, 'workout', ledger.workoutId));
     const value = snapshot.data();
-    if (value?.schemaVersion === 1 && value.enabled === true && value.scope === 'workout' && value.scopeId === ledger.workoutId
+    if (value?.schemaVersion === 1 && typeof value.enabled === 'boolean'
+      && value.scope === 'workout' && value.scopeId === ledger.workoutId
       && typeof value.mutationId === 'string' && Number.isSafeInteger(value.requestedAtMs)
       && (workout ? value.deletedAtMs === workout.deletedAtMs : true)) {
+      // The later per-workout deletion choice supersedes an earlier plan opt-in.
+      if (!value.enabled) return null;
       return { scope: 'workout', scopeId: ledger.workoutId, mutationId: value.mutationId,
         requestedAtMs: value.requestedAtMs, ...(Number.isSafeInteger(value.deletedAtMs) ? { deletedAtMs: value.deletedAtMs } : {}) };
     }
   }
-  if (ledger.planId && stillDeleted({ scope: 'plan', scopeId: ledger.planId, mutationId: '', requestedAtMs: 0 }, workout)) {
-    const snapshot = await tx.get(pastCleanupRef(db, uid, 'plan', ledger.planId));
+  // A plan-to-standalone deletion can clear the ledger's current planId while a
+  // disconnected provider is still holding its old copy. Retain only a pointer
+  // here; the private marker remains the authority for every retry.
+  const deletedPlanId = ledger.pastCleanup?.scope === 'plan' ? ledger.pastCleanup.scopeId : ledger.planId;
+  if (deletedPlanId && stillDeleted({ scope: 'plan', scopeId: deletedPlanId, mutationId: '', requestedAtMs: 0 }, workout)) {
+    const snapshot = await tx.get(pastCleanupRef(db, uid, 'plan', deletedPlanId));
     const value = snapshot.data();
-    if (value?.schemaVersion === 1 && value.scope === 'plan' && value.scopeId === ledger.planId
+    if (value?.schemaVersion === 1 && value.scope === 'plan' && value.scopeId === deletedPlanId
       && typeof value.mutationId === 'string' && Number.isSafeInteger(value.requestedAtMs)
+      && (ledger.pastCleanup?.scope !== 'plan' || ledger.pastCleanup.mutationId === value.mutationId)
       && Array.isArray(value.workoutIds) && value.workoutIds.includes(ledger.workoutId)) {
-      return { scope: 'plan', scopeId: ledger.planId, mutationId: value.mutationId, requestedAtMs: value.requestedAtMs };
+      return { scope: 'plan', scopeId: deletedPlanId, mutationId: value.mutationId, requestedAtMs: value.requestedAtMs };
     }
   }
   return null;

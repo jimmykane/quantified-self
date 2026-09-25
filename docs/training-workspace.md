@@ -39,6 +39,8 @@ lock is acquired keeps the proposal resumable so the same approved apply can fin
 Permanent single-workout deletion and history restoration remain excluded. The latter allows plan delivery
 enablement and workout send/resume/stop/retry/check/approval. Delivery remains Pro and is gated by provider connection,
 permissions, configuration, compatibility and explicit consent.
+MCP plan and recoverable workout deletion never select the manual UI's optional past-provider-copy cleanup. Their
+previews distinguish eligible future-copy withdrawal from past copies, which remain, and recorded activities are untouched.
 External clients prepare one strict proposal of at most 25 changes, then invoke the separately approval-gated
 `apply_training_changes` write tool. ChatGPT, Claude and other MCP hosts own their native tool-approval UI; QS does not
 use MCP elicitation for a second confirmation round. A host may let its user configure automatic tool approval, which QS
@@ -1042,10 +1044,12 @@ a private, mutation-bound choice; reconciliation and every provider request rech
 connection generation, retained identity and completion state. Garmin removes the schedule before its workout; Wahoo
 removes the dated Workout before its Plan; Suunto removes the owned Guide. These are best-effort cloud removals, not
 proof of app/watch removal or deletion of any recorded activity. A restored and subsequently deleted workout must opt
-in again; an old authorization cannot be reused. COROS deliberately remains in backend reconciliation and tests, but
+in again; an old authorization cannot be reused. For plan-to-standalone deletion, the ledger keeps only the old plan
+marker pointer across temporary disconnects and rechecks the private marker on retry. A later standalone-workout
+deletion without opt-in overrides that earlier plan choice. COROS deliberately remains in backend reconciliation and tests, but
 its contract allows deleting only unexecuted workouts dated today or later, so past copies are retained and reported
-as unsupported. New-send UI availability remains a separate policy. Existing MCP deletion previews/applies omit the
-new opt-in and retain default past-copy preservation; this change adds no MCP tool, schema, scope, or provider action.
+as unsupported. New-send UI availability remains a separate policy. MCP deletion previews/applies omit the
+opt-in and retain default past-copy preservation; this change adds no MCP tool, schema, scope, or provider action.
 
 #### Garmin workout sport profiles (#647)
 

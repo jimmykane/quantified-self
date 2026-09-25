@@ -165,6 +165,7 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Training MCP write propos
     const created = await applyTrainingChanges({ uid, connectionId: 'connection', scopes,
       arguments: { proposalRef: createPreview.proposalRef, permissionMode: 'schedule' } }, deps);
     const planRef = created.createdReferences.find(reference => reference.kind === 'plan')!.reference;
+    const planId = (await db.collection('users').doc(uid).collection('trainingPlans').get()).docs[0].id;
 
     await expect(previewTrainingChanges({ uid, connectionId: 'connection', scopes,
       arguments: { expectedScheduleRevision: created.scheduleRevision, changes: [
@@ -180,6 +181,7 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Training MCP write propos
     expect(deletionPreview.changes[0]).toMatchObject({ kind: 'delete-plan' });
     expect(deletionPreview.changes[0].summary).toContain('revision history');
     expect(deletionPreview.changes[0].summary).toContain('will become standalone');
+    expect(deletionPreview.changes[0].summary).toContain('past provider copies remain');
 
     const deleted = await applyTrainingChanges({ uid, connectionId: 'connection', scopes,
       arguments: { proposalRef: deletionPreview.proposalRef, permissionMode: 'schedule' } }, deps);
@@ -187,6 +189,32 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Training MCP write propos
     expect((await db.collection('users').doc(uid).collection('trainingPlans').get()).empty).toBe(true);
     expect((await db.collection('users').doc(uid).collection('scheduledWorkouts').get()).docs[0].data())
       .toMatchObject({ title: 'Keep this run', planId: null });
+    expect((await db.collection('users').doc(uid).collection('trainingDeliveryState').doc('current')
+      .collection('pastCleanup').doc(`plan_${planId}`).get()).exists).toBe(false);
+  });
+
+  it('keeps MCP workout deletion recoverable without opting into past provider cleanup', async () => {
+    const user = db.collection('users').doc(uid);
+    const create = await previewCreatePlannedWorkout({ uid, connectionId: 'connection', scopes,
+      arguments: { expectedScheduleRevision: 1, localDate: '2026-09-18', title: 'MCP deletion check', structure } }, deps);
+    const created = await applyTrainingChanges({ uid, connectionId: 'connection', scopes,
+      arguments: { proposalRef: create.proposalRef, permissionMode: 'schedule' } }, deps);
+    const workoutRef = created.createdReferences[0].reference;
+    const workoutId = (await user.collection('scheduledWorkouts').get()).docs[0].id;
+    const deletion = await previewTrainingChanges({ uid, connectionId: 'connection', scopes,
+      arguments: { expectedScheduleRevision: created.scheduleRevision,
+        changes: [{ kind: 'delete-workout', workout: { ref: workoutRef } }] } }, deps);
+    expect(deletion.changes[0].summary).toContain('recoverable history');
+    expect(deletion.changes[0].summary).toContain('past provider copies remain');
+    const input = { uid, connectionId: 'connection', scopes,
+      arguments: { proposalRef: deletion.proposalRef, permissionMode: 'schedule' as const } };
+    const applied = await applyTrainingChanges(input, deps);
+    expect(applied.changes).toEqual([expect.objectContaining({ kind: 'delete-workout', status: 'applied' })]);
+    expect((await user.collection('scheduledWorkouts').doc(workoutId).get()).data()?.lifecycle).toBe('deleted');
+    expect((await user.collection('trainingDeliveryState').doc('current').collection('pastCleanup')
+      .doc(`workout_${workoutId}`).get()).data()).toMatchObject({ enabled: false, scope: 'workout', scopeId: workoutId });
+    expect(transport?.calls).toHaveLength(0);
+    await expect(applyTrainingChanges(input, deps)).resolves.toEqual(applied);
   });
 
   it('permanently deletes plan workouts and replays the approved deletion idempotently', async () => {
@@ -214,6 +242,7 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Training MCP write propos
         { kind: 'delete-plan', plan: { ref: planRef }, workoutDisposition: 'delete-workouts' },
       ] } }, deps);
     expect(deletionPreview.changes[0].summary).toContain('permanently deleted');
+    expect(deletionPreview.changes[0].summary).toContain('past provider copies remain');
     const deletionInput = { uid, connectionId: 'connection', scopes,
       arguments: { proposalRef: deletionPreview.proposalRef, permissionMode: 'schedule' as const } };
     const deleted = await applyTrainingChanges(deletionInput, deps);
