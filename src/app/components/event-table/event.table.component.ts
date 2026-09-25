@@ -53,6 +53,7 @@ import { AppBenchmarkFlowService } from '../../services/app.benchmark-flow.servi
 import { MergeOptionsDialogComponent } from './merge-options-dialog/merge-options-dialog.component';
 import { AppEventMergeService, MergeEventResponse, MergeType } from '../../services/app.event-merge.service';
 import { EventTagService } from '../../services/event-tag.service';
+import { EventTagCatalogService } from '../../services/event-tag-catalog.service';
 import { EVENT_TAG_BULK_LIMIT, getEventTags, normalizeEventTagSuggestions } from '@shared/event-tags';
 import { EventTagsDialogComponent } from '../event-tags/event-tags-dialog.component';
 import { EventTagsBulkDialogComponent } from '../event-tags/event-tags-bulk-dialog.component';
@@ -129,6 +130,10 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
   private analyticsService = inject(AppAnalyticsService);
   private hapticsService = inject(AppHapticsService);
   private eventTagService = inject(EventTagService);
+  private eventTagCatalogService = inject(EventTagCatalogService);
+  private allHistoryTags: string[] | null = null;
+  private tagCatalogUserID: string | null = null;
+  private tagCatalogRequestVersion = 0;
   public tagFilter = '';
   public tagFilterOptions: string[] = [];
   public isBulkTagSaving = false;
@@ -207,12 +212,16 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
       }
       this.updateDisplayedColumns();
     }
+    if (simpleChanges.user || simpleChanges.targetUser || simpleChanges.presentation) {
+      void this.loadAllHistoryTags();
+    }
   }
 
   ngOnInit(): void {
     if (!this.user) {
       throw new Error(`Component needs user`)
     }
+    void this.loadAllHistoryTags();
     this.updateDisplayedColumns();
     this.searchSubscription = this.searchSubject.pipe(
       debounceTime(250)
@@ -970,6 +979,7 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
     }
 
     this.processChanges('event_tags_saved');
+    void this.loadAllHistoryTags(true);
     this.snackBar.open('Tags saved.', undefined, { duration: 2000 });
   }
 
@@ -1028,6 +1038,7 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
       return;
     }
     this.processChanges('bulk_event_tags_saved');
+    void this.loadAllHistoryTags(true);
     this.snackBar.open(
       `Tags updated on ${selectedEvents.length} ${selectedEvents.length === 1 ? 'activity' : 'activities'}.`,
       undefined,
@@ -1122,6 +1133,7 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
   }
 
   ngOnDestroy() {
+    this.tagCatalogRequestVersion += 1;
     this.unsubscribeFromAll();
     if (this.breakpointSubscription) {
       this.breakpointSubscription.unsubscribe();
@@ -1135,6 +1147,54 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
 
   isStickyEnd(column: string) {
     return false
+  }
+
+  private async loadAllHistoryTags(force = false): Promise<void> {
+    // Event collection listing is owner-only. Public/other-user views retain their loaded-row tags.
+    const userID = this.user?.uid;
+    if (!this.showToolbar || !userID || (this.targetUser && this.targetUser.uid !== userID)) {
+      this.tagCatalogRequestVersion += 1;
+      this.tagCatalogUserID = null;
+      this.allHistoryTags = null;
+      this.updateTagFilterOptions();
+      return;
+    }
+    if (!force && this.tagCatalogUserID === userID) {
+      return;
+    }
+
+    this.tagCatalogUserID = userID;
+    this.allHistoryTags = null;
+    const requestVersion = ++this.tagCatalogRequestVersion;
+    try {
+      const tags = await this.eventTagCatalogService.listAllTags();
+      if (requestVersion !== this.tagCatalogRequestVersion) {
+        return;
+      }
+      this.allHistoryTags = tags;
+      this.updateTagFilterOptions();
+      this.changeDetector.markForCheck();
+    } catch (error) {
+      if (requestVersion === this.tagCatalogRequestVersion) {
+        this.logger.warn('[EventTableComponent] Could not load all activity tags.', error);
+      }
+    }
+  }
+
+  private updateTagFilterOptions(): void {
+    const rows = this.data.data as StatRowElement[];
+    this.tagFilterOptions = normalizeEventTagSuggestions([
+      ...(this.allHistoryTags || []),
+      ...rows.flatMap(row => row['Tag Values'] || []),
+    ]).sort((first, second) => first.localeCompare(second));
+    if (this.tagFilter) {
+      const selectedTagKey = this.tagFilter.toLowerCase();
+      const matchingTagOption = this.tagFilterOptions.find(tag => tag.toLowerCase() === selectedTagKey) || '';
+      if (matchingTagOption !== this.tagFilter) {
+        this.tagFilter = matchingTagOption;
+        this.applyTableFilter();
+      }
+    }
   }
 
   private processChanges(trigger: string = 'unknown', preserveSelection: boolean = false) {
@@ -1228,17 +1288,7 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
         }
       });
     }
-    this.tagFilterOptions = normalizeEventTagSuggestions(
-      rows.flatMap(row => row['Tag Values'] || []),
-    ).sort((first, second) => first.localeCompare(second));
-    if (this.tagFilter) {
-      const selectedTagKey = this.tagFilter.toLowerCase();
-      const matchingTagOption = this.tagFilterOptions.find(tag => tag.toLowerCase() === selectedTagKey) || '';
-      if (matchingTagOption !== this.tagFilter) {
-        this.tagFilter = matchingTagOption;
-        this.applyTableFilter();
-      }
-    }
+    this.updateTagFilterOptions();
     this.logger.info('[perf] event_table_process_changes', {
       durationMs: Number((performance.now() - processStart).toFixed(2)),
       trigger,

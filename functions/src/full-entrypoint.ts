@@ -153,6 +153,7 @@ export {
 export { uploadRoute } from './routes/upload-route';
 export { createToolComparisonEvent } from './events/create-tool-comparison-event';
 export { reprocessEvent } from './events/reprocess-event';
+export { listEventTags } from './events/list-event-tags';
 export { setEventSharing } from './events/set-event-sharing';
 export { reprocessRoute } from './routes/reprocess-route';
 export { mergeEvents } from './events/merge-events';
