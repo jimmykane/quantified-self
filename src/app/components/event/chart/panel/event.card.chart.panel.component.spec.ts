@@ -2157,8 +2157,8 @@ describe('EventCardChartPanelComponent', () => {
     expect(option?.grid).toEqual(expect.objectContaining({
       left: 12,
       right: 44,
-      top: 8,
-      bottom: 24,
+      top: 4,
+      bottom: 16,
     }));
     expect(option?.dataZoom?.[0]?.type).toBe('slider');
     expect(option?.dataZoom?.[0]?.show).toBe(true);
