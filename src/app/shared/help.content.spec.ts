@@ -16,8 +16,9 @@ import {
 describe('help.content', () => {
   it('explains shared horizontal pinch zoom on Event details charts', () => {
     const content = HELP_SECTIONS.find(section => section.id === 'getting-started')!.content;
-    expect(content).toContain('pinch with two fingers on an Event details chart');
+    expect(content).toContain('In **Zoom** chart mode, pinch with two fingers');
     expect(content).toContain('same time or distance range appears across the other event charts');
+    expect(content).toContain('Pinching a chart in **Select** mode does not change its range');
   });
 
   it('explains separately consented Timeline-note context for workout suggestions', () => {

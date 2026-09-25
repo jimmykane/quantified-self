@@ -280,6 +280,7 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
 
   public rangeStats: EventPanelRangeStat[] = [];
   public isFullscreen = false;
+  public readonly zoomCursorBehaviour = ChartCursorBehaviours.ZoomX;
 
   private readonly chartHost: EChartsHostController;
   private eventsBound = false;
@@ -2986,7 +2987,10 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
 
   private startPinchInteraction(gesture: EChartsPinchGesture): void {
     this.pinchInteraction = null;
-    if (!this.interactionsEnabled || !this.panel || this.showZoomBar) {
+    if (
+      !this.interactionsEnabled || !this.panel || this.showZoomBar
+      || this.cursorBehaviour !== ChartCursorBehaviours.ZoomX
+    ) {
       return;
     }
 

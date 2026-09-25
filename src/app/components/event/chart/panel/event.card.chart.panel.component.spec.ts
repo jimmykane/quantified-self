@@ -2260,17 +2260,39 @@ describe('EventCardChartPanelComponent', () => {
     expect(fixture.nativeElement.querySelector('.event-chart-panel__chart--pinch-enabled')).not.toBeNull();
   });
 
-  it('allows two-finger zoom while one-finger selection mode is active', async () => {
+  it('leaves the chart range unchanged when pinching in selection mode', async () => {
     component.cursorBehaviour = ChartCursorBehaviours.SelectX;
     await renderComponent();
     chart.dispatchAction.mockClear();
+    const emitSpy = vi.spyOn(component.zoomRangeChange, 'emit');
 
     dispatchChartTouch('touchstart', [createTouch(1, 30, 20), createTouch(2, 90, 20)]);
     dispatchChartTouch('touchmove', [createTouch(1, 15, 20), createTouch(2, 105, 20)]);
+    dispatchChartTouch('touchend', [], [createTouch(1, 15, 20), createTouch(2, 105, 20)]);
 
-    expect(chart.dispatchAction).toHaveBeenCalledWith(expect.objectContaining({
-      type: 'dataZoom', startValue: 20, endValue: 100,
-    }));
+    expect(chart.dispatchAction).not.toHaveBeenCalledWith(expect.objectContaining({ type: 'dataZoom' }));
+    expect(emitSpy).not.toHaveBeenCalled();
+    expect(fixture.nativeElement.querySelector('.event-chart-panel__chart--pinch-enabled')).toBeNull();
+  });
+
+  it('stops an active pinch when chart mode changes to selection', async () => {
+    await renderComponent();
+    dispatchChartTouch('touchstart', [createTouch(1, 30, 20), createTouch(2, 90, 20)]);
+
+    component.cursorBehaviour = ChartCursorBehaviours.SelectX;
+    component.ngOnChanges({
+      cursorBehaviour: new SimpleChange(ChartCursorBehaviours.ZoomX, ChartCursorBehaviours.SelectX, false),
+    });
+    fixture.detectChanges();
+    chart.dispatchAction.mockClear();
+    const emitSpy = vi.spyOn(component.zoomRangeChange, 'emit');
+
+    dispatchChartTouch('touchmove', [createTouch(1, 15, 20), createTouch(2, 105, 20)]);
+    dispatchChartTouch('touchend', [], [createTouch(1, 15, 20), createTouch(2, 105, 20)]);
+
+    expect(chart.dispatchAction).not.toHaveBeenCalledWith(expect.objectContaining({ type: 'dataZoom' }));
+    expect(emitSpy).not.toHaveBeenCalled();
+    expect(fixture.nativeElement.querySelector('.event-chart-panel__chart--pinch-enabled')).toBeNull();
   });
 
   it('zooms horizontally from a vertical pinch and applies its final touch position', async () => {
