@@ -219,7 +219,9 @@ async function check(): Promise<void> {
   const catalogProjection = stack.endpoints.projectEventTagCatalog;
   assert(
     catalogProjection?.platform === 'gcfv2'
+      && catalogProjection.availableMemoryMb === 256
       && arraysEqual(catalogProjection.region || [], ['europe-west2'])
+      && (catalogProjection.secretEnvironmentVariables || []).length === 0
       && catalogProjection.eventTrigger?.eventType === 'google.cloud.firestore.document.v1.written'
       && catalogProjection.eventTrigger.eventFilterPathPatterns?.document === 'users/{uid}/events/{eventId}'
       && catalogProjection.eventTrigger.retry === true,
@@ -247,7 +249,10 @@ async function check(): Promise<void> {
     const secretKeys = (endpoint.secretEnvironmentVariables || [])
       .map(secret => secret.key || '')
       .sort();
-    if (MARKETING_TARGETS.has(target)) {
+    if (target === 'projectEventTagCatalog') {
+      assert(endpoint.availableMemoryMb === 256, `${target} memory configuration changed.`);
+      assert(secretKeys.length === 0, `${target} secret bindings changed.`);
+    } else if (MARKETING_TARGETS.has(target)) {
       const expectedMemory = target === 'trackMarketingDelivery' || target === 'marketingUnsubscribe'
         ? 256 : 512;
       assert(endpoint.availableMemoryMb === expectedMemory, `${target} memory configuration changed.`);

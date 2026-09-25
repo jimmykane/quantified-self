@@ -6,6 +6,7 @@ import { ensureEventTagCatalogEntries, newlyAssignedEventTags } from './event-ta
 export const projectEventTagCatalog = onDocumentWritten({
   document: 'users/{uid}/events/{eventId}',
   region: 'europe-west2',
+  memory: '256MiB',
   retry: true,
 }, async event => {
   const uid = `${event.params.uid || ''}`.trim();

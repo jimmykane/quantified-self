@@ -16,7 +16,7 @@ const invoke = projectEventTagCatalog as unknown as (event: unknown) => Promise<
 describe('projectEventTagCatalog', () => {
   it('registers a retryable event trigger and projects only newly assigned tags', async () => {
     expect(mocks.onDocumentWritten).toHaveBeenCalledWith(expect.objectContaining({
-      document: 'users/{uid}/events/{eventId}', region: 'europe-west2', retry: true,
+      document: 'users/{uid}/events/{eventId}', region: 'europe-west2', memory: '256MiB', retry: true,
     }), expect.any(Function));
     await invoke({ params: { uid: 'owner' }, data: {
       before: { data: () => ({ tags: ['Race'] }) },
