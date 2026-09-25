@@ -436,9 +436,13 @@ write, including failure cleanup, checks the shared user-deletion guard so an in
 after deletion starts.
 
 The Assistant reuses the existing request ledger and role limits. A reservation remains releasable while MCP session
-creation, tool discovery, and other non-billable setup runs. It is finalized immediately before the first Gemini model
-or MCP tool attempt; a defensive completion fallback prevents a grounded answer from being committed uncharged. A
-setup failure therefore releases the reservation, while a failed model or tool attempt still consumes the request.
+creation, tool discovery, and grounded work run. The reservation holds an allowance slot and is finalized before a
+grounded answer is committed, or after a failed model or tool attempt. A setup failure releases the reservation.
+For Training-derived reads, the Assistant first calls `prepare_training_metrics`. If the snapshot is still preparing
+after the bounded wait, the turn and quota reservation are released without a stored user or Assistant message, and
+the page retains the question with a clear retry message. If releasing the reservation fails, its ten-minute lease
+expires without incrementing usage. Completed answers and other failed model or tool attempts still consume one
+allowance. This does not schedule a background Assistant reply or email.
 Loading or resetting a conversation does not consume quota. Usage documents are read directly by period ID, so their
 server-only fields and dynamic reservation map are exempt from automatic single-field indexing. `periodEnd`
 deliberately remains indexed because the admin fallback orders historical usage by that field when no current

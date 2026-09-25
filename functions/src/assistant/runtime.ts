@@ -27,6 +27,7 @@ import {
 import {
   createAssistantMcpSession,
   AssistantRecoverableMcpToolError,
+  AssistantTrainingMetricsPreparingError,
   type AssistantMcpSession,
   type AssistantMcpToolName,
 } from './mcp-session';
@@ -179,6 +180,7 @@ export const ASSISTANT_SYSTEM_INSTRUCTIONS = [
   'For a requested workout chart, discover supported streams with list_activity_chart_metrics and read only the relevant bounded series with get_activity_chart_data.',
   'Use list_routes for saved-route summary questions by sport, name, or recency.',
   `Call discovery tools before guessing a metric, activity type, sleep vital, or measurement capability. The explicitly named canonical ${DataDuration.type} metric in the combined workout workflow is known, not a guess; if its query is unavailable, report that instead of inferring consistency.`,
+  'Before reading a Training-derived snapshot with get_training_metric, call prepare_training_metrics for the selected kind. Preparation may take longer than this chat turn; if it is pending, the app will invite the user to retry.',
   'For all available years, all-time, or full-history activity-metric trends, query from 2000-01-01T00:00:00.000Z through the supplied currentTime. The Assistant pages that one metric request through the public-compatible date windows and recombines every result; do not silently limit the trend to a recent year. Use yearly interval for an all-history trend unless the user asks for another resolution.',
   'Use persisted Average, Minimum, and Maximum summary metrics for cross-activity summary trends; a raw chart stream such as Temperature is not evidence that those persisted activity summaries are missing.',
   'Never conclude that no matching activities exist from an empty query_activities result whose scanComplete field is false. Continue with its nextCursor or use the aggregate metric tool appropriate to the question.',
@@ -1147,6 +1149,9 @@ export function createAssistantRuntime(
                 pendingTrainingProposal = TRAINING_WRITE_OUTPUTS.preview_training_changes.parse(result.structuredContent);
               }
             } catch (error) {
+              if (error instanceof AssistantTrainingMetricsPreparingError) {
+                throw error;
+              }
               if (error instanceof AssistantRecoverableMcpToolError) {
                 return {
                   assistantToolError: {

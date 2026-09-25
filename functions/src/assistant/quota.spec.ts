@@ -109,9 +109,9 @@ class FakeTransaction {
   set(
     docRef: FakeDocumentReference,
     data: Record<string, unknown>,
-    options?: { merge?: boolean },
+    options?: { merge?: boolean; mergeFields?: string[] },
   ): void {
-    this.db.setDocument(docRef.path, data, options?.merge === true);
+    this.db.setDocument(docRef.path, data, options?.merge === true || !!options?.mergeFields);
   }
 }
 
@@ -219,6 +219,23 @@ describe('Assistant quota', () => {
     expect(finalizedStatus.remainingCount).toBe(99);
     expect(quotaStatus.successfulRequestCount).toBe(1);
     expect(quotaStatus.remainingCount).toBe(99);
+  });
+
+  it('holds an allowance slot without charging it and ignores an expired hold', async () => {
+    const reservation = await reserveAssistantQuotaForRequest('user-1');
+    expect(await getAssistantQuotaStatus('user-1')).toMatchObject({
+      successfulRequestCount: 0,
+      activeRequestCount: 1,
+      remainingCount: 99,
+    });
+    fakeDb.seedDocument(`users/user-1/assistantUsage/${PERIOD_DOC_ID}`, buildUsageDoc({
+      reservationMap: { [reservation.reservationID]: Date.parse(FIXED_NOW_ISO) - 1 },
+    }));
+    expect(await getAssistantQuotaStatus('user-1')).toMatchObject({
+      successfulRequestCount: 0,
+      activeRequestCount: 0,
+      remainingCount: 100,
+    });
   });
 
   it('does not consume quota twice when a reservation is finalized again', async () => {

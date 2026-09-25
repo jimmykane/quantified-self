@@ -3241,6 +3241,19 @@ ready/building/failed/stale/missing/schema-mismatch. It never returns payloads, 
 device/provider provenance. Clients should use it before `get_training_metric` so a missing or rebuilding snapshot is
 not mistaken for an unsupported Training capability.
 
+`prepare_training_metrics` is the shared on-demand freshness path for MCP, the built-in Assistant, and future
+backend callers. It accepts one to eight registered kinds under `metrics:read`, probes the same coordinator,
+snapshot payload/schema, source mutation revision, latest event update, and UTC-day checks as the Training route's
+`ensureDerivedMetrics` callable, and joins or queues only the affected kinds through the existing coordinator.
+`ready` requires the exact current snapshot schema and a payload that passes the same strict redacted MCP read
+contract for every kind, whether or not that kind needs an additional public projection.
+It polls for at most five seconds. Its strict response contains only `ready`, `preparing`, or `unavailable`, the
+requested and ready kind lists, and a retry delay; it never returns a metric payload, worker error, or source identity.
+An in-flight coordinator is not treated as a ready snapshot. Clients retry preparation after a `preparing` result
+and then call the unchanged `get_training_metric` read. Repeated preparation joins queued work without creating a
+new generation. A future email worker can call the same authenticated backend service without opening `/training`;
+this change adds no email job or sending behavior.
+
 The explicitly named live `get_current_readiness` tool is not a derived-snapshot projection. It requires both
 Training-metric and sleep grants, reads the ready Form/Form Now/Ramp snapshots plus one bounded normalized sleep query,
 rebuilds the same current UTC-day zero-load decay used by Dashboard Today, and calls the shared readiness evaluator. It

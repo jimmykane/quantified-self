@@ -50,6 +50,7 @@ import { applyTrainingChanges } from '../mcp/training-plans-write.service';
 import { MCP_OAUTH_SCOPES } from '../mcp/oauth.service';
 import { McpDataError } from '../mcp/data.service';
 import { createMcpDataService } from '../mcp/data.service';
+import { AssistantTrainingMetricsPreparingError } from './mcp-session';
 
 interface AssistantCallableContext {
   auth?: {
@@ -360,6 +361,9 @@ function assertRequestFingerprintMatchesInput(
 }
 
 function isRetryableGroundedAnswerError(error: unknown): boolean {
+  if (error instanceof AssistantTrainingMetricsPreparingError) {
+    return false;
+  }
   if (error instanceof AssistantConversationStoreError) {
     return false;
   }
@@ -461,7 +465,14 @@ export async function runAssistantChat(
   let reservation: AssistantQuotaReservation | null = null;
   let begunTurn: BegunAssistantTurn | null = null;
   let finalizedQuota: AssistantQuotaStatusResponse | null = null;
+  let billableAttemptStarted = false;
   let finalizeQuotaPromise: Promise<AssistantQuotaStatusResponse> | null = null;
+  const markBillableAttempt = async (): Promise<void> => {
+    if (!reservation && !finalizedQuota) {
+      throw new Error('Assistant quota reservation was unavailable at the billable-work boundary.');
+    }
+    billableAttemptStarted = true;
+  };
   const finalizeQuotaForBillableAttempt = async (): Promise<void> => {
     if (finalizedQuota) {
       return;
@@ -659,11 +670,11 @@ export async function runAssistantChat(
         }
       } } : {}),
       history: begunTurn.history,
-      onBillableAttempt: finalizeQuotaForBillableAttempt,
+      onBillableAttempt: markBillableAttempt,
     }, () => finalizeQuotaPromise === null || finalizedQuota !== null);
-    // Production runtime calls this immediately before Gemini or an MCP tool.
-    // Retain a defensive completion fallback for injected runtimes: a grounded
-    // answer must never be committed without consuming its reserved allowance.
+    // Finalize before committing the answer. The reservation holds capacity
+    // throughout grounded work, but a pending Training build can still be
+    // released without a compensating refund transaction.
     await finalizeQuotaForBillableAttempt();
     if (!finalizedQuota) {
       throw new Error('Assistant quota was not finalized for a completed answer.');
@@ -708,6 +719,17 @@ export async function runAssistantChat(
       pendingRequestId: null,
     };
   } catch (error) {
+    let failure = error;
+    if (!(error instanceof AssistantTrainingMetricsPreparingError)
+      && billableAttemptStarted
+      && reservation
+      && finalizeQuotaPromise === null) {
+      try {
+        await finalizeQuotaForBillableAttempt();
+      } catch (quotaError) {
+        failure = quotaError;
+      }
+    }
     if (begunTurn) {
       try {
         await dependencies.conversationStore.releaseTurn(uid, begunTurn);
@@ -726,13 +748,19 @@ export async function runAssistantChat(
         });
       }
     }
-    const mappedError = mapAssistantError(error);
+    if (error instanceof AssistantTrainingMetricsPreparingError) {
+      throw new HttpsError('unavailable', 'Training metrics are still preparing. Try again shortly.', {
+        reason: 'training_metrics_preparing',
+        retryAfterSeconds: error.retryAfterSeconds,
+      });
+    }
+    const mappedError = mapAssistantError(failure);
     if (mappedError.code === 'unavailable') {
       logger.error('[Assistant] Grounded response generation failed.', {
-        errorName: error instanceof Error ? error.name : 'unknown',
-        errorReason: getAssistantRuntimeErrorReason(error) ?? 'unknown',
-        errorStatus: getGenkitErrorStatus(error) ?? 'unknown',
-        toolName: getAssistantRuntimeErrorToolName(error) ?? 'unknown',
+        errorName: failure instanceof Error ? failure.name : 'unknown',
+        errorReason: getAssistantRuntimeErrorReason(failure) ?? 'unknown',
+        errorStatus: getGenkitErrorStatus(failure) ?? 'unknown',
+        toolName: getAssistantRuntimeErrorToolName(failure) ?? 'unknown',
       });
     }
     throw mappedError;

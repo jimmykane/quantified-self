@@ -34,6 +34,7 @@ export type AssistantErrorCode =
   | 'TURN_IN_PROGRESS'
   | 'CONVERSATION_CHANGED'
   | 'UNAVAILABLE'
+  | 'TRAINING_METRICS_PREPARING'
   | 'INTERNAL';
 
 export class AssistantError extends Error {
@@ -294,6 +295,8 @@ export class AssistantService {
         return 'The conversation changed in another tab. Reload it and try again.';
       case 'UNAVAILABLE':
         return 'The Assistant could not answer right now. Please try again.';
+      case 'TRAINING_METRICS_PREPARING':
+        return 'Your Training metrics are being prepared. Try your message again in a few seconds; this attempt does not use your Assistant allowance.';
       default:
         return 'Something went wrong while preparing the answer.';
     }
@@ -333,6 +336,10 @@ export class AssistantService {
       return new AssistantError('CONVERSATION_CHANGED', message || 'Conversation changed.', error);
     }
     if (code.includes('unavailable')) {
+      const reason = `${(error as { details?: { reason?: unknown } } | null)?.details?.reason || ''}`;
+      if (reason === 'training_metrics_preparing') {
+        return new AssistantError('TRAINING_METRICS_PREPARING', message, error);
+      }
       return new AssistantError('UNAVAILABLE', message || 'Assistant unavailable.', error);
     }
     return new AssistantError('INTERNAL', message || 'Assistant request failed.', error);

@@ -53,8 +53,9 @@ export const ASSISTANT_PROMPT_EXAMPLES = [
     prompt: 'How is my Training load and Form compared with usual?',
     shortLabel: 'Training & Form',
     icon: 'monitoring',
-    toolWorkflow: ['list_training_metrics', 'get_training_metric'],
-    routingHint: 'Discover the ready Training metric kinds, then read the current Form and Training summary snapshots needed for the comparison.',
+    toolWorkflow: ['list_training_metrics', 'prepare_training_metrics', 'get_training_metric'],
+    routingHint: 'Discover the Training metric kinds, prepare Form and Training summary, then read both current snapshots after preparation reports ready.',
+    toolInputOverrides: { prepare_training_metrics: { metricKinds: ['form', 'training_summary'] } },
   },
   {
     id: 'body-weight-trend',
@@ -143,9 +144,10 @@ export const ASSISTANT_ANALYTICAL_PROMPT_WORKFLOWS = [
   {
     id: 'late-session-cycling-power-decline',
     examplePrompt: 'Which long rides showed the greatest late-session power decline?',
-    toolWorkflow: ['get_training_metric'],
+    toolWorkflow: ['prepare_training_metrics', 'get_training_metric'],
     routingHint: 'Read the ready Aerobic durability snapshot using the server-owned training_durability metric kind. Use only the Cycling scope and its recent supporting eligible activities. Rank late-session fade by the persisted output-retention and decoupling evidence, identify rides by their recorded UTC day, state the snapshot window and coverage, and do not substitute a sample of raw power charts or claim an all-time result.',
     toolInputOverrides: {
+      prepare_training_metrics: { metricKinds: ['training_durability'] },
       get_training_metric: {
         metricKind: 'training_durability',
       },
@@ -154,9 +156,10 @@ export const ASSISTANT_ANALYTICAL_PROMPT_WORKFLOWS = [
   {
     id: 'strongest-training-build-comparison',
     examplePrompt: 'What changed between my strongest training build and what I’m doing now?',
-    toolWorkflow: ['get_training_metric'],
+    toolWorkflow: ['prepare_training_metrics', 'get_training_metric'],
     routingHint: 'Read Best build comparison using the server-owned training_build_comparison metric kind. Compare the configured historical build with the equal-length current build, including workload, intensity, durability, and recovery evidence that is actually available. If no valid benchmark is configured, say so; never replace the requested build comparison with current-versus-usual or a daily report.',
     toolInputOverrides: {
+      prepare_training_metrics: { metricKinds: ['training_build_comparison'] },
       get_training_metric: {
         metricKind: 'training_build_comparison',
       },
@@ -165,9 +168,10 @@ export const ASSISTANT_ANALYTICAL_PROMPT_WORKFLOWS = [
   {
     id: 'body-weight-training-volume-comparison',
     examplePrompt: 'How has my body weight moved alongside training volume?',
-    toolWorkflow: ['query_measurements', 'get_training_metric'],
+    toolWorkflow: ['query_measurements', 'prepare_training_metrics', 'get_training_metric'],
     routingHint: 'Use weekly median body-weight measurements for the latest 28 days, then read the ready Training summary using the server-owned selectors for its aligned current 28-day volume and equivalent usual 28-day comparison. Describe the two recorded movements side by side without claiming causation or treating missing weigh-ins as zero.',
     toolInputOverrides: {
+      prepare_training_metrics: { metricKinds: ['training_summary'] },
       query_measurements: {
         measurementType: 'body_weight',
         aggregation: 'median',

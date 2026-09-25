@@ -4,6 +4,7 @@ import { NodeStreamableHTTPServerTransport } from '@modelcontextprotocol/node';
 import { InMemoryTransport, McpServer } from '@modelcontextprotocol/server';
 import { Client, StreamableHTTPClientTransport } from '@modelcontextprotocol/client';
 import { z } from 'zod';
+import { DERIVED_METRIC_KINDS } from '../../../shared/derived-metrics';
 import { McpDataError } from './data.service';
 import {
   McpBearerAuthenticationError,
@@ -42,6 +43,42 @@ import {
 import { createMcpTransportHandler } from './transport';
 
 describe('MCP HTTP scope enforcement', () => {
+  it('prepares only caller-owned selected Training kinds with non-destructive idempotent metadata', async () => {
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+    const calls: Array<{ uid: string; kinds: string[] }> = [];
+    const server = createMcpServer({
+      uid: 'user-1', clientId: 'https://client.example/mcp.json', connectionId: 'connection-1',
+      scopes: [MCP_OAUTH_SCOPES.MetricsRead],
+    }, 'https://quantified-self.io', undefined, async (uid, metricKinds) => {
+      calls.push({ uid, kinds: metricKinds });
+      return { status: 'preparing', metricKinds, readyMetricKinds: [], retryAfterSeconds: 5 };
+    });
+    const client = new Client({ name: 'preparation-test-client', version: '1.0.0' });
+    try {
+      await server.connect(serverTransport);
+      await client.connect(clientTransport);
+      const tool = (await client.listTools()).tools.find(item => item.name === 'prepare_training_metrics');
+      expect(tool?.annotations).toMatchObject({
+        readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false,
+      });
+      const result = await client.callTool({ name: 'prepare_training_metrics', arguments: {
+        metricKinds: [DERIVED_METRIC_KINDS.Form, DERIVED_METRIC_KINDS.Form],
+      } });
+      expect(result.structuredContent).toEqual({
+        status: 'preparing', metricKinds: [DERIVED_METRIC_KINDS.Form],
+        readyMetricKinds: [], retryAfterSeconds: 5,
+      });
+      expect(calls).toEqual([{ uid: 'user-1', kinds: [DERIVED_METRIC_KINDS.Form] }]);
+      const invalid = await client.callTool({ name: 'prepare_training_metrics', arguments: {
+        metricKinds: ['unknown'], uid: 'user-2',
+      } });
+      expect(invalid.isError).toBe(true);
+      expect(calls).toHaveLength(1);
+    } finally {
+      await client.close();
+      await server.close();
+    }
+  });
   it('advertises actionable permission recovery without treating missing tools as missing data', async () => {
     const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
     const server = createMcpServer({
@@ -700,6 +737,7 @@ describe('MCP HTTP scope enforcement', () => {
       'list_activity_types',
       'list_metrics',
       'list_training_metrics',
+      'prepare_training_metrics',
       'query_metric',
       'query_metrics',
     ]);
@@ -732,6 +770,7 @@ describe('MCP HTTP scope enforcement', () => {
       'list_sleep_sessions',
       'list_sleep_vitals',
       'list_training_metrics',
+      'prepare_training_metrics',
       'query_metric',
       'query_metrics',
       'query_sleep_summary',
@@ -768,6 +807,7 @@ describe('MCP HTTP scope enforcement', () => {
       'list_activity_types',
       'list_metrics',
       'list_training_metrics',
+      'prepare_training_metrics',
       'query_activities',
       'query_activities_with_tags',
       'query_metric',
