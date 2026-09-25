@@ -6,10 +6,21 @@ import {
 } from './function-target-loader';
 
 describe('function target loader', () => {
-  it('keeps the first canary limited to the two Suunto OAuth functions', () => {
+  it('optimizes the Suunto OAuth and all marketing functions', () => {
     expect(OPTIMIZED_FUNCTION_TARGETS).toEqual([
       'getSuuntoAPIAuthRequestTokenRedirectURI',
       'requestAndSetSuuntoAPIAccessToken',
+      'listMarketingCampaigns',
+      'saveMarketingCampaign',
+      'cloneMarketingCampaign',
+      'previewMarketingCampaign',
+      'prepareMarketingCampaign',
+      'setMarketingDailyCap',
+      'sendMarketingTest',
+      'changeMarketingCampaignStatus',
+      'dispatchMarketingCampaigns',
+      'trackMarketingDelivery',
+      'marketingUnsubscribe',
     ]);
   });
 

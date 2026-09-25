@@ -3,6 +3,7 @@ import { describe, beforeEach, expect, it, vi } from 'vitest';
 import { Firestore, deleteField, doc, runTransaction } from 'app/firebase/firestore';
 
 import { EventTagService } from './event-tag.service';
+import { EventTagCatalogService } from './event-tag-catalog.service';
 
 vi.mock('app/firebase/firestore', async (importOriginal) => {
   const actual: any = await importOriginal();
@@ -18,11 +19,13 @@ describe('EventTagService', () => {
   let service: EventTagService;
   let transactionUpdate: ReturnType<typeof vi.fn>;
   let documents: Record<string, Record<string, unknown>>;
+  let noteSavedTags: ReturnType<typeof vi.fn>;
 
   beforeEach(() => {
     vi.clearAllMocks();
     documents = {};
     transactionUpdate = vi.fn();
+    noteSavedTags = vi.fn();
     vi.mocked(runTransaction).mockImplementation(async (_firestore, callback: any) => callback({
       get: vi.fn(async (ref: { pathParts: unknown[] }) => {
         const eventID = `${ref.pathParts.at(-1)}`;
@@ -38,6 +41,7 @@ describe('EventTagService', () => {
       providers: [
         EventTagService,
         { provide: Firestore, useValue: {} },
+        { provide: EventTagCatalogService, useValue: { noteSavedTags } },
       ],
     });
     service = TestBed.inject(EventTagService);
@@ -61,6 +65,7 @@ describe('EventTagService', () => {
     expect(event.tags).toEqual(['race']);
     expect(event.benchmarkReviewTags).toBeUndefined();
     expect(deleteField).toHaveBeenCalledTimes(1);
+    expect(noteSavedTags).toHaveBeenCalledWith('user-1', ['race']);
   });
 
   it('rejects a stale single-event editor without overwriting newer tags', async () => {
@@ -76,6 +81,7 @@ describe('EventTagService', () => {
 
     expect(transactionUpdate).not.toHaveBeenCalled();
     expect(event.tags).toEqual(['Original']);
+    expect(noteSavedTags).not.toHaveBeenCalled();
   });
 
   it('applies removals before additions using fresh transaction data and legacy fallback', async () => {
@@ -100,6 +106,7 @@ describe('EventTagService', () => {
       { tags: ['Firmware', 'Long run'], benchmarkReviewTags: 'DELETE_FIELD' },
     ]);
     expect(deleteField).toHaveBeenCalledTimes(2);
+    expect(noteSavedTags).toHaveBeenCalledWith('user-1', ['2026', 'Long run', 'Firmware', 'Long run']);
   });
 
   it('rejects the whole transaction when any event would exceed the tag limit', async () => {

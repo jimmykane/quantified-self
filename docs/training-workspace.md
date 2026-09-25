@@ -72,6 +72,17 @@ validation and the public recipe coverage gate remain identical.
 The built-in Assistant has separate default-off **Training plans**, **Plan and workout changes**, and **Planned-workout
 sync changes** choices. Only applicable focused/batch preview tools enter Gemini context. The model cannot apply changes; Quantified Self
 stores one bounded proposal under the current server-owned conversation and the user must apply or dismiss it in the app.
+Plan-level and provider-only actions select the batch preview before a sport keyword can select a focused recipe editor;
+a combined historical comparison and workout recommendation keeps live daily and completed-activity reads available.
+When the separately consented Timeline-note read is on, that recommendation also checks bounded recent and ongoing
+notes for relevant illness, injury, travel, vacation or stress before suggesting a session. It treats note text as
+untrusted self-report, checks actual dates and incomplete scans, and never derives plan-write authority from a note.
+Because closed notes precede ongoing notes, an incomplete note scan cannot rule out a current illness or injury note;
+the Assistant requests up to 64 notes and its recommendation guidance instructs it not to preview a workout as if it
+had reviewed all current notes.
+The Assistant uses canonical daily `Duration` buckets with model-only local weekday labels to assess recorded workout
+consistency without changing MCP metric output, evidence or Training calculations. Note access remains independent of
+Training read/write choices; missing consent is reported rather than treated as an empty note history.
 Proposal references bind the exact conversation generation, so permission changes, New chat, stale tabs and account
 switches cannot reuse them. The dedicated App Check callable rechecks the conversation before applying and clears the
 pending proposal after either apply or dismiss. Internal Training reads recognize both the fixed first-party Assistant
@@ -155,6 +166,8 @@ move together from 12,320 to 12,328 kB while the 1,440 kB initial budget remains
 sports/strength feature raises the production and beta `allScript` budget to 12,344 kB (from the expansion
 branch's 12,336 kB); the 1,440 kB initial budget is unchanged. The strength editor snapshots weight units when opened,
 retains exact canonical kg for an unchanged rounded lb display, and converts edited lb input through Sports Lib.
+Subsequent bundle growth raises the production and beta `allScript` budget to 12,400 kB; the initial budget stays at
+1,440 kB.
 
 ## Product Contract
 
@@ -419,6 +432,14 @@ Training plan read/write contract, release lifecycle, and independent consent re
 
 ### Canonical workout boundary
 
+The built-in Assistant presents the existing strict MCP recipe and change inputs through a Gemini-compatible typed
+projection. This is model guidance only: the unchanged MCP schema and shared `WorkoutStructureV1` validator remain
+authoritative for every proposal. When extending a node, ending, target, or change variant, verify both the MCP
+contract and the all-permissions Assistant tool-schema regression test so an incompatible declaration cannot block
+unrelated Assistant reads. It advertises only one context-selected Training proposal tool to Gemini per turn, while
+the first-party MCP session retains every authorized tool. This repair adds no Training permission, provider action,
+or stored field.
+
 Quantified Self currently owns the versioned planned-workout contract in `shared/planned-workout.ts`. It stores only
 plain canonical primitives: Sports Lib `ActivityTypes` strings, seconds, metres, bpm, watts, metres per second, rpm,
 kilojoules, percentage points, and positive repetition counts. It does not persist Sports Lib class instances or
@@ -451,9 +472,14 @@ value to be no greater than the Slower value; the editor does not silently reord
 than rounding to zero. No recipe field, schedule history or stored workout requires migration. Garmin and Suunto consume
 canonical metres directly; COROS applies its existing documented integer-metre rounding and degradation approval;
 Wahoo's dated Workout delivery still rejects distance-ended recipes because its required duration is unknown.
-MCP impact: no tool, scope, schema, consent, projection or proposal shape changes. Existing MCP planning reads/writes
-already use canonical metres and m/s plus Sports Lib owner-unit formatting, and provider actions still use the same
-saved recipe and approval path.
+MCP impact: #734 adds `get_planned_workout_v2` and `preview_planned_workout_v2_change` while preserving registered v1
+schemas. The read uses existing Training plans consent and includes only an authored pool length in canonical metres
+plus its metre/yard presentation; a distance step never implies pool size. The focused create/update preview uses
+the existing Training plans write grant and revision-bound, approval-gated proposal/apply flow without provider
+delivery. A v1 edit of a selected-length swim is rejected rather than silently dropping the pool setting. Existing
+pool swims without an authored length remain valid; open-water recipes cannot carry one. No new scope, consent,
+provider action, storage migration or recorded-event metric is introduced. Deployment and client catalog refresh
+are separate from local code verification.
 The shared contract remains broader so saved v1 data does
 not need a redesign when later UI slices are enabled.
 
@@ -1022,6 +1048,10 @@ Garmin receives the same broad family at the workout and segment levels. Cycling
 cycling-only secondary-target field subject to its existing device-support warning; running-family folds may not.
 Unsupported sports still fail closed. Existing Running/Cycling payloads and retained remote identities do not change,
 and no authored recipe, schedule history, Sports Lib type or provider ID is rewritten.
+MCP create-and-send keeps the authored subtype and establishes standalone delivery consent, but a degraded Garmin fold
+does not count as approved by that Send action. The workout remains unsent with a mapping-review requirement until a
+separate current-digest approval is confirmed. MCP previews and apply results must make that distinction explicit;
+neither an applied consent result nor a queued reconciliation means Garmin accepted a copy.
 
 Pool and open-water swimming are manually authorable. The #733 mapper encodes pool swimming as
 `LAP_SWIMMING` with an optional explicit physical pool length and target-free swim steps. It also supports an
@@ -1239,11 +1269,20 @@ completion evidence is not cleared through this path. A history-recoverable work
 workout or delete-with-plan removal deletes the owner-visible projection while retaining private event-bound duplicate
 protection until that source event or account is deleted.
 
-For Garmin, standard FIT `training_file` (message 72) and embedded workout (message 26) data are retained only as
-account-bound candidate evidence. The unsigned serial is not reinterpreted as a Training API workout ID or schedule ID,
-and no exact link is created until the separately recorded #651 contract proof establishes a real identifier path.
-Bounded fallback matching, ambiguous confirmation, audited unlink/relink and cross-provider adoption remain open in
-#651; this Sports Lib adoption does not silently narrow those acceptance criteria.
+For Garmin, standard FIT `training_file` (message 72) and embedded workout (message 26) data remain private,
+account-bound evidence. One owner-account recording showed the workout-file serial equal to the retained Training API
+workout ID, but Garmin's FIT specification defines it as file identity, not a documented API join key. QS therefore
+links only when a single workout-file reference and embedded workout, one recorded activity, one retained Garmin delivery
+with that exact numeric identity, the current connected account, the imported file ID and saved activity document,
+an accepted schedule, and the activity's saved-zone calendar date all agree. The source metadata keeps its original
+file-type label when a legacy GPX download actually parses as FIT. A moved current schedule, repeated remote identity,
+missing activity, delivery lease, different
+account, or conflicting existing completion cannot claim the link. The transaction writes the existing owner-readable
+completion and private reverse link, protects that remote copy from deletion, and is idempotent on reimport. It does not
+compare titles, durations or target adherence, infer late/early occurrence, or rewrite completed activity metrics.
+The one-link-per-workout v1 projection still cannot attach a second simultaneous Garmin recording when a Suunto recording
+already owns the completion; #651 retains that multi-source decision and any fallback/manual scope revision. This code
+does not retrospectively reparse previously imported FIT files or establish watch receipt across devices.
 
 Verification combines synthetic HTTP/ZIP/FIT fixtures, real Firestore transactions, Rules, UI/help and MCP read tests.
 MCP continues to read strict local delivery projections: Suunto counts derive from workouts, no watch receipt is inferred,
@@ -1524,8 +1563,8 @@ support it. The owner-account cloud lifecycle proof on 23 September 2026 enabled
 explicitly consenting Garmin connections: create, repeat-count edit, date move, positive retained-record checks and
 Stop/withdrawal completed without retries. The checked workout and schedule were cloud records, not proof of Garmin
 app/watch download or completed-activity correlation. Running/cycling admission is unchanged. The frozen registered MCP
-v1 recipe omits the new field in its legacy workout read; #734 tracks additive
-MCP read/authoring coverage without changing existing tool schemas.
+v1 recipe omits the new field in its legacy workout read. #734 adds a separate full-workout read and focused
+create/update preview for authored pool length without changing existing tool schemas; see the MCP boundary above.
 
 `delivery/garmin/` binds the existing serializer to Training API V2. It creates workout content using the partner
 contract's exact `POST /workoutportal/workout/v2` path; GET/PUT/DELETE use `/training-api/workout/v2/{workoutId}`.
@@ -1575,7 +1614,8 @@ idempotency key nor a lookup by external workout identity: an accepted first POS
 a fresh operation ID. Such copies require operator/provider reconciliation; the adapter does not claim exactly-once
 first creates. The QS scheduling horizon is 365 days as a conservative product policy, not a documented Garmin maximum.
 Past/provider-confirmed completed artifacts are not rewritten or removed; a schedule observed moved into the past is
-retained with that observed date. No completed-activity matching or new provider hook is claimed (#651).
+retained with that observed date. Newly imported FIT activities can use the conservative account/schedule-bound
+correlation described above; no new provider completion hook or retrospective reparse is claimed (#651).
 
 Verification combines synthetic request/response fixtures (including signed-64-bit boundary IDs), HTTP/authorization/
 transport unit tests and real Firestore worker transactions through the excluded synthetic server. It covers duplicate
@@ -3201,6 +3241,19 @@ ready/building/failed/stale/missing/schema-mismatch. It never returns payloads, 
 device/provider provenance. Clients should use it before `get_training_metric` so a missing or rebuilding snapshot is
 not mistaken for an unsupported Training capability.
 
+`prepare_training_metrics` is the shared on-demand freshness path for MCP, the built-in Assistant, and future
+backend callers. It accepts one to eight registered kinds under `metrics:read`, probes the same coordinator,
+snapshot payload/schema, source mutation revision, latest event update, and UTC-day checks as the Training route's
+`ensureDerivedMetrics` callable, and joins or queues only the affected kinds through the existing coordinator.
+`ready` requires the exact current snapshot schema and a payload that passes the same strict redacted MCP read
+contract for every kind, whether or not that kind needs an additional public projection.
+It polls for at most five seconds. Its strict response contains only `ready`, `preparing`, or `unavailable`, the
+requested and ready kind lists, and a retry delay; it never returns a metric payload, worker error, or source identity.
+An in-flight coordinator is not treated as a ready snapshot. Clients retry preparation after a `preparing` result
+and then call the unchanged `get_training_metric` read. Repeated preparation joins queued work without creating a
+new generation. A future email worker can call the same authenticated backend service without opening `/training`;
+this change adds no email job or sending behavior.
+
 The explicitly named live `get_current_readiness` tool is not a derived-snapshot projection. It requires both
 Training-metric and sleep grants, reads the ready Form/Form Now/Ramp snapshots plus one bounded normalized sleep query,
 rebuilds the same current UTC-day zero-load decay used by Dashboard Today, and calls the shared readiness evaluator. It
@@ -3375,6 +3428,21 @@ failure from blocking a loopback Training refresh; it does not weaken deployed e
 Derived metrics also require the Cloud Tasks emulator configuration used by this repository. When
 `CLOUD_TASKS_EMULATOR_HOST` is set, task lookup and queue statistics stay local and must not fall through to the production
 Cloud Tasks API.
+
+### Training delivery queue monitoring
+
+Admin Queue Monitoring includes **Training Delivery** at `/admin/queues/training-delivery`. Its Firestore job count
+includes delivery, remote verification and recurring reconciliation markers; **Due now** and oldest overdue lag exclude
+future-dated work. The separate Cloud Tasks depth is dispatch backlog, not the number of workouts synced. Current
+workout outcomes are aggregate counts over `trainingDeliveryStatuses`: delivered records with a retained remote copy,
+retrying, failed and needs review, with per-service breakdowns. A completed queue job does not imply provider acceptance.
+The admin callable uses only
+bounded Firestore aggregate queries, never returns ledger evidence, remote IDs, credentials or raw rejection bodies,
+and keeps the other queues available if Training indexes are missing. The collection-group status indexes in
+`firestore.indexes.json` must be deployed before outcome counts become available. Queue monitoring is read-only;
+it neither retries deliveries nor enables a provider. Production dashboards and alerts remain a separate rollout
+concern. MCP impact: none—the new counts are admin-only and do not change Training reads, mutations, scopes, consent,
+user-visible delivery projections or provider actions.
 
 ### Sports-lib reparse observability
 

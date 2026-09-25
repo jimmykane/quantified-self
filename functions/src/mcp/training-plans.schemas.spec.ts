@@ -13,6 +13,7 @@ import {
   TRAINING_CHANGE_SCHEMA,
   TRAINING_READ_OUTPUTS,
   TRAINING_RECIPE_SCHEMA,
+  TRAINING_RECIPE_WITH_POOL_SCHEMA,
   TRAINING_WRITE_INPUTS,
 } from './training-plans.schemas';
 
@@ -103,7 +104,7 @@ describe('Strict public Training recipe v1', () => {
     expect(Object.keys(endingFixtures)).toEqual([...WORKOUT_ENDING_KINDS]);
     expect(Object.keys(MCP_WORKOUT_RECIPE_VARIANT_COVERAGE.targetModes)).toEqual(['absolute', 'relative']);
     expect([...new Set(Object.values(targetVariantFixtures).map(target => target.kind))]).toEqual([...WORKOUT_TARGET_KINDS]);
-    expect(MCP_WORKOUT_RECIPE_VARIANT_COVERAGE.deferredStructureFields).toEqual({ poolLength: 734 });
+    expect(MCP_WORKOUT_RECIPE_VARIANT_COVERAGE.additiveStructureFields).toEqual({ poolLength: true });
   });
 
   it.each(Object.entries(endingFixtures))('round-trips shared ending %s through public reads and writes', (_kind, ending) => {
@@ -154,6 +155,40 @@ describe('Strict public Training recipe v1', () => {
 });
 
 describe('Strict Training write proposal contract', () => {
+  it('round-trips metre and yard pool lengths only through the additive v2 contract', () => {
+    for (const poolLength of [{ meters: 25, presentation: 'meters' as const },
+      { meters: 22.86, presentation: 'yards' as const }]) {
+      const structure: WorkoutStructureV1 = { ...recipe({ kind: 'distance', meters: 100 }),
+        sport: ActivityTypes.Swimming, poolLength };
+      const serialized = JSON.parse(JSON.stringify(structure));
+      expect(TRAINING_RECIPE_WITH_POOL_SCHEMA.parse(serialized)).toEqual(structure);
+      expect(TRAINING_READ_OUTPUTS.get_planned_workout_v2.parse({ scheduleRevision: 1,
+        workout: { workoutRef: 'opaque', planRef: null, title: 'Pool swim', localDate: '2026-09-30',
+          lifecycle: 'planned', revision: 1, createdAtMs: 1, updatedAtMs: 1,
+          structure: serialized, displaySteps: [] } }).workout.structure).toEqual(structure);
+      expect(TRAINING_WRITE_INPUTS.preview_planned_workout_v2_change.safeParse({ expectedScheduleRevision: 1,
+        change: { kind: 'create-workout', localKey: 'swim', plan: null, localDate: '2026-09-30',
+          title: 'Pool swim', structure: serialized } }).success).toBe(true);
+      expect(TRAINING_RECIPE_SCHEMA.safeParse(serialized).success).toBe(false);
+    }
+  });
+
+  it('rejects non-pool, malformed and private pool-length fields', () => {
+    const structure = { ...recipe({ kind: 'distance', meters: 100 }), sport: ActivityTypes.Swimming,
+      poolLength: { meters: 25, presentation: 'meters' } };
+    for (const bad of [
+      { ...structure, sport: ActivityTypes.OpenWaterSwimming },
+      { ...structure, sport: ActivityTypes.Running },
+      { ...structure, poolLength: { meters: 0, presentation: 'meters' } },
+      { ...structure, poolLength: { meters: Infinity, presentation: 'meters' } },
+      { ...structure, poolLength: { meters: 1001, presentation: 'meters' } },
+      { ...structure, poolLength: { meters: 25, presentation: 'feet' } },
+      { ...structure, poolLength: { meters: 25, presentation: 'meters', remoteId: 'PRIVATE' } },
+      { ...structure, remoteId: 'PRIVATE' },
+    ]) expect(TRAINING_RECIPE_WITH_POOL_SCHEMA.safeParse(bad).success).toBe(false);
+    const legacy = { ...recipe({ kind: 'distance', meters: 100 }), sport: ActivityTypes.Swimming };
+    expect(TRAINING_RECIPE_WITH_POOL_SCHEMA.parse(legacy)).toEqual(legacy);
+  });
   it('offers a focused single-workout input without operation or local-key fields', () => {
     const input = {
       expectedScheduleRevision: 1,

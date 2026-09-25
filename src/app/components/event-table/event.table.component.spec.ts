@@ -14,6 +14,7 @@ import { AppProcessingService } from '../../services/app.processing.service';
 import { AppAnalyticsService } from '../../services/app.analytics.service';
 import { LoggerService } from '../../services/logger.service';
 import { EventTagService } from '../../services/event-tag.service';
+import { EventTagCatalogService } from '../../services/event-tag-catalog.service';
 import { AppHapticsService } from '../../services/app.haptics.service';
 import { DatePipe } from '@angular/common';
 import { NO_ERRORS_SCHEMA } from '@angular/core';
@@ -108,6 +109,7 @@ describe('EventTableComponent', () => {
     let mockAnalyticsService: any;
     let mockLogger: any;
     let mockEventTagService: any;
+    let mockEventTagCatalogService: any;
     let mockHapticsService: any;
 
     const mockUser = new User('testUser');
@@ -270,6 +272,9 @@ describe('EventTableComponent', () => {
             }),
             applyBulkChanges: vi.fn().mockResolvedValue({}),
         };
+        mockEventTagCatalogService = {
+            listAllTags: vi.fn().mockResolvedValue([]),
+        };
         mockHapticsService = {
             selection: vi.fn(),
             success: vi.fn(),
@@ -295,6 +300,7 @@ describe('EventTableComponent', () => {
                 { provide: AppProcessingService, useValue: mockProcessingService },
                 { provide: LoggerService, useValue: mockLogger },
                 { provide: EventTagService, useValue: mockEventTagService },
+                { provide: EventTagCatalogService, useValue: mockEventTagCatalogService },
                 { provide: AppHapticsService, useValue: mockHapticsService },
                 DatePipe
             ],
@@ -793,6 +799,98 @@ describe('EventTableComponent', () => {
         (component.events[0] as any).tags = ['Long run'];
         (component as any).processChanges('spec_removed_selected_tag');
         expect(component.tagFilter).toBe('');
+    });
+
+    it('keeps historical tag choices while the table changes to a different date range', async () => {
+        mockEventTagCatalogService.listAllTags.mockResolvedValue(['Historical', 'Race']);
+        (component.events[0] as any).tags = ['Race'];
+        (component as any).processChanges('spec_tags');
+        await (component as any).loadAllHistoryTags(true);
+        const catalogCalls = mockEventTagCatalogService.listAllTags.mock.calls.length;
+
+        expect(component.tagFilterOptions).toEqual(['Historical', 'Race']);
+        component.updateTagFilter('historical');
+        expect(component.tagFilter).toBe('Historical');
+
+        component.events = [new MockEvent('new-range-event') as any];
+        (component as any).processChanges('spec_new_date_range');
+
+        expect(component.tagFilterOptions).toEqual(['Historical', 'Race']);
+        expect(component.tagFilter).toBe('Historical');
+        expect(component.data.filterPredicate(component.data.data[0], component.data.filter)).toBe(false);
+        expect(mockEventTagCatalogService.listAllTags).toHaveBeenCalledTimes(catalogCalls);
+    });
+
+    it('keeps a selected historical tag while refreshing the catalog and ignores stale owner results', async () => {
+        mockEventTagCatalogService.listAllTags.mockResolvedValueOnce(['Historical']);
+        await (component as any).loadAllHistoryTags(true);
+        component.updateTagFilter('Historical');
+
+        let resolveRefresh!: (tags: string[]) => void;
+        mockEventTagCatalogService.listAllTags.mockReturnValueOnce(new Promise<string[]>(resolve => {
+            resolveRefresh = resolve;
+        }));
+        const refresh = (component as any).loadAllHistoryTags(true);
+        component.events = [new MockEvent('new-range-event') as any];
+        (component as any).processChanges('spec_range_changed_during_refresh');
+
+        expect(component.tagFilter).toBe('Historical');
+        expect(component.tagFilterOptions).toContain('Historical');
+
+        component.targetUser = new User('other-user');
+        component.ngOnChanges({ targetUser: new SimpleChange(null, component.targetUser, false) });
+        resolveRefresh(['Private owner tag']);
+        await refresh;
+
+        expect(component.tagFilterOptions).not.toContain('Private owner tag');
+    });
+
+    it('retries a failed full-history tag load when the filter is opened', async () => {
+        mockEventTagCatalogService.listAllTags.mockRejectedValueOnce(new Error('offline'));
+        await (component as any).loadAllHistoryTags(true);
+        expect(component.tagCatalogLoadFailed).toBe(true);
+
+        mockEventTagCatalogService.listAllTags.mockResolvedValueOnce(['Historical']);
+        component.onTagFilterOpened(true);
+        await fixture.whenStable();
+
+        expect(component.tagCatalogLoadFailed).toBe(false);
+        expect(component.tagFilterOptions).toContain('Historical');
+    });
+
+    it('rechecks historical tags when the filter is reopened', async () => {
+        mockEventTagCatalogService.listAllTags.mockResolvedValueOnce(['Old tag']);
+        await (component as any).loadAllHistoryTags(true);
+        expect(component.tagFilterOptions).toContain('Old tag');
+
+        mockEventTagCatalogService.listAllTags.mockResolvedValueOnce(['New tag']);
+        component.onTagFilterOpened(true);
+        await fixture.whenStable();
+
+        expect(component.tagFilterOptions).toContain('New tag');
+        expect(component.tagFilterOptions).not.toContain('Old tag');
+        expect(mockEventTagCatalogService.listAllTags).toHaveBeenLastCalledWith('testUser', false);
+        expect(mockHapticsService.selection).not.toHaveBeenCalled();
+    });
+
+    it('gives one selection haptic for each changed tag choice', () => {
+        (component.events[0] as any).tags = ['Race'];
+        (component as any).processChanges('spec_tag_haptics');
+
+        component.updateTagFilter('race');
+        component.updateTagFilter('Race');
+        expect(mockHapticsService.selection).toHaveBeenCalledOnce();
+
+        component.updateTagFilter('');
+        expect(mockHapticsService.selection).toHaveBeenCalledTimes(2);
+    });
+
+    it('does not request the owner tag catalog for another user dashboard', () => {
+        mockEventTagCatalogService.listAllTags.mockClear();
+        component.targetUser = new User('other-user');
+        component.ngOnChanges({ targetUser: new SimpleChange(null, component.targetUser, false) });
+
+        expect(mockEventTagCatalogService.listAllTags).not.toHaveBeenCalled();
     });
 
     it('should identify tag controls by event and expose every read-only tag', () => {

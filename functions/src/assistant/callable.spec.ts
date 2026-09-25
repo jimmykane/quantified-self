@@ -6,6 +6,7 @@ import {
   type AssistantConversationStore,
 } from './conversation-store';
 import type { AssistantCallableDependencies } from './callable';
+import { AssistantTrainingMetricsPreparingError } from './mcp-session';
 import {
   APPLY_ASSISTANT_TRAINING_PROPOSAL_OPTIONS,
   ASSISTANT_CALLABLE_OPTIONS,
@@ -451,6 +452,50 @@ describe('Assistant callable', () => {
     );
   });
 
+  it('releases a pending Training preparation turn without finalizing its allowance', async () => {
+    const { dependencies, store, reservation } = createDependencies();
+    vi.mocked(dependencies.answer).mockImplementation(async input => {
+      await input.onBillableAttempt();
+      throw new AssistantTrainingMetricsPreparingError(5);
+    });
+    await expect(runAssistantChat({
+      requestId: REQUEST_ID,
+      message: 'How is my Training load?',
+      timeZone: 'Europe/Helsinki',
+      conversationId: 'conversation-1',
+    }, context, dependencies)).rejects.toMatchObject({
+      code: 'unavailable',
+      details: { reason: 'training_metrics_preparing', retryAfterSeconds: 5 },
+    });
+    expect(dependencies.answer).toHaveBeenCalledTimes(1);
+    expect(dependencies.finalizeQuota).not.toHaveBeenCalled();
+    expect(dependencies.releaseQuota).toHaveBeenCalledWith(reservation);
+    expect(store.releaseTurn).toHaveBeenCalledOnce();
+    expect(store.completeTurn).not.toHaveBeenCalled();
+  });
+
+  it('does not charge pending Training preparation when releasing its reservation fails', async () => {
+    const { dependencies, store, reservation } = createDependencies();
+    vi.mocked(dependencies.answer).mockImplementation(async input => {
+      await input.onBillableAttempt();
+      throw new AssistantTrainingMetricsPreparingError(5);
+    });
+    vi.mocked(dependencies.releaseQuota).mockRejectedValueOnce(new Error('Firestore unavailable'));
+
+    await expect(runAssistantChat({
+      requestId: REQUEST_ID,
+      message: 'How is my Training load?',
+      timeZone: 'Europe/Helsinki',
+      conversationId: 'conversation-1',
+    }, context, dependencies)).rejects.toMatchObject({
+      code: 'unavailable',
+      details: { reason: 'training_metrics_preparing', retryAfterSeconds: 5 },
+    });
+    expect(dependencies.finalizeQuota).not.toHaveBeenCalled();
+    expect(dependencies.releaseQuota).toHaveBeenCalledWith(reservation);
+    expect(store.releaseTurn).toHaveBeenCalledOnce();
+  });
+
   it('returns a proposal retained by the authoritative conversation completion', async () => {
     const { dependencies, store, conversation } = createDependencies();
     const proposal = {
@@ -838,11 +883,6 @@ describe('Assistant callable', () => {
     vi.mocked(dependencies.finalizeQuota).mockRejectedValue(
       new Error('quota persistence unavailable'),
     );
-    vi.mocked(dependencies.answer).mockImplementation(async input => {
-      await input.onBillableAttempt();
-      throw new Error('should not reach generation');
-    });
-
     await expect(runAssistantChat({
       requestId: REQUEST_ID,
       message: 'How am I today?',
@@ -853,6 +893,7 @@ describe('Assistant callable', () => {
     expect(dependencies.finalizeQuota).toHaveBeenCalledOnce();
     expect(dependencies.releaseQuota).toHaveBeenCalledWith(reservation);
     expect(store.releaseTurn).toHaveBeenCalledOnce();
+    expect(store.completeTurn).not.toHaveBeenCalled();
   });
 
   it('does not retry a permanent callable error from grounded work', async () => {

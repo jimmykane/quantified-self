@@ -4,6 +4,7 @@ import { NodeStreamableHTTPServerTransport } from '@modelcontextprotocol/node';
 import { InMemoryTransport, McpServer } from '@modelcontextprotocol/server';
 import { Client, StreamableHTTPClientTransport } from '@modelcontextprotocol/client';
 import { z } from 'zod';
+import { DERIVED_METRIC_KINDS } from '../../../shared/derived-metrics';
 import { McpDataError } from './data.service';
 import {
   McpBearerAuthenticationError,
@@ -42,6 +43,42 @@ import {
 import { createMcpTransportHandler } from './transport';
 
 describe('MCP HTTP scope enforcement', () => {
+  it('prepares only caller-owned selected Training kinds with non-destructive idempotent metadata', async () => {
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+    const calls: Array<{ uid: string; kinds: string[] }> = [];
+    const server = createMcpServer({
+      uid: 'user-1', clientId: 'https://client.example/mcp.json', connectionId: 'connection-1',
+      scopes: [MCP_OAUTH_SCOPES.MetricsRead],
+    }, 'https://quantified-self.io', undefined, async (uid, metricKinds) => {
+      calls.push({ uid, kinds: metricKinds });
+      return { status: 'preparing', metricKinds, readyMetricKinds: [], retryAfterSeconds: 5 };
+    });
+    const client = new Client({ name: 'preparation-test-client', version: '1.0.0' });
+    try {
+      await server.connect(serverTransport);
+      await client.connect(clientTransport);
+      const tool = (await client.listTools()).tools.find(item => item.name === 'prepare_training_metrics');
+      expect(tool?.annotations).toMatchObject({
+        readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false,
+      });
+      const result = await client.callTool({ name: 'prepare_training_metrics', arguments: {
+        metricKinds: [DERIVED_METRIC_KINDS.Form, DERIVED_METRIC_KINDS.Form],
+      } });
+      expect(result.structuredContent).toEqual({
+        status: 'preparing', metricKinds: [DERIVED_METRIC_KINDS.Form],
+        readyMetricKinds: [], retryAfterSeconds: 5,
+      });
+      expect(calls).toEqual([{ uid: 'user-1', kinds: [DERIVED_METRIC_KINDS.Form] }]);
+      const invalid = await client.callTool({ name: 'prepare_training_metrics', arguments: {
+        metricKinds: ['unknown'], uid: 'user-2',
+      } });
+      expect(invalid.isError).toBe(true);
+      expect(calls).toHaveLength(1);
+    } finally {
+      await client.close();
+      await server.close();
+    }
+  });
   it('advertises actionable permission recovery without treating missing tools as missing data', async () => {
     const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
     const server = createMcpServer({
@@ -494,6 +531,12 @@ describe('MCP HTTP scope enforcement', () => {
     expect(requiredScopesForRequest({ method: 'tools/call', params: {
       name: 'preview_strength_workout_change', arguments: { expectedScheduleRevision: 1 },
     } })).toEqual([MCP_OAUTH_SCOPES.TrainingPlansRead, MCP_OAUTH_SCOPES.TrainingPlansWrite]);
+    expect(requiredScopesForRequest({ method: 'tools/call', params: {
+      name: 'get_planned_workout_v2', arguments: { workoutRef: 'opaque' },
+    } })).toEqual([MCP_OAUTH_SCOPES.TrainingPlansRead]);
+    expect(requiredScopesForRequest({ method: 'tools/call', params: {
+      name: 'preview_planned_workout_v2_change', arguments: { expectedScheduleRevision: 1 },
+    } })).toEqual([MCP_OAUTH_SCOPES.TrainingPlansRead, MCP_OAUTH_SCOPES.TrainingPlansWrite]);
     expect(requiredScopesForRequest({ method: 'tools/call', params: { name: 'preview_training_changes', arguments: {
       expectedScheduleRevision: 1, changes: [{ kind: 'rename-plan' }],
     } } })).toEqual([MCP_OAUTH_SCOPES.TrainingPlansRead, MCP_OAUTH_SCOPES.TrainingPlansWrite]);
@@ -694,6 +737,7 @@ describe('MCP HTTP scope enforcement', () => {
       'list_activity_types',
       'list_metrics',
       'list_training_metrics',
+      'prepare_training_metrics',
       'query_metric',
       'query_metrics',
     ]);
@@ -726,6 +770,7 @@ describe('MCP HTTP scope enforcement', () => {
       'list_sleep_sessions',
       'list_sleep_vitals',
       'list_training_metrics',
+      'prepare_training_metrics',
       'query_metric',
       'query_metrics',
       'query_sleep_summary',
@@ -762,6 +807,7 @@ describe('MCP HTTP scope enforcement', () => {
       'list_activity_types',
       'list_metrics',
       'list_training_metrics',
+      'prepare_training_metrics',
       'query_activities',
       'query_activities_with_tags',
       'query_metric',
@@ -829,12 +875,14 @@ describe('MCP HTTP scope enforcement', () => {
       'get_planned_workout',
       'get_planned_workout_completion',
       'get_planned_workout_completions',
+      'get_planned_workout_v2',
       'get_strength_workout_details',
       'get_training_plan',
       'get_training_sync_status',
       'list_activity_types',
       'list_training_plans',
       'preview_create_planned_workout',
+      'preview_planned_workout_v2_change',
       'preview_strength_workout_change',
       'preview_training_changes',
       'query_planned_workouts',
@@ -863,7 +911,9 @@ describe('MCP HTTP scope enforcement', () => {
       MCP_OAUTH_SCOPES.TrainingPlansRead,
       MCP_OAUTH_SCOPES.TrainingPlansWrite,
     ]);
-    expect(writeInstructions).toContain('Construct non-strength workout recipes only from the advertised v1 schema');
+    expect(writeInstructions).toContain('Construct non-strength workout recipes using stable unique node IDs');
+    expect(writeInstructions).toContain('use get_planned_workout_v2 to read an authored pool length');
+    expect(writeInstructions).toContain('use preview_planned_workout_v2_change for one create/update');
     expect(writeInstructions).toContain('query_planned_workouts_by_date');
     expect(writeInstructions).toContain('get_planned_workout_completions');
     expect(writeInstructions).toContain('local mapping assessment, not a live provider/account check');
@@ -1290,6 +1340,9 @@ describe('MCP HTTP scope enforcement', () => {
       expect(instructions).toContain(
         'relativePeriod plus timeZone for today or yesterday',
       );
+      expect(instructions).toContain('then list_activities');
+      expect(instructions).toContain('if a connector rejects that schema before the call, use list_activities');
+      expect(tools.map(tool => tool.name)).toContain('list_activities');
       expect(instructions).toContain(
         'add activityTypes and limit 1 when named',
       );

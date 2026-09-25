@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { Firestore } from 'firebase-admin/firestore';
+import { ServiceNames } from '@sports-alliance/sports-lib';
 import { standardWorkoutReferenceFitFixture } from '../delivery/test-support/suunto-fit-fixture';
 
 const deletion = vi.hoisted(() => vi.fn());
@@ -18,17 +19,22 @@ describe('provider-neutral FIT workout-reference evidence', () => {
     expect(evidence.workouts).toEqual([{ name: 'Intervals', sport: 2, subSport: 8, numValidSteps: 4 }]);
   });
 
-  it('retains Garmin references as account-bound candidate evidence without claiming an exact match', async () => {
+  it('retains Garmin references as account-bound candidate evidence without a recorded activity', async () => {
     deletion.mockResolvedValue({ shouldSkip: false });
     authority.mockResolvedValue({ account: 'garmin-account', token: { data: () => ({ tokenCredentialGeneration: 'generation' }) },
       connection: { state: 'connected', destinationKey: 'opaque' } });
     const writes = vi.fn();
     const ref = (path: string): any => ({ path, collection: (part: string) => ref(`${path}/${part}`), doc: (part: string) => ref(`${path}/${part}`) });
     const tx = { set: writes, get: vi.fn(async (target: { path: string }) => target.path.endsWith('/events/event')
-      ? { exists: true, data: () => ({}) } : { exists: false, data: () => undefined }) };
+      ? { exists: true, data: () => ({}) } : target.path.endsWith(`/metaData/${ServiceNames.GarminAPI}`)
+        ? { exists: true, data: () => ({ serviceName: ServiceNames.GarminAPI, serviceUserID: 'garmin-account',
+          serviceActivityFileID: 'source-file', serviceActivityFileType: 'FIT' }) }
+        : { exists: false, data: () => undefined }) };
     const db = { collection: (path: string) => ref(path), runTransaction: (callback: (value: unknown) => unknown) => callback(tx) } as unknown as Firestore;
-    await expect(retainGarminFITWorkoutReferences(db, 'uid', 'event', 'garmin-account', 'generation',
-      standardWorkoutReferenceFitFixture(), 123)).resolves.toBe(true);
+    const retained = await retainGarminFITWorkoutReferences(db, 'uid', 'event', 'garmin-account', 'generation',
+      { activityFileID: 'source-file', activityFileType: 'FIT' },
+      standardWorkoutReferenceFitFixture(), [], 123);
+    expect(retained).toBe(true);
     expect(writes).toHaveBeenCalledExactlyOnceWith(
       expect.objectContaining({ path: 'users/uid/events/event/trainingCompletionEvidence/fit' }),
       expect.objectContaining({ reader: 'sports-lib', sourceProvider: 'garmin', correlationState: 'candidate_only',
@@ -48,6 +54,7 @@ describe('provider-neutral FIT workout-reference evidence', () => {
     const tx = { set, get: vi.fn(async () => ({ exists: true, data: () => ({}) })) };
     const db = { collection: (path: string) => ref(path), runTransaction: (callback: (value: unknown) => unknown) => callback(tx) } as unknown as Firestore;
     await expect(retainGarminFITWorkoutReferences(db, 'uid', 'event', 'garmin-account', 'generation',
+      { activityFileID: 'source-file', activityFileType: 'FIT' },
       standardWorkoutReferenceFitFixture())).resolves.toBe(false);
     expect(set).not.toHaveBeenCalled();
   });

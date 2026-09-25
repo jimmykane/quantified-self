@@ -197,6 +197,19 @@ describe('AssistantService', () => {
     ))).toContain('still in progress');
   });
 
+  it('shows a retry message for pending Training metrics without suggesting quota was used', async () => {
+    functionsService.call.mockRejectedValue({
+      code: 'functions/unavailable',
+      message: 'Training metrics are still preparing.',
+      details: { reason: 'training_metrics_preparing', retryAfterSeconds: 5 },
+    });
+    const error = await service.sendMessage({
+      requestId, message: 'How is my Training load?', timeZone: 'UTC', locationAccess: 'coordinate_free',
+    }).catch(value => value);
+    expect(error).toMatchObject({ code: 'TRAINING_METRICS_PREPARING' });
+    expect(service.getErrorMessage(error)).toContain('does not use your Assistant allowance');
+  });
+
   it('uses conversation-specific copy for reset failures while preserving actionable errors', () => {
     expect(service.getConversationUpdateErrorMessage(new AssistantError(
       'INTERNAL',

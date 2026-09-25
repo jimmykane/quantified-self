@@ -49,6 +49,15 @@ Garmin stress-validation diagnostics use the existing WARNING with allowlisted f
 
 ### Structured-workout remote verification evidence
 
+Garmin completed-activity correlation is separate from remote Workout/Schedule verification. Its imported FIT
+`training_file` serial is only a candidate identifier under the FIT specification; one owner-account recording matched
+the retained Training API workout ID. The local linker requires the Garmin activity-file ID from import metadata, a
+saved activity in that event, a unique same-account ledger, accepted schedule, current scheduled date, and one recorded
+activity on that local date before writing the existing completion and private
+reverse link. Ambiguity remains unlinked, with no similarity fallback or activity-metric rewrite. The current v1
+completion projection has one recorded source per workout, so a simultaneous second provider recording is not linked
+until #651 resolves multi-source representation. Provider acceptance is never watch receipt or proof every target was met.
+
 Remote verification (#703) reuses the Training delivery ledger, 25-item reconciliation pages, dispatcher and per-delivery
 lease. `check` is an idempotent, revision-checked command with a 15-minute coalescing window; it does not change consent.
 Daily checks share production application/account capacity with delivery and yield to writes. The compact owner-readable
@@ -137,6 +146,9 @@ approval UI; QS does not use MCP elicitation as an additional confirmation round
 an independent blocked result rather than hiding the reason. Destination keys, credentials, artifact IDs, approval
 digests and attempt journals never enter MCP input or output. Provider delivery remains Pro-gated, and failure does not
 roll back an authored plan/workout mutation in the same confirmed proposal.
+For a newly authored workout with a degraded mapping (such as Mountain Biking to Garmin Cycling), MCP Send establishes
+consent without approving the loss of sport detail. A separate, current-digest approval is required before transport;
+an applied Send result must not be described as a provider-side copy.
 
 Manual training planning is available to every signed-in account across its routes, calendar actions/overlays, Help and
 planning-specific connection/deletion instructions. This does not authorize transport work, alter disconnect or deletion
@@ -257,8 +269,10 @@ deployment requires separate operational approval and monitoring.
 QS still revalidates the exact connected account, filters its OAuth client owner and deterministic Guide external ID,
 and links only one unambiguous session marker
 to the matching scheduled workout. The private IDs/evidence never enter Event/Activity JSON; the owner sees only
-**Activity linked**, which does not claim target or interval adherence. Garmin message 72 remains candidate-only because
-its serial-to-Training-API semantics are not documented. Bounded fallback/manual reconciliation remains in #651. The existing OAuth
+**Activity linked**, which does not claim target or interval adherence. Garmin message 72 is retained as candidate evidence;
+the conservative account/date/source-validated link above can promote one exact match despite the undocumented
+serial-to-API semantics.
+Bounded fallback/manual and multi-source reconciliation remain in #651. The existing OAuth
 application/client credentials/user tokens and `SUUNTOAPP_SUBSCRIPTION_KEY` are reused, with the
 exact OAuth application name supplied through the `SUUNTOAPP_GUIDE_OWNER` Secret Manager setting (`.secret.local`
 for emulators). The name is not hardcoded; only the two Training delivery callables and worker bind it. Guides uses the

@@ -75,6 +75,7 @@ export const CLIENT_RENDERED_APP_ROUTES = [
   'admin/changelog',
   'admin/queues/workout',
   'admin/queues/activity-sync',
+  'admin/queues/training-delivery',
   'admin/queues/route-delivery-sync',
   'admin/queues/route-sync',
   'admin/queues/sleep-sync',

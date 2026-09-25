@@ -32,6 +32,7 @@ import { AdminUserAnalyticsStore } from '../../../services/admin-user-analytics.
 import { AdminUserHistoryComponent } from './admin-user-history.component';
 import { AdminUserKpiGridComponent } from '../admin-user-kpi-grid/admin-user-kpi-grid.component';
 import { PageHeaderComponent } from '../../shared/page-header/page-header.component';
+import { AppChartSharedModule } from '../../../modules/app-chart-shared.module';
 
 interface AdminDashboardOverview {
     value: string;
@@ -53,6 +54,7 @@ interface AdminDashboardOverview {
         MatTableModule,
         MatTooltipModule,
         RouterModule,
+        AppChartSharedModule,
         AdminFinancialsComponent,
         AdminUserHistoryComponent,
         AdminUserKpiGridComponent,

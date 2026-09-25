@@ -111,6 +111,10 @@ They never accept credentials or remote IDs. `all_connected` fans out only to co
 by preview; explicit providers return independent blocked/success results. Pro, compatibility approval, horizon,
 connection, completion and provider readiness checks remain authoritative. Provider failure never rolls back authored
 schedule changes, and MCP itself makes no direct provider HTTP request.
+For a degraded standalone create-and-send (for example, Mountain Biking folded to Garmin Cycling), Send stores only
+delivery consent and queues reconciliation. It must not forward the mapping digest as approval. The public preview and
+apply result explain that a separate approval is needed; the current workout remains unsent until a new `approve`
+proposal binds the current destination and payload digest. An applied Send result is not a provider acceptance claim.
 
 The built-in Assistant exposes only the applicable focused/batch previews to Gemini. It prefers the focused tool for one
 new workout, including a one-workout create-and-send request, and the batch tool for other or genuinely multi-change
@@ -118,6 +122,22 @@ requests. One bounded proposal is stored with the current conversation and
 rendered in a compact review surface; a separate Auth + App Check callable applies or dismisses it after the user's click.
 The opaque reference and data-boundary authorization include the conversation generation and its three independent
 Training toggles. New chat and permission changes invalidate stale proposals.
+Its model-facing Genkit schema is a typed projection of the strict MCP input, not a replacement wire contract: local
+references and recipe/change unions are made legible to Gemini, while MCP still rejects invalid variants and
+unapproved writes. Include the full optional-permission tool catalogue in schema-compatibility tests when a Training
+or content input changes; otherwise one incompatible declaration can prevent every Assistant answer before a tool runs.
+The Assistant selects one relevant Training preview per turn rather than advertising all four deeply nested proposals
+to Gemini together; public MCP clients continue to see all tools under their independent grants.
+Plan-level and provider-only actions select the batch preview before sport-specific recipe wording; one authored strength
+or pool-length change selects its focused preview. A combined comparison and workout recommendation retains live daily
+and completed-activity reads instead of inheriting a single-purpose analytical workflow. This is internal routing only:
+the public tool list, scopes, strict schemas and approval boundary do not change.
+The same combined recommendation may consult `query_timeline_notes` only under its separately enabled Assistant
+permission. Bounded recent/ongoing notes are dated, incomplete reads are disclosed, and user-authored text cannot
+instruct a provider or authorize a plan change. The internal model-only projection adds local date/weekday labels to
+numeric metric buckets using the request's IANA time zone, without changing the validated public metric response or
+registered contract. A known canonical `Duration` query leaves room within the six-call Assistant budget for notes
+and one expressly requested focused create preview.
 
 Every future planning feature must review MCP impact in the same PR: explicit projections, schemas, consent, bounds, units,
 Assistant/plugin guidance and tests. Record a no-impact rationale or a focused epic-linked Project 2 deferral. Maintaining
@@ -153,15 +173,19 @@ explicit folds cover the QS running and cycling Training profiles, including ind
 velomobile, Enduro MTB and Downhill Cycling. Every non-base profile remains an approval-bound degradation; clients must
 not rewrite the authored sport just to satisfy a provider.
 
-Manual pool and open-water swimming support likewise leaves the MCP wire contract unchanged: the existing canonical sport
-enum already accepts `Swimming` and `Open Water Swimming`, and planned-workout read summaries format both swim profiles'
-distances in metres and pace using the owner's /100 m or /100 yd setting. The later #733 recipe adds an optional
-canonical pool length for pool swimming, but the registered v1 recipe remains frozen: its existing read omits that new
-field while continuing to return the workout and compatibility assessment. It cannot author the pool setting. Additive
-pool-length read/authoring coverage is tracked in #734 under #583; no existing schema, mutation kind, tool, scope,
-consent, provider action, or private delivery evidence changes. Existing strict proposal/confirmation checks and
-provider compatibility assessment
-still govern writes; Garmin accepts compatible, explicitly consented pool-swim delivery after owner-account cloud CRUD/readback proof (not watch receipt), Wahoo rejects swimming delivery, COROS accepts only target-free pool recipes at its backend
+Manual pool and open-water swimming use the exact canonical sport strings `Swimming` and `Open Water Swimming`.
+Planned-workout summaries format swim distances in metres and pace with the owner's /100 m or /100 yd setting.
+The #733 recipe's optional physical pool length is independent of a distance step. The registered v1 read and write
+schemas stay frozen and omit it. The additive `get_planned_workout_v2` read returns an authored
+`poolLength: { meters, presentation }` for pool swims under the existing `training-plans:read` grant, without inferring
+one from step distance. `preview_planned_workout_v2_change` accepts one complete non-strength create/update with optional
+pool length under the existing parent read plus `training-plans:write` grants. It shares the owner-, connection-,
+grant-, revision- and expiry-bound proposal and approval-gated `apply_training_changes` path; it has no provider
+action. A registered v1 edit of a workout with selected pool length fails rather than clearing that setting. Invalid
+or non-pool lengths fail strict validation, and older pool recipes remain readable with length absent. These additive
+tools are the local implementation of #734 under #583; they need deployment and client catalog refresh before use.
+No existing schema, mutation kind, scope, consent, provider action or private delivery evidence changes. Existing
+provider compatibility assessment still governs writes; Garmin accepts compatible, explicitly consented pool-swim delivery after owner-account cloud CRUD/readback proof (not watch receipt), Wahoo rejects swimming delivery, COROS accepts only target-free pool recipes at its backend
 while new browser Send/sync actions remain unavailable, and Suunto maps pool and open-water profiles to distinct Guide
 activity recommendations. Owner read fixtures cover both swim sport strings and metre-based steps; no widened consent or
 provider action is implied by this read-only presentation change.
@@ -189,6 +213,12 @@ kilograms; the owner's display preference does not alter the wire contract.
 
 Sports Lib 21.2.1 FIT workout-reference adoption and the first exact Suunto activity link add no MCP metric, scope,
 provider action or registered wire field. Private FIT references, account digests and reverse-link records are excluded.
+The Garmin FIT correlation path writes the existing completion v1 projection only after account, unique delivery,
+scheduled occurrence and source-activity checks. Existing single/bulk completion reads and Assistant evidence already
+consume that exact projection, so this adds no MCP tool, scope, schema, consent, mutation or registered wire change.
+Private FIT identities and ledgers remain excluded; a conflicting second recording stays unlinked under the current v1
+one-source contract. The registered contract check and existing Garmin completion read fixtures cover the no-wire-impact
+boundary.
 Existing sync status may truthfully become `completed` after an account-bound Guide marker is accepted, using the status
 already present in the frozen delivery schema. `get_training_sync_status` also applies an exact persisted workout
 completion to every confirmed destination copy of that workout: the evidence provider remains private provenance, while
@@ -771,6 +801,7 @@ The analytics and map entries follow the
 | `query_metric` | `metrics:read` | One event-stat aggregation by local date interval or activity type |
 | `query_metrics` | `metrics:read` | Up to four event-stat aggregations over one shared bounded read, date range, grouping, timezone, and activity filter |
 | `list_training_metrics` | `metrics:read` | Human-readable Training metric catalog with current snapshot availability metadata but no payloads or provenance |
+| `prepare_training_metrics` | `metrics:read` | Queue or join preparation for one to eight registered Training snapshots and return readiness with retry guidance, without metric values |
 | `get_training_metric` | `metrics:read` | One ready, redacted Training-derived snapshot |
 | `get_activity_metrics` | `metrics:read` + `activity-details:read` | Up to 25 explicitly selected canonical numeric Sports Lib metrics for one referenced activity |
 | `get_activity_overview` | `metrics:read` + `activity-details:read` | Coordinate-free activity type plus actual metric, detail, and chart-source availability |
@@ -791,8 +822,8 @@ The analytics and map entries follow the
 | `create_timeline_note` | `timeline-notes:read` + `timeline-notes:write`; native client approval gate | Idempotently creates one explicitly authored private note from a stable mutation UUID |
 | `update_timeline_note` | `timeline-notes:read` + `timeline-notes:write`; native client approval gate | Replaces one note at its expected revision; stale changes conflict |
 | `delete_timeline_note` | `timeline-notes:read` + `timeline-notes:write`; native client approval gate | Permanently removes one note at its expected revision and leaves a content-free deletion receipt |
-| `list_activities` | `activity-details:read`; locations add `activity-location:read` | Frozen compatibility tool for bounded newest-first activity scans |
-| `query_activities` | `activity-details:read`; locations add `activity-location:read` | Preferred bounded activity query with structurally exclusive explicit, relative, and unbounded date modes |
+| `list_activities` | `activity-details:read`; locations add `activity-location:read` | Bounded newest-first activity scans; preferred across MCP hosts, including for today's completed workouts |
+| `query_activities` | `activity-details:read`; locations add `activity-location:read` | Equivalent activity query with structurally exclusive explicit, relative, and unbounded date modes for clients that support its `oneOf` schema |
 | `query_activities_with_tags` | `activity-details:read` | Coordinate-free activity summaries with their parent event tags and optional exact case-insensitive `any`/`all` tag filtering |
 | `update_event_tags` | `activity-details:read` + `events:write`; host-controlled approval | Replaces the complete parent-event tag list after an exact current-tag precondition; sibling activities share the result and benchmark events are excluded |
 | `get_event_title` | `activity-details:read` + `events:write` | Reads one editable parent-event title for an opaque activity reference before a rename; no internal event ID |
@@ -1087,7 +1118,7 @@ user asks for jump-level details. When reading those records, follow `nextCursor
 inspection is incomplete; the bounded built-in Assistant does not spend its required superlative workflow on redundant
 jump pagination. `jumpCount` is availability and volume evidence only; it never ranks jump quality.
 
-For a recent or latest jump detail request, use newest-first `query_activities`, choose the first returned activity with
+For a recent or latest jump detail request, use newest-first `list_activities`, choose the first returned activity with
 `jumpCount > 0`, then pass that opaque reference to `list_activity_jumps`. Continue the same query cursor only when the
 page contains no activity with jumps. With `activity-location:read`, only a jump-record coordinate may represent a jump
 on a map or in prose: an activity's start and end positions are distinct summary locations and must never be substituted.
@@ -1184,8 +1215,14 @@ cursors use authenticated encryption and are bound to the UID and MCP connection
 them. The separately requested direct app URL uses the existing `/user/{uid}/event/{eventId}` route and still requires
 the user's normal application sign-in; it contains no MCP credential or authorization bypass.
 
-Activity discovery metadata explicitly maps workout, exercise-session, today, yesterday, last, latest, most-recent, and
-named-sport requests to `query_activities`. `list_activity_types` returns the unique canonical Sports Lib activity types
+Activity discovery metadata maps workout, exercise-session, today, yesterday, last, latest, most-recent, and
+named-sport requests to `list_activities`. It has the same bounded, owner-scoped activity service as
+`query_activities` and avoids connectors that reject the latter's `oneOf` input before the request reaches QS.
+The existing strict tool remains available to compatible clients; a client-side schema rejection should fall back to
+`list_activities` with identical filters, never infer that the user has no completed workouts.
+The in-process built-in Assistant keeps `query_activities` in its curated allowlist because it does not use the
+affected external connector schema conversion.
+`list_activity_types` returns the unique canonical Sports Lib activity types
 plus their group and indoor hints; filters accept those values or aliases recognized by Sports Lib and canonicalize
 them before scanning. A request such as “latest run” therefore uses a server-side type filter with `limit: 1`, so a newer
 activity of another type is skipped instead of being mistaken for the requested workout.
@@ -1464,6 +1501,15 @@ descriptors, validates the snapshot entry type and metric identity, and reports 
 `missing`, or `schema_mismatch`. It never returns a snapshot payload, backend error text, event identity, or source
 provenance. Clients should use it before deciding that a Training metric is unavailable, and call
 `get_training_metric` only for a ready kind.
+
+For a current or missing snapshot, call `prepare_training_metrics` with one to eight catalog kinds. The tool runs the
+same freshness check as the Training route, queues only stale kinds through the existing coordinator, waits at most
+five seconds, and returns `ready`, `preparing`, or `unavailable`, plus the kinds already ready and a retry delay when
+preparing. It is idempotent but can queue backend work (`readOnlyHint: false`, `destructiveHint: false`). Retry this
+tool after the suggested delay while it is preparing; once ready, call the unchanged `get_training_metric` read.
+The response exposes neither snapshot values nor private worker state. A failed or disabled queue reports
+`unavailable` rather than inventing a ready value. Existing clients need a deployed server update and tool-catalog
+refresh to discover this additive tool; the pending contract record does not make it available by itself.
 
 Training calculation, schema, invalidation, rebuild, and extension guidance remains in
 [`training-workspace.md`](training-workspace.md). Adding a kind requires its normal derived pipeline, exact safe MCP

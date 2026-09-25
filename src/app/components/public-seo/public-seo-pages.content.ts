@@ -756,7 +756,7 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
       },
       {
         question: 'Can an MCP client read my Training plans and planned workouts?',
-        answer: 'With separately approved Training plans and planned workouts permission, supported clients can read current plans, standalone workouts, complete instructions, step notes, exact stored completion links, and existing service sync summaries. Separate child permissions allow bounded plan/workout or provider-delivery proposals. Applying a proposal uses the client\'s native approval controls, and provider delivery remains Pro and connection-gated. Synced means provider-side workout delivery, not receipt on a watch.',
+        answer: 'With separate Training permission, clients can read plans, workouts, instructions, an authored pool-swim length when selected, notes, exact completion links and sanitized sync status. Pool length is not step distance. Separate change grants permit bounded proposals, including a pool-length preview; apply uses the client\'s approval controls. Provider delivery remains Pro and connection-gated; sync confirms cloud delivery, not watch receipt.',
       },
       {
         question: 'Why are my Training plan tools missing?',

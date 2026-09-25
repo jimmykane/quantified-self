@@ -135,26 +135,26 @@
 
                     <ng-container matColumnDef="pendingDb">
                         <th mat-header-cell *matHeaderCellDef> Database backlog </th>
-                        <td mat-cell *matCellDef="let row">{{ row.pendingDb | number }}</td>
+                        <td mat-cell *matCellDef="let row">{{ row.pendingDb === null ? '—' : (row.pendingDb | number) }}</td>
                     </ng-container>
 
                     <ng-container matColumnDef="cloudTasks">
                         <th mat-header-cell *matHeaderCellDef> Tasks queued </th>
-                        <td mat-cell *matCellDef="let row">{{ row.cloudTasks | number }}</td>
+                        <td mat-cell *matCellDef="let row">{{ row.cloudTasks === null ? '—' : (row.cloudTasks | number) }}</td>
                     </ng-container>
 
                     <ng-container matColumnDef="completed">
                         <th mat-header-cell *matHeaderCellDef> Completed </th>
                         <td mat-cell *matCellDef="let row">
-                            <span>{{ row.completed | number }}</span>
+                            <span>{{ row.completed === null ? '—' : (row.completed | number) }}</span>
                             <span class="cell-detail">{{ row.completedLabel }}</span>
                         </td>
                     </ng-container>
 
                     <ng-container matColumnDef="problems">
                         <th mat-header-cell *matHeaderCellDef> Needs attention </th>
-                        <td mat-cell *matCellDef="let row" [class.problem-cell]="row.problemCount > 0">
-                            <span>{{ row.problemCount | number }}</span>
+                        <td mat-cell *matCellDef="let row" [class.problem-cell]="(row.problemCount ?? 0) > 0">
+                            <span>{{ row.problemCount === null ? '—' : (row.problemCount | number) }}</span>
                             <span class="cell-detail">{{ row.problemLabel }}</span>
                         </td>
                     </ng-container>
@@ -201,7 +201,7 @@
                     <ng-container matColumnDef="actions">
                         <th mat-header-cell *matHeaderCellDef></th>
                         <td mat-cell *matCellDef="let row">
-                            <button mat-icon-button class="qs-mat-primary" [routerLink]="row.route"
+                            <button mat-icon-button class="qs-mat-primary" appHapticTap [routerLink]="row.route"
                                 [attr.aria-label]="'Open ' + row.label + ' queue'">
                                 <mat-icon>open_in_new</mat-icon>
                             </button>
@@ -230,7 +230,7 @@
                             [class.status-disabled-icon]="row.severity === 'disabled'">{{ row.icon }}</mat-icon>
                         <span>{{ row.label }}</span>
                     </div>
-                    <button mat-icon-button class="qs-mat-primary" [routerLink]="row.route"
+                    <button mat-icon-button class="qs-mat-primary" appHapticTap [routerLink]="row.route"
                         [attr.aria-label]="'Open ' + row.label + ' queue'">
                         <mat-icon>open_in_new</mat-icon>
                     </button>
@@ -238,19 +238,19 @@
 
                 <div class="queue-card-metrics">
                     <div class="queue-metric">
-                        <span class="queue-metric-value">{{ row.pendingDb | number }}</span>
+                        <span class="queue-metric-value">{{ row.pendingDb === null ? '—' : (row.pendingDb | number) }}</span>
                         <span class="queue-metric-label">Database backlog</span>
                     </div>
                     <div class="queue-metric">
-                        <span class="queue-metric-value">{{ row.cloudTasks | number }}</span>
+                        <span class="queue-metric-value">{{ row.cloudTasks === null ? '—' : (row.cloudTasks | number) }}</span>
                         <span class="queue-metric-label">Tasks queued</span>
                     </div>
                     <div class="queue-metric">
-                        <span class="queue-metric-value">{{ row.completed | number }}</span>
+                        <span class="queue-metric-value">{{ row.completed === null ? '—' : (row.completed | number) }}</span>
                         <span class="queue-metric-label">{{ row.completedLabel }}</span>
                     </div>
                     <div class="queue-metric">
-                        <span class="queue-metric-value" [class.problem-cell]="row.problemCount > 0">{{ row.problemCount | number }}</span>
+                        <span class="queue-metric-value" [class.problem-cell]="(row.problemCount ?? 0) > 0">{{ row.problemCount === null ? '—' : (row.problemCount | number) }}</span>
                         <span class="queue-metric-label">{{ row.problemLabel }}</span>
                     </div>
                     <div class="queue-metric">

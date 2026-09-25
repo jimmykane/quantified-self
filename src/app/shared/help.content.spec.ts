@@ -14,6 +14,13 @@ import {
 } from './policies.content';
 
 describe('help.content', () => {
+  it('explains separately consented Timeline-note context for workout suggestions', () => {
+    const assistant = HELP_SECTIONS.find(section => section.id === 'ai-insights')?.content;
+    expect(assistant).toContain('notes about sickness, injury, travel, or vacation');
+    expect(assistant).toContain('Without it the Assistant cannot check notes');
+    expect(assistant).toContain('never change calculations, automatically send a workout');
+  });
+
   it('keeps Planning guidance public and searchable', () => {
     const copy = JSON.stringify(HELP_SECTIONS);
     expect(copy).toContain('/training/plans');
@@ -56,7 +63,7 @@ describe('help.content', () => {
     expect(content).toContain('Workout delivery to Garmin, Suunto, and Wahoo is available to connected Pro members');
     expect(content).toContain('New COROS plan sync and standalone Send actions are coming soon in the app');
     expect(content).toContain('Distance-based steps are not sent because Wahoo needs a total duration');
-    expect(content).toContain('Running and cycling distance steps use your chosen kilometres or miles');
+    expect(content).toContain('Running/cycling distance follows your km or mile preference');
     expect(content).toContain('Older Wahoo connections may need **Reconnect Wahoo**');
     expect(content).toContain('Checks confirm the app-owned Plan, Workout and association; automatic missing-copy restoration is unavailable');
     expect(content).toContain('COROS workout delivery is coming soon in the app');
@@ -490,6 +497,8 @@ describe('help.content', () => {
     expect(gettingStartedSection?.content).toContain('Event search filters only the dashboard event table');
     expect(gettingStartedSection?.content).toContain('Event tags can be added from an event row or event details');
     expect(gettingStartedSection?.content).toContain('exact tag filter');
+    expect(gettingStartedSection?.content).toContain('tag filter and tag editors list your saved tags regardless of the selected date range');
+    expect(gettingStartedSection?.content).toContain('A tag remains available for reuse after you remove it from every event');
     expect(gettingStartedSection?.content).toContain('up to 250 selected events');
     expect(gettingStartedSection?.content).toContain('atomic add/remove tag changes in bulk');
     expect(gettingStartedSection?.content).toContain('tags are visible on public event and comparison links');
@@ -556,6 +565,7 @@ describe('help.content', () => {
     expect(calendarSection?.content).toContain('summary exclusions configured in **Settings** also apply');
     expect(calendarSection?.content).toContain('Settings -> Dashboard -> Start of the Week');
     expect(calendarSection?.content).toContain('visible-period activity query');
+    expect(calendarSection?.content).toContain('tag filter lists your saved activity tags across all dates');
     expect(calendarSection?.content).toContain('independent from the dashboard event table');
     expect(calendarSection?.content).toContain('Select any date, including an empty one');
     expect(calendarSection?.content).toContain('standalone workouts plus workouts from the active plan');
@@ -605,20 +615,24 @@ describe('help.content', () => {
     expect(planningSection?.content).toContain('never recreates a Guide automatically');
     expect(planningSection?.content).toContain('reconnecting is not required or recommended as a normal QS workflow');
     expect(planningSection?.content).toContain('**Completed · activity linked**');
+    expect(planningSection?.content).toContain('A completed Garmin FIT activity can link to a planned workout');
+    expect(planningSection?.content).toContain('a second recording of an already-linked workout does not replace the first');
     expect(planningSection?.content).toContain('**Sent · workout completed**');
     expect(planningSection?.content).toContain('**Past workout · previously sent**');
-    expect(planningSection?.content).toContain('authorized MCP client can also author');
-    expect(planningSection?.content).toContain('Enduro MTB, and Downhill Cycling profiles');
+    expect(planningSection?.content).toContain('Authorized MCP clients can also author');
+    expect(planningSection?.content).toContain('Enduro MTB and Downhill Cycling');
     expect(planningSection?.content).toContain('Pool swimming');
     expect(planningSection?.content).toContain('Open-water swimming');
     expect(planningSection?.content).toContain('pool length');
-    expect(planningSection?.content).toContain('keeps every authored running/cycling profile unchanged in QS');
-    expect(planningSection?.content).toContain('only its broad Running or Cycling family');
+    expect(planningSection?.content).toContain('Garmin receives broad Running/Cycling families');
+    expect(planningSection?.content).toContain('with a review warning');
     expect(planningSection?.content).toContain('only one can be active');
     expect(planningSection?.content).toContain('Move a workout between plans or between a plan and **Standalone**');
     expect(planningSection?.content).toContain('Ordinary deletion is recoverable from history');
     expect(planningSection?.content).toContain('Every visible date');
     expect(planningSection?.content).toContain('Planned workouts and completed activities are separate');
+    expect(planningSection?.content).toContain('Separate MCP read/preview tools support an authored pool length');
+    expect(planningSection?.content).toContain('A pool length only appears');
     expect(planningSection?.links).toContainEqual({
       label: 'Open Plans',
       icon: 'event_note',

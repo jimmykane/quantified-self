@@ -13,11 +13,11 @@ export interface AdminDashboardQueueRow {
     label: string;
     icon: string;
     route: string;
-    pendingDb: number;
-    cloudTasks: number;
-    completed: number;
+    pendingDb: number | null;
+    cloudTasks: number | null;
+    completed: number | null;
     completedLabel: string;
-    problemCount: number;
+    problemCount: number | null;
     problemLabel: string;
     dead: number;
     deadLabel: string;
@@ -71,6 +71,9 @@ interface QueueRowBase {
     throughput?: number | null;
     maxLagMs?: number | null;
     automaticScanEnabled?: boolean;
+    /** Preserve unavailable aggregates as unknown, rather than converting them to zero. */
+    preserveMissingCounts?: boolean;
+    queuePaused?: boolean;
     chips?: string[];
 }
 
@@ -125,6 +128,33 @@ export function buildAdminDashboardQueueRows(stats: QueueStats | null): AdminDas
             maxLagMs: stats.activitySync?.advanced?.maxLagMs,
             chips: countChip('Manual review', stats.activitySync?.manualReconciliationRequired),
         }),
+        ...(stats.trainingDelivery ? [buildQueueRow({
+            id: 'training-delivery',
+            label: 'Training Delivery',
+            icon: 'event_repeat',
+            route: '/admin/queues/training-delivery',
+            pendingDb: stats.trainingDelivery.jobsAvailable ? stats.trainingDelivery.jobs.due : null,
+            cloudTasks: queues?.trainingDelivery && queues.trainingDelivery.state !== 'UNKNOWN'
+                ? queues.trainingDelivery.pending : null,
+            completed: stats.trainingDelivery.statusCountsAvailable ? stats.trainingDelivery.outcomes.delivered : null,
+            completedLabel: 'Delivered',
+            problemCount: stats.trainingDelivery.statusCountsAvailable
+                ? normalizeCount(stats.trainingDelivery.outcomes.failed) + normalizeCount(stats.trainingDelivery.outcomes.needsAttention)
+                : null,
+            problemLabel: 'Failed / Review',
+            dead: 0,
+            deadLabel: 'Dead',
+            maxLagMs: stats.trainingDelivery.jobsAvailable ? stats.trainingDelivery.jobs.oldestDueLagMs : null,
+            preserveMissingCounts: true,
+            queuePaused: queues?.trainingDelivery?.state === 'PAUSED' || queues?.trainingDelivery?.state === 'DISABLED',
+            chips: [
+                ...(stats.trainingDelivery.jobsAvailable ? countChip('Scheduled jobs', stats.trainingDelivery.jobs.total) : ['Job counts unavailable']),
+                ...(stats.trainingDelivery.statusCountsAvailable ? countChip('Retrying', stats.trainingDelivery.outcomes.retrying) : ['Outcome counts unavailable']),
+                ...(!queues?.trainingDelivery || queues.trainingDelivery.state === 'UNKNOWN' ? ['Cloud Tasks unavailable'] : []),
+                ...(queues?.trainingDelivery?.state === 'PAUSED' ? ['Cloud Tasks paused'] : []),
+                ...(queues?.trainingDelivery?.state === 'DISABLED' ? ['Cloud Tasks disabled'] : []),
+            ],
+        })] : []),
         buildQueueRow({
             id: 'route-delivery-sync',
             label: 'Route Delivery',
@@ -327,11 +357,11 @@ function buildQueueRow(base: QueueRowBase): AdminDashboardQueueRow {
         label: base.label,
         icon: base.icon,
         route: base.route,
-        pendingDb: normalizeCount(base.pendingDb),
-        cloudTasks: normalizeCount(base.cloudTasks),
-        completed: normalizeCount(base.completed),
+        pendingDb: base.preserveMissingCounts ? normalizeNullableCount(base.pendingDb) : normalizeCount(base.pendingDb),
+        cloudTasks: base.preserveMissingCounts ? normalizeNullableCount(base.cloudTasks) : normalizeCount(base.cloudTasks),
+        completed: base.preserveMissingCounts ? normalizeNullableCount(base.completed) : normalizeCount(base.completed),
         completedLabel: base.completedLabel || 'Completed',
-        problemCount: normalizeCount(base.problemCount),
+        problemCount: base.preserveMissingCounts ? normalizeNullableCount(base.problemCount) : normalizeCount(base.problemCount),
         problemLabel: base.problemLabel || 'Stuck',
         dead: normalizeCount(base.dead),
         deadLabel: base.deadLabel || 'Dead',
@@ -344,20 +374,26 @@ function buildQueueRow(base: QueueRowBase): AdminDashboardQueueRow {
     return {
         ...row,
         maxLagLabel: row.maxLagMs === null ? '-' : formatAdminDashboardDuration(row.maxLagMs),
-        severity: resolveQueueSeverity(row.problemCount, row.dead, row.automaticScanEnabled),
+        severity: resolveQueueSeverity(row.problemCount, row.dead, row.automaticScanEnabled,
+            row.pendingDb === null || row.cloudTasks === null || row.completed === null || row.problemCount === null
+                || base.queuePaused === true),
     };
 }
 
 function resolveQueueSeverity(
-    problemCount: number,
+    problemCount: number | null,
     dead: number,
-    automaticScanEnabled: boolean | undefined
+    automaticScanEnabled: boolean | undefined,
+    unavailable: boolean,
 ): AdminDashboardSeverity {
-    if (problemCount > 0 || dead > 0) {
+    if ((problemCount ?? 0) > 0 || dead > 0) {
         return 'error';
     }
     if (automaticScanEnabled === false) {
         return 'disabled';
+    }
+    if (unavailable) {
+        return 'warning';
     }
     return 'ok';
 }

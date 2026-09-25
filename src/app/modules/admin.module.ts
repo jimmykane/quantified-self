@@ -52,6 +52,12 @@ export const adminRoutes: Routes = [
         }
     },
     {
+        path: 'queues/training-delivery',
+        component: AdminQueueMonitorComponent,
+        canActivate: [adminGuard],
+        data: { queueView: 'training-delivery' }
+    },
+    {
         path: 'queues/route-delivery-sync',
         component: AdminQueueMonitorComponent,
         canActivate: [adminGuard],

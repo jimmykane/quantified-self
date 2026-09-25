@@ -23,13 +23,16 @@ to a single optimized function.
 Firebase Admin initialization lives in `functions/src/bootstrap.ts` and runs before either path. It remains idempotent,
 uses the migrated EU Storage bucket and configures Firestore to ignore undefined properties.
 
-The initial canary includes only:
+The initial deployed canary included:
 
 - `getSuuntoAPIAuthRequestTokenRedirectURI`
 - `requestAndSetSuuntoAPIAccessToken`
 
-Other functions continue through the complete entrypoint until they are deliberately added to the target map and pass
-the same checks.
+The target map also isolates all 11 exports from `functions/src/admin/marketing/handlers.ts`, including the
+`trackMarketingDelivery` Firestore trigger. That trigger observes updates to the shared `mail/{mailId}` collection even
+when the updated email is not part of a marketing campaign. Its existing 256 MiB memory limit is unchanged; this routing
+change needs a separately approved deployment and production memory check. Functions outside these two groups continue
+through the complete entrypoint.
 
 ## Verification
 
@@ -41,14 +44,17 @@ npm --prefix functions run entrypoint:check
 
 The check builds the Functions package and verifies:
 
-- discovery exposes all 153 application exports;
+- discovery exposes all 165 application exports;
 - both Firebase discovery modes ignore an inherited optimized `FUNCTION_TARGET`;
 - an unknown target exposes the same complete export set;
 - a discovered Gen 1 target retains the complete entrypoint fallback;
 - each optimized target exposes only its requested handler;
 - the optimized export is the exact object created by the provider wrapper;
 - optimized Suunto startup does not import Genkit, BigQuery, MCP or admin handler modules;
-- optimized Suunto endpoints remain Gen 2 in `europe-west2` with 512 MiB and the same secret bindings.
+- optimized marketing startup does not import Genkit, BigQuery, MCP or unrelated admin modules;
+- optimized Suunto endpoints remain Gen 2 in `europe-west2` with 512 MiB and the same secret bindings;
+- optimized marketing endpoints retain their callable, schedule, Firestore or HTTP triggers, existing memory limits,
+  region and secret bindings.
 
 CI runs the compiled check after the Functions build. Firebase Functions predeploy first rejects forbidden local
 credential, environment and operational files, then runs the compiled entrypoint check and secret-binding validation.
@@ -78,6 +84,19 @@ Three isolated Node 22.23.2 runs on 2026-09-18 produced these medians:
 These are local cold-import measurements rather than production container measurements. They establish that the loader
 avoids about 108 MiB of local startup RSS and more than half of the module graph. Production Cloud Monitoring remains
 the source for rollout decisions.
+
+Three isolated Node 20.19.3 runs on 2026-09-25, using the same machine and dependencies before and after the marketing
+target-map change, produced these medians:
+
+| Loading path | RSS after import | Import time | Heap used | Loaded modules |
+| --- | ---: | ---: | ---: | ---: |
+| Complete entrypoint before marketing routing | 218.2 MiB | 1,387 ms | 106.2 MiB | 3,104 |
+| Complete entrypoint after marketing routing | 217.4 MiB | 1,052 ms | 106.3 MiB | 3,104 |
+| Isolated `trackMarketingDelivery` | 116.7 MiB | 329 ms | 28.9 MiB | 1,306 |
+
+All 11 marketing targets loaded the same 1,306-module marketing graph and measured 116.3–116.9 MiB median RSS. The
+comparison suggests about 101 MiB less local startup RSS for the 256 MiB delivery trigger. It is not a production
+memory guarantee; keep its memory limit unchanged for rollout measurement.
 
 ## Adding another optimized target
 

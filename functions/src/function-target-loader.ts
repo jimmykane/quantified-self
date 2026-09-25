@@ -1,11 +1,25 @@
 type FunctionModule = Record<string, unknown>;
 type ModuleLoader = () => FunctionModule;
 
+const loadMarketingHandlers = (): FunctionModule =>
+  module.require('./admin/marketing/handlers') as FunctionModule;
+
 const TARGET_LOADERS: Readonly<Record<string, ModuleLoader>> = Object.freeze({
   getSuuntoAPIAuthRequestTokenRedirectURI:
     () => module.require('./suunto/auth/wrapper') as FunctionModule,
   requestAndSetSuuntoAPIAccessToken:
     () => module.require('./suunto/auth/wrapper') as FunctionModule,
+  listMarketingCampaigns: loadMarketingHandlers,
+  saveMarketingCampaign: loadMarketingHandlers,
+  cloneMarketingCampaign: loadMarketingHandlers,
+  previewMarketingCampaign: loadMarketingHandlers,
+  prepareMarketingCampaign: loadMarketingHandlers,
+  setMarketingDailyCap: loadMarketingHandlers,
+  sendMarketingTest: loadMarketingHandlers,
+  changeMarketingCampaignStatus: loadMarketingHandlers,
+  dispatchMarketingCampaigns: loadMarketingHandlers,
+  trackMarketingDelivery: loadMarketingHandlers,
+  marketingUnsubscribe: loadMarketingHandlers,
 });
 
 export const OPTIMIZED_FUNCTION_TARGETS = Object.freeze(Object.keys(TARGET_LOADERS));

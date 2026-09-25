@@ -1,5 +1,5 @@
 import { COMMA, ENTER } from '@angular/cdk/keycodes';
-import { ChangeDetectionStrategy, Component, ElementRef, ViewChild, computed, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, DestroyRef, ElementRef, OnInit, ViewChild, computed, inject, signal } from '@angular/core';
 import { MatAutocompleteSelectedEvent } from '@angular/material/autocomplete';
 import { MatChipInputEvent } from '@angular/material/chips';
 import { MAT_DIALOG_DATA, MatDialogRef } from '@angular/material/dialog';
@@ -14,6 +14,8 @@ import {
 } from '@shared/event-tags';
 import { SharedModule } from '../../modules/shared.module';
 import { AppHapticsService } from '../../services/app.haptics.service';
+import { EventTagCatalogService } from '../../services/event-tag-catalog.service';
+import { Auth } from 'app/firebase/auth';
 
 export interface EventTagsBulkDialogData {
   selectedCount: number;
@@ -32,7 +34,7 @@ type ChangeKind = 'add' | 'remove';
   styleUrls: ['./event-tags-bulk-dialog.component.scss'],
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
-export class EventTagsBulkDialogComponent {
+export class EventTagsBulkDialogComponent implements OnInit {
   @ViewChild('addInputElement') addInputElement?: ElementRef<HTMLInputElement>;
   @ViewChild('removeInputElement') removeInputElement?: ElementRef<HTMLInputElement>;
 
@@ -40,6 +42,9 @@ export class EventTagsBulkDialogComponent {
   private snackBar = inject(MatSnackBar);
   private data = inject<EventTagsBulkDialogData>(MAT_DIALOG_DATA);
   private hapticsService = inject(AppHapticsService);
+  private catalog = inject(EventTagCatalogService);
+  private auth = inject(Auth);
+  private destroyRef = inject(DestroyRef);
 
   readonly separatorKeysCodes = [ENTER, COMMA] as const;
   readonly tagLimit = EVENT_TAG_LIMIT;
@@ -59,6 +64,17 @@ export class EventTagsBulkDialogComponent {
   readonly filteredRemoveSuggestions = computed(() => this.filterSuggestions(
     this.removeSuggestions(), [...this.removeTags(), ...this.addTags()], this.removeInput(),
   ));
+
+  ngOnInit(): void {
+    const user = this.auth.currentUser;
+    if (!user) return;
+    void this.catalog.listAllTags(user.uid).then(tags => {
+      if (this.destroyRef.destroyed || this.auth.currentUser !== user) return;
+      this.addSuggestions.set(this.normalizeSuggestions([...this.addSuggestions(), ...tags]));
+    }).catch(() => {
+      // Editing selected events remains available if catalog suggestions cannot load.
+    });
+  }
 
   addFromInput(kind: ChangeKind, event: MatChipInputEvent): void {
     this.addTag(kind, event.value);

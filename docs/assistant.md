@@ -14,6 +14,24 @@ MCP server, schemas, projections, and Sports Lib-backed metric discovery used by
 public URL remains `/ai-insights` so existing links and post-auth return URLs continue to work, but that route now loads
 the conversational Assistant.
 
+For a user-requested workout suggestion, the Assistant first grounds today's load, sleep, HRV and readiness in the
+daily report, counts recent recorded workout days by local weekday from the canonical daily Duration metric, and checks
+whether an activity has already been completed today. When the independent **Timeline notes** choice is on, it also
+reads a bounded recent-to-today note window for relevant user-reported sickness, injury, travel, vacation or stress,
+including overlapping ongoing notes. The note query requests its 64-note maximum because closed notes precede ongoing
+notes; an incomplete first page cannot rule out a current note. It checks actual dates, distinguishes ended from current
+notes. The model is instructed to disclose incomplete reads and avoid preparing a workout as if all current notes had
+been reviewed. If note access is off, it says that notes were not checked rather than inferring their absence.
+Notes inform context but never alter the recorded metrics, supply instructions, or authorize a write. The Assistant may
+offer a cautious optional session rather than a medical prescription, then prepare one current-revision Training
+proposal for in-app review only if the user asked to create/send it.
+Sparse weekday counts are reported as limited evidence, not a consistent habit, and unfiltered Duration totals cannot
+establish which sport was performed.
+Preview and queued delivery are not provider acceptance or watch receipt.
+Combined comparison-and-workout requests retain the live daily and activity tools instead of being forced into a
+single-purpose comparison workflow. Plan-level and provider-only actions use the batch Training preview even when a
+strength or pool workout is mentioned; one authored strength or pool-length change uses its focused preview.
+
 ## Request architecture
 
 ```text
@@ -176,6 +194,10 @@ authorization. Deterministic evidence stores compact note titles, categories, an
 tool responses. Answers can quote relevant details under the same seven-day conversation retention. Logs, analytics,
 and errors must not contain private note text. The existing metric/readiness/briefing contracts and calculations are
 unchanged; no note chart overlays are added to Assistant visuals.
+For a combined recovery/consistency workout request, the known Sports Lib `Duration` metric avoids a redundant catalog
+call, leaving room in the six-tool turn budget for the independent note read and, when expressly requested, one focused
+Training preview. The model-only metric projection labels numeric date buckets with local dates and weekdays using the
+turn's IANA time zone; it does not change validated MCP responses, evidence, stored values, or the public contract.
 
 Deployment remains a separate approved release step. The hosted MCP contract, registered-app digest, consent scopes,
 and external plugin are unchanged by this first-party Assistant addition. Training planning permissions remain
@@ -251,6 +273,18 @@ signatures—are replayed unchanged before the validated tool responses. At the 
 measurement names, Sports Lib metric and activity-group labels, and local date-only ranges are normalized
 before authoritative MCP validation. The nearby-location input union is also projected into the narrower object shape
 accepted by Gemini function declarations; this does not change or bypass the public MCP contract.
+
+All first-party model-facing input schemas now resolve MCP-local references and flatten unions into typed Gemini
+properties, including Training recipes and optional content changes. The projection retains discriminator values and
+labels variant-dependent required fields for model guidance; it is intentionally not an authorization or validation
+schema. The original strict MCP schema still validates every invocation, including cross-field date modes and workout
+variants. Numeric literals become typed values with a descriptive allowed value, and oversized catalog enums become
+discovery guidance; Gemini rejects those declarations while MCP still validates the exact values. Session setup fails
+closed if an input cannot be projected. Gemini receives only the most relevant Training preview for the current question
+(focused workout create, batch lifecycle, strength, or pool-length edit), because combining all four nested preview
+schemas with the full read catalogue exceeds its accepted tool request. The authorized in-process MCP session remains
+complete. Regression coverage walks every tool with all optional permissions enabled and checks that Gemini cannot
+receive an undefined required property, array item, or non-string enum.
 
 Raw chart-stream labels are also normalized to their persisted summary family when an aggregate or per-activity
 summary read requires it. For example, an average/minimum/maximum `Temperature` selection resolves to Sports Lib's
@@ -402,9 +436,13 @@ write, including failure cleanup, checks the shared user-deletion guard so an in
 after deletion starts.
 
 The Assistant reuses the existing request ledger and role limits. A reservation remains releasable while MCP session
-creation, tool discovery, and other non-billable setup runs. It is finalized immediately before the first Gemini model
-or MCP tool attempt; a defensive completion fallback prevents a grounded answer from being committed uncharged. A
-setup failure therefore releases the reservation, while a failed model or tool attempt still consumes the request.
+creation, tool discovery, and grounded work run. The reservation holds an allowance slot and is finalized before a
+grounded answer is committed, or after a failed model or tool attempt. A setup failure releases the reservation.
+For Training-derived reads, the Assistant first calls `prepare_training_metrics`. If the snapshot is still preparing
+after the bounded wait, the turn and quota reservation are released without a stored user or Assistant message, and
+the page retains the question with a clear retry message. If releasing the reservation fails, its ten-minute lease
+expires without incrementing usage. Completed answers and other failed model or tool attempts still consume one
+allowance. This does not schedule a background Assistant reply or email.
 Loading or resetting a conversation does not consume quota. Usage documents are read directly by period ID, so their
 server-only fields and dynamic reservation map are exempt from automatic single-field indexing. `periodEnd`
 deliberately remains indexed because the admin fallback orders historical usage by that field when no current

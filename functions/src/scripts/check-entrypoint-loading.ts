@@ -11,7 +11,26 @@ const NO_TARGET = '__NO_TARGET__';
 // Exercise a property inherited from Object.prototype so the fallback check
 // also guards against accidental prototype-based routing.
 const UNKNOWN_TARGET = 'toString';
-const EXPECTED_FULL_EXPORT_COUNT = 164;
+const EXPECTED_FULL_EXPORT_COUNT = 165;
+const MARKETING_TARGETS = new Set([
+  'listMarketingCampaigns',
+  'saveMarketingCampaign',
+  'cloneMarketingCampaign',
+  'previewMarketingCampaign',
+  'prepareMarketingCampaign',
+  'setMarketingDailyCap',
+  'sendMarketingTest',
+  'changeMarketingCampaignStatus',
+  'dispatchMarketingCampaigns',
+  'trackMarketingDelivery',
+  'marketingUnsubscribe',
+]);
+const MARKETING_SECRET_TARGETS = new Set([
+  'sendMarketingTest',
+  'changeMarketingCampaignStatus',
+  'dispatchMarketingCampaigns',
+  'marketingUnsubscribe',
+]);
 
 interface ProbeResult {
   target: string | null;
@@ -27,6 +46,14 @@ interface DiscoveredEndpoint {
   availableMemoryMb?: number;
   entryPoint?: string;
   secretEnvironmentVariables?: Array<{ key?: string }>;
+  callableTrigger?: unknown;
+  scheduleTrigger?: { schedule?: string; timeZone?: string };
+  eventTrigger?: {
+    eventType?: string;
+    eventFilterPathPatterns?: { document?: string };
+    retry?: boolean;
+  };
+  httpsTrigger?: unknown;
 }
 
 interface DiscoveredStack {
@@ -64,13 +91,20 @@ function probe(targetArgument: string): void {
   }
 
   const normalizedModules = Object.keys(require.cache).map(path => path.replace(/\\/g, '/'));
-  const forbiddenModules = normalizedModules.filter(path =>
-    path.includes('/node_modules/@genkit-ai/')
-    || path.includes('/node_modules/genkit/')
-    || path.includes('/node_modules/@google-cloud/bigquery/')
-    || path.includes('/lib/functions/src/mcp/')
-    || path.includes('/lib/functions/src/admin/'),
-  );
+  const marketingTarget = runtimeTarget != null && MARKETING_TARGETS.has(runtimeTarget);
+  const forbiddenModules = normalizedModules.filter(path => {
+    if (
+      path.includes('/node_modules/@genkit-ai/')
+      || path.includes('/node_modules/genkit/')
+      || path.includes('/node_modules/@google-cloud/bigquery/')
+      || path.includes('/lib/functions/src/mcp/')
+    ) return true;
+    if (!path.includes('/lib/functions/src/admin/')) return false;
+    return !marketingTarget || !(
+      path.includes('/lib/functions/src/admin/marketing/')
+      || path.endsWith('/lib/functions/src/admin/shared/subscription.constants.js')
+    );
+  });
 
   const result: ProbeResult = {
     target,
@@ -182,6 +216,15 @@ async function check(): Promise<void> {
     arraysEqual(discovery.exports, endpointNames),
     'Firebase manifest endpoints differ from the complete discovery exports.',
   );
+  const catalogProjection = stack.endpoints.projectEventTagCatalog;
+  assert(
+    catalogProjection?.platform === 'gcfv2'
+      && arraysEqual(catalogProjection.region || [], ['europe-west2'])
+      && catalogProjection.eventTrigger?.eventType === 'google.cloud.firestore.document.v1.written'
+      && catalogProjection.eventTrigger.eventFilterPathPatterns?.document === 'users/{uid}/events/{eventId}'
+      && catalogProjection.eventTrigger.retry === true,
+    'Event tag catalog projection metadata changed.',
+  );
 
   const firstGenerationEndpoint = Object.entries(stack.endpoints)
     .find(([, endpoint]) => endpoint.platform === 'gcfv1');
@@ -197,7 +240,6 @@ async function check(): Promise<void> {
     const endpoint = stack.endpoints[target];
     assert(endpoint?.platform === 'gcfv2', `${target} is no longer a Gen 2 endpoint.`);
     assert(endpoint.entryPoint === target, `${target} entrypoint metadata changed.`);
-    assert(endpoint.availableMemoryMb === 512, `${target} is no longer configured at 512 MiB.`);
     assert(
       arraysEqual(endpoint.region || [], ['europe-west2']),
       `${target} region metadata changed.`,
@@ -205,14 +247,42 @@ async function check(): Promise<void> {
     const secretKeys = (endpoint.secretEnvironmentVariables || [])
       .map(secret => secret.key || '')
       .sort();
-    assert(
-      arraysEqual(secretKeys, ['SUUNTOAPP_CLIENT_ID', 'SUUNTOAPP_CLIENT_SECRET']),
-      `${target} secret bindings changed.`,
-    );
+    if (MARKETING_TARGETS.has(target)) {
+      const expectedMemory = target === 'trackMarketingDelivery' || target === 'marketingUnsubscribe'
+        ? 256 : 512;
+      assert(endpoint.availableMemoryMb === expectedMemory, `${target} memory configuration changed.`);
+      const expectedSecrets = MARKETING_SECRET_TARGETS.has(target)
+        ? ['MARKETING_UNSUBSCRIBE_SIGNING_KEY'] : [];
+      assert(arraysEqual(secretKeys, expectedSecrets), `${target} secret bindings changed.`);
+      if (target === 'trackMarketingDelivery') {
+        assert(
+          endpoint.eventTrigger?.eventType === 'google.cloud.firestore.document.v1.updated'
+            && endpoint.eventTrigger.eventFilterPathPatterns?.document === 'mail/{mailId}'
+            && endpoint.eventTrigger.retry === false,
+          `${target} Firestore trigger changed.`,
+        );
+      } else if (target === 'dispatchMarketingCampaigns') {
+        assert(
+          endpoint.scheduleTrigger?.schedule === 'every 5 minutes'
+            && endpoint.scheduleTrigger.timeZone === 'UTC',
+          `${target} schedule changed.`,
+        );
+      } else if (target === 'marketingUnsubscribe') {
+        assert(endpoint.httpsTrigger !== undefined, `${target} HTTP trigger changed.`);
+      } else {
+        assert(endpoint.callableTrigger !== undefined, `${target} callable trigger changed.`);
+      }
+    } else {
+      assert(endpoint.availableMemoryMb === 512, `${target} is no longer configured at 512 MiB.`);
+      assert(
+        arraysEqual(secretKeys, ['SUUNTOAPP_CLIENT_ID', 'SUUNTOAPP_CLIENT_SECRET']),
+        `${target} secret bindings changed.`,
+      );
+    }
   }
 
   console.log(
-    `Entrypoint loading verified: ${discovery.exports.length} Firebase endpoints and ${OPTIMIZED_FUNCTION_TARGETS.length} isolated Suunto targets.`,
+    `Entrypoint loading verified: ${discovery.exports.length} Firebase endpoints and ${OPTIMIZED_FUNCTION_TARGETS.length} isolated targets.`,
   );
 }
 

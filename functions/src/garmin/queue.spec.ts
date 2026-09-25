@@ -536,6 +536,13 @@ describe('Garmin Queue', () => { // Grouping for cleaner output
         });
 
         it('should successfully process a FIT file and use the correct Firebase User ID', async () => {
+            const { EventImporterFIT } = await import('@sports-alliance/sports-lib');
+            vi.mocked(EventImporterFIT.getFromArrayBuffer).mockResolvedValueOnce({
+                getID: () => 'event-id', name: 'test-event', startDate: new Date('2026-09-17T07:00:00Z'),
+                setID: function () { return this; }, toJSON: () => ({}),
+                getActivities: () => [{ getID: () => 'activity-id', startDate: new Date('2026-09-17T07:00:00Z') }],
+                clearActivities: () => {}, addActivities: () => {},
+            } as unknown as Awaited<ReturnType<typeof EventImporterFIT.getFromArrayBuffer>>);
             const result = await processGarminAPIActivityQueueItem(queueItem);
 
             expect(result).toBe('PROCESSED');
@@ -570,7 +577,9 @@ describe('Garmin Queue', () => { // Grouping for cleaner output
                 sourceActivityID: queueItem.activityFileID,
             }));
             expect(mockRetainGarminFITWorkoutReferences).toHaveBeenCalledWith(
-                expect.anything(), firebaseUserID, 'event-id', 'garmin-user-id', '', expect.any(Buffer),
+                expect.anything(), firebaseUserID, 'event-id', 'garmin-user-id', '',
+                { activityFileID: queueItem.activityFileID, activityFileType: queueItem.activityFileType }, expect.any(Buffer),
+                [{ id: 'activity-id', startTimeMs: Date.parse('2026-09-17T07:00:00Z') }],
             );
             expect(updateToProcessed).toHaveBeenCalledWith(queueItem, undefined);
         });
@@ -640,6 +649,10 @@ describe('Garmin Queue', () => { // Grouping for cleaner output
             expect(mockRequestGet).toHaveBeenCalledTimes(2);
             expect(mockCreateParsingOptions).toHaveBeenCalledTimes(2);
             expect(mockRetainGarminFITWorkoutReferences).toHaveBeenCalledOnce();
+            expect(mockRetainGarminFITWorkoutReferences).toHaveBeenCalledWith(
+                expect.anything(), firebaseUserID, 'event-id', 'garmin-user-id', '',
+                { activityFileID: queueItem.activityFileID, activityFileType: 'GPX' }, expect.any(Buffer), [],
+            );
         });
 
         it('should successfully process a TCX file', async () => {

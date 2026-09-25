@@ -33,6 +33,7 @@ describe('Built-in Assistant policy', () => {
     expect(external).toContain('benchmark events cannot be changed');
     expect(assistant).toContain('full private');
     expect(external).toContain('Timeline notes permission');
+    expect(external).toContain('an authored pool-swim length when selected');
     expect(external).toContain('Both checkboxes are selected by default when requested; uncheck either before approving.');
     expect(external).toContain('separate dependent change grant');
     expect(external).toContain('Activity descriptions permission');
