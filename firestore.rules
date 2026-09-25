@@ -127,6 +127,11 @@ service cloud.firestore {
          allow write: if false; // Only Cloud Functions (Admin SDK)
       }
 
+        match /eventTagCatalog/{tagKey} {
+          allow get, list: if isOwner();
+          allow write: if false;
+        }
+
         match /events/{eventID} {
           function isPublicEvent() {
             return resource.data.privacy == 'public';

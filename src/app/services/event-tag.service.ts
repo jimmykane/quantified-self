@@ -11,10 +11,12 @@ import {
   getEventTags,
   normalizeEventTags,
 } from '@shared/event-tags';
+import { EventTagCatalogService } from './event-tag-catalog.service';
 
 @Injectable({ providedIn: 'root' })
 export class EventTagService {
   private firestore = inject(Firestore);
+  private catalog = inject(EventTagCatalogService);
 
   normalizeTags(value: unknown): string[] {
     return normalizeEventTags(value);
@@ -58,6 +60,7 @@ export class EventTagService {
     });
     event.tags = tags;
     delete event.benchmarkReviewTags;
+    this.catalog.noteSavedTags(user.uid, tags);
     return tags;
   }
 
@@ -87,7 +90,7 @@ export class EventTagService {
       ref: doc(this.firestore, 'users', user.uid, 'events', eventID),
     }));
 
-    return runTransaction(this.firestore, async (transaction) => {
+    const results = await runTransaction(this.firestore, async (transaction) => {
       const snapshots = await Promise.all(eventRefs.map(({ ref }) => transaction.get(ref)));
       const results: Record<string, string[]> = {};
 
@@ -117,6 +120,8 @@ export class EventTagService {
 
       return results;
     });
+    this.catalog.noteSavedTags(user.uid, Object.values(results).flat());
+    return results;
   }
 
   private areTagsEqual(first: string[], second: string[]): boolean {

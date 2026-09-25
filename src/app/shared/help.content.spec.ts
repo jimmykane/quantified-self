@@ -497,7 +497,8 @@ describe('help.content', () => {
     expect(gettingStartedSection?.content).toContain('Event search filters only the dashboard event table');
     expect(gettingStartedSection?.content).toContain('Event tags can be added from an event row or event details');
     expect(gettingStartedSection?.content).toContain('exact tag filter');
-    expect(gettingStartedSection?.content).toContain('tags from your full activity history, regardless of the selected date range');
+    expect(gettingStartedSection?.content).toContain('tag filter and tag editors list your saved tags regardless of the selected date range');
+    expect(gettingStartedSection?.content).toContain('A tag remains available for reuse after you remove it from every event');
     expect(gettingStartedSection?.content).toContain('up to 250 selected events');
     expect(gettingStartedSection?.content).toContain('atomic add/remove tag changes in bulk');
     expect(gettingStartedSection?.content).toContain('tags are visible on public event and comparison links');
@@ -564,7 +565,7 @@ describe('help.content', () => {
     expect(calendarSection?.content).toContain('summary exclusions configured in **Settings** also apply');
     expect(calendarSection?.content).toContain('Settings -> Dashboard -> Start of the Week');
     expect(calendarSection?.content).toContain('visible-period activity query');
-    expect(calendarSection?.content).toContain('tag filter lists tags from your full activity history');
+    expect(calendarSection?.content).toContain('tag filter lists your saved activity tags across all dates');
     expect(calendarSection?.content).toContain('independent from the dashboard event table');
     expect(calendarSection?.content).toContain('Select any date, including an empty one');
     expect(calendarSection?.content).toContain('standalone workouts plus workouts from the active plan');

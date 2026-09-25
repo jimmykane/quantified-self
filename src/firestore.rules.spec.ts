@@ -32,6 +32,26 @@ describe('Firestore Security Rules', () => {
         await testEnv.clearFirestore();
     });
 
+    describe('Event tag catalog', () => {
+        it('allows only the owner to read and rejects client writes', async () => {
+            const path = 'users/owner/eventTagCatalog/race';
+            await testEnv.withSecurityRulesDisabled(async context => {
+                await context.firestore().doc(path).set({ name: 'Race' });
+            });
+            const owner = testEnv.authenticatedContext('owner').firestore();
+            const other = testEnv.authenticatedContext('other').firestore();
+            const guest = testEnv.unauthenticatedContext().firestore();
+            await assertSucceeds(owner.doc(path).get());
+            await assertSucceeds(owner.collection('users/owner/eventTagCatalog').get());
+            await assertFails(other.doc(path).get());
+            await assertFails(other.collection('users/owner/eventTagCatalog').get());
+            await assertFails(guest.doc(path).get());
+            await assertFails(owner.doc(path).set({ name: 'Changed' }));
+            await assertFails(owner.doc(path).update({ name: 'Changed' }));
+            await assertFails(owner.doc(path).delete());
+        });
+    });
+
     describe('Timeline notes', () => {
         it('supports inclusive overlapping ranges, earlier starts, ongoing and future history pages', async () => {
             const path = 'users/owner/timelineNotes';

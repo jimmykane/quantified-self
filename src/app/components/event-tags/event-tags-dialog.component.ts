@@ -1,5 +1,5 @@
 import { COMMA, ENTER } from '@angular/cdk/keycodes';
-import { ChangeDetectionStrategy, Component, ElementRef, ViewChild, computed, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, DestroyRef, ElementRef, OnInit, ViewChild, computed, inject, signal } from '@angular/core';
 import { MatAutocompleteSelectedEvent } from '@angular/material/autocomplete';
 import { MatChipInputEvent } from '@angular/material/chips';
 import { MAT_DIALOG_DATA, MatDialogRef } from '@angular/material/dialog';
@@ -13,6 +13,8 @@ import {
 } from '@shared/event-tags';
 import { SharedModule } from '../../modules/shared.module';
 import { AppHapticsService } from '../../services/app.haptics.service';
+import { EventTagCatalogService } from '../../services/event-tag-catalog.service';
+import { Auth } from 'app/firebase/auth';
 
 export interface EventTagsDialogData {
   title?: string;
@@ -29,13 +31,16 @@ export interface EventTagsDialogData {
   styleUrls: ['./event-tags-dialog.component.scss'],
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
-export class EventTagsDialogComponent {
+export class EventTagsDialogComponent implements OnInit {
   @ViewChild('tagInputElement') tagInputElement?: ElementRef<HTMLInputElement>;
 
   private dialogRef = inject(MatDialogRef<EventTagsDialogComponent>);
   private snackBar = inject(MatSnackBar);
   private data = inject<EventTagsDialogData>(MAT_DIALOG_DATA);
   private hapticsService = inject(AppHapticsService);
+  private catalog = inject(EventTagCatalogService);
+  private auth = inject(Auth);
+  private destroyRef = inject(DestroyRef);
 
   readonly separatorKeysCodes = [ENTER, COMMA] as const;
   readonly tagLimit = EVENT_TAG_LIMIT;
@@ -57,6 +62,18 @@ export class EventTagsDialogComponent {
       .filter(tag => !selectedKeys.has(tag.toLowerCase()))
       .filter(tag => !query || tag.toLowerCase().includes(query));
   });
+
+  ngOnInit(): void {
+    const user = this.auth.currentUser;
+    if (!user) return;
+    void this.catalog.listAllTags(user.uid).then(tags => {
+      if (this.destroyRef.destroyed || this.auth.currentUser !== user) return;
+      this.suggestions.set(normalizeEventTagSuggestions([...this.suggestions(), ...tags])
+        .sort((first, second) => first.localeCompare(second)));
+    }).catch(() => {
+      // A catalog read failure must not prevent editing the event's own tags.
+    });
+  }
 
   addTagFromInput(event: MatChipInputEvent): void {
     this.addTag(event.value || this.tagInput());

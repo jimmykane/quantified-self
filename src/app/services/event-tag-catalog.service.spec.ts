@@ -1,89 +1,77 @@
 import { TestBed } from '@angular/core/testing';
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { Auth } from 'app/firebase/auth';
-import { AppFunctionsService } from './app.functions.service';
+import { Firestore, collection, getDocs } from 'app/firebase/firestore';
 import { EventTagCatalogService } from './event-tag-catalog.service';
 
+vi.mock('app/firebase/firestore', async (importOriginal) => ({
+  ...await importOriginal<typeof import('app/firebase/firestore')>(),
+  collection: vi.fn((_db, ...path: string[]) => ({ path })),
+  getDocs: vi.fn(),
+}));
+
+function catalogSnapshot(names: string[]) {
+  return { docs: names.map(name => ({ data: () => ({ name }) })) };
+}
+
 describe('EventTagCatalogService', () => {
-  it('requests the signed-in account tag catalog without a user ID argument', async () => {
-    const functionsService = { call: vi.fn().mockResolvedValue({ data: { tags: ['Older', 'Race'] } }) };
-    const auth = { currentUser: { uid: 'owner-1' } };
+  const auth = { currentUser: { uid: 'owner-1' } };
+  let service: EventTagCatalogService;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    auth.currentUser = { uid: 'owner-1' };
+    vi.mocked(getDocs).mockResolvedValue(catalogSnapshot(['Older', 'Race']) as never);
     TestBed.configureTestingModule({
-      providers: [EventTagCatalogService, { provide: AppFunctionsService, useValue: functionsService },
+      providers: [EventTagCatalogService, { provide: Firestore, useValue: {} },
         { provide: Auth, useValue: auth }],
     });
-
-    const service = TestBed.inject(EventTagCatalogService);
-    await expect(service.listAllTags('owner-1')).resolves.toEqual(['Older', 'Race']);
-    await expect(service.listAllTags('owner-1')).resolves.toEqual(['Older', 'Race']);
-    expect(functionsService.call).toHaveBeenCalledOnce();
-
-    await service.listAllTags('owner-1', true);
-    expect(functionsService.call).toHaveBeenCalledTimes(2);
-    expect(functionsService.call).toHaveBeenCalledWith('listEventTags', undefined,
-      { canExecute: expect.any(Function) });
+    service = TestBed.inject(EventTagCatalogService);
   });
 
-  it('refreshes the cached catalog after its short lifetime', async () => {
+  it('reads the owner collection directly and reuses its short cache', async () => {
+    await expect(service.listAllTags('owner-1')).resolves.toEqual(['Older', 'Race']);
+    await expect(service.listAllTags('owner-1')).resolves.toEqual(['Older', 'Race']);
+    expect(collection).toHaveBeenCalledWith(expect.anything(), 'users', 'owner-1', 'eventTagCatalog');
+    expect(getDocs).toHaveBeenCalledOnce();
+
+    await service.listAllTags('owner-1', true);
+    expect(getDocs).toHaveBeenCalledTimes(2);
+  });
+
+  it('refreshes after expiry and merges newly saved tags immediately', async () => {
     const now = vi.spyOn(Date, 'now').mockReturnValue(1_000_000);
     try {
-      const functionsService = { call: vi.fn().mockResolvedValue({ data: { tags: ['Race'] } }) };
-      TestBed.configureTestingModule({
-        providers: [EventTagCatalogService, { provide: AppFunctionsService, useValue: functionsService },
-          { provide: Auth, useValue: { currentUser: { uid: 'owner-1' } } }],
-      });
-      const service = TestBed.inject(EventTagCatalogService);
-
       await service.listAllTags('owner-1');
+      service.noteSavedTags('owner-1', [' race ', 'New']);
+      await expect(service.listAllTags('owner-1')).resolves.toEqual(['New', 'Older', 'Race']);
       now.mockReturnValue(1_000_000 + 2 * 60 * 1000 + 1);
       await service.listAllTags('owner-1');
-
-      expect(functionsService.call).toHaveBeenCalledTimes(2);
+      expect(getDocs).toHaveBeenCalledTimes(2);
     } finally {
       now.mockRestore();
     }
   });
 
-  it('retries a failed request rather than caching the failure', async () => {
-    let rejectRequest!: (error: Error) => void;
-    const functionsService = { call: vi.fn()
-      .mockImplementationOnce(() => new Promise((_resolve, reject) => {
-        rejectRequest = reject;
-      }))
-      .mockResolvedValueOnce({ data: { tags: ['Race'] } }) };
-    TestBed.configureTestingModule({
-      providers: [EventTagCatalogService, { provide: AppFunctionsService, useValue: functionsService },
-        { provide: Auth, useValue: { currentUser: { uid: 'owner-1' } } }],
-    });
-    const service = TestBed.inject(EventTagCatalogService);
-
-    const pending = service.listAllTags('owner-1');
-    rejectRequest(new Error('offline'));
-    await expect(pending).rejects.toThrow('offline');
-    await expect(service.listAllTags('owner-1')).resolves.toEqual(['Race']);
-    expect(functionsService.call).toHaveBeenCalledTimes(2);
+  it('retries a failed read rather than caching the failure', async () => {
+    vi.mocked(getDocs).mockRejectedValueOnce(new Error('offline'));
+    await expect(service.listAllTags('owner-1')).rejects.toThrow('offline');
+    await expect(service.listAllTags('owner-1')).resolves.toEqual(['Older', 'Race']);
+    expect(getDocs).toHaveBeenCalledTimes(2);
   });
 
-  it('rejects a mismatched owner and an account switch during the request', async () => {
-    let resolveRequest!: (value: { data: { tags: string[] } }) => void;
-    const functionsService = { call: vi.fn().mockReturnValue(new Promise(resolve => {
-      resolveRequest = resolve;
-    })) };
-    const auth = { currentUser: { uid: 'owner-1' } };
-    TestBed.configureTestingModule({
-      providers: [EventTagCatalogService, { provide: AppFunctionsService, useValue: functionsService },
-        { provide: Auth, useValue: auth }],
-    });
-    const service = TestBed.inject(EventTagCatalogService);
-
+  it('rejects a mismatched owner and an account switch during the read', async () => {
+    let resolveRequest!: (value: ReturnType<typeof catalogSnapshot>) => void;
+    vi.mocked(getDocs).mockReturnValueOnce(new Promise(resolve => { resolveRequest = resolve; }) as never);
     await expect(service.listAllTags('other-owner')).rejects.toThrow('signed-in account');
-    expect(functionsService.call).not.toHaveBeenCalled();
+    expect(getDocs).not.toHaveBeenCalled();
 
     const pending = service.listAllTags('owner-1');
     auth.currentUser = { uid: 'other-owner' };
-    resolveRequest({ data: { tags: ['Private'] } });
+    resolveRequest(catalogSnapshot(['Private']));
     await expect(pending).rejects.toThrow('account changed');
+    service.noteSavedTags('owner-1', ['Private']);
     await expect(service.listAllTags('owner-1')).rejects.toThrow('signed-in account');
   });
 });

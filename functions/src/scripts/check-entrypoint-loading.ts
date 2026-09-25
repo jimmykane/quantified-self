@@ -11,7 +11,7 @@ const NO_TARGET = '__NO_TARGET__';
 // Exercise a property inherited from Object.prototype so the fallback check
 // also guards against accidental prototype-based routing.
 const UNKNOWN_TARGET = 'toString';
-const EXPECTED_FULL_EXPORT_COUNT = 165;
+const EXPECTED_FULL_EXPORT_COUNT = 166;
 const MARKETING_TARGETS = new Set([
   'listMarketingCampaigns',
   'saveMarketingCampaign',
@@ -215,6 +215,15 @@ async function check(): Promise<void> {
   assert(
     arraysEqual(discovery.exports, endpointNames),
     'Firebase manifest endpoints differ from the complete discovery exports.',
+  );
+  const catalogProjection = stack.endpoints.projectEventTagCatalog;
+  assert(
+    catalogProjection?.platform === 'gcfv2'
+      && arraysEqual(catalogProjection.region || [], ['europe-west2'])
+      && catalogProjection.eventTrigger?.eventType === 'google.cloud.firestore.document.v1.written'
+      && catalogProjection.eventTrigger.eventFilterPathPatterns?.document === 'users/{uid}/events/{eventId}'
+      && catalogProjection.eventTrigger.retry === true,
+    'Event tag catalog projection metadata changed.',
   );
 
   const firstGenerationEndpoint = Object.entries(stack.endpoints)
