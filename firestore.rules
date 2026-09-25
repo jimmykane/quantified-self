@@ -13,6 +13,22 @@ service cloud.firestore {
         return request.auth != null && request.auth.uid == userID;
       }
 
+      function isValidEventTagName(tag) {
+        return tag is string
+          && tag.size() > 0
+          && tag.size() <= 32
+          && tag.matches('^\\S+( \\S+)*$');
+      }
+
+      function mayCreateEventTagCatalogEntry() {
+        let userPath = /databases/$(database)/documents/users/$(userID);
+        let tombstonePath = /databases/$(database)/documents/userDeletionTombstones/$(userID);
+        return exists(userPath)
+          && (!exists(tombstonePath)
+            || (get(tombstonePath).data.get('expireAt', null) is timestamp
+              && get(tombstonePath).data.expireAt <= request.time));
+      }
+
       allow read: if isOwner();
       allow create: if isOwner()
         && (
@@ -129,7 +145,13 @@ service cloud.firestore {
 
         match /eventTagCatalog/{tagKey} {
           allow get, list: if isOwner();
-          allow write: if false;
+          allow create: if isOwner()
+            && mayCreateEventTagCatalogEntry()
+            && request.resource.data.keys().hasOnly(['name'])
+            && request.resource.data.keys().hasAll(['name'])
+            && isValidEventTagName(request.resource.data.name)
+            && tagKey.matches('^[a-f0-9]{64}$');
+          allow update, delete: if false;
         }
 
         match /events/{eventID} {
@@ -154,10 +176,7 @@ service cloud.firestore {
 
           function isValidEventTag(tags, index) {
             return tags.size() <= index
-              || (tags[index] is string
-                && tags[index].size() > 0
-                && tags[index].size() <= 32
-                && tags[index].matches('^\\S+( \\S+)*$'));
+              || isValidEventTagName(tags[index]);
           }
 
           function isValidEventTagList(tags) {

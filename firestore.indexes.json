@@ -25,10 +25,6 @@
     },
     {
       "collectionGroup": "trainingDeliveryStatuses", "queryScope": "COLLECTION_GROUP",
-      "fields": [{ "fieldPath": "status", "order": "ASCENDING" }]
-    },
-    {
-      "collectionGroup": "trainingDeliveryStatuses", "queryScope": "COLLECTION_GROUP",
       "fields": [{ "fieldPath": "provider", "order": "ASCENDING" }, { "fieldPath": "status", "order": "ASCENDING" }]
     },
     {
@@ -1660,6 +1656,15 @@
     }
   ],
   "fieldOverrides": [
+    {
+      "collectionGroup": "trainingDeliveryStatuses", "fieldPath": "status", "ttl": false,
+      "indexes": [
+        { "order": "ASCENDING", "queryScope": "COLLECTION" },
+        { "order": "DESCENDING", "queryScope": "COLLECTION" },
+        { "arrayConfig": "CONTAINS", "queryScope": "COLLECTION" },
+        { "order": "ASCENDING", "queryScope": "COLLECTION_GROUP" }
+      ]
+    },
     {
       "collectionGroup": "recipients", "fieldPath": "uid", "ttl": false,
       "indexes": [

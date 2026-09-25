@@ -132,12 +132,15 @@ Plan-level and provider-only actions select the batch preview before sport-speci
 or pool-length change selects its focused preview. A combined comparison and workout recommendation retains live daily
 and completed-activity reads instead of inheriting a single-purpose analytical workflow. This is internal routing only:
 the public tool list, scopes, strict schemas and approval boundary do not change.
-The same combined recommendation may consult `query_timeline_notes` only under its separately enabled Assistant
-permission. Bounded recent/ongoing notes are dated, incomplete reads are disclosed, and user-authored text cannot
-instruct a provider or authorize a plan change. The internal model-only projection adds local date/weekday labels to
-numeric metric buckets using the request's IANA time zone, without changing the validated public metric response or
-registered contract. A known canonical `Duration` query leaves room within the six-call Assistant budget for notes
-and one expressly requested focused create preview.
+The same combined today recommendation deterministically collects a bounded context through the existing MCP session.
+It prepares and reads relevant ready Training snapshots, the daily report, canonical `Duration` buckets and today's
+activities. With separate consent it reads bounded dated Timeline notes and today's planned workouts, followed by a
+bulk exact-completion read for the listed workouts. The server counts local weekday activity days and appends verified
+note dates, scan limits and completion states to the answer; an incomplete scan blocks a workout preview. User-authored
+text cannot instruct a provider or authorize a plan change. The internal model-only projection adds local date/weekday
+labels to numeric metric buckets using the request's IANA time zone, without changing the validated public metric
+response or registered contract. Gemini keeps its six model-selected calls for additional detail or one expressly
+requested focused preview; the deterministic context has a separate bounded read budget.
 
 Every future planning feature must review MCP impact in the same PR: explicit projections, schemas, consent, bounds, units,
 Assistant/plugin guidance and tests. Record a no-impact rationale or a focused epic-linked Project 2 deferral. Maintaining
@@ -1267,7 +1270,8 @@ change or no-op. If the current normalized list differs from `expectedTags`, the
 overwriting a concurrent edit. Repeating an accepted replacement is a safe no-op. The canonical event field is written
 through the same shared sanitizer as the UI and the legacy tag field is removed; sibling activities inherit the result
 because tags remain event-owned. The focused write returns only the input opaque reference, normalized tags and whether
-storage changed, with no event/activity IDs.
+storage changed, with no event/activity IDs. Newly assigned labels are added to the private per-user tag catalog in
+the same transaction. This changes no MCP tool schema, scope, consent, or approval step.
 
 An activity/workout rename edits the parent event's `name` through `update_event_title`. The client first reads
 `get_event_title` and submits its exact `expectedTitle`. A description edit first reads the full private text with

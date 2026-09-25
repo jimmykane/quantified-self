@@ -55,10 +55,12 @@ const hoisted = vi.hoisted(() => {
     const getUserDeletionGuardState = vi.fn();
     const getUserDeletionGuardStateInTransaction = vi.fn();
     const transactionSet = vi.fn();
+    const transactionCreate = vi.fn();
     const transactionGet = vi.fn();
     const runTransaction = vi.fn(async (callback: any) => callback({
         get: transactionGet,
         set: transactionSet,
+        create: transactionCreate,
     }));
 
     const makeCollection = (name: string) => ({
@@ -70,6 +72,7 @@ const hoisted = vi.hoisted(() => {
     });
 
     const makeDoc = (path: string) => ({
+        path,
         _path: path,
         collection: (name: string) => makeCollection(`${path}/${name}`),
         set: vi.fn(),
@@ -123,6 +126,7 @@ const hoisted = vi.hoisted(() => {
         getUserDeletionGuardState,
         getUserDeletionGuardStateInTransaction,
         transactionSet,
+        transactionCreate,
         transactionGet,
         runTransaction,
     };
@@ -178,6 +182,7 @@ describe('utils higher-level helpers', () => {
             shouldSkip: false,
         });
         hoisted.transactionSet.mockClear();
+        hoisted.transactionCreate.mockClear();
         hoisted.transactionGet.mockClear();
         hoisted.runTransaction.mockClear();
         eventWriterConstructorMock.mockClear();
@@ -319,6 +324,39 @@ describe('utils higher-level helpers', () => {
                 name: 'Reparsed event',
                 tags: ['Race', '2026'],
             });
+            expect(hoisted.transactionCreate).not.toHaveBeenCalled();
+        });
+
+        it('creates catalog entries only for newly assigned server event tags', async () => {
+            const docRef = hoisted.firestore().doc('users/user-1/events/event-1');
+            hoisted.transactionGet.mockResolvedValueOnce({
+                exists: true,
+                data: () => ({ tags: ['Race'] }),
+            }).mockResolvedValueOnce({ exists: false });
+
+            await setEventDocumentIfUserActive('user-1', 'event_tag_change', docRef as any,
+                { tags: ['race', 'Trail'] });
+
+            expect(hoisted.transactionCreate).toHaveBeenCalledWith(
+                expect.objectContaining({ path: expect.stringMatching(/^users\/user-1\/eventTagCatalog\/[a-f0-9]{64}$/) }),
+                { name: 'Trail' },
+            );
+            expect(hoisted.transactionSet).toHaveBeenCalledWith(docRef, { tags: ['race', 'Trail'] });
+        });
+
+        it('creates catalog entries for tagged imports while leaving untagged imports alone', async () => {
+            const docRef = hoisted.firestore().doc('users/user-1/events/event-1');
+            hoisted.transactionGet.mockResolvedValue({ exists: false, data: () => undefined });
+
+            await setEventDocumentIfUserActive('user-1', 'untagged_import', docRef as any,
+                { name: 'Untagged' });
+            expect(hoisted.transactionCreate).not.toHaveBeenCalled();
+            expect(hoisted.transactionGet).not.toHaveBeenCalled();
+
+            await setEventDocumentIfUserActive('user-1', 'tagged_import', docRef as any,
+                { name: 'Tagged', tags: ['Trail'] }, undefined, preserveEventTagsOnRewrite);
+            expect(hoisted.transactionCreate).toHaveBeenCalledWith(
+                expect.anything(), { name: 'Trail' });
         });
     });
 

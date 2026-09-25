@@ -23,6 +23,7 @@ const renderer = createLocalEmailTemplateRenderer(path.join(__dirname, '../../..
 const template = MANUAL_CAMPAIGN_EMAIL_TEMPLATE_CATALOG.find(entry => entry.id === 'marketing_campaign')!;
 const settingsUrl = 'https://quantified-self.io/settings';
 const unsubscribeBase = 'https://quantified-self.io/email/unsubscribe';
+const testUnsubscribeUrl = `${unsubscribeBase}?test=1`;
 // prepareMarketingCampaign has a nine-minute hard timeout. Permit a new attempt
 // only after that invocation has ended, even if its error handler never ran.
 const PREPARATION_LEASE_MS = 11 * 60_000;
@@ -34,16 +35,26 @@ function checkedId(value: unknown): string {
   if (typeof value !== 'string' || !/^[A-Za-z0-9_-]{10,60}$/.test(value)) badRequest('Invalid campaign ID.');
   return value as string;
 }
+export function checkedTestEmail(value: unknown): string {
+  if (typeof value !== 'string') badRequest('Enter a test recipient email address.');
+  const email = (value as string).trim();
+  if (email.length > 254 || !/^[A-Z0-9._%+-]+@(?:[A-Z0-9](?:[A-Z0-9-]{0,61}[A-Z0-9])?\.)+[A-Z]{2,63}$/i.test(email)) {
+    badRequest('Enter one valid test recipient email address.');
+  }
+  return email;
+}
 function asView(id: string, data: FirebaseFirestore.DocumentData): MarketingCampaignView {
   return { id, name: data.name, subject: data.subject, content: data.content, cta: data.cta, filters: data.filters,
     status: data.status, stats: data.stats, exclusions: data.exclusions, createdAt: data.createdAt,
     updatedAt: data.updatedAt, startedAt: data.startedAt || null,
-    lastTestMailId: data.lastTestMailId || null, lastTestState: data.lastTestState || null };
+    lastTestMailId: data.lastTestMailId || null, lastTestState: data.lastTestState || null,
+    lastTestTo: null };
 }
 async function withTestState(view: MarketingCampaignView): Promise<MarketingCampaignView> {
   if (!view.lastTestMailId) return view;
   const mail = await db().collection('mail').doc(view.lastTestMailId).get();
-  return { ...view, lastTestState: mail.exists ? (mail.get('delivery.state') || view.lastTestState) : null };
+  return { ...view, lastTestState: mail.exists ? (mail.get('delivery.state') || view.lastTestState) : null,
+    lastTestTo: mail.exists ? (mail.get('to') || null) : null };
 }
 function blankExclusions(): MarketingAudienceExclusions {
   return { noAuth: 0, disabledOrAdmin: 0, noEmail: 0, noProfile: 0, deletionMarked: 0, plan: 0, signupDate: 0 };
@@ -94,9 +105,10 @@ export function verifyUnsubscribeToken(token: unknown, secret: string): string |
   return uid;
 }
 
-function renderMessage(draft: MarketingCampaignDraft, firstName: string, uid: string, secret: string) {
+function renderMessage(draft: MarketingCampaignDraft, firstName: string, uid: string, secret: string,
+  unsubscribeOverride?: string) {
   const content = renderMarketingContent(draft);
-  const unsubscribeUrl = `${unsubscribeBase}?token=${encodeURIComponent(makeUnsubscribeToken(uid, secret))}`;
+  const unsubscribeUrl = unsubscribeOverride || `${unsubscribeBase}?token=${encodeURIComponent(makeUnsubscribeToken(uid, secret))}`;
   const rendered = renderer.render(template, {
     subject: draft.subject, email_title: draft.subject, first_name: firstName,
     body_html: content.bodyHtml, body_text: content.bodyText,
@@ -105,12 +117,14 @@ function renderMessage(draft: MarketingCampaignDraft, firstName: string, uid: st
   });
   return { rendered: { ...rendered, subject: draft.subject }, unsubscribeUrl };
 }
-function mailPayload(draft: MarketingCampaignDraft, email: string, firstName: string, uid: string, secret: string, campaignId: string | null, attempt: number) {
-  const { rendered, unsubscribeUrl } = renderMessage(draft, firstName, uid, secret);
+function mailPayload(draft: MarketingCampaignDraft, email: string, firstName: string, uid: string, secret: string,
+  campaignId: string | null, attempt: number, unsubscribeOverride?: string) {
+  const { rendered, unsubscribeUrl } = renderMessage(draft, firstName, uid, secret, unsubscribeOverride);
   return {
     to: email, from: MARKETING_EMAIL_FROM, replyTo: MARKETING_EMAIL_REPLY_TO,
     headers: { 'List-Unsubscribe': `<${unsubscribeUrl}>`, 'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click' },
-    message: rendered, marketing: { campaignId, uid, attempt },
+    message: unsubscribeOverride ? { ...rendered, subject: `[TEST] ${rendered.subject}` } : rendered,
+    marketing: { campaignId, uid, attempt },
     expireAt: getExpireAtTimestamp(TTL_CONFIG.MAIL_IN_DAYS),
   };
 }
@@ -151,7 +165,7 @@ export async function saveCampaign(idInput: unknown, input: unknown, actorUid: s
     const doc = await tx.get(ref);
     if (!doc.exists) throw new HttpsError('not-found', 'Campaign not found.');
     if (doc.get('status') !== 'draft') throw new HttpsError('failed-precondition', 'Clone this campaign to edit its content.');
-    tx.update(ref, { ...draft!, updatedAt: now });
+    tx.update(ref, { ...draft!, updatedAt: now, lastTestMailId: null, lastTestState: null });
   });
   return getCampaign(id);
 }
@@ -163,7 +177,7 @@ export async function cloneCampaign(idInput: unknown, actorUid: string): Promise
 export function previewCampaign(input: unknown): { subject: string; html: string; text: string } {
   let draft: MarketingCampaignDraft;
   try { draft = validateMarketingDraft(input); } catch (error) { badRequest(error); }
-  return renderMessage(draft!, 'friend', 'preview-user', 'preview-only-signing-key').rendered;
+  return renderMessage(draft!, 'friend', 'preview-user', 'preview-only-signing-key', testUnsubscribeUrl).rendered;
 }
 
 export async function prepareCampaign(idInput: unknown): Promise<MarketingCampaignView> {
@@ -272,14 +286,32 @@ export async function reserveMail(mailId: string, data: Record<string, unknown>,
   });
 }
 
-export async function sendTest(idInput: unknown, adminUid: string, secret: string): Promise<{ mailId: string; submitted: boolean }> {
-  const campaign = await getCampaign(idInput);
-  if (campaign.status !== 'ready') throw new HttpsError('failed-precondition', 'Prepare the audience before a test send.');
+export async function sendTest(idInput: unknown, adminUid: string, secret: string,
+  recipientInput: unknown, draftInput?: unknown): Promise<{ mailId: string; submitted: boolean }> {
+  const recipient = checkedTestEmail(recipientInput);
+  const unsaved = idInput === null || idInput === undefined;
+  let draft: MarketingCampaignDraft;
+  if (unsaved) {
+    try { draft = validateMarketingDraft(draftInput); } catch (error) { badRequest(error); }
+  } else {
+    draft = await getCampaign(idInput);
+  }
+  const campaign = unsaved ? null : draft as MarketingCampaignView;
+  if (campaign && campaign.status !== 'draft' && campaign.status !== 'ready') {
+    throw new HttpsError('failed-precondition', 'Tests are available for saved drafts and ready campaigns.');
+  }
   const user = await getAuth(adminUid);
   if (!user?.email || user.disabled) throw new HttpsError('failed-precondition', 'Your admin account needs an enabled email address.');
+  const mailId = `marketing_test_${campaign?.id || 'unsaved'}_${randomUUID()}`;
+  const firstName = recipient.toLowerCase() === user.email.toLowerCase()
+    ? user.displayName?.trim().split(/\s+/)[0] || 'friend' : 'friend';
+  const mail = mailPayload(draft!, recipient, firstName, adminUid, secret, null, 1, testUnsubscribeUrl);
+  if (!campaign) {
+    const submitted = await reserveMail(mailId, mail);
+    if (!submitted) throw new HttpsError('resource-exhausted', 'The UTC daily marketing limit has been reached.');
+    return { mailId, submitted };
+  }
   const ref = campaigns().doc(campaign.id);
-  const mailId = `marketing_test_${campaign.id}_${randomUUID()}`;
-  const mail = mailPayload(campaign, user.email, user.displayName?.trim().split(/\s+/)[0] || '', adminUid, secret, null, 1);
   const submitted = await db().runTransaction(async tx => {
     const now = new Date();
     const day = dayRef(utcDay(now));
@@ -287,8 +319,8 @@ export async function sendTest(idInput: unknown, adminUid: string, secret: strin
     const [campaignDoc, controlDoc, dayDoc, mailDoc] = await Promise.all([
       tx.get(ref), tx.get(control()), tx.get(day), tx.get(mailRef),
     ]);
-    if (campaignDoc.get('status') !== 'ready') {
-      throw new HttpsError('failed-precondition', 'The campaign must still be ready to send a test.');
+    if (campaignDoc.get('status') !== campaign.status || campaignDoc.get('updatedAt') !== campaign.updatedAt) {
+      throw new HttpsError('failed-precondition', 'The campaign changed while preparing the test. Refresh and try again.');
     }
     const cap = controlDoc.exists ? validDailyCap(controlDoc.get('dailyCap')) : DEFAULT_MARKETING_DAILY_CAP;
     const used = dayDoc.get('used') || 0;

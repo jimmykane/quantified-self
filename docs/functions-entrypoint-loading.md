@@ -31,8 +31,10 @@ The initial deployed canary included:
 The target map also isolates all 11 exports from `functions/src/admin/marketing/handlers.ts`, including the
 `trackMarketingDelivery` Firestore trigger. That trigger observes updates to the shared `mail/{mailId}` collection even
 when the updated email is not part of a marketing campaign. Its existing 256 MiB memory limit is unchanged; this routing
-change needs a separately approved deployment and production memory check. Functions outside these two groups continue
-through the complete entrypoint.
+change needs a separately approved deployment and production memory check. The map also isolates
+`projectEventTagCatalog` directly from its event-tag trigger module, preserving its `users/{uid}/events/{eventId}`
+Firestore written-event trigger, retry behavior and 256 MiB limit. Other functions continue through the complete
+entrypoint.
 
 ## Verification
 
@@ -55,6 +57,8 @@ The check builds the Functions package and verifies:
 - optimized Suunto endpoints remain Gen 2 in `europe-west2` with 512 MiB and the same secret bindings;
 - optimized marketing endpoints retain their callable, schedule, Firestore or HTTP triggers, existing memory limits,
   region and secret bindings.
+- the isolated event-tag catalog endpoint retains its Firestore trigger path and type, retry setting, region, 256 MiB
+  memory limit and absence of secrets.
 
 CI runs the compiled check after the Functions build. Firebase Functions predeploy first rejects forbidden local
 credential, environment and operational files, then runs the compiled entrypoint check and secret-binding validation.
@@ -98,12 +102,17 @@ All 11 marketing targets loaded the same 1,306-module marketing graph and measur
 comparison suggests about 101 MiB less local startup RSS for the 256 MiB delivery trigger. It is not a production
 memory guarantee; keep its memory limit unchanged for rollout measurement.
 
+Three isolated Node 20.19.3 runs on 2026-09-25 measured 216.6 MiB median RSS, 954 ms import time and 3,108 modules
+for the complete entrypoint, versus 62.2 MiB RSS, 83 ms and 264 modules for isolated `projectEventTagCatalog`. This
+suggests about 154 MiB less local startup RSS. Production memory and retry logs must confirm the rollout.
+
 ## Adding another optimized target
 
-1. Add the function name and direct module loader to `functions/src/function-target-loader.ts`. Avoid barrel modules that
-   export unrelated handlers.
-2. Extend the unit expectation in `functions/src/function-target-loader.spec.ts`. The entrypoint check reads the target
-   list directly from the production loader so its coverage cannot drift from the runtime routing table.
+1. For each new deployed Function, add the full export and a direct owner-module loader in
+   `functions/src/function-target-loader.ts` before deployment. Avoid barrel modules that export unrelated handlers.
+2. Extend the unit expectation in `functions/src/function-target-loader.spec.ts` and the metadata assertions in
+   `functions/src/scripts/check-entrypoint-loading.ts` for the function's trigger and configured options. The entrypoint
+   check reads the target list directly from the production loader so its coverage cannot drift from runtime routing.
 3. Run the entrypoint check, the provider's focused tests, the Functions build, deployment safety and secret-binding
    checks.
 4. Deploy only the selected function after explicit deployment approval. Keep its existing memory limit during the

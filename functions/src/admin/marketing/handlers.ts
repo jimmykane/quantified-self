@@ -28,7 +28,7 @@ export const previewMarketingCampaign = onAdminCall<Record<string, unknown>>(cal
 export const prepareMarketingCampaign = onAdminCall<Record<string, unknown>>({ ...callable('prepareMarketingCampaign'), timeoutSeconds: 540 }, request => prepareCampaign(request.data?.id));
 export const setMarketingDailyCap = onAdminCall<Record<string, unknown>>(callable('setMarketingDailyCap'), request => setDailyCap(request.data?.dailyCap));
 export const sendMarketingTest = onAdminCall<Record<string, unknown>>({ ...callable('sendMarketingTest'), secrets: [secret] }, request =>
-  sendTest(request.data?.id, request.auth!.uid, signingKey()));
+  sendTest(request.data?.id, request.auth!.uid, signingKey(), request.data?.to, request.data?.draft));
 export const changeMarketingCampaignStatus = onAdminCall<Record<string, unknown>>({ ...callable('changeMarketingCampaignStatus'), timeoutSeconds: 540, secrets: [secret] }, async request => {
   const action = request.data?.action;
   if (action !== 'start' && action !== 'pause' && action !== 'resume' && action !== 'retry') {
@@ -62,6 +62,10 @@ export async function handleMarketingUnsubscribe(request: Request, response: Res
   response.type('html');
   if (request.method !== 'GET' && request.method !== 'POST') {
     response.set('Allow', 'GET, POST').status(405).send(confirmationPage('This method is not supported.'));
+    return;
+  }
+  if (request.query.test === '1' && !request.query.token) {
+    response.status(200).send(confirmationPage('This was a test email. No marketing preference was changed.'));
     return;
   }
   const token = request.query.token;

@@ -16,6 +16,11 @@ import { sportsLibVersionToCode } from './reparse/sports-lib-reparse.service';
 import { OriginalFileMetaData } from '../../shared/app-event.interface';
 import { preserveEventTagsOnRewrite } from '../../shared/event-tags';
 import {
+  createMissingEventTagCatalogEntriesInTransaction,
+  newlyAssignedEventTags,
+  storedEventTagNames,
+} from './events/event-tag-catalog';
+import {
   getUserDeletionGuardState,
   getUserDeletionGuardStateInTransaction,
   UserDeletionGuardReadError,
@@ -262,12 +267,19 @@ export async function setEventDocumentIfUserActive(
 
     const incomingData = data as admin.firestore.DocumentData;
     let resolvedData = incomingData;
-    if (transformExistingData) {
+    const isEventDocument = docRef.path.startsWith(`users/${userID}/events/`)
+      && docRef.path.split('/').length === 4;
+    const needsExistingTags = isEventDocument && storedEventTagNames(incomingData).length > 0;
+    let existingData: admin.firestore.DocumentData | null = null;
+    if (transformExistingData || needsExistingTags) {
       const existingSnapshot = await transaction.get(docRef);
-      resolvedData = transformExistingData(
-        incomingData,
-        existingSnapshot.exists ? existingSnapshot.data() || null : null,
-      );
+      existingData = existingSnapshot.exists ? existingSnapshot.data() || null : null;
+      if (transformExistingData) resolvedData = transformExistingData(incomingData, existingData);
+    }
+
+    if (isEventDocument) {
+      await createMissingEventTagCatalogEntriesInTransaction(db, transaction, userID,
+        newlyAssignedEventTags(existingData, resolvedData));
     }
 
     if (options) {

@@ -1,5 +1,20 @@
 import type { MarketingContentNode, MarketingDocument, MarketingTextMark } from '../../../../../shared/admin-marketing';
 
+export function safeEditorLink(value: string): string | null {
+  if (!value || value.length > 2048 || /\s/.test(value)) return null;
+  try {
+    const url = new URL(value);
+    return (url.protocol === 'https:' || url.protocol === 'mailto:') && !url.username && !url.password
+      ? url.toString() : null;
+  } catch { return null; }
+}
+
+export function hasVisibleMarketingText(document: MarketingDocument): boolean {
+  const visible = (node: MarketingContentNode): boolean => node.type === 'text'
+    ? !!node.text?.trim() : !!node.content?.some(visible);
+  return document.content.some(visible);
+}
+
 function marksFor(element: Element, inherited: MarketingTextMark[]): MarketingTextMark[] {
   const tag = element.tagName.toLowerCase();
   const marks = [...inherited];
@@ -7,10 +22,8 @@ function marksFor(element: Element, inherited: MarketingTextMark[]): MarketingTe
   if (tag === 'em' || tag === 'i') marks.push({ type: 'italic' });
   if (tag === 'a') {
     const href = element.getAttribute('href') || '';
-    try {
-      const url = new URL(href);
-      if (url.protocol === 'https:' || url.protocol === 'mailto:') marks.push({ type: 'link', attrs: { href: url.toString() } });
-    } catch { /* Invalid pasted links become plain text. */ }
+    const url = safeEditorLink(href);
+    if (url) marks.push({ type: 'link', attrs: { href: url } });
   }
   return marks.filter((mark, index) => marks.findIndex(item => item.type === mark.type) === index);
 }
@@ -43,32 +56,4 @@ function block(node: ChildNode): MarketingContentNode[] {
 export function documentFromEditor(element: HTMLElement): MarketingDocument {
   const content = Array.from(element.childNodes).flatMap(block);
   return { type: 'doc', content: content.length ? content : [{ type: 'paragraph', content: [] }] };
-}
-function appendInline(parent: HTMLElement, item: MarketingContentNode): void {
-  if (item.type === 'hardBreak') { parent.append(document.createElement('br')); return; }
-  if (item.type !== 'text') return;
-  let node: Node = document.createTextNode(item.text || '');
-  for (const mark of item.marks || []) {
-    let element: HTMLElement;
-    if (mark.type === 'bold') element = document.createElement('strong');
-    else if (mark.type === 'italic') element = document.createElement('em');
-    else {
-      element = document.createElement('a');
-      if (mark.attrs?.href?.startsWith('https:') || mark.attrs?.href?.startsWith('mailto:')) element.setAttribute('href', mark.attrs.href);
-    }
-    element.append(node); node = element;
-  }
-  parent.append(node);
-}
-function makeBlock(item: MarketingContentNode): HTMLElement {
-  const element = document.createElement(item.type === 'heading' ? 'h2' : item.type === 'bulletList' ? 'ul' : item.type === 'orderedList' ? 'ol' : item.type === 'listItem' ? 'li' : 'p');
-  if (item.type === 'bulletList' || item.type === 'orderedList') {
-    for (const child of item.content || []) element.append(makeBlock(child));
-  } else if (item.type === 'listItem') {
-    for (const child of item.content || []) for (const inlineNode of ('content' in child ? child.content || [] : [])) appendInline(element, inlineNode);
-  } else for (const child of item.content || []) appendInline(element, child);
-  return element;
-}
-export function fillEditor(element: HTMLElement, content: MarketingDocument): void {
-  element.replaceChildren(...content.content.map(makeBlock));
 }
