@@ -114,7 +114,6 @@ export const FUNCTIONS_MANIFEST = {
     uploadRoute: { name: 'uploadRoute', region: 'europe-west2' },
     createToolComparisonEvent: { name: 'createToolComparisonEvent', region: 'europe-west2' },
     reprocessEvent: { name: 'reprocessEvent', region: 'europe-west2' },
-    listEventTags: { name: 'listEventTags', region: 'europe-west2' },
     setEventSharing: { name: 'setEventSharing', region: 'europe-west2' },
     reprocessRoute: { name: 'reprocessRoute', region: 'europe-west2' },
     retrySportsLibReparseHeavyJob: { name: RETRY_SPORTS_LIB_REPARSE_HEAVY_JOB_FUNCTION_NAME, region: 'europe-west2' },

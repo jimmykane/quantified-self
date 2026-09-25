@@ -13,9 +13,7 @@ or legacy tags. Its writes are idempotent and check the account-deletion guard
 inside each transaction. Owner clients may list or get the catalog; only the
 server writes it. The catalog is under `users/{uid}`, so recursive user deletion
 removes it. The app reads the catalog directly and merges successful local edits
-into the current session while the projection catches up. The older
-`listEventTags` callable remains exported for existing clients but is unused by
-the new UI.
+into the current session while the projection catches up.
 
 ## Backfill and rollout
 
@@ -35,8 +33,7 @@ and verify the code locally, then roll out in this order:
    across every page before releasing the catalog-reading UI. Spot-check a
    legacy-tag account and an account with tags outside the current dashboard
    range.
-5. Release the UI. Retire `listEventTags` only in a later, separately approved
-   function deletion after old clients are no longer using it.
+5. Release the catalog-reading UI.
 
 The backfill can recover tags still present on events, including legacy
 `benchmarkReviewTags`. It cannot recover labels removed from all events before
