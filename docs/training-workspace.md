@@ -74,15 +74,18 @@ sync changes** choices. Only applicable focused/batch preview tools enter Gemini
 stores one bounded proposal under the current server-owned conversation and the user must apply or dismiss it in the app.
 Plan-level and provider-only actions select the batch preview before a sport keyword can select a focused recipe editor;
 a combined historical comparison and workout recommendation keeps live daily and completed-activity reads available.
-When the separately consented Timeline-note read is on, that recommendation also checks bounded recent and ongoing
-notes for relevant illness, injury, travel, vacation or stress before suggesting a session. It treats note text as
-untrusted self-report, checks actual dates and incomplete scans, and never derives plan-write authority from a note.
-Because closed notes precede ongoing notes, an incomplete note scan cannot rule out a current illness or injury note;
-the Assistant requests up to 64 notes and its recommendation guidance instructs it not to preview a workout as if it
-had reviewed all current notes.
-The Assistant uses canonical daily `Duration` buckets with model-only local weekday labels to assess recorded workout
-consistency without changing MCP metric output, evidence or Training calculations. Note access remains independent of
-Training read/write choices; missing consent is reported rather than treated as an empty note history.
+For a today recommendation, the server prepares Form, Form Now, ramp-rate and Training Summary snapshots before the
+daily report, then reads the ready Form, ramp-rate and Training Summary payloads. It also reads canonical daily
+`Duration` buckets and today's completed activities. The model-only bucket projection supplies local weekday labels;
+server code counts positive-duration dates in the 28-day local window, including today, without changing MCP output or
+Training calculations. With separate consent, the server reads recent Timeline notes for up to two bounded pages,
+marks each ended or ongoing from its actual dates, and never treats an ended sickness note as current illness. Closed
+notes precede ongoing notes, so an incomplete scan cannot prove their absence. With Training plans read access, it
+reads today's calendar and one bounded bulk exact-completion result for its listed workouts; a planned lifecycle is
+not completion evidence. The server appends these verified facts and gaps to the recommendation. Incomplete activity,
+note or calendar scans block a workout preview. Note access remains independent of Training read/write choices;
+missing consent is reported rather than treated as an empty history. This Assistant-only orchestration changes no MCP
+tool, schema, scope, projection, consent or provider action, and needs no registered-client or plugin update.
 Proposal references bind the exact conversation generation, so permission changes, New chat, stale tabs and account
 switches cannot reuse them. The dedicated App Check callable rechecks the conversation before applying and clears the
 pending proposal after either apply or dismiss. Internal Training reads recognize both the fixed first-party Assistant

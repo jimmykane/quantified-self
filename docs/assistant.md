@@ -14,14 +14,18 @@ MCP server, schemas, projections, and Sports Lib-backed metric discovery used by
 public URL remains `/ai-insights` so existing links and post-auth return URLs continue to work, but that route now loads
 the conversational Assistant.
 
-For a user-requested workout suggestion, the Assistant first grounds today's load, sleep, HRV and readiness in the
-daily report, counts recent recorded workout days by local weekday from the canonical daily Duration metric, and checks
-whether an activity has already been completed today. When the independent **Timeline notes** choice is on, it also
-reads a bounded recent-to-today note window for relevant user-reported sickness, injury, travel, vacation or stress,
-including overlapping ongoing notes. The note query requests its 64-note maximum because closed notes precede ongoing
-notes; an incomplete first page cannot rule out a current note. It checks actual dates, distinguishes ended from current
-notes. The model is instructed to disclose incomplete reads and avoid preparing a workout as if all current notes had
-been reviewed. If note access is off, it says that notes were not checked rather than inferring their absence.
+For a user-requested workout suggestion for today, the server collects a bounded context before asking Gemini to
+recommend anything. It prepares Form, Form Now, ramp-rate and Training Summary snapshots through the existing
+`prepare_training_metrics` lifecycle, then reads the ready Form, ramp-rate and Training Summary payloads. A preparing
+snapshot uses the existing retry path rather than being presented as a value. The server then reads today's load, sleep,
+HRV and readiness from `get_daily_report`, counts recorded local weekdays from canonical daily Duration buckets, and
+checks today's recorded activities. When the independent **Timeline notes** choice is on, it reads up to two 64-note
+pages in the recent-to-today window, including overlapping ongoing notes; closed notes precede ongoing notes. It marks
+each note ended or ongoing from its actual dates. When **Training plans** is on, it reads today's calendar workouts and
+their exact stored completion states through one bounded bulk lookup. The authored schedule list alone never establishes
+completion. The server appends these checked facts to the answer, including missing-access or incomplete-scan limits.
+An incomplete note, activity or plan scan cannot support a new workout preview. If note or plan access is off, the
+answer says that domain was not checked.
 Notes inform context but never alter the recorded metrics, supply instructions, or authorize a write. The Assistant may
 offer a cautious optional session rather than a medical prescription, then prepare one current-revision Training
 proposal for in-app review only if the user asked to create/send it.
@@ -195,9 +199,10 @@ tool responses. Answers can quote relevant details under the same seven-day conv
 and errors must not contain private note text. The existing metric/readiness/briefing contracts and calculations are
 unchanged; no note chart overlays are added to Assistant visuals.
 For a combined recovery/consistency workout request, the known Sports Lib `Duration` metric avoids a redundant catalog
-call, leaving room in the six-tool turn budget for the independent note read and, when expressly requested, one focused
-Training preview. The model-only metric projection labels numeric date buckets with local dates and weekdays using the
-turn's IANA time zone; it does not change validated MCP responses, evidence, stored values, or the public contract.
+call. The deterministic daily context has a separate bounded read budget; Gemini keeps the existing six model-selected
+calls for a requested detail or one expressly requested focused Training preview. The model-only metric projection
+labels numeric date buckets with local dates and weekdays using the turn's IANA time zone; it does not change validated
+MCP responses, evidence, stored values, or the public contract.
 
 Deployment remains a separate approved release step. The hosted MCP contract, registered-app digest, consent scopes,
 and external plugin are unchanged by this first-party Assistant addition. Training planning permissions remain
