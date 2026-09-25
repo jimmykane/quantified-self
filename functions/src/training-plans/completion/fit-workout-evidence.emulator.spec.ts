@@ -230,6 +230,42 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)(
       expect((await user().collection('trainingWorkoutCompletions').get()).empty).toBe(true);
     });
 
+    it('ignores a retired remote Workout ID and links only the accepted replacement ID', async () => {
+      const replacementWorkoutId = String(0xfffffffd);
+      await user().collection(DELIVERY_LEDGER).doc('delivery').update({
+        'actual.ids.workout': replacementWorkoutId,
+        'actual.ids.schedule': '18',
+        lastAcceptedAtMs: 2,
+      });
+
+      expect(await retain()).toBe(true);
+      expect((await evidence().get()).data()).toMatchObject({ correlationState: 'candidate_only' });
+      expect((await user().collection('trainingWorkoutCompletions').get()).empty).toBe(true);
+
+      const replacementEvent = user().collection('events').doc('replacement-event');
+      await replacementEvent.set({ test: true });
+      await replacementEvent.collection('metaData').doc(ServiceNames.GarminAPI).set({
+        serviceName: ServiceNames.GarminAPI, serviceUserID: account,
+        serviceActivityFileID: 'replacement-file', serviceActivityFileType: 'FIT',
+      });
+      await user().collection('activities').doc('replacement-activity').set({
+        userID: uid, eventID: replacementEvent.id, startDate: activityStartAtMs,
+      });
+      expect(await retainGarminFITWorkoutReferences(db, uid, replacementEvent.id, account, 'credential',
+        { activityFileID: 'replacement-file', activityFileType: 'FIT' },
+        standardWorkoutReferenceFitFixture(true, Number(replacementWorkoutId)),
+        [{ id: 'replacement-activity', startTimeMs: activityStartAtMs }])).toBe(true);
+      expect((await replacementEvent.collection('trainingCompletionEvidence').doc('fit').get()).data())
+        .toMatchObject({ correlationState: 'linked' });
+      expect((await user().collection('trainingWorkoutCompletions').doc('workout').get()).data())
+        .toMatchObject({ provider: 'garmin', eventId: replacementEvent.id, activityId: 'replacement-activity' });
+
+      expect(await retain()).toBe(true);
+      expect((await evidence().get()).data()).toMatchObject({ correlationState: 'candidate_only' });
+      expect((await user().collection('trainingWorkoutCompletions').doc('workout').get()).data())
+        .toMatchObject({ eventId: replacementEvent.id, activityId: 'replacement-activity' });
+    });
+
     it('leaves malformed retained delivery identities as private candidates without failing import', async () => {
       await user().collection(DELIVERY_LEDGER).doc('delivery').update({ workoutId: 'invalid/path' });
       expect(await retain()).toBe(true);
