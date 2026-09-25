@@ -166,6 +166,8 @@ move together from 12,320 to 12,328 kB while the 1,440 kB initial budget remains
 sports/strength feature raises the production and beta `allScript` budget to 12,344 kB (from the expansion
 branch's 12,336 kB); the 1,440 kB initial budget is unchanged. The strength editor snapshots weight units when opened,
 retains exact canonical kg for an unchanged rounded lb display, and converts edited lb input through Sports Lib.
+Subsequent bundle growth raises the production and beta `allScript` budget to 12,400 kB; the initial budget stays at
+1,440 kB.
 
 ## Product Contract
 
