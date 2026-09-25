@@ -195,6 +195,7 @@ export async function retainCOROSTrainingCompletion(
           // already persisted exact link remains idempotent after later edits.
           if (!sameCompletion && (workout.id !== candidate.ledger.workoutId
             || workout.planId !== candidate.ledger.planId
+            || (candidate.resolvedAttemptId && workout.planId !== candidate.ledger.attempt?.workout?.planId)
             || workout.localDate !== candidate.artifact.localDate)) outcome = 'conflict';
           if (outcome !== 'conflict' && ((completionDocument.exists && !sameCompletion)
             || (reverseDocument.exists && !sameReverse))) outcome = 'conflict';

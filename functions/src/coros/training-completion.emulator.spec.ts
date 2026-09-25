@@ -219,6 +219,21 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)(
       expect((await user().collection('trainingWorkoutCompletions').get()).empty).toBe(true);
     });
 
+    it('does not resolve a reserved first-send marker for an older plan association', async () => {
+      const workout = (await user().collection('scheduledWorkouts').doc('workout').get()).data();
+      await user().collection(DELIVERY_LEDGER).doc('delivery').update({
+        actual: null, status: 'needs_attention', planId: 'new-plan',
+        attempt: { id: randomUUID(), kind: 'upsert', deliveryId: 'delivery', generation: 1,
+          connectionGeneration: 'connection', destinationKey, timeZone: 'Europe/Helsinki',
+          digest: 'reserved-desired', contentDigest: 'reserved-content', workout, artifact: null,
+          progress: { version: 1, step: 'batch-upsert', state: 'started' },
+          providerIdentity: { athleteId: 987654321, workoutId: Number(marker) }, batchId: randomUUID() },
+      });
+      await user().collection('scheduledWorkouts').doc('workout').update({ planId: 'new-plan', revision: 3 });
+      expect(await retain()).toEqual({ retained: true, linkedWorkoutIds: [] });
+      expect((await user().collection('trainingWorkoutCompletions').get()).empty).toBe(true);
+    });
+
     it('accepts matching generation metadata and rejects stale authority', async () => {
       const root = db.collection('COROSAPIAccessTokens').doc(uid);
       await root.update({ activeOAuthCredentialGeneration: 'generation' });
