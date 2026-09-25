@@ -9,7 +9,10 @@ import {
 import type { AssistantContentProposalKind } from '../../../shared/assistant.types';
 import { isBenchmarkEvent } from '../../../shared/event-classification';
 import {
+  EVENT_TAG_CATALOG_SUBMISSION_COLLECTION,
+  EVENT_TAG_CATALOG_SUBMISSION_DOCUMENT,
   getEventTags,
+  newlyAssignedEventTags,
   normalizeEventTags,
 } from '../../../shared/event-tags';
 import { sanitizeEventFirestoreWritePayload } from '../../../shared/firestore-write-sanitizer';
@@ -331,6 +334,8 @@ export async function updateMcpEventTags(
   const user = deps.db.collection('users').doc(input.uid);
   const activityRef = user.collection('activities').doc(reference.activityId);
   const eventRef = user.collection('events').doc(reference.eventId);
+  const submissionRef = user.collection(EVENT_TAG_CATALOG_SUBMISSION_COLLECTION)
+    .doc(EVENT_TAG_CATALOG_SUBMISSION_DOCUMENT);
 
   const result = await deps.db.runTransaction(async transaction => {
     if ((await getUserDeletionGuardStateInTransaction(
@@ -372,6 +377,8 @@ export async function updateMcpEventTags(
       ...sanitizeEventFirestoreWritePayload({ tags }),
       benchmarkReviewTags: FieldValue.delete(),
     });
+    const additions = newlyAssignedEventTags(event.data(), { tags });
+    if (additions.length) transaction.set(submissionRef, { tags: additions });
     return { activityRef: args.activityRef, tags, changed: true };
   });
   return MCP_CONTENT_WRITE_OUTPUTS.update_event_tags.parse(result);

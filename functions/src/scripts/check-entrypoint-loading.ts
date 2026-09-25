@@ -11,7 +11,7 @@ const NO_TARGET = '__NO_TARGET__';
 // Exercise a property inherited from Object.prototype so the fallback check
 // also guards against accidental prototype-based routing.
 const UNKNOWN_TARGET = 'toString';
-const EXPECTED_FULL_EXPORT_COUNT = 165;
+const EXPECTED_FULL_EXPORT_COUNT = 166;
 const MARKETING_TARGETS = new Set([
   'listMarketingCampaigns',
   'saveMarketingCampaign',
@@ -224,6 +224,16 @@ async function check(): Promise<void> {
       && catalogProjection.eventTrigger.eventFilterPathPatterns?.document === 'users/{uid}/events/{eventId}'
       && catalogProjection.eventTrigger.retry === true,
     'Event tag catalog projection metadata changed.',
+  );
+  const catalogSubmissionProjection = stack.endpoints.projectEventTagCatalogSubmission;
+  assert(
+    catalogSubmissionProjection?.platform === 'gcfv2'
+      && arraysEqual(catalogSubmissionProjection.region || [], ['europe-west2'])
+      && catalogSubmissionProjection.eventTrigger?.eventType === 'google.cloud.firestore.document.v1.written'
+      && catalogSubmissionProjection.eventTrigger.eventFilterPathPatterns?.document
+        === 'users/{uid}/eventTagCatalogSubmissions/current'
+      && catalogSubmissionProjection.eventTrigger.retry === true,
+    'Event tag catalog submission projection metadata changed.',
   );
 
   const firstGenerationEndpoint = Object.entries(stack.endpoints)

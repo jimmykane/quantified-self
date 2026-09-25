@@ -1,8 +1,10 @@
 import { createHash } from 'node:crypto';
 import * as admin from 'firebase-admin';
 
-import { normalizeEventTags, normalizeEventTagSuggestions } from '../../../shared/event-tags';
+import { normalizeEventTagSuggestions } from '../../../shared/event-tags';
 import { getUserDeletionGuardStateInTransaction } from '../shared/user-deletion-guard';
+
+export { newlyAssignedEventTags, storedEventTagNames } from '../../../shared/event-tags';
 
 export const EVENT_TAG_CATALOG_COLLECTION = 'eventTagCatalog';
 const MAX_TAGS_PER_TRANSACTION = 50;
@@ -11,20 +13,6 @@ export function eventTagCatalogKey(tag: string): string {
   const [normalized] = normalizeEventTagSuggestions([tag]);
   if (!normalized) throw new Error('An event tag is required for a catalog key.');
   return createHash('sha256').update(normalized.toLowerCase(), 'utf8').digest('hex');
-}
-
-export function storedEventTagNames(event: unknown): string[] {
-  const fields = event as { tags?: unknown; benchmarkReviewTags?: unknown } | null | undefined;
-  return normalizeEventTagSuggestions([
-    ...normalizeEventTags(fields?.tags),
-    ...normalizeEventTags(fields?.benchmarkReviewTags),
-  ]);
-}
-
-export function newlyAssignedEventTags(before: unknown, after: unknown): string[] {
-  const previous = new Set(storedEventTagNames(before).map(tag => tag.toLowerCase()));
-  return storedEventTagNames(after)
-    .filter(tag => !previous.has(tag.toLowerCase()));
 }
 
 export async function ensureEventTagCatalogEntries(

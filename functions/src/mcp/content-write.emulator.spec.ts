@@ -116,6 +116,8 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)(
         activityRef: `activity:${uid}:connection`, tags: ['Easy', 'Trail'], changed: true,
       });
       await expect(updateMcpEventTags(input, codec, deps)).resolves.toMatchObject({ changed: false });
+      expect((await user.collection('eventTagCatalogSubmissions').doc('current').get()).data())
+        .toEqual({ tags: ['Trail'] });
       expect((await user.collection('events').doc('event-1').get()).data()).toEqual({
         tags: ['Easy', 'Trail'],
         mergeType: 'multi',

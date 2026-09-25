@@ -70,6 +70,7 @@ const hoisted = vi.hoisted(() => {
     });
 
     const makeDoc = (path: string) => ({
+        path,
         _path: path,
         collection: (name: string) => makeCollection(`${path}/${name}`),
         set: vi.fn(),
@@ -319,6 +320,40 @@ describe('utils higher-level helpers', () => {
                 name: 'Reparsed event',
                 tags: ['Race', '2026'],
             });
+            expect(hoisted.transactionSet).toHaveBeenCalledTimes(1);
+        });
+
+        it('submits newly assigned tags on a server event write in the same transaction', async () => {
+            const docRef = hoisted.firestore().doc('users/user-1/events/event-1');
+            hoisted.transactionGet.mockResolvedValueOnce({
+                exists: true,
+                data: () => ({ tags: ['Race'] }),
+            });
+
+            await setEventDocumentIfUserActive('user-1', 'event_rewrite', docRef as any,
+                { name: 'Updated', tags: ['race', 'Trail'] });
+
+            expect(hoisted.transactionSet).toHaveBeenCalledWith(docRef,
+                { name: 'Updated', tags: ['race', 'Trail'] });
+            expect(hoisted.transactionSet).toHaveBeenCalledWith(
+                expect.objectContaining({ path: 'users/user-1/eventTagCatalogSubmissions/current' }),
+                { tags: ['Trail'] },
+            );
+        });
+
+        it('submits tags on a newly imported tagged event', async () => {
+            const docRef = hoisted.firestore().doc('users/user-1/events/event-1');
+            hoisted.transactionGet.mockResolvedValueOnce({ exists: false });
+
+            await setEventDocumentIfUserActive('user-1', 'event_import', docRef as any,
+                { name: 'Imported', tags: ['Trail'] }, undefined, preserveEventTagsOnRewrite);
+
+            expect(hoisted.transactionSet).toHaveBeenCalledWith(
+                expect.objectContaining({ path: 'users/user-1/eventTagCatalogSubmissions/current' }),
+                { tags: ['Trail'] },
+            );
+            expect(hoisted.transactionSet).toHaveBeenCalledWith(docRef,
+                { name: 'Imported', tags: ['Trail'] });
         });
     });
 

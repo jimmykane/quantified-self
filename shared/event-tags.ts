@@ -1,6 +1,8 @@
 export const EVENT_TAG_LIMIT = 10;
 export const EVENT_TAG_MAX_LENGTH = 32;
 export const EVENT_TAG_BULK_LIMIT = 250;
+export const EVENT_TAG_CATALOG_SUBMISSION_COLLECTION = 'eventTagCatalogSubmissions';
+export const EVENT_TAG_CATALOG_SUBMISSION_DOCUMENT = 'current';
 
 export interface EventTagChanges {
   add: string[];
@@ -57,6 +59,21 @@ export function getEventTags(event: EventTagsContainer | null | undefined): stri
     return normalizeEventTags(event.tags);
   }
   return normalizeEventTags(event?.benchmarkReviewTags);
+}
+
+export function storedEventTagNames(event: EventTagsContainer | null | undefined): string[] {
+  return normalizeEventTagSuggestions([
+    ...normalizeEventTags(event?.tags),
+    ...normalizeEventTags(event?.benchmarkReviewTags),
+  ]);
+}
+
+export function newlyAssignedEventTags(
+  before: EventTagsContainer | null | undefined,
+  after: EventTagsContainer | null | undefined,
+): string[] {
+  const previous = new Set(storedEventTagNames(before).map(tag => tag.toLowerCase()));
+  return storedEventTagNames(after).filter(tag => !previous.has(tag.toLowerCase()));
 }
 
 export function preserveEventTagsOnRewrite(

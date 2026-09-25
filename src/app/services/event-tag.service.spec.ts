@@ -18,6 +18,7 @@ vi.mock('app/firebase/firestore', async (importOriginal) => {
 describe('EventTagService', () => {
   let service: EventTagService;
   let transactionUpdate: ReturnType<typeof vi.fn>;
+  let transactionSet: ReturnType<typeof vi.fn>;
   let documents: Record<string, Record<string, unknown>>;
   let noteSavedTags: ReturnType<typeof vi.fn>;
 
@@ -25,6 +26,7 @@ describe('EventTagService', () => {
     vi.clearAllMocks();
     documents = {};
     transactionUpdate = vi.fn();
+    transactionSet = vi.fn();
     noteSavedTags = vi.fn();
     vi.mocked(runTransaction).mockImplementation(async (_firestore, callback: any) => callback({
       get: vi.fn(async (ref: { pathParts: unknown[] }) => {
@@ -35,6 +37,7 @@ describe('EventTagService', () => {
         };
       }),
       update: transactionUpdate,
+      set: transactionSet,
     }));
 
     TestBed.configureTestingModule({
@@ -62,6 +65,10 @@ describe('EventTagService', () => {
       expect.anything(),
       { tags: ['race'], benchmarkReviewTags: 'DELETE_FIELD' },
     );
+    expect(transactionSet).toHaveBeenCalledWith(
+      expect.objectContaining({ pathParts: [expect.anything(), 'users', 'user-1', 'eventTagCatalogSubmissions', 'current'] }),
+      { tags: ['race'] },
+    );
     expect(event.tags).toEqual(['race']);
     expect(event.benchmarkReviewTags).toBeUndefined();
     expect(deleteField).toHaveBeenCalledTimes(1);
@@ -80,8 +87,19 @@ describe('EventTagService', () => {
     )).rejects.toThrow('Tags changed elsewhere');
 
     expect(transactionUpdate).not.toHaveBeenCalled();
+    expect(transactionSet).not.toHaveBeenCalled();
     expect(event.tags).toEqual(['Original']);
     expect(noteSavedTags).not.toHaveBeenCalled();
+  });
+
+  it('does not submit tags when an edit only removes a tag', async () => {
+    const event = { getID: () => 'event-1', tags: ['Race', 'Recovery'] } as any;
+    documents = { 'event-1': { tags: ['Race', 'Recovery'] } };
+
+    await service.saveTags({ uid: 'user-1' } as any, event, ['Race']);
+
+    expect(transactionUpdate).toHaveBeenCalledOnce();
+    expect(transactionSet).not.toHaveBeenCalled();
   });
 
   it('applies removals before additions using fresh transaction data and legacy fallback', async () => {
@@ -105,6 +123,7 @@ describe('EventTagService', () => {
       { tags: ['2026', 'Long run'], benchmarkReviewTags: 'DELETE_FIELD' },
       { tags: ['Firmware', 'Long run'], benchmarkReviewTags: 'DELETE_FIELD' },
     ]);
+    expect(transactionSet).toHaveBeenCalledWith(expect.anything(), { tags: ['Long run'] });
     expect(deleteField).toHaveBeenCalledTimes(2);
     expect(noteSavedTags).toHaveBeenCalledWith('user-1', ['2026', 'Long run', 'Firmware', 'Long run']);
   });
@@ -121,6 +140,7 @@ describe('EventTagService', () => {
       { add: ['overflow'], remove: [] },
     )).rejects.toThrow('would exceed 10 tags');
     expect(transactionUpdate).not.toHaveBeenCalled();
+    expect(transactionSet).not.toHaveBeenCalled();
   });
 
   it('rejects missing events and selections above the bulk limit', async () => {
@@ -135,6 +155,6 @@ describe('EventTagService', () => {
       Array.from({ length: 251 }, (_value, index) => `event-${index}`),
       { add: ['tag'], remove: [] },
     )).rejects.toThrow('up to 250 events');
-    expect(doc).toHaveBeenCalledTimes(1);
+    expect(doc).toHaveBeenCalledTimes(2);
   });
 });

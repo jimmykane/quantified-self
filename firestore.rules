@@ -13,6 +13,30 @@ service cloud.firestore {
         return request.auth != null && request.auth.uid == userID;
       }
 
+      function isValidEventTag(tags, index) {
+        return tags.size() <= index
+          || (tags[index] is string
+            && tags[index].size() > 0
+            && tags[index].size() <= 32
+            && tags[index].matches('^\\S+( \\S+)*$'));
+      }
+
+      function isValidEventTagList(tags) {
+        return tags is list
+          && tags.size() <= 10
+          && tags.toSet().size() == tags.size()
+          && isValidEventTag(tags, 0)
+          && isValidEventTag(tags, 1)
+          && isValidEventTag(tags, 2)
+          && isValidEventTag(tags, 3)
+          && isValidEventTag(tags, 4)
+          && isValidEventTag(tags, 5)
+          && isValidEventTag(tags, 6)
+          && isValidEventTag(tags, 7)
+          && isValidEventTag(tags, 8)
+          && isValidEventTag(tags, 9);
+      }
+
       allow read: if isOwner();
       allow create: if isOwner()
         && (
@@ -132,6 +156,18 @@ service cloud.firestore {
           allow write: if false;
         }
 
+        // Owner tag editors submit newly assigned labels here. A scoped
+        // server trigger projects them into the reusable catalog.
+        match /eventTagCatalogSubmissions/{submissionID} {
+          allow read, delete: if false;
+          allow create, update: if isOwner()
+            && submissionID == 'current'
+            && request.resource.data.keys().hasOnly(['tags'])
+            && request.resource.data.keys().hasAll(['tags'])
+            && request.resource.data.tags.size() > 0
+            && isValidEventTagList(request.resource.data.tags);
+        }
+
         match /events/{eventID} {
           function isPublicEvent() {
             return resource.data.privacy == 'public';
@@ -150,30 +186,6 @@ service cloud.firestore {
               'benchmarkStatus',
               'privacy'
             ];
-          }
-
-          function isValidEventTag(tags, index) {
-            return tags.size() <= index
-              || (tags[index] is string
-                && tags[index].size() > 0
-                && tags[index].size() <= 32
-                && tags[index].matches('^\\S+( \\S+)*$'));
-          }
-
-          function isValidEventTagList(tags) {
-            return tags is list
-              && tags.size() <= 10
-              && tags.toSet().size() == tags.size()
-              && isValidEventTag(tags, 0)
-              && isValidEventTag(tags, 1)
-              && isValidEventTag(tags, 2)
-              && isValidEventTag(tags, 3)
-              && isValidEventTag(tags, 4)
-              && isValidEventTag(tags, 5)
-              && isValidEventTag(tags, 6)
-              && isValidEventTag(tags, 7)
-              && isValidEventTag(tags, 8)
-              && isValidEventTag(tags, 9);
           }
 
           function hasValidUpdatedEventTags() {

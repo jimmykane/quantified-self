@@ -50,6 +50,42 @@ describe('Firestore Security Rules', () => {
             await assertFails(owner.doc(path).update({ name: 'Changed' }));
             await assertFails(owner.doc(path).delete());
         });
+
+        it('accepts only bounded owner tag submissions and keeps them unreadable', async () => {
+            const path = 'users/owner/eventTagCatalogSubmissions/current';
+            const owner = testEnv.authenticatedContext('owner').firestore();
+            const other = testEnv.authenticatedContext('other').firestore();
+            const guest = testEnv.unauthenticatedContext().firestore();
+            await assertSucceeds(owner.doc(path).set({ tags: ['Race', 'Recovery'] }));
+            await assertSucceeds(owner.doc(path).set({ tags: ['New'] }));
+            await assertFails(owner.doc(path).get());
+            await assertFails(owner.collection('users/owner/eventTagCatalogSubmissions').get());
+            await assertFails(owner.doc(path).delete());
+            await assertFails(other.doc(path).set({ tags: ['Other'] }));
+            await assertFails(guest.doc(path).set({ tags: ['Guest'] }));
+            await assertFails(owner.doc('users/owner/eventTagCatalogSubmissions/other').set({ tags: ['Race'] }));
+            await assertFails(owner.doc(path).set({ tags: [] }));
+            await assertFails(owner.doc(path).set({ tags: ['bad  spacing'] }));
+            await assertFails(owner.doc(path).set({ tags: Array.from({ length: 11 }, (_, index) => `Tag ${index}`) }));
+            await assertFails(owner.doc(path).set({ tags: ['Race'], extra: true }));
+        });
+
+        it('allows a tag edit and catalog submission in one owner transaction', async () => {
+            await testEnv.withSecurityRulesDisabled(async context => {
+                await context.firestore().doc('users/owner/events/event-1')
+                    .set({ privacy: 'private', tags: ['Race'] });
+            });
+            const owner = testEnv.authenticatedContext('owner').firestore();
+            const eventRef = owner.doc('users/owner/events/event-1');
+            const submissionRef = owner.doc('users/owner/eventTagCatalogSubmissions/current');
+
+            await assertSucceeds(owner.runTransaction(async transaction => {
+                const event = await transaction.get(eventRef);
+                expect(event.data()?.tags).toEqual(['Race']);
+                transaction.update(eventRef, { tags: ['Race', 'Trail'] });
+                transaction.set(submissionRef, { tags: ['Trail'] });
+            }));
+        });
     });
 
     describe('Timeline notes', () => {
