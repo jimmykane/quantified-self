@@ -12,7 +12,3 @@
   /* Only the calendar's own row grows; charts in adjacent rows keep their height. */
   grid-auto-rows: minmax(var(--dashboard-tile-board-row-height, 150px), auto);
 }
-
-:host(.dashboard-tile-board--activity-calendar) .dashboard-calendar-cell {
-  min-height: 440px;
-}

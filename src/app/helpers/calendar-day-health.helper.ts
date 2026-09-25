@@ -73,7 +73,7 @@ export function buildCalendarDayHealthSummary(
         status: 'ready',
         value: formatHealthValue(HEALTH_METRIC_IDS.HeartRateVariability, hrvReading.point.value,
           hrvReading.series.unit, hrvReading.series.nativeOnly, options.unitSettings),
-        detail: [hrvReading.series.sourceLabel, hrvReading.series.semanticLabel,
+        detail: [hrvReading.series.sourceLabel, compactHrvReadingLabel(hrvReading.series.semanticLabel),
           evidence.hrvError ? 'Other HRV readings unavailable' : null].filter(Boolean).join(' · '),
       }
       : evidence.hrvError ? error('HRV could not be loaded') : empty('No HRV reading for this day');
@@ -122,6 +122,12 @@ export function buildCalendarDayHealthSummary(
           : empty('No active recovery estimate');
   }
   return { readiness, sleep, hrv, recovery };
+}
+
+function compactHrvReadingLabel(semanticLabel: string): string {
+  const reading = semanticLabel.split(' · ')[0]?.trim() || '';
+  if (semanticLabel.includes('Sleep session') && reading === 'Average HRV') return 'Sleep average';
+  return reading;
 }
 
 function localDateKey(value: number): string {

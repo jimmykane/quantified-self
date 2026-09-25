@@ -44,7 +44,7 @@
           @if (activity.route) {
             <a mat-list-item [routerLink]="activity.route" (click)="prepareNavigation()">
               <span matListItemTitle>{{ activity.name }}</span><span matListItemLine>{{ activity.duration }}</span>
-              <mat-icon matListItemMeta aria-hidden="true">chevron_right</mat-icon>
+              <span matListItemMeta aria-hidden="true"><mat-icon>chevron_right</mat-icon></span>
             </a>
           } @else {
             <div mat-list-item><span matListItemTitle>{{ activity.name }}</span><span matListItemLine>{{ activity.duration }}</span></div>

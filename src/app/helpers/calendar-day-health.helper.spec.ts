@@ -16,7 +16,7 @@ describe('calendar day health summary', () => {
     const evidence = noEvidence();
     evidence.hrvSeries = [{
       id: 'source-1', metricId: HEALTH_METRIC_IDS.HeartRateVariability, sourceLabel: 'Suunto',
-      semanticLabel: 'Sleep average', unit: HEALTH_UNITS.Millisecond, nativeOnly: false,
+      semanticLabel: 'Average HRV · Sleep session · Provider summary · Provider calculated', unit: HEALTH_UNITS.Millisecond, nativeOnly: false,
       points: [{ timestampMs: nowMs, calendarDate: '2026-09-25', value: 44, qualityCode: null }],
     } as HealthWorkspaceSeries];
     const summary = buildCalendarDayHealthSummary('2026-09-24', evidence, { nowMs });
@@ -42,6 +42,7 @@ describe('calendar day health summary', () => {
       expect(summary.hrv.value).toContain('34');
       expect(summary.hrv.value).toContain('ms');
       expect(summary.hrv.detail).toContain('Suunto · Sleep average');
+      expect(summary.hrv.detail).not.toContain('Provider summary');
     }
   });
 

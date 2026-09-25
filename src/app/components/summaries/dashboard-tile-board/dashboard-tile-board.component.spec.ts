@@ -44,14 +44,23 @@ describe('DashboardTileBoardComponent', () => {
   });
 
   it('lets the activity-calendar row grow with its selected-day content', () => {
-    const styles = readFileSync(
+    const boardStyles = readFileSync(
       resolve(process.cwd(), 'src/app/components/summaries/dashboard-tile-board/dashboard-tile-board.component.css'),
       'utf8',
     );
+    const ownerStyles = readFileSync(
+      resolve(process.cwd(), 'src/app/components/summaries/summaries.component.css'),
+      'utf8',
+    );
+    const calendarStyles = readFileSync(
+      resolve(process.cwd(), 'src/app/components/calendar/activity-calendar-tile/activity-calendar-tile.component.scss'),
+      'utf8',
+    );
 
-    expect(styles).toContain(':host(.dashboard-tile-board--activity-calendar)');
-    expect(styles).toContain('grid-auto-rows: minmax(var(--dashboard-tile-board-row-height, 150px), auto);');
-    expect(styles).toContain('.dashboard-calendar-cell');
-    expect(styles).not.toContain('min-height: 760px');
+    expect(boardStyles).toContain(':host(.dashboard-tile-board--activity-calendar)');
+    expect(boardStyles).toContain('grid-auto-rows: minmax(var(--dashboard-tile-board-row-height, 150px), auto);');
+    expect(ownerStyles).toContain('.dashboard-tile-board--activity-calendar .dashboard-calendar-cell');
+    expect(calendarStyles).toContain('.activity-calendar-day-layout { display: grid; flex: none;');
+    expect(ownerStyles).not.toContain('min-height: 760px');
   });
 });
