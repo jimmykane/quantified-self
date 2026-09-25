@@ -199,6 +199,14 @@ export class EChartsHorizontalTouchGestureController {
     this.suppressCompatibilityContextMenu();
 
     if (this.pinchIdentifiers) {
+      const [firstIdentifier, secondIdentifier] = this.pinchIdentifiers;
+      const first = this.findTouch(event.touches, firstIdentifier)
+        ?? this.findTouch(event.changedTouches, firstIdentifier);
+      const second = this.findTouch(event.touches, secondIdentifier)
+        ?? this.findTouch(event.changedTouches, secondIdentifier);
+      if (first && second) {
+        this.callbacks.onPinchMove?.({ first: this.toPoint(first), second: this.toPoint(second) });
+      }
       this.endPinchGesture();
       return;
     }

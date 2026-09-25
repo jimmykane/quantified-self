@@ -2273,6 +2273,21 @@ describe('EventCardChartPanelComponent', () => {
     }));
   });
 
+  it('zooms horizontally from a vertical pinch and applies its final touch position', async () => {
+    const emitSpy = vi.spyOn(component.zoomRangeChange, 'emit');
+    await renderComponent();
+    chart.dispatchAction.mockClear();
+
+    dispatchChartTouch('touchstart', [createTouch(1, 60, 20), createTouch(2, 60, 120)]);
+    dispatchChartTouch('touchmove', [createTouch(1, 60, -10), createTouch(2, 60, 150)]);
+    dispatchChartTouch('touchend', [], [createTouch(1, 60, -30), createTouch(2, 60, 170)]);
+
+    expect(chart.dispatchAction).toHaveBeenLastCalledWith({
+      type: 'dataZoom', startValue: 30, endValue: 90, $from: 'event-chart-touch-zoom',
+    });
+    expect(emitSpy).toHaveBeenLastCalledWith({ start: 30, end: 90 });
+  });
+
   it('renders empty-axis no-data option when panel is null outside zoom mode', async () => {
     component.panel = null;
     component.showZoomBar = false;

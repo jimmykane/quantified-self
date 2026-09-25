@@ -3023,8 +3023,8 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
       interaction.domain,
       interaction.initialRange,
       interaction.axisPixels,
-      { firstX: interaction.initial.first.clientX, secondX: interaction.initial.second.clientX },
-      { firstX: gesture.first.clientX, secondX: gesture.second.clientX },
+      interaction.initial,
+      gesture,
     );
     if (!nextRange || this.areRangesEqual(interaction.lastRange, nextRange)) {
       return;
