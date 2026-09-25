@@ -311,8 +311,8 @@ export class EChartsHorizontalTouchGestureController {
   }
 
   private keepGestureAwayFromECharts(event: TouchEvent): void {
-    // Deliberately do not call preventDefault: native vertical scrolling and
-    // pinch zoom must remain compositor-owned and responsive.
+    // Keep listeners passive so vertical page scrolling stays browser-owned.
+    // The chart handles pinch only when Zoom mode enables it.
     event.stopPropagation();
     event.stopImmediatePropagation();
   }

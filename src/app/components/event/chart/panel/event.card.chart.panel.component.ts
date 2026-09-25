@@ -77,6 +77,7 @@ import {
   type EChartsPinchGesture,
 } from '../../../../helpers/echarts-horizontal-touch-gesture.controller';
 import { resolveEventChartPinchRange } from '../../../../helpers/event-chart-pinch-zoom.helper';
+import { resolveEventChartPanRange } from '../../../../helpers/event-chart-pan-range.helper';
 
 type ChartOption = Parameters<EChartsType['setOption']>[0];
 type ChartAction = Parameters<EChartsType['dispatchAction']>[0];
@@ -143,11 +144,18 @@ type TooltipResolvedPoint = {
   point: EventChartPoint;
   index: number;
 };
-type PanelTouchInteraction = {
-  kind: 'panel';
-  mode: ChartCursorBehaviours;
+type PanelSelectTouchInteraction = {
+  kind: 'panelSelect';
   startValue: number;
   lastRange: EventChartRange | null;
+};
+type PanelPanTouchInteraction = {
+  kind: 'panelPan';
+  domain: EventChartRange;
+  initialRange: EventChartRange;
+  axisPixelSpan: number;
+  startClientX: number;
+  lastRange: EventChartRange;
 };
 type ZoomBarTouchDragMode = 'start' | 'end' | 'pan';
 type ZoomBarTouchInteraction = {
@@ -158,7 +166,7 @@ type ZoomBarTouchInteraction = {
   startValue: number;
   lastRange: EventChartRange;
 };
-type EventChartTouchInteraction = PanelTouchInteraction | ZoomBarTouchInteraction;
+type EventChartTouchInteraction = PanelSelectTouchInteraction | PanelPanTouchInteraction | ZoomBarTouchInteraction;
 type PanelPinchInteraction = {
   domain: EventChartRange;
   initialRange: EventChartRange;
@@ -2972,14 +2980,37 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
       return;
     }
 
+    if (this.cursorBehaviour === ChartCursorBehaviours.ZoomX) {
+      const chart = this.chartHost.getChart();
+      if (!chart) {
+        return;
+      }
+
+      const initialRange = this.getVisibleXAxisRange();
+      const pixelStart = Number(chart.convertToPixel({ xAxisIndex: 0 }, initialRange.start));
+      const pixelEnd = Number(chart.convertToPixel({ xAxisIndex: 0 }, initialRange.end));
+      if (!Number.isFinite(pixelStart) || !Number.isFinite(pixelEnd) || pixelEnd <= pixelStart) {
+        return;
+      }
+
+      this.touchInteraction = {
+        kind: 'panelPan',
+        domain: this.getActiveDomain(),
+        initialRange,
+        axisPixelSpan: pixelEnd - pixelStart,
+        startClientX: gesture.start.clientX,
+        lastRange: initialRange,
+      };
+      return;
+    }
+
     const startValue = this.resolvePanelTouchValue(gesture.start.clientX);
     if (!Number.isFinite(startValue)) {
       return;
     }
 
     this.touchInteraction = {
-      kind: 'panel',
-      mode: this.cursorBehaviour,
+      kind: 'panelSelect',
       startValue,
       lastRange: null,
     };
@@ -3061,6 +3092,11 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
       return;
     }
 
+    if (touchInteraction.kind === 'panelPan') {
+      this.updatePanelPanTouchInteraction(touchInteraction, gesture.current.clientX);
+      return;
+    }
+
     this.updatePanelTouchInteraction(touchInteraction, gesture.current.clientX);
   }
 
@@ -3072,7 +3108,7 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
 
     this.updateHorizontalTouchInteraction(gesture);
     this.touchInteraction = null;
-    if (touchInteraction.kind === 'zoomBar') {
+    if (touchInteraction.kind === 'zoomBar' || touchInteraction.kind === 'panelPan') {
       return;
     }
 
@@ -3083,32 +3119,8 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
       return;
     }
 
-    if (touchInteraction.mode === ChartCursorBehaviours.SelectX) {
-      this.previewRangeChange.emit(nextRange);
-      this.selectedRangeChange.emit(nextRange);
-      return;
-    }
-
-    if (touchInteraction.mode !== ChartCursorBehaviours.ZoomX) {
-      this.clearSelectionOverlay();
-      return;
-    }
-
-    const chart = this.chartHost.getChart();
-    this.clearSelectionOverlay();
-    if (!chart) {
-      return;
-    }
-
     this.previewRangeChange.emit(nextRange);
-    this.zoomRangeChange.emit(this.normalizeZoomRange(nextRange));
-    const dataZoomAction: ChartAction = {
-      type: 'dataZoom',
-      startValue: nextRange.start,
-      endValue: nextRange.end,
-      $from: TOUCH_GESTURE_DATAZOOM_SOURCE,
-    };
-    chart.dispatchAction(dataZoomAction);
+    this.selectedRangeChange.emit(nextRange);
   }
 
   private cancelHorizontalTouchInteraction(): void {
@@ -3134,15 +3146,15 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
       return;
     }
 
-    this.updateSelectionBrushState(false);
-    this.clearSelectionOverlay();
-    if (touchInteraction.mode === ChartCursorBehaviours.SelectX) {
+    if (touchInteraction.kind === 'panelSelect') {
+      this.updateSelectionBrushState(false);
+      this.clearSelectionOverlay();
       this.previewRangeChange.emit(null);
     }
   }
 
   private updatePanelTouchInteraction(
-    touchInteraction: PanelTouchInteraction,
+    touchInteraction: PanelSelectTouchInteraction,
     currentClientX: number,
   ): void {
     const currentValue = this.resolvePanelTouchValue(currentClientX);
@@ -3168,7 +3180,7 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
     };
     chart.dispatchAction(brushAction);
 
-    if (touchInteraction.mode !== ChartCursorBehaviours.SelectX || !ENABLE_LIVE_SELECTION_SYNC) {
+    if (!ENABLE_LIVE_SELECTION_SYNC) {
       return;
     }
 
@@ -3178,6 +3190,41 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
     }
 
     this.previewRangeChange.emit(nextRange);
+  }
+
+  private updatePanelPanTouchInteraction(
+    touchInteraction: PanelPanTouchInteraction,
+    currentClientX: number,
+  ): void {
+    const chart = this.chartHost.getChart();
+    if (!chart || this.cursorBehaviour !== ChartCursorBehaviours.ZoomX) {
+      return;
+    }
+
+    const nextRange = resolveEventChartPanRange(
+      touchInteraction.domain,
+      touchInteraction.initialRange,
+      touchInteraction.axisPixelSpan,
+      currentClientX - touchInteraction.startClientX,
+    );
+    if (!nextRange || this.areRangesEqual(touchInteraction.lastRange, nextRange)) {
+      return;
+    }
+
+    touchInteraction.lastRange = nextRange;
+    this.lastKnownVisibleZoomRange = this.normalizeZoomRange(nextRange);
+    this.applyingSharedZoomRange = true;
+    try {
+      chart.dispatchAction({
+        type: 'dataZoom',
+        startValue: nextRange.start,
+        endValue: nextRange.end,
+        $from: TOUCH_GESTURE_DATAZOOM_SOURCE,
+      });
+    } finally {
+      this.applyingSharedZoomRange = false;
+    }
+    this.zoomRangeChange.emit(this.lastKnownVisibleZoomRange);
   }
 
   private resolvePanelTouchValue(clientX: number): number {
