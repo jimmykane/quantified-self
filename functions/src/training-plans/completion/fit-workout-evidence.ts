@@ -28,6 +28,8 @@ import { DELIVERY_LEDGER, type DeliveryLedgerV1 } from '../delivery/contracts';
 import { projectDelivery } from '../delivery/store';
 
 const MAX_PERSISTED_REFERENCES = 100;
+const WORKOUT_ID = /^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/;
+const GARMIN_ID = /^[1-9]\d{0,18}$/;
 
 export type QSFITWorkoutReferenceDiagnostic = FITWorkoutReferenceDiagnostic | 'qs_storage_limit';
 
@@ -92,7 +94,9 @@ export function fitWorkoutEvidencePayload(
 
 function garminWorkoutReference(evidence: FITWorkoutReferenceEvidence, activities: readonly FITActivityReference[]): string | null {
   if (evidence.status !== 'ok' || evidence.trainingFiles.length !== 1 || evidence.workouts.length !== 1
-    || activities.length !== 1 || !activities[0].id || activities[0].startTimeMs === null) return null;
+    || activities.length !== 1 || !activities[0].id || activities[0].id.length > 1500
+    || activities[0].id.includes('/') || !Number.isSafeInteger(activities[0].startTimeMs)
+    || activities[0].startTimeMs! < 0) return null;
   const reference = evidence.trainingFiles[0];
   // FIT defines this as a workout-file identity, not a Training API identity.
   // Only the observed numeric overlap is considered, and every account,
@@ -104,9 +108,11 @@ function garminWorkoutReference(evidence: FITWorkoutReferenceEvidence, activitie
 function garminLedger(snapshot: QueryDocumentSnapshot, destinationKey: string, workoutId: string): DeliveryLedgerV1 | null {
   const ledger = snapshot.data() as DeliveryLedgerV1;
   if (ledger.schemaVersion !== 1 || ledger.id !== snapshot.id || ledger.provider !== 'garmin'
-    || ledger.destinationKey !== destinationKey || !ledger.actual
-    || ledger.actual.ids.workout !== workoutId || !ledger.actual.ids.schedule
-    || !ledger.actual.ids.owner || !Number.isSafeInteger(ledger.lastAcceptedAtMs)
+    || ledger.destinationKey !== destinationKey || typeof ledger.workoutId !== 'string'
+    || !WORKOUT_ID.test(ledger.workoutId) || !ledger.actual?.ids
+    || ledger.actual.ids.workout !== workoutId || typeof ledger.actual.ids.schedule !== 'string'
+    || !GARMIN_ID.test(ledger.actual.ids.schedule) || typeof ledger.actual.ids.owner !== 'string'
+    || !GARMIN_ID.test(ledger.actual.ids.owner) || !Number.isSafeInteger(ledger.lastAcceptedAtMs)
     || ledger.lastAcceptedAtMs! < 0 || typeof ledger.acceptedDigest !== 'string' || !ledger.acceptedDigest) return null;
   if (ledger.attempt || ledger.lease) throw new Error('Training completion link deferred while delivery is changing.');
   return ledger;
@@ -125,6 +131,7 @@ export async function retainGarminFITWorkoutReferences(
   eventId: string,
   account: string,
   tokenGeneration: string,
+  source: { activityFileID: string; activityFileType: 'FIT' | 'GPX' | 'TCX' },
   input: ArrayBuffer | Uint8Array,
   activities: readonly FITActivityReference[] = [],
   nowMs = Date.now(),
@@ -139,25 +146,27 @@ export async function retainGarminFITWorkoutReferences(
     const [eventDoc, eventMeta] = await Promise.all([
       tx.get(eventRef), tx.get(eventRef.collection('metaData').doc(ServiceNames.GarminAPI)),
     ]);
-    if (!eventDoc.exists || authority.connection.state !== 'connected' || authority.account !== account
+    if (!eventDoc.exists || !source.activityFileID || authority.connection.state !== 'connected' || authority.account !== account
       || authority.token?.data().tokenCredentialGeneration !== tokenGeneration
       || eventMeta.data()?.serviceName !== ServiceNames.GarminAPI || eventMeta.data()?.serviceUserID !== account
-      || eventMeta.data()?.serviceActivityFileType !== 'FIT') return false;
+      || eventMeta.data()?.serviceActivityFileID !== source.activityFileID
+      || eventMeta.data()?.serviceActivityFileType !== source.activityFileType) return false;
 
     const workoutId = garminWorkoutReference(evidence, activities);
     const matching = workoutId ? await tx.get(user.collection(DELIVERY_LEDGER)
       .where('actual.ids.workout', '==', workoutId).limit(2)) : null;
     const ledger = matching?.size === 1 ? garminLedger(matching.docs[0], authority.connection.destinationKey, workoutId!) : null;
     const activity = activities.length === 1 ? activities[0] : null;
-    const related = ledger ? await Promise.all([
+    const related = ledger && activity ? await Promise.all([
       tx.get(user.collection('scheduledWorkouts').doc(ledger.workoutId)),
       tx.get(user.collection(TRAINING_WORKOUT_COMPLETIONS_COLLECTION_ID).doc(ledger.workoutId)),
       tx.get(user.collection(TRAINING_ACTIVITY_COMPLETION_LINKS_COLLECTION_ID).doc(reverseLinkId(uid, eventId))),
+      tx.get(user.collection('activities').doc(activity.id)),
     ]) : null;
     let correlationState: 'candidate_only' | 'linked' | 'already_linked' | 'conflict' = 'candidate_only';
     if (matching && matching.size > 1) correlationState = 'conflict';
     if (ledger && related && activity && activity.startTimeMs !== null) {
-      const [workoutDoc, completionDoc, reverseDoc] = related;
+      const [workoutDoc, completionDoc, reverseDoc, activityDoc] = related;
       let workout: ReturnType<typeof parseScheduledWorkoutV1> | null = null;
       let completion: TrainingWorkoutCompletionV1 | null = null;
       try {
@@ -180,29 +189,41 @@ export async function retainGarminFITWorkoutReferences(
         let activityLocalDate: string | null = null;
         try { activityLocalDate = trainingDeliveryLocalDate(activity.startTimeMs, ledger.timeZone); }
         catch { /* Invalid retained zone is conflicting evidence, not a retryable import failure. */ }
+        const storedActivity = activityDoc.data();
         if (workout && workout.id === ledger.workoutId && workout.planId === ledger.planId
           && workout.lifecycle !== 'deleted' && workout.localDate === ledger.actual!.localDate
+          && activityDoc.exists && storedActivity?.userID === uid && storedActivity.eventID === eventId
+          && storedActivity.startDate === activity.startTimeMs
           && activityLocalDate === workout.localDate
           && (!completionDoc.exists || sameCompletion) && (!reverseDoc.exists || sameReverse)
-          && (!ledger.actual!.completed || ledger.completionLinkId === reverseId)) {
-          const linked: TrainingWorkoutCompletionV1 = completion ?? {
+          && (!ledger.actual!.completed || !ledger.completionLinkId || ledger.completionLinkId === reverseId)) {
+          const linked: TrainingWorkoutCompletionV1 = completion ? {
+            ...completion, activityStartAtMs: activity.startTimeMs,
+            updatedAtMs: completion.activityStartAtMs === activity.startTimeMs
+              ? completion.updatedAtMs : Math.max(completion.updatedAtMs, nowMs),
+          } : {
             schemaVersion: 1, workoutId: workout.id, planId: workout.planId, provider: 'garmin',
             matchMethod: 'provider_marker', eventId, activityId: activity.id, sourceSessionIndex: null,
             activityStartAtMs: activity.startTimeMs, scheduledLocalDate: workout.localDate,
             workoutRevisionAtLink: workout.revision, timing: 'on_date', linkedAtMs: nowMs, updatedAtMs: nowMs,
           };
-          tx.set(user.collection(TRAINING_WORKOUT_COMPLETIONS_COLLECTION_ID).doc(workout.id), linked);
-          tx.set(user.collection(TRAINING_ACTIVITY_COMPLETION_LINKS_COLLECTION_ID).doc(reverseId), {
-            schemaVersion: 1, deliveryId: ledger.id, workoutId: workout.id, eventId,
-            activityId: activity.id, sourceSessionIndex: null, provider: 'garmin', linkedAtMs: linked.linkedAtMs,
-          });
-          const completedLedger: DeliveryLedgerV1 = {
-            ...ledger, completionLinkId: reverseId, desired: 'preserve', status: 'completed',
-            actual: { ...ledger.actual!, completed: true }, updatedAtMs: nowMs,
-          };
-          tx.set(user.collection(DELIVERY_LEDGER).doc(ledger.id), completedLedger);
-          tx.set(user.collection('trainingDeliveryStatuses').doc(ledger.id), projectDelivery(completedLedger));
-          correlationState = completion ? 'already_linked' : 'linked';
+          try { parseTrainingWorkoutCompletionV1(linked); }
+          catch { correlationState = 'conflict'; }
+          if (correlationState !== 'conflict') {
+            tx.set(user.collection(TRAINING_WORKOUT_COMPLETIONS_COLLECTION_ID).doc(workout.id), linked);
+            tx.set(user.collection(TRAINING_ACTIVITY_COMPLETION_LINKS_COLLECTION_ID).doc(reverseId), {
+              schemaVersion: 1, deliveryId: ledger.id, workoutId: workout.id, eventId,
+              activityId: activity.id, sourceSessionIndex: null, provider: 'garmin', linkedAtMs: linked.linkedAtMs,
+            });
+            const completedLedger: DeliveryLedgerV1 = {
+              ...ledger, ...(!ledger.actual!.completed || ledger.completionLinkId ? { completionLinkId: reverseId } : {}),
+              desired: 'preserve', status: 'completed',
+              actual: { ...ledger.actual!, completed: true }, updatedAtMs: nowMs,
+            };
+            tx.set(user.collection(DELIVERY_LEDGER).doc(ledger.id), completedLedger);
+            tx.set(user.collection('trainingDeliveryStatuses').doc(ledger.id), projectDelivery(completedLedger));
+            correlationState = completion ? 'already_linked' : 'linked';
+          }
         } else correlationState = 'conflict';
       }
     }

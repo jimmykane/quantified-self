@@ -411,6 +411,7 @@ export async function processGarminAPIActivityQueueItem(queueItem: GarminAPIActi
         eventID,
         queueItem.userID,
         String(tokenQuerySnapshots.docs[0].data().tokenCredentialGeneration ?? ''),
+        { activityFileID: queueItem.activityFileID, activityFileType: queueItem.activityFileType },
         Buffer.from(result),
         fitActivityReferencesFromEvent(event),
       );

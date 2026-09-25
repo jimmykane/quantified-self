@@ -1271,8 +1271,10 @@ For Garmin, standard FIT `training_file` (message 72) and embedded workout (mess
 account-bound evidence. One owner-account recording showed the workout-file serial equal to the retained Training API
 workout ID, but Garmin's FIT specification defines it as file identity, not a documented API join key. QS therefore
 links only when a single workout-file reference and embedded workout, one recorded activity, one retained Garmin delivery
-with that exact numeric identity, the current connected account, an accepted schedule, and the activity's saved-zone
-calendar date all agree. A moved current schedule, repeated remote identity, missing activity, delivery lease, different
+with that exact numeric identity, the current connected account, the imported file ID and saved activity document,
+an accepted schedule, and the activity's saved-zone calendar date all agree. The source metadata keeps its original
+file-type label when a legacy GPX download actually parses as FIT. A moved current schedule, repeated remote identity,
+missing activity, delivery lease, different
 account, or conflicting existing completion cannot claim the link. The transaction writes the existing owner-readable
 completion and private reverse link, protects that remote copy from deletion, and is idempotent on reimport. It does not
 compare titles, durations or target adherence, infer late/early occurrence, or rewrite completed activity metrics.

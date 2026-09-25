@@ -14,6 +14,7 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)(
     const db = new Firestore({ projectId: 'demo-training-garmin-completion' });
     const uids: string[] = [];
     const account = 'garmin-account';
+    const activityFileID = 'source-file';
     const remoteWorkoutId = String(0xfffffffe);
     const activityStartAtMs = Date.parse('2026-09-17T07:00:00Z');
     let uid: string;
@@ -22,7 +23,8 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)(
     const event = () => user().collection('events').doc('event');
     const evidence = () => event().collection('trainingCompletionEvidence').doc('fit');
     const retain = (eventId = 'event', activities = [{ id: 'activity', startTimeMs: activityStartAtMs }]) =>
-      retainGarminFITWorkoutReferences(db, uid, eventId, account, 'credential', standardWorkoutReferenceFitFixture(),
+      retainGarminFITWorkoutReferences(db, uid, eventId, account, 'credential',
+        { activityFileID, activityFileType: 'FIT' }, standardWorkoutReferenceFitFixture(),
         activities, Date.parse('2026-09-17T08:00:00Z'));
 
     async function seedLedger(id = 'delivery', workoutId = 'workout'): Promise<void> {
@@ -51,7 +53,8 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)(
         userID: account, tokenCredentialGeneration: 'credential', permissions: ['WORKOUT_IMPORT'] });
       await event().set({ test: true });
       await event().collection('metaData').doc(ServiceNames.GarminAPI).set({ serviceName: ServiceNames.GarminAPI,
-        serviceUserID: account, serviceActivityFileType: 'FIT' });
+        serviceUserID: account, serviceActivityFileID: activityFileID, serviceActivityFileType: 'FIT' });
+      await user().collection('activities').doc('activity').set({ userID: uid, eventID: 'event', startDate: activityStartAtMs });
       await user().collection('scheduledWorkouts').doc('workout').set({ schemaVersion: 1, id: 'workout', planId: null,
         title: 'Intervals', localDate: '2026-09-17', revision: 2, lifecycle: 'planned', createdAtMs: 1, updatedAtMs: 2,
         structure: { version: 1, sport: ActivityTypes.Cycling,
@@ -84,6 +87,52 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)(
       expect((await user().collection('trainingActivityCompletionLinks').get()).size).toBe(1);
     });
 
+    it('checks the persisted Garmin file identity and activity before linking', async () => {
+      const metadata = event().collection('metaData').doc(ServiceNames.GarminAPI);
+      const storedActivity = user().collection('activities').doc('activity');
+      await metadata.update({ serviceActivityFileID: 'a-different-file' });
+      expect(await retain()).toBe(false);
+      expect((await evidence().get()).exists).toBe(false);
+      await metadata.update({ serviceActivityFileID: activityFileID });
+      await storedActivity.update({ eventID: 'another-event' });
+      expect(await retain()).toBe(true);
+      expect((await evidence().get()).data()?.correlationState).toBe('conflict');
+      await storedActivity.update({ eventID: 'event', startDate: activityStartAtMs + 60_000 });
+      expect(await retain()).toBe(true);
+      expect((await evidence().get()).data()?.correlationState).toBe('conflict');
+      expect((await user().collection('trainingWorkoutCompletions').get()).empty).toBe(true);
+    });
+
+    it('refreshes a reimported activity time without creating another link', async () => {
+      expect(await retain()).toBe(true);
+      const previous = (await user().collection('trainingWorkoutCompletions').doc('workout').get()).data()!;
+      const movedStart = activityStartAtMs + 60_000;
+      await user().collection('activities').doc('activity').update({ startDate: movedStart });
+      expect(await retain('event', [{ id: 'activity', startTimeMs: movedStart }])).toBe(true);
+      expect((await user().collection('trainingWorkoutCompletions').doc('workout').get()).data()).toMatchObject({
+        activityStartAtMs: movedStart, linkedAtMs: previous.linkedAtMs,
+      });
+      expect((await evidence().get()).data()?.correlationState).toBe('already_linked');
+      expect((await user().collection('trainingActivityCompletionLinks').get()).size).toBe(1);
+    });
+
+    it('does not transfer provider-owned completion protection to a new activity link', async () => {
+      await user().collection(DELIVERY_LEDGER).doc('delivery').update({ 'actual.completed': true, status: 'completed' });
+      expect(await retain()).toBe(true);
+      expect((await user().collection('trainingWorkoutCompletions').doc('workout').get()).exists).toBe(true);
+      const ledger = (await user().collection(DELIVERY_LEDGER).doc('delivery').get()).data()!;
+      expect(ledger.actual.completed).toBe(true);
+      expect(ledger.completionLinkId).toBeFalsy();
+    });
+
+    it('accepts a FIT fallback under its original GPX source label', async () => {
+      await event().collection('metaData').doc(ServiceNames.GarminAPI).update({ serviceActivityFileType: 'GPX' });
+      expect(await retainGarminFITWorkoutReferences(db, uid, 'event', account, 'credential',
+        { activityFileID, activityFileType: 'GPX' }, standardWorkoutReferenceFitFixture(),
+        [{ id: 'activity', startTimeMs: activityStartAtMs }], Date.parse('2026-09-17T08:00:00Z'))).toBe(true);
+      expect((await user().collection('trainingWorkoutCompletions').doc('workout').get()).exists).toBe(true);
+    });
+
     it('retains candidate evidence but does not guess without one source activity', async () => {
       expect(await retain('event', [])).toBe(true);
       expect((await evidence().get()).data()).toMatchObject({ correlationState: 'candidate_only' });
@@ -113,6 +162,15 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)(
       await user().collection('scheduledWorkouts').doc('workout').update({ localDate: '2026-09-18', revision: 3 });
       expect(await retain()).toBe(true);
       expect((await evidence().get()).data()).toMatchObject({ correlationState: 'conflict' });
+      expect((await user().collection('trainingWorkoutCompletions').get()).empty).toBe(true);
+    });
+
+    it('leaves malformed retained delivery identities as private candidates without failing import', async () => {
+      await user().collection(DELIVERY_LEDGER).doc('delivery').update({ workoutId: 'invalid/path' });
+      expect(await retain()).toBe(true);
+      expect((await evidence().get()).data()?.correlationState).toBe('candidate_only');
+      await user().collection(DELIVERY_LEDGER).doc('delivery').update({ workoutId: 'workout', 'actual.ids.schedule': 42 });
+      expect(await retain()).toBe(true);
       expect((await user().collection('trainingWorkoutCompletions').get()).empty).toBe(true);
     });
 
