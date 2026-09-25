@@ -24,6 +24,7 @@ export async function createMissingEventTagCatalogEntriesInTransaction(
   dryRun = false,
 ): Promise<{ created: number; existing: number }> {
   const tags = normalizeEventTagSuggestions([...values]);
+  if (!tags.length) return { created: 0, existing: 0 };
   const collection = db.collection('users').doc(uid).collection(EVENT_TAG_CATALOG_COLLECTION);
   const refs = tags.map(tag => collection.doc(eventTagCatalogKey(tag)));
   const snapshots = await Promise.all(refs.map(ref => transaction.get(ref)));

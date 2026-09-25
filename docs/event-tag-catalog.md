@@ -41,8 +41,9 @@ separate approval. Roll out the lower-cost path in this order:
    different events. Confirm saved tags appear outside the selected date range.
 3. Run `npm --prefix functions run backfill-event-tag-catalog -- --limit-users 100`
    as a full dry run, following `nextStartAfter` until `complete: true` and
-   requiring `missingEntries: 0` across every page. Allow older app clients to
-   finish moving to the new tag editor.
+   requiring `missingEntries: 0` across every page. Keep the trigger until old
+   app versions that edit tags without creating catalog entries are no longer
+   supported or can no longer write event tags.
 4. With separate approval naming `projectEventTagCatalog` in the production
    project, remove that Function in a later deployment. Do not run a broad
    Functions deployment that implicitly deletes it.

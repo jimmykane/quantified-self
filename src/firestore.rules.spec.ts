@@ -79,6 +79,10 @@ describe('Firestore Security Rules', () => {
             await assertFails(tagRef.set({ name: 'Race' }));
             await testEnv.withSecurityRulesDisabled(async context => {
                 await context.firestore().doc('users/owner').set({ created: true });
+                await context.firestore().doc('userDeletionTombstones/owner').set({ deleting: true });
+            });
+            await assertFails(tagRef.set({ name: 'Race' }));
+            await testEnv.withSecurityRulesDisabled(async context => {
                 await context.firestore().doc('userDeletionTombstones/owner').set({ expireAt: new Date(Date.now() + 60_000) });
             });
             await assertFails(tagRef.set({ name: 'Race' }));
@@ -86,6 +90,25 @@ describe('Firestore Security Rules', () => {
                 await context.firestore().doc('userDeletionTombstones/owner').set({ expireAt: new Date(0) });
             });
             await assertSucceeds(tagRef.set({ name: 'Race' }));
+        });
+
+        it('rolls back the event edit when account deletion blocks its catalog entry', async () => {
+            await testEnv.withSecurityRulesDisabled(async context => {
+                const db = context.firestore();
+                await db.doc('users/owner').set({ created: true });
+                await db.doc('users/owner/events/event-1').set({ privacy: 'private', tags: [] });
+                await db.doc('userDeletionTombstones/owner').set({ deleting: true });
+            });
+            const owner = testEnv.authenticatedContext('owner').firestore();
+            const eventRef = owner.doc('users/owner/events/event-1');
+            const tagRef = owner.doc(`users/owner/eventTagCatalog/${key('Trail')}`);
+            await assertFails(owner.runTransaction(async transaction => {
+                await transaction.get(eventRef);
+                const catalogEntry = await transaction.get(tagRef);
+                if (!catalogEntry.exists) transaction.set(tagRef, { name: 'Trail' });
+                transaction.update(eventRef, { tags: ['Trail'] });
+            }));
+            expect((await eventRef.get()).data()?.tags).toEqual([]);
         });
 
         it('commits an event tag edit and its catalog entry together', async () => {
