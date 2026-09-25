@@ -54,12 +54,6 @@ function releaseAssistantQuotaReservation(
   return quotaSubject.releaseAssistantQuotaReservation(...args);
 }
 
-function refundAssistantQuotaForPreparation(
-  ...args: Parameters<AssistantQuotaApi['refundAssistantQuotaForPreparation']>
-): ReturnType<AssistantQuotaApi['refundAssistantQuotaForPreparation']> {
-  return quotaSubject.refundAssistantQuotaForPreparation(...args);
-}
-
 const FIXED_NOW_ISO = '2026-03-19T12:00:00.000Z';
 const PERIOD_START = '2026-03-01T00:00:00.000Z';
 const PERIOD_END = '2026-04-01T00:00:00.000Z';
@@ -227,14 +221,21 @@ describe('Assistant quota', () => {
     expect(quotaStatus.remainingCount).toBe(99);
   });
 
-  it('refunds a pending preparation once while preserving other finalized requests', async () => {
-    const first = await reserveAssistantQuotaForRequest('user-1');
-    await finalizeAssistantQuotaReservation(first);
-    const second = await reserveAssistantQuotaForRequest('user-1');
-    await finalizeAssistantQuotaReservation(second);
-    expect((await refundAssistantQuotaForPreparation(first)).successfulRequestCount).toBe(1);
-    expect((await refundAssistantQuotaForPreparation(first)).successfulRequestCount).toBe(1);
-    expect((await getAssistantQuotaStatus('user-1')).successfulRequestCount).toBe(1);
+  it('holds an allowance slot without charging it and ignores an expired hold', async () => {
+    const reservation = await reserveAssistantQuotaForRequest('user-1');
+    expect(await getAssistantQuotaStatus('user-1')).toMatchObject({
+      successfulRequestCount: 0,
+      activeRequestCount: 1,
+      remainingCount: 99,
+    });
+    fakeDb.seedDocument(`users/user-1/assistantUsage/${PERIOD_DOC_ID}`, buildUsageDoc({
+      reservationMap: { [reservation.reservationID]: Date.parse(FIXED_NOW_ISO) - 1 },
+    }));
+    expect(await getAssistantQuotaStatus('user-1')).toMatchObject({
+      successfulRequestCount: 0,
+      activeRequestCount: 0,
+      remainingCount: 100,
+    });
   });
 
   it('does not consume quota twice when a reservation is finalized again', async () => {

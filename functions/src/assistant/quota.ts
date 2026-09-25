@@ -39,7 +39,6 @@ interface AssistantQuotaUsageDoc {
   periodKind: AssistantQuotaPeriodKind;
   successfulRequestCount: number;
   reservationMap: Record<string, number>;
-  billableReservationMap: Record<string, number>;
   lastSuccessfulRequestAt?: string;
 }
 
@@ -90,9 +89,6 @@ export interface AssistantQuotaApi {
     reservation: AssistantQuotaReservation,
   ) => Promise<AssistantQuotaStatus>;
   releaseAssistantQuotaReservation: (
-    reservation: AssistantQuotaReservation,
-  ) => Promise<AssistantQuotaStatus>;
-  refundAssistantQuotaForPreparation: (
     reservation: AssistantQuotaReservation,
   ) => Promise<AssistantQuotaStatus>;
 }
@@ -323,11 +319,6 @@ function normalizeUsageDoc(
       : 'subscription',
     successfulRequestCount,
     reservationMap: normalizeReservationMap(data?.reservationMap, nowMs),
-    billableReservationMap: data?.billableReservationMap && typeof data.billableReservationMap === 'object'
-      && !Array.isArray(data.billableReservationMap)
-      ? Object.fromEntries(Object.entries(data.billableReservationMap as Record<string, unknown>)
-        .filter(([key, value]) => key.length <= 80 && typeof value === 'number' && Number.isFinite(value))) as Record<string, number>
-      : {},
     lastSuccessfulRequestAt: typeof data?.lastSuccessfulRequestAt === 'string'
       ? data.lastSuccessfulRequestAt
       : undefined,
@@ -384,8 +375,8 @@ function setUsageDocFields(
   docRef: FirebaseFirestore.DocumentReference,
   payload: FirebaseFirestore.UpdateData<FirebaseFirestore.DocumentData>,
 ): void {
-  // Replace the dynamic maps as whole fields. Nested merge semantics can retain
-  // removed reservation IDs and incorrectly hold an allowance after a refund.
+  // Replace the dynamic reservation map as one field. Nested merge semantics
+  // can retain released IDs and hold an allowance until the lease expires.
   transaction.set(docRef, payload, { mergeFields: Object.keys(payload) });
 }
 
@@ -629,13 +620,7 @@ export async function finalizeAssistantQuotaReservation(
 
       setUsageDocFields(
         transaction, docRef,
-        {
-          ...buildUsageDocPayload(reservationStatus, successfulRequestCount, reservationMap, dependencies, nowIso),
-          billableReservationMap: {
-            ...usageDoc.billableReservationMap,
-            [reservation.reservationID]: dependencies.now().getTime(),
-          },
-        },
+        buildUsageDocPayload(reservationStatus, successfulRequestCount, reservationMap, dependencies, nowIso),
       );
 
       return buildQuotaStatus(reservationStatus, successfulRequestCount, Object.keys(reservationMap).length);
@@ -647,37 +632,6 @@ export async function finalizeAssistantQuotaReservation(
   });
 
   return result;
-}
-
-export async function refundAssistantQuotaForPreparation(
-  reservation: AssistantQuotaReservation,
-  dependencies: AssistantQuotaDependencies = defaultAssistantQuotaDependencies,
-): Promise<AssistantQuotaStatus> {
-  const reservationStatus: ResolvedAssistantQuotaWindow['status'] = {
-    role: reservation.role,
-    limit: reservation.limit,
-    periodStart: reservation.periodStart,
-    periodEnd: reservation.periodEnd,
-    periodKind: reservation.periodKind,
-    resetMode: reservation.resetMode,
-    isEligible: reservation.isEligible,
-  };
-  return withQuotaDocumentTransaction(reservation.userID, reservation.periodDocId, dependencies,
-    async (transaction, docRef, usageDoc) => {
-      const billableReservationMap = { ...usageDoc.billableReservationMap };
-      if (!Object.prototype.hasOwnProperty.call(billableReservationMap, reservation.reservationID)) {
-        return buildQuotaStatus(reservationStatus, usageDoc.successfulRequestCount,
-          Object.keys(usageDoc.reservationMap).length);
-      }
-      delete billableReservationMap[reservation.reservationID];
-      const successfulRequestCount = Math.max(0, usageDoc.successfulRequestCount - 1);
-      transaction.set(docRef, { billableReservationMap, successfulRequestCount,
-        updatedAt: dependencies.now().toISOString() }, {
-        mergeFields: ['billableReservationMap', 'successfulRequestCount', 'updatedAt'],
-      });
-      return buildQuotaStatus(reservationStatus, successfulRequestCount,
-        Object.keys(usageDoc.reservationMap).length);
-    });
 }
 
 export async function releaseAssistantQuotaReservation(
@@ -765,9 +719,6 @@ export function createAssistantQuota(
     ),
     releaseAssistantQuotaReservation: (reservation) => (
       releaseAssistantQuotaReservation(reservation, resolvedDependencies)
-    ),
-    refundAssistantQuotaForPreparation: (reservation) => (
-      refundAssistantQuotaForPreparation(reservation, resolvedDependencies)
     ),
   };
 }

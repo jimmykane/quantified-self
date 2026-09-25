@@ -26,7 +26,6 @@ import {
   finalizeAssistantQuotaReservation,
   getAssistantQuotaStatus as getAssistantQuotaStatusForUser,
   releaseAssistantQuotaReservation,
-  refundAssistantQuotaForPreparation,
   reserveAssistantQuotaForRequest,
   type AssistantQuotaReservation,
   type AssistantUserRoleContext,
@@ -77,7 +76,6 @@ export interface AssistantCallableDependencies {
   reserveQuota: typeof reserveAssistantQuotaForRequest;
   finalizeQuota: typeof finalizeAssistantQuotaReservation;
   releaseQuota: typeof releaseAssistantQuotaReservation;
-  refundQuotaForPreparation: typeof refundAssistantQuotaForPreparation;
   conversationStore: AssistantConversationStore;
   answer: (input: {
     uid: string;
@@ -126,7 +124,6 @@ const defaultDependencies: AssistantCallableDependencies = {
   reserveQuota: reserveAssistantQuotaForRequest,
   finalizeQuota: finalizeAssistantQuotaReservation,
   releaseQuota: releaseAssistantQuotaReservation,
-  refundQuotaForPreparation: refundAssistantQuotaForPreparation,
   conversationStore: assistantConversationStore,
   answer: input => assistantRuntime.answer(input),
   createId: () => randomUUID(),
@@ -468,8 +465,14 @@ export async function runAssistantChat(
   let reservation: AssistantQuotaReservation | null = null;
   let begunTurn: BegunAssistantTurn | null = null;
   let finalizedQuota: AssistantQuotaStatusResponse | null = null;
-  let finalizedReservation: AssistantQuotaReservation | null = null;
+  let billableAttemptStarted = false;
   let finalizeQuotaPromise: Promise<AssistantQuotaStatusResponse> | null = null;
+  const markBillableAttempt = async (): Promise<void> => {
+    if (!reservation && !finalizedQuota) {
+      throw new Error('Assistant quota reservation was unavailable at the billable-work boundary.');
+    }
+    billableAttemptStarted = true;
+  };
   const finalizeQuotaForBillableAttempt = async (): Promise<void> => {
     if (finalizedQuota) {
       return;
@@ -481,7 +484,6 @@ export async function runAssistantChat(
       const activeReservation = reservation;
       finalizeQuotaPromise = dependencies.finalizeQuota(activeReservation).then(quota => {
         finalizedQuota = quota;
-        finalizedReservation = activeReservation;
         reservation = null;
         return quota;
       });
@@ -668,11 +670,11 @@ export async function runAssistantChat(
         }
       } } : {}),
       history: begunTurn.history,
-      onBillableAttempt: finalizeQuotaForBillableAttempt,
+      onBillableAttempt: markBillableAttempt,
     }, () => finalizeQuotaPromise === null || finalizedQuota !== null);
-    // Production runtime calls this immediately before Gemini or an MCP tool.
-    // Retain a defensive completion fallback for injected runtimes: a grounded
-    // answer must never be committed without consuming its reserved allowance.
+    // Finalize before committing the answer. The reservation holds capacity
+    // throughout grounded work, but a pending Training build can still be
+    // released without a compensating refund transaction.
     await finalizeQuotaForBillableAttempt();
     if (!finalizedQuota) {
       throw new Error('Assistant quota was not finalized for a completed answer.');
@@ -717,6 +719,17 @@ export async function runAssistantChat(
       pendingRequestId: null,
     };
   } catch (error) {
+    let failure = error;
+    if (!(error instanceof AssistantTrainingMetricsPreparingError)
+      && billableAttemptStarted
+      && reservation
+      && finalizeQuotaPromise === null) {
+      try {
+        await finalizeQuotaForBillableAttempt();
+      } catch (quotaError) {
+        failure = quotaError;
+      }
+    }
     if (begunTurn) {
       try {
         await dependencies.conversationStore.releaseTurn(uid, begunTurn);
@@ -736,21 +749,18 @@ export async function runAssistantChat(
       }
     }
     if (error instanceof AssistantTrainingMetricsPreparingError) {
-      if (finalizedReservation) {
-        await dependencies.refundQuotaForPreparation(finalizedReservation);
-      }
       throw new HttpsError('unavailable', 'Training metrics are still preparing. Try again shortly.', {
         reason: 'training_metrics_preparing',
         retryAfterSeconds: error.retryAfterSeconds,
       });
     }
-    const mappedError = mapAssistantError(error);
+    const mappedError = mapAssistantError(failure);
     if (mappedError.code === 'unavailable') {
       logger.error('[Assistant] Grounded response generation failed.', {
-        errorName: error instanceof Error ? error.name : 'unknown',
-        errorReason: getAssistantRuntimeErrorReason(error) ?? 'unknown',
-        errorStatus: getGenkitErrorStatus(error) ?? 'unknown',
-        toolName: getAssistantRuntimeErrorToolName(error) ?? 'unknown',
+        errorName: failure instanceof Error ? failure.name : 'unknown',
+        errorReason: getAssistantRuntimeErrorReason(failure) ?? 'unknown',
+        errorStatus: getGenkitErrorStatus(failure) ?? 'unknown',
+        toolName: getAssistantRuntimeErrorToolName(failure) ?? 'unknown',
       });
     }
     throw mappedError;

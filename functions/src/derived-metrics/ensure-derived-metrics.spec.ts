@@ -205,6 +205,12 @@ describe('decideDerivedMetricsFreshness', () => {
         )).toBe(false);
     });
 
+    it('rejects a malformed unprojected payload before reporting ready', () => {
+        expect(isDerivedMetricSnapshotReadableByMcp(
+            DERIVED_METRIC_KINDS.Form, { score: 88 },
+        )).toBe(false);
+    });
+
     it('queues hard- and calendar-stale snapshots together in request order', () => {
         const decision = decideDerivedMetricsFreshness({
             ...baseInput,
