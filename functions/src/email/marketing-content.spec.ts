@@ -37,6 +37,9 @@ describe('marketing content', () => {
     expect(result.bodyText).toContain('1. First step\n2. Second step');
     expect(result.bodyText).toContain('feature (https://quantified-self.io/features)');
     expect(result.ctaHtml).toContain('https://quantified-self.io/');
+    expect(result.ctaHtml).toContain('font-size:14px;line-height:20px;');
+    expect(result.ctaHtml).toContain('padding:9px 14px;');
+    expect(result.ctaHtml).toContain('max-width:100%;box-sizing:border-box;overflow-wrap:anywhere;word-break:break-word;');
   });
 
   it.each([
