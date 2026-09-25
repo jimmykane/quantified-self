@@ -57,7 +57,7 @@ describe('ActivityCalendarTileComponent', () => {
         { provide: AppUserService, useValue: { user: viewer, user$: viewer$ } },
         { provide: ActivityCalendarService, useValue: { watchEvents } },
         { provide: TrainingPlansService, useValue: { watchSchedule, watchWorkoutCompletions } },
-        { provide: CalendarDayHealthService, useValue: { load: vi.fn().mockResolvedValue({ sessions: [], hrvSeries: [], derived: null, sleepError: false, hrvError: false, readinessError: false, recoveryError: false }) } },
+        { provide: CalendarDayHealthService, useValue: { watch: vi.fn(() => of({ sessions: [], hrvSeries: [], derived: null, sleepError: false, hrvError: false, readinessError: false, recoveryError: false })) } },
         { provide: TrainingWorkoutDuplicateService, useValue: { duplicate: vi.fn() } },
         { provide: CalendarDayDetailsNavigationService, useValue: dayDetailsNavigation },
       ],

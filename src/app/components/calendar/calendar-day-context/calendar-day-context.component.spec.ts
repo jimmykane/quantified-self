@@ -1,6 +1,7 @@
 import { signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
+import { Subject } from 'rxjs';
 import { vi, expect, it, describe } from 'vitest';
 import { buildActivityCalendarViewModel } from '../../../helpers/activity-calendar.helper';
 import { AppUserService } from '../../../services/app.user.service';
@@ -20,12 +21,16 @@ const emptyEvidence = { sessions: [], hrvSeries: [], derived: null, sleepError: 
 describe('CalendarDayContextComponent', () => {
   it('keeps the calendar mounted, cancels an older day read, and fences private health on account change', async () => {
     const viewer = signal<{ uid: string } | null>({ uid: 'owner' });
-    const pending: Array<(value: typeof emptyEvidence) => void> = [];
-    const load = vi.fn((_uid, _date, _now, _signal) => new Promise<typeof emptyEvidence>(resolve => pending.push(resolve)));
+    const pending: Array<Subject<typeof emptyEvidence>> = [];
+    const watch = vi.fn((_uid, _date, _now, _signal) => {
+      const subject = new Subject<typeof emptyEvidence>();
+      pending.push(subject);
+      return subject.asObservable();
+    });
     await TestBed.configureTestingModule({ imports: [CalendarDayContextComponent], providers: [
       provideRouter([]),
       { provide: AppUserService, useValue: { user: viewer } },
-      { provide: CalendarDayHealthService, useValue: { load } },
+      { provide: CalendarDayHealthService, useValue: { watch } },
       { provide: TrainingWorkoutDuplicateService, useValue: { duplicate: vi.fn() } },
       { provide: AppEventColorService, useValue: { getActivityColor: vi.fn(), getColorForActivityTypeByActivityTypeGroup: vi.fn() } },
     ] }).compileComponents();
@@ -35,26 +40,29 @@ describe('CalendarDayContextComponent', () => {
     fixture.detectChanges();
     expect(fixture.nativeElement.querySelector('.calendar-day-context-header a')?.getAttribute('href'))
       .toBe('/calendar/day/2026-09-10');
-    expect(load).toHaveBeenCalledWith('owner', '2026-09-10', expect.any(Number), expect.any(AbortSignal));
-    const oldSignal = load.mock.calls[0][3] as AbortSignal;
+    expect(watch).toHaveBeenCalledWith('owner', '2026-09-10', expect.any(Number), expect.any(AbortSignal));
+    const oldSignal = watch.mock.calls[0][3] as AbortSignal;
     fixture.componentRef.setInput('data', data('2026-09-11'));
     fixture.detectChanges();
     expect(fixture.nativeElement.querySelector('.calendar-day-context-header a')?.getAttribute('href'))
       .toBe('/calendar/day/2026-09-11');
     expect(oldSignal.aborted).toBe(true);
-    pending[0](emptyEvidence); await Promise.resolve(); fixture.detectChanges();
+    expect(pending[0].observed).toBe(false);
+    pending[0].next(emptyEvidence); fixture.detectChanges();
     expect(fixture.componentInstance.healthState().status).toBe('loading');
-    pending[1](emptyEvidence); await Promise.resolve(); fixture.detectChanges();
+    pending[1].next(emptyEvidence); fixture.detectChanges();
     expect(fixture.nativeElement.textContent).toContain('No HRV reading for this day');
+    pending[1].next({ ...emptyEvidence, sleepError: true }); fixture.detectChanges();
+    expect(fixture.nativeElement.textContent).toContain('Sleep could not be loaded');
     fixture.componentRef.setInput('data', { ...data('2026-09-11'), userId: 'different-profile' });
     fixture.detectChanges();
     expect(fixture.nativeElement.querySelector('.calendar-day-context-health')).toBeNull();
-    expect(load).toHaveBeenCalledTimes(2);
+    expect(watch).toHaveBeenCalledTimes(2);
     viewer.set({ uid: 'another' }); fixture.detectChanges();
     expect(fixture.nativeElement.querySelector('.calendar-day-context-health')).toBeNull();
-    expect(load).toHaveBeenCalledTimes(2);
+    expect(watch).toHaveBeenCalledTimes(2);
     fixture.componentRef.setInput('privateHealthEnabled', false);
     viewer.set({ uid: 'owner' }); fixture.detectChanges();
-    expect(load).toHaveBeenCalledTimes(2);
+    expect(watch).toHaveBeenCalledTimes(2);
   });
 });

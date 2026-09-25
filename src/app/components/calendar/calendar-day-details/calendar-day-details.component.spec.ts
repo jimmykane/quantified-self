@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { signal } from '@angular/core';
+import { of } from 'rxjs';
 import { TestBed } from '@angular/core/testing';
 import { AppUserService } from '../../../services/app.user.service';
 import { CalendarDayHealthService } from '../../../services/calendar-day-health.service';
@@ -367,7 +368,7 @@ async function renderDayDetails(eventOrEvents: EventInterface | EventInterface[]
       { provide: AppUserService, useValue: { user: signal({ uid: data.userId }) } },
       { provide: MatBottomSheetRef, useValue: { dismiss: vi.fn() } },
       { provide: TrainingWorkoutDuplicateService, useValue: { duplicate: vi.fn() } },
-      { provide: CalendarDayHealthService, useValue: { load: vi.fn().mockResolvedValue({ sessions: [], hrvSeries: [], derived: null, sleepError: false, hrvError: false, derivedError: false }) } },
+      { provide: CalendarDayHealthService, useValue: { watch: vi.fn(() => of({ sessions: [], hrvSeries: [], derived: null, sleepError: false, hrvError: false, readinessError: false, recoveryError: false })) } },
       {
         provide: AppEventColorService,
         useValue: {

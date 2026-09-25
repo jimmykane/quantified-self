@@ -95,25 +95,31 @@ export class CalendarDayContextComponent {
     const controller = new AbortController();
     const nowMs = Date.now();
     this.healthState.set({ status: 'loading', summary: null });
-    void this.health.load(ownerUid, dateKey, nowMs, controller.signal).then(evidence => {
-      if (controller.signal.aborted || this.users.user()?.uid !== ownerUid) return;
-      this.healthState.set({
-        status: 'ready',
-        summary: buildCalendarDayHealthSummary(dateKey, evidence, {
-          nowMs, locale: data.locale, unitSettings: data.unitSettings,
-        }),
-      });
-    }).catch(() => {
-      if (controller.signal.aborted) return;
-      this.healthState.set({ status: 'ready', summary: {
-        readiness: { status: 'error', value: '—', detail: 'Could not load readiness' },
-        sleep: { status: 'error', value: '—', detail: 'Could not load sleep' },
-        hrv: { status: 'error', value: '—', detail: 'Could not load HRV' },
-        recovery: dateKey === localDateKey(nowMs)
-          ? { status: 'error', value: '—', detail: 'Could not load recovery' } : null,
-      } });
+    const subscription = this.health.watch(ownerUid, dateKey, nowMs, controller.signal).subscribe({
+      next: evidence => {
+        if (controller.signal.aborted || this.users.user()?.uid !== ownerUid) return;
+        this.healthState.set({
+          status: 'ready',
+          summary: buildCalendarDayHealthSummary(dateKey, evidence, {
+            nowMs, locale: data.locale, unitSettings: data.unitSettings,
+          }),
+        });
+      },
+      error: () => {
+        if (controller.signal.aborted || this.users.user()?.uid !== ownerUid) return;
+        this.healthState.set({ status: 'ready', summary: {
+          readiness: { status: 'error', value: '—', detail: 'Could not load readiness' },
+          sleep: { status: 'error', value: '—', detail: 'Could not load sleep' },
+          hrv: { status: 'error', value: '—', detail: 'Could not load HRV' },
+          recovery: dateKey === localDateKey(nowMs)
+            ? { status: 'error', value: '—', detail: 'Could not load recovery' } : null,
+        } });
+      },
     });
-    onCleanup(() => controller.abort());
+    onCleanup(() => {
+      controller.abort();
+      subscription.unsubscribe();
+    });
   });
 
   selectNote(note: TimelineNote): void {
