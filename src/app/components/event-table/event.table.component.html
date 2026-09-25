@@ -17,7 +17,7 @@
         <mat-form-field appearance="outline" class="tag-filter-field" subscriptSizing="dynamic">
           <mat-label>Tags</mat-label>
           <mat-select [value]="tagFilter"
-            [disabled]="tagFilterOptions.length === 0 && !tagCatalogIsLoading && !tagCatalogLoadFailed"
+            [disabled]="tagFilterOptions.length === 0 && !canLoadTagCatalog"
             (openedChange)="onTagFilterOpened($event)" (selectionChange)="updateTagFilter($event.value)">
             <mat-option value="">All tags</mat-option>
             @if (tagCatalogIsLoading && tagFilterOptions.length === 0) {

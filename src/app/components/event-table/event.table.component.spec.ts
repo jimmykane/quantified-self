@@ -858,6 +858,21 @@ describe('EventTableComponent', () => {
         expect(component.tagFilterOptions).toContain('Historical');
     });
 
+    it('rechecks historical tags when the filter is reopened', async () => {
+        mockEventTagCatalogService.listAllTags.mockResolvedValueOnce(['Old tag']);
+        await (component as any).loadAllHistoryTags(true);
+        expect(component.tagFilterOptions).toContain('Old tag');
+
+        mockEventTagCatalogService.listAllTags.mockResolvedValueOnce(['New tag']);
+        component.onTagFilterOpened(true);
+        await fixture.whenStable();
+
+        expect(component.tagFilterOptions).toContain('New tag');
+        expect(component.tagFilterOptions).not.toContain('Old tag');
+        expect(mockEventTagCatalogService.listAllTags).toHaveBeenLastCalledWith('testUser', false);
+        expect(mockHapticsService.selection).not.toHaveBeenCalled();
+    });
+
     it('gives one selection haptic for each changed tag choice', () => {
         (component.events[0] as any).tags = ['Race'];
         (component as any).processChanges('spec_tag_haptics');

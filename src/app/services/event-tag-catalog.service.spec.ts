@@ -25,6 +25,26 @@ describe('EventTagCatalogService', () => {
       { canExecute: expect.any(Function) });
   });
 
+  it('refreshes the cached catalog after its short lifetime', async () => {
+    const now = vi.spyOn(Date, 'now').mockReturnValue(1_000_000);
+    try {
+      const functionsService = { call: vi.fn().mockResolvedValue({ data: { tags: ['Race'] } }) };
+      TestBed.configureTestingModule({
+        providers: [EventTagCatalogService, { provide: AppFunctionsService, useValue: functionsService },
+          { provide: Auth, useValue: { currentUser: { uid: 'owner-1' } } }],
+      });
+      const service = TestBed.inject(EventTagCatalogService);
+
+      await service.listAllTags('owner-1');
+      now.mockReturnValue(1_000_000 + 2 * 60 * 1000 + 1);
+      await service.listAllTags('owner-1');
+
+      expect(functionsService.call).toHaveBeenCalledTimes(2);
+    } finally {
+      now.mockRestore();
+    }
+  });
+
   it('retries a failed request rather than caching the failure', async () => {
     let rejectRequest!: (error: Error) => void;
     const functionsService = { call: vi.fn()

@@ -136,6 +136,7 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
   private tagCatalogRequestVersion = 0;
   public tagCatalogIsLoading = false;
   public tagCatalogLoadFailed = false;
+  public canLoadTagCatalog = false;
   public tagFilter = '';
   public tagFilterOptions: string[] = [];
   public isBulkTagSaving = false;
@@ -958,8 +959,8 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
   }
 
   onTagFilterOpened(opened: boolean): void {
-    if (opened && this.tagCatalogLoadFailed) {
-      void this.loadAllHistoryTags();
+    if (opened) {
+      void this.loadAllHistoryTags(false, true);
     }
   }
 
@@ -1162,10 +1163,11 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
     return false
   }
 
-  private async loadAllHistoryTags(force = false): Promise<void> {
+  private async loadAllHistoryTags(force = false, checkCache = false): Promise<void> {
     // Event collection listing is owner-only. Public/other-user views retain their loaded-row tags.
     const userID = this.user?.uid;
     if (!this.showToolbar || !userID || (this.targetUser && this.targetUser.uid !== userID)) {
+      this.canLoadTagCatalog = false;
       this.tagCatalogRequestVersion += 1;
       this.tagCatalogUserID = null;
       this.allHistoryTags = null;
@@ -1174,8 +1176,10 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
       this.updateTagFilterOptions();
       return;
     }
+    this.canLoadTagCatalog = true;
     const sameUser = this.tagCatalogUserID === userID;
-    if (!force && sameUser && (this.tagCatalogIsLoading || (this.allHistoryTags !== null && !this.tagCatalogLoadFailed))) {
+    if (!force && sameUser && (this.tagCatalogIsLoading
+      || (!checkCache && this.allHistoryTags !== null && !this.tagCatalogLoadFailed))) {
       return;
     }
 
