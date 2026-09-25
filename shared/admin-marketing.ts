@@ -69,6 +69,7 @@ export interface MarketingCampaignView extends MarketingCampaignDraft {
   startedAt: string | null;
   lastTestMailId: string | null;
   lastTestState: string | null;
+  lastTestTo: string | null;
 }
 
 export interface MarketingCampaignListResponse {

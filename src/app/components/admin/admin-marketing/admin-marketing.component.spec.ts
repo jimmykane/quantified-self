@@ -53,4 +53,38 @@ describe('AdminMarketingComponent haptics', () => {
     expect(haptics.error).toHaveBeenCalledTimes(1);
     expect(haptics.success).not.toHaveBeenCalled();
   });
+  it('sends the saved campaign test to the entered recipient', async () => {
+    const { component, call } = setup();
+    component.selected = { id: 'campaign_1234567890', status: 'draft' } as MarketingCampaignView;
+    component.testTo = ' qa@example.org ';
+    await component.sendTest();
+    expect(call).toHaveBeenCalledWith('sendMarketingTest', { id: 'campaign_1234567890', to: 'qa@example.org' });
+    expect(component.notice).toContain('qa@example.org');
+  });
+  it('renders a live server preview from an unsaved message without sending mail', async () => {
+    const preview = { subject: 'Subject', html: '<p>Hello</p>', text: 'Hello' };
+    const call = vi.fn(async (name: string) => ({ data: name === 'previewMarketingCampaign' ? preview : listing }));
+    const { component, haptics } = setup(call);
+    component.draft.subject = 'Subject';
+    component.draft.content = { type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Hello' }] }] };
+    vi.useFakeTimers();
+    try {
+      component.schedulePreview();
+      await vi.advanceTimersByTimeAsync(900);
+      expect(component.preview).toEqual(preview);
+      expect(call).toHaveBeenCalledWith('previewMarketingCampaign', { draft: expect.objectContaining({ name: 'Preview', subject: 'Subject' }) });
+      expect(haptics.success).not.toHaveBeenCalled();
+    } finally { vi.useRealTimers(); component.ngOnDestroy(); }
+  });
+  it('shows the rendered email beside a saved draft and exposes its test address field', () => {
+    setup();
+    const fixture = TestBed.createComponent(AdminMarketingComponent);
+    fixture.componentInstance.selected = { id: 'campaign_1234567890', name: 'Product update', status: 'draft',
+      stats: { eligible: 0, pending: 0, queued: 0, accepted: 0, failed: 0, skipped: 0 } } as MarketingCampaignView;
+    fixture.componentInstance.preview = { subject: 'A note', html: '<p>Hello</p>', text: 'Hello' };
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('iframe')?.getAttribute('srcdoc')).toBe('<p>Hello</p>');
+    expect(fixture.nativeElement.querySelector('input[type="email"]')).not.toBeNull();
+    fixture.destroy();
+  });
 });

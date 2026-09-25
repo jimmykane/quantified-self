@@ -1,0 +1,14 @@
+.marketing-rich-editor { border: 1px solid var(--mat-sys-outline-variant); border-radius: 12px; overflow: hidden; background: var(--mat-sys-surface); }
+.format-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 2px; padding: 6px 10px; border-bottom: 1px solid var(--mat-sys-outline-variant); background: var(--mat-sys-surface-container-low); }
+.format-toolbar button.active { color: var(--mat-sys-on-secondary-container); background: var(--mat-sys-secondary-container); }
+.toolbar-divider { width: 1px; height: 24px; margin: 0 6px; background: var(--mat-sys-outline-variant); }
+.link-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 12px; border-bottom: 1px solid var(--mat-sys-outline-variant); }
+.link-controls mat-form-field { flex: 1 1 220px; }
+.link-error { flex-basis: 100%; color: var(--mat-sys-error); font: var(--mat-sys-body-small); }
+.editor-host .tiptap { min-height: 280px; max-height: 650px; overflow-y: auto; padding: 24px; outline: none; font: var(--mat-sys-body-large); line-height: 1.7; }
+.editor-host .tiptap:focus-visible { outline: 2px solid var(--mat-sys-primary); outline-offset: -2px; }
+.editor-host .tiptap p { margin: 0 0 16px; }
+.editor-host .tiptap h2 { margin: 0 0 16px; font: var(--mat-sys-title-large); }
+.editor-host .tiptap ul, .editor-host .tiptap ol { margin: 0 0 16px; padding-left: 24px; }
+.editor-host .tiptap a { color: var(--mat-sys-primary); text-decoration: underline; }
+@media (max-width: 600px) { .editor-host .tiptap { min-height: 240px; padding: 16px; } }

@@ -117,6 +117,16 @@ describe.skipIf(!enabled)('marketing campaign durability (emulators)', () => {
     expect(post.body).toContain('You are unsubscribed');
     expect((await ref.get()).get('acceptedMarketingPolicy')).toBe(false);
     await handleMarketingUnsubscribe({ method: 'POST', query: { token } } as unknown as Request, response() as unknown as Response, secret);
+    await ref.update({ acceptedMarketingPolicy: true });
+    const testGet = response();
+    await handleMarketingUnsubscribe({ method: 'GET', query: { test: '1' } } as unknown as Request, testGet as unknown as Response, secret);
+    expect(testGet.code).toBe(200);
+    expect(testGet.body).toContain('No marketing preference was changed');
+    expect(testGet.body).not.toContain('<form');
+    const testPost = response();
+    await handleMarketingUnsubscribe({ method: 'POST', query: { test: '1' } } as unknown as Request, testPost as unknown as Response, secret);
+    expect(testPost.code).toBe(200);
+    expect((await ref.get()).get('acceptedMarketingPolicy')).toBe(true);
     const invalid = response();
     await handleMarketingUnsubscribe({ method: 'GET', query: { token: 'invalid' } } as unknown as Request, invalid as unknown as Response, secret);
     expect(invalid.code).toBe(400);
@@ -211,19 +221,23 @@ describe.skipIf(!enabled)('marketing campaign durability (emulators)', () => {
     expect((await ref.get()).get('stats')).toMatchObject({ eligible: 1, failed: 0, skipped: 1 });
   });
 
-  it('charges test sends to the same daily limit', async () => {
+  it('sends saved drafts to a chosen address, invalidates tests after edits, and charges the daily limit', async () => {
     const user = await admin.auth().createUser({ email: `test-admin-${randomUUID()}@example.com` });
     const campaign = await saveCampaign(null, draft, user.uid);
-    await db.collection('marketingCampaigns').doc(campaign.id).update({ status: 'ready' });
     await db.doc('marketingControl/global').set({ dailyCap: 1 });
     await db.doc(`marketingDispatchDays/${utcDay(new Date())}`).set({ used: 0 });
-    const test = await sendTest(campaign.id, user.uid, secret);
+    const target = `preview-${randomUUID()}@example.org`;
+    const test = await sendTest(campaign.id, user.uid, secret, target);
     expect(test.submitted).toBe(true);
     const mail = await db.collection('mail').doc(test.mailId).get();
-    expect(mail.get('to')).toBe(user.email);
+    expect(mail.get('to')).toBe(target);
+    expect(mail.get('message.subject')).toBe(`[TEST] ${draft.subject}`);
+    expect(mail.get('headers.List-Unsubscribe')).toBe('<https://quantified-self.io/email/unsubscribe?test=1>');
     expect(mail.get('from')).toBe('Dimitrios from Quantified Self <updates@quantified-self.io>');
     expect((await db.doc(`marketingDispatchDays/${utcDay(new Date())}`).get()).get('used')).toBe(1);
-    await expect(sendTest(campaign.id, user.uid, secret)).rejects.toThrow();
+    await expect(sendTest(campaign.id, user.uid, secret, target)).rejects.toThrow();
+    const edited = await saveCampaign(campaign.id, { ...draft, subject: 'Edited subject' }, user.uid);
+    expect(edited.lastTestMailId).toBeNull();
   });
 
   it('does not submit a test when the campaign starts while the admin lookup is in flight', async () => {
@@ -247,11 +261,11 @@ describe.skipIf(!enabled)('marketing campaign durability (emulators)', () => {
       return originalGetUser(uid);
     });
     try {
-      const pendingTest = sendTest(campaign.id, user.uid, secret);
+      const pendingTest = sendTest(campaign.id, user.uid, secret, user.email);
       await started;
       await setCampaignStatus(campaign.id, 'start');
       releaseLookup();
-      await expect(pendingTest).rejects.toThrow('ready');
+      await expect(pendingTest).rejects.toThrow('changed');
       expect((await ref.get()).get('lastTestMailId')).toBe(acceptedTestId);
       expect((await db.doc(`marketingDispatchDays/${utcDay(new Date())}`).get()).get('used')).toBe(0);
     } finally {

@@ -1,4 +1,4 @@
-import { Component, ElementRef, OnInit, ViewChild, inject } from '@angular/core';
+import { Component, OnDestroy, OnInit, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { MatButtonModule } from '@angular/material/button';
@@ -9,15 +9,17 @@ import { MatIconModule } from '@angular/material/icon';
 import { MatInputModule } from '@angular/material/input';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { RouterModule } from '@angular/router';
-import { documentFromEditor, fillEditor } from './marketing-editor';
-import type { MarketingCampaignDraft, MarketingCampaignListResponse, MarketingCampaignView, MarketingPlan } from '../../../../../shared/admin-marketing';
+import type { MarketingCampaignDraft, MarketingCampaignListResponse, MarketingCampaignView, MarketingDocument, MarketingPlan } from '../../../../../shared/admin-marketing';
 import { AppFunctionsService } from '../../../services/app.functions.service';
 import { PageHeaderComponent } from '../../shared/page-header/page-header.component';
 import { AppHapticsService } from '../../../services/app.haptics.service';
 import { MatButtonToggleModule } from '@angular/material/button-toggle';
+import { MatSlideToggleModule } from '@angular/material/slide-toggle';
+import { MarketingRichEditorComponent } from './marketing-rich-editor.component';
+import { hasVisibleMarketingText } from './marketing-editor';
 
 function emptyDraft(): MarketingCampaignDraft {
-  return { name: '', subject: '', content: { type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text: '' }] }] },
+  return { name: '', subject: '', content: { type: 'doc', content: [{ type: 'paragraph', content: [] }] },
     cta: null, filters: { plans: ['free', 'basic', 'pro'], signupFrom: null, signupTo: null } };
 }
 
@@ -25,48 +27,37 @@ function emptyDraft(): MarketingCampaignDraft {
   selector: 'app-admin-marketing',
   standalone: true,
   imports: [CommonModule, FormsModule, RouterModule, MatButtonModule, MatCardModule, MatCheckboxModule,
-    MatFormFieldModule, MatIconModule, MatInputModule, MatProgressSpinnerModule, MatButtonToggleModule, PageHeaderComponent],
+    MatFormFieldModule, MatIconModule, MatInputModule, MatProgressSpinnerModule, MatButtonToggleModule,
+    MatSlideToggleModule, MarketingRichEditorComponent, PageHeaderComponent],
   templateUrl: './admin-marketing.component.html',
   styleUrls: ['./admin-marketing.component.scss'],
 })
-export class AdminMarketingComponent implements OnInit {
+export class AdminMarketingComponent implements OnInit, OnDestroy {
   private readonly functions = inject(AppFunctionsService);
   private readonly haptics = inject(AppHapticsService);
-  private savedRange: Range | null = null;
-  @ViewChild('editorHost') editorHost?: ElementRef<HTMLElement>;
+  private previewTimer: ReturnType<typeof setTimeout> | null = null;
+  private previewSequence = 0;
+  private destroyed = false;
   list: MarketingCampaignListResponse | null = null;
   selected: MarketingCampaignView | null = null;
   draft = emptyDraft();
-  linkUrl = '';
+  dirty = false;
+  showCta = false;
   ctaLabel = '';
   ctaUrl = '';
+  testTo = '';
   cap = 10;
   busy = '';
   error = '';
   notice = '';
   preview: { subject: string; html: string; text: string } | null = null;
+  previewBusy = false;
+  previewError = '';
   activePreview: 'desktop' | 'phone' | 'text' = 'desktop';
   readonly plans: MarketingPlan[] = ['free', 'basic', 'pro'];
 
   ngOnInit(): void { void this.refresh(); }
-  rememberSelection(): void {
-    const selection = window.getSelection();
-    const range = selection?.rangeCount ? selection.getRangeAt(0) : null;
-    if (range && this.editorHost?.nativeElement.contains(range.commonAncestorContainer)) this.savedRange = range.cloneRange();
-  }
-  private restoreSelection(): void {
-    if (!this.savedRange) return;
-    const selection = window.getSelection();
-    selection?.removeAllRanges(); selection?.addRange(this.savedRange);
-  }
-  format(command: string, value?: string): void {
-    if (!this.canEdit || !this.editorHost) return;
-    this.editorHost.nativeElement.focus();
-    this.restoreSelection();
-    if (document.execCommand(command, false, value)) this.haptics.selection();
-    this.rememberSelection();
-  }
-  heading(): void { this.format('formatBlock', 'h2'); }
+  ngOnDestroy(): void { this.destroyed = true; this.clearPreviewTimer(); this.previewSequence++; }
   changePreview(view: 'desktop' | 'phone' | 'text'): void {
     if (this.activePreview === view) return;
     this.activePreview = view;
@@ -98,25 +89,28 @@ export class AdminMarketingComponent implements OnInit {
   choose(campaign: MarketingCampaignView, feedback = true): void {
     if (feedback && this.selected?.id !== campaign.id) this.haptics.selection();
     this.selected = campaign;
-    this.savedRange = null;
     this.draft = { name: campaign.name, subject: campaign.subject, content: campaign.content,
       cta: campaign.cta, filters: { ...campaign.filters, plans: [...campaign.filters.plans] } };
+    this.dirty = false;
+    this.showCta = !!campaign.cta;
     this.ctaLabel = campaign.cta?.label || '';
     this.ctaUrl = campaign.cta?.url || '';
-    if (this.editorHost) fillEditor(this.editorHost.nativeElement, campaign.content);
-    this.preview = null;
+    this.testTo = feedback ? campaign.lastTestTo || '' : this.testTo || campaign.lastTestTo || '';
+    this.resetPreview();
+    this.schedulePreview();
     this.error = '';
     this.notice = '';
   }
   newDraft(): void {
     if (this.selected || this.draft.name || this.draft.subject) this.haptics.selection();
     this.selected = null;
-    this.savedRange = null;
     this.draft = emptyDraft();
+    this.dirty = false;
+    this.showCta = false;
     this.ctaLabel = '';
     this.ctaUrl = '';
-    if (this.editorHost) fillEditor(this.editorHost.nativeElement, this.draft.content);
-    this.preview = null;
+    this.testTo = '';
+    this.resetPreview();
     this.error = '';
     this.notice = '';
   }
@@ -126,21 +120,23 @@ export class AdminMarketingComponent implements OnInit {
     this.draft.filters.plans = checked
       ? [...new Set([...this.draft.filters.plans, plan])]
       : this.draft.filters.plans.filter(item => item !== plan);
+    this.markDirty();
   }
-  applyLink(): void {
-    if (!this.linkUrl) return;
-    try {
-      const parsed = new URL(this.linkUrl);
-      if ((parsed.protocol !== 'https:' && parsed.protocol !== 'mailto:') || parsed.username || parsed.password) throw new Error();
-    } catch { this.error = 'Enter an HTTPS or mailto link.'; this.haptics.error(); return; }
-    this.format('createLink', this.linkUrl);
-    this.linkUrl = '';
+  markDirty(): void { this.dirty = true; this.schedulePreview(); }
+  onContentChange(content: MarketingDocument): void {
+    this.draft.content = content;
+    this.markDirty();
   }
-  removeLink(): void { this.format('unlink'); }
+  setCta(enabled: boolean): void {
+    if (this.showCta === enabled) return;
+    this.showCta = enabled;
+    this.haptics.selection();
+    this.markDirty();
+  }
   private collectDraft(): MarketingCampaignDraft {
     return { name: this.draft.name, subject: this.draft.subject,
-      content: this.editorHost ? documentFromEditor(this.editorHost.nativeElement) : this.draft.content,
-      cta: this.ctaLabel.trim() || this.ctaUrl.trim() ? { label: this.ctaLabel, url: this.ctaUrl } : null,
+      content: this.draft.content,
+      cta: this.showCta ? { label: this.ctaLabel, url: this.ctaUrl } : null,
       filters: { plans: [...this.draft.filters.plans], signupFrom: this.draft.filters.signupFrom || null,
         signupTo: this.draft.filters.signupTo || null } };
   }
@@ -160,16 +156,55 @@ export class AdminMarketingComponent implements OnInit {
       { id: this.selected?.id || null, draft: this.collectDraft() })).data as MarketingCampaignView,
       campaign => { this.choose(campaign, false); this.notice = 'Draft saved.'; });
   }
-  async showPreview(): Promise<void> {
-    await this.run('Rendering preview', async () => (await this.functions.call('previewMarketingCampaign',
-      { draft: this.collectDraft() })).data as { subject: string; html: string; text: string },
-      preview => { this.preview = preview; this.notice = 'Preview rendered with the email template.'; });
+  private clearPreviewTimer(): void {
+    if (this.previewTimer) clearTimeout(this.previewTimer);
+    this.previewTimer = null;
+  }
+  private resetPreview(): void {
+    this.clearPreviewTimer();
+    this.previewSequence++;
+    this.preview = null;
+    this.previewError = '';
+    this.previewBusy = false;
+  }
+  schedulePreview(): void {
+    this.clearPreviewTimer();
+    const sequence = ++this.previewSequence;
+    if (!this.draft.subject.trim() || !hasVisibleMarketingText(this.draft.content)) {
+      this.preview = null;
+      this.previewError = '';
+      this.previewBusy = false;
+      return;
+    }
+    this.previewBusy = true;
+    this.previewTimer = setTimeout(() => { void this.renderPreview(sequence); }, 900);
+  }
+  private async renderPreview(sequence: number): Promise<void> {
+    const draft = this.collectDraft();
+    const previewDraft = { ...draft, name: draft.name.trim() || 'Preview',
+      filters: { plans: draft.filters.plans.length ? draft.filters.plans : this.plans,
+        signupFrom: null, signupTo: null } };
+    this.previewBusy = true;
+    try {
+      const result = await this.functions.call<unknown, { subject: string; html: string; text: string }>(
+        'previewMarketingCampaign', { draft: previewDraft });
+      if (this.destroyed || sequence !== this.previewSequence) return;
+      this.preview = result.data;
+      this.previewError = '';
+    } catch (error) {
+      if (this.destroyed || sequence !== this.previewSequence) return;
+      this.preview = null;
+      this.previewError = this.message(error);
+    } finally {
+      if (sequence === this.previewSequence) this.previewBusy = false;
+    }
   }
   async prepare(): Promise<void> { await this.campaignAction('prepareMarketingCampaign', 'Preparing audience', 'Audience frozen. Review counts, then send a test.'); }
   async sendTest(): Promise<void> {
     if (!this.selected) return;
-    await this.run('Sending test', async () => (await this.functions.call('sendMarketingTest', { id: this.selected!.id })).data,
-      () => { this.notice = 'Test submitted to your admin email. Refresh until SMTP acceptance appears.'; });
+    const to = this.testTo.trim();
+    await this.run('Sending test', async () => (await this.functions.call('sendMarketingTest', { id: this.selected!.id, to })).data,
+      () => { this.notice = `Test submitted to ${to}. Refresh until SMTP acceptance appears.`; });
   }
   async change(action: 'start' | 'pause' | 'resume' | 'retry'): Promise<void> {
     if (!this.selected) return;

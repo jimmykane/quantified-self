@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { UserRecord } from 'firebase-admin/auth';
-import { authAllowed, makeUnsubscribeToken, previewCampaign, verifyUnsubscribeToken } from './service';
+import { authAllowed, checkedTestEmail, makeUnsubscribeToken, previewCampaign, verifyUnsubscribeToken } from './service';
 
 const draft = {
   name: 'Product update', subject: 'A note from Dimitrios',
@@ -10,6 +10,13 @@ const draft = {
 };
 
 describe('marketing audience and content', () => {
+  it('accepts one test address and rejects malformed or injected recipients', () => {
+    expect(checkedTestEmail('  qa+campaign@example.org  ')).toBe('qa+campaign@example.org');
+    for (const value of ['', 'one@example.org,two@example.org', 'Name <one@example.org>',
+      'one@example.org\r\nBcc:other@example.org', 'one@localhost', 42]) {
+      expect(() => checkedTestEmail(value)).toThrow();
+    }
+  });
   it.each(['password', 'google.com', 'github.com'])('accepts consented %s accounts even when emailVerified is false', providerId => {
     const user = { uid: 'uid', email: 'person@example.com', emailVerified: false, disabled: false,
       customClaims: {}, providerData: [{ providerId }] } as UserRecord;
@@ -23,6 +30,7 @@ describe('marketing audience and content', () => {
     expect(previewCampaign({ ...draft, subject: "Dimitrios's update" }).text).toContain("Dimitrios's update");
     expect(message.html).toContain('Hello &amp; welcome.');
     expect(message.html).toContain('Unsubscribe from product updates');
+    expect(message.html).toContain('/email/unsubscribe?test&#x3D;1');
     expect(message.html).toContain('max-width:600px');
     expect(message.text).toContain('Hello & welcome.');
     expect(message.text).toContain('Unsubscribe from product updates');
