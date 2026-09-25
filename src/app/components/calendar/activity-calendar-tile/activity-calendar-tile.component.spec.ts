@@ -89,10 +89,11 @@ describe('ActivityCalendarTileComponent', () => {
     expect(fixture.componentInstance.selectedDay()?.dateKey).toBe(day.dateKey);
     expect(fixture.nativeElement.querySelector('.activity-calendar-day--selected')).toBeTruthy();
     expect(fixture.nativeElement.querySelector('app-calendar-day-context')).toBeTruthy();
-    expect(fixture.nativeElement.querySelectorAll('a[aria-label="Open selected day in full calendar"]')).toHaveLength(1);
+    const fullDayLink = fixture.nativeElement.querySelector('a[aria-label="Open selected day page"]');
+    expect(fullDayLink?.getAttribute('href')).toBe(`/calendar/day/${day.dateKey}`);
     expect(openBottomSheet).not.toHaveBeenCalled();
     fixture.componentRef.setInput('privateHealthEnabled', false); fixture.detectChanges();
-    expect(fixture.nativeElement.querySelector('a[aria-label="Open selected day in full calendar"]')).toBeNull();
+    expect(fixture.nativeElement.querySelector('a[aria-label="Open selected day page"]')).toBeNull();
   });
 
   it.each([false, true])('opens the destination in full Calendar after a duplicate from a tile (navigation: %s)', async showNavigation => {
