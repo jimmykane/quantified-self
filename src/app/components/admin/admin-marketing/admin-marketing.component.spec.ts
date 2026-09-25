@@ -66,6 +66,8 @@ describe('AdminMarketingComponent haptics', () => {
     component.draft.subject = 'Test subject';
     component.draft.content = { type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'A test message' }] }] };
     component.testTo = ' jimmykane9@gmail.com ';
+    expect(component.canSendTest).toBe(false);
+    component.preview = { subject: 'Test subject', html: '<p>A test message</p>', text: 'A test message' };
     expect(component.canSendTest).toBe(true);
     await component.sendTest();
     expect(call).toHaveBeenCalledWith('sendMarketingTest', { id: null, to: 'jimmykane9@gmail.com',
@@ -77,8 +79,39 @@ describe('AdminMarketingComponent haptics', () => {
     setup();
     const fixture = TestBed.createComponent(AdminMarketingComponent);
     fixture.detectChanges();
-    expect(fixture.nativeElement.querySelector('input[type="email"]')).not.toBeNull();
+    expect(fixture.nativeElement.querySelector('.writing-column input[type="email"]')).not.toBeNull();
     fixture.destroy();
+  });
+  it('keeps Send test disabled until the recipient address is valid', () => {
+    setup();
+    const fixture = TestBed.createComponent(AdminMarketingComponent);
+    fixture.componentInstance.preview = { subject: 'A note', html: '<p>Hello</p>', text: 'Hello' };
+    fixture.detectChanges();
+    const input = fixture.nativeElement.querySelector('.test-send input[type="email"]') as HTMLInputElement;
+    const button = fixture.nativeElement.querySelector('.test-send button') as HTMLButtonElement;
+    input.value = 'not-an-email';
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    fixture.detectChanges();
+    expect(button.disabled).toBe(true);
+    input.value = 'qa@example.org';
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    fixture.detectChanges();
+    expect(button.disabled).toBe(false);
+    fixture.destroy();
+  });
+  it('blocks testing while a preview is stale or button details are incomplete', () => {
+    const { component } = setup();
+    component.draft.subject = 'A note';
+    component.draft.content = { type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Hello' }] }] };
+    component.testTo = 'qa@example.org';
+    component.preview = { subject: 'A note', html: '<p>Hello</p>', text: 'Hello' };
+    expect(component.canSendTest).toBe(true);
+    component.schedulePreview();
+    expect(component.canSendTest).toBe(false);
+    component.setCta(true);
+    expect(component.previewError).toContain('button label');
+    expect(component.canSendTest).toBe(false);
+    component.ngOnDestroy();
   });
   it('renders a live server preview from an unsaved message without sending mail', async () => {
     const preview = { subject: 'Subject', html: '<p>Hello</p>', text: 'Hello' };
@@ -114,7 +147,7 @@ describe('AdminMarketingComponent haptics', () => {
       const frame = fixture.nativeElement.querySelector('iframe');
       expect(frame?.getAttribute('srcdoc')).toContain('<style>body{color:#123456}</style>');
       expect(frame?.getAttribute('srcdoc')).toContain('style="margin:0"');
-      expect(frame?.getAttribute('sandbox')).toBe('');
+      expect(frame?.getAttribute('sandbox')).toBe('allow-same-origin allow-popups allow-popups-to-escape-sandbox');
       expect(fixture.nativeElement.querySelector('input[type="email"]')).not.toBeNull();
     } finally { fixture.destroy(); vi.useRealTimers(); }
   });

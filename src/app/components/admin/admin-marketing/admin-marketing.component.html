@@ -44,6 +44,19 @@
                   </div>
                 }
               </div>
+              @if (canEdit || selected?.status === 'ready') {
+                <div class="test-send">
+                  <div><h3>Send a test</h3><p>Send the current message to one address. This uses one slot from today's limit. Test unsubscribe links cannot change preferences.</p></div>
+                  @if (selected && dirty) { <p class="unsaved-note">This tests your unsaved edits. Save and send another test before launching the campaign.</p> }
+                  <div class="test-send-controls">
+                    <mat-form-field appearance="outline" subscriptSizing="dynamic"><mat-label>Test email address</mat-label>
+                      <input matInput type="email" [(ngModel)]="testTo" #testEmail="ngModel" email required autocomplete="email" placeholder="name@example.com">
+                      @if (testEmail.invalid && testEmail.touched && testTo.trim()) { <mat-error>Enter one valid email address.</mat-error> }
+                    </mat-form-field>
+                    <button mat-stroked-button type="button" [disabled]="!!busy || !canSendTest || testEmail.invalid" (click)="sendTest()">Send test</button>
+                  </div>
+                </div>
+              }
             </section>
             <section class="preview-column" aria-labelledby="preview-heading">
               <div class="section-heading"><h3 id="preview-heading">Live preview</h3>
@@ -57,7 +70,9 @@
               @if (preview) {
                 <p class="preview-subject"><strong>Subject</strong> {{ preview.subject }}</p>
                 @if (activePreview === 'text') { <pre class="text-preview">{{ preview.text }}</pre> }
-                @else { <div class="preview-frame" [class.phone]="activePreview === 'phone'"><iframe title="Rendered campaign email" sandbox="" [attr.srcdoc]="trustedPreviewHtml"></iframe></div> }
+                @else { <div class="preview-frame" [class.phone]="activePreview === 'phone'"><iframe #emailPreviewFrame title="Rendered campaign email" sandbox="allow-same-origin allow-popups allow-popups-to-escape-sandbox" [attr.srcdoc]="trustedPreviewHtml" (load)="resizePreviewFrame()"></iframe></div> }
+              } @else if (previewBusy) {
+                <p class="preview-empty" role="status">Rendering the current message…</p>
               } @else if (previewError) {
                 <p class="preview-empty" role="status">{{ previewError }}</p>
               } @else {
@@ -65,17 +80,6 @@
               }
             </section>
           </div>
-          @if (canEdit || selected?.status === 'ready') {
-            <div class="test-send">
-              <div><h3>Send a test</h3><p>Send the message shown above to one address, even before saving a campaign. Tests use the global daily limit, and their unsubscribe link cannot change anyone's preference.</p></div>
-              <div class="test-send-controls">
-                <mat-form-field appearance="outline" subscriptSizing="dynamic"><mat-label>Test email address</mat-label>
-                  <input matInput type="email" [(ngModel)]="testTo" autocomplete="email" placeholder="name@example.com">
-                </mat-form-field>
-                <button mat-stroked-button type="button" [disabled]="!!busy || !canSendTest" (click)="sendTest()">Send test</button>
-              </div>
-            </div>
-          }
           <h3>Audience</h3>
           <p>Enabled, non-admin users with an email and explicit marketing consent. Sign-up dates are inclusive in UTC. Login provider and email verification do not affect eligibility.</p>
           <div class="plans">
@@ -85,7 +89,7 @@
             <mat-form-field appearance="outline"><mat-label>Signed up from (UTC)</mat-label><input matInput type="date" [(ngModel)]="draft.filters.signupFrom" (ngModelChange)="markDirty()" [disabled]="!canEdit"></mat-form-field>
             <mat-form-field appearance="outline"><mat-label>Signed up through (UTC)</mat-label><input matInput type="date" [(ngModel)]="draft.filters.signupTo" (ngModelChange)="markDirty()" [disabled]="!canEdit"></mat-form-field>
           </div>
-          @if (dirty && selected) { <p class="unsaved-note">Save your changes before preparing the audience or sending a test.</p> }
+          @if (dirty && selected) { <p class="unsaved-note">Save your changes before preparing the audience.</p> }
           <div class="actions">
             @if (canEdit) { <button mat-flat-button type="button" [disabled]="!!busy" (click)="save()">Save draft</button> }
             @if (selected?.status === 'draft' || canRetryPreparation) { <button mat-stroked-button type="button" [disabled]="!!busy || dirty" (click)="prepare()">{{ canRetryPreparation ? 'Retry preparation' : 'Prepare audience' }}</button> }

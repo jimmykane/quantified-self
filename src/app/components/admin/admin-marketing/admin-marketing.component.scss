@@ -29,7 +29,7 @@ mat-form-field { width: 100%; }
 .actions, .plans, .test-send-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
 .plans { margin: 12px 0; }
 .actions { padding-top: 14px; border-top: 1px solid var(--mat-sys-outline-variant); }
-.test-send { margin: 24px 0; padding: 18px 0; border-top: 1px solid var(--mat-sys-outline-variant); }
+.test-send { margin: 24px 0 0; padding: 18px 0 0; border-top: 1px solid var(--mat-sys-outline-variant); }
 .test-send h3 { margin: 0 0 6px; }
 .test-send p { margin: 0 0 12px; color: var(--mat-sys-on-surface-variant); }
 .test-send-controls mat-form-field { flex: 1 1 260px; max-width: 440px; }

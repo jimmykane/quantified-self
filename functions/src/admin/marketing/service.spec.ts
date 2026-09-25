@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { UserRecord } from 'firebase-admin/auth';
+import { JSDOM } from 'jsdom';
 import { authAllowed, checkedTestEmail, makeUnsubscribeToken, previewCampaign, verifyUnsubscribeToken } from './service';
 
 const draft = {
@@ -36,6 +37,17 @@ describe('marketing audience and content', () => {
     expect(message.text).toContain('Unsubscribe from product updates');
     expect(message.text).toContain('/email/unsubscribe?test=1');
     expect(message.text).not.toContain('&#x3D;');
+    const document = new JSDOM(message.html).window.document;
+    const letter = document.querySelector('table.letter');
+    const body = letter?.querySelector('td.letter-body');
+    const footer = [...(letter?.querySelectorAll('td') || [])]
+      .find(cell => cell.textContent?.includes('Unsubscribe from product updates'));
+    expect(body?.textContent).toContain('Hi friend');
+    expect(body?.textContent).toContain('Hello & welcome.');
+    expect(body?.textContent).toContain('Best regards');
+    expect(body?.querySelector('a[style*="background"]')?.textContent).toBe('Open Quantified Self');
+    expect(footer?.textContent).toContain('You received this product update');
+    expect(footer?.querySelector('a[href*="unsubscribe"]')).not.toBeNull();
   });
   it('escapes body markup before the admin preview trusts the rendered template', () => {
     const hostile = previewCampaign({ ...draft, content: { type: 'doc', content: [

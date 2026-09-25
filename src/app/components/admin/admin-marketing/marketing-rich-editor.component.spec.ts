@@ -22,6 +22,12 @@ describe('MarketingRichEditorComponent', () => {
     expect(emitted.mock.lastCall?.[0].content[0].content[0].text).toContain('updated');
 
     editor.commands.setTextSelection({ from: 1, to: 6 });
+    fixture.nativeElement.querySelector('button[aria-label="Bold"]')?.click();
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('.tiptap strong')?.textContent).toBeTruthy();
+    expect(haptics.selection).toHaveBeenCalled();
+
+    editor.commands.setTextSelection({ from: 1, to: 6 });
     fixture.componentInstance.linkUrl = 'https://example.org';
     fixture.componentInstance.applyLink();
     expect(fixture.nativeElement.querySelector('.tiptap a')?.getAttribute('href')).toBe('https://example.org/');

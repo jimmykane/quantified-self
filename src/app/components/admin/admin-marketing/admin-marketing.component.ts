@@ -1,4 +1,4 @@
-import { Component, OnDestroy, OnInit, inject } from '@angular/core';
+import { Component, ElementRef, OnDestroy, OnInit, ViewChild, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { MatButtonModule } from '@angular/material/button';
@@ -18,6 +18,7 @@ import { MatSlideToggleModule } from '@angular/material/slide-toggle';
 import { DomSanitizer, SafeHtml } from '@angular/platform-browser';
 import { MarketingRichEditorComponent } from './marketing-rich-editor.component';
 import { hasVisibleMarketingText } from './marketing-editor';
+import { openPreviewLinksOutsideFrame } from './marketing-preview-links';
 
 function emptyDraft(): MarketingCampaignDraft {
   return { name: '', subject: '', content: { type: 'doc', content: [{ type: 'paragraph', content: [] }] },
@@ -34,6 +35,7 @@ function emptyDraft(): MarketingCampaignDraft {
   styleUrls: ['./admin-marketing.component.scss'],
 })
 export class AdminMarketingComponent implements OnInit, OnDestroy {
+  @ViewChild('emailPreviewFrame') private emailPreviewFrame?: ElementRef<HTMLIFrameElement>;
   private readonly functions = inject(AppFunctionsService);
   private readonly haptics = inject(AppHapticsService);
   private readonly sanitizer = inject(DomSanitizer);
@@ -65,6 +67,21 @@ export class AdminMarketingComponent implements OnInit, OnDestroy {
     if (this.activePreview === view) return;
     this.activePreview = view;
     this.haptics.selection();
+    if (view !== 'text' && typeof requestAnimationFrame === 'function') {
+      requestAnimationFrame(() => this.resizePreviewFrame());
+    }
+  }
+
+  resizePreviewFrame(): void {
+    const frame = this.emailPreviewFrame?.nativeElement;
+    const document = frame?.contentDocument;
+    if (!frame || !document) return;
+    // The static sandbox keeps scripts and forms disabled. Same-origin access lets the
+    // parent size the email and open its links outside the preview frame.
+    openPreviewLinksOutsideFrame(document);
+    frame.style.height = '1px';
+    const height = Math.max(document.documentElement.scrollHeight, document.body?.scrollHeight || 0);
+    frame.style.height = `${Number.isFinite(height) ? Math.max(360, height + 2) : 650}px`;
   }
 
   get canEdit(): boolean { return !this.selected || this.selected.status === 'draft'; }
@@ -74,7 +91,7 @@ export class AdminMarketingComponent implements OnInit, OnDestroy {
     return !Number.isFinite(started) || Date.now() - started >= 11 * 60_000;
   }
   get remaining(): number { return this.list ? Math.max(0, this.list.dailyCap - this.list.usedToday) : 0; }
-  get canSendTest(): boolean { return !!this.testTo.trim() && !!this.draft.subject.trim() && hasVisibleMarketingText(this.draft.content); }
+  get canSendTest(): boolean { return !!this.testTo.trim() && !!this.preview && !this.previewBusy && !this.previewError; }
   get counts() { return this.selected?.stats; }
   get exclusions() { return this.selected?.exclusions; }
 
@@ -175,11 +192,16 @@ export class AdminMarketingComponent implements OnInit, OnDestroy {
   schedulePreview(): void {
     this.clearPreviewTimer();
     const sequence = ++this.previewSequence;
+    this.preview = null;
+    this.trustedPreviewHtml = null;
+    this.previewError = '';
     if (!this.draft.subject.trim() || !hasVisibleMarketingText(this.draft.content)) {
-      this.preview = null;
-      this.trustedPreviewHtml = null;
-      this.previewError = '';
       this.previewBusy = false;
+      return;
+    }
+    if (this.showCta && (!this.ctaLabel.trim() || !this.ctaUrl.trim())) {
+      this.previewBusy = false;
+      this.previewError = 'Add both a button label and HTTPS destination to preview this email.';
       return;
     }
     this.previewBusy = true;

@@ -2,6 +2,7 @@ import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import * as admin from 'firebase-admin';
 import { randomUUID } from 'crypto';
 import type { Request, Response } from 'express';
+import { JSDOM } from 'jsdom';
 import { handleMarketingUnsubscribe } from './handlers';
 import { cleanupMarketingCampaignRecipients } from './cleanup';
 import { completeCampaignIfDrained, dispatchCampaigns, listCampaigns, makeUnsubscribeToken, optOut, prepareCampaign, recordMailDelivery, reserveMail, saveCampaign, sendTest, setCampaignStatus, verifyUnsubscribeToken } from './service';
@@ -246,15 +247,23 @@ describe.skipIf(!enabled)('marketing campaign durability (emulators)', () => {
     await db.doc(`marketingDispatchDays/${utcDay(new Date())}`).set({ used: 0 });
     const campaignsBefore = (await db.collection('marketingCampaigns').get()).size;
     const target = `unsaved-${randomUUID()}@example.org`;
-    const result = await sendTest(null, user.uid, secret, target, draft);
+    const testDraft = { ...draft, cta: { label: 'Open Quantified Self', url: 'https://quantified-self.io/dashboard' } };
+    const result = await sendTest(null, user.uid, secret, target, testDraft);
     const mail = await db.collection('mail').doc(result.mailId).get();
     expect(mail.get('to')).toBe(target);
     expect(mail.get('message.subject')).toBe(`[TEST] ${draft.subject}`);
+    const rendered = new JSDOM(mail.get('message.html')).window.document;
+    const letter = rendered.querySelector('table.letter');
+    expect(letter?.querySelector('.letter-body')?.textContent).toContain('Hello test.');
+    expect(letter?.querySelector('a[href="https://quantified-self.io/dashboard"]')?.textContent).toBe('Open Quantified Self');
+    expect(letter?.textContent).toContain('Unsubscribe from product updates');
+    expect(mail.get('message.text')).toContain('Open Quantified Self: https://quantified-self.io/dashboard');
+    expect(mail.get('message.text')).toContain('/email/unsubscribe?test=1');
     expect(mail.get('marketing.campaignId')).toBeNull();
     expect(mail.get('marketing.testCampaignId')).toBeUndefined();
     expect((await db.collection('marketingCampaigns').get()).size).toBe(campaignsBefore);
     expect((await db.doc(`marketingDispatchDays/${utcDay(new Date())}`).get()).get('used')).toBe(1);
-    await expect(sendTest(null, user.uid, secret, target, draft)).rejects.toThrow('limit');
+    await expect(sendTest(null, user.uid, secret, target, testDraft)).rejects.toThrow('limit');
   });
 
   it('does not submit a test when the campaign starts while the admin lookup is in flight', async () => {
