@@ -213,6 +213,12 @@ kilograms; the owner's display preference does not alter the wire contract.
 
 Sports Lib 21.2.1 FIT workout-reference adoption and the first exact Suunto activity link add no MCP metric, scope,
 provider action or registered wire field. Private FIT references, account digests and reverse-link records are excluded.
+The Garmin FIT correlation path writes the existing completion v1 projection only after account, unique delivery,
+scheduled occurrence and source-activity checks. Existing single/bulk completion reads and Assistant evidence already
+consume that exact projection, so this adds no MCP tool, scope, schema, consent, mutation or registered wire change.
+Private FIT identities and ledgers remain excluded; a conflicting second recording stays unlinked under the current v1
+one-source contract. The registered contract check and existing Garmin completion read fixtures cover the no-wire-impact
+boundary.
 Existing sync status may truthfully become `completed` after an account-bound Guide marker is accepted, using the status
 already present in the frozen delivery schema. `get_training_sync_status` also applies an exact persisted workout
 completion to every confirmed destination copy of that workout: the evidence provider remains private provenance, while

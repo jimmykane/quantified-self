@@ -49,6 +49,14 @@ Garmin stress-validation diagnostics use the existing WARNING with allowlisted f
 
 ### Structured-workout remote verification evidence
 
+Garmin completed-activity correlation is separate from remote Workout/Schedule verification. Its imported FIT
+`training_file` serial is only a candidate identifier under the FIT specification; one owner-account recording matched
+the retained Training API workout ID. The local linker requires a unique same-account ledger, accepted schedule,
+current scheduled date, and one recorded activity on that local date before writing the existing completion and private
+reverse link. Ambiguity remains unlinked, with no similarity fallback or activity-metric rewrite. The current v1
+completion projection has one recorded source per workout, so a simultaneous second provider recording is not linked
+until #651 resolves multi-source representation. Provider acceptance is never watch receipt or proof every target was met.
+
 Remote verification (#703) reuses the Training delivery ledger, 25-item reconciliation pages, dispatcher and per-delivery
 lease. `check` is an idempotent, revision-checked command with a 15-minute coalescing window; it does not change consent.
 Daily checks share production application/account capacity with delivery and yield to writes. The compact owner-readable

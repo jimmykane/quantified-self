@@ -157,7 +157,10 @@ Past/completed copies remain protected, and provider-held copies may remain afte
 The detailed implementation and production-verification checklist lives in the
 [Training source of truth](training-workspace.md#garmin-workoutcalendar-adapter-647). Remaining request/response and
 schedule-list/404 behavior, representative device rendering and post-release observation stay tracked in #645/#647/#655.
-The retired #698 issue is not a launch gate. Completed-activity correlation remains #651. No new completion hook is implemented.
+The retired #698 issue is not a launch gate. Newly imported Garmin FIT activities may link to a QS-planned workout only
+when the workout-file reference uniquely resolves to one same-account delivered Workout and current dated Schedule, with
+one recorded activity on that date. This is conservative local correlation, not a Garmin completion hook, watch receipt,
+or proof of prescribed-step execution. Multi-source recordings and ambiguous/missing identifiers remain #651.
 Neither the adapter nor the offline proof authorizes a provider call or deployment.
 
 ## Production configuration

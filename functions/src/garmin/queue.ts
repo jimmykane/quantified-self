@@ -34,6 +34,7 @@ import {
   deferWorkoutQueueItemForTokenRefreshContention,
 } from '../queue/token-refresh-contention';
 import { retainGarminFITWorkoutReferences } from '../training-plans/completion/fit-workout-evidence';
+import { fitActivityReferencesFromEvent } from '../suunto/guide-completion';
 
 interface RequestError extends Error {
   statusCode?: number;
@@ -411,6 +412,7 @@ export async function processGarminAPIActivityQueueItem(queueItem: GarminAPIActi
         queueItem.userID,
         String(tokenQuerySnapshots.docs[0].data().tokenCredentialGeneration ?? ''),
         Buffer.from(result),
+        fitActivityReferencesFromEvent(event),
       );
     }
     if (!bulkWriter) {

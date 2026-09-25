@@ -1267,11 +1267,18 @@ completion evidence is not cleared through this path. A history-recoverable work
 workout or delete-with-plan removal deletes the owner-visible projection while retaining private event-bound duplicate
 protection until that source event or account is deleted.
 
-For Garmin, standard FIT `training_file` (message 72) and embedded workout (message 26) data are retained only as
-account-bound candidate evidence. The unsigned serial is not reinterpreted as a Training API workout ID or schedule ID,
-and no exact link is created until the separately recorded #651 contract proof establishes a real identifier path.
-Bounded fallback matching, ambiguous confirmation, audited unlink/relink and cross-provider adoption remain open in
-#651; this Sports Lib adoption does not silently narrow those acceptance criteria.
+For Garmin, standard FIT `training_file` (message 72) and embedded workout (message 26) data remain private,
+account-bound evidence. One owner-account recording showed the workout-file serial equal to the retained Training API
+workout ID, but Garmin's FIT specification defines it as file identity, not a documented API join key. QS therefore
+links only when a single workout-file reference and embedded workout, one recorded activity, one retained Garmin delivery
+with that exact numeric identity, the current connected account, an accepted schedule, and the activity's saved-zone
+calendar date all agree. A moved current schedule, repeated remote identity, missing activity, delivery lease, different
+account, or conflicting existing completion cannot claim the link. The transaction writes the existing owner-readable
+completion and private reverse link, protects that remote copy from deletion, and is idempotent on reimport. It does not
+compare titles, durations or target adherence, infer late/early occurrence, or rewrite completed activity metrics.
+The one-link-per-workout v1 projection still cannot attach a second simultaneous Garmin recording when a Suunto recording
+already owns the completion; #651 retains that multi-source decision and any fallback/manual scope revision. This code
+does not retrospectively reparse previously imported FIT files or establish watch receipt across devices.
 
 Verification combines synthetic HTTP/ZIP/FIT fixtures, real Firestore transactions, Rules, UI/help and MCP read tests.
 MCP continues to read strict local delivery projections: Suunto counts derive from workouts, no watch receipt is inferred,
@@ -1603,7 +1610,8 @@ idempotency key nor a lookup by external workout identity: an accepted first POS
 a fresh operation ID. Such copies require operator/provider reconciliation; the adapter does not claim exactly-once
 first creates. The QS scheduling horizon is 365 days as a conservative product policy, not a documented Garmin maximum.
 Past/provider-confirmed completed artifacts are not rewritten or removed; a schedule observed moved into the past is
-retained with that observed date. No completed-activity matching or new provider hook is claimed (#651).
+retained with that observed date. Newly imported FIT activities can use the conservative account/schedule-bound
+correlation described above; no new provider completion hook or retrospective reparse is claimed (#651).
 
 Verification combines synthetic request/response fixtures (including signed-64-bit boundary IDs), HTTP/authorization/
 transport unit tests and real Firestore worker transactions through the excluded synthetic server. It covers duplicate

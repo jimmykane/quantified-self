@@ -612,6 +612,8 @@ describe('help.content', () => {
     expect(planningSection?.content).toContain('never recreates a Guide automatically');
     expect(planningSection?.content).toContain('reconnecting is not required or recommended as a normal QS workflow');
     expect(planningSection?.content).toContain('**Completed · activity linked**');
+    expect(planningSection?.content).toContain('A completed Garmin FIT activity can link to a planned workout');
+    expect(planningSection?.content).toContain('a second recording of an already-linked workout does not replace the first');
     expect(planningSection?.content).toContain('**Sent · workout completed**');
     expect(planningSection?.content).toContain('**Past workout · previously sent**');
     expect(planningSection?.content).toContain('Authorized MCP clients can also author');
