@@ -160,7 +160,7 @@ function renderNode(node: MarketingContentNode): { html: string; text: string } 
 export function renderMarketingContent(draft: MarketingCampaignDraft): { bodyHtml: string; bodyText: string; ctaHtml: string; ctaText: string } {
   const content = draft.content.content.map(renderNode);
   const ctaHtml = draft.cta
-    ? `<p style="margin:0 0 28px;"><a href="${escapeHtml(draft.cta.url)}" style="display:inline-block;max-width:100%;box-sizing:border-box;overflow-wrap:anywhere;word-break:break-word;background:#174ea6;color:#ffffff;font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:20px;font-weight:700;text-decoration:none;padding:9px 14px;border-radius:4px;">${escapeHtml(draft.cta.label)}</a></p>`
+    ? `<p style="margin:0 0 28px;"><a href="${escapeHtml(draft.cta.url)}" style="display:inline-block;max-width:100%;box-sizing:border-box;overflow-wrap:anywhere;word-break:break-word;background:#174ea6;color:#ffffff;font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:20px;font-weight:700;text-decoration:none;padding:2px 10px;border-radius:4px;">${escapeHtml(draft.cta.label)}</a></p>`
     : '';
   const ctaText = draft.cta ? `${draft.cta.label}: ${draft.cta.url}\n\n` : '';
   return { bodyHtml: content.map(item => item.html).join(''), bodyText: content.map(item => item.text).join('').trim(), ctaHtml, ctaText };
