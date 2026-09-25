@@ -31,11 +31,16 @@ describe('CalendarDayContextComponent', () => {
     ] }).compileComponents();
     const fixture = TestBed.createComponent(CalendarDayContextComponent);
     fixture.componentRef.setInput('data', data('2026-09-10'));
+    fixture.componentRef.setInput('showFullDayLink', true);
     fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('.calendar-day-context-header a')?.getAttribute('href'))
+      .toBe('/calendar/day/2026-09-10');
     expect(load).toHaveBeenCalledWith('owner', '2026-09-10', expect.any(Number), expect.any(AbortSignal));
     const oldSignal = load.mock.calls[0][3] as AbortSignal;
     fixture.componentRef.setInput('data', data('2026-09-11'));
     fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('.calendar-day-context-header a')?.getAttribute('href'))
+      .toBe('/calendar/day/2026-09-11');
     expect(oldSignal.aborted).toBe(true);
     pending[0](emptyEvidence); await Promise.resolve(); fixture.detectChanges();
     expect(fixture.componentInstance.healthState().status).toBe('loading');

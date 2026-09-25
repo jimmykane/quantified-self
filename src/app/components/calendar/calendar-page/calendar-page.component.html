@@ -1,7 +1,12 @@
-<main class="calendar-page qs-workspace-page" aria-labelledby="calendar-page-title">
-  <app-page-header class="calendar-page-header" title="Calendar" titleId="calendar-page-title"
-    leadingIcon="calendar_month">
+<main class="calendar-page qs-workspace-page" [class.calendar-page--day]="isDayRoute" aria-labelledby="calendar-page-title">
+  <app-page-header class="calendar-page-header" [title]="isDayRoute ? 'Day' : 'Calendar'" titleId="calendar-page-title"
+    [leadingIcon]="isDayRoute ? 'today' : 'calendar_month'">
     <app-timeline-notes-workspace pageHeaderActions [visibleRange]="timelineNoteRange()"></app-timeline-notes-workspace>
+    @if (isDayRoute) {
+    <a pageHeaderActions mat-button appHapticTap [routerLink]="['/calendar']" [queryParams]="calendarBackQuery()">
+      <mat-icon aria-hidden="true">calendar_month</mat-icon>Calendar
+    </a>
+    } @else {
     <mat-button-toggle-group pageHeaderActions class="calendar-view-toggle" aria-label="Calendar view"
       hideSingleSelectionIndicator [value]="routeState().view"
       (change)="selectView($event.value)">
@@ -14,14 +19,15 @@
       </mat-button-toggle>
       }
     </mat-button-toggle-group>
+    }
   </app-page-header>
 
-  <nav class="calendar-period-navigation" aria-label="Calendar period navigation">
-    <button mat-icon-button type="button" appHapticTap matTooltip="Previous {{ routeState().view }}"
-      [attr.aria-label]="'Previous ' + routeState().view" (click)="navigatePeriod(-1)">
+  <nav class="calendar-period-navigation" [attr.aria-label]="isDayRoute ? 'Day navigation' : 'Calendar period navigation'">
+    <button mat-icon-button type="button" appHapticTap [matTooltip]="isDayRoute ? 'Previous day' : 'Previous ' + routeState().view"
+      [attr.aria-label]="isDayRoute ? 'Previous day' : 'Previous ' + routeState().view" (click)="navigatePeriod(-1)">
       <mat-icon>chevron_left</mat-icon>
     </button>
-    <h2 aria-live="polite">{{ calendarModel().periodLabel }}</h2>
+    <h2 aria-live="polite">{{ isDayRoute ? dayTitle() : calendarModel().periodLabel }}</h2>
     <button class="calendar-today-button--desktop" mat-stroked-button type="button" appHapticTap
       (click)="goToToday()">
       <mat-icon aria-hidden="true">today</mat-icon>
@@ -31,14 +37,14 @@
       aria-label="Go to today" (click)="goToToday()">
       <mat-icon aria-hidden="true">today</mat-icon>
     </button>
-    <button mat-icon-button type="button" appHapticTap matTooltip="Next {{ routeState().view }}"
-      [attr.aria-label]="'Next ' + routeState().view" (click)="navigatePeriod(1)">
+    <button mat-icon-button type="button" appHapticTap [matTooltip]="isDayRoute ? 'Next day' : 'Next ' + routeState().view"
+      [attr.aria-label]="isDayRoute ? 'Next day' : 'Next ' + routeState().view" (click)="navigatePeriod(1)">
       <mat-icon>chevron_right</mat-icon>
     </button>
   </nav>
 
   <section class="calendar-period-summary"
-    [attr.aria-label]="calendarModel().periodLabel + ' activity totals'"
+    [attr.aria-label]="(isDayRoute ? dayTitle() : calendarModel().periodLabel) + ' activity totals'"
     [attr.aria-busy]="isLoading()">
     @for (metric of periodSummaryMetrics(); track metric.label) {
     <div class="calendar-period-summary-metric">
@@ -76,6 +82,12 @@
     @if (hasTrainingPlanningUIAccess() && plansState().status === 'error') {
     <span class="calendar-status-announcement" role="status">Planned workouts could not be loaded.</span>
     }
+    @if (isDayRoute) {
+      @if (selectedDayData(); as dayData) {
+        <app-calendar-day-context class="calendar-selected-day" [data]="dayData"
+          [standaloneDayPage]="true" (noteSelected)="selectDayNote($event.id)"></app-calendar-day-context>
+      }
+    } @else {
     <div class="calendar-day-layout">
     <app-activity-calendar-grid [model]="calendarModel()"
       [selectedDateKey]="selectedDay()?.dateKey ?? null"
@@ -84,7 +96,7 @@
       (daySelected)="openDay($event)">
     </app-activity-calendar-grid>
     @if (selectedDayData(); as dayData) {
-      <app-calendar-day-context class="calendar-selected-day" [data]="dayData"
+      <app-calendar-day-context class="calendar-selected-day" [data]="dayData" [showFullDayLink]="true"
         (noteSelected)="selectDayNote($event.id)"></app-calendar-day-context>
     }
     </div>
@@ -114,4 +126,5 @@
     [periodLabel]="calendarModel().periodLabel">
   </app-activity-range-table-section>
   }
+    }
 </main>

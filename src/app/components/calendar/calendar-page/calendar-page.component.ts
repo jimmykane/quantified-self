@@ -10,6 +10,7 @@ import { SharedModule } from '../../../modules/shared.module';
 import { AppUserService } from '../../../services/app.user.service';
 import { ActivityCalendarService } from '../../../services/activity-calendar.service';
 import { CalendarDayDetailsNavigationService } from '../../../services/calendar-day-details-navigation.service';
+import { getDateTimeFormatter } from '../../../helpers/date-time-format.helper';
 import {
   TrainingPlansService,
   selectCalendarVisibleScheduledWorkouts,
@@ -22,11 +23,13 @@ import {
   buildActivityCalendarViewModel,
   formatActivityCalendarDateParam,
   formatActivityCalendarDuration,
+  navigateActivityCalendarDay,
   navigateActivityCalendarDate,
   normalizeActivityCalendarView,
   parseActivityCalendarDate,
   resolveActivityCalendarPrimaryRange,
   resolveActivityCalendarQueryWindow,
+  resolveActivityCalendarDayRange,
 } from '../../../helpers/activity-calendar.helper';
 import {
   ACTIVITY_CALENDAR_VOLUME_TOOLTIP,
@@ -95,9 +98,15 @@ export class CalendarPageComponent {
   private readonly notesWorkspace = viewChild(TimelineNotesWorkspaceComponent);
   private readonly reloadSequence = signal(0);
   private readonly today = signal(new Date());
-  private readonly initialRouteState = resolveRouteState(this.route.snapshot.queryParamMap);
-  private readonly routeState$ = this.route.queryParamMap.pipe(
-    map(params => resolveRouteState(params)),
+  readonly isDayRoute = this.route.snapshot.data?.['calendarMode'] === 'day';
+  private readonly initialRouteState = resolveRouteState(
+    this.route.snapshot.queryParamMap,
+    this.isDayRoute ? this.route.snapshot.paramMap.get('date') : null,
+  );
+  private readonly routeState$ = combineLatest([this.route.queryParamMap, this.route.paramMap]).pipe(
+    map(([queryParams, routeParams]) => resolveRouteState(
+      queryParams, this.isDayRoute ? routeParams.get('date') : null,
+    )),
     distinctUntilChanged((previous, current) => (
       previous.view === current.view
       && formatActivityCalendarDateParam(previous.anchorDate) === formatActivityCalendarDateParam(current.anchorDate)
@@ -115,6 +124,9 @@ export class CalendarPageComponent {
   private readonly explicitDateParam = toSignal(this.route.queryParamMap.pipe(map(params => params.get('date'))), {
     initialValue: this.route.snapshot.queryParamMap.get('date'),
   });
+  private readonly dayRouteDateParam = toSignal(this.route.paramMap.pipe(map(params => params.get('date'))), {
+    initialValue: this.route.snapshot.paramMap.get('date'),
+  });
   readonly currentUser = computed(() => this.userService.user() as AppUserInterface | null);
   readonly hasTrainingPlanningUIAccess = computed(() => !!this.currentUser()?.uid);
   readonly eventState = toSignal(combineLatest([
@@ -125,7 +137,9 @@ export class CalendarPageComponent {
     switchMap(([user, state]) => {
       if (!user?.uid) return of({ status: 'ready', events: [] } as CalendarEventsState);
       const startOfWeek = user.settings?.unitSettings?.startOfTheWeek;
-      const queryWindow = resolveActivityCalendarQueryWindow(state.view, state.anchorDate, startOfWeek);
+      const queryWindow = this.isDayRoute
+        ? resolveActivityCalendarDayRange(state.anchorDate)
+        : resolveActivityCalendarQueryWindow(state.view, state.anchorDate, startOfWeek);
       return this.calendarService.watchEvents(user, queryWindow).pipe(
         map(events => ({ status: 'ready', events }) as CalendarEventsState),
         startWith({ status: 'loading', events: [] } as CalendarEventsState),
@@ -171,12 +185,17 @@ export class CalendarPageComponent {
       now: this.today(),
     });
   });
-  readonly primaryActivityRange = computed(() => resolveActivityCalendarPrimaryRange(
-    this.routeState().view,
-    this.routeState().anchorDate,
-    this.currentUser()?.settings?.unitSettings?.startOfTheWeek,
-  ));
-  readonly timelineNoteRange = computed(() => calendarTimelineNoteRange(this.calendarModel()));
+  readonly primaryActivityRange = computed(() => this.isDayRoute
+    ? resolveActivityCalendarDayRange(this.routeState().anchorDate)
+    : resolveActivityCalendarPrimaryRange(
+      this.routeState().view,
+      this.routeState().anchorDate,
+      this.currentUser()?.settings?.unitSettings?.startOfTheWeek,
+    ));
+  readonly timelineNoteRange = computed(() => this.isDayRoute
+    ? { startDate: formatActivityCalendarDateParam(this.routeState().anchorDate),
+      endDate: formatActivityCalendarDateParam(this.routeState().anchorDate) }
+    : calendarTimelineNoteRange(this.calendarModel()));
   readonly notesByDate = computed(() => {
     const workspace = this.notesWorkspace();
     const notes = this.currentUser()?.uid === workspace?.service.uid() ? workspace?.context().notes ?? [] : [];
@@ -233,7 +252,15 @@ export class CalendarPageComponent {
   readonly hasEvents = computed(() => this.calendarModel().months.some(month => (
     month.days.some(day => day.inPrimaryPeriod && day.eventCount > 0)
   )));
-  readonly emptyStateLabel = computed(() => `No completed activities in ${this.calendarModel().periodLabel}`);
+  readonly emptyStateLabel = computed(() => this.isDayRoute
+    ? 'No completed activities for this day'
+    : `No completed activities in ${this.calendarModel().periodLabel}`);
+  readonly dayTitle = computed(() => getDateTimeFormatter(this.locale, {
+    weekday: 'short', day: 'numeric', month: 'short', year: 'numeric',
+  }).format(this.routeState().anchorDate));
+  readonly calendarBackQuery = computed(() => ({
+    view: 'month', date: formatActivityCalendarDateParam(this.routeState().anchorDate),
+  }));
   readonly selectedDay = computed(() => {
     const dateKey = formatActivityCalendarDateParam(this.routeState().anchorDate);
     return this.calendarModel().months.flatMap(month => month.days)
@@ -289,6 +316,14 @@ export class CalendarPageComponent {
       .find(candidate => candidate.dateKey === dateKey);
     if (day) this.dayDetailsNavigation.consumeWorkoutDestination(uid, dateKey);
   });
+  private readonly canonicalDayRouteEffect = effect(() => {
+    if (!this.isDayRoute) return;
+    const routeDate = this.dayRouteDateParam();
+    const canonicalDate = formatActivityCalendarDateParam(parseActivityCalendarDate(routeDate));
+    if (routeDate !== canonicalDate) {
+      void this.router.navigate(['/calendar/day', canonicalDate], { replaceUrl: true });
+    }
+  });
 
   @HostListener('window:focus')
   refreshToday(): void {
@@ -311,6 +346,10 @@ export class CalendarPageComponent {
 
   navigatePeriod(direction: -1 | 1): void {
     const state = this.routeState();
+    if (this.isDayRoute) {
+      this.navigateToState({ ...state, anchorDate: navigateActivityCalendarDay(state.anchorDate, direction) });
+      return;
+    }
     this.navigateToState({
       ...state,
       anchorDate: navigateActivityCalendarDate(state.anchorDate, state.view, direction),
@@ -338,6 +377,10 @@ export class CalendarPageComponent {
   }
 
   private navigateToState(state: ActivityCalendarRouteState): void {
+    if (this.isDayRoute) {
+      void this.router.navigate(['/calendar/day', formatActivityCalendarDateParam(state.anchorDate)]);
+      return;
+    }
     const scrollPosition = this.viewportScroller.getScrollPosition();
     const targetDate = formatActivityCalendarDateParam(state.anchorDate);
     this.pendingScrollRestore?.unsubscribe();
@@ -382,9 +425,9 @@ export class CalendarPageComponent {
   }
 }
 
-function resolveRouteState(params: ParamMap): ActivityCalendarRouteState {
+function resolveRouteState(params: ParamMap, pathDate: string | null = null): ActivityCalendarRouteState {
   return {
-    view: normalizeActivityCalendarView(params.get('view')),
-    anchorDate: parseActivityCalendarDate(params.get('date')),
+    view: pathDate === null ? normalizeActivityCalendarView(params.get('view')) : 'month',
+    anchorDate: parseActivityCalendarDate(pathDate ?? params.get('date')),
   };
 }

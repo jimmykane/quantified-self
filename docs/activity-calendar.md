@@ -7,6 +7,7 @@ This document is the implementation and maintenance guide for the Activity Calen
 - The dashboard Activity Calendar tile is full section width, shows the current month, and keeps a selected-day panel beside the grid when wide or below it when the tile itself is narrow. New tiles use four columns. Existing owner tiles receive a one-time versioned size migration; later manual resizes are honored and all other tile settings are preserved.
 - New dashboards include the tile by default. Existing intentionally empty dashboards are preserved; the starter layout supplies Calendar only for new users.
 - The authenticated `/calendar` route provides Week, Month, and Year views, period navigation, totals, activity-group bars, and an inline selected-day panel. The Today mini-calendar retains its day-details sheet.
+- The authenticated `/calendar/day/:date` route opens the selected day on its own page. **Open full day** in the dashboard tile or Calendar panel links there; its **Calendar** action returns to that date in the month grid.
 - Private [Timeline notes](timeline-notes.md) mark their dates in all three full-calendar views, including note-only days.
   The shared header manager and **Show on charts and calendar** preference apply; dashboard tiles/popovers stay unchanged.
 - Every rendered date is selectable. The route and dashboard panel keep planned workouts separate from completed activity totals and rows, and link to a planned-workout editor or individual activity. The Today mini-calendar uses the same health context inside its existing sheet.
@@ -21,7 +22,8 @@ This document is the implementation and maintenance guide for the Activity Calen
 - Month uses a fixed 42-day grid so adjacent dates render consistently. Period totals include only dates in the selected month.
 - Year queries January 1 through the following January 1 and renders all 12 months.
 - The full route stores `view` and `date` in query parameters. Selecting a date updates both the URL and inline day panel; Back/Forward restore it. Previous and next controls move by the selected view; Today changes the anchor to the current local date.
-- The dashboard tile owns its current-month query. The full calendar owns its visible-period query. Neither reuses the dashboard event table, custom-chart range, or map-tile filters.
+- The standalone day route stores its local date in the path. Previous and next controls move one local day, and Back/Forward restore the exact day. Activity and Timeline-note reads are bounded to that date; the existing shared panel still performs its own selected-date health read. No month-wide health read is added.
+- The dashboard tile owns its current-month query. The full calendar owns its visible-period query, and the standalone day route queries only its local day. None reuses the dashboard event table, custom-chart range, or map-tile filters.
 
 Dashboard automatic-tile and layout migration state:
 
@@ -102,7 +104,7 @@ Keep these interaction contracts:
 ## SEO and privacy
 
 - `/features/activity-calendar` is a prerendered public page included in the sitemap and public startup-route allowlist.
-- `/calendar` and `/training/plans` require authentication, are client-rendered, and are excluded from the sitemap. They use `noindex, follow` route metadata and hosting `noindex` headers; `robots.txt` permits crawling so those directives can be read. Neither workspace is a public product page.
+- `/calendar`, `/calendar/day/:date`, and `/training/plans` require authentication, are client-rendered, and are excluded from the sitemap. They use `noindex, follow` route metadata and hosting `noindex` headers; `robots.txt` permits crawling so those directives can be read. Neither workspace is a public product page.
 - Public page metadata and structured data describe the feature only. They must never include activity values, account identifiers, or examples derived from a user's calendar.
 
 ## Test map

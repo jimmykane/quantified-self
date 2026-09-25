@@ -1,12 +1,12 @@
 <section class="calendar-day-context" [attr.aria-label]="title() + ' details'">
-  @if (!compact()) {
+  @if (!compact() && !standaloneDayPage()) {
   <header class="calendar-day-context-header">
     <div>
       <h2>{{ title() }}</h2>
       <span>Day in context</span>
     </div>
     @if (showFullDayLink()) {
-      <a mat-button appHapticTap [routerLink]="['/calendar']" [queryParams]="fullDayQuery()" aria-label="Open selected day in full calendar">
+      <a mat-button appHapticTap [routerLink]="fullDayRoute()" aria-label="Open selected day page">
         Open full day <mat-icon iconPositionEnd aria-hidden="true">arrow_forward</mat-icon>
       </a>
     }

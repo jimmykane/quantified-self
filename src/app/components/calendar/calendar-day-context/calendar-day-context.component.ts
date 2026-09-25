@@ -40,6 +40,7 @@ export class CalendarDayContextComponent {
   readonly data = input.required<CalendarDayDetailsData>();
   readonly compact = input(false);
   readonly showFullDayLink = input(false);
+  readonly standaloneDayPage = input(false);
   readonly privateHealthEnabled = input(true);
   readonly noteSelected = output<TimelineNote>();
   readonly title = computed(() => getDateTimeFormatter(this.data().locale, {
@@ -80,7 +81,7 @@ export class CalendarDayContextComponent {
     buildActivityCalendarPeriodSummary(this.day().events, this.data().summariesSettings),
     this.data().unitSettings, this.data().locale,
   ));
-  readonly fullDayQuery = computed(() => ({ view: 'month', date: this.data().day.dateKey }));
+  readonly fullDayRoute = computed(() => ['/calendar/day', this.data().day.dateKey]);
 
   private readonly loadHealth = effect((onCleanup) => {
     const dateKey = this.healthDateKey();
@@ -132,7 +133,11 @@ export class CalendarDayContextComponent {
       const result = await this.duplicateService.duplicate(data.userId, workout, data.scheduleSource);
       if (!result || !this.canPlan()) return;
       this.navigation.prepareWorkoutDestination(data.userId, result.localDate);
-      void this.router.navigate(['/calendar'], { queryParams: { view: 'month', date: result.localDate } });
+      if (this.standaloneDayPage()) {
+        void this.router.navigate(['/calendar/day', result.localDate]);
+      } else {
+        void this.router.navigate(['/calendar'], { queryParams: { view: 'month', date: result.localDate } });
+      }
     } finally {
       this.duplicatingId.set(null);
     }

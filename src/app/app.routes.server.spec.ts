@@ -99,6 +99,7 @@ describe('serverRoutes', () => {
     expect(prerenderedPaths.has('mcp/authorize')).toBe(false);
     expect(prerenderedPaths.has('dashboard')).toBe(false);
     expect(prerenderedPaths.has('health')).toBe(false);
+    expect(prerenderedPaths.has('calendar/day/:date')).toBe(false);
     expect(prerenderedPaths.has('training/plans')).toBe(false);
     expect(prerenderedPaths.has('settings')).toBe(false);
     expect(prerenderedPaths.has('mytracks')).toBe(false);

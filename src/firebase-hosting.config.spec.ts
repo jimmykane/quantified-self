@@ -270,6 +270,7 @@ describe('Firebase Hosting configuration', () => {
     expect(matchesAnyHostingSource(sources, '/mcp/authorize')).toBe(true);
     expect(matchesAnyHostingSource(sources, '/dashboard')).toBe(true);
     expect(matchesAnyHostingSource(sources, '/calendar')).toBe(true);
+    expect(matchesAnyHostingSource(sources, '/calendar/day/2026-09-25')).toBe(true);
     expect(matchesAnyHostingSource(sources, '/routes')).toBe(true);
     expect(matchesAnyHostingSource(sources, '/admin/queues/workout')).toBe(true);
     expect(matchesAnyHostingSource(sources, '/admin/queues/route-reparse')).toBe(true);
@@ -284,6 +285,7 @@ describe('Firebase Hosting configuration', () => {
     expect(matchesAnyHostingSource(sources, '/definitely-missing')).toBe(false);
     expect(matchesAnyHostingSource(sources, '/integrations/garmin')).toBe(false);
     expect(matchesAnyHostingSource(sources, '/features/activity-calendar')).toBe(false);
+    expect(matchesAnyHostingSource(sources, '/calendar/day/2026-09-25/extra')).toBe(false);
     expect(matchesAnyHostingSource(sources, '/features/ai-insights')).toBe(false);
     expect(matchesAnyHostingSource(sources, '/tools')).toBe(false);
     expect(matchesAnyHostingSource(sources, '/tools/compare')).toBe(false);

@@ -54,6 +54,12 @@ describe('CalendarPageComponent', () => {
     },
   };
   let queryParams: BehaviorSubject<ReturnType<typeof convertToParamMap>>;
+  let routeParams: BehaviorSubject<ReturnType<typeof convertToParamMap>>;
+  let activatedRoute: {
+    snapshot: { queryParamMap: ReturnType<typeof convertToParamMap>; paramMap: ReturnType<typeof convertToParamMap>; data: Record<string, unknown> };
+    queryParamMap: ReturnType<BehaviorSubject<ReturnType<typeof convertToParamMap>>['asObservable']>;
+    paramMap: ReturnType<BehaviorSubject<ReturnType<typeof convertToParamMap>>['asObservable']>;
+  };
   let navigate: ReturnType<typeof vi.fn>;
   let watchEvents: ReturnType<typeof vi.fn>;
   let openBottomSheet: ReturnType<typeof vi.fn>;
@@ -75,6 +81,11 @@ describe('CalendarPageComponent', () => {
 
   beforeEach(async () => {
     queryParams = new BehaviorSubject(convertToParamMap({ view: 'month', date: '2026-08-03' }));
+    routeParams = new BehaviorSubject(convertToParamMap({}));
+    activatedRoute = {
+      snapshot: { queryParamMap: queryParams.value, paramMap: routeParams.value, data: {} },
+      queryParamMap: queryParams.asObservable(), paramMap: routeParams.asObservable(),
+    };
     navigate = vi.fn().mockResolvedValue(true);
     watchEvents = vi.fn().mockReturnValue(of([createEvent()]));
     dismissed = new Subject();
@@ -97,10 +108,7 @@ describe('CalendarPageComponent', () => {
       imports: [CalendarPageComponent],
       providers: [
         provideRouter([]),
-        { provide: ActivatedRoute, useValue: {
-          snapshot: { queryParamMap: queryParams.value },
-          queryParamMap: queryParams.asObservable(),
-        } },
+        { provide: ActivatedRoute, useValue: activatedRoute },
         { provide: AppUserService, useValue: { user: signal(user), user$: of(user) } },
         { provide: ActivityCalendarService, useValue: { watchEvents } },
         { provide: TrainingPlansService, useValue: { watchSchedule, watchWorkoutCompletions } },
@@ -142,6 +150,38 @@ describe('CalendarPageComponent', () => {
       { label: 'Ascent', value: '450 m' },
     ]);
     expect(fixture.nativeElement.textContent).toContain('August 2026');
+  });
+
+  it('opens a bounded standalone day with its context and no calendar grid', async () => {
+    activatedRoute.snapshot.data = { calendarMode: 'day' };
+    activatedRoute.snapshot.paramMap = convertToParamMap({ date: '2026-08-03' });
+    routeParams.next(activatedRoute.snapshot.paramMap);
+    const fixture = TestBed.createComponent(CalendarPageComponent);
+    fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('#calendar-page-title')?.textContent).toContain('Day');
+    expect(fixture.nativeElement.querySelector('.activity-calendar-day-button')).toBeNull();
+    expect(fixture.nativeElement.querySelector('app-calendar-day-context')).toBeTruthy();
+    expect(watchEvents).toHaveBeenCalledWith(user, {
+      startMs: new Date(2026, 7, 3).getTime(), endExclusiveMs: new Date(2026, 7, 4).getTime(),
+    });
+    expect(fixture.componentInstance.timelineNoteRange()).toEqual({ startDate: '2026-08-03', endDate: '2026-08-03' });
+    expect(fixture.nativeElement.querySelector('app-activity-range-table-section')).toBeNull();
+  });
+
+  it('navigates adjacent day routes and follows the path parameter on Back', async () => {
+    activatedRoute.snapshot.data = { calendarMode: 'day' };
+    activatedRoute.snapshot.paramMap = convertToParamMap({ date: '2026-08-03' });
+    routeParams.next(activatedRoute.snapshot.paramMap);
+    const fixture = TestBed.createComponent(CalendarPageComponent);
+    fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+    fixture.componentInstance.navigatePeriod(1);
+    expect(navigate).toHaveBeenCalledWith(['/calendar/day', '2026-08-04']);
+    routeParams.next(convertToParamMap({ date: '2026-08-04' }));
+    fixture.detectChanges();
+    expect(fixture.componentInstance.selectedDay()?.dateKey).toBe('2026-08-04');
+    routeParams.next(convertToParamMap({ date: '2026-08-03' }));
+    fixture.detectChanges();
+    expect(fixture.componentInstance.selectedDay()?.dateKey).toBe('2026-08-03');
   });
 
   it('reads and exposes planning for any signed-in account while completed activities remain visible', async () => {
