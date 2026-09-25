@@ -28,7 +28,7 @@ export const previewMarketingCampaign = onAdminCall<Record<string, unknown>>(cal
 export const prepareMarketingCampaign = onAdminCall<Record<string, unknown>>({ ...callable('prepareMarketingCampaign'), timeoutSeconds: 540 }, request => prepareCampaign(request.data?.id));
 export const setMarketingDailyCap = onAdminCall<Record<string, unknown>>(callable('setMarketingDailyCap'), request => setDailyCap(request.data?.dailyCap));
 export const sendMarketingTest = onAdminCall<Record<string, unknown>>({ ...callable('sendMarketingTest'), secrets: [secret] }, request =>
-  sendTest(request.data?.id, request.auth!.uid, signingKey(), request.data?.to));
+  sendTest(request.data?.id, request.auth!.uid, signingKey(), request.data?.to, request.data?.draft));
 export const changeMarketingCampaignStatus = onAdminCall<Record<string, unknown>>({ ...callable('changeMarketingCampaignStatus'), timeoutSeconds: 540, secrets: [secret] }, async request => {
   const action = request.data?.action;
   if (action !== 'start' && action !== 'pause' && action !== 'resume' && action !== 'retry') {

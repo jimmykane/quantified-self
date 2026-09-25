@@ -34,6 +34,15 @@ describe('marketing audience and content', () => {
     expect(message.html).toContain('max-width:600px');
     expect(message.text).toContain('Hello & welcome.');
     expect(message.text).toContain('Unsubscribe from product updates');
+    expect(message.text).toContain('/email/unsubscribe?test=1');
+    expect(message.text).not.toContain('&#x3D;');
+  });
+  it('escapes body markup before the admin preview trusts the rendered template', () => {
+    const hostile = previewCampaign({ ...draft, content: { type: 'doc', content: [
+      { type: 'paragraph', content: [{ type: 'text', text: '<img src=x onerror=alert(1)>' }] },
+    ] } });
+    expect(hostile.html).toContain('&lt;img src=x onerror=alert(1)&gt;');
+    expect(hostile.html).not.toContain('<img');
   });
   it('verifies signed unsubscribe tokens and rejects tampering', () => {
     const token = makeUnsubscribeToken('user_123', 'a-long-local-test-secret');

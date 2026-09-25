@@ -57,7 +57,7 @@
               @if (preview) {
                 <p class="preview-subject"><strong>Subject</strong> {{ preview.subject }}</p>
                 @if (activePreview === 'text') { <pre class="text-preview">{{ preview.text }}</pre> }
-                @else { <div class="preview-frame" [class.phone]="activePreview === 'phone'"><iframe title="Rendered campaign email" sandbox="" [attr.srcdoc]="preview.html"></iframe></div> }
+                @else { <div class="preview-frame" [class.phone]="activePreview === 'phone'"><iframe title="Rendered campaign email" sandbox="" [attr.srcdoc]="trustedPreviewHtml"></iframe></div> }
               } @else if (previewError) {
                 <p class="preview-empty" role="status">{{ previewError }}</p>
               } @else {
@@ -65,14 +65,14 @@
               }
             </section>
           </div>
-          @if (selected?.status === 'draft' || selected?.status === 'ready') {
+          @if (canEdit || selected?.status === 'ready') {
             <div class="test-send">
-              <div><h3>Send a test</h3><p>Send this saved version to one address. Tests use the global daily limit, and their unsubscribe link cannot change anyone's preference.</p></div>
+              <div><h3>Send a test</h3><p>Send the message shown above to one address, even before saving a campaign. Tests use the global daily limit, and their unsubscribe link cannot change anyone's preference.</p></div>
               <div class="test-send-controls">
                 <mat-form-field appearance="outline" subscriptSizing="dynamic"><mat-label>Test email address</mat-label>
                   <input matInput type="email" [(ngModel)]="testTo" autocomplete="email" placeholder="name@example.com">
                 </mat-form-field>
-                <button mat-stroked-button type="button" [disabled]="!!busy || dirty || !testTo.trim()" (click)="sendTest()">Send test</button>
+                <button mat-stroked-button type="button" [disabled]="!!busy || !canSendTest" (click)="sendTest()">Send test</button>
               </div>
             </div>
           }

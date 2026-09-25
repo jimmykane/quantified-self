@@ -240,6 +240,23 @@ describe.skipIf(!enabled)('marketing campaign durability (emulators)', () => {
     expect(edited.lastTestMailId).toBeNull();
   });
 
+  it('sends an unsaved test without writing a campaign and still enforces the shared cap', async () => {
+    const user = await admin.auth().createUser({ email: `unsaved-admin-${randomUUID()}@example.com` });
+    await db.doc('marketingControl/global').set({ dailyCap: 1 });
+    await db.doc(`marketingDispatchDays/${utcDay(new Date())}`).set({ used: 0 });
+    const campaignsBefore = (await db.collection('marketingCampaigns').get()).size;
+    const target = `unsaved-${randomUUID()}@example.org`;
+    const result = await sendTest(null, user.uid, secret, target, draft);
+    const mail = await db.collection('mail').doc(result.mailId).get();
+    expect(mail.get('to')).toBe(target);
+    expect(mail.get('message.subject')).toBe(`[TEST] ${draft.subject}`);
+    expect(mail.get('marketing.campaignId')).toBeNull();
+    expect(mail.get('marketing.testCampaignId')).toBeUndefined();
+    expect((await db.collection('marketingCampaigns').get()).size).toBe(campaignsBefore);
+    expect((await db.doc(`marketingDispatchDays/${utcDay(new Date())}`).get()).get('used')).toBe(1);
+    await expect(sendTest(null, user.uid, secret, target, draft)).rejects.toThrow('limit');
+  });
+
   it('does not submit a test when the campaign starts while the admin lookup is in flight', async () => {
     const user = await admin.auth().createUser({ email: `racing-admin-${randomUUID()}@example.com` });
     const campaign = await saveCampaign(null, draft, user.uid);
@@ -348,6 +365,12 @@ describe.skipIf(!enabled)('marketing campaign durability (emulators)', () => {
   });
 
   it('dispatches campaigns beyond the first page of running campaigns', async () => {
+    // Earlier cases leave independent running fixtures in this shared emulator.
+    // Pause them so this pagination check has an isolated dispatch queue.
+    const previousRunning = await db.collection('marketingCampaigns').where('status', '==', 'running').get();
+    const pause = db.batch();
+    for (const campaign of previousRunning.docs) pause.update(campaign.ref, { status: 'paused' });
+    await pause.commit();
     const user = await admin.auth().createUser({ email: `paged-${randomUUID()}@example.com`, emailVerified: false });
     await db.doc(`users/${user.uid}`).set({ test: true });
     await db.doc(`users/${user.uid}/legal/agreements`).set({ acceptedMarketingPolicy: true });

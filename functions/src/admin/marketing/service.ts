@@ -287,19 +287,31 @@ export async function reserveMail(mailId: string, data: Record<string, unknown>,
 }
 
 export async function sendTest(idInput: unknown, adminUid: string, secret: string,
-  recipientInput: unknown): Promise<{ mailId: string; submitted: boolean }> {
+  recipientInput: unknown, draftInput?: unknown): Promise<{ mailId: string; submitted: boolean }> {
   const recipient = checkedTestEmail(recipientInput);
-  const campaign = await getCampaign(idInput);
-  if (campaign.status !== 'draft' && campaign.status !== 'ready') {
+  const unsaved = idInput === null || idInput === undefined;
+  let draft: MarketingCampaignDraft;
+  if (unsaved) {
+    try { draft = validateMarketingDraft(draftInput); } catch (error) { badRequest(error); }
+  } else {
+    draft = await getCampaign(idInput);
+  }
+  const campaign = unsaved ? null : draft as MarketingCampaignView;
+  if (campaign && campaign.status !== 'draft' && campaign.status !== 'ready') {
     throw new HttpsError('failed-precondition', 'Tests are available for saved drafts and ready campaigns.');
   }
   const user = await getAuth(adminUid);
   if (!user?.email || user.disabled) throw new HttpsError('failed-precondition', 'Your admin account needs an enabled email address.');
-  const ref = campaigns().doc(campaign.id);
-  const mailId = `marketing_test_${campaign.id}_${randomUUID()}`;
+  const mailId = `marketing_test_${campaign?.id || 'unsaved'}_${randomUUID()}`;
   const firstName = recipient.toLowerCase() === user.email.toLowerCase()
     ? user.displayName?.trim().split(/\s+/)[0] || 'friend' : 'friend';
-  const mail = mailPayload(campaign, recipient, firstName, adminUid, secret, null, 1, testUnsubscribeUrl);
+  const mail = mailPayload(draft!, recipient, firstName, adminUid, secret, null, 1, testUnsubscribeUrl);
+  if (!campaign) {
+    const submitted = await reserveMail(mailId, mail);
+    if (!submitted) throw new HttpsError('resource-exhausted', 'The UTC daily marketing limit has been reached.');
+    return { mailId, submitted };
+  }
+  const ref = campaigns().doc(campaign.id);
   const submitted = await db().runTransaction(async tx => {
     const now = new Date();
     const day = dayRef(utcDay(now));

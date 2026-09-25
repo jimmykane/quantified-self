@@ -15,6 +15,7 @@ import { PageHeaderComponent } from '../../shared/page-header/page-header.compon
 import { AppHapticsService } from '../../../services/app.haptics.service';
 import { MatButtonToggleModule } from '@angular/material/button-toggle';
 import { MatSlideToggleModule } from '@angular/material/slide-toggle';
+import { DomSanitizer, SafeHtml } from '@angular/platform-browser';
 import { MarketingRichEditorComponent } from './marketing-rich-editor.component';
 import { hasVisibleMarketingText } from './marketing-editor';
 
@@ -35,6 +36,7 @@ function emptyDraft(): MarketingCampaignDraft {
 export class AdminMarketingComponent implements OnInit, OnDestroy {
   private readonly functions = inject(AppFunctionsService);
   private readonly haptics = inject(AppHapticsService);
+  private readonly sanitizer = inject(DomSanitizer);
   private previewTimer: ReturnType<typeof setTimeout> | null = null;
   private previewSequence = 0;
   private destroyed = false;
@@ -51,6 +53,7 @@ export class AdminMarketingComponent implements OnInit, OnDestroy {
   error = '';
   notice = '';
   preview: { subject: string; html: string; text: string } | null = null;
+  trustedPreviewHtml: SafeHtml | null = null;
   previewBusy = false;
   previewError = '';
   activePreview: 'desktop' | 'phone' | 'text' = 'desktop';
@@ -71,6 +74,7 @@ export class AdminMarketingComponent implements OnInit, OnDestroy {
     return !Number.isFinite(started) || Date.now() - started >= 11 * 60_000;
   }
   get remaining(): number { return this.list ? Math.max(0, this.list.dailyCap - this.list.usedToday) : 0; }
+  get canSendTest(): boolean { return !!this.testTo.trim() && !!this.draft.subject.trim() && hasVisibleMarketingText(this.draft.content); }
   get counts() { return this.selected?.stats; }
   get exclusions() { return this.selected?.exclusions; }
 
@@ -164,6 +168,7 @@ export class AdminMarketingComponent implements OnInit, OnDestroy {
     this.clearPreviewTimer();
     this.previewSequence++;
     this.preview = null;
+    this.trustedPreviewHtml = null;
     this.previewError = '';
     this.previewBusy = false;
   }
@@ -172,6 +177,7 @@ export class AdminMarketingComponent implements OnInit, OnDestroy {
     const sequence = ++this.previewSequence;
     if (!this.draft.subject.trim() || !hasVisibleMarketingText(this.draft.content)) {
       this.preview = null;
+      this.trustedPreviewHtml = null;
       this.previewError = '';
       this.previewBusy = false;
       return;
@@ -190,10 +196,14 @@ export class AdminMarketingComponent implements OnInit, OnDestroy {
         'previewMarketingCampaign', { draft: previewDraft });
       if (this.destroyed || sequence !== this.previewSequence) return;
       this.preview = result.data;
+      // The admin-only renderer validates and escapes draft content before adding the fixed
+      // email template. Keep its CSS intact inside an iframe with scripts and forms disabled.
+      this.trustedPreviewHtml = this.sanitizer.bypassSecurityTrustHtml(result.data.html);
       this.previewError = '';
     } catch (error) {
       if (this.destroyed || sequence !== this.previewSequence) return;
       this.preview = null;
+      this.trustedPreviewHtml = null;
       this.previewError = this.message(error);
     } finally {
       if (sequence === this.previewSequence) this.previewBusy = false;
@@ -201,10 +211,17 @@ export class AdminMarketingComponent implements OnInit, OnDestroy {
   }
   async prepare(): Promise<void> { await this.campaignAction('prepareMarketingCampaign', 'Preparing audience', 'Audience frozen. Review counts, then send a test.'); }
   async sendTest(): Promise<void> {
-    if (!this.selected) return;
     const to = this.testTo.trim();
-    await this.run('Sending test', async () => (await this.functions.call('sendMarketingTest', { id: this.selected!.id, to })).data,
-      () => { this.notice = `Test submitted to ${to}. Refresh until SMTP acceptance appears.`; });
+    const saved = this.selected && !this.dirty;
+    const draft = this.collectDraft();
+    const previewDraft = { ...draft, name: draft.name.trim() || 'Test message',
+      filters: { plans: draft.filters.plans.length ? draft.filters.plans : this.plans,
+        signupFrom: null, signupTo: null } };
+    await this.run('Sending test', async () => (await this.functions.call('sendMarketingTest',
+      saved ? { id: this.selected!.id, to } : { id: null, to, draft: previewDraft })).data,
+      () => { this.notice = saved
+        ? `Test submitted to ${to}. Refresh until SMTP acceptance appears.`
+        : `Test submitted to ${to}. Check that inbox for delivery.`; });
   }
   async change(action: 'start' | 'pause' | 'resume' | 'retry'): Promise<void> {
     if (!this.selected) return;
