@@ -10,6 +10,22 @@ import { calendarTimelineNotesByDate } from '../../../helpers/calendar-timeline-
 import type { PlannedWorkoutCalendarOverlay } from '../../../helpers/planned-workout-calendar.helper';
 
 describe('ActivityCalendarGridComponent', () => {
+  it('marks only the selected date without changing the today marker or day layout', async () => {
+    const fixture = await renderGrid('month', false, []);
+    fixture.componentRef.setInput('selectedDateKey', '2026-08-03'); fixture.detectChanges();
+    const selected = fixture.nativeElement.querySelector('.activity-calendar-day--selected') as HTMLButtonElement;
+    expect(selected).toBeTruthy();
+    expect(selected.getAttribute('aria-pressed')).toBe('true');
+    expect(selected.querySelector('.activity-calendar-day-number-value')?.textContent?.trim()).toBe('3');
+    expect(fixture.nativeElement.querySelectorAll('[aria-pressed="true"]')).toHaveLength(1);
+    const daySelected = vi.fn(); fixture.componentInstance.daySelected.subscribe(daySelected);
+    selected.click();
+    expect(daySelected).toHaveBeenCalledOnce();
+    expect(fixture.componentRef.injector.get(AppHapticsService).selection).not.toHaveBeenCalled();
+    fixture.componentRef.setInput('selectedDateKey', '2026-08-04'); fixture.detectChanges();
+    expect(fixture.nativeElement.querySelectorAll('[aria-pressed="true"]')).toHaveLength(1);
+    expect(fixture.nativeElement.querySelector('.activity-calendar-day--selected .activity-calendar-day-number-value')?.textContent?.trim()).toBe('4');
+  });
   it('omits planning announcements when hidden and retains empty-day announcements when enabled', async () => {
     const fixture = await renderGrid('month', false, []);
     expect(fixture.nativeElement.querySelector('[aria-label*="planned workout"]')).toBeNull();

@@ -6,6 +6,7 @@
   </app-bottom-sheet-header>
 
   <div class="bottom-sheet-content calendar-day-details-content">
+    <app-calendar-day-context [data]="data" [compact]="true" [privateHealthEnabled]="data.privateHealthEnabled !== false"></app-calendar-day-context>
     @if (noteRows().length) {
     <section aria-labelledby="calendar-day-notes-title">
       <h3 id="calendar-day-notes-title">Timeline notes</h3>

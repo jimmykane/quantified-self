@@ -23,6 +23,7 @@ export class ActivityCalendarGridComponent implements OnChanges {
   /** Compact dashboard tiles fill their allocated height; scrollable pickers keep natural row sizes. */
   @Input() fillHeight = true;
   @Input() hideOutsideDays = false;
+  @Input() selectedDateKey: string | null = null;
   // Private notes are opt-in; dashboard/shared calendar instances do not fetch or receive them.
   @Input() timelineNotesByDate: ReadonlyMap<string, CalendarDayTimelineNotes> = new Map();
   /** Null omits planning from both the visual and accessible calendar. */
@@ -46,7 +47,7 @@ export class ActivityCalendarGridComponent implements OnChanges {
   }
 
   selectDay(day: ActivityCalendarDayViewModel): void {
-    this.hapticsService.selection();
+    if (this.selectedDateKey !== day.dateKey) this.hapticsService.selection();
     this.daySelected.emit(day);
   }
 }

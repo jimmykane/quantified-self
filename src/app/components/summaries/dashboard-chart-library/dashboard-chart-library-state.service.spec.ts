@@ -172,7 +172,7 @@ describe('inline chart library state', () => {
   });
   it('disables Undo after another layout change and never removes a different tile', async () => {
     await state.select(user, calendar); await state.save();
-    user.settings.dashboardSettings.tiles[0].size.columns = 4;
+    user.settings.dashboardSettings.tiles[0].size.columns = 2;
     state.invalidateUndo(user.settings.dashboardSettings); await state.undo(user);
     expect(state.undoAvailable()).toBe(false); expect(persistence.save).toHaveBeenCalledTimes(1);
     expect(user.settings.dashboardSettings.tiles).toHaveLength(1);

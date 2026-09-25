@@ -183,6 +183,18 @@ export function formatActivityCalendarDateParam(date: Date): string {
   ].join('-');
 }
 
+export function resolveActivityCalendarDayRange(date: Date): ActivityRange {
+  const day = startOfLocalDay(isValidDate(date) ? date : new Date());
+  return {
+    startMs: day.getTime(),
+    endExclusiveMs: addLocalDays(day, 1).getTime(),
+  };
+}
+
+export function navigateActivityCalendarDay(date: Date, direction: -1 | 1): Date {
+  return addLocalDays(startOfLocalDay(isValidDate(date) ? date : new Date()), direction);
+}
+
 export function navigateActivityCalendarDate(
   anchorDate: Date,
   view: ActivityCalendarView,

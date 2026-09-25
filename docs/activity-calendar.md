@@ -4,12 +4,13 @@ This document is the implementation and maintenance guide for the Activity Calen
 
 ## Product surfaces
 
-- The dashboard Activity Calendar tile shows the current month in a compact 1 x 1 tile and opens the full calendar. This is the creation default; persisted user-selected dimensions are not rewritten.
-- New dashboards include the tile by default. An existing editable dashboard that does not contain it receives a one-time automatic addition with an Undo action.
-- The authenticated `/calendar` route provides Week, Month, and Year views, period navigation, totals, activity-group bars, and day details.
+- The dashboard Activity Calendar tile is full section width, shows the current month, and keeps a selected-day panel beside the grid when wide or below it when the tile itself is narrow. New tiles use four columns. Existing owner tiles receive a one-time versioned size migration; later manual resizes are honored and all other tile settings are preserved.
+- New dashboards include the tile by default. Existing intentionally empty dashboards are preserved; the starter layout supplies Calendar only for new users.
+- The authenticated `/calendar` route provides Week, Month, and Year views, period navigation, totals, activity-group bars, and an inline selected-day panel. The Today mini-calendar retains its day-details sheet.
+- The authenticated `/calendar/day/:date` route opens the selected day on its own page. **Open full day** in the dashboard tile or Calendar panel links there; its **Calendar** action returns to that date in the month grid.
 - Private [Timeline notes](timeline-notes.md) mark their dates in all three full-calendar views, including note-only days.
   The shared header manager and **Show on charts and calendar** preference apply; dashboard tiles/popovers stay unchanged.
-- Every rendered date is selectable. Its Angular Material bottom sheet keeps planned workouts separate from completed activity totals and rows, provides active-plan/standalone creation actions, and links to a planned-workout editor or individual event as appropriate.
+- Every rendered date is selectable. The route and dashboard panel keep planned workouts separate from completed activity totals and rows, and link to a planned-workout editor or individual activity. The Today mini-calendar uses the same health context inside its existing sheet.
 - Standalone workouts and workouts from the active plan appear on the full Calendar, dashboard tile, and Dashboard Today mini-calendar. Inactive-plan workouts remain in `/training/plans`; skipped workouts remain visible with a distinct marker.
 - The public `/features/activity-calendar` route explains the feature without reading or exposing user activity data.
 
@@ -20,15 +21,16 @@ This document is the implementation and maintenance guide for the Activity Calen
 - Week spans seven local calendar days aligned to the user's configured start of week.
 - Month uses a fixed 42-day grid so adjacent dates render consistently. Period totals include only dates in the selected month.
 - Year queries January 1 through the following January 1 and renders all 12 months.
-- The full route stores `view` and `date` in query parameters. Previous and next controls move by the selected view; Today changes the anchor to the current local date.
-- The dashboard tile owns its current-month query. The full calendar owns its visible-period query. Neither reuses the dashboard event table, custom-chart range, or map-tile filters.
+- The full route stores `view` and `date` in query parameters. Selecting a date updates both the URL and inline day panel; Back/Forward restore it. Previous and next controls move by the selected view; Today changes the anchor to the current local date.
+- The standalone day route stores its local date in the path. Previous and next controls move one local day, and Back/Forward restore the exact day. Activity and Timeline-note reads are bounded to that date; the existing shared panel still performs its own selected-date health read. No month-wide health read is added.
+- The dashboard tile owns its current-month query. The full calendar owns its visible-period query, and the standalone day route queries only its local day. None reuses the dashboard event table, custom-chart range, or map-tile filters.
 
-Dashboard migration state uses the shared automatic-tile framework:
+Dashboard automatic-tile and layout migration state:
 
-- `DashboardAutoTileService` treats Activity Calendar as always eligible when the signed-in user opens their own editable dashboard. Public, shared, and other read-only dashboards do not run this migration.
-- `settings.dashboardSettings.autoTiles.activityCalendar` records `added` or `dismissed` state. An existing tile or either state prevents duplicate automatic additions.
+- The current starter dashboard includes Calendar; no automatic addition runs for existing or intentionally empty layouts. Public, shared, and other read-only dashboards do not run the size migration.
+- `settings.dashboardSettings.autoTiles.activityCalendar` continues to record `added` or `dismissed` for suggestions and Undo. The independent `calendarDayContextLayoutVersion` marks the one-time width migration.
 - Undo, direct tile deletion, replacing the tile in Dashboard manager, and **Remove all** persist `dismissed`. Adding Activity Calendar manually after dismissal persists `added`.
-- Failed additions, Undo operations, and dashboard edits restore the previous tiles and automatic-tile metadata before reporting the error.
+- Add/Undo and dashboard edits keep their existing rollback behavior. A failed width migration restores its local draft; a later owner load can retry it.
 
 `src/app/services/activity-calendar.service.ts` reads lightweight event summary documents by `startDate`. It excludes merge and benchmark documents, maps only calendar-required fields into `EventInterface` values, and sorts results by start time. Exact user and query-window results are cached for five minutes with at most 12 entries; a cached value is emitted immediately while the live listener supplies current data.
 
@@ -64,14 +66,14 @@ Activities are grouped with the shared Sports Lib activity-type groups and app c
 - Date cells do not use Material tooltips. This preserves native touch scrolling; their accessible names contain the date, activity, planned-workout, and visible note counts, duration, and group summary.
 - Note days add a category icon (or grouped `event_note` indicator), an accessible note count, and a slim colored edge,
   separate from activity circles. The edge retains a segment for each distinct note color when notes overlap, with
-  the shared neutral gray used by chart note markers for Default. It does not change cell sizing or activity marker colors. Their day sheet lists
+  the shared neutral gray used by chart note markers for Default. It does not change cell sizing or activity marker colors. The selected-day panel and Today sheet list
   note titles, categories, and actual dates above activities; selecting a note opens the shared editor. Inclusive periods,
   future bounded dates, and ongoing periods through today in their captured zone are supported without changing totals.
   Window focus and returning to a visible tab refresh the current-day clock, including ongoing note cutoffs after midnight.
   Calendar owns the bounded notes load for its visible labels (including adjacent Month dates); the grid never fetches.
-  Open sheets receive owner-fenced reactive notes, and stale selections cannot open another account's note.
+  The inline panel and Today sheet receive owner-fenced reactive notes, and stale selections cannot open another account's note.
   A notes failure leaves activity rendering intact, and an activities failure still permits viewing notes.
-  Note days can open before activity loading finishes: the sheet shows loading/error status instead of falsely reporting
+  Note days can be selected before activity loading finishes: the panel shows loading/error status instead of falsely reporting
   no workouts, and its activities update when the selected day's data arrives.
 
 ## Period summaries
@@ -79,7 +81,7 @@ Activities are grouped with the shared Sports Lib activity-type groups and app c
 The top summary shows distance, duration, and ascent for the selected primary period. The Activities section groups the same period by activity group and compares each group's recorded duration with the longest-duration group.
 
 - Duration is the bar metric. Positive recorded duration, distance, ascent, and descent values appear beneath the bar.
-- The day-details sheet reuses these exact group rows for the selected local day; its bars compare only that day's activity groups.
+- The inline selected-day panel and Today day-details sheet reuse these exact group rows for the selected local day; their bars compare only that day's activity groups.
 - Planned workouts never contribute to distance, duration, ascent, descent, activity counts, group bars, or the activity table. Day details render them in a separate **Planned workouts** section.
 - Missing values remain unavailable rather than being inferred. A group without recorded duration uses `--` and has no progressbar semantics.
 - `AppEventUtilities.shouldExcludeAscent` and `shouldExcludeDescent` apply shared sport rules. Lift-served downhill types can contribute descent without contributing ascent; Diving, Scuba Diving, Free Diving, Snorkeling, and Mermaiding contribute neither elevation metric because their vertical movement is depth.
@@ -88,21 +90,21 @@ The top summary shows distance, duration, and ascent for the selected primary pe
 
 ## UI and accessibility
 
-Use Angular Material controls for view selection, navigation, progress, retry, the explanatory info tooltip, and the day-details bottom sheet. Reuse app surface and glass-card tokens rather than introducing calendar-only colors or overlay containers.
+Use Angular Material controls for view selection, navigation, progress, retry, the explanatory info tooltip, and the Today day-details bottom sheet. Reuse app surface and glass-card tokens rather than introducing calendar-only colors or overlay containers.
 
 Keep these interaction contracts:
 
 - Previous and next controls have period-specific accessible labels.
 - The period label announces navigation changes.
 - Loading occupies a stable progress slot so cached and live emissions do not move the page.
-- Every rendered date is a button, including dates with neither a planned workout nor a completed activity. Empty dates open creation choices.
+- Every rendered date is a button, including dates with neither a planned workout nor a completed activity. Empty dates still show the selected-day panel and workout creation choices where planning access is available.
 - Activity bars expose progressbar semantics only when recorded duration exists.
 - Start-of-week and weekend treatment must follow the user's settings and shared theme tokens.
 
 ## SEO and privacy
 
 - `/features/activity-calendar` is a prerendered public page included in the sitemap and public startup-route allowlist.
-- `/calendar` and `/training/plans` require authentication, are client-rendered, and are excluded from the sitemap. They use `noindex, follow` route metadata and hosting `noindex` headers; `robots.txt` permits crawling so those directives can be read. Neither workspace is a public product page.
+- `/calendar`, `/calendar/day/:date`, and `/training/plans` require authentication, are client-rendered, and are excluded from the sitemap. They use `noindex, follow` route metadata and hosting `noindex` headers; `robots.txt` permits crawling so those directives can be read. Neither workspace is a public product page.
 - Public page metadata and structured data describe the feature only. They must never include activity values, account identifiers, or examples derived from a user's calendar.
 
 ## Test map
@@ -111,9 +113,17 @@ Keep these interaction contracts:
 - `src/app/services/activity-calendar.service.spec.ts`: summary queries, filtering, mapping, sorting, and cache behavior.
 - `src/app/helpers/dashboard-auto-tile.helper.spec.ts` and `src/app/services/dashboard-auto-tile.service.spec.ts`: Calendar identity, one-time dashboard migration, duplicate prevention, dismissal, Undo, and rollback behavior.
 - `src/app/components/calendar/**.spec.ts`: page, grid, tile, day details, responsive behavior, and Material interaction contracts.
+- `src/app/helpers/calendar-day-health.helper.spec.ts` and `src/app/services/calendar-day-health.service.spec.ts`: exact-date evidence, source labels, partial failures, owner fences, and bounded selected-day reads.
+- `src/app/helpers/dashboard-calendar-layout.helper.spec.ts` and `src/app/components/summaries/summaries.component.spec.ts`: one-time full-width migration and later user resizing.
 - `src/app/helpers/planned-workout-calendar.helper.spec.ts` and `src/app/services/training-plans.service.spec.ts`: active-plan/standalone overlay selection, inactive-plan exclusion, skipped visibility, and owner-current schedule reads.
 - `src/app/components/public-seo/public-seo-pages.content.spec.ts`: public page metadata, links, and structured data.
 - `src/app/app.routing.module.spec.ts`, `src/app/app.routes.server.spec.ts`, and `src/app/shared/public-startup-route.spec.ts`: public and authenticated route contracts.
 - `src/firebase-hosting.config.spec.ts`: sitemap, robots, and hosting behavior.
 
 When changing calendar behavior, update the focused in-app help article and this document in the same change, then run the narrow helper, service, component, routing, and hosting specs affected by the edit.
+
+## Selected-day health
+
+`CalendarDayHealthService` reads only the selected date using the bounded Health/Sleep readers and watches the existing derived-metric snapshots. The shared `CalendarDayContextComponent` renders that evidence in the dashboard tile, full Calendar, and Today sheet. Sleep and HRV require an exact local date match and name their source; a last-known reading is never substituted. Sleep shows its score when available, otherwise its recorded duration. The one-day HRV read includes sample-only measurements; if that read fails, an available Sleep HRV reading remains visible with a partial-source warning. Past readiness requires an exact stored daily score, while today uses the same live readiness inputs as the Today card. Recovery-left is present only for today. Sources distinguish empty and failed reads, while derived readiness and recovery identify an update in progress and refresh in place when their snapshot changes. Derived updates reuse the completed Sleep/HRV reads. Owner checks prevent private reads from shared dashboards; abort and subscription cleanup prevent stale results replacing a newer selection. No month-wide health query or new calculation is performed.
+
+`dashboard-calendar-layout.helper.ts` expands existing Calendar tiles once, using `calendarDayContextLayoutVersion` in owner dashboard settings. The dashboard board lets only the Calendar row grow with day content. User resizing after the version is stored is left untouched.

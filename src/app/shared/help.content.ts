@@ -247,23 +247,25 @@ See the public [Training Plans overview](/features/training-plans) for a walkthr
 
 const ACTIVITY_CALENDAR_HELP_CONTENT = `## Open and navigate the calendar
 
-- New dashboards start with a 1 x 1 **Activity Calendar** tile showing the current month. Select its open action to move to the full [Calendar](/calendar).
+- New dashboards start with a full-width **Activity Calendar** tile showing the current month. Select a date to see its activities, health, notes, and plans beside the calendar or below it when the tile is narrow. **Open full day** opens a dedicated page for that date, with the same day details and previous/next day controls.
 - The **Today** card opens a month calendar in a bottom sheet. Use its arrows to change months and select a day for details. The Dashboard and Training headers also link to the full [Calendar](/calendar).
-- Existing dashboards keep their saved layout. To add the calendar, use **Add tile** in **Activity Overview**. Removing it keeps it off your dashboard and out of suggestions until you add it again manually.
+- Existing Calendar tiles expand to the full section width once. Other tiles stay in place, and any later resize you make is kept. To add the calendar, use **Add tile** in **Activity Overview**. Removing it keeps it off your dashboard and out of suggestions until you add it again manually.
 - The full Calendar has **Week**, **Month**, and **Year** views. The previous and next controls move by the selected view's period, and **Today** returns to the current period without taking a separate row on smaller screens.
-- The selected view and date are kept in the URL, so refreshing or sharing the authenticated route preserves the same calendar position.
+- Selecting a day keeps the calendar visible and updates the day panel. The selected view and date are kept in the URL, so refreshing, sharing the authenticated route, or using browser Back restores the same day. **Open full day** opens that date on its own page; **Calendar** returns to the month containing it.
 
 ## Read activity days
 
 - A circle's color identifies an activity group and its size reflects recorded duration. Larger circles mean more recorded time, using a bounded scale so unusually long activities do not dominate the grid.
 - Week and Month views separate activity-group circles when space allows. Narrow layouts, the dashboard tile, and Year view place multiple circles concentrically around the same center so a day stays readable in a compact cell.
-- Select any date, including an empty one, to open its details sheet. Completed totals and activity-group bars appear above individual activities with their available distance and elevation metrics.
+- Select any date, including an empty one, to see that day next to the calendar on desktop or below it on mobile. Completed totals and activity-group bars appear above individual activities. The Today mini-calendar still opens day details in a sheet.
 ${TRAINING_PLANNING_HELP_SNIPPETS.calendarDetails}
 ${TRAINING_PLANNING_HELP_SNIPPETS.calendarOverlays}
 ${TRAINING_PLANNING_HELP_SNIPPETS.calendarColors}
 - In Calendar and the dashboard calendar, a note icon marks days with **Timeline notes**, even when there is no workout. Small color markers show your chosen note colors; overlapping notes keep their different colors as separate segments. Activity circles keep their own colors. Select the day to see its notes, then select a note to open or edit it. Date ranges include their end day; ongoing notes stop at today in their original time zone and refresh when you return to the tab. Notes never affect activity totals or circle sizes. Use **Timeline notes** in the header to manage them and **Show on charts and calendar** to show or hide them across workspaces. The dashboard Activity calendar tile and Today calendar popup show the same private notes.
-- In day details, an activity group containing exactly one activity opens that activity directly, as does its individual activity row. Browser **Back** restores the same day's details sheet. Deleting an activity from its details page returns to the previous in-app page; the day sheet reopens when other activity remains on that day.
+- Select an activity row to open its details. Browser **Back** returns to the selected calendar day. The Today mini-calendar retains its day-details sheet and its activity-group links.
 - Calendar dates intentionally have no hover or touch tooltip. This keeps native vertical scrolling responsive on phones; day details remain available by selecting a date.
+
+- The selected day shows date-matched sleep and HRV with their sources. Readiness appears for past days only when a daily score was stored; recovery left is shown only for today. Missing readings, loading, and read errors are labeled separately.
 
 ## Understand period totals and activity bars
 
@@ -374,7 +376,7 @@ HRV and Sleep each have their own date range and older/newer navigation. While a
 - Chart previews and info buttons explain what each chart shows, which records contribute, and how to read the trend. Easy and Hard percentages measure time in recorded zones, not a share of Training Stress Score. Calculation periods, such as the 42-day fitness average, are separate from the date range displayed.
 - Charts farther down the page draw as you approach them to keep scrolling responsive. Their titles and controls remain available, and scrolling back keeps charts already shown.
 - **Curated Recovery** remains a fixed insight and does not react to event table or custom tile date ranges.
-- **Activity Calendar** is the default 1 x 1 dashboard tile. It shows the current month and opens the full [Calendar](/calendar). Existing dashboards keep their saved layout; add it from **Activity Overview** when you want it. The [Activity Calendar guide](/help#activity-calendar) explains its views, circles, summaries, and data scope.
+- **Activity Calendar** is a full-width dashboard tile. It shows the current month and a selected day's activities, health, notes, and plans, with an **Open full day** link to a dedicated page for that date. Existing Calendar tiles expand once while other tiles keep their settings; add it from **Activity Overview** when you want it. The [Activity Calendar guide](/help#activity-calendar) explains its views, circles, summaries, and data scope.
 - **Curated Form/TSS** computes from full history and does not react to event table or custom tile date ranges. Its **W / M / Y** view setting is saved on that dashboard tile.
 - New curated charts: **Freshness Forecast**, **Intensity Distribution**, **Efficiency Trend**, **Cycling Power Curve**, and **Running Power Curve**.
 - New dashboards start with **Today**, followed by **Weekly Training Time** and **Activity Calendar** in **Activity Overview**. Weekly Training Time shows weekly columns grouped by sport over **90 days**. Before data arrives, empty states guide you to upload activities or connect a service. The optional Dashboard **Today** header greets the dashboard owner according to browser-local morning, afternoon, or evening time, using the first part of their display name when available and generic copy otherwise; the greeting stays hidden on shared dashboards. Today then begins with the same TSS-only **Training state** shown in Training and shows current **Readiness** with its score, confidence, available-signal count, Load, Sleep, HRV, and Overnight HR. Open **Training** or **Health** from the main navigation. Select its calendar icon to open a mini calendar for the current month, use its previous and next controls to browse months, then select an activity day for details. Use **Show Today summary** in **Dashboard options** to show or hide it independently from chart and map tiles.

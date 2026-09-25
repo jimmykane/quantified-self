@@ -92,6 +92,7 @@ export const CLIENT_RENDERED_APP_ROUTES = [
   'dashboard',
   'health',
   'calendar',
+  'calendar/day/:date',
   'training/plans/workout/:workoutId',
   'training/plans/standalone/new',
   'training/plans/plan/:planId/new',

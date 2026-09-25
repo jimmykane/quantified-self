@@ -15,11 +15,13 @@ import {
   formatActivityCalendarDateParam,
   formatActivityCalendarDuration,
   navigateActivityCalendarDate,
+  navigateActivityCalendarDay,
   normalizeActivityCalendarView,
   parseActivityCalendarDate,
   resolveActivityCalendarEventLabel,
   resolveActivityCalendarPrimaryRange,
   resolveActivityCalendarQueryWindow,
+  resolveActivityCalendarDayRange,
 } from './activity-calendar.helper';
 
 function createEvent(
@@ -96,6 +98,15 @@ describe('activity-calendar helper', () => {
       .toBe('2025-02-28');
     expect(formatActivityCalendarDateParam(navigateActivityCalendarDate(new Date(2026, 7, 3), 'week', -1)))
       .toBe('2026-07-27');
+  });
+
+  it('uses local day boundaries and adjacent dates for a dedicated day', () => {
+    const day = new Date(2026, 9, 25, 12);
+    const range = resolveActivityCalendarDayRange(day);
+    expect(new Date(range.startMs)).toEqual(new Date(2026, 9, 25));
+    expect(new Date(range.endExclusiveMs)).toEqual(new Date(2026, 9, 26));
+    expect(formatActivityCalendarDateParam(navigateActivityCalendarDay(day, -1))).toBe('2026-10-24');
+    expect(formatActivityCalendarDateParam(navigateActivityCalendarDay(day, 1))).toBe('2026-10-26');
   });
 
   it('builds a month grid and aggregates duration by local day and sport family', () => {

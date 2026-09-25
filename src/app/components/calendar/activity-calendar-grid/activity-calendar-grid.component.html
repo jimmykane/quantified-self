@@ -29,7 +29,9 @@
           <button type="button" class="activity-calendar-day activity-calendar-day-button"
             [class.activity-calendar-day--outside]="!day.inPrimaryPeriod"
             [class.activity-calendar-day--today]="day.isToday"
+            [class.activity-calendar-day--selected]="selectedDateKey === day.dateKey"
             [class.activity-calendar-day--weekend]="day.isWeekend"
+            [attr.aria-pressed]="selectedDateKey ? selectedDateKey === day.dateKey : null"
             [attr.aria-label]="(dayNotes?.ariaLabel ?? day.ariaLabel) + (plannedDay ? ' ' + plannedDay.ariaLabel + '.' : plannedWorkoutsByDate ? ' No planned workouts.' : '')"
             matRipple
             (click)="selectDay(day)">

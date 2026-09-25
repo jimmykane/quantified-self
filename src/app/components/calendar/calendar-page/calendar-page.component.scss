@@ -276,3 +276,23 @@
     display: none;
   }
 }
+
+
+.calendar-day-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1.35fr) minmax(300px, 0.85fr);
+  align-items: start;
+  gap: 16px;
+}
+.calendar-day-layout > app-activity-calendar-grid { min-width: 0; }
+.calendar-selected-day {
+  min-width: 0;
+  padding: 16px;
+  border: 1px solid var(--mat-sys-outline-variant);
+  border-radius: 16px;
+  background: var(--mat-sys-surface-container-low);
+}
+@media (max-width: 900px) {
+  .calendar-day-layout { grid-template-columns: minmax(0, 1fr); }
+  .calendar-selected-day { padding: 14px; }
+}

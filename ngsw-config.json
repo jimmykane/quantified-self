@@ -55,6 +55,7 @@
     "/dashboard",
     "/health",
     "/calendar",
+    "/calendar/day/*",
     "/training/plans/workout/*",
     "/training/plans/standalone/new",
     "/training/plans/plan/*/new",
