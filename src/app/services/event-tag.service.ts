@@ -8,10 +8,7 @@ import {
   applyEventTagChanges,
   EventTagChanges,
   EVENT_TAG_BULK_LIMIT,
-  EVENT_TAG_CATALOG_SUBMISSION_COLLECTION,
-  EVENT_TAG_CATALOG_SUBMISSION_DOCUMENT,
   getEventTags,
-  newlyAssignedEventTags,
   normalizeEventTags,
 } from '@shared/event-tags';
 import { EventTagCatalogService } from './event-tag-catalog.service';
@@ -43,16 +40,15 @@ export class EventTagService {
     const tags = normalizeEventTags(value);
     const expectedTags = normalizeEventTags(expectedValue);
     const eventRef = doc(this.firestore, 'users', user.uid, 'events', eventID);
-    const submissionRef = doc(this.firestore, 'users', user.uid,
-      EVENT_TAG_CATALOG_SUBMISSION_COLLECTION, EVENT_TAG_CATALOG_SUBMISSION_DOCUMENT);
     await runTransaction(this.firestore, async (transaction) => {
       const snapshot = await transaction.get(eventRef);
       if (!snapshot.exists()) {
         throw new Error('Tags were not changed because the event no longer exists.');
       }
 
-      const currentData = snapshot.data() as { tags?: unknown; benchmarkReviewTags?: unknown };
-      const currentTags = getEventTags(currentData);
+      const currentTags = getEventTags(
+        snapshot.data() as { tags?: unknown; benchmarkReviewTags?: unknown },
+      );
       if (!this.areTagsEqual(currentTags, expectedTags)) {
         throw new Error('Tags changed elsewhere. Reopen the editor and try again.');
       }
@@ -61,8 +57,6 @@ export class EventTagService {
         tags,
         benchmarkReviewTags: deleteField(),
       }));
-      const additions = newlyAssignedEventTags(currentData, { tags });
-      if (additions.length) transaction.set(submissionRef, { tags: additions });
     });
     event.tags = tags;
     delete event.benchmarkReviewTags;
@@ -95,13 +89,10 @@ export class EventTagService {
       eventID,
       ref: doc(this.firestore, 'users', user.uid, 'events', eventID),
     }));
-    const submissionRef = doc(this.firestore, 'users', user.uid,
-      EVENT_TAG_CATALOG_SUBMISSION_COLLECTION, EVENT_TAG_CATALOG_SUBMISSION_DOCUMENT);
 
     const results = await runTransaction(this.firestore, async (transaction) => {
       const snapshots = await Promise.all(eventRefs.map(({ ref }) => transaction.get(ref)));
       const results: Record<string, string[]> = {};
-      const additions = new Map<string, string>();
 
       snapshots.forEach((snapshot, index) => {
         const { eventID } = eventRefs[index];
@@ -118,9 +109,6 @@ export class EventTagService {
           throw new Error('Tags were not changed because one or more events would exceed 10 tags.');
         }
         results[eventID] = tags;
-        for (const tag of newlyAssignedEventTags(data, { tags })) {
-          additions.set(tag.toLowerCase(), tag);
-        }
       });
 
       eventRefs.forEach(({ eventID, ref }) => {
@@ -129,7 +117,6 @@ export class EventTagService {
           benchmarkReviewTags: deleteField(),
         }));
       });
-      if (additions.size) transaction.set(submissionRef, { tags: [...additions.values()] });
 
       return results;
     });

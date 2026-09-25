@@ -1267,8 +1267,7 @@ change or no-op. If the current normalized list differs from `expectedTags`, the
 overwriting a concurrent edit. Repeating an accepted replacement is a safe no-op. The canonical event field is written
 through the same shared sanitizer as the UI and the legacy tag field is removed; sibling activities inherit the result
 because tags remain event-owned. The focused write returns only the input opaque reference, normalized tags and whether
-storage changed, with no event/activity IDs. Newly assigned labels are submitted to the private per-user tag catalog
-projection in the same transaction. This changes no MCP tool schema, scope, consent, or approval step.
+storage changed, with no event/activity IDs.
 
 An activity/workout rename edits the parent event's `name` through `update_event_title`. The client first reads
 `get_event_title` and submits its exact `expectedTitle`. A description edit first reads the full private text with
@@ -1284,8 +1283,8 @@ Sibling activities share the new event title or description. No recorded activit
 provider records or remote services are touched. The MCP host controls per-call approval; users who want to inspect
 each edit must keep automatic approval disabled in that host. These tools
 are external-client only: the built-in Assistant's independent **Activity tag changes** choice still authorizes only
-tag proposals and does not expose title or description mutation. Title and description edits add no callable, index,
-collection or background job. Future editable event fields still require dedicated strict tools, projection and consent review, tests and docs;
+tag proposals and does not expose title or description mutation. This adds no callable, index, collection or background
+job. Future editable event fields still require dedicated strict tools, projection and consent review, tests and docs;
 the broader permission name does not automatically expose newly stored fields.
 
 One filtered call, including a tag-filtered call, scans at most 100 selected activity documents and can return fewer

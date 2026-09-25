@@ -14,13 +14,7 @@ import { SPORTS_LIB_VERSION } from './shared/sports-lib-version.node';
 import { EVENT_PROCESSING_ENTITY, ProcessingMetaData } from './shared/processing-metadata.interface';
 import { sportsLibVersionToCode } from './reparse/sports-lib-reparse.service';
 import { OriginalFileMetaData } from '../../shared/app-event.interface';
-import {
-  EVENT_TAG_CATALOG_SUBMISSION_COLLECTION,
-  EVENT_TAG_CATALOG_SUBMISSION_DOCUMENT,
-  newlyAssignedEventTags,
-  preserveEventTagsOnRewrite,
-  storedEventTagNames,
-} from '../../shared/event-tags';
+import { preserveEventTagsOnRewrite } from '../../shared/event-tags';
 import {
   getUserDeletionGuardState,
   getUserDeletionGuardStateInTransaction,
@@ -268,23 +262,12 @@ export async function setEventDocumentIfUserActive(
 
     const incomingData = data as admin.firestore.DocumentData;
     let resolvedData = incomingData;
-    const isEventDocument = docRef.path.startsWith(`users/${userID}/events/`)
-      && docRef.path.split('/').length === 4;
-    const needsExistingTags = isEventDocument && storedEventTagNames(incomingData).length > 0;
-    let existingData: admin.firestore.DocumentData | null = null;
-    if (transformExistingData || needsExistingTags) {
+    if (transformExistingData) {
       const existingSnapshot = await transaction.get(docRef);
-      existingData = existingSnapshot.exists ? existingSnapshot.data() || null : null;
-      if (transformExistingData) resolvedData = transformExistingData(incomingData, existingData);
-    }
-
-    if (isEventDocument) {
-      const additions = newlyAssignedEventTags(existingData, resolvedData);
-      if (additions.length) {
-        transaction.set(db.collection('users').doc(userID)
-          .collection(EVENT_TAG_CATALOG_SUBMISSION_COLLECTION)
-          .doc(EVENT_TAG_CATALOG_SUBMISSION_DOCUMENT), { tags: additions });
-      }
+      resolvedData = transformExistingData(
+        incomingData,
+        existingSnapshot.exists ? existingSnapshot.data() || null : null,
+      );
     }
 
     if (options) {
