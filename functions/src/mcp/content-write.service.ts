@@ -9,6 +9,10 @@ import {
 import type { AssistantContentProposalKind } from '../../../shared/assistant.types';
 import { isBenchmarkEvent } from '../../../shared/event-classification';
 import {
+  createMissingEventTagCatalogEntriesInTransaction,
+  newlyAssignedEventTags,
+} from '../events/event-tag-catalog';
+import {
   getEventTags,
   normalizeEventTags,
 } from '../../../shared/event-tags';
@@ -368,6 +372,9 @@ export async function updateMcpEventTags(
     if (!sameTags(currentTags, expectedTags)) {
       invalid('Event tags changed since they were read. Read them again before updating.');
     }
+    await createMissingEventTagCatalogEntriesInTransaction(
+      deps.db, transaction, input.uid, newlyAssignedEventTags(event.data(), { tags }),
+    );
     transaction.update(eventRef, {
       ...sanitizeEventFirestoreWritePayload({ tags }),
       benchmarkReviewTags: FieldValue.delete(),

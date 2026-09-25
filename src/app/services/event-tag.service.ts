@@ -2,21 +2,26 @@ import { inject, Injectable } from '@angular/core';
 import { User } from '@sports-alliance/sports-lib';
 import { AppEventInterface } from '@shared/app-event.interface';
 import { sanitizeEventFirestoreWritePayload } from '@shared/firestore-write-sanitizer';
+import type { Transaction } from 'firebase/firestore';
 import { Firestore, deleteField, doc, runTransaction } from 'app/firebase/firestore';
 
 import {
   applyEventTagChanges,
   EventTagChanges,
   EVENT_TAG_BULK_LIMIT,
+  eventTagCatalogKeyFromWebCrypto,
   getEventTags,
+  newlyAssignedEventTags,
   normalizeEventTags,
 } from '@shared/event-tags';
 import { EventTagCatalogService } from './event-tag-catalog.service';
+import { BrowserCompatibilityService } from './browser.compatibility.service';
 
 @Injectable({ providedIn: 'root' })
 export class EventTagService {
   private firestore = inject(Firestore);
   private catalog = inject(EventTagCatalogService);
+  private compatibility = inject(BrowserCompatibilityService);
 
   normalizeTags(value: unknown): string[] {
     return normalizeEventTags(value);
@@ -46,13 +51,14 @@ export class EventTagService {
         throw new Error('Tags were not changed because the event no longer exists.');
       }
 
-      const currentTags = getEventTags(
-        snapshot.data() as { tags?: unknown; benchmarkReviewTags?: unknown },
-      );
+      const currentData = snapshot.data() as { tags?: unknown; benchmarkReviewTags?: unknown };
+      const currentTags = getEventTags(currentData);
       if (!this.areTagsEqual(currentTags, expectedTags)) {
         throw new Error('Tags changed elsewhere. Reopen the editor and try again.');
       }
 
+      await this.createMissingCatalogEntries(transaction, user.uid,
+        newlyAssignedEventTags(currentData, { tags }));
       transaction.update(eventRef, sanitizeEventFirestoreWritePayload({
         tags,
         benchmarkReviewTags: deleteField(),
@@ -93,6 +99,7 @@ export class EventTagService {
     const results = await runTransaction(this.firestore, async (transaction) => {
       const snapshots = await Promise.all(eventRefs.map(({ ref }) => transaction.get(ref)));
       const results: Record<string, string[]> = {};
+      const additions = new Map<string, string>();
 
       snapshots.forEach((snapshot, index) => {
         const { eventID } = eventRefs[index];
@@ -109,8 +116,12 @@ export class EventTagService {
           throw new Error('Tags were not changed because one or more events would exceed 10 tags.');
         }
         results[eventID] = tags;
+        for (const tag of newlyAssignedEventTags(data, { tags })) {
+          additions.set(tag.toLowerCase(), tag);
+        }
       });
 
+      await this.createMissingCatalogEntries(transaction, user.uid, [...additions.values()]);
       eventRefs.forEach(({ eventID, ref }) => {
         transaction.update(ref, sanitizeEventFirestoreWritePayload({
           tags: results[eventID],
@@ -126,5 +137,25 @@ export class EventTagService {
 
   private areTagsEqual(first: string[], second: string[]): boolean {
     return first.length === second.length && first.every((tag, index) => tag === second[index]);
+  }
+
+  private async createMissingCatalogEntries(
+    transaction: Transaction,
+    userID: string,
+    tags: string[],
+  ): Promise<void> {
+    if (!tags.length) return;
+    if (!this.compatibility.checkWebCryptoSupport()) {
+      throw new Error('Secure event tag storage is unavailable in this browser.');
+    }
+    const entries = await Promise.all(tags.map(async name => ({
+      name,
+      ref: doc(this.firestore, 'users', userID, 'eventTagCatalog',
+        await eventTagCatalogKeyFromWebCrypto(name)),
+    })));
+    const snapshots = await Promise.all(entries.map(({ ref }) => transaction.get(ref)));
+    snapshots.forEach((snapshot, index) => {
+      if (!snapshot.exists()) transaction.set(entries[index].ref, { name: entries[index].name });
+    });
   }
 }

@@ -1267,7 +1267,8 @@ change or no-op. If the current normalized list differs from `expectedTags`, the
 overwriting a concurrent edit. Repeating an accepted replacement is a safe no-op. The canonical event field is written
 through the same shared sanitizer as the UI and the legacy tag field is removed; sibling activities inherit the result
 because tags remain event-owned. The focused write returns only the input opaque reference, normalized tags and whether
-storage changed, with no event/activity IDs.
+storage changed, with no event/activity IDs. Newly assigned labels are added to the private per-user tag catalog in
+the same transaction. This changes no MCP tool schema, scope, consent, or approval step.
 
 An activity/workout rename edits the parent event's `name` through `update_event_title`. The client first reads
 `get_event_title` and submits its exact `expectedTitle`. A description edit first reads the full private text with

@@ -5,6 +5,7 @@ import {
     RulesTestEnvironment,
 } from '@firebase/rules-unit-testing';
 import { readFileSync } from 'fs';
+import { createHash } from 'node:crypto';
 import { resolve } from 'path';
 import { beforeEach, describe, it, beforeAll, afterAll, expect } from 'vitest';
 
@@ -17,7 +18,7 @@ describe('Firestore Security Rules', () => {
             firestore: {
                 rules: readFileSync(resolve(__dirname, '../firestore.rules'), 'utf8'),
                 host: 'localhost',
-                port: 8081,
+                port: Number(process.env.FIRESTORE_RULES_EMULATOR_PORT || 8081),
             },
         });
     });
@@ -33,7 +34,9 @@ describe('Firestore Security Rules', () => {
     });
 
     describe('Event tag catalog', () => {
-        it('allows only the owner to read and rejects client writes', async () => {
+        const key = (name: string) => createHash('sha256').update(name.toLowerCase()).digest('hex');
+
+        it('allows only the owner to read and rejects changes to saved entries', async () => {
             const path = 'users/owner/eventTagCatalog/race';
             await testEnv.withSecurityRulesDisabled(async context => {
                 await context.firestore().doc(path).set({ name: 'Race' });
@@ -49,6 +52,107 @@ describe('Firestore Security Rules', () => {
             await assertFails(owner.doc(path).set({ name: 'Changed' }));
             await assertFails(owner.doc(path).update({ name: 'Changed' }));
             await assertFails(owner.doc(path).delete());
+        });
+
+        it('lets the owner create normalized labels under hash-shaped keys', async () => {
+            await testEnv.withSecurityRulesDisabled(async context => {
+                await context.firestore().doc('users/owner').set({ created: true });
+            });
+            const owner = testEnv.authenticatedContext('owner').firestore();
+            const other = testEnv.authenticatedContext('other').firestore();
+            const guest = testEnv.unauthenticatedContext().firestore();
+            for (const name of ['Race', 'İstanbul', '🏃 Trail']) {
+                await assertSucceeds(owner.doc(`users/owner/eventTagCatalog/${key(name)}`).set({ name }));
+            }
+            await assertFails(owner.doc(`users/owner/eventTagCatalog/${key('race')}`).set({ name: 'race' }));
+            await assertFails(owner.doc('users/owner/eventTagCatalog/wrong-key').set({ name: 'New' }));
+            await assertFails(owner.doc(`users/owner/eventTagCatalog/${key(' padded')}`).set({ name: ' padded' }));
+            await assertFails(owner.doc(`users/owner/eventTagCatalog/${key('bad  space')}`).set({ name: 'bad  space' }));
+            await assertFails(owner.doc(`users/owner/eventTagCatalog/${key('New')}`).set({ name: 'New', extra: true }));
+            await assertFails(other.doc(`users/owner/eventTagCatalog/${key('Other')}`).set({ name: 'Other' }));
+            await assertFails(guest.doc(`users/owner/eventTagCatalog/${key('Guest')}`).set({ name: 'Guest' }));
+        });
+
+        it('refuses catalog creation after account deletion begins', async () => {
+            const owner = testEnv.authenticatedContext('owner').firestore();
+            const tagRef = owner.doc(`users/owner/eventTagCatalog/${key('Race')}`);
+            await assertFails(tagRef.set({ name: 'Race' }));
+            await testEnv.withSecurityRulesDisabled(async context => {
+                await context.firestore().doc('users/owner').set({ created: true });
+                await context.firestore().doc('userDeletionTombstones/owner').set({ expireAt: new Date(Date.now() + 60_000) });
+            });
+            await assertFails(tagRef.set({ name: 'Race' }));
+            await testEnv.withSecurityRulesDisabled(async context => {
+                await context.firestore().doc('userDeletionTombstones/owner').set({ expireAt: new Date(0) });
+            });
+            await assertSucceeds(tagRef.set({ name: 'Race' }));
+        });
+
+        it('commits an event tag edit and its catalog entry together', async () => {
+            await testEnv.withSecurityRulesDisabled(async context => {
+                await context.firestore().doc('users/owner').set({ created: true });
+                await context.firestore().doc('users/owner/events/event-1')
+                    .set({ privacy: 'private', tags: [] });
+            });
+            const owner = testEnv.authenticatedContext('owner').firestore();
+            const eventRef = owner.doc('users/owner/events/event-1');
+            const tagRef = owner.doc(`users/owner/eventTagCatalog/${key('Trail')}`);
+            await assertSucceeds(owner.runTransaction(async transaction => {
+                await transaction.get(eventRef);
+                const tag = await transaction.get(tagRef);
+                if (!tag.exists) transaction.set(tagRef, { name: 'Trail' });
+                transaction.update(eventRef, { tags: ['Trail'] });
+            }));
+        });
+
+        it('allows an event to acquire the full ten-tag limit atomically', async () => {
+            await testEnv.withSecurityRulesDisabled(async context => {
+                await context.firestore().doc('users/owner').set({ created: true });
+                await context.firestore().doc('users/owner/events/event-1')
+                    .set({ privacy: 'private', tags: [] });
+            });
+            const owner = testEnv.authenticatedContext('owner').firestore();
+            const eventRef = owner.doc('users/owner/events/event-1');
+            const tags = Array.from({ length: 10 }, (_, index) => `Tag ${index}`);
+            const refs = tags.map(name => owner.doc(`users/owner/eventTagCatalog/${key(name)}`));
+            await assertSucceeds(owner.runTransaction(async transaction => {
+                await transaction.get(eventRef);
+                const snapshots = await Promise.all(refs.map(ref => transaction.get(ref)));
+                snapshots.forEach((snapshot, index) => {
+                    if (!snapshot.exists) transaction.set(refs[index], { name: tags[index] });
+                });
+                transaction.update(eventRef, { tags });
+            }));
+            expect((await owner.collection('users/owner/eventTagCatalog').get()).size).toBe(10);
+        });
+
+        it('keeps simultaneous additions to different events and deduplicates the same label', async () => {
+            await testEnv.withSecurityRulesDisabled(async context => {
+                const db = context.firestore();
+                await db.doc('users/owner').set({ created: true });
+                for (const eventID of ['one', 'two', 'three']) {
+                    await db.doc(`users/owner/events/${eventID}`).set({ privacy: 'private', tags: [] });
+                }
+            });
+            const owner = testEnv.authenticatedContext('owner').firestore();
+            const edit = (eventID: string, name: string) => owner.runTransaction(async transaction => {
+                const eventRef = owner.doc(`users/owner/events/${eventID}`);
+                const tagRef = owner.doc(`users/owner/eventTagCatalog/${key(name)}`);
+                await transaction.get(eventRef);
+                const catalogEntry = await transaction.get(tagRef);
+                if (!catalogEntry.exists) transaction.set(tagRef, { name });
+                transaction.update(eventRef, { tags: [name] });
+            });
+
+            await Promise.all([
+                edit('one', 'Race'), edit('two', 'race'), edit('three', 'Trail'),
+            ]);
+
+            for (const [eventID, name] of [['one', 'Race'], ['two', 'race'], ['three', 'Trail']]) {
+                expect((await owner.doc(`users/owner/events/${eventID}`).get()).data()?.tags).toEqual([name]);
+            }
+            const entries = await owner.collection('users/owner/eventTagCatalog').get();
+            expect(entries.docs.map(doc => doc.id).sort()).toEqual([key('Race'), key('Trail')].sort());
         });
     });
 

@@ -1,4 +1,4 @@
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { FieldPath, Firestore, Timestamp } from 'firebase-admin/firestore';
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 import {
@@ -116,6 +116,9 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)(
         activityRef: `activity:${uid}:connection`, tags: ['Easy', 'Trail'], changed: true,
       });
       await expect(updateMcpEventTags(input, codec, deps)).resolves.toMatchObject({ changed: false });
+      const trailKey = createHash('sha256').update('trail').digest('hex');
+      expect((await user.collection('eventTagCatalog').doc(trailKey).get()).data())
+        .toEqual({ name: 'Trail' });
       expect((await user.collection('events').doc('event-1').get()).data()).toEqual({
         tags: ['Easy', 'Trail'],
         mergeType: 'multi',

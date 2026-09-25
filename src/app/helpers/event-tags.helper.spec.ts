@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
+import { createHash } from 'node:crypto';
 
-import { applyEventTagChanges, getEventTags, normalizeEventTags, preserveEventTagsOnRewrite } from '@shared/event-tags';
+import { applyEventTagChanges, eventTagCatalogKeyFromWebCrypto, getEventTags,
+  newlyAssignedEventTags, normalizeEventTags, preserveEventTagsOnRewrite } from '@shared/event-tags';
 
 describe('event tags helper', () => {
   it('normalizes whitespace, length, duplicates, and the tag count', () => {
@@ -43,6 +45,22 @@ describe('event tags helper', () => {
       Array.from({ length: 10 }, (_value, index) => `tag-${index}`),
       { add: ['overflow'], remove: [] },
     )).toThrow('up to 10 tags');
+  });
+
+  it('uses the existing catalog hash for case variants and Unicode', async () => {
+    for (const tag of ['Race', 'İstanbul', '🏃 Trail']) {
+      const expected = createHash('sha256').update(tag.toLowerCase()).digest('hex');
+      await expect(eventTagCatalogKeyFromWebCrypto(tag)).resolves.toBe(expected);
+    }
+    await expect(eventTagCatalogKeyFromWebCrypto(' race '))
+      .resolves.toBe(await eventTagCatalogKeyFromWebCrypto('RACE'));
+  });
+
+  it('recognizes only newly assigned tags across canonical and legacy fields', () => {
+    expect(newlyAssignedEventTags({ tags: ['Race'], benchmarkReviewTags: ['Legacy'] },
+      { tags: ['race', 'Trail'] })).toEqual(['Trail']);
+    expect(newlyAssignedEventTags(undefined, { benchmarkReviewTags: ['Legacy'] })).toEqual(['Legacy']);
+    expect(newlyAssignedEventTags({ tags: ['Race'] }, { tags: [] })).toEqual([]);
   });
 
   it('preserves the latest stored tags on event rewrites', () => {

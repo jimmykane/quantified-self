@@ -1,9 +1,11 @@
 import { TestBed } from '@angular/core/testing';
 import { describe, beforeEach, expect, it, vi } from 'vitest';
+import { createHash } from 'node:crypto';
 import { Firestore, deleteField, doc, runTransaction } from 'app/firebase/firestore';
 
 import { EventTagService } from './event-tag.service';
 import { EventTagCatalogService } from './event-tag-catalog.service';
+import { BrowserCompatibilityService } from './browser.compatibility.service';
 
 vi.mock('app/firebase/firestore', async (importOriginal) => {
   const actual: any = await importOriginal();
@@ -18,23 +20,33 @@ vi.mock('app/firebase/firestore', async (importOriginal) => {
 describe('EventTagService', () => {
   let service: EventTagService;
   let transactionUpdate: ReturnType<typeof vi.fn>;
+  let transactionSet: ReturnType<typeof vi.fn>;
   let documents: Record<string, Record<string, unknown>>;
+  let catalogDocuments: Set<string>;
   let noteSavedTags: ReturnType<typeof vi.fn>;
+  let webCryptoSupported: boolean;
 
   beforeEach(() => {
     vi.clearAllMocks();
     documents = {};
+    catalogDocuments = new Set();
     transactionUpdate = vi.fn();
+    transactionSet = vi.fn();
     noteSavedTags = vi.fn();
+    webCryptoSupported = true;
     vi.mocked(runTransaction).mockImplementation(async (_firestore, callback: any) => callback({
       get: vi.fn(async (ref: { pathParts: unknown[] }) => {
         const eventID = `${ref.pathParts.at(-1)}`;
+        if (ref.pathParts.at(-2) === 'eventTagCatalog') {
+          return { exists: () => catalogDocuments.has(eventID), data: () => ({ name: 'Race' }) };
+        }
         return {
           exists: () => !!documents[eventID],
           data: () => documents[eventID],
         };
       }),
       update: transactionUpdate,
+      set: transactionSet,
     }));
 
     TestBed.configureTestingModule({
@@ -42,6 +54,9 @@ describe('EventTagService', () => {
         EventTagService,
         { provide: Firestore, useValue: {} },
         { provide: EventTagCatalogService, useValue: { noteSavedTags } },
+        { provide: BrowserCompatibilityService, useValue: {
+          checkWebCryptoSupport: () => webCryptoSupported,
+        } },
       ],
     });
     service = TestBed.inject(EventTagService);
@@ -62,6 +77,11 @@ describe('EventTagService', () => {
       expect.anything(),
       { tags: ['race'], benchmarkReviewTags: 'DELETE_FIELD' },
     );
+    expect(transactionSet).toHaveBeenCalledWith(
+      expect.objectContaining({ pathParts: [expect.anything(), 'users', 'user-1', 'eventTagCatalog',
+        createHash('sha256').update('race').digest('hex')] }),
+      { name: 'race' },
+    );
     expect(event.tags).toEqual(['race']);
     expect(event.benchmarkReviewTags).toBeUndefined();
     expect(deleteField).toHaveBeenCalledTimes(1);
@@ -80,8 +100,31 @@ describe('EventTagService', () => {
     )).rejects.toThrow('Tags changed elsewhere');
 
     expect(transactionUpdate).not.toHaveBeenCalled();
+    expect(transactionSet).not.toHaveBeenCalled();
     expect(event.tags).toEqual(['Original']);
     expect(noteSavedTags).not.toHaveBeenCalled();
+  });
+
+  it('keeps an existing catalog spelling and skips catalog writes for removals', async () => {
+    const event = { getID: () => 'event-1', tags: ['Race', 'Recovery'] } as any;
+    documents = { 'event-1': { tags: ['Race', 'Recovery'] } };
+    await service.saveTags({ uid: 'user-1' } as any, event, ['Race']);
+    expect(transactionSet).not.toHaveBeenCalled();
+
+    documents = { 'event-1': { tags: [] } };
+    catalogDocuments.add(createHash('sha256').update('race').digest('hex'));
+    await service.saveTags({ uid: 'user-1' } as any, event, ['race'], []);
+    expect(transactionSet).not.toHaveBeenCalled();
+  });
+
+  it('rejects newly assigned tags without Web Crypto before changing the event', async () => {
+    const event = { getID: () => 'event-1', tags: [] } as any;
+    documents = { 'event-1': { tags: [] } };
+    webCryptoSupported = false;
+    await expect(service.saveTags({ uid: 'user-1' } as any, event, ['Race']))
+      .rejects.toThrow('Secure event tag storage');
+    expect(transactionUpdate).not.toHaveBeenCalled();
+    expect(transactionSet).not.toHaveBeenCalled();
   });
 
   it('applies removals before additions using fresh transaction data and legacy fallback', async () => {
@@ -105,6 +148,8 @@ describe('EventTagService', () => {
       { tags: ['2026', 'Long run'], benchmarkReviewTags: 'DELETE_FIELD' },
       { tags: ['Firmware', 'Long run'], benchmarkReviewTags: 'DELETE_FIELD' },
     ]);
+    expect(transactionSet).toHaveBeenCalledTimes(1);
+    expect(transactionSet.mock.calls[0][1]).toEqual({ name: 'Long run' });
     expect(deleteField).toHaveBeenCalledTimes(2);
     expect(noteSavedTags).toHaveBeenCalledWith('user-1', ['2026', 'Long run', 'Firmware', 'Long run']);
   });
@@ -121,6 +166,7 @@ describe('EventTagService', () => {
       { add: ['overflow'], remove: [] },
     )).rejects.toThrow('would exceed 10 tags');
     expect(transactionUpdate).not.toHaveBeenCalled();
+    expect(transactionSet).not.toHaveBeenCalled();
   });
 
   it('rejects missing events and selections above the bulk limit', async () => {
