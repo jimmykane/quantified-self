@@ -37,7 +37,7 @@ function fakeFirestore() {
   return { db, documents, create };
 }
 
-describe('event tag catalog projection', () => {
+describe('event tag catalog writes', () => {
   beforeEach(() => {
     mocks.deletionGuard.mockReset().mockResolvedValue({ shouldSkip: false });
   });
