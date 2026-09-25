@@ -5,7 +5,10 @@ vi.mock('firebase-admin', () => ({
   firestore: Object.assign(() => ({}), { FieldPath: { documentId: () => '__name__' } }),
   apps: [],
 }));
-vi.mock('../events/event-tag-catalog', () => ({ ensureEventTagCatalogEntries: mocks.ensure }));
+vi.mock('../events/event-tag-catalog', async importOriginal => ({
+  ...await importOriginal<typeof import('../events/event-tag-catalog')>(),
+  ensureEventTagCatalogEntries: mocks.ensure,
+}));
 
 import {
   backfillEventTagCatalog,
@@ -16,7 +19,7 @@ function fakeDb() {
   const events: Record<string, Record<string, Record<string, unknown>>> = {
     alpha: {
       first: { tags: ['Race', 'Recovery'] },
-      second: { benchmarkReviewTags: ['Older', 'race'] },
+      second: { tags: ['Race'], benchmarkReviewTags: ['Older', 'race'] },
     },
     beta: { third: { tags: ['Swim'] } },
   };
@@ -77,7 +80,7 @@ describe('event tag catalog backfill', () => {
     const first = await backfillEventTagCatalog(db as never, {
       execute: false, limitUsers: 1,
     });
-    expect(first).toMatchObject({ dryRun: true, usersScanned: 1, tagFieldsRead: 2,
+    expect(first).toMatchObject({ dryRun: true, usersScanned: 1, tagFieldsRead: 3,
       uniqueTags: 3, missingEntries: 3, nextStartAfter: 'alpha', complete: false });
     expect(mocks.ensure).toHaveBeenCalledWith(db, 'alpha', ['Race', 'Recovery', 'Older'], true);
 

@@ -1,7 +1,6 @@
 import * as admin from 'firebase-admin';
 
-import { getEventTags } from '../../../shared/event-tags';
-import { ensureEventTagCatalogEntries } from '../events/event-tag-catalog';
+import { ensureEventTagCatalogEntries, storedEventTagNames } from '../events/event-tag-catalog';
 
 export interface EventTagCatalogBackfillOptions {
   execute: boolean;
@@ -61,7 +60,7 @@ async function collectUserTags(
       .stream() as AsyncIterable<admin.firestore.QueryDocumentSnapshot>;
     for await (const document of documents) {
       tagFieldsRead += 1;
-      for (const tag of getEventTags(document.data())) {
+      for (const tag of storedEventTagNames(document.data())) {
         const key = tag.toLowerCase();
         if (!tagsByKey.has(key)) tagsByKey.set(key, tag);
       }

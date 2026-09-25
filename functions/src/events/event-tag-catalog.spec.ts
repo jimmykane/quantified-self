@@ -12,6 +12,7 @@ import {
   ensureEventTagCatalogEntries,
   eventTagCatalogKey,
   newlyAssignedEventTags,
+  storedEventTagNames,
 } from './event-tag-catalog';
 
 function fakeFirestore() {
@@ -61,6 +62,10 @@ describe('event tag catalog projection', () => {
     expect(newlyAssignedEventTags(undefined, { benchmarkReviewTags: [' Older '] })).toEqual(['Older']);
     expect(newlyAssignedEventTags({ tags: ['Race'] }, { tags: ['race', 'Recovery'] }))
       .toEqual(['Recovery']);
+    expect(storedEventTagNames({ tags: ['Race'], benchmarkReviewTags: ['Older', 'race'] }))
+      .toEqual(['Race', 'Older']);
+    expect(newlyAssignedEventTags(undefined, { tags: [], benchmarkReviewTags: ['Older'] }))
+      .toEqual(['Older']);
     expect(newlyAssignedEventTags({ tags: ['Race'] }, { tags: [] })).toEqual([]);
 
     const { db, documents } = fakeFirestore();

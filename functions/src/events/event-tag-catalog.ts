@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import * as admin from 'firebase-admin';
 
-import { getEventTags, normalizeEventTagSuggestions } from '../../../shared/event-tags';
+import { normalizeEventTags, normalizeEventTagSuggestions } from '../../../shared/event-tags';
 import { getUserDeletionGuardStateInTransaction } from '../shared/user-deletion-guard';
 
 export const EVENT_TAG_CATALOG_COLLECTION = 'eventTagCatalog';
@@ -13,10 +13,17 @@ export function eventTagCatalogKey(tag: string): string {
   return createHash('sha256').update(normalized.toLowerCase(), 'utf8').digest('hex');
 }
 
+export function storedEventTagNames(event: unknown): string[] {
+  const fields = event as { tags?: unknown; benchmarkReviewTags?: unknown } | null | undefined;
+  return normalizeEventTagSuggestions([
+    ...normalizeEventTags(fields?.tags),
+    ...normalizeEventTags(fields?.benchmarkReviewTags),
+  ]);
+}
+
 export function newlyAssignedEventTags(before: unknown, after: unknown): string[] {
-  const previous = new Set(getEventTags(before as { tags?: unknown; benchmarkReviewTags?: unknown })
-    .map(tag => tag.toLowerCase()));
-  return getEventTags(after as { tags?: unknown; benchmarkReviewTags?: unknown })
+  const previous = new Set(storedEventTagNames(before).map(tag => tag.toLowerCase()));
+  return storedEventTagNames(after)
     .filter(tag => !previous.has(tag.toLowerCase()));
 }
 
