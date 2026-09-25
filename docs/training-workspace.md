@@ -8,8 +8,8 @@ summaries, and a preview/native-approval/apply workflow. It does not modify
 `WorkoutStructureV1`. The tools, strict scopes, projection and bounds are documented in
 [MCP server](mcp-server.md#training-plans-and-planned-workouts-690). Source support is not a deployed or
 registered-client promise. Provider certification, deployment, registered-contract promotion and plugin installation
-remain separate. The approval workflow implements the bounded #652 dependency; fallback/manual completion matching
-remains under #651.
+remain separate. The approval workflow implements the bounded #652 dependency. #651 is exact-marker-only; fallback/manual
+matching and audited unlink/relink are out of scope.
 
 Independent `training-plans:read` consent is available without a UID or Pro gate. Manual planning is available to every
 signed-in account; provider delivery remains separately gated by readiness, connection authority, explicit consent and Pro.
@@ -1298,9 +1298,18 @@ missing activity, delivery lease, different
 account, or conflicting existing completion cannot claim the link. The transaction writes the existing owner-readable
 completion and private reverse link, protects that remote copy from deletion, and is idempotent on reimport. It does not
 compare titles, durations or target adherence, infer late/early occurrence, or rewrite completed activity metrics.
-The one-link-per-workout v1 projection still cannot attach a second simultaneous Garmin recording when a Suunto recording
-already owns the completion; #651 retains that multi-source decision and any fallback/manual scope revision. This code
-does not retrospectively reparse previously imported FIT files or establish watch receipt across devices.
+The one-link-per-workout v1 projection keeps the first exact link committed when a second provider records the same
+workout; the second activity stays in completed history without replacing the link. Missing/reused markers, reconnect
+generations, stale plan/date occurrences and cross-user identities fail closed in provider emulator coverage. Once the
+matching provider copy catches up to a reschedule or plan transfer, a new exact link may proceed. This code does not
+retrospectively reparse previously imported FIT files or establish watch receipt across devices.
+
+MCP single/bulk completion reads use only the owner-scoped exact persisted link. `unlinked` has null provider, method,
+timing, link time and activity reference; `linked` retains the date and plan at link time. A later workout revision,
+including a plan transfer, keeps the stable workout link readable and sets `workoutChangedSinceCompletion`; an activity
+reference still requires independent `activity-details:read` consent. The current workout ID and revision are checked,
+and private source event IDs, remote markers, account identities and reverse links never enter MCP output. No MCP tool,
+scope, wire schema, consent, provider action or bundled-skill change is required for these edge-case fixes.
 
 Verification combines synthetic HTTP/ZIP/FIT fixtures, real Firestore transactions, Rules, UI/help and MCP read tests.
 MCP continues to read strict local delivery projections: Suunto counts derive from workouts, no watch receipt is inferred,
@@ -1388,7 +1397,7 @@ digest and reverse evidence remain private. Repeated imports are idempotent; mis
 accounts, active delivery writes and conflicting existing links fail closed without date/title matching. Deleting the
 source event removes only its matching link/evidence, clears that marker-derived completion protection and queues
 delivery reconciliation; an independently observed provider summary remains protective. Provider-side moves, changed
-associations, past dates or ambiguous ownership block destructive writes. Bounded fallback/manual matching remains #651.
+associations, past dates or ambiguous ownership block destructive writes. Fallback/manual matching is outside #651.
 
 Neither identifier is a POST idempotency guarantee. An uncertain Plan create is recovered through a unique exact
 app-owned external-ID lookup, then a guarded in-place PUT if needed. An uncertain Workout create with a lost ID uses

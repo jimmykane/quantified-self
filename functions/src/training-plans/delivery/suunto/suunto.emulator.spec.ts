@@ -16,6 +16,9 @@ import { buildSuuntoHealthWebhookAccountBinding, getSuuntoHealthWebhookAccountBi
 import { readSuuntoGuideCompletions, retainSuuntoGuideCompletions } from '../../../suunto/guide-completion';
 import { suuntoFitFixture, suuntoMultiSessionFitFixture } from '../test-support/suunto-fit-fixture';
 import { guideExternalId } from './mapping';
+import { deliveryIdentity } from '../intent';
+import { retainGarminFITWorkoutReferences } from '../../completion/fit-workout-evidence';
+import { standardWorkoutReferenceFitFixture } from '../test-support/suunto-fit-fixture';
 import type { TrainingDeliveryCommandV1 } from '../../../../../shared/training-provider-delivery';
 import { TRAINING_DELIVERY_VERIFICATIONS } from '../../../../../shared/training-provider-verification';
 import { projectStrengthWorkoutToV1 } from '../../../../../shared/strength-workout';
@@ -55,7 +58,9 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Suunto worker with real F
   afterAll(async () => {
     for (const id of users) {
       await db.recursiveDelete(db.collection('users').doc(id)); await db.recursiveDelete(db.collection('suuntoAppAccessTokens').doc(id));
+      await db.recursiveDelete(db.collection('garminAPITokens').doc(id));
       await db.recursiveDelete(getSuuntoHealthWebhookAccountBindingRef(db, 'account', id));
+      await db.recursiveDelete(getSuuntoHealthWebhookAccountBindingRef(db, 'other-account', id));
       await db.recursiveDelete(db.collection('userDeletionTombstones').doc(id));
       for (const doc of (await db.collection(DELIVERY_QUEUE).where('uid', '==', id).get()).docs) await db.recursiveDelete(doc.ref);
     }
@@ -320,5 +325,123 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Suunto worker with real F
       status: 'completed', desired: 'preserve', completionLinkId: expect.any(String),
       actual: { completed: true },
     });
+  });
+  it.each([
+    ['rescheduling', { localDate: '2026-09-18', revision: 2 }],
+    ['plan transfer', { planId: 'another-plan', revision: 2 }],
+  ])('does not link a Guide from a stale delivered occurrence after %s', async (_reason, change) => {
+    const delivered = await send();
+    const externalId = delivered.actual?.ids.externalId;
+    expect(externalId).toBeTruthy();
+    await user().collection('scheduledWorkouts').doc('w').update(change);
+    const event = user().collection('events').doc('rescheduled-event'); await event.set({ test: true });
+    const result = await retainSuuntoGuideCompletions(db, uid, event.id, 'account', 'retained',
+      suuntoFitFixture(['qs'], [externalId!]), 'qs', [{ id: 'activity', startTimeMs: 631065723000 }], now);
+    expect(result).toEqual({ retained: true, linkedWorkoutIds: [] });
+    expect((await user().collection('trainingWorkoutCompletions').get()).empty).toBe(true);
+    expect((await ledger()).actual?.completed).toBe(false);
+    await user().collection(DELIVERY_LEDGER).doc(delivered.id).update(_reason === 'rescheduling'
+      ? { 'actual.localDate': change.localDate } : { planId: change.planId });
+    expect((await retainSuuntoGuideCompletions(db, uid, event.id, 'account', 'retained',
+      suuntoFitFixture(['qs'], [externalId!]), 'qs', [{ id: 'activity', startTimeMs: 631065723000 }], now)).linkedWorkoutIds)
+      .toEqual(['w']);
+  });
+  it('leaves a missing marker unlinked and keeps the first link when a Guide marker is reused', async () => {
+    const delivered = await send();
+    const externalId = delivered.actual!.ids.externalId;
+    const first = user().collection('events').doc('first-event'); await first.set({ test: true });
+    const missing = await retainSuuntoGuideCompletions(db, uid, first.id, 'account', 'retained',
+      suuntoFitFixture(['qs'], [guideExternalId('account', 'missing')]), 'qs');
+    expect(missing.linkedWorkoutIds).toEqual([]);
+    const marker = suuntoFitFixture(['qs'], [externalId]);
+    expect((await retainSuuntoGuideCompletions(db, uid, first.id, 'account', 'retained', marker, 'qs')).linkedWorkoutIds)
+      .toEqual(['w']);
+    const second = user().collection('events').doc('second-event'); await second.set({ test: true });
+    expect((await retainSuuntoGuideCompletions(db, uid, second.id, 'account', 'retained', marker, 'qs')).linkedWorkoutIds)
+      .toEqual([]);
+    expect((await user().collection('trainingWorkoutCompletions').doc('w').get()).data())
+      .toMatchObject({ eventId: first.id, provider: 'suunto' });
+  });
+  it('does not turn a same-event manual completion into an exact Suunto marker link', async () => {
+    const delivered = await send();
+    const event = user().collection('events').doc('manual-event'); await event.set({ test: true });
+    await user().collection('trainingWorkoutCompletions').doc('w').set({
+      schemaVersion: 1, workoutId: 'w', planId: null, provider: 'suunto', matchMethod: 'manual_confirmation',
+      eventId: event.id, activityId: null, sourceSessionIndex: 0, activityStartAtMs: null,
+      scheduledLocalDate: '2026-09-17', workoutRevisionAtLink: 1, timing: 'unknown', linkedAtMs: 1, updatedAtMs: 1,
+    });
+    expect((await retainSuuntoGuideCompletions(db, uid, event.id, 'account', 'retained',
+      suuntoFitFixture(['qs'], [delivered.actual!.ids.externalId]), 'qs')).linkedWorkoutIds).toEqual([]);
+    expect((await user().collection('trainingWorkoutCompletions').doc('w').get()).data())
+      .toMatchObject({ matchMethod: 'manual_confirmation' });
+    expect((await ledger()).actual?.completed).toBe(false);
+  });
+  it('fences stale reconnect generations and another owner with the same incoming Guide marker', async () => {
+    const delivered = await send();
+    const externalId = delivered.actual!.ids.externalId;
+    const event = user().collection('events').doc('reconnect-event'); await event.set({ test: true });
+    const marker = suuntoFitFixture(['qs'], [externalId]);
+    await db.collection('suuntoAppAccessTokens').doc(uid).collection('tokens').doc('account')
+      .update({ tokenCredentialGeneration: 'new-generation' });
+    await getSuuntoHealthWebhookAccountBindingRef(db, 'account', uid)
+      .set(buildSuuntoHealthWebhookAccountBinding(uid, 'account', 'new-generation', 'oauth_callback'));
+    expect(await retainSuuntoGuideCompletions(db, uid, event.id, 'account', 'retained', marker, 'qs'))
+      .toEqual({ retained: false, linkedWorkoutIds: [] });
+    expect((await retainSuuntoGuideCompletions(db, uid, event.id, 'account', 'new-generation', marker, 'qs')).linkedWorkoutIds)
+      .toEqual(['w']);
+    const otherUid = `suunto-test-${randomUUID()}`; users.push(otherUid);
+    const other = db.collection('users').doc(otherUid);
+    await other.set({ test: true });
+    await other.collection('meta').doc(ServiceNames.SuuntoApp).set({ connectionState: 'connected',
+      connectionStateGeneration: 'connection', providerUserId: 'other-account' });
+    await db.collection('suuntoAppAccessTokens').doc(otherUid).set({ activeOAuthCredentialGeneration: 'new-generation' });
+    await db.collection('suuntoAppAccessTokens').doc(otherUid).collection('tokens').doc('other-account').set({
+      userName: 'other-account', serviceName: ServiceNames.SuuntoApp, tokenCredentialGeneration: 'new-generation',
+    });
+    await getSuuntoHealthWebhookAccountBindingRef(db, 'other-account', otherUid)
+      .set(buildSuuntoHealthWebhookAccountBinding(otherUid, 'other-account', 'new-generation', 'oauth_callback'));
+    await other.collection('events').doc('event').set({ test: true });
+    expect(await retainSuuntoGuideCompletions(db, otherUid, 'event', 'other-account', 'new-generation', marker, 'qs'))
+      .toEqual({ retained: true, linkedWorkoutIds: [] });
+    expect((await other.collection('trainingWorkoutCompletions').get()).empty).toBe(true);
+  });
+  it.each(['suunto', 'garmin'] as const)('keeps the first exact completion when %s imports before the other provider', async first => {
+    const suuntoDelivery = await send();
+    const externalId = suuntoDelivery.actual!.ids.externalId;
+    const garminAccount = 'garmin-account';
+    const garminWorkoutId = String(0xfffffffe);
+    const activityStartAtMs = Date.parse('2026-09-17T07:00:00Z');
+    await user().collection('meta').doc(ServiceNames.GarminAPI).set({ connectionState: 'connected',
+      connectionStateGeneration: 'connection', providerUserId: garminAccount });
+    await db.collection('garminAPITokens').doc(uid).set({ activeOAuthCredentialGeneration: 'credential' });
+    await db.collection('garminAPITokens').doc(uid).collection('tokens').doc(garminAccount).set({
+      serviceName: ServiceNames.GarminAPI, userID: garminAccount, tokenCredentialGeneration: 'credential',
+      permissions: ['WORKOUT_IMPORT'],
+    });
+    await user().collection(DELIVERY_LEDGER).doc('garmin-delivery').set({ ...suuntoDelivery,
+      id: 'garmin-delivery', provider: 'garmin', destinationKey: deliveryIdentity(uid, 'garmin', garminAccount, 'account'),
+      actual: { ids: { workout: garminWorkoutId, schedule: '17', owner: '23' },
+        localDate: '2026-09-17', completed: false },
+    } satisfies DeliveryLedgerV1);
+    const suuntoEvent = user().collection('events').doc('suunto-event'); await suuntoEvent.set({ test: true });
+    const garminEvent = user().collection('events').doc('garmin-event'); await garminEvent.set({ test: true });
+    await garminEvent.collection('metaData').doc(ServiceNames.GarminAPI).set({ serviceName: ServiceNames.GarminAPI,
+      serviceUserID: garminAccount, serviceActivityFileID: 'garmin-source-file', serviceActivityFileType: 'FIT' });
+    await user().collection('activities').doc('garmin-activity').set({
+      userID: uid, eventID: garminEvent.id, startDate: activityStartAtMs,
+    });
+    const linkSuunto = () => retainSuuntoGuideCompletions(db, uid, suuntoEvent.id, 'account', 'retained',
+      suuntoFitFixture(['qs'], [externalId]), 'qs', [{ id: 'suunto-activity', startTimeMs: activityStartAtMs }]);
+    const linkGarmin = () => retainGarminFITWorkoutReferences(db, uid, garminEvent.id, garminAccount, 'credential',
+      { activityFileID: 'garmin-source-file', activityFileType: 'FIT' }, standardWorkoutReferenceFitFixture(),
+      [{ id: 'garmin-activity', startTimeMs: activityStartAtMs }]);
+    if (first === 'suunto') { await linkSuunto(); await linkGarmin(); }
+    else { await linkGarmin(); await linkSuunto(); }
+    expect((await user().collection('trainingWorkoutCompletions').doc('w').get()).data())
+      .toMatchObject({ provider: first, eventId: `${first}-event` });
+    expect((await user().collection(DELIVERY_LEDGER).doc(first === 'suunto' ? suuntoDelivery.id : 'garmin-delivery').get())
+      .get('actual.completed')).toBe(true);
+    expect((await user().collection(DELIVERY_LEDGER).doc(first === 'suunto' ? 'garmin-delivery' : suuntoDelivery.id).get())
+      .get('actual.completed')).toBe(false);
   });
 });

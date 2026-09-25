@@ -245,7 +245,10 @@ export async function readTrainingPlans(input: TrainingReadInput, reads: Trainin
         linkedWorkoutRevision: null, workoutChangedSinceCompletion: false, activityStartAtMs: null, linkedAtMs: null,
         activityRef: null };
       const completion = parseTrainingWorkoutCompletionV1(completionSchema.parse(completionDoc.data));
-      if (completion.workoutId !== doc.id || completion.planId !== workout.planId) throw unavailable();
+      // The completion records the plan at link time. A later revision may
+      // transfer the same stable workout ID to another plan or standalone.
+      if (completion.workoutId !== doc.id || completion.workoutRevisionAtLink > workout.revision
+        || (completion.planId !== workout.planId && completion.workoutRevisionAtLink === workout.revision)) throw unavailable();
       const activityRef = input.scopes.includes('activity-details:read') && completion.activityId && codec.encodeActivity
         ? codec.encodeActivity({ activityId: completion.activityId, eventId: completion.eventId }, input.uid, input.connectionId)
         : null;
