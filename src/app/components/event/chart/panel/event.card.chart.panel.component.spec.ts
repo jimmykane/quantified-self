@@ -62,6 +62,7 @@ describe('EventCardChartPanelComponent', () => {
     }),
     setOption: vi.fn(),
     convertFromPixel: vi.fn((_finder: unknown, value: number | number[]) => value),
+    convertToPixel: vi.fn((_finder: unknown, value: number | number[]) => value),
     resize: vi.fn(),
     dispose: vi.fn(),
     isDisposed: vi.fn().mockReturnValue(false),
@@ -397,6 +398,7 @@ describe('EventCardChartPanelComponent', () => {
     expect(chart.on).not.toHaveBeenCalled();
     expect(zr.on).not.toHaveBeenCalled();
     expect(intersectionObserverObserveSpies).toHaveLength(0);
+    expect(fixture.nativeElement.querySelector('.event-chart-panel__chart--pinch-enabled')).toBeNull();
   });
 
   it('keeps compact preview chrome while enabling the production tooltip and interactions', async () => {
@@ -2238,6 +2240,37 @@ describe('EventCardChartPanelComponent', () => {
     await new Promise<void>((resolve) => setTimeout(resolve, 20));
 
     expect(emitSpy).toHaveBeenCalledWith({ start: 15, end: 75 });
+  });
+
+  it('pinches a panel on the x-axis and emits its range for the other charts', async () => {
+    const emitSpy = vi.spyOn(component.zoomRangeChange, 'emit');
+    await renderComponent();
+    chart.dispatchAction.mockClear();
+
+    dispatchChartTouch('touchstart', [createTouch(1, 30, 20)]);
+    dispatchChartTouch('touchstart', [createTouch(1, 30, 20), createTouch(2, 90, 20)],
+      [createTouch(2, 90, 20)]);
+    dispatchChartTouch('touchmove', [createTouch(1, 15, 20), createTouch(2, 105, 20)]);
+    dispatchChartTouch('touchend', [createTouch(1, 15, 20)], [createTouch(2, 105, 20)]);
+
+    expect(chart.dispatchAction).toHaveBeenCalledWith({
+      type: 'dataZoom', startValue: 20, endValue: 100, $from: 'event-chart-touch-zoom',
+    });
+    expect(emitSpy).toHaveBeenCalledWith({ start: 20, end: 100 });
+    expect(fixture.nativeElement.querySelector('.event-chart-panel__chart--pinch-enabled')).not.toBeNull();
+  });
+
+  it('allows two-finger zoom while one-finger selection mode is active', async () => {
+    component.cursorBehaviour = ChartCursorBehaviours.SelectX;
+    await renderComponent();
+    chart.dispatchAction.mockClear();
+
+    dispatchChartTouch('touchstart', [createTouch(1, 30, 20), createTouch(2, 90, 20)]);
+    dispatchChartTouch('touchmove', [createTouch(1, 15, 20), createTouch(2, 105, 20)]);
+
+    expect(chart.dispatchAction).toHaveBeenCalledWith(expect.objectContaining({
+      type: 'dataZoom', startValue: 20, endValue: 100,
+    }));
   });
 
   it('renders empty-axis no-data option when panel is null outside zoom mode', async () => {

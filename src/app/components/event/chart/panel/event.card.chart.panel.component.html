@@ -85,7 +85,8 @@
   </header>
   }
 
-  <div #chartDiv class="event-chart-panel__chart" [class.event-chart-panel__chart--zoom-only]="!panel && showZoomBar"></div>
+  <div #chartDiv class="event-chart-panel__chart" [class.event-chart-panel__chart--zoom-only]="!panel && showZoomBar"
+    [class.event-chart-panel__chart--pinch-enabled]="!!panel && (!previewMode || previewInteractions)"></div>
 
   @if (hasSelection) {
   <section class="event-chart-panel__stats">

@@ -74,7 +74,9 @@ import { resolveUnitAwareDisplayFromValue } from '@shared/unit-aware-display';
 import {
   EChartsHorizontalTouchGestureController,
   type EChartsHorizontalTouchGesture,
+  type EChartsPinchGesture,
 } from '../../../../helpers/echarts-horizontal-touch-gesture.controller';
+import { resolveEventChartPinchRange } from '../../../../helpers/event-chart-pinch-zoom.helper';
 
 type ChartOption = Parameters<EChartsType['setOption']>[0];
 type ChartAction = Parameters<EChartsType['dispatchAction']>[0];
@@ -157,6 +159,13 @@ type ZoomBarTouchInteraction = {
   lastRange: EventChartRange;
 };
 type EventChartTouchInteraction = PanelTouchInteraction | ZoomBarTouchInteraction;
+type PanelPinchInteraction = {
+  domain: EventChartRange;
+  initialRange: EventChartRange;
+  axisPixels: EventChartRange;
+  initial: EChartsPinchGesture;
+  lastRange: EventChartRange;
+};
 
 const PROGRESSIVE_THRESHOLD = 6000;
 const PROGRESSIVE_STEP = 900;
@@ -288,6 +297,7 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
   private applyingSharedZoomRange = false;
   private selectionBrushActive = false;
   private touchInteraction: EventChartTouchInteraction | null = null;
+  private pinchInteraction: PanelPinchInteraction | null = null;
   private chartRefreshSequence: Promise<void> = Promise.resolve();
   private pendingAxisScaleFrame: number | null = null;
   private lastKnownVisibleZoomRange: EventChartRange | null = null;
@@ -306,6 +316,9 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
     onHorizontalMove: (gesture) => this.ngZone.run(() => this.updateHorizontalTouchInteraction(gesture)),
     onHorizontalEnd: (gesture) => this.ngZone.run(() => this.finishHorizontalTouchInteraction(gesture)),
     onHorizontalCancel: () => this.ngZone.run(() => this.cancelHorizontalTouchInteraction()),
+    onPinchStart: (gesture) => this.ngZone.run(() => this.startPinchInteraction(gesture)),
+    onPinchMove: (gesture) => this.ngZone.run(() => this.updatePinchInteraction(gesture)),
+    onPinchEnd: () => { this.pinchInteraction = null; },
   });
   private readonly nonPrimaryMouseButtonGuard = (event: Event) => {
     if (!this.isNonPrimaryMouseButtonEvent(event)) {
@@ -574,6 +587,7 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
       || changes.previewInteractions
     ) {
       this.cancelHorizontalTouchInteraction();
+      this.pinchInteraction = null;
     }
 
     if (
@@ -2968,6 +2982,68 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
       startValue,
       lastRange: null,
     };
+  }
+
+  private startPinchInteraction(gesture: EChartsPinchGesture): void {
+    this.pinchInteraction = null;
+    if (!this.interactionsEnabled || !this.panel || this.showZoomBar) {
+      return;
+    }
+
+    const chart = this.chartHost.getChart();
+    if (!chart) {
+      return;
+    }
+
+    const initialRange = this.getVisibleXAxisRange();
+    const pixelStart = Number(chart.convertToPixel({ xAxisIndex: 0 }, initialRange.start));
+    const pixelEnd = Number(chart.convertToPixel({ xAxisIndex: 0 }, initialRange.end));
+    if (!Number.isFinite(pixelStart) || !Number.isFinite(pixelEnd) || pixelEnd <= pixelStart) {
+      return;
+    }
+
+    const chartLeft = this.chartDiv.nativeElement.getBoundingClientRect().left;
+    this.pinchInteraction = {
+      domain: this.getActiveDomain(),
+      initialRange,
+      axisPixels: { start: chartLeft + pixelStart, end: chartLeft + pixelEnd },
+      initial: gesture,
+      lastRange: initialRange,
+    };
+  }
+
+  private updatePinchInteraction(gesture: EChartsPinchGesture): void {
+    const interaction = this.pinchInteraction;
+    const chart = this.chartHost.getChart();
+    if (!interaction || !chart) {
+      return;
+    }
+
+    const nextRange = resolveEventChartPinchRange(
+      interaction.domain,
+      interaction.initialRange,
+      interaction.axisPixels,
+      { firstX: interaction.initial.first.clientX, secondX: interaction.initial.second.clientX },
+      { firstX: gesture.first.clientX, secondX: gesture.second.clientX },
+    );
+    if (!nextRange || this.areRangesEqual(interaction.lastRange, nextRange)) {
+      return;
+    }
+
+    interaction.lastRange = nextRange;
+    this.lastKnownVisibleZoomRange = this.normalizeZoomRange(nextRange);
+    this.applyingSharedZoomRange = true;
+    try {
+      chart.dispatchAction({
+        type: 'dataZoom',
+        startValue: nextRange.start,
+        endValue: nextRange.end,
+        $from: TOUCH_GESTURE_DATAZOOM_SOURCE,
+      });
+    } finally {
+      this.applyingSharedZoomRange = false;
+    }
+    this.zoomRangeChange.emit(this.lastKnownVisibleZoomRange);
   }
 
   private updateHorizontalTouchInteraction(gesture: EChartsHorizontalTouchGesture): void {

@@ -126,6 +126,46 @@ describe('EChartsHorizontalTouchGestureController', () => {
     controller.dispose();
   });
 
+  it('tracks two fingers through a pinch without resuming the one-finger gesture', () => {
+    const element = document.createElement('div');
+    const onHorizontalMove = vi.fn();
+    const onPinchStart = vi.fn();
+    const onPinchMove = vi.fn();
+    const onPinchEnd = vi.fn();
+    const controller = new EChartsHorizontalTouchGestureController({
+      onHorizontalMove,
+      onHorizontalEnd: vi.fn(),
+      onPinchStart,
+      onPinchMove,
+      onPinchEnd,
+    });
+    controller.bind(element);
+
+    dispatchTouch(element, 'touchstart', [createTouch(1, { clientX: 30, clientY: 20 })]);
+    dispatchTouch(element, 'touchstart', [
+      createTouch(1, { clientX: 30, clientY: 20 }),
+      createTouch(2, { clientX: 90, clientY: 20 }),
+    ]);
+    const moveEvent = dispatchTouch(element, 'touchmove', [
+      createTouch(2, { clientX: 105, clientY: 20 }),
+      createTouch(1, { clientX: 15, clientY: 20 }),
+    ]);
+    dispatchTouch(element, 'touchend', [createTouch(1, { clientX: 15, clientY: 20 })],
+      [createTouch(2, { clientX: 105, clientY: 20 })]);
+    dispatchTouch(element, 'touchmove', [createTouch(1, { clientX: 5, clientY: 20 })]);
+
+    expect(moveEvent.defaultPrevented).toBe(false);
+    expect(onPinchStart).toHaveBeenCalledWith({
+      first: { clientX: 30, clientY: 20 }, second: { clientX: 90, clientY: 20 },
+    });
+    expect(onPinchMove).toHaveBeenCalledWith({
+      first: { clientX: 15, clientY: 20 }, second: { clientX: 105, clientY: 20 },
+    });
+    expect(onPinchEnd).toHaveBeenCalledOnce();
+    expect(onHorizontalMove).not.toHaveBeenCalled();
+    controller.dispose();
+  });
+
   it('allows compatibility mouse events for taps but suppresses the sequence after a drag', () => {
     const element = document.createElement('div');
     const mouseDownSpy = vi.fn();

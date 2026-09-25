@@ -14,6 +14,12 @@ import {
 } from './policies.content';
 
 describe('help.content', () => {
+  it('explains shared horizontal pinch zoom on Event details charts', () => {
+    const content = HELP_SECTIONS.find(section => section.id === 'getting-started')!.content;
+    expect(content).toContain('pinch with two fingers on an Event details chart');
+    expect(content).toContain('same time or distance range appears across the other event charts');
+  });
+
   it('explains separately consented Timeline-note context for workout suggestions', () => {
     const assistant = HELP_SECTIONS.find(section => section.id === 'ai-insights')?.content;
     expect(assistant).toContain('notes about sickness, injury, travel, or vacation');
