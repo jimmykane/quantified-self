@@ -519,6 +519,43 @@ describe('SummariesComponent', () => {
     expect(routesBoard?.classList.contains('dashboard-tile-board--activity-calendar')).toBe(false);
   });
 
+  it('migrates an owner calendar once and preserves a later manual resize', async () => {
+    const calendar = { type: TileTypes.Chart, order: 1, chartType: DASHBOARD_ACTIVITY_CALENDAR_CHART_TYPE,
+      size: { columns: 1, rows: 1 } } as any;
+    const other = { type: TileTypes.Map, order: 0, size: { columns: 2, rows: 2 } } as any;
+    component.user = { uid: 'owner-user', settings: { dashboardSettings: { tiles: [other, calendar] } } } as any;
+    component.eventUser = { uid: 'owner-user' } as any;
+    const save = vi.spyOn(TestBed.inject(DashboardConfigurationService), 'save').mockResolvedValue(undefined);
+    await component.ngOnChanges({ user: { currentValue: component.user, previousValue: null,
+      firstChange: true, isFirstChange: () => true } as any });
+    expect(component.user.settings.dashboardSettings.tiles).toEqual([other, { ...calendar, size: { columns: 4, rows: 1 } }]);
+    expect(component.user.settings.dashboardSettings.calendarDayContextLayoutVersion).toBe(1);
+    expect(save).toHaveBeenCalledWith('owner-user', expect.any(Object), {
+      tiles: [other, { ...calendar, size: { columns: 4, rows: 1 } }], calendarDayContextLayoutVersion: 1,
+    });
+    component.user.settings.dashboardSettings.tiles[1].size = { columns: 2, rows: 1 };
+    await component.ngOnChanges({ user: { currentValue: component.user, previousValue: component.user,
+      firstChange: false, isFirstChange: () => false } as any });
+    expect(component.user.settings.dashboardSettings.tiles[1].size).toEqual({ columns: 2, rows: 1 });
+    expect(save).toHaveBeenCalledTimes(1);
+  });
+
+  it('restores an unsaved calendar width without changing other settings', async () => {
+    const calendar = { type: TileTypes.Chart, order: 0, chartType: DASHBOARD_ACTIVITY_CALENDAR_CHART_TYPE,
+      size: { columns: 1, rows: 1 } } as any;
+    component.user = { uid: 'owner-user', settings: { dashboardSettings: { tiles: [calendar], showTodaySummary: true } } } as any;
+    component.eventUser = { uid: 'owner-user' } as any;
+    vi.spyOn(TestBed.inject(DashboardConfigurationService), 'save').mockRejectedValueOnce(new Error('offline'));
+    const notice = vi.spyOn(TestBed.inject(MatSnackBar), 'open');
+    await component.ngOnChanges({ user: { currentValue: component.user, previousValue: null,
+      firstChange: true, isFirstChange: () => true } as any });
+    await Promise.resolve();
+    expect(component.user.settings.dashboardSettings.tiles[0].size).toEqual({ columns: 1, rows: 1 });
+    expect(component.user.settings.dashboardSettings.calendarDayContextLayoutVersion).toBeUndefined();
+    expect(component.user.settings.dashboardSettings.showTodaySummary).toBe(true);
+    expect(notice).toHaveBeenCalledWith('offline', 'Dismiss', { duration: 6000 });
+  });
+
   it('renders the owner greeting from the first display-name part', () => {
     vi.useFakeTimers();
     vi.setSystemTime(localDashboardDate(9));
@@ -885,7 +922,7 @@ describe('SummariesComponent', () => {
     expect(todayCalendarButton?.querySelector('.dashboard-today-calendar-cue')?.getAttribute('aria-hidden')).toBe('true');
     todayCalendarButton?.click();
     expect(mockBottomSheet.open).toHaveBeenCalledWith(CalendarMonthPickerBottomSheetComponent, {
-      data: { user: component.user, timelineNotes: component.timelineNotes },
+      data: { user: component.user, timelineNotes: component.timelineNotes, privateHealthEnabled: component.showActions && component.isOwnerDashboard },
       panelClass: ['qs-bottom-sheet-container', 'qs-calendar-month-picker-sheet'],
     });
     expect(dashboardHeader?.querySelector('#dashboard-today-title')?.textContent?.trim()).toBe('Today');

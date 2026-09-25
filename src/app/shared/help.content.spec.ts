@@ -507,7 +507,7 @@ describe('help.content', () => {
     expect(gettingStartedSection?.content).toContain('Routes** map tiles show recent saved routes from lightweight route previews');
     expect(gettingStartedSection?.content).toContain('derived tiles stay independent from event table filters and custom/map tile filters');
     expect(gettingStartedSection?.content).toContain('New dashboards start with **Today**');
-    expect(gettingStartedSection?.content).toContain('default 1 x 1 dashboard tile');
+    expect(gettingStartedSection?.content).toContain('full-width dashboard tile');
     expect(gettingStartedSection?.content).toContain('intentionally empty dashboards stay as you left them');
     expect(gettingStartedSection?.content).toContain('Open **Training** or **Health** from the main navigation');
     expect(gettingStartedSection?.content).toContain('Select its calendar icon to open a mini calendar for the current month');
@@ -543,17 +543,17 @@ describe('help.content', () => {
     const calendarSection = HELP_SECTIONS.find(section => section.id === 'activity-calendar');
 
     expect(calendarSection?.content).toContain('**Week**, **Month**, and **Year** views');
-    expect(calendarSection?.content).toContain('1 x 1 **Activity Calendar** tile');
+    expect(calendarSection?.content).toContain('full-width **Activity Calendar** tile');
     expect(calendarSection?.content).toContain('**Today** card opens a month calendar in a bottom sheet');
     expect(calendarSection?.content).toContain('Dashboard and Training headers also link to the full [Calendar](/calendar)');
-    expect(calendarSection?.content).toContain('Existing dashboards keep their saved layout');
+    expect(calendarSection?.content).toContain('Other tiles stay in place, and any later resize you make is kept');
     expect(calendarSection?.content).toContain('out of suggestions until you add it again manually');
     expect(calendarSection?.content).toContain('place multiple circles concentrically around the same center');
     expect(calendarSection?.content).toContain('size reflects recorded duration');
-    expect(calendarSection?.content).toContain('individual activities with their available distance and elevation metrics');
-    expect(calendarSection?.content).toContain('activity group containing exactly one activity opens that activity directly');
-    expect(calendarSection?.content).toContain('Browser **Back** restores the same day\'s details sheet');
-    expect(calendarSection?.content).toContain('Deleting an activity from its details page returns to the previous in-app page');
+    expect(calendarSection?.content).toContain('Completed totals and activity-group bars appear above individual activities');
+    expect(calendarSection?.content).toContain('Select an activity row to open its details');
+    expect(calendarSection?.content).toContain('Browser **Back** returns to the selected calendar day');
+    expect(calendarSection?.content).toContain('The selected view and date are kept in the URL');
     expect(calendarSection?.content).toContain('intentionally have no hover or touch tooltip');
     expect(calendarSection?.content).toContain('recorded **Distance**, **Duration**, and **Ascent**');
     expect(calendarSection?.content).toContain('Month totals exclude adjacent dates');

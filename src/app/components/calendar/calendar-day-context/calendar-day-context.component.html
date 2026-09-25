@@ -1,0 +1,105 @@
+<section class="calendar-day-context" [attr.aria-label]="title() + ' details'">
+  @if (!compact()) {
+  <header class="calendar-day-context-header">
+    <div>
+      <h2>{{ title() }}</h2>
+      <span>Day in context</span>
+    </div>
+    @if (showFullDayLink()) {
+      <a mat-button appHapticTap [routerLink]="['/calendar']" [queryParams]="fullDayQuery()" aria-label="Open selected day in full calendar">
+        Open full day <mat-icon iconPositionEnd aria-hidden="true">arrow_forward</mat-icon>
+      </a>
+    }
+  </header>
+  }
+
+  @if (healthState().status !== 'private') {
+    <section class="calendar-day-context-health" aria-label="Health and recovery for selected day">
+      @if (healthState().status === 'loading' && !healthState().summary) {
+        <p role="status">Loading health for this day…</p>
+      } @else if (healthState().summary; as health) {
+        <div class="calendar-day-context-metrics">
+          <div class="calendar-day-context-metric"><span>Readiness</span><strong>{{ health.readiness.value }}</strong><small>{{ health.readiness.detail }}</small></div>
+          <div class="calendar-day-context-metric"><span>Sleep</span><strong>{{ health.sleep.value }}</strong><small>{{ health.sleep.detail }}</small></div>
+          <div class="calendar-day-context-metric"><span>HRV</span><strong>{{ health.hrv.value }}</strong><small>{{ health.hrv.detail }}</small></div>
+          @if (health.recovery; as recovery) {
+            <div class="calendar-day-context-metric"><span>Recovery left</span><strong>{{ recovery.value }}</strong><small>{{ recovery.detail }}</small></div>
+          }
+        </div>
+      }
+    </section>
+  }
+
+  @if (!compact()) {
+  <section class="calendar-day-context-section" aria-label="Activities on selected day">
+    <div class="calendar-day-context-section-header"><h3>Activities</h3>
+      @if (activityState().status === 'ready') { <span>{{ day().eventCount }} completed · {{ day().durationLabel }}</span> }
+    </div>
+    @if (activityState().status === 'loading') { <p role="status">Loading activities…</p> }
+    @else if (activityState().status === 'error') { <p role="alert">Activities could not be loaded.</p> }
+    @else if (activities().length) {
+      <app-activity-calendar-volume-list [rows]="activityGroups()"></app-activity-calendar-volume-list>
+      <mat-nav-list>
+        @for (activity of activities(); track activity.id) {
+          @if (activity.route) {
+            <a mat-list-item [routerLink]="activity.route" (click)="prepareNavigation()">
+              <span matListItemTitle>{{ activity.name }}</span><span matListItemLine>{{ activity.duration }}</span>
+              <mat-icon matListItemMeta aria-hidden="true">chevron_right</mat-icon>
+            </a>
+          } @else {
+            <div mat-list-item><span matListItemTitle>{{ activity.name }}</span><span matListItemLine>{{ activity.duration }}</span></div>
+          }
+        }
+      </mat-nav-list>
+    } @else { <p>No completed activity for this day.</p> }
+  </section>
+
+  @if (noteRows().length) {
+    <section class="calendar-day-context-section" aria-label="Timeline notes on selected day">
+      <h3>Timeline notes</h3>
+      <mat-action-list>
+        @for (row of noteRows(); track row.note.id) {
+          <button mat-list-item type="button" appHapticTap (click)="selectNote(row.note)">
+            <mat-icon matListItemIcon [style.color]="row.color" aria-hidden="true">{{ row.icon }}</mat-icon>
+            <span matListItemTitle>{{ row.note.title }}</span><span matListItemLine>{{ row.label }} · {{ row.dates }}</span>
+          </button>
+        }
+      </mat-action-list>
+    </section>
+  }
+
+  @if (canPlan()) {
+    <section class="calendar-day-context-section" aria-label="Planned workouts on selected day">
+      <div class="calendar-day-context-section-header"><h3>Planned workouts</h3>
+        <div class="calendar-day-context-plan-actions">
+          <a mat-button appHapticTap [routerLink]="['/training/plans/new']" [queryParams]="{ date: data().day.dateKey }" (click)="prepareNavigation()">
+            <mat-icon aria-hidden="true">add</mat-icon>Add workout
+          </a>
+          <a mat-button appHapticTap [routerLink]="['/training/plans/standalone/new']" [queryParams]="{ date: data().day.dateKey }" (click)="prepareNavigation()">Standalone</a>
+        </div>
+      </div>
+      @if (plannedStatus() === 'loading') { <p role="status">Loading planned workouts…</p> }
+      @else if (plannedStatus() === 'error') { <p role="alert">Planned workouts could not be loaded.</p> }
+      @else if (plannedRows().length) {
+        <mat-nav-list>
+          @for (entry of plannedRows(); track entry.workout.id) {
+            <div class="calendar-day-context-plan" [style.--planned-workout-color]="entry.color">
+              <a mat-list-item [routerLink]="['/training/plans/workout', entry.workout.id]" (click)="prepareNavigation()">
+                <span matListItemTitle>{{ entry.workout.title }}</span>
+                <span matListItemLine>{{ entry.planName || 'Standalone' }} · {{ entry.lifecycle }}</span>
+                <span matListItemLine>{{ entry.summary.join(' · ') }}</span>
+              </a>
+              <button mat-icon-button appHapticTap type="button" matTooltip="Duplicate to…"
+                [attr.aria-label]="'Duplicate ' + entry.workout.title + ' to another date'"
+                [disabled]="duplicatingId() !== null || !data().scheduleSource" (click)="duplicateWorkout(entry.workout.id)">
+                @if (duplicatingId() === entry.workout.id) { <mat-spinner diameter="18" aria-hidden="true"></mat-spinner> }
+                @else { <mat-icon aria-hidden="true">content_copy</mat-icon> }
+              </button>
+            </div>
+          }
+        </mat-nav-list>
+      } @else { <p>No planned workouts for this day.</p> }
+    </section>
+  }
+  }
+</section>

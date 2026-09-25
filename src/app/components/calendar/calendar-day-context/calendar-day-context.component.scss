@@ -1,0 +1,25 @@
+:host { display: block; min-width: 0; }
+.calendar-day-context { min-width: 0; color: var(--mat-sys-on-surface); }
+.calendar-day-context-header, .calendar-day-context-section-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-width: 0; }
+.calendar-day-context-header { margin-bottom: 12px; }
+.calendar-day-context-header h2 { margin: 0; font: var(--mat-sys-title-medium); }
+.calendar-day-context-header span, .calendar-day-context-section-header span { color: var(--mat-sys-on-surface-variant); font: var(--mat-sys-body-small); }
+.calendar-day-context-header a { flex: 0 0 auto; }
+.calendar-day-context-metrics { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.calendar-day-context-metric { min-width: 0; border-top: 1px solid var(--mat-sys-outline-variant); padding-top: 8px; }
+.calendar-day-context-metric span, .calendar-day-context-metric small { display: block; color: var(--mat-sys-on-surface-variant); font: var(--mat-sys-body-small); }
+.calendar-day-context-metric strong { display: block; margin: 2px 0; font-family: 'Barlow Condensed', sans-serif; font-size: 22px; font-weight: 600; line-height: 1.1; }
+.calendar-day-context-metric small { line-height: 1.25; overflow-wrap: anywhere; }
+.calendar-day-context-section { margin-top: 16px; padding-top: 12px; border-top: 1px solid var(--mat-sys-outline-variant); }
+.calendar-day-context-section h3 { margin: 0; font: var(--mat-sys-title-small); }
+.calendar-day-context-section p { margin: 8px 0 0; color: var(--mat-sys-on-surface-variant); font: var(--mat-sys-body-small); }
+.calendar-day-context-section mat-nav-list, .calendar-day-context-section mat-action-list { padding: 0; }
+.calendar-day-context-plan { display: flex; min-width: 0; align-items: center; }
+.calendar-day-context-plan { border-left: 3px solid var(--planned-workout-color, var(--mat-sys-outline-variant)); }
+.calendar-day-context-plan a { min-width: 0; flex: 1; }
+.calendar-day-context-plan-actions { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
+@media (max-width: 480px) {
+  .calendar-day-context-header { align-items: flex-start; }
+  .calendar-day-context-header a { font: var(--mat-sys-label-small); }
+  .calendar-day-context-metrics { gap: 10px; }
+}

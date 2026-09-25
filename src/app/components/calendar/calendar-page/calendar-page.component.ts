@@ -1,6 +1,5 @@
-import { ChangeDetectionStrategy, Component, DestroyRef, HostListener, LOCALE_ID, computed, effect, inject, signal, viewChild } from '@angular/core';
-import { takeUntilDestroyed, toObservable, toSignal } from '@angular/core/rxjs-interop';
-import { MatBottomSheet } from '@angular/material/bottom-sheet';
+import { ChangeDetectionStrategy, Component, HostListener, LOCALE_ID, computed, effect, inject, signal, viewChild } from '@angular/core';
+import { toObservable, toSignal } from '@angular/core/rxjs-interop';
 import { ActivatedRoute, ParamMap, Router } from '@angular/router';
 import { DataAscent, DataDistance, type EventInterface } from '@sports-alliance/sports-lib';
 import { formatUnitAwareDataValue } from '@shared/unit-aware-display';
@@ -34,11 +33,8 @@ import {
 } from '../../../helpers/activity-calendar-volume.helper';
 import { ActivityCalendarGridComponent } from '../activity-calendar-grid/activity-calendar-grid.component';
 import { ActivityCalendarVolumeListComponent } from '../activity-calendar-volume-list/activity-calendar-volume-list.component';
-import {
-  CalendarDayDetailsComponent,
-  type CalendarDayDetailsData,
-  type CalendarDayDetailsResult,
-} from '../calendar-day-details/calendar-day-details.component';
+import type { CalendarDayDetailsData } from '../calendar-day-details/calendar-day-details.component';
+import { CalendarDayContextComponent } from '../calendar-day-context/calendar-day-context.component';
 import { ActivityRangeTableSectionComponent } from '../../event-table/activity-range-table-section.component';
 import { TimelineNotesWorkspaceComponent } from '../../timeline-notes/timeline-notes-workspace.component';
 import { calendarTimelineNoteRange, calendarTimelineNotesByDate } from '../../../helpers/calendar-timeline-notes.helper';
@@ -75,6 +71,7 @@ interface CalendarSummaryMetric {
   imports: [
     SharedModule,
     ActivityCalendarGridComponent,
+    CalendarDayContextComponent,
     ActivityCalendarVolumeListComponent,
     ActivityRangeTableSectionComponent,
     TimelineNotesWorkspaceComponent,
@@ -89,10 +86,8 @@ export class CalendarPageComponent {
   private readonly userService = inject(AppUserService);
   private readonly calendarService = inject(ActivityCalendarService);
   private readonly plansService = inject(TrainingPlansService);
-  private readonly bottomSheet = inject(MatBottomSheet);
   private readonly dayDetailsNavigation = inject(CalendarDayDetailsNavigationService);
   private readonly locale = inject(LOCALE_ID);
-  private readonly destroy = inject(DestroyRef);
   private readonly notesWorkspace = viewChild(TimelineNotesWorkspaceComponent);
   private readonly reloadSequence = signal(0);
   private readonly today = signal(new Date());
@@ -232,6 +227,34 @@ export class CalendarPageComponent {
     month.days.some(day => day.inPrimaryPeriod && day.eventCount > 0)
   )));
   readonly emptyStateLabel = computed(() => `No completed activities in ${this.calendarModel().periodLabel}`);
+  readonly selectedDay = computed(() => {
+    const dateKey = formatActivityCalendarDateParam(this.routeState().anchorDate);
+    return this.calendarModel().months.flatMap(month => month.days)
+      .find(day => day.dateKey === dateKey)
+      ?? this.calendarModel().months.flatMap(month => month.days).find(day => day.inPrimaryPeriod)
+      ?? null;
+  });
+  readonly selectedDayActivities = computed(() => ({
+    day: this.selectedDay()!, status: this.eventState().status,
+  }));
+  readonly selectedDayNotes = computed(() => this.notesByDate().get(this.selectedDay()?.dateKey || '')?.notes ?? []);
+  readonly selectedDayPlanned = computed(() => this.plannedWorkoutsByDate()[this.selectedDay()?.dateKey || '']?.entries ?? []);
+  readonly selectedDayData = computed<CalendarDayDetailsData | null>(() => {
+    const day = this.selectedDay();
+    const user = this.currentUser();
+    if (!day || !user?.uid) return null;
+    return {
+      day, userId: user.uid, locale: this.locale,
+      planningEnabled: this.hasTrainingPlanningUIAccess(),
+      unitSettings: user.settings?.unitSettings ?? null,
+      summariesSettings: user.settings?.summariesSettings ?? null,
+      timelineNotes: this.selectedDayNotes,
+      activities: this.selectedDayActivities,
+      plannedWorkoutsSource: this.selectedDayPlanned,
+      plannedWorkoutsStatusSource: () => this.plansState().status,
+      scheduleSource: () => this.currentUser()?.uid === user.uid ? this.plansState().schedule : null,
+    };
+  });
   private readonly restoreDayDetailsEffect = effect(() => {
     const restoration = this.dayDetailsNavigation.restorationFor(this.router.url);
     if (!restoration || this.eventState().status !== 'ready') {
@@ -247,9 +270,7 @@ export class CalendarPageComponent {
     if (!this.dayDetailsNavigation.consumeRestoration(restoration)) {
       return;
     }
-    if (day) {
-      this.openDay(day);
-    }
+    if (day && this.selectedDay()?.dateKey !== day.dateKey) this.openDay(day);
   });
   private readonly openDuplicatedDayEffect = effect(() => {
     const uid = this.currentUser()?.uid;
@@ -259,7 +280,7 @@ export class CalendarPageComponent {
       || this.eventState().status === 'loading') return;
     const day = this.calendarModel().months.flatMap(month => month.days)
       .find(candidate => candidate.dateKey === dateKey);
-    if (day && this.dayDetailsNavigation.consumeWorkoutDestination(uid, dateKey)) this.openDay(day);
+    if (day) this.dayDetailsNavigation.consumeWorkoutDestination(uid, dateKey);
   });
 
   @HostListener('window:focus')
@@ -298,44 +319,15 @@ export class CalendarPageComponent {
   }
 
   openDay(day: ActivityCalendarDayViewModel): void {
-    const userId = `${this.currentUser()?.uid || ''}`.trim();
-    if (!userId) {
-      return;
+    if (!this.currentUser()?.uid || this.selectedDay()?.dateKey === day.dateKey) return;
+    this.navigateToState({ ...this.routeState(), anchorDate: day.date });
+  }
+
+  selectDayNote(noteId: string): void {
+    const note = this.selectedDayNotes().find(candidate => candidate.id === noteId);
+    if (note && this.currentUser()?.uid === this.notesWorkspace()?.service.uid()) {
+      this.notesWorkspace()?.context().select([note]);
     }
-    // Keep an open sheet's notes live and owner-fenced through refreshes, edits, and account changes.
-    const timelineNotes = computed(() => this.currentUser()?.uid === userId
-      ? this.notesByDate().get(day.dateKey)?.notes ?? [] : []);
-    const sheet = this.bottomSheet.open<CalendarDayDetailsComponent, CalendarDayDetailsData, CalendarDayDetailsResult>(CalendarDayDetailsComponent, {
-      data: {
-        day,
-        userId,
-        locale: this.locale,
-        unitSettings: this.currentUser()?.settings?.unitSettings ?? null,
-        summariesSettings: this.currentUser()?.settings?.summariesSettings ?? null,
-        timelineNotes,
-        activities: computed(() => {
-          const currentDay = this.calendarModel().months.flatMap(month => month.days).find(candidate => candidate.dateKey === day.dateKey);
-          return {
-            day: currentDay ?? day,
-            status: this.currentUser()?.uid === userId && currentDay ? this.eventState().status : 'error',
-          };
-        }),
-        plannedWorkouts: this.plannedWorkoutsByDate()[day.dateKey]?.entries ?? [],
-        plannedWorkoutsSource: () => this.plannedWorkoutsByDate()[day.dateKey]?.entries ?? [],
-        plannedWorkoutsStatusSource: () => this.plansState().status,
-        scheduleSource: () => this.currentUser()?.uid === userId ? this.plansState().schedule : null,
-      },
-    });
-    sheet.afterDismissed().pipe(takeUntilDestroyed(this.destroy)).subscribe(result => {
-      if (result && typeof result !== 'string') {
-        if (this.currentUser()?.uid !== userId
-          || !this.dayDetailsNavigation.prepareWorkoutDestination(userId, result.localDate)) return;
-        this.navigateToState({ ...this.routeState(), anchorDate: parseActivityCalendarDate(result.localDate) });
-        return;
-      }
-      const note = timelineNotes().find(note => note.id === result);
-      if (note && this.currentUser()?.uid === userId) this.notesWorkspace()?.context().select([note]);
-    });
   }
 
   private navigateToState(state: ActivityCalendarRouteState): void {

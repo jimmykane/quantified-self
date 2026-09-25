@@ -35,6 +35,7 @@ import {
   type CurrentTrainingScheduleV1,
 } from '../../../services/training-plans.service';
 import { ActivityCalendarGridComponent } from '../activity-calendar-grid/activity-calendar-grid.component';
+import { CalendarDayContextComponent } from '../calendar-day-context/calendar-day-context.component';
 import {
   CalendarDayDetailsComponent,
   type CalendarDayDetailsData,
@@ -58,11 +59,11 @@ interface ActivityCalendarTilePlansState {
 @Component({
   selector: 'app-activity-calendar-tile',
   standalone: true,
-  imports: [SharedModule, ActivityCalendarGridComponent],
+  imports: [SharedModule, ActivityCalendarGridComponent, CalendarDayContextComponent],
   templateUrl: './activity-calendar-tile.component.html',
   styleUrls: ['./activity-calendar-tile.component.scss'],
   changeDetection: ChangeDetectionStrategy.OnPush,
-  host: { '[class.activity-calendar-tile--auto-height]': '!fillHeight()' },
+  host: { '[class.activity-calendar-tile--auto-height]': '!fillHeight()', '[class.activity-calendar-tile--day-context]': 'dayContextEnabled()' },
 })
 export class ActivityCalendarTileComponent {
   private readonly calendarService = inject(ActivityCalendarService);
@@ -92,6 +93,9 @@ export class ActivityCalendarTileComponent {
   readonly showHeading = input(true);
   readonly fillHeight = input(true);
   readonly showNavigation = input(false);
+  readonly dayContextEnabled = input(false);
+  readonly privateHealthEnabled = input(true);
+  readonly selectedDateKey = signal(localDateKey(new Date()));
   // Share each concrete query with an open day sheet. Material destroys the month popup when
   // replacing it, but the selected day's pending data must continue until its own sheet closes.
   private readonly eventsSource = computed(() => {
@@ -164,6 +168,37 @@ export class ActivityCalendarTileComponent {
     now: this.today(),
   }));
   readonly isLoading = computed(() => this.eventState().status === 'loading');
+  readonly selectedDay = computed(() => this.calendarModel().months.flatMap(month => month.days)
+    .find(day => day.dateKey === this.selectedDateKey())
+    ?? this.calendarModel().months.flatMap(month => month.days).find(day => day.inPrimaryPeriod)
+    ?? null);
+  readonly selectedDayActivities = computed(() => ({
+    day: this.selectedDay()!, status: this.eventState().status,
+  }));
+  readonly selectedDayNotes = computed(() => this.notesByDate().get(this.selectedDay()?.dateKey || '')?.notes ?? []);
+  readonly selectedDayPlanned = computed(() => this.plannedWorkoutsByDate()[this.selectedDay()?.dateKey || '']?.entries ?? []);
+  readonly selectedDayData = computed<CalendarDayDetailsData | null>(() => {
+    const day = this.selectedDay();
+    const user = this.user();
+    if (!day || !user?.uid) return null;
+    return {
+      day, userId: user.uid, locale: this.locale,
+      privateHealthEnabled: this.privateHealthEnabled(),
+      planningEnabled: this.hasTrainingPlanningUIAccess(),
+      unitSettings: user.settings?.unitSettings ?? null,
+      summariesSettings: user.settings?.summariesSettings ?? null,
+      timelineNotes: this.selectedDayNotes,
+      activities: this.selectedDayActivities,
+      plannedWorkoutsSource: this.selectedDayPlanned,
+      plannedWorkoutsStatusSource: () => this.plansState().status,
+      scheduleSource: () => this.users.user()?.uid === user.uid ? this.plansState().schedule : null,
+    };
+  });
+  selectDayNote(noteId: string): void {
+    const note = this.selectedDayNotes().find(candidate => candidate.id === noteId);
+    const context = this.notesContext();
+    if (note && context?.ownerUid === this.users.user()?.uid) context.select([note]);
+  }
   readonly notesByDate = computed(() => calendarTimelineNotesByDate(this.calendarModel(), this.notesContext()?.notes ?? [], this.today().getTime()));
   private readonly notesRange = computed(() => calendarTimelineNoteRange(this.calendarModel()));
   private readonly notesRangeEffect = effect(onCleanup => {
@@ -230,10 +265,19 @@ export class ActivityCalendarTileComponent {
 
   navigateMonth(direction: -1 | 1): void {
     this.followsCurrentMonth.set(false);
-    this.anchorDate.set(navigateActivityCalendarDate(this.anchorDate(), 'month', direction));
+    const target = navigateActivityCalendarDate(this.anchorDate(), 'month', direction);
+    this.anchorDate.set(target);
+    const selected = new Date(`${this.selectedDateKey()}T12:00:00`);
+    const dayOfMonth = Number.isFinite(selected.getTime()) ? selected.getDate() : 1;
+    const next = new Date(target.getFullYear(), target.getMonth(), Math.min(dayOfMonth, new Date(target.getFullYear(), target.getMonth() + 1, 0).getDate()));
+    this.selectedDateKey.set(localDateKey(next));
   }
 
   openDay(day: ActivityCalendarDayViewModel): void {
+    if (this.dayContextEnabled()) {
+      this.selectedDateKey.set(day.dateKey);
+      return;
+    }
     const user = this.user();
     const userId = `${user?.uid || ''}`.trim();
     if (!userId) {
@@ -288,6 +332,8 @@ export class ActivityCalendarTileComponent {
         data: {
           day,
           userId,
+          privateHealthEnabled: this.privateHealthEnabled(),
+          planningEnabled: this.hasTrainingPlanningUIAccess(),
           timelineNotes,
           activities,
           locale: this.locale,
@@ -318,4 +364,8 @@ export class ActivityCalendarTileComponent {
 
 function startOfCurrentMonth(now = new Date()): Date {
   return new Date(now.getFullYear(), now.getMonth(), 1);
+}
+
+function localDateKey(date: Date): string {
+  return `${date.getFullYear()}-${`${date.getMonth() + 1}`.padStart(2, '0')}-${`${date.getDate()}`.padStart(2, '0')}`;
 }

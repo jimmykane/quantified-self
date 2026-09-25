@@ -26,9 +26,9 @@ describe('dashboard-tile-default-size.helper', () => {
     expect(getDefaultDashboardChartTileSizeForChartType(null)).toEqual(DASHBOARD_DEFAULT_TILE_SIZE);
   });
 
-  it('defaults the activity calendar to a compact one-cell tile', () => {
+  it('defaults the activity calendar to the full desktop section width', () => {
     expect(getDefaultDashboardChartTileSizeForChartType(DASHBOARD_ACTIVITY_CALENDAR_CHART_TYPE))
-      .toEqual(DASHBOARD_DEFAULT_TILE_SIZE);
+      .toEqual({ columns: 4, rows: 1 });
   });
 
   it('defaults route maps to wide one-row tiles and event maps to compact tiles', () => {

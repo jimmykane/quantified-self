@@ -178,6 +178,11 @@
   outline-offset: -2px;
 }
 
+.activity-calendar-day--selected {
+  z-index: 1;
+  box-shadow: inset 0 0 0 2px var(--mat-sys-primary);
+}
+
 .activity-calendar-day--outside {
   color: var(--mat-sys-on-surface-variant);
 }

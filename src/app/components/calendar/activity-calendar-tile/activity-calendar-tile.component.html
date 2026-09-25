@@ -10,7 +10,7 @@
   </header>
   }
 
-  @if (showNavigation()) {
+  @if (showNavigation() || dayContextEnabled()) {
   <nav class="activity-calendar-tile-navigation" aria-label="Calendar month navigation">
     <button mat-icon-button type="button" appHapticTap matTooltip="Previous month" aria-label="Previous month"
       (click)="navigateMonth(-1)">
@@ -39,8 +39,10 @@
     </button>
   </div>
   }
+  <div class="activity-calendar-day-layout">
   <app-activity-calendar-grid
     [model]="calendarModel()"
+    [selectedDateKey]="dayContextEnabled() ? selectedDay()?.dateKey ?? null : null"
     [compact]="true"
     [fillHeight]="fillHeight()"
     [hideOutsideDays]="true"
@@ -48,6 +50,11 @@
     [timelineNotesByDate]="notesByDate()"
     (daySelected)="openDay($event)">
   </app-activity-calendar-grid>
+  @if (dayContextEnabled() && selectedDayData(); as dayData) {
+    <app-calendar-day-context [data]="dayData" [showFullDayLink]="true" [privateHealthEnabled]="privateHealthEnabled()"
+      (noteSelected)="selectDayNote($event.id)"></app-calendar-day-context>
+  }
+  </div>
   @if (eventState().status === 'ready' && !hasEvents()) {
   <div class="activity-calendar-tile-status" role="status">No completed activities this month</div>
   }

@@ -25,6 +25,7 @@ import type { SummaryStatsSettingsLike } from '../../../helpers/summary-stats.he
 import { SharedModule } from '../../../modules/shared.module';
 import { CalendarDayDetailsNavigationService } from '../../../services/calendar-day-details-navigation.service';
 import { ActivityCalendarVolumeListComponent } from '../activity-calendar-volume-list/activity-calendar-volume-list.component';
+import { CalendarDayContextComponent } from '../calendar-day-context/calendar-day-context.component';
 import { ActivityCalendarVolumeStatsComponent } from '../activity-calendar-volume-list/activity-calendar-volume-stats.component';
 import type { PlannedWorkoutCalendarEntry } from '../../../helpers/planned-workout-calendar.helper';
 import { formatManualWorkoutStructure } from '../../../helpers/planned-workout-editor.helper';
@@ -33,6 +34,8 @@ import { getDateTimeFormatter } from '../../../helpers/date-time-format.helper';
 export interface CalendarDayDetailsData {
   day: ActivityCalendarDayViewModel;
   userId: string;
+  privateHealthEnabled?: boolean;
+  planningEnabled?: boolean;
   locale?: string;
   unitSettings?: UserUnitSettingsInterface | null;
   summariesSettings?: SummaryStatsSettingsLike | null;
@@ -76,7 +79,7 @@ interface CalendarDayEventDetailPart {
 @Component({
   selector: 'app-calendar-day-details',
   standalone: true,
-  imports: [SharedModule, ActivityCalendarVolumeListComponent, ActivityCalendarVolumeStatsComponent],
+  imports: [SharedModule, ActivityCalendarVolumeListComponent, ActivityCalendarVolumeStatsComponent, CalendarDayContextComponent],
   templateUrl: './calendar-day-details.component.html',
   styleUrls: ['./calendar-day-details.component.scss'],
   changeDetection: ChangeDetectionStrategy.OnPush,

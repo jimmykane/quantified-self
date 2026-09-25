@@ -76,11 +76,18 @@
     @if (hasTrainingPlanningUIAccess() && plansState().status === 'error') {
     <span class="calendar-status-announcement" role="status">Planned workouts could not be loaded.</span>
     }
+    <div class="calendar-day-layout">
     <app-activity-calendar-grid [model]="calendarModel()"
+      [selectedDateKey]="selectedDay()?.dateKey ?? null"
       [timelineNotesByDate]="notesByDate()"
       [plannedWorkoutsByDate]="hasTrainingPlanningUIAccess() ? plannedWorkoutsByDate() : null"
       (daySelected)="openDay($event)">
     </app-activity-calendar-grid>
+    @if (selectedDayData(); as dayData) {
+      <app-calendar-day-context class="calendar-selected-day" [data]="dayData"
+        (noteSelected)="selectDayNote($event.id)"></app-calendar-day-context>
+    }
+    </div>
 
     @if (!isLoading() && familyVolumeRows().length) {
     <section class="calendar-family-volume" aria-labelledby="calendar-family-volume-title">

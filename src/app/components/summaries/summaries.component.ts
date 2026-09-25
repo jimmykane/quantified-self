@@ -9,6 +9,7 @@ import { localCalendarDate } from '../../helpers/health-workspace.helper';
 import { DashboardHrvService } from '../../services/dashboard-hrv.service';
 import { dashboardHrvWindows, type DashboardHrvContext } from '../../helpers/dashboard-hrv-context.helper';
 import { DashboardConfigurationService, cloneDashboardSettings } from '../../services/dashboard-configuration.service';
+import { migrateDashboardCalendarDayContextLayout } from '../../helpers/dashboard-calendar-layout.helper';
 import { DashboardChartLibraryComponent } from './dashboard-chart-library/dashboard-chart-library.component';
 import { DashboardChartLibraryState } from './dashboard-chart-library/dashboard-chart-library-state.service';
 import type { DashboardPreviewInput } from '../../helpers/dashboard-chart-preview.helper';
@@ -344,6 +345,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
   public mainGridSections: DashboardTileSectionViewModel[] = [];
 
   public tileTypes = TileTypes;
+  public readonly isDashboardActivityCalendarChartType = isDashboardActivityCalendarChartType;
   public desktopTileDragEnabled = false;
   private readonly configuration = inject(DashboardConfigurationService);
   private readonly healthSnack = inject(MatSnackBar);
@@ -519,6 +521,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
     }
     if (simpleChanges.user || simpleChanges.eventUser) {
       this.refreshTodayHeader(new Date());
+      this.migrateCalendarLayoutForOwner();
     }
     this.syncTodaySummaryVisibility();
     this.updateDesktopTileDragCapability();
@@ -544,6 +547,29 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
       }
       return this.unsubscribeAndCreateCharts();
     }
+  }
+
+  private migrateCalendarLayoutForOwner(): void {
+    const uid = this.resolveOwnDashboardUID();
+    if (!uid) return;
+    const settings = this.user.settings.dashboardSettings;
+    const migration = migrateDashboardCalendarDayContextLayout(settings);
+    if (!migration) return;
+    const baseline = cloneDashboardSettings(settings);
+    const migrated = { ...settings, ...migration };
+    this.user.settings.dashboardSettings = migrated;
+    void this.configuration.save(uid, baseline, migration).catch(error => {
+      // An edit made while the migration was saving is newer than this draft.
+      const current = this.user.settings.dashboardSettings as AppDashboardSettingsInterface;
+      if (this.resolveOwnDashboardUID() !== uid
+        || current.calendarDayContextLayoutVersion !== migration.calendarDayContextLayoutVersion
+        || !equal(current.tiles, migration.tiles)) return;
+      const restored: AppDashboardSettingsInterface = { ...current, tiles: baseline.tiles,
+        calendarDayContextLayoutVersion: baseline.calendarDayContextLayoutVersion };
+      this.user.settings.dashboardSettings = restored;
+      void this.unsubscribeAndCreateCharts();
+      this.healthSnack.open(error instanceof Error ? error.message : 'Could not update calendar layout.', 'Dismiss', { duration: 6000 });
+    });
   }
 
   ngDoCheck(): void {
@@ -674,7 +700,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
     this.bottomSheet.open<CalendarMonthPickerBottomSheetComponent, CalendarMonthPickerBottomSheetData>(
       CalendarMonthPickerBottomSheetComponent,
       {
-        data: { user: this.user, timelineNotes: this.timelineNotes },
+        data: { user: this.user, timelineNotes: this.timelineNotes, privateHealthEnabled: this.showActions && this.isOwnerDashboard },
         panelClass: ['qs-bottom-sheet-container', 'qs-calendar-month-picker-sheet'],
       },
     );
