@@ -4,6 +4,62 @@ import { ServiceNames } from '@sports-alliance/sports-lib';
 import { PLANNED_WORKOUT_PROVIDER_IDS } from '../../../../shared/planned-workout-providers';
 import { deliverySettingsId, TRAINING_DELIVERY_SETTINGS } from '../../../../shared/training-provider-delivery';
 import { DELIVERY_QUEUE, DELIVERY_SCOPES, DELIVERY_STATE } from './contracts';
+import type { DeliveryLedgerV1, PastCleanupAuthorization } from './contracts';
+import type { ScheduledWorkoutV1 } from '../../../../shared/training-plans';
+
+const PAST_CLEANUP = 'pastCleanup';
+
+function pastCleanupRef(db: Firestore, uid: string, scope: 'plan' | 'workout', scopeId: string) {
+  return db.collection('users').doc(uid).collection(DELIVERY_STATE).doc('current')
+    .collection(PAST_CLEANUP).doc(`${scope}_${scopeId}`);
+}
+
+/** These server-only intents survive authored-source deletion; no provider request runs in the mutation transaction. */
+export function stagePastPlanCleanup(tx: Transaction, db: Firestore, uid: string, planId: string,
+  workoutIds: readonly string[], mutationId: string, requestedAtMs: number): void {
+  tx.create(pastCleanupRef(db, uid, 'plan', planId), {
+    schemaVersion: 1, scope: 'plan', scopeId: planId, mutationId, requestedAtMs,
+    workoutIds: [...workoutIds].sort(),
+  });
+}
+
+export function stagePastWorkoutCleanup(tx: Transaction, db: Firestore, uid: string, workoutId: string,
+  mutationId: string, requestedAtMs: number, enabled: boolean, deletedAtMs?: number): void {
+  tx.set(pastCleanupRef(db, uid, 'workout', workoutId), {
+    schemaVersion: 1, scope: 'workout', scopeId: workoutId, mutationId, requestedAtMs, enabled,
+    ...(deletedAtMs === undefined ? {} : { deletedAtMs }),
+  });
+}
+
+function stillDeleted(authorization: PastCleanupAuthorization, workout: ScheduledWorkoutV1 | null): boolean {
+  if (authorization.scope === 'plan') return !workout || workout.planId !== authorization.scopeId;
+  return !workout || (workout.lifecycle === 'deleted' && workout.deletedAtMs === authorization.deletedAtMs);
+}
+
+export async function readPastCleanupAuthorization(tx: Transaction, db: Firestore, uid: string,
+  ledger: DeliveryLedgerV1 | null, workout: ScheduledWorkoutV1 | null): Promise<PastCleanupAuthorization | null> {
+  if (!ledger?.actual && !ledger?.repair?.original) return null;
+  if (workout?.lifecycle === 'deleted' || !workout) {
+    const snapshot = await tx.get(pastCleanupRef(db, uid, 'workout', ledger.workoutId));
+    const value = snapshot.data();
+    if (value?.schemaVersion === 1 && value.enabled === true && value.scope === 'workout' && value.scopeId === ledger.workoutId
+      && typeof value.mutationId === 'string' && Number.isSafeInteger(value.requestedAtMs)
+      && (workout ? value.deletedAtMs === workout.deletedAtMs : true)) {
+      return { scope: 'workout', scopeId: ledger.workoutId, mutationId: value.mutationId,
+        requestedAtMs: value.requestedAtMs, ...(Number.isSafeInteger(value.deletedAtMs) ? { deletedAtMs: value.deletedAtMs } : {}) };
+    }
+  }
+  if (ledger.planId && stillDeleted({ scope: 'plan', scopeId: ledger.planId, mutationId: '', requestedAtMs: 0 }, workout)) {
+    const snapshot = await tx.get(pastCleanupRef(db, uid, 'plan', ledger.planId));
+    const value = snapshot.data();
+    if (value?.schemaVersion === 1 && value.scope === 'plan' && value.scopeId === ledger.planId
+      && typeof value.mutationId === 'string' && Number.isSafeInteger(value.requestedAtMs)
+      && Array.isArray(value.workoutIds) && value.workoutIds.includes(ledger.workoutId)) {
+      return { scope: 'plan', scopeId: ledger.planId, mutationId: value.mutationId, requestedAtMs: value.requestedAtMs };
+    }
+  }
+  return null;
+}
 
 export function reconciliationJobId(uid: string): string {
   return `reconcile_${createHash('sha256').update(uid).digest('hex')}`;

@@ -44,6 +44,8 @@ export interface DeliveryOperation {
   workout: ScheduledWorkoutV1 | null;
   strength?: StrengthWorkoutDetailsV1 | null;
   artifact: DeliveryArtifact | null;
+  /** One explicitly requested removal of a past, uncompleted owned copy. */
+  allowPastRemoval?: boolean;
   /** Internal transport journal. null proves a new operation has made no request;
    * absence is a legacy/unknown journal and must not authorize a non-idempotent retry. */
   progress?: DeliveryTransportProgress | null;
@@ -116,7 +118,7 @@ export interface TrainingDeliveryTransport {
   withdrawOutsideHorizon?: boolean;
   assess(workout: ScheduledWorkoutV1, destinationKey: string, timeZone: string,
     strength?: StrengthWorkoutDetailsV1 | null): DeliveryAssessment;
-  canRemove(artifact: DeliveryArtifact, today: string): boolean;
+  canRemove(artifact: DeliveryArtifact, today: string, allowPastRemoval?: boolean): boolean;
   execute(operation: DeliveryOperation, checkpoint: DeliveryCheckpoint, guard: DeliveryRequestGuard): Promise<DeliveryArtifact | null>;
   recover(operation: DeliveryOperation, checkpoint: DeliveryCheckpoint, guard: DeliveryRequestGuard): Promise<DeliveryRecovery>;
 }
@@ -180,6 +182,7 @@ export interface DeliveryLedgerV1 {
   /** Private reverse-link identity when `actual.completed` came from an imported
    * activity marker. Remote provider completion observations leave this unset. */
   completionLinkId?: string | null;
+  pastCleanup?: PastCleanupAuthorization | null;
   schemaVersion: 1;
   id: string;
   workoutId: string;
@@ -211,6 +214,13 @@ export interface DeliveryLedgerV1 {
   lastAcceptedAtMs: number | null;
   updatedAtMs: number;
 }
+export interface PastCleanupAuthorization {
+  scope: 'plan' | 'workout';
+  scopeId: string;
+  mutationId: string;
+  requestedAtMs: number;
+  deletedAtMs?: number;
+}
 export interface DeliveryIntent {
   desired: DeliveryLedgerV1['desired'];
   status: TrainingDeliveryStatus;
@@ -230,4 +240,5 @@ export interface DeliveryContext {
   hasPro: boolean;
   transport: TrainingDeliveryTransport | null;
   nowMs: number;
+  pastCleanup: PastCleanupAuthorization | null;
 }

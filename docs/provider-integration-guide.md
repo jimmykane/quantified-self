@@ -326,6 +326,17 @@ require same-account reconnect. Explicit disconnect invalidates Training consent
 copies; authentication failure preserves consent but blocks the failed connection generation. A changed account requires
 fresh consent. Do not reuse activity/route auto-restoration rules for Training.
 
+Deleting a plan or workout still withdraws eligible uncompleted future copies by default. The browser offers a separate,
+unchecked past-copy cleanup choice. The server commits that choice beside the deletion under `trainingDeliveryState/current/pastCleanup`
+and requires the matching current deletion before a reconciler may attempt any past removal; a later deletion without opt-in
+revokes the old choice. The ledger retains the private authorization and artifact IDs for retries, but rechecks the marker,
+connection epoch, exact account, completed evidence and provider ownership before every write. Garmin deletes its schedule
+then workout, Wahoo its Workout then Plan, and Suunto its owned Guide; acceptance is not device removal. COROS's partner
+contract permits deletion only for unexecuted workouts dated today or later, so its past copy is retained with a clear
+unsupported reason even if selected. The same COROS backend path remains tested while the app hides new-send controls.
+Never infer that deleting a planned provider copy deletes a recorded activity. MCP deletion keeps its existing no-opt-in
+wire contract and cannot grant this extra destructive provider action.
+
 An adapter must bind to the server-resolved owner/account, implement compatibility, horizon/deletion policy, execution,
 inspection and accepted-artifact checkpoints. Garmin workout/schedule IDs and Wahoo Plan/Workout IDs remain distinct;
 COROS keeps stable partner workout IDs and batches at most 30; Suunto delivers dated Guides, not native plan parity.

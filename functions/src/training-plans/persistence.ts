@@ -34,7 +34,7 @@ import {
     type TrainingScheduleSnapshotV1,
 } from './mutation';
 import { assertNoTrainingPlanDeletionInProgress } from './deletion-lock';
-import { invalidateTrainingWorkoutConsent, stageTrainingDeliveryReconciliation } from './delivery/marker';
+import { invalidateTrainingWorkoutConsent, stagePastWorkoutCleanup, stageTrainingDeliveryReconciliation } from './delivery/marker';
 import { TRAINING_WORKOUT_COMPLETIONS_COLLECTION_ID } from '../../../shared/training-workout-completion';
 
 const MUTATION_RECEIPT_RETENTION_MS = 30 * 24 * 60 * 60 * 1000;
@@ -520,6 +520,11 @@ function estimateBatchWriteCount(
             || !item.applied.after.workouts.has(id)
         ))
     ));
+    const pastCleanupWorkouts = items.flatMap(item => {
+        const operation = item.request.operation;
+        return (operation.kind === 'delete-workout' || operation.kind === 'permanently-delete-workout')
+            ? [operation.workoutId] : [];
+    });
     const historyWrites = items.reduce((total, item) => total
         + item.revisions.planRevisions.size
         + [...item.revisions.planRevisionChunks.values()].reduce((sum, chunks) => sum + chunks.length, 0)
@@ -532,6 +537,7 @@ function estimateBatchWriteCount(
         )) && final.strengthDetails?.has(id)))
         + historyWrites
         + uniqueDocumentCount(invalidatedWorkouts)
+        + uniqueDocumentCount(pastCleanupWorkouts)
         + uniqueDocumentCount(permanentlyDeletedWorkouts) * 3
         + items.length // One idempotency receipt per newly applied request.
         + additionalWriteBudget;
@@ -635,6 +641,22 @@ export async function mutateTrainingScheduleBatchForUser(
             }
         }
         invalidatedWorkoutIds.forEach(id => invalidateTrainingWorkoutConsent(transaction, db, uid, id));
+        const pastCleanupRequests = new Map<string, { mutationId: string; requestedAtMs: number; enabled: boolean; deletedAtMs?: number }>();
+        for (const item of items) {
+            const operation = item.request.operation;
+            if (operation.kind !== 'delete-workout' && operation.kind !== 'permanently-delete-workout') continue;
+            const deletedAtMs = operation.kind === 'delete-workout'
+                ? item.applied.after.workouts.get(operation.workoutId)?.deletedAtMs : undefined;
+            pastCleanupRequests.set(operation.workoutId, {
+                mutationId: item.request.mutationId, requestedAtMs: item.nowMs,
+                enabled: operation.removePastProviderCopies === true,
+                ...(deletedAtMs === undefined ? {} : { deletedAtMs }),
+            });
+        }
+        for (const [workoutId, authorization] of pastCleanupRequests) {
+            stagePastWorkoutCleanup(transaction, db, uid, workoutId, authorization.mutationId,
+                authorization.requestedAtMs, authorization.enabled, authorization.deletedAtMs);
+        }
 
         const finalSnapshot = items[items.length - 1].applied.after;
         transaction.set(stateRef, cloneValue(finalSnapshot.state));

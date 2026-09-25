@@ -256,6 +256,13 @@
                     Permanently delete current workouts
                   </mat-radio-button>
                 </mat-radio-group>
+                <div class="past-provider-cleanup-option">
+                  <mat-checkbox [checked]="removePastProviderCopies()" [disabled]="busyAction() !== null"
+                    (change)="removePastProviderCopies.set($event.checked); haptics.selection()">
+                    Also try to remove past provider copies
+                  </mat-checkbox>
+                  <p>Only uncompleted provider workouts are eligible. COROS cannot remove past workouts. Provider apps and devices may retain copies; completed activities are never deleted.</p>
+                </div>
               </mat-card-content>
               <mat-card-actions align="end">
                 <button appHapticTap mat-button type="button" (click)="deletingPlanId.set(null)" [disabled]="busyAction() !== null">Cancel</button>

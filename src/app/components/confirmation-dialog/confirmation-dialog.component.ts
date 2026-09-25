@@ -13,6 +13,12 @@ export interface ConfirmationDialogData {
   cancelLabel?: string;
   confirmColor?: 'primary' | 'accent' | 'warn';
   showCancel?: boolean;
+  pastProviderCleanupOption?: boolean;
+}
+
+export interface ConfirmationWithPastProviderCleanup {
+  confirmed: true;
+  removePastProviderCopies: boolean;
 }
 
 @Component({
@@ -26,6 +32,16 @@ export class ConfirmationDialogComponent {
   private _dialogRef = inject(MatDialogRef, { optional: true });
   private _dialogData = inject<ConfirmationDialogData | null>(MAT_DIALOG_DATA, { optional: true });
   private _hapticsService = inject(AppHapticsService);
+  removePastProviderCopies = false;
+
+  get pastProviderCleanupOption(): boolean {
+    return this._dialogData?.pastProviderCleanupOption === true;
+  }
+
+  onPastProviderCleanupChange(checked: boolean): void {
+    this.removePastProviderCopies = checked;
+    this._hapticsService.selection();
+  }
 
   get title(): string {
     return this._dialogData?.title || 'Are you sure?';
@@ -69,10 +85,11 @@ export class ConfirmationDialogComponent {
     } else {
       this._hapticsService.selection();
     }
-    this.respond(true);
+    this.respond(this.pastProviderCleanupOption
+      ? { confirmed: true, removePastProviderCopies: this.removePastProviderCopies } : true);
   }
 
-  private respond(confirmed: boolean): void {
+  private respond(confirmed: boolean | ConfirmationWithPastProviderCleanup): void {
     if (this._bottomSheetRef) {
       this._bottomSheetRef.dismiss(confirmed);
     }

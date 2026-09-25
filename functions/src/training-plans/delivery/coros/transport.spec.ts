@@ -66,6 +66,7 @@ describe('COROS Training batch transport', () => {
     const transport = new CorosTrainingTransport(client, () => NOW);
     const past = operations(1, 'remove', transport);
     past[0].artifact = { ...past[0].artifact!, localDate: '2026-09-16' };
+    past[0].allowPastRemoval = true;
     await expect(transport.batch.execute(past, async () => {}, async () => {}))
       .rejects.toMatchObject({ kind: 'terminal', rejected: true });
     const completed = operations(1, 'remove', transport);

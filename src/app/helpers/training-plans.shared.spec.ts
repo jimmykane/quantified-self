@@ -247,6 +247,15 @@ describe('training schedule mutation contracts', () => {
     })).toThrow(TrainingPlanContractError);
   });
 
+  it.each(['delete-workout', 'permanently-delete-workout'] as const)('strictly parses optional past-provider cleanup on %s', kind => {
+    const operation = { kind, workoutId: 'workout-1', removePastProviderCopies: true,
+      ...(kind === 'permanently-delete-workout' ? { confirmPermanentDeletion: true } : {}) };
+    expect(parseMutateTrainingScheduleRequestV1({ mutationId: 'cleanup', expectedRevisions: [], operation }).operation)
+      .toMatchObject(operation);
+    expect(() => parseMutateTrainingScheduleRequestV1({ mutationId: 'invalid', expectedRevisions: [],
+      operation: { ...operation, removePastProviderCopies: 'yes' } })).toThrow(TrainingPlanContractError);
+  });
+
   it('parses both explicit plan-deletion dispositions and rejects silent deletion', () => {
     const base = {
       mutationId: 'delete-plan-1',
@@ -263,6 +272,10 @@ describe('training schedule mutation contracts', () => {
     expect(parseDeleteTrainingPlanRequestV1({
       ...base, workoutDisposition: 'delete-workouts',
     }).workoutDisposition).toBe('delete-workouts');
+    expect(parseDeleteTrainingPlanRequestV1({ ...base, workoutDisposition: 'delete-workouts',
+      removePastProviderCopies: true }).removePastProviderCopies).toBe(true);
+    expect(() => parseDeleteTrainingPlanRequestV1({ ...base, workoutDisposition: 'delete-workouts',
+      removePastProviderCopies: 'yes' })).toThrow(TrainingPlanContractError);
     expect(() => parseDeleteTrainingPlanRequestV1({
       ...base, workoutDisposition: 'delete-workouts', confirmPlanDeletion: false,
     })).toThrow('Explicit plan-deletion confirmation');

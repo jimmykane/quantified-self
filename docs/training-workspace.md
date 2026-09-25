@@ -1036,6 +1036,17 @@ ordinary provider integration tests remain #647–#650, with contract questions 
 matching and Sports Lib extraction remain #651–#655; manual bulk-operation hardening remains #657 under epic #583.
 These are explicit tracked slices, not anonymous TODOs.
 
+Deletion policy: authored workout/plan deletion continues to withdraw eligible uncompleted future provider copies.
+The manual delete UI additionally offers an unchecked request to clean up past copies. The deletion transaction stores
+a private, mutation-bound choice; reconciliation and every provider request recheck it alongside the exact account,
+connection generation, retained identity and completion state. Garmin removes the schedule before its workout; Wahoo
+removes the dated Workout before its Plan; Suunto removes the owned Guide. These are best-effort cloud removals, not
+proof of app/watch removal or deletion of any recorded activity. A restored and subsequently deleted workout must opt
+in again; an old authorization cannot be reused. COROS deliberately remains in backend reconciliation and tests, but
+its contract allows deleting only unexecuted workouts dated today or later, so past copies are retained and reported
+as unsupported. New-send UI availability remains a separate policy. Existing MCP deletion previews/applies omit the
+new opt-in and retain default past-copy preservation; this change adds no MCP tool, schema, scope, or provider action.
+
 #### Garmin workout sport profiles (#647)
 
 Garmin Training API V2 exposes `RUNNING` and `CYCLING` for supported running/cycling planned workouts and no sub-sport

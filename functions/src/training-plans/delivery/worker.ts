@@ -55,7 +55,7 @@ export async function processTrainingDelivery(runtime: DeliveryRuntime, uid: str
     ]);
     if (!locks.empty) return null;
     const workout = workoutDoc.exists ? parseScheduledWorkoutV1(workoutDoc.data()) : null;
-    const context = await readDeliveryContext(runtime, tx, uid, workout, ledger.provider, pro, ledger.workoutId);
+    const context = await readDeliveryContext(runtime, tx, uid, workout, ledger.provider, pro, ledger.workoutId, ledger);
     const intent = resolveDeliveryIntent(context, ledger);
     const transport = context.transport;
     if (!transport || context.connection.state !== 'connected' || ledger.destinationKey !== context.connection.destinationKey
@@ -110,6 +110,7 @@ export async function processTrainingDelivery(runtime: DeliveryRuntime, uid: str
         workout: kind === 'upsert' ? workout : null,
         ...(kind === 'upsert' && context.strength ? { strength: context.strength } : {}),
         artifact: ledger.actual ?? (kind === 'remove' ? ledger.repair?.original ?? null : null), progress: null,
+        ...(kind === 'remove' && context.pastCleanup ? { allowPastRemoval: true } : {}),
         ...(ledger.repair ? { repair: ledger.repair } : {}) };
       tx.create(ledgerRef.collection('attempts').doc(ledger.attempt.id), {
         schemaVersion: 1, operation: ledger.attempt, state: 'started', startedAtMs: runtime.now(),
@@ -192,6 +193,7 @@ export async function processTrainingDelivery(runtime: DeliveryRuntime, uid: str
         ledger.acceptedContentDigest = null;
       }
       if (complete) {
+        ledger.pastCleanup = null;
         const repairTimes = (ledger.verification?.repairTimes ?? []).filter(time => time > runtime.now() - VERIFICATION_DAY_MS);
         ledger.verification = { ...emptyVerification(runtime.now()),
           requestedAtMs: ledger.verification?.requestedAtMs ?? 0,
@@ -258,7 +260,7 @@ export async function processTrainingDelivery(runtime: DeliveryRuntime, uid: str
         tx.get(user.collection('trainingPlanState').doc('current').collection('planDeletionLocks').limit(1)),
       ]);
       const context = await readDeliveryContext(runtime, tx, uid,
-        workoutDoc.exists ? parseScheduledWorkoutV1(workoutDoc.data()) : null, ledger.provider, currentPro, ledger.workoutId);
+        workoutDoc.exists ? parseScheduledWorkoutV1(workoutDoc.data()) : null, ledger.provider, currentPro, ledger.workoutId, ledger);
       if (!locks.empty || !runtime.transport(ledger.provider, uid) || context.connection.state !== 'connected'
         || context.connection.destinationKey !== operation.destinationKey || context.connection.epoch !== ledger.connectionEpoch
         || context.connection.generation !== operation.connectionGeneration

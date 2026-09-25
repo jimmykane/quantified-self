@@ -162,12 +162,15 @@ export interface SetScheduledWorkoutLifecycleMutationV1 {
 export interface DeleteScheduledWorkoutMutationV1 {
   kind: 'delete-workout';
   workoutId: string;
+  /** Explicit opt-in to remove eligible past provider copies; completed copies stay protected. */
+  removePastProviderCopies?: boolean;
 }
 
 export interface PermanentlyDeleteScheduledWorkoutMutationV1 {
   kind: 'permanently-delete-workout';
   workoutId: string;
   confirmPermanentDeletion: true;
+  removePastProviderCopies?: boolean;
 }
 
 export type TrainingScheduleMutationOperationV1 =
@@ -249,6 +252,7 @@ export interface DeleteTrainingPlanRequestV1 {
   expectedRevisions: ExpectedTrainingScheduleRevision[];
   workoutDisposition: 'convert-to-standalone' | 'delete-workouts';
   confirmPlanDeletion: true;
+  removePastProviderCopies?: boolean;
 }
 
 export interface DeleteTrainingPlanResponseV1 {
@@ -662,18 +666,26 @@ export function parseMutateTrainingScheduleRequestV1(value: unknown): MutateTrai
       };
       break;
     case 'delete-workout':
-      rejectUnknownFields(operationRecord, ['kind', 'workoutId'], '$.operation');
-      operation = { kind, workoutId: readEntityId(operationRecord.workoutId, '$.operation.workoutId') };
+      rejectUnknownFields(operationRecord, ['kind', 'workoutId', 'removePastProviderCopies'], '$.operation');
+      if ('removePastProviderCopies' in operationRecord && typeof operationRecord.removePastProviderCopies !== 'boolean') {
+        throw new TrainingPlanContractError('$.operation.removePastProviderCopies', 'Expected a boolean.');
+      }
+      operation = { kind, workoutId: readEntityId(operationRecord.workoutId, '$.operation.workoutId'),
+        ...('removePastProviderCopies' in operationRecord ? { removePastProviderCopies: operationRecord.removePastProviderCopies as boolean } : {}) };
       break;
     case 'permanently-delete-workout':
-      rejectUnknownFields(operationRecord, ['kind', 'workoutId', 'confirmPermanentDeletion'], '$.operation');
+      rejectUnknownFields(operationRecord, ['kind', 'workoutId', 'confirmPermanentDeletion', 'removePastProviderCopies'], '$.operation');
       if (operationRecord.confirmPermanentDeletion !== true) {
         throw new TrainingPlanContractError('$.operation.confirmPermanentDeletion', 'Explicit confirmation is required.');
+      }
+      if ('removePastProviderCopies' in operationRecord && typeof operationRecord.removePastProviderCopies !== 'boolean') {
+        throw new TrainingPlanContractError('$.operation.removePastProviderCopies', 'Expected a boolean.');
       }
       operation = {
         kind,
         workoutId: readEntityId(operationRecord.workoutId, '$.operation.workoutId'),
         confirmPermanentDeletion: true,
+        ...('removePastProviderCopies' in operationRecord ? { removePastProviderCopies: operationRecord.removePastProviderCopies as boolean } : {}),
       };
       break;
   }
@@ -688,7 +700,7 @@ export function parseMutateTrainingScheduleRequestV1(value: unknown): MutateTrai
 export function parseDeleteTrainingPlanRequestV1(value: unknown): DeleteTrainingPlanRequestV1 {
   const record = asRecord(value, '$');
   rejectUnknownFields(record, [
-    'mutationId', 'planId', 'expectedRevisions', 'workoutDisposition', 'confirmPlanDeletion',
+    'mutationId', 'planId', 'expectedRevisions', 'workoutDisposition', 'confirmPlanDeletion', 'removePastProviderCopies',
   ], '$');
   const workoutDisposition = readLifecycle(
     record.workoutDisposition,
@@ -698,12 +710,16 @@ export function parseDeleteTrainingPlanRequestV1(value: unknown): DeleteTraining
   if (record.confirmPlanDeletion !== true) {
     throw new TrainingPlanContractError('$.confirmPlanDeletion', 'Explicit plan-deletion confirmation is required.');
   }
+  if ('removePastProviderCopies' in record && typeof record.removePastProviderCopies !== 'boolean') {
+    throw new TrainingPlanContractError('$.removePastProviderCopies', 'Expected a boolean.');
+  }
   return {
     mutationId: normalizeTrainingScheduleMutationId(record.mutationId),
     planId: readEntityId(record.planId, '$.planId'),
     expectedRevisions: parseExpectedRevisions(record.expectedRevisions),
     workoutDisposition,
     confirmPlanDeletion: true,
+    ...('removePastProviderCopies' in record ? { removePastProviderCopies: record.removePastProviderCopies as boolean } : {}),
   };
 }
 

@@ -1292,6 +1292,36 @@ describe('PlansWorkspaceComponent', () => {
     expect(fixture.componentInstance.view()).toBe('standalone');
   });
 
+  it('keeps past-provider cleanup opt-in off by default and sends the selected plan choice', async () => {
+    deleteTrainingPlan.mockResolvedValue({ mutationId: 'mutation-1', state: schedule.state,
+      removedPlanId: 'active-plan', workoutDisposition: 'convert-to-standalone',
+      convertedWorkoutIds: [], permanentlyDeletedWorkoutIds: [] });
+    const fixture = await renderPlans();
+    const componentDialog = (fixture.componentInstance as unknown as { dialog: MatDialog }).dialog;
+    vi.spyOn(componentDialog, 'open').mockReturnValue({ afterClosed: () => of(true) } as never);
+    fixture.componentInstance.beginPlanDeletion(schedule.plans[0]);
+    expect(fixture.componentInstance.removePastProviderCopies()).toBe(false);
+    fixture.componentInstance.removePastProviderCopies.set(true);
+    fixture.detectChanges();
+    expect(fixture.nativeElement.textContent).toContain('COROS cannot remove past workouts');
+    await fixture.componentInstance.deletePlan(schedule.plans[0]);
+    expect(deleteTrainingPlan).toHaveBeenCalledWith(expect.objectContaining({ removePastProviderCopies: true }));
+  });
+
+  it('passes the explicit single-workout cleanup choice and leaves cancellation inert', async () => {
+    const fixture = await renderPlans();
+    const componentDialog = (fixture.componentInstance as unknown as { dialog: MatDialog }).dialog;
+    vi.spyOn(componentDialog, 'open')
+      .mockReturnValueOnce({ afterClosed: () => of({ confirmed: true, removePastProviderCopies: true }) } as never)
+      .mockReturnValueOnce({ afterClosed: () => of(false) } as never);
+    await fixture.componentInstance.deleteWorkout(schedule.workouts[0]);
+    expect(mutate).toHaveBeenCalledWith(expect.objectContaining({
+      operation: { kind: 'delete-workout', workoutId: 'plan-workout', removePastProviderCopies: true },
+    }));
+    await fixture.componentInstance.permanentlyDeleteWorkout(schedule.workouts[0]);
+    expect(mutate).toHaveBeenCalledTimes(1);
+  });
+
   it('keeps plan mutations visibly pending beside the triggering controls', async () => {
     const fixture = await renderPlans();
 
