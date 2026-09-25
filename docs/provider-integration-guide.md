@@ -55,8 +55,11 @@ the retained Training API workout ID. The local linker requires the Garmin activ
 saved activity in that event, a unique same-account ledger, accepted schedule, current scheduled date, and one recorded
 activity on that local date before writing the existing completion and private
 reverse link. Ambiguity remains unlinked, with no similarity fallback or activity-metric rewrite. The current v1
-completion projection has one recorded source per workout, so a simultaneous second provider recording is not linked
-until #651 resolves multi-source representation. Provider acceptance is never watch receipt or proof every target was met.
+completion projection has one recorded source per workout: the first exact link committed wins, and a second provider
+recording remains a normal completed activity without replacing it. COROS, Wahoo and Suunto also require the current
+workout plan/date to match the retained provider occurrence before a new link; a later delivery update can make a
+rescheduled occurrence eligible. Same-account reconnects retain exact matching, while stale credentials and different
+owners do not. Provider acceptance is never watch receipt or proof every target was met.
 
 Remote verification (#703) reuses the Training delivery ledger, 25-item reconciliation pages, dispatcher and per-delivery
 lease. `check` is an idempotent, revision-checked command with a 15-minute coalescing window; it does not change consent.

@@ -136,6 +136,10 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)(
       });
       expect((await user().collection('events').doc('event').collection('trainingCompletionEvidence').doc('coros').get()).data())
         .toMatchObject({ sourceProvider: 'coros', planWorkoutId: marker, componentKey: 'root', outcome: 'already_linked' });
+      await user().collection('scheduledWorkouts').doc('workout').update({ localDate: '2026-09-18', revision: 3 });
+      expect(await retain()).toEqual({ retained: true, linkedWorkoutIds: ['workout'] });
+      expect((await user().collection('trainingWorkoutCompletions').doc('workout').get()).data())
+        .toMatchObject({ scheduledLocalDate: '2026-09-17', workoutRevisionAtLink: 2 });
     });
 
     it('uses a started reserved identity to resolve an ambiguous first send', async () => {
@@ -235,6 +239,13 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)(
       expect((await user().collection('events').doc('event').collection('trainingCompletionEvidence').get()).empty).toBe(true);
     });
 
+    it('retains a valid but unknown marker only as unlinked evidence', async () => {
+      expect(await retain({ marker: '123456788' })).toEqual({ retained: true, linkedWorkoutIds: [] });
+      expect((await user().collection('events').doc('event').collection('trainingCompletionEvidence').doc('coros').get()).data())
+        .toMatchObject({ outcome: 'missing' });
+      expect((await user().collection('trainingWorkoutCompletions').get()).empty).toBe(true);
+    });
+
     it('does not choose between collided ledger identities', async () => {
       await user().collection('scheduledWorkouts').doc('other-workout').set({
         ...(await user().collection('scheduledWorkouts').doc('workout').get()).data(),
@@ -245,6 +256,49 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)(
       expect((await user().collection('events').doc('event').collection('trainingCompletionEvidence').doc('coros').get()).data())
         .toMatchObject({ outcome: 'conflict' });
       expect((await user().collection('trainingWorkoutCompletions').get()).empty).toBe(true);
+    });
+
+    it('keeps the first exact event when the same marker is reused by another event', async () => {
+      expect(await retain()).toMatchObject({ linkedWorkoutIds: ['workout'] });
+      await user().collection('events').doc('other-event').set({ test: true });
+      const second = await retainCOROSTrainingCompletion(db, uid, 'other-event', account, account, null,
+        marker, 'root', [{ id: 'other-activity', startTimeMs: Date.parse('2026-09-17T07:00:00Z') }]);
+      expect(second).toEqual({ retained: true, linkedWorkoutIds: [] });
+      expect((await user().collection('trainingWorkoutCompletions').doc('workout').get()).data())
+        .toMatchObject({ eventId: 'event', activityId: 'activity' });
+    });
+
+    it('accepts a same-account reconnect generation but never reads another owner ledger', async () => {
+      const root = db.collection('COROSAPIAccessTokens').doc(uid);
+      await root.update({ activeOAuthCredentialGeneration: 'reconnected' });
+      await root.collection('tokens').doc(account).update({ tokenCredentialGeneration: 'reconnected' });
+      expect(await retain({ tokenCredentialGeneration: 'reconnected' })).toMatchObject({ linkedWorkoutIds: ['workout'] });
+      const otherUid = `coros-completion-${randomUUID()}`; users.push(otherUid);
+      const other = db.collection('users').doc(otherUid);
+      await other.set({ test: true });
+      await other.collection('meta').doc(ServiceNames.COROSAPI).set({ connectionState: 'connected',
+        connectionStateGeneration: 'connection', providerUserId: account });
+      await db.collection('COROSAPIAccessTokens').doc(otherUid).set({ connected: true });
+      await db.collection('COROSAPIAccessTokens').doc(otherUid).collection('tokens').doc(account).set({
+        serviceName: ServiceNames.COROSAPI, openId: account, accessToken: 'other-token',
+      });
+      await other.collection('events').doc('event').set({ test: true });
+      expect(await retainCOROSTrainingCompletion(db, otherUid, 'event', account, account, null, marker, 'root'))
+        .toEqual({ retained: true, linkedWorkoutIds: [] });
+      expect((await other.collection('trainingWorkoutCompletions').get()).empty).toBe(true);
+    });
+
+    it.each([
+      ['date', { localDate: '2026-09-18', revision: 3 }],
+      ['plan', { planId: 'another-plan', revision: 3 }],
+    ])('does not link a stale delivered occurrence after a %s transfer', async (_kind, change) => {
+      await user().collection('scheduledWorkouts').doc('workout').update(change);
+      expect(await retain()).toEqual({ retained: true, linkedWorkoutIds: [] });
+      expect((await user().collection('trainingWorkoutCompletions').get()).empty).toBe(true);
+      expect((await user().collection(DELIVERY_LEDGER).doc('delivery').get()).get('actual.completed')).toBe(false);
+      await user().collection(DELIVERY_LEDGER).doc('delivery').update(_kind === 'date'
+        ? { 'actual.localDate': change.localDate } : { planId: change.planId });
+      expect(await retain()).toEqual({ retained: true, linkedWorkoutIds: ['workout'] });
     });
 
     it('does not let unrelated provider artifact IDs mask the exact COROS marker', async () => {

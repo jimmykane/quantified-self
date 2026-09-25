@@ -191,6 +191,10 @@ export async function retainWahooTrainingCompletion(
           const sameReverse = reverse?.schemaVersion === 1 && reverse.deliveryId === candidate.ledger.id
             && reverse.workoutId === workout.id && reverse.eventId === eventId
             && reverse.sourceSessionIndex === null && reverse.provider === 'wahoo';
+          // Do not let a retained Workout from an earlier plan/date occurrence
+          // complete the current one before the provider copy is updated.
+          if (!sameCompletion && (workout.planId !== candidate.ledger.planId
+            || workout.localDate !== candidate.artifact.localDate)) outcome = 'conflict';
           if (outcome !== 'conflict' && ((completionDocument.exists && !sameCompletion)
             || (reverseDocument.exists && !sameReverse))) outcome = 'conflict';
           if (outcome !== 'conflict') {

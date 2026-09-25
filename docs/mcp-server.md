@@ -221,7 +221,10 @@ scheduled occurrence and source-activity checks. Existing single/bulk completion
 consume that exact projection, so this adds no MCP tool, scope, schema, consent, mutation or registered wire change.
 Private FIT identities and ledgers remain excluded; a conflicting second recording stays unlinked under the current v1
 one-source contract. The registered contract check and existing Garmin completion read fixtures cover the no-wire-impact
-boundary.
+boundary. A completion retains its at-link plan/date when a workout is later transferred or rescheduled; the stable
+workout reference remains linked, and `workoutChangedSinceCompletion` signals the current revision differs. Unlinked
+reads never infer a match. Both single and bounded bulk reads reject a foreign connection/owner reference, while the
+optional activity reference requires independent `activity-details:read` consent. No new field or scope is introduced.
 Existing sync status may truthfully become `completed` after an account-bound Guide marker is accepted, using the status
 already present in the frozen delivery schema. `get_training_sync_status` also applies an exact persisted workout
 completion to every confirmed destination copy of that workout: the evidence provider remains private provenance, while

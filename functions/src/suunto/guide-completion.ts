@@ -204,11 +204,20 @@ export async function retainSuuntoGuideCompletions(
         matchOutcomes.push({ sessionIndex: session.sessionIndex, workoutId: ledger.workoutId, state: 'conflict' });
         continue;
       }
-      const existingReverse = candidate.reverse.data() as { workoutId?: unknown; eventId?: unknown; sourceSessionIndex?: unknown } | undefined;
-      const sameCompletion = existingCompletion?.eventId === eventId
+      const existingReverse = candidate.reverse.data() as { schemaVersion?: unknown; deliveryId?: unknown;
+        workoutId?: unknown; eventId?: unknown; sourceSessionIndex?: unknown; provider?: unknown } | undefined;
+      const sameCompletion = existingCompletion?.workoutId === workout.id
+        && existingCompletion.provider === 'suunto' && existingCompletion.matchMethod === 'provider_marker'
+        && existingCompletion.eventId === eventId
         && existingCompletion.sourceSessionIndex === session.sessionIndex;
-      const sameReverse = existingReverse?.workoutId === workout.id && existingReverse.eventId === eventId
-        && existingReverse.sourceSessionIndex === session.sessionIndex;
+      const sameReverse = existingReverse?.schemaVersion === 1 && existingReverse.deliveryId === ledger.id
+        && existingReverse.workoutId === workout.id && existingReverse.eventId === eventId
+        && existingReverse.sourceSessionIndex === session.sessionIndex && existingReverse.provider === 'suunto';
+      if (!sameCompletion && (workout.id !== ledger.workoutId || workout.planId !== ledger.planId
+        || workout.localDate !== ledger.actual?.localDate)) {
+        matchOutcomes.push({ sessionIndex: session.sessionIndex, workoutId: ledger.workoutId, state: 'conflict' });
+        continue;
+      }
       if ((candidate.completion.exists && !sameCompletion) || (candidate.reverse.exists && !sameReverse)) {
         matchOutcomes.push({ sessionIndex: session.sessionIndex, workoutId: ledger.workoutId, state: 'conflict' });
         continue;
