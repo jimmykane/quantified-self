@@ -47,7 +47,7 @@ export class ActivityCalendarGridComponent implements OnChanges {
   }
 
   selectDay(day: ActivityCalendarDayViewModel): void {
-    this.hapticsService.selection();
+    if (this.selectedDateKey !== day.dateKey) this.hapticsService.selection();
     this.daySelected.emit(day);
   }
 }

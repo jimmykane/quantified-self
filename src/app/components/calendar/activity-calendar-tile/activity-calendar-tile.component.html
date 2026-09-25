@@ -51,7 +51,7 @@
     (daySelected)="openDay($event)">
   </app-activity-calendar-grid>
   @if (dayContextEnabled() && selectedDayData(); as dayData) {
-    <app-calendar-day-context [data]="dayData" [showFullDayLink]="true" [privateHealthEnabled]="privateHealthEnabled()"
+    <app-calendar-day-context [data]="dayData" [showFullDayLink]="privateHealthEnabled()" [privateHealthEnabled]="privateHealthEnabled()"
       (noteSelected)="selectDayNote($event.id)"></app-calendar-day-context>
   }
   </div>

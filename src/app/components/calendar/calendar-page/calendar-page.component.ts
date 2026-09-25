@@ -1,9 +1,10 @@
-import { ChangeDetectionStrategy, Component, HostListener, LOCALE_ID, computed, effect, inject, signal, viewChild } from '@angular/core';
-import { toObservable, toSignal } from '@angular/core/rxjs-interop';
-import { ActivatedRoute, ParamMap, Router } from '@angular/router';
+import { ChangeDetectionStrategy, Component, DestroyRef, HostListener, LOCALE_ID, computed, effect, inject, signal, viewChild } from '@angular/core';
+import { ViewportScroller } from '@angular/common';
+import { takeUntilDestroyed, toObservable, toSignal } from '@angular/core/rxjs-interop';
+import { ActivatedRoute, ParamMap, Router, Scroll } from '@angular/router';
 import { DataAscent, DataDistance, type EventInterface } from '@sports-alliance/sports-lib';
 import { formatUnitAwareDataValue } from '@shared/unit-aware-display';
-import { catchError, combineLatest, distinctUntilChanged, map, of, shareReplay, startWith, switchMap } from 'rxjs';
+import { catchError, combineLatest, distinctUntilChanged, filter, map, of, shareReplay, startWith, switchMap, take, type Subscription } from 'rxjs';
 import type { AppUserInterface } from '../../../models/app-user.interface';
 import { SharedModule } from '../../../modules/shared.module';
 import { AppUserService } from '../../../services/app.user.service';
@@ -83,6 +84,9 @@ interface CalendarSummaryMetric {
 export class CalendarPageComponent {
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
+  private readonly viewportScroller = inject(ViewportScroller);
+  private readonly destroyRef = inject(DestroyRef);
+  private pendingScrollRestore: Subscription | null = null;
   private readonly userService = inject(AppUserService);
   private readonly calendarService = inject(ActivityCalendarService);
   private readonly plansService = inject(TrainingPlansService);
@@ -108,6 +112,9 @@ export class CalendarPageComponent {
   ];
   readonly familyVolumeTooltip = ACTIVITY_CALENDAR_VOLUME_TOOLTIP;
   readonly routeState = toSignal(this.routeState$, { initialValue: this.initialRouteState });
+  private readonly explicitDateParam = toSignal(this.route.queryParamMap.pipe(map(params => params.get('date'))), {
+    initialValue: this.route.snapshot.queryParamMap.get('date'),
+  });
   readonly currentUser = computed(() => this.userService.user() as AppUserInterface | null);
   readonly hasTrainingPlanningUIAccess = computed(() => !!this.currentUser()?.uid);
   readonly eventState = toSignal(combineLatest([
@@ -319,7 +326,7 @@ export class CalendarPageComponent {
   }
 
   openDay(day: ActivityCalendarDayViewModel): void {
-    if (!this.currentUser()?.uid || this.selectedDay()?.dateKey === day.dateKey) return;
+    if (!this.currentUser()?.uid || (this.selectedDay()?.dateKey === day.dateKey && this.explicitDateParam() === day.dateKey)) return;
     this.navigateToState({ ...this.routeState(), anchorDate: day.date });
   }
 
@@ -331,13 +338,46 @@ export class CalendarPageComponent {
   }
 
   private navigateToState(state: ActivityCalendarRouteState): void {
+    const scrollPosition = this.viewportScroller.getScrollPosition();
+    const targetDate = formatActivityCalendarDateParam(state.anchorDate);
+    this.pendingScrollRestore?.unsubscribe();
+    // The app router scrolls to the top after query-only navigation. Restore the
+    // current position after its Scroll event so selecting a day stays in context.
+    const scrollRestore = this.router.events.pipe(
+      filter((event): event is Scroll => {
+        if (!(event instanceof Scroll)) return false;
+        const url = 'urlAfterRedirects' in event.routerEvent
+          ? event.routerEvent.urlAfterRedirects : event.routerEvent.url;
+        const params = this.router.parseUrl(url).queryParamMap;
+        return params.get('view') === state.view && params.get('date') === targetDate;
+      }),
+      take(1),
+      takeUntilDestroyed(this.destroyRef),
+    ).subscribe(event => {
+      if (this.pendingScrollRestore === scrollRestore) this.pendingScrollRestore = null;
+      if (event.position) return; // Browser Back already restores its saved position.
+      Promise.resolve().then(() => {
+        if (!this.destroyRef.destroyed) this.viewportScroller.scrollToPosition(scrollPosition);
+      });
+    });
+    this.pendingScrollRestore = scrollRestore;
     void this.router.navigate([], {
       relativeTo: this.route,
       queryParams: {
         view: state.view,
-        date: formatActivityCalendarDateParam(state.anchorDate),
+        date: targetDate,
       },
       queryParamsHandling: 'merge',
+    }).then(navigated => {
+      if (!navigated && this.pendingScrollRestore === scrollRestore) {
+        scrollRestore.unsubscribe();
+        this.pendingScrollRestore = null;
+      }
+    }).catch(() => {
+      if (this.pendingScrollRestore === scrollRestore) {
+        scrollRestore.unsubscribe();
+        this.pendingScrollRestore = null;
+      }
     });
   }
 }

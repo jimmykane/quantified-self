@@ -1,10 +1,11 @@
 import { Component, Input, signal } from '@angular/core';
+import { ViewportScroller } from '@angular/common';
 import { TestBed } from '@angular/core/testing';
 import { MatBottomSheet } from '@angular/material/bottom-sheet';
 import { MatDialog } from '@angular/material/dialog';
 import { MatTooltip } from '@angular/material/tooltip';
 import { By } from '@angular/platform-browser';
-import { ActivatedRoute, convertToParamMap, provideRouter, Router } from '@angular/router';
+import { ActivatedRoute, convertToParamMap, NavigationEnd, provideRouter, Router, Scroll } from '@angular/router';
 import {
   ActivityTypes,
   DataAscent,
@@ -104,7 +105,7 @@ describe('CalendarPageComponent', () => {
         { provide: ActivityCalendarService, useValue: { watchEvents } },
         { provide: TrainingPlansService, useValue: { watchSchedule, watchWorkoutCompletions } },
         { provide: CalendarDayDetailsNavigationService, useValue: dayDetailsNavigation },
-        { provide: CalendarDayHealthService, useValue: { load: vi.fn().mockResolvedValue({ sessions: [], hrvSeries: [], derived: null, sleepError: false, hrvError: false, derivedError: false }) } },
+        { provide: CalendarDayHealthService, useValue: { load: vi.fn().mockResolvedValue({ sessions: [], hrvSeries: [], derived: null, sleepError: false, hrvError: false, readinessError: false, recoveryError: false }) } },
         { provide: AppTimelineNotesService, useValue: notesService },
         { provide: AppHapticsService, useValue: haptics },
         { provide: MatDialog, useValue: dialogs },
@@ -307,6 +308,17 @@ describe('CalendarPageComponent', () => {
     expect(openBottomSheet).not.toHaveBeenCalled();
   });
 
+  it('writes a shareable URL when selecting the initially highlighted day without a date parameter', async () => {
+    queryParams.next(convertToParamMap({ view: 'month' }));
+    const fixture = TestBed.createComponent(CalendarPageComponent);
+    fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+    const selected = fixture.componentInstance.selectedDay()!;
+    fixture.componentInstance.openDay(selected);
+    expect(navigate).toHaveBeenCalledWith([], expect.objectContaining({
+      queryParams: { view: 'month', date: selected.dateKey },
+    }));
+  });
+
   it.each(['week', 'month', 'year'] as const)('keeps the selected day linkable and restores it on Back in %s view', async view => {
     queryParams.next(convertToParamMap({ view, date: '2026-08-03' }));
     const fixture = TestBed.createComponent(CalendarPageComponent);
@@ -321,6 +333,30 @@ describe('CalendarPageComponent', () => {
     queryParams.next(convertToParamMap({ view, date: '2026-08-03' }));
     fixture.detectChanges();
     expect(fixture.componentInstance.selectedDay()?.dateKey).toBe('2026-08-03');
+  });
+
+  it('preserves scroll after a day selection while leaving browser Back restoration to the router', async () => {
+    const router = TestBed.inject(Router);
+    const routerEvents = new Subject<Scroll>();
+    vi.spyOn(router, 'events', 'get').mockReturnValue(routerEvents.asObservable());
+    const scroller = TestBed.inject(ViewportScroller);
+    vi.spyOn(scroller, 'getScrollPosition').mockReturnValue([0, 420]);
+    const restore = vi.spyOn(scroller, 'scrollToPosition').mockImplementation(() => undefined);
+    const fixture = TestBed.createComponent(CalendarPageComponent);
+    fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+    const day = fixture.componentInstance.calendarModel().months[0].days.find(item => item.dateKey === '2026-08-04')!;
+    fixture.componentInstance.openDay(day);
+    routerEvents.next(new Scroll(new NavigationEnd(1, '/calendar', '/calendar?view=month&date=2026-08-05'), null, null));
+    await Promise.resolve();
+    expect(restore).not.toHaveBeenCalled();
+    routerEvents.next(new Scroll(new NavigationEnd(2, '/calendar', '/calendar?view=month&date=2026-08-04'), null, null));
+    await Promise.resolve();
+    expect(restore).toHaveBeenCalledWith([0, 420]);
+    restore.mockClear();
+    fixture.componentInstance.navigatePeriod(1);
+    routerEvents.next(new Scroll(new NavigationEnd(3, '/calendar', '/calendar?view=month&date=2026-09-03'), [0, 180], null));
+    await Promise.resolve();
+    expect(restore).not.toHaveBeenCalled();
   });
 
   it('selects empty days and exposes only active-plan and standalone workouts', async () => {

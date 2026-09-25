@@ -15,7 +15,7 @@ function data(dateKey: string): CalendarDayDetailsData {
   return { day: model.months[0].days.find(day => day.dateKey === dateKey)!, userId: 'owner', locale: 'en-US' };
 }
 
-const emptyEvidence = { sessions: [], hrvSeries: [], derived: null, sleepError: false, hrvError: false, derivedError: false };
+const emptyEvidence = { sessions: [], hrvSeries: [], derived: null, sleepError: false, hrvError: false, readinessError: false, recoveryError: false };
 
 describe('CalendarDayContextComponent', () => {
   it('keeps the calendar mounted, cancels an older day read, and fences private health on account change', async () => {

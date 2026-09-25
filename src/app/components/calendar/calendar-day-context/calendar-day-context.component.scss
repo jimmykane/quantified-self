@@ -1,8 +1,9 @@
 :host { display: block; min-width: 0; }
 .calendar-day-context { min-width: 0; color: var(--mat-sys-on-surface); }
-.calendar-day-context-header, .calendar-day-context-section-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-width: 0; }
+.calendar-day-context-header, .calendar-day-context-section-header { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; min-width: 0; }
+.calendar-day-context-header > div { min-width: 0; }
 .calendar-day-context-header { margin-bottom: 12px; }
-.calendar-day-context-header h2 { margin: 0; font: var(--mat-sys-title-medium); }
+.calendar-day-context-header h2 { margin: 0; font: var(--mat-sys-title-medium); overflow-wrap: anywhere; }
 .calendar-day-context-header span, .calendar-day-context-section-header span { color: var(--mat-sys-on-surface-variant); font: var(--mat-sys-body-small); }
 .calendar-day-context-header a { flex: 0 0 auto; }
 .calendar-day-context-metrics { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }

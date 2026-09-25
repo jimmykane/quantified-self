@@ -112,14 +112,13 @@ app-activity-calendar-grid {
 .activity-calendar-day-layout { min-height: 0; flex: 1 1 0; }
 :host(.activity-calendar-tile--day-context) {
   height: auto;
+  container-type: inline-size;
   .activity-calendar-tile { height: auto; min-height: 390px; }
   .activity-calendar-day-layout { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(250px, .85fr); gap: 16px; }
   app-activity-calendar-grid { min-height: 320px; }
   app-calendar-day-context { min-width: 0; padding: 12px; border-radius: 12px; background: var(--mat-sys-surface-container-low); }
 }
-@media (max-width: 760px) {
-  :host(.activity-calendar-tile--day-context) {
-    .activity-calendar-day-layout { grid-template-columns: minmax(0, 1fr); }
-    app-activity-calendar-grid { min-height: 350px; }
-  }
+@container (max-width: 760px) {
+  .activity-calendar-day-layout { grid-template-columns: minmax(0, 1fr); }
+  app-activity-calendar-grid { min-height: 350px; }
 }

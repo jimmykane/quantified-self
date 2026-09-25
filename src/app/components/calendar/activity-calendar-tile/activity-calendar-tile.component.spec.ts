@@ -15,6 +15,8 @@ import type { WorkoutStructureV1 } from '@shared/planned-workout';
 import { ActivityCalendarService } from '../../../services/activity-calendar.service';
 import { CalendarDayDetailsNavigationService } from '../../../services/calendar-day-details-navigation.service';
 import { TrainingPlansService, type CurrentTrainingScheduleV1 } from '../../../services/training-plans.service';
+import { CalendarDayHealthService } from '../../../services/calendar-day-health.service';
+import { TrainingWorkoutDuplicateService } from '../../../services/training-workout-duplicate.service';
 import { ActivityCalendarTileComponent } from './activity-calendar-tile.component';
 import { STANDALONE_WORKOUT_COLOR, trainingPlanAppearance } from '../../../helpers/training-plan-appearance.helper';
 
@@ -55,6 +57,8 @@ describe('ActivityCalendarTileComponent', () => {
         { provide: AppUserService, useValue: { user: viewer, user$: viewer$ } },
         { provide: ActivityCalendarService, useValue: { watchEvents } },
         { provide: TrainingPlansService, useValue: { watchSchedule, watchWorkoutCompletions } },
+        { provide: CalendarDayHealthService, useValue: { load: vi.fn().mockResolvedValue({ sessions: [], hrvSeries: [], derived: null, sleepError: false, hrvError: false, readinessError: false, recoveryError: false }) } },
+        { provide: TrainingWorkoutDuplicateService, useValue: { duplicate: vi.fn() } },
         { provide: CalendarDayDetailsNavigationService, useValue: dayDetailsNavigation },
       ],
     }).compileComponents();
@@ -72,6 +76,23 @@ describe('ActivityCalendarTileComponent', () => {
     expect(fixture.nativeElement.querySelector('.activity-calendar--compact')).toBeTruthy();
     expect(fixture.nativeElement.querySelector('.activity-calendar-marker-stage--concentric')).toBeTruthy();
     expect(fixture.nativeElement.textContent).toContain('Activity calendar');
+  });
+
+  it('keeps a selected day inline and offers one date-specific full-day link for the owner', async () => {
+    const fixture = TestBed.createComponent(ActivityCalendarTileComponent);
+    fixture.componentRef.setInput('user', user);
+    fixture.componentRef.setInput('dayContextEnabled', true);
+    fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+    const day = fixture.componentInstance.calendarModel().months[0].days.find(candidate => candidate.inPrimaryPeriod && candidate.dateKey !== fixture.componentInstance.selectedDay()?.dateKey)!;
+    fixture.componentInstance.openDay(day);
+    fixture.detectChanges();
+    expect(fixture.componentInstance.selectedDay()?.dateKey).toBe(day.dateKey);
+    expect(fixture.nativeElement.querySelector('.activity-calendar-day--selected')).toBeTruthy();
+    expect(fixture.nativeElement.querySelector('app-calendar-day-context')).toBeTruthy();
+    expect(fixture.nativeElement.querySelectorAll('a[aria-label="Open selected day in full calendar"]')).toHaveLength(1);
+    expect(openBottomSheet).not.toHaveBeenCalled();
+    fixture.componentRef.setInput('privateHealthEnabled', false); fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('a[aria-label="Open selected day in full calendar"]')).toBeNull();
   });
 
   it.each([false, true])('opens the destination in full Calendar after a duplicate from a tile (navigation: %s)', async showNavigation => {

@@ -325,7 +325,7 @@ export class TileChartComponent extends TileAbstractDirective {
   }
 
   get showCalendarRouteAction(): boolean {
-    return this.chartType === this.activityCalendarChartType;
+    return this.chartType === this.activityCalendarChartType && !this.showActions;
   }
 
   get showStackedMobileHeaderControls(): boolean {

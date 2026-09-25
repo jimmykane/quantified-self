@@ -2,6 +2,7 @@ import { inject, Injectable } from '@angular/core';
 import { firstValueFrom, fromEvent, takeUntil } from 'rxjs';
 import { HEALTH_METRIC_IDS } from '@shared/health';
 import { DERIVED_METRIC_KINDS } from '@shared/derived-metrics';
+import { projectLoadedHealthRange } from '@shared/health-query';
 import { HealthMetricQueryService } from './health-metric-query.service';
 import { DashboardDerivedMetricsService } from './dashboard-derived-metrics.service';
 import { buildHealthMetricWorkspaceView, type HealthWorkspaceSeries, type HealthWorkspaceSleepSession } from '../helpers/health-workspace.helper';
@@ -23,7 +24,8 @@ export class CalendarDayHealthService {
     const today = new Date(nowMs);
     const isToday = date.toDateString() === today.toDateString();
     const todaySleepWindow = buildDashboardReadinessSleepQueryWindow(nowMs);
-    const sleepStart = isToday ? todaySleepWindow.startMs : date.getTime() - 86400000;
+    const sleepStart = isToday ? todaySleepWindow.startMs
+      : new Date(date.getFullYear(), date.getMonth(), date.getDate() - 1).getTime();
     const sleepEnd = new Date(date.getFullYear(), date.getMonth(), date.getDate() + 1).getTime();
     const derivedKinds = isToday
       ? [DERIVED_METRIC_KINDS.Form, DERIVED_METRIC_KINDS.FormNow, DERIVED_METRIC_KINDS.RampRate, DERIVED_METRIC_KINDS.RecoveryNow]
@@ -32,9 +34,9 @@ export class CalendarDayHealthService {
       this.queries.loadSleepRange(uid, sleepStart, isToday ? todaySleepWindow.endMs : sleepEnd, 30, signal),
       this.queries.loadMetricRange(uid, {
         metricId: HEALTH_METRIC_IDS.HeartRateVariability,
-        startDate: dateKey, endDate: dateKey, includeSamples: false,
+        startDate: dateKey, endDate: dateKey, includeSamples: true,
       }, 30, signal),
-      firstValueFrom(this.derived.watch({ uid }, { metricKinds: derivedKinds }).pipe(
+      firstValueFrom(this.derived.watch({ uid }, { metricKinds: derivedKinds, reportReadErrors: true }).pipe(
         takeUntil(fromEvent(signal, 'abort')),
       )),
     ]);
@@ -43,13 +45,24 @@ export class CalendarDayHealthService {
     let hrvSeries: HealthWorkspaceSeries[] = [];
     if (hrvResult.status === 'fulfilled') {
       hrvSeries = buildHealthMetricWorkspaceView(hrvResult.value.result, sessions).series;
+    } else if (sessions.length) {
+      // A Health read failure should not discard HRV recorded in an available Sleep session.
+      const sleepOnly = projectLoadedHealthRange([], [], {
+        startDate: dateKey, endDate: dateKey, metricIds: [HEALTH_METRIC_IDS.HeartRateVariability],
+      }, { sourceRecordsComplete: true, samplesComplete: true }, nowMs);
+      hrvSeries = buildHealthMetricWorkspaceView(sleepOnly, sessions).series;
     }
+    const derived = derivedResult.status === 'fulfilled' ? derivedResult.value : null;
+    const derivedReadFailed = derivedResult.status === 'rejected';
     return {
       sessions, hrvSeries,
-      derived: derivedResult.status === 'fulfilled' ? derivedResult.value : null,
+      derived,
       sleepError: sleepResult.status === 'rejected',
       hrvError: hrvResult.status === 'rejected',
-      derivedError: derivedResult.status === 'rejected',
+      readinessError: derivedReadFailed || (isToday
+        ? derived?.formStatus === 'failed' || derived?.formNowStatus === 'failed' || derived?.rampRateStatus === 'failed'
+        : derived?.trainingReadinessStatus === 'failed'),
+      recoveryError: derivedReadFailed || (isToday && derived?.recoveryNowStatus === 'failed'),
     };
   }
 }

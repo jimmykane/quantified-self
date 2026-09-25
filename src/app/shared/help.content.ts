@@ -246,7 +246,7 @@ See the public [Training Plans overview](/features/training-plans) for a walkthr
 
 const ACTIVITY_CALENDAR_HELP_CONTENT = `## Open and navigate the calendar
 
-- New dashboards start with a full-width **Activity Calendar** tile showing the current month. Select a date to see its activities, health, notes, and plans beside the calendar or below it on a phone. **Open full day** takes that date to [Calendar](/calendar).
+- New dashboards start with a full-width **Activity Calendar** tile showing the current month. Select a date to see its activities, health, notes, and plans beside the calendar or below it when the tile is narrow. **Open full day** takes that date to [Calendar](/calendar).
 - The **Today** card opens a month calendar in a bottom sheet. Use its arrows to change months and select a day for details. The Dashboard and Training headers also link to the full [Calendar](/calendar).
 - Existing Calendar tiles expand to the full section width once. Other tiles stay in place, and any later resize you make is kept. To add the calendar, use **Add tile** in **Activity Overview**. Removing it keeps it off your dashboard and out of suggestions until you add it again manually.
 - The full Calendar has **Week**, **Month**, and **Year** views. The previous and next controls move by the selected view's period, and **Today** returns to the current period without taking a separate row on smaller screens.

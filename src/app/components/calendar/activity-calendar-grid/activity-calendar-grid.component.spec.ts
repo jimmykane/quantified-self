@@ -18,6 +18,10 @@ describe('ActivityCalendarGridComponent', () => {
     expect(selected.getAttribute('aria-pressed')).toBe('true');
     expect(selected.querySelector('.activity-calendar-day-number-value')?.textContent?.trim()).toBe('3');
     expect(fixture.nativeElement.querySelectorAll('[aria-pressed="true"]')).toHaveLength(1);
+    const daySelected = vi.fn(); fixture.componentInstance.daySelected.subscribe(daySelected);
+    selected.click();
+    expect(daySelected).toHaveBeenCalledOnce();
+    expect(fixture.componentRef.injector.get(AppHapticsService).selection).not.toHaveBeenCalled();
     fixture.componentRef.setInput('selectedDateKey', '2026-08-04'); fixture.detectChanges();
     expect(fixture.nativeElement.querySelectorAll('[aria-pressed="true"]')).toHaveLength(1);
     expect(fixture.nativeElement.querySelector('.activity-calendar-day--selected .activity-calendar-day-number-value')?.textContent?.trim()).toBe('4');

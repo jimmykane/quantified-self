@@ -8,13 +8,6 @@
   overflow: hidden;
 }
 
-@media (max-width: 860px) {
-  :host(.dashboard-tile-board--activity-calendar) {
-    /* Six compact calendar rows need room for an 18 px date and a 20 px marker stage. */
-    grid-auto-rows: max(var(--dashboard-tile-board-row-height, 150px), 360px);
-  }
-}
-
 :host(.dashboard-tile-board--activity-calendar) {
   /* Only the calendar's own row grows; charts in adjacent rows keep their height. */
   grid-auto-rows: minmax(var(--dashboard-tile-board-row-height, 150px), auto);
@@ -22,10 +15,4 @@
 
 :host(.dashboard-tile-board--activity-calendar) .dashboard-calendar-cell {
   min-height: 440px;
-}
-
-@media (max-width: 760px) {
-  :host(.dashboard-tile-board--activity-calendar) .dashboard-calendar-cell {
-    min-height: 760px;
-  }
 }
