@@ -821,6 +821,55 @@ describe('EventTableComponent', () => {
         expect(mockEventTagCatalogService.listAllTags).toHaveBeenCalledTimes(catalogCalls);
     });
 
+    it('keeps a selected historical tag while refreshing the catalog and ignores stale owner results', async () => {
+        mockEventTagCatalogService.listAllTags.mockResolvedValueOnce(['Historical']);
+        await (component as any).loadAllHistoryTags(true);
+        component.updateTagFilter('Historical');
+
+        let resolveRefresh!: (tags: string[]) => void;
+        mockEventTagCatalogService.listAllTags.mockReturnValueOnce(new Promise<string[]>(resolve => {
+            resolveRefresh = resolve;
+        }));
+        const refresh = (component as any).loadAllHistoryTags(true);
+        component.events = [new MockEvent('new-range-event') as any];
+        (component as any).processChanges('spec_range_changed_during_refresh');
+
+        expect(component.tagFilter).toBe('Historical');
+        expect(component.tagFilterOptions).toContain('Historical');
+
+        component.targetUser = new User('other-user');
+        component.ngOnChanges({ targetUser: new SimpleChange(null, component.targetUser, false) });
+        resolveRefresh(['Private owner tag']);
+        await refresh;
+
+        expect(component.tagFilterOptions).not.toContain('Private owner tag');
+    });
+
+    it('retries a failed full-history tag load when the filter is opened', async () => {
+        mockEventTagCatalogService.listAllTags.mockRejectedValueOnce(new Error('offline'));
+        await (component as any).loadAllHistoryTags(true);
+        expect(component.tagCatalogLoadFailed).toBe(true);
+
+        mockEventTagCatalogService.listAllTags.mockResolvedValueOnce(['Historical']);
+        component.onTagFilterOpened(true);
+        await fixture.whenStable();
+
+        expect(component.tagCatalogLoadFailed).toBe(false);
+        expect(component.tagFilterOptions).toContain('Historical');
+    });
+
+    it('gives one selection haptic for each changed tag choice', () => {
+        (component.events[0] as any).tags = ['Race'];
+        (component as any).processChanges('spec_tag_haptics');
+
+        component.updateTagFilter('race');
+        component.updateTagFilter('Race');
+        expect(mockHapticsService.selection).toHaveBeenCalledOnce();
+
+        component.updateTagFilter('');
+        expect(mockHapticsService.selection).toHaveBeenCalledTimes(2);
+    });
+
     it('does not request the owner tag catalog for another user dashboard', () => {
         mockEventTagCatalogService.listAllTags.mockClear();
         component.targetUser = new User('other-user');

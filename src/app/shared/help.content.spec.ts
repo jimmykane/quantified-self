@@ -564,6 +564,7 @@ describe('help.content', () => {
     expect(calendarSection?.content).toContain('summary exclusions configured in **Settings** also apply');
     expect(calendarSection?.content).toContain('Settings -> Dashboard -> Start of the Week');
     expect(calendarSection?.content).toContain('visible-period activity query');
+    expect(calendarSection?.content).toContain('tag filter lists tags from your full activity history');
     expect(calendarSection?.content).toContain('independent from the dashboard event table');
     expect(calendarSection?.content).toContain('Select any date, including an empty one');
     expect(calendarSection?.content).toContain('standalone workouts plus workouts from the active plan');

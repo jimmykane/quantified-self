@@ -1,11 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const hoisted = vi.hoisted(() => {
-  const get = vi.fn();
-  const select = vi.fn(() => ({ get }));
-  const collection = vi.fn(() => ({ select }));
+  const stream = vi.fn();
+  const select = vi.fn(() => ({ stream }));
+  const orderBy = vi.fn(() => ({ select }));
+  const collection = vi.fn(() => ({ orderBy }));
   const enforceAppCheck = vi.fn();
-  return { get, select, collection, enforceAppCheck };
+  return { stream, select, orderBy, collection, enforceAppCheck };
 });
 
 vi.mock('firebase-functions/v2/https', () => ({
@@ -37,19 +38,34 @@ describe('listEventTags', () => {
     expect(hoisted.collection).not.toHaveBeenCalled();
   });
 
+  it('rejects an invalid App Check request before reading event documents', async () => {
+    hoisted.enforceAppCheck.mockImplementationOnce(() => {
+      throw new Error('invalid app check');
+    });
+
+    await expect(listEventTags({ auth: { uid: 'owner-1' } } as CallableRequest))
+      .rejects.toThrow('invalid app check');
+    expect(hoisted.collection).not.toHaveBeenCalled();
+  });
+
   it('reads only the caller\'s tag fields across all dates and normalizes legacy tags', async () => {
-    hoisted.get.mockResolvedValue({ docs: [
-      { data: () => ({ tags: ['Race', 'Long run'] }) },
-      { data: () => ({ tags: ['race', 'Recovery'] }) },
-      { data: () => ({ benchmarkReviewTags: ['Older tag'] }) },
-      { data: () => ({ tags: [] }) },
-    ] });
+    hoisted.stream.mockReturnValueOnce((async function* () {
+      yield { data: () => ({ tags: ['Race', 'Long run'] }) };
+      yield { data: () => ({ tags: ['race', 'Recovery'] }) };
+    })());
+    hoisted.stream.mockReturnValueOnce((async function* () {
+      yield { data: () => ({ benchmarkReviewTags: ['Older tag'] }) };
+      yield { data: () => ({ tags: ['Race'], benchmarkReviewTags: ['Legacy ignored'] }) };
+    })());
 
     const result = await listEventTags({ auth: { uid: 'owner-1' } } as CallableRequest);
 
     expect(hoisted.enforceAppCheck).toHaveBeenCalledOnce();
     expect(hoisted.collection).toHaveBeenCalledWith('users/owner-1/events');
+    expect(hoisted.orderBy.mock.calls).toEqual([['tags'], ['benchmarkReviewTags']]);
+    expect(hoisted.select).toHaveBeenCalledTimes(2);
     expect(hoisted.select).toHaveBeenCalledWith('tags', 'benchmarkReviewTags');
+    expect(hoisted.stream).toHaveBeenCalledTimes(2);
     expect(result).toEqual({ tags: ['Long run', 'Older tag', 'Race', 'Recovery'] });
   });
 });

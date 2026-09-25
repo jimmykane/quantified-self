@@ -134,6 +134,8 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
   private allHistoryTags: string[] | null = null;
   private tagCatalogUserID: string | null = null;
   private tagCatalogRequestVersion = 0;
+  public tagCatalogIsLoading = false;
+  public tagCatalogLoadFailed = false;
   public tagFilter = '';
   public tagFilterOptions: string[] = [];
   public isBulkTagSaving = false;
@@ -944,10 +946,21 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
 
   updateTagFilter(tag: string): void {
     const requestedTag = `${tag || ''}`;
-    this.tagFilter = requestedTag
+    const nextTag = requestedTag
       ? this.tagFilterOptions.find(option => option.toLowerCase() === requestedTag.toLowerCase()) || ''
       : '';
+    if (nextTag === this.tagFilter) {
+      return;
+    }
+    this.tagFilter = nextTag;
+    this.hapticsService.selection();
     this.applyTableFilter();
+  }
+
+  onTagFilterOpened(opened: boolean): void {
+    if (opened && this.tagCatalogLoadFailed) {
+      void this.loadAllHistoryTags();
+    }
   }
 
   async openEventTagsDialog(domEvent: Event, event: AppEventInterface): Promise<void> {
@@ -1156,26 +1169,38 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
       this.tagCatalogRequestVersion += 1;
       this.tagCatalogUserID = null;
       this.allHistoryTags = null;
+      this.tagCatalogIsLoading = false;
+      this.tagCatalogLoadFailed = false;
       this.updateTagFilterOptions();
       return;
     }
-    if (!force && this.tagCatalogUserID === userID) {
+    const sameUser = this.tagCatalogUserID === userID;
+    if (!force && sameUser && (this.tagCatalogIsLoading || (this.allHistoryTags !== null && !this.tagCatalogLoadFailed))) {
       return;
     }
 
+    if (!sameUser) {
+      this.allHistoryTags = null;
+    }
     this.tagCatalogUserID = userID;
-    this.allHistoryTags = null;
+    this.tagCatalogIsLoading = true;
+    this.tagCatalogLoadFailed = false;
     const requestVersion = ++this.tagCatalogRequestVersion;
     try {
-      const tags = await this.eventTagCatalogService.listAllTags();
+      const tags = await this.eventTagCatalogService.listAllTags(userID, force);
       if (requestVersion !== this.tagCatalogRequestVersion) {
         return;
       }
       this.allHistoryTags = tags;
+      this.tagCatalogIsLoading = false;
       this.updateTagFilterOptions();
       this.changeDetector.markForCheck();
     } catch (error) {
       if (requestVersion === this.tagCatalogRequestVersion) {
+        this.tagCatalogIsLoading = false;
+        this.tagCatalogLoadFailed = true;
+        this.updateTagFilterOptions();
+        this.changeDetector.markForCheck();
         this.logger.warn('[EventTableComponent] Could not load all activity tags.', error);
       }
     }
@@ -1186,6 +1211,7 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
     this.tagFilterOptions = normalizeEventTagSuggestions([
       ...(this.allHistoryTags || []),
       ...rows.flatMap(row => row['Tag Values'] || []),
+      ...((this.tagCatalogIsLoading || this.tagCatalogLoadFailed) && this.tagFilter ? [this.tagFilter] : []),
     ]).sort((first, second) => first.localeCompare(second));
     if (this.tagFilter) {
       const selectedTagKey = this.tagFilter.toLowerCase();
