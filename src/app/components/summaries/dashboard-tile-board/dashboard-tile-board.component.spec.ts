@@ -43,7 +43,7 @@ describe('DashboardTileBoardComponent', () => {
     expect(host.style.getPropertyValue('--dashboard-tile-cell-inline-divider')).toBe('0');
   });
 
-  it('lets the activity-calendar row grow with its selected-day content', () => {
+  it('sizes the calendar row from its month layout without a stale height floor', () => {
     const boardStyles = readFileSync(
       resolve(process.cwd(), 'src/app/components/summaries/dashboard-tile-board/dashboard-tile-board.component.css'),
       'utf8',
@@ -59,8 +59,9 @@ describe('DashboardTileBoardComponent', () => {
 
     expect(boardStyles).toContain(':host(.dashboard-tile-board--activity-calendar)');
     expect(boardStyles).toContain('grid-auto-rows: minmax(var(--dashboard-tile-board-row-height, 150px), auto);');
-    expect(ownerStyles).toContain('.dashboard-tile-board--activity-calendar .dashboard-calendar-cell');
-    expect(calendarStyles).toContain('.activity-calendar-day-layout { display: grid; flex: none;');
+    expect(ownerStyles).not.toMatch(/\.dashboard-calendar-cell\s*\{[^}]*min-height:/);
+    expect(calendarStyles).toContain('.activity-calendar-day-layout { display: grid; height: 360px; flex: none;');
+    expect(calendarStyles).toContain('.activity-calendar-day-layout { height: auto; grid-template-columns: minmax(0, 1fr);');
     expect(ownerStyles).not.toContain('min-height: 760px');
   });
 });

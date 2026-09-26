@@ -626,10 +626,6 @@ app-tile-map {
   overflow: visible;
 }
 
-.dashboard-tile-board--activity-calendar .dashboard-calendar-cell {
-  min-height: 440px;
-}
-
 section {
   margin-bottom: 1.25rem;
   margin-top: 0.75rem;
