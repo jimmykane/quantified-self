@@ -708,6 +708,7 @@ export async function previewTrainingChanges(
   const providerOperations: StoredProviderOperation[] = [];
   const providerPreviews: PreviewResult['providerPreviews'] = [];
   const providerDestinations = new Set<string>();
+  let hasUnsupportedDestination = false;
   for (const template of providerTemplates) {
     const targetId = resolveReference(template.change.target, template.change.targetType, input, simulated, locals);
     if (template.change.targetType === 'plan' && ['send', 'resume', 'approve'].includes(template.change.action)) {
@@ -759,6 +760,7 @@ export async function previewTrainingChanges(
         }
         providerPreviews.push(assessed.publicPreview);
         if (assessed.unsupported && ['send', 'resume'].includes(operation.action)) {
+          hasUnsupportedDestination = true;
           unsupportedSummary = assessed.publicPreview.summary;
         }
         if (operation.action === 'approve' && !assessed.approvalDigest) {
@@ -775,6 +777,7 @@ export async function previewTrainingChanges(
       const previewed = await previewProviderOperation(deps, input.uid, operation, loaded.snapshot.state.revision, loaded.snapshot);
       providerPreviews.push(previewed.publicPreview);
       if (previewed.preview.workoutCompatibility === 'unsupported' && ['send', 'resume'].includes(operation.action)) {
+        hasUnsupportedDestination = true;
         unsupportedSummary = previewed.publicPreview.summary;
       }
       const storedOperation: StoredProviderOperation = { ...operation,
@@ -799,7 +802,7 @@ export async function previewTrainingChanges(
   const ref = proposalRef(proposalId, createdAtMs, input.uid, input.connectionId);
   const preview: PreviewResult = { proposalRef: ref, expiresAtMs, permissionMode: permissionMode(required),
     scheduleRevision: loaded.snapshot.state.revision,
-    summary: `${publicChanges.length} proposed Training change${publicChanges.length === 1 ? '' : 's'} will be applied in order after client approval. Provider results are independent.`,
+    summary: `${publicChanges.length} Training change${publicChanges.length === 1 ? '' : 's'} proposed for client approval. Provider actions have independent results from authored changes.${hasUnsupportedDestination ? ' At least one requested provider action targets an unsupported workout version. No update will be sent there; an earlier copy may remain unchanged. Review each provider preview before confirming.' : ''}`,
     requiresConfirmation: true, changes: publicChanges, providerPreviews };
   TRAINING_WRITE_OUTPUTS.preview_training_changes.parse(preview);
   const stored: StoredProposal = { schemaVersion: 1, uid: input.uid, connectionId: input.connectionId,

@@ -424,6 +424,7 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Training MCP write propos
     expect(preview.providerPreviews).toEqual([expect.objectContaining({ provider: 'wahoo', availability: 'unavailable',
       summary: expect.stringContaining('cannot receive this workout') })]);
     expect(preview.providerPreviews[0].summary).toContain('No new Wahoo delivery will start');
+    expect(preview.summary).toContain('No update will be sent there; an earlier copy may remain unchanged');
     const applied = await applyTrainingChanges({ uid, connectionId: 'connection', scopes,
       arguments: { proposalRef: preview.proposalRef, permissionMode: 'combined' } }, deps);
     expect(applied.status).toBe('partially_applied');
@@ -463,6 +464,7 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Training MCP write propos
       expect.objectContaining({ provider: 'wahoo', availability: 'unavailable' }),
       expect.objectContaining({ provider: 'suunto', availability: 'ready' }),
     ]));
+    expect(preview.summary).toContain('No update will be sent there; an earlier copy may remain unchanged');
     const applied = await applyTrainingChanges({ uid, connectionId: 'connection', scopes,
       arguments: { proposalRef: preview.proposalRef, permissionMode: preview.permissionMode } }, deps);
     expect(applied.providers).toEqual([expect.objectContaining({ provider: 'suunto', status: 'applied' })]);

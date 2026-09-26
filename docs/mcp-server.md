@@ -127,7 +127,8 @@ without delivery or simplify the recipe before sending; a hidden warning is neve
 An unsupported workout is not an approvable degradation. Its provider preview says it cannot be sent, `all_connected`
 skips it, and explicit Send/Resume remains a blocked provider result without saving consent or calling that provider.
 The authored workout may still be created if the user confirms the clearly labelled partial proposal. The browser's
-direct Send confirmation is disabled for an unsupported workout. Wahoo currently requires a Running/Cycling recipe
+direct Send confirmation is disabled for an unsupported workout. An earlier provider copy may remain unchanged when a
+new version is unsupported; neither preview nor a blocked result implies removal. Wahoo currently requires a Running/Cycling recipe
 with time endings throughout; neither a different sport nor distance-ending steps can be approved into compatibility.
 
 The built-in Assistant exposes only the applicable focused/batch previews to Gemini. It prefers the focused tool for one

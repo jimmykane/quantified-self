@@ -287,6 +287,8 @@ describe('Training provider delivery controls', () => {
     await fixture.componentInstance.begin('wahoo', 'send'); fixture.detectChanges();
     expect(fixture.nativeElement.textContent).toContain('Wahoo cannot receive this workout');
     expect(fixture.nativeElement.textContent).toContain('Wahoo requires time-based steps');
+    expect(fixture.nativeElement.textContent).toContain('an earlier copy may remain unchanged');
+    expect(fixture.nativeElement.textContent).not.toContain('Nothing has been sent');
     expect(fixture.componentInstance.canConfirm()).toBe(false);
     await fixture.componentInstance.confirm();
     expect(service.mutate).not.toHaveBeenCalled();

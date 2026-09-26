@@ -722,11 +722,14 @@ Rules/client transactions cannot authorize server-held provider credentials. Com
 and delivery-settings revisions and a mutation ID, never a UID, provider account ID, credential, or remote artifact ID.
 Single-workout previews identify exact, degraded or unsupported compatibility separately from provider connection
 readiness. Direct Send/Resume cannot record consent for an unsupported recipe; the browser explains the mapping reasons
-and disables confirmation. MCP's first proposal likewise marks an unsupported destination unavailable, excludes it from
+and disables confirmation without implying an earlier provider copy was removed or updated. MCP's first proposal likewise
+marks an unsupported destination unavailable, excludes it from
 `all_connected`, and keeps an explicitly requested failure independent from authored changes and other providers.
 Degraded mappings still use one reviewed digest-bound approval; plan-level consent can cover a mix of supported and
 unsupported workouts, with each individual delivery retaining its own truthful status. This adds no MCP tool, scope or
 registered output field: the existing provider preview availability and summary carry the result.
+Roll out the Functions guard before the browser change: an older Functions preview omits the optional compatibility
+field and cannot enforce this new Send/Resume rejection. Neither change is deployed by local verification.
 Receipts reject reuse with a different request and carry a 30-day `expireAt`; production TTL configuration is part of #655,
 not an operation performed by tests or this implementation. Manual authoring does not acquire a Pro requirement.
 

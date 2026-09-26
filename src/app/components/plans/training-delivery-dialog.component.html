@@ -77,7 +77,7 @@
             <button mat-button type="button" [disabled]="busy()" (click)="reconnectWahooTraining()">Reconnect Wahoo</button>
           } @else if (preview.result.connection !== 'connected') { <p>Check access in <a routerLink="/services" (click)="dialogRef.close()" appHapticTap>Connectivity</a>.</p> }
           @if (preview.result.workoutCompatibility === 'unsupported' && (draft.action === 'send' || draft.action === 'resume')) {
-            <p role="alert">{{ draftLabel() }} cannot receive this workout. Review the reasons below, then edit the workout before trying again. Nothing has been sent.</p>
+            <p role="alert">{{ draftLabel() }} cannot receive this workout. Review the reasons below, then edit the workout before trying again. This action will not send an update; an earlier copy may remain unchanged.</p>
           } @else if (preview.result.warningCount) {
             <p>{{ preview.result.warningCount }} {{ preview.result.warningCount === 1 ? 'workout needs' : 'workouts need' }} review. Unsupported workouts cannot be sent; degraded workouts require individual approval.</p>
           }
