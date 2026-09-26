@@ -40,6 +40,7 @@ export interface CalendarDayDetailsData {
   unitSettings?: UserUnitSettingsInterface | null;
   summariesSettings?: SummaryStatsSettingsLike | null;
   timelineNotes?: Signal<readonly TimelineNote[]>;
+  timelineNotesStatusSource?: () => 'loading' | 'ready' | 'error';
   activities?: Signal<{ status: 'loading' | 'ready' | 'error'; day: ActivityCalendarDayViewModel }>;
   plannedWorkouts?: PlannedWorkoutCalendarEntry[];
   plannedWorkoutsSource?: () => readonly PlannedWorkoutCalendarEntry[];

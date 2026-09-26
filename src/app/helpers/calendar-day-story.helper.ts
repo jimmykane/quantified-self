@@ -77,7 +77,7 @@ export function buildCalendarDayStory(input: CalendarDayStoryInput): CalendarDay
     items.push({
       key: `note:${note.id}`, kind: 'note', id: note.id, title: note.title,
       detail: `${TIMELINE_NOTE_LABELS[note.category]} · ${formatNoteDates(note, input.dateKey, input.locale)}`,
-      timeLabel: 'All day', timeMs: null, icon: TIMELINE_NOTE_ICONS[note.category], color: timelineNoteColor(note),
+      timeLabel: 'Date only', timeMs: null, icon: TIMELINE_NOTE_ICONS[note.category], color: timelineNoteColor(note),
     });
   }
   if (input.planStatus === 'ready') {

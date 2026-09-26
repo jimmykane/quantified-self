@@ -63,6 +63,7 @@ export class CalendarDayContextComponent {
       startDate: this.data().day.dateKey, endDate: this.data().day.dateKey,
     })).map(note => ({ note, label: TIMELINE_NOTE_LABELS[note.category], dates: timelineNoteDates(note),
       icon: TIMELINE_NOTE_ICONS[note.category], color: timelineNoteColor(note) })));
+  readonly notesStatus = computed(() => this.data().timelineNotesStatusSource?.() ?? 'ready');
   readonly plannedWorkouts = computed(() => this.data().plannedWorkoutsSource?.()
     ?? this.data().plannedWorkouts ?? []);
   readonly plannedStatus = computed(() => this.data().plannedWorkoutsStatusSource?.() ?? 'ready');

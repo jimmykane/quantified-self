@@ -288,6 +288,11 @@ export class CalendarPageComponent {
       unitSettings: user.settings?.unitSettings ?? null,
       summariesSettings: user.settings?.summariesSettings ?? null,
       timelineNotes: this.selectedDayNotes,
+      timelineNotesStatusSource: () => {
+        const workspace = this.notesWorkspace();
+        if (!workspace || workspace.service.uid() !== user.uid || workspace.loading()) return 'loading';
+        return workspace.error() ? 'error' : 'ready';
+      },
       activities: this.selectedDayActivities,
       plannedWorkoutsSource: this.selectedDayPlanned,
       plannedWorkoutsStatusSource: () => this.plansState().status,

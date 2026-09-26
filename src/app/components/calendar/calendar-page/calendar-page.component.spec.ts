@@ -21,6 +21,7 @@ import type { TimelineNote } from '@shared/timeline-notes';
 import type { WorkoutStructureV1 } from '@shared/planned-workout';
 import { AppTimelineNotesService } from '../../../services/app.timeline-notes.service';
 import { AppHapticsService } from '../../../services/app.haptics.service';
+import { AppEventColorService } from '../../../services/color/app.event.color.service';
 import type { CalendarDayDetailsResult } from '../calendar-day-details/calendar-day-details.component';
 import { AppUserService } from '../../../services/app.user.service';
 import { AppThemeService } from '../../../services/app.theme.service';
@@ -119,6 +120,9 @@ describe('CalendarPageComponent', () => {
         { provide: CalendarDayHealthService, useValue: { watch: vi.fn(() => of({ sessions: [], hrvSeries: [], derived: null, sleepError: false, hrvError: false, readinessError: false, recoveryError: false })) } },
         { provide: AppTimelineNotesService, useValue: notesService },
         { provide: AppHapticsService, useValue: haptics },
+        { provide: AppEventColorService, useValue: {
+          getActivityColor: vi.fn(), getColorForActivityTypeByActivityTypeGroup: vi.fn(),
+        } },
         { provide: MatDialog, useValue: dialogs },
       ],
     }).overrideComponent(CalendarPageComponent, {

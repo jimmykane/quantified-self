@@ -14,6 +14,7 @@ import { TrainingWorkoutDuplicateService } from '../../../services/training-work
 import { EChartsLoaderService } from '../../../services/echarts-loader.service';
 import { LoggerService } from '../../../services/logger.service';
 import { AppEventColorService } from '../../../services/color/app.event.color.service';
+import { AppHapticsService } from '../../../services/app.haptics.service';
 import type { CalendarDayDetailsData } from '../calendar-day-details/calendar-day-details.component';
 import { CalendarDayContextComponent } from './calendar-day-context.component';
 
@@ -28,6 +29,7 @@ describe('CalendarDayContextComponent', () => {
   it('keeps the calendar mounted, cancels an older day read, and fences private health on account change', async () => {
     const viewer = signal<{ uid: string } | null>({ uid: 'owner' });
     const pending: Array<Subject<typeof emptyEvidence>> = [];
+    const haptics = { selection: vi.fn() };
     const watch = vi.fn((_uid, _date, _now, _signal) => {
       const subject = new Subject<typeof emptyEvidence>();
       pending.push(subject);
@@ -43,6 +45,7 @@ describe('CalendarDayContextComponent', () => {
       { provide: LoggerService, useValue: { error: vi.fn() } },
       { provide: TrainingWorkoutDuplicateService, useValue: { duplicate: vi.fn() } },
       { provide: AppEventColorService, useValue: { getActivityColor: vi.fn(), getColorForActivityTypeByActivityTypeGroup: vi.fn() } },
+      { provide: AppHapticsService, useValue: haptics },
     ] }).compileComponents();
     const fixture = TestBed.createComponent(CalendarDayContextComponent);
     fixture.componentRef.setInput('data', data('2026-09-10'));
@@ -74,10 +77,12 @@ describe('CalendarDayContextComponent', () => {
     expect(fixture.nativeElement.querySelector('app-health-sleep-stage-summary')?.textContent).toContain('Sleep stages');
     expect(fixture.nativeElement.querySelector('.calendar-day-context-sleep-stages')?.textContent).toContain('Suunto · overnight sleep');
     expect(fixture.nativeElement.querySelector('.calendar-day-context-timeline')).toBeTruthy();
+    expect(haptics.selection).not.toHaveBeenCalled();
     expect(fixture.nativeElement.querySelector('[aria-label="Activities on selected day"]')).toBeNull();
     const scrollToAnchor = vi.spyOn(TestBed.inject(ViewportScroller), 'scrollToAnchor');
     fixture.nativeElement.querySelector('.calendar-day-timeline-content button')?.click();
     expect(scrollToAnchor).toHaveBeenCalledWith('day-sleep-stages');
+    expect(haptics.selection).toHaveBeenCalledOnce();
     expect(fixture.componentInstance.healthState().sleepPoint?.sleepDate).toBe('2026-09-11');
     for (const unitSettings of [null, normalizeUserUnitSettings({ distanceUnits: DistanceUnits.Miles })]) {
       fixture.componentRef.setInput('data', { ...data('2026-09-11'), unitSettings });
@@ -87,6 +92,16 @@ describe('CalendarDayContextComponent', () => {
     pending[1].next({ ...emptyEvidence, sleepError: true }); fixture.detectChanges();
     expect(fixture.nativeElement.textContent).toContain('Sleep could not be loaded');
     expect(fixture.nativeElement.querySelector('app-health-sleep-stage-summary')).toBeNull();
+    const notesStatus = signal<'loading' | 'ready' | 'error'>('loading');
+    fixture.componentRef.setInput('data', { ...data('2026-09-11'), timelineNotesStatusSource: notesStatus });
+    fixture.detectChanges();
+    expect(fixture.nativeElement.textContent).toContain('Loading notes…');
+    expect(fixture.nativeElement.textContent).not.toContain('No timeline entries available');
+    notesStatus.set('error'); fixture.detectChanges();
+    expect(fixture.nativeElement.textContent).toContain('Timeline notes could not be loaded.');
+    expect(fixture.nativeElement.textContent).not.toContain('No timeline entries available');
+    notesStatus.set('ready'); fixture.detectChanges();
+    expect(fixture.nativeElement.textContent).toContain('No timeline entries available');
     fixture.componentRef.setInput('data', { ...data('2026-09-11'), userId: 'different-profile' });
     fixture.detectChanges();
     expect(fixture.nativeElement.querySelector('.calendar-day-context-health')).toBeNull();
