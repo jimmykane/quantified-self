@@ -206,6 +206,8 @@ export interface SleepSyncQueueItemInterface extends QueueItemInterface {
   rangeStartMs?: number;
   rangeEndMs?: number;
   healthTrigger?: 'poll' | 'webhook' | 'backfill';
+  /** Earliest dispatch for a coalesced Suunto Health webhook refetch. */
+  dispatchAfterMs?: number;
   /** Webhook-only fence captured from the server-owned Suunto account binding. */
   suuntoHealthTokenCredentialGeneration?: string | null;
   /** Webhook-only fence captured from the current Suunto token-root OAuth revision. */

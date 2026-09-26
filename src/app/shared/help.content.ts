@@ -992,7 +992,7 @@ Saved FIT and GPX routes can be sent to Suunto from **Routes** using a row actio
 
 **Uploads** in Suunto Services also accepts a selected GPX or FIT route without adding it to **Routes**. Suunto receives GPX, so Quantified Self converts a selected FIT route to GPX in memory before delivery. The direct upload does not create or retain a Quantified Self route.
 
-Suunto 24/7 Health notifications are signature-checked and used to refetch bounded local-day ranges. Quantified Self stores normalized, source-attributed Health records rather than raw webhook samples. Repeated polls, notifications, and history ranges update the same source identities instead of creating duplicates. Disconnecting stops future imports but retains imported Sleep and Health history; deleting the account removes both plus associated queue work.
+Suunto 24/7 Health notifications are signature-checked and used to refetch bounded local-day ranges. Nearby notifications for the same day are grouped into a refresh that starts after a window of up to five minutes, so new readings or corrections may take a few minutes to appear. Quantified Self stores normalized, source-attributed Health records rather than raw webhook samples. Repeated polls, notifications, and history ranges update the same source identities instead of creating duplicates. Disconnecting stops future imports but retains imported Sleep and Health history; deleting the account removes both plus associated queue work.
 
 See [Policies -> Suunto Data](/policies#suunto-data) for the provider-specific privacy summary for Suunto imports, Sleep and 24/7 Health sync, route imports, and sending routes or activities to connected destinations.
 
