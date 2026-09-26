@@ -116,5 +116,18 @@ describe('CalendarDayContextComponent', () => {
     fixture.componentRef.setInput('privateHealthEnabled', false);
     viewer.set({ uid: 'owner' }); fixture.detectChanges();
     expect(watch).toHaveBeenCalledTimes(2);
+
+    fixture.componentRef.setInput('dashboardTile', true);
+    fixture.componentRef.setInput('data', data('2026-09-12'));
+    fixture.detectChanges();
+    const scrollBody = fixture.nativeElement.querySelector('.calendar-day-context-body');
+    expect(scrollBody.getAttribute('tabindex')).toBe('0');
+    scrollBody.scrollTop = 99;
+    fixture.componentRef.setInput('data', data('2026-09-12'));
+    fixture.detectChanges();
+    expect(scrollBody.scrollTop).toBe(99);
+    fixture.componentRef.setInput('data', data('2026-09-13'));
+    fixture.detectChanges();
+    expect(scrollBody.scrollTop).toBe(0);
   });
 });

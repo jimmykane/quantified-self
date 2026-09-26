@@ -12,6 +12,9 @@
   </header>
   }
 
+  <div class="calendar-day-context-body" [attr.tabindex]="dashboardTile() ? 0 : null"
+    [attr.role]="dashboardTile() ? 'region' : null"
+    [attr.aria-label]="dashboardTile() ? 'Selected day preview' : null">
   @if (healthState().status !== 'private' && healthState().status !== 'hidden') {
     <section class="calendar-day-context-health" [class.calendar-day-context-health--full]="standaloneDayPage()" aria-label="Health and recovery for selected day">
       @if (standaloneDayPage()) {
@@ -288,4 +291,5 @@
   }
   }
   }
+  </div>
 </section>

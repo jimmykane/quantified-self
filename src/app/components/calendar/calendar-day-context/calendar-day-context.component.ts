@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, computed, effect, inject, input, output, signal, untracked } from '@angular/core';
+import { ChangeDetectionStrategy, Component, ElementRef, computed, effect, inject, input, output, signal, untracked } from '@angular/core';
 import { Router } from '@angular/router';
 import { ViewportScroller } from '@angular/common';
 import { isTimelineNoteVisible, timelineNoteOverlaps, TIMELINE_NOTE_LABELS, timelineNoteDates } from '@shared/timeline-notes';
@@ -45,6 +45,7 @@ export class CalendarDayContextComponent {
   private readonly viewportScroller = inject(ViewportScroller);
   private readonly navigation = inject(CalendarDayDetailsNavigationService);
   private readonly duplicateService = inject(TrainingWorkoutDuplicateService);
+  private readonly elementRef = inject<ElementRef<HTMLElement>>(ElementRef);
 
   readonly data = input.required<CalendarDayDetailsData>();
   readonly compact = input(false);
@@ -61,6 +62,13 @@ export class CalendarDayContextComponent {
     weekday: 'short', day: 'numeric', month: 'short',
   }).format(this.data().day.date));
   private readonly healthDateKey = computed(() => this.data().day.dateKey);
+  private readonly resetDashboardScroll = effect(() => {
+    if (this.dashboardTile()) {
+      this.healthDateKey();
+      const scrollBody = this.elementRef.nativeElement.querySelector<HTMLElement>('.calendar-day-context-body');
+      if (scrollBody) scrollBody.scrollTop = 0;
+    }
+  });
   private readonly healthOwnerUid = computed(() => this.data().userId);
   readonly activityState = computed(() => this.data().activities?.() ?? { status: 'ready' as const, day: this.data().day });
   readonly day = computed(() => this.activityState().day);

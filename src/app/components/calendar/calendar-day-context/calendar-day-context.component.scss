@@ -1,5 +1,10 @@
 :host { display: block; min-width: 0; }
-:host(.calendar-day-context--dashboard) { container-type: inline-size; }
+:host(.calendar-day-context--dashboard) {
+  container-type: inline-size;
+  .calendar-day-context { display: flex; height: 100%; flex-direction: column; }
+  .calendar-day-context-header { flex: 0 0 auto; margin-bottom: 0; }
+  .calendar-day-context-body { min-height: 0; flex: 1 1 0; overflow-y: auto; }
+}
 .calendar-day-context { min-width: 0; color: var(--mat-sys-on-surface); }
 .calendar-day-context-header, .calendar-day-context-section-header { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; min-width: 0; }
 .calendar-day-context-header > div { min-width: 0; }
@@ -41,6 +46,7 @@
 .calendar-day-context-preview-more { margin-top: 4px; }
 .calendar-day-context-preview-plan { display: flex; min-width: 0; align-items: center; gap: 4px; border-left: 3px solid var(--planned-workout-color, var(--mat-sys-outline-variant)); padding-left: 8px; }
 .calendar-day-context-preview-plan .calendar-day-context-preview-row { min-width: 0; flex: 1; }
+.calendar-day-context-preview-plan > button { flex: 0 0 48px; width: 48px; height: 48px; }
 .calendar-day-context-preview-add { margin-top: 4px; }
 @container (min-width: 420px) {
   .calendar-day-context-metrics { grid-template-columns: repeat(3, minmax(0, 1fr)); }
