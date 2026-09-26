@@ -32,6 +32,7 @@ import {
 } from '../shared/activity-processing-config';
 import { parseActivityFilePayload } from '../shared/activity-file-parser';
 import { getActivityParserDiagnostics } from '../shared/activity-parser-diagnostics';
+import { inspectFitPayload } from '../shared/fit-payload';
 import { isSupportedActivityFileBaseExtension } from '../../../shared/activity-file-formats';
 import { preserveEventTagsOnRewrite } from '../../../shared/event-tags';
 
@@ -121,6 +122,18 @@ function normalizeExtension(extension: string): string {
 
 function getBaseExtension(extension: string): string {
   return extension.endsWith('.gz') ? extension.slice(0, -3) : extension;
+}
+
+function getRejectedUploadContext(userID: string, payload: Buffer, extension: string) {
+  return {
+    userID,
+    // A content digest links exact re-uploads, including after account recreation,
+    // without retaining the file or logging its potentially private filename.
+    payloadSha256: createHash('sha256').update(payload).digest('hex'),
+    ...(getBaseExtension(extension) === 'fit'
+      ? { fitEnvelopeReason: inspectFitPayload(payload).reason }
+      : {}),
+  };
 }
 
 function resolveExtensionFromFilename(filename?: string): string | null {
@@ -425,12 +438,16 @@ export const uploadActivity = onRequest({
       }
       if (isRouteOnlyParserError(error)) {
         logger.warn('[uploadActivity] Rejected route/course file submitted to activity upload', {
+          ...getRejectedUploadContext(userID, payloadForParsing, resolvedExtension),
           resolvedExtension,
           reason: 'route_only',
         });
         throw new HttpStatusError(400, ROUTE_OR_COURSE_ACTIVITY_UPLOAD_ERROR_MESSAGE, 'route_file_in_activity_upload');
       }
-      logger.warn('[uploadActivity] Activity parsing failed', getActivityParserDiagnostics(error, payloadForParsing, resolvedExtension));
+      logger.warn('[uploadActivity] Activity parsing failed', {
+        ...getActivityParserDiagnostics(error, payloadForParsing, resolvedExtension),
+        ...getRejectedUploadContext(userID, payloadForParsing, resolvedExtension),
+      });
       throw new HttpStatusError(400, 'Could not parse uploaded payload.');
     }
 

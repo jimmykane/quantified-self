@@ -837,6 +837,10 @@ until the new diagnostics explain the affected files. Manual route/course reject
 upload batches finish, including overlapping batches. Later per-file errors or the generic batch summary must not
 replace this action, and account changes or teardown suppress it. No rejected manual payload
 is retained by this change. Any future debug-file capture needs a separate retention/access/deletion-cleanup design.
+Manual parsing and route-only warning logs include the authenticated UID and a SHA-256 digest of the parsed payload,
+so exact re-submissions can be distinguished from similarly sized files even across account recreation. FIT parsing
+warnings also include the bounded FIT-envelope reason; `valid` means the envelope length is complete, not that the
+file contains an activity or has a verified CRC. Never add raw filenames or FIT contents to these warning logs.
 
 ## 11. Test plan
 

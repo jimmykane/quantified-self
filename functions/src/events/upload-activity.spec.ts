@@ -820,17 +820,59 @@ describe('uploadActivity', () => {
 
   it('should map FIT parser failures to 400', async () => {
     hoisted.mockFITImporter.getFromArrayBuffer.mockRejectedValueOnce(new Error('bad fit'));
+    const rawBody = Buffer.alloc(18);
+    rawBody.writeUInt8(12, 0);
+    rawBody.writeUInt32LE(4, 4);
+    rawBody.write('.FIT', 8);
     const response = makeResponse();
     await invokeUploadActivity(makeRequest({
-      headers: { Authorization: 'Bearer token', 'X-Firebase-AppCheck': 'app-check' },
+      headers: {
+        Authorization: 'Bearer token',
+        'X-Firebase-AppCheck': 'app-check',
+        'X-Original-Filename': 'Private-place-name.fit',
+      },
+      rawBody,
     }), response);
 
     expect(response.status).toHaveBeenCalledWith(400);
     expect(logger.warn).toHaveBeenCalledWith('[uploadActivity] Activity parsing failed', expect.objectContaining({
-      format: 'fit', payloadBytes: expect.any(Number), sportsLibVersion: expect.any(String),
+      format: 'fit', payloadBytes: rawBody.length, sportsLibVersion: expect.any(String),
       errorMessage: 'Unclassified parser error; message withheld.',
+      userID: 'user-1',
+      payloadSha256: createHash('sha256').update(rawBody).digest('hex'),
+      fitEnvelopeReason: 'valid',
     }));
+    expect(JSON.stringify(vi.mocked(logger.warn).mock.calls)).not.toContain('Private-place-name');
     expect(hoisted.mockWriteAllEventData).not.toHaveBeenCalled();
+  });
+
+  it('should fingerprint the same rejected FIT bytes across account IDs', async () => {
+    const rawBody = Buffer.from([0x01, 0x02, 0x03]);
+    hoisted.mockVerifyIdToken
+      .mockResolvedValueOnce({ uid: 'old-user' })
+      .mockResolvedValueOnce({ uid: 'new-user' });
+    hoisted.mockFITImporter.getFromArrayBuffer
+      .mockRejectedValueOnce(new Error('bad fit'))
+      .mockRejectedValueOnce(new Error('bad fit'));
+
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const response = makeResponse();
+      await invokeUploadActivity(makeRequest({
+        headers: { Authorization: 'Bearer token', 'X-Firebase-AppCheck': 'app-check' },
+        rawBody,
+      }), response);
+      expect(response.status).toHaveBeenCalledWith(400);
+    }
+
+    const warnings = vi.mocked(logger.warn).mock.calls.map(([, details]) => details as {
+      userID: string;
+      payloadSha256: string;
+    });
+    expect(warnings.map(({ userID }) => userID)).toEqual(['old-user', 'new-user']);
+    expect(warnings.map(({ payloadSha256 }) => payloadSha256)).toEqual([
+      createHash('sha256').update(rawBody).digest('hex'),
+      createHash('sha256').update(rawBody).digest('hex'),
+    ]);
   });
 
   it('should reject route-only GPX files before writing event data', async () => {
@@ -850,6 +892,12 @@ describe('uploadActivity', () => {
 
     expect(response.status).toHaveBeenCalledWith(400);
     expect(response.json).toHaveBeenCalledWith({ error: ROUTE_OR_COURSE_ACTIVITY_UPLOAD_ERROR_MESSAGE, code: 'route_file_in_activity_upload' });
+    expect(logger.warn).toHaveBeenCalledWith('[uploadActivity] Rejected route/course file submitted to activity upload', expect.objectContaining({
+      userID: 'user-1',
+      payloadSha256: createHash('sha256').update('<gpx><rte></rte></gpx>').digest('hex'),
+      resolvedExtension: 'gpx',
+      reason: 'route_only',
+    }));
     expect(hoisted.mockGenerateActivityID).not.toHaveBeenCalled();
     expect(hoisted.mockWriteAllEventData).not.toHaveBeenCalled();
     expect(hoisted.mockDocSet).not.toHaveBeenCalled();
