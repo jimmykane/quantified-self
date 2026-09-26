@@ -143,7 +143,7 @@ function deferGarminQueueItemForPendingDisconnect(
 
 export const insertGarminAPIActivityFileToQueue = functions.region('europe-west2').runWith({
   timeoutSeconds: 60,
-  memory: '256MB',
+  memory: '512MB',
 }).https.onRequest(async (req, res) => {
   const activityFiles: GarminAPIActivityFileInterface[] = req.body.activityFiles;
   let queueItems: GarminActivityQueueInput[];
