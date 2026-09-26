@@ -1032,10 +1032,11 @@ export async function addSleepSyncQueueItem(input: AddSleepSyncQueueItemInput): 
     if (input.dispatchImmediately) {
         const existingSnapshot = await docRef.get();
         const existingQueueItem = existingSnapshot.exists ? existingSnapshot.data() as Partial<SleepSyncQueueItemInterface> : null;
+        const queueAdmissionNowMs = Date.now();
         if (existingQueueItem && input.lateArrivalKey && (
-            input.dispatchAfterMs! <= nowMs
+            input.dispatchAfterMs! <= queueAdmissionNowMs
             || (existingQueueItem as { processed?: boolean }).processed === true
-            || getActiveRevisionProcessingLease(existingQueueItem, nowMs) !== null
+            || getActiveRevisionProcessingLease(existingQueueItem, queueAdmissionNowMs) !== null
         )) {
             // The bucket's task may already be processing. A delayed ingress
             // needs its own deterministic follow-up instead of being mistaken

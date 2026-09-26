@@ -912,6 +912,45 @@ describe('sleep queue', () => {
         }
     });
 
+    it('keeps a follow-up when queue admission crosses the bucket deadline', async () => {
+        vi.useFakeTimers();
+        const admissionStartedAtMs = new Date('2026-09-26T11:04:59.000Z').getTime();
+        vi.setSystemTime(admissionStartedAtMs);
+        try {
+            const input = {
+                type: 'suunto_health_poll' as const,
+                provider: 'SuuntoApp' as const,
+                userID: 'test-user-uid',
+                providerUserId: 'suunto-user-1',
+                rangeStartMs: 1_777_392_000_000,
+                rangeEndMs: 1_777_478_400_000,
+                healthTrigger: 'webhook' as const,
+                dedupeKey: 'suunto-health-webhook:boundary',
+                dispatchImmediately: true,
+                dispatchAfterMs: admissionStartedAtMs + 2_000,
+                lateArrivalKey: 'b'.repeat(64),
+            };
+            hoisted.docGet
+                .mockImplementationOnce(async () => {
+                    vi.setSystemTime(admissionStartedAtMs + 3_000);
+                    return {
+                        exists: true,
+                        data: () => ({ dispatchedToCloudTask: admissionStartedAtMs }),
+                    };
+                })
+                .mockResolvedValueOnce({ exists: false, data: () => undefined });
+
+            await addSleepSyncQueueItem(input);
+
+            expect(hoisted.docIdValues[0]).not.toBe(hoisted.docIdValues[1]);
+            expect(hoisted.docSet).toHaveBeenCalledWith(expect.objectContaining({
+                id: hoisted.docIdValues[1],
+            }), { merge: false });
+        } finally {
+            vi.useRealTimers();
+        }
+    });
+
     it('rejects Suunto Health webhook queue creation when a captured lifecycle document changed', async () => {
         const staleBindingRef = {
             get: vi.fn().mockResolvedValue({
