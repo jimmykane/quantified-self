@@ -31,6 +31,7 @@ describe('ActivityCalendarTileComponent', () => {
   let openBottomSheet: ReturnType<typeof vi.fn>;
   let watchSchedule: ReturnType<typeof vi.fn>;
   let watchWorkoutCompletions: ReturnType<typeof vi.fn>;
+  let watchHealth: ReturnType<typeof vi.fn>;
   let viewer: ReturnType<typeof signal<{ uid: string } | null>>;
   let viewer$: BehaviorSubject<{ uid: string } | null>;
   let dayDetailsNavigation: {
@@ -45,6 +46,7 @@ describe('ActivityCalendarTileComponent', () => {
     watchEvents = vi.fn().mockReturnValue(of([createEvent()]));
     watchSchedule = vi.fn().mockReturnValue(of(emptySchedule()));
     watchWorkoutCompletions = vi.fn().mockReturnValue(of([]));
+    watchHealth = vi.fn(() => of({ sessions: [], hrvSeries: [], derived: null, sleepError: false, hrvError: false, readinessError: false, recoveryError: false }));
     openBottomSheet = vi.fn().mockReturnValue({ afterDismissed: () => of(undefined) });
     dayDetailsNavigation = {
       restorationFor: vi.fn().mockReturnValue(null),
@@ -59,7 +61,7 @@ describe('ActivityCalendarTileComponent', () => {
         { provide: AppThemeService, useValue: { appTheme: signal(AppThemes.Normal) } },
         { provide: ActivityCalendarService, useValue: { watchEvents } },
         { provide: TrainingPlansService, useValue: { watchSchedule, watchWorkoutCompletions } },
-        { provide: CalendarDayHealthService, useValue: { watch: vi.fn(() => of({ sessions: [], hrvSeries: [], derived: null, sleepError: false, hrvError: false, readinessError: false, recoveryError: false })) } },
+        { provide: CalendarDayHealthService, useValue: { watch: watchHealth } },
         { provide: TrainingWorkoutDuplicateService, useValue: { duplicate: vi.fn() } },
         { provide: CalendarDayDetailsNavigationService, useValue: dayDetailsNavigation },
       ],
@@ -91,6 +93,7 @@ describe('ActivityCalendarTileComponent', () => {
     expect(fixture.componentInstance.selectedDay()?.dateKey).toBe(day.dateKey);
     expect(fixture.nativeElement.querySelector('.activity-calendar-day--selected')).toBeTruthy();
     expect(fixture.nativeElement.querySelector('app-calendar-day-context')).toBeTruthy();
+    expect(fixture.nativeElement.querySelector('.activity-calendar--dashboard-context')).toBeTruthy();
     expect(fixture.nativeElement.querySelector('.activity-calendar-tile-header span')).toBeNull();
     expect(fixture.nativeElement.querySelector('.activity-calendar-tile-navigation > span')?.textContent.trim())
       .toBe(fixture.componentInstance.calendarModel().periodLabel);
@@ -99,6 +102,50 @@ describe('ActivityCalendarTileComponent', () => {
     expect(openBottomSheet).not.toHaveBeenCalled();
     fixture.componentRef.setInput('privateHealthEnabled', false); fixture.detectChanges();
     expect(fixture.nativeElement.querySelector('a[aria-label="Open selected day page"]')).toBeNull();
+  });
+
+  it('does not repeat Today health or read it until another date is selected', async () => {
+    const fixture = TestBed.createComponent(ActivityCalendarTileComponent);
+    fixture.componentRef.setInput('user', user);
+    fixture.componentRef.setInput('dayContextEnabled', true);
+    fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+
+    expect(fixture.componentInstance.selectedDay()?.isToday).toBe(true);
+    expect(fixture.nativeElement.querySelector('.calendar-day-context-health')).toBeNull();
+    expect(watchHealth).not.toHaveBeenCalled();
+
+    const earlierDay = fixture.componentInstance.calendarModel().months[0].days
+      .find(day => day.inPrimaryPeriod && !day.isToday)!;
+    fixture.componentInstance.openDay(earlierDay);
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.querySelector('.calendar-day-context-health')).toBeTruthy();
+    expect(watchHealth).toHaveBeenCalledWith(user.uid, earlierDay.dateKey, expect.any(Number), expect.any(AbortSignal));
+  });
+
+  it('limits the dashboard day preview while leaving every planned workout in the calendar', async () => {
+    const dateKey = currentLocalDate(2);
+    const schedule = scheduleForDate(dateKey);
+    const structure = schedule.workouts[0].structure;
+    watchSchedule.mockReturnValue(of({ ...schedule, workouts: [
+      ...schedule.workouts,
+      plannedWorkout('extra-standalone-1', null, dateKey, structure),
+      plannedWorkout('extra-standalone-2', null, dateKey, structure),
+    ] }));
+    const fixture = TestBed.createComponent(ActivityCalendarTileComponent);
+    fixture.componentRef.setInput('user', user);
+    fixture.componentRef.setInput('dayContextEnabled', true);
+    fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+
+    const day = fixture.componentInstance.calendarModel().months[0].days.find(candidate => candidate.dateKey === dateKey)!;
+    fixture.componentInstance.openDay(day);
+    fixture.detectChanges();
+
+    expect(fixture.componentInstance.selectedDayPlanned()).toHaveLength(4);
+    expect(fixture.nativeElement.querySelectorAll('.calendar-day-context-preview-plan')).toHaveLength(2);
+    expect(fixture.nativeElement.textContent).toContain('+2 more on the full day');
+    expect(fixture.nativeElement.querySelector('a[aria-label="Open selected day page"]')?.getAttribute('href'))
+      .toBe(`/calendar/day/${dateKey}`);
   });
 
   it('restores the inline selected date while its month activities are still loading', async () => {

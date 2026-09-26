@@ -2,18 +2,17 @@
   @if (!compact() && !standaloneDayPage()) {
   <header class="calendar-day-context-header">
     <div>
-      <h2>{{ title() }}</h2>
-      <span>Day in context</span>
+      <h2>{{ dashboardTile() ? dashboardTitle() : title() }}</h2>
     </div>
     @if (showFullDayLink()) {
       <a mat-button appHapticTap [routerLink]="fullDayRoute()" (click)="prepareNavigation()" aria-label="Open selected day page">
-        Open full day <mat-icon iconPositionEnd aria-hidden="true">arrow_forward</mat-icon>
+        {{ dashboardTile() ? 'Full day' : 'Open full day' }} <mat-icon iconPositionEnd aria-hidden="true">arrow_forward</mat-icon>
       </a>
     }
   </header>
   }
 
-  @if (healthState().status !== 'private') {
+  @if (healthState().status !== 'private' && healthState().status !== 'hidden') {
     <section class="calendar-day-context-health" [class.calendar-day-context-health--full]="standaloneDayPage()" aria-label="Health and recovery for selected day">
       @if (standaloneDayPage()) {
         <div class="calendar-day-context-health-heading">
@@ -130,6 +129,93 @@
   }
 
   @if (!compact() && !standaloneDayPage()) {
+  @if (dashboardTile()) {
+  <mat-menu #dashboardWorkoutMenu="matMenu" class="qs-menu-panel">
+    <a mat-menu-item appHapticTap [routerLink]="['/training/plans/new']"
+      [queryParams]="{ date: data().day.dateKey }" (click)="prepareNavigation()">Plan workout</a>
+    <a mat-menu-item appHapticTap [routerLink]="['/training/plans/standalone/new']"
+      [queryParams]="{ date: data().day.dateKey }" (click)="prepareNavigation()">Standalone workout</a>
+  </mat-menu>
+  @if (dashboardDayIsEmpty()) {
+    <div class="calendar-day-context-empty">
+      <p role="status">No activities, notes, or workouts for this day.</p>
+      @if (canPlan()) {
+        <button mat-button appHapticTap type="button" [matMenuTriggerFor]="dashboardWorkoutMenu">
+          <mat-icon aria-hidden="true">add</mat-icon>Add workout<mat-icon iconPositionEnd aria-hidden="true">arrow_drop_down</mat-icon>
+        </button>
+      }
+    </div>
+  } @else {
+    <div class="calendar-day-context-preview">
+      @if (activityState().status === 'loading') { <p role="status">Loading activities…</p> }
+      @else if (activityState().status === 'error') { <p role="alert">Activities could not be loaded.</p> }
+      @else if (dashboardActivities().length) {
+        <section class="calendar-day-context-preview-group" aria-label="Activities on selected day">
+          <h3>Activities <span>{{ day().eventCount }} completed · {{ day().durationLabel }}</span></h3>
+          @for (activity of dashboardActivities(); track activity.id) {
+            <div class="calendar-day-context-preview-row">
+              @if (activity.route) {
+                <a mat-button appHapticTap [routerLink]="activity.route" (click)="prepareNavigation()">{{ activity.name }}</a>
+              } @else { <strong>{{ activity.name }}</strong> }
+              <small>{{ activity.duration }}</small>
+            </div>
+          }
+          @if (activities().length > dashboardActivities().length) {
+            <span class="calendar-day-context-preview-more">+{{ activities().length - dashboardActivities().length }} more on the full day</span>
+          }
+        </section>
+      }
+      @if (notesStatus() === 'loading') { <p role="status">Loading notes…</p> }
+      @else if (notesStatus() === 'error') { <p role="alert">Timeline notes could not be loaded.</p> }
+      @else if (dashboardNotes().length) {
+        <section class="calendar-day-context-preview-group" aria-label="Timeline notes on selected day">
+          <h3>Timeline notes</h3>
+          @for (row of dashboardNotes(); track row.note.id) {
+            <div class="calendar-day-context-preview-row">
+              <button mat-button appHapticTap type="button" (click)="selectNote(row.note)">{{ row.note.title }}</button>
+              <small>{{ row.label }} · {{ row.dates }}</small>
+            </div>
+          }
+          @if (noteRows().length > dashboardNotes().length) {
+            <span class="calendar-day-context-preview-more">+{{ noteRows().length - dashboardNotes().length }} more on the full day</span>
+          }
+        </section>
+      }
+      @if (canPlan()) {
+        @if (plannedStatus() === 'loading') { <p role="status">Loading planned workouts…</p> }
+        @else if (plannedStatus() === 'error') { <p role="alert">Planned workouts could not be loaded.</p> }
+        @else if (dashboardPlans().length) {
+          <section class="calendar-day-context-preview-group" aria-label="Planned workouts on selected day">
+            <h3>Planned workouts</h3>
+            @for (entry of dashboardPlans(); track entry.workout.id) {
+              <div class="calendar-day-context-preview-plan" [style.--planned-workout-color]="entry.color">
+                <div class="calendar-day-context-preview-row">
+                  <a mat-button appHapticTap [routerLink]="['/training/plans/workout', entry.workout.id]" (click)="prepareNavigation()">{{ entry.workout.title }}</a>
+                  <small>{{ entry.planName || 'Standalone' }} · {{ entry.lifecycle }}</small>
+                </div>
+                <button mat-icon-button appHapticTap type="button" matTooltip="Duplicate to…"
+                  [attr.aria-label]="'Duplicate ' + entry.workout.title + ' to another date'"
+                  [disabled]="duplicatingId() !== null || !data().scheduleSource" (click)="duplicateWorkout(entry.workout.id)">
+                  @if (duplicatingId() === entry.workout.id) { <mat-spinner diameter="18" aria-hidden="true"></mat-spinner> }
+                  @else { <mat-icon aria-hidden="true">content_copy</mat-icon> }
+                </button>
+              </div>
+            }
+            @if (plannedRows().length > dashboardPlans().length) {
+              <span class="calendar-day-context-preview-more">+{{ plannedRows().length - dashboardPlans().length }} more on the full day</span>
+            }
+          </section>
+        }
+        @if (plannedStatus() === 'ready') {
+          <button mat-button appHapticTap type="button" class="calendar-day-context-preview-add"
+            [matMenuTriggerFor]="dashboardWorkoutMenu">
+            <mat-icon aria-hidden="true">add</mat-icon>Add workout<mat-icon iconPositionEnd aria-hidden="true">arrow_drop_down</mat-icon>
+          </button>
+        }
+      }
+    </div>
+  }
+  } @else {
   <section class="calendar-day-context-section" aria-label="Activities on selected day">
     <div class="calendar-day-context-section-header"><h3>Activities</h3>
       @if (activityState().status === 'ready') { <span>{{ day().eventCount }} completed · {{ day().durationLabel }}</span> }
@@ -199,6 +285,7 @@
         </mat-nav-list>
       } @else { <p>No planned workouts for this day.</p> }
     </section>
+  }
   }
   }
 </section>

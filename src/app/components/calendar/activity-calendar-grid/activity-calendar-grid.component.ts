@@ -22,6 +22,7 @@ export class ActivityCalendarGridComponent implements OnChanges {
   @Input() compact = false;
   /** Compact dashboard tiles fill their allocated height; scrollable pickers keep natural row sizes. */
   @Input() fillHeight = true;
+  @Input() dashboardDayContext = false;
   @Input() hideOutsideDays = false;
   @Input() selectedDateKey: string | null = null;
   // Private notes are opt-in; dashboard/shared calendar instances do not fetch or receive them.

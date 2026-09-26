@@ -23,7 +23,7 @@ import { buildCalendarDayStory } from '../../../helpers/calendar-day-story.helpe
 import type { CalendarDayDetailsData } from '../calendar-day-details/calendar-day-details.component';
 
 interface HealthState {
-  status: 'loading' | 'ready' | 'private';
+  status: 'loading' | 'ready' | 'private' | 'hidden';
   summary: CalendarDayHealthSummary | null;
   sleepPoint: DashboardSleepTrendPoint | null;
 }
@@ -31,6 +31,7 @@ interface HealthState {
 @Component({
   selector: 'app-calendar-day-context',
   standalone: true,
+  host: { '[class.calendar-day-context--dashboard]': 'dashboardTile()' },
   imports: [SharedModule, ActivityCalendarVolumeListComponent, HealthSleepStageSummaryComponent],
   templateUrl: './calendar-day-context.component.html',
   styleUrls: ['./calendar-day-context.component.scss'],
@@ -49,10 +50,15 @@ export class CalendarDayContextComponent {
   readonly compact = input(false);
   readonly showFullDayLink = input(false);
   readonly standaloneDayPage = input(false);
+  readonly dashboardTile = input(false);
   readonly privateHealthEnabled = input(true);
+  readonly hideHealth = input(false);
   readonly noteSelected = output<TimelineNote>();
   readonly title = computed(() => getDateTimeFormatter(this.data().locale, {
     weekday: 'long', day: 'numeric', month: 'long', year: 'numeric',
+  }).format(this.data().day.date));
+  readonly dashboardTitle = computed(() => getDateTimeFormatter(this.data().locale, {
+    weekday: 'short', day: 'numeric', month: 'short',
   }).format(this.data().day.date));
   private readonly healthDateKey = computed(() => this.data().day.dateKey);
   private readonly healthOwnerUid = computed(() => this.data().userId);
@@ -73,6 +79,15 @@ export class CalendarDayContextComponent {
       : entry.workout.lifecycle === 'skipped' ? 'Skipped' : 'Planned',
     summary: formatManualWorkoutStructure(entry.workout.structure, this.data().unitSettings, this.data().locale),
   })));
+  readonly dashboardDayIsEmpty = computed(() => this.dashboardTile()
+    && this.activityState().status === 'ready'
+    && this.activities().length === 0
+    && this.notesStatus() === 'ready'
+    && this.noteRows().length === 0
+    && (!this.canPlan() || (this.plannedStatus() === 'ready' && this.plannedRows().length === 0)));
+  readonly dashboardActivities = computed(() => this.activities().slice(0, 2));
+  readonly dashboardNotes = computed(() => this.noteRows().slice(0, 2));
+  readonly dashboardPlans = computed(() => this.plannedRows().slice(0, 2));
   readonly canPlan = computed(() => this.data().planningEnabled !== false && this.users.user()?.uid === this.data().userId);
   readonly healthState = signal<HealthState>({ status: 'loading', summary: null, sleepPoint: null });
   readonly isDarkTheme = computed(() => this.theme.appTheme() === AppThemes.Dark);
@@ -106,6 +121,10 @@ export class CalendarDayContextComponent {
   }));
 
   private readonly loadHealth = effect((onCleanup) => {
+    if (this.hideHealth()) {
+      this.healthState.set({ status: 'hidden', summary: null, sleepPoint: null });
+      return;
+    }
     const dateKey = this.healthDateKey();
     const dayOwnerUid = this.healthOwnerUid();
     const ownerUid = this.users.user()?.uid;

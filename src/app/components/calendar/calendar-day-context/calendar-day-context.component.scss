@@ -1,4 +1,5 @@
 :host { display: block; min-width: 0; }
+:host(.calendar-day-context--dashboard) { container-type: inline-size; }
 .calendar-day-context { min-width: 0; color: var(--mat-sys-on-surface); }
 .calendar-day-context-header, .calendar-day-context-section-header { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; min-width: 0; }
 .calendar-day-context-header > div { min-width: 0; }
@@ -26,6 +27,24 @@
 .calendar-day-context-plan { border-left: 3px solid var(--planned-workout-color, var(--mat-sys-outline-variant)); }
 .calendar-day-context-plan a { min-width: 0; flex: 1; }
 .calendar-day-context-plan-actions { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
+.calendar-day-context-empty { padding-top: 12px; border-top: 1px solid var(--mat-sys-outline-variant); }
+.calendar-day-context-empty p { margin: 0 0 4px; color: var(--mat-sys-on-surface-variant); font: var(--mat-sys-body-medium); }
+.calendar-day-context-preview { padding-top: 4px; }
+.calendar-day-context-preview > p { margin: 8px 0; color: var(--mat-sys-on-surface-variant); font: var(--mat-sys-body-small); }
+.calendar-day-context-preview-group { padding: 10px 0; border-top: 1px solid var(--mat-sys-outline-variant); }
+.calendar-day-context-preview-group h3 { display: flex; justify-content: space-between; gap: 8px; margin: 0 0 4px; font: var(--mat-sys-title-small); }
+.calendar-day-context-preview-group h3 span { color: var(--mat-sys-on-surface-variant); font: var(--mat-sys-body-small); white-space: nowrap; }
+.calendar-day-context-preview-row { min-width: 0; }
+.calendar-day-context-preview-row > a, .calendar-day-context-preview-row > button { max-width: 100%; min-width: 0; height: auto; min-height: 36px; padding-inline: 0; text-align: left; white-space: normal; overflow-wrap: anywhere; }
+.calendar-day-context-preview-row > strong { display: block; padding-block: 7px; font: var(--mat-sys-label-large); }
+.calendar-day-context-preview-row small, .calendar-day-context-preview-more { display: block; color: var(--mat-sys-on-surface-variant); font: var(--mat-sys-body-small); }
+.calendar-day-context-preview-more { margin-top: 4px; }
+.calendar-day-context-preview-plan { display: flex; min-width: 0; align-items: center; gap: 4px; border-left: 3px solid var(--planned-workout-color, var(--mat-sys-outline-variant)); padding-left: 8px; }
+.calendar-day-context-preview-plan .calendar-day-context-preview-row { min-width: 0; flex: 1; }
+.calendar-day-context-preview-add { margin-top: 4px; }
+@container (min-width: 420px) {
+  .calendar-day-context-metrics { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
 .calendar-day-context-highlights { margin-top: 18px; padding: 14px 16px; border-radius: 12px; background: var(--mat-sys-secondary-container); color: var(--mat-sys-on-secondary-container); }
 .calendar-day-context-highlights h3 { margin: 0 0 8px; font: var(--mat-sys-title-small); }
 .calendar-day-context-highlights ul { margin: 0; padding-left: 20px; font: var(--mat-sys-body-medium); }

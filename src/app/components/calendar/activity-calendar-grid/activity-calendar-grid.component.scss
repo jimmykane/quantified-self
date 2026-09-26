@@ -545,6 +545,33 @@
   padding-block: 0;
 }
 
+@container (min-width: 560px) {
+  .activity-calendar--dashboard-context .activity-calendar-weekdays {
+    min-height: 32px;
+  }
+
+  .activity-calendar--dashboard-context .activity-calendar-day {
+    padding-block: 4px;
+  }
+
+  .activity-calendar--dashboard-context .activity-calendar-day-number {
+    width: 24px;
+    height: 24px;
+    flex-basis: 24px;
+    font: var(--mat-sys-label-large);
+  }
+
+  .activity-calendar--dashboard-context .activity-calendar-marker-stage {
+    height: 28px;
+    flex-basis: 28px;
+  }
+
+  .activity-calendar--dashboard-context .activity-calendar-marker-stage--concentric .activity-calendar-marker {
+    width: calc(var(--calendar-marker-compact-diameter) * 1.2);
+    height: calc(var(--calendar-marker-compact-diameter) * 1.2);
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .activity-calendar-day-button {
     scroll-behavior: auto;

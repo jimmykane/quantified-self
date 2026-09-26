@@ -4,6 +4,7 @@
   [class.activity-calendar--week]="model.view === 'week'"
   [class.activity-calendar--compact]="compact"
   [class.activity-calendar--fill-height]="compact && fillHeight"
+  [class.activity-calendar--dashboard-context]="dashboardDayContext"
   [class.activity-calendar--picker]="isMonthPicker">
   <div class="activity-calendar-months">
     @for (month of visibleMonths; track month.id) {
