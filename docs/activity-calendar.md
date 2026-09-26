@@ -21,7 +21,7 @@ This document is the implementation and maintenance guide for the Activity Calen
 - Week spans seven local calendar days aligned to the user's configured start of week.
 - Month uses a fixed 42-day grid so adjacent dates render consistently. Period totals include only dates in the selected month.
 - Year queries January 1 through the following January 1 and renders all 12 months.
-- The full route stores `view` and `date` in query parameters. Selecting a date updates both the URL and inline day panel; Back/Forward restore it. Previous and next controls move by the selected view; Today changes the anchor to the current local date.
+- The full route stores `view` and `date` in query parameters. Selecting a date updates both the URL and inline day panel; Back/Forward restore it. On narrow screens, selecting a Year date opens its Month view to keep the day panel near the selection; Back returns to Year. Previous and next controls move by the selected view; Today changes the anchor to the current local date.
 - The standalone day route stores its local date in the path. Previous and next controls move one local day, and Back/Forward restore the exact day. Activity and Timeline-note reads are bounded to that date; the existing shared panel still performs its own selected-date health read. No month-wide health read is added.
 - The dashboard tile owns its current-month query. The full calendar owns its visible-period query, and the standalone day route queries only its local day. None reuses the dashboard event table, custom-chart range, or map-tile filters.
 
@@ -98,6 +98,7 @@ Keep these interaction contracts:
 - The period label announces navigation changes.
 - Loading occupies a stable progress slot so cached and live emissions do not move the page.
 - Every rendered date is a button, including dates with neither a planned workout nor a completed activity. Empty dates still show the selected-day panel and workout creation choices where planning access is available.
+- In a stacked layout, explicit day selection reveals the start of the inline panel while keeping the selected date visible. Restoring a date from navigation does not move the user's scroll position.
 - Activity bars expose progressbar semantics only when recorded duration exists.
 - Start-of-week and weekend treatment must follow the user's settings and shared theme tokens.
 

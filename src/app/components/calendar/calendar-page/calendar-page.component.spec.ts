@@ -375,6 +375,22 @@ describe('CalendarPageComponent', () => {
     expect(fixture.componentInstance.selectedDay()?.dateKey).toBe('2026-08-03');
   });
 
+  it('drills from a narrow Year grid into the selected month, even for the already highlighted date', async () => {
+    queryParams.next(convertToParamMap({ view: 'year', date: '2026-08-03' }));
+    const originalMatchMedia = window.matchMedia;
+    window.matchMedia = vi.fn(() => ({ matches: true } as MediaQueryList));
+    try {
+      const fixture = TestBed.createComponent(CalendarPageComponent);
+      fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+      fixture.componentInstance.openDay(fixture.componentInstance.selectedDay()!);
+      expect(navigate).toHaveBeenCalledWith([], expect.objectContaining({
+        queryParams: { view: 'month', date: '2026-08-03' },
+      }));
+    } finally {
+      window.matchMedia = originalMatchMedia;
+    }
+  });
+
   it('preserves scroll after a day selection while leaving browser Back restoration to the router', async () => {
     const router = TestBed.inject(Router);
     const routerEvents = new Subject<Scroll>();

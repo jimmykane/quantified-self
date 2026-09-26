@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, DestroyRef, HostListener, LOCALE_ID, computed, effect, inject, signal, viewChild } from '@angular/core';
+import { ChangeDetectionStrategy, Component, DestroyRef, ElementRef, HostListener, LOCALE_ID, computed, effect, inject, signal, viewChild } from '@angular/core';
 import { ViewportScroller } from '@angular/common';
 import { takeUntilDestroyed, toObservable, toSignal } from '@angular/core/rxjs-interop';
 import { ActivatedRoute, ParamMap, Router, Scroll } from '@angular/router';
@@ -11,6 +11,7 @@ import { AppUserService } from '../../../services/app.user.service';
 import { ActivityCalendarService } from '../../../services/activity-calendar.service';
 import { CalendarDayDetailsNavigationService } from '../../../services/calendar-day-details-navigation.service';
 import { getDateTimeFormatter } from '../../../helpers/date-time-format.helper';
+import { revealCalendarDayContext } from '../../../helpers/reveal-calendar-day-context.helper';
 import {
   TrainingPlansService,
   selectCalendarVisibleScheduledWorkouts,
@@ -89,6 +90,7 @@ export class CalendarPageComponent {
   private readonly router = inject(Router);
   private readonly viewportScroller = inject(ViewportScroller);
   private readonly destroyRef = inject(DestroyRef);
+  private readonly elementRef = inject<ElementRef<HTMLElement>>(ElementRef);
   private pendingScrollRestore: Subscription | null = null;
   private readonly userService = inject(AppUserService);
   private readonly calendarService = inject(ActivityCalendarService);
@@ -304,7 +306,7 @@ export class CalendarPageComponent {
     if (!this.dayDetailsNavigation.consumeRestoration(restoration)) {
       return;
     }
-    if (day && this.selectedDay()?.dateKey !== day.dateKey) this.openDay(day);
+    if (day && this.selectedDay()?.dateKey !== day.dateKey) this.openDay(day, false);
   });
   private readonly openDuplicatedDayEffect = effect(() => {
     const uid = this.currentUser()?.uid;
@@ -364,9 +366,13 @@ export class CalendarPageComponent {
     this.reloadSequence.update(value => value + 1);
   }
 
-  openDay(day: ActivityCalendarDayViewModel): void {
-    if (!this.currentUser()?.uid || (this.selectedDay()?.dateKey === day.dateKey && this.explicitDateParam() === day.dateKey)) return;
-    this.navigateToState({ ...this.routeState(), anchorDate: day.date });
+  openDay(day: ActivityCalendarDayViewModel, revealDay = true): void {
+    const state = this.routeState();
+    const isNarrowYear = revealDay && state.view === 'year'
+      && this.elementRef.nativeElement.ownerDocument.defaultView?.matchMedia?.('(max-width: 900px)')?.matches;
+    if (!this.currentUser()?.uid || (!isNarrowYear
+      && this.selectedDay()?.dateKey === day.dateKey && this.explicitDateParam() === day.dateKey)) return;
+    this.navigateToState({ ...state, view: isNarrowYear ? 'month' : state.view, anchorDate: day.date }, revealDay);
   }
 
   selectDayNote(noteId: string): void {
@@ -376,11 +382,12 @@ export class CalendarPageComponent {
     }
   }
 
-  private navigateToState(state: ActivityCalendarRouteState): void {
+  private navigateToState(state: ActivityCalendarRouteState, revealDay = false): void {
     if (this.isDayRoute) {
       void this.router.navigate(['/calendar/day', formatActivityCalendarDateParam(state.anchorDate)]);
       return;
     }
+    const viewChanged = state.view !== this.routeState().view;
     const scrollPosition = this.viewportScroller.getScrollPosition();
     const targetDate = formatActivityCalendarDateParam(state.anchorDate);
     this.pendingScrollRestore?.unsubscribe();
@@ -400,7 +407,11 @@ export class CalendarPageComponent {
       if (this.pendingScrollRestore === scrollRestore) this.pendingScrollRestore = null;
       if (event.position) return; // Browser Back already restores its saved position.
       Promise.resolve().then(() => {
-        if (!this.destroyRef.destroyed) this.viewportScroller.scrollToPosition(scrollPosition);
+        if (this.destroyRef.destroyed) return;
+        if (!viewChanged) this.viewportScroller.scrollToPosition(scrollPosition);
+        if (revealDay) requestAnimationFrame(() => {
+          if (!this.destroyRef.destroyed) revealCalendarDayContext(this.elementRef.nativeElement);
+        });
       });
     });
     this.pendingScrollRestore = scrollRestore;

@@ -251,7 +251,7 @@ const ACTIVITY_CALENDAR_HELP_CONTENT = `## Open and navigate the calendar
 - The **Today** card opens a month calendar in a bottom sheet. Use its arrows to change months and select a day for details. The Dashboard and Training headers also link to the full [Calendar](/calendar).
 - Existing Calendar tiles expand to the full section width once. Other tiles stay in place, and any later resize you make is kept. To add the calendar, use **Add tile** in **Activity Overview**. Removing it keeps it off your dashboard and out of suggestions until you add it again manually.
 - The full Calendar has **Week**, **Month**, and **Year** views. The previous and next controls move by the selected view's period, and **Today** returns to the current period without taking a separate row on smaller screens.
-- Selecting a day keeps the calendar visible and updates the day panel. The selected view and date are kept in the URL, so refreshing, sharing the authenticated route, or using browser Back restores the same day. **Open full day** opens that date on its own page; **Calendar** returns to the month containing it.
+- Selecting a day keeps the calendar visible and updates the day panel. On a phone, selecting a date in Year view opens that month so the day's details are close to the calendar; browser Back returns to Year. The selected view and date are kept in the URL, so refreshing or sharing the authenticated route restores the same day. **Open full day** opens that date on its own page; **Calendar** returns to the month containing it.
 
 ## Read activity days
 

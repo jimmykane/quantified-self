@@ -1,6 +1,7 @@
 import {
   ChangeDetectionStrategy,
   Component,
+  ElementRef,
   HostListener,
   LOCALE_ID,
   computed,
@@ -18,6 +19,7 @@ import { catchError, distinctUntilChanged, finalize, map, of, shareReplay, start
 import { isTimelineNoteVisible, timelineNoteOverlaps } from '@shared/timeline-notes';
 import type { TimelineNoteChartContext } from '../../../helpers/timeline-notes-chart.helper';
 import { calendarTimelineNoteRange, calendarTimelineNotesByDate } from '../../../helpers/calendar-timeline-notes.helper';
+import { revealCalendarDayContext } from '../../../helpers/reveal-calendar-day-context.helper';
 import {
   type ActivityCalendarDayViewModel,
   buildActivityCalendarViewModel,
@@ -73,6 +75,7 @@ export class ActivityCalendarTileComponent {
   private readonly router = inject(Router);
   private readonly dayDetailsNavigation = inject(CalendarDayDetailsNavigationService);
   private readonly locale = inject(LOCALE_ID);
+  private readonly elementRef = inject<ElementRef<HTMLElement>>(ElementRef);
   private readonly anchorDate = signal(startOfCurrentMonth());
   private readonly followsCurrentMonth = signal(true);
   private readonly reloadSequence = signal(0);
@@ -237,7 +240,7 @@ export class ActivityCalendarTileComponent {
       return;
     }
     if (day) {
-      this.openDay(day);
+      this.openDay(day, false);
     }
   });
 
@@ -273,9 +276,10 @@ export class ActivityCalendarTileComponent {
     this.selectedDateKey.set(localDateKey(next));
   }
 
-  openDay(day: ActivityCalendarDayViewModel): void {
+  openDay(day: ActivityCalendarDayViewModel, revealDay = true): void {
     if (this.dayContextEnabled()) {
       this.selectedDateKey.set(day.dateKey);
+      if (revealDay) requestAnimationFrame(() => revealCalendarDayContext(this.elementRef.nativeElement));
       return;
     }
     const user = this.user();
