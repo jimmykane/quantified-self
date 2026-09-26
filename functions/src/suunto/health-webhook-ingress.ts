@@ -533,6 +533,9 @@ export async function processSuuntoHealthWebhookIngressDocument(
   }
 
   const addQueueItem = dependencies.addQueueItem || addSleepSyncQueueItem;
+  const coalescingBucketMs = 5 * 60 * 1000;
+  const dispatchAfterMs = (Math.floor(nowMs / coalescingBucketMs) + 1)
+    * coalescingBucketMs + 1_000;
   try {
     await Promise.all(ingress.windows.map(window => addQueueItem({
       type: 'suunto_health_poll',
@@ -542,8 +545,10 @@ export async function processSuuntoHealthWebhookIngressDocument(
       rangeStartMs: window.startMs,
       rangeEndMs: window.endMs,
       healthTrigger: 'webhook',
-      dedupeKey: `suunto-health-webhook:${ingress.userID}:${ingress.providerUserId}:${window.startMs}:${window.endMs}:${eventSnapshot.id}`,
+      dedupeKey: `suunto-health-webhook:${ingress.userID}:${ingress.providerUserId}:${window.startMs}:${window.endMs}:${ingress.tokenCredentialGeneration}:${ingress.rootOAuthCredentialGeneration}:${ingress.connectionStateGeneration}:${dispatchAfterMs}`,
       dispatchImmediately: true,
+      dispatchAfterMs,
+      lateArrivalKey: eventSnapshot.id,
       suuntoHealthTokenCredentialGeneration: ingress.tokenCredentialGeneration,
       suuntoHealthRootOAuthCredentialGeneration:
         ingress.rootOAuthCredentialGeneration,

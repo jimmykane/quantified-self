@@ -214,6 +214,9 @@ interface AddSleepSyncQueueItemInput {
     rangeStartMs?: number;
     rangeEndMs?: number;
     healthTrigger?: 'poll' | 'webhook' | 'backfill';
+    dispatchAfterMs?: number;
+    /** Opaque ingress ID used only if its scheduled bucket has already started. */
+    lateArrivalKey?: string;
     dedupeKey?: string;
     dispatchImmediately?: boolean;
     /** Admin catch-up only: never reset an existing deterministic queue ID or cursor. */
@@ -288,6 +291,13 @@ export function getMalformedSleepQueueItemReason(queueItem: SleepSyncQueueItemIn
     }
     if (!isValidSleepProvider(queueItem.provider)) {
         return `invalid provider ${queueItem.provider || 'missing'}`;
+    }
+    if (queueItem.dispatchAfterMs !== undefined
+        && (queueItem.type !== 'suunto_health_poll'
+            || queueItem.healthTrigger !== 'webhook'
+            || !Number.isSafeInteger(queueItem.dispatchAfterMs)
+            || queueItem.dispatchAfterMs <= 0)) {
+        return 'invalid Suunto Health webhook dispatch time';
     }
     const garminSummaryType = queueItem.garminSummaryType
         || (queueItem.provider === SLEEP_PROVIDERS.GarminAPI ? 'sleeps' : undefined);
@@ -522,6 +532,7 @@ function compactQueuePayload(input: AddSleepSyncQueueItemInput): Partial<SleepSy
         rangeStartMs: input.rangeStartMs,
         rangeEndMs: input.rangeEndMs,
         healthTrigger: input.healthTrigger,
+        dispatchAfterMs: input.dispatchAfterMs,
         suuntoHealthTokenCredentialGeneration: input.suuntoHealthTokenCredentialGeneration,
         suuntoHealthRootOAuthCredentialGeneration:
             input.suuntoHealthRootOAuthCredentialGeneration,
@@ -570,6 +581,7 @@ function comparableQueuePayload(payload: Partial<SleepSyncQueueItemInterface>): 
         rangeStartMs: payload.rangeStartMs,
         rangeEndMs: payload.rangeEndMs,
         healthTrigger: payload.healthTrigger,
+        dispatchAfterMs: payload.dispatchAfterMs,
         suuntoHealthTokenCredentialGeneration: payload.suuntoHealthTokenCredentialGeneration,
         suuntoHealthRootOAuthCredentialGeneration:
             payload.suuntoHealthRootOAuthCredentialGeneration,
@@ -726,6 +738,7 @@ interface SleepQueueWriteResult {
     queueRevision: string;
     dateCreated: number;
     shouldDispatchImmediately: boolean;
+    coalesced?: boolean;
 }
 
 async function prepareGarminHealthQueueAdmission(
@@ -884,6 +897,7 @@ async function writeSleepQueueItemIfUserActive(
                 queueRevision: currentRevision,
                 dateCreated: Number(current.dateCreated),
                 shouldDispatchImmediately: true,
+                coalesced: input.lateArrivalKey !== undefined,
             };
         }
 
@@ -962,6 +976,14 @@ export async function addSleepSyncQueueItem(input: AddSleepSyncQueueItemInput): 
         || !isValidOptionalLifecycleGeneration(input.suuntoHealthConnectionStateGeneration)) {
         throw new Error('Invalid Suunto Health queue lifecycle fences.');
     }
+    if ((input.dispatchAfterMs !== undefined || input.lateArrivalKey !== undefined)
+        && (input.type !== 'suunto_health_poll'
+            || input.healthTrigger !== 'webhook'
+            || !Number.isSafeInteger(input.dispatchAfterMs)
+            || (input.dispatchAfterMs || 0) <= 0
+            || !/^[a-f0-9]{64}$/.test(input.lateArrivalKey || ''))) {
+        throw new Error('Invalid Suunto Health webhook coalescing fields.');
+    }
     if ((input.type === 'suunto_webhook'
             && input.suuntoWebhookAuthorityDigest !== undefined
             && !/^[a-f0-9]{64}$/.test(input.suuntoWebhookAuthorityDigest))
@@ -1010,9 +1032,41 @@ export async function addSleepSyncQueueItem(input: AddSleepSyncQueueItemInput): 
     if (input.dispatchImmediately) {
         const existingSnapshot = await docRef.get();
         const existingQueueItem = existingSnapshot.exists ? existingSnapshot.data() as Partial<SleepSyncQueueItemInterface> : null;
-        if (existingQueueItem?.processed || existingQueueItem?.dispatchedToCloudTask) {
+        if (existingQueueItem && input.lateArrivalKey && (
+            input.dispatchAfterMs! <= nowMs
+            || (existingQueueItem as { processed?: boolean }).processed === true
+            || getActiveRevisionProcessingLease(existingQueueItem, nowMs) !== null
+        )) {
+            // The bucket's task may already be processing. A delayed ingress
+            // needs its own deterministic follow-up instead of being mistaken
+            // for a notification that the earlier refetch already covered.
+            queueId = await generateIDFromParts([
+                input.provider, input.type, input.providerUserId,
+                input.dedupeKey || queueId, 'late', input.lateArrivalKey,
+            ]);
+            docRef = queueCollection().doc(queueId);
+            const lateSnapshot = await docRef.get();
+            if (lateSnapshot.exists) {
+                if (!isSameQueuePayload(
+                    lateSnapshot.data() as Partial<SleepSyncQueueItemInterface>,
+                    queuePayload,
+                )) {
+                    throw new Error('Suunto Health late-arrival queue identity collision.');
+                }
+                logger.info('[HealthSync][Suunto] Reused late webhook refetch.', {
+                    coalescedWindows: 1,
+                });
+                return docRef;
+            }
+        } else if (existingQueueItem?.processed || existingQueueItem?.dispatchedToCloudTask) {
             if (isSameQueuePayload(existingQueueItem, queuePayload)) {
-                logger.info(`[SleepSync] Reusing existing immediate queue item ${queueId} for duplicate ${input.provider} ${input.type} notification.`);
+                if (input.lateArrivalKey) {
+                    logger.info('[HealthSync][Suunto] Coalesced webhook refetch.', {
+                        coalescedWindows: 1,
+                    });
+                } else {
+                    logger.info(`[SleepSync] Reusing existing immediate queue item ${queueId} for duplicate ${input.provider} ${input.type} notification.`);
+                }
                 return docRef;
             }
 
@@ -1044,6 +1098,11 @@ export async function addSleepSyncQueueItem(input: AddSleepSyncQueueItemInput): 
         userID,
         nowMs,
     );
+    if (writeResult.coalesced) {
+        logger.info('[HealthSync][Suunto] Coalesced webhook refetch.', {
+            coalescedWindows: 1,
+        });
+    }
 
     try {
         await assertSleepQueueUserCanReceiveWork(input, userID, queueId, `sleep_sync_queue_after_write:${input.provider}`);
@@ -1058,7 +1117,10 @@ export async function addSleepSyncQueueItem(input: AddSleepSyncQueueItemInput): 
         const enqueueTask = input.type === 'garmin_health_backfill'
             ? enqueueGarminHealthBackfillTask
             : enqueueSleepSyncTask;
-        const wasTaskEnqueued = await enqueueTask(queueId, writeResult.dateCreated, undefined, {
+        const dispatchDelaySeconds = input.dispatchAfterMs === undefined
+            ? undefined
+            : Math.max(1, Math.ceil((input.dispatchAfterMs - Date.now()) / 1000));
+        const wasTaskEnqueued = await enqueueTask(queueId, writeResult.dateCreated, dispatchDelaySeconds, {
             queueRevision: writeResult.queueRevision,
             queueDateCreated: writeResult.dateCreated,
         });
