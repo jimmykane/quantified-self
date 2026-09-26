@@ -9,11 +9,50 @@ import { processSleepSyncQueueItem } from '../sleep/queue';
 import { isQueueItemDeletedForUserCleanup } from '../queue/cleanup-tombstone';
 import { FUNCTION_SECRET_BINDINGS } from '../secrets';
 import { isCurrentSleepQueueRevision } from '../sleep/queue-revision';
+import { normalizeSleepProvider } from '../../../shared/sleep';
+import { isGarminSupportedSummaryType } from '../garmin/health-summary-types';
+import { SleepSyncQueueItemType } from '../queue/queue-item.interface';
 
 interface SleepSyncTaskPayload {
     queueItemId: string;
     queueRevision?: string;
     queueDateCreated?: number;
+}
+
+const TELEMETRY_QUEUE_TYPES = new Set<SleepSyncQueueItemType>([
+    'garmin_push',
+    'garmin_ping',
+    'garmin_ping_batch',
+    'suunto_webhook',
+    'suunto_poll',
+    'suunto_health_poll',
+    'garmin_health_backfill',
+    'coros_poll',
+]);
+
+function safeWorkloadFields(queueItem: SleepSyncQueueItemInterface | undefined) {
+    const provider = normalizeSleepProvider(queueItem?.provider) || 'unknown';
+    const queueType = queueItem && TELEMETRY_QUEUE_TYPES.has(queueItem.type)
+        ? queueItem.type
+        : 'unknown';
+    const isGarminPing = provider === 'GarminAPI'
+        && (queueType === 'garmin_ping' || queueType === 'garmin_ping_batch');
+    const garminSummaryType = isGarminPing
+        ? isGarminSupportedSummaryType(queueItem?.garminSummaryType)
+            ? queueItem.garminSummaryType
+            : queueItem?.garminSummaryType == null ? 'sleeps' : 'unknown'
+        : 'none';
+    return {
+        provider,
+        queueType,
+        healthTrigger: queueType === 'suunto_health_poll'
+            && (queueItem?.healthTrigger === 'poll'
+                || queueItem?.healthTrigger === 'webhook'
+                || queueItem?.healthTrigger === 'backfill')
+            ? queueItem.healthTrigger
+            : 'none',
+        garminSummaryType,
+    };
 }
 
 export const processSleepSyncTask = onTaskDispatched({
@@ -23,64 +62,86 @@ export const processSleepSyncTask = onTaskDispatched({
     timeoutSeconds: 540,
     region: 'europe-west2',
 }, async (request) => {
-    const { queueItemId, queueRevision, queueDateCreated } = request.data as SleepSyncTaskPayload;
-    logger.info(`[SleepSyncTaskWorker] Starting task for queue item ${queueItemId}`);
+    const startedAtMs = Date.now();
+    let queueItem: SleepSyncQueueItemInterface | undefined;
+    let outcome = 'error';
+    try {
+        const { queueItemId, queueRevision, queueDateCreated } = request.data as SleepSyncTaskPayload;
+        logger.info(`[SleepSyncTaskWorker] Starting task for queue item ${queueItemId}`);
 
-    const queueRef = admin.firestore().collection(SLEEP_SYNC_QUEUE_COLLECTION_NAME).doc(queueItemId);
-    const queueDoc = await queueRef.get();
+        const queueRef = admin.firestore().collection(SLEEP_SYNC_QUEUE_COLLECTION_NAME).doc(queueItemId);
+        const queueDoc = await queueRef.get();
 
-    if (!queueDoc.exists) {
-        const failedJobDoc = await admin.firestore().collection('failed_jobs').doc(queueItemId).get();
-        if (failedJobDoc.exists) {
-            logger.warn(`[SleepSyncTaskWorker] Queue item ${queueItemId} not found but exists in failed_jobs. Stopping retry.`);
+        if (!queueDoc.exists) {
+            const failedJobDoc = await admin.firestore().collection('failed_jobs').doc(queueItemId).get();
+            if (failedJobDoc.exists) {
+                outcome = 'already_failed';
+                logger.warn(`[SleepSyncTaskWorker] Queue item ${queueItemId} not found but exists in failed_jobs. Stopping retry.`);
+                return;
+            }
+            if (await isQueueItemDeletedForUserCleanup(SLEEP_SYNC_QUEUE_COLLECTION_NAME, queueItemId)) {
+                outcome = 'deleted_for_cleanup';
+                logger.warn(`[SleepSyncTaskWorker] Queue item ${queueItemId} was deleted during queue cleanup. Stopping retry.`);
+                return;
+            }
+            outcome = 'missing';
+            throw new Error(`[SleepSyncTaskWorker] Queue item ${queueItemId} not found in ${SLEEP_SYNC_QUEUE_COLLECTION_NAME}`);
+        }
+
+        queueItem = queueDoc.data() as SleepSyncQueueItemInterface | undefined;
+        const hasBoundIdentity = typeof queueRevision === 'string' && queueRevision.trim().length > 0
+            || Number.isFinite(Number(queueDateCreated));
+        if (queueItem && hasBoundIdentity && !isCurrentSleepQueueRevision(queueItem, {
+            queueRevision,
+            dateCreated: Number(queueDateCreated),
+        })) {
+            outcome = 'stale_revision';
+            logger.info(`[SleepSyncTaskWorker] Task identity for ${queueItemId} is stale; leaving the replacement revision queued.`);
             return;
         }
-        if (await isQueueItemDeletedForUserCleanup(SLEEP_SYNC_QUEUE_COLLECTION_NAME, queueItemId)) {
-            logger.warn(`[SleepSyncTaskWorker] Queue item ${queueItemId} was deleted during queue cleanup. Stopping retry.`);
+        if (queueItem?.processed) {
+            outcome = 'already_processed';
+            logger.info(`[SleepSyncTaskWorker] Item ${queueItemId} already processed, skipping.`);
             return;
         }
-        throw new Error(`[SleepSyncTaskWorker] Queue item ${queueItemId} not found in ${SLEEP_SYNC_QUEUE_COLLECTION_NAME}`);
-    }
-
-    const queueItem = queueDoc.data() as SleepSyncQueueItemInterface | undefined;
-    const hasBoundIdentity = typeof queueRevision === 'string' && queueRevision.trim().length > 0
-        || Number.isFinite(Number(queueDateCreated));
-    if (queueItem && hasBoundIdentity && !isCurrentSleepQueueRevision(queueItem, {
-        queueRevision,
-        dateCreated: Number(queueDateCreated),
-    })) {
-        logger.info(`[SleepSyncTaskWorker] Task identity for ${queueItemId} is stale; leaving the replacement revision queued.`);
-        return;
-    }
-    if (queueItem?.processed) {
-        logger.info(`[SleepSyncTaskWorker] Item ${queueItemId} already processed, skipping.`);
-        return;
-    }
-    if (queueItem?.type === 'garmin_health_backfill') {
-        logger.warn(`[SleepSyncTaskWorker] Item ${queueItemId} belongs to the dedicated Garmin Health backfill worker.`);
-        return;
-    }
-
-    const result = await processSleepSyncQueueItem(Object.assign({
-        id: queueDoc.id,
-        ref: queueDoc.ref,
-    }, queueItem) as SleepSyncQueueItemInterface);
-
-    switch (result) {
-        case QueueResult.Processed:
-            logger.info(`[SleepSyncTaskWorker] Successfully processed item ${queueItemId}`);
+        if (queueItem?.type === 'garmin_health_backfill') {
+            outcome = 'wrong_worker';
+            logger.warn(`[SleepSyncTaskWorker] Item ${queueItemId} belongs to the dedicated Garmin Health backfill worker.`);
             return;
-        case QueueResult.Deferred:
-            logger.warn(`[SleepSyncTaskWorker] Deferred item ${queueItemId}; it remains queued for a future dispatcher run.`);
-            return;
-        case QueueResult.MovedToDLQ:
-            logger.warn(`[SleepSyncTaskWorker] Item ${queueItemId} was moved to DLQ.`);
-            return;
-        case QueueResult.RetryIncremented:
-            throw new Error(`Item ${queueItemId} failed and was scheduled for retry.`);
-        case QueueResult.Failed:
-            throw new Error(`Fatal failure updating sleep sync item ${queueItemId}`);
-        default:
-            throw new Error(`Unexpected result for sleep sync item ${queueItemId}: ${result}`);
+        }
+
+        const result = await processSleepSyncQueueItem(Object.assign({
+            id: queueDoc.id,
+            ref: queueDoc.ref,
+        }, queueItem) as SleepSyncQueueItemInterface);
+
+        switch (result) {
+            case QueueResult.Processed:
+                outcome = 'processed';
+                logger.info(`[SleepSyncTaskWorker] Successfully processed item ${queueItemId}`);
+                return;
+            case QueueResult.Deferred:
+                outcome = 'deferred';
+                logger.warn(`[SleepSyncTaskWorker] Deferred item ${queueItemId}; it remains queued for a future dispatcher run.`);
+                return;
+            case QueueResult.MovedToDLQ:
+                outcome = 'moved_to_dlq';
+                logger.warn(`[SleepSyncTaskWorker] Item ${queueItemId} was moved to DLQ.`);
+                return;
+            case QueueResult.RetryIncremented:
+                outcome = 'retry_incremented';
+                throw new Error(`Item ${queueItemId} failed and was scheduled for retry.`);
+            case QueueResult.Failed:
+                outcome = 'failed';
+                throw new Error(`Fatal failure updating sleep sync item ${queueItemId}`);
+            default:
+                throw new Error(`Unexpected result for sleep sync item ${queueItemId}: ${result}`);
+        }
+    } finally {
+        logger.info('[SleepSyncTaskWorker] Invocation summary', {
+            ...safeWorkloadFields(queueItem),
+            outcome,
+            durationMs: Math.max(0, Date.now() - startedAtMs),
+        });
     }
 });
