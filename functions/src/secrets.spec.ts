@@ -66,6 +66,7 @@ const EXPECTED_BINDINGS: Record<string, string[]> = {
   processSleepSyncTask: [...COROS, ...GARMIN, ...SUUNTO_API],
   processTrainingDeliveryTask: [...COROS, ...GARMIN, ...SUUNTO_API, ...WAHOO, 'SUUNTOAPP_GUIDE_OWNER'],
   processGarminHealthBackfillTask: GARMIN,
+  processConnectionHistoryTask: [...COROS, ...GARMIN, ...SUUNTO_API, ...WAHOO],
   processWorkoutTask: [...COROS, ...GARMIN, ...SUUNTO_API, 'WAHOOAPI_ALLOWED_FILE_HOSTS'],
   previewAdminSubscriptionGift: ['STRIPE_ADMIN_BILLING_KEY'],
   previewTrainingProviderDelivery: ['SUUNTOAPP_GUIDE_OWNER'],

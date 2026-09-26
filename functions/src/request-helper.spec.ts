@@ -61,6 +61,13 @@ describe('request-helper', () => {
         }
     });
 
+    it.each(['7200', 'Mon, 14 Sep 2026 15:00:00 GMT'])('preserves Retry-After %s for the queue retry policy', async retryAfter => {
+        vi.mocked(fetch).mockResolvedValue(new Response('Busy', { status: 429, headers: { 'retry-after': retryAfter } }));
+        await expect(requestHelper.get('https://example.com')).rejects.toMatchObject({
+            statusCode: 429, response: { headers: { 'retry-after': retryAfter } },
+        });
+    });
+
     it('should handle bearer auth shortcut', async () => {
         (global.fetch as any).mockResolvedValue({
             ok: true,

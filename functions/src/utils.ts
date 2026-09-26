@@ -1,3 +1,4 @@
+import { assertHistoryWrite, currentHistoryExecution } from './connection-history/context';
 import * as functions from 'firebase-functions/v1';
 type Request = functions.https.Request;
 type Response = functions.Response;
@@ -239,6 +240,7 @@ async function assertEventWriteAuthorizationCurrent(
 ): Promise<void> {
   const db = admin.firestore();
   await db.runTransaction(async (transaction) => {
+    await assertHistoryWrite(transaction);
     await assertEventWriteAuthorizationInTransaction(db, transaction, userID, phase);
     if (assertAdditionalAuthorization) {
       await assertAdditionalAuthorization(db, transaction);
@@ -260,6 +262,7 @@ export async function setEventDocumentIfUserActive(
 ): Promise<void> {
   const db = admin.firestore();
   await db.runTransaction(async (transaction) => {
+    await assertHistoryWrite(transaction);
     await assertEventWriteAuthorizationInTransaction(db, transaction, userID, phase);
     if (assertAdditionalAuthorization) {
       await assertAdditionalAuthorization(db, transaction);
@@ -302,7 +305,7 @@ export async function setEvent(userID: string, eventID: string, event: EventInte
     'event_write_start',
     writeOptions.assertWriteAuthorizationInTransaction,
   );
-  const stageOriginalFilesUntilEventWrite = writeOptions.stageOriginalFilesUntilEventWrite === true;
+  const stageOriginalFilesUntilEventWrite = writeOptions.stageOriginalFilesUntilEventWrite === true || !!currentHistoryExecution();
   const stagedOriginalFiles: { stagingPath: string; targetPath: string }[] = [];
   const stagingBucket = stageOriginalFilesUntilEventWrite ? admin.storage().bucket() : undefined;
 

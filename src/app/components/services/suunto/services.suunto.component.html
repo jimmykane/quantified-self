@@ -80,7 +80,7 @@
     }
     </div>
 
-    <div connection-actions class="tool-actions">
+    <div connection-actions class="tool-actions connection-history-actions">
       @if (isServiceConnected && hasActiveSyncRoutesUsingService) {
       <div class="active-sync-warning-pill">
         <mat-icon>warning</mat-icon>
@@ -88,6 +88,9 @@
       </div>
       }
       @if (shouldShowConnectAction) {
+      <app-connection-history-option [service]="serviceName" [checked]="importRecentHistory" [range]="importHistoryRange"
+        [disabled]="!user || isLoading || isConnecting || !hasProAccess"
+        (checkedChange)="importRecentHistory = $event" (rangeChange)="importHistoryRange = $event"></app-connection-history-option>
       <button mat-flat-button class="qs-mat-primary"
         [disabled]="!user || isLoading || isConnecting" (click)="connectWithService($event)">
         @if (isConnecting) {
@@ -106,6 +109,9 @@
 
     </div>
   </app-service-connection-status>
+  <app-connection-history-status [service]="serviceName" [status]="serviceMeta?.connectionHistoryImport || null"
+    [disabled]="!hasProAccess || isConnecting || isDisconnecting"
+    (reconnect)="reconnectRequested = true"></app-connection-history-status>
   }
 
   @if (showAdvancedTools) {

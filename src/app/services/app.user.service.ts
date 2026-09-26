@@ -120,6 +120,7 @@ import {
   type ServiceDisconnectRetryDetails,
   type ServiceConnectionAccountProjection,
 } from '@shared/service-connection';
+import { CONNECTION_HISTORY_DEFAULT_RANGE, type ConnectionHistoryRangePreset } from '@shared/connection-history';
 import {
   getUserLegalAgreementsPath,
   OPTIONAL_USER_LEGAL_CONSENT_FIELDS,
@@ -1566,7 +1567,17 @@ export class AppUserService implements OnDestroy {
       && (!isCurrentView || isCurrentView());
   }
 
-  async getCurrentUserServiceTokenAndRedirectURI(serviceName: ServiceNames, isCurrentView?: () => boolean): Promise<{ redirect_uri: string }> {
+  async retryConnectionHistoryImport(runId: string): Promise<void> {
+    const result = await this.functionsService.call<{ runId: string }, { accepted: boolean }>('retryConnectionHistoryImport', { runId });
+    if (!result.data.accepted) throw new Error('History retry was not accepted.');
+  }
+
+  async getCurrentUserServiceTokenAndRedirectURI(
+    serviceName: ServiceNames,
+    importRecentHistory = false,
+    importHistoryRange: ConnectionHistoryRangePreset = CONNECTION_HISTORY_DEFAULT_RANGE,
+    isCurrentView?: () => boolean,
+  ): Promise<{ redirect_uri: string }> {
     const canExecute = this.captureServiceConnectionAccount(isCurrentView);
     const currentDomain = this.windowService.currentDomain;
     const redirectUri = encodeURI(`${currentDomain}/services?serviceName=${serviceName}&connect=1`);
@@ -1589,7 +1600,10 @@ export class AppUserService implements OnDestroy {
         throw new Error(`Service ${serviceName} not supported for auth redirect`);
     }
 
-    const result = await this.functionsService.call<{ redirectUri: string }, { redirect_uri: string }>(functionName, { redirectUri }, { canExecute });
+    const result = await this.functionsService.call<
+      { redirectUri: string; importRecentHistory: boolean; importHistoryRange: ConnectionHistoryRangePreset },
+      { redirect_uri: string }
+    >(functionName, { redirectUri, importRecentHistory, importHistoryRange }, { canExecute });
     return result.data;
   }
 

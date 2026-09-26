@@ -43,7 +43,13 @@ export const getWahooAPIAuthRequestTokenRedirectURI = onCall({
   if (!redirectUri) throw new HttpsError('invalid-argument', 'Missing redirect_uri');
   try {
     return {
-      redirect_uri: await getServiceOAuth2CodeRedirectAndSaveStateToUser(userID, SERVICE_NAME, redirectUri),
+      redirect_uri: await getServiceOAuth2CodeRedirectAndSaveStateToUser(
+        userID,
+        SERVICE_NAME,
+        redirectUri,
+        request.data?.importRecentHistory,
+        request.data?.importHistoryRange,
+      ),
     };
   } catch (error) {
     if (isServiceDisconnectInProgressError(error)) {

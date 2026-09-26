@@ -37,7 +37,7 @@ Existing-user Health catch-up is available through the dry-run-first `backfill-e
 operator script for Garmin, Suunto, and COROS. It preserves Pro eligibility, queues existing
 workers in bounded batches, and keeps deletion-safe submission receipts without treating
 request completion as complete data coverage. See [Health backfill operations](health-backfill-operations.md)
-before any execution. Automatic connection backfill remains enhancement #681, not an enabled behavior.
+before any execution. New eligible Pro connections/reconnections offer a preselected optional history import whose range defaults to 30 days. Users can choose only ranges registered for that provider, up to Garmin's rolling five years, COROS's rolling three months, or all available retained history for Suunto and Wahoo. It uses the same manual operations and durable ingestion workers and never continues earlier than the selected boundary. See [connection history import](connection-history-import.md) for the #681 implementation, capability/range-registration contract, private progress model, admission switch and release order.
 
 Suunto Health history adapts to item-count limits by halving oversized target windows and reapplying local-day context, rather than truncating responses or increasing parser caps. Subrequests remain sequential, lifecycle-fenced, and bounded by per-job HTTP/time/result budgets; irreducible or malformed responses remain failures. See [Suunto ingestion bounds](suunto-integration.md#ingestion-and-revision-flow). Do not treat repeated `response_item_limit` validation failures as transient upstream 500s during bulk backfill monitoring.
 
@@ -414,8 +414,8 @@ Complete these shared changes early. Exhaustive unions and switch statements are
 2. Publish the required sports-lib version before making the application depend on it. Do not leave an application lockfile pointing at an unpublished package version.
 3. Add provider labels, source/destination branding, and icon keys to `shared/provider-presentation.ts`. Use source attribution for imported data and destination branding for connection or sending surfaces.
 4. Add Function names and the correct region to `shared/functions-manifest.ts`; export every deployed entry point from
-   `functions/src/full-entrypoint.ts`. Add a direct loader in `functions/src/function-target-loader.ts` only when the
-   endpoint has passed the benchmark, discovery, metadata, rollout, and rollback process in
+   `functions/src/full-entrypoint.ts`. Add a direct owner-module loader in `functions/src/function-target-loader.ts`
+   and verify its benchmark, discovery, metadata, rollout, and rollback process as described in
    [Firebase Functions target-aware entrypoint loading](functions-entrypoint-loading.md).
 5. Add the environment configuration in `functions/src/config.ts`. Match established providers by requiring credentials when the integration runs; add a feature gate only when an explicitly approved staged rollout or operational requirement needs one. Update the configuration table in `README.md` with names only—never values, secrets, or production URLs.
 6. Add approved SVG assets and register them through the existing icon/presentation path. Confirm partner brand requirements before release.
@@ -928,3 +928,7 @@ Use this checklist in every provider integration PR or implementation handoff:
 - [ ] Unit, Rules, frontend, admin, shared-library, and build verification passed.
 - [ ] Provider-specific architecture/release document and this guide were updated.
 - [ ] Rollout, monitoring, and rollback plan are written before enabling production traffic.
+
+### Connection-history capability registration
+
+For each provider/history API addition, register a versioned capability in `shared/connection-history.ts` and its adapter in `functions/src/connection-history/adapters.ts`, or explicitly declare history unsupported. Contract tests enforce the pairing. Reuse the existing family registry, manual import operation, reservations and canonical queues/writers. Snapshot inventories affect future connections only. Test the bounded range, owner-scoped identity, restart receipts, shared cooldowns, permission failures, replacement credentials and deletion guards; do not add OAuth-specific fetch loops or frontend background orchestration. See [the extension checklist](connection-history-import.md#adding-capabilities).

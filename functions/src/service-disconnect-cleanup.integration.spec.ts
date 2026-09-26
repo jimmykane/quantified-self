@@ -191,6 +191,20 @@ describe.skipIf(!emulatorHost)('explicit disconnect durability (Firestore emulat
     expect((await taskRef.get()).exists).toBe(false);
   }, 30_000);
 
+  it('removes owned history runs on disconnect while preserving imported records and another owner', async () => {
+    const owned = db.collection('connectionHistoryImports').doc(`owned-${uid}`);
+    const other = db.collection('connectionHistoryImports').doc(`other-${uid}`);
+    const imported = db.doc(`users/${uid}/events/imported-history`);
+    await owned.set({ userID: uid, serviceName: service, providerUserId: providerID });
+    await other.set({ userID: `other-${uid}`, serviceName: service, providerUserId: providerID });
+    await imported.set({ name: 'Previously imported activity' });
+    await deauthorizeServiceForUser(uid, service);
+    await retryServiceDisconnectCleanup();
+    expect((await owned.get()).exists).toBe(false);
+    expect((await other.get()).exists).toBe(true);
+    expect((await imported.get()).exists).toBe(true);
+  });
+
   it('re-drives claimed work after worker termination and does not steal an active lease', async () => {
     await deauthorizeServiceForUser(uid, service);
     const taskRef = (await tasks().get()).docs[0].ref;

@@ -11,7 +11,7 @@ const NO_TARGET = '__NO_TARGET__';
 // Exercise a property inherited from Object.prototype so the fallback check
 // also guards against accidental prototype-based routing.
 const UNKNOWN_TARGET = 'toString';
-const EXPECTED_FULL_EXPORT_COUNT = 165;
+const EXPECTED_FULL_EXPORT_COUNT = 169;
 const MARKETING_TARGETS = new Set([
   'listMarketingCampaigns',
   'saveMarketingCampaign',
@@ -31,6 +31,23 @@ const MARKETING_SECRET_TARGETS = new Set([
   'dispatchMarketingCampaigns',
   'marketingUnsubscribe',
 ]);
+const CONNECTION_HISTORY_TARGETS = new Set([
+  'processConnectionHistoryTask',
+  'onConnectionHistoryImportWritten',
+  'recoverConnectionHistoryImports',
+  'retryConnectionHistoryImport',
+]);
+const CONNECTION_HISTORY_TASK_SECRETS = [
+  'COROSAPI_CLIENT_ID',
+  'COROSAPI_CLIENT_SECRET',
+  'GARMINAPI_CLIENT_ID',
+  'GARMINAPI_CLIENT_SECRET',
+  'SUUNTOAPP_CLIENT_ID',
+  'SUUNTOAPP_CLIENT_SECRET',
+  'SUUNTOAPP_SUBSCRIPTION_KEY',
+  'WAHOOAPI_CLIENT_ID',
+  'WAHOOAPI_CLIENT_SECRET',
+];
 
 interface ProbeResult {
   target: string | null;
@@ -44,10 +61,15 @@ interface DiscoveredEndpoint {
   platform?: string;
   region?: string[];
   availableMemoryMb?: number;
+  timeoutSeconds?: number;
   entryPoint?: string;
   secretEnvironmentVariables?: Array<{ key?: string }>;
   callableTrigger?: unknown;
   scheduleTrigger?: { schedule?: string; timeZone?: string };
+  taskQueueTrigger?: {
+    retryConfig?: { maxAttempts?: number; minBackoffSeconds?: number; maxBackoffSeconds?: number };
+    rateLimits?: { maxConcurrentDispatches?: number; maxDispatchesPerSecond?: number };
+  };
   eventTrigger?: {
     eventType?: string;
     eventFilterPathPatterns?: { document?: string };
@@ -68,6 +90,10 @@ function sortedKeys(value: Record<string, unknown>): string[] {
 
 function arraysEqual(left: readonly string[], right: readonly string[]): boolean {
   return left.length === right.length && left.every((value, index) => value === right[index]);
+}
+
+function isDefaultRuntimeValue(value: unknown): boolean {
+  return value == null || (typeof value === 'object' && value.constructor?.name === 'ResetValue');
 }
 
 function probe(targetArgument: string): void {
@@ -252,6 +278,34 @@ async function check(): Promise<void> {
     if (target === 'projectEventTagCatalog') {
       assert(endpoint.availableMemoryMb === 256, `${target} memory configuration changed.`);
       assert(secretKeys.length === 0, `${target} secret bindings changed.`);
+    } else if (CONNECTION_HISTORY_TARGETS.has(target)) {
+      const isTask = target === 'processConnectionHistoryTask';
+      assert(isTask ? endpoint.availableMemoryMb === 512 : isDefaultRuntimeValue(endpoint.availableMemoryMb),
+        `${target} memory configuration changed.`);
+      assert(arraysEqual(secretKeys, isTask ? CONNECTION_HISTORY_TASK_SECRETS : []),
+        `${target} secret bindings changed.`);
+      if (isTask) {
+        assert(endpoint.availableMemoryMb === 512 && endpoint.timeoutSeconds === 300,
+          `${target} runtime limits changed.`);
+        assert(endpoint.taskQueueTrigger?.rateLimits?.maxConcurrentDispatches === 1
+          && endpoint.taskQueueTrigger.rateLimits.maxDispatchesPerSecond === 1
+          && endpoint.taskQueueTrigger.retryConfig?.maxAttempts === 10
+          && endpoint.taskQueueTrigger.retryConfig.minBackoffSeconds === 900
+          && endpoint.taskQueueTrigger.retryConfig.maxBackoffSeconds === 14400,
+        `${target} task pacing or retry policy changed.`);
+      } else if (target === 'onConnectionHistoryImportWritten') {
+        assert(isDefaultRuntimeValue(endpoint.timeoutSeconds)
+          && endpoint.eventTrigger?.eventType === 'google.cloud.firestore.document.v1.written'
+          && endpoint.eventTrigger.eventFilterPathPatterns?.document === 'connectionHistoryImports/{runId}'
+          && endpoint.eventTrigger.retry === true,
+        `${target} Firestore trigger changed.`);
+      } else if (target === 'recoverConnectionHistoryImports') {
+        assert(endpoint.timeoutSeconds === 120 && endpoint.scheduleTrigger?.schedule === '* * * * *',
+          `${target} recovery schedule changed.`);
+      } else {
+        assert(isDefaultRuntimeValue(endpoint.timeoutSeconds)
+          && endpoint.callableTrigger !== undefined, `${target} callable trigger changed.`);
+      }
     } else if (MARKETING_TARGETS.has(target)) {
       const expectedMemory = target === 'trackMarketingDelivery' || target === 'marketingUnsubscribe'
         ? 256 : 512;

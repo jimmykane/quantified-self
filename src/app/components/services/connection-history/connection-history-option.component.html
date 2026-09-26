@@ -1,0 +1,14 @@
+<mat-checkbox [checked]="checked()" [disabled]="disabled()" (change)="change($event.checked)">
+  Import history from this service
+</mat-checkbox>
+@if (checked()) {
+<mat-form-field appearance="outline" class="history-range-field">
+  <mat-label>History range</mat-label>
+  <mat-select [value]="range()" [disabled]="disabled()" (selectionChange)="changeRange($event.value)">
+    @for (option of rangeOptions(); track option.value) {
+    <mat-option [value]="option.value">{{ option.label }}</mat-option>
+    }
+  </mat-select>
+</mat-form-field>
+}
+<p class="history-option-description">{{ description() }}</p>

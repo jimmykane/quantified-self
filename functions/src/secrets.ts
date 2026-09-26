@@ -107,6 +107,7 @@ export const FUNCTION_SECRET_BINDINGS = {
   processSleepSyncTask: [...COROS, ...GARMIN, ...SUUNTO_API],
   processGarminHealthBackfillTask: GARMIN,
   processTrainingDeliveryTask: [...COROS, ...GARMIN, ...SUUNTO_API, ...WAHOO, SECRET_PARAMS.SUUNTOAPP_GUIDE_OWNER],
+  processConnectionHistoryTask: [...COROS, ...GARMIN, ...SUUNTO_API, ...WAHOO],
   processWorkoutTask: [...COROS, ...GARMIN, ...SUUNTO_API, SECRET_PARAMS.WAHOOAPI_ALLOWED_FILE_HOSTS],
   previewAdminSubscriptionGift: [SECRET_PARAMS.STRIPE_ADMIN_BILLING_KEY],
   previewTrainingProviderDelivery: [SECRET_PARAMS.SUUNTOAPP_GUIDE_OWNER],

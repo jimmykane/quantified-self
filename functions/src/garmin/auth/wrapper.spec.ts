@@ -150,12 +150,12 @@ describe('Garmin Auth Wrapper', () => {
     describe('getGarminAPIAuthRequestTokenRedirectURI', () => {
         it('should return redirect URI from OAuth2 helper', async () => {
             vi.mocked(OAuth2.getServiceOAuth2CodeRedirectAndSaveStateToUser).mockResolvedValue('https://garmin.com/oauth');
-            const data = { redirectUri: 'https://callback' };
+            const data = { redirectUri: 'https://callback', importRecentHistory: true, importHistoryRange: 'maximum' };
 
             const result = await (getGarminAPIAuthRequestTokenRedirectURI as any)(data, context);
 
             expect(serviceOAuthAccess.hasServiceOAuthConnectAccess).toHaveBeenCalledWith('testUserID', ServiceNames.GarminAPI);
-            expect(OAuth2.getServiceOAuth2CodeRedirectAndSaveStateToUser).toHaveBeenCalledWith('testUserID', ServiceNames.GarminAPI, 'https://callback');
+            expect(OAuth2.getServiceOAuth2CodeRedirectAndSaveStateToUser).toHaveBeenCalledWith('testUserID', ServiceNames.GarminAPI, 'https://callback', true, 'maximum');
             expect(result).toEqual({ redirect_uri: 'https://garmin.com/oauth' });
         });
 

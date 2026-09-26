@@ -22,6 +22,14 @@ const TARGET_LOADERS: Readonly<Record<string, ModuleLoader>> = Object.freeze({
   marketingUnsubscribe: loadMarketingHandlers,
   projectEventTagCatalog:
     () => module.require('./events/event-tag-catalog.trigger') as FunctionModule,
+  processConnectionHistoryTask:
+    () => module.require('./connection-history/tasks') as FunctionModule,
+  onConnectionHistoryImportWritten:
+    () => module.require('./connection-history/tasks') as FunctionModule,
+  recoverConnectionHistoryImports:
+    () => module.require('./connection-history/tasks') as FunctionModule,
+  retryConnectionHistoryImport:
+    () => module.require('./connection-history/tasks') as FunctionModule,
 });
 
 export const OPTIMIZED_FUNCTION_TARGETS = Object.freeze(Object.keys(TARGET_LOADERS));

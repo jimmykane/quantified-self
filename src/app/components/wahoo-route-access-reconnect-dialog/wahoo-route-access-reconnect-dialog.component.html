@@ -3,10 +3,10 @@
   @if (training) {
     <p>Your current Wahoo connection does not include the plans and workouts permissions needed for Training sync.</p>
     <p>Reconnect the same Wahoo account and allow plan and workout access. Existing activity and route permissions are still requested.</p>
-    <p>When you return, review your Training sync setup or retry the workout. Reconnecting does not automatically enable plan sync.</p>
+    <p>Open Connections to review your history-import choice and reconnect the same Wahoo account. When you return, review your Training sync setup or retry the workout. Reconnecting does not automatically enable plan sync.</p>
   } @else {
     <p>Your current Wahoo connection does not include permission to add routes.</p>
-    <p>Reconnect Wahoo to grant route access. When you return, send the route again.</p>
+    <p>Open Connections to review your history-import choice and reconnect Wahoo. When you return, send the route again.</p>
   }
 </mat-dialog-content>
 <mat-dialog-actions align="end">
@@ -15,9 +15,9 @@
     <span class="wahoo-route-access-reconnect-dialog__button-content">
       @if (reconnecting()) {
         <mat-spinner diameter="18"></mat-spinner>
-        <span>Opening Wahoo…</span>
+        <span>Opening Connections…</span>
       } @else {
-        <span>Reconnect Wahoo</span>
+        <span>Open Connections</span>
       }
     </span>
   </button>

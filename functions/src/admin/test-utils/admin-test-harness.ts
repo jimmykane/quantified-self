@@ -257,6 +257,7 @@ vi.mock('../../config', () => ({
             routeSyncQueue: 'processRouteSyncTask',
             sleepSyncQueue: 'processSleepSyncTask',
             garminHealthBackfillQueue: 'processGarminHealthBackfillTask',
+            connectionHistoryQueue: 'processConnectionHistoryTask',
             sportsLibReparseQueue: 'processSportsLibReparseTask',
             sportsLibReparseHeavyQueue: 'processSportsLibReparseHeavyTask',
             sportsLibRouteReparseQueue: 'processSportsLibRouteReparseTask',

@@ -1,3 +1,4 @@
+import { withHistoryQueueExecution } from '../connection-history/execution';
 import * as admin from 'firebase-admin';
 import * as crypto from 'crypto';
 import * as logger from 'firebase-functions/logger';
@@ -196,6 +197,7 @@ interface COROSWriteLifecycleGuards {
 }
 
 interface AddSleepSyncQueueItemInput {
+    connectionHistoryRunId?: string;
     type: SleepSyncQueueItemType;
     provider: SleepProvider;
     providerUserId: string;
@@ -504,6 +506,7 @@ function parseGarminPingBatchCallbackURLs(
 function compactQueuePayload(input: AddSleepSyncQueueItemInput): Partial<SleepSyncQueueItemInterface> {
     const payload: Partial<SleepSyncQueueItemInterface> = {
         type: input.type,
+        connectionHistoryRunId: input.connectionHistoryRunId,
         provider: input.provider,
         providerUserId: input.providerUserId,
         userID: input.userID,
@@ -2221,6 +2224,9 @@ async function dispatchHealthContinuation(
 }
 
 export async function processSleepSyncQueueItem(queueItem: SleepSyncQueueItemInterface): Promise<QueueResult> {
+    return withHistoryQueueExecution(queueItem, () => processHistoryGuardedSleepQueueItem(queueItem));
+}
+async function processHistoryGuardedSleepQueueItem(queueItem: SleepSyncQueueItemInterface): Promise<QueueResult> {
     logger.info(`[SleepSync] Processing queue item ${queueItem.id}`);
     const processingStartedAtMs = Date.now();
     // Lease fields read from Firestore belong to whichever invocation claimed

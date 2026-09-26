@@ -1,3 +1,5 @@
+import { isConnectionHistoryAdmissionEnabled } from './connection-history/admission';
+import { CONNECTION_HISTORY_COLLECTION, OAUTH_HISTORY_FIELD, OAUTH_HISTORY_RANGE_FIELD, createHistoryRun, historyProjection, type HistoryConnectionContext } from './connection-history/model';
 import * as admin from 'firebase-admin';
 import * as crypto from 'crypto';
 import { FieldValue } from 'firebase-admin/firestore';
@@ -501,6 +503,7 @@ async function setServiceMetaIfUserActive(
   expectedTokenCredentialGeneration?: DocumentGenerationGuard,
   expectedOAuthFlowGeneration?: DocumentGenerationGuard,
   requireNoPendingDisconnect = false,
+  stageHistory?: (transaction: admin.firestore.Transaction) => void,
 ): Promise<boolean> {
   const db = admin.firestore();
   const ref = serviceMetaRef(db, userID, serviceName);
@@ -555,10 +558,13 @@ async function setServiceMetaIfUserActive(
     }
 
     transaction.set(ref, payload, { merge: true });
+    stageHistory?.(transaction);
     if (expectedOAuthFlowGeneration) {
       transaction.set(expectedOAuthFlowGeneration.documentRef, {
         [expectedOAuthFlowGeneration.fieldName]: FieldValue.delete(),
         [OAUTH_FLOW_CREATED_AT_FIELD]: FieldValue.delete(),
+        [OAUTH_HISTORY_FIELD]: FieldValue.delete(),
+        [OAUTH_HISTORY_RANGE_FIELD]: FieldValue.delete(),
         [OAUTH_FLOW_EXPIRES_AT_FIELD]: FieldValue.delete(),
       }, { merge: true });
     }
@@ -1209,14 +1215,20 @@ export async function markServiceConnected(
   providerUserId?: string | null,
   expectedTokenCredentialGeneration?: DocumentGenerationGuard,
   expectedOAuthFlowGeneration?: DocumentGenerationGuard,
+  historyContext?: HistoryConnectionContext,
 ): Promise<boolean> {
   const normalizedProviderUserId = `${providerUserId || ''}`.trim();
   const healthProvider = healthProviderForService(serviceName);
   const connectionStateGeneration = crypto.randomUUID();
   const nowMs = Date.now();
+  const historyRun = historyContext?.requested && isConnectionHistoryAdmissionEnabled()
+    ? createHistoryRun(userID, serviceName, historyContext, connectionStateGeneration, nowMs) : null;
   const didWrite = await setServiceMetaIfUserActive(userID, serviceName, {
     connectionState: SERVICE_CONNECTION_STATES.Connected,
     connectionStateGeneration,
+    connectionHistoryReservation: FieldValue.delete(),
+    connectionHistoryReservationExpiresAt: FieldValue.delete(),
+    connectionHistoryImport: historyRun ? historyProjection(historyRun) : FieldValue.delete(),
     ...(healthProvider
       ? healthLifecycleProjectionMarker(connectionStateGeneration, nowMs)
       : {}),
@@ -1259,7 +1271,13 @@ export async function markServiceConnected(
     providerBindingCheckLeaseId: FieldValue.delete(),
     providerBindingCheckLeaseExpiresAt: FieldValue.delete(),
     providerBindingCheckNextRetryAt: FieldValue.delete(),
-  }, expectedTokenCredentialGeneration, expectedOAuthFlowGeneration, !!expectedOAuthFlowGeneration);
+  }, expectedTokenCredentialGeneration, expectedOAuthFlowGeneration, !!expectedOAuthFlowGeneration,
+    transaction => {
+      if (historyRun) transaction.create(admin.firestore().collection(CONNECTION_HISTORY_COLLECTION).doc(historyRun.id), historyRun);
+      if (healthProvider && historyRun) transaction.set(admin.firestore().collection('users').doc(userID).collection('sleepSyncState').doc(healthProvider), {
+        connectionHistoryReservation: FieldValue.delete(), connectionHistoryReservationExpiresAt: FieldValue.delete(),
+      }, { merge: true });
+    });
   if (!didWrite) {
     return didWrite;
   }

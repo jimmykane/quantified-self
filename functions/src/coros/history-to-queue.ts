@@ -6,7 +6,7 @@ import * as admin from 'firebase-admin';
 import { hasProAccess, PRO_REQUIRED_MESSAGE } from '../utils';
 import { SERVICE_NAME } from './constants';
 import { COROS_HISTORY_IMPORT_LIMIT_MONTHS } from '../../../shared/history-import.constants';
-import { HistoryImportResult, addHistoryToQueue, getNextAllowedHistoryImportDate } from '../history';
+import { HistoryImportResult, withActivityHistoryImportReservation, getNextAllowedHistoryImportDate } from '../history';
 import { FUNCTIONS_MANIFEST } from '../../../shared/functions-manifest';
 import { FUNCTION_SECRET_BINDINGS } from '../secrets';
 import { getActiveCOROSTokenSnapshot } from './account';
@@ -155,44 +155,45 @@ export const addCOROSAPIHistoryToQueue = functions
       throw toHistoryCallableError(error);
     }
 
-    for (let i = 0; i < dateWindows.length; i++) {
-      const { startDate: batchStartDate, endDate: batchEndDate } = dateWindows[i];
+    return withActivityHistoryImportReservation(userID, SERVICE_NAME, async importWindow => {
+      for (let i = 0; i < dateWindows.length; i++) {
+        const { startDate: batchStartDate, endDate: batchEndDate } = dateWindows[i];
 
-      try {
-        await assertCOROSHistoryAllowed(userID, 'before_provider_request');
-        const stats = await addHistoryToQueue(userID, SERVICE_NAME, batchStartDate, batchEndDate, {
-          expectedProviderUserId,
-          cumulativeMetadata: {
-            startDate,
-            endDate: batchEndDate,
-            processedActivitiesCountOffset: totalStats.successCount,
-          },
-        });
+        try {
+          await assertCOROSHistoryAllowed(userID, 'before_provider_request');
+          const stats = await importWindow(batchStartDate, batchEndDate, {
+            expectedProviderUserId,
+            cumulativeMetadata: {
+              startDate,
+              endDate: batchEndDate,
+              processedActivitiesCountOffset: totalStats.successCount,
+            },
+          });
 
-        totalStats.successCount += stats.successCount;
-        totalStats.failureCount += stats.failureCount;
-        totalStats.processedBatches += stats.processedBatches;
-        totalStats.failedBatches += stats.failedBatches;
+          totalStats.successCount += stats.successCount;
+          totalStats.failureCount += stats.failureCount;
+          totalStats.processedBatches += stats.processedBatches;
+          totalStats.failedBatches += stats.failedBatches;
 
-        if (stats.successCount === 0 && stats.failureCount > 0) {
-          throw new Error(`Failed to import all ${stats.failureCount} items in batch.`);
+          if (stats.successCount === 0 && stats.failureCount > 0) {
+            throw new Error(`Failed to import all ${stats.failureCount} items in batch.`);
+          }
+
+          if (stats.failureCount > 0) {
+            logger.warn(`Partial import success in batch: ${stats.successCount} imported, ${stats.failureCount} failed.`);
+          }
+        } catch (e: any) {
+          logger.error('[COROSHistoryImport] Failed to queue a history window.', {
+            userID,
+            providerUserId: expectedProviderUserId,
+            batchIndex: i,
+            errorName: e instanceof Error ? e.name : typeof e,
+            code: e?.code,
+            statusCode: Number.isFinite(Number(e?.statusCode)) ? Number(e.statusCode) : undefined,
+          });
+          throw toHistoryCallableError(e);
         }
-
-        if (stats.failureCount > 0) {
-          logger.warn(`Partial import success in batch: ${stats.successCount} imported, ${stats.failureCount} failed.`);
-        }
-      } catch (e: any) {
-        logger.error('[COROSHistoryImport] Failed to queue a history window.', {
-          userID,
-          providerUserId: expectedProviderUserId,
-          batchIndex: i,
-          errorName: e instanceof Error ? e.name : typeof e,
-          code: e?.code,
-          statusCode: Number.isFinite(Number(e?.statusCode)) ? Number(e.statusCode) : undefined,
-        });
-        throw toHistoryCallableError(e);
       }
-    }
-
-    return { result: 'History items added to queue', stats: totalStats };
+      return { result: 'History items added to queue', stats: totalStats };
+    });
   });

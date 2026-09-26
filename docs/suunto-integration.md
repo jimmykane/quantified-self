@@ -140,3 +140,11 @@ Production operations:
 7. Monitor queue age/retries, malformed per-user bindings, opaque error categories, Health sync timestamps, validation rejects, provider rate-limit responses, Firestore read volume, worker duration, and transaction aborts. After a Health-writer batching release, verify that record-level completion logs and cumulative queue counts remain aligned. Use the kill switch for rollback; do not delete accepted queue or Health data.
 
 The bounded writer needs no schema, index, Rules, or data migration; rolling the Functions revision back restores the one-record transaction path while leaving accepted records and queue cursors valid. Emergency rollback sets `SUUNTO_HEALTH_SYNC_ENABLED` to false and deploys the affected Functions. New schedules and webhooks then stop Health work, already queued Health rows are acknowledged as provider-disabled without calling Suunto, and the availability callable makes the History Import UI sleep-only even when an older Health sync-state document remains. Existing imported Health data remains until account deletion; Sleep continues independently.
+
+## Optional history on connection
+
+Connections offers **Import history from this service**, selected by default for eligible Pro connections and reconnections, with **30 days** selected initially. Users can choose 90 days, 1 year, 2 years, or all history Suunto makes available. Clearing the checkbox connects without starting history. The server accepts a durable run only after successful authorization; users can keep using the app or close the page. Progress and recoverable retries appear on Connections, independently of connection status. Existing cooldowns and permissions apply, and no automatic import continues earlier than the selected boundary.
+
+Suunto imports activities, Sleep and supported 24/7 Health through the existing queues. Automatic activity admission uses the same Firebase-owner-scoped identity as live webhooks and binds only the newly authorized account.
+
+See [connection history import](connection-history-import.md) for the shared architecture, capability-registration requirements and backend-first release order. Manual History Import retains its existing range and response contract.
