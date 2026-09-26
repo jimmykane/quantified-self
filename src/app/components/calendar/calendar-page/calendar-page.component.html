@@ -1,39 +1,44 @@
 <main class="calendar-page qs-workspace-page" [class.calendar-page--day]="isDayRoute" aria-labelledby="calendar-page-title">
-  <app-page-header class="calendar-page-header" [title]="isDayRoute ? 'Day' : 'Calendar'" titleId="calendar-page-title"
-    [variant]="isDayRoute ? 'compact' : 'route'"
-    [leadingIcon]="isDayRoute ? 'today' : 'calendar_month'">
-    <app-timeline-notes-workspace pageHeaderActions [visibleRange]="timelineNoteRange()"></app-timeline-notes-workspace>
-    @if (isDayRoute) {
-    <a pageHeaderActions class="calendar-day-back--desktop" mat-button appHapticTap [routerLink]="['/calendar']" [queryParams]="calendarBackQuery()">
-      <mat-icon aria-hidden="true">calendar_month</mat-icon>Calendar
-    </a>
-    } @else {
-    <mat-button-toggle-group pageHeaderActions class="calendar-view-toggle" aria-label="Calendar view"
-      hideSingleSelectionIndicator [value]="routeState().view"
-      (change)="selectView($event.value)">
-      @for (option of viewOptions; track option.value) {
-      <mat-button-toggle [value]="option.value">
-        <span class="calendar-view-option">
-          <mat-icon aria-hidden="true">{{ option.icon }}</mat-icon>
-          <span>{{ option.label }}</span>
-        </span>
-      </mat-button-toggle>
-      }
-    </mat-button-toggle-group>
-    }
-  </app-page-header>
+  @if (isDayRoute) {
+    <header class="calendar-day-toolbar">
+      <a class="calendar-day-back" mat-button appHapticTap [routerLink]="['/calendar']" [queryParams]="calendarBackQuery()"
+        aria-label="Back to calendar for this day">
+        <mat-icon aria-hidden="true">arrow_back</mat-icon>Calendar
+      </a>
+      <app-timeline-notes-workspace [visibleRange]="timelineNoteRange()"></app-timeline-notes-workspace>
+    </header>
+  } @else {
+    <app-page-header class="calendar-page-header" title="Calendar" titleId="calendar-page-title" variant="route"
+      leadingIcon="calendar_month">
+      <app-timeline-notes-workspace pageHeaderActions [visibleRange]="timelineNoteRange()"></app-timeline-notes-workspace>
+      <mat-button-toggle-group pageHeaderActions class="calendar-view-toggle" aria-label="Calendar view"
+        hideSingleSelectionIndicator [value]="routeState().view"
+        (change)="selectView($event.value)">
+        @for (option of viewOptions; track option.value) {
+        <mat-button-toggle [value]="option.value">
+          <span class="calendar-view-option">
+            <mat-icon aria-hidden="true">{{ option.icon }}</mat-icon>
+            <span>{{ option.label }}</span>
+          </span>
+        </mat-button-toggle>
+        }
+      </mat-button-toggle-group>
+    </app-page-header>
+  }
 
   <nav class="calendar-period-navigation" [attr.aria-label]="isDayRoute ? 'Day navigation' : 'Calendar period navigation'">
     <button mat-icon-button type="button" appHapticTap [matTooltip]="isDayRoute ? 'Previous day' : 'Previous ' + routeState().view"
       [attr.aria-label]="isDayRoute ? 'Previous day' : 'Previous ' + routeState().view" (click)="navigatePeriod(-1)">
       <mat-icon>chevron_left</mat-icon>
     </button>
-    <h2 aria-live="polite" [attr.aria-label]="isDayRoute ? dayTitle() : null">
-      @if (isDayRoute) {
+    @if (isDayRoute) {
+      <h1 id="calendar-page-title" aria-live="polite" [attr.aria-label]="dayTitle()">
         <span class="calendar-day-date--desktop">{{ dayTitle() }}</span>
         <span class="calendar-day-date--mobile">{{ dayShortTitle() }}</span>
-      } @else { {{ calendarModel().periodLabel }} }
-    </h2>
+      </h1>
+    } @else {
+      <h2 aria-live="polite">{{ calendarModel().periodLabel }}</h2>
+    }
     <button class="calendar-today-button--desktop" mat-stroked-button type="button" appHapticTap
       (click)="goToToday()">
       <mat-icon aria-hidden="true">today</mat-icon>
@@ -43,12 +48,6 @@
       aria-label="Go to today" (click)="goToToday()">
       <mat-icon aria-hidden="true">today</mat-icon>
     </button>
-    @if (isDayRoute) {
-      <a class="calendar-day-back--mobile" mat-icon-button appHapticTap [routerLink]="['/calendar']"
-        [queryParams]="calendarBackQuery()" aria-label="Back to calendar for this day" matTooltip="Calendar">
-        <mat-icon aria-hidden="true">calendar_month</mat-icon>
-      </a>
-    }
     <button mat-icon-button type="button" appHapticTap [matTooltip]="isDayRoute ? 'Next day' : 'Next ' + routeState().view"
       [attr.aria-label]="isDayRoute ? 'Next day' : 'Next ' + routeState().view" (click)="navigatePeriod(1)">
       <mat-icon>chevron_right</mat-icon>

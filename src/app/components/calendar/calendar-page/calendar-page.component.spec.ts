@@ -165,8 +165,13 @@ describe('CalendarPageComponent', () => {
     routeParams.next(activatedRoute.snapshot.paramMap);
     const fixture = TestBed.createComponent(CalendarPageComponent);
     fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
-    expect(fixture.nativeElement.querySelector('#calendar-page-title')?.textContent).toContain('Day');
-    expect(fixture.nativeElement.querySelector('.qs-page-header--compact')).toBeTruthy();
+    expect(fixture.nativeElement.querySelector('h1#calendar-page-title')?.textContent).toContain('Aug');
+    expect(fixture.nativeElement.querySelector('.calendar-page-header')).toBeNull();
+    expect(fixture.nativeElement.querySelector('.calendar-day-toolbar a')?.getAttribute('href'))
+      .toBe('/calendar?view=month&date=2026-08-03');
+    expect(fixture.nativeElement.querySelector('.calendar-day-toolbar a')?.getAttribute('aria-label'))
+      .toBe('Back to calendar for this day');
+    expect(fixture.nativeElement.querySelector('.calendar-day-toolbar app-timeline-notes-workspace')).toBeTruthy();
     expect(fixture.componentInstance.dayShortTitle()).toContain('Aug');
     expect(fixture.nativeElement.querySelector('.activity-calendar-day-button')).toBeNull();
     expect(fixture.nativeElement.querySelector('app-calendar-day-context')).toBeTruthy();
