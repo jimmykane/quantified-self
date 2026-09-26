@@ -6,6 +6,8 @@ import type { DeliveryRuntime } from '../training-plans/delivery/contracts';
 import { FakeTrainingTransport } from '../training-plans/delivery/test-support/fake-transport';
 import { SuuntoHttpFixture } from '../training-plans/delivery/test-support/suunto-http-fixture';
 import { SuuntoGuideTransport } from '../training-plans/delivery/suunto/transport';
+import { WahooHttpFixture } from '../training-plans/delivery/test-support/wahoo-http-fixture';
+import { WahooTrainingTransport } from '../training-plans/delivery/wahoo/transport';
 import { reconcileTrainingDeliveryPage } from '../training-plans/delivery/store';
 import { processTrainingDelivery } from '../training-plans/delivery/worker';
 import { parseStrengthWorkoutDetailsV1 } from '../../../shared/strength-workout';
@@ -377,6 +379,39 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Training MCP write propos
     expect((await user.collection('trainingDeliveryStatuses').doc(ledger.id).get()).get('status')).toBe('delivered');
     expect(applied.providers).toEqual([expect.objectContaining({ provider: 'suunto', status: 'applied' })]);
     expect(suunto.calls.filter(call => call.method === 'POST')).toHaveLength(1);
+  });
+
+  it('discloses Wahoo target limitations in the first proposal and delivers after one approval', async () => {
+    const wahoo = new WahooHttpFixture();
+    const wahooTransport = new WahooTrainingTransport(wahoo.request, deps.now);
+    deps.runtime.transport = provider => provider === 'wahoo' ? wahooTransport : null;
+    const preview = await previewCreatePlannedWorkout({ uid, connectionId: 'connection', scopes,
+      arguments: { expectedScheduleRevision: 1, localDate: '2026-09-18', title: 'Threshold ride',
+        structure: { ...structure, sport: ActivityTypes.Cycling, nodes: [{ ...structure.nodes[0], targets: [{
+          kind: 'heart-rate', mode: 'relative', minimumPercent: 90, maximumPercent: 100,
+          reference: { kind: 'threshold-heart-rate', bpm: 170 },
+        }] }] },
+        delivery: { providers: ['wahoo'], timeZone: 'Europe/Helsinki' } } }, deps);
+    expect(preview.providerPreviews).toEqual([expect.objectContaining({ provider: 'wahoo', warningCount: 1,
+      summary: expect.stringContaining('not ELEMNT computers or RIVAL') })]);
+    expect(preview.providerPreviews[0].summary).toContain('Confirming this proposal approves');
+
+    const applied = await applyTrainingChanges({ uid, connectionId: 'connection', scopes,
+      arguments: { proposalRef: preview.proposalRef, permissionMode: 'combined' } }, deps);
+    expect(applied.providers).toEqual([expect.objectContaining({ provider: 'wahoo', status: 'applied',
+      message: expect.stringContaining('previewed mapping adjustment were approved') })]);
+    const user = db.collection('users').doc(uid);
+    const workout = (await user.collection('scheduledWorkouts').get()).docs[0];
+    expect((await user.collection('trainingDeliverySettings').doc(`workout_${workout.id}_wahoo`).get())
+      .get('approvedDigest')).toMatch(/^[a-f0-9]{64}$/);
+
+    for (let page = 0; page < 20 && await reconcileTrainingDeliveryPage(deps.runtime, uid); page += 1) { /* drain */ }
+    const ledger = (await user.collection('trainingDeliveryLedger').get()).docs[0];
+    await processTrainingDelivery(deps.runtime, uid, ledger.id);
+    expect((await user.collection('trainingDeliveryStatuses').doc(ledger.id).get()).get('status')).toBe('delivered');
+    expect(wahoo.plans.size).toBe(1);
+    expect(wahoo.workouts.size).toBe(1);
+    expect(wahoo.calls.filter(call => call.method === 'POST')).toHaveLength(2);
   });
 
   it('blocks a degraded Send when the mapping changes after its preview', async () => {
