@@ -344,6 +344,8 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
   public kpiLaneTiles: DashboardChartTileViewModel[] = [];
   public mainGridTiles: DashboardTileViewModel[] = [];
   public mainGridSections: DashboardTileSectionViewModel[] = [];
+  public calendarGridSection: DashboardTileSectionViewModel | null = null;
+  public otherGridSections: DashboardTileSectionViewModel[] = [];
 
   public tileTypes = TileTypes;
   public readonly isDashboardActivityCalendarChartType = isDashboardActivityCalendarChartType;
@@ -2326,6 +2328,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
         };
       })
       .filter(section => section.tiles.length > 0);
+    this.splitCalendarSection();
   }
 
   private refreshMainGridSectionLayout(): void {
@@ -2340,6 +2343,12 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
         trailingPlaceholders: this.buildMainGridTrailingPlaceholders(sectionCells, sectionColumns),
       };
     });
+    this.splitCalendarSection();
+  }
+
+  private splitCalendarSection(): void {
+    this.calendarGridSection = this.mainGridSections.find(section => section.id === 'calendar') || null;
+    this.otherGridSections = this.mainGridSections.filter(section => section.id !== 'calendar');
   }
 
   private buildMainGridSectionCells(

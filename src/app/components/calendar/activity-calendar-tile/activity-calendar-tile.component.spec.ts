@@ -94,7 +94,8 @@ describe('ActivityCalendarTileComponent', () => {
     expect(fixture.nativeElement.querySelector('.activity-calendar-day--selected')).toBeTruthy();
     expect(fixture.nativeElement.querySelector('app-calendar-day-context')).toBeTruthy();
     expect(fixture.nativeElement.querySelector('.activity-calendar--dashboard-context')).toBeTruthy();
-    expect(fixture.nativeElement.querySelector('.activity-calendar-tile-header span')).toBeNull();
+    expect(fixture.nativeElement.querySelector('.activity-calendar-tile-header')).toBeNull();
+    expect(fixture.nativeElement.querySelector('.activity-calendar-tile')?.getAttribute('aria-label')).toBe('Calendar');
     expect(fixture.nativeElement.querySelector('.activity-calendar-tile-navigation > span')?.textContent.trim())
       .toBe(fixture.componentInstance.calendarModel().periodLabel);
     const fullDayLink = fixture.nativeElement.querySelector('a[aria-label="Open selected day page"]');

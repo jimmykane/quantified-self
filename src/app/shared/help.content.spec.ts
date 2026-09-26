@@ -515,7 +515,7 @@ describe('help.content', () => {
     expect(gettingStartedSection?.content).toContain('Routes** map tiles show recent saved routes from lightweight route previews');
     expect(gettingStartedSection?.content).toContain('derived tiles stay independent from event table filters and custom/map tile filters');
     expect(gettingStartedSection?.content).toContain('New dashboards start with **Today**');
-    expect(gettingStartedSection?.content).toContain('full-width dashboard tile');
+    expect(gettingStartedSection?.content).toContain('full-width dashboard section');
     expect(gettingStartedSection?.content).toContain('intentionally empty dashboards stay as you left them');
     expect(gettingStartedSection?.content).toContain('Open **Training** or **Health** from the main navigation');
     expect(gettingStartedSection?.content).toContain('Select its calendar icon to open a mini calendar for the current month');
@@ -536,11 +536,12 @@ describe('help.content', () => {
     expect(gettingStartedSection?.content).toContain('**Aerobic Capacity**');
     expect(gettingStartedSection?.content).toContain('**Aerobic Durability**');
     expect(gettingStartedSection?.content).toContain('current **Readiness**');
-    expect(gettingStartedSection?.content).toContain('groups chart and map tiles by intent');
+    expect(gettingStartedSection?.content).toContain('KPIs and charts grouped by intent');
+    expect(gettingStartedSection?.content).toContain('**Calendar** after Today, then KPIs');
     expect(gettingStartedSection?.content).toContain('**Training State**, **Health**, **Performance & Power**, **Activity Overview**, and **Routes & Maps**');
     expect(gettingStartedSection?.content).toContain('All custom charts belong in **Activity Overview**');
     expect(gettingStartedSection?.content).toContain('chart-aware default sizes');
-    expect(gettingStartedSection?.content).toContain('Empty editable dashboards show lightweight section guidance');
+    expect(gettingStartedSection?.content).toContain('Empty sections stay hidden');
     expect(gettingStartedSection?.content).toContain('**Cycling Power Curve** and **Running Power Curve** are curated derived snapshots');
     expect(gettingStartedSection?.content).toContain('defaults to **1y**');
     expect(gettingStartedSection?.content).toContain('latest activity or a saved recent-best comparison window');
@@ -552,11 +553,11 @@ describe('help.content', () => {
 
     expect(calendarSection?.content).toContain('**Week**, **Month**, and **Year** views');
     expect(calendarSection?.content).toContain('same sleep-stage breakdown used in Health');
-    expect(calendarSection?.content).toContain('full-width **Activity Calendar** tile');
+    expect(calendarSection?.content).toContain('full-width **Calendar** section');
     expect(calendarSection?.content).toContain('**Today** card opens a month calendar in a bottom sheet');
     expect(calendarSection?.content).toContain('Dashboard and Training headers also link to the full [Calendar](/calendar)');
-    expect(calendarSection?.content).toContain('Other tiles stay in place, and any later resize you make is kept');
-    expect(calendarSection?.content).toContain('out of suggestions until you add it again manually');
+    expect(calendarSection?.content).toContain('without changing their saved settings');
+    expect(calendarSection?.content).toContain('out of suggestions until you add it manually');
     expect(calendarSection?.content).toContain('place multiple circles concentrically around the same center');
     expect(calendarSection?.content).toContain('size reflects recorded duration');
     expect(calendarSection?.content).toContain('Completed totals and activity-group bars appear above individual activities');

@@ -131,6 +131,7 @@ app-activity-calendar-grid {
   app-calendar-day-context { box-sizing: border-box; min-width: 0; min-height: 0; height: 100%; overflow: hidden; padding: 0 8px 0 16px; border-left: 1px solid var(--mat-sys-outline-variant); }
 }
 @container (max-width: 900px) {
+  :host(.activity-calendar-tile--day-context) .activity-calendar-tile-navigation { padding-inline: 40px; }
   :host(.activity-calendar-tile--day-context) .activity-calendar-day-layout { height: auto; grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(0, 240px); }
   :host(.activity-calendar-tile--day-context) .activity-calendar-month-pane { height: auto; }
   :host(.activity-calendar-tile--day-context) app-activity-calendar-grid { min-height: 0; flex: 0 0 auto; overflow: visible; }

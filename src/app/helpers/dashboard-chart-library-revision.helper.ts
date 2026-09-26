@@ -12,7 +12,7 @@ export function dashboardChartLibraryRevision(value: unknown): number {
 }
 
 export function newDashboardChartLibrarySeen(): DashboardChartLibrarySeen {
-  return Object.fromEntries(['kpi', 'section:trainingState', 'section:health', 'section:performancePower', 'section:activityOverview', 'section:routesMaps']
+  return Object.fromEntries(['section:calendar', 'kpi', 'section:trainingState', 'section:health', 'section:performancePower', 'section:activityOverview', 'section:routesMaps']
     .map(lane => [lane, DASHBOARD_CHART_LIBRARY_CURRENT_REVISION]));
 }
 

@@ -529,7 +529,7 @@ describe('SummariesComponent', () => {
     expect(component).toBeTruthy();
   });
 
-  it('marks only the Activity Calendar board for the mobile calendar row height', () => {
+  it('marks only the dedicated Calendar board for the mobile calendar row height', () => {
     const activityCalendarTile = {
       type: TileTypes.Chart,
       order: 0,
@@ -557,20 +557,58 @@ describe('SummariesComponent', () => {
 
     fixture.detectChanges();
 
-    const activitySection = component.mainGridSections.find(section => section.id === 'activityOverview');
+    const calendarSection = component.mainGridSections.find(section => section.id === 'calendar');
     const routesSection = component.mainGridSections.find(section => section.id === 'routesMaps');
     const nativeElement = fixture.nativeElement as HTMLElement;
-    const activityBoard = nativeElement.querySelector(
-      '[aria-labelledby="dashboard-section-activityOverview"] app-dashboard-tile-board',
+    const calendarBoard = nativeElement.querySelector(
+      '[aria-labelledby="dashboard-section-calendar"] app-dashboard-tile-board',
     );
     const routesBoard = nativeElement.querySelector(
       '[aria-labelledby="dashboard-section-routesMaps"] app-dashboard-tile-board',
     );
 
-    expect(activitySection?.hasActivityCalendar).toBe(true);
+    expect(calendarSection?.hasActivityCalendar).toBe(true);
     expect(routesSection?.hasActivityCalendar).toBe(false);
-    expect(activityBoard?.classList.contains('dashboard-tile-board--activity-calendar')).toBe(true);
+    expect(calendarBoard?.classList.contains('dashboard-tile-board--activity-calendar')).toBe(true);
     expect(routesBoard?.classList.contains('dashboard-tile-board--activity-calendar')).toBe(false);
+  });
+
+  it('places Calendar after Today and before KPIs, with a route action instead of Add chart', () => {
+    const calendar = {
+      type: TileTypes.Chart, order: 2, chartType: DASHBOARD_ACTIVITY_CALENDAR_CHART_TYPE,
+      size: { columns: 4, rows: 1 }, data: [],
+    } as any;
+    const kpi = {
+      type: TileTypes.Chart, order: 0, chartType: DASHBOARD_ACWR_KPI_CHART_TYPE,
+      size: { columns: 1, rows: 1 }, data: [],
+    } as any;
+    const activity = {
+      type: TileTypes.Chart, order: 1, chartType: ChartTypes.ColumnsVertical,
+      dataType: DataDuration.type, size: { columns: 1, rows: 1 }, data: [],
+    } as any;
+    component.user = { uid: 'owner-user', settings: { dashboardSettings: { tiles: [kpi, activity, calendar] } } } as any;
+    component.showActions = true;
+    component.tiles = [kpi, activity, calendar];
+    (component as any).refreshTileLanes();
+    fixture.detectChanges();
+
+    const root = fixture.nativeElement as HTMLElement;
+    const children = Array.from(root.querySelector('.pie')!.children);
+    const todayIndex = children.findIndex(child => child.classList.contains('dashboard-current-state-row'));
+    const calendarIndex = children.findIndex(child => child.classList.contains('dashboard-calendar-section'));
+    const kpiIndex = children.findIndex(child => child.classList.contains('dashboard-kpi-section'));
+    expect(todayIndex).toBeLessThan(calendarIndex);
+    expect(calendarIndex).toBeLessThan(kpiIndex);
+    const calendarSection = root.querySelector('[aria-labelledby="dashboard-section-calendar"]');
+    expect(calendarSection?.querySelector('h2')?.textContent?.trim()).toBe('Calendar');
+    expect(calendarSection?.querySelector('a[routerLink="/calendar"]')?.textContent).toContain('Open calendar');
+    expect(calendarSection?.querySelector('app-dashboard-chart-library')).toBeNull();
+
+    component.user.settings.dashboardSettings.tiles = [kpi, activity];
+    component.tiles = [kpi, activity];
+    (component as any).refreshTileLanes();
+    fixture.detectChanges();
+    expect(root.querySelector('.dashboard-calendar-section')).toBeNull();
   });
 
   it('migrates an owner calendar once and preserves a later manual resize', async () => {

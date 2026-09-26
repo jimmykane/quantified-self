@@ -188,6 +188,11 @@
       </div>
     </section>
   }
+  @if (calendarGridSection; as calendarSection) {
+    <div class="dashboard-main-sections dashboard-calendar-section">
+      <ng-container [ngTemplateOutlet]="dashboardSection" [ngTemplateOutletContext]="{ $implicit: calendarSection }" />
+    </div>
+  }
   @if (kpiLaneTiles.length) {
   <section class="dashboard-kpi-section" aria-label="KPIs">
     @if (showActions && isOwnerDashboard) {
@@ -260,9 +265,17 @@
     }
   </section>
   }
-  @if (mainGridSections.length) {
+  @if (otherGridSections.length) {
   <div class="dashboard-main-sections">
-    @for (section of mainGridSections; track trackBySection($index, section)) {
+    @for (section of otherGridSections; track trackBySection($index, section)) {
+      <ng-container [ngTemplateOutlet]="dashboardSection" [ngTemplateOutletContext]="{ $implicit: section }" />
+    }
+  </div>
+  }
+</section>
+}
+
+<ng-template #dashboardSection let-section>
     <section class="dashboard-main-section" [attr.aria-labelledby]="'dashboard-section-' + section.id">
       <div class="dashboard-section-header dashboard-main-section-header">
         <div class="dashboard-section-title-block">
@@ -271,7 +284,15 @@
             <h2 [id]="'dashboard-section-' + section.id">{{ section.label }}</h2>
           </div>
         </div>
-      @if (showActions && isOwnerDashboard) { <ng-container [ngTemplateOutlet]="sectionAddAction" [ngTemplateOutletContext]="{ lane: 'section:' + section.id }" /> }
+      @if (section.id === 'calendar') {
+        @if (showActions && isOwnerDashboard) {
+          <a mat-button appHapticTap routerLink="/calendar" aria-label="Open calendar">
+            Open calendar<mat-icon iconPositionEnd aria-hidden="true">arrow_forward</mat-icon>
+          </a>
+        }
+      } @else if (showActions && isOwnerDashboard) {
+        <ng-container [ngTemplateOutlet]="sectionAddAction" [ngTemplateOutletContext]="{ lane: 'section:' + section.id }" />
+      }
       </div>
       @if (section.tiles.length) {
       <app-dashboard-tile-board
@@ -368,11 +389,7 @@
       </app-dashboard-tile-board>
       }
     </section>
-    }
-  </div>
-  }
-</section>
-}
+</ng-template>
 
 <ng-template #sectionAddAction let-lane="lane">
   @if (dashboardPicker(); as picker) {

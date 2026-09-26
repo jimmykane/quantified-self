@@ -89,7 +89,7 @@ describe('dashboard-manager-presets.helper', () => {
     });
 
     expect(tile).toMatchObject({
-      name: 'Activity calendar',
+      name: 'Calendar',
       type: TileTypes.Chart,
       order: 4,
       size: { columns: 2, rows: 2 },

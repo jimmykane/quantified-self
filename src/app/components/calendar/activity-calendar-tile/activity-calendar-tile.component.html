@@ -1,7 +1,7 @@
 <section class="activity-calendar-tile"
-  [attr.aria-labelledby]="showHeading() ? 'activity-calendar-tile-title' : null"
-  [attr.aria-label]="showHeading() ? null : 'Activity calendar'">
-  @if (showHeading()) {
+  [attr.aria-labelledby]="showHeading() && !dayContextEnabled() ? 'activity-calendar-tile-title' : null"
+  [attr.aria-label]="showHeading() && !dayContextEnabled() ? null : 'Calendar'">
+  @if (showHeading() && !dayContextEnabled()) {
   <header class="activity-calendar-tile-header">
     <div>
       <h2 id="activity-calendar-tile-title">Activity calendar</h2>

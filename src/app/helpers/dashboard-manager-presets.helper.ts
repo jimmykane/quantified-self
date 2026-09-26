@@ -190,9 +190,9 @@ const DASHBOARD_MANAGER_PRESET_DEFINITIONS: DashboardManagerPresetDefinition[] =
   {
     id: DASHBOARD_MANAGER_PRESET_IDS.CURATED_ACTIVITY_CALENDAR,
     introducedIn: 1,
-    label: 'Activity Calendar',
-    tileName: 'Activity calendar',
-    description: 'Daily activity time by sport group for the displayed month.',
+    label: 'Calendar',
+    tileName: 'Calendar',
+    description: 'Select a day to see its activities, health, notes, and planned workouts.',
     icon: 'calendar_month',
     category: 'curated',
     curatedChartType: DASHBOARD_ACTIVITY_CALENDAR_CHART_TYPE,
