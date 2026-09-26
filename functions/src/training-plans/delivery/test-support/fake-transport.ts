@@ -19,7 +19,9 @@ export class FakeTrainingTransport implements TrainingDeliveryTransport {
     return { level: this.level, issues: this.level === 'exact' ? [] : ['Test target mapping warning'], mappingVersion: this.mappingVersion,
       digest: createHash('sha256').update(JSON.stringify([workout.title, workout.localDate, workout.structure, destinationKey, timeZone, this.mappingVersion])).digest('hex') };
   }
-  canRemove(artifact: DeliveryArtifact, today: string): boolean { return !artifact.completed && artifact.localDate >= today; }
+  canRemove(artifact: DeliveryArtifact, today: string, allowPastRemoval = false): boolean {
+    return !artifact.completed && (artifact.localDate >= today || allowPastRemoval);
+  }
   async execute(operation: DeliveryOperation, checkpoint: DeliveryCheckpoint): Promise<DeliveryArtifact | null> {
     this.calls.push(operation);
     await this.beforeAccept?.();

@@ -1,53 +1,67 @@
 <section class="activity-calendar-tile"
-  [attr.aria-labelledby]="showHeading() ? 'activity-calendar-tile-title' : null"
-  [attr.aria-label]="showHeading() ? null : 'Activity calendar'">
-  @if (showHeading()) {
+  [attr.aria-labelledby]="showHeading() && !dayContextEnabled() ? 'activity-calendar-tile-title' : null"
+  [attr.aria-label]="showHeading() && !dayContextEnabled() ? null : 'Calendar'">
+  @if (showHeading() && !dayContextEnabled()) {
   <header class="activity-calendar-tile-header">
     <div>
       <h2 id="activity-calendar-tile-title">Activity calendar</h2>
-      <span>{{ calendarModel().periodLabel }}</span>
+      @if (!showNavigation() && !dayContextEnabled()) {
+        <span>{{ calendarModel().periodLabel }}</span>
+      }
     </div>
   </header>
   }
 
-  @if (showNavigation()) {
-  <nav class="activity-calendar-tile-navigation" aria-label="Calendar month navigation">
-    <button mat-icon-button type="button" appHapticTap matTooltip="Previous month" aria-label="Previous month"
-      (click)="navigateMonth(-1)">
-      <mat-icon aria-hidden="true">chevron_left</mat-icon>
-    </button>
-    <span aria-live="polite">{{ calendarModel().periodLabel }}</span>
-    <button mat-icon-button type="button" appHapticTap matTooltip="Next month" aria-label="Next month"
-      (click)="navigateMonth(1)">
-      <mat-icon aria-hidden="true">chevron_right</mat-icon>
-    </button>
-  </nav>
-  }
+  <div class="activity-calendar-day-layout">
+    <div class="activity-calendar-month-pane">
+      @if (showNavigation() || dayContextEnabled()) {
+        <nav class="activity-calendar-tile-navigation" aria-label="Calendar month navigation">
+          <button mat-icon-button type="button" appHapticTap matTooltip="Previous month" aria-label="Previous month"
+            (click)="navigateMonth(-1)">
+            <mat-icon aria-hidden="true">chevron_left</mat-icon>
+          </button>
+          <span aria-live="polite">{{ calendarModel().periodLabel }}</span>
+          <button mat-icon-button type="button" appHapticTap matTooltip="Next month" aria-label="Next month"
+            (click)="navigateMonth(1)">
+            <mat-icon aria-hidden="true">chevron_right</mat-icon>
+          </button>
+        </nav>
+      }
 
-  <div class="activity-calendar-tile-progress">
-    @if (isLoading()) {
-    <mat-progress-bar mode="indeterminate" aria-label="Loading calendar activities"></mat-progress-bar>
+      <div class="activity-calendar-tile-progress">
+        @if (isLoading()) {
+          <mat-progress-bar mode="indeterminate" aria-label="Loading calendar activities"></mat-progress-bar>
+        }
+      </div>
+
+      @if (hasError()) {
+        <div class="activity-calendar-tile-status activity-calendar-tile-status--error" role="alert">
+          <mat-icon aria-hidden="true">error_outline</mat-icon>
+          <span>Calendar unavailable</span>
+          <button mat-icon-button type="button" appHapticTap matTooltip="Retry" aria-label="Retry loading calendar" (click)="retry()">
+            <mat-icon>refresh</mat-icon>
+          </button>
+        </div>
+      }
+      <app-activity-calendar-grid
+        [model]="calendarModel()"
+        [selectedDateKey]="dayContextEnabled() ? selectedDay()?.dateKey ?? null : null"
+        [compact]="true"
+        [fillHeight]="fillHeight()"
+        [dashboardDayContext]="dayContextEnabled()"
+        [hideOutsideDays]="true"
+        [plannedWorkoutsByDate]="hasTrainingPlanningUIAccess() ? plannedWorkoutsByDate() : null"
+        [timelineNotesByDate]="notesByDate()"
+        (daySelected)="openDay($event)">
+      </app-activity-calendar-grid>
+    </div>
+    @if (dayContextEnabled() && selectedDayData(); as dayData) {
+      <app-calendar-day-context [data]="dayData" [showFullDayLink]="privateHealthEnabled()" [privateHealthEnabled]="privateHealthEnabled()"
+        [dashboardTile]="true"
+        [hideHealth]="selectedDay()?.isToday ?? false"
+        (noteSelected)="selectDayNote($event.id)"></app-calendar-day-context>
     }
   </div>
-
-  @if (hasError()) {
-  <div class="activity-calendar-tile-status activity-calendar-tile-status--error" role="alert">
-    <mat-icon aria-hidden="true">error_outline</mat-icon>
-    <span>Calendar unavailable</span>
-    <button mat-icon-button type="button" appHapticTap matTooltip="Retry" aria-label="Retry loading calendar" (click)="retry()">
-      <mat-icon>refresh</mat-icon>
-    </button>
-  </div>
-  }
-  <app-activity-calendar-grid
-    [model]="calendarModel()"
-    [compact]="true"
-    [fillHeight]="fillHeight()"
-    [hideOutsideDays]="true"
-    [plannedWorkoutsByDate]="hasTrainingPlanningUIAccess() ? plannedWorkoutsByDate() : null"
-    [timelineNotesByDate]="notesByDate()"
-    (daySelected)="openDay($event)">
-  </app-activity-calendar-grid>
   @if (eventState().status === 'ready' && !hasEvents()) {
   <div class="activity-calendar-tile-status" role="status">No completed activities this month</div>
   }

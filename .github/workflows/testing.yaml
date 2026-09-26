@@ -6,6 +6,8 @@ on:
       - develop
       - main
   pull_request:
+    branches:
+      - main
 
 jobs:
   run-tests:

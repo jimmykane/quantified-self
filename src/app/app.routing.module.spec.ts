@@ -170,8 +170,13 @@ describe('AppRoutingModule routes', () => {
 
   it('should keep the activity calendar authenticated and noindexed', () => {
     const calendarRoute = routes.find(route => route.path === 'calendar');
+    const dayRoute = routes.find(route => route.path === 'calendar/day/:date');
 
     expect(calendarRoute).toBeTruthy();
+    expect(dayRoute).toBeTruthy();
+    expect(dayRoute?.canMatch).toEqual([authGuard, onboardingGuard]);
+    expect(dayRoute?.data?.['calendarMode']).toBe('day');
+    expect(dayRoute?.data?.['robots']).toBe('noindex, follow');
     expect(calendarRoute?.canMatch).toEqual([authGuard, onboardingGuard]);
     expect(calendarRoute?.data?.['description']).toContain('Week, Month, and Year activity calendar');
     expect(calendarRoute?.data?.['description']).not.toMatch(/\bprivate\b/i);

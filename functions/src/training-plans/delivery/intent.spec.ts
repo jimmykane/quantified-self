@@ -11,7 +11,7 @@ const base: DeliveryContext = {
   setting: { schemaVersion: 1, scope: 'workout', scopeId: 'workout', provider: 'garmin', revision: 1, enabled: true,
     suppressed: false, timeZone: 'Europe/Helsinki', destinationKey: 'account-a', connectionEpoch: 0,
     scopeGeneration: 0, associationPlanId: null, approvedDigest: null, updatedAtMs: 1 },
-  override: null, scopeGeneration: 0, planActive: true, hasPro: true, nowMs: Date.parse('2026-09-10T10:00:00Z'),
+  override: null, scopeGeneration: 0, planActive: true, hasPro: true, nowMs: Date.parse('2026-09-10T10:00:00Z'), pastCleanup: null,
   connection: { state: 'connected', destinationKey: 'account-a', epoch: 0, generation: 'g1' }, transport: new FakeTrainingTransport(),
 };
 describe('delivery intent', () => {
@@ -60,6 +60,15 @@ describe('delivery intent', () => {
     transport.level = 'unsupported';
     expect(resolveDeliveryIntent(context).status).toBe('unsupported');
   });
+  it('keeps an earlier provider copy when the current workout becomes unsupported', () => {
+    const transport = new FakeTrainingTransport();
+    transport.level = 'unsupported';
+    const ledger = { connectionEpoch: 0, destinationKey: 'account-a',
+      actual: { ids: { workout: 'earlier-copy' }, localDate: '2026-09-10', completed: false } } as DeliveryLedgerV1;
+    expect(resolveDeliveryIntent({ ...base, transport, workout: { ...base.workout!, title: 'Unsupported edit' } }, ledger))
+      .toMatchObject({ desired: 'preserve', status: 'unsupported' });
+    expect(ledger.actual?.ids.workout).toBe('earlier-copy');
+  });
   it('does not rewrite completed or old remote copies, even if QS is moved forward', () => {
     const ledger = { actual: { ids: { workout: 'id' }, localDate: '2026-09-09', completed: false } } as DeliveryLedgerV1;
     expect(resolveDeliveryIntent(base, ledger).status).toBe('past');
@@ -81,5 +90,26 @@ describe('delivery intent', () => {
     expect(resolveDeliveryIntent(stopped, ledger).status).toBe('past');
     ledger.repair!.original.completed = true;
     expect(resolveDeliveryIntent(stopped, ledger).status).toBe('completed');
+  });
+  it('only withdraws an old uncompleted copy after explicit deletion opt-in', () => {
+    const ledger = { provider: 'garmin', connectionEpoch: 0, destinationKey: 'account-a',
+      actual: { ids: { workout: 'id' }, localDate: '2026-09-09', completed: false } } as DeliveryLedgerV1;
+    const stopped = { ...base, workout: { ...base.workout!, lifecycle: 'deleted' as const, deletedAtMs: 7 } };
+    expect(resolveDeliveryIntent(stopped, ledger)).toMatchObject({ desired: 'preserve', status: 'past' });
+    const authorized = { ...stopped, pastCleanup: { scope: 'workout' as const, scopeId: 'workout', mutationId: 'delete-1',
+      requestedAtMs: 7, deletedAtMs: 7 } };
+    expect(resolveDeliveryIntent(authorized, ledger)).toMatchObject({ desired: 'absent', status: 'stopped' });
+    ledger.actual!.completed = true;
+    expect(resolveDeliveryIntent(authorized, ledger)).toMatchObject({ desired: 'preserve', status: 'completed' });
+  });
+  it('reports COROS past deletion as unavailable even after opt-in', () => {
+    const transport = new FakeTrainingTransport();
+    transport.canRemove = (artifact, today) => !artifact.completed && artifact.localDate >= today;
+    const ledger = { provider: 'coros', actual: { ids: { workout: 'id' }, localDate: '2026-09-09', completed: false } } as DeliveryLedgerV1;
+    const intent = resolveDeliveryIntent({ ...base, workout: null, transport, pastCleanup: {
+      scope: 'plan', scopeId: 'plan', mutationId: 'delete-plan', requestedAtMs: 7,
+    } }, ledger);
+    expect(intent).toMatchObject({ desired: 'preserve', status: 'past' });
+    expect(intent.issues).toContain('COROS permits removal only for unexecuted workouts dated today or later.');
   });
 });

@@ -620,6 +620,12 @@ app-tile-map {
   /* Ensure border-radius clips internal content */
 }
 
+.dashboard-calendar-cell app-tile-chart.dashboard-calendar-chart {
+  height: auto;
+  min-height: 100%;
+  overflow: visible;
+}
+
 section {
   margin-bottom: 1.25rem;
   margin-top: 0.75rem;

@@ -67,6 +67,7 @@ describe('COROS Auth Wrapper', () => {
     it.each([
         ['getCOROSAPIAuthRequestTokenRedirectURI', getCOROSAPIAuthRequestTokenRedirectURI],
         ['requestAndSetCOROSAPIAccessToken', requestAndSetCOROSAPIAccessToken],
+        ['deauthorizeCOROSAPI', deauthorizeCOROSAPI],
     ])('configures %s with 512 MiB', (_name, callable) => {
         expect(hoisted.callableOptions.get(callable)).toMatchObject({ memory: '512MB' });
     });

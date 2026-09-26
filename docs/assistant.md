@@ -141,6 +141,10 @@ surface. Applying uses a dedicated Auth + App Check callable that rechecks the s
 then invokes the common proposal service. Dismissal clears the server-owned proposal without changes. New chat, a toggle
 change, account switch, expiry, schedule conflict or stale grant makes the proposal unusable. Provider results are
 independent and a send failure never removes a newly authored workout. Call/output budgets and quotas are unchanged.
+For a Suunto-bound workout, the Assistant omits unrequested step notes and keeps necessary watch instructions concise.
+If a provider must shorten authored instructions or make another mapping adjustment, the proposal review names the
+consequence before the user's one in-app confirmation; that confirmation also approves the current digest-bound Send.
+Changed mappings fail closed, and a queued Send is not a provider or watch receipt.
 Source support does not deploy or promote an app. See the
 [MCP planning contract](mcp-server.md#training-plans-and-planned-workouts-690).
 

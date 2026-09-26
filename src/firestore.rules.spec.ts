@@ -1673,6 +1673,7 @@ describe('Firestore Security Rules', () => {
                     `users/${userId}/trainingDeliveryLedger/id/attempts/attempt`,
                     `users/${userId}/trainingDeliveryState/current`,
                     `users/${userId}/trainingDeliveryState/current/receipts/mutation`,
+                    `users/${userId}/trainingDeliveryState/current/pastCleanup/workout_w`,
                     `users/${userId}/trainingDeliveryScopes/workout`, 'trainingDeliveryQueue/job', 'trainingProviderCapacity/garmin_app',
                     'trainingDeliveryCorosIntegerClaims/12345',
                     `users/${userId}/trainingProviderCapacity/garmin_account`,

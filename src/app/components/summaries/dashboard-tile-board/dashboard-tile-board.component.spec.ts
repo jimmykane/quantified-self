@@ -43,14 +43,25 @@ describe('DashboardTileBoardComponent', () => {
     expect(host.style.getPropertyValue('--dashboard-tile-cell-inline-divider')).toBe('0');
   });
 
-  it('reserves a full-height mobile row only for activity-calendar boards', () => {
-    const styles = readFileSync(
+  it('sizes the calendar row from its month layout without a stale height floor', () => {
+    const boardStyles = readFileSync(
       resolve(process.cwd(), 'src/app/components/summaries/dashboard-tile-board/dashboard-tile-board.component.css'),
       'utf8',
     );
+    const ownerStyles = readFileSync(
+      resolve(process.cwd(), 'src/app/components/summaries/summaries.component.css'),
+      'utf8',
+    );
+    const calendarStyles = readFileSync(
+      resolve(process.cwd(), 'src/app/components/calendar/activity-calendar-tile/activity-calendar-tile.component.scss'),
+      'utf8',
+    );
 
-    expect(styles).toContain('@media (max-width: 860px)');
-    expect(styles).toContain(':host(.dashboard-tile-board--activity-calendar)');
-    expect(styles).toContain('grid-auto-rows: max(var(--dashboard-tile-board-row-height, 150px), 360px);');
+    expect(boardStyles).toContain(':host(.dashboard-tile-board--activity-calendar)');
+    expect(boardStyles).toContain('grid-auto-rows: minmax(var(--dashboard-tile-board-row-height, 150px), auto);');
+    expect(ownerStyles).not.toMatch(/\.dashboard-calendar-cell\s*\{[^}]*min-height:/);
+    expect(calendarStyles).toContain('.activity-calendar-day-layout { display: grid; height: 360px; flex: none;');
+    expect(calendarStyles).toContain('.activity-calendar-day-layout { height: auto; grid-template-columns: minmax(0, 1fr);');
+    expect(ownerStyles).not.toContain('min-height: 760px');
   });
 });

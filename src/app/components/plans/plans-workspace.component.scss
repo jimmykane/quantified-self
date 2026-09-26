@@ -182,6 +182,17 @@
   gap: 8px;
 }
 
+.plan-deletion-card .past-provider-cleanup-option {
+  margin-block-start: 16px;
+}
+
+.plan-deletion-card .past-provider-cleanup-option p {
+  color: var(--mat-sys-on-surface-variant);
+  font-size: 0.875rem;
+  line-height: 1.4;
+  margin: 4px 0 0 32px;
+}
+
 .plan-deletion-card mat-card-actions {
   flex-wrap: wrap;
   gap: 8px;

@@ -105,7 +105,7 @@ export const deauthorizeWahooAPI = onCall({
   region: FUNCTIONS_MANIFEST.deauthorizeWahooAPI.region,
   secrets: FUNCTION_SECRET_BINDINGS.deauthorizeWahooAPI,
   cors: ALLOWED_CORS_ORIGINS,
-  memory: '256MiB',
+  memory: '512MiB',
   maxInstances: 10,
   timeoutSeconds: 120,
 }, async (request): Promise<{ result: string }> => {

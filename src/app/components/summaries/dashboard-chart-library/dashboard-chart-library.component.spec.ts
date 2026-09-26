@@ -67,7 +67,7 @@ describe('responsive chart picker interactions', () => {
     fixture.componentRef.setInput('lane', 'section:activityOverview'); await settle();
     expect(component.addActionLabel()).toContain('Add to dashboard');
     expect(component.unseen().length).toBeGreaterThan(0);
-    expect(component.sections()).toHaveLength(6);
+    expect(component.sections()).toHaveLength(7);
     expect(derived.watch).not.toHaveBeenCalled(); expect(events.getEventsBy).not.toHaveBeenCalled();
     expect(discovery.acknowledge).not.toHaveBeenCalled(); expect(haptics.selection).not.toHaveBeenCalled();
     await component.toggle(); await settle();
@@ -216,13 +216,21 @@ describe('responsive chart picker interactions', () => {
     await component.toggle(); await settle();
     const selected = component.state.selected()?.definition.id;
     source$.next(buildDashboardExampleEvents(Date.now())); await settle();
-    expect(component.suggested().map(entry => entry.definition.id)).toEqual(['custom-weekly-training-time', 'curated-activity-calendar']);
+    expect(component.suggested().map(entry => entry.definition.id)).toEqual(['custom-weekly-training-time', 'custom-duration-pie']);
     expect(new Set(component.rowPreviews().map(entry => entry.definition.id)).size).toBe(component.rowPreviews().length);
     expect(component.state.selected()?.definition.id).toBe(selected);
     expect(document.body.textContent).toContain('Suggested for you');
     component.filter('distance'); await settle();
     expect(component.suggested()).toHaveLength(0);
     expect(component.rowPreviews().every(entry => entry.definition.label.toLowerCase().includes('distance'))).toBe(true);
+  });
+
+  it('keeps Calendar as a single-purpose browse section without duplicate labels', async () => {
+    fixture.componentRef.setInput('lane', 'section:calendar'); await settle();
+    expect(component.available().map(entry => entry.definition.label)).toEqual(['Calendar']);
+    await component.toggle(); await settle();
+    expect(document.querySelector('.chart-library-heading h2')?.textContent?.trim()).toBe('Add Calendar');
+    expect(component.backLabel()).toBe('Back to Calendar');
   });
 
   it('loads missing KPI data once per open picker, keeps filtering silent, and releases reads on close', async () => {
@@ -556,9 +564,10 @@ describe('responsive chart picker interactions', () => {
   });
   it.each([
     ['kpi', 'Add KPI', 'KPIs'],
+    ['section:calendar', 'Add calendar', 'calendars'],
     ['section:trainingState', 'Add chart', 'charts'],
     ['section:performancePower', 'Add chart', 'charts'],
-    ['section:activityOverview', 'Add tile', 'tiles'],
+    ['section:activityOverview', 'Add chart', 'charts'],
     ['section:routesMaps', 'Add map', 'maps'],
   ])('keeps %s labels stable as availability and filters change', async (lane, action, plural) => {
     fixture.componentRef.setInput('lane', lane); await settle();
@@ -593,7 +602,7 @@ describe('responsive chart picker interactions', () => {
     expect(component.available()).toHaveLength(0);
     expect(component.state.draft()).toBeNull();
     haptics.selection.mockClear();
-    button('Add tile').click(); await settle();
+    button('Add chart').click(); await settle();
     expect(component.state.configuring()).toBe(true);
     expect(document.body.querySelector('.chart-library-browser')).toBeNull();
     expect(document.body.querySelector('.chart-library-heading h2')?.textContent).toContain('Create custom chart');

@@ -10,6 +10,22 @@ import { calendarTimelineNotesByDate } from '../../../helpers/calendar-timeline-
 import type { PlannedWorkoutCalendarOverlay } from '../../../helpers/planned-workout-calendar.helper';
 
 describe('ActivityCalendarGridComponent', () => {
+  it('marks only the selected date without changing the today marker or day layout', async () => {
+    const fixture = await renderGrid('month', false, []);
+    fixture.componentRef.setInput('selectedDateKey', '2026-08-03'); fixture.detectChanges();
+    const selected = fixture.nativeElement.querySelector('.activity-calendar-day--selected') as HTMLButtonElement;
+    expect(selected).toBeTruthy();
+    expect(selected.getAttribute('aria-pressed')).toBe('true');
+    expect(selected.querySelector('.activity-calendar-day-number-value')?.textContent?.trim()).toBe('3');
+    expect(fixture.nativeElement.querySelectorAll('[aria-pressed="true"]')).toHaveLength(1);
+    const daySelected = vi.fn(); fixture.componentInstance.daySelected.subscribe(daySelected);
+    selected.click();
+    expect(daySelected).toHaveBeenCalledOnce();
+    expect(fixture.componentRef.injector.get(AppHapticsService).selection).not.toHaveBeenCalled();
+    fixture.componentRef.setInput('selectedDateKey', '2026-08-04'); fixture.detectChanges();
+    expect(fixture.nativeElement.querySelectorAll('[aria-pressed="true"]')).toHaveLength(1);
+    expect(fixture.nativeElement.querySelector('.activity-calendar-day--selected .activity-calendar-day-number-value')?.textContent?.trim()).toBe('4');
+  });
   it('omits planning announcements when hidden and retains empty-day announcements when enabled', async () => {
     const fixture = await renderGrid('month', false, []);
     expect(fixture.nativeElement.querySelector('[aria-label*="planned workout"]')).toBeNull();
@@ -238,6 +254,25 @@ describe('ActivityCalendarGridComponent', () => {
     expect(firstWeek[0].classList).toContain('activity-calendar-day--weekend');
     expect(firstWeek[6].classList).toContain('activity-calendar-day--weekend');
     expect(firstWeek[1].classList).not.toContain('activity-calendar-day--weekend');
+  });
+
+  it('paints height-filling weekend columns continuously for either week start', async () => {
+    const fixture = await renderGrid('month', true, []);
+    const days = fixture.nativeElement.querySelector('.activity-calendar-days') as HTMLElement;
+    expect(days.style.backgroundImage).toContain('71.42857142857143%');
+    expect(days.style.backgroundImage).toContain('100%');
+
+    fixture.componentRef.setInput('model', buildActivityCalendarViewModel([], {
+      view: 'month', anchorDate: new Date(2026, 7, 1), startOfWeek: DaysOfTheWeek.Sunday,
+      now: new Date(2026, 7, 1),
+    }));
+    fixture.detectChanges();
+    expect(days.style.backgroundImage).toContain('0% 14.285714285714286%');
+    expect(days.style.backgroundImage).toContain('85.71428571428571% 100%');
+
+    fixture.componentRef.setInput('fillHeight', false);
+    fixture.detectChanges();
+    expect(days.style.backgroundImage).toBe('');
   });
 
   it('does not use calendar-specific gray surface fills', () => {

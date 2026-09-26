@@ -95,7 +95,9 @@ using Research because Research may invoke connector tools without another appro
 proposal and binds it to the owner, connection, grant, revision and expiry; replay returns its persisted terminal result.
 Plan deletion is available only as the sole proposal change and requires an explicit `convert-to-standalone` or
 `delete-workouts` choice. Its preview states that the plan and revision history are permanently removed, describes the
-workout effect, and warns that provider copies may remain when access is unavailable. If its resumable multi-transaction
+workout effect, and states that eligible future provider copies may withdraw, while past provider copies and recorded
+activities remain. MCP deletion does not offer the manual UI's separate past-copy cleanup opt-in. If its resumable
+multi-transaction
 deletion or cleanup is interrupted after the lock is acquired, the proposal remains retryable and the same approved apply
 resumes the idempotent operation instead of recording a false terminal failure. Permanent single-workout deletion and
 history restoration remain deliberately absent.
@@ -107,14 +109,27 @@ terminal outcome and the slowest stage—never owner IDs, references, titles, no
 five seconds emit one structured slow warning for operational investigation.
 
 Delivery actions resolve the destination account on the server and reuse the existing #646 command/reconciliation path.
-They never accept credentials or remote IDs. `all_connected` fans out only to connected, rollout-ready providers shown
+They never accept credentials or remote IDs. `all_connected` fans out only to connected, rollout-ready, compatible providers shown
 by preview; explicit providers return independent blocked/success results. Pro, compatibility approval, horizon,
 connection, completion and provider readiness checks remain authoritative. Provider failure never rolls back authored
 schedule changes, and MCP itself makes no direct provider HTTP request.
-For a degraded standalone create-and-send (for example, Mountain Biking folded to Garmin Cycling), Send stores only
-delivery consent and queues reconciliation. It must not forward the mapping digest as approval. The public preview and
-apply result explain that a separate approval is needed; the current workout remains unsent until a new `approve`
-proposal binds the current destination and payload digest. An applied Send result is not a provider acceptance claim.
+For a degraded standalone create-and-send (for example, a Suunto step instruction that must be shortened), the public
+preview names the bounded, safe mapping warnings before the host's native approval. The approved Send proposal may carry
+the server-computed digest into the existing delivery command, which rechecks the current destination and payload in the
+write transaction; a changed mapping blocks delivery rather than silently approving new loss. This removes a second
+approval for the same unchanged workout. Browser Send without a digest and later plan-workout changes retain their
+existing per-workout review behavior. An applied Send result means consent and any disclosed adjustment were recorded
+and reconciliation was queued; it is not a provider acceptance or watch-receipt claim. For Suunto-bound new workouts,
+clients should omit unrequested step notes and keep necessary instructions watch-sized (40 characters alongside a
+duration/target, 54 for manual-only steps), without dropping a user-requested instruction merely to avoid review.
+If the full warning set cannot fit the bounded public preview, preview fails closed and directs the client to create
+without delivery or simplify the recipe before sending; a hidden warning is never covered by implicit approval.
+An unsupported workout is not an approvable degradation. Its provider preview says it cannot be sent, `all_connected`
+skips it, and explicit Send/Resume remains a blocked provider result without saving consent or calling that provider.
+The authored workout may still be created if the user confirms the clearly labelled partial proposal. The browser's
+direct Send confirmation is disabled for an unsupported workout. An earlier provider copy may remain unchanged when a
+new version is unsupported; neither preview nor a blocked result implies removal. Wahoo currently requires a Running/Cycling recipe
+with time endings throughout; neither a different sport nor distance-ending steps can be approved into compatibility.
 
 The built-in Assistant exposes only the applicable focused/batch previews to Gemini. It prefers the focused tool for one
 new workout, including a one-workout create-and-send request, and the batch tool for other or genuinely multi-change
@@ -221,7 +236,10 @@ scheduled occurrence and source-activity checks. Existing single/bulk completion
 consume that exact projection, so this adds no MCP tool, scope, schema, consent, mutation or registered wire change.
 Private FIT identities and ledgers remain excluded; a conflicting second recording stays unlinked under the current v1
 one-source contract. The registered contract check and existing Garmin completion read fixtures cover the no-wire-impact
-boundary.
+boundary. A completion retains its at-link plan/date when a workout is later transferred or rescheduled; the stable
+workout reference remains linked, and `workoutChangedSinceCompletion` signals the current revision differs. Unlinked
+reads never infer a match. Both single and bounded bulk reads reject a foreign connection/owner reference, while the
+optional activity reference requires independent `activity-details:read` consent. No new field or scope is introduced.
 Existing sync status may truthfully become `completed` after an account-bound Guide marker is accepted, using the status
 already present in the frozen delivery schema. `get_training_sync_status` also applies an exact persisted workout
 completion to every confirmed destination copy of that workout: the evidence provider remains private provenance, while

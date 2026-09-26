@@ -1,11 +1,13 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { signal } from '@angular/core';
+import { of } from 'rxjs';
 import { TestBed } from '@angular/core/testing';
 import { AppUserService } from '../../../services/app.user.service';
+import { CalendarDayHealthService } from '../../../services/calendar-day-health.service';
 import type { TimelineNote } from '@shared/timeline-notes';
 import { MAT_BOTTOM_SHEET_DATA, MatBottomSheetRef } from '@angular/material/bottom-sheet';
-import { provideRouter } from '@angular/router';
+import { provideRouter, Router } from '@angular/router';
 import {
   ActivityTypes,
   DataAscent,
@@ -17,6 +19,8 @@ import {
 } from '@sports-alliance/sports-lib';
 import { buildActivityCalendarViewModel } from '../../../helpers/activity-calendar.helper';
 import { AppEventColorService } from '../../../services/color/app.event.color.service';
+import { AppHapticsService } from '../../../services/app.haptics.service';
+import { AppThemeService } from '../../../services/app.theme.service';
 import { CalendarDayDetailsNavigationService } from '../../../services/calendar-day-details-navigation.service';
 import { TrainingWorkoutDuplicateService } from '../../../services/training-workout-duplicate.service';
 import type { PlannedWorkoutCalendarEntry } from '../../../helpers/planned-workout-calendar.helper';
@@ -25,6 +29,33 @@ import { CalendarDayDetailsComponent, type CalendarDayDetailsData } from './cale
 const planningUserUid = 'planning-user';
 
 describe('CalendarDayDetailsComponent', () => {
+  it('offers the selected full day from the Today sheet and preserves the return date', async () => {
+    const fixture = await renderDayDetails([]);
+    const link = fixture.nativeElement.querySelector('.calendar-day-details-full-day') as HTMLAnchorElement;
+    expect(link?.getAttribute('href')).toBe('/calendar/day/2026-08-03');
+    const navigation = TestBed.inject(CalendarDayDetailsNavigationService);
+    const prepareReturn = vi.spyOn(navigation, 'prepareReturn');
+    const dismiss = vi.spyOn(TestBed.inject(MatBottomSheetRef), 'dismiss');
+    const haptics = vi.spyOn(TestBed.inject(AppHapticsService), 'selection');
+    vi.spyOn(TestBed.inject(Router), 'navigateByUrl').mockResolvedValue(true);
+    link.click();
+    expect(prepareReturn).toHaveBeenCalledWith('/', '2026-08-03', 'today-sheet');
+    expect(dismiss).toHaveBeenCalledOnce();
+    expect(haptics).toHaveBeenCalledOnce();
+  });
+
+  it('keeps the full-day link out of public day sheets', async () => {
+    const fixture = await renderDayDetails([], { privateHealthEnabled: false });
+    expect(fixture.nativeElement.querySelector('.calendar-day-details-full-day')).toBeNull();
+  });
+
+  it('closes the day sheet with one selection haptic', async () => {
+    const fixture = await renderDayDetails([]);
+    (fixture.nativeElement.querySelector('[aria-label="Close day details"]') as HTMLButtonElement).click();
+    expect(TestBed.inject(MatBottomSheetRef).dismiss).toHaveBeenCalledOnce();
+    expect(TestBed.inject(AppHapticsService).selection).toHaveBeenCalledOnce();
+  });
+
   it.each(['another-user', null])('hides all planning UI for viewer %s, including a retained day sheet', async uid => {
     const fixture = await renderDayDetails(createEvent(), { plannedWorkouts: [{ workout: createPlannedWorkout() }] });
     const users = TestBed.inject(AppUserService);
@@ -32,6 +63,7 @@ describe('CalendarDayDetailsComponent', () => {
     fixture.detectChanges();
     expect(fixture.nativeElement.querySelector('.calendar-day-planned')).toBeNull();
     expect(fixture.nativeElement.querySelector('a[href*="/training/plans"]')).toBeNull();
+    expect(fixture.nativeElement.querySelector('.calendar-day-details-full-day')).toBeNull();
     expect(fixture.nativeElement.textContent).toContain('Morning run');
   });
   it('shows plain-text notes with actual dates, supports note-only days, and clears stale selections', async () => {
@@ -73,7 +105,7 @@ describe('CalendarDayDetailsComponent', () => {
     expect(fixture.nativeElement.querySelector('.calendar-day-number')?.textContent?.trim()).toBe('1');
     expect(fixture.nativeElement.querySelector('.calendar-family-volume-count-value')?.textContent?.trim()).toBe('1');
     expect(fixture.nativeElement.querySelector('app-bottom-sheet-header h2')?.textContent?.trim())
-      .toBe('Monday, August 3, 2026');
+      .toBe('Mon, Aug 3, 2026');
     expect(fixture.nativeElement.querySelectorAll('.bottom-sheet-title-numeric')).toHaveLength(0);
     expect([...fixture.nativeElement.querySelectorAll('.calendar-day-event-metric')]
       .map((part: HTMLElement) => part.textContent?.trim())).toEqual(['8:30 AM', '1h']);
@@ -199,7 +231,7 @@ describe('CalendarDayDetailsComponent', () => {
     expect(listStyles).toMatch(
       /\.calendar-family-volume-count-value\s*\{[^}]*font-family:\s*'Barlow Condensed', sans-serif/s,
     );
-    expect(template).toContain('<app-bottom-sheet-header [title]="title" icon="calendar_month">');
+    expect(template).toContain('<app-bottom-sheet-header [title]="compactTitle" icon="calendar_month">');
     expect(template).not.toContain('[titleSegments]');
   });
 
@@ -365,7 +397,10 @@ async function renderDayDetails(eventOrEvents: EventInterface | EventInterface[]
       { provide: MAT_BOTTOM_SHEET_DATA, useValue: data },
       { provide: AppUserService, useValue: { user: signal({ uid: data.userId }) } },
       { provide: MatBottomSheetRef, useValue: { dismiss: vi.fn() } },
+      { provide: AppHapticsService, useValue: { selection: vi.fn() } },
+      { provide: AppThemeService, useValue: { appTheme: signal('normal') } },
       { provide: TrainingWorkoutDuplicateService, useValue: { duplicate: vi.fn() } },
+      { provide: CalendarDayHealthService, useValue: { watch: vi.fn(() => of({ sessions: [], hrvSeries: [], derived: null, sleepError: false, hrvError: false, readinessError: false, recoveryError: false })) } },
       {
         provide: AppEventColorService,
         useValue: {

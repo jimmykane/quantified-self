@@ -534,7 +534,7 @@ describe('DashboardTileConfiguration', () => {
     expect(dialogData.user.settings.dashboardSettings.tiles[1]).toMatchObject({
       type: TileTypes.Chart,
       chartType: DASHBOARD_ACTIVITY_CALENDAR_CHART_TYPE,
-      size: { columns: 1, rows: 1 },
+      size: { columns: 4, rows: 1 },
     });
     expect(dialogData.user.settings.dashboardSettings.autoTiles.activityCalendar).toMatchObject({
       state: 'added',

@@ -35,8 +35,9 @@ describe('dashboard tile presentation', () => {
   it.each([
     ['kpi', 'Add KPI'],
     ['section:trainingState', 'Add chart'],
+    ['section:calendar', 'Add calendar'],
     ['section:performancePower', 'Add chart'],
-    ['section:activityOverview', 'Add tile'],
+    ['section:activityOverview', 'Add chart'],
     ['section:routesMaps', 'Add map'],
   ])('derives %s terminology from all supported entries', (lane, action) => {
     const tiles = getDashboardChartCatalog().filter(entry => entry.lane === lane).map(entry => entry.tile);

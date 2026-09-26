@@ -951,6 +951,8 @@ async function cleanupTopLevelQueueState(uid: string, identifiers: UserProviderI
 
 export const ACCOUNT_DELETION_CLEANUP_RUNTIME_OPTIONS = {
     failurePolicy: true,
+    timeoutSeconds: 540,
+    memory: '512MB',
     secrets: FUNCTION_SECRET_BINDINGS.cleanupUserAccounts,
 } as const;
 

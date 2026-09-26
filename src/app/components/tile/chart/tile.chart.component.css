@@ -39,6 +39,11 @@ app-activity-calendar-tile {
   min-width: 0;
 }
 
+:host(.dashboard-calendar-chart) > section {
+  height: auto;
+  min-height: 100%;
+}
+
 .calendar-route-action {
   flex: 0 0 auto;
 }

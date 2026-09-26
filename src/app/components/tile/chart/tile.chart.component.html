@@ -79,7 +79,7 @@
     <app-dashboard-health-chart [disabled]="healthSettingsSaving || isTileActionSaving" [user]="$any(user)" [settings]="healthMetric" [darkTheme]="darkTheme" [reserveActions]="showActions" [timelineNotes]="previewMode ? null : notesContext()" (settingsChange)="healthMetricChange.emit($event)" />
   }
   @if (chartType === activityCalendarChartType) {
-  <app-activity-calendar-tile [user]="user" [timelineNotes]="previewMode ? null : timelineNotes()"></app-activity-calendar-tile>
+  <app-activity-calendar-tile [user]="user" [timelineNotes]="previewMode ? null : timelineNotes()" [dayContextEnabled]="!previewMode" [privateHealthEnabled]="showActions && !previewMode"></app-activity-calendar-tile>
   }
   @if (chartType === recoveryNowChartType) {
   <app-pie-chart [isLoading]="isLoading || isTileActionSaving" [data]="data" [darkTheme]="darkTheme" [chartDataType]="dataType"

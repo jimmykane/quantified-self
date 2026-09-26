@@ -39,7 +39,7 @@ export function suuntoMultiSessionFitFixture(
 }
 
 /** Synthetic standard FIT training_file + workout messages for consumer tests. */
-export function standardWorkoutReferenceFitFixture(): Buffer {
+export function standardWorkoutReferenceFitFixture(withTrainingFile = true, serialNumber = 0xfffffffe): Buffer {
   const parts: Buffer[] = [];
   const message = (global: number, fields: Array<[number, number, Buffer]>) => {
     const globalNumber = Buffer.alloc(2); globalNumber.writeUInt16LE(global);
@@ -49,11 +49,11 @@ export function standardWorkoutReferenceFitFixture(): Buffer {
   };
   const uint16 = (value: number) => { const bytes = Buffer.alloc(2); bytes.writeUInt16LE(value); return bytes; };
   const uint32 = (value: number) => { const bytes = Buffer.alloc(4); bytes.writeUInt32LE(value); return bytes; };
-  message(72, [
+  if (withTrainingFile) message(72, [
     [0, 0, Buffer.from([5])],
     [1, 0x84, uint16(1)],
     [2, 0x84, uint16(2)],
-    [3, 0x8c, uint32(0xfffffffe)],
+    [3, 0x8c, uint32(serialNumber)],
     [4, 0x86, uint32(123)],
     [253, 0x86, uint32(124)],
   ]);

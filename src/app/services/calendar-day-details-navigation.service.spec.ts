@@ -59,6 +59,25 @@ describe('CalendarDayDetailsNavigationService', () => {
     expect(service.restorationFor('/dashboard')).toBeNull();
   });
 
+  it('restores the dashboard selection after visiting a full day and using browser Back', () => {
+    expect(service.prepareReturn('/dashboard', '2026-08-20')).toBe(true);
+    routerEvents.next(new NavigationStart(1, '/calendar/day/2026-08-20', 'imperative'));
+    expect(service.restorationFor('/dashboard')).toBeNull();
+
+    routerEvents.next(new NavigationStart(2, '/dashboard', 'popstate'));
+    expect(service.restorationFor('/dashboard')).toEqual({ sourceUrl: '/dashboard', dateKey: '2026-08-20' });
+  });
+
+  it('retains the Today sheet origin when returning from a full day', () => {
+    expect(service.prepareReturn('/dashboard', '2026-08-20', 'today-sheet')).toBe(true);
+    routerEvents.next(new NavigationStart(1, '/calendar/day/2026-08-20', 'imperative'));
+    routerEvents.next(new NavigationStart(2, '/dashboard', 'popstate'));
+
+    const restoration = service.restorationFor('/dashboard');
+    expect(restoration).toEqual({ sourceUrl: '/dashboard', dateKey: '2026-08-20', surface: 'today-sheet' });
+    expect(service.consumeRestoration(restoration!)).toBe(true);
+  });
+
   it('preserves calendar query parameters when matching a full-calendar return', () => {
     const sourceUrl = '/calendar?view=month&date=2026-08-03';
     service.prepareReturn(sourceUrl, '2026-08-03');

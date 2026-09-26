@@ -190,6 +190,13 @@ export async function retainCOROSTrainingCompletion(
           const sameReverse = reverse?.schemaVersion === 1 && reverse.deliveryId === candidate.ledger.id
             && reverse.workoutId === workout.id && reverse.eventId === eventId
             && reverse.sourceSessionIndex === null && reverse.provider === 'coros';
+          // A remote ID from an older plan/date occurrence cannot complete the
+          // current authored occurrence until its delivery catches up. An
+          // already persisted exact link remains idempotent after later edits.
+          if (!sameCompletion && (workout.id !== candidate.ledger.workoutId
+            || workout.planId !== candidate.ledger.planId
+            || (candidate.resolvedAttemptId && workout.planId !== candidate.ledger.attempt?.workout?.planId)
+            || workout.localDate !== candidate.artifact.localDate)) outcome = 'conflict';
           if (outcome !== 'conflict' && ((completionDocument.exists && !sameCompletion)
             || (reverseDocument.exists && !sameReverse))) outcome = 'conflict';
           if (outcome !== 'conflict') {

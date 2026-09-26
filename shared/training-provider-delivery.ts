@@ -74,6 +74,8 @@ export interface TrainingDeliveryPreviewV1 {
   warningCount: number;
   issues: string[];
   approvalDigest: string | null;
+  /** Present for one workout; a plan preview may contain mixed mappings. */
+  workoutCompatibility?: 'exact' | 'degraded' | 'unsupported' | null;
 }
 
 export class TrainingDeliveryContractError extends Error {}
@@ -123,11 +125,17 @@ export function parseTrainingDeliveryCommandV1(value: unknown): TrainingDelivery
     throw new TrainingDeliveryContractError('This action requires a workout.');
   }
   if (input.scope === 'workout' && input.action === 'configure') throw new TrainingDeliveryContractError('Configure requires a plan.');
-  if (input.action === 'approve') {
+  if (input.action === 'approve' && !('approvalDigest' in input)) {
+    throw new TrainingDeliveryContractError('Approval requires the current preview digest.');
+  }
+  if ('approvalDigest' in input) {
+    if (!['approve', 'send'].includes(input.action as string)) {
+      throw new TrainingDeliveryContractError('Unexpected approval digest.');
+    }
     if (typeof input.approvalDigest !== 'string' || !/^[a-f0-9]{64}$/.test(input.approvalDigest)) {
       throw new TrainingDeliveryContractError('Approval requires the current preview digest.');
     }
-  } else if ('approvalDigest' in input) throw new TrainingDeliveryContractError('Unexpected approval digest.');
+  }
   const command = { ...input } as unknown as TrainingDeliveryCommandV1;
   if (command.action === 'check' && 'timeZone' in input) throw new TrainingDeliveryContractError('Checks do not change the time zone.');
   if ('timeZone' in input) command.timeZone = normalizeDeliveryTimeZone(input.timeZone);

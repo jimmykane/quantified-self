@@ -41,7 +41,7 @@ import {
   type CurrentTrainingScheduleV1,
 } from '../../services/training-plans.service';
 import { TrainingWorkoutDuplicateService } from '../../services/training-workout-duplicate.service';
-import { ConfirmationDialogComponent } from '../confirmation-dialog/confirmation-dialog.component';
+import { ConfirmationDialogComponent, type ConfirmationWithPastProviderCleanup } from '../confirmation-dialog/confirmation-dialog.component';
 import { CompactRowComponent } from '../shared/compact-row/compact-row.component';
 import { PlanScheduleCalendarComponent } from './plan-schedule-calendar.component';
 import { TrainingDeliveryButtonComponent } from './training-delivery-button.component';
@@ -286,6 +286,7 @@ export class PlansWorkspaceComponent {
   readonly shiftDays = signal(1);
   readonly deletingPlanId = signal<string | null>(null);
   readonly deleteDisposition = signal<DeleteTrainingPlanRequestV1['workoutDisposition']>('convert-to-standalone');
+  readonly removePastProviderCopies = signal(false);
   readonly editor = signal<WorkoutEditorSession | null>(null);
   readonly workoutDatePickerValue = computed(() => workoutDatePickerInput(this.editor()?.value.localDate ?? ''));
   readonly workoutDateInputInvalid = signal(false);
@@ -708,10 +709,12 @@ export class PlansWorkspaceComponent {
     this.clearPlanActions();
     this.deletingPlanId.set(plan.id);
     this.deleteDisposition.set('convert-to-standalone');
+    this.removePastProviderCopies.set(false);
   }
 
   async deletePlan(plan: TrainingPlanV1): Promise<void> {
     const disposition = this.deleteDisposition();
+    const removePastProviderCopies = this.removePastProviderCopies();
     const expectedRevisions = this.expectedRevisions({
       planIds: [plan.id],
       planRevisionOverrides: new Map([[plan.id, plan.revision]]),
@@ -733,11 +736,14 @@ export class PlansWorkspaceComponent {
         expectedRevisions,
         workoutDisposition: disposition,
         confirmPlanDeletion: true,
+        ...(removePastProviderCopies ? { removePastProviderCopies: true } : {}),
       });
       this.haptics.success();
       this.deletingPlanId.set(null);
       this.navigateAfterPlanDeletion(response);
-      this.snackBar.open('Training plan deleted.', 'Dismiss', { duration: 4000 });
+      this.snackBar.open(removePastProviderCopies
+        ? 'Training plan deleted. Past provider cleanup is pending where supported; check Workout sync history.'
+        : 'Training plan deleted.', 'Dismiss', { duration: 6000 });
     } catch (error) {
       this.showError(error);
     } finally {
@@ -1222,19 +1228,22 @@ export class PlansWorkspaceComponent {
       workoutRevisionOverrides: new Map([[workout.id, workout.revision]]),
       planIds: workout.planId ? [workout.planId] : [],
     });
-    const confirmed = await this.confirm(
+    const confirmation = await this.confirmWithPastProviderCleanup(
       'Delete workout?',
       'The workout will remain in history and can be restored.',
       'Delete workout',
       'warn',
     );
-    if (!confirmed) return;
+    if (!confirmation) return;
     const response = await this.runMutation({
       mutationId: this.plansService.createMutationId('delete-workout'),
       expectedRevisions,
-      operation: { kind: 'delete-workout', workoutId: workout.id },
+      operation: { kind: 'delete-workout', workoutId: workout.id,
+        ...(confirmation.removePastProviderCopies ? { removePastProviderCopies: true } : {}) },
     }, `delete-${workout.id}`);
-    if (response) this.snackBar.open('Workout deleted. Open history to restore it.', 'Dismiss', { duration: 5000 });
+    if (response) this.snackBar.open(confirmation.removePastProviderCopies
+      ? 'Workout deleted. Past provider cleanup is pending where supported; check Workout sync history.'
+      : 'Workout deleted. Open history to restore it.', 'Dismiss', { duration: 6000 });
   }
 
   async permanentlyDeleteWorkout(workout: ScheduledWorkoutV1): Promise<void> {
@@ -1243,7 +1252,7 @@ export class PlansWorkspaceComponent {
       workoutRevisionOverrides: new Map([[workout.id, workout.revision]]),
       planIds: workout.planId ? [workout.planId] : [],
     });
-    const confirmed = await this.confirm(
+    const confirmation = await this.confirmWithPastProviderCleanup(
       'Permanently delete workout?',
       workout.planId
         ? 'This removes the workout and prevents restoration. Its plan revision audit remains until the plan is deleted. This cannot be undone.'
@@ -1251,13 +1260,16 @@ export class PlansWorkspaceComponent {
       'Delete permanently',
       'warn',
     );
-    if (!confirmed) return;
+    if (!confirmation) return;
     const response = await this.runMutation({
       mutationId: this.plansService.createMutationId('permanent-workout-delete'),
       expectedRevisions,
-      operation: { kind: 'permanently-delete-workout', workoutId: workout.id, confirmPermanentDeletion: true },
+      operation: { kind: 'permanently-delete-workout', workoutId: workout.id, confirmPermanentDeletion: true,
+        ...(confirmation.removePastProviderCopies ? { removePastProviderCopies: true } : {}) },
     }, `permanent-${workout.id}`);
-    if (response) this.snackBar.open('Workout permanently retired and can no longer be restored.', 'Dismiss', { duration: 4000 });
+    if (response) this.snackBar.open(confirmation.removePastProviderCopies
+      ? 'Workout deleted permanently. Past provider cleanup is pending where supported; check Workout sync history.'
+      : 'Workout permanently retired and can no longer be restored.', 'Dismiss', { duration: 6000 });
   }
 
   async openHistory(scope: TrainingScheduleRevisionScope): Promise<void> {
@@ -1427,6 +1439,19 @@ export class PlansWorkspaceComponent {
       data: { title, message, confirmText, confirmColor },
     });
     return new Promise(resolve => reference.afterClosed().subscribe(value => resolve(value === true)));
+  }
+
+  private async confirmWithPastProviderCleanup(
+    title: string,
+    message: string,
+    confirmText: string,
+    confirmColor: 'primary' | 'accent' | 'warn' = 'warn',
+  ): Promise<ConfirmationWithPastProviderCleanup | null> {
+    const reference = this.dialog.open<ConfirmationDialogComponent, unknown, ConfirmationWithPastProviderCleanup>(
+      ConfirmationDialogComponent,
+      { data: { title, message, confirmText, confirmColor, pastProviderCleanupOption: true } },
+    );
+    return new Promise(resolve => reference.afterClosed().subscribe(value => resolve(value?.confirmed === true ? value : null)));
   }
 
   private showError(error: unknown): void {

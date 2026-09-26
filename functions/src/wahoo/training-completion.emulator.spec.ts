@@ -163,6 +163,10 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)(
         workoutTokenDigest: createHash('sha256').update(workoutToken).digest('hex'),
         outcome: 'already_linked',
       });
+      await user().collection('scheduledWorkouts').doc('workout').update({ localDate: '2026-09-18', revision: 3 });
+      expect(await retain()).toEqual({ retained: true, linkedWorkoutIds: ['workout'] });
+      expect((await user().collection('trainingWorkoutCompletions').doc('workout').get()).data())
+        .toMatchObject({ scheduledLocalDate: '2026-09-17', workoutRevisionAtLink: 2 });
     });
 
     it('adds the activity link when provider inspection already protected the copy', async () => {
@@ -190,6 +194,50 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)(
       expect((await user().collection('events').doc('event')
         .collection('trainingCompletionEvidence').doc('wahoo').get()).data()).toMatchObject({ outcome: 'conflict' });
       expect((await user().collection('trainingWorkoutCompletions').get()).empty).toBe(true);
+    });
+
+    it('keeps the first exact activity when a marker is reused by another event', async () => {
+      expect(await retain()).toMatchObject({ linkedWorkoutIds: ['workout'] });
+      await user().collection('events').doc('other-event').set({ test: true });
+      expect(await retain({ eventId: 'other-event' })).toEqual({ retained: true, linkedWorkoutIds: [] });
+      expect((await user().collection('trainingWorkoutCompletions').doc('workout').get()).data())
+        .toMatchObject({ eventId: 'event', activityId: 'activity' });
+    });
+
+    it('fences old reconnect credentials and cannot match another owner ledger', async () => {
+      const root = db.collection('wahooAPIAccessTokens').doc(uid);
+      await root.update({ activeOAuthCredentialGeneration: 'reconnected' });
+      await root.collection('tokens').doc(account).update({ tokenCredentialGeneration: 'reconnected' });
+      expect(await retain()).toEqual({ retained: false, linkedWorkoutIds: [] });
+      const currentGuard = { ...accountGuard(), activeCredentialGeneration: 'reconnected' };
+      expect(await retainWahooTrainingCompletion(db, uid, 'event', currentGuard,
+        workoutId, planId, workoutToken, '999')).toMatchObject({ linkedWorkoutIds: ['workout'] });
+      const otherUid = `wahoo-completion-${randomUUID()}`; users.push(otherUid);
+      const other = db.collection('users').doc(otherUid);
+      await other.set({ test: true });
+      await other.collection('meta').doc(ServiceNames.WahooAPI).set({ connectionState: 'connected',
+        connectionStateGeneration: 'connection', providerUserId: account });
+      await db.collection('wahooAPIAccessTokens').doc(otherUid).set({ activeOAuthCredentialGeneration: 'credential' });
+      await db.collection('wahooAPIAccessTokens').doc(otherUid).collection('tokens').doc(account).set({
+        serviceName: ServiceNames.WahooAPI, wahooUserID: account, tokenCredentialGeneration: 'credential', scope: WAHOO_API_SCOPES,
+      });
+      await other.collection('events').doc('event').set({ test: true });
+      expect(await retainWahooTrainingCompletion(db, otherUid, 'event', accountGuard(),
+        workoutId, planId, workoutToken, '999')).toEqual({ retained: true, linkedWorkoutIds: [] });
+      expect((await other.collection('trainingWorkoutCompletions').get()).empty).toBe(true);
+    });
+
+    it.each([
+      ['date', { localDate: '2026-09-18', revision: 3 }],
+      ['plan', { planId: 'another-plan', revision: 3 }],
+    ])('does not link a stale delivered occurrence after a %s transfer', async (_kind, change) => {
+      await user().collection('scheduledWorkouts').doc('workout').update(change);
+      expect(await retain()).toEqual({ retained: true, linkedWorkoutIds: [] });
+      expect((await user().collection('trainingWorkoutCompletions').get()).empty).toBe(true);
+      expect((await user().collection(DELIVERY_LEDGER).doc('delivery').get()).get('actual.completed')).toBe(false);
+      await user().collection(DELIVERY_LEDGER).doc('delivery').update(_kind === 'date'
+        ? { 'actual.localDate': change.localDate } : { planId: change.planId });
+      expect(await retain()).toEqual({ retained: true, linkedWorkoutIds: ['workout'] });
     });
 
     it('does not overwrite an existing completion or trust inconsistent internal identities', async () => {
@@ -238,6 +286,12 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)(
       await user().collection('events').doc('event').delete();
       expect(await retain()).toEqual({ retained: false, linkedWorkoutIds: [] });
       expect((await user().collection('events').doc('event').collection('trainingCompletionEvidence').get()).empty).toBe(true);
+    });
+    it('keeps a valid but unknown Workout marker unlinked', async () => {
+      expect(await retain({ workoutId: '457' })).toEqual({ retained: true, linkedWorkoutIds: [] });
+      expect((await user().collection('events').doc('event').collection('trainingCompletionEvidence').doc('wahoo').get()).data())
+        .toMatchObject({ outcome: 'missing' });
+      expect((await user().collection('trainingWorkoutCompletions').get()).empty).toBe(true);
     });
   },
 );

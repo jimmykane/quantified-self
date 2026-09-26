@@ -7,10 +7,11 @@ import type { DashboardTileLaneKey } from './dashboard-tile-section.helper';
 import { dashboardChartLibraryRevision } from './dashboard-chart-library-revision.helper';
 
 const PRIORITY: Record<DashboardTileLaneKey, readonly DashboardManagerPresetId[]> = {
+  'section:calendar': [P.CURATED_ACTIVITY_CALENDAR],
   'section:trainingState': [P.CURATED_FORM, P.CURATED_INTENSITY_DISTRIBUTION],
   'section:health': [P.CURATED_SLEEP, P.CURATED_HRV, 'health:resting_heart_rate', 'health:steps', 'health:body_weight'],
   'section:performancePower': [P.CURATED_POWER_CURVE, P.CURATED_RUNNING_POWER_CURVE],
-  'section:activityOverview': [P.CUSTOM_WEEKLY_TRAINING_TIME, P.CURATED_ACTIVITY_CALENDAR, P.CUSTOM_DURATION_PIE],
+  'section:activityOverview': [P.CUSTOM_WEEKLY_TRAINING_TIME, P.CUSTOM_DURATION_PIE],
   'section:routesMaps': [P.MAP_ROUTES_PREVIEW, P.MAP_DEFAULT_CLUSTERED],
   kpi: [P.KPI_ACWR, P.KPI_TRAINING_BALANCE],
 };

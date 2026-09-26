@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import * as logger from 'firebase-functions/logger';
 
 interface TaskRequestMock {
   data: {
@@ -226,5 +227,162 @@ describe('processSleepSyncTask', () => {
     mockProcessSleepSyncQueueItem.mockResolvedValueOnce('DEFERRED');
 
     await expect(invokeWorker({ data: { queueItemId: 'sleep-item-1' } })).resolves.toBeUndefined();
+  });
+
+  it('records a safe Suunto Health workload summary without account or payload fields', async () => {
+    mockQueueGet.mockResolvedValueOnce({
+      exists: true,
+      id: 'private-queue-item',
+      ref: { path: 'sleepSyncQueue/private-queue-item' },
+      data: () => ({
+        type: 'suunto_health_poll',
+        provider: 'SuuntoApp',
+        healthTrigger: 'webhook',
+        userID: 'private-user',
+        providerUserId: 'private-account',
+        payload: { secret: 'private-payload' },
+      }),
+    });
+    mockProcessSleepSyncQueueItem.mockResolvedValueOnce('PROCESSED');
+
+    await invokeWorker({ data: { queueItemId: 'private-queue-item' } });
+
+    const summaryCall = vi.mocked(logger.info).mock.calls.find(
+      ([message]) => message === '[SleepSyncTaskWorker] Invocation summary',
+    );
+    expect(summaryCall?.[1]).toEqual({
+      provider: 'SuuntoApp',
+      queueType: 'suunto_health_poll',
+      healthTrigger: 'webhook',
+      garminSummaryType: 'none',
+      outcome: 'processed',
+      durationMs: expect.any(Number),
+    });
+    expect(logger.info).toHaveBeenCalledTimes(1);
+    expect(JSON.stringify(summaryCall)).not.toContain('private-');
+  });
+
+  it('records failed Garmin work with only allowlisted dimensions', async () => {
+    mockQueueGet.mockResolvedValueOnce({
+      exists: true,
+      id: 'garmin-item',
+      ref: { path: 'sleepSyncQueue/garmin-item' },
+      data: () => ({
+        type: 'garmin_ping',
+        provider: 'GarminAPI',
+        garminSummaryType: 'hrv',
+        callbackURL: 'https://private.example/callback',
+      }),
+    });
+    mockProcessSleepSyncQueueItem.mockResolvedValueOnce('RETRY_INCREMENTED');
+
+    await expect(invokeWorker({ data: { queueItemId: 'garmin-item' } }))
+      .rejects.toThrow('scheduled for retry');
+
+    const summaryCall = vi.mocked(logger.info).mock.calls.find(
+      ([message]) => message === '[SleepSyncTaskWorker] Invocation summary',
+    );
+    expect(summaryCall?.[1]).toEqual({
+      provider: 'GarminAPI',
+      queueType: 'garmin_ping',
+      healthTrigger: 'none',
+      garminSummaryType: 'hrv',
+      outcome: 'retry_incremented',
+      durationMs: expect.any(Number),
+    });
+    expect(JSON.stringify(summaryCall)).not.toContain('private.example');
+  });
+
+  it('classifies a legacy Garmin Ping without a summary family as Sleep', async () => {
+    mockQueueGet.mockResolvedValueOnce({
+      exists: true,
+      id: 'legacy-garmin-ping',
+      ref: { path: 'sleepSyncQueue/legacy-garmin-ping' },
+      data: () => ({ type: 'garmin_ping', provider: 'GarminAPI' }),
+    });
+    mockProcessSleepSyncQueueItem.mockResolvedValueOnce('PROCESSED');
+
+    await invokeWorker({ data: { queueItemId: 'legacy-garmin-ping' } });
+
+    expect(vi.mocked(logger.info).mock.calls.find(
+      ([message]) => message === '[SleepSyncTaskWorker] Invocation summary',
+    )?.[1]).toEqual(expect.objectContaining({
+      provider: 'GarminAPI',
+      queueType: 'garmin_ping',
+      garminSummaryType: 'sleeps',
+    }));
+  });
+
+  it('uses the same Sleep default as queue processing for an empty Garmin family', async () => {
+    mockQueueGet.mockResolvedValueOnce({
+      exists: true,
+      id: 'empty-family-ping',
+      ref: { path: 'sleepSyncQueue/empty-family-ping' },
+      data: () => ({ type: 'garmin_ping', provider: 'GarminAPI', garminSummaryType: '' }),
+    });
+    mockProcessSleepSyncQueueItem.mockResolvedValueOnce('PROCESSED');
+
+    await invokeWorker({ data: { queueItemId: 'empty-family-ping' } });
+
+    expect(vi.mocked(logger.info).mock.calls.find(
+      ([message]) => message === '[SleepSyncTaskWorker] Invocation summary',
+    )?.[1]).toEqual(expect.objectContaining({ garminSummaryType: 'sleeps' }));
+  });
+
+  it('does not retry a completed task when summary logging fails', async () => {
+    mockQueueGet.mockResolvedValueOnce({
+      exists: true,
+      id: 'sleep-item-1',
+      ref: { path: 'sleepSyncQueue/sleep-item-1' },
+      data: () => ({ type: 'suunto_poll', provider: 'SuuntoApp' }),
+    });
+    mockProcessSleepSyncQueueItem.mockResolvedValueOnce('PROCESSED');
+    vi.mocked(logger.info).mockImplementationOnce(() => { throw new Error('logging unavailable'); });
+
+    await expect(invokeWorker({ data: { queueItemId: 'sleep-item-1' } })).resolves.toBeUndefined();
+    expect(mockProcessSleepSyncQueueItem).toHaveBeenCalledOnce();
+  });
+
+  it('preserves the original retry error when summary logging fails', async () => {
+    mockQueueGet.mockResolvedValueOnce({
+      exists: true,
+      id: 'sleep-item-1',
+      ref: { path: 'sleepSyncQueue/sleep-item-1' },
+      data: () => ({ type: 'suunto_poll', provider: 'SuuntoApp' }),
+    });
+    mockProcessSleepSyncQueueItem.mockResolvedValueOnce('RETRY_INCREMENTED');
+    vi.mocked(logger.info).mockImplementationOnce(() => { throw new Error('logging unavailable'); });
+
+    await expect(invokeWorker({ data: { queueItemId: 'sleep-item-1' } }))
+      .rejects.toThrow('scheduled for retry');
+  });
+
+  it('does not log unrecognized queue values as telemetry dimensions', async () => {
+    mockQueueGet.mockResolvedValueOnce({
+      exists: true,
+      id: 'unknown-item',
+      ref: { path: 'sleepSyncQueue/unknown-item' },
+      data: () => ({
+        type: 'injected-queue-type',
+        provider: { toString: null },
+        garminSummaryType: 'injected-family',
+        healthTrigger: 'injected-trigger',
+      }),
+    });
+    mockProcessSleepSyncQueueItem.mockResolvedValueOnce('DEFERRED');
+
+    await invokeWorker({ data: { queueItemId: 'unknown-item' } });
+
+    const summaryCall = vi.mocked(logger.info).mock.calls.find(
+      ([message]) => message === '[SleepSyncTaskWorker] Invocation summary',
+    );
+    expect(summaryCall?.[1]).toEqual({
+      provider: 'unknown',
+      queueType: 'unknown',
+      healthTrigger: 'none',
+      garminSummaryType: 'none',
+      outcome: 'deferred',
+      durationMs: expect.any(Number),
+    });
   });
 });

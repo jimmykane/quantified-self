@@ -8,8 +8,8 @@ summaries, and a preview/native-approval/apply workflow. It does not modify
 `WorkoutStructureV1`. The tools, strict scopes, projection and bounds are documented in
 [MCP server](mcp-server.md#training-plans-and-planned-workouts-690). Source support is not a deployed or
 registered-client promise. Provider certification, deployment, registered-contract promotion and plugin installation
-remain separate. The approval workflow implements the bounded #652 dependency; fallback/manual completion matching
-remains under #651.
+remain separate. The approval workflow implements the bounded #652 dependency. #651 is exact-marker-only; fallback/manual
+matching and audited unlink/relink are out of scope.
 
 Independent `training-plans:read` consent is available without a UID or Pro gate. Manual planning is available to every
 signed-in account; provider delivery remains separately gated by readiness, connection authority, explicit consent and Pro.
@@ -39,6 +39,8 @@ lock is acquired keeps the proposal resumable so the same approved apply can fin
 Permanent single-workout deletion and history restoration remain excluded. The latter allows plan delivery
 enablement and workout send/resume/stop/retry/check/approval. Delivery remains Pro and is gated by provider connection,
 permissions, configuration, compatibility and explicit consent.
+MCP plan and recoverable workout deletion never select the manual UI's optional past-provider-copy cleanup. Their
+previews distinguish eligible future-copy withdrawal from past copies, which remain, and recorded activities are untouched.
 External clients prepare one strict proposal of at most 25 changes, then invoke the separately approval-gated
 `apply_training_changes` write tool. ChatGPT, Claude and other MCP hosts own their native tool-approval UI; QS does not
 use MCP elicitation for a second confirmation round. A host may let its user configure automatic tool approval, which QS
@@ -718,6 +720,16 @@ exist only in `delivery/test-support/`, are excluded from the Functions build, a
 commands. Backend execution is necessary to resolve privileged connection authority and create background work; owner
 Rules/client transactions cannot authorize server-held provider credentials. Commands accept expected schedule, scope,
 and delivery-settings revisions and a mutation ID, never a UID, provider account ID, credential, or remote artifact ID.
+Single-workout previews identify exact, degraded or unsupported compatibility separately from provider connection
+readiness. Direct Send/Resume cannot record consent for an unsupported recipe; the browser explains the mapping reasons
+and disables confirmation without implying an earlier provider copy was removed or updated. MCP's first proposal likewise
+marks an unsupported destination unavailable, excludes it from
+`all_connected`, and keeps an explicitly requested failure independent from authored changes and other providers.
+Degraded mappings still use one reviewed digest-bound approval; plan-level consent can cover a mix of supported and
+unsupported workouts, with each individual delivery retaining its own truthful status. This adds no MCP tool, scope or
+registered output field: the existing provider preview availability and summary carry the result.
+Roll out the Functions guard before the browser change: an older Functions preview omits the optional compatibility
+field and cannot enforce this new Send/Resume rejection. Neither change is deployed by local verification.
 Receipts reject reuse with a different request and carry a 30-day `expireAt`; production TTL configuration is part of #655,
 not an operation performed by tests or this implementation. Manual authoring does not acquire a Pro requirement.
 
@@ -1036,6 +1048,19 @@ ordinary provider integration tests remain #647–#650, with contract questions 
 matching and Sports Lib extraction remain #651–#655; manual bulk-operation hardening remains #657 under epic #583.
 These are explicit tracked slices, not anonymous TODOs.
 
+Deletion policy: authored workout/plan deletion continues to withdraw eligible uncompleted future provider copies.
+The manual delete UI additionally offers an unchecked request to clean up past copies. The deletion transaction stores
+a private, mutation-bound choice; reconciliation and every provider request recheck it alongside the exact account,
+connection generation, retained identity and completion state. Garmin removes the schedule before its workout; Wahoo
+removes the dated Workout before its Plan; Suunto removes the owned Guide. These are best-effort cloud removals, not
+proof of app/watch removal or deletion of any recorded activity. A restored and subsequently deleted workout must opt
+in again; an old authorization cannot be reused. For plan-to-standalone deletion, the ledger keeps only the old plan
+marker pointer across temporary disconnects and rechecks the private marker on retry. A later standalone-workout
+deletion without opt-in overrides that earlier plan choice. COROS deliberately remains in backend reconciliation and tests, but
+its contract allows deleting only unexecuted workouts dated today or later, so past copies are retained and reported
+as unsupported. New-send UI availability remains a separate policy. MCP deletion previews/applies omit the
+opt-in and retain default past-copy preservation; this change adds no MCP tool, schema, scope, or provider action.
+
 #### Garmin workout sport profiles (#647)
 
 Garmin Training API V2 exposes `RUNNING` and `CYCLING` for supported running/cycling planned workouts and no sub-sport
@@ -1051,10 +1076,11 @@ Garmin receives the same broad family at the workout and segment levels. Cycling
 cycling-only secondary-target field subject to its existing device-support warning; running-family folds may not.
 Unsupported sports still fail closed. Existing Running/Cycling payloads and retained remote identities do not change,
 and no authored recipe, schedule history, Sports Lib type or provider ID is rewritten.
-MCP create-and-send keeps the authored subtype and establishes standalone delivery consent, but a degraded Garmin fold
-does not count as approved by that Send action. The workout remains unsent with a mapping-review requirement until a
-separate current-digest approval is confirmed. MCP previews and apply results must make that distinction explicit;
-neither an applied consent result nor a queued reconciliation means Garmin accepted a copy.
+MCP create-and-send keeps the authored subtype and establishes standalone delivery consent. Its preview must name the
+Garmin fold before the MCP host's native write approval; the approved Send carries the server-computed mapping digest
+into the existing delivery command, which rechecks the current payload and account in the write transaction. No second
+approval is needed for the same unchanged fold. Browser Send without that digest and subsequent changed mappings retain
+their normal review requirement. Neither an applied Send nor queued reconciliation means Garmin accepted a copy.
 
 Pool and open-water swimming are manually authorable. The #733 mapper encodes pool swimming as
 `LAP_SWIMMING` with an optional explicit physical pool length and target-free swim steps. It also supports an
@@ -1132,6 +1158,13 @@ description remain unchanged. Explicit subtitle truncation, title/instruction lo
 characters still require review. Identity fields and the configured Guide owner are never normalized. Character
 warnings identify the affected field; the derived subtitle does not repeat the title's warning, and app-only description
 text is not tested against watch fonts. This is a formatting policy, not a claim that Suunto rejects Unicode.
+For MCP-created Suunto workouts, omit unrequested step notes and keep necessary watch instructions within 40 code points
+when duration/targets are present or 54 for manual-only steps. Never silently discard requested authored meaning. If
+truncation remains necessary, the first MCP proposal summarizes the exact warnings; its single native approval also
+approves the current destination- and payload-bound adjustment. The authored QS note remains complete. A changed
+mapping blocks delivery until reviewed again. A warning set too large for the strict preview fails closed instead of
+approving undisclosed loss; the client can create without delivery or simplify the recipe. Browser and later
+plan-workout review semantics are unchanged.
 
 The same mapping keeps the authored canonical sport and translates it to Suunto's documented Guide `activities`
 recommendations: Running `1`, Trail Running `22`, Treadmill `53`, Cycling `2`, Mountain Biking `10`, Indoor Cycling
@@ -1283,9 +1316,18 @@ missing activity, delivery lease, different
 account, or conflicting existing completion cannot claim the link. The transaction writes the existing owner-readable
 completion and private reverse link, protects that remote copy from deletion, and is idempotent on reimport. It does not
 compare titles, durations or target adherence, infer late/early occurrence, or rewrite completed activity metrics.
-The one-link-per-workout v1 projection still cannot attach a second simultaneous Garmin recording when a Suunto recording
-already owns the completion; #651 retains that multi-source decision and any fallback/manual scope revision. This code
-does not retrospectively reparse previously imported FIT files or establish watch receipt across devices.
+The one-link-per-workout v1 projection keeps the first exact link committed when a second provider records the same
+workout; the second activity stays in completed history without replacing the link. Missing/reused markers, reconnect
+generations, stale plan/date occurrences and cross-user identities fail closed in provider emulator coverage. Once the
+matching provider copy catches up to a reschedule or plan transfer, a new exact link may proceed. This code does not
+retrospectively reparse previously imported FIT files or establish watch receipt across devices.
+
+MCP single/bulk completion reads use only the owner-scoped exact persisted link. `unlinked` has null provider, method,
+timing, link time and activity reference; `linked` retains the date and plan at link time. A later workout revision,
+including a plan transfer, keeps the stable workout link readable and sets `workoutChangedSinceCompletion`; an activity
+reference still requires independent `activity-details:read` consent. The current workout ID and revision are checked,
+and private source event IDs, remote markers, account identities and reverse links never enter MCP output. No MCP tool,
+scope, wire schema, consent, provider action or bundled-skill change is required for these edge-case fixes.
 
 Verification combines synthetic HTTP/ZIP/FIT fixtures, real Firestore transactions, Rules, UI/help and MCP read tests.
 MCP continues to read strict local delivery projections: Suunto counts derive from workouts, no watch receipt is inferred,
@@ -1340,6 +1382,15 @@ documented Running/Cycling baseline with time endings throughout. Required Worko
 step seconds times total repeat passes divided by 60, including fractional minutes. Distance endings cannot supply
 that value without an estimate and are unsupported for delivery. The broader fixture serializer's distance/kilojoule
 capabilities do not add editor features or imply delivery eligibility. Existing target/degradation approvals still apply.
+The unsupported verdict is visible at the first Send preview, before any Wahoo consent or HTTP operation. A supported
+relative-target workout remains a degradation, not an unsupported workout: its warning is approved with the same MCP
+proposal, then queued for the normal Plan/Workout reconciliation. A Wahoo-incompatible workout can still be authored
+in QS without Wahoo delivery, and a mixed all-connected request may send it to another compatible service.
+Loopback Firestore tests cover new and existing unsupported Sends, distance-ended all-connected rejection, mixed
+Wahoo/Suunto selection, and the degraded Wahoo create-through-Plan/Workout fixture lifecycle. They do not claim a
+live Wahoo app or device result. The MCP impact review found no new tool, permission, registered output shape,
+Assistant route or plugin instruction requirement; the existing preview availability/summary now reflects the
+backend compatibility verdict.
 
 The saved delivery zone determines today through today + 6, inclusive. Later workouts wait; moving an owned future
 copy outside the window withdraws it and preserves consent for later re-entry. QS represents its date-only schedule
@@ -1373,7 +1424,7 @@ digest and reverse evidence remain private. Repeated imports are idempotent; mis
 accounts, active delivery writes and conflicting existing links fail closed without date/title matching. Deleting the
 source event removes only its matching link/evidence, clears that marker-derived completion protection and queues
 delivery reconciliation; an independently observed provider summary remains protective. Provider-side moves, changed
-associations, past dates or ambiguous ownership block destructive writes. Bounded fallback/manual matching remains #651.
+associations, past dates or ambiguous ownership block destructive writes. Fallback/manual matching is outside #651.
 
 Neither identifier is a POST idempotency guarantee. An uncertain Plan create is recovered through a unique exact
 app-owned external-ID lookup, then a guarded in-place PUT if needed. An uncertain Workout create with a lost ID uses

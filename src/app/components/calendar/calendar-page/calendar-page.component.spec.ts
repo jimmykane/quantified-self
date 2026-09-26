@@ -1,12 +1,14 @@
 import { Component, Input, signal } from '@angular/core';
+import { ViewportScroller } from '@angular/common';
 import { TestBed } from '@angular/core/testing';
 import { MatBottomSheet } from '@angular/material/bottom-sheet';
 import { MatDialog } from '@angular/material/dialog';
 import { MatTooltip } from '@angular/material/tooltip';
 import { By } from '@angular/platform-browser';
-import { ActivatedRoute, convertToParamMap, provideRouter, Router } from '@angular/router';
+import { ActivatedRoute, convertToParamMap, NavigationEnd, provideRouter, Router, Scroll } from '@angular/router';
 import {
   ActivityTypes,
+  AppThemes,
   DataAscent,
   DataDescent,
   DataDistance,
@@ -19,8 +21,11 @@ import type { TimelineNote } from '@shared/timeline-notes';
 import type { WorkoutStructureV1 } from '@shared/planned-workout';
 import { AppTimelineNotesService } from '../../../services/app.timeline-notes.service';
 import { AppHapticsService } from '../../../services/app.haptics.service';
-import type { CalendarDayDetailsData, CalendarDayDetailsResult } from '../calendar-day-details/calendar-day-details.component';
+import { AppEventColorService } from '../../../services/color/app.event.color.service';
+import type { CalendarDayDetailsResult } from '../calendar-day-details/calendar-day-details.component';
 import { AppUserService } from '../../../services/app.user.service';
+import { AppThemeService } from '../../../services/app.theme.service';
+import { CalendarDayHealthService } from '../../../services/calendar-day-health.service';
 import { ActivityCalendarService } from '../../../services/activity-calendar.service';
 import { CalendarDayDetailsNavigationService } from '../../../services/calendar-day-details-navigation.service';
 import { TrainingPlansService, type CurrentTrainingScheduleV1 } from '../../../services/training-plans.service';
@@ -52,6 +57,12 @@ describe('CalendarPageComponent', () => {
     },
   };
   let queryParams: BehaviorSubject<ReturnType<typeof convertToParamMap>>;
+  let routeParams: BehaviorSubject<ReturnType<typeof convertToParamMap>>;
+  let activatedRoute: {
+    snapshot: { queryParamMap: ReturnType<typeof convertToParamMap>; paramMap: ReturnType<typeof convertToParamMap>; data: Record<string, unknown> };
+    queryParamMap: ReturnType<BehaviorSubject<ReturnType<typeof convertToParamMap>>['asObservable']>;
+    paramMap: ReturnType<BehaviorSubject<ReturnType<typeof convertToParamMap>>['asObservable']>;
+  };
   let navigate: ReturnType<typeof vi.fn>;
   let watchEvents: ReturnType<typeof vi.fn>;
   let openBottomSheet: ReturnType<typeof vi.fn>;
@@ -73,6 +84,11 @@ describe('CalendarPageComponent', () => {
 
   beforeEach(async () => {
     queryParams = new BehaviorSubject(convertToParamMap({ view: 'month', date: '2026-08-03' }));
+    routeParams = new BehaviorSubject(convertToParamMap({}));
+    activatedRoute = {
+      snapshot: { queryParamMap: queryParams.value, paramMap: routeParams.value, data: {} },
+      queryParamMap: queryParams.asObservable(), paramMap: routeParams.asObservable(),
+    };
     navigate = vi.fn().mockResolvedValue(true);
     watchEvents = vi.fn().mockReturnValue(of([createEvent()]));
     dismissed = new Subject();
@@ -95,16 +111,18 @@ describe('CalendarPageComponent', () => {
       imports: [CalendarPageComponent],
       providers: [
         provideRouter([]),
-        { provide: ActivatedRoute, useValue: {
-          snapshot: { queryParamMap: queryParams.value },
-          queryParamMap: queryParams.asObservable(),
-        } },
+        { provide: ActivatedRoute, useValue: activatedRoute },
         { provide: AppUserService, useValue: { user: signal(user), user$: of(user) } },
+        { provide: AppThemeService, useValue: { appTheme: signal(AppThemes.Normal) } },
         { provide: ActivityCalendarService, useValue: { watchEvents } },
         { provide: TrainingPlansService, useValue: { watchSchedule, watchWorkoutCompletions } },
         { provide: CalendarDayDetailsNavigationService, useValue: dayDetailsNavigation },
+        { provide: CalendarDayHealthService, useValue: { watch: vi.fn(() => of({ sessions: [], hrvSeries: [], derived: null, sleepError: false, hrvError: false, readinessError: false, recoveryError: false })) } },
         { provide: AppTimelineNotesService, useValue: notesService },
         { provide: AppHapticsService, useValue: haptics },
+        { provide: AppEventColorService, useValue: {
+          getActivityColor: vi.fn(), getColorForActivityTypeByActivityTypeGroup: vi.fn(),
+        } },
         { provide: MatDialog, useValue: dialogs },
       ],
     }).overrideComponent(CalendarPageComponent, {
@@ -139,6 +157,45 @@ describe('CalendarPageComponent', () => {
       { label: 'Ascent', value: '450 m' },
     ]);
     expect(fixture.nativeElement.textContent).toContain('August 2026');
+  });
+
+  it('opens a bounded standalone day with its context and no calendar grid', async () => {
+    activatedRoute.snapshot.data = { calendarMode: 'day' };
+    activatedRoute.snapshot.paramMap = convertToParamMap({ date: '2026-08-03' });
+    routeParams.next(activatedRoute.snapshot.paramMap);
+    const fixture = TestBed.createComponent(CalendarPageComponent);
+    fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('h1#calendar-page-title')?.textContent).toContain('Aug');
+    expect(fixture.nativeElement.querySelector('.calendar-page-header')).toBeNull();
+    expect(fixture.nativeElement.querySelector('.calendar-day-toolbar a')?.getAttribute('href'))
+      .toBe('/calendar?view=month&date=2026-08-03');
+    expect(fixture.nativeElement.querySelector('.calendar-day-toolbar a')?.getAttribute('aria-label'))
+      .toBe('Back to calendar for this day');
+    expect(fixture.nativeElement.querySelector('.calendar-day-toolbar app-timeline-notes-workspace')).toBeTruthy();
+    expect(fixture.componentInstance.dayShortTitle()).toContain('Aug');
+    expect(fixture.nativeElement.querySelector('.activity-calendar-day-button')).toBeNull();
+    expect(fixture.nativeElement.querySelector('app-calendar-day-context')).toBeTruthy();
+    expect(watchEvents).toHaveBeenCalledWith(user, {
+      startMs: new Date(2026, 7, 3).getTime(), endExclusiveMs: new Date(2026, 7, 4).getTime(),
+    });
+    expect(fixture.componentInstance.timelineNoteRange()).toEqual({ startDate: '2026-08-03', endDate: '2026-08-03' });
+    expect(fixture.nativeElement.querySelector('app-activity-range-table-section')).toBeNull();
+  });
+
+  it('navigates adjacent day routes and follows the path parameter on Back', async () => {
+    activatedRoute.snapshot.data = { calendarMode: 'day' };
+    activatedRoute.snapshot.paramMap = convertToParamMap({ date: '2026-08-03' });
+    routeParams.next(activatedRoute.snapshot.paramMap);
+    const fixture = TestBed.createComponent(CalendarPageComponent);
+    fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+    fixture.componentInstance.navigatePeriod(1);
+    expect(navigate).toHaveBeenCalledWith(['/calendar/day', '2026-08-04']);
+    routeParams.next(convertToParamMap({ date: '2026-08-04' }));
+    fixture.detectChanges();
+    expect(fixture.componentInstance.selectedDay()?.dateKey).toBe('2026-08-04');
+    routeParams.next(convertToParamMap({ date: '2026-08-03' }));
+    fixture.detectChanges();
+    expect(fixture.componentInstance.selectedDay()?.dateKey).toBe('2026-08-03');
   });
 
   it('reads and exposes planning for any signed-in account while completed activities remain visible', async () => {
@@ -207,7 +264,7 @@ describe('CalendarPageComponent', () => {
     expect(fixture.nativeElement.querySelector('.calendar-family-volume-value')?.textContent?.trim()).toBe('1h');
     expect((fixture.nativeElement.querySelector('.calendar-family-volume-fill') as HTMLElement)?.style.width)
       .toBe('100%');
-    const recordedTotals = [...fixture.nativeElement.querySelectorAll('.calendar-family-volume-stat')]
+    const recordedTotals = [...fixture.nativeElement.querySelectorAll('.calendar-family-volume > app-activity-calendar-volume-list .calendar-family-volume-stat')]
       .map((stat: HTMLElement) => stat.getAttribute('aria-label'));
     expect(recordedTotals).toEqual([
       'Duration 1h',
@@ -236,7 +293,7 @@ describe('CalendarPageComponent', () => {
     await fixture.whenStable();
     fixture.detectChanges();
 
-    const recordedTotals = [...fixture.nativeElement.querySelectorAll('.calendar-family-volume-stat')]
+    const recordedTotals = [...fixture.nativeElement.querySelectorAll('.calendar-family-volume > app-activity-calendar-volume-list .calendar-family-volume-stat')]
       .map((stat: HTMLElement) => stat.getAttribute('aria-label'));
     expect(recordedTotals).toEqual(['Duration 1h']);
   });
@@ -247,7 +304,7 @@ describe('CalendarPageComponent', () => {
     fixture.detectChanges();
     await fixture.whenStable();
 
-    const recordedTotals = [...fixture.nativeElement.querySelectorAll('.calendar-family-volume-stat')]
+    const recordedTotals = [...fixture.nativeElement.querySelectorAll('.calendar-family-volume > app-activity-calendar-volume-list .calendar-family-volume-stat')]
       .map((stat: HTMLElement) => stat.getAttribute('aria-label'));
     expect(recordedTotals).toEqual([
       'Duration 1h',
@@ -263,7 +320,7 @@ describe('CalendarPageComponent', () => {
     fixture.detectChanges();
     await fixture.whenStable();
 
-    const recordedTotals = [...fixture.nativeElement.querySelectorAll('.calendar-family-volume-stat')]
+    const recordedTotals = [...fixture.nativeElement.querySelectorAll('.calendar-family-volume > app-activity-calendar-volume-list .calendar-family-volume-stat')]
       .map((stat: HTMLElement) => stat.getAttribute('aria-label'));
     expect(recordedTotals).toEqual([
       'Duration 1h',
@@ -295,92 +352,116 @@ describe('CalendarPageComponent', () => {
     expect(mobileButton?.querySelector('mat-icon')?.textContent).toContain('today');
   });
 
-  it('opens Material day details for an activity day', async () => {
+  it('selects an activity day inline and updates the linkable route date', async () => {
     const fixture = TestBed.createComponent(CalendarPageComponent);
-    fixture.detectChanges();
-    await fixture.whenStable();
-    fixture.detectChanges();
-    const componentBottomSheet = (fixture.componentInstance as unknown as {
-      bottomSheet: MatBottomSheet;
-    }).bottomSheet;
-    const componentOpen = vi.spyOn(componentBottomSheet, 'open').mockImplementation(openBottomSheet);
-
-    const activityDay = fixture.componentInstance.calendarModel().months[0].days
-      .find(day => day.eventCount > 0);
+    fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+    const activityDay = fixture.componentInstance.calendarModel().months[0].days.find(day => day.eventCount > 0)!;
     fixture.componentInstance.openDay(activityDay);
+    expect(fixture.componentInstance.selectedDayData()?.day.dateKey).toBe(activityDay.dateKey);
+    expect(fixture.nativeElement.querySelector('app-calendar-day-context')).toBeTruthy();
+    expect(openBottomSheet).not.toHaveBeenCalled();
+  });
 
-    expect(componentOpen).toHaveBeenCalledWith(expect.any(Function), expect.objectContaining({
-      data: expect.objectContaining({
-        userId: planningUserUid,
-        unitSettings: user.settings.unitSettings,
-        summariesSettings: user.settings.summariesSettings,
-      }),
+  it('writes a shareable URL when selecting the initially highlighted day without a date parameter', async () => {
+    queryParams.next(convertToParamMap({ view: 'month' }));
+    const fixture = TestBed.createComponent(CalendarPageComponent);
+    fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+    const selected = fixture.componentInstance.selectedDay()!;
+    fixture.componentInstance.openDay(selected);
+    expect(navigate).toHaveBeenCalledWith([], expect.objectContaining({
+      queryParams: { view: 'month', date: selected.dateKey },
     }));
   });
 
-  it('opens empty days and supplies standalone plus active-plan workouts separately', async () => {
+  it.each(['week', 'month', 'year'] as const)('keeps the selected day linkable and restores it on Back in %s view', async view => {
+    queryParams.next(convertToParamMap({ view, date: '2026-08-03' }));
+    const fixture = TestBed.createComponent(CalendarPageComponent);
+    fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+    const next = fixture.componentInstance.calendarModel().months.flatMap(month => month.days)
+      .find(day => day.dateKey === '2026-08-04')!;
+    fixture.componentInstance.openDay(next);
+    expect(navigate).toHaveBeenCalledWith([], expect.objectContaining({ queryParams: { view, date: '2026-08-04' } }));
+    queryParams.next(convertToParamMap({ view, date: '2026-08-04' }));
+    fixture.detectChanges();
+    expect(fixture.componentInstance.selectedDay()?.dateKey).toBe('2026-08-04');
+    queryParams.next(convertToParamMap({ view, date: '2026-08-03' }));
+    fixture.detectChanges();
+    expect(fixture.componentInstance.selectedDay()?.dateKey).toBe('2026-08-03');
+  });
+
+  it('drills from a narrow Year grid into the selected month, even for the already highlighted date', async () => {
+    queryParams.next(convertToParamMap({ view: 'year', date: '2026-08-03' }));
+    const originalMatchMedia = window.matchMedia;
+    window.matchMedia = vi.fn(() => ({ matches: true } as MediaQueryList));
+    try {
+      const fixture = TestBed.createComponent(CalendarPageComponent);
+      fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+      fixture.componentInstance.openDay(fixture.componentInstance.selectedDay()!);
+      expect(navigate).toHaveBeenCalledWith([], expect.objectContaining({
+        queryParams: { view: 'month', date: '2026-08-03' },
+      }));
+    } finally {
+      window.matchMedia = originalMatchMedia;
+    }
+  });
+
+  it('preserves scroll after a day selection while leaving browser Back restoration to the router', async () => {
+    const router = TestBed.inject(Router);
+    const routerEvents = new Subject<Scroll>();
+    vi.spyOn(router, 'events', 'get').mockReturnValue(routerEvents.asObservable());
+    const scroller = TestBed.inject(ViewportScroller);
+    vi.spyOn(scroller, 'getScrollPosition').mockReturnValue([0, 420]);
+    const restore = vi.spyOn(scroller, 'scrollToPosition').mockImplementation(() => undefined);
+    const fixture = TestBed.createComponent(CalendarPageComponent);
+    fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+    const day = fixture.componentInstance.calendarModel().months[0].days.find(item => item.dateKey === '2026-08-04')!;
+    fixture.componentInstance.openDay(day);
+    routerEvents.next(new Scroll(new NavigationEnd(1, '/calendar', '/calendar?view=month&date=2026-08-05'), null, null));
+    await Promise.resolve();
+    expect(restore).not.toHaveBeenCalled();
+    routerEvents.next(new Scroll(new NavigationEnd(2, '/calendar', '/calendar?view=month&date=2026-08-04'), null, null));
+    await Promise.resolve();
+    expect(restore).toHaveBeenCalledWith([0, 420]);
+    restore.mockClear();
+    fixture.componentInstance.navigatePeriod(1);
+    routerEvents.next(new Scroll(new NavigationEnd(3, '/calendar', '/calendar?view=month&date=2026-09-03'), [0, 180], null));
+    await Promise.resolve();
+    expect(restore).not.toHaveBeenCalled();
+  });
+
+  it('selects empty days and exposes only active-plan and standalone workouts', async () => {
     watchSchedule.mockReturnValue(of(trainingSchedule()));
     const fixture = TestBed.createComponent(CalendarPageComponent);
-    fixture.detectChanges();
-    await fixture.whenStable();
-    fixture.detectChanges();
-    const componentBottomSheet = (fixture.componentInstance as unknown as {
-      bottomSheet: MatBottomSheet;
-    }).bottomSheet;
-    const componentOpen = vi.spyOn(componentBottomSheet, 'open').mockImplementation(openBottomSheet);
-    const plannedDay = fixture.componentInstance.calendarModel().months[0].days
-      .find(day => day.dateKey === '2026-08-04')!;
-
-    fixture.componentInstance.openDay(plannedDay);
-
-    expect(fixture.nativeElement.querySelectorAll('[aria-label*="planned workout"]')).not.toHaveLength(0);
-    expect(componentOpen).toHaveBeenCalledWith(expect.any(Function), expect.objectContaining({
-      data: expect.objectContaining({
-        day: expect.objectContaining({ dateKey: '2026-08-04', eventCount: 0 }),
-        plannedWorkouts: [
-          expect.objectContaining({ workout: expect.objectContaining({ id: 'active-workout' }) }),
-          expect.objectContaining({ workout: expect.objectContaining({ id: 'standalone-workout' }) }),
-        ],
-      }),
-    }));
-    expect((componentOpen.mock.calls[0][1] as { data: { plannedWorkouts: Array<{ workout: { id: string } }> } })
-      .data.plannedWorkouts.map(entry => entry.workout.id)).not.toContain('inactive-workout');
+    fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+    const day = fixture.componentInstance.calendarModel().months[0].days.find(item => item.dateKey === '2026-08-04')!;
+    fixture.componentInstance.openDay(day);
+    expect(navigate).toHaveBeenCalledWith([], expect.objectContaining({ queryParams: { view: 'month', date: '2026-08-04' } }));
+    queryParams.next(convertToParamMap({ view: 'month', date: '2026-08-04' }));
+    fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+    expect(fixture.componentInstance.selectedDayData()?.day.eventCount).toBe(0);
+    expect(fixture.componentInstance.selectedDayPlanned().map(entry => entry.workout.id)).toEqual(['active-workout', 'standalone-workout']);
+    expect(fixture.nativeElement.querySelector('app-calendar-day-context')).toBeTruthy();
   });
 
-  it('moves to the duplicated workout date and reopens its Calendar day details', async () => {
+  it('keeps the duplicated workout destination selected inline', async () => {
     const fixture = TestBed.createComponent(CalendarPageComponent);
     fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
-    const componentBottomSheet = (fixture.componentInstance as unknown as { bottomSheet: MatBottomSheet }).bottomSheet;
-    vi.spyOn(componentBottomSheet, 'open').mockImplementation(openBottomSheet);
-    const sourceDay = fixture.componentInstance.calendarModel().months[0].days.find(day => day.dateKey === '2026-08-03')!;
-    fixture.componentInstance.openDay(sourceDay);
-    dismissed.next({ kind: 'duplicated-workout', workoutId: 'copy', planId: null, localDate: '2026-08-10' });
-    expect(dayDetailsNavigation.prepareWorkoutDestination).toHaveBeenCalledWith(planningUserUid, '2026-08-10');
-    expect(navigate).toHaveBeenCalledWith([], expect.objectContaining({ queryParams: { view: 'month', date: '2026-08-10' } }));
+    pendingDestination.set('2026-08-10');
     queryParams.next(convertToParamMap({ view: 'month', date: '2026-08-10' }));
     fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
-    expect(fixture.componentInstance.routeState().anchorDate.getDate()).toBe(10);
-    expect(fixture.componentInstance.eventState().status).toBe('ready');
+    expect(fixture.componentInstance.selectedDay()?.dateKey).toBe('2026-08-10');
     expect(dayDetailsNavigation.consumeWorkoutDestination).toHaveBeenCalledWith(planningUserUid, '2026-08-10');
-    expect(openBottomSheet.mock.calls.at(-1)?.[1].data.day.dateKey).toBe('2026-08-10');
+    expect(openBottomSheet).not.toHaveBeenCalled();
   });
 
-  it('reopens day details after returning from an event route', async () => {
+  it('restores the inline selected day after returning from an activity', async () => {
     const restoration = { sourceUrl: '/', dateKey: '2026-08-03' };
     dayDetailsNavigation.restorationFor.mockReturnValue(restoration);
     const fixture = TestBed.createComponent(CalendarPageComponent);
-    const componentBottomSheet = (fixture.componentInstance as unknown as {
-      bottomSheet: MatBottomSheet;
-    }).bottomSheet;
-    vi.spyOn(componentBottomSheet, 'open').mockImplementation(openBottomSheet);
-    fixture.detectChanges();
-    await fixture.whenStable();
-    fixture.detectChanges();
-
+    fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
     expect(dayDetailsNavigation.consumeRestoration).toHaveBeenCalledWith(restoration);
-    expect(openBottomSheet).toHaveBeenCalledWith(expect.any(Function), expect.objectContaining({
-      data: expect.objectContaining({ day: expect.objectContaining({ dateKey: '2026-08-03' }) }),
-    }));
+    expect(fixture.componentInstance.selectedDay()?.dateKey).toBe('2026-08-03');
+    expect(openBottomSheet).not.toHaveBeenCalled();
   });
 
   it('shows a retryable error state', async () => {
@@ -396,34 +477,35 @@ describe('CalendarPageComponent', () => {
     expect(fixture.nativeElement.querySelector('.planned-workout-markers')).toBeTruthy();
     expect(fixture.nativeElement.textContent).not.toContain('No completed activities in August 2026');
   });
-  it('loads the visible grid and opens notes on days without activities using the shared manager', async () => {
+  it('loads notes for empty days and opens them from the inline panel', async () => {
     notesService.loadRange.mockResolvedValue({ notes: [note], incomplete: null });
     const fixture = TestBed.createComponent(CalendarPageComponent);
     fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
     await vi.waitFor(() => expect(fixture.componentInstance.notesByDate().size).toBe(2));
-    expect(notesService.loadRange).toHaveBeenCalledWith(planningUserUid, { startDate: '2026-07-27', endDate: '2026-09-06' }, false);
-    const day = fixture.componentInstance.calendarModel().months[0].days.find(day => day.dateKey === note.startDate)!;
+    const day = fixture.componentInstance.calendarModel().months[0].days.find(item => item.dateKey === note.startDate)!;
     fixture.componentInstance.openDay(day);
-    const data = openBottomSheet.mock.calls.at(-1)?.[1].data as CalendarDayDetailsData;
-    expect(data.timelineNotes?.()).toEqual([note]);
+    queryParams.next(convertToParamMap({ view: 'month', date: note.startDate }));
+    fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+    expect(fixture.componentInstance.selectedDayNotes()).toEqual([note]);
     expect(day.eventCount).toBe(0);
-    dismissed.next(note.id);
+    fixture.componentInstance.selectDayNote(note.id);
     expect(dialogs.open).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ data: { uid: planningUserUid, notes: [note] } }));
-    expect(haptics.selection).toHaveBeenCalledOnce();
   });
-  it('clears an open sheet on account change and ignores a stale note selection', async () => {
+
+  it('clears inline private notes on account change and ignores stale selection', async () => {
     notesService.loadRange.mockResolvedValue({ notes: [note], incomplete: null });
     const fixture = TestBed.createComponent(CalendarPageComponent);
     fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
     await vi.waitFor(() => expect(fixture.componentInstance.notesByDate().size).toBe(2));
     fixture.componentInstance.openDay(fixture.componentInstance.calendarModel().months[0].days.find(day => day.dateKey === note.startDate)!);
-    const data = openBottomSheet.mock.calls.at(-1)?.[1].data as CalendarDayDetailsData;
+    queryParams.next(convertToParamMap({ view: 'month', date: note.startDate }));
+    fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
     notesService.uid.set('another-owner'); fixture.detectChanges();
-    expect(data.timelineNotes?.()).toEqual([]);
-    dismissed.next(note.id);
+    expect(fixture.componentInstance.selectedDayNotes()).toEqual([]);
+    fixture.componentInstance.selectDayNote(note.id);
     expect(dialogs.open).not.toHaveBeenCalled();
-    expect(haptics.selection).not.toHaveBeenCalled();
   });
+
   it('keeps notes available when activities fail and does not hide activities when notes fail', async () => {
     watchEvents.mockReturnValue(throwError(() => new Error('offline')));
     notesService.loadRange.mockResolvedValue({ notes: [note], incomplete: 'records' });
@@ -439,7 +521,7 @@ describe('CalendarPageComponent', () => {
     watchEvents.mockReturnValue(of([createEvent()]));
     fixture.componentInstance.retry(); notesService.changes$.next();
     fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
-    expect(fixture.nativeElement.textContent).toContain('Retry notes');
+    expect(fixture.nativeElement.textContent).toContain('Morning run');
     expect(fixture.nativeElement.querySelectorAll('.activity-calendar-day-button')).toHaveLength(42);
   });
 

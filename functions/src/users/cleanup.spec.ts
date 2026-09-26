@@ -386,7 +386,7 @@ describe('cleanupUserAccounts', () => {
         );
     });
 
-    it('registers durable retry for account-deletion cleanup', () => {
+    it('registers durable retry and extended runtime limits for account-deletion cleanup', () => {
         const expectedSecretNames = [
             'COROSAPI_CLIENT_ID',
             'COROSAPI_CLIENT_SECRET',
@@ -399,8 +399,12 @@ describe('cleanupUserAccounts', () => {
         ];
 
         expect(ACCOUNT_DELETION_CLEANUP_RUNTIME_OPTIONS.failurePolicy).toBe(true);
+        expect(ACCOUNT_DELETION_CLEANUP_RUNTIME_OPTIONS.timeoutSeconds).toBe(540);
+        expect(ACCOUNT_DELETION_CLEANUP_RUNTIME_OPTIONS.memory).toBe('512MB');
         expect(ACCOUNT_DELETION_CLEANUP_RUNTIME_OPTIONS.secrets.map(secret => secret.name)).toEqual(expectedSecretNames);
         expect(registeredCleanupRuntimeOptions?.failurePolicy).toBe(true);
+        expect(registeredCleanupRuntimeOptions?.timeoutSeconds).toBe(540);
+        expect(registeredCleanupRuntimeOptions?.memory).toBe('512MB');
         expect(registeredCleanupRuntimeOptions?.secrets.map(secret => secret.name)).toEqual(expectedSecretNames);
     });
 

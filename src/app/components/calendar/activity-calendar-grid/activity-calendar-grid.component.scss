@@ -178,6 +178,11 @@
   outline-offset: -2px;
 }
 
+.activity-calendar-day--selected {
+  z-index: 1;
+  box-shadow: inset 0 0 0 2px var(--mat-sys-primary);
+}
+
 .activity-calendar-day--outside {
   color: var(--mat-sys-on-surface-variant);
 }
@@ -188,6 +193,17 @@
 
 .activity-calendar-day--weekend {
   background: var(--activity-calendar-weekend-background);
+}
+
+// The height-filling dashboard grid can place row edges on fractional pixels.
+// Paint weekend columns once behind the cells so their tint has no row seams.
+.activity-calendar--fill-height .activity-calendar-day--weekend {
+  background: transparent;
+}
+
+.activity-calendar--fill-height .activity-calendar-day-button:hover,
+.activity-calendar--fill-height .activity-calendar-day-button:focus-visible {
+  background: var(--mat-sys-surface-container-high);
 }
 
 .activity-calendar-day-number {
@@ -538,6 +554,33 @@
 .activity-calendar--fill-height .activity-calendar-day {
   min-height: 0;
   padding-block: 0;
+}
+
+@container (min-width: 560px) {
+  .activity-calendar--dashboard-context .activity-calendar-weekdays {
+    min-height: 32px;
+  }
+
+  .activity-calendar--dashboard-context .activity-calendar-day {
+    padding-block: 4px;
+  }
+
+  .activity-calendar--dashboard-context .activity-calendar-day-number {
+    width: 24px;
+    height: 24px;
+    flex-basis: 24px;
+    font: var(--mat-sys-label-large);
+  }
+
+  .activity-calendar--dashboard-context .activity-calendar-marker-stage {
+    height: 28px;
+    flex-basis: 28px;
+  }
+
+  .activity-calendar--dashboard-context .activity-calendar-marker-stage--concentric .activity-calendar-marker {
+    width: calc(var(--calendar-marker-compact-diameter) * 1.2);
+    height: calc(var(--calendar-marker-compact-diameter) * 1.2);
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {

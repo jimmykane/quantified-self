@@ -14,6 +14,14 @@ import {
 } from './policies.content';
 
 describe('help.content', () => {
+  it('explains shared horizontal pinch zoom on Event details charts', () => {
+    const content = HELP_SECTIONS.find(section => section.id === 'getting-started')!.content;
+    expect(content).toContain('In **Zoom** chart mode, pinch with two fingers');
+    expect(content).toContain('swipe left or right with one finger to move through the zoomed range');
+    expect(content).toContain('same time or distance range appears across the other event charts');
+    expect(content).toContain('In **Select** mode, one-finger drags select a range and pinching does not change the chart range');
+  });
+
   it('explains separately consented Timeline-note context for workout suggestions', () => {
     const assistant = HELP_SECTIONS.find(section => section.id === 'ai-insights')?.content;
     expect(assistant).toContain('notes about sickness, injury, travel, or vacation');
@@ -507,7 +515,7 @@ describe('help.content', () => {
     expect(gettingStartedSection?.content).toContain('Routes** map tiles show recent saved routes from lightweight route previews');
     expect(gettingStartedSection?.content).toContain('derived tiles stay independent from event table filters and custom/map tile filters');
     expect(gettingStartedSection?.content).toContain('New dashboards start with **Today**');
-    expect(gettingStartedSection?.content).toContain('default 1 x 1 dashboard tile');
+    expect(gettingStartedSection?.content).toContain('full-width dashboard section');
     expect(gettingStartedSection?.content).toContain('intentionally empty dashboards stay as you left them');
     expect(gettingStartedSection?.content).toContain('Open **Training** or **Health** from the main navigation');
     expect(gettingStartedSection?.content).toContain('Select its calendar icon to open a mini calendar for the current month');
@@ -528,11 +536,12 @@ describe('help.content', () => {
     expect(gettingStartedSection?.content).toContain('**Aerobic Capacity**');
     expect(gettingStartedSection?.content).toContain('**Aerobic Durability**');
     expect(gettingStartedSection?.content).toContain('current **Readiness**');
-    expect(gettingStartedSection?.content).toContain('groups chart and map tiles by intent');
+    expect(gettingStartedSection?.content).toContain('KPIs and charts grouped by intent');
+    expect(gettingStartedSection?.content).toContain('**Calendar** after Today, then KPIs');
     expect(gettingStartedSection?.content).toContain('**Training State**, **Health**, **Performance & Power**, **Activity Overview**, and **Routes & Maps**');
     expect(gettingStartedSection?.content).toContain('All custom charts belong in **Activity Overview**');
     expect(gettingStartedSection?.content).toContain('chart-aware default sizes');
-    expect(gettingStartedSection?.content).toContain('Empty editable dashboards show lightweight section guidance');
+    expect(gettingStartedSection?.content).toContain('Empty sections stay hidden');
     expect(gettingStartedSection?.content).toContain('**Cycling Power Curve** and **Running Power Curve** are curated derived snapshots');
     expect(gettingStartedSection?.content).toContain('defaults to **1y**');
     expect(gettingStartedSection?.content).toContain('latest activity or a saved recent-best comparison window');
@@ -543,17 +552,18 @@ describe('help.content', () => {
     const calendarSection = HELP_SECTIONS.find(section => section.id === 'activity-calendar');
 
     expect(calendarSection?.content).toContain('**Week**, **Month**, and **Year** views');
-    expect(calendarSection?.content).toContain('1 x 1 **Activity Calendar** tile');
+    expect(calendarSection?.content).toContain('same sleep-stage breakdown used in Health');
+    expect(calendarSection?.content).toContain('full-width **Calendar** section');
     expect(calendarSection?.content).toContain('**Today** card opens a month calendar in a bottom sheet');
     expect(calendarSection?.content).toContain('Dashboard and Training headers also link to the full [Calendar](/calendar)');
-    expect(calendarSection?.content).toContain('Existing dashboards keep their saved layout');
-    expect(calendarSection?.content).toContain('out of suggestions until you add it again manually');
+    expect(calendarSection?.content).toContain('without changing their saved settings');
+    expect(calendarSection?.content).toContain('out of suggestions until you add it manually');
     expect(calendarSection?.content).toContain('place multiple circles concentrically around the same center');
     expect(calendarSection?.content).toContain('size reflects recorded duration');
-    expect(calendarSection?.content).toContain('individual activities with their available distance and elevation metrics');
-    expect(calendarSection?.content).toContain('activity group containing exactly one activity opens that activity directly');
-    expect(calendarSection?.content).toContain('Browser **Back** restores the same day\'s details sheet');
-    expect(calendarSection?.content).toContain('Deleting an activity from its details page returns to the previous in-app page');
+    expect(calendarSection?.content).toContain('Completed totals and activity-group bars appear above individual activities');
+    expect(calendarSection?.content).toContain('Select an activity row to open its details');
+    expect(calendarSection?.content).toContain('Browser **Back** returns to the selected calendar day');
+    expect(calendarSection?.content).toContain('The selected view and date are kept in the URL');
     expect(calendarSection?.content).toContain('intentionally have no hover or touch tooltip');
     expect(calendarSection?.content).toContain('recorded **Distance**, **Duration**, and **Ascent**');
     expect(calendarSection?.content).toContain('Month totals exclude adjacent dates');
@@ -614,6 +624,9 @@ describe('help.content', () => {
     expect(planningSection?.content).toContain('does not offer a Suunto visibility check');
     expect(planningSection?.content).toContain('never recreates a Guide automatically');
     expect(planningSection?.content).toContain('reconnecting is not required or recommended as a normal QS workflow');
+    expect(planningSection?.content).toContain('Stop requests withdrawal of an eligible cloud Guide');
+    expect(planningSection?.content).toContain('does not guarantee that a Guide already visible in the Suunto app or on your watch disappears');
+    expect(planningSection?.content).toContain('Remove or hide it in Suunto if you no longer want to see it there');
     expect(planningSection?.content).toContain('**Completed · activity linked**');
     expect(planningSection?.content).toContain('A completed Garmin FIT activity can link to a planned workout');
     expect(planningSection?.content).toContain('a second recording of an already-linked workout does not replace the first');

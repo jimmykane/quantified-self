@@ -1,5 +1,5 @@
 import * as admin from 'firebase-admin';
-import { retireTrainingPlanDeliverySettings, stageTrainingDeliveryReconciliation } from './delivery/marker';
+import { retireTrainingPlanDeliverySettings, stagePastPlanCleanup, stageTrainingDeliveryReconciliation } from './delivery/marker';
 import { TRAINING_WORKOUT_COMPLETIONS_COLLECTION_ID } from '../../../shared/training-workout-completion';
 import { Timestamp } from 'firebase-admin/firestore';
 import { ActivityTypes } from '@sports-alliance/sports-lib';
@@ -56,6 +56,7 @@ interface PlanDeletionLockV1 {
     stateRevision: number;
     planRevision: number;
     workoutDisposition: DeleteTrainingPlanRequestV1['workoutDisposition'];
+    removePastProviderCopies?: boolean;
     workouts: PlanDeletionLockWorkoutV1[];
     createdAtMs: number;
 }
@@ -233,6 +234,7 @@ function parsePlanDeletionLock(value: unknown): PlanDeletionLockV1 {
         || !Number.isSafeInteger(record.stateRevision)
         || !Number.isSafeInteger(record.planRevision)
         || (record.workoutDisposition !== 'convert-to-standalone' && record.workoutDisposition !== 'delete-workouts')
+        || (record.removePastProviderCopies !== undefined && typeof record.removePastProviderCopies !== 'boolean')
         || !Array.isArray(record.workouts)
         || !Number.isSafeInteger(record.createdAtMs)
     ) throw new Error('Invalid plan-deletion lock.');
@@ -252,6 +254,7 @@ function parsePlanDeletionLock(value: unknown): PlanDeletionLockV1 {
         stateRevision: record.stateRevision as number,
         planRevision: record.planRevision as number,
         workoutDisposition: record.workoutDisposition,
+        ...(record.removePastProviderCopies === true ? { removePastProviderCopies: true } : {}),
         workouts,
         createdAtMs: record.createdAtMs as number,
     };
@@ -336,7 +339,8 @@ async function ensurePlanDeletionLock(
         }
         if (lockSnapshot?.exists) {
             const lock = parsePlanDeletionLock(documentData(lockSnapshot));
-            if (lock.workoutDisposition !== request.workoutDisposition) {
+            if (lock.workoutDisposition !== request.workoutDisposition
+                || !!lock.removePastProviderCopies !== !!request.removePastProviderCopies) {
                 throw new TrainingScheduleMutationError(
                     'failed-precondition',
                     'This plan already has a deletion in progress with a different workout choice.',
@@ -376,6 +380,7 @@ async function ensurePlanDeletionLock(
             stateRevision: snapshot.state.revision,
             planRevision: plan.revision,
             workoutDisposition: request.workoutDisposition,
+            ...(request.removePastProviderCopies === true ? { removePastProviderCopies: true } : {}),
             workouts: [...applied.convertedWorkouts.size > 0
                 ? applied.convertedWorkouts.values()
                 : currentPlanWorkouts(snapshot, request.planId)]
@@ -678,6 +683,10 @@ async function finalizePlanDeletion(
         };
         const applied = applyTrainingPlanDeletion(snapshot, finalRequest, lock.createdAtMs);
         stageTrainingDeliveryReconciliation(transaction, db, uid);
+        if (lock.removePastProviderCopies) {
+            stagePastPlanCleanup(transaction, db, uid, request.planId,
+                lock.workouts.map(workout => workout.id), lock.mutationId, lock.createdAtMs);
+        }
         retireTrainingPlanDeliverySettings(transaction, db, uid, request.planId);
         transaction.set(stateRef, applied.after.state);
         if (request.workoutDisposition === 'convert-to-standalone') {
@@ -797,6 +806,7 @@ export async function deleteTrainingPlanForUser(
                     ...request,
                     mutationId: lockResult.lock.mutationId,
                     workoutDisposition: lockResult.lock.workoutDisposition,
+                    ...(lockResult.lock.removePastProviderCopies ? { removePastProviderCopies: true } : {}),
                 };
                 return finalizePlanDeletion(
                     db,

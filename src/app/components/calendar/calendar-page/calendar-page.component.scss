@@ -10,6 +10,24 @@
   margin-bottom: 18px;
 }
 
+.calendar-day-toolbar {
+  display: flex;
+  min-height: 44px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.calendar-day-back {
+  flex: 0 0 auto;
+}
+
+.calendar-day-toolbar app-timeline-notes-workspace {
+  min-width: 0;
+  justify-content: flex-end;
+}
+
 .calendar-view-option {
   display: inline-flex;
   align-items: center;
@@ -36,6 +54,7 @@
   border-bottom: 1px solid var(--mat-sys-outline-variant);
 }
 
+.calendar-period-navigation h1,
 .calendar-period-navigation h2 {
   min-width: 0;
   margin: 0;
@@ -50,6 +69,8 @@
 .calendar-today-button--mobile {
   display: none;
 }
+
+.calendar-day-date--mobile { display: none; }
 
 .calendar-period-summary {
   display: grid;
@@ -229,6 +250,17 @@
     font: var(--mat-sys-title-medium);
   }
 
+  .calendar-page--day .calendar-period-navigation {
+    position: sticky;
+    top: var(--qs-visible-top-offset, var(--qs-layout-top-offset, 0px));
+    z-index: 2;
+    grid-template-columns: 42px minmax(0, 1fr) 42px 42px;
+    background: var(--mat-sys-surface);
+  }
+
+  .calendar-day-date--desktop { display: none; }
+  .calendar-day-date--mobile { display: inline; }
+
   .calendar-period-summary {
     height: 60px;
   }
@@ -275,4 +307,21 @@
   .calendar-view-option mat-icon {
     display: none;
   }
+}
+
+
+.calendar-day-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1.35fr) minmax(300px, 0.85fr);
+  align-items: start;
+  gap: 16px;
+}
+.calendar-day-layout > app-activity-calendar-grid { min-width: 0; }
+.calendar-selected-day {
+  min-width: 0;
+  padding: 16px;
+}
+@media (max-width: 900px) {
+  .calendar-day-layout { grid-template-columns: minmax(0, 1fr); }
+  .calendar-selected-day { padding: 14px; }
 }

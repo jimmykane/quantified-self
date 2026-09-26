@@ -200,6 +200,14 @@ describe('Wahoo Plan + dated Workout lifecycle', () => {
     expect(server.calls.filter(call => call.method !== 'GET')).toHaveLength(count);
     if (scenario === 'completed') expect(op.artifact?.completed).toBe(true);
   });
+  it('removes an exactly owned past Workout and Plan after explicit authorization', async () => {
+    const artifact = (await execute())!;
+    transport = new WahooTrainingTransport(server.request, () => Date.parse('2026-10-28T12:00:00Z'));
+    op = { ...op, kind: 'remove', workout: null, progress: null, allowPastRemoval: true };
+    expect(await execute()).toBeNull();
+    expect(server.workouts.has(artifact.ids.workout)).toBe(false);
+    expect(server.plans.has(artifact.ids.plan)).toBe(false);
+  });
   it.each(['2026-10-24', '2026-11-01'])('does not send outside the seven-day saved-zone horizon: %s', async localDate => {
     next({ localDate }); await expect(execute()).rejects.toThrow(); expect(server.calls).toHaveLength(0);
   });

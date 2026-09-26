@@ -551,6 +551,14 @@ describe('Garmin workout/schedule lifecycle, synthetic HTTP only', () => {
     if (state === 'past') operation.artifact!.localDate = '2026-09-13'; else operation.artifact!.completed = true;
     await expect(execute()).rejects.toThrow(); expect(server.calls).toHaveLength(0);
   });
+  it('removes an exactly owned past schedule and workout only with explicit authorization', async () => {
+    const artifact = (await execute())!;
+    transport = new GarminTrainingTransport(server.request, () => Date.parse('2026-09-17T10:00:00Z'));
+    operation = { ...operation, kind: 'remove', workout: null, progress: null, allowPastRemoval: true };
+    expect(await execute()).toBeNull();
+    expect(server.schedules.has(artifact.ids.schedule)).toBe(false);
+    expect(server.workouts.has(artifact.ids.workout)).toBe(false);
+  });
   it('detects provider rescheduling into the past before updating content', async () => {
     await execute(); server.calls = [];
     server.schedules.get(operation.artifact!.ids.schedule)!.date = '2026-09-13';

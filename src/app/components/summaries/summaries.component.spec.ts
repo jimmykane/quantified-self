@@ -1,5 +1,5 @@
 import { MatSnackBar } from '@angular/material/snack-bar';
-import { provideRouter } from '@angular/router';
+import { provideRouter, Router } from '@angular/router';
 import { TimelineNotesWorkspaceComponent } from '../timeline-notes/timeline-notes-workspace.component';
 import { AppTimelineNotesService } from '../../services/app.timeline-notes.service';
 import { By } from '@angular/platform-browser';
@@ -15,6 +15,7 @@ import { AppChartSharedModule } from '../../modules/app-chart-shared.module';
 import { NoopAnimationsModule } from '@angular/platform-browser/animations';
 import { DashboardConfigurationService } from '../../services/dashboard-configuration.service';
 import { AppHapticsService } from '../../services/app.haptics.service';
+import { CalendarDayDetailsNavigationService } from '../../services/calendar-day-details-navigation.service';
 import { LOCALE_ID, NO_ERRORS_SCHEMA, signal } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { afterEach, describe, it, expect, vi, beforeEach } from 'vitest';
@@ -368,6 +369,59 @@ describe('SummariesComponent', () => {
     expect(mockDialog.open).not.toHaveBeenCalled();
   });
 
+  it('reopens the selected Today-sheet day after returning from its full-day page', () => {
+    const restoration = { sourceUrl: '/', dateKey: '2026-08-03', surface: 'today-sheet' as const };
+    const navigation = TestBed.inject(CalendarDayDetailsNavigationService);
+    const restorationFor = vi.spyOn(navigation, 'restorationFor').mockReturnValue(restoration);
+    const consume = vi.spyOn(navigation, 'consumeRestoration').mockImplementation(() => {
+      restorationFor.mockReturnValue(null);
+      return true;
+    });
+    const owner = { uid: 'owner-user', settings: { dashboardSettings: { tiles: [] } } } as SummariesComponent['user'];
+    fixture.componentRef.setInput('user', owner);
+    fixture.componentRef.setInput('eventUser', owner);
+    fixture.detectChanges();
+
+    expect(consume).toHaveBeenCalledWith(restoration);
+    expect(mockBottomSheet.open).toHaveBeenCalledWith(expect.any(Function), expect.objectContaining({
+      data: expect.objectContaining({ initialDateKey: '2026-08-03', privateHealthEnabled: true }),
+    }));
+    expect(mockBottomSheet.open).toHaveBeenCalledOnce();
+  });
+
+  it('does not restore a private Today sheet on another profile', () => {
+    const restoration = { sourceUrl: '/', dateKey: '2026-08-03', surface: 'today-sheet' as const };
+    const navigation = TestBed.inject(CalendarDayDetailsNavigationService);
+    vi.spyOn(navigation, 'restorationFor').mockReturnValue(restoration);
+    const consume = vi.spyOn(navigation, 'consumeRestoration');
+    const owner = { uid: 'owner-user', settings: { dashboardSettings: { tiles: [] } } } as SummariesComponent['user'];
+    fixture.componentRef.setInput('user', owner);
+    fixture.componentRef.setInput('eventUser', { uid: 'different-user' });
+    fixture.detectChanges();
+
+    expect(consume).not.toHaveBeenCalled();
+    expect(mockBottomSheet.open).not.toHaveBeenCalled();
+  });
+
+  it('restores the Today sheet when browser navigation finishes after the dashboard is mounted', async () => {
+    const router = TestBed.inject(Router);
+    router.resetConfig([{ path: 'dashboard', children: [] }]);
+    const restoration = { sourceUrl: '/dashboard', dateKey: '2026-08-03', surface: 'today-sheet' as const };
+    const navigation = TestBed.inject(CalendarDayDetailsNavigationService);
+    vi.spyOn(navigation, 'restorationFor').mockImplementation(url => url === '/dashboard' ? restoration : null);
+    vi.spyOn(navigation, 'consumeRestoration').mockReturnValue(true);
+    const owner = { uid: 'owner-user', settings: { dashboardSettings: { tiles: [] } } } as SummariesComponent['user'];
+    fixture.componentRef.setInput('user', owner);
+    fixture.componentRef.setInput('eventUser', owner);
+    fixture.detectChanges();
+    expect(mockBottomSheet.open).not.toHaveBeenCalled();
+
+    await router.navigateByUrl('/dashboard');
+    expect(mockBottomSheet.open).toHaveBeenCalledWith(expect.any(Function), expect.objectContaining({
+      data: expect.objectContaining({ initialDateKey: '2026-08-03' }),
+    }));
+  });
+
   it('keeps the dashboard layout stable during address-bar height changes but updates column breakpoints', () => {
     const columns = vi.spyOn(component, 'getNumberOfColumns' as never).mockReturnValue(1 as never);
     vi.spyOn(component, 'getRowHeight' as never).mockReturnValue('40vh' as never);
@@ -475,7 +529,7 @@ describe('SummariesComponent', () => {
     expect(component).toBeTruthy();
   });
 
-  it('marks only the Activity Calendar board for the mobile calendar row height', () => {
+  it('marks only the dedicated Calendar board for the mobile calendar row height', () => {
     const activityCalendarTile = {
       type: TileTypes.Chart,
       order: 0,
@@ -503,20 +557,95 @@ describe('SummariesComponent', () => {
 
     fixture.detectChanges();
 
-    const activitySection = component.mainGridSections.find(section => section.id === 'activityOverview');
+    const calendarSection = component.mainGridSections.find(section => section.id === 'calendar');
     const routesSection = component.mainGridSections.find(section => section.id === 'routesMaps');
     const nativeElement = fixture.nativeElement as HTMLElement;
-    const activityBoard = nativeElement.querySelector(
-      '[aria-labelledby="dashboard-section-activityOverview"] app-dashboard-tile-board',
+    const calendarBoard = nativeElement.querySelector(
+      '[aria-labelledby="dashboard-section-calendar"] app-dashboard-tile-board',
     );
     const routesBoard = nativeElement.querySelector(
       '[aria-labelledby="dashboard-section-routesMaps"] app-dashboard-tile-board',
     );
 
-    expect(activitySection?.hasActivityCalendar).toBe(true);
+    expect(calendarSection?.hasActivityCalendar).toBe(true);
     expect(routesSection?.hasActivityCalendar).toBe(false);
-    expect(activityBoard?.classList.contains('dashboard-tile-board--activity-calendar')).toBe(true);
+    expect(calendarBoard?.classList.contains('dashboard-tile-board--activity-calendar')).toBe(true);
     expect(routesBoard?.classList.contains('dashboard-tile-board--activity-calendar')).toBe(false);
+  });
+
+  it('places Calendar after Today and before KPIs, with a route action instead of Add chart', () => {
+    const calendar = {
+      type: TileTypes.Chart, order: 2, chartType: DASHBOARD_ACTIVITY_CALENDAR_CHART_TYPE,
+      size: { columns: 4, rows: 1 }, data: [],
+    } as any;
+    const kpi = {
+      type: TileTypes.Chart, order: 0, chartType: DASHBOARD_ACWR_KPI_CHART_TYPE,
+      size: { columns: 1, rows: 1 }, data: [],
+    } as any;
+    const activity = {
+      type: TileTypes.Chart, order: 1, chartType: ChartTypes.ColumnsVertical,
+      dataType: DataDuration.type, size: { columns: 1, rows: 1 }, data: [],
+    } as any;
+    component.user = { uid: 'owner-user', settings: { dashboardSettings: { tiles: [kpi, activity, calendar] } } } as any;
+    component.showActions = true;
+    component.tiles = [kpi, activity, calendar];
+    (component as any).refreshTileLanes();
+    fixture.detectChanges();
+
+    const root = fixture.nativeElement as HTMLElement;
+    const children = Array.from(root.querySelector('.pie')!.children);
+    const todayIndex = children.findIndex(child => child.classList.contains('dashboard-current-state-row'));
+    const calendarIndex = children.findIndex(child => child.classList.contains('dashboard-calendar-section'));
+    const kpiIndex = children.findIndex(child => child.classList.contains('dashboard-kpi-section'));
+    expect(todayIndex).toBeLessThan(calendarIndex);
+    expect(calendarIndex).toBeLessThan(kpiIndex);
+    const calendarSection = root.querySelector('[aria-labelledby="dashboard-section-calendar"]');
+    expect(calendarSection?.querySelector('h2')?.textContent?.trim()).toBe('Calendar');
+    expect(calendarSection?.querySelector('a[routerLink="/calendar"]')?.textContent).toContain('Open calendar');
+    expect(calendarSection?.querySelector('app-dashboard-chart-library')).toBeNull();
+
+    component.user.settings.dashboardSettings.tiles = [kpi, activity];
+    component.tiles = [kpi, activity];
+    (component as any).refreshTileLanes();
+    fixture.detectChanges();
+    expect(root.querySelector('.dashboard-calendar-section')).toBeNull();
+  });
+
+  it('migrates an owner calendar once and preserves a later manual resize', async () => {
+    const calendar = { type: TileTypes.Chart, order: 1, chartType: DASHBOARD_ACTIVITY_CALENDAR_CHART_TYPE,
+      size: { columns: 1, rows: 1 } } as any;
+    const other = { type: TileTypes.Map, order: 0, size: { columns: 2, rows: 2 } } as any;
+    component.user = { uid: 'owner-user', settings: { dashboardSettings: { tiles: [other, calendar] } } } as any;
+    component.eventUser = { uid: 'owner-user' } as any;
+    const save = vi.spyOn(TestBed.inject(DashboardConfigurationService), 'save').mockResolvedValue(undefined);
+    await component.ngOnChanges({ user: { currentValue: component.user, previousValue: null,
+      firstChange: true, isFirstChange: () => true } as any });
+    expect(component.user.settings.dashboardSettings.tiles).toEqual([other, { ...calendar, size: { columns: 4, rows: 1 } }]);
+    expect(component.user.settings.dashboardSettings.calendarDayContextLayoutVersion).toBe(1);
+    expect(save).toHaveBeenCalledWith('owner-user', expect.any(Object), {
+      tiles: [other, { ...calendar, size: { columns: 4, rows: 1 } }], calendarDayContextLayoutVersion: 1,
+    });
+    component.user.settings.dashboardSettings.tiles[1].size = { columns: 2, rows: 1 };
+    await component.ngOnChanges({ user: { currentValue: component.user, previousValue: component.user,
+      firstChange: false, isFirstChange: () => false } as any });
+    expect(component.user.settings.dashboardSettings.tiles[1].size).toEqual({ columns: 2, rows: 1 });
+    expect(save).toHaveBeenCalledTimes(1);
+  });
+
+  it('restores an unsaved calendar width without changing other settings', async () => {
+    const calendar = { type: TileTypes.Chart, order: 0, chartType: DASHBOARD_ACTIVITY_CALENDAR_CHART_TYPE,
+      size: { columns: 1, rows: 1 } } as any;
+    component.user = { uid: 'owner-user', settings: { dashboardSettings: { tiles: [calendar], showTodaySummary: true } } } as any;
+    component.eventUser = { uid: 'owner-user' } as any;
+    vi.spyOn(TestBed.inject(DashboardConfigurationService), 'save').mockRejectedValueOnce(new Error('offline'));
+    const notice = vi.spyOn(TestBed.inject(MatSnackBar), 'open');
+    await component.ngOnChanges({ user: { currentValue: component.user, previousValue: null,
+      firstChange: true, isFirstChange: () => true } as any });
+    await Promise.resolve();
+    expect(component.user.settings.dashboardSettings.tiles[0].size).toEqual({ columns: 1, rows: 1 });
+    expect(component.user.settings.dashboardSettings.calendarDayContextLayoutVersion).toBeUndefined();
+    expect(component.user.settings.dashboardSettings.showTodaySummary).toBe(true);
+    expect(notice).toHaveBeenCalledWith('offline', 'Dismiss', { duration: 6000 });
   });
 
   it('renders the owner greeting from the first display-name part', () => {
@@ -885,7 +1014,7 @@ describe('SummariesComponent', () => {
     expect(todayCalendarButton?.querySelector('.dashboard-today-calendar-cue')?.getAttribute('aria-hidden')).toBe('true');
     todayCalendarButton?.click();
     expect(mockBottomSheet.open).toHaveBeenCalledWith(CalendarMonthPickerBottomSheetComponent, {
-      data: { user: component.user, timelineNotes: component.timelineNotes },
+      data: { user: component.user, timelineNotes: component.timelineNotes, privateHealthEnabled: component.showActions && component.isOwnerDashboard },
       panelClass: ['qs-bottom-sheet-container', 'qs-calendar-month-picker-sheet'],
     });
     expect(dashboardHeader?.querySelector('#dashboard-today-title')?.textContent?.trim()).toBe('Today');

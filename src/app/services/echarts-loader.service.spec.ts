@@ -441,35 +441,38 @@ describe('EChartsLoaderService', () => {
     dataZoomHandler?.({ $from: 'view-component-inside' });
     expect(hapticsMock.selection).toHaveBeenCalledTimes(5);
 
-    brushEndHandler?.({ areas: [{ coordRange: [10, 20] }] });
+    dataZoomHandler?.({ $from: 'event-chart-touch-zoom' });
     expect(hapticsMock.selection).toHaveBeenCalledTimes(6);
+
+    brushEndHandler?.({ areas: [{ coordRange: [10, 20] }] });
+    expect(hapticsMock.selection).toHaveBeenCalledTimes(7);
 
     brushEndHandler?.({ areas: [] });
-    expect(hapticsMock.selection).toHaveBeenCalledTimes(6);
+    expect(hapticsMock.selection).toHaveBeenCalledTimes(7);
 
     brushEndHandler?.({ $from: 'view-component-brush', areas: [{ coordRange: [10, 20] }] });
-    expect(hapticsMock.selection).toHaveBeenCalledTimes(7);
+    expect(hapticsMock.selection).toHaveBeenCalledTimes(8);
 
     brushEndHandler?.({ $from: 'event-chart-selection-sync', areas: [{ coordRange: [10, 20] }] });
-    expect(hapticsMock.selection).toHaveBeenCalledTimes(7);
+    expect(hapticsMock.selection).toHaveBeenCalledTimes(8);
 
     brushEndHandler?.({ $from: 'event-chart-brush-zoom', areas: [{ coordRange: [10, 20] }] });
-    expect(hapticsMock.selection).toHaveBeenCalledTimes(7);
+    expect(hapticsMock.selection).toHaveBeenCalledTimes(8);
 
     axisPointerHandler?.({ axesInfo: [{ axisDim: 'y', axisIndex: 0, value: 90 }] });
-    expect(hapticsMock.selection).toHaveBeenCalledTimes(7);
-
-    axisPointerHandler?.({ axesInfo: [{ axisDim: 'x', axisIndex: 0, value: 100 }] });
     expect(hapticsMock.selection).toHaveBeenCalledTimes(8);
 
     axisPointerHandler?.({ axesInfo: [{ axisDim: 'x', axisIndex: 0, value: 100 }] });
-    expect(hapticsMock.selection).toHaveBeenCalledTimes(8);
+    expect(hapticsMock.selection).toHaveBeenCalledTimes(9);
+
+    axisPointerHandler?.({ axesInfo: [{ axisDim: 'x', axisIndex: 0, value: 100 }] });
+    expect(hapticsMock.selection).toHaveBeenCalledTimes(9);
 
     axisPointerHandler?.({ axesInfo: [{ axisDim: 'x', axisIndex: 0, value: 101 }] });
-    expect(hapticsMock.selection).toHaveBeenCalledTimes(9);
+    expect(hapticsMock.selection).toHaveBeenCalledTimes(10);
 
     axisPointerHandler?.({ $from: 'event-chart-tooltip-sync', axesInfo: [{ axisDim: 'x', axisIndex: 0, value: 102 }] });
-    expect(hapticsMock.selection).toHaveBeenCalledTimes(9);
+    expect(hapticsMock.selection).toHaveBeenCalledTimes(10);
 
     unsubscribe();
     expect(chart.off).toHaveBeenCalledWith('click', clickHandler);

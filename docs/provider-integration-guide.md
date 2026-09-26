@@ -43,6 +43,8 @@ Suunto Health history adapts to item-count limits by halving oversized target wi
 
 Suunto Health failure logs retain allowlisted operation stages and error classifications before raw errors are sanitized for retry storage. Distinguish worker HTTP 500s from validated upstream status codes; RPC, transport, validation and unknown failures have separate safe diagnostics. See [backfill diagnostic fields](health-backfill-operations.md#verification). Do not add raw provider responses, exception messages, stacks, credential URLs or account identifiers to those fields.
 
+Suunto Health Activity/Recovery webhooks use the existing durable Sleep/Health queue with a five-minute dispatch bucket per UID, provider account, exact local-day window, and captured token/root/connection generations. The ingress still acknowledges only after durable staging and the retryable trigger retains its lifecycle checks. Queue admission schedules one bounded refetch just after the bucket closes; distinct notifications in that bucket reuse the same queued refetch. An ingress that reaches a bucket after dispatch has begun receives a deterministic notification-specific follow-up, so corrections are not lost. Poll and history jobs retain their current schedules. The 30-minute dispatcher preserves the earliest dispatch time when recovering an enqueue failure. Monitor `coalescedWindows` (reused bucket admissions, which can include an exact Eventarc retry), `duplicateIngressWindows` (exact late-ingress retries), actual task/worker counts, queue age, and Health freshness during rollout; revert the Functions revision to restore per-notification dispatch without migrating existing queue data. See [Suunto ingestion](suunto-integration.md#ingestion-and-revision-flow).
+
 Garmin Sleep and Health history recovery must account for a moving provider minimum, not merely round it to the next second. Both allow up to 30 seconds of retry headroom without erasing a short valid window. Sleep retains its three-attempt window limit. The independent Health worker stops after three consecutive minimum-start failures in the same family per invocation and uses the existing durable queue retry/exhaustion path; cutoff-only adjustments must not reset that retry budget. Log safe cutoff/progress metadata without provider response bodies or credentials, and distinguish submitted/skipped request windows from ingested records. See [Garmin history recovery](garmin-integration.md#availability-and-history). Activity history is a separate path.
 
 Garmin stress-validation diagnostics use the existing WARNING with allowlisted family/field/reason, summary index, type, and bounded numeric-only values; never log raw provider strings or objects. Stress sample zeroes are numeric readings; daily average -2 is retained as a native-only availability code because its daily semantics are undocumented. Do not transfer sentinel meanings between summary families or let a recognized non-measurement code discard unrelated valid metrics. A fix does not recover an existing DLQ callback whose pull credentials were removed; use bounded Summary Resender recovery and verify replacement ingestion. See [Garmin delivery diagnostics](garmin-integration.md#delivery-and-trust-boundary) for the exact bound and metadata contract.
@@ -55,8 +57,11 @@ the retained Training API workout ID. The local linker requires the Garmin activ
 saved activity in that event, a unique same-account ledger, accepted schedule, current scheduled date, and one recorded
 activity on that local date before writing the existing completion and private
 reverse link. Ambiguity remains unlinked, with no similarity fallback or activity-metric rewrite. The current v1
-completion projection has one recorded source per workout, so a simultaneous second provider recording is not linked
-until #651 resolves multi-source representation. Provider acceptance is never watch receipt or proof every target was met.
+completion projection has one recorded source per workout: the first exact link committed wins, and a second provider
+recording remains a normal completed activity without replacing it. COROS, Wahoo and Suunto also require the current
+workout plan to match its ledger association and its date to match the retained provider copy before a new link. A later
+delivery update can make a rescheduled occurrence eligible. Same-account reconnects retain exact matching, while stale
+credentials and different owners do not. Provider acceptance is never watch receipt or proof every target was met.
 
 Remote verification (#703) reuses the Training delivery ledger, 25-item reconciliation pages, dispatcher and per-delivery
 lease. `check` is an idempotent, revision-checked command with a 15-minute coalescing window; it does not change consent.
@@ -100,7 +105,13 @@ never infer input units from the account preference or convert a distance a seco
 metres, COROS applies its existing integer-metre mapping with approval for loss, and Wahoo's dated delivery continues
 to reject distance-ended recipes when a required total duration cannot be established.
 
-The Training UI checks availability and compatibility automatically on entering sync consent. With one ready provider,
+The Training UI checks availability and compatibility automatically on entering sync consent. For an MCP standalone
+create-and-send, the first proposal names any provider mapping loss; one native approval covers the current
+digest-bound adjustment as well as the authored change. The delivery command rechecks that digest, destination and
+current schedule before queuing work. Later edits and browser plan-workout reviews keep their own approval semantics;
+an applied proposal is not proof of provider or device receipt. Suunto-bound generated step notes should be omitted
+when unrequested or kept within its watch text limits, never silently dropping requested meaning.
+With one ready provider,
 **Sync plan with Garmin** → **Enable plan sync** (plan) or **Send to Garmin** → **Send workout** (standalone) is the normal path;
 subsequent eligible edits reconcile automatically. Opening the dialog never mutates consent. The saved/browser time
 zone is shown inline and changes explicitly; mapping degradation still needs per-workout approval. Troubleshooting is
@@ -142,13 +153,16 @@ Separately authorized MCP Training delivery changes reuse `trainingDeliveryComma
 marker; MCP does not implement an adapter or call provider HTTP directly. A strict proposal resolves only server-owned
 connection authority, compatibility and readiness. Apply is a separate write-capable tool behind the MCP host's native
 approval UI; QS does not use MCP elicitation as an additional confirmation round.
-`all_connected` includes only providers that are connected and rollout-ready during preview. Explicit providers retain
+For a standalone Send, `all_connected` includes only providers that are connected, rollout-ready, and compatible with
+that workout during preview. Explicit providers retain
 an independent blocked result rather than hiding the reason. Destination keys, credentials, artifact IDs, approval
 digests and attempt journals never enter MCP input or output. Provider delivery remains Pro-gated, and failure does not
 roll back an authored plan/workout mutation in the same confirmed proposal.
-For a newly authored workout with a degraded mapping (such as Mountain Biking to Garmin Cycling), MCP Send establishes
-consent without approving the loss of sport detail. A separate, current-digest approval is required before transport;
-an applied Send result must not be described as a provider-side copy.
+For a newly authored workout with a degraded mapping (such as Mountain Biking to Garmin Cycling), MCP's first preview
+discloses the mapping loss. Confirming that proposal approves its current destination-bound digest and establishes
+consent in one step; a changed digest blocks delivery. Unsupported standalone Send/Resume is different: preview names
+the incompatibility, and the delivery command refuses consent even if a client attempts to apply it. Explicit-provider
+failure remains independent of authored changes and other provider results. An applied Send result is not a provider-side copy.
 
 Manual training planning is available to every signed-in account across its routes, calendar actions/overlays, Help and
 planning-specific connection/deletion instructions. This does not authorize transport work, alter disconnect or deletion
@@ -325,6 +339,17 @@ while pausing writes; cleanup removals remain allowed with valid access. Subscri
 require same-account reconnect. Explicit disconnect invalidates Training consent atomically before provider I/O and leaves
 copies; authentication failure preserves consent but blocks the failed connection generation. A changed account requires
 fresh consent. Do not reuse activity/route auto-restoration rules for Training.
+
+Deleting a plan or workout still withdraws eligible uncompleted future copies by default. The browser offers a separate,
+unchecked past-copy cleanup choice. The server commits that choice beside the deletion under `trainingDeliveryState/current/pastCleanup`
+and requires the matching current deletion before a reconciler may attempt any past removal; a later deletion without opt-in
+revokes the old choice. The ledger retains the private authorization and artifact IDs for retries, but rechecks the marker,
+connection epoch, exact account, completed evidence and provider ownership before every write. Garmin deletes its schedule
+then workout, Wahoo its Workout then Plan, and Suunto its owned Guide; acceptance is not device removal. COROS's partner
+contract permits deletion only for unexecuted workouts dated today or later, so its past copy is retained with a clear
+unsupported reason even if selected. The same COROS backend path remains tested while the app hides new-send controls.
+Never infer that deleting a planned provider copy deletes a recorded activity. MCP deletion keeps its existing no-opt-in
+wire contract and cannot grant this extra destructive provider action.
 
 An adapter must bind to the server-resolved owner/account, implement compatibility, horizon/deletion policy, execution,
 inspection and accepted-artifact checkpoints. Garmin workout/schedule IDs and Wahoo Plan/Workout IDs remain distinct;
@@ -823,6 +848,10 @@ until the new diagnostics explain the affected files. Manual route/course reject
 upload batches finish, including overlapping batches. Later per-file errors or the generic batch summary must not
 replace this action, and account changes or teardown suppress it. No rejected manual payload
 is retained by this change. Any future debug-file capture needs a separate retention/access/deletion-cleanup design.
+Manual parsing and route-only warning logs include the authenticated UID and a SHA-256 digest of the parsed payload,
+so exact re-submissions can be distinguished from similarly sized files even across account recreation. FIT parsing
+warnings also include the bounded FIT-envelope reason; `valid` means the envelope length is complete, not that the
+file contains an activity or has a verified CRC. Never add raw filenames or FIT contents to these warning logs.
 
 ## 11. Test plan
 

@@ -1088,6 +1088,14 @@ describe('TileChartComponent', () => {
     expect(fixture.nativeElement.querySelector('.tile-event-filter-controls')).toBeNull();
   });
 
+  it('keeps the owner calendar header free of a duplicate full-page action', () => {
+    component.chartType = DASHBOARD_ACTIVITY_CALENDAR_CHART_TYPE;
+    component.showActions = true;
+    fixture.detectChanges();
+    expect(component.showCalendarRouteAction).toBe(false);
+    expect(fixture.nativeElement.querySelector('.calendar-route-action')).toBeNull();
+  });
+
   it('should size the Calendar route action like other compact tile-header buttons', () => {
     const stylePath = resolve(process.cwd(), 'src/app/components/tile/tile.abstract.css');
     const styles = readFileSync(stylePath, 'utf8');

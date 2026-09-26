@@ -143,6 +143,67 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)(
       expect((await user().collection('trainingWorkoutCompletions').get()).empty).toBe(true);
     });
 
+    it('links exact marker evidence without claiming that a shortened recording met the prescription', async () => {
+      await user().collection('activities').doc('activity').update({ durationSeconds: 30, incomplete: true });
+      expect(await retain()).toBe(true);
+      expect((await user().collection('trainingWorkoutCompletions').doc('workout').get()).data())
+        .toMatchObject({ provider: 'garmin', matchMethod: 'provider_marker', activityId: 'activity' });
+      expect((await user().collection('activities').doc('activity').get()).data())
+        .toMatchObject({ durationSeconds: 30, incomplete: true });
+    });
+
+    it('leaves a FIT with no Garmin workout marker unlinked and preserves the first reused-marker event', async () => {
+      expect(await retainGarminFITWorkoutReferences(db, uid, 'event', account, 'credential',
+        { activityFileID, activityFileType: 'FIT' }, standardWorkoutReferenceFitFixture(false),
+        [{ id: 'activity', startTimeMs: activityStartAtMs }])).toBe(true);
+      expect((await evidence().get()).data()).toMatchObject({ correlationState: 'candidate_only' });
+      expect((await user().collection('trainingWorkoutCompletions').get()).empty).toBe(true);
+      expect(await retain()).toBe(true);
+      const second = user().collection('events').doc('second-event'); await second.set({ test: true });
+      await second.collection('metaData').doc(ServiceNames.GarminAPI).set({ serviceName: ServiceNames.GarminAPI,
+        serviceUserID: account, serviceActivityFileID: 'second-file', serviceActivityFileType: 'FIT' });
+      await user().collection('activities').doc('second-activity').set({
+        userID: uid, eventID: second.id, startDate: activityStartAtMs,
+      });
+      expect(await retainGarminFITWorkoutReferences(db, uid, second.id, account, 'credential',
+        { activityFileID: 'second-file', activityFileType: 'FIT' }, standardWorkoutReferenceFitFixture(),
+        [{ id: 'second-activity', startTimeMs: activityStartAtMs }])).toBe(true);
+      expect((await second.collection('trainingCompletionEvidence').doc('fit').get()).data())
+        .toMatchObject({ correlationState: 'conflict' });
+      expect((await user().collection('trainingWorkoutCompletions').doc('workout').get()).data())
+        .toMatchObject({ eventId: 'event', activityId: 'activity' });
+    });
+
+    it('fences stale reconnect credentials and another owner with the same FIT marker', async () => {
+      const tokenRoot = db.collection('garminAPITokens').doc(uid);
+      await tokenRoot.update({ activeOAuthCredentialGeneration: 'reconnected' });
+      await tokenRoot.collection('tokens').doc(account).update({ tokenCredentialGeneration: 'reconnected' });
+      expect(await retain()).toBe(false);
+      expect(await retainGarminFITWorkoutReferences(db, uid, 'event', account, 'reconnected',
+        { activityFileID, activityFileType: 'FIT' }, standardWorkoutReferenceFitFixture(),
+        [{ id: 'activity', startTimeMs: activityStartAtMs }])).toBe(true);
+      expect((await user().collection('trainingWorkoutCompletions').doc('workout').get()).exists).toBe(true);
+      const otherUid = `garmin-completion-${randomUUID()}`; uids.push(otherUid);
+      const other = db.collection('users').doc(otherUid); await other.set({ test: true });
+      await other.collection('meta').doc(ServiceNames.GarminAPI).set({ connectionState: 'connected',
+        connectionStateGeneration: 'connection', providerUserId: account });
+      await db.collection('garminAPITokens').doc(otherUid).set({ activeOAuthCredentialGeneration: 'credential' });
+      await db.collection('garminAPITokens').doc(otherUid).collection('tokens').doc(account).set({
+        serviceName: ServiceNames.GarminAPI, userID: account, tokenCredentialGeneration: 'credential',
+        permissions: ['WORKOUT_IMPORT'],
+      });
+      const otherEvent = other.collection('events').doc('event'); await otherEvent.set({ test: true });
+      await otherEvent.collection('metaData').doc(ServiceNames.GarminAPI).set({ serviceName: ServiceNames.GarminAPI,
+        serviceUserID: account, serviceActivityFileID: activityFileID, serviceActivityFileType: 'FIT' });
+      await other.collection('activities').doc('activity').set({
+        userID: otherUid, eventID: 'event', startDate: activityStartAtMs,
+      });
+      expect(await retainGarminFITWorkoutReferences(db, otherUid, 'event', account, 'credential',
+        { activityFileID, activityFileType: 'FIT' }, standardWorkoutReferenceFitFixture(),
+        [{ id: 'activity', startTimeMs: activityStartAtMs }])).toBe(true);
+      expect((await other.collection('trainingWorkoutCompletions').get()).empty).toBe(true);
+    });
+
     it('requires a fully accepted schedule and the recorded date of that occurrence', async () => {
       await user().collection(DELIVERY_LEDGER).doc('delivery').update({ acceptedDigest: null });
       expect(await retain()).toBe(true);
@@ -154,6 +215,10 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)(
     });
 
     it('rejects duplicate remote IDs and a rescheduled current workout', async () => {
+      await user().collection('scheduledWorkouts').doc('other-workout').set({
+        ...(await user().collection('scheduledWorkouts').doc('workout').get()).data(),
+        id: 'other-workout', localDate: '2026-09-24',
+      });
       await seedLedger('duplicate', 'other-workout');
       expect(await retain()).toBe(true);
       expect((await evidence().get()).data()).toMatchObject({ correlationState: 'conflict' });
@@ -163,6 +228,42 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)(
       expect(await retain()).toBe(true);
       expect((await evidence().get()).data()).toMatchObject({ correlationState: 'conflict' });
       expect((await user().collection('trainingWorkoutCompletions').get()).empty).toBe(true);
+    });
+
+    it('ignores a retired remote Workout ID and links only the accepted replacement ID', async () => {
+      const replacementWorkoutId = String(0xfffffffd);
+      await user().collection(DELIVERY_LEDGER).doc('delivery').update({
+        'actual.ids.workout': replacementWorkoutId,
+        'actual.ids.schedule': '18',
+        lastAcceptedAtMs: 2,
+      });
+
+      expect(await retain()).toBe(true);
+      expect((await evidence().get()).data()).toMatchObject({ correlationState: 'candidate_only' });
+      expect((await user().collection('trainingWorkoutCompletions').get()).empty).toBe(true);
+
+      const replacementEvent = user().collection('events').doc('replacement-event');
+      await replacementEvent.set({ test: true });
+      await replacementEvent.collection('metaData').doc(ServiceNames.GarminAPI).set({
+        serviceName: ServiceNames.GarminAPI, serviceUserID: account,
+        serviceActivityFileID: 'replacement-file', serviceActivityFileType: 'FIT',
+      });
+      await user().collection('activities').doc('replacement-activity').set({
+        userID: uid, eventID: replacementEvent.id, startDate: activityStartAtMs,
+      });
+      expect(await retainGarminFITWorkoutReferences(db, uid, replacementEvent.id, account, 'credential',
+        { activityFileID: 'replacement-file', activityFileType: 'FIT' },
+        standardWorkoutReferenceFitFixture(true, Number(replacementWorkoutId)),
+        [{ id: 'replacement-activity', startTimeMs: activityStartAtMs }])).toBe(true);
+      expect((await replacementEvent.collection('trainingCompletionEvidence').doc('fit').get()).data())
+        .toMatchObject({ correlationState: 'linked' });
+      expect((await user().collection('trainingWorkoutCompletions').doc('workout').get()).data())
+        .toMatchObject({ provider: 'garmin', eventId: replacementEvent.id, activityId: 'replacement-activity' });
+
+      expect(await retain()).toBe(true);
+      expect((await evidence().get()).data()).toMatchObject({ correlationState: 'candidate_only' });
+      expect((await user().collection('trainingWorkoutCompletions').doc('workout').get()).data())
+        .toMatchObject({ eventId: replacementEvent.id, activityId: 'replacement-activity' });
     });
 
     it('leaves malformed retained delivery identities as private candidates without failing import', async () => {

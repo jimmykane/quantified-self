@@ -37,6 +37,13 @@ describe('Suunto Guide lifecycle — synthetic transport', () => {
     op = { ...op, kind: 'remove', workout: null, progress: null };
     expect(await execute()).toBeNull(); expect(server.guides.size).toBe(0);
   });
+  it('removes an exactly owned past Guide after explicit authorization', async () => {
+    const artifact = (await execute())!;
+    transport = new SuuntoGuideTransport(server.request, owner, () => Date.parse('2027-01-02T12:00:00Z'));
+    op = { ...op, kind: 'remove', workout: null, progress: null, allowPastRemoval: true };
+    expect(await execute()).toBeNull();
+    expect(server.guides.has(artifact.ids.guide)).toBe(false);
+  });
   it('updates a retained pre-normalization Guide in place without changing pinning or identity', async () => {
     next({ title: 'Sample — interval session' });
     const artifact = (await execute())!;

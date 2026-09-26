@@ -41,7 +41,6 @@ const EXPECTED_BINDINGS: Record<string, string[]> = {
   grantAdminSubscriptionGift: ['STRIPE_ADMIN_BILLING_KEY'],
   getGarminAPIAuthRequestTokenRedirectURI: GARMIN,
   getSuuntoAPIAuthRequestTokenRedirectURI: SUUNTO,
-  getSuuntoFITFile: SUUNTO_API,
   getUpcomingRenewalAmount: ['STRIPE_SECRET_KEY'],
   getWahooAPIAuthRequestTokenRedirectURI: WAHOO,
   getWahooAPIWorkoutFileUploadStatus: WAHOO,
