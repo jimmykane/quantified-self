@@ -341,7 +341,7 @@ export async function reconcileSleepSyncQueueDispatches(nowMs = Date.now()): Pro
                 candidate.dateCreated,
                 candidate.dispatchAfterMs === null
                     ? undefined
-                    : Math.max(1, Math.ceil((candidate.dispatchAfterMs - nowMs) / 1000)),
+                    : Math.max(1, Math.ceil((candidate.dispatchAfterMs - Date.now()) / 1000)),
                 taskIdentity,
             );
             if (!wasTaskEnqueued) {

@@ -458,6 +458,25 @@ describe('Suunto Health webhook ingress', () => {
     expect(hoisted.addQueueItem.mock.calls[4][0].dedupeKey).not.toBe(first.dedupeKey);
   });
 
+  it('uses admission time when lifecycle validation crosses a bucket boundary', async () => {
+    const beforeBoundaryMs = 1_700_000_099_000;
+    const afterBoundaryMs = beforeBoundaryMs + 120_000;
+    const nowMs = vi.fn()
+      .mockReturnValueOnce(beforeBoundaryMs)
+      .mockReturnValueOnce(afterBoundaryMs);
+
+    await processSuuntoHealthWebhookIngressDocument(
+      ingressSnapshot().snapshot,
+      activeDependencies({ nowMs }) as any,
+    );
+
+    const expectedDispatchAfterMs = (Math.floor(afterBoundaryMs / 300_000) + 1)
+      * 300_000 + 1_000;
+    expect(hoisted.addQueueItem.mock.calls[0][0].dispatchAfterMs)
+      .toBe(expectedDispatchAfterMs);
+    expect(nowMs).toHaveBeenCalledTimes(2);
+  });
+
   it('version-deletes malformed, disabled, stale, and deleting ingress', async () => {
     const malformed = ingressSnapshot(ingressData({ schemaVersion: 4 }));
     await processSuuntoHealthWebhookIngressDocument(malformed.snapshot, activeDependencies() as any);

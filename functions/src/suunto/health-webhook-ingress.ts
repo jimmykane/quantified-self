@@ -534,7 +534,8 @@ export async function processSuuntoHealthWebhookIngressDocument(
 
   const addQueueItem = dependencies.addQueueItem || addSleepSyncQueueItem;
   const coalescingBucketMs = 5 * 60 * 1000;
-  const dispatchAfterMs = (Math.floor(nowMs / coalescingBucketMs) + 1)
+  const queueAdmissionMs = (dependencies.nowMs || Date.now)();
+  const dispatchAfterMs = (Math.floor(queueAdmissionMs / coalescingBucketMs) + 1)
     * coalescingBucketMs + 1_000;
   try {
     await Promise.all(ingress.windows.map(window => addQueueItem({
