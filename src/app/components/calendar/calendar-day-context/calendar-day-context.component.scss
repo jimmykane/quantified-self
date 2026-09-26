@@ -41,6 +41,9 @@
 .calendar-day-context-preview-group h3 span { color: var(--mat-sys-on-surface-variant); font: var(--mat-sys-body-small); white-space: nowrap; }
 .calendar-day-context-preview-row { min-width: 0; }
 .calendar-day-context-preview-row > a, .calendar-day-context-preview-row > button { max-width: 100%; min-width: 0; height: auto; min-height: 36px; padding-inline: 0; text-align: left; white-space: normal; overflow-wrap: anywhere; }
+.calendar-day-context-preview-activity-link { display: inline-flex; align-items: center; color: var(--mat-sys-primary); font: var(--mat-sys-body-medium); text-decoration: none; }
+.calendar-day-context-preview-activity-link:hover { text-decoration: underline; }
+.calendar-day-context-preview-activity-link:focus-visible { outline: 2px solid var(--mat-sys-primary); outline-offset: 2px; }
 .calendar-day-context-preview-row > strong { display: block; padding-block: 7px; font: var(--mat-sys-label-large); }
 .calendar-day-context-preview-row small, .calendar-day-context-preview-more { display: block; color: var(--mat-sys-on-surface-variant); font: var(--mat-sys-body-small); }
 .calendar-day-context-preview-more { margin-top: 4px; }

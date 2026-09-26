@@ -158,7 +158,8 @@
           @for (activity of dashboardActivities(); track activity.id) {
             <div class="calendar-day-context-preview-row">
               @if (activity.route) {
-                <a mat-button appHapticTap [routerLink]="activity.route" (click)="prepareNavigation()">{{ activity.name }}</a>
+                <a class="calendar-day-context-preview-activity-link" appHapticTap
+                  [routerLink]="activity.route" (click)="prepareNavigation()">{{ activity.name }}</a>
               } @else { <strong>{{ activity.name }}</strong> }
               <small>{{ activity.duration }}</small>
             </div>
