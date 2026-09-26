@@ -414,6 +414,90 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Training MCP write propos
     expect(wahoo.calls.filter(call => call.method === 'POST')).toHaveLength(2);
   });
 
+  it('shows an unsupported Wahoo sport before confirmation and never records Wahoo consent', async () => {
+    const wahoo = new WahooHttpFixture();
+    deps.runtime.transport = provider => provider === 'wahoo' ? new WahooTrainingTransport(wahoo.request, deps.now) : null;
+    const preview = await previewCreatePlannedWorkout({ uid, connectionId: 'connection', scopes,
+      arguments: { expectedScheduleRevision: 1, localDate: '2026-09-18', title: 'Mountain bike ride',
+        structure: { ...structure, sport: ActivityTypes.MountainBiking },
+        delivery: { providers: ['wahoo'], timeZone: 'Europe/Helsinki' } } }, deps);
+    expect(preview.providerPreviews).toEqual([expect.objectContaining({ provider: 'wahoo', availability: 'unavailable',
+      summary: expect.stringContaining('cannot receive this workout') })]);
+    expect(preview.providerPreviews[0].summary).toContain('No new Wahoo delivery will start');
+    const applied = await applyTrainingChanges({ uid, connectionId: 'connection', scopes,
+      arguments: { proposalRef: preview.proposalRef, permissionMode: 'combined' } }, deps);
+    expect(applied.status).toBe('partially_applied');
+    expect(applied.providers).toEqual([expect.objectContaining({ provider: 'wahoo', status: 'blocked',
+      message: expect.stringContaining('cannot be sent') })]);
+    const user = db.collection('users').doc(uid);
+    expect((await user.collection('scheduledWorkouts').get()).size).toBe(1);
+    expect((await user.collection('trainingDeliverySettings').get()).empty).toBe(true);
+    for (let page = 0; page < 20 && await reconcileTrainingDeliveryPage(deps.runtime, uid); page += 1) { /* drain */ }
+    expect((await user.collection('trainingDeliveryLedger').get()).empty).toBe(true);
+    expect(wahoo.calls).toHaveLength(0);
+  });
+
+  it('rejects a Wahoo-only all-connected request with distance steps before authoring', async () => {
+    const wahoo = new WahooHttpFixture();
+    deps.runtime.transport = provider => provider === 'wahoo' ? new WahooTrainingTransport(wahoo.request, deps.now) : null;
+    await expect(previewCreatePlannedWorkout({ uid, connectionId: 'connection', scopes,
+      arguments: { expectedScheduleRevision: 1, localDate: '2026-09-18', title: 'Distance ride',
+        structure: { ...structure, sport: ActivityTypes.Cycling, nodes: [{ ...structure.nodes[0],
+          ending: { kind: 'distance', meters: 1000 } }] },
+        delivery: { providers: 'all_connected', timeZone: 'Europe/Helsinki' } } }, deps))
+      .rejects.toThrow('Wahoo cannot receive this workout');
+    expect((await db.collection('users').doc(uid).collection('scheduledWorkouts').get()).empty).toBe(true);
+    expect(wahoo.calls).toHaveLength(0);
+  });
+
+  it('delivers an all-connected mountain bike workout only to compatible Suunto', async () => {
+    const wahoo = new WahooHttpFixture();
+    const suunto = new SuuntoHttpFixture();
+    deps.runtime.transport = provider => provider === 'wahoo' ? new WahooTrainingTransport(wahoo.request, deps.now)
+      : provider === 'suunto' ? new SuuntoGuideTransport(suunto.request, 'Quantified Self', deps.now) : null;
+    const preview = await previewCreatePlannedWorkout({ uid, connectionId: 'connection', scopes,
+      arguments: { expectedScheduleRevision: 1, localDate: '2026-09-18', title: 'Mountain bike ride',
+        structure: { ...structure, sport: ActivityTypes.MountainBiking },
+        delivery: { providers: 'all_connected', timeZone: 'Europe/Helsinki' } } }, deps);
+    expect(preview.providerPreviews).toEqual(expect.arrayContaining([
+      expect.objectContaining({ provider: 'wahoo', availability: 'unavailable' }),
+      expect.objectContaining({ provider: 'suunto', availability: 'ready' }),
+    ]));
+    const applied = await applyTrainingChanges({ uid, connectionId: 'connection', scopes,
+      arguments: { proposalRef: preview.proposalRef, permissionMode: preview.permissionMode } }, deps);
+    expect(applied.providers).toEqual([expect.objectContaining({ provider: 'suunto', status: 'applied' })]);
+    const user = db.collection('users').doc(uid);
+    for (let page = 0; page < 20 && await reconcileTrainingDeliveryPage(deps.runtime, uid); page += 1) { /* drain */ }
+    const ledgers = (await user.collection('trainingDeliveryLedger').get()).docs;
+    expect(ledgers).toHaveLength(1);
+    expect(ledgers[0].get('provider')).toBe('suunto');
+    await processTrainingDelivery(deps.runtime, uid, ledgers[0].id);
+    expect((await user.collection('trainingDeliveryStatuses').doc(ledgers[0].id).get()).get('status')).toBe('delivered');
+    expect(suunto.calls.filter(call => call.method === 'POST')).toHaveLength(1);
+    expect(wahoo.calls).toHaveLength(0);
+  });
+
+  it('rejects an existing unsupported workout Send at the same server boundary', async () => {
+    const wahoo = new WahooHttpFixture();
+    deps.runtime.transport = provider => provider === 'wahoo' ? new WahooTrainingTransport(wahoo.request, deps.now) : null;
+    const authored = await previewCreatePlannedWorkout({ uid, connectionId: 'connection', scopes,
+      arguments: { expectedScheduleRevision: 1, localDate: '2026-09-18', title: 'Mountain bike ride',
+        structure: { ...structure, sport: ActivityTypes.MountainBiking } } }, deps);
+    const created = await applyTrainingChanges({ uid, connectionId: 'connection', scopes,
+      arguments: { proposalRef: authored.proposalRef, permissionMode: 'schedule' } }, deps);
+    const preview = await previewTrainingChanges({ uid, connectionId: 'connection', scopes,
+      arguments: { expectedScheduleRevision: created.scheduleRevision, changes: [{ kind: 'provider-delivery',
+        targetType: 'workout', target: { ref: created.createdReferences[0].reference },
+        providers: ['wahoo'], action: 'send', timeZone: 'Europe/Helsinki' }] } }, deps);
+    expect(preview.providerPreviews[0]).toMatchObject({ provider: 'wahoo', availability: 'unavailable',
+      summary: expect.stringContaining('cannot receive this workout') });
+    const applied = await applyTrainingChanges({ uid, connectionId: 'connection', scopes,
+      arguments: { proposalRef: preview.proposalRef, permissionMode: preview.permissionMode } }, deps);
+    expect(applied.providers).toEqual([expect.objectContaining({ provider: 'wahoo', status: 'blocked' })]);
+    expect((await db.collection('users').doc(uid).collection('trainingDeliverySettings').get()).empty).toBe(true);
+    expect(wahoo.calls).toHaveLength(0);
+  });
+
   it('blocks a degraded Send when the mapping changes after its preview', async () => {
     transport!.level = 'degraded';
     const preview = await previewCreateAndSend();

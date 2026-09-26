@@ -267,6 +267,7 @@ export class TrainingDeliveryDialogComponent {
     if (this.editingSettings() && (!this.hasSettingsChanges() || (this.settingsChangedElsewhere() && !this.confirmationAttempted()))) return false;
     return !!preview && (preview.command.action === 'stop'
       || (preview.result.available && (preview.result.hasPro || preview.command.action === 'retry') && preview.result.connection === 'connected'
+        && (!['send', 'resume'].includes(preview.command.action) || preview.result.workoutCompatibility !== 'unsupported')
         && (preview.command.action !== 'approve' || !!preview.result.approvalDigest)));
   });
 

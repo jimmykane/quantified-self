@@ -109,7 +109,7 @@ terminal outcome and the slowest stage—never owner IDs, references, titles, no
 five seconds emit one structured slow warning for operational investigation.
 
 Delivery actions resolve the destination account on the server and reuse the existing #646 command/reconciliation path.
-They never accept credentials or remote IDs. `all_connected` fans out only to connected, rollout-ready providers shown
+They never accept credentials or remote IDs. `all_connected` fans out only to connected, rollout-ready, compatible providers shown
 by preview; explicit providers return independent blocked/success results. Pro, compatibility approval, horizon,
 connection, completion and provider readiness checks remain authoritative. Provider failure never rolls back authored
 schedule changes, and MCP itself makes no direct provider HTTP request.
@@ -124,6 +124,11 @@ clients should omit unrequested step notes and keep necessary instructions watch
 duration/target, 54 for manual-only steps), without dropping a user-requested instruction merely to avoid review.
 If the full warning set cannot fit the bounded public preview, preview fails closed and directs the client to create
 without delivery or simplify the recipe before sending; a hidden warning is never covered by implicit approval.
+An unsupported workout is not an approvable degradation. Its provider preview says it cannot be sent, `all_connected`
+skips it, and explicit Send/Resume remains a blocked provider result without saving consent or calling that provider.
+The authored workout may still be created if the user confirms the clearly labelled partial proposal. The browser's
+direct Send confirmation is disabled for an unsupported workout. Wahoo currently requires a Running/Cycling recipe
+with time endings throughout; neither a different sport nor distance-ending steps can be approved into compatibility.
 
 The built-in Assistant exposes only the applicable focused/batch previews to Gemini. It prefers the focused tool for one
 new workout, including a one-workout create-and-send request, and the batch tool for other or genuinely multi-change

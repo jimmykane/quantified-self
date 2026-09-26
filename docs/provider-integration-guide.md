@@ -151,13 +151,16 @@ Separately authorized MCP Training delivery changes reuse `trainingDeliveryComma
 marker; MCP does not implement an adapter or call provider HTTP directly. A strict proposal resolves only server-owned
 connection authority, compatibility and readiness. Apply is a separate write-capable tool behind the MCP host's native
 approval UI; QS does not use MCP elicitation as an additional confirmation round.
-`all_connected` includes only providers that are connected and rollout-ready during preview. Explicit providers retain
+For a standalone Send, `all_connected` includes only providers that are connected, rollout-ready, and compatible with
+that workout during preview. Explicit providers retain
 an independent blocked result rather than hiding the reason. Destination keys, credentials, artifact IDs, approval
 digests and attempt journals never enter MCP input or output. Provider delivery remains Pro-gated, and failure does not
 roll back an authored plan/workout mutation in the same confirmed proposal.
-For a newly authored workout with a degraded mapping (such as Mountain Biking to Garmin Cycling), MCP Send establishes
-consent without approving the loss of sport detail. A separate, current-digest approval is required before transport;
-an applied Send result must not be described as a provider-side copy.
+For a newly authored workout with a degraded mapping (such as Mountain Biking to Garmin Cycling), MCP's first preview
+discloses the mapping loss. Confirming that proposal approves its current destination-bound digest and establishes
+consent in one step; a changed digest blocks delivery. Unsupported standalone Send/Resume is different: preview names
+the incompatibility, and the delivery command refuses consent even if a client attempts to apply it. Explicit-provider
+failure remains independent of authored changes and other provider results. An applied Send result is not a provider-side copy.
 
 Manual training planning is available to every signed-in account across its routes, calendar actions/overlays, Help and
 planning-specific connection/deletion instructions. This does not authorize transport work, alter disconnect or deletion

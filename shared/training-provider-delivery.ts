@@ -74,6 +74,8 @@ export interface TrainingDeliveryPreviewV1 {
   warningCount: number;
   issues: string[];
   approvalDigest: string | null;
+  /** Present for one workout; a plan preview may contain mixed mappings. */
+  workoutCompatibility?: 'exact' | 'degraded' | 'unsupported' | null;
 }
 
 export class TrainingDeliveryContractError extends Error {}

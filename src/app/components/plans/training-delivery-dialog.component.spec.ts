@@ -278,6 +278,20 @@ describe('Training provider delivery controls', () => {
     fixture.componentInstance.reconnectWahooTraining();
     expect(open).toHaveBeenCalledTimes(1); expect(service.mutate).not.toHaveBeenCalled();
   });
+  it('explains an unsupported Wahoo workout and prevents confirmation', async () => {
+    service.isReady.mockImplementation(provider => provider === 'wahoo');
+    service.preview.mockResolvedValue({ schemaVersion: 1, available: true, connection: 'connected', hasPro: true,
+      timeZone: 'Europe/Helsinki', effect: 'enable', settingsRevision: 0, eligibleCount: 1, warningCount: 1,
+      issues: ['Wahoo requires time-based steps.'], approvalDigest: null, workoutCompatibility: 'unsupported' });
+    const fixture = TestBed.createComponent(TrainingDeliveryDialogComponent); fixture.detectChanges();
+    await fixture.componentInstance.begin('wahoo', 'send'); fixture.detectChanges();
+    expect(fixture.nativeElement.textContent).toContain('Wahoo cannot receive this workout');
+    expect(fixture.nativeElement.textContent).toContain('Wahoo requires time-based steps');
+    expect(fixture.componentInstance.canConfirm()).toBe(false);
+    await fixture.componentInstance.confirm();
+    expect(service.mutate).not.toHaveBeenCalled();
+    expect(haptics.success).not.toHaveBeenCalled();
+  });
   it.each([false, true])('makes review primary and keeps plan exclusion in a secondary menu, even when paused: %s', async paused => {
     service.isReady.mockImplementation(provider => provider === 'suunto' && !paused);
     service.watchScope.mockReturnValue(of({ settings: [], statuses: [{ ...status, provider: 'suunto', planId: 'p',

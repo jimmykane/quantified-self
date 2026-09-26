@@ -720,6 +720,13 @@ exist only in `delivery/test-support/`, are excluded from the Functions build, a
 commands. Backend execution is necessary to resolve privileged connection authority and create background work; owner
 Rules/client transactions cannot authorize server-held provider credentials. Commands accept expected schedule, scope,
 and delivery-settings revisions and a mutation ID, never a UID, provider account ID, credential, or remote artifact ID.
+Single-workout previews identify exact, degraded or unsupported compatibility separately from provider connection
+readiness. Direct Send/Resume cannot record consent for an unsupported recipe; the browser explains the mapping reasons
+and disables confirmation. MCP's first proposal likewise marks an unsupported destination unavailable, excludes it from
+`all_connected`, and keeps an explicitly requested failure independent from authored changes and other providers.
+Degraded mappings still use one reviewed digest-bound approval; plan-level consent can cover a mix of supported and
+unsupported workouts, with each individual delivery retaining its own truthful status. This adds no MCP tool, scope or
+registered output field: the existing provider preview availability and summary carry the result.
 Receipts reject reuse with a different request and carry a 30-day `expireAt`; production TTL configuration is part of #655,
 not an operation performed by tests or this implementation. Manual authoring does not acquire a Pro requirement.
 
@@ -1372,6 +1379,15 @@ documented Running/Cycling baseline with time endings throughout. Required Worko
 step seconds times total repeat passes divided by 60, including fractional minutes. Distance endings cannot supply
 that value without an estimate and are unsupported for delivery. The broader fixture serializer's distance/kilojoule
 capabilities do not add editor features or imply delivery eligibility. Existing target/degradation approvals still apply.
+The unsupported verdict is visible at the first Send preview, before any Wahoo consent or HTTP operation. A supported
+relative-target workout remains a degradation, not an unsupported workout: its warning is approved with the same MCP
+proposal, then queued for the normal Plan/Workout reconciliation. A Wahoo-incompatible workout can still be authored
+in QS without Wahoo delivery, and a mixed all-connected request may send it to another compatible service.
+Loopback Firestore tests cover new and existing unsupported Sends, distance-ended all-connected rejection, mixed
+Wahoo/Suunto selection, and the degraded Wahoo create-through-Plan/Workout fixture lifecycle. They do not claim a
+live Wahoo app or device result. The MCP impact review found no new tool, permission, registered output shape,
+Assistant route or plugin instruction requirement; the existing preview availability/summary now reflects the
+backend compatibility verdict.
 
 The saved delivery zone determines today through today + 6, inclusive. Later workouts wait; moving an owned future
 copy outside the window withdraws it and preserves consent for later re-entry. QS represents its date-only schedule

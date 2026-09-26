@@ -119,7 +119,8 @@ export async function trainingDeliveryCommand(runtime: DeliveryRuntime, uid: str
         && (!transport || (Date.parse(item.localDate) - Date.parse(today)) / 86_400_000 <= transport.horizonDays)).length,
       warningCount: assessments.filter(item => item.level !== 'exact').length,
       issues: [...new Set([...(connection.issues ?? []), ...assessments.flatMap(item => item.issues)])].slice(0, 20),
-      approvalDigest: workout && assessments[0]?.level === 'degraded' ? assessments[0].digest : null };
+      approvalDigest: workout && assessments[0]?.level === 'degraded' ? assessments[0].digest : null,
+      workoutCompatibility: workout ? assessments[0]?.level ?? null : null };
     if (previewOnly) return preview;
     const removal = command.action === 'stop';
     // Retry never grants consent. Workers still enforce Pro for creates/updates, while
@@ -128,6 +129,9 @@ export async function trainingDeliveryCommand(runtime: DeliveryRuntime, uid: str
     if (!removal && !transport) throw new HttpsError('failed-precondition', 'This provider is not yet available for workout delivery.');
     if (!removal && connection.state !== 'connected') throw new HttpsError('failed-precondition', 'Repair or reconnect this provider connection first.');
     if (command.action === 'send' && workout?.planId) throw new HttpsError('failed-precondition', 'Plan workouts use plan provider settings.');
+    if (workout && ['send', 'resume'].includes(command.action) && assessments[0]?.level === 'unsupported') {
+      throw new HttpsError('failed-precondition', 'This workout cannot be sent to the selected provider. Review its sport and step endings before enabling sync.');
+    }
     if (retired && retained!.connectionEpoch !== connection.epoch) {
       throw new HttpsError('failed-precondition', 'Access was explicitly revoked. Provider-held copies may need removing in the provider app.');
     }

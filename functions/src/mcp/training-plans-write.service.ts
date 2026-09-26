@@ -22,7 +22,8 @@ import {
 import { parseWorkoutStructureV1 } from '../../../shared/planned-workout';
 import { parseStrengthWorkoutDetailsV1, projectStrengthWorkoutToV1,
   strengthProjectionMatchesDetails, type StrengthWorkoutDetailsV1 } from '../../../shared/strength-workout';
-import { PLANNED_WORKOUT_PROVIDER_IDS, type PlannedWorkoutProviderId } from '../../../shared/planned-workout-providers';
+import { PLANNED_WORKOUT_PROVIDER_CAPABILITIES_V1, PLANNED_WORKOUT_PROVIDER_IDS,
+  type PlannedWorkoutProviderId } from '../../../shared/planned-workout-providers';
 import { deliverySettingsId, normalizeDeliveryTimeZone, trainingDeliveryLocalDate, TrainingDeliveryContractError,
   type TrainingDeliveryAction, type TrainingDeliveryPreviewV1 } from '../../../shared/training-provider-delivery';
 import { getUserDeletionGuardStateInTransaction } from '../shared/user-deletion-guard';
@@ -445,10 +446,13 @@ function mapDeliveryAction(operation: Pick<StoredProviderOperation, 'action'>): 
   return operation.action;
 }
 
-function deliveryAvailability(preview: TrainingDeliveryPreviewV1): 'ready' | 'unavailable' | 'reconnect_required' | 'connection_repair' | 'pro_required' {
+function deliveryAvailability(preview: TrainingDeliveryPreviewV1,
+  operation?: Pick<ProviderOperationDraft, 'targetType' | 'action'>): 'ready' | 'unavailable' | 'reconnect_required' | 'connection_repair' | 'pro_required' {
   if (!preview.hasPro && preview.effect !== 'remove-future-copies') return 'pro_required';
   if (!preview.available) return 'unavailable';
   if (preview.connection !== 'connected') return preview.connection;
+  if (operation?.targetType === 'workout' && ['send', 'resume'].includes(operation.action)
+    && preview.workoutCompatibility === 'unsupported') return 'unavailable';
   return 'ready';
 }
 
@@ -477,9 +481,19 @@ function mappingDisclosure(provider: PlannedWorkoutProviderId, preview: Training
   return summary;
 }
 
-function providerSummary(provider: PlannedWorkoutProviderId, action: StoredProviderOperation['action'], preview: TrainingDeliveryPreviewV1): string {
-  const availability = deliveryAvailability(preview);
+function providerSummary(provider: PlannedWorkoutProviderId,
+  operation: Pick<ProviderOperationDraft, 'targetType' | 'action'>, preview: TrainingDeliveryPreviewV1): string {
+  const action = operation.action;
+  const availability = deliveryAvailability(preview, operation);
   if (availability === 'pro_required') return `${provider} delivery requires Pro.`;
+  if (availability === 'unavailable' && preview.available && operation.targetType === 'workout'
+    && ['send', 'resume'].includes(action) && preview.workoutCompatibility === 'unsupported') {
+    const label = PLANNED_WORKOUT_PROVIDER_CAPABILITIES_V1[provider].label;
+    const reason = [...new Set(preview.issues)].join(' ').trim() || 'Its sport or steps are unsupported.';
+    const summary = `${label} cannot receive this workout: ${reason} No new ${label} delivery will start. You can keep the workout in QS or edit it before trying again.`;
+    return summary.length <= 500 ? summary
+      : `${label} cannot receive this workout because its sport or steps are unsupported. No new ${label} delivery will start. You can keep the workout in QS or edit it before trying again.`;
+  }
   if (availability === 'unavailable') return `${provider} workout delivery is not enabled for this account.`;
   if (availability === 'reconnect_required') return `${provider} must be reconnected before delivery can change.`;
   if (availability === 'connection_repair') return `${provider} connection access must be repaired before delivery can change.`;
@@ -530,9 +544,9 @@ async function previewProviderOperation(
     unavailable('Provider delivery cannot be previewed safely right now. Try again later.');
   }
   return { preview: preview!, publicPreview: { index: operation.index, provider: operation.provider,
-    targetType: operation.targetType, action: operation.action, availability: deliveryAvailability(preview!),
+    targetType: operation.targetType, action: operation.action, availability: deliveryAvailability(preview!, operation),
     timeZone: preview!.timeZone || null, eligibleCount: preview!.eligibleCount, warningCount: preview!.warningCount,
-    summary: providerSummary(operation.provider, operation.action, preview!) } };
+    summary: providerSummary(operation.provider, operation, preview!) } };
 }
 
 async function previewSimulatedProviderAvailability(
@@ -540,7 +554,7 @@ async function previewSimulatedProviderAvailability(
   uid: string,
   operation: ProviderOperationDraft,
   snapshot: TrainingScheduleSnapshotV1,
-): Promise<{ ready: boolean; settingsRevision: number; approvalDigest: string | null;
+): Promise<{ ready: boolean; unsupported: boolean; settingsRevision: number; approvalDigest: string | null;
   publicPreview: PreviewResult['providerPreviews'][number] }> {
   const target = operation.targetType === 'plan'
     ? snapshot.plans.get(operation.targetId)
@@ -562,10 +576,6 @@ async function previewSimulatedProviderAvailability(
   const transport = deps.runtime.transport(operation.provider, uid);
   const inspectionAvailable = operation.action !== 'check'
     || (!!transport?.inspection && transport.inspection.policy.mode !== 'unavailable');
-  const availability = !hasPro && !['stop'].includes(operation.action) ? 'pro_required'
-    : !transport || !inspectionAvailable ? 'unavailable'
-      : connection.state;
-  const ready = availability === 'connected';
   const previous = setting.data() ?? {};
   const inherited = inheritedPlanSetting?.data() ?? {};
   const timeZone = workout?.planId
@@ -595,12 +605,16 @@ async function previewSimulatedProviderAvailability(
     issues: assessments.flatMap(item => item?.issues ?? []).slice(0, 20),
     approvalDigest: operation.targetType === 'workout' && assessments[0]?.level === 'degraded'
       ? assessments[0].digest : null,
+    workoutCompatibility: operation.targetType === 'workout' ? assessments[0]?.level ?? null : null,
   };
-  return { ready, settingsRevision: Number(previous.revision ?? 0), approvalDigest: preview.approvalDigest,
+  const publicAvailability = deliveryAvailability(preview, operation);
+  const ready = publicAvailability === 'ready';
+  return { ready, unsupported: preview.workoutCompatibility === 'unsupported',
+    settingsRevision: Number(previous.revision ?? 0), approvalDigest: preview.approvalDigest,
     publicPreview: { index: operation.index, provider: operation.provider,
     targetType: operation.targetType, action: operation.action,
-    availability: ready ? 'ready' : availability,
-    timeZone, eligibleCount, warningCount, summary: providerSummary(operation.provider, operation.action, preview) } };
+    availability: publicAvailability,
+    timeZone, eligibleCount, warningCount, summary: providerSummary(operation.provider, operation, preview) } };
 }
 
 function proposalRef(id: string, createdAtMs: number, uid: string, connectionId: string): string {
@@ -716,6 +730,7 @@ export async function previewTrainingChanges(
     const selected = template.change.providers === 'all_connected'
       ? [...PLANNED_WORKOUT_PROVIDER_IDS] : template.change.providers;
     let readyCount = 0;
+    let unsupportedSummary: string | null = null;
     for (const provider of selected) {
       const operation: ProviderOperationDraft = { index: template.index, provider,
         targetType: template.change.targetType, targetId, action: template.change.action,
@@ -743,6 +758,9 @@ export async function previewTrainingChanges(
           unavailable('Provider delivery cannot be previewed safely right now. Try again later.');
         }
         providerPreviews.push(assessed.publicPreview);
+        if (assessed.unsupported && ['send', 'resume'].includes(operation.action)) {
+          unsupportedSummary = assessed.publicPreview.summary;
+        }
         if (operation.action === 'approve' && !assessed.approvalDigest) {
           invalid('The current workout mapping no longer needs or permits approval.');
         }
@@ -756,6 +774,9 @@ export async function previewTrainingChanges(
       }
       const previewed = await previewProviderOperation(deps, input.uid, operation, loaded.snapshot.state.revision, loaded.snapshot);
       providerPreviews.push(previewed.publicPreview);
+      if (previewed.preview.workoutCompatibility === 'unsupported' && ['send', 'resume'].includes(operation.action)) {
+        unsupportedSummary = previewed.publicPreview.summary;
+      }
       const storedOperation: StoredProviderOperation = { ...operation,
         expectedScheduleRevision: simulated.state.revision,
         expectedScopeRevision: simulatedTarget!.revision,
@@ -764,11 +785,11 @@ export async function previewTrainingChanges(
       if (operation.action === 'approve' && !storedOperation.approvalDigest) {
         invalid('The current workout mapping no longer needs or permits approval.');
       }
-      if (deliveryAvailability(previewed.preview) === 'ready') { providerOperations.push(storedOperation); readyCount += 1; }
+      if (deliveryAvailability(previewed.preview, operation) === 'ready') { providerOperations.push(storedOperation); readyCount += 1; }
       else if (template.change.providers !== 'all_connected') providerOperations.push(storedOperation);
     }
     if (template.change.providers === 'all_connected' && readyCount === 0) {
-      invalid('No connected, rollout-enabled provider is currently eligible for this delivery action.');
+      invalid(unsupportedSummary ?? 'No connected, rollout-enabled provider is currently eligible for this delivery action.');
     }
   }
 
