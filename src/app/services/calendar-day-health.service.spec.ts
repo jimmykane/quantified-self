@@ -104,4 +104,27 @@ describe('CalendarDayHealthService', () => {
     subscription.unsubscribe();
     expect(snapshots.observed).toBe(false);
   });
+
+  it('delivers sleep evidence before a delayed derived-metrics snapshot', async () => {
+    vi.clearAllMocks();
+    const snapshots = new Subject<ReturnType<typeof createDashboardDerivedMetricsMissingState>>();
+    derived.watch.mockReturnValueOnce(snapshots.asObservable());
+    queries.loadSleepRange.mockResolvedValueOnce([{
+      id: 'night', sleepDate: '2026-09-10', startTimeMs: new Date(2026, 8, 9, 23).getTime(),
+      endTimeMs: new Date(2026, 8, 10, 7).getTime(), durationSeconds: 8 * 3600,
+      score: { value: 74 }, source: { provider: 'SuuntoApp' },
+    }]);
+    const values: Array<{ pending: boolean; sleep: string; readiness: string }> = [];
+    const subscription = service().watch('owner', '2026-09-10', new Date(2026, 8, 15, 12).getTime(), new AbortController().signal)
+      .subscribe(evidence => {
+        const summary = buildCalendarDayHealthSummary('2026-09-10', evidence, { nowMs: new Date(2026, 8, 15, 12).getTime() });
+        values.push({ pending: evidence.derivedPending === true, sleep: summary.sleep.value, readiness: summary.readiness.status });
+      });
+    await vi.waitFor(() => expect(values).toEqual([{ pending: true, sleep: '74/100', readiness: 'updating' }]));
+    snapshots.next(createDashboardDerivedMetricsMissingState());
+    expect(values).toHaveLength(2);
+    expect(values[1].pending).toBe(false);
+    expect(queries.loadSleepRange).toHaveBeenCalledTimes(1);
+    subscription.unsubscribe();
+  });
 });

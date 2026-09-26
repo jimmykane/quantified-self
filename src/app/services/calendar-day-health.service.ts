@@ -1,12 +1,12 @@
 import { inject, Injectable } from '@angular/core';
-import { catchError, combineLatest, defer, from, fromEvent, map, of, takeUntil, throwError, type Observable } from 'rxjs';
+import { catchError, combineLatest, defer, from, fromEvent, map, of, startWith, takeUntil, throwError, type Observable } from 'rxjs';
 import { HEALTH_METRIC_IDS } from '@shared/health';
 import { DERIVED_METRIC_KINDS } from '@shared/derived-metrics';
 import { projectLoadedHealthRange } from '@shared/health-query';
 import { HealthMetricQueryService } from './health-metric-query.service';
 import { DashboardDerivedMetricsService } from './dashboard-derived-metrics.service';
 import { buildHealthMetricWorkspaceView, type HealthWorkspaceSeries, type HealthWorkspaceSleepSession } from '../helpers/health-workspace.helper';
-import type { CalendarDayHealthEvidence } from '../helpers/calendar-day-health.helper';
+import { selectCalendarDaySleepPoint, type CalendarDayHealthEvidence } from '../helpers/calendar-day-health.helper';
 import { buildDashboardReadinessSleepQueryWindow } from '../helpers/dashboard-training-insights.helper';
 
 @Injectable({ providedIn: 'root' })
@@ -49,21 +49,22 @@ export class CalendarDayHealthService {
         hrvSeries = buildHealthMetricWorkspaceView(sleepOnly, sessions).series;
       }
       return {
-        sessions, hrvSeries,
+        sessions, sleepPoint: selectCalendarDaySleepPoint(dateKey, sessions), hrvSeries,
         sleepError: sleepResult.status === 'rejected',
         hrvError: hrvResult.status === 'rejected',
       };
     }));
     const derived$ = defer(() => this.derived.watch({ uid }, { metricKinds: derivedKinds, reportReadErrors: true })).pipe(
-      map(derived => ({ derived, readFailed: false })),
-      catchError(() => of({ derived: null, readFailed: true })),
+      map(derived => ({ derived, readFailed: false, derivedPending: false })),
+      catchError(() => of({ derived: null, readFailed: true, derivedPending: false })),
+      startWith({ derived: null, readFailed: false, derivedPending: true }),
     );
     return combineLatest([health$, derived$]).pipe(
       takeUntil(fromEvent(signal, 'abort')),
-      map(([health, { derived, readFailed }]) => {
+      map(([health, { derived, readFailed, derivedPending }]) => {
         if (signal.aborted || !this.queries.isOwner(uid)) throw new Error('Calendar health read cancelled.');
         return {
-          ...health, derived,
+          ...health, derived, derivedPending,
           readinessError: readFailed || (isToday
             ? derived?.formStatus === 'failed' || derived?.formNowStatus === 'failed' || derived?.rampRateStatus === 'failed'
             : derived?.trainingReadinessStatus === 'failed'),

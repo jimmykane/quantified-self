@@ -26,6 +26,13 @@
             <div class="calendar-day-context-metric"><span>Recovery left</span><strong>{{ recovery.value }}</strong><small>{{ recovery.detail }}</small></div>
           }
         </div>
+        @if (standaloneDayPage() && healthState().sleepPoint; as sleepPoint) {
+          <div class="calendar-day-context-sleep-stages" [attr.aria-label]="sleepPoint.providerLabel + ' sleep stages for ' + title()">
+            <span class="calendar-day-context-sleep-source">{{ sleepPoint.providerLabel }} · overnight sleep</span>
+            <app-health-sleep-stage-summary [point]="sleepPoint" [sourceLabel]="sleepPoint.providerLabel"
+              [darkTheme]="isDarkTheme()" [unitSettings]="data().unitSettings ?? null" />
+          </div>
+        }
       }
     </section>
   }

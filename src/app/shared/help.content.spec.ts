@@ -551,6 +551,7 @@ describe('help.content', () => {
     const calendarSection = HELP_SECTIONS.find(section => section.id === 'activity-calendar');
 
     expect(calendarSection?.content).toContain('**Week**, **Month**, and **Year** views');
+    expect(calendarSection?.content).toContain('same sleep-stage breakdown used in Health');
     expect(calendarSection?.content).toContain('full-width **Activity Calendar** tile');
     expect(calendarSection?.content).toContain('**Today** card opens a month calendar in a bottom sheet');
     expect(calendarSection?.content).toContain('Dashboard and Training headers also link to the full [Calendar](/calendar)');

@@ -5,9 +5,10 @@ import { signal } from '@angular/core';
 import { MatBottomSheet } from '@angular/material/bottom-sheet';
 import { provideRouter } from '@angular/router';
 import { Router } from '@angular/router';
-import { ActivityTypes, DataDuration, DaysOfTheWeek, type EventInterface } from '@sports-alliance/sports-lib';
+import { ActivityTypes, AppThemes, DataDuration, DaysOfTheWeek, type EventInterface } from '@sports-alliance/sports-lib';
 import { BehaviorSubject, of, Subject, throwError } from 'rxjs';
 import { AppUserService } from '../../../services/app.user.service';
+import { AppThemeService } from '../../../services/app.theme.service';
 import type { TimelineNote, TimelineNoteRange } from '@shared/timeline-notes';
 import type { TimelineNoteChartContext } from '../../../helpers/timeline-notes-chart.helper';
 import type { CalendarDayDetailsData } from '../calendar-day-details/calendar-day-details.component';
@@ -55,6 +56,7 @@ describe('ActivityCalendarTileComponent', () => {
       providers: [
         provideRouter([]),
         { provide: AppUserService, useValue: { user: viewer, user$: viewer$ } },
+        { provide: AppThemeService, useValue: { appTheme: signal(AppThemes.Normal) } },
         { provide: ActivityCalendarService, useValue: { watchEvents } },
         { provide: TrainingPlansService, useValue: { watchSchedule, watchWorkoutCompletions } },
         { provide: CalendarDayHealthService, useValue: { watch: vi.fn(() => of({ sessions: [], hrvSeries: [], derived: null, sleepError: false, hrvError: false, readinessError: false, recoveryError: false })) } },

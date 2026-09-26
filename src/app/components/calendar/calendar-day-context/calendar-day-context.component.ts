@@ -2,13 +2,16 @@ import { ChangeDetectionStrategy, Component, computed, effect, inject, input, ou
 import { Router } from '@angular/router';
 import { isTimelineNoteVisible, timelineNoteOverlaps, TIMELINE_NOTE_LABELS, timelineNoteDates } from '@shared/timeline-notes';
 import type { TimelineNote } from '@shared/timeline-notes';
-import { type EventInterface } from '@sports-alliance/sports-lib';
+import { AppThemes, type EventInterface } from '@sports-alliance/sports-lib';
 import { SharedModule } from '../../../modules/shared.module';
 import { AppUserService } from '../../../services/app.user.service';
 import { CalendarDayHealthService } from '../../../services/calendar-day-health.service';
+import { AppThemeService } from '../../../services/app.theme.service';
 import { CalendarDayDetailsNavigationService } from '../../../services/calendar-day-details-navigation.service';
 import { TrainingWorkoutDuplicateService } from '../../../services/training-workout-duplicate.service';
-import { buildCalendarDayHealthSummary, type CalendarDayHealthSummary } from '../../../helpers/calendar-day-health.helper';
+import { buildCalendarDayHealthSummary, resolveCalendarDaySleepPoint, type CalendarDayHealthSummary } from '../../../helpers/calendar-day-health.helper';
+import type { DashboardSleepTrendPoint } from '../../../helpers/dashboard-sleep-chart.helper';
+import { HealthSleepStageSummaryComponent } from '../../health/health-sleep-stage-summary.component';
 import { resolveActivityCalendarEventLabel, formatActivityCalendarDuration, resolveActivityCalendarEventDurationSeconds, buildActivityCalendarPeriodSummary } from '../../../helpers/activity-calendar.helper';
 import { buildActivityCalendarFamilyVolumeRows } from '../../../helpers/activity-calendar-volume.helper';
 import { ActivityCalendarVolumeListComponent } from '../activity-calendar-volume-list/activity-calendar-volume-list.component';
@@ -20,12 +23,13 @@ import type { CalendarDayDetailsData } from '../calendar-day-details/calendar-da
 interface HealthState {
   status: 'loading' | 'ready' | 'private';
   summary: CalendarDayHealthSummary | null;
+  sleepPoint: DashboardSleepTrendPoint | null;
 }
 
 @Component({
   selector: 'app-calendar-day-context',
   standalone: true,
-  imports: [SharedModule, ActivityCalendarVolumeListComponent],
+  imports: [SharedModule, ActivityCalendarVolumeListComponent, HealthSleepStageSummaryComponent],
   templateUrl: './calendar-day-context.component.html',
   styleUrls: ['./calendar-day-context.component.scss'],
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -33,6 +37,7 @@ interface HealthState {
 export class CalendarDayContextComponent {
   private readonly users = inject(AppUserService);
   private readonly health = inject(CalendarDayHealthService);
+  private readonly theme = inject(AppThemeService);
   private readonly router = inject(Router);
   private readonly navigation = inject(CalendarDayDetailsNavigationService);
   private readonly duplicateService = inject(TrainingWorkoutDuplicateService);
@@ -65,7 +70,8 @@ export class CalendarDayContextComponent {
     summary: formatManualWorkoutStructure(entry.workout.structure, this.data().unitSettings, this.data().locale),
   })));
   readonly canPlan = computed(() => this.data().planningEnabled !== false && this.users.user()?.uid === this.data().userId);
-  readonly healthState = signal<HealthState>({ status: 'loading', summary: null });
+  readonly healthState = signal<HealthState>({ status: 'loading', summary: null, sleepPoint: null });
+  readonly isDarkTheme = computed(() => this.theme.appTheme() === AppThemes.Dark);
   readonly duplicatingId = signal<string | null>(null);
   readonly activities = computed(() => this.day().events.map((event: EventInterface) => ({
     id: `${event.getID?.() || ''}`,
@@ -89,17 +95,18 @@ export class CalendarDayContextComponent {
     const ownerUid = this.users.user()?.uid;
     const data = untracked(() => this.data());
     if (!this.privateHealthEnabled() || !ownerUid || ownerUid !== dayOwnerUid) {
-      this.healthState.set({ status: 'private', summary: null });
+      this.healthState.set({ status: 'private', summary: null, sleepPoint: null });
       return;
     }
     const controller = new AbortController();
     const nowMs = Date.now();
-    this.healthState.set({ status: 'loading', summary: null });
+    this.healthState.set({ status: 'loading', summary: null, sleepPoint: null });
     const subscription = this.health.watch(ownerUid, dateKey, nowMs, controller.signal).subscribe({
       next: evidence => {
         if (controller.signal.aborted || this.users.user()?.uid !== ownerUid) return;
         this.healthState.set({
           status: 'ready',
+          sleepPoint: resolveCalendarDaySleepPoint(dateKey, evidence),
           summary: buildCalendarDayHealthSummary(dateKey, evidence, {
             nowMs, locale: data.locale, unitSettings: data.unitSettings,
           }),
@@ -107,7 +114,7 @@ export class CalendarDayContextComponent {
       },
       error: () => {
         if (controller.signal.aborted || this.users.user()?.uid !== ownerUid) return;
-        this.healthState.set({ status: 'ready', summary: {
+        this.healthState.set({ status: 'ready', sleepPoint: null, summary: {
           readiness: { status: 'error', value: '—', detail: 'Could not load readiness' },
           sleep: { status: 'error', value: '—', detail: 'Could not load sleep' },
           hrv: { status: 'error', value: '—', detail: 'Could not load HRV' },

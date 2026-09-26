@@ -2,7 +2,7 @@ import { HEALTH_METRIC_IDS } from '@shared/health';
 import type { UserUnitSettingsInterface } from '@sports-alliance/sports-lib';
 import type { HealthWorkspaceSeries, HealthWorkspaceSleepSession } from './health-workspace.helper';
 import { formatHealthValue } from './health-workspace.helper';
-import { buildDashboardSleepTrendContext, formatSleepDuration } from './dashboard-sleep-chart.helper';
+import { buildDashboardSleepTrendContext, formatSleepDuration, type DashboardSleepTrendPoint } from './dashboard-sleep-chart.helper';
 import { buildDashboardReadinessSignalsContext } from './dashboard-training-insights.helper';
 import {
   resolveDashboardFormNowContextFromPoints,
@@ -29,8 +29,10 @@ export interface CalendarDayHealthSummary {
 
 export interface CalendarDayHealthEvidence {
   sessions: readonly HealthWorkspaceSleepSession[];
+  sleepPoint?: DashboardSleepTrendPoint | null;
   hrvSeries: readonly HealthWorkspaceSeries[];
   derived: DashboardDerivedMetricsState | null;
+  derivedPending?: boolean;
   sleepError: boolean;
   hrvError: boolean;
   readinessError: boolean;
@@ -41,6 +43,24 @@ const empty = (detail: string): CalendarDayMetric => ({ status: 'empty', value: 
 const updating = (detail: string): CalendarDayMetric => ({ status: 'updating', value: '—', detail });
 const error = (detail: string): CalendarDayMetric => ({ status: 'error', value: '—', detail });
 
+/** Pick the same latest, date-matched overnight session for the summary and stage chart. */
+export function selectCalendarDaySleepPoint(
+  dateKey: string, sessions: readonly HealthWorkspaceSleepSession[],
+): DashboardSleepTrendPoint | null {
+  return buildDashboardSleepTrendContext(sessions).points
+    .filter(point => !point.isPlaceholder && !point.isNap && point.sleepDate === dateKey)
+    .sort((a, b) => b.endTimeMs - a.endTimeMs)[0] ?? null;
+}
+
+export function resolveCalendarDaySleepPoint(
+  dateKey: string, evidence: CalendarDayHealthEvidence,
+): DashboardSleepTrendPoint | null {
+  const point = evidence.sleepPoint;
+  if (point === null) return null;
+  return point && !point.isPlaceholder && !point.isNap && point.sleepDate === dateKey
+    ? point : selectCalendarDaySleepPoint(dateKey, evidence.sessions);
+}
+
 /** Date-key matching is deliberate: a nearby night or a last-known reading is not this day's data. */
 export function buildCalendarDayHealthSummary(
   dateKey: string,
@@ -49,10 +69,7 @@ export function buildCalendarDayHealthSummary(
 ): CalendarDayHealthSummary {
   const todayKey = localDateKey(options.nowMs);
   const isToday = dateKey === todayKey;
-  const nights = buildDashboardSleepTrendContext(evidence.sessions)
-    .points.filter(point => !point.isPlaceholder && !point.isNap && point.sleepDate === dateKey)
-    .sort((a, b) => b.endTimeMs - a.endTimeMs);
-  const night = nights[0] ?? null;
+  const night = resolveCalendarDaySleepPoint(dateKey, evidence);
   const sleep: CalendarDayMetric = evidence.sleepError
     ? error('Sleep could not be loaded')
     : night?.score != null
@@ -98,7 +115,9 @@ export function buildCalendarDayHealthSummary(
       readiness = { status: 'ready', value: `${point.label} ${point.score}/100`, detail: 'Recorded for this day' };
     }
   }
-  if (readiness.status === 'empty' && evidence.readinessError) {
+  if (readiness.status === 'empty' && evidence.derivedPending) {
+    readiness = updating('Loading readiness for this day');
+  } else if (readiness.status === 'empty' && evidence.readinessError) {
     readiness = error('Readiness could not be loaded');
   } else if (readiness.status === 'empty' && evidence.derived && (isToday
     ? [evidence.derived.formStatus, evidence.derived.formNowStatus, evidence.derived.rampRateStatus]
@@ -115,7 +134,9 @@ export function buildCalendarDayHealthSummary(
     recovery = presentation
       ? { status: 'ready', value: presentation.remainingText,
         detail: evidence.recoveryError ? `Until ${presentation.finishText} · could not refresh estimate` : `Until ${presentation.finishText}` }
-      : evidence.recoveryError
+      : evidence.derivedPending
+        ? updating('Loading recovery estimate')
+        : evidence.recoveryError
         ? error('Recovery could not be loaded')
         : isDerivedMetricPendingStatus(evidence.derived?.recoveryNowStatus)
           ? updating('Recovery is being updated')

@@ -3,7 +3,7 @@ import { DistanceUnits } from '@sports-alliance/sports-lib';
 import { HEALTH_METRIC_IDS, HEALTH_UNITS } from '@shared/health';
 import { normalizeUserUnitSettings } from '@shared/unit-aware-display';
 import { createDashboardDerivedMetricsMissingState } from '../services/dashboard-derived-metrics.service';
-import { buildCalendarDayHealthSummary, type CalendarDayHealthEvidence } from './calendar-day-health.helper';
+import { buildCalendarDayHealthSummary, resolveCalendarDaySleepPoint, selectCalendarDaySleepPoint, type CalendarDayHealthEvidence } from './calendar-day-health.helper';
 import type { HealthWorkspaceSeries } from './health-workspace.helper';
 
 const nowMs = new Date(2026, 8, 25, 12).getTime();
@@ -93,6 +93,16 @@ describe('calendar day health summary', () => {
     expect(today.recovery?.status).toBe('updating');
   });
 
+  it('keeps date-matched sleep visible while readiness and recovery are still loading', () => {
+    const evidence = { ...noEvidence(), derivedPending: true };
+    const past = buildCalendarDayHealthSummary('2026-09-24', evidence, { nowMs });
+    expect(past.readiness).toMatchObject({ status: 'updating', detail: 'Loading readiness for this day' });
+    expect(past.sleep.status).toBe('empty');
+    expect(past.recovery).toBeNull();
+    const today = buildCalendarDayHealthSummary('2026-09-25', evidence, { nowMs });
+    expect(today.recovery).toMatchObject({ status: 'updating', detail: 'Loading recovery estimate' });
+  });
+
   it('labels a Sleep HRV fallback as partial when the all-day read failed', () => {
     const evidence = noEvidence();
     evidence.hrvError = true;
@@ -127,6 +137,10 @@ describe('calendar day health summary', () => {
     const summary = buildCalendarDayHealthSummary('2026-09-24', evidence, { nowMs });
     expect(summary.sleep.value).toBe('74/100');
     expect(summary.sleep.detail).toContain('Suunto');
+    expect(selectCalendarDaySleepPoint('2026-09-24', evidence.sessions)?.providerLabel).toBe('Suunto');
+    expect(selectCalendarDaySleepPoint('2026-09-25', evidence.sessions)).toBeNull();
+    evidence.sleepPoint = selectCalendarDaySleepPoint('2026-09-24', evidence.sessions);
+    expect(resolveCalendarDaySleepPoint('2026-09-25', evidence)).toBeNull();
     expect(summary.hrv.value).toContain('34');
     expect(summary.hrv.detail).toContain('Suunto');
   });

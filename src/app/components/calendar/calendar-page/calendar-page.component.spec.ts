@@ -8,6 +8,7 @@ import { By } from '@angular/platform-browser';
 import { ActivatedRoute, convertToParamMap, NavigationEnd, provideRouter, Router, Scroll } from '@angular/router';
 import {
   ActivityTypes,
+  AppThemes,
   DataAscent,
   DataDescent,
   DataDistance,
@@ -22,6 +23,7 @@ import { AppTimelineNotesService } from '../../../services/app.timeline-notes.se
 import { AppHapticsService } from '../../../services/app.haptics.service';
 import type { CalendarDayDetailsResult } from '../calendar-day-details/calendar-day-details.component';
 import { AppUserService } from '../../../services/app.user.service';
+import { AppThemeService } from '../../../services/app.theme.service';
 import { CalendarDayHealthService } from '../../../services/calendar-day-health.service';
 import { ActivityCalendarService } from '../../../services/activity-calendar.service';
 import { CalendarDayDetailsNavigationService } from '../../../services/calendar-day-details-navigation.service';
@@ -110,6 +112,7 @@ describe('CalendarPageComponent', () => {
         provideRouter([]),
         { provide: ActivatedRoute, useValue: activatedRoute },
         { provide: AppUserService, useValue: { user: signal(user), user$: of(user) } },
+        { provide: AppThemeService, useValue: { appTheme: signal(AppThemes.Normal) } },
         { provide: ActivityCalendarService, useValue: { watchEvents } },
         { provide: TrainingPlansService, useValue: { watchSchedule, watchWorkoutCompletions } },
         { provide: CalendarDayDetailsNavigationService, useValue: dayDetailsNavigation },

@@ -11,6 +11,8 @@
 .calendar-day-context-metric span, .calendar-day-context-metric small { display: block; color: var(--mat-sys-on-surface-variant); font: var(--mat-sys-body-small); }
 .calendar-day-context-metric strong { display: block; margin: 2px 0; font-family: 'Barlow Condensed', sans-serif; font-size: 22px; font-weight: 600; line-height: 1.1; }
 .calendar-day-context-metric small { line-height: 1.25; overflow-wrap: anywhere; }
+.calendar-day-context-sleep-stages { margin-top: 16px; padding-top: 12px; border-top: 1px solid var(--mat-sys-outline-variant); min-width: 0; }
+.calendar-day-context-sleep-source { color: var(--mat-sys-on-surface-variant); font: var(--mat-sys-body-small); }
 .calendar-day-context-section { margin-top: 16px; padding-top: 12px; border-top: 1px solid var(--mat-sys-outline-variant); }
 .calendar-day-context-section h3 { margin: 0; font: var(--mat-sys-title-small); }
 .calendar-day-context-section p { margin: 8px 0 0; color: var(--mat-sys-on-surface-variant); font: var(--mat-sys-body-small); }
