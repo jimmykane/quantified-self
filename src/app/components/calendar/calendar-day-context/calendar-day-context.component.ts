@@ -1,5 +1,6 @@
 import { ChangeDetectionStrategy, Component, computed, effect, inject, input, output, signal, untracked } from '@angular/core';
 import { Router } from '@angular/router';
+import { ViewportScroller } from '@angular/common';
 import { isTimelineNoteVisible, timelineNoteOverlaps, TIMELINE_NOTE_LABELS, timelineNoteDates } from '@shared/timeline-notes';
 import type { TimelineNote } from '@shared/timeline-notes';
 import { AppThemes, type EventInterface } from '@sports-alliance/sports-lib';
@@ -18,6 +19,7 @@ import { ActivityCalendarVolumeListComponent } from '../activity-calendar-volume
 import { TIMELINE_NOTE_ICONS, timelineNoteColor } from '../../../helpers/timeline-note-appearance.helper';
 import { formatManualWorkoutStructure } from '../../../helpers/planned-workout-editor.helper';
 import { getDateTimeFormatter } from '../../../helpers/date-time-format.helper';
+import { buildCalendarDayStory } from '../../../helpers/calendar-day-story.helper';
 import type { CalendarDayDetailsData } from '../calendar-day-details/calendar-day-details.component';
 
 interface HealthState {
@@ -39,6 +41,7 @@ export class CalendarDayContextComponent {
   private readonly health = inject(CalendarDayHealthService);
   private readonly theme = inject(AppThemeService);
   private readonly router = inject(Router);
+  private readonly viewportScroller = inject(ViewportScroller);
   private readonly navigation = inject(CalendarDayDetailsNavigationService);
   private readonly duplicateService = inject(TrainingWorkoutDuplicateService);
 
@@ -88,6 +91,18 @@ export class CalendarDayContextComponent {
     this.data().unitSettings, this.data().locale,
   ));
   readonly fullDayRoute = computed(() => ['/calendar/day', this.data().day.dateKey]);
+  readonly dayStory = computed(() => buildCalendarDayStory({
+    dateKey: this.data().day.dateKey,
+    locale: this.data().locale,
+    nowMs: Date.now(),
+    activityStatus: this.activityState().status,
+    events: this.day().events,
+    notes: this.noteRows().map(row => row.note),
+    planStatus: this.canPlan() ? this.plannedStatus() : 'ready',
+    plans: this.canPlan() ? this.plannedWorkouts() : [],
+    sleepPoint: this.healthState().sleepPoint,
+    health: this.healthState().summary,
+  }));
 
   private readonly loadHealth = effect((onCleanup) => {
     const dateKey = this.healthDateKey();
@@ -131,6 +146,15 @@ export class CalendarDayContextComponent {
 
   selectNote(note: TimelineNote): void {
     this.noteSelected.emit(note);
+  }
+
+  selectTimelineNote(id: string): void {
+    const note = this.noteRows().find(row => row.note.id === id)?.note;
+    if (note) this.selectNote(note);
+  }
+
+  showSleepStages(): void {
+    this.viewportScroller.scrollToAnchor('day-sleep-stages');
   }
 
   prepareNavigation(): void {

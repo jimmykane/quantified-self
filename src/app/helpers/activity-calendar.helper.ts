@@ -638,7 +638,7 @@ function groupEventsByLocalDay(events: EventInterface[]): Map<string, EventInter
   return eventsByDay;
 }
 
-function resolveEventStartDate(event: EventInterface): Date | null {
+export function resolveEventStartDate(event: EventInterface): Date | null {
   const rawStartDate = (event as { startDate?: unknown } | null)?.startDate;
   if (rawStartDate instanceof Date && isValidDate(rawStartDate)) {
     return rawStartDate;

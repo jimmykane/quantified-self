@@ -2,6 +2,7 @@ import { signal } from '@angular/core';
 import { AppThemes, DistanceUnits } from '@sports-alliance/sports-lib';
 import { normalizeUserUnitSettings } from '@shared/unit-aware-display';
 import { TestBed } from '@angular/core/testing';
+import { ViewportScroller } from '@angular/common';
 import { provideRouter } from '@angular/router';
 import { Subject } from 'rxjs';
 import { vi, expect, it, describe } from 'vitest';
@@ -34,6 +35,7 @@ describe('CalendarDayContextComponent', () => {
     });
     await TestBed.configureTestingModule({ imports: [CalendarDayContextComponent], providers: [
       provideRouter([]),
+      { provide: ViewportScroller, useValue: { scrollToAnchor: vi.fn() } },
       { provide: AppUserService, useValue: { user: viewer } },
       { provide: CalendarDayHealthService, useValue: { watch } },
       { provide: AppThemeService, useValue: { appTheme: signal(AppThemes.Dark) } },
@@ -61,6 +63,7 @@ describe('CalendarDayContextComponent', () => {
     pending[1].next(emptyEvidence); fixture.detectChanges();
     expect(fixture.nativeElement.textContent).toContain('No HRV reading for this day');
     expect(fixture.nativeElement.querySelector('app-health-sleep-stage-summary')).toBeNull();
+    expect(fixture.nativeElement.querySelector('.calendar-day-context-timeline')).toBeNull();
     fixture.componentRef.setInput('standaloneDayPage', true);
     pending[1].next({ ...emptyEvidence, sessions: [{
       id: 'night', sleepDate: '2026-09-11', startTimeMs: new Date(2026, 8, 10, 23).getTime(),
@@ -70,6 +73,11 @@ describe('CalendarDayContextComponent', () => {
     }] } as typeof emptyEvidence); fixture.detectChanges();
     expect(fixture.nativeElement.querySelector('app-health-sleep-stage-summary')?.textContent).toContain('Sleep stages');
     expect(fixture.nativeElement.querySelector('.calendar-day-context-sleep-stages')?.textContent).toContain('Suunto · overnight sleep');
+    expect(fixture.nativeElement.querySelector('.calendar-day-context-timeline')).toBeTruthy();
+    expect(fixture.nativeElement.querySelector('[aria-label="Activities on selected day"]')).toBeNull();
+    const scrollToAnchor = vi.spyOn(TestBed.inject(ViewportScroller), 'scrollToAnchor');
+    fixture.nativeElement.querySelector('.calendar-day-timeline-content button')?.click();
+    expect(scrollToAnchor).toHaveBeenCalledWith('day-sleep-stages');
     expect(fixture.componentInstance.healthState().sleepPoint?.sleepDate).toBe('2026-09-11');
     for (const unitSettings of [null, normalizeUserUnitSettings({ distanceUnits: DistanceUnits.Miles })]) {
       fixture.componentRef.setInput('data', { ...data('2026-09-11'), unitSettings });

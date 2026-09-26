@@ -73,7 +73,7 @@ export function buildCalendarDayHealthSummary(
   const sleep: CalendarDayMetric = evidence.sleepError
     ? error('Sleep could not be loaded')
     : night?.score != null
-      ? { status: 'ready', value: `${Math.round(night.score)}/100`, detail: `${night.providerLabel} · overnight` }
+      ? { status: 'ready', value: `${Math.round(night.score)}/100`, detail: `${night.providerLabel} · overnight score` }
       : night && night.totalSeconds > 0
         ? { status: 'ready', value: formatSleepDuration(night.totalSeconds), detail: `${night.providerLabel} · overnight duration` }
         : empty(night ? 'No sleep duration or score recorded' : 'No sleep recorded for this day');

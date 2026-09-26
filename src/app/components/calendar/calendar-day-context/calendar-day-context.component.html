@@ -14,7 +14,13 @@
   }
 
   @if (healthState().status !== 'private') {
-    <section class="calendar-day-context-health" aria-label="Health and recovery for selected day">
+    <section class="calendar-day-context-health" [class.calendar-day-context-health--full]="standaloneDayPage()" aria-label="Health and recovery for selected day">
+      @if (standaloneDayPage()) {
+        <div class="calendar-day-context-health-heading">
+          <h3>Health on this day</h3>
+          <span>This day only · sources kept separate</span>
+        </div>
+      }
       @if (healthState().status === 'loading' && !healthState().summary) {
         <p role="status">Loading health for this day…</p>
       } @else if (healthState().summary; as health) {
@@ -27,7 +33,7 @@
           }
         </div>
         @if (standaloneDayPage() && healthState().sleepPoint; as sleepPoint) {
-          <div class="calendar-day-context-sleep-stages" [attr.aria-label]="sleepPoint.providerLabel + ' sleep stages for ' + title()">
+          <div id="day-sleep-stages" class="calendar-day-context-sleep-stages" [attr.aria-label]="sleepPoint.providerLabel + ' sleep stages for ' + title()">
             <span class="calendar-day-context-sleep-source">{{ sleepPoint.providerLabel }} · overnight sleep</span>
             <app-health-sleep-stage-summary [point]="sleepPoint" [sourceLabel]="sleepPoint.providerLabel"
               [darkTheme]="isDarkTheme()" [unitSettings]="data().unitSettings ?? null" />
@@ -37,7 +43,91 @@
     </section>
   }
 
-  @if (!compact()) {
+  @if (!compact() && standaloneDayPage()) {
+    @if (dayStory().highlights.length) {
+      <section class="calendar-day-context-highlights" aria-labelledby="calendar-day-highlights-title">
+        <h3 id="calendar-day-highlights-title">What stands out</h3>
+        <ul>
+          @for (highlight of dayStory().highlights; track highlight) { <li>{{ highlight }}</li> }
+        </ul>
+      </section>
+    }
+    <section class="calendar-day-context-section calendar-day-context-timeline" aria-labelledby="calendar-day-timeline-title">
+      <div class="calendar-day-context-section-header">
+        <div>
+          <h3 id="calendar-day-timeline-title">Day timeline</h3>
+          <span>Notes and workouts without a time appear first.</span>
+        </div>
+        @if (canPlan()) {
+          <button mat-button appHapticTap type="button" [matMenuTriggerFor]="addDayWorkoutMenu">
+            <mat-icon aria-hidden="true">add</mat-icon>Add workout<mat-icon iconPositionEnd aria-hidden="true">arrow_drop_down</mat-icon>
+          </button>
+          <mat-menu #addDayWorkoutMenu="matMenu" class="qs-menu-panel">
+            <a mat-menu-item appHapticTap [routerLink]="['/training/plans/new']"
+              [queryParams]="{ date: data().day.dateKey }" (click)="prepareNavigation()">Plan workout</a>
+            <a mat-menu-item appHapticTap [routerLink]="['/training/plans/standalone/new']"
+              [queryParams]="{ date: data().day.dateKey }" (click)="prepareNavigation()">Standalone workout</a>
+          </mat-menu>
+        }
+      </div>
+      @if (activityState().status === 'loading') { <p role="status">Loading activities…</p> }
+      @if (canPlan() && plannedStatus() === 'loading') { <p role="status">Loading planned workouts…</p> }
+      @if (activityState().status === 'error') { <p role="alert">Activities could not be loaded.</p> }
+      @if (canPlan() && plannedStatus() === 'error') { <p role="alert">Planned workouts could not be loaded.</p> }
+      @if (dayStory().items.length) {
+        <ol class="calendar-day-timeline-list">
+          @for (item of dayStory().items; track item.key) {
+            <li class="calendar-day-timeline-item">
+              <span class="calendar-day-timeline-time">{{ item.timeLabel }}</span>
+              @if (item.activityType) {
+                <app-activity-type-icon class="calendar-day-timeline-icon" [activityType]="item.activityType"
+                  size="20px" aria-hidden="true"></app-activity-type-icon>
+              } @else {
+                <mat-icon class="calendar-day-timeline-icon" [style.color]="item.color || null" aria-hidden="true">{{ item.icon }}</mat-icon>
+              }
+              <div class="calendar-day-timeline-content">
+                @switch (item.kind) {
+                  @case ('sleep') {
+                    <button mat-button appHapticTap type="button" (click)="showSleepStages()">{{ item.title }}</button>
+                  }
+                  @case ('activity') {
+                    @if (item.id && data().userId) {
+                      <a mat-button appHapticTap [routerLink]="['/user', data().userId, 'event', item.id]" (click)="prepareNavigation()">{{ item.title }}</a>
+                    } @else { <strong>{{ item.title }}</strong> }
+                  }
+                  @case ('note') {
+                    <button mat-button appHapticTap type="button" (click)="selectTimelineNote(item.id)">{{ item.title }}</button>
+                  }
+                  @case ('plan') {
+                    <a mat-button appHapticTap [routerLink]="['/training/plans/workout', item.id]" (click)="prepareNavigation()">{{ item.title }}</a>
+                  }
+                }
+                <small>{{ item.detail }}</small>
+              </div>
+              @if (item.kind === 'plan') {
+                <button mat-icon-button appHapticTap type="button" matTooltip="Duplicate to…"
+                  [attr.aria-label]="'Duplicate ' + item.title + ' to another date'"
+                  [disabled]="duplicatingId() !== null || !data().scheduleSource" (click)="duplicateWorkout(item.id)">
+                  @if (duplicatingId() === item.id) { <mat-spinner diameter="18" aria-hidden="true"></mat-spinner> }
+                  @else { <mat-icon aria-hidden="true">content_copy</mat-icon> }
+                </button>
+              }
+            </li>
+          }
+        </ol>
+      } @else if (activityState().status === 'ready' && (!canPlan() || plannedStatus() === 'ready') && healthState().status === 'ready') {
+        <p>No timeline entries available for this day.</p>
+      }
+    </section>
+    @if (activityState().status === 'ready' && activityGroups().length) {
+      <section class="calendar-day-context-section" aria-label="Activity mix on selected day">
+        <h3>Activity mix</h3>
+        <app-activity-calendar-volume-list [rows]="activityGroups()"></app-activity-calendar-volume-list>
+      </section>
+    }
+  }
+
+  @if (!compact() && !standaloneDayPage()) {
   <section class="calendar-day-context-section" aria-label="Activities on selected day">
     <div class="calendar-day-context-section-header"><h3>Activities</h3>
       @if (activityState().status === 'ready') { <span>{{ day().eventCount }} completed · {{ day().durationLabel }}</span> }

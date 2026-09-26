@@ -51,6 +51,9 @@
   display: none;
 }
 
+.calendar-day-back--mobile { display: none; }
+.calendar-day-date--mobile { display: none; }
+
 .calendar-period-summary {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr) auto minmax(0, 1fr);
@@ -228,6 +231,19 @@
   .calendar-period-navigation h2 {
     font: var(--mat-sys-title-medium);
   }
+
+  .calendar-page--day .calendar-period-navigation {
+    position: sticky;
+    top: var(--qs-visible-top-offset, var(--qs-layout-top-offset, 0px));
+    z-index: 2;
+    grid-template-columns: 42px minmax(0, 1fr) 42px 42px 42px;
+    background: var(--mat-sys-surface);
+  }
+
+  .calendar-page--day .calendar-day-back--desktop { display: none; }
+  .calendar-day-back--mobile { display: inline-flex; }
+  .calendar-day-date--desktop { display: none; }
+  .calendar-day-date--mobile { display: inline; }
 
   .calendar-period-summary {
     height: 60px;

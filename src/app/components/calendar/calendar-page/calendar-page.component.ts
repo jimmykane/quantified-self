@@ -260,6 +260,9 @@ export class CalendarPageComponent {
   readonly dayTitle = computed(() => getDateTimeFormatter(this.locale, {
     weekday: 'short', day: 'numeric', month: 'short', year: 'numeric',
   }).format(this.routeState().anchorDate));
+  readonly dayShortTitle = computed(() => getDateTimeFormatter(this.locale, {
+    day: 'numeric', month: 'short', year: '2-digit',
+  }).format(this.routeState().anchorDate));
   readonly calendarBackQuery = computed(() => ({
     view: 'month', date: formatActivityCalendarDateParam(this.routeState().anchorDate),
   }));

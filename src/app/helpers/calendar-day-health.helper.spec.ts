@@ -138,6 +138,8 @@ describe('calendar day health summary', () => {
     expect(summary.sleep.value).toBe('74/100');
     expect(summary.sleep.detail).toContain('Suunto');
     expect(selectCalendarDaySleepPoint('2026-09-24', evidence.sessions)?.providerLabel).toBe('Suunto');
+    expect(buildCalendarDayHealthSummary('2026-09-24', evidence, { nowMs: Date.UTC(2026, 8, 25) }).sleep.detail)
+      .toBe('Suunto · overnight score');
     expect(selectCalendarDaySleepPoint('2026-09-25', evidence.sessions)).toBeNull();
     evidence.sleepPoint = selectCalendarDaySleepPoint('2026-09-24', evidence.sessions);
     expect(resolveCalendarDaySleepPoint('2026-09-25', evidence)).toBeNull();

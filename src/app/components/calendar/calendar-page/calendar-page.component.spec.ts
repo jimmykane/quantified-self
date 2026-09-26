@@ -162,6 +162,8 @@ describe('CalendarPageComponent', () => {
     const fixture = TestBed.createComponent(CalendarPageComponent);
     fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
     expect(fixture.nativeElement.querySelector('#calendar-page-title')?.textContent).toContain('Day');
+    expect(fixture.nativeElement.querySelector('.qs-page-header--compact')).toBeTruthy();
+    expect(fixture.componentInstance.dayShortTitle()).toContain('Aug');
     expect(fixture.nativeElement.querySelector('.activity-calendar-day-button')).toBeNull();
     expect(fixture.nativeElement.querySelector('app-calendar-day-context')).toBeTruthy();
     expect(watchEvents).toHaveBeenCalledWith(user, {
