@@ -256,6 +256,25 @@ describe('ActivityCalendarGridComponent', () => {
     expect(firstWeek[1].classList).not.toContain('activity-calendar-day--weekend');
   });
 
+  it('paints height-filling weekend columns continuously for either week start', async () => {
+    const fixture = await renderGrid('month', true, []);
+    const days = fixture.nativeElement.querySelector('.activity-calendar-days') as HTMLElement;
+    expect(days.style.backgroundImage).toContain('71.42857142857143%');
+    expect(days.style.backgroundImage).toContain('100%');
+
+    fixture.componentRef.setInput('model', buildActivityCalendarViewModel([], {
+      view: 'month', anchorDate: new Date(2026, 7, 1), startOfWeek: DaysOfTheWeek.Sunday,
+      now: new Date(2026, 7, 1),
+    }));
+    fixture.detectChanges();
+    expect(days.style.backgroundImage).toContain('0% 14.285714285714286%');
+    expect(days.style.backgroundImage).toContain('85.71428571428571% 100%');
+
+    fixture.componentRef.setInput('fillHeight', false);
+    fixture.detectChanges();
+    expect(days.style.backgroundImage).toBe('');
+  });
+
   it('does not use calendar-specific gray surface fills', () => {
     const styles = readFileSync(
       resolve(process.cwd(), 'src/app/components/calendar/activity-calendar-grid/activity-calendar-grid.component.scss'),

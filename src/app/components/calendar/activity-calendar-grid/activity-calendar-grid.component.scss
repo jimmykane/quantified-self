@@ -195,6 +195,17 @@
   background: var(--activity-calendar-weekend-background);
 }
 
+// The height-filling dashboard grid can place row edges on fractional pixels.
+// Paint weekend columns once behind the cells so their tint has no row seams.
+.activity-calendar--fill-height .activity-calendar-day--weekend {
+  background: transparent;
+}
+
+.activity-calendar--fill-height .activity-calendar-day-button:hover,
+.activity-calendar--fill-height .activity-calendar-day-button:focus-visible {
+  background: var(--mat-sys-surface-container-high);
+}
+
 .activity-calendar-day-number {
   box-sizing: border-box;
   display: inline-flex;

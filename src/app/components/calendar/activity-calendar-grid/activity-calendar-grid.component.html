@@ -22,7 +22,8 @@
           [class.activity-calendar-weekday--week-start]="weekday.isWeekStart">{{ weekday.label }}</span>
         }
       </div>
-      <div class="activity-calendar-days">
+      <div class="activity-calendar-days"
+        [style.background-image]="compact && fillHeight ? month.weekendBackground : null">
         @for (day of month.days; track day.dateKey) {
         @let dayNotes = timelineNotesByDate.get(day.dateKey);
         @let plannedDay = plannedWorkoutsByDate?.[day.dateKey];
