@@ -134,6 +134,7 @@ function validateBenchmarkSelection(
 
 export const setTrainingBuildBenchmark = onCall({
     region: FUNCTIONS_MANIFEST.setTrainingBuildBenchmark.region,
+    memory: '512MiB',
 }, async (request): Promise<SetTrainingBuildBenchmarkResponse> => {
     if (!request.auth) {
         throw new HttpsError('unauthenticated', 'The function must be called while authenticated.');

@@ -6,7 +6,7 @@ import { enforceAppCheck } from '../utils';
 import { saveTimelineNote, deleteTimelineNote, TimelineNoteConflictError, TimelineNoteNotFoundError, TimelineNoteUnavailableError } from './mutations';
 
 function mutation<T>(name: 'saveTimelineNote' | 'deleteTimelineNote', action: (uid: string, data: unknown) => Promise<T>) {
-  return onCall({ region: FUNCTIONS_MANIFEST[name].region, cors: true, timeoutSeconds: 30, memory: '256MiB', maxInstances: 100 }, async request => {
+  return onCall({ region: FUNCTIONS_MANIFEST[name].region, cors: true, timeoutSeconds: 30, memory: name === 'saveTimelineNote' ? '512MiB' : '256MiB', maxInstances: 100 }, async request => {
     if (!request.auth?.uid) throw new HttpsError('unauthenticated', 'Sign in to use Timeline notes.');
     enforceAppCheck(request);
     const data: unknown = request.data;

@@ -125,6 +125,7 @@ export const disableActivitySyncRoutesOnCOROSTokenRootDelete = onDocumentDeleted
 export const disableActivitySyncRoutesOnWahooTokenRootDelete = onDocumentDeleted({
   document: `${WAHOO_API_ACCESS_TOKENS_COLLECTION_NAME}/{uid}`,
   region: REGION,
+  memory: '512MiB',
 }, async (event) => {
   await handleServiceTokenRootDisconnected(
     event.params.uid,
