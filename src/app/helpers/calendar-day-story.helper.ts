@@ -77,7 +77,7 @@ export function buildCalendarDayStory(input: CalendarDayStoryInput): CalendarDay
     items.push({
       key: `note:${note.id}`, kind: 'note', id: note.id, title: note.title,
       detail: `${TIMELINE_NOTE_LABELS[note.category]} · ${formatNoteDates(note, input.dateKey, input.locale)}`,
-      timeLabel: 'Date only', timeMs: null, icon: TIMELINE_NOTE_ICONS[note.category], color: timelineNoteColor(note),
+      timeLabel: 'All day', timeMs: null, icon: TIMELINE_NOTE_ICONS[note.category], color: timelineNoteColor(note),
     });
   }
   if (input.planStatus === 'ready') {
@@ -86,7 +86,7 @@ export function buildCalendarDayStory(input: CalendarDayStoryInput): CalendarDay
         key: `plan:${plan.workout.id}`, kind: 'plan', id: plan.workout.id,
         title: plan.workout.title,
         detail: `${plan.planName || 'Standalone'} · ${plan.completed ? 'Activity linked' : plan.workout.lifecycle === 'skipped' ? 'Skipped' : 'Planned'}`,
-        timeLabel: 'Date only', timeMs: null, icon: 'event_available',
+        timeLabel: 'No time set', timeMs: null, icon: 'event_available',
         activityType: plan.workout.structure.sport, color: plan.color,
       });
     }

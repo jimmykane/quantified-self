@@ -36,7 +36,7 @@ describe('buildCalendarDayStory', () => {
   it('orders dated items by actual time and leaves notes and plans without invented times', () => {
     const story = buildCalendarDayStory(base);
     expect(story.items.map(item => item.kind)).toEqual(['note', 'plan', 'sleep', 'activity']);
-    expect(story.items.map(item => item.timeLabel)).toEqual(['Date only', 'Date only', 'Woke 7:00 AM', '10:00 AM']);
+    expect(story.items.map(item => item.timeLabel)).toEqual(['All day', 'No time set', 'Woke 7:00 AM', '10:00 AM']);
     expect(story.items[2].detail).toBe('74/100 · Suunto');
     expect(story.items[3].detail).toBe('1h');
     expect(story.items[3].activityType).toBe('Running');
