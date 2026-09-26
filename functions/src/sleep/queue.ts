@@ -1055,7 +1055,7 @@ export async function addSleepSyncQueueItem(input: AddSleepSyncQueueItemInput): 
                     throw new Error('Suunto Health late-arrival queue identity collision.');
                 }
                 logger.info('[HealthSync][Suunto] Reused late webhook refetch.', {
-                    coalescedWindows: 1,
+                    duplicateIngressWindows: 1,
                 });
                 return docRef;
             }

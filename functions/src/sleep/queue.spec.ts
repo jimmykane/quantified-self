@@ -46,6 +46,7 @@ const hoisted = vi.hoisted(() => ({
     getServiceConnectionMeta: vi.fn(),
     loggerWarn: vi.fn(),
     loggerError: vi.fn(),
+    loggerInfo: vi.fn(),
     claimSleepQueueRevision: vi.fn(),
     releaseSleepQueueRevision: vi.fn(),
     captureSuuntoHealthWriteLifecycleGuards: vi.fn(),
@@ -61,7 +62,7 @@ const hoisted = vi.hoisted(() => ({
 }));
 
 vi.mock('firebase-functions/logger', () => ({
-    info: vi.fn(),
+    info: hoisted.loggerInfo,
     warn: hoisted.loggerWarn,
     error: hoisted.loggerError,
 }));
@@ -869,6 +870,10 @@ describe('sleep queue', () => {
             await addSleepSyncQueueItem(input);
             expect(hoisted.docSet).not.toHaveBeenCalled();
             expect(hoisted.enqueueSleepSyncTask).not.toHaveBeenCalled();
+            expect(hoisted.loggerInfo).toHaveBeenCalledWith(
+                '[HealthSync][Suunto] Reused late webhook refetch.',
+                { duplicateIngressWindows: 1 },
+            );
         } finally {
             vi.useRealTimers();
         }
