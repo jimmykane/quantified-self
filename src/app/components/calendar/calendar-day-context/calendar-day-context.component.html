@@ -96,14 +96,16 @@
                   }
                   @case ('activity') {
                     @if (item.id && data().userId) {
-                      <a mat-button appHapticTap [routerLink]="['/user', data().userId, 'event', item.id]" (click)="prepareNavigation()">{{ item.title }}</a>
+                      <a class="calendar-day-context-navigation-link" appHapticTap
+                        [routerLink]="['/user', data().userId, 'event', item.id]" (click)="prepareNavigation()">{{ item.title }}</a>
                     } @else { <strong>{{ item.title }}</strong> }
                   }
                   @case ('note') {
                     <button mat-button appHapticTap type="button" (click)="selectTimelineNote(item.id)">{{ item.title }}</button>
                   }
                   @case ('plan') {
-                    <a mat-button appHapticTap [routerLink]="['/training/plans/workout', item.id]" (click)="prepareNavigation()">{{ item.title }}</a>
+                    <a class="calendar-day-context-navigation-link" appHapticTap
+                      [routerLink]="['/training/plans/workout', item.id]" (click)="prepareNavigation()">{{ item.title }}</a>
                   }
                 }
                 <small>{{ item.detail }}</small>
@@ -158,7 +160,7 @@
           @for (activity of dashboardActivities(); track activity.id) {
             <div class="calendar-day-context-preview-row">
               @if (activity.route) {
-                <a class="calendar-day-context-preview-activity-link" appHapticTap
+                <a class="calendar-day-context-navigation-link" appHapticTap
                   [routerLink]="activity.route" (click)="prepareNavigation()">{{ activity.name }}</a>
               } @else { <strong>{{ activity.name }}</strong> }
               <small>{{ activity.duration }}</small>
@@ -194,7 +196,8 @@
             @for (entry of dashboardPlans(); track entry.workout.id) {
               <div class="calendar-day-context-preview-plan" [style.--planned-workout-color]="entry.color">
                 <div class="calendar-day-context-preview-row">
-                  <a mat-button appHapticTap [routerLink]="['/training/plans/workout', entry.workout.id]" (click)="prepareNavigation()">{{ entry.workout.title }}</a>
+                  <a class="calendar-day-context-navigation-link" appHapticTap
+                    [routerLink]="['/training/plans/workout', entry.workout.id]" (click)="prepareNavigation()">{{ entry.workout.title }}</a>
                   <small>{{ entry.planName || 'Standalone' }} · {{ entry.lifecycle }}</small>
                 </div>
                 <button mat-icon-button appHapticTap type="button" matTooltip="Duplicate to…"

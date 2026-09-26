@@ -320,9 +320,6 @@
 .calendar-selected-day {
   min-width: 0;
   padding: 16px;
-  border: 1px solid var(--mat-sys-outline-variant);
-  border-radius: 16px;
-  background: var(--mat-sys-surface-container-low);
 }
 @media (max-width: 900px) {
   .calendar-day-layout { grid-template-columns: minmax(0, 1fr); }

@@ -95,7 +95,7 @@
     }
     @if (isDayRoute) {
       @if (selectedDayData(); as dayData) {
-        <app-calendar-day-context class="calendar-selected-day" [data]="dayData"
+        <app-calendar-day-context class="calendar-selected-day qs-glass-card-panel" [data]="dayData"
           [standaloneDayPage]="true" (noteSelected)="selectDayNote($event.id)"></app-calendar-day-context>
       }
     } @else {
@@ -107,7 +107,7 @@
       (daySelected)="openDay($event)">
     </app-activity-calendar-grid>
     @if (selectedDayData(); as dayData) {
-      <app-calendar-day-context class="calendar-selected-day" [data]="dayData" [showFullDayLink]="true"
+      <app-calendar-day-context class="calendar-selected-day qs-glass-card-panel" [data]="dayData" [showFullDayLink]="true"
         (noteSelected)="selectDayNote($event.id)"></app-calendar-day-context>
     }
     </div>
