@@ -101,6 +101,7 @@ describe('Wahoo Auth Wrapper', () => {
   it.each([
     ['getWahooAPIAuthRequestTokenRedirectURI', getWahooAPIAuthRequestTokenRedirectURI],
     ['requestAndSetWahooAPIAccessToken', requestAndSetWahooAPIAccessToken],
+    ['deauthorizeWahooAPI', deauthorizeWahooAPI],
   ])('configures %s with 512 MiB while preserving its instance limit', (_name, callable) => {
     expect(mocks.callableOptions.get(callable)).toMatchObject({ memory: '512MiB', maxInstances: 10 });
   });
