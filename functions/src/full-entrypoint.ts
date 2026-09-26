@@ -139,7 +139,6 @@ export { importRouteToSuuntoApp } from './suunto/routes';
 export { importRouteToGarminAPI } from './garmin/manual-route-upload';
 export { sendRoutesToService } from './routes/send-routes-to-service';
 export { backfillRouteDeliverySyncRoute } from './route-delivery-sync/backfill';
-export { getSuuntoFITFile } from './suunto/get-suunto-fit-file';
 export { importActivityToCOROSAPI, getCOROSAPIWorkoutFileUploadStatus } from './coros/activities';
 
 // Events
