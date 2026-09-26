@@ -1,4 +1,5 @@
 import { onTaskDispatched } from 'firebase-functions/v2/tasks';
+import { performance } from 'node:perf_hooks';
 import * as logger from 'firebase-functions/logger';
 import * as admin from 'firebase-admin';
 import { CLOUD_TASK_RETRY_CONFIG } from '../shared/queue-config';
@@ -9,7 +10,7 @@ import { processSleepSyncQueueItem } from '../sleep/queue';
 import { isQueueItemDeletedForUserCleanup } from '../queue/cleanup-tombstone';
 import { FUNCTION_SECRET_BINDINGS } from '../secrets';
 import { isCurrentSleepQueueRevision } from '../sleep/queue-revision';
-import { normalizeSleepProvider } from '../../../shared/sleep';
+import { SLEEP_PROVIDERS } from '../../../shared/sleep';
 import { isGarminSupportedSummaryType } from '../garmin/health-summary-types';
 import { SleepSyncQueueItemType } from '../queue/queue-item.interface';
 
@@ -31,21 +32,29 @@ const TELEMETRY_QUEUE_TYPES = new Set<SleepSyncQueueItemType>([
 ]);
 
 function safeWorkloadFields(queueItem: SleepSyncQueueItemInterface | undefined) {
-    const provider = normalizeSleepProvider(queueItem?.provider) || 'unknown';
+    const provider = queueItem?.provider === SLEEP_PROVIDERS.GarminAPI
+        ? SLEEP_PROVIDERS.GarminAPI
+        : queueItem?.provider === SLEEP_PROVIDERS.SuuntoApp
+            ? SLEEP_PROVIDERS.SuuntoApp
+            : queueItem?.provider === SLEEP_PROVIDERS.COROSAPI
+                ? SLEEP_PROVIDERS.COROSAPI
+                : 'unknown';
     const queueType = queueItem && TELEMETRY_QUEUE_TYPES.has(queueItem.type)
         ? queueItem.type
         : 'unknown';
     const isGarminPing = provider === 'GarminAPI'
         && (queueType === 'garmin_ping' || queueType === 'garmin_ping_batch');
+    const effectiveGarminSummaryType = queueItem?.garminSummaryType || 'sleeps';
     const garminSummaryType = isGarminPing
-        ? isGarminSupportedSummaryType(queueItem?.garminSummaryType)
-            ? queueItem.garminSummaryType
-            : queueItem?.garminSummaryType == null ? 'sleeps' : 'unknown'
+        ? isGarminSupportedSummaryType(effectiveGarminSummaryType)
+            ? effectiveGarminSummaryType
+            : 'unknown'
         : 'none';
     return {
         provider,
         queueType,
-        healthTrigger: queueType === 'suunto_health_poll'
+        healthTrigger: provider === SLEEP_PROVIDERS.SuuntoApp
+            && queueType === 'suunto_health_poll'
             && (queueItem?.healthTrigger === 'poll'
                 || queueItem?.healthTrigger === 'webhook'
                 || queueItem?.healthTrigger === 'backfill')
@@ -62,12 +71,11 @@ export const processSleepSyncTask = onTaskDispatched({
     timeoutSeconds: 540,
     region: 'europe-west2',
 }, async (request) => {
-    const startedAtMs = Date.now();
+    const startedAtMs = performance.now();
     let queueItem: SleepSyncQueueItemInterface | undefined;
     let outcome = 'error';
     try {
         const { queueItemId, queueRevision, queueDateCreated } = request.data as SleepSyncTaskPayload;
-        logger.info(`[SleepSyncTaskWorker] Starting task for queue item ${queueItemId}`);
 
         const queueRef = admin.firestore().collection(SLEEP_SYNC_QUEUE_COLLECTION_NAME).doc(queueItemId);
         const queueDoc = await queueRef.get();
@@ -118,7 +126,6 @@ export const processSleepSyncTask = onTaskDispatched({
         switch (result) {
             case QueueResult.Processed:
                 outcome = 'processed';
-                logger.info(`[SleepSyncTaskWorker] Successfully processed item ${queueItemId}`);
                 return;
             case QueueResult.Deferred:
                 outcome = 'deferred';
@@ -138,10 +145,14 @@ export const processSleepSyncTask = onTaskDispatched({
                 throw new Error(`Unexpected result for sleep sync item ${queueItemId}: ${result}`);
         }
     } finally {
-        logger.info('[SleepSyncTaskWorker] Invocation summary', {
-            ...safeWorkloadFields(queueItem),
-            outcome,
-            durationMs: Math.max(0, Date.now() - startedAtMs),
-        });
+        try {
+            logger.info('[SleepSyncTaskWorker] Invocation summary', {
+                ...safeWorkloadFields(queueItem),
+                outcome,
+                durationMs: Math.max(0, Math.round(performance.now() - startedAtMs)),
+            });
+        } catch {
+            // Cost telemetry must not change task acknowledgement or retries.
+        }
     }
 });

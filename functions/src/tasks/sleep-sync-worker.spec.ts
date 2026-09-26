@@ -258,6 +258,7 @@ describe('processSleepSyncTask', () => {
       outcome: 'processed',
       durationMs: expect.any(Number),
     });
+    expect(logger.info).toHaveBeenCalledTimes(1);
     expect(JSON.stringify(summaryCall)).not.toContain('private-');
   });
 
@@ -312,6 +313,50 @@ describe('processSleepSyncTask', () => {
     }));
   });
 
+  it('uses the same Sleep default as queue processing for an empty Garmin family', async () => {
+    mockQueueGet.mockResolvedValueOnce({
+      exists: true,
+      id: 'empty-family-ping',
+      ref: { path: 'sleepSyncQueue/empty-family-ping' },
+      data: () => ({ type: 'garmin_ping', provider: 'GarminAPI', garminSummaryType: '' }),
+    });
+    mockProcessSleepSyncQueueItem.mockResolvedValueOnce('PROCESSED');
+
+    await invokeWorker({ data: { queueItemId: 'empty-family-ping' } });
+
+    expect(vi.mocked(logger.info).mock.calls.find(
+      ([message]) => message === '[SleepSyncTaskWorker] Invocation summary',
+    )?.[1]).toEqual(expect.objectContaining({ garminSummaryType: 'sleeps' }));
+  });
+
+  it('does not retry a completed task when summary logging fails', async () => {
+    mockQueueGet.mockResolvedValueOnce({
+      exists: true,
+      id: 'sleep-item-1',
+      ref: { path: 'sleepSyncQueue/sleep-item-1' },
+      data: () => ({ type: 'suunto_poll', provider: 'SuuntoApp' }),
+    });
+    mockProcessSleepSyncQueueItem.mockResolvedValueOnce('PROCESSED');
+    vi.mocked(logger.info).mockImplementationOnce(() => { throw new Error('logging unavailable'); });
+
+    await expect(invokeWorker({ data: { queueItemId: 'sleep-item-1' } })).resolves.toBeUndefined();
+    expect(mockProcessSleepSyncQueueItem).toHaveBeenCalledOnce();
+  });
+
+  it('preserves the original retry error when summary logging fails', async () => {
+    mockQueueGet.mockResolvedValueOnce({
+      exists: true,
+      id: 'sleep-item-1',
+      ref: { path: 'sleepSyncQueue/sleep-item-1' },
+      data: () => ({ type: 'suunto_poll', provider: 'SuuntoApp' }),
+    });
+    mockProcessSleepSyncQueueItem.mockResolvedValueOnce('RETRY_INCREMENTED');
+    vi.mocked(logger.info).mockImplementationOnce(() => { throw new Error('logging unavailable'); });
+
+    await expect(invokeWorker({ data: { queueItemId: 'sleep-item-1' } }))
+      .rejects.toThrow('scheduled for retry');
+  });
+
   it('does not log unrecognized queue values as telemetry dimensions', async () => {
     mockQueueGet.mockResolvedValueOnce({
       exists: true,
@@ -319,7 +364,7 @@ describe('processSleepSyncTask', () => {
       ref: { path: 'sleepSyncQueue/unknown-item' },
       data: () => ({
         type: 'injected-queue-type',
-        provider: 'injected-provider',
+        provider: { toString: null },
         garminSummaryType: 'injected-family',
         healthTrigger: 'injected-trigger',
       }),
