@@ -623,6 +623,9 @@ describe('help.content', () => {
     expect(planningSection?.content).toContain('does not offer a Suunto visibility check');
     expect(planningSection?.content).toContain('never recreates a Guide automatically');
     expect(planningSection?.content).toContain('reconnecting is not required or recommended as a normal QS workflow');
+    expect(planningSection?.content).toContain('Stop requests withdrawal of an eligible cloud Guide');
+    expect(planningSection?.content).toContain('does not guarantee that a Guide already visible in the Suunto app or on your watch disappears');
+    expect(planningSection?.content).toContain('Remove or hide it in Suunto if you no longer want to see it there');
     expect(planningSection?.content).toContain('**Completed · activity linked**');
     expect(planningSection?.content).toContain('A completed Garmin FIT activity can link to a planned workout');
     expect(planningSection?.content).toContain('a second recording of an already-linked workout does not replace the first');
