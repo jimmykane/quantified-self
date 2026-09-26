@@ -1,5 +1,5 @@
 import { MatSnackBar } from '@angular/material/snack-bar';
-import { provideRouter } from '@angular/router';
+import { provideRouter, Router } from '@angular/router';
 import { TimelineNotesWorkspaceComponent } from '../timeline-notes/timeline-notes-workspace.component';
 import { AppTimelineNotesService } from '../../services/app.timeline-notes.service';
 import { By } from '@angular/platform-browser';
@@ -15,6 +15,7 @@ import { AppChartSharedModule } from '../../modules/app-chart-shared.module';
 import { NoopAnimationsModule } from '@angular/platform-browser/animations';
 import { DashboardConfigurationService } from '../../services/dashboard-configuration.service';
 import { AppHapticsService } from '../../services/app.haptics.service';
+import { CalendarDayDetailsNavigationService } from '../../services/calendar-day-details-navigation.service';
 import { LOCALE_ID, NO_ERRORS_SCHEMA, signal } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { afterEach, describe, it, expect, vi, beforeEach } from 'vitest';
@@ -366,6 +367,59 @@ describe('SummariesComponent', () => {
     expect(source()).toBeNull();
     workspace.open();
     expect(mockDialog.open).not.toHaveBeenCalled();
+  });
+
+  it('reopens the selected Today-sheet day after returning from its full-day page', () => {
+    const restoration = { sourceUrl: '/', dateKey: '2026-08-03', surface: 'today-sheet' as const };
+    const navigation = TestBed.inject(CalendarDayDetailsNavigationService);
+    const restorationFor = vi.spyOn(navigation, 'restorationFor').mockReturnValue(restoration);
+    const consume = vi.spyOn(navigation, 'consumeRestoration').mockImplementation(() => {
+      restorationFor.mockReturnValue(null);
+      return true;
+    });
+    const owner = { uid: 'owner-user', settings: { dashboardSettings: { tiles: [] } } } as SummariesComponent['user'];
+    fixture.componentRef.setInput('user', owner);
+    fixture.componentRef.setInput('eventUser', owner);
+    fixture.detectChanges();
+
+    expect(consume).toHaveBeenCalledWith(restoration);
+    expect(mockBottomSheet.open).toHaveBeenCalledWith(expect.any(Function), expect.objectContaining({
+      data: expect.objectContaining({ initialDateKey: '2026-08-03', privateHealthEnabled: true }),
+    }));
+    expect(mockBottomSheet.open).toHaveBeenCalledOnce();
+  });
+
+  it('does not restore a private Today sheet on another profile', () => {
+    const restoration = { sourceUrl: '/', dateKey: '2026-08-03', surface: 'today-sheet' as const };
+    const navigation = TestBed.inject(CalendarDayDetailsNavigationService);
+    vi.spyOn(navigation, 'restorationFor').mockReturnValue(restoration);
+    const consume = vi.spyOn(navigation, 'consumeRestoration');
+    const owner = { uid: 'owner-user', settings: { dashboardSettings: { tiles: [] } } } as SummariesComponent['user'];
+    fixture.componentRef.setInput('user', owner);
+    fixture.componentRef.setInput('eventUser', { uid: 'different-user' });
+    fixture.detectChanges();
+
+    expect(consume).not.toHaveBeenCalled();
+    expect(mockBottomSheet.open).not.toHaveBeenCalled();
+  });
+
+  it('restores the Today sheet when browser navigation finishes after the dashboard is mounted', async () => {
+    const router = TestBed.inject(Router);
+    router.resetConfig([{ path: 'dashboard', children: [] }]);
+    const restoration = { sourceUrl: '/dashboard', dateKey: '2026-08-03', surface: 'today-sheet' as const };
+    const navigation = TestBed.inject(CalendarDayDetailsNavigationService);
+    vi.spyOn(navigation, 'restorationFor').mockImplementation(url => url === '/dashboard' ? restoration : null);
+    vi.spyOn(navigation, 'consumeRestoration').mockReturnValue(true);
+    const owner = { uid: 'owner-user', settings: { dashboardSettings: { tiles: [] } } } as SummariesComponent['user'];
+    fixture.componentRef.setInput('user', owner);
+    fixture.componentRef.setInput('eventUser', owner);
+    fixture.detectChanges();
+    expect(mockBottomSheet.open).not.toHaveBeenCalled();
+
+    await router.navigateByUrl('/dashboard');
+    expect(mockBottomSheet.open).toHaveBeenCalledWith(expect.any(Function), expect.objectContaining({
+      data: expect.objectContaining({ initialDateKey: '2026-08-03' }),
+    }));
   });
 
   it('keeps the dashboard layout stable during address-bar height changes but updates column breakpoints', () => {

@@ -1,6 +1,6 @@
 import { AppHapticsService } from '../../services/app.haptics.service';
 import { CoalescedFrameTask } from '../../helpers/coalesced-frame-task';
-import { ActivatedRoute, Router } from '@angular/router';
+import { ActivatedRoute, NavigationEnd, Router } from '@angular/router';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { dashboardHealthMetric, dashboardHealthSettings, isPrivateDashboardHealthTile } from '../../helpers/dashboard-health-tile.helper';
 import type { AppDashboardHealthMetricSettings } from '../../models/app-user.interface';
@@ -35,7 +35,7 @@ import {
   SimpleChanges,
   viewChild,
 } from '@angular/core';
-import { firstValueFrom, Subscription, take } from 'rxjs';
+import { filter, firstValueFrom, Subscription, take } from 'rxjs';
 import { EventInterface } from '@sports-alliance/sports-lib';
 import { User } from '@sports-alliance/sports-lib';
 import { CdkDragDrop, moveItemInArray } from '@angular/cdk/drag-drop';
@@ -79,6 +79,7 @@ import {
   type DashboardTodayRangeIndicator,
 } from '../../helpers/dashboard-today-visuals.helper';
 import { AppUserService } from '../../services/app.user.service';
+import { CalendarDayDetailsNavigationService } from '../../services/calendar-day-details-navigation.service';
 import {
   DashboardDerivedMetricsService,
   getDefaultDashboardDerivedMetricKinds,
@@ -350,7 +351,9 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
   private readonly configuration = inject(DashboardConfigurationService);
   private readonly healthSnack = inject(MatSnackBar);
   private readonly healthRoute = inject(ActivatedRoute);
-  private readonly healthRouter = inject(Router);
+  private readonly router = inject(Router);
+  private readonly dayDetailsNavigation = inject(CalendarDayDetailsNavigationService);
+  private calendarReturnSubscription?: Subscription;
   private healthTileRevealed = false;
   private revealRequestedHealthTile(): void {
     const metric=this.healthRoute.snapshot.queryParamMap.get('healthMetric');
@@ -361,7 +364,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
     requestAnimationFrame(()=>{
       const target=this.documentRef.querySelector<HTMLElement>(`[data-dashboard-tile-order="${tile.order}"]`);
       target?.focus({preventScroll:true});target?.scrollIntoView({block:'center'});
-      void this.healthRouter.navigate([], {relativeTo:this.healthRoute,queryParams:{healthMetric:null},queryParamsHandling:'merge',replaceUrl:true});
+      void this.router.navigate([], {relativeTo:this.healthRoute,queryParams:{healthMetric:null},queryParamsHandling:'merge',replaceUrl:true});
     });
   }
   private readonly healthHaptics = inject(AppHapticsService);
@@ -506,6 +509,10 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
   }
 
   ngOnInit() {
+    this.calendarReturnSubscription = this.router.events.pipe(
+      filter((event): event is NavigationEnd => event instanceof NavigationEnd),
+    ).subscribe(() => this.restoreTodayCalendarDay());
+    this.restoreTodayCalendarDay();
     this.librarySubscription = this.library.changed$.subscribe(order => {
       this.libraryFocusOrder = order;
       this.libraryRefresh = this.unsubscribeAndCreateCharts().then(() => this.changeDetector.markForCheck());
@@ -522,6 +529,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
     if (simpleChanges.user || simpleChanges.eventUser) {
       this.refreshTodayHeader(new Date());
       this.migrateCalendarLayoutForOwner();
+      this.restoreTodayCalendarDay();
     }
     this.syncTodaySummaryVisibility();
     this.updateDesktopTileDragCapability();
@@ -584,6 +592,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
   }
 
   ngOnDestroy(): void {
+    this.calendarReturnSubscription?.unsubscribe();
     this.tileRebuild.dispose();
     this.librarySubscription?.unsubscribe();
     this.documentRef.removeEventListener('visibilitychange', this.onDocumentVisibilityChange);
@@ -693,14 +702,21 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
     await this.persistLaneOrder();
   }
 
-  public openDashboardCalendar(): void {
+  private restoreTodayCalendarDay(): void {
+    const restoration = this.dayDetailsNavigation.restorationFor(this.router.url);
+    if (restoration?.surface !== 'today-sheet' || !this.user?.uid || !this.showActions || !this.isOwnerDashboard) return;
+    if (!this.dayDetailsNavigation.consumeRestoration(restoration)) return;
+    this.openDashboardCalendar(restoration.dateKey);
+  }
+
+  public openDashboardCalendar(initialDateKey?: string): void {
     if (!this.user?.uid) {
       return;
     }
     this.bottomSheet.open<CalendarMonthPickerBottomSheetComponent, CalendarMonthPickerBottomSheetData>(
       CalendarMonthPickerBottomSheetComponent,
       {
-        data: { user: this.user, timelineNotes: this.timelineNotes, privateHealthEnabled: this.showActions && this.isOwnerDashboard },
+        data: { user: this.user, timelineNotes: this.timelineNotes, privateHealthEnabled: this.showActions && this.isOwnerDashboard, initialDateKey },
         panelClass: ['qs-bottom-sheet-container', 'qs-calendar-month-picker-sheet'],
       },
     );

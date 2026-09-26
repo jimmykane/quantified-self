@@ -98,7 +98,9 @@ export class ActivityCalendarTileComponent {
   readonly showNavigation = input(false);
   readonly dayContextEnabled = input(false);
   readonly privateHealthEnabled = input(true);
+  readonly initialDateKey = input<string | null>(null);
   readonly selectedDateKey = signal(localDateKey(new Date()));
+  private openedInitialDateKey: string | null = null;
   // Share each concrete query with an open day sheet. Material destroys the month popup when
   // replacing it, but the selected day's pending data must continue until its own sheet closes.
   private readonly eventsSource = computed(() => {
@@ -216,8 +218,12 @@ export class ActivityCalendarTileComponent {
   )));
   private readonly restoreDayDetailsEffect = effect(() => {
     const restoration = this.dayDetailsNavigation.restorationFor(this.router.url);
-    if (!restoration) {
+    if (!restoration || restoration.surface === 'today-sheet') {
       return;
+    }
+
+    if (this.dayContextEnabled() && this.selectedDateKey() !== restoration.dateKey) {
+      this.selectedDateKey.set(restoration.dateKey);
     }
 
     const restoredMonth = startOfCurrentMonth(parseActivityCalendarDate(restoration.dateKey));
@@ -242,6 +248,22 @@ export class ActivityCalendarTileComponent {
     if (day) {
       this.openDay(day, false);
     }
+  });
+  private readonly openInitialDayEffect = effect(() => {
+    const dateKey = this.initialDateKey();
+    if (!dateKey || !this.user()?.uid || this.dayContextEnabled() || this.openedInitialDateKey === dateKey) return;
+    const date = parseActivityCalendarDate(dateKey);
+    const month = startOfCurrentMonth(date);
+    if (month.getTime() !== this.anchorDate().getTime()) {
+      this.followsCurrentMonth.set(false);
+      this.anchorDate.set(month);
+      return;
+    }
+    const day = this.calendarModel().months.flatMap(value => value.days)
+      .find(candidate => candidate.dateKey === dateKey);
+    if (!day) return;
+    this.openedInitialDateKey = dateKey;
+    this.openDay(day, false);
   });
 
   @HostListener('window:focus')

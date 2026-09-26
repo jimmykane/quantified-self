@@ -9,6 +9,7 @@ export interface CalendarMonthPickerBottomSheetData {
   user: User;
   timelineNotes?: Signal<TimelineNoteChartContext | null>;
   privateHealthEnabled?: boolean;
+  initialDateKey?: string;
 }
 
 @Component({

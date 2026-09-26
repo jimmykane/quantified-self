@@ -5,7 +5,9 @@
   <header class="activity-calendar-tile-header">
     <div>
       <h2 id="activity-calendar-tile-title">Activity calendar</h2>
-      <span>{{ calendarModel().periodLabel }}</span>
+      @if (!showNavigation() && !dayContextEnabled()) {
+        <span>{{ calendarModel().periodLabel }}</span>
+      }
     </div>
   </header>
   }

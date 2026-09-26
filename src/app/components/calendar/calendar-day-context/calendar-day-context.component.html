@@ -6,7 +6,7 @@
       <span>Day in context</span>
     </div>
     @if (showFullDayLink()) {
-      <a mat-button appHapticTap [routerLink]="fullDayRoute()" aria-label="Open selected day page">
+      <a mat-button appHapticTap [routerLink]="fullDayRoute()" (click)="prepareNavigation()" aria-label="Open selected day page">
         Open full day <mat-icon iconPositionEnd aria-hidden="true">arrow_forward</mat-icon>
       </a>
     }

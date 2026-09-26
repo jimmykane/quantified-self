@@ -40,6 +40,10 @@
   min-width: 0;
 }
 
+.calendar-day-details-full-day {
+  justify-self: end;
+}
+
 .calendar-day-total {
   display: flex;
   align-items: baseline;

@@ -96,6 +96,8 @@ export class CalendarDayDetailsComponent {
     const viewerUid = this.users.user()?.uid;
     return !!viewerUid && viewerUid === this.data.userId;
   });
+  readonly canOpenFullDay = computed(() => this.data.privateHealthEnabled !== false
+    && this.users.user()?.uid === this.data.userId);
   private readonly titleFormatter = getDateTimeFormatter(this.data.locale, {
     weekday: 'long',
     month: 'long',
@@ -103,6 +105,9 @@ export class CalendarDayDetailsComponent {
     year: 'numeric',
   });
   readonly title = this.titleFormatter.format(this.data.day.date);
+  readonly compactTitle = getDateTimeFormatter(this.data.locale, {
+    weekday: 'short', month: 'short', day: 'numeric', year: 'numeric',
+  }).format(this.data.day.date);
   readonly activityState = computed(() => this.data.activities?.() ?? { status: 'ready', day: this.data.day });
   readonly day = computed(() => this.activityState().day);
   readonly eventRows = computed(() => this.day().events.map(event => this.buildEventRow(event)));
@@ -158,6 +163,12 @@ export class CalendarDayDetailsComponent {
 
   prepareWorkoutNavigation(): void {
     this.navigation.prepareReturn(this.router.url, this.data.day.dateKey);
+    this.dismiss();
+  }
+
+  prepareFullDayNavigation(): void {
+    if (!this.canOpenFullDay()) return;
+    this.navigation.prepareReturn(this.router.url, this.data.day.dateKey, 'today-sheet');
     this.dismiss();
   }
 

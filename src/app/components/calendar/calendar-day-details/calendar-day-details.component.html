@@ -1,11 +1,17 @@
 <section class="calendar-day-details" [attr.aria-label]="title">
-  <app-bottom-sheet-header [title]="title" icon="calendar_month">
-    <button mat-icon-button type="button" aria-label="Close day details" matTooltip="Close" (click)="dismiss()">
+  <app-bottom-sheet-header [title]="compactTitle" icon="calendar_month">
+    <button mat-icon-button appHapticTap type="button" aria-label="Close day details" matTooltip="Close" (click)="dismiss()">
       <mat-icon>close</mat-icon>
     </button>
   </app-bottom-sheet-header>
 
   <div class="bottom-sheet-content calendar-day-details-content">
+    @if (canOpenFullDay()) {
+      <a mat-button appHapticTap class="calendar-day-details-full-day" [routerLink]="['/calendar/day', data.day.dateKey]"
+        (click)="prepareFullDayNavigation()">
+        Open full day <mat-icon iconPositionEnd aria-hidden="true">arrow_forward</mat-icon>
+      </a>
+    }
     <app-calendar-day-context [data]="data" [compact]="true" [privateHealthEnabled]="data.privateHealthEnabled !== false"></app-calendar-day-context>
     @if (noteRows().length) {
     <section aria-labelledby="calendar-day-notes-title">

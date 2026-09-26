@@ -91,11 +91,63 @@ describe('ActivityCalendarTileComponent', () => {
     expect(fixture.componentInstance.selectedDay()?.dateKey).toBe(day.dateKey);
     expect(fixture.nativeElement.querySelector('.activity-calendar-day--selected')).toBeTruthy();
     expect(fixture.nativeElement.querySelector('app-calendar-day-context')).toBeTruthy();
+    expect(fixture.nativeElement.querySelector('.activity-calendar-tile-header span')).toBeNull();
+    expect(fixture.nativeElement.querySelector('.activity-calendar-tile-navigation > span')?.textContent.trim())
+      .toBe(fixture.componentInstance.calendarModel().periodLabel);
     const fullDayLink = fixture.nativeElement.querySelector('a[aria-label="Open selected day page"]');
     expect(fullDayLink?.getAttribute('href')).toBe(`/calendar/day/${day.dateKey}`);
     expect(openBottomSheet).not.toHaveBeenCalled();
     fixture.componentRef.setInput('privateHealthEnabled', false); fixture.detectChanges();
     expect(fixture.nativeElement.querySelector('a[aria-label="Open selected day page"]')).toBeNull();
+  });
+
+  it('restores the inline selected date while its month activities are still loading', async () => {
+    const dateKey = currentLocalDate(1);
+    const pendingEvents = new Subject<EventInterface[]>();
+    watchEvents.mockReturnValue(pendingEvents.asObservable());
+    dayDetailsNavigation.restorationFor.mockReturnValue({ sourceUrl: '/', dateKey });
+    const fixture = TestBed.createComponent(ActivityCalendarTileComponent);
+    fixture.componentRef.setInput('user', user);
+    fixture.componentRef.setInput('dayContextEnabled', true);
+    fixture.detectChanges();
+
+    expect(fixture.componentInstance.eventState().status).toBe('loading');
+    expect(fixture.componentInstance.selectedDateKey()).toBe(dateKey);
+    expect(dayDetailsNavigation.consumeRestoration).not.toHaveBeenCalled();
+
+    pendingEvents.next([]);
+    fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+    expect(dayDetailsNavigation.consumeRestoration).toHaveBeenCalled();
+  });
+
+  it('opens an initial Today-sheet day even if its activities are still loading', async () => {
+    const now = new Date();
+    const target = new Date(now.getFullYear(), now.getMonth() - 1, 5);
+    const dateKey = [target.getFullYear(), `${target.getMonth() + 1}`.padStart(2, '0'), '05'].join('-');
+    const pendingEvents = new Subject<EventInterface[]>();
+    watchEvents.mockReturnValue(pendingEvents.asObservable());
+    const fixture = TestBed.createComponent(ActivityCalendarTileComponent);
+    const componentBottomSheet = (fixture.componentInstance as unknown as { bottomSheet: MatBottomSheet }).bottomSheet;
+    vi.spyOn(componentBottomSheet, 'open').mockImplementation(openBottomSheet);
+    fixture.componentRef.setInput('user', user);
+    fixture.componentRef.setInput('initialDateKey', dateKey);
+    fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+
+    expect(openBottomSheet).toHaveBeenCalledWith(expect.any(Function), expect.objectContaining({
+      data: expect.objectContaining({ day: expect.objectContaining({ dateKey }) }),
+    }));
+    expect(openBottomSheet).toHaveBeenCalledOnce();
+  });
+
+  it('leaves Today-sheet restoration for the dashboard owner to reopen', async () => {
+    dayDetailsNavigation.restorationFor.mockReturnValue({ sourceUrl: '/', dateKey: currentLocalDate(1), surface: 'today-sheet' });
+    const fixture = TestBed.createComponent(ActivityCalendarTileComponent);
+    fixture.componentRef.setInput('user', user);
+    fixture.componentRef.setInput('dayContextEnabled', true);
+    fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+
+    expect(dayDetailsNavigation.consumeRestoration).not.toHaveBeenCalled();
+    expect(fixture.componentInstance.selectedDateKey()).toBe(currentLocalDate(new Date().getDate()));
   });
 
   it.each([false, true])('opens the destination in full Calendar after a duplicate from a tile (navigation: %s)', async showNavigation => {
