@@ -1066,10 +1066,11 @@ Garmin receives the same broad family at the workout and segment levels. Cycling
 cycling-only secondary-target field subject to its existing device-support warning; running-family folds may not.
 Unsupported sports still fail closed. Existing Running/Cycling payloads and retained remote identities do not change,
 and no authored recipe, schedule history, Sports Lib type or provider ID is rewritten.
-MCP create-and-send keeps the authored subtype and establishes standalone delivery consent, but a degraded Garmin fold
-does not count as approved by that Send action. The workout remains unsent with a mapping-review requirement until a
-separate current-digest approval is confirmed. MCP previews and apply results must make that distinction explicit;
-neither an applied consent result nor a queued reconciliation means Garmin accepted a copy.
+MCP create-and-send keeps the authored subtype and establishes standalone delivery consent. Its preview must name the
+Garmin fold before the MCP host's native write approval; the approved Send carries the server-computed mapping digest
+into the existing delivery command, which rechecks the current payload and account in the write transaction. No second
+approval is needed for the same unchanged fold. Browser Send without that digest and subsequent changed mappings retain
+their normal review requirement. Neither an applied Send nor queued reconciliation means Garmin accepted a copy.
 
 Pool and open-water swimming are manually authorable. The #733 mapper encodes pool swimming as
 `LAP_SWIMMING` with an optional explicit physical pool length and target-free swim steps. It also supports an
@@ -1147,6 +1148,13 @@ description remain unchanged. Explicit subtitle truncation, title/instruction lo
 characters still require review. Identity fields and the configured Guide owner are never normalized. Character
 warnings identify the affected field; the derived subtitle does not repeat the title's warning, and app-only description
 text is not tested against watch fonts. This is a formatting policy, not a claim that Suunto rejects Unicode.
+For MCP-created Suunto workouts, omit unrequested step notes and keep necessary watch instructions within 40 code points
+when duration/targets are present or 54 for manual-only steps. Never silently discard requested authored meaning. If
+truncation remains necessary, the first MCP proposal summarizes the exact warnings; its single native approval also
+approves the current destination- and payload-bound adjustment. The authored QS note remains complete. A changed
+mapping blocks delivery until reviewed again. A warning set too large for the strict preview fails closed instead of
+approving undisclosed loss; the client can create without delivery or simplify the recipe. Browser and later
+plan-workout review semantics are unchanged.
 
 The same mapping keeps the authored canonical sport and translates it to Suunto's documented Guide `activities`
 recommendations: Running `1`, Trail Running `22`, Treadmill `53`, Cycling `2`, Mountain Biking `10`, Indoor Cycling

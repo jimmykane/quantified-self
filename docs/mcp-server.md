@@ -113,10 +113,17 @@ They never accept credentials or remote IDs. `all_connected` fans out only to co
 by preview; explicit providers return independent blocked/success results. Pro, compatibility approval, horizon,
 connection, completion and provider readiness checks remain authoritative. Provider failure never rolls back authored
 schedule changes, and MCP itself makes no direct provider HTTP request.
-For a degraded standalone create-and-send (for example, Mountain Biking folded to Garmin Cycling), Send stores only
-delivery consent and queues reconciliation. It must not forward the mapping digest as approval. The public preview and
-apply result explain that a separate approval is needed; the current workout remains unsent until a new `approve`
-proposal binds the current destination and payload digest. An applied Send result is not a provider acceptance claim.
+For a degraded standalone create-and-send (for example, a Suunto step instruction that must be shortened), the public
+preview names the bounded, safe mapping warnings before the host's native approval. The approved Send proposal may carry
+the server-computed digest into the existing delivery command, which rechecks the current destination and payload in the
+write transaction; a changed mapping blocks delivery rather than silently approving new loss. This removes a second
+approval for the same unchanged workout. Browser Send without a digest and later plan-workout changes retain their
+existing per-workout review behavior. An applied Send result means consent and any disclosed adjustment were recorded
+and reconciliation was queued; it is not a provider acceptance or watch-receipt claim. For Suunto-bound new workouts,
+clients should omit unrequested step notes and keep necessary instructions watch-sized (40 characters alongside a
+duration/target, 54 for manual-only steps), without dropping a user-requested instruction merely to avoid review.
+If the full warning set cannot fit the bounded public preview, preview fails closed and directs the client to create
+without delivery or simplify the recipe before sending; a hidden warning is never covered by implicit approval.
 
 The built-in Assistant exposes only the applicable focused/batch previews to Gemini. It prefers the focused tool for one
 new workout, including a one-workout create-and-send request, and the batch tool for other or genuinely multi-change

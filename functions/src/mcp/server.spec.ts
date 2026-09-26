@@ -931,6 +931,8 @@ describe('MCP HTTP scope enforcement', () => {
       MCP_OAUTH_SCOPES.TrainingDeliveryWrite,
     ]);
     expect(combinedWriteInstructions).toContain('optional delivery object');
+    expect(combinedWriteInstructions).toContain('keep necessary concise instructions within 40 characters');
+    expect(combinedWriteInstructions).toContain('One approved Send proposal also approves the previewed digest-bound adjustment');
     expect(combinedWriteInstructions).not.toContain('provider delivery is not available on this connection');
 
     const readInstructionsOnly = await readInstructions([MCP_OAUTH_SCOPES.TrainingPlansRead]);

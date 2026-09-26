@@ -103,7 +103,13 @@ never infer input units from the account preference or convert a distance a seco
 metres, COROS applies its existing integer-metre mapping with approval for loss, and Wahoo's dated delivery continues
 to reject distance-ended recipes when a required total duration cannot be established.
 
-The Training UI checks availability and compatibility automatically on entering sync consent. With one ready provider,
+The Training UI checks availability and compatibility automatically on entering sync consent. For an MCP standalone
+create-and-send, the first proposal names any provider mapping loss; one native approval covers the current
+digest-bound adjustment as well as the authored change. The delivery command rechecks that digest, destination and
+current schedule before queuing work. Later edits and browser plan-workout reviews keep their own approval semantics;
+an applied proposal is not proof of provider or device receipt. Suunto-bound generated step notes should be omitted
+when unrequested or kept within its watch text limits, never silently dropping requested meaning.
+With one ready provider,
 **Sync plan with Garmin** → **Enable plan sync** (plan) or **Send to Garmin** → **Send workout** (standalone) is the normal path;
 subsequent eligible edits reconcile automatically. Opening the dialog never mutates consent. The saved/browser time
 zone is shown inline and changes explicitly; mapping degradation still needs per-workout approval. Troubleshooting is

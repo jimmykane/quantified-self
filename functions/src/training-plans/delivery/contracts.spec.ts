@@ -23,6 +23,13 @@ describe('Training delivery contracts', () => {
   it('round trips exact JSON without touching the workout recipe', () => {
     expect(parseTrainingDeliveryCommandV1(JSON.parse(JSON.stringify(command)))).toEqual(command);
   });
+  it('accepts a preview-bound digest on Send but not on unrelated delivery actions', () => {
+    const approvalDigest = 'a'.repeat(64);
+    expect(parseTrainingDeliveryCommandV1({ ...command, approvalDigest }).approvalDigest).toBe(approvalDigest);
+    expect(() => parseTrainingDeliveryCommandV1({ ...command, action: 'approve', approvalDigest })).not.toThrow();
+    expect(() => parseTrainingDeliveryCommandV1({ ...command, action: 'stop', approvalDigest })).toThrow();
+    expect(() => parseTrainingDeliveryCommandV1({ ...command, approvalDigest: 'invalid' })).toThrow();
+  });
   it.each([{ uid: 'other' }, { remoteId: 'secret' }, { schemaVersion: 2 }, { provider: 'fake' },
     { scopeId: '../other' }, { expectedSettingsRevision: NaN }, { expectedScopeRevision: -1 },
     { action: 'approve' }, { timeZone: 'invalid-zone' }, { scope: 'plan' }, { token: 'secret' }])('rejects %j', patch => {

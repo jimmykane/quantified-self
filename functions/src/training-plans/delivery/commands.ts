@@ -141,7 +141,7 @@ export async function trainingDeliveryCommand(runtime: DeliveryRuntime, uid: str
     }
     if (workout?.planId && enable && (!planSetting?.enabled || planSetting.destinationKey !== connection.destinationKey
       || planSetting.connectionEpoch !== connection.epoch)) throw new HttpsError('failed-precondition', 'Enable this provider on the plan first.');
-    if (command.action === 'approve' && (preview.approvalDigest !== command.approvalDigest || !preview.approvalDigest)) {
+    if (command.approvalDigest && preview.approvalDigest !== command.approvalDigest) {
       throw new HttpsError('aborted', 'The compatibility preview changed. Review the latest warnings.');
     }
     const revision = (state.data()?.revision ?? 0) + 1;
@@ -151,7 +151,8 @@ export async function trainingDeliveryCommand(runtime: DeliveryRuntime, uid: str
       destinationKey: removal ? previous?.destinationKey ?? planSetting?.destinationKey ?? connection.destinationKey : connection.destinationKey,
       connectionEpoch: removal ? previous?.connectionEpoch ?? planSetting?.connectionEpoch ?? connection.epoch : connection.epoch,
       scopeGeneration: generationDoc.data()?.generation ?? 0, associationPlanId: workout?.planId ?? null,
-      approvedDigest: command.action === 'approve' ? command.approvalDigest! : command.action === 'retry' ? previous?.approvedDigest ?? null : null,
+      approvedDigest: command.action === 'approve' || command.action === 'send'
+        ? command.approvalDigest ?? null : command.action === 'retry' ? previous?.approvedDigest ?? null : null,
       updatedAtMs: runtime.now() };
     tx.set(settingRef, result);
     tx.set(privateState, { revision }, { merge: true });

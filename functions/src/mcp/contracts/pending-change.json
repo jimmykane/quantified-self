@@ -1,7 +1,7 @@
 {
   "formatVersion": 1,
-  "candidateSha256": "6b9c7a99fabc0c99d8178d76cd7ebf72628f70fb14d1bd17e2960b45e53c952d",
+  "candidateSha256": "b3fbb464b8b9518afc26a885f55bf0cabf53a6e119f5361821bbd0a25ccc201a",
   "lifecycleAction": "developer-refresh",
-  "summary": "Retain prior Training, Health, Timeline, activity, OAuth and PKCE changes. Add event title/description edits, Strength details, pool-length reads/previews, and metrics:read preparation for one to eight Training snapshots. Preserve strict outputs, scope dependencies, current-value checks, benchmark exclusion, frozen v1 recipes, native approval and provider boundaries. Guide clients to list_activities if query_activities oneOf is rejected. Refresh the catalog after deployment.",
+  "summary": "Retain Training, Health, Timeline, activity, OAuth and PKCE changes. Add event title/description edits, Strength details, pool-length reads/previews, and metrics:read preparation for 1–8 Training snapshots. Preserve strict outputs, scope dependencies, value checks, benchmark exclusion, frozen v1 recipes, native approval and provider boundaries. Guide clients around query_activities oneOf rejection, concise Suunto step notes, and mapping loss in the first Send preview. Refresh after deployment.",
   "rescanRequired": true
 }

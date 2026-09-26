@@ -452,6 +452,31 @@ function deliveryAvailability(preview: TrainingDeliveryPreviewV1): 'ready' | 'un
   return 'ready';
 }
 
+function mappingDisclosure(provider: PlannedWorkoutProviderId, preview: TrainingDeliveryPreviewV1,
+  action: 'send' | 'approve'): string {
+  const issues = [...new Set(preview.issues)].map(issue => {
+    if (provider === 'suunto' && issue === 'Suunto step text is limited to 54 characters by Suunto.') {
+      return 'Suunto will shorten long step instructions.';
+    }
+    if (provider === 'suunto' && issue === 'Suunto cannot show other fields alongside text longer than 40 characters.') {
+      return 'Instructions shown with duration or targets will be shortened to 40 characters on the watch.';
+    }
+    return issue;
+  });
+  const lead = action === 'send' ? `${provider}: this workout needs these mapping adjustments: `
+    : `${provider}: approve these current mapping adjustments: `;
+  const tail = action === 'send'
+    ? ' Confirming this proposal approves them and enables delivery; provider receipt is not yet confirmed.'
+    : ' This approval applies only to the current workout and destination.';
+  const summary = `${lead}${issues.join(' ')}${tail}`;
+  // The v1 public preview has one bounded summary field. Never approve a digest
+  // when its warning set cannot be completely explained in that field.
+  if (issues.length === 0 || preview.issues.length >= 20 || summary.length > 500) {
+    invalid('Provider mapping warnings are too extensive for one safe preview. Create without delivery or simplify the workout, then review compatibility before sending.');
+  }
+  return summary;
+}
+
 function providerSummary(provider: PlannedWorkoutProviderId, action: StoredProviderOperation['action'], preview: TrainingDeliveryPreviewV1): string {
   const availability = deliveryAvailability(preview);
   if (availability === 'pro_required') return `${provider} delivery requires Pro.`;
@@ -459,7 +484,10 @@ function providerSummary(provider: PlannedWorkoutProviderId, action: StoredProvi
   if (availability === 'reconnect_required') return `${provider} must be reconnected before delivery can change.`;
   if (availability === 'connection_repair') return `${provider} connection access must be repaired before delivery can change.`;
   if (action === 'send' && preview.approvalDigest) {
-    return `${provider}: enable workout delivery; mapping differences require separate approval before a copy can be sent.`;
+    return mappingDisclosure(provider, preview, 'send');
+  }
+  if (action === 'approve' && preview.approvalDigest) {
+    return mappingDisclosure(provider, preview, 'approve');
   }
   const effect = action === 'stop' ? 'stop sync and withdraw eligible future copies'
     : action === 'check' ? 'queue a remote-copy check'
@@ -864,7 +892,8 @@ async function currentDeliveryCommand(
     provider: operation.provider, action, expectedScheduleRevision: operation.expectedScheduleRevision,
     expectedScopeRevision: operation.expectedScopeRevision, expectedSettingsRevision: operation.expectedSettingsRevision,
     ...(operation.timeZone ? { timeZone: operation.timeZone } : {}),
-    ...(action === 'approve' && operation.approvalDigest ? { approvalDigest: operation.approvalDigest } : {}) };
+    ...((action === 'approve' || action === 'send') && operation.approvalDigest
+      ? { approvalDigest: operation.approvalDigest } : {}) };
   if (action === 'check') {
     return await trainingDeliveryCommand(deps.runtime, uid, base, false,
       tx => assertAuthorityInTransaction(deps, tx, uid, connectionId, requiredScopes, expectedAccessGeneration,
@@ -1129,7 +1158,7 @@ async function applyTrainingChangesInternal(
           status: operation.action === 'check' ? 'queued' : 'applied',
           message: operation.action === 'check' ? 'Remote-copy verification was queued.'
             : operation.action === 'send' && operation.approvalDigest
-              ? 'Delivery was enabled, but this workout needs separate mapping approval before a provider copy can be sent.'
+              ? 'Delivery and the previewed mapping adjustment were approved; reconciliation was queued. Provider receipt is not yet confirmed.'
               : 'Delivery preferences were updated and reconciliation was queued.' });
       } catch (error) {
         providerResults.push({ index: operation.index, provider: operation.provider, status: 'blocked',
