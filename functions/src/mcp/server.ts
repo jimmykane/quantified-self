@@ -2349,6 +2349,14 @@ export function sanitizeMcpProtocolVersionForDiagnostics(
     : 'invalid_or_absent';
 }
 
+function isMcpProtocolVersionMismatch(error: unknown): boolean {
+  return error instanceof Error && /^Rejected inbound request \((?:header-body-version-mismatch|notification-header-body-version-mismatch|modern-header-without-claim|initialize-with-modern-header)\):/.test(error.message);
+}
+
+function mismatchProtocolVersionForDiagnostics(value: unknown): string {
+  return value === undefined ? 'missing' : sanitizeMcpProtocolVersionForDiagnostics(value);
+}
+
 export function classifyMcpTransportRejectionReason(
   error: unknown,
 ): McpTransportRejectionReason {
@@ -2418,6 +2426,14 @@ function logMcpTransportRejection(
       ? { protocolVersion: sanitizeMcpProtocolVersionForDiagnostics(
         request.get('mcp-protocol-version') ?? request.body?.params?._meta?.[PROTOCOL_VERSION_META_KEY],
       ) }
+      : {}),
+    ...(reason === 'invalid_protocol_envelope' && isMcpProtocolVersionMismatch(error)
+      ? {
+        headerProtocolVersion: mismatchProtocolVersionForDiagnostics(request.get('mcp-protocol-version')),
+        envelopeProtocolVersion: mismatchProtocolVersionForDiagnostics(
+          request.body?.params?._meta?.[PROTOCOL_VERSION_META_KEY],
+        ),
+      }
       : {}),
   });
 }

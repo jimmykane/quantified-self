@@ -343,9 +343,29 @@ describe('MCP Function protocol compatibility', () => {
     }
     expect(warn).toHaveBeenCalledWith('[MCP] Streamable HTTP request rejected', {
       reason: 'invalid_protocol_envelope', clientFamily: 'claude',
+      headerProtocolVersion: VERSION, envelopeProtocolVersion: 'missing',
+    });
+    expect(warn).toHaveBeenCalledWith('[MCP] Streamable HTTP request rejected', {
+      reason: 'invalid_protocol_envelope', clientFamily: 'claude',
+      headerProtocolVersion: '2025-11-25', envelopeProtocolVersion: VERSION,
+    });
+    expect(warn).toHaveBeenCalledWith('[MCP] Streamable HTTP request rejected', {
+      reason: 'invalid_protocol_envelope', clientFamily: 'claude',
     });
     expect(logError).not.toHaveBeenCalled();
     expect(info).not.toHaveBeenCalled();
+  });
+
+  it('redacts malformed protocol headers in mismatch warnings', async () => {
+    const response = await post(modernRequest(), {
+      'mcp-protocol-version': 'private-version-canary',
+    });
+    expect(response.status).toBe(400);
+    expect(warn).toHaveBeenCalledExactlyOnceWith('[MCP] Streamable HTTP request rejected', {
+      reason: 'invalid_protocol_envelope', clientFamily: 'claude',
+      headerProtocolVersion: 'invalid_or_absent', envelopeProtocolVersion: VERSION,
+    });
+    expect(JSON.stringify(warn.mock.calls)).not.toMatch(/private-version-canary|fixture-token|protocol-user/);
   });
 
   it('logs safe rejected envelope versions when the optional protocol header is absent', async () => {
