@@ -5,6 +5,7 @@
   [class.activity-calendar--compact]="compact"
   [class.activity-calendar--fill-height]="compact && fillHeight"
   [class.activity-calendar--dashboard-context]="dashboardDayContext"
+  [class.activity-calendar--calm-month]="calmMonth && model.view === 'month'"
   [class.activity-calendar--picker]="isMonthPicker">
   <div class="activity-calendar-months">
     @for (month of visibleMonths; track month.id) {
@@ -41,7 +42,7 @@
             <span class="activity-calendar-day-indicators">
               @if (day.eventCount) {
               <span class="activity-calendar-marker-stage"
-                [class.activity-calendar-marker-stage--concentric]="compact || model.view === 'year'">
+                [class.activity-calendar-marker-stage--concentric]="!calmMonth && (compact || model.view === 'year')">
                 @for (family of day.visibleFamilies; track family.id) {
                 <span class="activity-calendar-marker"
                   [style.background-color]="family.color"
@@ -49,12 +50,15 @@
                   [style.--calendar-marker-compact-diameter]="family.compactDiameterPx + 'px'"
                   [style.z-index]="$index + 1"></span>
                 }
-                @if (day.overflowFamilyCount) {
-                <span class="activity-calendar-marker-overflow">+{{ day.overflowFamilyCount }}</span>
+                @if (day.overflowFamilyCount || (calmMonth && day.eventCount > 1 && day.visibleFamilies.length === 1)) {
+                <span class="activity-calendar-marker-overflow">{{ day.overflowFamilyCount ? '+' + day.overflowFamilyCount : day.eventCount }}</span>
                 }
               </span>
               }
               @if (dayNotes) {
+              @if (calmMonth && model.view === 'month') {
+              <span class="activity-calendar-calm-note" [style.background-color]="dayNotes.color" aria-hidden="true"></span>
+              } @else {
               <span class="activity-calendar-day-notes">
                 <span class="activity-calendar-note-colors" aria-hidden="true">
                   @for (color of dayNotes.accentColors; track color) {
@@ -63,6 +67,7 @@
                 </span>
                 <mat-icon class="activity-calendar-note-indicator" [style.color]="dayNotes.color" aria-hidden="true">{{ dayNotes.icon }}</mat-icon>
               </span>
+              }
               }
             </span>
             @if (plannedDay) {
@@ -89,5 +94,17 @@
     </section>
     }
   </div>
+  @if (calmMonth && model.view === 'month' && (legendFamilies.length || hasVisibleNotes || hasVisiblePlans)) {
+    <div class="activity-calendar-calm-legend" aria-label="Calendar markers">
+      @for (family of legendFamilies; track family.id) {
+        <span><i [style.background-color]="family.color" aria-hidden="true"></i>{{ family.label }}</span>
+      }
+      @if (model.summary.families.length > legendFamilies.length) {
+        <span>+{{ model.summary.families.length - legendFamilies.length }} groups</span>
+      }
+      @if (hasVisibleNotes) { <span><i class="activity-calendar-calm-legend-note" aria-hidden="true"></i>Timeline note</span> }
+      @if (hasVisiblePlans) { <span><i class="activity-calendar-calm-legend-plan" aria-hidden="true"></i>Planned workout</span> }
+    </div>
+  }
 </section>
 }

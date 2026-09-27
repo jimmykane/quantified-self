@@ -533,6 +533,145 @@
   }
 }
 
+// Opt-in month presentation used by the Calendar route and dashboard tile.
+// Keep the shared picker, Week, and Year marker semantics unchanged.
+.activity-calendar--calm-month {
+  .activity-calendar-month--surface { padding: 0; border: 0; border-radius: 0; background: transparent; box-shadow: none; }
+  .activity-calendar-weekdays { min-height: 34px; }
+  .activity-calendar-day,
+  &.activity-calendar--compact .activity-calendar-day {
+    min-height: 64px;
+    align-items: flex-start;
+    gap: 5px;
+    padding: 7px;
+    border-right-color: var(--mat-sys-outline-variant);
+    border-bottom-color: var(--mat-sys-outline-variant);
+    text-align: left;
+  }
+  .activity-calendar-day:nth-child(7n) { border-right: 0; }
+  .activity-calendar-day--selected { background: color-mix(in srgb, var(--mat-sys-primary) 8%, transparent); }
+  .activity-calendar-day-number,
+  &.activity-calendar--compact .activity-calendar-day-number {
+    width: 24px;
+    height: 24px;
+    flex-basis: 24px;
+    font: var(--mat-sys-label-medium);
+  }
+  .activity-calendar-day-indicators {
+    display: flex;
+    width: 100%;
+    min-height: 16px;
+    align-items: center;
+    gap: 4px;
+  }
+  .activity-calendar-marker-stage,
+  &.activity-calendar--compact .activity-calendar-marker-stage {
+    position: static;
+    display: flex;
+    width: auto;
+    height: 16px;
+    flex: 0 1 auto;
+    align-items: center;
+    justify-content: flex-start;
+    gap: 0;
+  }
+  .activity-calendar-marker {
+    width: 13px;
+    height: 13px;
+    margin-right: -4px;
+    border: 2px solid var(--mat-sys-surface);
+  }
+  .activity-calendar-marker-overflow,
+  &.activity-calendar--compact .activity-calendar-marker-overflow {
+    position: static;
+    z-index: auto;
+    min-width: 0;
+    margin-left: 6px;
+    padding: 0;
+    background: transparent;
+    font: var(--mat-sys-label-small);
+  }
+  .activity-calendar-calm-note {
+    width: 3px;
+    height: 13px;
+    flex: 0 0 3px;
+    margin-left: auto;
+    border-radius: 3px;
+  }
+  .planned-workout-markers,
+  &.activity-calendar--compact .planned-workout-markers {
+    position: absolute;
+    top: auto;
+    right: 3px;
+    bottom: 4px;
+    width: auto;
+    max-width: 22px;
+    height: 14px;
+    flex-direction: row;
+    align-items: center;
+    overflow: hidden;
+    padding: 0;
+    background: transparent;
+  }
+  .planned-workout-markers mat-icon,
+  &.activity-calendar--compact .planned-workout-markers mat-icon {
+    width: 9px;
+    height: 3px;
+    flex: 0 0 9px;
+    border: 0;
+    border-bottom: 3px solid currentColor;
+    font-size: 0;
+    line-height: 0;
+  }
+  .planned-workout-marker--skipped { border-bottom-style: dashed; }
+  .activity-calendar-calm-legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px 15px;
+    margin-top: 11px;
+    color: var(--mat-sys-on-surface-variant);
+    font: var(--mat-sys-body-small);
+  }
+  .activity-calendar-calm-legend span { display: inline-flex; align-items: center; gap: 5px; }
+  .activity-calendar-calm-legend i { display: inline-block; width: 8px; height: 8px; border-radius: 50%; }
+  .activity-calendar-calm-legend .activity-calendar-calm-legend-note {
+    width: 3px;
+    height: 12px;
+    border-radius: 2px;
+    background: var(--mat-sys-primary);
+  }
+  .activity-calendar-calm-legend .activity-calendar-calm-legend-plan {
+    width: 10px;
+    height: 3px;
+    border-radius: 0;
+    background: var(--mat-sys-outline);
+  }
+}
+
+.activity-calendar--calm-month.activity-calendar--dashboard-context {
+  .activity-calendar-day { min-height: 48px; gap: 1px; padding: 5px; }
+  .activity-calendar-day-number { width: 21px; height: 21px; flex-basis: 21px; }
+}
+
+@container (max-width: 540px) {
+  .activity-calendar--calm-month {
+    .activity-calendar-day,
+    &.activity-calendar--compact .activity-calendar-day {
+      min-height: 46px;
+      align-items: center;
+      gap: 2px;
+      padding: 4px 1px;
+    }
+    .activity-calendar-day-indicators { justify-content: center; min-height: 12px; }
+    .activity-calendar-marker-stage,
+    &.activity-calendar--compact .activity-calendar-marker-stage { height: 12px; }
+    .activity-calendar-marker { width: 8px; height: 8px; margin-right: -3px; border-width: 1px; }
+    .activity-calendar-marker-overflow { display: none; }
+    .activity-calendar-calm-note { position: absolute; right: 2px; bottom: 7px; width: 2px; height: 12px; }
+  }
+  .activity-calendar--calm-month.activity-calendar--dashboard-context .activity-calendar-day { min-height: 44px; }
+}
+
 // Fixed-height tiles distribute their visible weeks evenly at every viewport width.
 .activity-calendar--fill-height,
 .activity-calendar--fill-height .activity-calendar-months,
@@ -555,6 +694,15 @@
   min-height: 0;
   padding-block: 0;
 }
+
+.activity-calendar--calm-month.activity-calendar--fill-height {
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) auto;
+  gap: 6px;
+}
+.activity-calendar--calm-month.activity-calendar--fill-height .activity-calendar-months { height: auto; min-height: 0; }
+.activity-calendar--calm-month.activity-calendar--fill-height .activity-calendar-month { grid-template-rows: 33px minmax(0, 1fr); }
+.activity-calendar--calm-month.activity-calendar--fill-height .activity-calendar-calm-legend { margin-top: 0; }
 
 @container (min-width: 560px) {
   .activity-calendar--dashboard-context .activity-calendar-weekdays {
@@ -580,6 +728,25 @@
   .activity-calendar--dashboard-context .activity-calendar-marker-stage--concentric .activity-calendar-marker {
     width: calc(var(--calendar-marker-compact-diameter) * 1.2);
     height: calc(var(--calendar-marker-compact-diameter) * 1.2);
+  }
+}
+
+@container (min-width: 560px) {
+  .activity-calendar--calm-month.activity-calendar--dashboard-context .activity-calendar-marker-stage {
+    height: 16px;
+    flex-basis: auto;
+  }
+}
+
+@media (max-width: 540px) {
+  .activity-calendar--calm-month:not(.activity-calendar--year):not(.activity-calendar--compact) {
+    .activity-calendar-day { min-height: 46px; align-items: center; gap: 2px; padding: 4px 1px; }
+    .activity-calendar-day-number { width: 19px; height: 19px; flex-basis: 19px; font: var(--mat-sys-label-small); }
+    .activity-calendar-day-indicators { min-height: 12px; justify-content: center; }
+    .activity-calendar-marker-stage { position: static; width: auto; height: 12px; flex: 0 1 auto; }
+    .activity-calendar-marker { position: static; width: 8px; height: 8px; margin-right: -3px; border-width: 1px; transform: none; }
+    .activity-calendar-marker-overflow { display: none; }
+    .activity-calendar-calm-note { position: absolute; right: 2px; bottom: 7px; width: 2px; height: 12px; }
   }
 }
 

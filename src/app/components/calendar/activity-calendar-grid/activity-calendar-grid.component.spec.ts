@@ -10,6 +10,34 @@ import { calendarTimelineNotesByDate } from '../../../helpers/calendar-timeline-
 import type { PlannedWorkoutCalendarOverlay } from '../../../helpers/planned-workout-calendar.helper';
 
 describe('ActivityCalendarGridComponent', () => {
+  it('shows calm month dots and one note cue only when opted in', async () => {
+    const fixture = await renderGrid('month', false, [
+      createEvent('run-1', new Date(2026, 7, 3, 8), ActivityTypes.Running, 3600),
+    ]);
+    const note: TimelineNote = { id: 'a'.repeat(64), category: 'travel', title: 'Trip', startDate: '2026-08-03', endDate: '2026-08-03', timeZone: 'UTC', revision: 1, createdAtMs: 1, updatedAtMs: 1 };
+    fixture.componentRef.setInput('timelineNotesByDate', calendarTimelineNotesByDate(fixture.componentInstance.model, [note]));
+    fixture.componentRef.setInput('calmMonth', true);
+    fixture.detectChanges();
+    const day = fixture.nativeElement.querySelector('[aria-label*="1 Timeline note"]') as HTMLElement;
+    expect(fixture.nativeElement.querySelector('.activity-calendar--calm-month')).toBeTruthy();
+    expect(day.querySelector('.activity-calendar-calm-note')).toBeTruthy();
+    expect(day.querySelector('.activity-calendar-note-indicator')).toBeNull();
+    expect(day.querySelector('.activity-calendar-marker')).toBeTruthy();
+    expect(fixture.nativeElement.querySelector('.activity-calendar-calm-legend')).toBeTruthy();
+    fixture.componentRef.setInput('calmMonth', false);
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('.activity-calendar-calm-legend')).toBeNull();
+  });
+  it('does not advertise an adjacent-month note in the calm legend', async () => {
+    const fixture = await renderGrid('month', false, []);
+    const adjacentNote: TimelineNote = { id: 'b'.repeat(64), category: 'travel', title: 'Next month', startDate: '2026-09-01', endDate: '2026-09-01', timeZone: 'UTC', revision: 1, createdAtMs: 1, updatedAtMs: 1 };
+    fixture.componentRef.setInput('timelineNotesByDate', calendarTimelineNotesByDate(fixture.componentInstance.model, [adjacentNote]));
+    fixture.componentRef.setInput('calmMonth', true);
+    fixture.componentRef.setInput('hideOutsideDays', true);
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('.activity-calendar-calm-note')).toBeNull();
+    expect(fixture.nativeElement.querySelector('.activity-calendar-calm-legend')).toBeNull();
+  });
   it('marks only the selected date without changing the today marker or day layout', async () => {
     const fixture = await renderGrid('month', false, []);
     fixture.componentRef.setInput('selectedDateKey', '2026-08-03'); fixture.detectChanges();

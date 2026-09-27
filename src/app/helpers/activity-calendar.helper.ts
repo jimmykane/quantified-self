@@ -654,7 +654,7 @@ export function resolveEventStartDate(event: EventInterface): Date | null {
   return null;
 }
 
-function resolveEventFamilyIdentity(event: EventInterface): ActivityCalendarFamilyIdentity {
+export function resolveEventFamilyIdentity(event: EventInterface): ActivityCalendarFamilyIdentity {
   const groups = new Set<ActivityTypeGroup>();
   const activityTypes = resolveEventActivityTypes(event);
   activityTypes.forEach((activityType) => {

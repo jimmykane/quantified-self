@@ -325,3 +325,31 @@
   .calendar-day-layout { grid-template-columns: minmax(0, 1fr); }
   .calendar-selected-day { padding: 14px; }
 }
+
+.calendar-page--calm-month {
+  .calendar-main-surface { display: flex; flex-direction: column; padding: 14px; }
+  .calendar-period-navigation { order: 0; }
+  .calendar-progress-slot, .calendar-status, .calendar-status-announcement { order: 1; }
+  .calendar-day-layout { order: 2; }
+  .calendar-period-summary { order: 3; }
+  .calendar-period-navigation { min-height: 44px; margin-bottom: 8px; border: 0; grid-template-columns: 44px minmax(0, 1fr) auto 44px; }
+  .calendar-period-navigation h2 { font: var(--mat-sys-title-medium); }
+  .calendar-today-button--desktop { min-height: 36px; }
+  .calendar-period-summary { height: 52px; margin: 8px 0 0; border-top: 1px solid var(--mat-sys-outline-variant); }
+  .calendar-period-summary-value { font-size: 19px; }
+  .calendar-progress-slot { margin-bottom: 0; }
+  .calendar-day-layout { grid-template-columns: minmax(0, 1.55fr) minmax(250px, .85fr); align-items: stretch; }
+  .calendar-selected-day { padding: 0 0 0 16px; border: 0; border-left: 1px solid var(--mat-sys-outline-variant); border-radius: 0; background: transparent; box-shadow: none; }
+}
+
+@media (max-width: 900px) {
+  .calendar-page--calm-month {
+    .calendar-main-surface { padding: 10px; }
+    .calendar-day-layout { grid-template-columns: minmax(0, 1fr); gap: 13px; }
+    .calendar-selected-day { padding: 13px 0 0; border-top: 1px solid var(--mat-sys-outline-variant); border-left: 0; }
+  }
+}
+
+@media (max-width: 360px) {
+  .calendar-page--calm-month .calendar-period-navigation h2 { font-size: 14px; }
+}

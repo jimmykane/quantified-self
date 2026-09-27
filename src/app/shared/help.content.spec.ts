@@ -166,12 +166,12 @@ describe('help.content', () => {
     }
     expect(searchHelpSections(HELP_SECTIONS, 'Timeline notes').map(section => section.id)).toEqual(expect.arrayContaining(['health', 'training-analysis']));
     const calendar = HELP_SECTIONS.find(section => section.id === 'activity-calendar')?.content;
-    expect(calendar).toContain('a note icon marks days');
-    expect(calendar).toContain("Small color markers show your chosen note colors");
-    expect(calendar).toContain('overlapping notes keep their different colors as separate segments');
+    expect(calendar).toContain('a slim colored tick marks days');
+    expect(calendar).toContain('notes and their individual colors');
+    expect(calendar).toContain('Week, Year, and the Today mini-calendar keep their existing note icons');
     expect(calendar).toContain('Activity circles keep their own colors');
     expect(calendar).toContain('Show on charts and calendar');
-    expect(calendar).toContain('Today calendar popup show the same private notes');
+    expect(calendar).toContain('The **Today** card opens a month calendar');
     const dashboard = HELP_SECTIONS.find(section => section.id === 'getting-started')?.content;
     expect(dashboard).toContain('HRV, Sleep, Form, and Freshness Forecast show the same note markers');
     expect(dashboard).toContain('shared profiles and chart-library previews do not include them');
@@ -558,9 +558,9 @@ describe('help.content', () => {
     expect(calendarSection?.content).toContain('Dashboard and Training headers also link to the full [Calendar](/calendar)');
     expect(calendarSection?.content).toContain('without changing their saved settings');
     expect(calendarSection?.content).toContain('out of suggestions until you add it manually');
-    expect(calendarSection?.content).toContain('place multiple circles concentrically around the same center');
+    expect(calendarSection?.content).toContain('small overlapping activity-group circles');
     expect(calendarSection?.content).toContain('size reflects recorded duration');
-    expect(calendarSection?.content).toContain('Completed totals and activity-group bars appear above individual activities');
+    expect(calendarSection?.content).toContain('Period totals and activity-group bars remain available below the month');
     expect(calendarSection?.content).toContain('Select an activity row to open its details');
     expect(calendarSection?.content).toContain('Browser **Back** returns to the selected calendar day');
     expect(calendarSection?.content).toContain('The selected view and date are kept in the URL');

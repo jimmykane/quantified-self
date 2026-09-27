@@ -1,4 +1,5 @@
-<main class="calendar-page qs-workspace-page" [class.calendar-page--day]="isDayRoute" aria-labelledby="calendar-page-title">
+<main class="calendar-page qs-workspace-page" [class.calendar-page--day]="isDayRoute"
+  [class.calendar-page--calm-month]="!isDayRoute && calendarModel().view === 'month'" aria-labelledby="calendar-page-title">
   @if (isDayRoute) {
     <header class="calendar-day-toolbar">
       <a class="calendar-day-back" mat-button appHapticTap [routerLink]="['/calendar']" [queryParams]="calendarBackQuery()"
@@ -26,6 +27,7 @@
     </app-page-header>
   }
 
+  <div class="calendar-main-surface" [class.qs-glass-card-panel]="!isDayRoute && calendarModel().view === 'month'">
   <nav class="calendar-period-navigation" [attr.aria-label]="isDayRoute ? 'Day navigation' : 'Calendar period navigation'">
     <button mat-icon-button type="button" appHapticTap [matTooltip]="isDayRoute ? 'Previous day' : 'Previous ' + routeState().view"
       [attr.aria-label]="isDayRoute ? 'Previous day' : 'Previous ' + routeState().view" (click)="navigatePeriod(-1)">
@@ -101,17 +103,23 @@
     } @else {
     <div class="calendar-day-layout">
     <app-activity-calendar-grid [model]="calendarModel()"
+      [calmMonth]="calendarModel().view === 'month'"
+      [hideOutsideDays]="calendarModel().view === 'month'"
       [selectedDateKey]="selectedDay()?.dateKey ?? null"
       [timelineNotesByDate]="notesByDate()"
       [plannedWorkoutsByDate]="hasTrainingPlanningUIAccess() ? plannedWorkoutsByDate() : null"
       (daySelected)="openDay($event)">
     </app-activity-calendar-grid>
     @if (selectedDayData(); as dayData) {
-      <app-calendar-day-context class="calendar-selected-day qs-glass-card-panel" [data]="dayData" [showFullDayLink]="true"
+      <app-calendar-day-context class="calendar-selected-day" [class.qs-glass-card-panel]="calendarModel().view !== 'month'"
+        [data]="dayData" [showFullDayLink]="true"
+        [calmMonth]="calendarModel().view === 'month'"
         (noteSelected)="selectDayNote($event.id)"></app-calendar-day-context>
     }
     </div>
-
+    }
+  </div>
+  @if (!isDayRoute) {
     @if (!isLoading() && familyVolumeRows().length) {
     <section class="calendar-family-volume" aria-labelledby="calendar-family-volume-title">
       <header class="calendar-family-volume-header">
@@ -137,5 +145,5 @@
     [periodLabel]="calendarModel().periodLabel">
   </app-activity-range-table-section>
   }
-    }
+  }
 </main>

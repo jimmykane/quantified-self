@@ -9,6 +9,7 @@ import { ActivityTypes, AppThemes, DataDuration, DaysOfTheWeek, type EventInterf
 import { BehaviorSubject, of, Subject, throwError } from 'rxjs';
 import { AppUserService } from '../../../services/app.user.service';
 import { AppThemeService } from '../../../services/app.theme.service';
+import { AppHapticsService } from '../../../services/app.haptics.service';
 import type { TimelineNote, TimelineNoteRange } from '@shared/timeline-notes';
 import type { TimelineNoteChartContext } from '../../../helpers/timeline-notes-chart.helper';
 import type { CalendarDayDetailsData } from '../calendar-day-details/calendar-day-details.component';
@@ -32,6 +33,7 @@ describe('ActivityCalendarTileComponent', () => {
   let watchSchedule: ReturnType<typeof vi.fn>;
   let watchWorkoutCompletions: ReturnType<typeof vi.fn>;
   let watchHealth: ReturnType<typeof vi.fn>;
+  let haptics: { selection: ReturnType<typeof vi.fn> };
   let viewer: ReturnType<typeof signal<{ uid: string } | null>>;
   let viewer$: BehaviorSubject<{ uid: string } | null>;
   let dayDetailsNavigation: {
@@ -47,6 +49,7 @@ describe('ActivityCalendarTileComponent', () => {
     watchSchedule = vi.fn().mockReturnValue(of(emptySchedule()));
     watchWorkoutCompletions = vi.fn().mockReturnValue(of([]));
     watchHealth = vi.fn(() => of({ sessions: [], hrvSeries: [], derived: null, sleepError: false, hrvError: false, readinessError: false, recoveryError: false }));
+    haptics = { selection: vi.fn() };
     openBottomSheet = vi.fn().mockReturnValue({ afterDismissed: () => of(undefined) });
     dayDetailsNavigation = {
       restorationFor: vi.fn().mockReturnValue(null),
@@ -59,6 +62,7 @@ describe('ActivityCalendarTileComponent', () => {
         provideRouter([]),
         { provide: AppUserService, useValue: { user: viewer, user$: viewer$ } },
         { provide: AppThemeService, useValue: { appTheme: signal(AppThemes.Normal) } },
+        { provide: AppHapticsService, useValue: haptics },
         { provide: ActivityCalendarService, useValue: { watchEvents } },
         { provide: TrainingPlansService, useValue: { watchSchedule, watchWorkoutCompletions } },
         { provide: CalendarDayHealthService, useValue: { watch: watchHealth } },
@@ -103,6 +107,22 @@ describe('ActivityCalendarTileComponent', () => {
     expect(openBottomSheet).not.toHaveBeenCalled();
     fixture.componentRef.setInput('privateHealthEnabled', false); fixture.detectChanges();
     expect(fixture.nativeElement.querySelector('a[aria-label="Open selected day page"]')).toBeNull();
+  });
+
+  it('uses Calm month only for the inline tile and returns to today with one haptic tap', async () => {
+    const fixture = TestBed.createComponent(ActivityCalendarTileComponent);
+    fixture.componentRef.setInput('user', user);
+    fixture.componentRef.setInput('dayContextEnabled', true);
+    fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('.activity-calendar--calm-month')).toBeTruthy();
+    expect(fixture.nativeElement.querySelector('.activity-calendar-calm-legend')).toBeTruthy();
+    expect(haptics.selection).not.toHaveBeenCalled();
+    fixture.componentInstance.navigateMonth(-1);
+    fixture.detectChanges();
+    (fixture.nativeElement.querySelector('[aria-label="Go to today"]') as HTMLButtonElement).click();
+    fixture.detectChanges();
+    expect(fixture.componentInstance.selectedDay()?.isToday).toBe(true);
+    expect(haptics.selection).toHaveBeenCalledOnce();
   });
 
   it('does not repeat Today health or read it until another date is selected', async () => {

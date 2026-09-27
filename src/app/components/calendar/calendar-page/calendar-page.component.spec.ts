@@ -142,10 +142,12 @@ describe('CalendarPageComponent', () => {
 
     expect(watchEvents).toHaveBeenCalledOnce();
     expect(fixture.nativeElement.querySelector('#calendar-page-title')?.textContent).toContain('Calendar');
+    expect(fixture.nativeElement.querySelector('.calendar-page--calm-month .activity-calendar--calm-month')).toBeTruthy();
     expect(fixture.nativeElement.querySelector('.qs-page-header__leading-icon')?.textContent?.trim())
       .toBe('calendar_month');
     expect(fixture.nativeElement.querySelector('.calendar-progress-slot')).toBeTruthy();
-    expect(fixture.nativeElement.querySelectorAll('.activity-calendar-day-button')).toHaveLength(42);
+    expect(fixture.nativeElement.querySelectorAll('.activity-calendar-day-button')).toHaveLength(
+      fixture.componentInstance.calendarModel().months[0].days.filter(day => day.inPrimaryPeriod).length);
     const summaryMetrics = [...fixture.nativeElement.querySelectorAll('.calendar-period-summary-metric')]
       .map((metric: HTMLElement) => ({
         label: metric.querySelector('.calendar-period-summary-label span')?.textContent?.trim(),
@@ -212,7 +214,8 @@ describe('CalendarPageComponent', () => {
     expect(fixture.componentInstance.plannedWorkoutsByDate()['2026-08-04'].entries
       .find(entry => entry.workout.id === 'active-workout')?.completed).toBe(true);
     expect(fixture.nativeElement.querySelector('.planned-workout-marker--completed')?.textContent?.trim()).toBe('task_alt');
-    expect(fixture.nativeElement.querySelectorAll('.activity-calendar-day-button')).toHaveLength(42);
+    expect(fixture.nativeElement.querySelectorAll('.activity-calendar-day-button')).toHaveLength(
+      fixture.componentInstance.calendarModel().months[0].days.filter(day => day.inPrimaryPeriod).length);
   });
 
   it('renders twelve months when the URL selects the yearly view', async () => {
@@ -473,7 +476,8 @@ describe('CalendarPageComponent', () => {
     fixture.detectChanges();
 
     expect(fixture.nativeElement.querySelector('[role="alert"]')?.textContent).toContain('could not be loaded');
-    expect(fixture.nativeElement.querySelectorAll('.activity-calendar-day-button')).toHaveLength(42);
+    expect(fixture.nativeElement.querySelectorAll('.activity-calendar-day-button')).toHaveLength(
+      fixture.componentInstance.calendarModel().months[0].days.filter(day => day.inPrimaryPeriod).length);
     expect(fixture.nativeElement.querySelector('.planned-workout-markers')).toBeTruthy();
     expect(fixture.nativeElement.textContent).not.toContain('No completed activities in August 2026');
   });
@@ -513,7 +517,7 @@ describe('CalendarPageComponent', () => {
     fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
     await vi.waitFor(() => expect(fixture.componentInstance.notesByDate().size).toBe(2));
     fixture.detectChanges();
-    expect(fixture.nativeElement.querySelectorAll('.activity-calendar-note-indicator')).toHaveLength(2);
+    expect(fixture.nativeElement.querySelectorAll('.activity-calendar-calm-note')).toHaveLength(2);
     expect(fixture.nativeElement.textContent).toContain('Some notes not shown');
     expect(fixture.nativeElement.querySelector('[role="alert"]')).not.toBeNull();
     expect(fixture.nativeElement.querySelector('.calendar-status-announcement')).toBeNull();
@@ -522,7 +526,8 @@ describe('CalendarPageComponent', () => {
     fixture.componentInstance.retry(); notesService.changes$.next();
     fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
     expect(fixture.nativeElement.textContent).toContain('Morning run');
-    expect(fixture.nativeElement.querySelectorAll('.activity-calendar-day-button')).toHaveLength(42);
+    expect(fixture.nativeElement.querySelectorAll('.activity-calendar-day-button')).toHaveLength(
+      fixture.componentInstance.calendarModel().months[0].days.filter(day => day.inPrimaryPeriod).length);
   });
 
   it('shows the selected month empty state when only an adjacent grid day has an activity', async () => {

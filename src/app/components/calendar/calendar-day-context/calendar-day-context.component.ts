@@ -13,7 +13,7 @@ import { TrainingWorkoutDuplicateService } from '../../../services/training-work
 import { buildCalendarDayHealthSummary, resolveCalendarDaySleepPoint, type CalendarDayHealthSummary } from '../../../helpers/calendar-day-health.helper';
 import type { DashboardSleepTrendPoint } from '../../../helpers/dashboard-sleep-chart.helper';
 import { HealthSleepStageSummaryComponent } from '../../health/health-sleep-stage-summary.component';
-import { resolveActivityCalendarEventLabel, formatActivityCalendarDuration, resolveActivityCalendarEventDurationSeconds, buildActivityCalendarPeriodSummary } from '../../../helpers/activity-calendar.helper';
+import { resolveActivityCalendarEventLabel, formatActivityCalendarDuration, resolveActivityCalendarEventDurationSeconds, buildActivityCalendarPeriodSummary, resolveEventFamilyIdentity } from '../../../helpers/activity-calendar.helper';
 import { buildActivityCalendarFamilyVolumeRows } from '../../../helpers/activity-calendar-volume.helper';
 import { ActivityCalendarVolumeListComponent } from '../activity-calendar-volume-list/activity-calendar-volume-list.component';
 import { TIMELINE_NOTE_ICONS, timelineNoteColor } from '../../../helpers/timeline-note-appearance.helper';
@@ -31,7 +31,7 @@ interface HealthState {
 @Component({
   selector: 'app-calendar-day-context',
   standalone: true,
-  host: { '[class.calendar-day-context--dashboard]': 'dashboardTile()' },
+  host: { '[class.calendar-day-context--dashboard]': 'dashboardTile()', '[class.calendar-day-context--calm-month]': 'calmMonth()' },
   imports: [SharedModule, ActivityCalendarVolumeListComponent, HealthSleepStageSummaryComponent],
   templateUrl: './calendar-day-context.component.html',
   styleUrls: ['./calendar-day-context.component.scss'],
@@ -52,6 +52,7 @@ export class CalendarDayContextComponent {
   readonly showFullDayLink = input(false);
   readonly standaloneDayPage = input(false);
   readonly dashboardTile = input(false);
+  readonly calmMonth = input(false);
   readonly privateHealthEnabled = input(true);
   readonly hideHealth = input(false);
   readonly noteSelected = output<TimelineNote>();
@@ -87,7 +88,7 @@ export class CalendarDayContextComponent {
       : entry.workout.lifecycle === 'skipped' ? 'Skipped' : 'Planned',
     summary: formatManualWorkoutStructure(entry.workout.structure, this.data().unitSettings, this.data().locale),
   })));
-  readonly dashboardDayIsEmpty = computed(() => this.dashboardTile()
+  readonly dashboardDayIsEmpty = computed(() => (this.dashboardTile() || this.calmMonth())
     && this.activityState().status === 'ready'
     && this.activities().length === 0
     && this.notesStatus() === 'ready'
@@ -103,6 +104,7 @@ export class CalendarDayContextComponent {
   readonly activities = computed(() => this.day().events.map((event: EventInterface) => ({
     id: `${event.getID?.() || ''}`,
     name: resolveActivityCalendarEventLabel(event),
+    color: resolveEventFamilyIdentity(event).color,
     duration: (() => {
       const seconds = resolveActivityCalendarEventDurationSeconds(event);
       return seconds === null ? 'Duration unavailable' : formatActivityCalendarDuration(seconds);

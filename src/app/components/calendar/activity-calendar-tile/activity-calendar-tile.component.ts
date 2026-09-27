@@ -298,6 +298,14 @@ export class ActivityCalendarTileComponent {
     this.selectedDateKey.set(localDateKey(next));
   }
 
+  goToToday(): void {
+    const today = new Date();
+    this.today.set(today);
+    this.anchorDate.set(new Date(today.getFullYear(), today.getMonth(), 1));
+    this.followsCurrentMonth.set(true);
+    this.selectedDateKey.set(localDateKey(today));
+  }
+
   openDay(day: ActivityCalendarDayViewModel, revealDay = true): void {
     if (this.dayContextEnabled()) {
       this.selectedDateKey.set(day.dateKey);

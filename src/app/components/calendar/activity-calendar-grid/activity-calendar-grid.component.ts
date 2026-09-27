@@ -23,6 +23,8 @@ export class ActivityCalendarGridComponent implements OnChanges {
   /** Compact dashboard tiles fill their allocated height; scrollable pickers keep natural row sizes. */
   @Input() fillHeight = true;
   @Input() dashboardDayContext = false;
+  /** The full Calendar and dashboard month share the quieter day marker treatment. */
+  @Input() calmMonth = false;
   @Input() hideOutsideDays = false;
   @Input() selectedDateKey: string | null = null;
   // Private notes are opt-in; dashboard/shared calendar instances do not fetch or receive them.
@@ -33,14 +35,22 @@ export class ActivityCalendarGridComponent implements OnChanges {
   private readonly hapticsService = inject(AppHapticsService);
 
   visibleMonths: (ActivityCalendarMonthViewModel & { weekendBackground: string })[] = [];
+  legendFamilies: ActivityCalendarViewModel['summary']['families'] = [];
+  hasVisibleNotes = false;
+  hasVisiblePlans = false;
   isMonthPicker = false;
 
   ngOnChanges(): void {
     this.isMonthPicker = this.compact && !this.fillHeight && this.model?.view === 'month';
     const months = this.model?.months ?? [];
-    // Trim only the rendered compact month; the source model and its query window stay intact.
+    this.legendFamilies = this.calmMonth && this.model?.view === 'month'
+      ? (this.model.summary.families ?? []).slice(0, 4) : [];
+    const visibleDates = months.flatMap(month => month.days.filter(day => day.inPrimaryPeriod).map(day => day.dateKey));
+    this.hasVisibleNotes = this.calmMonth && visibleDates.some(dateKey => this.timelineNotesByDate.has(dateKey));
+    this.hasVisiblePlans = this.calmMonth && visibleDates.some(dateKey => !!this.plannedWorkoutsByDate?.[dateKey]);
+    // Trim only the rendered compact/calm month; the source model and its query window stay intact.
     this.visibleMonths = months.map(month => {
-      const lastDay = this.compact && this.model?.view === 'month' && this.hideOutsideDays
+      const lastDay = (this.compact || this.calmMonth) && this.model?.view === 'month' && this.hideOutsideDays
         ? month.days.reduce((last, day, index) => day.inPrimaryPeriod ? index : last, -1)
         : -1;
       return {

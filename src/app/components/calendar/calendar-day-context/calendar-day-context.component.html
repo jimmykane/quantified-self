@@ -2,11 +2,11 @@
   @if (!compact() && !standaloneDayPage()) {
   <header class="calendar-day-context-header">
     <div>
-      <h2>{{ dashboardTile() ? dashboardTitle() : title() }}</h2>
+      <h2>{{ dashboardTile() || calmMonth() ? dashboardTitle() : title() }}</h2>
     </div>
     @if (showFullDayLink()) {
       <a mat-button appHapticTap [routerLink]="fullDayRoute()" (click)="prepareNavigation()" aria-label="Open selected day page">
-        {{ dashboardTile() ? 'Full day' : 'Open full day' }} <mat-icon iconPositionEnd aria-hidden="true">arrow_forward</mat-icon>
+        {{ dashboardTile() ? 'Full day' : calmMonth() ? 'View day' : 'Open full day' }} <mat-icon iconPositionEnd aria-hidden="true">arrow_forward</mat-icon>
       </a>
     }
   </header>
@@ -134,7 +134,7 @@
   }
 
   @if (!compact() && !standaloneDayPage()) {
-  @if (dashboardTile()) {
+  @if (dashboardTile() || calmMonth()) {
   <mat-menu #dashboardWorkoutMenu="matMenu" class="qs-menu-panel">
     <a mat-menu-item appHapticTap [routerLink]="['/training/plans/new']"
       [queryParams]="{ date: data().day.dateKey }" (click)="prepareNavigation()">Plan workout</a>
@@ -159,6 +159,7 @@
           <h3>Activities <span>{{ day().eventCount }} completed · {{ day().durationLabel }}</span></h3>
           @for (activity of dashboardActivities(); track activity.id) {
             <div class="calendar-day-context-preview-row">
+              <span class="calendar-day-context-activity-dot" [style.background-color]="activity.color" aria-hidden="true"></span>
               @if (activity.route) {
                 <a class="calendar-day-context-navigation-link" appHapticTap
                   [routerLink]="activity.route" (click)="prepareNavigation()">{{ activity.name }}</a>

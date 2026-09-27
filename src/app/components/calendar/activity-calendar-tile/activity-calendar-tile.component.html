@@ -21,6 +21,10 @@
             <mat-icon aria-hidden="true">chevron_left</mat-icon>
           </button>
           <span aria-live="polite">{{ calendarModel().periodLabel }}</span>
+          @if (dayContextEnabled()) {
+            <button mat-icon-button type="button" appHapticTap matTooltip="Go to today" aria-label="Go to today"
+              (click)="goToToday()"><mat-icon aria-hidden="true">today</mat-icon></button>
+          }
           <button mat-icon-button type="button" appHapticTap matTooltip="Next month" aria-label="Next month"
             (click)="navigateMonth(1)">
             <mat-icon aria-hidden="true">chevron_right</mat-icon>
@@ -49,6 +53,7 @@
         [compact]="true"
         [fillHeight]="fillHeight()"
         [dashboardDayContext]="dayContextEnabled()"
+        [calmMonth]="dayContextEnabled()"
         [hideOutsideDays]="true"
         [plannedWorkoutsByDate]="hasTrainingPlanningUIAccess() ? plannedWorkoutsByDate() : null"
         [timelineNotesByDate]="notesByDate()"
@@ -58,6 +63,7 @@
     @if (dayContextEnabled() && selectedDayData(); as dayData) {
       <app-calendar-day-context [data]="dayData" [showFullDayLink]="privateHealthEnabled()" [privateHealthEnabled]="privateHealthEnabled()"
         [dashboardTile]="true"
+        [calmMonth]="true"
         [hideHealth]="selectedDay()?.isToday ?? false"
         (noteSelected)="selectDayNote($event.id)"></app-calendar-day-context>
     }
