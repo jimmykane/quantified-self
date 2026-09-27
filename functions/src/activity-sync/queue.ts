@@ -163,7 +163,8 @@ export async function enqueueActivitySyncQueueItem(
                 };
             }
 
-            if (existingData.resultStatus === 'manual_reconciliation_required') {
+            if (existingData.resultStatus === 'manual_reconciliation_required'
+                || existingData.resultStatus === 'success') {
                 return {
                     enqueued: false,
                     queueItemId,

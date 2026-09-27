@@ -1,7 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ServiceNames } from '@sports-alliance/sports-lib';
+import { gzipSync } from 'zlib';
 import * as logger from 'firebase-functions/logger';
-import { ACTIVITY_SYNC_ROUTE_IDS, ACTIVITY_SYNC_ROUTES } from '../../../shared/activity-sync-routes';
+import { ACTIVITY_SYNC_ROUTE_IDS, ACTIVITY_SYNC_ROUTES, HISTORICAL_MANUAL_ACTIVITY_ROUTE_IDS } from '../../../shared/activity-sync-routes';
 import { ActivitySyncQueueItemInterface } from '../queue/queue-item.interface';
 import { ProviderOperationError } from '../shared/provider-operation-error';
 
@@ -35,6 +36,9 @@ function createMockActivitySyncQueueItemRef(currentQueueItem?: Record<string, un
 const {
   mockTokenGet,
   mockEventGet,
+  mockHistoricalEventGet,
+  mockHistoricalMetaGet,
+  mockFileMetadata,
   mockDownload,
   mockUpdateToProcessed,
   mockDeferQueueItemForPendingDisconnect,
@@ -79,6 +83,9 @@ const {
   return {
     mockTokenGet,
     mockEventGet: vi.fn(),
+    mockHistoricalEventGet: vi.fn(),
+    mockHistoricalMetaGet: vi.fn(),
+    mockFileMetadata: vi.fn(),
     mockDownload,
     mockUpdateToProcessed: vi.fn(),
     mockDeferQueueItemForPendingDisconnect: vi.fn(),
@@ -125,6 +132,10 @@ const {
 
 vi.mock('firebase-admin', () => ({
   firestore: () => ({
+    doc: vi.fn(() => ({
+      get: mockHistoricalEventGet,
+      collection: vi.fn(() => ({ doc: vi.fn(() => ({ get: mockHistoricalMetaGet })) })),
+    })),
     collection: vi.fn((collectionName: string) => ({
       doc: vi.fn(() => ({
         collection: vi.fn((nestedCollectionName: string) => (
@@ -143,6 +154,7 @@ vi.mock('firebase-admin', () => ({
     bucket: vi.fn(() => ({
       file: vi.fn(() => ({
         download: mockDownload,
+        getMetadata: mockFileMetadata,
       })),
     })),
   }),
@@ -438,6 +450,76 @@ describe('activity-sync/process-queue-item', () => {
       exists: true,
       data: () => ({ stats: { 'Activity Types': ['Hiking'] } }),
     });
+    mockHistoricalEventGet.mockResolvedValue({
+      exists: true,
+      data: () => ({ originalFiles: [{ path: baseQueueItem.originalFile.path, generation: '42' }] }),
+    });
+    mockHistoricalMetaGet.mockResolvedValue({ exists: true, data: () => ({ kind: 'manualUpload', version: 1 }) });
+    mockFileMetadata.mockResolvedValue([{ generation: '42', size: '14' }]);
+  });
+
+  it('delivers a retained provider import after its source disconnects', async () => {
+    const fit = Buffer.alloc(14);
+    fit[0] = 12;
+    fit.write('.FIT', 8, 'ascii');
+    mockDownload.mockResolvedValue([fit]);
+    mockGetServiceConnectionMeta.mockImplementation(async (_userID: string, serviceName: ServiceNames) => (
+      serviceName === ServiceNames.GarminAPI ? { connectionState: 'disconnect_pending' } : null
+    ));
+    const queueItem: ActivitySyncQueueItemInterface = {
+      ...baseQueueItem,
+      manual: true,
+      deliveryMode: 'historical',
+      originalFile: { ...baseQueueItem.originalFile, generation: '42' },
+    };
+
+    await processActivitySyncQueueItem(queueItem);
+
+    expect(mockGetServiceConnectionMeta).not.toHaveBeenCalledWith('user-1', ServiceNames.GarminAPI);
+    expect(mockUploadActivityFileToSuunto).toHaveBeenCalledWith('user-1', fit, expect.anything());
+    expect(mockSetActivitySyncSuccessMetadata).toHaveBeenCalled();
+  });
+
+  it('does not upload a historical original with missing Storage size metadata', async () => {
+    const queueItem: ActivitySyncQueueItemInterface = {
+      ...baseQueueItem,
+      manual: true,
+      deliveryMode: 'historical',
+      originalFile: { ...baseQueueItem.originalFile, generation: '42' },
+    };
+    mockFileMetadata.mockResolvedValue([{ generation: '42', size: undefined }]);
+
+    await processActivitySyncQueueItem(queueItem);
+
+    expect(mockDownload).not.toHaveBeenCalled();
+    expect(mockUploadActivityFileToSuunto).not.toHaveBeenCalled();
+  });
+
+  it('expands a retained manual FIT.gz before uploading through the shared adapter', async () => {
+    const fit = Buffer.alloc(14);
+    fit[0] = 12;
+    fit.write('.FIT', 8, 'ascii');
+    const compressed = gzipSync(fit);
+    mockDownload.mockResolvedValue([compressed]);
+    mockFileMetadata.mockResolvedValue([{ generation: '42', size: `${compressed.length}` }]);
+    const path = 'users/user-1/events/event-1/original.fit.gz';
+    mockHistoricalEventGet.mockResolvedValue({
+      exists: true,
+      data: () => ({ originalFiles: [{ path, generation: '42' }] }),
+    });
+    const queueItem: ActivitySyncQueueItemInterface = {
+      ...baseQueueItem,
+      routeId: HISTORICAL_MANUAL_ACTIVITY_ROUTE_IDS.SuuntoApp,
+      sourceServiceName: 'manualUpload',
+      manual: true,
+      deliveryMode: 'historical',
+      originalFile: { path, extension: 'fit.gz', generation: '42' },
+    };
+
+    await processActivitySyncQueueItem(queueItem);
+
+    expect(mockUploadActivityFileToSuunto).toHaveBeenCalledWith('user-1', fit, expect.anything());
+    expect(mockSetActivitySyncSuccessMetadata).toHaveBeenCalled();
   });
 
   it('persists provider-echo fingerprints before starting a new destination upload', async () => {

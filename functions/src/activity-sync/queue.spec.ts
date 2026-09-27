@@ -676,4 +676,26 @@ describe('activity-sync/queue', () => {
     expect(mockTransactionSet).not.toHaveBeenCalled();
     expect(mockEnqueueActivitySyncTask).not.toHaveBeenCalled();
   });
+
+  it('does not re-enqueue a successful provider upload when success metadata is missing', async () => {
+    mockTransactionGet.mockResolvedValueOnce({
+      exists: true,
+      data: () => ({ processed: true, resultStatus: 'success' }),
+    });
+
+    const result = await enqueueActivitySyncQueueItem({
+      routeId: ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_SuuntoApp,
+      sourceServiceName: ServiceNames.GarminAPI,
+      destinationServiceName: ServiceNames.SuuntoApp,
+      userID: 'user-1',
+      eventID: 'event-1',
+      originalFile: { path: 'p.fit', extension: 'fit' },
+      manual: true,
+      deliveryMode: 'historical',
+    });
+
+    expect(result).toMatchObject({ enqueued: false, reason: 'already_processed' });
+    expect(mockTransactionSet).not.toHaveBeenCalled();
+    expect(mockEnqueueActivitySyncTask).not.toHaveBeenCalled();
+  });
 });

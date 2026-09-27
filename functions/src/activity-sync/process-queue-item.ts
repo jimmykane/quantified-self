@@ -441,12 +441,15 @@ async function downloadOriginalFile(queueItem: ActivitySyncQueueItemInterface): 
     const file = bucket.file(originalPath);
     if (queueItem.deliveryMode === 'historical') {
         const [metadata] = await file.getMetadata();
+        const size = Number(metadata.size);
         if (!queueItem.originalFile.generation || `${metadata.generation || ''}` !== queueItem.originalFile.generation
-            || Number(metadata.size) > HISTORICAL_FIT_MAX_BYTES) {
+            || !Number.isFinite(size) || size <= 0 || size > HISTORICAL_FIT_MAX_BYTES) {
             throw new Error('Historical activity original changed or exceeds the send limit.');
         }
     }
-    const [buffer] = await file.download();
+    const [buffer] = await (queueItem.deliveryMode === 'historical'
+        ? bucket.file(originalPath, { generation: queueItem.originalFile.generation })
+        : file).download();
     if (queueItem.deliveryMode === 'historical') {
         const [metadata] = await file.getMetadata();
         if (`${metadata.generation || ''}` !== queueItem.originalFile.generation

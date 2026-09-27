@@ -10,6 +10,9 @@ const { queryGet, fileMetadata, fileDownload, queueGet, enqueue, queuedMetadata,
   destinationStatus: vi.fn(),
 }));
 
+vi.mock('firebase-functions/logger', () => ({ error: vi.fn() }));
+vi.mock('firebase-admin/firestore', () => ({ FieldPath: { documentId: () => '__name__' } }));
+
 vi.mock('firebase-admin', () => {
   const query = {
     where: vi.fn(), orderBy: vi.fn(), limit: vi.fn(), startAfter: vi.fn(), get: queryGet,
@@ -18,11 +21,11 @@ vi.mock('firebase-admin', () => {
   query.orderBy.mockReturnValue(query);
   query.limit.mockReturnValue(query);
   query.startAfter.mockReturnValue(query);
-  const firestore = Object.assign(() => ({
+  const firestore = () => ({
     collection: (name: string) => name === 'users'
       ? { doc: () => ({ collection: () => query }) }
       : { doc: () => ({ get: queueGet }) },
-  }), { FieldPath: { documentId: () => '__name__' } });
+  });
   return {
     firestore,
     storage: () => ({ bucket: () => ({ file: () => ({ getMetadata: fileMetadata, download: fileDownload }) }) }),
@@ -106,6 +109,25 @@ describe('historical activity send pages', () => {
     expect(queuedMetadata).toHaveBeenCalledOnce();
   });
 
+  it('reports durable queue admission even when its status metadata write fails', async () => {
+    queuedMetadata.mockRejectedValueOnce(new Error('metadata unavailable'));
+
+    const result = await runHistoricalSendPage('user-1', { ...request, action: 'send' });
+
+    expect(result.queued).toBe(1);
+    expect(result.failedCount).toBe(0);
+  });
+
+  it('does not preview a successfully delivered queue item as eligible when metadata is missing', async () => {
+    queueGet.mockResolvedValue({ exists: true, data: () => ({ processed: true, resultStatus: 'success' }) });
+
+    const result = await runHistoricalSendPage('user-1', request);
+
+    expect(result.eligibleBySource[source]).toBeUndefined();
+    expect(result.skippedByReason.already_sent).toBe(1);
+    expect(fileMetadata).not.toHaveBeenCalled();
+  });
+
   it('rejects invalid source selection and a disconnected destination before scanning', async () => {
     await expect(runHistoricalSendPage('user-1', { ...request, sources: [] })).rejects.toMatchObject({ code: 'invalid-argument' });
     expect(queryGet).not.toHaveBeenCalled();
@@ -126,6 +148,7 @@ describe('historical activity send pages', () => {
     const preview = await runHistoricalSendPage('user-1', manualRequest);
     expect(preview.eligibleBySource.manualUpload).toBe(1);
     expect(enqueue).not.toHaveBeenCalled();
+    expect(fileDownload).not.toHaveBeenCalled();
 
     queryGet.mockResolvedValueOnce({ size: 1, docs: [{
       ...manualEvent,
@@ -152,5 +175,15 @@ describe('historical activity send pages', () => {
     await expect(runHistoricalSendPage('user-1', {
       ...request, sources: ['manualUpload'], cursor: first.nextCursor!,
     })).rejects.toMatchObject({ code: 'invalid-argument' });
+  });
+
+  it('reports a transient original-file lookup failure instead of silently skipping it', async () => {
+    fileMetadata.mockRejectedValueOnce(Object.assign(new Error('storage unavailable'), { code: 503 }));
+
+    const result = await runHistoricalSendPage('user-1', request);
+
+    expect(result.failedCount).toBe(1);
+    expect(result.skippedByReason.processing_failed).toBe(1);
+    expect(result.skippedByReason.missing_invalid_or_oversized_original).toBeUndefined();
   });
 });

@@ -85,6 +85,7 @@ vi.mock('../shared/user-deletion-guard', () => {
 });
 
 import {
+  setActivitySyncQueuedMetadata,
   setActivitySyncProcessingMetadata,
   setActivitySyncRequeuedMetadata,
   setActivitySyncSkippedMetadata,
@@ -170,6 +171,24 @@ describe('activity-sync/metadata', () => {
     }), { merge: true });
   });
 
+  it('does not replace success with late queue or worker metadata writes', async () => {
+    mockTransactionGet.mockResolvedValue({ exists: true, data: () => ({ status: 'success' }) });
+    const params = {
+      routeId: ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_SuuntoApp,
+      userID: 'user-1', eventID: 'event-1',
+      sourceServiceName: ServiceNames.GarminAPI,
+      destinationServiceName: ServiceNames.SuuntoApp,
+      manual: true,
+    };
+
+    await setActivitySyncQueuedMetadata(params);
+    await setActivitySyncRequeuedMetadata(params);
+    await setActivitySyncProcessingMetadata(params);
+    await setActivitySyncSkippedMetadata({ ...params, skippedReason: 'stale_work' });
+
+    expect(mockTransactionSet).not.toHaveBeenCalled();
+  });
+
   it('does not write metadata when the user is missing or deletion is active', async () => {
     mockGetUserDeletionGuardStateInTransaction.mockResolvedValueOnce({
       userExists: false,
@@ -211,6 +230,26 @@ describe('activity-sync/metadata', () => {
       exists: true,
       data: () => ({ processed: true, resultStatus: 'success' }),
     });
+
+    await expect(setActivitySyncRetryingMetadataIfQueueItemDeferred({
+      routeId: ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_WahooAPI,
+      userID: 'user-1',
+      eventID: 'event-1',
+      sourceServiceName: ServiceNames.GarminAPI,
+      destinationServiceName: ServiceNames.WahooAPI,
+      manual: false,
+      queueItemRef: {} as never,
+      deferredReason: 'service_reconnect_required',
+      error: { code: 'unauthenticated', message: 'Reconnect Wahoo.', normalizedMessage: 'Reconnect Wahoo.' },
+    })).resolves.toBe(false);
+
+    expect(mockTransactionSet).not.toHaveBeenCalled();
+  });
+
+  it('does not overwrite success metadata while the queue item still appears reconnect-deferred', async () => {
+    mockTransactionGet
+      .mockResolvedValueOnce({ exists: true, data: () => ({ deferredReason: 'service_reconnect_required' }) })
+      .mockResolvedValueOnce({ exists: true, data: () => ({ status: 'success' }) });
 
     await expect(setActivitySyncRetryingMetadataIfQueueItemDeferred({
       routeId: ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_WahooAPI,

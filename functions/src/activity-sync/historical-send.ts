@@ -1,6 +1,8 @@
 import * as admin from 'firebase-admin';
+import { FieldPath } from 'firebase-admin/firestore';
 import { createHash } from 'crypto';
 import { HttpsError } from 'firebase-functions/v2/https';
+import * as logger from 'firebase-functions/logger';
 import { ServiceNames } from '@sports-alliance/sports-lib';
 import { HistoricalSendRequest, HistoricalSendResponse } from '../../../shared/historical-activity-send';
 import {
@@ -17,7 +19,10 @@ import { getDestinationConnectionStatus } from './process-queue-item';
 import { ACTIVITY_SYNC_QUEUE_COLLECTION_NAME } from './constants';
 import {
     HISTORICAL_FIT_MAX_BYTES,
+    HistoricalOriginalIneligibleError,
     HistoricalOriginalFile,
+    inspectHistoricalManualOriginal,
+    isStorageObjectMissing,
     isOwnerOriginalPath,
     MANUAL_UPLOAD_ORIGIN_DOC_ID,
     matchesLegacyManualUploadID,
@@ -123,8 +128,9 @@ async function checkOriginal(
         if (!Number.isFinite(size) || size <= 0 || size > HISTORICAL_FIT_MAX_BYTES
             || !generation || (original.generation && generation !== original.generation)) return null;
         return { ...original, generation };
-    } catch {
-        return null;
+    } catch (error) {
+        if (isStorageObjectMissing(error)) return null;
+        throw error;
     }
 }
 
@@ -134,8 +140,9 @@ async function eligibleOriginal(params: {
     event: Record<string, unknown>;
     source: ActivityDeliverySource;
     eventRef: admin.firestore.DocumentReference;
+    action: 'preview' | 'send';
 }): Promise<{ original?: HistoricalOriginalFile; reason?: string; sourceActivityID?: string }> {
-    const { userID, eventID, event, source, eventRef } = params;
+    const { userID, eventID, event, source, eventRef, action } = params;
     if (event.mergeType || event.isMerge === true || event.toolSource) return { reason: 'merged_or_derived_event' };
     const files = originalFiles(event);
     if (!files.length) return { reason: 'missing_original_files' };
@@ -147,16 +154,24 @@ async function eligibleOriginal(params: {
         const marker = await eventRef.collection('metaData').doc(MANUAL_UPLOAD_ORIGIN_DOC_ID).get();
         const trustedMarker = marker.data()?.kind === 'manualUpload' && marker.data()?.version === 1;
         if (!trustedMarker && !/^[a-f0-9]{64}$/.test(eventID)) return { reason: 'not_manual_upload' };
-        let loaded;
+        let generation: string;
         try {
-            loaded = await readHistoricalManualFit(userID, eventID, files[0]);
-        } catch {
-            return { reason: 'missing_invalid_or_oversized_original' };
+            if (trustedMarker && action === 'preview') {
+                generation = (await inspectHistoricalManualOriginal(userID, eventID, files[0])).generation;
+            } else {
+                const loaded = await readHistoricalManualFit(userID, eventID, files[0]);
+                if (!trustedMarker && !matchesLegacyManualUploadID(userID, eventID, loaded.fit)) {
+                    return { reason: 'not_manual_upload' };
+                }
+                generation = loaded.generation;
+            }
+        } catch (error) {
+            if (error instanceof HistoricalOriginalIneligibleError) {
+                return { reason: 'missing_invalid_or_oversized_original' };
+            }
+            throw error;
         }
-        if (!trustedMarker && !matchesLegacyManualUploadID(userID, eventID, loaded.fit)) {
-            return { reason: 'not_manual_upload' };
-        }
-        return { original: { ...files[0], generation: loaded.generation } };
+        return { original: { ...files[0], generation } };
     }
 
     const sourceMeta = await eventRef.collection('metaData').doc(source).get();
@@ -191,7 +206,10 @@ async function processSource(params: {
     if (existingQueue.data()?.resultStatus === 'manual_reconciliation_required') {
         return { eligible: false, queued: false, reason: 'manual_reconciliation_required' };
     }
-    const result = await eligibleOriginal({ userID, eventID, event, source: selected.source, eventRef: eventSnapshot.ref });
+    if (existingQueue.data()?.resultStatus === 'success') {
+        return { eligible: false, queued: false, reason: 'already_sent' };
+    }
+    const result = await eligibleOriginal({ userID, eventID, event, source: selected.source, eventRef: eventSnapshot.ref, action });
     if (!result.original) return { eligible: false, queued: false, reason: result.reason || 'unsupported_original_file' };
     if (action === 'preview') return { eligible: true, queued: false };
 
@@ -218,8 +236,14 @@ async function processSource(params: {
         destinationServiceName: getDestinationForRoute(selected.routeId),
         manual: true,
     };
-    if (queued.redispatched) await setActivitySyncRequeuedMetadata(metadataParams);
-    else await setActivitySyncQueuedMetadata(metadataParams);
+    try {
+        if (queued.redispatched) await setActivitySyncRequeuedMetadata(metadataParams);
+        else await setActivitySyncQueuedMetadata(metadataParams);
+    } catch {
+        // Queue admission is already durable. The worker can write its own
+        // processing state, and retrying this page remains idempotent.
+        logger.error('[HistoricalActivitySend] Queue admission metadata write failed.', { routeId: selected.routeId });
+    }
     return { eligible: true, queued: true };
 }
 
@@ -246,7 +270,7 @@ export async function runHistoricalSendPage(userID: string, request: HistoricalS
         .where('startDate', '>=', startMs)
         .where('startDate', '<=', endMs)
         .orderBy('startDate', 'asc')
-        .orderBy(admin.firestore.FieldPath.documentId())
+        .orderBy(FieldPath.documentId())
         .limit(PAGE_SIZE);
     if (request.cursor) query = query.startAfter(request.cursor.lastStartDate, request.cursor.lastEventID);
     const page = await query.get();

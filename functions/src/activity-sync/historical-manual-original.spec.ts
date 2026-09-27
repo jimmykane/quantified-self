@@ -13,7 +13,7 @@ vi.mock('firebase-admin', () => ({
   }),
 }));
 
-import { isOwnerOriginalPath, matchesLegacyManualUploadID, readHistoricalManualFit } from './historical-manual-original';
+import { inspectHistoricalManualOriginal, isOwnerOriginalPath, matchesLegacyManualUploadID, readHistoricalManualFit } from './historical-manual-original';
 
 function fitPayload(): Buffer {
   const fit = Buffer.alloc(14);
@@ -50,6 +50,13 @@ describe('historical manual original', () => {
     })).resolves.toEqual({ fit, generation: '42' });
   });
 
+  it('checks trusted upload metadata without downloading the original', async () => {
+    await expect(inspectHistoricalManualOriginal('user-1', 'event-1', {
+      path: 'users/user-1/events/event-1/original.fit', generation: '42',
+    })).resolves.toEqual({ generation: '42', size: 14 });
+    expect(download).not.toHaveBeenCalled();
+  });
+
   it('rejects a changed generation and oversized original before delivery', async () => {
     await expect(readHistoricalManualFit('user-1', 'event-1', {
       path: 'users/user-1/events/event-1/original.fit', generation: '41',
@@ -59,5 +66,12 @@ describe('historical manual original', () => {
       path: 'users/user-1/events/event-1/original.fit', generation: '42',
     })).rejects.toThrow('limit');
     expect(download).not.toHaveBeenCalled();
+  });
+
+  it('keeps transient Storage failures distinct from missing files', async () => {
+    getMetadata.mockRejectedValueOnce(Object.assign(new Error('unavailable'), { code: 503 }));
+    await expect(inspectHistoricalManualOriginal('user-1', 'event-1', {
+      path: 'users/user-1/events/event-1/original.fit', generation: '42',
+    })).rejects.toThrow('unavailable');
   });
 });

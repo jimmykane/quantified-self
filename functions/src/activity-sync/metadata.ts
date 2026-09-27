@@ -106,6 +106,13 @@ async function setActivitySyncMetadata(
             return;
         }
 
+        // Queue admission and Cloud Task processing are independent. Once a
+        // destination has accepted an activity, no late queue/worker write may
+        // make that route eligible for another provider upload.
+        if (status !== 'success' && (await transaction.get(ref)).data()?.status === 'success') {
+            return;
+        }
+
         transaction.set(ref, payload, { merge: true });
     });
 }
@@ -251,6 +258,9 @@ export async function setActivitySyncRetryingMetadataIfQueueItemDeferred(
         const queueSnapshot = await transaction.get(params.queueItemRef);
         const queueData = queueSnapshot.data() as Record<string, unknown> | undefined;
         if (!queueSnapshot.exists || queueData?.deferredReason !== params.deferredReason) {
+            return false;
+        }
+        if ((await transaction.get(metadataRef)).data()?.status === 'success') {
             return false;
         }
 
