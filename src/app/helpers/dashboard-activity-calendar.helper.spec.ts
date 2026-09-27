@@ -7,7 +7,7 @@ describe('dashboard-activity-calendar helper', () => {
     const tile = buildDashboardActivityCalendarTile(3);
 
     expect(tile).toMatchObject({
-      name: 'Activity calendar',
+      name: 'Calendar',
       type: TileTypes.Chart,
       order: 3,
       size: { columns: 4, rows: 1 },

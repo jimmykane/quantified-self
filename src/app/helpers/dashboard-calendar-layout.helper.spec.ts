@@ -9,7 +9,7 @@ describe('calendar day-context layout migration', () => {
     const other = { order: 1, size: { columns: 1, rows: 1 }, name: 'Other' };
     const result = migrateDashboardCalendarDayContextLayout({ tiles: [other, calendar] } as AppDashboardSettingsInterface)!;
     expect(result.tiles[0]).toBe(other);
-    expect(result.tiles[1]).toMatchObject({ order: 2, name: 'Activity calendar', size: { columns: 4, rows: 1 } });
+    expect(result.tiles[1]).toMatchObject({ order: 2, name: 'Calendar', size: { columns: 4, rows: 1 } });
     expect(calendar.size).toEqual({ columns: 1, rows: 1 });
   });
 

@@ -1089,7 +1089,7 @@ describe('DashboardTileConfiguration', () => {
     dialogMock.open.mockReturnValueOnce({ afterClosed: () => of(true) });
     await component.resetToDefault();
     expect(dialogMock.open).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ data: expect.objectContaining({ title: 'Reset to starter dashboard?' }) }));
-    expect(dialogData.user.settings.dashboardSettings.tiles.map(tile => tile.name)).toEqual(['Weekly Training Time', 'Activity calendar']);
+    expect(dialogData.user.settings.dashboardSettings.tiles.map(tile => tile.name)).toEqual(['Weekly Training Time', 'Calendar']);
     expect(dialogData.user.settings.dashboardSettings.showTodaySummary).toBe(true);
     expect(eventServiceMock.getEventsBy).not.toHaveBeenCalled();
     expect(sleepServiceMock.watchForDashboard).not.toHaveBeenCalled();
