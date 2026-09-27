@@ -1,7 +1,8 @@
 import * as admin from 'firebase-admin';
 import * as logger from 'firebase-functions/logger';
 import { ServiceNames } from '@sports-alliance/sports-lib';
-import { ActivitySyncRouteId } from '../../../shared/activity-sync-routes';
+import { ActivityDeliveryRouteId, ActivityDeliverySource } from '../../../shared/activity-sync-routes';
+import { getActivitySyncMetadataDocId } from './metadata';
 import { enqueueActivitySyncTask, generateIDFromParts } from '../utils';
 import { ACTIVITY_SYNC_QUEUE_COLLECTION_NAME } from './constants';
 import { ActivitySyncOriginalFileMetadata, ActivitySyncQueueItemInterface } from '../queue/queue-item.interface';
@@ -21,14 +22,15 @@ import {
 } from '../queue/cleanup-tombstone';
 
 export interface EnqueueActivitySyncQueueItemParams {
-    routeId: ActivitySyncRouteId;
-    sourceServiceName: ServiceNames;
+    routeId: ActivityDeliveryRouteId;
+    sourceServiceName: ActivityDeliverySource;
     destinationServiceName: ServiceNames;
     userID: string;
     eventID: string;
     sourceActivityID?: string;
     originalFile: ActivitySyncOriginalFileMetadata;
     manual: boolean;
+    deliveryMode?: 'automatic' | 'historical';
 }
 
 export interface EnqueueActivitySyncQueueItemResult {
@@ -113,7 +115,7 @@ async function markActivitySyncQueueItemDispatchedIfUserActive(
 }
 
 export async function buildActivitySyncQueueItemId(
-    routeId: ActivitySyncRouteId,
+    routeId: ActivityDeliveryRouteId,
     userID: string,
     eventID: string,
 ): Promise<string> {
@@ -126,8 +128,10 @@ export async function enqueueActivitySyncQueueItem(
     const queueItemId = await buildActivitySyncQueueItemId(params.routeId, params.userID, params.eventID);
     const db = admin.firestore();
     const queueDocRef = db.collection(ACTIVITY_SYNC_QUEUE_COLLECTION_NAME).doc(queueItemId);
+    const metadataRef = db.doc(`users/${params.userID}/events/${params.eventID}/metaData/${getActivitySyncMetadataDocId(params.routeId)}`);
     const decision = await db.runTransaction(async (transaction): Promise<QueueInsertDecision> => {
         const existingSnapshot = await transaction.get(queueDocRef);
+        const metadataSnapshot = await transaction.get(metadataRef);
         let deletionGuard;
         try {
             deletionGuard = await getUserDeletionGuardStateInTransaction(db, transaction, params.userID);
@@ -141,6 +145,10 @@ export async function enqueueActivitySyncQueueItem(
                 queueItemId,
                 reason: 'user_deleted_or_deleting',
             };
+        }
+
+        if (metadataSnapshot.data()?.status === 'success') {
+            return { enqueued: false, queueItemId, reason: 'already_processed' };
         }
 
         if (existingSnapshot.exists) {
@@ -190,6 +198,7 @@ export async function enqueueActivitySyncQueueItem(
             sourceActivityID: params.sourceActivityID || '',
             originalFile: params.originalFile,
             manual: params.manual === true,
+            ...(params.deliveryMode ? { deliveryMode: params.deliveryMode } : {}),
             outboundFingerprintID: null,
         };
 

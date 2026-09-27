@@ -2,7 +2,7 @@ import * as admin from 'firebase-admin';
 import { FieldValue } from 'firebase-admin/firestore';
 import * as logger from 'firebase-functions/logger';
 import { ServiceNames } from '@sports-alliance/sports-lib';
-import { ActivitySyncRouteId } from '../../../shared/activity-sync-routes';
+import { ActivityDeliveryRouteId, ActivityDeliverySource } from '../../../shared/activity-sync-routes';
 import { ACTIVITY_SYNC_METADATA_DOC_PREFIX } from './constants';
 import { getUserDeletionGuardStateInTransaction, UserDeletionGuardReadError } from '../shared/user-deletion-guard';
 
@@ -66,7 +66,7 @@ export function toActivitySyncMetadataError(error: unknown): ActivitySyncMetadat
     };
 }
 
-export function getActivitySyncMetadataDocId(routeId: ActivitySyncRouteId): string {
+export function getActivitySyncMetadataDocId(routeId: ActivityDeliveryRouteId): string {
     return `${ACTIVITY_SYNC_METADATA_DOC_PREFIX}${routeId}`;
 }
 
@@ -74,7 +74,7 @@ function getActivitySyncMetadataRef(
     db: admin.firestore.Firestore,
     userID: string,
     eventID: string,
-    routeId: ActivitySyncRouteId,
+    routeId: ActivityDeliveryRouteId,
 ) {
     return db
         .collection('users')
@@ -111,10 +111,10 @@ async function setActivitySyncMetadata(
 }
 
 interface BaseMetadataParams {
-    routeId: ActivitySyncRouteId;
+    routeId: ActivityDeliveryRouteId;
     userID: string;
     eventID: string;
-    sourceServiceName: ServiceNames;
+    sourceServiceName: ActivityDeliverySource;
     destinationServiceName: ServiceNames;
     manual: boolean;
 }

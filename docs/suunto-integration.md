@@ -6,6 +6,8 @@ Suunto 24/7 Health is available production-wide for active connected Suunto acco
 
 The separate Suunto activity-history picker defaults to the latest two calendar years through today. Users can select a longer or shorter range before submitting; this default does not change the Sleep and 24/7 Health history range policies below.
 
+The Suunto destination card in Services also offers **Send past activities**. Its paged server preview/send path can deliver retained Garmin, COROS, or Wahoo FIT imports and manual FIT/FIT.gz uploads using the shared activity-sync queue. The source account may be disconnected after import; the Suunto destination must remain connected. The server verifies manual-upload origin and saved file generation before queueing, and the worker repeats the check before upload. This one-time action leaves automatic routes off. See [outbound activity delivery](provider-integration-guide.md#outbound-activity-delivery) for queue and retry behavior.
+
 ## Provider contract
 
 Suunto exposes three relevant pull resources. Every request is authenticated with the connected user's OAuth access token and the Suunto subscription key. Suunto documents the stable account identity in the access token JWT's custom `user` claim; OAuth exchange and refresh handling normalize that claim before credential persistence. A legacy top-level `user` response field is accepted only when it agrees with the claim, and any mismatch with the expected retained account is rejected.

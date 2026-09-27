@@ -31,7 +31,9 @@ const {
     set: typeof mockTransactionSet;
     update: typeof mockTransactionUpdate;
   }) => unknown) => runner({
-    get: mockTransactionGet,
+    get: ((ref: { metadata?: boolean }) => ref.metadata
+      ? Promise.resolve({ exists: false, data: () => undefined })
+      : mockTransactionGet(ref)) as typeof mockTransactionGet,
     set: mockTransactionSet,
     update: mockTransactionUpdate,
   }));
@@ -67,6 +69,7 @@ const {
 vi.mock('firebase-admin', () => ({
   firestore: () => ({
     collection: mockCollection,
+    doc: () => ({ metadata: true }),
     runTransaction: mockRunTransaction,
     recursiveDelete: mockRecursiveDelete,
   }),
@@ -129,7 +132,9 @@ describe('activity-sync/queue', () => {
       set: typeof mockTransactionSet;
       update: typeof mockTransactionUpdate;
     }) => unknown) => runner({
-      get: mockTransactionGet,
+      get: ((ref: { metadata?: boolean }) => ref.metadata
+        ? Promise.resolve({ exists: false, data: () => undefined })
+        : mockTransactionGet(ref)) as typeof mockTransactionGet,
       set: mockTransactionSet,
       update: mockTransactionUpdate,
     }));

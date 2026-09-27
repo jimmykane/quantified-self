@@ -7,7 +7,6 @@ import { AppFileService } from '../../../services/app.file.service';
 import { AppEventService } from '../../../services/app.event.service';
 import { AppAuthService } from '../../../authentication/app.auth.service';
 import { AppUserService } from '../../../services/app.user.service';
-import { ActivitySyncBackfillSummary } from '../../../services/app.user.service';
 import { AppWindowService } from '../../../services/app.window.service';
 import { AppDeepLinkService } from '../../../services/app.deeplink.service';
 import { ServicesAbstractComponentDirective } from '../services-abstract-component.directive';
@@ -50,10 +49,6 @@ export class ServicesGarminComponent extends ServicesAbstractComponentDirective 
 
   public readonly garminToSuuntoRouteID = ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_SuuntoApp;
   public isSavingSyncRoute = false;
-  public isBackfillingSync = false;
-  public backfillStartDate: Date = new Date(Date.now() - (30 * 24 * 60 * 60 * 1000));
-  public backfillEndDate: Date = new Date();
-  public backfillSummary: ActivitySyncBackfillSummary | null = null;
   public activeActivitySyncDestination: 'suunto' | 'wahoo' | 'coros' = 'suunto';
   @Input() initialActivitySyncDestination: 'suunto' | 'wahoo' | 'coros' | null = null;
 
@@ -306,10 +301,6 @@ export class ServicesGarminComponent extends ServicesAbstractComponentDirective 
     return requiredPermissions.filter(permission => !permissionSet.has(permission));
   }
 
-  get isBackfillDateRangeInvalid(): boolean {
-    return this.backfillStartDate > this.backfillEndDate;
-  }
-
   async onGarminToSuuntoRouteToggle(enabled: boolean): Promise<void> {
     if (!this.user || this.isSavingSyncRoute) {
       return;
@@ -346,55 +337,4 @@ export class ServicesGarminComponent extends ServicesAbstractComponentDirective 
     }
   }
 
-  async runGarminToSuuntoBackfill(event: Event): Promise<void> {
-    event.preventDefault();
-
-    if (!this.user || this.isBackfillingSync) {
-      return;
-    }
-
-    if (!this.isGarminToSuuntoRouteAvailableForUser) {
-      this.snackBar.open('Activity sync is not available for this account.', undefined, { duration: 4000 });
-      return;
-    }
-
-    if (this.isSuuntoReconnectRequired) {
-      this.snackBar.open('Reconnect Suunto before syncing past Garmin activities.', undefined, { duration: 4000 });
-      return;
-    }
-
-    if (!this.isConnectedToService() || !this.isSuuntoConnected) {
-      this.snackBar.open('Connect Garmin and Suunto before syncing past activities.', undefined, { duration: 4000 });
-      return;
-    }
-
-    if (this.isBackfillDateRangeInvalid) {
-      this.snackBar.open('The start date must be before the end date.', undefined, { duration: 3500 });
-      return;
-    }
-
-    this.isBackfillingSync = true;
-    try {
-      const summary = await this.userService.backfillActivitySyncRouteForCurrentUser(
-        ServiceNames.GarminAPI,
-        ServiceNames.SuuntoApp,
-        this.backfillStartDate,
-        this.backfillEndDate,
-      );
-
-      this.backfillSummary = summary;
-      this.analyticsService.logActivitySyncRouteBackfill(this.garminToSuuntoRouteID, {
-        scanned: summary.scanned,
-        queued: summary.queued,
-        failedCount: summary.failedCount,
-      });
-      const failureSuffix = summary.failedCount > 0 ? ` Could not schedule: ${summary.failedCount}.` : '';
-      this.snackBar.open(`Activity sync started for ${summary.queued} ${summary.queued === 1 ? 'activity' : 'activities'}.${failureSuffix}`, undefined, { duration: 4000 });
-    } catch (error: any) {
-      this.logger.error(error);
-      this.snackBar.open(`Could not start activity sync: ${error?.message || 'Unknown error'}`, undefined, { duration: 5000 });
-    } finally {
-      this.isBackfillingSync = false;
-    }
-  }
 }

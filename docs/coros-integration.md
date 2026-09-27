@@ -12,7 +12,7 @@ This is the COROS-specific architecture and release record. For shared provider 
 - Recent COROS activity-history import with the provider's full rolling three-month limit selected by default; users can choose a shorter range before submitting.
 - Daily Health and sleep polling plus a user-requested three-month replay in 30-day windows, subject to the existing cooldown. It stores steps, the native COROS calorie value, resting/sleep heart rate, overnight HRV, and bounded detailed HRV/interval-heart-rate samples when supplied. COROS does not supply sleep stages through this integration.
 - Direct FIT activity delivery with asynchronous provider status polling.
-- Automatic and date-range FIT activity delivery from Garmin, Suunto, or Wahoo to COROS through the shared activity-sync queue.
+- Automatic FIT activity delivery from Garmin, Suunto, or Wahoo, plus one-time paged preview/send of retained FIT imports and manual FIT/FIT.gz uploads to COROS through the shared activity-sync queue.
 - Existing COROS-to-Suunto and COROS-to-Wahoo automatic/date-range activity routes.
 - Direct GPX/FIT route delivery from COROS Services without creating a saved Quantified Self route.
 - Saved-route delivery from the Routes row action, selected-row bulk toolbar, and route detail.
@@ -101,7 +101,7 @@ After COROS issues an upload ID, status retries resume that operation and do not
 
 ### Shared automatic and backfill delivery
 
-The following FIT-only routes use `shared/activity-sync-routes.ts`, the common date-range backfill callable, and the same COROS upload/status helpers:
+The following FIT-only routes use `shared/activity-sync-routes.ts`, the common historical send callable, and the same COROS upload/status helpers:
 
 | Source | Destination |
 | --- | --- |
@@ -110,6 +110,8 @@ The following FIT-only routes use `shared/activity-sync-routes.ts`, the common d
 | Wahoo | COROS |
 | COROS | Suunto |
 | COROS | Wahoo |
+
+The destination card in Services offers a server-owned preview/send scan over a selected date range and sources, including manual uploads. This one-time path does not enable automatic routes or require a saved import's source connection to remain active. It verifies upload provenance and original file generation before queueing and again before delivery; a changed or unavailable file is skipped. The older single-source backfill request remains compatible.
 
 The worker downloads the retained original FIT, verifies entitlement, both connection states, the active destination account, pending disconnect, and account deletion, then persists resume state before provider continuation. It never derives a replacement activity from event statistics.
 

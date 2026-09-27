@@ -1179,25 +1179,6 @@ describe('ServicesGarminComponent', () => {
             );
         });
 
-        it('should allow manual catch-up when auto-sync toggle is disabled', () => {
-            component.hasProAccess = true;
-            component.user = { uid: ACTIVITY_SYNC_ALLOWLISTED_UID, settings: {} } as any;
-            component.serviceTokens = [{ accessToken: 'garmin-token', userID: 'garmin-user', permissions: [] }] as any;
-            component.suuntoConnectionView = buildSuuntoServiceConnectionViewModel({ hasToken: true, serviceMeta: null });
-            component.isBackfillingSync = false;
-            component.backfillStartDate = new Date('2026-01-01T00:00:00.000Z');
-            component.backfillEndDate = new Date('2026-01-31T00:00:00.000Z');
-
-            fixture.detectChanges();
-
-            const queueButton = Array.from(fixture.nativeElement.querySelectorAll('button'))
-                .find((button: HTMLButtonElement) => (button.textContent || '').includes('Schedule activities')) as HTMLButtonElement | undefined;
-
-            expect(component.isGarminToSuuntoRouteEnabled).toBe(false);
-            expect(queueButton).toBeTruthy();
-            expect(queueButton?.disabled).toBe(false);
-        });
-
         it('should show reconnect-required copy instead of route controls when Suunto requires reconnect', () => {
             component.hasProAccess = true;
             component.user = { uid: ACTIVITY_SYNC_ALLOWLISTED_UID, settings: {} } as any;
@@ -1219,73 +1200,6 @@ describe('ServicesGarminComponent', () => {
             fixture.detectChanges();
 
             expect(fixture.nativeElement.textContent).toContain('Send Garmin activities to Suunto');
-        });
-
-        it('should render failed backfill events in the summary', () => {
-            component.hasProAccess = true;
-            component.user = { uid: ACTIVITY_SYNC_ALLOWLISTED_UID, settings: {} } as any;
-            component.serviceTokens = [{ accessToken: 'garmin-token', userID: 'garmin-user', permissions: [] }] as any;
-            component.suuntoConnectionView = buildSuuntoServiceConnectionViewModel({ hasToken: true, serviceMeta: null });
-            component.backfillSummary = {
-                scanned: 10,
-                queued: 8,
-                skippedByReason: {},
-                failedCount: 1,
-                failedEvents: [
-                    {
-                        eventID: 'event-123',
-                        reason: 'event_processing_failed',
-                        message: 'queue enqueue failed',
-                    },
-                ],
-            };
-
-            fixture.detectChanges();
-
-            const content = fixture.nativeElement.textContent;
-            expect(content).toContain('Could not schedule: 1');
-            expect(content).toContain('event-123');
-            expect(content).toContain('queue enqueue failed');
-        });
-
-        it('should explain that manual catch-up only uses already imported Quantified Self events', () => {
-            component.hasProAccess = true;
-            component.user = { uid: ACTIVITY_SYNC_ALLOWLISTED_UID, settings: {} } as any;
-            component.serviceTokens = [{ accessToken: 'garmin-token', userID: 'garmin-user', permissions: [] }] as any;
-            component.suuntoConnectionView = buildSuuntoServiceConnectionViewModel({ hasToken: true, serviceMeta: null });
-
-            fixture.detectChanges();
-
-            const infoBlock = fixture.nativeElement.querySelector('app-status-info[title="Choose which activities to send"]');
-            const content = fixture.nativeElement.textContent;
-            expect(infoBlock).toBeTruthy();
-            expect(content).toContain('Choose a date range to send Garmin activities already in Quantified Self to Suunto');
-            expect(content).toContain('even when automatic activity sync is off');
-        });
-
-        it('should log route backfill analytics when catch-up succeeds', async () => {
-            component.hasProAccess = true;
-            component.user = { uid: ACTIVITY_SYNC_ALLOWLISTED_UID, settings: {} } as any;
-            component.serviceTokens = [{ accessToken: 'garmin-token', userID: 'garmin-user', permissions: [] }] as any;
-            component.suuntoConnectionView = buildSuuntoServiceConnectionViewModel({ hasToken: true, serviceMeta: null });
-            mockUserService.backfillActivitySyncRouteForCurrentUser.mockResolvedValueOnce({
-                scanned: 20,
-                queued: 17,
-                skippedByReason: {},
-                failedCount: 1,
-                failedEvents: [{ eventID: 'evt-1', reason: 'x', message: 'failed' }]
-            });
-
-            await component.runGarminToSuuntoBackfill(new Event('submit'));
-
-            expect(mockAnalyticsService.logActivitySyncRouteBackfill).toHaveBeenCalledWith(
-                ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_SuuntoApp,
-                {
-                    scanned: 20,
-                    queued: 17,
-                    failedCount: 1,
-                }
-            );
         });
 
         it('should show inline warning pill when connected service is used by active route', () => {
