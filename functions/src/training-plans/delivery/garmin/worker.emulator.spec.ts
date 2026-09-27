@@ -16,6 +16,7 @@ import { GarminTrainingHttpError } from './http';
 import { authorizeGarminTrainingRequest } from './authorization';
 import { GARMIN_INSPECTION_POLICY } from './inspection';
 import { processTrainingVerification } from '../verification-worker';
+import { mutateTrainingScheduleForUser } from '../../persistence';
 import * as logger from 'firebase-functions/logger';
 
 // Real Firestore authority and worker transactions; shared OAuth refresh is replaced
@@ -101,6 +102,60 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Garmin delivery / real Fi
     }
     await db.terminate();
   }, 120_000);
+
+  it('keeps one pool-swim Workout and Schedule through plan opt-in, edit, reschedule and Stop', async () => {
+    const plan = user().collection('trainingPlans').doc('p');
+    const state = user().collection('trainingPlanState').doc('current');
+    const scheduled = user().collection('scheduledWorkouts').doc('w');
+    const poolStructure = (count: number) => ({ version: 1 as const, sport: ActivityTypes.Swimming,
+      poolLength: { meters: 25, presentation: 'meters' as const }, nodes: [{ kind: 'repeat' as const,
+        id: 'set', count, steps: [{ kind: 'step' as const, id: 'swim', purpose: 'work' as const,
+          ending: { kind: 'distance' as const, meters: 25 }, targets: [] },
+        { kind: 'step' as const, id: 'rest', purpose: 'rest' as const,
+          ending: { kind: 'time' as const, seconds: 30 }, targets: [] }] }] });
+    const mutate = async (operation: Parameters<typeof mutateTrainingScheduleForUser>[1]['operation']) => {
+      const [currentState, currentPlan, currentWorkout] = await Promise.all([state.get(), plan.get(), scheduled.get()]);
+      const expectedRevisions = [{ scope: 'state' as const, id: 'current', revision: currentState.get('revision') },
+        ...(currentPlan.exists ? [{ scope: 'plan' as const, id: 'p', revision: currentPlan.get('revision') }] : []),
+        { scope: 'workout' as const, id: 'w', revision: currentWorkout.get('revision') }];
+      await mutateTrainingScheduleForUser(uid, { mutationId: randomUUID(), expectedRevisions, operation }, { db, nowMs: now });
+    };
+    await mutate({ kind: 'create-plan', planId: 'p', name: 'QA pool plan', startLocalDate: '2026-09-20',
+      endLocalDate: '2026-09-27', activate: true });
+    await mutate({ kind: 'update-workout', workoutId: 'w', planId: 'p', localDate: '2026-09-20',
+      title: 'Four 25 m lengths', structure: poolStructure(4), confirmPlanRangeExtension: false });
+    const planCommand = async (action: 'configure' | 'stop') => {
+      const [currentState, currentPlan, settings] = await Promise.all([state.get(), plan.get(),
+        user().collection('trainingDeliverySettings').doc('plan_p_garmin').get()]);
+      return trainingDeliveryCommand(runtime, uid, { schemaVersion: 1, mutationId: randomUUID(), scope: 'plan',
+        scopeId: 'p', provider: 'garmin', action, timeZone: 'Europe/Helsinki',
+        expectedScheduleRevision: currentState.get('revision'), expectedScopeRevision: currentPlan.get('revision'),
+        expectedSettingsRevision: settings.get('revision') ?? 0 }, false);
+    };
+    await planCommand('configure'); await drain();
+    const id = (await ledger()).id;
+    await processTrainingDelivery(runtime, uid, id); await drain();
+    const delivered = (await ledger()).actual!;
+    expect(delivered.ids).toMatchObject({ workout: expect.any(String), schedule: expect.any(String) });
+    expect(server.workouts.get(delivered.ids.workout)).toMatchObject({ sport: 'LAP_SWIMMING',
+      poolLength: 25, poolLengthUnit: 'METER' });
+    expect(server.schedules.get(delivered.ids.schedule)).toMatchObject({ date: '2026-09-20' });
+
+    await mutate({ kind: 'update-workout', workoutId: 'w', planId: 'p', localDate: '2026-09-20',
+      title: 'Five 25 m lengths', structure: poolStructure(5), confirmPlanRangeExtension: false });
+    await drain(); await processTrainingDelivery(runtime, uid, id); await drain();
+    expect((await ledger()).actual!.ids).toEqual(delivered.ids);
+    expect(server.workouts.size).toBe(1); expect(server.schedules.size).toBe(1);
+
+    await mutate({ kind: 'move-workout', workoutId: 'w', planId: 'p', localDate: '2026-09-21',
+      confirmPlanRangeExtension: false });
+    await drain(); await processTrainingDelivery(runtime, uid, id); await drain();
+    expect((await ledger()).actual!.ids).toEqual(delivered.ids);
+    expect(server.schedules.get(delivered.ids.schedule)).toMatchObject({ date: '2026-09-21' });
+
+    await planCommand('stop'); await drain(); await processTrainingDelivery(runtime, uid, id); await drain();
+    expect(server.schedules.size).toBe(0); expect(server.workouts.size).toBe(0);
+  });
 
   it('confirms and repairs only a deleted Garmin schedule with the production policy', async () => {
     const id = await send(); await processTrainingDelivery(runtime, uid, id); await drain();

@@ -215,7 +215,9 @@ mapper: root pool length is explicit metres/yards or null for an unspecified poo
 null pool fields. Current swim steps must be target-free; rest uses `FIXED_REST`, repeat blocks skip their final rest,
 and non-rest time steps must be 1–59 minutes. Garmin permits unspecified pools but older devices may not. Eligible,
 explicitly consenting connections can deliver compatible pool swims after the 23 September 2026 owner-account cloud
-lifecycle proof; open water remains unsupported. Cloud checks do not prove app/watch receipt.
+lifecycle proof; open water remains unsupported. A demo-Firestore test with synthetic Garmin HTTP also covers an active
+plan's explicit opt-in, pool-swim edit, reschedule and Stop while retaining one remote Workout/Schedule identity until
+withdrawal. That test is not a plan-scoped account or device observation. Cloud checks do not prove app/watch receipt.
 The mapper also supports fixed repeats,
 time/distance/manual endings, and absolute HR/power/speed/pace/cadence ranges. Garmin's percentage fields do not carry
 the canonical reference snapshot, so relative targets are frozen to their stored absolute range only after explicit

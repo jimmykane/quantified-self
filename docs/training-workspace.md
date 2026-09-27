@@ -1618,7 +1618,10 @@ cover a real 4 × 25 m set in a 25 m pool. Garmin permits unspecified pool size,
 support it. The owner-account cloud lifecycle proof on 23 September 2026 enabled pool-swim admission for eligible,
 explicitly consenting Garmin connections: create, repeat-count edit, date move, positive retained-record checks and
 Stop/withdrawal completed without retries. The checked workout and schedule were cloud records, not proof of Garmin
-app/watch download or completed-activity correlation. Running/cycling admission is unchanged. The frozen registered MCP
+app/watch download or completed-activity correlation. A separate demo-Firestore and synthetic-Garmin-HTTP test exercises
+an active plan's explicit opt-in with a pool swim through create, repeat edit, date move and Stop. It retains one remote
+Workout and Schedule identity until withdrawal, but does not prove plan-scoped account or device behavior.
+Running/cycling admission is unchanged. The frozen registered MCP
 v1 recipe omits the new field in its legacy workout read. #734 adds a separate full-workout read and focused
 create/update preview for authored pool length without changing existing tool schemas; see the MCP boundary above.
 
