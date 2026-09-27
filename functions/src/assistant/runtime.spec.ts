@@ -126,6 +126,12 @@ describe('Training preview model-tool selection', () => {
       .toBe('preview_training_changes');
     expect(selectAssistantTrainingPreviewTool('Add a pool swim with a 25 m pool length.'))
       .toBe('preview_planned_workout_v2_change');
+    expect(selectAssistantTrainingPreviewTool('Create a swim session in a 50-meter pool.'))
+      .toBe('preview_planned_workout_v2_change');
+    expect(selectAssistantTrainingPreviewTool('Schedule a pool workout in a 33.3 m pool.'))
+      .toBe('preview_planned_workout_v2_change');
+    expect(selectAssistantTrainingPreviewTool('Make a 25-yard swimming workout.'))
+      .toBe('preview_planned_workout_v2_change');
     expect(selectAssistantTrainingPreviewTool('Update my pool swim and preserve its 25 m pool length.'))
       .toBe('preview_planned_workout_v2_change');
     expect(selectAssistantTrainingPreviewTool('Edit my pool swim workout for tomorrow.'))
