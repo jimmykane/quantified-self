@@ -19,7 +19,7 @@ import {
   type TrainingPlanV1,
   type TrainingScheduleMutationOperationV1,
 } from '../../../shared/training-plans';
-import { parseWorkoutStructureV1 } from '../../../shared/planned-workout';
+import { formatWorkoutEndingV1, parseWorkoutStructureV1 } from '../../../shared/planned-workout';
 import { parseStrengthWorkoutDetailsV1, projectStrengthWorkoutToV1,
   strengthProjectionMatchesDetails, type StrengthWorkoutDetailsV1 } from '../../../shared/strength-workout';
 import { PLANNED_WORKOUT_PROVIDER_CAPABILITIES_V1, PLANNED_WORKOUT_PROVIDER_IDS,
@@ -397,6 +397,20 @@ function describeScheduleEffects(
   return [describeOperation(operation), ...details].join(' ');
 }
 
+function describePoolLengthEffect(
+  operation: TrainingScheduleMutationOperationV1,
+  before: TrainingScheduleSnapshotV1,
+  after: TrainingScheduleSnapshotV1,
+): string {
+  if (operation.kind !== 'create-workout' && operation.kind !== 'update-workout') return '';
+  const previous = before.workouts.get(operation.workoutId)?.structure.poolLength;
+  const current = after.workouts.get(operation.workoutId)?.structure.poolLength;
+  if (!current) return previous ? ' The selected pool length will be removed.' : '';
+  const length = formatWorkoutEndingV1({ kind: 'distance', meters: current.meters },
+    undefined, undefined, ActivityTypes.Swimming);
+  return ` Selected pool length: ${length} (${current.presentation} presentation).`;
+}
+
 function resolveScheduleOperation(
   change: Exclude<TrainingChange, { kind: 'provider-delivery' } | { kind: 'delete-plan' }>,
   input: Pick<TrainingWriteInput, 'uid' | 'connectionId'>,
@@ -702,7 +716,8 @@ export async function previewTrainingChanges(
     try { simulated = applyTrainingScheduleMutation(simulated, request, deps.now() + index).after; }
     catch (error) { invalid(publicErrorMessage(error) ?? `Training change ${index + 1} is invalid.`); }
     scheduleRequests.push({ index, request });
-    publicChanges.push({ index, kind: operation.kind, summary: describeScheduleEffects(operation, before, simulated) });
+    publicChanges.push({ index, kind: operation.kind, summary: describeScheduleEffects(operation, before, simulated)
+      + (recipeMode === 'v2' ? describePoolLengthEffect(operation, before, simulated) : '') });
   });
 
   const providerOperations: StoredProviderOperation[] = [];

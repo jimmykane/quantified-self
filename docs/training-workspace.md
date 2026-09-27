@@ -481,8 +481,10 @@ MCP impact: #734 adds `get_planned_workout_v2` and `preview_planned_workout_v2_c
 schemas. The read uses existing Training plans consent and includes only an authored pool length in canonical metres
 plus its metre/yard presentation; a distance step never implies pool size. The focused create/update preview uses
 the existing Training plans write grant and revision-bound, approval-gated proposal/apply flow without provider
-delivery. A v1 edit of a selected-length swim is rejected rather than silently dropping the pool setting. Existing
-pool swims without an authored length remain valid; open-water recipes cannot carry one. No new scope, consent,
+delivery. A v1 edit of a selected-length swim is rejected rather than silently dropping the pool setting. The
+v2 preview discloses the canonical length and presentation, or explicitly states that the selection will be removed;
+Assistant edits of existing pool swims use v2 even if the request does not repeat the saved length. Existing pool swims
+without an authored length remain valid; open-water recipes cannot carry one. No new scope, consent,
 provider action, storage migration or recorded-event metric is introduced. Deployment and client catalog refresh
 are separate from local code verification.
 The shared contract remains broader so saved v1 data does

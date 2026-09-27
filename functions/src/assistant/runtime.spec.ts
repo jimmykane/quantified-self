@@ -128,6 +128,10 @@ describe('Training preview model-tool selection', () => {
       .toBe('preview_planned_workout_v2_change');
     expect(selectAssistantTrainingPreviewTool('Update my pool swim and preserve its 25 m pool length.'))
       .toBe('preview_planned_workout_v2_change');
+    expect(selectAssistantTrainingPreviewTool('Edit my pool swim workout for tomorrow.'))
+      .toBe('preview_planned_workout_v2_change');
+    expect(selectAssistantTrainingPreviewTool('Change my swimming workout date.'))
+      .toBe('preview_planned_workout_v2_change');
     expect(selectAssistantTrainingPreviewTool('Create a strength workout with four sets.'))
       .toBe('preview_strength_workout_change');
     expect(selectAssistantTrainingPreviewTool('Edit my strength workout sets.'))

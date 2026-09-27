@@ -323,8 +323,10 @@ export function selectAssistantTrainingPreviewTool(prompt: string): typeof TRAIN
     && /\b(workout|session|exercise|set|reps?)\b/u.test(question)) {
     return 'preview_strength_workout_change';
   }
+  const editsPoolSwim = /\b(edit|update|modify|change)\b/u.test(question)
+    && /\b(pool(?:\s+(?:swim|swimming|workout))?|swimming)\b/u.test(question);
   if (authorsWorkout && /\b(pool|swim|swimming)\b/u.test(question)
-    && /\b(pool length|pool size|25\s*m(?:etre|eter)?|25\s*yd|yards?)\b/u.test(question)) {
+    && (editsPoolSwim || /\b(pool length|pool size|25\s*m(?:etre|eter)?|25\s*yd|yards?)\b/u.test(question))) {
     return 'preview_planned_workout_v2_change';
   }
   const changesExisting = /\b(edit|update|move|copy|duplicate|delete|skip|archive|rename)\b/u.test(question);

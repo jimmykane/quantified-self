@@ -112,6 +112,7 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Training MCP write propos
     const createdPreview = await previewPlannedWorkoutV2Change({ uid, connectionId: 'connection', scopes,
       arguments: { expectedScheduleRevision: 1, change: { kind: 'create-workout', localKey: 'swim', plan: null,
         localDate: '2026-09-18', title: '25 m pool', structure: swim } } }, deps);
+    expect(createdPreview.changes[0].summary).toContain('Selected pool length: 25 m (meters presentation).');
     const created = await applyTrainingChanges({ uid, connectionId: 'connection', scopes,
       arguments: { proposalRef: createdPreview.proposalRef, permissionMode: 'schedule' } }, deps);
     const workout = (await db.collection('users').doc(uid).collection('scheduledWorkouts').get()).docs[0];
@@ -128,11 +129,20 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Training MCP write propos
         workout: { ref: workoutRef }, plan: null, localDate: '2026-09-19', title: '25 yd pool',
         structure: { ...swim, poolLength: { meters: 22.86, presentation: 'yards' } } } } };
     const updatedPreview = await previewPlannedWorkoutV2Change(updateInput, deps);
+    expect(updatedPreview.changes[0].summary).toContain('Selected pool length: 22.86 m (yards presentation).');
     const updated = await applyTrainingChanges({ uid, connectionId: 'connection', scopes,
       arguments: { proposalRef: updatedPreview.proposalRef, permissionMode: 'schedule' } }, deps);
     expect((await workout.ref.get()).get('structure.poolLength')).toEqual({ meters: 22.86, presentation: 'yards' });
     await expect(applyTrainingChanges({ uid, connectionId: 'connection', scopes,
       arguments: { proposalRef: updatedPreview.proposalRef, permissionMode: 'schedule' } }, deps)).resolves.toEqual(updated);
+    const removalPreview = await previewPlannedWorkoutV2Change({ uid, connectionId: 'connection', scopes,
+      arguments: { expectedScheduleRevision: updated.scheduleRevision, change: { kind: 'update-workout',
+        workout: { ref: workoutRef }, plan: null, localDate: '2026-09-19', title: 'Unspecified pool',
+        structure: legacySwim } } }, deps);
+    expect(removalPreview.changes[0].summary).toContain('The selected pool length will be removed.');
+    await applyTrainingChanges({ uid, connectionId: 'connection', scopes,
+      arguments: { proposalRef: removalPreview.proposalRef, permissionMode: 'schedule' } }, deps);
+    expect((await workout.ref.get()).get('structure.poolLength')).toBeUndefined();
     await expect(previewPlannedWorkoutV2Change(updateInput, deps)).rejects.toThrow('schedule changed');
     await expect(previewPlannedWorkoutV2Change({ ...updateInput,
       scopes: [TRAINING_PLANS_SCOPE] }, deps)).rejects.toThrow('permission');

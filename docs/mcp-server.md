@@ -200,7 +200,10 @@ one from step distance. `preview_planned_workout_v2_change` accepts one complete
 pool length under the existing parent read plus `training-plans:write` grants. It shares the owner-, connection-,
 grant-, revision- and expiry-bound proposal and approval-gated `apply_training_changes` path; it has no provider
 action. A registered v1 edit of a workout with selected pool length fails rather than clearing that setting. Invalid
-or non-pool lengths fail strict validation, and older pool recipes remain readable with length absent. These additive
+or non-pool lengths fail strict validation, and older pool recipes remain readable with length absent. The v2 preview
+states the selected canonical pool length and metre/yard presentation, or explicitly discloses removal,
+so approval does not hide a pool-setting change. The built-in Assistant routes an existing pool-swim edit through v2
+even when the user's prompt does not repeat the saved length; it must read and preserve that selection. These additive
 tools are the local implementation of #734 under #583; they need deployment and client catalog refresh before use.
 No existing schema, mutation kind, scope, consent, provider action or private delivery evidence changes. Existing
 provider compatibility assessment still governs writes; Garmin accepts compatible, explicitly consented pool-swim delivery after owner-account cloud CRUD/readback proof (not watch receipt), Wahoo rejects swimming delivery, COROS accepts only target-free pool recipes at its backend
