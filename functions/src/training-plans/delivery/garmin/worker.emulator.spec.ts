@@ -185,6 +185,40 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Garmin delivery / real Fi
     expect(server.calls.filter(request => request.method === 'POST' && request.path.includes('workout'))).toHaveLength(1);
   });
 
+  it.each(['stop', 'edit'] as const)('resolves a %s after an accepted production schedule-only repair POST', async change => {
+    const id = await send(); await processTrainingDelivery(runtime, uid, id); await drain();
+    const original = (await ledger()).actual!;
+    server.schedules.delete(original.ids.schedule);
+    await processTrainingVerification(runtime, uid, id); now += 900_000;
+    await processTrainingVerification(runtime, uid, id);
+    expect((await ledger()).verification?.state).toBe('restoring');
+
+    server.afterHandle = async request => {
+      if (request.method !== 'POST' || request.path !== '/training-api/schedule/') return;
+      server.afterHandle = null;
+      if (change === 'stop') await command('stop');
+      else await edit();
+      await drain();
+    };
+    await processTrainingDelivery(runtime, uid, id);
+    for (let pass = 0; pass < 4; pass++) { await retry(id); await drain(); }
+
+    const current = await ledger();
+    expect(current.attempt).toBeNull();
+    expect(server.calls.filter(request => request.method === 'POST' && request.path.includes('workout'))).toHaveLength(1);
+    expect(server.calls.filter(request => request.method === 'POST' && request.path === '/training-api/schedule/')).toHaveLength(2);
+    if (change === 'stop') {
+      expect(current.status).toBe('removed');
+      expect(server.workouts.size).toBe(0); expect(server.schedules.size).toBe(0);
+    } else {
+      expect(current.status).toBe('delivered');
+      expect(current.actual?.ids.workout).toBe(original.ids.workout);
+      expect(server.workouts.size).toBe(1); expect(server.schedules.size).toBe(1);
+      expect(server.workouts.get(original.ids.workout)?.workoutName).toBe('Revised run');
+      expect(server.schedules.get(current.actual!.ids.schedule)?.date).toBe('2026-09-21');
+    }
+  });
+
   it('serializes duplicate workers, updates retained Long IDs, and deletes both artifacts after Stop without Pro', async () => {
     const id = await send();
     await Promise.all([processTrainingDelivery(runtime, uid, id), processTrainingDelivery(runtime, uid, id)]);
