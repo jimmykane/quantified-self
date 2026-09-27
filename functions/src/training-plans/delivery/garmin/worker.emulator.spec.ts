@@ -174,15 +174,43 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Garmin delivery / real Fi
     expect((await ledger()).status).toBe('delivered');
   });
 
-  it('keeps a deleted Garmin workout inconclusive under the production policy', async () => {
+  it.each(['workout-only', 'connect-cascade'] as const)(
+    'keeps a %s Garmin Workout deletion inconclusive under the production policy', async deletion => {
+      const id = await send(); await processTrainingDelivery(runtime, uid, id); await drain();
+      const original = (await ledger()).actual!;
+      server.workouts.delete(original.ids.workout);
+      if (deletion === 'connect-cascade') server.schedules.delete(original.ids.schedule);
+      await processTrainingVerification(runtime, uid, id); now += 900_000;
+      await processTrainingVerification(runtime, uid, id);
+      expect((await ledger()).verification).toMatchObject({ state: 'unknown', missing: false, missingKeys: [] });
+      expect((await ledger()).repair).toBeFalsy();
+      expect(server.calls.filter(request => request.method === 'POST' && request.path.includes('workout'))).toHaveLength(1);
+      expect(server.calls.filter(request => request.method === 'POST' && request.path === '/training-api/schedule/')).toHaveLength(1);
+    });
+
+  it('restarts the schedule absence clock after the original association reappears', async () => {
     const id = await send(); await processTrainingDelivery(runtime, uid, id); await drain();
     const original = (await ledger()).actual!;
-    server.workouts.delete(original.ids.workout);
-    await processTrainingVerification(runtime, uid, id); now += 900_000;
+    const saved = structuredClone(server.schedules.get(original.ids.schedule)!);
+    server.schedules.delete(original.ids.schedule);
     await processTrainingVerification(runtime, uid, id);
-    expect((await ledger()).verification).toMatchObject({ state: 'unknown', missing: false, missingKeys: [] });
+    expect((await ledger()).verification).toMatchObject({ state: 'suspected_missing', missing: false });
+
+    server.schedules.set(original.ids.schedule, saved);
+    now += 900_000;
+    await processTrainingVerification(runtime, uid, id);
+    expect((await ledger()).verification).toMatchObject({ state: 'present', missing: false, missingKeys: [] });
+
+    server.schedules.delete(original.ids.schedule);
+    now += 86_400_000;
+    await processTrainingVerification(runtime, uid, id);
+    expect((await ledger()).verification).toMatchObject({ state: 'suspected_missing', missing: false, missingKeys: ['schedule'] });
     expect((await ledger()).repair).toBeFalsy();
-    expect(server.calls.filter(request => request.method === 'POST' && request.path.includes('workout'))).toHaveLength(1);
+    expect(server.calls.filter(request => request.method === 'POST' && request.path === '/training-api/schedule/')).toHaveLength(1);
+
+    now += 900_000;
+    await processTrainingVerification(runtime, uid, id);
+    expect((await ledger()).verification).toMatchObject({ state: 'restoring', missing: true, missingKeys: ['schedule'] });
   });
 
   it.each(['stop', 'edit'] as const)('resolves a %s after an accepted production schedule-only repair POST', async change => {
@@ -255,6 +283,45 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Garmin delivery / real Fi
     expect(server.schedules.size).toBe(0);
     expect(server.workouts.size).toBe(0);
     expect((await ledger()).attempt).toBeNull();
+  });
+
+  it('blocks an uncertain replacement Workout POST after paired absence, including explicit Retry', async () => {
+    // Synthetic authority exercises the disabled replacement branch without enabling
+    // production Workout absence/repair from a 404.
+    proveRepair = true;
+    const id = await send(); await processTrainingDelivery(runtime, uid, id); await drain();
+    const original = (await ledger()).actual!;
+    server.workouts.delete(original.ids.workout); server.schedules.delete(original.ids.schedule);
+    await processTrainingVerification(runtime, uid, id); now += 900_000;
+    await processTrainingVerification(runtime, uid, id);
+    expect((await ledger()).verification?.state).toBe('restoring');
+    server.afterHandle = async request => {
+      if (request.method === 'POST' && request.path.includes('workout')) {
+        server.afterHandle = null; throw new GarminTrainingHttpError('uncertain', false);
+      }
+    };
+    await processTrainingDelivery(runtime, uid, id);
+    expect((await ledger()).attempt?.progress).toMatchObject({ step: 'workout-create', state: 'started' });
+    expect(server.workouts.size).toBe(1); expect(server.schedules.size).toBe(0);
+    await retry(id);
+    expect((await ledger()).status).toBe('needs_attention');
+    await command('retry'); await drain(); await retry(id);
+    expect((await ledger()).status).toBe('needs_attention');
+    expect(server.calls.filter(request => request.method === 'POST' && request.path.includes('workout'))).toHaveLength(2);
+    expect(server.calls.filter(request => request.method === 'POST' && request.path === '/training-api/schedule/')).toHaveLength(1);
+  });
+
+  it('does not classify a missing Schedule after Garmin Training permission is revoked', async () => {
+    const id = await send(); await processTrainingDelivery(runtime, uid, id); await drain();
+    const original = (await ledger()).actual!;
+    server.schedules.delete(original.ids.schedule);
+    await credential().update({ permissions: [] });
+    const before = server.calls.length;
+    await processTrainingVerification(runtime, uid, id);
+    expect(server.calls).toHaveLength(before);
+    // Readiness rejects the check before HTTP; it cannot produce a negative observation.
+    expect((await ledger()).verification).toMatchObject({ state: 'pending', missing: false, missingKeys: [] });
+    expect((await ledger()).repair).toBeFalsy();
   });
 
   it.each(['ready', 'inspection-paused'] as const)('finishes the latest edit after partial repair, respecting %s readiness', async readiness => {
