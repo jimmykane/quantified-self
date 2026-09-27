@@ -1,5 +1,5 @@
 import { MatSnackBar } from '@angular/material/snack-bar';
-import { provideRouter, Router } from '@angular/router';
+import { provideRouter, Router, RouterModule } from '@angular/router';
 import { TimelineNotesWorkspaceComponent } from '../timeline-notes/timeline-notes-workspace.component';
 import { AppTimelineNotesService } from '../../services/app.timeline-notes.service';
 import { By } from '@angular/platform-browser';
@@ -182,7 +182,7 @@ describe('SummariesComponent', () => {
 
     await TestBed.configureTestingModule({
       declarations: [SummariesComponent, DashboardTileBoardComponent, DashboardTileCellComponent],
-      imports: [AppChartSharedModule, TimelineNotesWorkspaceComponent, PageHeaderComponent, MetricIndicatorComponent, MatMenuModule, MatProgressSpinnerModule, NoopAnimationsModule],
+      imports: [AppChartSharedModule, TimelineNotesWorkspaceComponent, PageHeaderComponent, MetricIndicatorComponent, MatMenuModule, MatProgressSpinnerModule, NoopAnimationsModule, RouterModule],
       schemas: [NO_ERRORS_SCHEMA],
       providers: [provideRouter([]),
         { provide: AppTimelineNotesService, useValue: {
@@ -603,6 +603,12 @@ describe('SummariesComponent', () => {
     expect(calendarSection?.querySelector('h2')?.textContent?.trim()).toBe('Calendar');
     expect(calendarSection?.querySelector('a[routerLink="/calendar"]')?.textContent).toContain('Open calendar');
     expect(calendarSection?.querySelector('app-dashboard-chart-library')).toBeNull();
+
+    fixture.debugElement.query(By.css('.dashboard-calendar-section app-tile-chart'))
+      .triggerEventHandler('calendarDateChange', '2026-09-09');
+    fixture.detectChanges();
+    expect(calendarSection?.querySelector('a[routerLink="/calendar"]')?.getAttribute('href'))
+      .toBe('/calendar?view=month&date=2026-09-09');
 
     component.user.settings.dashboardSettings.tiles = [kpi, activity];
     component.tiles = [kpi, activity];

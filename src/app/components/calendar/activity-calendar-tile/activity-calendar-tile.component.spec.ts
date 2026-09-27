@@ -92,9 +92,12 @@ describe('ActivityCalendarTileComponent', () => {
     fixture.componentRef.setInput('dayContextEnabled', true);
     fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
     const day = fixture.componentInstance.calendarModel().months[0].days.find(candidate => candidate.inPrimaryPeriod && candidate.dateKey !== fixture.componentInstance.selectedDay()?.dateKey)!;
+    const selectedDates: string[] = [];
+    fixture.componentInstance.selectedDateKeyChange.subscribe(dateKey => selectedDates.push(dateKey));
     fixture.componentInstance.openDay(day);
     fixture.detectChanges();
     expect(fixture.componentInstance.selectedDay()?.dateKey).toBe(day.dateKey);
+    expect(selectedDates).toEqual([day.dateKey]);
     expect(fixture.nativeElement.querySelector('.activity-calendar-day--selected')).toBeTruthy();
     expect(fixture.nativeElement.querySelector('app-calendar-day-context')).toBeTruthy();
     expect(fixture.nativeElement.querySelector('.activity-calendar--dashboard-context')).toBeTruthy();

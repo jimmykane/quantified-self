@@ -392,6 +392,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
   public todayDateSubtitle = '';
   public todayGreeting = '';
   public isOwnerDashboard = false;
+  public calendarSelectedDateKey: string | null = null;
 
   private appThemeSubscription: Subscription | null = null;
   private todayHeaderRefreshTimeoutHandle: ReturnType<typeof setTimeout> | null = null;
@@ -527,6 +528,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
   async ngOnChanges(simpleChanges: SimpleChanges) {
     if (['user', 'eventUser'].some(key => simpleChanges[key] && simpleChanges[key].previousValue?.uid !== simpleChanges[key].currentValue?.uid)) {
       this.library.resetContext();
+      this.calendarSelectedDateKey = null;
     }
     if (simpleChanges.user || simpleChanges.eventUser) {
       this.refreshTodayHeader(new Date());

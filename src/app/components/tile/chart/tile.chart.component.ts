@@ -122,6 +122,7 @@ export class TileChartComponent extends TileAbstractDirective {
   @Input() healthSettingsSaving = false;
   @Output() healthMetricChange = new EventEmitter<{settings:AppDashboardHealthMetricSettings; initial:boolean}>();
   @Output() healthSectionChange = new EventEmitter<'health'|'trainingState'>();
+  @Output() calendarDateChange = new EventEmitter<string>();
   readonly notesContext = computed(() => this.timelineNotes()?.() ?? null);
 
   @Input() tileName = '';

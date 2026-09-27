@@ -8,6 +8,7 @@ import {
   effect,
   inject,
   input,
+  output,
   signal,
   type Signal,
 } from '@angular/core';
@@ -100,6 +101,7 @@ export class ActivityCalendarTileComponent {
   readonly privateHealthEnabled = input(true);
   readonly initialDateKey = input<string | null>(null);
   readonly selectedDateKey = signal(localDateKey(new Date()));
+  readonly selectedDateKeyChange = output<string>();
   private openedInitialDateKey: string | null = null;
   // Share each concrete query with an open day sheet. Material destroys the month popup when
   // replacing it, but the selected day's pending data must continue until its own sheet closes.
@@ -223,7 +225,7 @@ export class ActivityCalendarTileComponent {
     }
 
     if (this.dayContextEnabled() && this.selectedDateKey() !== restoration.dateKey) {
-      this.selectedDateKey.set(restoration.dateKey);
+      this.selectDate(restoration.dateKey);
     }
 
     const restoredMonth = startOfCurrentMonth(parseActivityCalendarDate(restoration.dateKey));
@@ -295,7 +297,7 @@ export class ActivityCalendarTileComponent {
     const selected = new Date(`${this.selectedDateKey()}T12:00:00`);
     const dayOfMonth = Number.isFinite(selected.getTime()) ? selected.getDate() : 1;
     const next = new Date(target.getFullYear(), target.getMonth(), Math.min(dayOfMonth, new Date(target.getFullYear(), target.getMonth() + 1, 0).getDate()));
-    this.selectedDateKey.set(localDateKey(next));
+    this.selectDate(localDateKey(next));
   }
 
   goToToday(): void {
@@ -303,12 +305,18 @@ export class ActivityCalendarTileComponent {
     this.today.set(today);
     this.anchorDate.set(new Date(today.getFullYear(), today.getMonth(), 1));
     this.followsCurrentMonth.set(true);
-    this.selectedDateKey.set(localDateKey(today));
+    this.selectDate(localDateKey(today));
+  }
+
+  private selectDate(dateKey: string): void {
+    if (this.selectedDateKey() === dateKey) return;
+    this.selectedDateKey.set(dateKey);
+    this.selectedDateKeyChange.emit(dateKey);
   }
 
   openDay(day: ActivityCalendarDayViewModel, revealDay = true): void {
     if (this.dayContextEnabled()) {
-      this.selectedDateKey.set(day.dateKey);
+      this.selectDate(day.dateKey);
       if (revealDay) requestAnimationFrame(() => revealCalendarDayContext(this.elementRef.nativeElement));
       return;
     }
