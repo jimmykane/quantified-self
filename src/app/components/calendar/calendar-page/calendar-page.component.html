@@ -11,7 +11,7 @@
   } @else {
     <app-page-header class="calendar-page-header" title="Calendar" titleId="calendar-page-title" variant="route"
       leadingIcon="calendar_month">
-      <app-timeline-notes-workspace pageHeaderActions [visibleRange]="timelineNoteRange()"></app-timeline-notes-workspace>
+      <app-timeline-notes-workspace pageHeaderTitleActions [visibleRange]="timelineNoteRange()"></app-timeline-notes-workspace>
       <mat-button-toggle-group pageHeaderActions class="calendar-view-toggle" aria-label="Calendar view"
         hideSingleSelectionIndicator [value]="routeState().view"
         (change)="selectView($event.value)">

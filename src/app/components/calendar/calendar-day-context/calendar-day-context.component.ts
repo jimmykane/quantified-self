@@ -94,9 +94,10 @@ export class CalendarDayContextComponent {
     && this.notesStatus() === 'ready'
     && this.noteRows().length === 0
     && (!this.canPlan() || (this.plannedStatus() === 'ready' && this.plannedRows().length === 0)));
-  readonly dashboardActivities = computed(() => this.activities().slice(0, 2));
-  readonly dashboardNotes = computed(() => this.noteRows().slice(0, 2));
-  readonly dashboardPlans = computed(() => this.plannedRows().slice(0, 2));
+  private readonly previewCount = computed(() => this.calmMonth() && !this.dashboardTile() ? 1 : 2);
+  readonly previewActivities = computed(() => this.activities().slice(0, this.previewCount()));
+  readonly previewNotes = computed(() => this.noteRows().slice(0, this.previewCount()));
+  readonly previewPlans = computed(() => this.plannedRows().slice(0, this.previewCount()));
   readonly canPlan = computed(() => this.data().planningEnabled !== false && this.users.user()?.uid === this.data().userId);
   readonly healthState = signal<HealthState>({ status: 'loading', summary: null, sleepPoint: null });
   readonly isDarkTheme = computed(() => this.theme.appTheme() === AppThemes.Dark);

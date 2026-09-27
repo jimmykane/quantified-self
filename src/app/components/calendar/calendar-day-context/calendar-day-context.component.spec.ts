@@ -1,6 +1,7 @@
 import { signal } from '@angular/core';
 import { AppThemes, DistanceUnits } from '@sports-alliance/sports-lib';
 import { normalizeUserUnitSettings } from '@shared/unit-aware-display';
+import type { TimelineNote } from '@shared/timeline-notes';
 import { TestBed } from '@angular/core/testing';
 import { ViewportScroller } from '@angular/common';
 import { provideRouter } from '@angular/router';
@@ -129,5 +130,26 @@ describe('CalendarDayContextComponent', () => {
     fixture.componentRef.setInput('data', data('2026-09-13'));
     fixture.detectChanges();
     expect(scrollBody.scrollTop).toBe(0);
+
+    const notes: TimelineNote[] = ['First note', 'Second note', 'Third note'].map((title, index) => ({
+      id: `${index + 1}`.repeat(64), category: 'travel', title,
+      startDate: '2026-09-13', endDate: '2026-09-13', timeZone: 'UTC',
+      revision: 1, createdAtMs: 1, updatedAtMs: 1,
+    }));
+    fixture.componentRef.setInput('standaloneDayPage', false);
+    fixture.componentRef.setInput('calmMonth', true);
+    fixture.componentRef.setInput('data', { ...data('2026-09-13'), timelineNotes: signal(notes) });
+    fixture.detectChanges();
+    const previewNotes = () => fixture.nativeElement.querySelectorAll('[aria-label="Timeline notes on selected day"] button');
+    expect(previewNotes()).toHaveLength(2);
+    expect(fixture.nativeElement.textContent).toContain('+1 more on the full day');
+    fixture.componentRef.setInput('dashboardTile', false);
+    fixture.detectChanges();
+    expect(previewNotes()).toHaveLength(1);
+    expect(previewNotes()[0].textContent).toContain('First note');
+    expect(fixture.nativeElement.textContent).toContain('+2 more on the full day');
+    fixture.componentRef.setInput('calmMonth', false);
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelectorAll('.calendar-day-context-section button')).toHaveLength(3);
   });
 });
