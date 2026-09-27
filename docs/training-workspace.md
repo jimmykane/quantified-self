@@ -1088,7 +1088,12 @@ unspecified pool as the partner contract allows, although older devices may not.
 device pool by itself. Pool delivery is now admitted for explicitly consenting, eligible Garmin connections. A 25 m
 pool workout was created, edited, rescheduled, checked present, and withdrawn through the owner's Garmin cloud account
 on 23 September 2026 without retries. This proves Garmin cloud CRUD/readback, not app or watch receipt or exercise
-completion. Open-water swimming remains unmapped. Never fold either swim profile to Running or Cycling.
+completion. On 27 September, a separate plan-scoped 25 m pool swim passed owner-account cloud create, edit from 100 m
+to 125 m, reschedule, readback and Stop/withdrawal. A standalone 25 m pool workout then appeared in Garmin Connect,
+with pool size 25 m and Quantified Self as its source; the owner confirmed that it and its work step appeared on the
+watch. Its delivery was subsequently stopped, and QS reported no retained Garmin copy. These observations do not
+prove completed-activity correlation or guarantee watch receipt for other devices. Open-water swimming remains
+unmapped. Never fold either swim profile to Running or Cycling.
 COROS continues to map only target-free pool Swimming to `swim`; the current partner mapping does not justify
 open-water support. Wahoo's documented plan file remains running/cycling-only.
 
@@ -1618,8 +1623,12 @@ explicitly consenting Garmin connections: create, repeat-count edit, date move, 
 Stop/withdrawal completed without retries. The checked workout and schedule were cloud records, not proof of Garmin
 app/watch download or completed-activity correlation. A separate demo-Firestore and synthetic-Garmin-HTTP test exercises
 an active plan's explicit opt-in with a pool swim through create, repeat edit, date move and Stop. It retains one remote
-Workout and Schedule identity until withdrawal, but does not prove plan-scoped account or device behavior.
-Running/cycling admission is unchanged. The frozen registered MCP
+Workout and Schedule identity until withdrawal; that isolated test alone does not prove account or device behavior.
+The separate 27 September owner-account plan test did prove cloud plan-scoped create/edit/reschedule/readback/Stop;
+the owner's standalone test confirmed Garmin Connect and watch visibility for that one 25 m workout and its work step.
+Neither observation proves workout completion, and cloud acceptance alone never establishes device receipt.
+Running/cycling admission is unchanged. This fixture and evidence documentation add no MCP tool, scope, schema,
+consent, proposal, provider action or private delivery field. The frozen registered MCP
 v1 recipe omits the new field in its legacy workout read. #734 adds a separate full-workout read and focused
 create/update preview for authored pool length without changing existing tool schemas; see the MCP boundary above.
 
