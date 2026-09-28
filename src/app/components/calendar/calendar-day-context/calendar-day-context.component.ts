@@ -24,6 +24,8 @@ import type { CalendarDayDetailsData } from '../calendar-day-details/calendar-da
 
 interface HealthState {
   status: 'loading' | 'ready' | 'private' | 'hidden';
+  dateKey: string | null;
+  ownerUid: string | null;
   summary: CalendarDayHealthSummary | null;
   sleepPoint: DashboardSleepTrendPoint | null;
 }
@@ -100,7 +102,15 @@ export class CalendarDayContextComponent {
   readonly previewNotes = computed(() => this.noteRows().slice(0, this.previewCount()));
   readonly previewPlans = computed(() => this.plannedRows().slice(0, this.previewCount()));
   readonly canPlan = computed(() => this.data().planningEnabled !== false && this.users.user()?.uid === this.data().userId);
-  readonly healthState = signal<HealthState>({ status: 'loading', summary: null, sleepPoint: null });
+  readonly healthState = signal<HealthState>({ status: 'loading', dateKey: null, ownerUid: null, summary: null, sleepPoint: null });
+  readonly fullDayReady = computed(() => {
+    const health = this.healthState();
+    return health.dateKey === this.healthDateKey()
+      && health.ownerUid === this.healthOwnerUid()
+      && health.status !== 'loading'
+      && this.activityState().status !== 'loading'
+      && (!this.canPlan() || this.plannedStatus() !== 'loading');
+  });
   readonly isDarkTheme = computed(() => this.theme.appTheme() === AppThemes.Dark);
   readonly duplicatingId = signal<string | null>(null);
   readonly activities = computed(() => this.day().events.map((event: EventInterface) => ({
@@ -134,7 +144,7 @@ export class CalendarDayContextComponent {
 
   private readonly loadHealth = effect((onCleanup) => {
     if (this.hideHealth()) {
-      this.healthState.set({ status: 'hidden', summary: null, sleepPoint: null });
+      this.healthState.set({ status: 'hidden', dateKey: this.healthDateKey(), ownerUid: this.healthOwnerUid(), summary: null, sleepPoint: null });
       return;
     }
     const dateKey = this.healthDateKey();
@@ -142,17 +152,19 @@ export class CalendarDayContextComponent {
     const ownerUid = this.users.user()?.uid;
     const data = untracked(() => this.data());
     if (!this.privateHealthEnabled() || !ownerUid || ownerUid !== dayOwnerUid) {
-      this.healthState.set({ status: 'private', summary: null, sleepPoint: null });
+      this.healthState.set({ status: 'private', dateKey, ownerUid: dayOwnerUid, summary: null, sleepPoint: null });
       return;
     }
     const controller = new AbortController();
     const nowMs = Date.now();
-    this.healthState.set({ status: 'loading', summary: null, sleepPoint: null });
+    this.healthState.set({ status: 'loading', dateKey, ownerUid, summary: null, sleepPoint: null });
     const subscription = this.health.watch(ownerUid, dateKey, nowMs, controller.signal).subscribe({
       next: evidence => {
         if (controller.signal.aborted || this.users.user()?.uid !== ownerUid) return;
         this.healthState.set({
           status: 'ready',
+          dateKey,
+          ownerUid,
           sleepPoint: resolveCalendarDaySleepPoint(dateKey, evidence),
           summary: buildCalendarDayHealthSummary(dateKey, evidence, {
             nowMs, locale: data.locale, unitSettings: data.unitSettings,
@@ -161,7 +173,7 @@ export class CalendarDayContextComponent {
       },
       error: () => {
         if (controller.signal.aborted || this.users.user()?.uid !== ownerUid) return;
-        this.healthState.set({ status: 'ready', sleepPoint: null, summary: {
+        this.healthState.set({ status: 'ready', dateKey, ownerUid, sleepPoint: null, summary: {
           readiness: { status: 'error', value: '—', detail: 'Could not load readiness' },
           sleep: { status: 'error', value: '—', detail: 'Could not load sleep' },
           hrv: { status: 'error', value: '—', detail: 'Could not load HRV' },

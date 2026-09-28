@@ -6,6 +6,15 @@
   .calendar-day-context-body { min-height: 0; flex: 1 1 0; overflow-y: auto; }
 }
 .calendar-day-context { min-width: 0; color: var(--mat-sys-on-surface); }
+.calendar-day-context-loading { min-height: 270px; }
+.calendar-day-context-loading-title { display: block; margin-bottom: 18px; font: var(--mat-sys-title-medium); }
+.calendar-day-context-loading-metrics { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+.calendar-day-context-loading-metrics > div { min-width: 0; padding-top: 8px; border-top: 1px solid var(--mat-sys-outline-variant); }
+.calendar-day-context-loading-metrics span { display: block; margin-bottom: 8px; color: var(--mat-sys-on-surface-variant); font: var(--mat-sys-body-small); }
+.calendar-day-context-loading-metrics i { display: block; width: 65%; height: 15px; margin-bottom: 7px; border-radius: 4px; background: var(--mat-sys-surface-container-high); }
+.calendar-day-context-loading-metrics i:last-child { width: 45%; height: 9px; }
+.calendar-day-context-loading-stage { height: 34px; margin-top: 27px; border-radius: 6px; background: var(--mat-sys-surface-container-high); }
+.calendar-day-context-loading-timeline { width: 32%; height: 16px; margin-top: 42px; border-radius: 4px; background: var(--mat-sys-surface-container-high); }
 .calendar-day-context-header, .calendar-day-context-section-header { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; min-width: 0; }
 .calendar-day-context-header > div { min-width: 0; }
 .calendar-day-context-header { margin-bottom: 12px; }
@@ -71,6 +80,7 @@
 .calendar-day-timeline-content > strong { display: block; padding: 7px 0; font: var(--mat-sys-label-large); overflow-wrap: anywhere; }
 .calendar-day-timeline-content small { display: block; color: var(--mat-sys-on-surface-variant); font: var(--mat-sys-body-small); overflow-wrap: anywhere; }
 @media (max-width: 480px) {
+  .calendar-day-context-loading-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .calendar-day-context-header { align-items: flex-start; }
   .calendar-day-context-header a { font: var(--mat-sys-label-small); }
   .calendar-day-context-metrics { gap: 10px; }

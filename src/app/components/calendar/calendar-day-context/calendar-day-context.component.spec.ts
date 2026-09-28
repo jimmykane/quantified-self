@@ -68,6 +68,11 @@ describe('CalendarDayContextComponent', () => {
     expect(pending[0].observed).toBe(false);
     pending[0].next(emptyEvidence); fixture.detectChanges();
     expect(fixture.componentInstance.healthState().status).toBe('loading');
+    fixture.componentRef.setInput('standaloneDayPage', true);
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('[aria-label="Loading day details"]')).toBeTruthy();
+    expect(fixture.nativeElement.querySelector('.calendar-day-context-timeline')).toBeNull();
+    fixture.componentRef.setInput('standaloneDayPage', false);
     pending[1].next(emptyEvidence); fixture.detectChanges();
     expect(fixture.nativeElement.textContent).toContain('No HRV reading for this day');
     expect(fixture.nativeElement.querySelector('app-health-sleep-stage-summary')).toBeNull();
@@ -100,7 +105,7 @@ describe('CalendarDayContextComponent', () => {
     const notesStatus = signal<'loading' | 'ready' | 'error'>('loading');
     fixture.componentRef.setInput('data', { ...data('2026-09-11'), timelineNotesStatusSource: notesStatus });
     fixture.detectChanges();
-    expect(fixture.nativeElement.textContent).toContain('Loading notes…');
+    expect(fixture.nativeElement.textContent).not.toContain('Loading notes…');
     expect(fixture.nativeElement.textContent).not.toContain('No timeline entries available');
     notesStatus.set('error'); fixture.detectChanges();
     expect(fixture.nativeElement.textContent).toContain('Timeline notes could not be loaded.');
@@ -157,5 +162,14 @@ describe('CalendarDayContextComponent', () => {
     fixture.componentRef.setInput('calmMonth', false);
     fixture.detectChanges();
     expect(fixture.nativeElement.querySelectorAll('.calendar-day-context-section button')).toHaveLength(3);
+    fixture.componentRef.setInput('calmMonth', true);
+    const emptyDay = data('2026-09-13');
+    fixture.componentRef.setInput('data', {
+      ...emptyDay,
+      timelineNotes: signal([]),
+      activities: signal({ status: 'error' as const, day: emptyDay.day }),
+    });
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('[aria-label="Timeline notes on selected day"]')).toBeNull();
   });
 });
