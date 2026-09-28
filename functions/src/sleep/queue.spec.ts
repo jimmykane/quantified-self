@@ -835,6 +835,7 @@ describe('sleep queue', () => {
     });
 
     it('unions feed masks without replacing an undispatched webhook queue revision', async () => {
+        const createdAtMs = Date.now() - 1_000;
         const input = {
             type: 'suunto_health_poll' as const,
             provider: 'SuuntoApp' as const,
@@ -851,7 +852,7 @@ describe('sleep queue', () => {
         };
         hoisted.docGet.mockResolvedValue({ exists: true, data: () => ({
             ...input, suuntoHealthWebhookFeedMask: 1,
-            dateCreated: Date.now() - 1_000, queueRevision: 'original',
+            dateCreated: createdAtMs, queueRevision: 'original',
             processed: false, dispatchedToCloudTask: null,
         }) });
 
@@ -860,7 +861,7 @@ describe('sleep queue', () => {
         expect(hoisted.docSet).not.toHaveBeenCalled();
         expect(hoisted.docUpdate).toHaveBeenCalledWith({ suuntoHealthWebhookFeedMask: 3 });
         expect(hoisted.enqueueSleepSyncTask).toHaveBeenCalledWith(
-            expect.any(String), Date.now() - 1_000, expect.any(Number),
+            expect.any(String), createdAtMs, expect.any(Number),
             expect.objectContaining({ queueRevision: 'original' }),
         );
     });
@@ -917,6 +918,81 @@ describe('sleep queue', () => {
             ProviderQueueUserDeletedOrDeletingError,
         );
         expect(hoisted.docUpdate).not.toHaveBeenCalled();
+    });
+
+    it('still merges a mixed-feed notification just before dispatch', async () => {
+        vi.useFakeTimers();
+        vi.setSystemTime(new Date('2026-09-26T11:04:57.000Z'));
+        try {
+            const input = {
+                type: 'suunto_health_poll' as const,
+                provider: 'SuuntoApp' as const,
+                userID: 'test-user-uid',
+                providerUserId: 'suunto-user-1',
+                rangeStartMs: 1_777_392_000_000,
+                rangeEndMs: 1_777_478_400_000,
+                healthTrigger: 'webhook' as const,
+                dispatchImmediately: true,
+                dispatchAfterMs: Date.now() + 4_000,
+                lateArrivalKey: 'b'.repeat(64),
+                dedupeKey: 'suunto-health-webhook:bucket',
+                suuntoHealthWebhookFeedMask: 2 as const,
+            };
+            const original = { ...input, suuntoHealthWebhookFeedMask: 1,
+                processed: false, dispatchedToCloudTask: Date.now() };
+            hoisted.docGet.mockResolvedValue({ exists: true, data: () => original });
+
+            await addSleepSyncQueueItem(input);
+
+            expect(hoisted.docUpdate).toHaveBeenCalledWith({ suuntoHealthWebhookFeedMask: 3 });
+            expect(hoisted.runTransaction).toHaveBeenCalledOnce();
+            expect(hoisted.docSet).not.toHaveBeenCalled();
+            expect(hoisted.enqueueSleepSyncTask).not.toHaveBeenCalled();
+        } finally {
+            vi.useRealTimers();
+        }
+    });
+
+    it('keeps a follow-up if dispatch starts during the feed-mask transaction', async () => {
+        vi.useFakeTimers();
+        const startedAtMs = Date.parse('2026-09-26T11:02:00.000Z');
+        vi.setSystemTime(startedAtMs);
+        try {
+            const input = {
+                type: 'suunto_health_poll' as const,
+                provider: 'SuuntoApp' as const,
+                userID: 'test-user-uid',
+                providerUserId: 'suunto-user-1',
+                rangeStartMs: 1_777_392_000_000,
+                rangeEndMs: 1_777_478_400_000,
+                healthTrigger: 'webhook' as const,
+                dispatchImmediately: true,
+                dispatchAfterMs: startedAtMs + 180_000,
+                lateArrivalKey: 'b'.repeat(64),
+                dedupeKey: 'suunto-health-webhook:bucket',
+                suuntoHealthWebhookFeedMask: 2 as const,
+            };
+            const original = { ...input, suuntoHealthWebhookFeedMask: 1,
+                processed: false, dispatchedToCloudTask: startedAtMs };
+            hoisted.docGet.mockResolvedValueOnce({ exists: true, data: () => original })
+                .mockResolvedValueOnce({ exists: true, data: () => original })
+                .mockResolvedValue({ exists: false, data: () => undefined });
+            hoisted.getUserDeletionGuardStateInTransaction.mockImplementationOnce(async () => {
+                vi.setSystemTime(startedAtMs + 180_000);
+                return { shouldSkip: false };
+            });
+
+            await addSleepSyncQueueItem(input);
+
+            expect(hoisted.docUpdate).not.toHaveBeenCalledWith({ suuntoHealthWebhookFeedMask: 3 });
+            expect(hoisted.docSet).toHaveBeenCalledWith(expect.objectContaining({
+                suuntoHealthWebhookFeedMask: 2,
+            }), { merge: false });
+            expect(hoisted.runTransaction).toHaveBeenCalledTimes(2);
+            expect(new Set(hoisted.docIdValues).size).toBe(2);
+        } finally {
+            vi.useRealTimers();
+        }
     });
 
     it('queues a distinct deterministic follow-up for a webhook arriving after its bucket starts', async () => {

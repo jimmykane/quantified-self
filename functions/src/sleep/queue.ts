@@ -944,13 +944,18 @@ async function mergeScheduledSuuntoWebhookFeedMask(
     queuePayload: Partial<SleepSyncQueueItemInterface>,
     input: AddSleepSyncQueueItemInput,
     userID: string,
-): Promise<void> {
+): Promise<boolean> {
     const incomingMask = queuePayload.suuntoHealthWebhookFeedMask || 0;
-    if (!incomingMask) return;
+    if (!incomingMask) return true;
     const db = admin.firestore();
-    await db.runTransaction(async transaction => {
+    return db.runTransaction(async transaction => {
         const nowMs = Date.now();
-        const deletionGuard = await getUserDeletionGuardStateInTransaction(db, transaction, userID, nowMs);
+        let deletionGuard;
+        try {
+            deletionGuard = await getUserDeletionGuardStateInTransaction(db, transaction, userID, nowMs);
+        } catch (error) {
+            throw new UserDeletionGuardReadError(userID, `sleep_sync_queue_feed_mask_merge:${input.provider}`, error);
+        }
         if (deletionGuard.shouldSkip) {
             throw new ProviderQueueUserDeletedOrDeletingError(
                 ServiceNames.SuuntoApp, userID, input.providerUserId, docRef.id,
@@ -970,13 +975,37 @@ async function mergeScheduledSuuntoWebhookFeedMask(
         const snapshot = await transaction.get(docRef);
         const current = snapshot.exists ? snapshot.data() as SleepSyncQueueItemInterface : null;
         if (!current || current.processed || !isSameQueuePayload(current, queuePayload)
-            || current.dispatchAfterMs === undefined || nowMs >= current.dispatchAfterMs
-            || getActiveRevisionProcessingLease(current, nowMs)) return;
+            || current.dispatchAfterMs === undefined
+            || Date.now() >= current.dispatchAfterMs
+            || getActiveRevisionProcessingLease(current, Date.now())) return false;
         const combinedMask = (current.suuntoHealthWebhookFeedMask || 0) | incomingMask;
         if (combinedMask !== (current.suuntoHealthWebhookFeedMask || 0)) {
             transaction.update(docRef, { suuntoHealthWebhookFeedMask: combinedMask });
         }
+        return true;
     });
+}
+
+async function resolveLateSuuntoHealthWebhookRef(
+    input: AddSleepSyncQueueItemInput,
+    originalQueueId: string,
+    queuePayload: Partial<SleepSyncQueueItemInterface>,
+    lateArrivalKey: string,
+): Promise<{ queueId: string; docRef: admin.firestore.DocumentReference; reused: boolean }> {
+    const queueId = await generateIDFromParts([
+        input.provider, input.type, input.providerUserId,
+        input.dedupeKey || originalQueueId, 'late', lateArrivalKey,
+    ]);
+    const docRef = queueCollection().doc(queueId);
+    const snapshot = await docRef.get();
+    if (!snapshot.exists) return { queueId, docRef, reused: false };
+    if (!isSameQueuePayload(snapshot.data() as Partial<SleepSyncQueueItemInterface>, queuePayload)) {
+        throw new Error('Suunto Health late-arrival queue identity collision.');
+    }
+    logger.info('[HealthSync][Suunto] Reused late webhook refetch.', {
+        duplicateIngressWindows: 1,
+    });
+    return { queueId, docRef, reused: true };
 }
 
 export async function addSleepSyncQueueItem(input: AddSleepSyncQueueItemInput): Promise<admin.firestore.DocumentReference> {
@@ -1105,58 +1134,59 @@ export async function addSleepSyncQueueItem(input: AddSleepSyncQueueItemInput): 
             // The bucket's task may already be processing. A delayed ingress
             // needs its own deterministic follow-up instead of being mistaken
             // for a notification that the earlier refetch already covered.
-            queueId = await generateIDFromParts([
-                input.provider, input.type, input.providerUserId,
-                input.dedupeKey || queueId, 'late', input.lateArrivalKey,
-            ]);
-            docRef = queueCollection().doc(queueId);
-            const lateSnapshot = await docRef.get();
-            if (lateSnapshot.exists) {
-                if (!isSameQueuePayload(
-                    lateSnapshot.data() as Partial<SleepSyncQueueItemInterface>,
-                    queuePayload,
-                )) {
-                    throw new Error('Suunto Health late-arrival queue identity collision.');
-                }
-                logger.info('[HealthSync][Suunto] Reused late webhook refetch.', {
-                    duplicateIngressWindows: 1,
-                });
-                return docRef;
-            }
+            const late = await resolveLateSuuntoHealthWebhookRef(
+                input, queueId, queuePayload, input.lateArrivalKey,
+            );
+            queueId = late.queueId;
+            docRef = late.docRef;
+            if (late.reused) return docRef;
         } else if (existingQueueItem?.processed || existingQueueItem?.dispatchedToCloudTask) {
             if (isSameQueuePayload(existingQueueItem, queuePayload)) {
                 if (input.lateArrivalKey) {
                     const existingMask = existingQueueItem.suuntoHealthWebhookFeedMask || 0;
                     const incomingMask = queuePayload.suuntoHealthWebhookFeedMask || 0;
+                    let merged = true;
                     if ((existingMask | incomingMask) !== existingMask) {
-                        await mergeScheduledSuuntoWebhookFeedMask(docRef, queuePayload,
+                        merged = await mergeScheduledSuuntoWebhookFeedMask(docRef, queuePayload,
                             queuePayloadInput, userID);
                     }
-                    logger.info('[HealthSync][Suunto] Coalesced webhook refetch.', {
-                        coalescedWindows: 1,
-                    });
+                    if (merged) {
+                        logger.info('[HealthSync][Suunto] Coalesced webhook refetch.', {
+                            coalescedWindows: 1,
+                        });
+                        return docRef;
+                    }
+                    // The scheduled task may have started between the initial read
+                    // and the mask transaction. Preserve this notification in a
+                    // deterministic follow-up instead of undercounting its feed.
+                    const late = await resolveLateSuuntoHealthWebhookRef(
+                        input, queueId, queuePayload, input.lateArrivalKey,
+                    );
+                    queueId = late.queueId;
+                    docRef = late.docRef;
+                    if (late.reused) return docRef;
                 } else {
                     logger.info(`[SleepSync] Reusing existing immediate queue item ${queueId} for duplicate ${input.provider} ${input.type} notification.`);
+                    return docRef;
                 }
-                return docRef;
-            }
-
-            const revisionQueueId = await generateIDFromParts([
-                input.provider,
-                input.type,
-                input.providerUserId,
-                input.dedupeKey || input.callbackURL || queueId,
-                'revision',
-                queuePayloadFingerprint(queuePayload),
-            ]);
-            queueId = revisionQueueId;
-            docRef = queueCollection().doc(queueId);
-            const revisionSnapshot = await docRef.get();
-            const existingRevisionQueueItem = revisionSnapshot.exists ? revisionSnapshot.data() as Partial<SleepSyncQueueItemInterface> : null;
-            if ((existingRevisionQueueItem?.processed || existingRevisionQueueItem?.dispatchedToCloudTask)
-                && isSameQueuePayload(existingRevisionQueueItem, queuePayload)) {
-                logger.info(`[SleepSync] Reusing existing immediate queue item ${queueId} for duplicate ${input.provider} ${input.type} notification revision.`);
-                return docRef;
+            } else {
+                const revisionQueueId = await generateIDFromParts([
+                    input.provider,
+                    input.type,
+                    input.providerUserId,
+                    input.dedupeKey || input.callbackURL || queueId,
+                    'revision',
+                    queuePayloadFingerprint(queuePayload),
+                ]);
+                queueId = revisionQueueId;
+                docRef = queueCollection().doc(queueId);
+                const revisionSnapshot = await docRef.get();
+                const existingRevisionQueueItem = revisionSnapshot.exists ? revisionSnapshot.data() as Partial<SleepSyncQueueItemInterface> : null;
+                if ((existingRevisionQueueItem?.processed || existingRevisionQueueItem?.dispatchedToCloudTask)
+                    && isSameQueuePayload(existingRevisionQueueItem, queuePayload)) {
+                    logger.info(`[SleepSync] Reusing existing immediate queue item ${queueId} for duplicate ${input.provider} ${input.type} notification revision.`);
+                    return docRef;
+                }
             }
         }
     }
