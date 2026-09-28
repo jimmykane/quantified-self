@@ -2018,7 +2018,7 @@ Training state and Readiness are fixed inside the optional Today summary:
   recovery builders use the same resolver over their bounded Sleep windows;
   separate historical benchmark windows have separate Health reads. Existing normalized history needs no reimport.
   HRV Health creates, updates, and deletes invalidate only readiness and build comparison via the existing ingress queue.
-  `training_readiness.payload.evidenceVersion = 2` lets the frontend and backend freshness gate rebuild old readiness
+  `training_readiness.payload.evidenceVersion = 3` lets the frontend and backend freshness gate rebuild old readiness
   inputs independently from the formula version. Readiness formula 4 adds the shared HRV range. Recovery version 4 withholds HRV comparison across incompatible sources.
   MCP projects out the internal readiness evidence version. Registered readiness and recovery tools retain their
   version-3 formulas and wire shapes; additive current-readiness tools expose formula 4. Rebuilds use the ordinary
@@ -2366,12 +2366,14 @@ and is not a universal medical claim. Missing drivers are excluded and available
 missing evidence as zero.
 
 HRV uses `shared/personal-metric-range.ts`, exactly as the Health and Dashboard nightly HRV charts do. Historical
-readings on the same provider calendar date reduce to a median for the baseline, and original observations survive
-sleep grouping so that history is not changed into an average of averages. Current readiness is stricter: the latest
-eligible night must have ended within 48 hours and must represent exactly one completed main-sleep fragment with one
-HRV observation. A split latest night therefore contributes no current HRV; Readiness never promotes its last fragment
-or an invented fragment average to a nightly value. Each observation is filtered at the cutoff before selecting its
-source. The baseline is the mean ± one population standard deviation
+readings on the same provider calendar date reduce to a median for the baseline. Suunto main-sleep records from the
+same provider account and wake date are first partitioned into canonical nights: overlapping records or records with
+at most a 30-minute gap are one night, while a larger gap remains separate. The raw SleepIds are retained in storage.
+For a reconciled night, duration and stages are summed, interruption time remains awake, the latest score wins, and
+average HRV is weighted by each record's HRV sample count. Conflicting fragment values without complete positive sample
+counts remain unavailable; Readiness never promotes the last fragment. Current readiness then requires one authoritative
+HRV observation from the canonical latest night, completed within 48 hours. Each observation is filtered at the cutoff
+before selecting its source. The baseline is the mean ± one population standard deviation
 over the preceding 60 days, including current observations. At least 14 observed days are required, plus three observed
 days in the last seven days for the current average. Every historical date uses only observations completed by its own
 cutoff. Selecting a year of chart history changes the view, never these calculation windows. Dedicated overnight and

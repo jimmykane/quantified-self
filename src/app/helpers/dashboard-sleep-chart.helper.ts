@@ -1,7 +1,11 @@
 import { readinessHrvObservations, type ReadinessSleepEvidencePoint } from '@shared/readiness';
-import { sleepEvidenceSourceKey, sleepHrvSourceKey, aggregateNightlyHrvEvidence } from '@shared/nightly-hrv';
+import { aggregateNightlyHrvEvidence, isIdentifiedSleepEvidenceSourceKey, isSleepAverageHrvSourceKey,
+  sleepEvidenceSourceKey, sleepHrvSourceKey } from '@shared/nightly-hrv';
 import {
   normalizeSleepProvider,
+  partitionSleepNightFragments,
+  resolveSleepEffectiveStartTimeMs,
+  sumSleepFragmentInterruptionSeconds,
   SleepProvider,
   SleepSession,
   SleepStageDurationsSeconds,
@@ -15,8 +19,7 @@ import { getDateTimeFormatter } from './date-time-format.helper';
 export interface DashboardSleepTrendPoint {
   sourceKey?: string;
   hrvSourceKey?: string;
-  sleepFragmentCount?: number;
-  sleepFragmentEndTimesMs?: readonly number[];
+  hrvSampleCount?: number | null;
   hrvObservations?: ReadinessSleepEvidencePoint['hrvObservations'];
   id: string;
   sleepDate: string;
@@ -301,19 +304,20 @@ function buildPoint(session: SleepSession): DashboardSleepTrendPoint | null {
   if (!provider) {
     return null;
   }
-  const startTimeMs = Number(session.startTimeMs);
+  const storedStartTimeMs = Number(session.startTimeMs);
   const endTimeMs = Number(session.endTimeMs);
   if (
-    !Number.isFinite(startTimeMs)
+    !Number.isFinite(storedStartTimeMs)
     || !Number.isFinite(endTimeMs)
-    || !Number.isFinite(new Date(startTimeMs).getTime())
+    || !Number.isFinite(new Date(storedStartTimeMs).getTime())
     || !Number.isFinite(new Date(endTimeMs).getTime())
-    || endTimeMs <= startTimeMs
+    || endTimeMs <= storedStartTimeMs
   ) {
     return null;
   }
 
-  const totalSeconds = finiteSeconds(session.durationSeconds) || Math.max(0, Math.round((endTimeMs - startTimeMs) / 1000));
+  const totalSeconds = finiteSeconds(session.durationSeconds)
+    || Math.max(0, Math.round((endTimeMs - storedStartTimeMs) / 1000));
   const deepSeconds = stageSeconds(session.stageDurationsSeconds, SLEEP_STAGES.Deep);
   const lightSeconds = stageSeconds(session.stageDurationsSeconds, SLEEP_STAGES.Light);
   const remSeconds = stageSeconds(session.stageDurationsSeconds, SLEEP_STAGES.Rem);
@@ -327,15 +331,15 @@ function buildPoint(session: SleepSession): DashboardSleepTrendPoint | null {
   if (!resolvedSleepDate) {
     return null;
   }
+  const startTimeMs = resolveSleepEffectiveStartTimeMs(session);
 
   return {
     id: session.id || `${provider}:${session.source?.sourceSessionKey || startTimeMs}`,
     sleepDate: resolvedSleepDate,
     sourceKey: sleepEvidenceSourceKey(session),
     hrvSourceKey: sleepHrvSourceKey(session),
-    sleepFragmentCount: 1,
-    sleepFragmentEndTimesMs: [endTimeMs],
-    hrvObservations: readinessHrvObservations({ sleepDate: session.sleepDate || resolvedSleepDate,
+    hrvSampleCount: toMetric(session.vitals?.hrvSampleCount),
+    hrvObservations: readinessHrvObservations({ sleepDate: resolvedSleepDate,
       startTimeMs, endTimeMs, hrvSourceKey: sleepHrvSourceKey(session),
       averageHrvMs: toPositiveMetric(session.vitals?.averageHrvMs ?? session.vitals?.overnightHrvMs) }),
     provider,
@@ -428,8 +432,11 @@ function aggregatePointGroup(points: readonly DashboardSleepTrendPoint[]): Dashb
   const latestPrimaryPoint = primaryPoints.reduce((latest, point) => compareSleepRecency(latest, point) < 0 ? point : latest);
   const sortedPrimaryPoints = [...primaryPoints].sort((left, right) => left.startTimeMs - right.startTimeMs);
   const napSeconds = sumPointSeconds(napPoints, 'totalSeconds');
+  const interruptionSeconds = latestPrimaryPoint.provider === SLEEP_PROVIDERS.SuuntoApp
+    ? sumSleepFragmentInterruptionSeconds(sortedPrimaryPoints)
+    : 0;
 
-  return {
+  const result: DashboardSleepTrendPoint = {
     ...latestPrimaryPoint,
     id: [...points].sort(compareSleepRecency).map(point => point.id).join('|'),
     startTimeMs: sortedPrimaryPoints[0]?.startTimeMs ?? latestPrimaryPoint.startTimeMs,
@@ -438,14 +445,15 @@ function aggregatePointGroup(points: readonly DashboardSleepTrendPoint[]): Dashb
     deepSeconds: sumPointSeconds(primaryPoints, 'deepSeconds'),
     lightSeconds: sumPointSeconds(primaryPoints, 'lightSeconds'),
     remSeconds: sumPointSeconds(primaryPoints, 'remSeconds'),
-    awakeSeconds: sumPointSeconds(primaryPoints, 'awakeSeconds'),
+    awakeSeconds: sumPointSeconds(primaryPoints, 'awakeSeconds') + interruptionSeconds,
     unknownSeconds: sumPointSeconds(primaryPoints, 'unknownSeconds'),
     averageHeartRateBpm: aggregateFiniteMetrics(primaryPoints.map(point => point.averageHeartRateBpm)),
     minimumHeartRateBpm: minFiniteMetric(primaryPoints.map(point => point.minimumHeartRateBpm)),
-    ...aggregateNightlyHrvEvidence(primaryPoints),
-    sleepFragmentCount: primaryPoints.reduce((total, point) => total + (point.sleepFragmentCount ?? 1), 0),
-    sleepFragmentEndTimesMs: primaryPoints.flatMap(point => point.sleepFragmentEndTimesMs ?? [point.endTimeMs]),
-    hrvObservations: primaryPoints.flatMap(readinessHrvObservations),
+    ...aggregateNightlyHrvEvidence(primaryPoints, {
+      requireEveryPoint: latestPrimaryPoint.provider === SLEEP_PROVIDERS.SuuntoApp
+        && primaryPoints.some(point => isSleepAverageHrvSourceKey(point.hrvSourceKey)),
+    }),
+    hrvObservations: undefined,
     maxSpo2Percent: maxFiniteMetric(primaryPoints.map(point => point.maxSpo2Percent)),
     isNap: sleepPoints.length === 0 && napPoints.length > 0,
     napSeconds: sleepPoints.length ? napSeconds : 0,
@@ -455,18 +463,30 @@ function aggregatePointGroup(points: readonly DashboardSleepTrendPoint[]): Dashb
     napStartTimeMs: sleepPoints.length && napPoints.length ? Math.min(...napPoints.map(point => point.startTimeMs)) : null,
     napEndTimeMs: sleepPoints.length && napPoints.length ? Math.max(...napPoints.map(point => point.endTimeMs)) : null,
   };
+  result.hrvObservations = readinessHrvObservations(result);
+  return result;
 }
 
 function aggregateSameProviderDatePoints(points: readonly DashboardSleepTrendPoint[]): DashboardSleepTrendPoint[] {
   const groupedPoints = new Map<string, DashboardSleepTrendPoint[]>();
   for (const point of points) {
-    const key = point.isPlaceholder ? point.id : JSON.stringify([point.sleepDate, point.provider, point.sourceKey]);
+    const lacksSuuntoAccountIdentity = point.provider === SLEEP_PROVIDERS.SuuntoApp
+      && !isIdentifiedSleepEvidenceSourceKey(point.provider, point.sourceKey);
+    const key = point.isPlaceholder || lacksSuuntoAccountIdentity
+      ? point.id
+      : JSON.stringify([point.sleepDate, point.provider, point.sourceKey]);
     const group = groupedPoints.get(key) || [];
     group.push(point);
     groupedPoints.set(key, group);
   }
 
-  return [...groupedPoints.values()].map(aggregatePointGroup);
+  return [...groupedPoints.values()].flatMap(group => {
+    const mainSleep = group.filter(point => !point.isNap);
+    const naps = group.filter(point => point.isNap);
+    if (!mainSleep.length) return [aggregatePointGroup(group)];
+    return partitionSleepNightFragments(mainSleep[0]?.provider ?? null, mainSleep)
+      .map((cluster, index) => aggregatePointGroup(index === 0 ? [...cluster, ...naps] : cluster));
+  });
 }
 
 export function buildDashboardSleepTrendContext(

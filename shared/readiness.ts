@@ -20,7 +20,7 @@ export {
 } from './readiness-legacy';
 
 export const READINESS_FORMULA_VERSION = 4 as const;
-export const READINESS_EVIDENCE_VERSION = 2 as const;
+export const READINESS_EVIDENCE_VERSION = 3 as const;
 export const READINESS_SLEEP_LOOKBACK_MS = HRV_PERSONAL_RANGE_OPTIONS.baselineWindowDays * 86400000;
 const READINESS_HRV_TREND_MINIMUM_DAYS = 4;
 const READINESS_HRV_TREND_MINIMUM_CHANGE_MS = 1;
@@ -148,32 +148,17 @@ function readinessHrvObservationSeries(
     const observations = readinessHrvObservations(point).filter(observation =>
       Number.isFinite(observation.value) && observation.value > 0 && inWindow(observation.timestampMs));
     const pointTime = resolveReadinessSleepPointTime(point);
-    // A grouped night may include a later fragment. Retain original completed HRV
-    // observations at historical cutoffs instead of withholding the entire group.
     const selectedAtMs = inWindow(pointTime) ? pointTime : Math.max(-Infinity, ...observations.map(value => value.timestampMs));
     return inWindow(selectedAtMs) ? [{ point, observations, selectedAtMs }] : [];
   }).sort((a, b) => a.selectedAtMs - b.selectedAtMs || a.point.id.localeCompare(b.point.id));
   const latestSleep = eligible[eligible.length - 1];
   if (!latestSleep || nowMs - latestSleep.selectedAtMs > READINESS_SLEEP_MAX_AGE_MS) return [];
-
-  const currentNight = eligible.filter(({ point }) => point.provider === latestSleep.point.provider
-    && (point.sourceKey ?? null) === (latestSleep.point.sourceKey ?? null)
-    && point.sleepDate === latestSleep.point.sleepDate);
-  const fragmentCount = currentNight.reduce((total, { point }) => {
-    const completedFragments = point.sleepFragmentEndTimesMs?.filter(inWindow).length;
-    return total + (completedFragments !== undefined
-      ? completedFragments
-      : Number.isInteger(point.sleepFragmentCount) && point.sleepFragmentCount! > 0
-        ? point.sleepFragmentCount!
-        : 1);
-  }, 0);
-  const currentNightObservations = currentNight.flatMap(entry => entry.observations)
-    .filter(observation => observation.calendarDate === latestSleep.point.sleepDate)
-    .sort((a, b) => a.timestampMs - b.timestampMs || (a.sourceKey ?? '').localeCompare(b.sourceKey ?? ''));
-  // A fragment value is not an authoritative nightly value. Fail closed instead
-  // of presenting the last fragment (or an invented aggregate) as current HRV.
-  if (fragmentCount !== 1 || currentNightObservations.length !== 1) return [];
-
+  const currentNightObservations = latestSleep.observations
+    .filter(observation => observation.calendarDate === latestSleep.point.sleepDate);
+  // Grouping must yield one authoritative canonical observation. Conflicting
+  // or unweighted fragment values remain unavailable rather than becoming the
+  // current night.
+  if (currentNightObservations.length !== 1) return [];
   const currentObservation = currentNightObservations[0];
   return eligible.filter(({ point }) => point.provider === latestSleep.point.provider
     && (point.sourceKey ?? null) === (latestSleep.point.sourceKey ?? null))
@@ -182,7 +167,6 @@ function readinessHrvObservationSeries(
     .sort((a, b) => a.timestampMs - b.timestampMs || (a.sourceKey ?? '').localeCompare(b.sourceKey ?? ''));
 }
 
-/** Keep original per-day readings; averaging fragments first would change the chart's daily median. */
 export function readinessHrvObservations(point: Pick<ReadinessSleepEvidencePoint,
   'averageHrvMs' | 'hrvSourceKey' | 'hrvObservations' | 'sleepDate' | 'startTimeMs' | 'endTimeMs'>) {
   return point.hrvObservations ?? (typeof point.averageHrvMs === 'number' && point.averageHrvMs > 0

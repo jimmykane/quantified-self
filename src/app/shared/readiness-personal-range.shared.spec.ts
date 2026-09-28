@@ -80,16 +80,26 @@ describe('readiness shared HRV personal range', () => {
     }
   });
 
-  it('withholds current HRV when the latest night contains several sleep fragments', () => {
+  it('uses one canonical sample-weighted observation for a reconciled latest night', () => {
     const points = history();
     const last = points.at(-1)!;
-    const fragments = [20, 30, 100].map((value, index) => ({ ...last, averageHrvMs: value,
-      endTimeMs: last.endTimeMs! - (2 - index) * 3600000 }));
-    const grouped = { ...last, averageHrvMs: 50, sleepFragmentCount: fragments.length,
-      sleepFragmentEndTimesMs: fragments.map(fragment => fragment.endTimeMs!),
-      hrvObservations: fragments.flatMap(readinessHrvObservations) };
+    const averageHrvMs = ((29 * 46) + (40 * 35)) / 81;
+    const grouped = { ...last, averageHrvMs, hrvSampleCount: 81,
+      hrvObservations: [{ timestampMs: last.endTimeMs!, calendarDate: last.sleepDate,
+        value: averageHrvMs, sourceKey: last.hrvSourceKey }] };
+    const range = buildReadinessHrvPersonalRange([...points.slice(0, -1), grouped], now);
+    expect(range?.latestMs).toBeCloseTo(averageHrvMs);
+    expect(buildReadinessSignals({ sleepPoints: [...points.slice(0, -1), grouped], nowMs: now })?.hrvRatio)
+      .not.toBeNull();
+  });
+
+  it('withholds current HRV when reconciliation leaves conflicting observations', () => {
+    const points = history();
+    const last = points.at(-1)!;
+    const grouped = { ...last,
+      hrvObservations: [29, 40].map((value, index) => ({ timestampMs: last.endTimeMs! - index,
+        calendarDate: last.sleepDate, value, sourceKey: last.hrvSourceKey })) };
     expect(buildReadinessHrvPersonalRange([...points.slice(0, -1), grouped], now)).toBeNull();
-    expect(buildReadinessSignals({ sleepPoints: [...points.slice(0, -1), grouped], nowMs: now })?.hrvRatio).toBeNull();
   });
 
   it('keeps completed HRV fragments when another fragment of the same night ends after the cutoff', () => {

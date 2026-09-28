@@ -46,6 +46,15 @@ Suunto Health data is kept separate from workout FIT metrics and normalized Slee
 
 Missing values remain missing. Suunto can return complementary or corrected Activity/Recovery rows at one timestamp. Those rows merge per metric in provider response order: a later non-null value wins, while a later missing value or the Recovery `StressState` sentinel `0` cannot erase an earlier available measurement. Daily statistic nulls are ignored when a non-null value exists, while conflicting non-null values fail validation. Activity and recovery records are grouped by provider-local calendar date and UTC offset. A daylight-saving offset change therefore creates separate source records rather than pretending the whole local date used one offset.
 
+Suunto Sleep can finalize one physical night under more than one `SleepId`. Persistence remains one normalized Sleep
+record per provider ID; no ingestion-time rewrite or deletion is allowed. Dashboard, readiness, and aggregate MCP reads
+build a canonical night at read time for non-nap records from the same provider account and wake date when records
+overlap or their gap is at most 30 minutes. The displayed start uses Suunto's sleep-onset latency, sleep duration and
+stages are summed, interruption and later onset time remain awake, the latest completed record supplies the score,
+average sleep heart rate is averaged, minimum heart rate and maximum SpO₂ keep their extrema, and average HRV is
+weighted by `AvgHRVSampleCount`. Conflicting HRV values without complete positive sample counts are unavailable. Gaps
+over 30 minutes remain separate nights, and raw Sleep records remain available for auditing and session pagination.
+
 Historical coverage is `unknown` because the provider does not assert completeness. The current provider-local date is `partial`. Activity and recovery observation freshness follows the latest accepted sample; daily statistics use the end of their bounded day. The expected refresh interval is 48 hours.
 
 Daily statistics retain multiple devices as separate source records using a one-way device key derived from the provider account and Suunto source name. Activity and recovery feeds do not expose a device source in the documented sample shape, so those records deliberately have no device attribution.

@@ -34,6 +34,14 @@ export function sleepEvidenceSourceKey(session: Pick<SleepSession, 'source'>): s
   return JSON.stringify([session.source?.provider, session.source?.providerUserId || null]);
 }
 
+/** Fragment reconciliation requires a real provider-account identity. */
+export function isIdentifiedSleepEvidenceSourceKey(
+  provider: string | null | undefined,
+  sourceKey: string | null | undefined,
+): boolean {
+  return Boolean(provider && sourceKey && sourceKey !== JSON.stringify([provider, null]));
+}
+
 export function positiveNightlyHrv(value: unknown): value is number {
   return typeof value === 'number' && Number.isFinite(value) && value > 0;
 }
@@ -45,16 +53,47 @@ export function sleepHrvSourceKey(session: NightlyHrvSleepSession): string | und
   return field ? JSON.stringify(['sleep', sleepEvidenceSourceKey(session), field]) : undefined;
 }
 
+export function isSleepAverageHrvSourceKey(sourceKey: string | null | undefined): boolean {
+  if (!sourceKey) return false;
+  try {
+    const parts = JSON.parse(sourceKey) as unknown;
+    return Array.isArray(parts) && parts.length === 3 && parts[0] === 'sleep' && parts[2] === 'average';
+  } catch {
+    return false;
+  }
+}
+
 /** A fragment without HRV must not erase the source of another fragment's reading. */
-export function aggregateNightlyHrvEvidence<T extends { averageHrvMs: number | null; hrvSourceKey?: string }>(
+export function aggregateNightlyHrvEvidence<T extends {
+  averageHrvMs: number | null;
+  hrvSampleCount?: number | null;
+  hrvSourceKey?: string;
+}>(
   points: readonly T[],
-): { averageHrvMs: number | null; hrvSourceKey?: string } {
+  options: { requireEveryPoint?: boolean } = {},
+): { averageHrvMs: number | null; hrvSampleCount?: number; hrvSourceKey?: string } {
   const values = points.filter(point => positiveNightlyHrv(point.averageHrvMs));
+  if (options.requireEveryPoint && values.length !== points.length) return { averageHrvMs: null };
   const keys = new Set(values.map(point => point.hrvSourceKey));
   if (!values.length || keys.size !== 1) return { averageHrvMs: null };
   const hrvSourceKey = values[0].hrvSourceKey;
-  return { averageHrvMs: values.reduce((sum, point) => sum + point.averageHrvMs!, 0) / values.length,
-    ...(hrvSourceKey ? { hrvSourceKey } : {}) };
+  const sampleCounts = values.map(point => point.hrvSampleCount)
+    .filter((value): value is number => Number.isSafeInteger(value) && (value as number) > 0);
+  if (values.length > 1 && sampleCounts.length !== values.length) {
+    const distinctValues = new Set(values.map(point => point.averageHrvMs));
+    if (distinctValues.size !== 1) return { averageHrvMs: null };
+  }
+  const hrvSampleCount = sampleCounts.length === values.length
+    ? sampleCounts.reduce((sum, value) => sum + value, 0)
+    : undefined;
+  const averageHrvMs = hrvSampleCount
+    ? values.reduce((sum, point, index) => sum + point.averageHrvMs! * sampleCounts[index], 0) / hrvSampleCount
+    : values[0].averageHrvMs!;
+  return {
+    averageHrvMs,
+    ...(hrvSampleCount !== undefined ? { hrvSampleCount } : {}),
+    ...(hrvSourceKey ? { hrvSourceKey } : {}),
+  };
 }
 
 function validDate(value: unknown): value is string {

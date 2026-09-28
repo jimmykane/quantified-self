@@ -451,6 +451,13 @@ Unidentified legacy accounts are not guessed. Native records and existing canoni
 reimport or a Sleep rewrite. Only missing main nights are supplemented, once across fragments; late delivery,
 corrections, and removal are reflected at read time.
 
+If a provider can finalize one physical night as multiple records, keep every provider record and stable ID for audit,
+then define a provider-specific read-time reconciliation rule. Suunto records for the same provider account and wake
+date are one canonical night only when they overlap or the gap is at most 30 minutes. Sum sleep duration and stage
+durations, preserve the interruption as awake time, take the latest score, and weight average HRV by positive recorded
+sample counts. Never use a plain mean or the last fragment when values differ; incomplete weights make the canonical
+HRV unavailable. A larger gap remains a separate sleep, even on the same displayed date.
+
 New providers should use an approved canonical overnight-average semantic from `HRV_PERSONAL_RANGE_VARIANTS`,
 `average` aggregation, milliseconds, and recorded/provider-summary origin with device/provider-calculated recording
 method. Register a new semantic only after establishing its meaning and testing it. Spot checks, activity intervals,

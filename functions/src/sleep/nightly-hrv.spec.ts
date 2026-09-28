@@ -23,8 +23,20 @@ async function record(provider: string = SLEEP_PROVIDERS.GarminAPI): Promise<Nig
       normalizationStatus: 'canonical', origin: 'provider_summary', recordingMethod: 'provider_calculated', canonical: { value: 44, unit: 'ms' }, native: { metric: 'lastNightAvg', value: 44, unit: 'ms' } }] };
 }
 describe('shared nightly HRV', () => {
-  it('retains a fragment HRV source and rejects mixtures of measurement semantics', () => {
+  it('weights adjacent fragment HRV by sample count and rejects ambiguous evidence', () => {
     expect(aggregateNightlyHrvEvidence([{averageHrvMs: 44, hrvSourceKey: 'a'}, {averageHrvMs: null}]))
+      .toEqual({averageHrvMs: 44, hrvSourceKey: 'a'});
+    expect(aggregateNightlyHrvEvidence(
+      [{averageHrvMs: 44, hrvSourceKey: 'a'}, {averageHrvMs: null}],
+      {requireEveryPoint: true},
+    )).toEqual({averageHrvMs: null});
+    expect(aggregateNightlyHrvEvidence([
+      {averageHrvMs: 29, hrvSampleCount: 46, hrvSourceKey: 'a'},
+      {averageHrvMs: 40, hrvSampleCount: 35, hrvSourceKey: 'a'},
+    ])).toEqual({averageHrvMs: ((29 * 46) + (40 * 35)) / 81, hrvSampleCount: 81, hrvSourceKey: 'a'});
+    expect(aggregateNightlyHrvEvidence([{averageHrvMs: 29, hrvSourceKey: 'a'}, {averageHrvMs: 40, hrvSourceKey: 'a'}]))
+      .toEqual({averageHrvMs: null});
+    expect(aggregateNightlyHrvEvidence([{averageHrvMs: 44, hrvSourceKey: 'a'}, {averageHrvMs: 44, hrvSourceKey: 'a'}]))
       .toEqual({averageHrvMs: 44, hrvSourceKey: 'a'});
     expect(aggregateNightlyHrvEvidence([{averageHrvMs: 44, hrvSourceKey: 'a'}, {averageHrvMs: 44, hrvSourceKey: 'b'}]))
       .toEqual({averageHrvMs: null});

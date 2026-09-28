@@ -1,7 +1,8 @@
 import { readinessHrvObservations } from '../../../shared/readiness';
 import { buildReadinessSignals as buildLegacyReadinessSignals } from '../../../shared/readiness-legacy';
 import { supplementNightlyHrvSleepDocuments } from '../sleep/nightly-hrv';
-import { sleepEvidenceSourceKey, sleepHrvSourceKey, aggregateNightlyHrvEvidence } from '../../../shared/nightly-hrv';
+import { aggregateNightlyHrvEvidence, isIdentifiedSleepEvidenceSourceKey, isSleepAverageHrvSourceKey,
+    sleepEvidenceSourceKey, sleepHrvSourceKey } from '../../../shared/nightly-hrv';
 import * as admin from 'firebase-admin';
 import { FieldPath } from 'firebase-admin/firestore';
 import * as logger from 'firebase-functions/logger';
@@ -160,6 +161,7 @@ import {
 } from '../../../shared/training-load';
 import {
     normalizeSleepProvider,
+    partitionSleepNightFragments,
     SLEEP_PROVIDERS,
     SLEEP_SESSIONS_COLLECTION_ID,
     type SleepProvider,
@@ -3587,7 +3589,11 @@ function resolveTrainingSleepNights(
     sleepDocs: readonly FirestoreQueryDocumentSnapshot[],
 ): ResolvedTrainingSleepNight[] {
     const candidates = new Map<string, TrainingSleepNightCandidate>();
-    const hrvByAccountNight = new Map<string, Array<{ averageHrvMs: number | null; hrvSourceKey?: string }>>();
+    const hrvByAccountNight = new Map<string, Array<{
+        averageHrvMs: number | null;
+        hrvSampleCount?: number | null;
+        hrvSourceKey?: string;
+    }>>();
     sleepDocs.forEach((doc) => {
         const data = decodeTrainingSleepDocument(doc);
         if (!data) return;
@@ -3633,7 +3639,9 @@ function resolveTrainingSleepNights(
             ?? toFinitePositiveNumber(vitals.overnightHrvMs);
         const accountNightKey = JSON.stringify([sleepEvidenceSourceKey(data as unknown as SleepSession), sleepDayMs]);
         hrvByAccountNight.set(accountNightKey, [...(hrvByAccountNight.get(accountNightKey) || []), {
-            averageHrvMs: overnightHrvMs, hrvSourceKey: sleepHrvSourceKey(data as unknown as SleepSession),
+            averageHrvMs: overnightHrvMs,
+            hrvSampleCount: toFiniteNumber(vitals.hrvSampleCount),
+            hrvSourceKey: sleepHrvSourceKey(data as unknown as SleepSession),
         }]);
         const hasValidEndTime = hasValidTrainingSleepEndTime(startTimeMs, endTimeMs);
         const key = `${provider}:${formatUtcDayKey(sleepDayMs)}`;
@@ -3735,8 +3743,7 @@ function resolveTrainingReadinessSleepEvidence(
             provider,
             sourceKey: sleepEvidenceSourceKey(data as unknown as SleepSession),
             hrvSourceKey: sleepHrvSourceKey(data as unknown as SleepSession),
-            sleepFragmentCount: 1,
-            sleepFragmentEndTimesMs: [endTimeMs],
+            hrvSampleCount: toFiniteNumber(vitals.hrvSampleCount),
             startTimeMs,
             endTimeMs,
             totalSeconds: durationSeconds,
@@ -3745,43 +3752,59 @@ function resolveTrainingReadinessSleepEvidence(
             averageHeartRateBpm: toFiniteNumber(vitals.averageHeartRateBpm),
             minimumHeartRateBpm: toFiniteNumber(vitals.minimumHeartRateBpm),
         };
-        point.hrvObservations = readinessHrvObservations({ ...point,
-            sleepDate: typeof data.sleepDate === 'string' ? data.sleepDate : point.sleepDate });
-        const key = JSON.stringify([point.sleepDate, point.sourceKey]);
+        point.hrvObservations = readinessHrvObservations(point);
+        const key = JSON.stringify([
+            point.sleepDate,
+            point.sourceKey,
+            provider === SLEEP_PROVIDERS.SuuntoApp
+                && !isIdentifiedSleepEvidenceSourceKey(provider, point.sourceKey)
+                ? point.id
+                : null,
+        ]);
         groups.set(key, [...(groups.get(key) || []), point]);
     });
 
-    return [...groups.values()].map((points): ReadinessSleepEvidencePoint => {
-        const sortedPoints = [...points].sort((left, right) => (
-            (left.endTimeMs || 0) - (right.endTimeMs || 0)
-            || (left.startTimeMs || 0) - (right.startTimeMs || 0)
-            || left.id.localeCompare(right.id)
-        ));
-        const latest = sortedPoints[sortedPoints.length - 1];
-        const averageHeartRateValues = points
-            .map(point => point.averageHeartRateBpm)
-            .filter((value): value is number => Number.isFinite(value) && (value as number) > 0);
-        const minimumHeartRateValues = points
-            .map(point => point.minimumHeartRateBpm)
-            .filter((value): value is number => Number.isFinite(value) && (value as number) > 0);
-        return {
-            ...latest,
-            id: sortedPoints.map(point => point.id).join('|'),
-            startTimeMs: Math.min(...points.map(point => point.startTimeMs as number)),
-            endTimeMs: Math.max(...points.map(point => point.endTimeMs as number)),
-            totalSeconds: points.reduce((total, point) => total + Math.max(0, point.totalSeconds || 0), 0),
-            ...aggregateNightlyHrvEvidence(points),
-            sleepFragmentCount: points.reduce((total, point) => total + (point.sleepFragmentCount ?? 1), 0),
-            sleepFragmentEndTimesMs: points.flatMap(point => point.sleepFragmentEndTimesMs ?? [point.endTimeMs as number]),
-            hrvObservations: points.flatMap(readinessHrvObservations),
-            averageHeartRateBpm: averageHeartRateValues.length
-                ? averageHeartRateValues.reduce((total, value) => total + value, 0) / averageHeartRateValues.length
-                : null,
-            minimumHeartRateBpm: minimumHeartRateValues.length
-                ? Math.min(...minimumHeartRateValues)
-                : null,
-        };
-    });
+    return [...groups.values()].flatMap(points => (
+        partitionSleepNightFragments(points[0]?.provider ?? null, points)
+            .map((fragmentPoints): ReadinessSleepEvidencePoint => {
+                const sortedPoints = [...fragmentPoints].sort((left, right) => (
+                    (left.endTimeMs || 0) - (right.endTimeMs || 0)
+                    || (left.startTimeMs || 0) - (right.startTimeMs || 0)
+                    || left.id.localeCompare(right.id)
+                ));
+                const latest = sortedPoints[sortedPoints.length - 1];
+                const averageHeartRateValues = fragmentPoints
+                    .map(point => point.averageHeartRateBpm)
+                    .filter((value): value is number => Number.isFinite(value) && (value as number) > 0);
+                const minimumHeartRateValues = fragmentPoints
+                    .map(point => point.minimumHeartRateBpm)
+                    .filter((value): value is number => Number.isFinite(value) && (value as number) > 0);
+                const result: ReadinessSleepEvidencePoint = {
+                    ...latest,
+                    id: sortedPoints.map(point => point.id).join('|'),
+                    startTimeMs: Math.min(...fragmentPoints.map(point => point.startTimeMs as number)),
+                    endTimeMs: Math.max(...fragmentPoints.map(point => point.endTimeMs as number)),
+                    totalSeconds: fragmentPoints.reduce(
+                        (total, point) => total + Math.max(0, point.totalSeconds || 0),
+                        0,
+                    ),
+                    ...aggregateNightlyHrvEvidence(fragmentPoints, {
+                        requireEveryPoint: latest.provider === SLEEP_PROVIDERS.SuuntoApp
+                            && fragmentPoints.some(point => isSleepAverageHrvSourceKey(point.hrvSourceKey)),
+                    }),
+                    hrvObservations: undefined,
+                    averageHeartRateBpm: averageHeartRateValues.length
+                        ? averageHeartRateValues.reduce((total, value) => total + value, 0)
+                            / averageHeartRateValues.length
+                        : null,
+                    minimumHeartRateBpm: minimumHeartRateValues.length
+                        ? Math.min(...minimumHeartRateValues)
+                        : null,
+                };
+                result.hrvObservations = readinessHrvObservations(result);
+                return result;
+            })
+    ));
 }
 
 function resolveTrainingReadinessSleepDayMs(

@@ -6313,7 +6313,7 @@ describe('MCP data service', () => {
     });
   });
 
-  it('groups report vitals but withholds current readiness HRV for a fragmented night', async () => {
+  it('reconciles adjacent Suunto fragments for report and current readiness HRV', async () => {
     const nightlyDocument = (
       id: string,
       sleepDate: string,
@@ -6323,8 +6323,14 @@ describe('MCP data service', () => {
       averageHeartRate: number,
       minimumHeartRate: number,
       score: number | null = null,
+      hrvSampleCount = 35,
     ) => ({
       ...sleepDocument({
+        source: {
+          provider: SLEEP_PROVIDERS.SuuntoApp,
+          sourceSessionKey: id,
+          providerUserId: 'private-suunto-user',
+        },
         sleepDate,
         startTimeMs,
         endTimeMs,
@@ -6336,6 +6342,7 @@ describe('MCP data service', () => {
         },
         vitals: {
           averageHrvMs: hrv,
+          hrvSampleCount,
           averageHeartRateBpm: averageHeartRate,
           minimumHeartRateBpm: minimumHeartRate,
         },
@@ -6362,16 +6369,18 @@ describe('MCP data service', () => {
         '2026-07-27',
         Date.parse('2026-07-26T22:00:00.000Z'),
         Date.parse('2026-07-27T02:00:00.000Z'),
-        50,
+        29,
         50,
         42,
+        null,
+        46,
       ),
       nightlyDocument(
         'latest-b',
         '2026-07-27',
         Date.parse('2026-07-27T02:00:00.000Z'),
         Date.parse('2026-07-27T06:00:00.000Z'),
-        60,
+        40,
         48,
         40,
         82,
@@ -6397,7 +6406,8 @@ describe('MCP data service', () => {
         qualifier: 'recorded',
       },
       vitals: {
-        averageHrvMs: 55,
+        averageHrvMs: ((29 * 46) + (40 * 35)) / 81,
+        hrvSampleCount: 81,
         averageHeartRateBpm: 49,
         minimumHeartRateBpm: 40,
       },
@@ -6406,7 +6416,10 @@ describe('MCP data service', () => {
       durationSeconds: 28_800,
       recordedScore: 82,
     });
-    expect(result.readiness.drivers.hrv.personalRange).toBeNull();
+    expect(result.readiness.drivers.hrv.personalRange).toMatchObject({
+      reason: 'building_baseline',
+      latestMs: ((29 * 46) + (40 * 35)) / 81,
+    });
     expect(result.readiness.drivers.overnightHeartRate).toMatchObject({
       average: {
         latestBpm: 49,
@@ -6419,12 +6432,17 @@ describe('MCP data service', () => {
     });
   });
 
-  it('does not understate grouped in-bed duration when a sleep fragment is missing it', async () => {
+  it('uses the canonical Suunto night window when a fragment is missing in-bed duration', async () => {
     const firstEndTimeMs = Date.parse('2026-07-27T02:00:00.000Z');
     const secondEndTimeMs = Date.parse('2026-07-27T06:00:00.000Z');
     vi.mocked(dependencies.fetchReadinessSleepDocuments).mockResolvedValue([
       {
         ...sleepDocument({
+          source: {
+            provider: SLEEP_PROVIDERS.SuuntoApp,
+            sourceSessionKey: 'latest-a',
+            providerUserId: 'private-suunto-user',
+          },
           sleepDate: '2026-07-27',
           startTimeMs: Date.parse('2026-07-26T22:00:00.000Z'),
           endTimeMs: firstEndTimeMs,
@@ -6435,6 +6453,11 @@ describe('MCP data service', () => {
       },
       {
         ...sleepDocument({
+          source: {
+            provider: SLEEP_PROVIDERS.SuuntoApp,
+            sourceSessionKey: 'latest-b',
+            providerUserId: 'private-suunto-user',
+          },
           sleepDate: '2026-07-27',
           startTimeMs: firstEndTimeMs,
           endTimeMs: secondEndTimeMs,
@@ -6452,7 +6475,48 @@ describe('MCP data service', () => {
 
     expect(result.sleep.latestSession).toMatchObject({
       durationSeconds: 28_800,
-      inBedDurationSeconds: null,
+      inBedDurationSeconds: 28_800,
+    });
+  });
+
+  it('keeps Suunto sleeps more than 30 minutes apart as separate nights', async () => {
+    const firstEndTimeMs = Date.parse('2026-07-27T02:00:00.000Z');
+    const secondStartTimeMs = firstEndTimeMs + (31 * 60 * 1000);
+    vi.mocked(dependencies.fetchReadinessSleepDocuments).mockResolvedValue([
+      {
+        ...sleepDocument({
+          source: { provider: SLEEP_PROVIDERS.SuuntoApp,
+            sourceSessionKey: 'first', providerUserId: 'private-suunto-user' },
+          sleepDate: '2026-07-27',
+          startTimeMs: Date.parse('2026-07-26T22:00:00.000Z'),
+          endTimeMs: firstEndTimeMs,
+          durationSeconds: 14_400,
+          inBedDurationSeconds: 14_400,
+        }),
+        id: 'first',
+      },
+      {
+        ...sleepDocument({
+          source: { provider: SLEEP_PROVIDERS.SuuntoApp,
+            sourceSessionKey: 'second', providerUserId: 'private-suunto-user' },
+          sleepDate: '2026-07-27',
+          startTimeMs: secondStartTimeMs,
+          endTimeMs: Date.parse('2026-07-27T06:00:00.000Z'),
+          durationSeconds: 12_540,
+          inBedDurationSeconds: 12_540,
+        }),
+        id: 'second',
+      },
+    ]);
+
+    const result = await createMcpDataService(dependencies).getDailyReport({
+      uid: 'user-1',
+      timeZone: 'UTC',
+    });
+
+    expect(result.sleep.latestSession).toMatchObject({
+      startTimeMs: secondStartTimeMs,
+      durationSeconds: 12_540,
     });
   });
 

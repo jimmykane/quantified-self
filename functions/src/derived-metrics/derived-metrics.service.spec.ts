@@ -481,6 +481,7 @@ describe('fetchTrainingBuildSleepDocs', () => {
             'sportsLibData.metrics.duration',
             'sportsLibData.metrics.overnightHrv',
             'sportsLibData.metrics.averageHrv',
+            'sportsLibData.metrics.hrvSampleCount',
             'isNap',
             'providerFields.suunto.timestamp',
             'vitals.overnightHrvMs',
@@ -561,6 +562,7 @@ describe('fetchTrainingReadinessSleepDocs', () => {
             'sportsLibData.metrics.score',
             'sportsLibData.metrics.overnightHrv',
             'sportsLibData.metrics.averageHrv',
+            'sportsLibData.metrics.hrvSampleCount',
             'sportsLibData.metrics.averageHeartRate',
             'sportsLibData.metrics.minimumHeartRate',
             'isNap',
@@ -976,7 +978,7 @@ describe('buildTrainingReadinessMetricPayload', () => {
 
         expect(result.payload).toMatchObject({
             formulaVersion: 4,
-            evidenceVersion: 2,
+            evidenceVersion: 3,
             dayBoundary: 'UTC',
             asOfDayMs: Date.UTC(2026, 6, 16),
             generatedAtMs: nowMs,
@@ -999,14 +1001,15 @@ describe('buildTrainingReadinessMetricPayload', () => {
         expect(today?.overnightHeartRateRatio).toBeCloseTo(0.918);
     });
 
-    it('does not promote the last value from a fragmented current night to current HRV', async () => {
+    it('reconciles adjacent Suunto fragments into one sample-weighted current night', async () => {
         const { buildTrainingReadinessMetricPayload } = await import('./derived-metrics.service');
         const nowMs = Date.UTC(2026, 8, 28, 12);
         const dayMs = 24 * 60 * 60 * 1000;
-        const buildDoc = (id: string, sleepDate: string, startTimeMs: number, endTimeMs: number, hrv: number) => ({
+        const buildDoc = (id: string, sleepDate: string, startTimeMs: number, endTimeMs: number,
+            hrv: number, hrvSampleCount = 35) => ({
             id,
             data: () => ({
-                source: { provider: 'SuuntoApp', sourceSessionKey: id },
+                source: { provider: 'SuuntoApp', providerUserId: 'suunto-user', sourceSessionKey: id },
                 sleepDate,
                 startTimeMs,
                 endTimeMs,
@@ -1014,7 +1017,7 @@ describe('buildTrainingReadinessMetricPayload', () => {
                 timezoneOffsetSeconds: 3 * 60 * 60,
                 isNap: false,
                 score: { value: 80 },
-                vitals: { averageHrvMs: hrv },
+                vitals: { averageHrvMs: hrv, hrvSampleCount },
             }),
         });
         const baseline = Array.from({ length: 15 }, (_, index) => {
@@ -1024,15 +1027,16 @@ describe('buildTrainingReadinessMetricPayload', () => {
         });
         const sleepDate = '2026-09-28';
         const fragments = [
-            buildDoc('part-1', sleepDate, Date.UTC(2026, 8, 27, 18, 57), Date.UTC(2026, 8, 27, 23, 54), 29),
+            buildDoc('part-1', sleepDate, Date.UTC(2026, 8, 27, 18, 57), Date.UTC(2026, 8, 27, 23, 54), 29, 46),
             buildDoc('part-2', sleepDate, Date.UTC(2026, 8, 28, 0, 1), Date.UTC(2026, 8, 28, 4), 40),
         ];
 
         const today = buildTrainingReadinessMetricPayload([], 0, [...baseline, ...fragments] as any, nowMs)
             .payload.points.at(-1);
 
-        expect(today).toMatchObject({ sleepScore: 80, availableSignalCount: 1,
-            hrvPersonalRange: null, hrvRatio: null });
+        expect(today).toMatchObject({ sleepScore: 80, availableSignalCount: 2 });
+        expect(today?.hrvPersonalRange?.latestMs).toBeCloseTo(((29 * 46) + (40 * 35)) / 81);
+        expect(today?.hrvRatio).toBeCloseTo(1);
     });
 
     it('withholds current HRV when the latest sleep has expired', async () => {

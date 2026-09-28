@@ -11,6 +11,13 @@ export const SLEEP_PROVIDERS = {
 
 export type SleepProvider = typeof SLEEP_PROVIDERS[keyof typeof SLEEP_PROVIDERS];
 
+/**
+ * Suunto can finalize one night as adjacent provider-owned SleepIds. Keep the
+ * raw records, but only reconcile records that overlap or have a short interruption. A
+ * larger gap remains a distinct sleep session even when the wake date matches.
+ */
+export const SUUNTO_SLEEP_FRAGMENT_MAX_GAP_MS = 30 * 60 * 1000;
+
 export const SLEEP_STAGES = {
   Deep: 'deep',
   Light: 'light',
@@ -123,6 +130,77 @@ export interface SleepSession {
   sportsLibData?: SportsLibDataEnvelope<SleepSportsLibMetricField>;
   createdAtMs: number;
   updatedAtMs: number;
+}
+
+function finiteSleepTime(value: unknown): number | null {
+  return typeof value === 'number' && Number.isFinite(value) ? value : null;
+}
+
+/** Suunto's app displays sleep onset, not the earlier in-bed timestamp. */
+export function resolveSleepEffectiveStartTimeMs(
+  session: Pick<SleepSession, 'source' | 'startTimeMs' | 'endTimeMs' | 'isNap' | 'providerFields'>,
+): number {
+  const startTimeMs = finiteSleepTime(session.startTimeMs) ?? 0;
+  const endTimeMs = finiteSleepTime(session.endTimeMs);
+  if (session.source?.provider !== SLEEP_PROVIDERS.SuuntoApp || session.isNap || endTimeMs === null) {
+    return startTimeMs;
+  }
+  const suunto = session.providerFields?.suunto;
+  const latencySeconds = finiteSleepTime(suunto?.SleepOnsetLatencyDuration);
+  if (latencySeconds === null || latencySeconds < 0) return startTimeMs;
+  const effectiveStartTimeMs = startTimeMs + Math.floor(latencySeconds * 1000);
+  return effectiveStartTimeMs < endTimeMs ? effectiveStartTimeMs : startTimeMs;
+}
+
+/**
+ * Partition one provider/account/date group into canonical nights. Existing
+ * provider behavior is preserved except for Suunto, where only overlapping or
+ * adjacent fragments are combined.
+ */
+export function partitionSleepNightFragments<T extends { startTimeMs: number | null; endTimeMs: number | null }>(
+  provider: SleepProvider | null,
+  input: readonly T[],
+): T[][] {
+  const sorted = [...input].sort((left, right) =>
+    (left.startTimeMs ?? 0) - (right.startTimeMs ?? 0)
+    || (left.endTimeMs ?? 0) - (right.endTimeMs ?? 0));
+  if (provider !== SLEEP_PROVIDERS.SuuntoApp || sorted.length <= 1) return sorted.length ? [sorted] : [];
+
+  return sorted.reduce<T[][]>((groups, point) => {
+    const current = groups[groups.length - 1];
+    const currentEndTimeMs = current?.reduce((latestEndTimeMs, member) =>
+      member.endTimeMs === null ? latestEndTimeMs : Math.max(latestEndTimeMs, member.endTimeMs),
+    Number.NEGATIVE_INFINITY);
+    const gapMs = currentEndTimeMs !== undefined && Number.isFinite(currentEndTimeMs)
+      && point.startTimeMs !== null
+      ? point.startTimeMs - currentEndTimeMs
+      : Number.POSITIVE_INFINITY;
+    if (current && gapMs <= SUUNTO_SLEEP_FRAGMENT_MAX_GAP_MS) {
+      current.push(point);
+    } else {
+      groups.push([point]);
+    }
+    return groups;
+  }, []);
+}
+
+/** Awake time between canonical fragments, excluding overlap and nested records. */
+export function sumSleepFragmentInterruptionSeconds<T extends {
+  startTimeMs: number | null;
+  endTimeMs: number | null;
+}>(input: readonly T[]): number {
+  const sorted = [...input].sort((left, right) =>
+    (left.startTimeMs ?? 0) - (right.startTimeMs ?? 0)
+    || (left.endTimeMs ?? 0) - (right.endTimeMs ?? 0));
+  let latestEndTimeMs: number | null = null;
+  return sorted.reduce((total, point) => {
+    if (point.startTimeMs === null || point.endTimeMs === null) return total;
+    const interruptionMs = latestEndTimeMs === null ? 0 : Math.max(0, point.startTimeMs - latestEndTimeMs);
+    latestEndTimeMs = latestEndTimeMs === null
+      ? point.endTimeMs
+      : Math.max(latestEndTimeMs, point.endTimeMs);
+    return total + Math.round(interruptionMs / 1000);
+  }, 0);
 }
 
 export interface SleepSyncState {

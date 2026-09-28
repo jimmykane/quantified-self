@@ -1625,10 +1625,13 @@ same daily-median calculation as Health for matching overnight evidence and eval
 chart range. Latest nightly HRV remains distinct from the weekly average. See `docs/training-workspace.md` for the
 canonical formula, source matching, confidence, missing-data and scoring rules. The strict output boundary verifies the
 score, label, weights, count, confidence and HRV cutoff; private neighboring fields fail the whole output.
-Current HRV also requires a latest main sleep no older than 48 hours with exactly one completed sleep fragment and one
-HRV observation. A split latest night returns a null personal range instead of promoting the last fragment or an
-invented aggregate to the current nightly value. This implementation-only tightening preserves the registered tool
-schema and formula version; internal readiness evidence version 2 invalidates prior persisted history for rebuild.
+Current HRV also requires a canonical latest main-sleep night no older than 48 hours with one authoritative HRV
+observation. Adjacent or overlapping Suunto records for the same provider account and wake date are reconciled when
+their gap is at most 30 minutes. Sleep duration and stages are summed, interruption time remains awake, the latest
+score wins, and average HRV is weighted by the recorded HRV sample counts. Missing weights for conflicting fragment
+values leave HRV unavailable rather than promoting the last fragment. Raw Sleep records and IDs remain unchanged for
+audit and paginated session reads. This read-time reconciliation preserves the registered tool schema and formula
+version; internal readiness evidence version 3 invalidates prior persisted history for rebuild.
 
 `get_readiness_history` has no inputs and requires `metrics:read`, `sleep:read` and `health:read`. Persisted history can
 contain absolute HRV values enriched from Health; it cannot safely reconstruct a Sleep-only alternative. Registration,
@@ -1960,7 +1963,7 @@ after validation, but no additional server deployment or registered-app rescan o
 - Live readiness reads at most 257 projected sleep documents to enforce an at-most-256-session 60-day bound (30 days for legacy readiness), reads
   exactly the three ready load snapshots in parallel, and returns at most 16 KiB. Its score uses only the latest
   eligible main sleep and source-matched overnight context. Current HRV uses the shared 60-day range and seven-day
-  average only when the latest eligible night has one completed fragment and one HRV observation; legacy HRV and
+  average only when the latest eligible canonical night has one authoritative HRV observation; legacy HRV and
   Overnight HR retain up to 14 prior same-provider nights within 30 days.
 - A daily report reuses that same bounded sleep/readiness work, reads only the additional ready `training_summary`
   snapshot, compares duration with at most 14 earlier same-provider nights, and returns at most 16 KiB.

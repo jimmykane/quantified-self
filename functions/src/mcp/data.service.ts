@@ -7,7 +7,8 @@ import { ActivitySampleCache } from './activity-sample-cache';
 import { ActivitySampleContext, ActivitySamplesInput, ActivitySamplesDependencies, ActivitySamplesError, queryActivitySamples } from './activity-samples.service';
 import { getUserDeletionGuardState } from '../shared/user-deletion-guard';
 import { supplementNightlyHrvSleepDocuments } from '../sleep/nightly-hrv';
-import { sleepEvidenceSourceKey, sleepHrvSourceKey, aggregateNightlyHrvEvidence } from '../../../shared/nightly-hrv';
+import { aggregateNightlyHrvEvidence, isIdentifiedSleepEvidenceSourceKey,
+  sleepEvidenceSourceKey } from '../../../shared/nightly-hrv';
 import * as admin from 'firebase-admin';
 import { firestoreHrvRangeReads, HrvRangeInput, queryHrvPersonalRange } from './hrv-personal-range.service';
 import {
@@ -109,6 +110,9 @@ import {
   normalizePersistedEventMetricSemantics,
 } from '../../../shared/sports-lib-metric-semantics';
 import {
+  partitionSleepNightFragments,
+  resolveSleepEffectiveStartTimeMs,
+  sumSleepFragmentInterruptionSeconds,
   SLEEP_PROVIDERS,
   SLEEP_SPORTS_LIB_METRIC_FIELDS,
   SLEEP_STAGES,
@@ -842,6 +846,7 @@ const defaultDependencies: McpDataServiceDependencies = {
           .map(stage => new FieldPath('stageDurationsSeconds', stage)),
         new FieldPath('score', 'value'),
         new FieldPath('score', 'qualifier'),
+        new FieldPath('providerFields', 'suunto', 'SleepOnsetLatencyDuration'),
         ...SAFE_SLEEP_VITAL_KEYS.map(key => new FieldPath('vitals', key)),
       );
     if (cursor) {
@@ -882,6 +887,7 @@ const defaultDependencies: McpDataServiceDependencies = {
         new FieldPath('sportsLibData', 'metrics', SLEEP_SPORTS_LIB_METRIC_FIELDS.Score),
         new FieldPath('sportsLibData', 'metrics', SLEEP_SPORTS_LIB_METRIC_FIELDS.AverageHrv),
         new FieldPath('sportsLibData', 'metrics', SLEEP_SPORTS_LIB_METRIC_FIELDS.OvernightHrv),
+        new FieldPath('sportsLibData', 'metrics', SLEEP_SPORTS_LIB_METRIC_FIELDS.HrvSampleCount),
         new FieldPath('sportsLibData', 'metrics', SLEEP_SPORTS_LIB_METRIC_FIELDS.AverageHeartRate),
         new FieldPath('sportsLibData', 'metrics', SLEEP_SPORTS_LIB_METRIC_FIELDS.MinimumHeartRate),
         'timezoneOffsetSeconds',
@@ -889,8 +895,10 @@ const defaultDependencies: McpDataServiceDependencies = {
         new FieldPath('score', 'value'),
         new FieldPath('vitals', 'averageHrvMs'),
         new FieldPath('vitals', 'overnightHrvMs'),
+        new FieldPath('vitals', 'hrvSampleCount'),
         new FieldPath('vitals', 'averageHeartRateBpm'),
         new FieldPath('vitals', 'minimumHeartRateBpm'),
+        new FieldPath('providerFields', 'suunto', 'SleepOnsetLatencyDuration'),
         ...(includeDailyReportFields
           ? [
               'inBedDurationSeconds',
@@ -3743,11 +3751,14 @@ function toSafeSleepSession(data: Record<string, unknown>): SafeSleepSession | n
     && rawScore.qualifier.trim().length <= 120
     ? rawScore.qualifier.trim()
     : null;
+  const effectiveStartTimeMs = resolveSleepEffectiveStartTimeMs(
+    normalizedData as unknown as SleepSession,
+  );
 
   return {
     provider,
     sleepDate,
-    startTimeMs,
+    startTimeMs: effectiveStartTimeMs,
     endTimeMs,
     durationSeconds,
     inBedDurationSeconds: asNonNegativeNumber(normalizedData.inBedDurationSeconds),
@@ -3759,6 +3770,120 @@ function toSafeSleepSession(data: Record<string, unknown>): SafeSleepSession | n
     } : null,
     vitals: normalizeSleepVitals(normalizedData.vitals),
   };
+}
+
+interface SafeSleepDocument {
+  id: string;
+  sourceKey: string;
+  session: SafeSleepSession;
+}
+
+function positiveVitalValues(
+  sessions: readonly SafeSleepSession[],
+  type: McpSleepVitalType,
+): number[] {
+  return sessions.map(session => session.vitals?.[type])
+    .filter((value): value is number => typeof value === 'number' && Number.isFinite(value) && value > 0);
+}
+
+function averageVital(values: readonly number[]): number | undefined {
+  return values.length ? values.reduce((sum, value) => sum + value, 0) / values.length : undefined;
+}
+
+function unambiguousVital(values: readonly number[]): number | undefined {
+  if (!values.length) return undefined;
+  return new Set(values).size === 1 ? values[0] : undefined;
+}
+
+function aggregateSafeSleepDocumentGroup(group: readonly SafeSleepDocument[]): SafeSleepDocument {
+  if (group.length === 1) return group[0];
+  const sorted = [...group].sort((left, right) => left.session.startTimeMs - right.session.startTimeMs
+    || left.session.endTimeMs - right.session.endTimeMs || left.id.localeCompare(right.id));
+  const byRecency = [...sorted].sort((left, right) => left.session.endTimeMs - right.session.endTimeMs
+    || left.session.startTimeMs - right.session.startTimeMs || left.id.localeCompare(right.id));
+  const latest = byRecency[byRecency.length - 1];
+  const sessions = sorted.map(entry => entry.session);
+  const startTimeMs = Math.min(...sessions.map(session => session.startTimeMs));
+  const endTimeMs = Math.max(...sessions.map(session => session.endTimeMs));
+  const interruptionSeconds = sumSleepFragmentInterruptionSeconds(sessions);
+  const hrv = aggregateNightlyHrvEvidence(sessions.map(session => ({
+    averageHrvMs: session.vitals?.averageHrvMs ?? null,
+    hrvSampleCount: session.vitals?.hrvSampleCount ?? null,
+    hrvSourceKey: JSON.stringify(['sleep', latest.sourceKey, 'average']),
+  })), { requireEveryPoint: true });
+  const stageDurationsSeconds = Object.fromEntries(Object.values(SLEEP_STAGES).flatMap(stage => {
+    const values = sessions.map(session => session.stageDurationsSeconds[stage])
+      .filter((value): value is number => typeof value === 'number' && Number.isFinite(value) && value >= 0);
+    const total = values.reduce((sum, value) => sum + value, 0)
+      + (stage === SLEEP_STAGES.Awake ? interruptionSeconds : 0);
+    return total > 0 ? [[stage, total]] : [];
+  })) as Partial<Record<SleepStage, number>>;
+  const averageHeartRateBpm = averageVital(positiveVitalValues(sessions, 'averageHeartRateBpm'));
+  const minimumHeartRateValues = positiveVitalValues(sessions, 'minimumHeartRateBpm');
+  const restingHeartRateBpm = averageVital(positiveVitalValues(sessions, 'restingHeartRateBpm'));
+  const overnightHrvMs = unambiguousVital(positiveVitalValues(sessions, 'overnightHrvMs'));
+  const maxSpo2Values = positiveVitalValues(sessions, 'maxSpo2Percent');
+  const averageRespirationBrpm = averageVital(positiveVitalValues(sessions, 'averageRespirationBrpm'));
+  const vitals = Object.fromEntries([
+    ['averageHeartRateBpm', averageHeartRateBpm],
+    ['minimumHeartRateBpm', minimumHeartRateValues.length ? Math.min(...minimumHeartRateValues) : undefined],
+    ['restingHeartRateBpm', restingHeartRateBpm],
+    ['averageHrvMs', hrv.averageHrvMs ?? undefined],
+    ['hrvSampleCount', hrv.hrvSampleCount],
+    ['overnightHrvMs', overnightHrvMs],
+    ['maxSpo2Percent', maxSpo2Values.length ? Math.max(...maxSpo2Values) : undefined],
+    ['averageRespirationBrpm', averageRespirationBrpm],
+  ].filter((entry): entry is [string, number] => typeof entry[1] === 'number')) as McpSafeSleepVitals;
+  return {
+    id: sorted.map(entry => entry.id).join('|'),
+    sourceKey: latest.sourceKey,
+    session: {
+      ...latest.session,
+      startTimeMs,
+      endTimeMs,
+      durationSeconds: sessions.reduce((sum, session) => sum + session.durationSeconds, 0),
+      inBedDurationSeconds: Math.max(0, Math.round((endTimeMs - startTimeMs) / 1000)),
+      stageDurationsSeconds,
+      vitals: Object.keys(vitals).length ? vitals : null,
+    },
+  };
+}
+
+function canonicalizeSafeSleepDocuments(
+  documents: readonly RawDocument[],
+  options: { resolveSuuntoSleepDate?: boolean } = {},
+): SafeSleepDocument[] {
+  const result: SafeSleepDocument[] = [];
+  const suuntoGroups = new Map<string, SafeSleepDocument[]>();
+  for (const document of documents) {
+    const normalizedSession = toSafeSleepSession(document.data);
+    if (!normalizedSession) continue;
+    const session = options.resolveSuuntoSleepDate
+      ? { ...normalizedSession, sleepDate: resolveTodayReadinessSleepDate(document.data, normalizedSession) }
+      : normalizedSession;
+    const candidate = {
+      id: document.id,
+      sourceKey: sleepEvidenceSourceKey(document.data as unknown as SleepSession),
+      session,
+    };
+    if (
+      session.provider !== SLEEP_PROVIDERS.SuuntoApp
+      || session.isNap
+      || !isIdentifiedSleepEvidenceSourceKey(session.provider, candidate.sourceKey)
+    ) {
+      result.push(candidate);
+      continue;
+    }
+    const key = JSON.stringify([session.sleepDate, candidate.sourceKey]);
+    suuntoGroups.set(key, [...(suuntoGroups.get(key) || []), candidate]);
+  }
+  for (const group of suuntoGroups.values()) {
+    result.push(...partitionSleepNightFragments(
+      SLEEP_PROVIDERS.SuuntoApp,
+      group.map(entry => ({ ...entry, startTimeMs: entry.session.startTimeMs, endTimeMs: entry.session.endTimeMs })),
+    ).map(cluster => aggregateSafeSleepDocumentGroup(cluster)));
+  }
+  return result;
 }
 
 export interface ListSleepSessionsInput {
@@ -4324,19 +4449,22 @@ function buildTodayReadinessSleepNights(
     session: SafeSleepSession;
     evidence: ReadinessSleepEvidencePoint;
   }>>();
-  for (const document of documents) {
-    const session = toSafeSleepSession(document.data);
-    if (!session || session.isNap) {
+  for (const candidate of canonicalizeSafeSleepDocuments(documents, { resolveSuuntoSleepDate: true })) {
+    const { session } = candidate;
+    if (session.isNap) {
       continue;
     }
     const evidence: ReadinessSleepEvidencePoint = {
-      id: document.id,
-      sleepDate: resolveTodayReadinessSleepDate(document.data, session),
+      id: candidate.id,
+      sleepDate: session.sleepDate,
       provider: session.provider,
-      sourceKey: sleepEvidenceSourceKey(document.data as unknown as SleepSession),
-      hrvSourceKey: sleepHrvSourceKey({ ...document.data, vitals: session.vitals } as unknown as SleepSession),
-      sleepFragmentCount: 1,
-      sleepFragmentEndTimesMs: [session.endTimeMs],
+      sourceKey: candidate.sourceKey,
+      hrvSourceKey: session.vitals?.averageHrvMs
+        ? JSON.stringify(['sleep', candidate.sourceKey, 'average'])
+        : session.vitals?.overnightHrvMs
+          ? JSON.stringify(['sleep', candidate.sourceKey, 'overnight'])
+          : undefined,
+      hrvSampleCount: session.vitals?.hrvSampleCount ?? null,
       startTimeMs: session.startTimeMs,
       endTimeMs: session.endTimeMs,
       totalSeconds: session.durationSeconds,
@@ -4347,8 +4475,12 @@ function buildTodayReadinessSleepNights(
       averageHeartRateBpm: session.vitals?.averageHeartRateBpm ?? null,
       minimumHeartRateBpm: session.vitals?.minimumHeartRateBpm ?? null,
     };
-    evidence.hrvObservations = readinessHrvObservations({ ...evidence, sleepDate: session.sleepDate });
-    const key = JSON.stringify([evidence.sleepDate, evidence.sourceKey]);
+    evidence.hrvObservations = readinessHrvObservations(evidence);
+    const key = JSON.stringify([
+      evidence.sleepDate,
+      evidence.sourceKey,
+      session.provider === SLEEP_PROVIDERS.SuuntoApp ? candidate.id : null,
+    ]);
     grouped.set(key, [
       ...(grouped.get(key) || []),
       {
@@ -4398,15 +4530,13 @@ function buildTodayReadinessSleepNights(
       endTimeMs,
       totalSeconds: durationSeconds,
       ...aggregateNightlyHrvEvidence(entries.map(entry => entry.evidence)),
-      sleepFragmentCount: entries.reduce((total, entry) => total + (entry.evidence.sleepFragmentCount ?? 1), 0),
-      sleepFragmentEndTimesMs: entries.flatMap(entry =>
-        entry.evidence.sleepFragmentEndTimesMs ?? [entry.evidence.endTimeMs as number]),
-      hrvObservations: entries.flatMap(entry => readinessHrvObservations(entry.evidence)),
+      hrvObservations: undefined,
       averageHeartRateBpm: average(averageHeartRateValues),
       minimumHeartRateBpm: minimumHeartRateValues.length
         ? Math.min(...minimumHeartRateValues)
         : null,
     };
+    evidence.hrvObservations = readinessHrvObservations(evidence);
     return {
       id,
       provider: latest.session.provider,
@@ -4426,6 +4556,9 @@ function buildTodayReadinessSleepNights(
         vitals: {
           averageHrvMs: average(averageHrvValues),
           overnightHrvMs: average(overnightHrvValues),
+          ...(typeof evidence.hrvSampleCount === 'number'
+            ? { hrvSampleCount: evidence.hrvSampleCount }
+            : {}),
           averageHeartRateBpm: average(averageHeartRateValues),
           minimumHeartRateBpm: minimumHeartRateValues.length
             ? Math.min(...minimumHeartRateValues)
@@ -6091,8 +6224,9 @@ export function createMcpDataService(
         `The query matches more than ${MAX_SLEEP_QUERY_DOCUMENTS} sleep sessions. Narrow the date range.`,
       );
     }
-    return (await supplementAuthorizedSleep(dependencies, input, docs)).flatMap((doc) => {
-      const session = toSafeSleepSession(doc.data);
+    return canonicalizeSafeSleepDocuments(
+      await supplementAuthorizedSleep(dependencies, input, docs),
+    ).flatMap(({ session }) => {
       return session
         && (input.includeNaps || !session.isNap)
         && (!input.provider || session.provider === input.provider)

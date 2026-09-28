@@ -753,7 +753,8 @@ describe('help.content', () => {
       'Failed or stale load, recovery, or sleep sources contribute no current value',
     );
     expect(trainingSection?.content).toContain('sleep refresh failure clears previously loaded readiness sleep evidence immediately');
-    expect(trainingSection?.content).toContain('multiple sleep fragments');
+    expect(trainingSection?.content).toContain('weights their HRV by the recorded sample counts');
+    expect(trainingSection?.content).toContain('does not simply use the last record');
     expect(trainingSection?.content).toContain('**No current HRV**');
     expect(trainingSection?.content).toContain('context, not a workout instruction');
     expect(trainingSection?.content).toContain('**14-day trend**');
