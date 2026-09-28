@@ -1154,6 +1154,7 @@ describe('buildTrainingReadinessMetricPayload', () => {
             sleepScore: 82,
             availableSignalCount: 1,
             confidence: 'low',
+            hrvPersonalRange: null,
             hrvRatio: null,
             averageHeartRateRatio: null,
             minimumHeartRateRatio: null,

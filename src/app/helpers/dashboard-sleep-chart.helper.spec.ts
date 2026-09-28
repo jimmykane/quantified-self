@@ -344,12 +344,15 @@ describe('dashboard-sleep-chart.helper', () => {
   it('does not reconcile Suunto fragments without a provider-account identity', () => {
     const context = buildDashboardSleepTrendContext([
       { id: 'unknown-a', source: { provider: 'SuuntoApp', sourceSessionKey: 'a' }, sleepDate: '2026-09-28',
-        startTimeMs: 1_000, endTimeMs: 3_000, durationSeconds: 2, isNap: false },
+        startTimeMs: 1_000, endTimeMs: 3_000, durationSeconds: 2, isNap: false,
+        vitals: { averageHrvMs: 29, hrvSampleCount: 46 } },
       { id: 'unknown-b', source: { provider: 'SuuntoApp', sourceSessionKey: 'b' }, sleepDate: '2026-09-28',
-        startTimeMs: 4_000, endTimeMs: 6_000, durationSeconds: 2, isNap: false },
+        startTimeMs: 4_000, endTimeMs: 6_000, durationSeconds: 2, isNap: false,
+        vitals: { averageHrvMs: 40, hrvSampleCount: 35 } },
     ] as any[]);
 
     expect(context.points.map(point => point.id)).toEqual(['unknown-a', 'unknown-b']);
+    expect(context.points.every(point => point.averageHrvMs === null)).toBe(true);
   });
 
   it('normalizes non-positive vitals when a night has only one stored fragment', () => {

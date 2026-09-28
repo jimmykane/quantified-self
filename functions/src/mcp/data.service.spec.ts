@@ -5957,6 +5957,10 @@ describe('MCP data service', () => {
       status: 'available',
       sleepDate: '2026-07-27',
     });
+    expect(result.drivers.hrv).toMatchObject({
+      status: 'not_recorded',
+      latestMs: null,
+    });
     expect(JSON.stringify(result)).not.toContain('SuuntoApp');
     expect(JSON.stringify(result)).not.toContain('private-suunto');
   });

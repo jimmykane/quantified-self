@@ -3737,18 +3737,25 @@ function resolveTrainingReadinessSleepEvidence(
         const vitals = data.vitals && typeof data.vitals === 'object' && !Array.isArray(data.vitals)
             ? data.vitals as Record<string, unknown>
             : {};
+        const sourceKey = sleepEvidenceSourceKey(data as unknown as SleepSession);
+        const hasCanonicalNightIdentity = provider !== SLEEP_PROVIDERS.SuuntoApp
+            || isIdentifiedSleepEvidenceSourceKey(provider, sourceKey);
         const point: ReadinessSleepEvidencePoint = {
             id: doc.id,
             sleepDate: formatUtcDayKey(sleepDayMs),
             provider,
-            sourceKey: sleepEvidenceSourceKey(data as unknown as SleepSession),
-            hrvSourceKey: sleepHrvSourceKey(data as unknown as SleepSession),
-            hrvSampleCount: toFiniteNumber(vitals.hrvSampleCount),
+            sourceKey,
+            hrvSourceKey: hasCanonicalNightIdentity
+                ? sleepHrvSourceKey(data as unknown as SleepSession)
+                : undefined,
+            hrvSampleCount: hasCanonicalNightIdentity ? toFiniteNumber(vitals.hrvSampleCount) : null,
             startTimeMs,
             endTimeMs,
             totalSeconds: durationSeconds,
             score: toFiniteNumber(score.value),
-            averageHrvMs: toFiniteNumber(vitals.averageHrvMs) ?? toFiniteNumber(vitals.overnightHrvMs),
+            averageHrvMs: hasCanonicalNightIdentity
+                ? toFiniteNumber(vitals.averageHrvMs) ?? toFiniteNumber(vitals.overnightHrvMs)
+                : null,
             averageHeartRateBpm: toFiniteNumber(vitals.averageHeartRateBpm),
             minimumHeartRateBpm: toFiniteNumber(vitals.minimumHeartRateBpm),
         };

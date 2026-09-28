@@ -3795,6 +3795,18 @@ function unambiguousVital(values: readonly number[]): number | undefined {
   return new Set(values).size === 1 ? values[0] : undefined;
 }
 
+function withoutCanonicalNightHrv(session: SafeSleepSession): SafeSleepSession {
+  if (!session.vitals) return session;
+  const remainingVitals = { ...session.vitals };
+  delete remainingVitals.averageHrvMs;
+  delete remainingVitals.overnightHrvMs;
+  delete remainingVitals.hrvSampleCount;
+  return {
+    ...session,
+    vitals: Object.keys(remainingVitals).length ? remainingVitals : null,
+  };
+}
+
 function aggregateSafeSleepDocumentGroup(group: readonly SafeSleepDocument[]): SafeSleepDocument {
   if (group.length === 1) return group[0];
   const sorted = [...group].sort((left, right) => left.session.startTimeMs - right.session.startTimeMs
@@ -3866,12 +3878,12 @@ function canonicalizeSafeSleepDocuments(
       sourceKey: sleepEvidenceSourceKey(document.data as unknown as SleepSession),
       session,
     };
-    if (
-      session.provider !== SLEEP_PROVIDERS.SuuntoApp
-      || session.isNap
-      || !isIdentifiedSleepEvidenceSourceKey(session.provider, candidate.sourceKey)
-    ) {
+    if (session.provider !== SLEEP_PROVIDERS.SuuntoApp || session.isNap) {
       result.push(candidate);
+      continue;
+    }
+    if (!isIdentifiedSleepEvidenceSourceKey(session.provider, candidate.sourceKey)) {
+      result.push({ ...candidate, session: withoutCanonicalNightHrv(session) });
       continue;
     }
     const key = JSON.stringify([session.sleepDate, candidate.sourceKey]);

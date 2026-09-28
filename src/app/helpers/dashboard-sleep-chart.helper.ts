@@ -332,16 +332,22 @@ function buildPoint(session: SleepSession): DashboardSleepTrendPoint | null {
     return null;
   }
   const startTimeMs = resolveSleepEffectiveStartTimeMs(session);
+  const sourceKey = sleepEvidenceSourceKey(session);
+  const hasCanonicalNightIdentity = provider !== SLEEP_PROVIDERS.SuuntoApp
+    || isIdentifiedSleepEvidenceSourceKey(provider, sourceKey);
+  const hrvSourceKey = hasCanonicalNightIdentity ? sleepHrvSourceKey(session) : undefined;
+  const averageHrvMs = hasCanonicalNightIdentity
+    ? toPositiveMetric(session.vitals?.averageHrvMs ?? session.vitals?.overnightHrvMs)
+    : null;
 
   return {
     id: session.id || `${provider}:${session.source?.sourceSessionKey || startTimeMs}`,
     sleepDate: resolvedSleepDate,
-    sourceKey: sleepEvidenceSourceKey(session),
-    hrvSourceKey: sleepHrvSourceKey(session),
-    hrvSampleCount: toMetric(session.vitals?.hrvSampleCount),
+    sourceKey,
+    hrvSourceKey,
+    hrvSampleCount: hasCanonicalNightIdentity ? toMetric(session.vitals?.hrvSampleCount) : null,
     hrvObservations: readinessHrvObservations({ sleepDate: resolvedSleepDate,
-      startTimeMs, endTimeMs, hrvSourceKey: sleepHrvSourceKey(session),
-      averageHrvMs: toPositiveMetric(session.vitals?.averageHrvMs ?? session.vitals?.overnightHrvMs) }),
+      startTimeMs, endTimeMs, hrvSourceKey, averageHrvMs }),
     provider,
     providerLabel: label,
     categoryLabel: dateLabel(resolvedSleepDate),
@@ -356,7 +362,7 @@ function buildPoint(session: SleepSession): DashboardSleepTrendPoint | null {
     score: toMetric(session.score?.value),
     averageHeartRateBpm: toPositiveMetric(session.vitals?.averageHeartRateBpm),
     minimumHeartRateBpm: toPositiveMetric(session.vitals?.minimumHeartRateBpm),
-    averageHrvMs: toPositiveMetric(session.vitals?.averageHrvMs ?? session.vitals?.overnightHrvMs),
+    averageHrvMs,
     maxSpo2Percent: resolveMaxSpo2Percent(session),
     isNap: session.isNap === true,
     napSeconds: 0,
