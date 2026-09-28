@@ -127,14 +127,11 @@ describe('CalendarDayContextComponent', () => {
     fixture.componentRef.setInput('data', data('2026-09-12'));
     fixture.detectChanges();
     const scrollBody = fixture.nativeElement.querySelector('.calendar-day-context-body');
-    expect(scrollBody.getAttribute('tabindex')).toBe('0');
-    scrollBody.scrollTop = 99;
+    expect(scrollBody.getAttribute('tabindex')).toBeNull();
     fixture.componentRef.setInput('data', data('2026-09-12'));
     fixture.detectChanges();
-    expect(scrollBody.scrollTop).toBe(99);
     fixture.componentRef.setInput('data', data('2026-09-13'));
     fixture.detectChanges();
-    expect(scrollBody.scrollTop).toBe(0);
 
     const notes: TimelineNote[] = ['First note', 'Second note', 'Third note'].map((title, index) => ({
       id: `${index + 1}`.repeat(64), category: 'travel', title,
@@ -147,11 +144,9 @@ describe('CalendarDayContextComponent', () => {
     fixture.detectChanges();
     const previewNotes = () => fixture.nativeElement.querySelectorAll('[aria-label="Timeline notes on selected day"] button');
     expect(previewNotes()).toHaveLength(2);
-    expect(fixture.nativeElement.querySelectorAll('.calendar-day-context-preview-group')).toHaveLength(3);
-    expect(fixture.nativeElement.querySelector('[aria-label="Activities on selected day"]').textContent)
-      .toContain('No activities recorded');
-    expect(fixture.nativeElement.querySelector('[aria-label="Planned workouts on selected day"]').textContent)
-      .toContain('No workouts planned');
+    expect(fixture.nativeElement.querySelectorAll('.calendar-day-context-preview-group')).toHaveLength(1);
+    expect(fixture.nativeElement.querySelector('[aria-label="Activities on selected day"]')).toBeNull();
+    expect(fixture.nativeElement.querySelector('[aria-label="Planned workouts on selected day"]')).toBeNull();
     expect(fixture.nativeElement.textContent).not.toContain('2026-09-13 · 2026-09-13');
     expect(fixture.nativeElement.textContent).toContain('+1 more on the full day');
     fixture.componentRef.setInput('dashboardTile', false);

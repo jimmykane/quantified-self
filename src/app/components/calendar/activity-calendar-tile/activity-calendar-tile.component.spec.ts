@@ -112,20 +112,37 @@ describe('ActivityCalendarTileComponent', () => {
     expect(fixture.nativeElement.querySelector('a[aria-label="Open selected day page"]')).toBeNull();
   });
 
-  it('keeps the selected day note group in loading and error states until notes are ready', async () => {
+  it('hides absent notes in the day preview but reports note load errors', async () => {
     const notesStatus = signal<'loading' | 'ready' | 'error'>('loading');
     const fixture = TestBed.createComponent(ActivityCalendarTileComponent);
     fixture.componentRef.setInput('user', user);
     fixture.componentRef.setInput('dayContextEnabled', true);
     fixture.componentRef.setInput('timelineNotesStatus', notesStatus);
     fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
-    const noteGroup = () => fixture.nativeElement.querySelector('[aria-label="Timeline notes on selected day"]')?.textContent as string;
-    expect(noteGroup()).toContain('Loading notes…');
-    expect(noteGroup()).not.toContain('No notes shown');
+    const noteGroup = () => fixture.nativeElement.querySelector('[aria-label="Timeline notes on selected day"]')?.textContent as string | undefined;
+    expect(noteGroup()).toBeUndefined();
     notesStatus.set('error'); fixture.detectChanges();
     expect(noteGroup()).toContain('Timeline notes could not be loaded.');
     notesStatus.set('ready'); fixture.detectChanges();
-    expect(noteGroup()).toContain('No notes shown');
+    expect(noteGroup()).toBeUndefined();
+  });
+
+  it('shows only populated day preview groups when a day has a planned workout but no activity', async () => {
+    const plannedDate = currentLocalDate(2);
+    watchEvents.mockReturnValue(of([]));
+    watchSchedule.mockReturnValue(of(scheduleForDate(plannedDate)));
+    const fixture = TestBed.createComponent(ActivityCalendarTileComponent);
+    fixture.componentRef.setInput('user', user);
+    fixture.componentRef.setInput('dayContextEnabled', true);
+    fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+    const day = fixture.componentInstance.calendarModel().months[0].days.find(candidate => candidate.dateKey === plannedDate)!;
+    fixture.componentInstance.openDay(day);
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.querySelector('[aria-label="Activities on selected day"]')).toBeNull();
+    expect(fixture.nativeElement.querySelector('[aria-label="Timeline notes on selected day"]')).toBeNull();
+    expect(fixture.nativeElement.querySelector('[aria-label="Planned workouts on selected day"]')).toBeTruthy();
+    expect(fixture.nativeElement.querySelector('.calendar-day-context-preview-add')).toBeTruthy();
   });
 
   it('uses Calm month only for the inline tile and returns to today with one haptic tap', async () => {

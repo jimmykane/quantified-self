@@ -12,8 +12,7 @@
   </header>
   }
 
-  <div class="calendar-day-context-body" [attr.tabindex]="dashboardTile() ? 0 : null"
-    [attr.role]="dashboardTile() ? 'region' : null"
+  <div class="calendar-day-context-body" [attr.role]="dashboardTile() ? 'region' : null"
     [attr.aria-label]="dashboardTile() ? 'Selected day preview' : null"
     [attr.aria-busy]="standaloneDayPage() && !fullDayReady()">
   @if (standaloneDayPage() && !fullDayReady()) {
@@ -165,6 +164,7 @@
     </div>
   } @else {
     <div class="calendar-day-context-preview">
+      @if (activityState().status !== 'ready' || previewActivities().length) {
       <section class="calendar-day-context-preview-group" aria-label="Activities on selected day">
         <h3>Activities</h3>
         @if (activityState().status === 'loading') { <p role="status">Loading activities…</p> }
@@ -183,8 +183,9 @@
           @if (activities().length > previewActivities().length) {
             <span class="calendar-day-context-preview-more">+{{ activities().length - previewActivities().length }} more on the full day</span>
           }
-        } @else { <p>No activities recorded</p> }
+        }
       </section>
+      }
       @if (noteRows().length || notesStatus() === 'error') {
       <section class="calendar-day-context-preview-group" aria-label="Timeline notes on selected day">
         <h3>Timeline notes</h3>
@@ -203,7 +204,7 @@
         }
       </section>
       }
-      @if (canPlan()) {
+      @if (canPlan() && (plannedStatus() !== 'ready' || previewPlans().length)) {
         <section class="calendar-day-context-preview-group" aria-label="Planned workouts on selected day">
           <h3>Planned workouts</h3>
           @if (plannedStatus() === 'loading') { <p role="status">Loading planned workouts…</p> }
@@ -228,14 +229,14 @@
             @if (plannedRows().length > previewPlans().length) {
               <span class="calendar-day-context-preview-more">+{{ plannedRows().length - previewPlans().length }} more on the full day</span>
             }
-          } @else { <p>No workouts planned</p> }
+          }
         </section>
-        @if (plannedStatus() === 'ready') {
+      }
+      @if (canPlan() && plannedStatus() === 'ready') {
           <button mat-button appHapticTap type="button" class="calendar-day-context-preview-add"
             [matMenuTriggerFor]="dashboardWorkoutMenu">
             <mat-icon aria-hidden="true">add</mat-icon>Add workout<mat-icon iconPositionEnd aria-hidden="true">arrow_drop_down</mat-icon>
           </button>
-        }
       }
     </div>
   }

@@ -1,9 +1,9 @@
 :host { display: block; min-width: 0; }
 :host(.calendar-day-context--dashboard) {
   container-type: inline-size;
-  .calendar-day-context { display: flex; height: 100%; flex-direction: column; }
+  .calendar-day-context { display: flex; height: auto; flex-direction: column; }
   .calendar-day-context-header { flex: 0 0 auto; margin-bottom: 0; }
-  .calendar-day-context-body { min-height: 0; flex: 1 1 0; overflow-y: auto; }
+  .calendar-day-context-body { min-height: 0; flex: none; overflow: visible; }
 }
 .calendar-day-context { min-width: 0; color: var(--mat-sys-on-surface); }
 .calendar-day-context-loading { min-height: 270px; }
@@ -128,6 +128,11 @@
   .calendar-day-context-preview-row small { flex: 0 1 auto; min-width: 0; margin-left: auto; overflow-wrap: anywhere; text-align: right; }
   .calendar-day-context-activity-dot { width: 10px; height: 10px; flex: 0 0 10px; border-radius: 50%; }
   .calendar-day-context-empty { padding: 10px 0; }
+}
+
+:host(.calendar-day-context--dashboard.calendar-day-context--calm-month) {
+  .calendar-day-context-preview-plan .calendar-day-context-preview-row { display: block; }
+  .calendar-day-context-preview-plan .calendar-day-context-preview-row small { display: block; margin-left: 0; text-align: left; }
 }
 
 :host(.calendar-day-context--calm-month:not(.calendar-day-context--dashboard)) {

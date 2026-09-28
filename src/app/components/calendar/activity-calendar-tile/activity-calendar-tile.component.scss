@@ -125,22 +125,12 @@ app-activity-calendar-grid {
   height: auto;
   container-type: inline-size;
   .activity-calendar-tile { height: auto; padding: 12px; }
-  .activity-calendar-day-layout { display: grid; height: 360px; flex: none; grid-template-columns: minmax(0, 1.55fr) minmax(280px, .85fr); grid-template-rows: minmax(0, 1fr); gap: 16px; }
-  .activity-calendar-month-pane { min-width: 0; height: 100%; flex: none; }
-  app-activity-calendar-grid { min-height: 0; }
-  app-calendar-day-context { box-sizing: border-box; min-width: 0; min-height: 0; height: 100%; overflow: hidden; padding: 0 0 0 16px; border-left: 1px solid var(--mat-sys-outline-variant); }
+  .activity-calendar-day-layout { display: grid; height: auto; flex: none; grid-template-columns: minmax(0, 1fr) minmax(300px, 370px); align-items: start; gap: 16px; }
+  .activity-calendar-month-pane { min-width: 0; height: auto; flex: none; }
+  app-activity-calendar-grid { min-height: 0; flex: none; overflow: visible; }
+  app-calendar-day-context { box-sizing: border-box; min-width: 0; height: auto; padding: 12px 14px; border-radius: 12px; background: var(--mat-sys-surface-container-low); }
   .activity-calendar-tile-navigation { grid-template-columns: 40px minmax(0, 1fr) 40px 40px; }
 }
 @container (max-width: 900px) {
-  :host(.activity-calendar-tile--day-context) .activity-calendar-day-layout { height: auto; grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(0, 240px); }
-  :host(.activity-calendar-tile--day-context) .activity-calendar-month-pane { height: auto; }
-  :host(.activity-calendar-tile--day-context) app-activity-calendar-grid { min-height: 0; flex: 0 0 auto; overflow: visible; }
-  :host(.activity-calendar-tile--day-context) app-calendar-day-context { height: 240px; padding: 12px 4px 0 0; border-top: 1px solid var(--mat-sys-outline-variant); border-left: 0; }
-}
-
-@media (max-width: 600px) {
-  :host(.activity-calendar-tile--day-context) {
-    .activity-calendar-day-layout { grid-template-rows: auto auto; }
-    app-calendar-day-context { height: auto; overflow: visible; }
-  }
+  :host(.activity-calendar-tile--day-context) .activity-calendar-day-layout { grid-template-columns: minmax(0, 1fr); }
 }

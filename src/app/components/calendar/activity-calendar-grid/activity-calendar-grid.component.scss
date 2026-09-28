@@ -762,6 +762,29 @@
 .activity-calendar--calm-month.activity-calendar--fill-height .activity-calendar-month { grid-template-rows: 33px minmax(0, 1fr); }
 .activity-calendar--calm-month.activity-calendar--fill-height .activity-calendar-calm-legend { margin-top: 0; }
 
+// The dashboard day panel is content-sized, so the month no longer needs to
+// squeeze its rows into a fixed tile height. Keep this override off the other
+// compact calendars, which intentionally fill their allocated tile space.
+.activity-calendar--calm-month.activity-calendar--dashboard-context.activity-calendar--fill-height {
+  display: block;
+  height: auto;
+
+  .activity-calendar-months,
+  .activity-calendar-month { height: auto; }
+  .activity-calendar-month { display: block; }
+  .activity-calendar-days { grid-auto-rows: minmax(78px, auto); }
+  .activity-calendar-day { min-height: 78px; padding: 7px; }
+  .activity-calendar-calm-legend { margin-top: 12px; }
+  &.activity-calendar--dense-dashboard-month .activity-calendar-workout-preview { display: flex; }
+}
+
+@container (max-width: 540px) {
+  .activity-calendar--calm-month.activity-calendar--dashboard-context.activity-calendar--fill-height {
+    .activity-calendar-days { grid-auto-rows: minmax(56px, auto); }
+    .activity-calendar-day { min-height: 56px; padding: 4px 1px; }
+  }
+}
+
 @container (min-width: 560px) {
   .activity-calendar--dashboard-context .activity-calendar-weekdays {
     min-height: 32px;
