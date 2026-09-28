@@ -56,6 +56,7 @@ export const firestoreHrvRangeReads: HrvRangeReads = {
       : root.collection('sleepSessions').where('endTimeMs', '>=', start).where('endTimeMs', '<=', end)
         .orderBy('endTimeMs').orderBy(FieldPath.documentId())
         .select('source.provider', 'source.providerUserId', 'sleepDate', 'startTimeMs', 'endTimeMs', 'isNap',
+          'timezoneOffsetSeconds', 'providerFields.suunto.timestamp',
           'providerFields.suunto.SleepOnsetLatencyDuration',
           'vitals.averageHrvMs', 'vitals.hrvSampleCount', 'vitals.overnightHrvMs', 'sportsLibData.schemaVersion',
           // The shared Sleep decoder requires canonical duration, even for a vital-only projection.
