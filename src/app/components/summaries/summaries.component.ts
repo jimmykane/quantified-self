@@ -376,6 +376,11 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
   private readonly notesWorkspace = viewChild(TimelineNotesWorkspaceComponent);
   /** One live, owner-fenced source shared by tiles and calendar sheets. */
   readonly timelineNotes = computed<TimelineNoteChartContext | null>(() => this.notesWorkspace()?.context() ?? null);
+  readonly timelineNotesStatus = computed<'loading' | 'ready' | 'error'>(() => {
+    const workspace = this.notesWorkspace();
+    if (!workspace || workspace.service.uid() !== this.user?.uid || workspace.loading()) return 'loading';
+    return workspace.error() ? 'error' : 'ready';
+  });
   public previewInput: DashboardPreviewInput = { tiles: [] };
   private librarySubscription?: Subscription;
   private libraryRefresh = Promise.resolve();

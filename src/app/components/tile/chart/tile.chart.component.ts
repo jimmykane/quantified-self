@@ -118,6 +118,7 @@ type DashboardRecoveryNowSnapshotStatus = DerivedMetricSnapshotStatus | 'missing
 export class TileChartComponent extends TileAbstractDirective {
   /** Explicit workspace source; shared and library previews default to no private notes. */
   readonly timelineNotes = input<Signal<TimelineNoteChartContext | null> | null>(null);
+  readonly timelineNotesStatus = input<Signal<'loading' | 'ready' | 'error'> | null>(null);
   @Input() healthMetric: AppDashboardHealthMetricSettings | null = null;
   @Input() healthSettingsSaving = false;
   @Output() healthMetricChange = new EventEmitter<{settings:AppDashboardHealthMetricSettings; initial:boolean}>();

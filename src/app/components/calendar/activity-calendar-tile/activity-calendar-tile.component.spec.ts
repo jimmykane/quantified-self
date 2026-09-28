@@ -112,6 +112,22 @@ describe('ActivityCalendarTileComponent', () => {
     expect(fixture.nativeElement.querySelector('a[aria-label="Open selected day page"]')).toBeNull();
   });
 
+  it('keeps the selected day note group in loading and error states until notes are ready', async () => {
+    const notesStatus = signal<'loading' | 'ready' | 'error'>('loading');
+    const fixture = TestBed.createComponent(ActivityCalendarTileComponent);
+    fixture.componentRef.setInput('user', user);
+    fixture.componentRef.setInput('dayContextEnabled', true);
+    fixture.componentRef.setInput('timelineNotesStatus', notesStatus);
+    fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+    const noteGroup = () => fixture.nativeElement.querySelector('[aria-label="Timeline notes on selected day"]')?.textContent as string;
+    expect(noteGroup()).toContain('Loading notes…');
+    expect(noteGroup()).not.toContain('No notes shown');
+    notesStatus.set('error'); fixture.detectChanges();
+    expect(noteGroup()).toContain('Timeline notes could not be loaded.');
+    notesStatus.set('ready'); fixture.detectChanges();
+    expect(noteGroup()).toContain('No notes shown');
+  });
+
   it('uses Calm month only for the inline tile and returns to today with one haptic tap', async () => {
     const fixture = TestBed.createComponent(ActivityCalendarTileComponent);
     fixture.componentRef.setInput('user', user);

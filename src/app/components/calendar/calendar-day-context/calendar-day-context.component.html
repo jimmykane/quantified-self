@@ -171,7 +171,7 @@
           @if (activities().length > previewActivities().length) {
             <span class="calendar-day-context-preview-more">+{{ activities().length - previewActivities().length }} more on the full day</span>
           }
-        } @else { <p>None recorded for this day</p> }
+        } @else { <p>No activities recorded</p> }
       </section>
       <section class="calendar-day-context-preview-group" aria-label="Timeline notes on selected day">
         <h3>Timeline notes</h3>
@@ -188,7 +188,7 @@
           @if (noteRows().length > previewNotes().length) {
             <span class="calendar-day-context-preview-more">+{{ noteRows().length - previewNotes().length }} more on the full day</span>
           }
-        } @else { <p>None recorded for this day</p> }
+        } @else { <p>No notes shown</p> }
       </section>
       @if (canPlan()) {
         <section class="calendar-day-context-preview-group" aria-label="Planned workouts on selected day">
@@ -215,7 +215,7 @@
             @if (plannedRows().length > previewPlans().length) {
               <span class="calendar-day-context-preview-more">+{{ plannedRows().length - previewPlans().length }} more on the full day</span>
             }
-          } @else { <p>None recorded for this day</p> }
+          } @else { <p>No workouts planned</p> }
         </section>
         @if (plannedStatus() === 'ready') {
           <button mat-button appHapticTap type="button" class="calendar-day-context-preview-add"

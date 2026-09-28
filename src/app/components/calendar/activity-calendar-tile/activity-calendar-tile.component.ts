@@ -89,6 +89,7 @@ export class ActivityCalendarTileComponent {
   });
   /** Keep the workspace signal live even when the month popup is replaced by a day sheet. */
   readonly timelineNotes = input<Signal<TimelineNoteChartContext | null> | null>(null);
+  readonly timelineNotesStatus = input<Signal<'loading' | 'ready' | 'error'> | null>(null);
   private readonly notesContext = computed(() => {
     const context = this.timelineNotes()?.();
     return this.user()?.uid && context?.ownerUid === this.user()?.uid ? context : null;
@@ -195,6 +196,7 @@ export class ActivityCalendarTileComponent {
       unitSettings: user.settings?.unitSettings ?? null,
       summariesSettings: user.settings?.summariesSettings ?? null,
       timelineNotes: this.selectedDayNotes,
+      timelineNotesStatusSource: () => this.timelineNotesStatus()?.() ?? 'ready',
       activities: this.selectedDayActivities,
       plannedWorkoutsSource: this.selectedDayPlanned,
       plannedWorkoutsStatusSource: () => this.plansState().status,
