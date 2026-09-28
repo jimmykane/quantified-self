@@ -106,6 +106,11 @@ async function setActivitySyncMetadata(
             return;
         }
 
+        if (params.requireEventExists) {
+            const eventRef = db.collection('users').doc(params.userID).collection('events').doc(params.eventID);
+            if (!(await transaction.get(eventRef)).exists) return;
+        }
+
         // Queue admission and Cloud Task processing are independent. Once a
         // destination has accepted an activity, no late queue/worker write may
         // make that route eligible for another provider upload.
@@ -124,6 +129,7 @@ interface BaseMetadataParams {
     sourceServiceName: ActivityDeliverySource;
     destinationServiceName: ServiceNames;
     manual: boolean;
+    requireEventExists?: boolean;
 }
 
 export async function setActivitySyncQueuedMetadata(params: BaseMetadataParams): Promise<void> {
@@ -253,6 +259,11 @@ export async function setActivitySyncRetryingMetadataIfQueueItemDeferred(
         if (deletionGuard.shouldSkip) {
             logger.warn(`[ActivitySyncMetadata] Skipping guarded retrying metadata for user ${params.userID}, event ${params.eventID}, route ${params.routeId} because the user is missing or deletion is in progress.`);
             return false;
+        }
+
+        if (params.requireEventExists) {
+            const eventRef = db.collection('users').doc(params.userID).collection('events').doc(params.eventID);
+            if (!(await transaction.get(eventRef)).exists) return false;
         }
 
         const queueSnapshot = await transaction.get(params.queueItemRef);

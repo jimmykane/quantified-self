@@ -235,6 +235,7 @@ async function processSource(params: {
         sourceServiceName: selected.source,
         destinationServiceName: getDestinationForRoute(selected.routeId),
         manual: true,
+        requireEventExists: true,
     };
     try {
         if (queued.redispatched) await setActivitySyncRequeuedMetadata(metadataParams);

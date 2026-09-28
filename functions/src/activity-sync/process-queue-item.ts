@@ -23,7 +23,14 @@ import {
     updateToProcessed,
 } from '../queue-utils';
 import { ActivityDeliverySource, ActivitySyncRouteId, getActivityDeliveryRoute } from '../../../shared/activity-sync-routes';
-import { HISTORICAL_FIT_MAX_BYTES, MANUAL_UPLOAD_ORIGIN_DOC_ID, matchesLegacyManualUploadID, readHistoricalManualFit } from './historical-manual-original';
+import {
+    HISTORICAL_FIT_MAX_BYTES,
+    HistoricalOriginalIneligibleError,
+    isStorageObjectMissing,
+    MANUAL_UPLOAD_ORIGIN_DOC_ID,
+    matchesLegacyManualUploadID,
+    readHistoricalManualFit,
+} from './historical-manual-original';
 import { inspectFitPayload } from '../shared/fit-payload';
 import { isActivitySyncRouteEnabledForUser } from './settings';
 import { getServiceConnectionMeta } from '../service-connection-meta';
@@ -126,6 +133,10 @@ const TRANSIENT_ACTIVITY_SYNC_ERROR_CODES = new Set([
     'deadline-exceeded',
     'unavailable',
     'resource-exhausted',
+    'etimedout',
+    'econnreset',
+    'econnrefused',
+    'eai-again',
 ]);
 
 const TRANSIENT_ACTIVITY_SYNC_GRPC_CODES = new Set([
@@ -170,7 +181,9 @@ function isTransientActivitySyncError(error: unknown): boolean {
     const grpcStatus = toFiniteNumber(errorLike.status);
     if (
         (grpcCode !== null && TRANSIENT_ACTIVITY_SYNC_GRPC_CODES.has(grpcCode)) ||
-        (grpcStatus !== null && TRANSIENT_ACTIVITY_SYNC_GRPC_CODES.has(grpcStatus))
+        (grpcStatus !== null && TRANSIENT_ACTIVITY_SYNC_GRPC_CODES.has(grpcStatus)) ||
+        (grpcCode !== null && TRANSIENT_ACTIVITY_SYNC_STATUS_CODES.has(grpcCode)) ||
+        (grpcStatus !== null && TRANSIENT_ACTIVITY_SYNC_STATUS_CODES.has(grpcStatus))
     ) {
         return true;
     }
@@ -403,25 +416,30 @@ async function downloadOriginalFile(queueItem: ActivitySyncQueueItemInterface): 
         if (!event.exists || eventData?.mergeType || eventData?.isMerge || eventData?.toolSource
             || files.length !== 1 || files[0]?.path !== queueItem.originalFile.path
             || (files[0]?.generation && `${files[0].generation}` !== queueItem.originalFile.generation)) {
-            throw new Error('Manual activity provenance changed before send.');
+            throw new HistoricalOriginalIneligibleError(
+                'Manual activity provenance changed before send.',
+                !event.exists ? 'historical_event_missing' : 'historical_provenance_changed',
+            );
         }
         const loaded = await readHistoricalManualFit(queueItem.userID, queueItem.eventID, queueItem.originalFile);
         const trustedMarker = marker.data()?.kind === 'manualUpload' && marker.data()?.version === 1;
         if (!trustedMarker && !matchesLegacyManualUploadID(queueItem.userID, queueItem.eventID, loaded.fit)) {
-            throw new Error('Manual activity provenance cannot be verified.');
+            throw new HistoricalOriginalIneligibleError('Manual activity provenance cannot be verified.', 'not_manual_upload');
         }
         return loaded.fit;
     }
     const originalPath = `${queueItem.originalFile?.path || ''}`.trim();
     if (!originalPath) {
-        throw new Error('Missing original file path on activity sync queue item.');
+        throw queueItem.deliveryMode === 'historical'
+            ? new HistoricalOriginalIneligibleError('Historical activity original path is missing.')
+            : new Error('Missing original file path on activity sync queue item.');
     }
 
     const bucketName = `${queueItem.originalFile?.bucket || ''}`.trim();
     const bucket = bucketName.length > 0 ? admin.storage().bucket(bucketName) : admin.storage().bucket();
     if (queueItem.deliveryMode === 'historical'
         && !originalPath.startsWith(`users/${queueItem.userID}/events/${queueItem.eventID}/`)) {
-        throw new Error('Historical activity original path is invalid.');
+        throw new HistoricalOriginalIneligibleError('Historical activity original path is invalid.');
     }
     if (queueItem.deliveryMode === 'historical') {
         const eventRef = admin.firestore().doc(`users/${queueItem.userID}/events/${queueItem.eventID}`);
@@ -432,32 +450,43 @@ async function downloadOriginalFile(queueItem: ActivitySyncQueueItemInterface): 
         const eventData = event.data();
         const files = Array.isArray(eventData?.originalFiles) && eventData.originalFiles.length > 0
             ? eventData.originalFiles : eventData?.originalFile ? [eventData.originalFile] : [];
-        if (!event.exists || !sourceMeta.exists || eventData?.mergeType || eventData?.isMerge || eventData?.toolSource
-            || !files.some((candidate: { path?: unknown; generation?: unknown }) => candidate?.path === originalPath
-                && (!candidate.generation || `${candidate.generation}` === queueItem.originalFile.generation))) {
-            throw new Error('Historical activity source or original changed before send.');
+        if (!event.exists) throw new HistoricalOriginalIneligibleError('Historical activity event is missing.', 'historical_event_missing');
+        if (!sourceMeta.exists) throw new HistoricalOriginalIneligibleError('Historical activity source is missing.', 'not_imported_from_source');
+        if (eventData?.mergeType || eventData?.isMerge || eventData?.toolSource) {
+            throw new HistoricalOriginalIneligibleError('Historical activity is merged or derived.', 'merged_or_derived_event');
+        }
+        if (!files.some((candidate: { path?: unknown; generation?: unknown }) => candidate?.path === originalPath
+            && (!candidate.generation || `${candidate.generation}` === queueItem.originalFile.generation))) {
+            throw new HistoricalOriginalIneligibleError('Historical activity original changed before send.', 'historical_provenance_changed');
         }
     }
     const file = bucket.file(originalPath);
-    if (queueItem.deliveryMode === 'historical') {
-        const [metadata] = await file.getMetadata();
-        const size = Number(metadata.size);
-        if (!queueItem.originalFile.generation || `${metadata.generation || ''}` !== queueItem.originalFile.generation
-            || !Number.isFinite(size) || size <= 0 || size > HISTORICAL_FIT_MAX_BYTES) {
-            throw new Error('Historical activity original changed or exceeds the send limit.');
+    try {
+        if (queueItem.deliveryMode === 'historical') {
+            const [metadata] = await file.getMetadata();
+            const size = Number(metadata.size);
+            if (!queueItem.originalFile.generation || `${metadata.generation || ''}` !== queueItem.originalFile.generation
+                || !Number.isFinite(size) || size <= 0 || size > HISTORICAL_FIT_MAX_BYTES) {
+                throw new HistoricalOriginalIneligibleError('Historical activity original changed or exceeds the send limit.');
+            }
         }
-    }
-    const [buffer] = await (queueItem.deliveryMode === 'historical'
-        ? bucket.file(originalPath, { generation: queueItem.originalFile.generation })
-        : file).download();
-    if (queueItem.deliveryMode === 'historical') {
-        const [metadata] = await file.getMetadata();
-        if (`${metadata.generation || ''}` !== queueItem.originalFile.generation
-            || buffer.length > HISTORICAL_FIT_MAX_BYTES || !inspectFitPayload(buffer).isCompleteFit) {
-            throw new Error('Historical activity original changed or is not a supported FIT.');
+        const [buffer] = await (queueItem.deliveryMode === 'historical'
+            ? bucket.file(originalPath, { generation: queueItem.originalFile.generation })
+            : file).download();
+        if (queueItem.deliveryMode === 'historical') {
+            const [metadata] = await file.getMetadata();
+            if (`${metadata.generation || ''}` !== queueItem.originalFile.generation
+                || buffer.length > HISTORICAL_FIT_MAX_BYTES || !inspectFitPayload(buffer).isCompleteFit) {
+                throw new HistoricalOriginalIneligibleError('Historical activity original changed or is not a supported FIT.');
+            }
         }
+        return buffer;
+    } catch (error) {
+        if (queueItem.deliveryMode === 'historical' && isStorageObjectMissing(error)) {
+            throw new HistoricalOriginalIneligibleError('Historical activity original is missing.');
+        }
+        throw error;
     }
-    return buffer;
 }
 
 interface UploadActivityFileResult {
@@ -1475,6 +1504,7 @@ export async function processActivitySyncQueueItem(
         sourceServiceName: queueItem.sourceServiceName,
         destinationServiceName: queueItem.destinationServiceName,
         manual: queueItem.manual === true,
+        requireEventExists: queueItem.deliveryMode === 'historical',
     };
 
     let duringDestinationUpload = false;
@@ -2040,6 +2070,20 @@ export async function processActivitySyncQueueItem(
 
         if (isAccountDeletionSkipError(error)) {
             return markActivitySyncQueueItemSkippedForDeletedUser(queueItem, bulkWriter);
+        }
+
+        if (queueItem.deliveryMode === 'historical' && !duringDestinationUpload
+            && !hasPersistedDestinationUpload(queueItem) && error instanceof HistoricalOriginalIneligibleError) {
+            await safelyWriteMetadata(() => setActivitySyncSkippedMetadata({
+                ...routeMeta,
+                skippedReason: error.skippedReason,
+                detail: error.message,
+            }));
+            return finalizeActivitySyncQueueItemIfCurrent(queueItem, {
+                skippedReason: error.skippedReason,
+                destinationUploadContinuation: null,
+                resultStatus: 'skipped',
+            }, 'activity_sync_historical_original_skip', 'historical original skip');
         }
 
         if (isTokenUseSkippedForPendingDisconnectError(error)) {

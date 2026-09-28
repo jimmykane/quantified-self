@@ -21,6 +21,8 @@ This is the Wahoo-specific architecture and release record. For the reusable imp
 
 Workouts without an available FIT file are skipped. Wahoo records identified as originating from a third-party fitness application are also skipped. Existing imported events and their retained original files are not deleted when the connection is removed or Pro access expires.
 
+For one-time historical sends, a deleted event or changed/missing original before Wahoo upload is a skipped queue result. Temporary Storage failures retry, while an already accepted Wahoo upload retains its reconciliation state.
+
 ## Data flow
 
 Training delivery uses the shared queue, not the activity uploader or a new queue. Its

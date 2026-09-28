@@ -6,7 +6,14 @@ import { inspectFitPayload } from '../shared/fit-payload';
 export const HISTORICAL_FIT_MAX_BYTES = 20 * 1024 * 1024;
 export const MANUAL_UPLOAD_ORIGIN_DOC_ID = 'manualUploadOrigin';
 
-export class HistoricalOriginalIneligibleError extends Error {}
+export class HistoricalOriginalIneligibleError extends Error {
+    constructor(
+        message: string,
+        public readonly skippedReason = 'missing_invalid_or_oversized_original',
+    ) {
+        super(message);
+    }
+}
 
 export interface HistoricalOriginalFile {
     path: string;

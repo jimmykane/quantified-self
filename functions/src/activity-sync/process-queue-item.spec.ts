@@ -493,6 +493,122 @@ describe('activity-sync/process-queue-item', () => {
 
     expect(mockDownload).not.toHaveBeenCalled();
     expect(mockUploadActivityFileToSuunto).not.toHaveBeenCalled();
+    expect(mockSetActivitySyncSkippedMetadata).toHaveBeenCalledWith(expect.objectContaining({
+      skippedReason: 'missing_invalid_or_oversized_original', requireEventExists: true,
+    }));
+    expect(mockMoveToDeadLetterQueue).not.toHaveBeenCalled();
+  });
+
+  it('skips a historical send when its event was deleted before delivery', async () => {
+    mockHistoricalEventGet.mockResolvedValue({ exists: false, data: () => undefined });
+    const queueItem: ActivitySyncQueueItemInterface = {
+      ...baseQueueItem, manual: true, deliveryMode: 'historical',
+      originalFile: { ...baseQueueItem.originalFile, generation: '42' },
+    };
+
+    const result = await processActivitySyncQueueItem(queueItem);
+
+    expect(result).toBe(QueueResult.Processed);
+    expect(mockSetActivitySyncSkippedMetadata).toHaveBeenCalledWith(expect.objectContaining({
+      skippedReason: 'historical_event_missing', requireEventExists: true,
+    }));
+    expect(mockUpdateQueueItemIfUserActive).toHaveBeenCalledWith(expect.objectContaining({
+      updateData: expect.objectContaining({ processed: true, resultStatus: 'skipped', skippedReason: 'historical_event_missing' }),
+    }));
+    expect(mockUploadActivityFileToSuunto).not.toHaveBeenCalled();
+    expect(mockMoveToDeadLetterQueue).not.toHaveBeenCalled();
+  });
+
+  it('skips a missing or replaced historical original without using the DLQ', async () => {
+    const queueItem: ActivitySyncQueueItemInterface = {
+      ...baseQueueItem, manual: true, deliveryMode: 'historical',
+      originalFile: { ...baseQueueItem.originalFile, generation: '42' },
+    };
+    mockFileMetadata.mockRejectedValueOnce(Object.assign(new Error('gone'), { code: 404 }));
+    await processActivitySyncQueueItem(queueItem);
+    expect(mockSetActivitySyncSkippedMetadata).toHaveBeenCalledWith(expect.objectContaining({
+      skippedReason: 'missing_invalid_or_oversized_original',
+    }));
+    expect(mockMoveToDeadLetterQueue).not.toHaveBeenCalled();
+
+    vi.clearAllMocks();
+    mockHistoricalEventGet.mockResolvedValue({
+      exists: true,
+      data: () => ({ originalFiles: [{ path: queueItem.originalFile.path, generation: '42' }] }),
+    });
+    mockHistoricalMetaGet.mockResolvedValue({ exists: true });
+    mockFileMetadata.mockResolvedValue([{ generation: '43', size: '14' }]);
+    mockUpdateQueueItemIfUserActive.mockResolvedValue('updated');
+    await processActivitySyncQueueItem(queueItem);
+    expect(mockSetActivitySyncSkippedMetadata).toHaveBeenCalledWith(expect.objectContaining({
+      skippedReason: 'missing_invalid_or_oversized_original',
+    }));
+    expect(mockMoveToDeadLetterQueue).not.toHaveBeenCalled();
+  });
+
+  it('retries transient Storage failures when reading a historical original', async () => {
+    mockFileMetadata.mockRejectedValueOnce(Object.assign(new Error('unavailable'), { code: 503 }));
+    const queueItem: ActivitySyncQueueItemInterface = {
+      ...baseQueueItem, manual: true, deliveryMode: 'historical',
+      originalFile: { ...baseQueueItem.originalFile, generation: '42' },
+    };
+
+    const result = await processActivitySyncQueueItem(queueItem);
+
+    expect(result).toBe(QueueResult.RetryIncremented);
+    expect(mockIncreaseRetryCountForQueueItem).toHaveBeenCalled();
+    expect(mockSetActivitySyncSkippedMetadata).not.toHaveBeenCalled();
+    expect(mockMoveToDeadLetterQueue).not.toHaveBeenCalled();
+  });
+
+  it('retries a transient Storage connection reset before historical upload', async () => {
+    mockFileMetadata.mockRejectedValueOnce(Object.assign(new Error('connection reset'), { code: 'ECONNRESET' }));
+    const queueItem: ActivitySyncQueueItemInterface = {
+      ...baseQueueItem, manual: true, deliveryMode: 'historical',
+      originalFile: { ...baseQueueItem.originalFile, generation: '42' },
+    };
+
+    const result = await processActivitySyncQueueItem(queueItem);
+
+    expect(result).toBe(QueueResult.RetryIncremented);
+    expect(mockSetActivitySyncSkippedMetadata).not.toHaveBeenCalled();
+    expect(mockMoveToDeadLetterQueue).not.toHaveBeenCalled();
+  });
+
+  it('retains reconciliation for a prior accepted upload even if its historical event disappears', async () => {
+    mockHistoricalEventGet.mockResolvedValue({ exists: false, data: () => undefined });
+    const queueItem: ActivitySyncQueueItemInterface = {
+      ...baseQueueItem, manual: true, deliveryMode: 'historical',
+      outboundFingerprintID: null,
+      destinationUploadID: 'accepted-upload',
+      destinationProviderUserID: 'suunto-user-1',
+      originalFile: { ...baseQueueItem.originalFile, generation: '42' },
+    };
+
+    await processActivitySyncQueueItem(queueItem);
+
+    expect(mockSetActivitySyncSkippedMetadata).not.toHaveBeenCalled();
+    expect(mockMoveToDeadLetterQueue).toHaveBeenCalled();
+  });
+
+  it('skips a manual upload whose retained provenance changed before delivery', async () => {
+    const queueItem: ActivitySyncQueueItemInterface = {
+      ...baseQueueItem,
+      routeId: HISTORICAL_MANUAL_ACTIVITY_ROUTE_IDS.SuuntoApp,
+      sourceServiceName: 'manualUpload', manual: true, deliveryMode: 'historical',
+      originalFile: { ...baseQueueItem.originalFile, generation: '42' },
+    };
+    mockHistoricalEventGet.mockResolvedValue({
+      exists: true,
+      data: () => ({ originalFiles: [{ path: 'users/user-1/events/event-1/replaced.fit', generation: '42' }] }),
+    });
+
+    await processActivitySyncQueueItem(queueItem);
+
+    expect(mockSetActivitySyncSkippedMetadata).toHaveBeenCalledWith(expect.objectContaining({
+      skippedReason: 'historical_provenance_changed',
+    }));
+    expect(mockMoveToDeadLetterQueue).not.toHaveBeenCalled();
   });
 
   it('expands a retained manual FIT.gz before uploading through the shared adapter', async () => {

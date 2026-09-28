@@ -189,6 +189,22 @@ describe('activity-sync/metadata', () => {
     expect(mockTransactionSet).not.toHaveBeenCalled();
   });
 
+  it('does not create historical status metadata below a deleted event', async () => {
+    mockTransactionGet.mockResolvedValueOnce({ exists: false, data: () => undefined });
+
+    await setActivitySyncSkippedMetadata({
+      routeId: ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_SuuntoApp,
+      userID: 'user-1', eventID: 'deleted-event',
+      sourceServiceName: ServiceNames.GarminAPI,
+      destinationServiceName: ServiceNames.SuuntoApp,
+      manual: true,
+      requireEventExists: true,
+      skippedReason: 'historical_event_missing',
+    });
+
+    expect(mockTransactionSet).not.toHaveBeenCalled();
+  });
+
   it('does not write metadata when the user is missing or deletion is active', async () => {
     mockGetUserDeletionGuardStateInTransaction.mockResolvedValueOnce({
       userExists: false,
