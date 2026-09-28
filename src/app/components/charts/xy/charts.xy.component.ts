@@ -190,7 +190,8 @@ export class ChartsXYComponent implements AfterViewInit, OnChanges, OnDestroy {
         color: axisColor,
       }
       : { show: false };
-    const showValueLabels = points.length > 0 && points.length <= 200;
+    const showValueLabels = points.length > 0 && points.length <= 200
+      && (!isCompactLayout || points.length <= 6);
 
     if (!points.length) {
       return {

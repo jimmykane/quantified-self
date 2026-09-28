@@ -215,6 +215,7 @@ describe('ChartsXYComponent', () => {
     const formatter = option.tooltip.formatter as (params: { dataIndex: number }) => string;
 
     expect(option.xAxis.data).toEqual(['W22', 'W23']);
+    expect(option.series[0].label.show).toBe(true);
     expect(formatter({ dataIndex: 0 })).toContain(
       formatDashboardDateByInterval(weekStart, TimeIntervals.Weekly),
     );
@@ -228,9 +229,20 @@ describe('ChartsXYComponent', () => {
     fixture.detectChanges(); await waitForChartStabilization();
     const option = getLastOption();
     expect(option.series[0].data).toHaveLength(20);
+    expect(option.series[0].label.show).toBe(false);
     expect(option.series[0].labelLayout.hideOverlap).toBe(true);
     expect(option.tooltip.formatter({ dataIndex: 19 })).toContain('Activity 19');
     expect(option.tooltip.formatter({ dataIndex: 19 })).toContain(formatDashboardNumericValue(DataDistance.type, 10019));
+  });
+
+  it('keeps point values visible when the same series has enough width', async () => {
+    component.data = Array.from({ length: 20 }, (_, index) => ({
+      type: `Activity ${index}`, [ChartDataValueTypes.Total]: 10000 + index, count: 1,
+    }));
+    Object.defineProperty(component.chartDiv.nativeElement, 'clientWidth', { configurable: true, value: 800 });
+    fixture.detectChanges(); await waitForChartStabilization();
+
+    expect(getLastOption().series[0].label.show).toBe(true);
   });
 
   it('should render summary meta as "per activity type" for activity categories', async () => {
