@@ -76,11 +76,22 @@ describe('ActivityCalendarGridComponent', () => {
     fixture.componentRef.setInput('calmMonth', true);
     fixture.detectChanges();
     const day = fixture.nativeElement.querySelector('[aria-label*="1 planned workout, 1 skipped workout"]') as HTMLButtonElement;
-    expect(day.classList).toContain('activity-calendar-day--has-plan');
+    expect(day.getAttribute('aria-label')).toContain('First: tempo');
     expect(day.querySelector('.activity-calendar-workout-preview')?.textContent).toContain('tempo');
     expect(day.querySelector('.activity-calendar-workout-preview-more')?.textContent).toBe('+1');
     expect(day.querySelectorAll('.planned-workout-markers mat-icon')).toHaveLength(2);
     expect(day.querySelector('.activity-calendar-workout-preview')?.getAttribute('aria-hidden')).toBe('true');
+
+    fixture.componentRef.setInput('plannedWorkoutsByDate', {
+      '2026-08-03': {
+        entries: [{ ...first, completed: true, workout: { ...first.workout, lifecycle: 'skipped' } }],
+        visibleEntries: [{ ...first, completed: true, workout: { ...first.workout, lifecycle: 'skipped' } }],
+        overflowCount: 0, hasSkipped: false, ariaLabel: '1 completed workout, activity linked',
+      },
+    } satisfies PlannedWorkoutCalendarOverlay);
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('.activity-calendar-workout-preview--completed')).toBeTruthy();
+    expect(fixture.nativeElement.querySelector('.activity-calendar-workout-preview--skipped')).toBeNull();
 
     fixture.componentRef.setInput('calmMonth', false);
     fixture.detectChanges();

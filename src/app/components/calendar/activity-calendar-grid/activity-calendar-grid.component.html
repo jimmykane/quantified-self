@@ -35,9 +35,8 @@
             [class.activity-calendar-day--today]="day.isToday"
             [class.activity-calendar-day--selected]="selectedDateKey === day.dateKey"
             [class.activity-calendar-day--weekend]="day.isWeekend"
-            [class.activity-calendar-day--has-plan]="calmMonth && model.view === 'month' && !!plannedDay"
             [attr.aria-pressed]="selectedDateKey ? selectedDateKey === day.dateKey : null"
-            [attr.aria-label]="(dayNotes?.ariaLabel ?? day.ariaLabel) + (plannedDay ? ' ' + plannedDay.ariaLabel + '.' : plannedWorkoutsByDate ? ' No planned workouts.' : '')"
+            [attr.aria-label]="(dayNotes?.ariaLabel ?? day.ariaLabel) + (plannedDay ? ' ' + plannedDay.ariaLabel + (calmMonth && plannedDay.visibleEntries[0] ? '. First: ' + plannedDay.visibleEntries[0].workout.title : '') + '.' : plannedWorkoutsByDate ? ' No planned workouts.' : '')"
             matRipple
             (click)="selectDay(day)">
             <span class="activity-calendar-day-number"><span class="activity-calendar-day-number-value">{{ day.dayNumber }}</span></span>
@@ -87,7 +86,7 @@
               @if (calmMonth && model.view === 'month' && plannedDay.visibleEntries[0]; as firstWorkout) {
                 <span class="activity-calendar-workout-preview" aria-hidden="true"
                   [style.color]="firstWorkout.color"
-                  [class.activity-calendar-workout-preview--skipped]="firstWorkout.workout.lifecycle === 'skipped'"
+                  [class.activity-calendar-workout-preview--skipped]="!firstWorkout.completed && firstWorkout.workout.lifecycle === 'skipped'"
                   [class.activity-calendar-workout-preview--completed]="firstWorkout.completed">
                   <span class="activity-calendar-workout-preview-title">{{ firstWorkout.workout.title }}</span>
                   @if (plannedDay.entries.length > 1) {
