@@ -1244,7 +1244,7 @@ describe('buildTrainingReadinessMetricPayload', () => {
         expect(reverse.payload.points.at(-1)?.sleepScore).toBe(90);
     });
 
-    it('matches the live missing-date fallback without accepting an invalid stored date', async () => {
+    it('matches the live missing-date fallback without accepting malformed sessions', async () => {
         const { buildTrainingReadinessMetricPayload } = await import('./derived-metrics.service');
         const nowMs = Date.UTC(2026, 6, 16, 12);
         const buildDoc = (id: string, sleepDate: string | undefined, score: number, endHour: number) => ({
@@ -1264,6 +1264,19 @@ describe('buildTrainingReadinessMetricPayload', () => {
         const result = buildTrainingReadinessMetricPayload([], 0, [
             buildDoc('missing-date', undefined, 84, 6),
             buildDoc('invalid-date', '2026-02-31', 99, 7),
+            {
+                id: 'invalid-time',
+                data: () => ({
+                    source: { provider: 'GarminAPI' },
+                    sleepDate: '2026-07-16',
+                    startTimeMs: Number.MAX_SAFE_INTEGER - 1,
+                    endTimeMs: Number.MAX_SAFE_INTEGER,
+                    durationSeconds: 1,
+                    isNap: false,
+                    score: { value: 100 },
+                    vitals: {},
+                }),
+            },
         ] as any, nowMs);
 
         expect(result.payload.points.at(-1)).toMatchObject({

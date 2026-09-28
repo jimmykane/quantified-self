@@ -445,7 +445,7 @@ describe('dashboard-sleep-chart.helper', () => {
       id: 'invalid-time',
       startTimeMs: Number.MAX_SAFE_INTEGER - 1,
       endTimeMs: Number.MAX_SAFE_INTEGER,
-      sleepDate: '',
+      sleepDate: '2026-01-06',
       durationSeconds: 1,
       source: { provider: 'GarminAPI', sourceSessionKey: 'invalid-time' },
     }] as any[]);
