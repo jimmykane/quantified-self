@@ -55,10 +55,11 @@ export function buildHealthPreviewSeries(kind: HealthPreviewKind): HealthWorkspa
 }
 
 export const HEALTH_PREVIEW_SLEEP: DashboardSleepTrendPoint = {
-  id: 'sample-night', sleepDate: '2026-08-31', provider: 'SuuntoApp', providerLabel: 'Suunto', categoryLabel: '31 Aug',
+  id: 'sample-night', sourceSessionIds: ['sample-night'], sleepDate: '2026-08-31', provider: 'SuuntoApp', providerLabel: 'Suunto', categoryLabel: '31 Aug',
   startTimeMs: Date.UTC(2026, 7, 30, 23, 30), endTimeMs: Date.UTC(2026, 7, 31, 7, 20),
   totalSeconds: 27_660, deepSeconds: 5_100, lightSeconds: 15_660, remSeconds: 6_900, awakeSeconds: 540, unknownSeconds: 0,
-  score: null, averageHeartRateBpm: null, minimumHeartRateBpm: null, averageHrvMs: null, maxSpo2Percent: null,
+  score: null, averageHeartRateBpm: null, minimumHeartRateBpm: null, restingHeartRateBpm: null,
+  averageHrvMs: null, maxSpo2Percent: null, averageRespirationBrpm: null,
   isNap: false, napSeconds: 0, napCount: 0, napAverageHrvMs: null, napAverageHeartRateBpm: null, napStartTimeMs: null, napEndTimeMs: null,
 };
 
@@ -72,7 +73,7 @@ export function buildHealthPreviewSleepTrend(): DashboardSleepTrendContext {
     const endTimeMs = point.timestampMs + 20 * 60_000;
     return {
       ...HEALTH_PREVIEW_SLEEP,
-      id: `sample-night-${index}`, sleepDate: point.calendarDate,
+      id: `sample-night-${index}`, sourceSessionIds: [`sample-night-${index}`], sleepDate: point.calendarDate,
       categoryLabel: `${18 + index} Aug`,
       endTimeMs, startTimeMs: endTimeMs - (totalSeconds + HEALTH_PREVIEW_SLEEP.awakeSeconds) * 1000,
       totalSeconds, deepSeconds, remSeconds, lightSeconds: totalSeconds - deepSeconds - remSeconds,

@@ -1,4 +1,10 @@
 import { describe, expect, it } from 'vitest';
+import {
+  groupCanonicalSleepNightFragments,
+  parseSleepDateTimeOffsetSeconds,
+  resolveSleepDisplayDate,
+  SLEEP_PROVIDERS,
+} from '@shared/sleep';
 import { buildDashboardSleepTrendContext, formatSleepDuration } from './dashboard-sleep-chart.helper';
 
 function expectedSleepDateLabel(sleepDate: string): string {
@@ -10,6 +16,46 @@ function expectedSleepDateLabel(sleepDate: string): string {
 }
 
 describe('dashboard-sleep-chart.helper', () => {
+  it('shares one bounded provider-night identity and wake-date rule', () => {
+    const base = {
+      provider: SLEEP_PROVIDERS.SuuntoApp,
+      providerUserId: 'suunto-user',
+      sleepDate: '2026-09-28',
+      isNap: false,
+    };
+    const input = [
+      { ...base, id: 'first', startTimeMs: 1_000, endTimeMs: 2_000 },
+      { ...base, id: 'second', startTimeMs: 2_000 + (30 * 60 * 1000), endTimeMs: 3_000 + (30 * 60 * 1000) },
+      { ...base, id: 'separate', startTimeMs: 3_000 + (61 * 60 * 1000), endTimeMs: 4_000 + (61 * 60 * 1000) },
+      { ...base, id: 'unidentified', providerUserId: null, startTimeMs: 1_500, endTimeMs: 2_500 },
+      { ...base, id: 'nap', isNap: true, startTimeMs: 1_500, endTimeMs: 2_500 },
+    ];
+
+    expect(groupCanonicalSleepNightFragments(input).map(group => group.map(item => item.id))).toEqual([
+      ['first', 'second'],
+      ['separate'],
+      ['unidentified'],
+      ['nap'],
+    ]);
+    const session = {
+      source: { provider: SLEEP_PROVIDERS.SuuntoApp, providerUserId: 'suunto-user', sourceSessionKey: 'sleep' },
+      sleepDate: '2026-09-27',
+      startTimeMs: Date.parse('2026-09-27T18:57:00Z'),
+      endTimeMs: Date.parse('2026-09-28T04:00:00Z'),
+      isNap: false,
+      timezoneOffsetSeconds: Number.MAX_SAFE_INTEGER,
+      providerFields: { suunto: { timestamp: '2026-09-28T07:00:00+03:00' } },
+    };
+    expect(resolveSleepDisplayDate(session)).toBe('2026-09-28');
+    expect(resolveSleepDisplayDate({
+      ...session,
+      sleepDate: '2026-09-27',
+      timezoneOffsetSeconds: null,
+      providerFields: null,
+    })).toBe('2026-09-27');
+    expect(parseSleepDateTimeOffsetSeconds('2026-09-28T07:00:00+19:00')).toBeNull();
+  });
+
   it('builds stacked sleep points for staged provider sessions', () => {
     const context = buildDashboardSleepTrendContext([{
       id: 'garmin-sleep-1',

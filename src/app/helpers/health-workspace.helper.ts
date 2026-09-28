@@ -43,10 +43,18 @@ import {
   type ManualVo2Method,
 } from '@shared/manual-health';
 import {
+  groupCanonicalSleepNightFragments,
+  SLEEP_PROVIDERS,
   SLEEP_SPORTS_LIB_METRIC_FIELDS,
   SleepSession,
   normalizeSleepProvider,
+  resolveSleepEffectiveStartTimeMs,
+  resolveSleepTimezoneOffsetSeconds,
 } from '@shared/sleep';
+import {
+  aggregateNightlyHrvEvidence,
+  sleepEvidenceSourceKey,
+} from '@shared/nightly-hrv';
 import {
   formatCanonicalHealthMetricSportsLibValue,
   formatCanonicalSleepMetricSportsLibValue,
@@ -62,6 +70,7 @@ import {
 import type { UserUnitSettingsInterface } from '@sports-alliance/sports-lib';
 import {
   buildDashboardSleepTrendContext,
+  resolveSleepTrendDate,
   type DashboardSleepTrendPoint,
 } from './dashboard-sleep-chart.helper';
 import { formatDashboardRelativeDay } from './dashboard-relative-date.helper';
@@ -80,8 +89,19 @@ import {
 export const HEALTH_WORKSPACE_RANGES = APP_HEALTH_WORKSPACE_RANGES;
 export type HealthWorkspaceRange = AppHealthWorkspaceRange;
 export type HealthWorkspaceMetricSelection = AppHealthWorkspaceMetric;
-/** Read-time account identity shared with typed Health references; never persisted. */
-export type HealthWorkspaceSleepSession = SleepSession & { healthAccountKey?: string };
+/** Read-time identities shared with typed Health references; never persisted. */
+export type HealthWorkspaceSleepSession = SleepSession & {
+  healthAccountKey?: string;
+  nightlyHrvSourceKey?: string;
+};
+
+interface CanonicalHealthSleepRecord {
+  point: DashboardSleepTrendPoint;
+  sessions: HealthWorkspaceSleepSession[];
+  latestSession: HealthWorkspaceSleepSession;
+  provider: HealthProvider;
+  accountKey: string;
+}
 
 export const HEALTH_WORKSPACE_DEFAULT_METRIC = HEALTH_METRIC_IDS.RestingHeartRate;
 export const HEALTH_WORKSPACE_DEFAULT_RANGE: HealthWorkspaceRange = '30d';
@@ -202,7 +222,8 @@ export interface HealthPriorityRow {
   contextText: string;
   observedAtMs: number;
   details?: readonly HealthPriorityDetail[];
-  sleepPoint?: Omit<DashboardSleepTrendPoint, 'sourceKey' | 'hrvSourceKey'>;
+  sleepPoint?: Omit<DashboardSleepTrendPoint,
+    'sourceKey' | 'hrvSourceKey' | 'hrvObservations' | 'sourceSessionIds'>;
 }
 
 export interface HealthPriorityTrendSelectionOptions {
@@ -488,9 +509,12 @@ export function buildHealthMetricWorkspaceView(
   unitSettings: UserUnitSettingsInterface | null = null,
 ): HealthMetricWorkspaceView {
   const sleepById = new Map(sleepSessions.flatMap(session => session.id ? [[session.id, session] as const] : []));
+  const canonicalSleepRecords = buildCanonicalHealthSleepRecords(sleepSessions);
+  const canonicalSleepById = new Map(canonicalSleepRecords.flatMap(record => record.sessions.flatMap(session =>
+    session.id ? [[session.id, record] as const] : [])));
   const datums: MetricDatum[] = [];
   for (const observation of result.observations) {
-    const datum = observationDatum(observation, sleepById);
+    const datum = observationDatum(observation, sleepById, canonicalSleepById);
     if (datum) {
       datums.push(datum);
     }
@@ -499,9 +523,9 @@ export function buildHealthMetricWorkspaceView(
     datums.push(...chunkDatums(chunk));
   }
   if (result.query.metricIds.includes(HEALTH_METRIC_IDS.HeartRateVariability)) {
-    datums.push(...sleepHrvDatums(sleepSessions, result));
+    datums.push(...sleepHrvDatums(canonicalSleepRecords, result));
   }
-  datums.push(...sleepSummaryDatums(sleepSessions, result));
+  datums.push(...sleepSummaryDatums(canonicalSleepRecords, result));
   for (const observation of activityObservations) {
     datums.push(activityObservationDatum(observation));
   }
@@ -668,7 +692,13 @@ export function selectWorkoutWeightContextFallback(
 }
 
 export function sleepSessionHasHrv(session: SleepSession | null | undefined): boolean {
-  return session?.isNap !== true && sleepHrvValues(session).length > 0;
+  return sleepSessionsHaveCanonicalHrv(session ? [session] : []);
+}
+
+export function sleepSessionsHaveCanonicalHrv(sessions: readonly SleepSession[]): boolean {
+  return buildCanonicalHealthSleepRecords(sessions).some(record => !record.point.isNap
+    && (canonicalSleepHrvValue(record, 'vitals.averageHrvMs') !== null
+      || canonicalSleepHrvValue(record, 'vitals.overnightHrvMs') !== null));
 }
 
 export function isSleepHrvSemanticVariant(semanticVariant: string): boolean {
@@ -944,51 +974,124 @@ export function isHealthHrvPersonalRangeSemanticVariant(
   return (HEALTH_HRV_PERSONAL_RANGE_SEMANTIC_VARIANTS as readonly string[]).includes(semanticVariant);
 }
 
+function buildCanonicalHealthSleepRecords(
+  sessions: readonly HealthWorkspaceSleepSession[],
+): CanonicalHealthSleepRecord[] {
+  const candidates = sessions.flatMap(session => {
+    const provider = normalizeSleepProvider(session.source?.provider);
+    const sleepDate = resolveSleepTrendDate(session);
+    const endTimeMs = Number(session.endTimeMs);
+    if (!provider || !sleepDate || !Number.isFinite(endTimeMs)) return [];
+    return [{
+      session,
+      provider,
+      providerUserId: typeof session.source?.providerUserId === 'string'
+        ? session.source.providerUserId.trim() || null
+        : null,
+      sleepDate,
+      isNap: session.isNap === true,
+      startTimeMs: resolveSleepEffectiveStartTimeMs(session),
+      endTimeMs,
+    }];
+  });
+  return groupCanonicalSleepNightFragments(candidates).flatMap(group => {
+    const groupSessions = group.map(candidate => candidate.session);
+    const point = buildDashboardSleepTrendContext(groupSessions).latestPoint;
+    if (!point || !point.provider) return [];
+    const latestSession = [...groupSessions].sort((left, right) => right.endTimeMs - left.endTimeMs
+      || right.startTimeMs - left.startTimeMs || `${right.id || ''}`.localeCompare(`${left.id || ''}`))[0];
+    return [{
+      point,
+      sessions: groupSessions,
+      latestSession,
+      provider: point.provider as HealthProvider,
+      accountKey: groupSessions.map(session => session.healthAccountKey).find((value): value is string => !!value)
+        || latestSession.source.providerUserId || 'default',
+    }];
+  });
+}
+
+function canonicalSleepHrvValue(
+  record: CanonicalHealthSleepRecord,
+  field: 'vitals.averageHrvMs' | 'vitals.overnightHrvMs',
+): number | null {
+  if (record.point.isNap || (record.provider === SLEEP_PROVIDERS.SuuntoApp
+    && record.sessions.some(session => !session.source.providerUserId?.trim()))) {
+    return null;
+  }
+  const points = record.sessions.map(session => ({
+    averageHrvMs: positiveNumberOrNull(resolveSleepReferenceValue(session, field)),
+    hrvSampleCount: field === 'vitals.averageHrvMs'
+      ? positiveNumberOrNull(session.vitals?.hrvSampleCount)
+      : null,
+    hrvSourceKey: field === 'vitals.overnightHrvMs' && session.nightlyHrvSourceKey
+      ? session.nightlyHrvSourceKey
+      : JSON.stringify(['sleep', sleepEvidenceSourceKey(session), field]),
+  }));
+  return aggregateNightlyHrvEvidence(points, {
+    requireEveryPoint: record.provider === SLEEP_PROVIDERS.SuuntoApp
+      && field === 'vitals.averageHrvMs',
+  }).averageHrvMs;
+}
+
+function resolveCanonicalSleepReferenceValue(
+  record: CanonicalHealthSleepRecord,
+  field: HealthSleepReferenceField,
+): number | null {
+  switch (field) {
+    case 'durationSeconds': return record.point.totalSeconds > 0 ? record.point.totalSeconds : null;
+    case 'score.value': return record.point.score;
+    case 'vitals.averageHeartRateBpm': return record.point.averageHeartRateBpm;
+    case 'vitals.minimumHeartRateBpm': return record.point.minimumHeartRateBpm;
+    case 'vitals.restingHeartRateBpm': return record.point.restingHeartRateBpm;
+    case 'vitals.averageHrvMs': return canonicalSleepHrvValue(record, field);
+    case 'vitals.overnightHrvMs': return canonicalSleepHrvValue(record, field);
+    case 'vitals.maxSpo2Percent': return record.point.maxSpo2Percent;
+    case 'vitals.averageRespirationBrpm': return record.point.averageRespirationBrpm;
+  }
+}
+
 export function buildSleepPriorityRows(
   sessions: readonly SleepSession[],
   unitSettings: UserUnitSettingsInterface | null = null,
   nowMs = Date.now(),
 ): HealthPriorityRow[] {
-  const normalized = sessions.flatMap(session => {
-    const provider = normalizeSleepProvider(session.source?.provider);
-    return provider ? [{ session, provider }] : [];
-  });
-  const accountLabels = buildAccountLabels(normalized.map(({ session, provider }) => ({
+  const normalized = buildCanonicalHealthSleepRecords(sessions).filter(record => !record.point.isNap);
+  const accountLabels = buildAccountLabels(normalized.map(({ latestSession, provider, accountKey }) => ({
     provider,
-    accountKey: `${session.source.providerUserId || 'default'}`,
-    timestampMs: session.endTimeMs,
+    accountKey,
+    timestampMs: latestSession.endTimeMs,
   })));
-  const latestBySource = new Map<string, { session: SleepSession; provider: HealthProvider }>();
+  const latestBySource = new Map<string, CanonicalHealthSleepRecord>();
   for (const item of normalized) {
-    const key = accountIdentity(item.provider, `${item.session.source.providerUserId || 'default'}`);
+    const key = accountIdentity(item.provider, item.accountKey);
     const current = latestBySource.get(key);
-    if (!current || item.session.endTimeMs > current.session.endTimeMs) {
+    if (!current || item.point.endTimeMs > current.point.endTimeMs) {
       latestBySource.set(key, item);
     }
   }
-  return [...latestBySource.entries()].map(([key, { session, provider }], index) => {
+  return [...latestBySource.entries()].map(([key, { point, provider }], index) => {
     const id = `sleep-priority-${index + 1}`;
-    const sleepPoint = buildDashboardSleepTrendContext([session], { nowMs }).latestPoint || undefined;
-    if (sleepPoint) {
-      // This fresh display point does not need the internal identities used for readiness source matching.
-      sleepPoint.id = id;
-      delete sleepPoint.sourceKey;
-      delete sleepPoint.hrvSourceKey;
-      delete sleepPoint.hrvObservations;
-    }
+    const { sourceKey: _sourceKey, hrvSourceKey: _hrvSourceKey, hrvObservations: _hrvObservations,
+      sourceSessionIds: _sourceSessionIds, ...publicPoint } = point;
+    void _sourceKey;
+    void _hrvSourceKey;
+    void _hrvObservations;
+    void _sourceSessionIds;
+    const sleepPoint = { ...publicPoint, id };
     const scoreText = formatSleepMetricValue(
       SLEEP_SPORTS_LIB_METRIC_FIELDS.Score,
-      session.score?.value,
+      point.score,
       unitSettings,
     );
     const hrvText = formatSleepMetricValue(
       SLEEP_SPORTS_LIB_METRIC_FIELDS.AverageHrv,
-      session.vitals?.averageHrvMs ?? session.vitals?.overnightHrvMs,
+      point.averageHrvMs,
       unitSettings,
     );
     const heartRateText = formatSleepMetricValue(
       SLEEP_SPORTS_LIB_METRIC_FIELDS.AverageHeartRate,
-      session.vitals?.averageHeartRateBpm,
+      point.averageHeartRateBpm,
       unitSettings,
     );
     const details = [
@@ -1004,12 +1107,12 @@ export function buildSleepPriorityRows(
       sourceLabel: accountLabels.get(key) || providerLabel(provider),
       valueText: formatSleepMetricValue(
         SLEEP_SPORTS_LIB_METRIC_FIELDS.Duration,
-        session.durationSeconds,
+        point.totalSeconds,
         unitSettings,
         true,
       ),
-      contextText: formatDashboardRelativeDay(session.endTimeMs, { nowMs }),
-      observedAtMs: session.endTimeMs,
+      contextText: formatDashboardRelativeDay(point.endTimeMs, { nowMs }),
+      observedAtMs: point.endTimeMs,
       details,
       sleepPoint,
     };
@@ -1021,33 +1124,30 @@ export function buildSleepObservationRows(
   sessions: readonly SleepSession[],
   unitSettings: UserUnitSettingsInterface | null = null,
 ): HealthSleepObservationRow[] {
-  const normalized = sessions.flatMap(session => {
-    const provider = normalizeSleepProvider(session.source?.provider);
-    return provider ? [{ session, provider }] : [];
-  });
-  const accountLabels = buildAccountLabels(normalized.map(({ session, provider }) => ({
+  const normalized = buildCanonicalHealthSleepRecords(sessions);
+  const accountLabels = buildAccountLabels(normalized.map(({ point, provider, accountKey }) => ({
     provider,
-    accountKey: `${session.source.providerUserId || 'default'}`,
-    timestampMs: session.endTimeMs,
+    accountKey,
+    timestampMs: point.endTimeMs,
   })));
   return normalized
-    .sort((left, right) => right.session.endTimeMs - left.session.endTimeMs)
-    .map(({ session, provider }, index) => ({
+    .sort((left, right) => right.point.endTimeMs - left.point.endTimeMs)
+    .map(({ point, provider, accountKey }, index) => ({
       id: `sleep-row-${index + 1}`,
-      dateText: formatDateTime(session.endTimeMs),
-      sourceLabel: accountLabels.get(accountIdentity(provider, `${session.source.providerUserId || 'default'}`))
+      dateText: formatDateTime(point.endTimeMs),
+      sourceLabel: accountLabels.get(accountIdentity(provider, accountKey))
         || providerLabel(provider),
       durationText: formatSleepMetricValue(
         SLEEP_SPORTS_LIB_METRIC_FIELDS.Duration,
-        session.durationSeconds,
+        point.totalSeconds,
         unitSettings,
         true,
       ),
-      scoreText: formatSleepMetricValue(SLEEP_SPORTS_LIB_METRIC_FIELDS.Score, session.score?.value, unitSettings),
-      hrvText: formatSleepMetricValue(SLEEP_SPORTS_LIB_METRIC_FIELDS.AverageHrv, session.vitals?.averageHrvMs, unitSettings),
+      scoreText: formatSleepMetricValue(SLEEP_SPORTS_LIB_METRIC_FIELDS.Score, point.score, unitSettings),
+      hrvText: formatSleepMetricValue(SLEEP_SPORTS_LIB_METRIC_FIELDS.AverageHrv, point.averageHrvMs, unitSettings),
       heartRateText: formatSleepMetricValue(
         SLEEP_SPORTS_LIB_METRIC_FIELDS.AverageHeartRate,
-        session.vitals?.averageHeartRateBpm,
+        point.averageHeartRateBpm,
         unitSettings,
       ),
     }));
@@ -1182,6 +1282,7 @@ function finiteSleepMetricNumber(value: unknown): number | null {
 function observationDatum(
   observation: HealthObservation,
   sleepById: ReadonlyMap<string, SleepSession>,
+  canonicalSleepById: ReadonlyMap<string, CanonicalHealthSleepRecord>,
 ): MetricDatum | null {
   const entry = observation.entry;
   let value: number | string | boolean;
@@ -1189,7 +1290,10 @@ function observationDatum(
   let normalizationStatus: string;
   let nativeOnly: boolean;
   if (entry.kind === 'sleep_reference') {
-    const resolved = resolveSleepReferenceValue(sleepById.get(entry.reference.documentId), entry.reference.field);
+    const canonicalRecord = canonicalSleepById.get(entry.reference.documentId);
+    const resolved = canonicalRecord
+      ? resolveCanonicalSleepReferenceValue(canonicalRecord, entry.reference.field)
+      : resolveSleepReferenceValue(sleepById.get(entry.reference.documentId), entry.reference.field);
     if (resolved === null) {
       return null;
     }
@@ -1312,7 +1416,7 @@ function chunkDatums(chunk: HealthSampleChunk): MetricDatum[] {
 }
 
 function sleepHrvDatums(
-  sessions: readonly HealthWorkspaceSleepSession[],
+  records: readonly CanonicalHealthSleepRecord[],
   result: HealthRangeResult,
 ): MetricDatum[] {
   const representedReferences = new Set(result.observations.flatMap(observation => {
@@ -1323,25 +1427,35 @@ function sleepHrvDatums(
       : [];
   }));
 
-  return sessions.flatMap((session, sessionIndex) => {
-    if (session.isNap) {
+  return records.flatMap((record, recordIndex) => {
+    if (record.point.isNap) {
       return [];
     }
-    const provider = normalizeSleepProvider(session.source?.provider);
-    const timestampMs = Number(session.endTimeMs);
-    if (!provider || !Number.isFinite(timestampMs)) {
-      return [];
-    }
-    const calendarDate = parseCalendarDate(session.sleepDate) === null
-      ? localCalendarDate(timestampMs)
-      : session.sleepDate;
+    const { provider, point, latestSession } = record;
+    const timestampMs = point.endTimeMs;
+    const calendarDate = point.sleepDate;
     if (calendarDate < result.query.startDate
       || calendarDate > result.query.endDate) {
       return [];
     }
-    const documentId = `${session.id || `loaded-${sessionIndex + 1}`}`;
-    return sleepHrvValues(session).flatMap(({ field, value, semanticVariant, semanticLabel }) => {
-      if (session.id && representedReferences.has(sleepHrvReferenceIdentity(session.id, field))) {
+    const documentId = point.sourceSessionIds.join('|') || `loaded-${recordIndex + 1}`;
+    const values = [
+      {
+        field: 'vitals.averageHrvMs' as const,
+        value: canonicalSleepHrvValue(record, 'vitals.averageHrvMs'),
+        semanticVariant: 'sleep_session_average_hrv',
+        semanticLabel: 'Average HRV · Sleep session · Provider summary · Provider calculated',
+      },
+      {
+        field: 'vitals.overnightHrvMs' as const,
+        value: canonicalSleepHrvValue(record, 'vitals.overnightHrvMs'),
+        semanticVariant: 'sleep_overnight_hrv',
+        semanticLabel: 'Overnight HRV · Sleep session · Provider summary · Provider calculated',
+      },
+    ].filter((item): item is typeof item & { value: number } => item.value !== null);
+    return values.flatMap(({ field, value, semanticVariant, semanticLabel }) => {
+      if (record.sessions.some(session => session.id
+        && representedReferences.has(sleepHrvReferenceIdentity(session.id, field)))) {
         return [];
       }
       return [{
@@ -1350,7 +1464,7 @@ function sleepHrvDatums(
         // HealthMetricQueryService derives the same opaque account identity as
         // the Health writer. Reuse it so Sleep HRV and all-day Health evidence
         // from one provider account do not appear as two connected accounts.
-        accountKey: session.healthAccountKey || `${session.source?.providerUserId || 'default'}`,
+        accountKey: record.accountKey,
         aggregation: 'average',
         semanticVariant,
         origin: HEALTH_VALUE_ORIGINS.ProviderSummary,
@@ -1362,7 +1476,7 @@ function sleepHrvDatums(
         valueType: HEALTH_VALUE_TYPES.Number,
         timestampMs,
         calendarDate,
-        timezoneOffsetSeconds: session.timezoneOffsetSeconds ?? null,
+        timezoneOffsetSeconds: resolveSleepTimezoneOffsetSeconds(latestSession),
         value,
         deviceLabel: null,
         qualityCode: HEALTH_QUALITY_STATUSES.Valid,
@@ -1415,10 +1529,20 @@ export function sleepSummaryMetricIds(session: SleepSession): HealthMetricId[] {
   return [...new Set(sleepSummaryValues(session).map(value => value.metricId))];
 }
 
-function sleepSummaryDatums(sessions: readonly HealthWorkspaceSleepSession[], result: HealthRangeResult): MetricDatum[] {
+function canonicalSleepSummaryValues(record: CanonicalHealthSleepRecord) {
+  return SLEEP_SUMMARY_FIELDS.flatMap(definition => {
+    const value = resolveCanonicalSleepReferenceValue(record, definition.field);
+    if (value === null || (definition.field === 'score.value' ? value < 0 : value <= 0)
+      || (definition.max !== undefined && value > definition.max)) return [];
+    return [{ ...definition, value }];
+  });
+}
+
+function sleepSummaryDatums(records: readonly CanonicalHealthSleepRecord[], result: HealthRangeResult): MetricDatum[] {
   const requested = new Set<HealthMetricId>(result.query.metricIds.filter(metric =>
     SLEEP_SUMMARY_FIELDS.some(definition => definition.metricId === metric)));
   if (!requested.size) return [];
+  const sessions = records.flatMap(record => record.sessions);
   const sessionsById = new Map(sessions.filter(session => session.id).map(session => [session.id!, session]));
   const represented = new Set<string>();
   const referencedAccounts = new Map<string, string>();
@@ -1431,41 +1555,44 @@ function sleepSummaryDatums(sessions: readonly HealthWorkspaceSleepSession[], re
       referencedAccounts.set(accountIdentity(session.source.provider, session.source.providerUserId), observation.accountKey);
     }
   }
-  return sessions.flatMap((session, index) => {
-    const values = sleepSummaryValues(session).filter(value => requested.has(value.metricId));
+  return records.flatMap((record, index) => {
+    const { point, latestSession, provider } = record;
+    const values = canonicalSleepSummaryValues(record).filter(value => requested.has(value.metricId));
     if (!values.length) return [];
-    const calendarDate = parseCalendarDate(session.sleepDate) === null
-      ? localCalendarDate(session.endTimeMs) : session.sleepDate;
+    const calendarDate = point.sleepDate;
     if (calendarDate < result.query.startDate || calendarDate > result.query.endDate) return [];
     return values.flatMap(({ metricId, field, aggregation, variant, label, value }) => {
-      if (session.id && represented.has(JSON.stringify([session.id, field]))) return [];
-      const period = session.isNap ? 'nap' : 'session';
+      if (record.sessions.some(session => session.id
+        && represented.has(JSON.stringify([session.id, field])))) return [];
+      const period = point.isNap ? 'nap' : 'session';
+      const referencedAccountKey = record.sessions.map(session =>
+        referencedAccounts.get(accountIdentity(session.source.provider, session.source.providerUserId)))
+        .find((value): value is string => !!value);
       return [{
         metricId,
-        provider: session.source.provider,
-        accountKey: session.healthAccountKey || referencedAccounts.get(accountIdentity(session.source.provider, session.source.providerUserId))
-          || session.source.providerUserId || 'default',
+        provider,
+        accountKey: latestSession.healthAccountKey || referencedAccountKey || record.accountKey,
         aggregation,
-        semanticVariant: `${!session.isNap && label ? 'sleep_' : ''}${period}_${variant}`,
+        semanticVariant: `${!point.isNap && label ? 'sleep_' : ''}${period}_${variant}`,
         origin: HEALTH_VALUE_ORIGINS.ProviderSummary,
         recordingMethod: HEALTH_RECORDING_METHODS.ProviderCalculated,
         unit: getHealthMetricDefinition(metricId).canonicalUnit,
         normalizationStatus: HEALTH_NORMALIZATION_STATUSES.Canonical,
         nativeOnly: false,
-        semanticLabel: `${label ? `${label} · ` : ''}${session.isNap ? 'Nap' : 'Sleep session'} · Provider summary · Provider calculated`,
+        semanticLabel: `${label ? `${label} · ` : ''}${point.isNap ? 'Nap' : 'Sleep session'} · Provider summary · Provider calculated`,
         valueType: HEALTH_VALUE_TYPES.Number,
-        timestampMs: session.endTimeMs,
+        timestampMs: point.endTimeMs,
         calendarDate,
-        timezoneOffsetSeconds: session.timezoneOffsetSeconds ?? null,
+        timezoneOffsetSeconds: resolveSleepTimezoneOffsetSeconds(latestSession),
         value,
         deviceLabel: null,
         qualityCode: HEALTH_QUALITY_STATUSES.Valid,
         observationId: null,
-        rowId: `sleep:${session.id || `loaded-${index + 1}`}:${field}`,
+        rowId: `sleep:${point.sourceSessionIds.join('|') || `loaded-${index + 1}`}:${field}`,
         rowKind: 'sleep',
         sampleCount: 1,
         coverageStatus: HEALTH_COVERAGE_STATUSES.Unknown,
-        expectedUpdateIntervalMs: session.isNap ? null : SLEEP_HRV_EXPECTED_UPDATE_INTERVAL_MS,
+        expectedUpdateIntervalMs: point.isNap ? null : SLEEP_HRV_EXPECTED_UPDATE_INTERVAL_MS,
         manualMeasurement: null,
       } satisfies MetricDatum];
     });
@@ -1513,32 +1640,6 @@ function manualObservationEdit(
     vo2Context: context as ManualVo2Context,
     vo2Method: method as ManualVo2Method,
   };
-}
-
-function sleepHrvValues(session: SleepSession | null | undefined): Array<{
-  field: HealthSleepReferenceField;
-  value: number;
-  semanticVariant: string;
-  semanticLabel: string;
-}> {
-  if (!session) {
-    return [];
-  }
-  const values = [
-    {
-      field: 'vitals.averageHrvMs' as const,
-      value: Number(session.vitals?.averageHrvMs),
-      semanticVariant: 'sleep_session_average_hrv',
-      semanticLabel: 'Average HRV · Sleep session · Provider summary · Provider calculated',
-    },
-    {
-      field: 'vitals.overnightHrvMs' as const,
-      value: Number(session.vitals?.overnightHrvMs),
-      semanticVariant: 'sleep_overnight_hrv',
-      semanticLabel: 'Overnight HRV · Sleep session · Provider summary · Provider calculated',
-    },
-  ];
-  return values.filter(item => Number.isFinite(item.value) && item.value > 0);
 }
 
 function sleepHrvReferenceIdentity(documentId: string, field: HealthSleepReferenceField): string {

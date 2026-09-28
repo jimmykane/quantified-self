@@ -1727,7 +1727,9 @@ activities, body measurements, and source fields are absent from this projection
 
 The latest session and comparison use the same canonical Suunto-night reconciliation as sleep trends and the daily
 report. Adjacent same-account records are combined before choosing the latest night; the raw session-list tool remains
-the audit surface for the individual provider records, while their stored SleepIds remain unchanged.
+the audit surface for the individual provider records, while their stored SleepIds remain unchanged. The shared
+`shared/sleep.ts` resolver supplies the same wake-date, effective-onset, identity, and adjacency rule to MCP reports,
+Training-derived metrics, Dashboard, and Health; it adds no query or provider call.
 
 It also reads the current `training_readiness` snapshot through its exact strict payload schema, but returns only its
 freshness, score, label, confidence, and aggregate evidence counts. Readiness itself remains UTC-day based. A snapshot

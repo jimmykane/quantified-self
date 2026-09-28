@@ -6,7 +6,7 @@ import { calculatePersonalMetricRange, calculatePersonalMetricPointRange, calcul
 import { decodeHealthMetricSportsLibData, decodeSleepSessionSportsLibData, formatCanonicalHealthMetricSportsLibValue } from '../../../shared/sports-lib-health-data';
 import { HealthMetricEntry, HEALTH_UNITS } from '../../../shared/health';
 import { aggregateNightlyHrvEvidence } from '../../../shared/nightly-hrv';
-import { partitionSleepNightFragments, resolveSleepEffectiveStartTimeMs, SleepSession,
+import { groupCanonicalSleepNightFragments, resolveSleepDisplayDate, resolveSleepEffectiveStartTimeMs, SleepSession,
   SLEEP_PROVIDERS, SLEEP_SPORTS_LIB_METRIC_FIELDS } from '../../../shared/sleep';
 import { getUserDeletionGuardState } from '../shared/user-deletion-guard';
 import { McpHealthError, firestoreHealthReads } from './health.service';
@@ -137,7 +137,9 @@ export async function queryHrvPersonalRange(input: HrvRangeInput, reads: HrvRang
           try { session = decodeSleepSessionSportsLibData(d as unknown as SleepSession); } catch { excludedValues++; continue; }
           if (session.isNap) continue;
           if (session.source?.provider === SLEEP_PROVIDERS.SuuntoApp) {
-            suuntoSleepSessions.push(session);
+            const sleepDate = resolveSleepDisplayDate(session);
+            if (!sleepDate) { excludedValues++; continue; }
+            suuntoSleepSessions.push({ ...session, sleepDate });
             continue;
           }
           for (const [field, variant] of [['averageHrvMs', 'sleep_session_average_hrv'], ['overnightHrvMs', 'sleep_overnight_hrv']] as const) {
@@ -154,48 +156,52 @@ export async function queryHrvPersonalRange(input: HrvRangeInput, reads: HrvRang
       cursor = next;
     }
   }
-  const suuntoGroups = new Map<string, Array<{ session: SleepSession; startTimeMs: number; endTimeMs: number }>>();
-  for (const session of suuntoSleepSessions) {
+  const suuntoCandidates = suuntoSleepSessions.flatMap(session => {
     const account = session.source?.providerUserId;
     const startTimeMs = resolveSleepEffectiveStartTimeMs(session);
     const endTimeMs = session.endTimeMs;
     if (!account || account.length > 1024 || !z.iso.date().safeParse(session.sleepDate).success
       || !Number.isSafeInteger(startTimeMs) || !Number.isSafeInteger(endTimeMs) || endTimeMs <= startTimeMs) {
       excludedValues++;
-      continue;
+      return [];
     }
-    const key = JSON.stringify([account, session.sleepDate]);
-    suuntoGroups.set(key, [...(suuntoGroups.get(key) || []), { session, startTimeMs, endTimeMs }]);
-  }
-  for (const group of suuntoGroups.values()) {
-    for (const cluster of partitionSleepNightFragments(SLEEP_PROVIDERS.SuuntoApp, group)) {
-      const byRecency = [...cluster].sort((left, right) => left.endTimeMs - right.endTimeMs
-        || left.startTimeMs - right.startTimeMs);
-      const latest = byRecency[byRecency.length - 1];
-      const account = latest.session.source!.providerUserId!;
-      const averageHrv = aggregateNightlyHrvEvidence(cluster.map(({ session }) => ({
-        averageHrvMs: session.vitals?.averageHrvMs ?? null,
-        hrvSampleCount: session.vitals?.hrvSampleCount ?? null,
-        hrvSourceKey: 'suunto-average',
-      })), { requireEveryPoint: true });
-      const overnightHrv = aggregateNightlyHrvEvidence(cluster.map(({ session }) => ({
-        averageHrvMs: session.vitals?.overnightHrvMs ?? null,
-        hrvSourceKey: 'suunto-overnight',
-      })), { requireEveryPoint: true });
-      if (averageHrv.averageHrvMs !== null) {
-        add('sleep', SLEEP_PROVIDERS.SuuntoApp, account, latest.session.sleepDate, latest.endTimeMs,
-          'sleep_session_average_hrv', averageHrv.averageHrvMs,
-          'average', 'provider_summary', 'provider_calculated');
-      } else if (cluster.some(({ session }) => typeof session.vitals?.averageHrvMs === 'number')) {
-        excludedValues++;
-      }
-      if (overnightHrv.averageHrvMs !== null) {
-        add('sleep', SLEEP_PROVIDERS.SuuntoApp, account, latest.session.sleepDate, latest.endTimeMs,
-          'sleep_overnight_hrv', overnightHrv.averageHrvMs,
-          'average', 'provider_summary', 'provider_calculated');
-      } else if (cluster.some(({ session }) => typeof session.vitals?.overnightHrvMs === 'number')) {
-        excludedValues++;
-      }
+    return [{
+      session,
+      provider: SLEEP_PROVIDERS.SuuntoApp,
+      providerUserId: account,
+      sleepDate: session.sleepDate,
+      isNap: false,
+      startTimeMs,
+      endTimeMs,
+    }];
+  });
+  for (const cluster of groupCanonicalSleepNightFragments(suuntoCandidates)) {
+    const byRecency = [...cluster].sort((left, right) => left.endTimeMs - right.endTimeMs
+      || left.startTimeMs - right.startTimeMs);
+    const latest = byRecency[byRecency.length - 1];
+    const account = latest.session.source!.providerUserId!;
+    const averageHrv = aggregateNightlyHrvEvidence(cluster.map(({ session }) => ({
+      averageHrvMs: session.vitals?.averageHrvMs ?? null,
+      hrvSampleCount: session.vitals?.hrvSampleCount ?? null,
+      hrvSourceKey: 'suunto-average',
+    })), { requireEveryPoint: true });
+    const overnightHrv = aggregateNightlyHrvEvidence(cluster.map(({ session }) => ({
+      averageHrvMs: session.vitals?.overnightHrvMs ?? null,
+      hrvSourceKey: 'suunto-overnight',
+    })), { requireEveryPoint: true });
+    if (averageHrv.averageHrvMs !== null) {
+      add('sleep', SLEEP_PROVIDERS.SuuntoApp, account, latest.session.sleepDate, latest.endTimeMs,
+        'sleep_session_average_hrv', averageHrv.averageHrvMs,
+        'average', 'provider_summary', 'provider_calculated');
+    } else if (cluster.some(({ session }) => typeof session.vitals?.averageHrvMs === 'number')) {
+      excludedValues++;
+    }
+    if (overnightHrv.averageHrvMs !== null) {
+      add('sleep', SLEEP_PROVIDERS.SuuntoApp, account, latest.session.sleepDate, latest.endTimeMs,
+        'sleep_overnight_hrv', overnightHrv.averageHrvMs,
+        'average', 'provider_summary', 'provider_calculated');
+    } else if (cluster.some(({ session }) => typeof session.vitals?.overnightHrvMs === 'number')) {
+      excludedValues++;
     }
   }
   const clamp = (value: { min: number; max: number } | null) => value ? { min: Math.max(0, value.min), max: value.max } : null;

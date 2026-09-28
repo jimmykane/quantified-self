@@ -11,6 +11,8 @@ export const SLEEP_PROVIDERS = {
 
 export type SleepProvider = typeof SLEEP_PROVIDERS[keyof typeof SLEEP_PROVIDERS];
 
+export const MAX_SLEEP_TIMEZONE_OFFSET_SECONDS = 18 * 60 * 60;
+
 /**
  * Suunto can finalize one night as adjacent provider-owned SleepIds. Keep the
  * raw records, but only reconcile records that overlap or have a short interruption. A
@@ -136,6 +138,65 @@ function finiteSleepTime(value: unknown): number | null {
   return typeof value === 'number' && Number.isFinite(value) ? value : null;
 }
 
+export function parseSleepDateTimeOffsetSeconds(value: unknown): number | null {
+  const stringValue = typeof value === 'string' ? value.trim() : '';
+  if (!stringValue) return null;
+  if (/z$/i.test(stringValue)) return 0;
+  const match = /([+-])(\d{2}):?(\d{2})$/.exec(stringValue);
+  if (!match) return null;
+  const hours = Number(match[2]);
+  const minutes = Number(match[3]);
+  const totalSeconds = ((hours * 60) + minutes) * 60;
+  if (!Number.isFinite(totalSeconds)
+    || minutes >= 60
+    || totalSeconds > MAX_SLEEP_TIMEZONE_OFFSET_SECONDS) {
+    return null;
+  }
+  return match[1] === '-' ? -totalSeconds : totalSeconds;
+}
+
+export function resolveSleepTimezoneOffsetSeconds(
+  session: Pick<SleepSession, 'source' | 'timezoneOffsetSeconds' | 'providerFields'>,
+): number | null {
+  const explicitOffsetSeconds = finiteSleepTime(session.timezoneOffsetSeconds);
+  if (explicitOffsetSeconds !== null
+    && Math.abs(explicitOffsetSeconds) <= MAX_SLEEP_TIMEZONE_OFFSET_SECONDS) {
+    return explicitOffsetSeconds;
+  }
+  return session.source?.provider === SLEEP_PROVIDERS.SuuntoApp
+    ? parseSleepDateTimeOffsetSeconds(session.providerFields?.suunto?.['timestamp'])
+    : null;
+}
+
+/** Resolve the provider-facing calendar date used by read-time Sleep surfaces. */
+export function resolveSleepDisplayDate(
+  session: Pick<SleepSession, 'source' | 'sleepDate' | 'startTimeMs' | 'endTimeMs' | 'timezoneOffsetSeconds' | 'isNap' | 'providerFields'>,
+): string | null {
+  const startTimeMs = finiteSleepTime(session.startTimeMs);
+  const endTimeMs = finiteSleepTime(session.endTimeMs);
+  const storedSleepDate = typeof session.sleepDate === 'string' && session.sleepDate.trim()
+    ? session.sleepDate.trim()
+    : null;
+  const fallbackSleepDate = endTimeMs === null
+    ? storedSleepDate
+    : storedSleepDate || new Date(endTimeMs).toISOString().slice(0, 10);
+  if (session.source?.provider !== SLEEP_PROVIDERS.SuuntoApp
+    || startTimeMs === null
+    || endTimeMs === null
+    || endTimeMs <= startTimeMs) {
+    return fallbackSleepDate;
+  }
+  const timestampMs = session.isNap ? startTimeMs : endTimeMs;
+  const offsetSeconds = resolveSleepTimezoneOffsetSeconds(session);
+  if (offsetSeconds === null) {
+    return fallbackSleepDate;
+  }
+  const localDate = new Date(timestampMs + (offsetSeconds * 1000));
+  return Number.isFinite(localDate.getTime())
+    ? localDate.toISOString().slice(0, 10)
+    : fallbackSleepDate;
+}
+
 /** Suunto's app displays sleep onset, not the earlier in-bed timestamp. */
 export function resolveSleepEffectiveStartTimeMs(
   session: Pick<SleepSession, 'source' | 'startTimeMs' | 'endTimeMs' | 'isNap' | 'providerFields'>,
@@ -166,22 +227,74 @@ export function partitionSleepNightFragments<T extends { startTimeMs: number | n
     || (left.endTimeMs ?? 0) - (right.endTimeMs ?? 0));
   if (provider !== SLEEP_PROVIDERS.SuuntoApp || sorted.length <= 1) return sorted.length ? [sorted] : [];
 
-  return sorted.reduce<T[][]>((groups, point) => {
+  const groups: T[][] = [];
+  let currentEndTimeMs = Number.NEGATIVE_INFINITY;
+  for (const point of sorted) {
     const current = groups[groups.length - 1];
-    const currentEndTimeMs = current?.reduce((latestEndTimeMs, member) =>
-      member.endTimeMs === null ? latestEndTimeMs : Math.max(latestEndTimeMs, member.endTimeMs),
-    Number.NEGATIVE_INFINITY);
-    const gapMs = currentEndTimeMs !== undefined && Number.isFinite(currentEndTimeMs)
-      && point.startTimeMs !== null
+    const gapMs = Number.isFinite(currentEndTimeMs) && point.startTimeMs !== null
       ? point.startTimeMs - currentEndTimeMs
       : Number.POSITIVE_INFINITY;
     if (current && gapMs <= SUUNTO_SLEEP_FRAGMENT_MAX_GAP_MS) {
       current.push(point);
     } else {
       groups.push([point]);
+      currentEndTimeMs = Number.NEGATIVE_INFINITY;
     }
-    return groups;
-  }, []);
+    if (point.endTimeMs !== null) {
+      currentEndTimeMs = Math.max(currentEndTimeMs, point.endTimeMs);
+    }
+  }
+  return groups;
+}
+
+export interface CanonicalSleepNightFragment {
+  provider: SleepProvider | null;
+  providerUserId: string | null;
+  sleepDate: string;
+  isNap: boolean;
+  startTimeMs: number | null;
+  endTimeMs: number | null;
+}
+
+/**
+ * Apply the provider-specific physical-night identity rule once. Non-Suunto,
+ * naps, and unidentified Suunto records remain individual audit records.
+ */
+export function groupCanonicalSleepNightFragments<T extends CanonicalSleepNightFragment>(
+  input: readonly T[],
+): T[][] {
+  const output: Array<{ firstIndex: number; fragments: T[] }> = [];
+  const suuntoGroups = new Map<string, { firstIndex: number; fragments: T[] }>();
+  const inputIndexes = new Map<T, number>();
+  input.forEach((fragment, index) => {
+    inputIndexes.set(fragment, index);
+    const providerUserId = typeof fragment.providerUserId === 'string'
+      ? fragment.providerUserId.trim()
+      : '';
+    if (fragment.provider !== SLEEP_PROVIDERS.SuuntoApp || fragment.isNap || !providerUserId) {
+      output.push({ firstIndex: index, fragments: [fragment] });
+      return;
+    }
+    const key = JSON.stringify([providerUserId, fragment.sleepDate]);
+    const existing = suuntoGroups.get(key);
+    if (existing) {
+      existing.fragments.push(fragment);
+    } else {
+      suuntoGroups.set(key, { firstIndex: index, fragments: [fragment] });
+    }
+  });
+  for (const group of suuntoGroups.values()) {
+    for (const fragments of partitionSleepNightFragments(SLEEP_PROVIDERS.SuuntoApp, group.fragments)) {
+      const firstIndex = fragments.reduce((earliestIndex, fragment) => {
+        const index = inputIndexes.get(fragment) ?? earliestIndex;
+        return index < earliestIndex ? index : earliestIndex;
+      }, group.firstIndex);
+      output.push({ firstIndex, fragments });
+    }
+  }
+  return output
+    .sort((left, right) => left.firstIndex - right.firstIndex)
+    .map(group => group.fragments);
 }
 
 /** Awake time between canonical fragments, excluding overlap and nested records. */

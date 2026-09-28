@@ -443,7 +443,9 @@ Complete these shared changes early. Exhaustive unions and switch statements are
 ### Nightly HRV across Sleep and Health
 
 A provider may deliver nightly HRV inside Sleep (Suunto/COROS) or as a separate Health summary (Garmin).
-`shared/nightly-hrv.ts` is the shared read-time resolver for Dashboard, Training, and MCP Sleep/report reads.
+`shared/sleep.ts` owns the provider-independent display-date, effective-onset, account/night identity, and bounded
+fragment-partition rules used by Dashboard, Health, Training, and MCP derived Sleep/report reads.
+`shared/nightly-hrv.ts` owns the separate HRV enrichment and weighted evidence aggregation rules.
 Preserve native normalized Sleep HRV. When absent, match canonical Health HRV by owner, provider, opaque account
 identity, provider calendar date, and overlapping sleep interval. The Health account identity is SHA-256 of the
 JSON-framed `healthAccountIdentityParts`; Sleep must retain the same provider account ID used by the Health writer.
@@ -455,8 +457,10 @@ If a provider can finalize one physical night as multiple records, keep every pr
 then define a provider-specific read-time reconciliation rule. Suunto records for the same provider account and wake
 date are one canonical night only when they overlap or the gap is at most 30 minutes. Sum sleep duration and stage
 durations, preserve the interruption as awake time, take the latest score, and weight average HRV by positive recorded
-sample counts. Never use a plain mean or the last fragment when values differ; incomplete weights make the canonical
-HRV unavailable. A larger gap remains a separate sleep, even on the same displayed date.
+sample counts. Never use a plain mean or the last fragment; when fragment values differ, incomplete weights make the
+canonical HRV unavailable. A larger gap remains a separate sleep, even on the same displayed date. Presentation and derived
+reads consume that canonical night; raw storage, exact provider IDs, and the MCP session-list audit surface remain
+unmerged. Keep the reconciliation in-memory and bounded by the existing query, with no extra provider or Firestore read.
 
 New providers should use an approved canonical overnight-average semantic from `HRV_PERSONAL_RANGE_VARIANTS`,
 `average` aggregation, milliseconds, and recorded/provider-summary origin with device/provider-calculated recording

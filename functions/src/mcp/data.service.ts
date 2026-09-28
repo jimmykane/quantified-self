@@ -7,8 +7,7 @@ import { ActivitySampleCache } from './activity-sample-cache';
 import { ActivitySampleContext, ActivitySamplesInput, ActivitySamplesDependencies, ActivitySamplesError, queryActivitySamples } from './activity-samples.service';
 import { getUserDeletionGuardState } from '../shared/user-deletion-guard';
 import { supplementNightlyHrvSleepDocuments } from '../sleep/nightly-hrv';
-import { aggregateNightlyHrvEvidence, isIdentifiedSleepEvidenceSourceKey,
-  sleepEvidenceSourceKey } from '../../../shared/nightly-hrv';
+import { aggregateNightlyHrvEvidence, sleepEvidenceSourceKey } from '../../../shared/nightly-hrv';
 import * as admin from 'firebase-admin';
 import { firestoreHrvRangeReads, HrvRangeInput, queryHrvPersonalRange } from './hrv-personal-range.service';
 import {
@@ -110,7 +109,8 @@ import {
   normalizePersistedEventMetricSemantics,
 } from '../../../shared/sports-lib-metric-semantics';
 import {
-  partitionSleepNightFragments,
+  groupCanonicalSleepNightFragments,
+  resolveSleepDisplayDate,
   resolveSleepEffectiveStartTimeMs,
   sumSleepFragmentInterruptionSeconds,
   SLEEP_PROVIDERS,
@@ -3863,39 +3863,39 @@ function aggregateSafeSleepDocumentGroup(group: readonly SafeSleepDocument[]): S
 
 function canonicalizeSafeSleepDocuments(
   documents: readonly RawDocument[],
-  options: { resolveSuuntoSleepDate?: boolean } = {},
 ): SafeSleepDocument[] {
-  const result: SafeSleepDocument[] = [];
-  const suuntoGroups = new Map<string, SafeSleepDocument[]>();
-  for (const document of documents) {
+  const candidates = documents.flatMap(document => {
     const normalizedSession = toSafeSleepSession(document.data);
-    if (!normalizedSession) continue;
-    const session = options.resolveSuuntoSleepDate
-      ? { ...normalizedSession, sleepDate: resolveTodayReadinessSleepDate(document.data, normalizedSession) }
-      : normalizedSession;
-    const candidate = {
+    if (!normalizedSession) return [];
+    const session = {
+      ...normalizedSession,
+      sleepDate: resolveCanonicalSleepDate(document.data, normalizedSession),
+    };
+    const rawSource = document.data.source && typeof document.data.source === 'object'
+      ? document.data.source as Record<string, unknown>
+      : {};
+    const providerUserId = typeof rawSource.providerUserId === 'string'
+      ? rawSource.providerUserId.trim() || null
+      : null;
+    const safeDocument = {
       id: document.id,
       sourceKey: sleepEvidenceSourceKey(document.data as unknown as SleepSession),
-      session,
+      session: session.provider === SLEEP_PROVIDERS.SuuntoApp && !providerUserId
+        ? withoutCanonicalNightHrv(session)
+        : session,
     };
-    if (session.provider !== SLEEP_PROVIDERS.SuuntoApp || session.isNap) {
-      result.push(candidate);
-      continue;
-    }
-    if (!isIdentifiedSleepEvidenceSourceKey(session.provider, candidate.sourceKey)) {
-      result.push({ ...candidate, session: withoutCanonicalNightHrv(session) });
-      continue;
-    }
-    const key = JSON.stringify([session.sleepDate, candidate.sourceKey]);
-    suuntoGroups.set(key, [...(suuntoGroups.get(key) || []), candidate]);
-  }
-  for (const group of suuntoGroups.values()) {
-    result.push(...partitionSleepNightFragments(
-      SLEEP_PROVIDERS.SuuntoApp,
-      group.map(entry => ({ ...entry, startTimeMs: entry.session.startTimeMs, endTimeMs: entry.session.endTimeMs })),
-    ).map(cluster => aggregateSafeSleepDocumentGroup(cluster)));
-  }
-  return result;
+    return [{
+      safeDocument,
+      provider: session.provider,
+      providerUserId,
+      sleepDate: session.sleepDate,
+      isNap: session.isNap,
+      startTimeMs: session.startTimeMs,
+      endTimeMs: session.endTimeMs,
+    }];
+  });
+  return groupCanonicalSleepNightFragments(candidates)
+    .map(group => aggregateSafeSleepDocumentGroup(group.map(candidate => candidate.safeDocument)));
 }
 
 export interface ListSleepSessionsInput {
@@ -4461,7 +4461,7 @@ function buildTodayReadinessSleepNights(
     session: SafeSleepSession;
     evidence: ReadinessSleepEvidencePoint;
   }>>();
-  for (const candidate of canonicalizeSafeSleepDocuments(documents, { resolveSuuntoSleepDate: true })) {
+  for (const candidate of canonicalizeSafeSleepDocuments(documents)) {
     const { session } = candidate;
     if (session.isNap) {
       continue;
@@ -4588,22 +4588,18 @@ function buildTodayReadinessSleepNights(
   ));
 }
 
-function resolveTodayReadinessSleepDate(
+function resolveCanonicalSleepDate(
   data: Record<string, unknown>,
   session: SafeSleepSession,
 ): string {
-  if (session.provider !== SLEEP_PROVIDERS.SuuntoApp) {
-    return session.sleepDate;
-  }
-  const offsetSeconds = asFiniteNumber(data.timezoneOffsetSeconds);
-  const safeOffsetSeconds = offsetSeconds !== null
-    && Math.abs(offsetSeconds) <= 18 * 60 * 60
-    ? offsetSeconds
-    : 0;
-  const localEndDate = new Date(
-    session.endTimeMs + (safeOffsetSeconds * 1000),
-  ).toISOString().slice(0, 10);
-  return normalizeCalendarDate(localEndDate) || session.sleepDate;
+  const resolved = resolveSleepDisplayDate({
+    ...(data as unknown as SleepSession),
+    startTimeMs: session.startTimeMs,
+    endTimeMs: session.endTimeMs,
+    sleepDate: session.sleepDate,
+    isNap: session.isNap,
+  });
+  return normalizeCalendarDate(resolved) || session.sleepDate;
 }
 
 function projectTodayReadinessMetric(

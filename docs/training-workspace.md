@@ -2006,6 +2006,9 @@ Training state and Readiness are fixed inside the optional Today summary:
   states. The additive `get_daily_report` reuses that live projection plus the safe latest-night aggregate values and
   compact Training Summary. `get_readiness_history` exposes the current 14-day series. Registered
   `get_today_readiness`, generic readiness snapshots and the frozen daily briefing retain formula 3 for compatibility.
+- **Canonical Sleep-night identity** comes from `shared/sleep.ts`: provider display date, effective onset, and the
+  account/date/adjacency boundary are shared by frontend Health/Dashboard views and backend derived/MCP reads. The
+  resolver works on the already bounded result set and retains every raw SleepId in storage.
 - **Nightly HRV evidence** comes from the shared read-time resolver in `shared/nightly-hrv.ts`. Native normalized Sleep
   HRV wins; otherwise a canonical overnight-average Health summary may fill a missing main night only for the same
   owner, provider/account, provider date, and overlapping sleep interval. A reading contributes once across fragments.
