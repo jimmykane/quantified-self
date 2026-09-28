@@ -74,6 +74,7 @@ import { shouldSkipQueueWorkForDeletedUser } from '../queue/user-deletion-skip';
 import {
     QueueItemUserGuardedUpdateResult,
     updateQueueItemIfUserActive,
+    type UpdateQueueItemIfUserActiveParams,
 } from '../queue/dispatch-marker';
 import {
     isProviderOperationError,
@@ -803,6 +804,54 @@ async function handlePreUploadGuardFailure(
     throw new UnclaimedActivitySyncQueueItemError(queueItem.id);
 }
 
+async function updatePreUploadQueueItemIfUserActive(
+    queueItem: ActivitySyncQueueItemInterface,
+    params: Pick<UpdateQueueItemIfUserActiveParams, 'phase' | 'updateData' | 'actionDescription'>,
+): Promise<QueueItemUserGuardedUpdateResult> {
+    const updateIfCurrent = () => {
+        const expectedQueueItem = { ...queueItem };
+        return updateQueueItemIfUserActive({
+            queueItemDocument: queueItem.ref!,
+            queueItemId: queueItem.id,
+            userID: queueItem.userID,
+            ...params,
+            logPrefix: 'ActivitySync',
+            isCurrent: currentQueueItem => isSameActivitySyncProviderState(currentQueueItem, expectedQueueItem),
+        });
+    };
+
+    let result = await updateIfCurrent();
+    if (result !== QueueItemUserGuardedUpdateResult.NotCurrent
+        || (queueItem.dispatchedToCloudTask !== null && queueItem.dispatchedToCloudTask !== undefined)) {
+        return result;
+    }
+
+    // Enqueue precedes the dispatch-marker write. A fast worker may read the
+    // initial null marker before that write commits. Adopt only this one marker
+    // transition; the second guarded transaction still rejects any other change.
+    const snapshot = await queueItem.ref!.get();
+    const currentQueueItem = snapshot.exists
+        ? snapshot.data() as Record<string, unknown> | undefined
+        : undefined;
+    const dispatchedAtMs = currentQueueItem?.dispatchedToCloudTask;
+    if (!currentQueueItem
+        || typeof dispatchedAtMs !== 'number'
+        || !Number.isSafeInteger(dispatchedAtMs)
+        || dispatchedAtMs <= 0
+        || dispatchedAtMs < queueItem.dateCreated
+        || dispatchedAtMs > Date.now() + 5_000
+        || !isSameActivitySyncProviderState(
+            { ...currentQueueItem, dispatchedToCloudTask: queueItem.dispatchedToCloudTask },
+            queueItem,
+        )) {
+        return result;
+    }
+
+    queueItem.dispatchedToCloudTask = dispatchedAtMs;
+    result = await updateIfCurrent();
+    return result;
+}
+
 async function ensureOutboundFingerprintBeforeProviderUpload(
     queueItem: ActivitySyncQueueItemInterface,
     fileBuffer: Buffer | undefined,
@@ -822,18 +871,12 @@ async function ensureOutboundFingerprintBeforeProviderUpload(
         destinationServiceName: queueItem.destinationServiceName,
         fileBuffer,
     });
-    const expectedQueueItem = { ...queueItem };
-    const updateResult = await updateQueueItemIfUserActive({
-        queueItemDocument: queueItem.ref,
-        queueItemId: queueItem.id,
-        userID: queueItem.userID,
+    const updateResult = await updatePreUploadQueueItemIfUserActive(queueItem, {
         phase: 'before_activity_sync_outbound_fingerprint_marker',
         updateData: {
             outboundFingerprintID: fingerprints.exactFingerprintId,
         },
-        logPrefix: 'ActivitySync',
         actionDescription: 'outbound provider-echo fingerprint marker',
-        isCurrent: currentQueueItem => isSameActivitySyncProviderState(currentQueueItem, expectedQueueItem),
     });
     if (updateResult !== QueueItemUserGuardedUpdateResult.Updated) {
         await handlePreUploadGuardFailure(queueItem, updateResult);
@@ -985,12 +1028,8 @@ async function markDestinationProviderOperationInFlight(
     if (!queueItem.ref) {
         throw new Error('Destination provider operation cannot start without a queue document reference.');
     }
-    const expectedQueueItem = { ...queueItem };
     const providerOperationStartedAt = Date.now();
-    const updateResult = await updateQueueItemIfUserActive({
-        queueItemDocument: queueItem.ref,
-        queueItemId: queueItem.id,
-        userID: queueItem.userID,
+    const updateResult = await updatePreUploadQueueItemIfUserActive(queueItem, {
         phase: 'before_activity_sync_destination_provider_operation',
         updateData: {
             dispatchedToCloudTask: PROVIDER_OPERATION_IN_FLIGHT_QUEUE_DISPATCH_MARKER,
@@ -999,9 +1038,7 @@ async function markDestinationProviderOperationInFlight(
                 ? { destinationExpectedWorkoutTypeID: expectedWahooWorkoutType.persistedWorkoutTypeId }
                 : {}),
         },
-        logPrefix: 'ActivitySync',
         actionDescription: 'destination provider in-flight marker',
-        isCurrent: currentQueueItem => isSameActivitySyncProviderState(currentQueueItem, expectedQueueItem),
     });
     if (updateResult !== QueueItemUserGuardedUpdateResult.Updated) {
         await handlePreUploadGuardFailure(queueItem, updateResult);

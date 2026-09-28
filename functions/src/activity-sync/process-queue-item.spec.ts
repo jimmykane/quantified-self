@@ -658,29 +658,110 @@ describe('activity-sync/process-queue-item', () => {
       .toBeLessThan(mockUploadActivityFileToSuunto.mock.invocationCallOrder[0]);
   });
 
-  it('retries when the dispatch marker changes after enqueue but the item remains unclaimed', async () => {
+  it('continues after the initial dispatch marker arrives behind a fast fingerprint write', async () => {
     delete baseQueueItem.outboundFingerprintID;
     const dispatchedAtMs = Date.now();
-    baseQueueItem.ref = createMockActivitySyncQueueItemRef({
+    const currentQueueItem = {
       ...baseQueueItem,
       processed: false,
       dispatchedToCloudTask: dispatchedAtMs,
+    };
+    baseQueueItem.ref = createMockActivitySyncQueueItemRef(currentQueueItem);
+    mockUpdateQueueItemIfUserActive
+      .mockImplementationOnce(async ({ isCurrent }) => {
+        expect(isCurrent(currentQueueItem)).toBe(false);
+        return 'not_current';
+      })
+      .mockImplementationOnce(async ({ isCurrent }) => {
+        expect(isCurrent(currentQueueItem)).toBe(true);
+        return 'updated';
+      });
+
+    await expect(processActivitySyncQueueItem(baseQueueItem)).resolves.toBe(QueueResult.Processed);
+
+    const fingerprintGuard = mockUpdateQueueItemIfUserActive.mock.calls[0]?.[0];
+    expect(fingerprintGuard.phase).toBe('before_activity_sync_outbound_fingerprint_marker');
+    expect(fingerprintGuard.isCurrent({ ...baseQueueItem, dispatchedToCloudTask: dispatchedAtMs })).toBe(false);
+    expect(baseQueueItem.dispatchedToCloudTask).toBe(PROVIDER_OPERATION_IN_FLIGHT_QUEUE_DISPATCH_MARKER);
+    expect(mockUploadActivityFileToSuunto).toHaveBeenCalledOnce();
+    expect(mockIncreaseRetryCountForQueueItem).not.toHaveBeenCalled();
+    expect(mockMoveToDeadLetterQueue).not.toHaveBeenCalled();
+  });
+
+  it('still retries when an initial dispatch marker arrives with another provider-state change', async () => {
+    delete baseQueueItem.outboundFingerprintID;
+    baseQueueItem.ref = createMockActivitySyncQueueItemRef({
+      ...baseQueueItem,
+      dispatchedToCloudTask: Date.now(),
+      outboundFingerprintID: 'another-worker-fingerprint',
     });
     mockUpdateQueueItemIfUserActive.mockResolvedValueOnce('not_current');
 
     await expect(processActivitySyncQueueItem(baseQueueItem))
       .rejects.toThrow('changed before provider upload but remains unclaimed; retrying the task');
 
-    const fingerprintGuard = mockUpdateQueueItemIfUserActive.mock.calls[0]?.[0];
-    expect(fingerprintGuard.phase).toBe('before_activity_sync_outbound_fingerprint_marker');
-    expect(fingerprintGuard.isCurrent({ ...baseQueueItem, dispatchedToCloudTask: dispatchedAtMs })).toBe(false);
+    expect(mockUpdateQueueItemIfUserActive).toHaveBeenCalledOnce();
+    expect(mockUploadActivityFileToSuunto).not.toHaveBeenCalled();
+  });
+
+  it('does not adopt an initial dispatch marker from a replaced queue revision', async () => {
+    delete baseQueueItem.outboundFingerprintID;
+    baseQueueItem.ref = createMockActivitySyncQueueItemRef({
+      ...baseQueueItem,
+      dateCreated: baseQueueItem.dateCreated + 1,
+      dispatchedToCloudTask: Date.now(),
+    });
+    mockUpdateQueueItemIfUserActive.mockResolvedValueOnce('not_current');
+
+    await expect(processActivitySyncQueueItem(baseQueueItem))
+      .rejects.toThrow('changed before provider upload but remains unclaimed; retrying the task');
+
+    expect(mockUpdateQueueItemIfUserActive).toHaveBeenCalledOnce();
+    expect(mockUploadActivityFileToSuunto).not.toHaveBeenCalled();
+  });
+
+  it('does not adopt a dispatch marker older than the queue revision', async () => {
+    delete baseQueueItem.outboundFingerprintID;
+    baseQueueItem.ref = createMockActivitySyncQueueItemRef({
+      ...baseQueueItem,
+      dispatchedToCloudTask: baseQueueItem.dateCreated - 1,
+    });
+    mockUpdateQueueItemIfUserActive.mockResolvedValueOnce('not_current');
+
+    await expect(processActivitySyncQueueItem(baseQueueItem))
+      .rejects.toThrow('changed before provider upload but remains unclaimed; retrying the task');
+
+    expect(mockUpdateQueueItemIfUserActive).toHaveBeenCalledOnce();
+    expect(mockUploadActivityFileToSuunto).not.toHaveBeenCalled();
+  });
+
+  it('does not upload if another worker claims during the marker refresh', async () => {
+    delete baseQueueItem.outboundFingerprintID;
+    const dispatchedAtMs = Date.now();
+    baseQueueItem.ref = {
+      get: vi.fn()
+        .mockResolvedValueOnce({
+          exists: true,
+          data: () => ({ ...baseQueueItem, dispatchedToCloudTask: dispatchedAtMs }),
+        })
+        .mockResolvedValueOnce({
+          exists: true,
+          data: () => ({
+            ...baseQueueItem,
+            dispatchedToCloudTask: PROVIDER_OPERATION_IN_FLIGHT_QUEUE_DISPATCH_MARKER,
+            providerOperationStartedAt: Date.now(),
+          }),
+        }),
+    } as unknown as MockActivitySyncQueueItemRef;
+    mockUpdateQueueItemIfUserActive
+      .mockResolvedValueOnce('not_current')
+      .mockResolvedValueOnce('not_current');
+
+    await expect(processActivitySyncQueueItem(baseQueueItem)).resolves.toBe(QueueResult.AcknowledgedStale);
+
+    expect(mockUpdateQueueItemIfUserActive).toHaveBeenCalledTimes(2);
     expect(mockUploadActivityFileToSuunto).not.toHaveBeenCalled();
     expect(mockIncreaseRetryCountForQueueItem).not.toHaveBeenCalled();
-    expect(mockMoveToDeadLetterQueue).not.toHaveBeenCalled();
-
-    const retryQueueItem = { ...baseQueueItem, dispatchedToCloudTask: dispatchedAtMs };
-    await expect(processActivitySyncQueueItem(retryQueueItem)).resolves.toBe(QueueResult.Processed);
-    expect(mockUploadActivityFileToSuunto).toHaveBeenCalledOnce();
   });
 
   it('acknowledges a stale fingerprint write only after another worker processed the item', async () => {
@@ -860,18 +941,26 @@ describe('activity-sync/process-queue-item', () => {
     expect(mockUpdateToProcessed).not.toHaveBeenCalled();
   });
 
-  it('retries a stale provider claim when only the dispatch marker changed', async () => {
+  it('claims once when the initial dispatch marker arrives behind a fast provider claim', async () => {
     const dispatchedAtMs = Date.now();
-    baseQueueItem.ref = createMockActivitySyncQueueItemRef({
+    const currentQueueItem = {
       ...baseQueueItem,
       dispatchedToCloudTask: dispatchedAtMs,
-    });
-    mockUpdateQueueItemIfUserActive.mockResolvedValueOnce('not_current');
+    };
+    baseQueueItem.ref = createMockActivitySyncQueueItemRef(currentQueueItem);
+    mockUpdateQueueItemIfUserActive
+      .mockImplementationOnce(async ({ isCurrent }) => {
+        expect(isCurrent(currentQueueItem)).toBe(false);
+        return 'not_current';
+      })
+      .mockImplementationOnce(async ({ isCurrent }) => {
+        expect(isCurrent(currentQueueItem)).toBe(true);
+        return 'updated';
+      });
 
-    await expect(processActivitySyncQueueItem(baseQueueItem))
-      .rejects.toThrow('changed before provider upload but remains unclaimed; retrying the task');
+    await expect(processActivitySyncQueueItem(baseQueueItem)).resolves.toBe(QueueResult.Processed);
 
-    expect(mockUploadActivityFileToSuunto).not.toHaveBeenCalled();
+    expect(mockUploadActivityFileToSuunto).toHaveBeenCalledOnce();
     expect(mockIncreaseRetryCountForQueueItem).not.toHaveBeenCalled();
   });
 
