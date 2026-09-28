@@ -1567,6 +1567,8 @@ and aggregate vitals. Missing optional numeric measurements remain unavailable a
 averages. The lower-level `list_sleep_vitals` reports only the safe vital types that have at least one recorded session in the
 requested bounded period, their units, and session coverage. It lets clients discover HRV before querying nightly or
 grouped values without returning readings, raw samples, provider identity, or source provenance in the discovery result.
+All Sleep reads use the shared display-date resolver: a genuinely absent date falls back to the validated wake instant,
+while an explicitly malformed date or impossible session timestamp is excluded instead of being guessed.
 
 COROS daily ingestion also writes steps, its native calorie value, and detailed HRV/interval-heart-rate series to the
 separate unified Health collections. The existing Weight path reads only canonical Weight point measurements from
@@ -1757,8 +1759,10 @@ Sleep references are skipped; normalized sessions are read through the separatel
 Sleep remain separately labelled series, including provider, response-local account ordinal and fixed semantics.
 The projection never guesses equivalence between opaque Health account keys and Sleep provider identities. The
 internal identities are used only to prevent blending and never appear in output. No spot-check/activity HRV, raw
-samples, device fields, callback URLs or persisted personal-range state are exposed. Reading dates remain the recorded
-calendar dates; daily range instants follow the explicitly requested window, not an inferred UTC calendar date.
+samples, device fields, callback URLs or persisted personal-range state are exposed. Reading dates use the shared
+canonical wake-date rule: valid stored dates remain authoritative outside Suunto local-date correction, a missing date
+uses the validated wake instant, and malformed dates are rejected. Daily range instants follow the explicitly requested
+window, not an inferred UTC calendar date.
 
 Complete reads are required: 2,048 Health records plus 1,000 Sleep records in 32-record pages, 16 MiB selected input,
 8,192 readings, 32 series and 512 KiB output. An over-budget request fails instead of grading a partial history.

@@ -147,6 +147,35 @@ describe('MCP shared HRV personal range', () => {
       expect.objectContaining({ date: '2026-09-10', value: ((29 * 46) + (40 * 35)) / 81 }),
     ]);
   });
+  it('uses the shared wake-date fallback for non-Suunto sleep without accepting malformed dates', async () => {
+    const deps = reads(0);
+    const session = {
+      source: { provider: 'GarminAPI', providerUserId: 'private-account' },
+      startTimeMs: Date.parse('2026-09-09T20:00:00.000Z'),
+      endTimeMs: Date.parse('2026-09-10T04:00:00.000Z'),
+      durationSeconds: 28_800,
+      isNap: false,
+      vitals: { averageHrvMs: 42 },
+    };
+    vi.mocked(deps.fetchPage).mockImplementation(async (_uid, requestedSource) => requestedSource === 'health' ? [] : [
+      { cursor: 'missing-date', data: session },
+      { cursor: 'malformed-date', data: { ...session, sleepDate: 'not-a-date', vitals: { averageHrvMs: 99 } } },
+      { cursor: 'invalid-time', data: {
+        ...session,
+        sleepDate: '2026-09-10',
+        startTimeMs: Number.MAX_SAFE_INTEGER,
+        vitals: { averageHrvMs: 100 },
+      } },
+    ]);
+
+    const result = await queryHrvPersonalRange(input, deps);
+
+    expect(result.excludedValues).toBe(2);
+    expect(result.series).toHaveLength(1);
+    expect(result.series[0].readings).toEqual([
+      expect.objectContaining({ date: '2026-09-10', value: 42 }),
+    ]);
+  });
   it.each([{ scopes: [] }, { scopes: ['health:read'] }, { scopes: ['sleep:read'] }])('rejects missing permissions before reads: $scopes', async ({ scopes }) => {
     const deps = reads();
     await expect(queryHrvPersonalRange({ ...input, scopes }, deps)).rejects.toThrow('access');

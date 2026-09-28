@@ -446,6 +446,8 @@ A provider may deliver nightly HRV inside Sleep (Suunto/COROS) or as a separate 
 `shared/sleep.ts` owns the provider-independent display-date, effective-onset, account/night identity, and bounded
 fragment-partition rules used by Dashboard, Health, Training, and MCP derived Sleep/report reads.
 `shared/nightly-hrv.ts` owns the separate HRV enrichment and weighted evidence aggregation rules.
+The display-date resolver derives a missing date only from a validated wake instant and rejects an explicitly malformed
+date. Live/current consumers also reject impossible session timestamps before accepting date or physiology evidence.
 Preserve native normalized Sleep HRV. When absent, match canonical Health HRV by owner, provider, opaque account
 identity, provider calendar date, and overlapping sleep interval. The Health account identity is SHA-256 of the
 JSON-framed `healthAccountIdentityParts`; Sleep must retain the same provider account ID used by the Health writer.

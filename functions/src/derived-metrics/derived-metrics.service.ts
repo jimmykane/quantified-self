@@ -3776,7 +3776,10 @@ function resolveTrainingReadinessSleepEvidence(
             ? null
             : resolveTrainingReadinessSleepDayMs(data, endTimeMs);
         if (!provider || sleepDayMs === null || storedStartTimeMs === null
-            || endTimeMs === null || endTimeMs <= storedStartTimeMs) {
+            || endTimeMs === null
+            || !Number.isFinite(new Date(storedStartTimeMs).getTime())
+            || !Number.isFinite(new Date(endTimeMs).getTime())
+            || endTimeMs <= storedStartTimeMs) {
             return;
         }
         const startTimeMs = provider === SLEEP_PROVIDERS.SuuntoApp

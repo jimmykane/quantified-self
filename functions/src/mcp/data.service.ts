@@ -3726,21 +3726,33 @@ function toSafeSleepSession(data: Record<string, unknown>): SafeSleepSession | n
     ? normalizedData.source as Record<string, unknown>
     : {};
   const provider = normalizeSleepProvider(source.provider);
-  const startTimeMs = asFiniteNumber(normalizedData.startTimeMs);
-  const endTimeMs = asFiniteNumber(normalizedData.endTimeMs);
+  const startTimeMs = asSafeOperationalTimestampMs(normalizedData.startTimeMs);
+  const endTimeMs = asSafeOperationalTimestampMs(normalizedData.endTimeMs);
   const durationSeconds = asNonNegativeNumber(normalizedData.durationSeconds);
-  const sleepDate = normalizeCalendarDate(normalizedData.sleepDate);
+  const storedSleepDate = normalizeCalendarDate(normalizedData.sleepDate);
+  const hasExplicitSleepDate = normalizedData.sleepDate !== undefined
+    && normalizedData.sleepDate !== null
+    && !(typeof normalizedData.sleepDate === 'string' && !normalizedData.sleepDate.trim());
   if (
     !provider
     || startTimeMs === null
     || endTimeMs === null
+    || !Number.isFinite(new Date(startTimeMs).getTime())
+    || !Number.isFinite(new Date(endTimeMs).getTime())
     || endTimeMs <= startTimeMs
     || durationSeconds === null
     || durationSeconds <= 0
-    || sleepDate === null
+    || (hasExplicitSleepDate && storedSleepDate === null)
   ) {
     return null;
   }
+  const sleepDate = resolveSleepDisplayDate({
+    ...(normalizedData as unknown as SleepSession),
+    startTimeMs,
+    endTimeMs,
+    sleepDate: storedSleepDate || '',
+  });
+  if (sleepDate === null) return null;
 
   const rawScore = normalizedData.score && typeof normalizedData.score === 'object'
     ? normalizedData.score as Record<string, unknown>
@@ -3871,12 +3883,8 @@ function canonicalizeSafeSleepDocuments(
   documents: readonly RawDocument[],
 ): SafeSleepDocument[] {
   const candidates = documents.flatMap(document => {
-    const normalizedSession = toSafeSleepSession(document.data);
-    if (!normalizedSession) return [];
-    const session = {
-      ...normalizedSession,
-      sleepDate: resolveCanonicalSleepDate(document.data, normalizedSession),
-    };
+    const session = toSafeSleepSession(document.data);
+    if (!session) return [];
     const rawSource = document.data.source && typeof document.data.source === 'object'
       ? document.data.source as Record<string, unknown>
       : {};
@@ -4592,20 +4600,6 @@ function buildTodayReadinessSleepNights(
     || right.sleepDate.localeCompare(left.sleepDate)
     || right.id.localeCompare(left.id)
   ));
-}
-
-function resolveCanonicalSleepDate(
-  data: Record<string, unknown>,
-  session: SafeSleepSession,
-): string {
-  const resolved = resolveSleepDisplayDate({
-    ...(data as unknown as SleepSession),
-    startTimeMs: session.startTimeMs,
-    endTimeMs: session.endTimeMs,
-    sleepDate: session.sleepDate,
-    isNap: session.isNap,
-  });
-  return normalizeCalendarDate(resolved) || session.sleepDate;
 }
 
 function projectTodayReadinessMetric(

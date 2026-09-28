@@ -38,7 +38,8 @@ describe('CalendarDayHealthService', () => {
     queries.loadSleepRange.mockResolvedValueOnce([{
       id: 'night', sleepDate: '2026-09-10', startTimeMs: new Date(2026, 8, 9, 23).getTime(),
       endTimeMs: new Date(2026, 8, 10, 7).getTime(), durationSeconds: 8 * 3600,
-      source: { provider: 'SuuntoApp' }, vitals: { averageHrvMs: 34 },
+      source: { provider: 'SuuntoApp', providerUserId: 'suunto-owner', sourceSessionKey: 'night' },
+      vitals: { averageHrvMs: 34 },
     }]);
     const result = await read(service(), 'owner', '2026-09-10', new Date(2026, 8, 15, 12).getTime(), new AbortController().signal);
     expect(result.hrvError).toBe(true);

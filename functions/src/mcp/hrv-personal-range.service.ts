@@ -136,16 +136,22 @@ export async function queryHrvPersonalRange(input: HrvRangeInput, reads: HrvRang
           let session: SleepSession;
           try { session = decodeSleepSessionSportsLibData(d as unknown as SleepSession); } catch { excludedValues++; continue; }
           if (session.isNap) continue;
+          const sleepStartTimeMs = resolveSleepEffectiveStartTimeMs(session);
+          const sleepEndTimeMs = session.endTimeMs;
+          if (!Number.isSafeInteger(sleepStartTimeMs) || !Number.isSafeInteger(sleepEndTimeMs)
+            || !Number.isFinite(new Date(sleepStartTimeMs).getTime())
+            || !Number.isFinite(new Date(sleepEndTimeMs).getTime())
+            || sleepEndTimeMs <= sleepStartTimeMs) { excludedValues++; continue; }
+          const sleepDate = resolveSleepDisplayDate(session);
+          if (!sleepDate) { excludedValues++; continue; }
           if (session.source?.provider === SLEEP_PROVIDERS.SuuntoApp) {
-            const sleepDate = resolveSleepDisplayDate(session);
-            if (!sleepDate) { excludedValues++; continue; }
             suuntoSleepSessions.push({ ...session, sleepDate });
             continue;
           }
           for (const [field, variant] of [['averageHrvMs', 'sleep_session_average_hrv'], ['overnightHrvMs', 'sleep_overnight_hrv']] as const) {
             const value = session.vitals?.[field];
             if (value === null || value === undefined) continue;
-            add(source, session.source?.provider, session.source?.providerUserId || 'default', session.sleepDate,
+            add(source, session.source?.provider, session.source?.providerUserId || 'default', sleepDate,
               session.endTimeMs, variant, value, 'average', 'provider_summary', 'provider_calculated');
           }
         }
