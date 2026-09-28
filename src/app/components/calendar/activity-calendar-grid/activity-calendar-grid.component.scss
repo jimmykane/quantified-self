@@ -707,7 +707,7 @@
 
 @keyframes activity-calendar-today-pulse {
   0% { opacity: 0.7; transform: scale(1); }
-  75%, 100% { opacity: 0; transform: scale(2.2); }
+  75%, 100% { opacity: 0; transform: scale(var(--activity-calendar-today-pulse-scale, 2.2)); }
 }
 
 @container (max-width: 600px) {
@@ -743,8 +743,9 @@
 
 @container (max-width: 540px) {
   .activity-calendar--calm-month {
-    // Keep the pulse ring inside the clipped phone-sized day cell.
-    .activity-calendar-today-corner { top: 8px; right: 8px; }
+    // Give the centered date more room while keeping the pulse inside the cell.
+    .activity-calendar-today-corner { top: 8px; right: 3px; }
+    .activity-calendar-today-dot { --activity-calendar-today-pulse-scale: 1.4; }
     .activity-calendar-day,
     &.activity-calendar--compact .activity-calendar-day {
       min-height: 52px;
@@ -866,7 +867,7 @@
   .activity-calendar-today-dot::after {
     animation: none;
     opacity: 0.45;
-    transform: scale(2.2);
+    transform: scale(var(--activity-calendar-today-pulse-scale, 2.2));
   }
   .activity-calendar-day-button {
     scroll-behavior: auto;
