@@ -111,7 +111,7 @@ describe('CalendarDayDetailsComponent', () => {
     expect(fixture.nativeElement.querySelector('.calendar-day-number')?.textContent?.trim()).toBe('1');
     expect(fixture.nativeElement.querySelector('.calendar-family-volume-count-value')?.textContent?.trim()).toBe('1');
     expect(fixture.nativeElement.querySelector('app-bottom-sheet-header h2')?.textContent?.trim())
-      .toBe('Mon, Aug 3, 2026');
+      .toBe('Mon, Aug 3');
     expect(fixture.nativeElement.querySelectorAll('.bottom-sheet-title-numeric')).toHaveLength(0);
     expect([...fixture.nativeElement.querySelectorAll('.calendar-day-event-metric')]
       .map((part: HTMLElement) => part.textContent?.trim())).toEqual(['8:30 AM', '1h']);
@@ -125,7 +125,7 @@ describe('CalendarDayDetailsComponent', () => {
       planName: 'Autumn build',
       color: 'purple',
     }] });
-    const actions = [...fixture.nativeElement.querySelectorAll('.calendar-day-plan-actions a')] as HTMLAnchorElement[];
+    const addButton = fixture.nativeElement.querySelector('.calendar-day-plan-add') as HTMLButtonElement;
 
     expect(fixture.nativeElement.querySelector('.calendar-day-planned-item')?.getAttribute('href'))
       .toBe('/training/plans/workout/workout-1');
@@ -134,10 +134,20 @@ describe('CalendarDayDetailsComponent', () => {
     expect(fixture.nativeElement.querySelector('.calendar-day-planned-summary')?.textContent).toContain('30m 00s');
     expect((fixture.nativeElement.querySelector('.calendar-day-planned-row') as HTMLElement).style.getPropertyValue('--planned-workout-color')).toBe('purple');
     expect(fixture.nativeElement.querySelector('.calendar-day-planned-accent')?.getAttribute('aria-hidden')).toBe('true');
+    expect(addButton?.getAttribute('aria-label')).toBe('Add workout for selected day');
+    addButton.click();
+    fixture.detectChanges();
+    await fixture.whenStable();
+    const actions = [...document.querySelectorAll('.mat-mdc-menu-panel a[mat-menu-item]')] as HTMLAnchorElement[];
     expect(actions.map(action => action.getAttribute('href'))).toEqual([
       '/training/plans/new?date=2026-08-03',
       '/training/plans/standalone/new?date=2026-08-03',
     ]);
+    const prepareReturn = vi.spyOn(TestBed.inject(CalendarDayDetailsNavigationService), 'prepareReturn');
+    vi.spyOn(TestBed.inject(Router), 'navigateByUrl').mockResolvedValue(true);
+    actions[0].click();
+    expect(prepareReturn).toHaveBeenCalledWith('/', '2026-08-03');
+    expect(TestBed.inject(MatBottomSheetRef).dismiss).toHaveBeenCalledOnce();
     expect(fixture.nativeElement.textContent).toContain('No completed activities for this day.');
     expect(fixture.nativeElement.querySelector('[aria-labelledby="calendar-day-family-title"]')).toBeNull();
   });
@@ -364,7 +374,9 @@ describe('CalendarDayDetailsComponent', () => {
     expect(componentStyles).toMatch(/\.calendar-day-details\s*\{[^}]*flex-direction:\s*column[^}]*overflow:\s*hidden/s);
     expect(componentStyles).toMatch(/\.calendar-day-details-content\s*\{[^}]*max-width:\s*100%[^}]*min-width:\s*0[^}]*overflow-x:\s*hidden[^}]*overflow-y:\s*auto[^}]*overscroll-behavior-x:\s*none[^}]*touch-action:\s*pan-y/s);
     expect(componentStyles).toMatch(/\.calendar-day-details-content > \*\s*\{[^}]*min-width:\s*0/s);
+    expect(componentStyles).toMatch(/app-calendar-day-context\s*\{[^}]*container-type:\s*inline-size/s);
     expect(globalStyles).toMatch(/\.mat-bottom-sheet-container\s*\{[^}]*display:\s*flex !important/s);
+    expect(componentStyles).toMatch(/@media \(max-width:\s*360px\)\s*\{[\s\S]*?\.calendar-day-section-heading\s*\{[^}]*flex-direction:\s*column/s);
   });
 
   it('uses a content-sized activity row for event metrics', () => {

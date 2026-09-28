@@ -99,6 +99,8 @@ export class ActivityCalendarTileComponent {
   readonly fillHeight = input(true);
   readonly showNavigation = input(false);
   readonly dayContextEnabled = input(false);
+  /** Keep the Today sheet's month cells in step with the dashboard and Calendar route. */
+  readonly calmMonth = input(false);
   readonly privateHealthEnabled = input(true);
   readonly initialDateKey = input<string | null>(null);
   readonly selectedDateKey = signal(localDateKey(new Date()));

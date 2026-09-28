@@ -53,7 +53,7 @@
         [compact]="true"
         [fillHeight]="fillHeight()"
         [dashboardDayContext]="dayContextEnabled()"
-        [calmMonth]="dayContextEnabled()"
+        [calmMonth]="dayContextEnabled() || calmMonth()"
         [hideOutsideDays]="true"
         [plannedWorkoutsByDate]="hasTrainingPlanningUIAccess() ? plannedWorkoutsByDate() : null"
         [timelineNotesByDate]="notesByDate()"

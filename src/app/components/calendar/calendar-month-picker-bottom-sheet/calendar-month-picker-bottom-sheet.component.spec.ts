@@ -56,6 +56,8 @@ describe('CalendarMonthPickerBottomSheetComponent', () => {
     expect(fixture.debugElement.query(element => element.name === 'app-activity-calendar-tile').componentInstance.timelineNotes()).toBe(timelineNotes);
     const tile = fixture.debugElement.query(element => element.name === 'app-activity-calendar-tile').componentInstance;
     expect(tile.fillHeight()).toBe(false);
+    expect(tile.calmMonth()).toBe(true);
+    expect(fixture.nativeElement.querySelector('.activity-calendar--calm-month')).not.toBeNull();
     expect(fixture.nativeElement.querySelector('.activity-calendar--fill-height')).toBeNull();
     expect(fixture.nativeElement.querySelector('.activity-calendar-tile--auto-height')).not.toBeNull();
     expect(selection).not.toHaveBeenCalled();

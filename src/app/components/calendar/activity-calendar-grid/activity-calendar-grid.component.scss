@@ -533,9 +533,8 @@
   }
 }
 
-// The Calendar route and dashboard use Training's stronger day structure, while
-// retaining their activity circles, note cue, and existing month navigation.
-// Keep the shared picker, Week, and Year marker semantics unchanged.
+// The Calendar route, dashboard, and Today picker share the same month markers.
+// Week and Year retain their own density and marker treatment.
 .activity-calendar--calm-month {
   .activity-calendar-month--surface { padding: 0; overflow: visible; border: 0; border-radius: 0; background: transparent; box-shadow: none; }
   .activity-calendar-weekdays { min-height: 34px; }
@@ -684,6 +683,13 @@
   .activity-calendar-day { min-height: 64px; gap: 3px; padding: 5px; }
   .activity-calendar-day-number { width: 21px; height: 21px; flex-basis: 21px; }
   .activity-calendar-marker-stage { height: 14px; }
+}
+
+// The bottom sheet has seven narrow columns even on a wide phone. Keep the
+// shared markers and selection treatment without squeezing workout titles in.
+.activity-calendar--calm-month.activity-calendar--picker {
+  .activity-calendar-day { min-height: 64px; }
+  .activity-calendar-workout-preview { display: none; }
 }
 
 // A six-week dashboard month uses shorter fixed-height rows. Keep its colored

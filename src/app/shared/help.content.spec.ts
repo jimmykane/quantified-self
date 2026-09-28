@@ -168,10 +168,11 @@ describe('help.content', () => {
     const calendar = HELP_SECTIONS.find(section => section.id === 'activity-calendar')?.content;
     expect(calendar).toContain('a slim colored tick on the right marks days');
     expect(calendar).toContain('notes and their individual colors');
-    expect(calendar).toContain('Week, Year, and the Today mini-calendar keep their existing note icons');
+    expect(calendar).toContain('the Today mini-calendar, a slim colored tick on the right marks days');
+    expect(calendar).toContain('Week and Year keep their note icons');
     expect(calendar).toContain('Activity circles keep their own colors');
     expect(calendar).toContain('Show on charts and calendar');
-    expect(calendar).toContain('The **Today** card opens a month calendar');
+    expect(calendar).toContain('The **Today** card opens a compact month calendar');
     expect(calendar).toContain("offers **Dashboard** to return when opened from the dashboard tile or Today's mini-calendar");
     const dashboard = HELP_SECTIONS.find(section => section.id === 'getting-started')?.content;
     expect(dashboard).toContain('HRV, Sleep, Form, and Freshness Forecast show the same note markers');
@@ -555,11 +556,11 @@ describe('help.content', () => {
     expect(calendarSection?.content).toContain('**Week**, **Month**, and **Year** views');
     expect(calendarSection?.content).toContain('same sleep-stage breakdown used in Health');
     expect(calendarSection?.content).toContain('full-width **Calendar** section');
-    expect(calendarSection?.content).toContain('**Today** card opens a month calendar in a bottom sheet');
+    expect(calendarSection?.content).toContain('**Today** card opens a compact month calendar in a bottom sheet');
     expect(calendarSection?.content).toContain('Dashboard and Training headers also link to the full [Calendar](/calendar)');
     expect(calendarSection?.content).toContain('without changing their saved settings');
     expect(calendarSection?.content).toContain('out of suggestions until you add it manually');
-    expect(calendarSection?.content).toContain('small overlapping activity-group circles');
+    expect(calendarSection?.content).toContain('show overlapping activity-group circles');
     expect(calendarSection?.content).toContain('size reflects recorded duration');
     expect(calendarSection?.content).toContain('Period totals and activity-group bars remain available below the month');
     expect(calendarSection?.content).toContain('Select an activity row to open its details');

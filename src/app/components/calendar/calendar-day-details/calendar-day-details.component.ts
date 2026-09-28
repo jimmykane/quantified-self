@@ -108,7 +108,7 @@ export class CalendarDayDetailsComponent {
   });
   readonly title = this.titleFormatter.format(this.data.day.date);
   readonly compactTitle = getDateTimeFormatter(this.data.locale, {
-    weekday: 'short', month: 'short', day: 'numeric', year: 'numeric',
+    weekday: 'short', month: 'short', day: 'numeric',
   }).format(this.data.day.date);
   readonly activityState = computed(() => this.data.activities?.() ?? { status: 'ready', day: this.data.day });
   readonly day = computed(() => this.activityState().day);

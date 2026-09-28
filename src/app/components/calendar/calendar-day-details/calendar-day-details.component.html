@@ -10,16 +10,16 @@
       <a mat-button appHapticTap class="calendar-day-details-full-day" [routerLink]="['/calendar/day', data.day.dateKey]"
         [queryParams]="fullDayQueryParams"
         (click)="prepareFullDayNavigation()">
-        Open full day <mat-icon iconPositionEnd aria-hidden="true">arrow_forward</mat-icon>
+        Full day <mat-icon iconPositionEnd aria-hidden="true">arrow_forward</mat-icon>
       </a>
     }
     <app-calendar-day-context [data]="data" [compact]="true" [privateHealthEnabled]="data.privateHealthEnabled !== false"></app-calendar-day-context>
     @if (noteRows().length) {
-    <section aria-labelledby="calendar-day-notes-title">
+    <section class="calendar-day-details-group" aria-labelledby="calendar-day-notes-title">
       <h3 id="calendar-day-notes-title">Timeline notes</h3>
       <mat-action-list>
         @for (row of noteRows(); track row.note.id) {
-        <button mat-list-item [lines]="3" type="button" (click)="selectNote(row.note.id)">
+        <button mat-list-item appHapticTap [lines]="3" type="button" (click)="selectNote(row.note.id)">
           <mat-icon matListItemIcon [style.color]="row.color" aria-hidden="true">{{ row.icon }}</mat-icon>
           <span matListItemTitle>{{ row.note.title }}</span>
           <span matListItemLine>{{ row.category }}</span>
@@ -31,21 +31,19 @@
     }
 
     @if (hasTrainingPlanningUIAccess()) {
-    <section class="calendar-day-planned" aria-labelledby="calendar-day-planned-title">
+    <section class="calendar-day-planned calendar-day-details-group" aria-labelledby="calendar-day-planned-title">
       <div class="calendar-day-section-heading">
         <h3 id="calendar-day-planned-title">Planned workouts</h3>
-        <div class="calendar-day-plan-actions" aria-label="Add a workout">
-          <a mat-flat-button [routerLink]="['/training/plans/new']" [queryParams]="{ date: data.day.dateKey }"
-            (click)="prepareWorkoutNavigation()">
-            <mat-icon aria-hidden="true">add</mat-icon>
-            Add workout
-          </a>
-          <a mat-stroked-button [routerLink]="['/training/plans/standalone/new']"
-            [queryParams]="{ date: data.day.dateKey }"
-            (click)="prepareWorkoutNavigation()">
-            Standalone
-          </a>
-        </div>
+        <button mat-button appHapticTap type="button" class="calendar-day-plan-add"
+          [matMenuTriggerFor]="addDayWorkoutMenu" aria-label="Add workout for selected day">
+          <mat-icon aria-hidden="true">add</mat-icon>Add workout<mat-icon iconPositionEnd aria-hidden="true">arrow_drop_down</mat-icon>
+        </button>
+        <mat-menu #addDayWorkoutMenu="matMenu" class="qs-menu-panel">
+          <a mat-menu-item appHapticTap [routerLink]="['/training/plans/new']"
+            [queryParams]="{ date: data.day.dateKey }" (click)="prepareWorkoutNavigation()">Plan workout</a>
+          <a mat-menu-item appHapticTap [routerLink]="['/training/plans/standalone/new']"
+            [queryParams]="{ date: data.day.dateKey }" (click)="prepareWorkoutNavigation()">Standalone workout</a>
+        </mat-menu>
       </div>
       @if (plannedWorkoutsStatus() === 'loading') {
       <p class="calendar-day-empty" role="status">Loading planned workouts…</p>
@@ -56,7 +54,7 @@
         @for (planned of plannedWorkoutRows(); track planned.id) {
         <div class="calendar-day-planned-row" role="presentation" [style.--planned-workout-color]="planned.color">
           <span class="calendar-day-planned-accent" aria-hidden="true"></span>
-          <a mat-list-item class="calendar-day-planned-item" [routerLink]="['/training/plans/workout', planned.id]"
+          <a mat-list-item appHapticTap class="calendar-day-planned-item" [routerLink]="['/training/plans/workout', planned.id]"
             (click)="prepareWorkoutNavigation()">
             <app-activity-type-icon matListItemIcon [activityType]="planned.sport" size="24px"
               aria-hidden="true"></app-activity-type-icon>
@@ -81,7 +79,6 @@
       }
     </section>
 
-    <mat-divider></mat-divider>
     }
 
     @if (activityState().status === 'loading') {
@@ -95,22 +92,21 @@
     </div>
 
     @if (familyVolumeRows().length) {
-    <section aria-labelledby="calendar-day-family-title">
+    <section class="calendar-day-details-group" aria-labelledby="calendar-day-family-title">
       <h3 id="calendar-day-family-title">Completed activities</h3>
       <app-activity-calendar-volume-list [rows]="familyVolumeRows()" [emphasizeNumericText]="true"
         (rowSelected)="prepareEventNavigation($event.route)"></app-activity-calendar-volume-list>
     </section>
 
-    <mat-divider></mat-divider>
     }
 
-    <section aria-labelledby="calendar-day-activities-title">
+    <section class="calendar-day-details-group" aria-labelledby="calendar-day-activities-title">
       <h3 id="calendar-day-activities-title">Completed activity details</h3>
       @if (eventRows().length) {
       <mat-nav-list>
         @for (event of eventRows(); track event.id) {
           @if (event.route) {
-          <a mat-list-item class="calendar-day-event-item"
+          <a mat-list-item appHapticTap class="calendar-day-event-item"
             [class.calendar-day-event-item-with-metrics]="event.metricStats.length > 0" [routerLink]="event.route"
             (click)="prepareEventNavigation(event.route)">
             <app-activity-type-icon matListItemIcon class="calendar-day-event-icon" [activityType]="event.activityType" size="24px"

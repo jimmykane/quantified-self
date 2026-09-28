@@ -23,12 +23,11 @@
 
 .calendar-day-details-content {
   box-sizing: border-box;
-  display: grid;
+  display: block;
   max-width: 100%;
   min-width: 0;
   min-height: 0;
   flex: 1 1 auto;
-  gap: 18px;
   padding: 16px;
   overflow-x: hidden;
   overflow-y: auto;
@@ -40,8 +39,24 @@
   min-width: 0;
 }
 
+// Let the shared day metrics use their existing three-column layout when the
+// sheet is wide, while retaining two columns on a narrow phone.
+app-calendar-day-context {
+  display: block;
+  container-type: inline-size;
+}
+
 .calendar-day-details-full-day {
-  justify-self: end;
+  display: flex;
+  width: max-content;
+  max-width: 100%;
+  margin: 0 0 12px auto;
+}
+
+.calendar-day-details-group {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--mat-sys-outline-variant);
 }
 
 .calendar-day-total {
@@ -72,9 +87,10 @@
 
 h3 {
   margin: 0 0 8px;
-  color: var(--mat-sys-on-surface);
-  font: var(--mat-sys-title-small);
-  letter-spacing: 0;
+  color: var(--mat-sys-on-surface-variant);
+  font: var(--mat-sys-label-medium);
+  letter-spacing: .04em;
+  text-transform: uppercase;
 }
 
 .calendar-day-section-heading {
@@ -88,11 +104,9 @@ h3 {
   margin-bottom: 0;
 }
 
-.calendar-day-plan-actions {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: flex-end;
-  gap: 8px;
+.calendar-day-plan-add {
+  flex: 0 0 auto;
+  white-space: nowrap;
 }
 
 .calendar-day-planned-row {
@@ -180,14 +194,12 @@ mat-action-list {
   .calendar-day-details-content {
     padding: 12px;
   }
+}
 
+@media (max-width: 360px) {
   .calendar-day-section-heading {
     align-items: flex-start;
     flex-direction: column;
-  }
-
-  .calendar-day-plan-actions {
-    width: 100%;
-    justify-content: flex-start;
+    gap: 2px;
   }
 }
