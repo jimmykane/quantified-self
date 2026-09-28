@@ -20,6 +20,7 @@ import {
     markQueueItemDeletedForUserCleanup,
     QUEUE_CLEANUP_TOMBSTONE_REASONS,
 } from '../queue/cleanup-tombstone';
+import { canPromotePendingActivitySyncQueueItem } from './queue-promotion';
 
 export interface EnqueueActivitySyncQueueItemParams {
     routeId: ActivityDeliveryRouteId;
@@ -154,13 +155,21 @@ export async function enqueueActivitySyncQueueItem(
         if (existingSnapshot.exists) {
             const existingData = existingSnapshot.data() as Partial<ActivitySyncQueueItemInterface>;
             if (!existingData.processed) {
-                return {
-                    enqueued: false,
-                    queueItemId,
-                    reason: 'already_pending',
-                    dateCreated: Number(existingData.dateCreated) || Date.now(),
-                    shouldDispatchExisting: existingData.dispatchedToCloudTask === null || existingData.dispatchedToCloudTask === undefined,
-                };
+                if (!(params.manual === true && params.deliveryMode === 'historical'
+                    && canPromotePendingActivitySyncQueueItem(existingData)
+                    && existingData.routeId === params.routeId
+                    && existingData.userID === params.userID
+                    && existingData.eventID === params.eventID
+                    && existingData.sourceServiceName === params.sourceServiceName
+                    && existingData.destinationServiceName === params.destinationServiceName)) {
+                    return {
+                        enqueued: false,
+                        queueItemId,
+                        reason: 'already_pending',
+                        dateCreated: Number(existingData.dateCreated) || Date.now(),
+                        shouldDispatchExisting: existingData.dispatchedToCloudTask === null || existingData.dispatchedToCloudTask === undefined,
+                    };
+                }
             }
 
             if (existingData.resultStatus === 'manual_reconciliation_required'
@@ -181,7 +190,14 @@ export async function enqueueActivitySyncQueueItem(
             }
         }
 
-        const dateCreated = Date.now();
+        // Replacing an unaccepted automatic row creates a new task generation.
+        // In-flight workers from the previous generation then fail their guarded writes.
+        const previousDateCreated = existingSnapshot.exists
+            ? Number(existingSnapshot.data()?.dateCreated)
+            : NaN;
+        const dateCreated = Number.isFinite(previousDateCreated)
+            ? Math.max(Date.now(), previousDateCreated + 1)
+            : Date.now();
         const queueItem: ActivitySyncQueueItemInterface = {
             id: queueItemId,
             dateCreated,

@@ -14,6 +14,7 @@ import {
 } from '../../../shared/activity-sync-routes';
 import { getActivitySyncRouteAllowlistConfigError, isActivitySyncRouteUserAllowlisted } from './allowlist';
 import { buildActivitySyncQueueItemId, enqueueActivitySyncQueueItem } from './queue';
+import { canPromotePendingActivitySyncQueueItem } from './queue-promotion';
 import { getActivitySyncMetadataDocId, setActivitySyncQueuedMetadata, setActivitySyncRequeuedMetadata } from './metadata';
 import { getDestinationConnectionStatus } from './process-queue-item';
 import { ACTIVITY_SYNC_QUEUE_COLLECTION_NAME } from './constants';
@@ -200,7 +201,14 @@ async function processSource(params: {
     if (metadata.data()?.status === 'success') return { eligible: false, queued: false, reason: 'already_sent' };
     const queueID = await buildActivitySyncQueueItemId(selected.routeId, userID, eventID);
     const existingQueue = await admin.firestore().collection(ACTIVITY_SYNC_QUEUE_COLLECTION_NAME).doc(queueID).get();
-    if (existingQueue.exists && existingQueue.data()?.processed !== true) {
+    const existingQueueData = existingQueue.data();
+    if (existingQueue.exists && existingQueueData?.processed !== true
+        && (!canPromotePendingActivitySyncQueueItem(existingQueueData || {})
+            || existingQueueData?.routeId !== selected.routeId
+            || existingQueueData?.userID !== userID
+            || existingQueueData?.eventID !== eventID
+            || existingQueueData?.sourceServiceName !== selected.source
+            || existingQueueData?.destinationServiceName !== getDestinationForRoute(selected.routeId))) {
         return { eligible: false, queued: false, reason: 'already_queued' };
     }
     if (existingQueue.data()?.resultStatus === 'manual_reconciliation_required') {

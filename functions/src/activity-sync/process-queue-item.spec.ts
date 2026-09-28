@@ -791,6 +791,18 @@ describe('activity-sync/process-queue-item', () => {
       dispatchedToCloudTask: PROVIDER_OPERATION_IN_FLIGHT_QUEUE_DISPATCH_MARKER,
       providerOperationStartedAt,
     })).toBe(false);
+    expect(claim?.isCurrent({
+      ...baseQueueItem,
+      dateCreated: baseQueueItem.dateCreated + 1,
+      processed: false,
+      dispatchedToCloudTask: null,
+      providerOperationStartedAt: undefined,
+      destinationUploadID: undefined,
+      destinationProviderUserID: undefined,
+      destinationWorkoutKey: undefined,
+      destinationInfoCode: undefined,
+      destinationUploadContinuation: undefined,
+    })).toBe(false);
     expect(receipt?.isCurrent({
       ...baseQueueItem,
       processed: false,

@@ -109,6 +109,30 @@ describe('historical activity send pages', () => {
     expect(queuedMetadata).toHaveBeenCalledOnce();
   });
 
+  it('includes an unaccepted automatic queue row in preview and one-time send', async () => {
+    queueGet.mockResolvedValue({
+      exists: true,
+      data: () => ({
+        processed: false,
+        deliveryMode: 'automatic',
+        deferredReason: 'service_reconnect_required',
+        routeId: ACTIVITY_SYNC_ROUTES.GarminAPI_to_SuuntoApp.id,
+        userID: 'user-1',
+        eventID: 'event-1',
+        sourceServiceName: source,
+        destinationServiceName: destination,
+      }),
+    });
+
+    const preview = await runHistoricalSendPage('user-1', request);
+    expect(preview.eligibleBySource[source]).toBe(1);
+    expect(preview.skippedByReason.already_queued).toBeUndefined();
+
+    const sent = await runHistoricalSendPage('user-1', { ...request, action: 'send' });
+    expect(sent.queued).toBe(1);
+    expect(enqueue).toHaveBeenCalledWith(expect.objectContaining({ deliveryMode: 'historical', manual: true }));
+  });
+
   it('reports durable queue admission even when its status metadata write fails', async () => {
     queuedMetadata.mockRejectedValueOnce(new Error('metadata unavailable'));
 
