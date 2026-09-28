@@ -546,6 +546,7 @@ export async function processSuuntoHealthWebhookIngressDocument(
       rangeStartMs: window.startMs,
       rangeEndMs: window.endMs,
       healthTrigger: 'webhook',
+      suuntoHealthWebhookFeedMask: ingress.notificationType === 'SUUNTO_247_ACTIVITY_CREATED' ? 1 : 2,
       dedupeKey: `suunto-health-webhook:${ingress.userID}:${ingress.providerUserId}:${window.startMs}:${window.endMs}:${ingress.tokenCredentialGeneration}:${ingress.rootOAuthCredentialGeneration}:${ingress.connectionStateGeneration}:${dispatchAfterMs}`,
       dispatchImmediately: true,
       dispatchAfterMs,
@@ -589,6 +590,7 @@ export async function processSuuntoHealthWebhookIngressDocument(
   if (!processed) return;
   logger.info('[HealthSync][Suunto] Fanned out durable webhook ingress.', {
     windows: ingress.windows.length,
+    notificationType: ingress.notificationType,
   });
 }
 

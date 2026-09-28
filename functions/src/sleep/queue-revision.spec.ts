@@ -163,6 +163,23 @@ describe('Sleep queue revision lease', () => {
       .resolves.toBe('claimed');
   });
 
+  it('uses the webhook feed mask committed before the worker claim', async () => {
+    const workerSnapshot = queueItem('revision-1', {
+      type: 'suunto_health_poll',
+      healthTrigger: 'webhook',
+      suuntoHealthWebhookFeedMask: 1,
+    });
+    mocks.state.current = {
+      ...workerSnapshot,
+      suuntoHealthWebhookFeedMask: 3,
+    };
+    delete mocks.state.current.ref;
+
+    await expect(claimSleepQueueRevision(workerSnapshot, 'firebase-user-1', 'worker-r1'))
+      .resolves.toBe('claimed');
+    expect(workerSnapshot.suuntoHealthWebhookFeedMask).toBe(3);
+  });
+
   it('reopens a replacement left behind by an expired older-revision lease', async () => {
     mocks.state.current = {
       ...queueItem('revision-2'),

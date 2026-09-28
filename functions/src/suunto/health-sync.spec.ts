@@ -301,12 +301,16 @@ describe('Suunto Health provider sync', () => {
   it('fetches all three bounded feeds and returns separate source records', async () => {
     const snapshot = tokenSnapshot();
     const initialGuards = currentAuthorityGuards(snapshot);
+    const onRequest = vi.fn();
 
     const result = await processSuuntoHealthQueueItem(
       queueItem(),
       snapshot,
       'staged-user',
       initialGuards,
+      undefined,
+      undefined,
+      onRequest,
     );
 
     expect(result.healthResults.map(item => item.input.sourceRecordType)).toEqual([
@@ -315,6 +319,15 @@ describe('Suunto Health provider sync', () => {
       'suunto_247_recovery',
     ]);
     expect(hoisted.requestGet).toHaveBeenCalledTimes(3);
+    expect(onRequest.mock.calls.map(([observation]) => ({
+      feed: observation.feed, outcome: observation.outcome,
+    }))).toEqual([
+      { feed: 'activity', outcome: 'success' },
+      { feed: 'statistics', outcome: 'success' },
+      { feed: 'recovery', outcome: 'success' },
+    ]);
+    expect(onRequest.mock.calls.every(([observation]) => Number.isSafeInteger(observation.durationMs)
+      && observation.durationMs >= 0)).toBe(true);
     expect(hoisted.validateCurrentSuuntoWebhookWriteLifecycle).toHaveBeenCalledTimes(4);
     expect(result.lifecycleGuards.requiredExistingTokenCredential.credentialGeneration)
       .toBe('credential-generation-1');
@@ -336,6 +349,16 @@ describe('Suunto Health provider sync', () => {
       }));
       expect(options.headers.Authorization).toBe('Bearer initial-access-token');
     }
+  });
+
+  it('does not fail a valid pull when telemetry collection throws', async () => {
+    const snapshot = tokenSnapshot();
+    const result = await processSuuntoHealthQueueItem(
+      queueItem(), snapshot, 'staged-user', currentAuthorityGuards(snapshot),
+      undefined, undefined, () => { throw new Error('telemetry unavailable'); },
+    );
+    expect(result.healthResults).toHaveLength(3);
+    expect(hoisted.requestGet).toHaveBeenCalledTimes(3);
   });
 
   it('rejects a stale token resolution at the first request boundary', async () => {
@@ -637,6 +660,7 @@ describe('Suunto Health provider sync', () => {
   });
 
   it('force-refreshes once after a provider 401 and advances the write fence', async () => {
+    const onRequest = vi.fn();
     hoisted.requestGet.mockReset()
       .mockRejectedValueOnce({ response: { statusCode: 401 }, body: 'private response' })
       .mockResolvedValueOnce([{
@@ -665,9 +689,16 @@ describe('Suunto Health provider sync', () => {
       snapshot,
       'staged-user',
       initialGuards,
+      undefined,
+      undefined,
+      onRequest,
     );
 
     expect(result.healthResults).toHaveLength(1);
+    expect(onRequest.mock.calls.map(([observation]) => [observation.feed, observation.outcome])).toEqual([
+      ['activity', 'unauthorized'], ['activity', 'success'],
+      ['statistics', 'success'], ['recovery', 'success'],
+    ]);
     expect(hoisted.getTokenData).toHaveBeenCalledWith(snapshot, ServiceNames.SuuntoApp, true, {
       opaqueTelemetry: true,
       expectedActiveOAuthCredentialGeneration: 'credential-generation-2',
@@ -680,6 +711,7 @@ describe('Suunto Health provider sync', () => {
   });
 
   it('replaces provider transport details with an opaque retry error and retains its HTTP status', async () => {
+    const onRequest = vi.fn();
     hoisted.requestGet.mockReset().mockRejectedValueOnce(Object.assign(
       new Error('private-provider-response private-access-token'),
       { statusCode: 503 },
@@ -689,11 +721,16 @@ describe('Suunto Health provider sync', () => {
 
     let caught: unknown;
     try {
-      await processSuuntoHealthQueueItem(queueItem(), snapshot, 'staged-user', initialGuards);
+      await processSuuntoHealthQueueItem(queueItem(), snapshot, 'staged-user', initialGuards,
+        undefined, undefined, onRequest);
     } catch (error) {
       caught = error;
     }
     expect(caught).toBeInstanceOf(SuuntoHealthRequestError);
+    expect(onRequest).toHaveBeenCalledWith(expect.objectContaining({
+      feed: 'activity', outcome: 'failed', durationMs: expect.any(Number),
+    }));
+    expect(JSON.stringify(onRequest.mock.calls)).not.toContain('private-provider-response');
     expect(caught).toEqual(expect.objectContaining({
       message: 'Suunto Health request failed.',
       providerStatusCode: 503,

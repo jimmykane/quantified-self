@@ -405,6 +405,7 @@ describe('Suunto Health webhook ingress', () => {
       rangeStartMs: 1_700_000_000_000,
       rangeEndMs: 1_700_086_400_000,
       healthTrigger: 'webhook',
+      suuntoHealthWebhookFeedMask: 1,
       dispatchImmediately: true,
       suuntoHealthTokenCredentialGeneration: TOKEN_GENERATION,
       suuntoHealthRootOAuthCredentialGeneration: ROOT_GENERATION,
@@ -430,6 +431,18 @@ describe('Suunto Health webhook ingress', () => {
       lastUpdateTime: UPDATE_TIME,
     });
     expect(hoisted.recursiveDelete).not.toHaveBeenCalled();
+  });
+
+  it('marks Recovery notifications for coalesced feed telemetry', async () => {
+    const { snapshot } = ingressSnapshot({
+      ...ingressData(),
+      notificationType: 'SUUNTO_247_RECOVERY_CREATED',
+    });
+    await processSuuntoHealthWebhookIngressDocument(snapshot, activeDependencies() as any);
+
+    expect(hoisted.addQueueItem).toHaveBeenCalledWith(expect.objectContaining({
+      suuntoHealthWebhookFeedMask: 2,
+    }));
   });
 
   it('coalesces distinct notifications in one five-minute bucket and separates later buckets', async () => {
