@@ -1563,6 +1563,8 @@ describe('help.content', () => {
     expect(dataAndPrivacySection?.content).toContain('complete no-match result');
     expect(dataAndPrivacySection?.content).toContain('your latest run');
     expect(dataAndPrivacySection?.content).toContain('today’s or yesterday’s workouts');
+    expect(dataAndPrivacySection?.content).toContain('standard activity list with the same date and sport filters');
+    expect(dataAndPrivacySection?.content).toContain('Do not repeatedly retry the rejected query');
     expect(dataAndPrivacySection?.content).toContain('case-insensitive part of the route name');
     expect(dataAndPrivacySection?.content).toContain('older history');
     expect(dataAndPrivacySection?.content).toContain('without a reparse, backfill, cache');

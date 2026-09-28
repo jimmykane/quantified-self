@@ -1293,6 +1293,8 @@ describe('MCP HTTP scope enforcement', () => {
       const cursorInstruction = 'Follow nextCursor until matched or scanComplete';
       const cursorInstructionIndex = instructions.indexOf(cursorInstruction);
       const tools = (await client.listTools()).tools;
+      const listActivities = tools
+        .find(tool => tool.name === 'list_activities');
       const queryActivities = tools
         .find(tool => tool.name === 'query_activities');
       const queryActivitiesWithTags = tools
@@ -1301,6 +1303,12 @@ describe('MCP HTTP scope enforcement', () => {
         .find(tool => tool.name === 'rank_activities_by_metric');
       const listActivityTypes = tools
         .find(tool => tool.name === 'list_activity_types');
+      const listInputSchema = listActivities?.inputSchema as {
+        properties?: Record<string, unknown>;
+        oneOf?: unknown;
+        anyOf?: unknown;
+        not?: unknown;
+      } | undefined;
       const inputSchema = queryActivities?.inputSchema as {
         properties?: Record<string, Record<string, unknown>>;
         oneOf?: Array<{
@@ -1345,6 +1353,13 @@ describe('MCP HTTP scope enforcement', () => {
       expect(instructions).toContain('then list_activities');
       expect(instructions).toContain('if a connector rejects that schema before the call, use list_activities');
       expect(tools.map(tool => tool.name)).toContain('list_activities');
+      expect(listInputSchema?.oneOf).toBeUndefined();
+      expect(listInputSchema?.anyOf).toBeUndefined();
+      expect(listInputSchema?.not).toBeUndefined();
+      expect(listInputSchema?.properties).toHaveProperty('start');
+      expect(listInputSchema?.properties).toHaveProperty('end');
+      expect(listInputSchema?.properties).toHaveProperty('relativePeriod');
+      expect(listInputSchema?.properties).toHaveProperty('timeZone');
       expect(instructions).toContain(
         'add activityTypes and limit 1 when named',
       );

@@ -31,6 +31,9 @@ rules, permissions, and coverage distinct until they are aligned for comparison.
    activity types before filtering; use timezone-aware relative periods for today or yesterday, and preserve the same
    filters across bounded scan cursors until the scan is complete. For saved routes, use the same canonical type filter
    and optional case-insensitive route-name search, preserving both filters with every cursor.
+   For external completed-activity reads, prefer the advertised simple-schema listing. If a strict date-mode query
+   fails in the connector before reaching QS, switch to the listing with identical filters once; do not loop on the
+   rejected schema or treat the connector error as evidence of no recorded activity.
 4. Align results only on comparable time buckets. Preserve each result's units, aggregation, coverage, freshness,
    pagination state, and missing values. For within-workout calculations, discover the detailed activity-sample
    capability and read only the required metrics and elapsed-second range with Activity details access. Complete that

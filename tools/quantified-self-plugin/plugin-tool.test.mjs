@@ -1076,6 +1076,21 @@ test('bundled skills cover focused workflows without copying the live tool catal
   }
 });
 
+test('activity-aware skills route around connector date-schema rejection without losing filters', async () => {
+  for (const skillName of [
+    'analyze-quantified-self',
+    'analyze-quantified-self-activity',
+    'analyze-quantified-self-training',
+  ]) {
+    const skill = await readFile(join(DEFAULT_REPO_ROOT, 'plugins', 'quantified-self',
+      'skills', skillName, 'SKILL.md'), 'utf8');
+    assert.match(skill, /simple-schema (?:activity )?listing/i, skillName);
+    assert.match(skill, /same filters|identical filters/i, skillName);
+    assert.match(skill, /do not (?:retry|loop)|instead of retrying/i, skillName);
+    assert.match(skill, /no (?:completed|recorded) activity|no activity was recorded/i, skillName);
+  }
+});
+
 test('every CLI-dependent root command bootstraps the pinned plugin tooling', async () => {
   const rootPackage = JSON.parse(
     await readFile(join(DEFAULT_REPO_ROOT, 'package.json'), 'utf8'),
