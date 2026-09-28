@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { ActivityTypes } from '@sports-alliance/sports-lib';
 import { gunzipSync } from 'node:zlib';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -22,6 +23,7 @@ vi.mock('../shared/user-deletion-guard', () => ({
 }));
 
 import {
+    TrainingScheduleBatchWriteLimitError,
     buildTrainingScheduleRevisionWrites,
     hashTrainingScheduleMutationRequest,
     mutateTrainingScheduleBatchForUser,
@@ -400,6 +402,48 @@ describe('mutateTrainingScheduleForUser persistence', () => {
         expect(first.state.revision).toBe(2);
         expect(db.updatedPaths.filter(path => /^users\/user-1\/scheduledWorkouts\/workout-/.test(path))).toHaveLength(400);
         expect(db.read('users/user-1/scheduledWorkouts/workout-399')).toMatchObject({ localDate: '2026-09-03', revision: 3 });
+    });
+
+    it('preflights high-entropy shift history without partially moving workouts', async () => {
+        db.seed('users/user-1/trainingPlanState/current', {
+            ...createEmptyTrainingPlanState(), activePlanId: 'plan-1', revision: 1, currentWorkoutCount: 400,
+        });
+        db.seed('users/user-1/trainingPlans/plan-1', plan({ workoutCount: 400 }));
+        for (let index = 0; index < 400; index += 1) {
+            const id = `workout-${`${index}`.padStart(3, '0')}`;
+            const structure = { ...STRUCTURE, nodes: Array.from({ length: 100 }, (_, step) => ({
+                kind: 'step' as const, id: `step-${step}`, purpose: 'work' as const,
+                ending: { kind: 'time' as const, seconds: 30 }, targets: [],
+                note: Array.from({ length: 3 }, (_, part) => createHash('sha256')
+                    .update(`${index}:${step}:${part}`).digest('hex')).join(''),
+            })) };
+            db.seed(`users/user-1/scheduledWorkouts/${id}`, workout({ id, planId: 'plan-1', structure }));
+        }
+        const shift: MutateTrainingScheduleRequestV1 = {
+            mutationId: 'oversized-shift',
+            expectedRevisions: [
+                { scope: 'state', id: 'current', revision: 1 },
+                { scope: 'plan', id: 'plan-1', revision: 3 },
+            ],
+            operation: { kind: 'shift-plan', planId: 'plan-1', days: 1 },
+        };
+
+        await expect(mutateTrainingScheduleForUser('user-1', shift, { db: db as never, nowMs: NOW_MS }))
+            .rejects.toMatchObject({ code: 'limit-exceeded' });
+        const batchError = await mutateTrainingScheduleBatchForUser('user-1', [shift, {
+            mutationId: 'rename-after-oversized-shift',
+            expectedRevisions: [
+                { scope: 'state', id: 'current', revision: 2 },
+                { scope: 'plan', id: 'plan-1', revision: 4 },
+            ],
+            operation: { kind: 'rename-plan', planId: 'plan-1', name: 'Shifted plan' },
+        }], { db: db as never, nowMs: NOW_MS }).catch(error => error);
+        expect(batchError).toBeInstanceOf(TrainingScheduleBatchWriteLimitError);
+        expect(db.read('users/user-1/trainingPlanState/current')).toMatchObject({ revision: 1 });
+        expect(db.read('users/user-1/trainingPlans/plan-1')).toMatchObject({ revision: 3 });
+        expect(db.read('users/user-1/scheduledWorkouts/workout-399')).toMatchObject({ localDate: '2026-09-02' });
+        expect(db.updatedPaths).toEqual([]);
+        expect(db.read('users/user-1/trainingPlans/plan-1/revisions/0000000004')).toBeUndefined();
     });
 
     it('persists colors in current plans, history and exact retry receipts without touching workouts', async () => {

@@ -144,7 +144,7 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('400-workout Training muta
         expect(saved).not.toHaveProperty('deletedAtMs');
     });
 
-    it('rejects an oversized 400-prescription restore before changing any current record', async () => {
+    it('rejects oversized 400-prescription restore and shift before changing any current record', async () => {
         const uid = `large-${randomUUID()}`; uids.push(uid);
         const user = db.collection('users').doc(uid);
         await user.set({ test: true });
@@ -223,5 +223,24 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('400-workout Training muta
         expect((await user.collection('scheduledWorkouts').doc('workout-399').get()).data())
             .toMatchObject({ revision: 3, structure: { nodes: [{ id: 'run' }] } });
         expect((await stateRef.collection('mutationReceipts').doc(request.mutationId).get()).exists).toBe(false);
+
+        for (let offset = 0; offset < desired.length; offset += 100) {
+            const batch = db.batch();
+            for (const workout of desired.slice(offset, offset + 100)) {
+                batch.set(user.collection('scheduledWorkouts').doc(workout.id), { ...workout, revision: 3 });
+            }
+            await batch.commit();
+        }
+        const shift = { mutationId: 'oversized-shift',
+            expectedRevisions: [{ scope: 'state' as const, id: 'current', revision: 3 },
+                { scope: 'plan' as const, id: plan.id, revision: 3 }],
+            operation: { kind: 'shift-plan' as const, planId: plan.id, days: 1 } };
+        await expect(mutateTrainingScheduleForUser(uid, shift, { db, nowMs: nowMs + 2 }))
+            .rejects.toMatchObject({ code: 'limit-exceeded' });
+        expect((await stateRef.get()).data()).toMatchObject({ revision: 3 });
+        expect((await planRef.get()).data()).toMatchObject({ revision: 3 });
+        expect((await user.collection('scheduledWorkouts').doc('workout-399').get()).data())
+            .toMatchObject({ localDate: '2026-10-02', revision: 3 });
+        expect((await stateRef.collection('mutationReceipts').doc(shift.mutationId).get()).exists).toBe(false);
     });
 });

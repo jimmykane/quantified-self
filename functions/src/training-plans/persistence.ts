@@ -40,6 +40,7 @@ import { finishTrainingCleanupJob, trainingCleanupJob, trainingCleanupJobRef } f
 
 const MUTATION_RECEIPT_RETENTION_MS = 30 * 24 * 60 * 60 * 1000;
 const FIRESTORE_TRANSACTION_WRITE_BUDGET = 490;
+const FIRESTORE_TRANSACTION_ESTIMATED_WRITE_BYTES_BUDGET = 7 * 1024 * 1024;
 
 export const TRAINING_PLAN_REVISION_CHUNKS_COLLECTION_ID = 'chunks';
 export const TRAINING_PLAN_REVISION_CHUNK_ENCODING = 'gzip-json-base64-v1' as const;
@@ -488,7 +489,7 @@ export class TrainingScheduleBatchWriteLimitError extends TrainingScheduleMutati
     constructor() {
         super(
             'limit-exceeded',
-            'These changes produce too much revision history for one atomic batch. Apply them in smaller batches.',
+            'These changes are too large for one atomic batch. Apply them in smaller batches.',
         );
         this.name = 'TrainingScheduleBatchWriteLimitError';
     }
@@ -542,6 +543,42 @@ function estimateBatchWriteCount(
         + uniqueDocumentCount(permanentlyDeletedWorkouts) * 4
         + items.length // One idempotency receipt per newly applied request.
         + additionalWriteBudget;
+}
+
+function assertBoundedBatchWritePayload(items: readonly AppliedBatchItem[], additionalWriteBudget: number): void {
+    const final = items[items.length - 1]?.applied.after;
+    if (!final) return;
+    const bytes = (value: unknown): number => Buffer.byteLength(JSON.stringify(value), 'utf8') + 1024;
+    let estimated = 8 * 1024 + bytes(final.state) + additionalWriteBudget * 1024;
+    const patchShiftedWorkouts = items.length === 1 && items[0].request.operation.kind === 'shift-plan';
+    for (const planId of new Set(items.flatMap(item => item.applied.affectedPlanIds))) {
+        const plan = final.plans.get(planId);
+        if (plan) estimated += bytes(plan);
+    }
+    for (const workoutId of new Set(items.flatMap(item => item.applied.changedWorkoutIds))) {
+        const workout = final.workouts.get(workoutId);
+        if (workout) estimated += patchShiftedWorkouts ? 1024 : bytes(workout);
+        const strength = final.strengthDetails?.get(workoutId);
+        if (strength && items.some(item => !valuesEqual(
+            item.applied.before.strengthDetails?.get(workoutId), item.applied.after.strengthDetails?.get(workoutId),
+        ))) estimated += bytes(strength);
+    }
+    for (const item of items) {
+        estimated += bytes(item.applied.response) + 2048; // Receipt, queue marker, and compact ancillary writes.
+        for (const revision of item.revisions.planRevisions.values()) estimated += bytes(revision);
+        for (const chunks of item.revisions.planRevisionChunks.values()) {
+            for (const chunk of chunks) estimated += bytes(chunk);
+        }
+        for (const revision of item.revisions.standaloneWorkoutRevisions.values()) estimated += bytes(revision);
+        estimated += item.applied.permanentlyDeletedWorkoutIds.length * 4096;
+    }
+    if (estimated > FIRESTORE_TRANSACTION_ESTIMATED_WRITE_BYTES_BUDGET) {
+        if (items.length > 1) throw new TrainingScheduleBatchWriteLimitError();
+        throw new TrainingScheduleMutationError(
+            'limit-exceeded',
+            'This Training change is too large for one atomic change. No changes were applied; contact support.',
+        );
+    }
 }
 
 export async function mutateTrainingScheduleBatchForUser(
@@ -629,6 +666,7 @@ export async function mutateTrainingScheduleBatchForUser(
         if (estimateBatchWriteCount(items, additionalWriteBudget) > FIRESTORE_TRANSACTION_WRITE_BUDGET) {
             throw new TrainingScheduleBatchWriteLimitError();
         }
+        assertBoundedBatchWritePayload(items, additionalWriteBudget);
 
         stageTrainingDeliveryReconciliation(transaction, db, uid);
         const invalidatedWorkoutIds = new Set<string>();

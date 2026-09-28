@@ -567,8 +567,12 @@ packed Sports Lib package. That gate is tracked by GitHub issue #654 under epic 
   up to 400 full structures. Plan-to-standalone deletion stages complete standalone snapshots in idempotent transactions
   bounded to 100 writes and about 2 MiB of serialized payload; its final transaction patches only plan association,
   revision, and timestamp. A plan restore likewise patches scalar-only changes and preflights estimated write payload;
-  an oversized full-prescription restore returns a stable `limit-exceeded` error before any write. The canonical workout
-  JSON and the published 400-workout limit do not change.
+  an oversized full-prescription restore returns a stable `limit-exceeded` error before any write. Schedule mutation
+  batches, including high-entropy plan shifts, also preflight compressed revision chunks and current-record writes
+  against a conservative 7 MiB budget; an oversized single change fails before a write and an oversized multi-change
+  batch uses the existing sequential fallback. This remains a safety guard, not the
+  resumable oversized restore/shift workflow required to complete #657. The canonical workout JSON and the published
+  400-workout limit do not change.
 - A permanent workout or plan deletion creates a server-internal `trainingCleanupJobs` record in the same transaction
   as its canonical receipt. The callable attempts recursive cleanup immediately; `reconcileTrainingPlanCleanup`
   scans due jobs every five minutes, leases each job, checks the account-deletion guard and matching deletion
@@ -589,6 +593,9 @@ packed Sports Lib package. That gate is tracked by GitHub issue #654 under epic 
 - MCP impact for the paging and cleanup slice: existing Training MCP current reads already exclude deleted workouts;
   internal cleanup jobs and UI-only deleted-history paging expose no new MCP field, permission, mutation kind, provider
   action, or approval route. Existing MCP plan deletion continues through the same idempotent server path.
+- MCP impact for large-write preflight: no tool, schema, scope, consent, projection, or provider action changes. The
+  existing batch apply may fall back to sequential transactions when its estimated payload is too large; a single
+  oversized shift returns the existing limit-error category without applying a partial schedule.
 
 ### UI and calendar contract
 
