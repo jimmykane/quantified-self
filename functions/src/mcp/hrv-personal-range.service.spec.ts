@@ -27,13 +27,17 @@ function reads(count = 70): HrvRangeReads {
   }) };
 }
 describe('MCP shared HRV personal range', () => {
-  it('reads the required canonical duration alongside Sports Lib-only HRV through the Firestore mask', async () => {
+  it('reads canonical duration and Suunto wake-date evidence through the Firestore mask', async () => {
     const encoded = encodeSleepSessionSportsLibData({ durationSeconds: 28800,
       vitals: { averageHrvMs: 42, hrvSampleCount: 96, overnightHrvMs: 44 } } as SleepSession);
     const selectedMetrics: Record<string, unknown> = {};
+    const selectedFields = new Set<string>();
+    const projectedEndTimeMs = Date.parse('2026-09-10T23:30:00.000Z');
     const query = {
       where: vi.fn().mockReturnThis(), orderBy: vi.fn().mockReturnThis(), limit: vi.fn().mockReturnThis(),
       select: vi.fn((...fields: (string | FieldPath)[]) => {
+        fields.filter((field): field is string => typeof field === 'string')
+          .forEach(field => selectedFields.add(field));
         for (const field of Object.values(SLEEP_SPORTS_LIB_METRIC_FIELDS)) {
           if (fields.some(path => path instanceof FieldPath && path.isEqual(new FieldPath('sportsLibData', 'metrics', field)))) {
             selectedMetrics[field] = encoded.sportsLibData!.metrics[field];
@@ -42,8 +46,13 @@ describe('MCP shared HRV personal range', () => {
         return query;
       }),
       get: vi.fn(async () => ({ docs: [{ data: () => ({
-        startTimeMs: end - (8 * 60 * 60 * 1000), endTimeMs: end, sleepDate: '2026-09-10',
+        startTimeMs: projectedEndTimeMs - (8 * 60 * 60 * 1000), endTimeMs: projectedEndTimeMs,
+        sleepDate: '2026-09-10',
         source: { provider: 'SuuntoApp', providerUserId: 'private-account' },
+        ...(selectedFields.has('timezoneOffsetSeconds') ? { timezoneOffsetSeconds: 2 * 60 * 60 } : {}),
+        ...(selectedFields.has('providerFields.suunto.timestamp')
+          ? { providerFields: { suunto: { timestamp: '2026-09-10T22:00:00.000+02:00' } } }
+          : {}),
         sportsLibData: { schemaVersion: encoded.sportsLibData!.schemaVersion, metrics: selectedMetrics },
       }) }] })),
     };
@@ -53,9 +62,15 @@ describe('MCP shared HRV personal range', () => {
     const result = await queryHrvPersonalRange(input, deps);
     expect(result.excludedValues).toBe(0);
     expect(result.series.map(series => series.readings[0].value)).toEqual([42, 44]);
+    expect(result.series.every(series => series.readings[0].date === '2026-09-11')).toBe(true);
+    expect([...selectedFields]).toEqual(expect.arrayContaining([
+      'timezoneOffsetSeconds',
+      'providerFields.suunto.timestamp',
+    ]));
     expect(selectedMetrics).toHaveProperty(SLEEP_SPORTS_LIB_METRIC_FIELDS.Duration);
     expect(selectedMetrics).toHaveProperty(SLEEP_SPORTS_LIB_METRIC_FIELDS.HrvSampleCount);
     expect(JSON.stringify(result)).not.toMatch(/duration|private-account|sportsLibData/);
+    expect(JSON.stringify(result)).not.toMatch(/providerFields|timezoneOffsetSeconds|\+02:00/);
   });
   it('keeps HRV in milliseconds with non-default unit preferences', async () => {
     const deps = reads(3);
