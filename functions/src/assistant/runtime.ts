@@ -26,6 +26,7 @@ import {
 } from './evidence';
 import {
   createAssistantMcpSession,
+  AssistantMcpToolFailure,
   AssistantRecoverableMcpToolError,
   AssistantTrainingMetricsPreparingError,
   type AssistantMcpSession,
@@ -117,6 +118,18 @@ export function getAssistantRuntimeErrorToolName(
   return error instanceof AssistantRuntimeStageError
     ? error.toolName
     : null;
+}
+
+export function getAssistantRuntimeToolFailureDiagnostic(error: unknown): {
+  toolErrorCode: string;
+  toolFailureStage: string;
+} | null {
+  if (!(error instanceof AssistantRuntimeStageError) || error.reason !== 'mcp_tool_failed') {
+    return null;
+  }
+  return error.cause instanceof AssistantMcpToolFailure
+    ? { toolErrorCode: error.cause.code, toolFailureStage: error.cause.stage }
+    : { toolErrorCode: 'unclassified_error', toolFailureStage: 'assistant_tool_execution' };
 }
 
 export interface AssistantRuntimeTool {
