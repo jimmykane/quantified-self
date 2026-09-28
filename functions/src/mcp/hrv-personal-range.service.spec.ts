@@ -1,5 +1,12 @@
 import { describe, expect, it, vi } from 'vitest';
-import { HrvRangeInput, HrvRangeReads, queryHrvPersonalRange, MCP_HRV_RANGE_SCHEMA, firestoreHrvRangeReads } from './hrv-personal-range.service';
+import {
+  firestoreHrvRangeReads,
+  HrvRangeInput,
+  HrvRangeReads,
+  MCP_HRV_RANGE_SCHEMA,
+  MCP_SLEEP_CANONICAL_TIME_FIELDS,
+  queryHrvPersonalRange,
+} from './hrv-personal-range.service';
 import * as admin from 'firebase-admin';
 import { FieldPath } from 'firebase-admin/firestore';
 import { encodeSleepSessionSportsLibData } from '../../../shared/sports-lib-health-data';
@@ -63,10 +70,7 @@ describe('MCP shared HRV personal range', () => {
     expect(result.excludedValues).toBe(0);
     expect(result.series.map(series => series.readings[0].value)).toEqual([42, 44]);
     expect(result.series.every(series => series.readings[0].date === '2026-09-11')).toBe(true);
-    expect([...selectedFields]).toEqual(expect.arrayContaining([
-      'timezoneOffsetSeconds',
-      'providerFields.suunto.timestamp',
-    ]));
+    expect([...selectedFields]).toEqual(expect.arrayContaining([...MCP_SLEEP_CANONICAL_TIME_FIELDS]));
     expect(selectedMetrics).toHaveProperty(SLEEP_SPORTS_LIB_METRIC_FIELDS.Duration);
     expect(selectedMetrics).toHaveProperty(SLEEP_SPORTS_LIB_METRIC_FIELDS.HrvSampleCount);
     expect(JSON.stringify(result)).not.toMatch(/duration|private-account|sportsLibData/);

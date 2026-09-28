@@ -14,6 +14,11 @@ import { McpHealthError, firestoreHealthReads } from './health.service';
 const DAY = 86400000;
 const options = HRV_PERSONAL_RANGE_OPTIONS;
 const variants = HRV_PERSONAL_RANGE_VARIANTS;
+export const MCP_SLEEP_CANONICAL_TIME_FIELDS = [
+  'timezoneOffsetSeconds',
+  'providerFields.suunto.timestamp',
+  'providerFields.suunto.SleepOnsetLatencyDuration',
+] as const;
 const reason = z.enum(['building_baseline', 'insufficient_current', 'within_range', 'outside_range', 'far_outside_range']);
 const range = z.strictObject({ min: z.number().nonnegative(), max: z.number().nonnegative() }).nullable();
 const display = z.strictObject({ value: z.string().max(100), unit: z.string().max(100) }).nullable();
@@ -56,8 +61,7 @@ export const firestoreHrvRangeReads: HrvRangeReads = {
       : root.collection('sleepSessions').where('endTimeMs', '>=', start).where('endTimeMs', '<=', end)
         .orderBy('endTimeMs').orderBy(FieldPath.documentId())
         .select('source.provider', 'source.providerUserId', 'sleepDate', 'startTimeMs', 'endTimeMs', 'isNap',
-          'timezoneOffsetSeconds', 'providerFields.suunto.timestamp',
-          'providerFields.suunto.SleepOnsetLatencyDuration',
+          ...MCP_SLEEP_CANONICAL_TIME_FIELDS,
           'vitals.averageHrvMs', 'vitals.hrvSampleCount', 'vitals.overnightHrvMs', 'sportsLibData.schemaVersion',
           // The shared Sleep decoder requires canonical duration, even for a vital-only projection.
           new FieldPath('sportsLibData', 'metrics', SLEEP_SPORTS_LIB_METRIC_FIELDS.Duration),
