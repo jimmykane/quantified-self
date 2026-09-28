@@ -115,7 +115,9 @@ import {
     processSuuntoHealthQueueItem,
     sanitizeSuuntoHealthErrorForTelemetry,
     SuuntoHealthWriteLifecycleGuards,
+    type SuuntoHealthFeed,
     type SuuntoHealthFailureStage,
+    type SuuntoHealthRequestObservation,
 } from '../suunto/health-sync';
 import {
     SUUNTO_HEALTH_MAX_PROVIDER_ACCOUNT_ID_LENGTH,
@@ -214,6 +216,7 @@ interface AddSleepSyncQueueItemInput {
     rangeStartMs?: number;
     rangeEndMs?: number;
     healthTrigger?: 'poll' | 'webhook' | 'backfill';
+    suuntoHealthWebhookFeedMask?: 1 | 2;
     dispatchAfterMs?: number;
     /** Opaque ingress ID used only if its scheduled bucket has already started. */
     lateArrivalKey?: string;
@@ -298,6 +301,13 @@ export function getMalformedSleepQueueItemReason(queueItem: SleepSyncQueueItemIn
             || !Number.isSafeInteger(queueItem.dispatchAfterMs)
             || queueItem.dispatchAfterMs <= 0)) {
         return 'invalid Suunto Health webhook dispatch time';
+    }
+    if (queueItem.suuntoHealthWebhookFeedMask !== undefined
+        && (queueItem.type !== 'suunto_health_poll'
+            || queueItem.provider !== SLEEP_PROVIDERS.SuuntoApp
+            || queueItem.healthTrigger !== 'webhook'
+            || ![1, 2, 3].includes(queueItem.suuntoHealthWebhookFeedMask))) {
+        return 'invalid Suunto Health webhook feed mask';
     }
     const garminSummaryType = queueItem.garminSummaryType
         || (queueItem.provider === SLEEP_PROVIDERS.GarminAPI ? 'sleeps' : undefined);
@@ -532,6 +542,7 @@ function compactQueuePayload(input: AddSleepSyncQueueItemInput): Partial<SleepSy
         rangeStartMs: input.rangeStartMs,
         rangeEndMs: input.rangeEndMs,
         healthTrigger: input.healthTrigger,
+        suuntoHealthWebhookFeedMask: input.suuntoHealthWebhookFeedMask,
         dispatchAfterMs: input.dispatchAfterMs,
         suuntoHealthTokenCredentialGeneration: input.suuntoHealthTokenCredentialGeneration,
         suuntoHealthRootOAuthCredentialGeneration:
@@ -890,6 +901,11 @@ async function writeSleepQueueItemIfUserActive(
             && current.dispatchedToCloudTask == null
             && !activeLease
             && isSameQueuePayload(current, queuePayload)) {
+            const combinedFeedMask = (current.suuntoHealthWebhookFeedMask || 0)
+                | (queuePayload.suuntoHealthWebhookFeedMask || 0);
+            if (combinedFeedMask !== (current.suuntoHealthWebhookFeedMask || 0)) {
+                transaction.update(docRef, { suuntoHealthWebhookFeedMask: combinedFeedMask });
+            }
             const currentRevision = typeof current.queueRevision === 'string'
                 ? current.queueRevision.trim()
                 : '';
@@ -920,6 +936,46 @@ async function writeSleepQueueItemIfUserActive(
             dateCreated: nowMs,
             shouldDispatchImmediately: !activeLease,
         };
+    });
+}
+
+async function mergeScheduledSuuntoWebhookFeedMask(
+    docRef: admin.firestore.DocumentReference,
+    queuePayload: Partial<SleepSyncQueueItemInterface>,
+    input: AddSleepSyncQueueItemInput,
+    userID: string,
+): Promise<void> {
+    const incomingMask = queuePayload.suuntoHealthWebhookFeedMask || 0;
+    if (!incomingMask) return;
+    const db = admin.firestore();
+    await db.runTransaction(async transaction => {
+        const nowMs = Date.now();
+        const deletionGuard = await getUserDeletionGuardStateInTransaction(db, transaction, userID, nowMs);
+        if (deletionGuard.shouldSkip) {
+            throw new ProviderQueueUserDeletedOrDeletingError(
+                ServiceNames.SuuntoApp, userID, input.providerUserId, docRef.id,
+            );
+        }
+        const requiredDocumentFieldValues = input.requiredDocumentFieldValues || [];
+        const requiredSnapshots = await Promise.all(requiredDocumentFieldValues.map(guard =>
+            transaction.get(guard.documentRef)
+        ));
+        if (requiredSnapshots.some((snapshot, index) => !documentMatchesExpectedFields(
+            snapshot, requiredDocumentFieldValues[index].expectedFields,
+        ))) {
+            throw new ProviderQueueUserNotConnectedError(
+                ServiceNames.SuuntoApp, input.providerUserId, docRef.id,
+            );
+        }
+        const snapshot = await transaction.get(docRef);
+        const current = snapshot.exists ? snapshot.data() as SleepSyncQueueItemInterface : null;
+        if (!current || current.processed || !isSameQueuePayload(current, queuePayload)
+            || current.dispatchAfterMs === undefined || nowMs >= current.dispatchAfterMs
+            || getActiveRevisionProcessingLease(current, nowMs)) return;
+        const combinedMask = (current.suuntoHealthWebhookFeedMask || 0) | incomingMask;
+        if (combinedMask !== (current.suuntoHealthWebhookFeedMask || 0)) {
+            transaction.update(docRef, { suuntoHealthWebhookFeedMask: combinedMask });
+        }
     });
 }
 
@@ -983,6 +1039,14 @@ export async function addSleepSyncQueueItem(input: AddSleepSyncQueueItemInput): 
             || (input.dispatchAfterMs || 0) <= 0
             || !/^[a-f0-9]{64}$/.test(input.lateArrivalKey || ''))) {
         throw new Error('Invalid Suunto Health webhook coalescing fields.');
+    }
+    if (input.suuntoHealthWebhookFeedMask !== undefined
+        && (input.type !== 'suunto_health_poll'
+            || input.provider !== SLEEP_PROVIDERS.SuuntoApp
+            || input.healthTrigger !== 'webhook'
+            || (input.suuntoHealthWebhookFeedMask !== 1
+                && input.suuntoHealthWebhookFeedMask !== 2))) {
+        throw new Error('Invalid Suunto Health webhook feed mask.');
     }
     if ((input.type === 'suunto_webhook'
             && input.suuntoWebhookAuthorityDigest !== undefined
@@ -1062,6 +1126,12 @@ export async function addSleepSyncQueueItem(input: AddSleepSyncQueueItemInput): 
         } else if (existingQueueItem?.processed || existingQueueItem?.dispatchedToCloudTask) {
             if (isSameQueuePayload(existingQueueItem, queuePayload)) {
                 if (input.lateArrivalKey) {
+                    const existingMask = existingQueueItem.suuntoHealthWebhookFeedMask || 0;
+                    const incomingMask = queuePayload.suuntoHealthWebhookFeedMask || 0;
+                    if ((existingMask | incomingMask) !== existingMask) {
+                        await mergeScheduledSuuntoWebhookFeedMask(docRef, queuePayload,
+                            queuePayloadInput, userID);
+                    }
                     logger.info('[HealthSync][Suunto] Coalesced webhook refetch.', {
                         coalescedWindows: 1,
                     });
@@ -2303,6 +2373,19 @@ export async function processSleepSyncQueueItem(queueItem: SleepSyncQueueItemInt
     let processingOwner: string | null = null;
     let processingUserID: string | null = null;
     let suuntoFailureStage: SuuntoHealthFailureStage = 'queue_validation';
+    const suuntoFeedMetrics = {
+        activity: { requests: 0, requestMs: 0, succeeded: 0, unauthorized: 0, failed: 0, written: 0, unchanged: 0, stale: 0, chunksWritten: 0, chunksDeleted: 0 },
+        statistics: { requests: 0, requestMs: 0, succeeded: 0, unauthorized: 0, failed: 0, written: 0, unchanged: 0, stale: 0, chunksWritten: 0, chunksDeleted: 0 },
+        recovery: { requests: 0, requestMs: 0, succeeded: 0, unauthorized: 0, failed: 0, written: 0, unchanged: 0, stale: 0, chunksWritten: 0, chunksDeleted: 0 },
+    };
+    const observeSuuntoRequest = ({ feed, outcome, durationMs }: SuuntoHealthRequestObservation): void => {
+        const metrics = suuntoFeedMetrics[feed];
+        metrics.requests += 1;
+        metrics.requestMs += durationMs;
+        if (outcome === 'success') metrics.succeeded += 1;
+        else if (outcome === 'unauthorized') metrics.unauthorized += 1;
+        else metrics.failed += 1;
+    };
 
     try {
         const providerForDeletionGuard = isValidSleepProvider(queueItem.provider) ? queueItem.provider : null;
@@ -2630,6 +2713,7 @@ export async function processSleepSyncQueueItem(queueItem: SleepSyncQueueItemInt
                             suuntoHealthLifecycleGuards = guards;
                         },
                         stage => { suuntoFailureStage = stage; },
+                        observeSuuntoRequest,
                     );
                     healthResults = suuntoHealthResult.healthResults;
                     suuntoHealthLifecycleGuards = suuntoHealthResult.lifecycleGuards;
@@ -2785,7 +2869,7 @@ export async function processSleepSyncQueueItem(queueItem: SleepSyncQueueItemInt
                 if (writeResults.length !== writeBatch.length && !isShortCircuitLifecycleSkip) {
                     throw new Error('Health source-record batch returned an unexpected result count.');
                 }
-                for (const writeResult of writeResults) {
+                for (const [writeOffset, writeResult] of writeResults.entries()) {
                     if (writeResult.status === 'skipped_deleted_user') {
                         return markQueueItemSkipped(queueItem, undefined, QUEUE_SKIPPED_REASONS.UserDeletedOrDeleting, {
                             skippedContext: 'USER_DELETION_GUARD',
@@ -2809,6 +2893,22 @@ export async function processSleepSyncQueueItem(queueItem: SleepSyncQueueItemInt
                     if (writeResult.status === 'written') healthRecordsWritten += 1;
                     if (writeResult.status === 'unchanged') healthRecordsUnchanged += 1;
                     if (writeResult.status === 'stale') healthRecordsStale += 1;
+                    if (isSuuntoHealthQueueItem(queueItem)) {
+                        const sourceType = writeBatch[writeOffset].input.sourceRecordType;
+                        const feed: SuuntoHealthFeed | null = sourceType === 'suunto_247_activity'
+                            ? 'activity'
+                            : sourceType === 'suunto_247_daily_activity_statistics'
+                                ? 'statistics'
+                                : sourceType === 'suunto_247_recovery'
+                                    ? 'recovery'
+                                    : null;
+                        if (feed && (writeResult.status === 'written'
+                            || writeResult.status === 'unchanged' || writeResult.status === 'stale')) {
+                            suuntoFeedMetrics[feed][writeResult.status] += 1;
+                            suuntoFeedMetrics[feed].chunksWritten += writeResult.chunksWritten;
+                            suuntoFeedMetrics[feed].chunksDeleted += writeResult.chunksDeleted;
+                        }
+                    }
                     healthResultIndex += 1;
                 }
                 if (garminHealthContinuation
@@ -3435,6 +3535,22 @@ export async function processSleepSyncQueueItem(queueItem: SleepSyncQueueItemInt
             telemetryError instanceof Error ? telemetryError : new Error(`${telemetryError}`),
         );
     } finally {
+        if (isSuuntoHealthQueueItem(queueItem)) {
+            try {
+                logger.info('[HealthSync][Suunto] Feed telemetry', {
+                    healthTrigger: queueItem.healthTrigger === 'webhook'
+                        || queueItem.healthTrigger === 'poll'
+                        || queueItem.healthTrigger === 'backfill'
+                        ? queueItem.healthTrigger : 'unknown',
+                    webhookFeedMask: queueItem.healthTrigger === 'webhook'
+                        && [1, 2, 3].includes(queueItem.suuntoHealthWebhookFeedMask || 0)
+                        ? queueItem.suuntoHealthWebhookFeedMask : 0,
+                    feeds: suuntoFeedMetrics,
+                });
+            } catch {
+                // Telemetry must not affect task acknowledgement or retries.
+            }
+        }
         if (processingOwner && processingUserID) {
             try {
                 await releaseSleepQueueRevision(queueItem, processingUserID, processingOwner);

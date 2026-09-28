@@ -1,4 +1,5 @@
 import * as admin from 'firebase-admin';
+import { performance } from 'node:perf_hooks';
 import { ServiceNames } from '@sports-alliance/sports-lib';
 import { SleepSyncQueueItemInterface } from '../queue/queue-item.interface';
 import { config } from '../config';
@@ -102,6 +103,14 @@ const SUUNTO_HEALTH_FAILURE_STAGES = [
   'result_assembly', 'health_write', 'window_checkpoint', 'sync_state_write', 'unknown',
 ] as const;
 export type SuuntoHealthFailureStage = typeof SUUNTO_HEALTH_FAILURE_STAGES[number];
+
+export type SuuntoHealthFeed = 'activity' | 'statistics' | 'recovery';
+export type SuuntoHealthRequestOutcome = 'success' | 'unauthorized' | 'failed';
+export interface SuuntoHealthRequestObservation {
+  feed: SuuntoHealthFeed;
+  outcome: SuuntoHealthRequestOutcome;
+  durationMs: number;
+}
 
 /** Classify the original exception before sanitization, without copying its message, stack or cause. */
 export function getSuuntoHealthFailureTelemetry(
@@ -340,6 +349,7 @@ export async function processSuuntoHealthQueueItem(
   initialGuards: SuuntoHealthWriteLifecycleGuards,
   onLifecycleGuardsCaptured?: (guards: SuuntoHealthWriteLifecycleGuards) => void,
   onStage?: (stage: SuuntoHealthFailureStage) => void,
+  onRequest?: (observation: SuuntoHealthRequestObservation) => void,
 ): Promise<{
   healthResults: SuuntoHealthResult[];
   lifecycleGuards: SuuntoHealthWriteLifecycleGuards;
@@ -385,7 +395,11 @@ export async function processSuuntoHealthQueueItem(
       throw new SuuntoHealthValidationError('Suunto Health pull budget exceeded.');
     }
   };
-  const fetchPayload = async (url: string, stage: SuuntoHealthFailureStage): Promise<unknown> => {
+  const fetchPayload = async (
+    url: string,
+    stage: SuuntoHealthFailureStage,
+    feed: SuuntoHealthFeed,
+  ): Promise<unknown> => {
     onStage?.('lifecycle_check');
     lifecycleGuards = resolvedAccessTokenNeedsValidation
       ? await captureSuuntoHealthLifecycleForAccessToken(
@@ -404,9 +418,28 @@ export async function processSuuntoHealthQueueItem(
     resolvedAccessTokenNeedsValidation = false;
     onLifecycleGuardsCaptured?.(lifecycleGuards);
     claimPullAttempt();
+    const requestWithObservation = async (): Promise<unknown> => {
+      const startedAtMs = performance.now();
+      try {
+        const payload = await requestBoundedSuuntoHealthPayload(url, accessToken);
+        try {
+          onRequest?.({ feed, outcome: 'success', durationMs: Math.max(0, Math.round(performance.now() - startedAtMs)) });
+        } catch { /* Telemetry must not change provider processing. */ }
+        return payload;
+      } catch (error) {
+        try {
+          onRequest?.({
+            feed,
+            outcome: providerStatusCode(error) === 401 ? 'unauthorized' : 'failed',
+            durationMs: Math.max(0, Math.round(performance.now() - startedAtMs)),
+          });
+        } catch { /* Telemetry must not change provider processing. */ }
+        throw error;
+      }
+    };
     try {
       onStage?.(stage);
-      return await requestBoundedSuuntoHealthPayload(url, accessToken);
+      return await requestWithObservation();
     } catch (error) {
       const statusCode = providerStatusCode(error);
       if (statusCode !== 401) {
@@ -450,7 +483,7 @@ export async function processSuuntoHealthQueueItem(
     claimPullAttempt();
     try {
       onStage?.(stage);
-      return await requestBoundedSuuntoHealthPayload(url, accessToken);
+      return await requestWithObservation();
     } catch (error) {
       throw new SuuntoHealthRequestError(
         providerStatusCode(error) ?? undefined,
@@ -490,6 +523,7 @@ export async function processSuuntoHealthQueueItem(
     const activityPayload = await fetchPayload(
       `https://cloudapi.suunto.com/247samples/activity?from=${window.requestStartMs}&to=${window.requestEndMs - 1}`,
       'activity_request',
+      'activity',
     );
     onStage?.('activity_mapping');
     const activitySamples = parseSuuntoActivitySamples(activityPayload);
@@ -512,6 +546,7 @@ export async function processSuuntoHealthQueueItem(
     const statisticsPayload = await fetchPayload(
       `https://cloudapi.suunto.com/247samples/daily-activity-statistics?startdate=${encodeURIComponent(new Date(window.requestStartMs).toISOString())}&enddate=${encodeURIComponent(new Date(window.requestEndMs - 1).toISOString())}`,
       'statistics_request',
+      'statistics',
     );
     onStage?.('statistics_mapping');
     const statisticsResults = mapSuuntoDailyStatisticsHealth(
@@ -533,6 +568,7 @@ export async function processSuuntoHealthQueueItem(
     const recoveryPayload = await fetchPayload(
       `https://cloudapi.suunto.com/247samples/recovery?from=${window.requestStartMs}&to=${window.requestEndMs - 1}`,
       'recovery_request',
+      'recovery',
     );
     onStage?.('recovery_mapping');
     const recoverySamples = parseSuuntoRecoverySamples(recoveryPayload);
