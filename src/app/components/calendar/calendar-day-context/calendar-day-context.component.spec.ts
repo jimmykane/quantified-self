@@ -87,6 +87,9 @@ describe('CalendarDayContextComponent', () => {
     expect(fixture.nativeElement.querySelector('app-health-sleep-stage-summary')?.textContent).toContain('Sleep stages');
     expect(fixture.nativeElement.querySelector('.calendar-day-context-sleep-stages')?.textContent).toContain('Suunto · overnight sleep');
     expect(fixture.nativeElement.querySelector('.calendar-day-context-timeline')).toBeTruthy();
+    expect(fixture.nativeElement.querySelector('.calendar-day-context-health-heading')?.textContent).toContain('Recovery & sleep');
+    expect(fixture.nativeElement.querySelector('#calendar-day-timeline-title')?.textContent).toContain('Your day');
+    expect(fixture.nativeElement.textContent).not.toContain('sources kept separate');
     expect(haptics.selection).not.toHaveBeenCalled();
     expect(fixture.nativeElement.querySelector('[aria-label="Activities on selected day"]')).toBeNull();
     const scrollToAnchor = vi.spyOn(TestBed.inject(ViewportScroller), 'scrollToAnchor');
@@ -106,12 +109,12 @@ describe('CalendarDayContextComponent', () => {
     fixture.componentRef.setInput('data', { ...data('2026-09-11'), timelineNotesStatusSource: notesStatus });
     fixture.detectChanges();
     expect(fixture.nativeElement.textContent).not.toContain('Loading notes…');
-    expect(fixture.nativeElement.textContent).not.toContain('No timeline entries available');
+    expect(fixture.nativeElement.textContent).not.toContain('No activities, plans, or notes for this day.');
     notesStatus.set('error'); fixture.detectChanges();
     expect(fixture.nativeElement.textContent).toContain('Timeline notes could not be loaded.');
-    expect(fixture.nativeElement.textContent).not.toContain('No timeline entries available');
+    expect(fixture.nativeElement.textContent).not.toContain('No activities, plans, or notes for this day.');
     notesStatus.set('ready'); fixture.detectChanges();
-    expect(fixture.nativeElement.textContent).toContain('No timeline entries available');
+    expect(fixture.nativeElement.textContent).toContain('No activities, plans, or notes for this day.');
     fixture.componentRef.setInput('data', { ...data('2026-09-11'), userId: 'different-profile' });
     fixture.detectChanges();
     expect(fixture.nativeElement.querySelector('.calendar-day-context-health')).toBeNull();

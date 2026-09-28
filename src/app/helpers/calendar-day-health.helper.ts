@@ -95,7 +95,7 @@ export function buildCalendarDayHealthSummary(
       }
       : evidence.hrvError ? error('HRV could not be loaded') : empty('No HRV reading for this day');
 
-  let readiness = empty(isToday ? 'No current readiness score' : 'No stored score for this day');
+  let readiness = empty(isToday ? 'No readiness score yet today' : 'No readiness score for this day');
   if (isToday && evidence.derived) {
     const formNow = resolveDashboardFormNowContextFromPoints(evidence.derived.formPoints, options.nowMs)
       || evidence.derived.formNow;
@@ -107,7 +107,7 @@ export function buildCalendarDayHealthSummary(
       nowMs: options.nowMs,
     });
     if (current) readiness = { status: 'ready', value: `${current.label} ${current.score}/100`,
-      detail: evidence.readinessError ? 'Current · some signals could not be refreshed' : 'Current · same signals as Today' };
+      detail: evidence.readinessError ? "Today's score · some signals could not be refreshed" : "Today's score" };
   } else if (!evidence.readinessError && evidence.derived?.trainingReadinessStatus === 'ready') {
     const point = evidence.derived.trainingReadiness?.points.find(item =>
       new Date(item.dayMs).toISOString().slice(0, 10) === dateKey);

@@ -30,15 +30,14 @@
     </div>
   } @else {
   @if (healthState().status !== 'private' && healthState().status !== 'hidden') {
-    <section class="calendar-day-context-health" [class.calendar-day-context-health--full]="standaloneDayPage()" aria-label="Health and recovery for selected day">
+    <section class="calendar-day-context-health" [class.calendar-day-context-health--full]="standaloneDayPage()" aria-label="Recovery and sleep">
       @if (standaloneDayPage()) {
         <div class="calendar-day-context-health-heading">
-          <h3>Health on this day</h3>
-          <span>This day only · sources kept separate</span>
+          <h3>Recovery &amp; sleep</h3>
         </div>
       }
       @if (healthState().status === 'loading' && !healthState().summary) {
-        <p role="status">Loading health for this day…</p>
+        <p role="status">Loading recovery and sleep…</p>
       } @else if (healthState().summary; as health) {
         <div class="calendar-day-context-metrics">
           <div class="calendar-day-context-metric"><span>Readiness</span><strong>{{ health.readiness.value }}</strong><small>{{ health.readiness.detail }}</small></div>
@@ -71,8 +70,7 @@
     <section class="calendar-day-context-section calendar-day-context-timeline" aria-labelledby="calendar-day-timeline-title">
       <div class="calendar-day-context-section-header">
         <div>
-          <h3 id="calendar-day-timeline-title">Day timeline</h3>
-          <span>Notes and workouts without a time appear first.</span>
+          <h3 id="calendar-day-timeline-title">Your day</h3>
         </div>
         @if (canPlan()) {
           <button mat-button appHapticTap type="button" [matMenuTriggerFor]="addDayWorkoutMenu">
@@ -135,12 +133,12 @@
           }
         </ol>
       } @else if (activityState().status === 'ready' && notesStatus() === 'ready' && (!canPlan() || plannedStatus() === 'ready') && healthState().status === 'ready') {
-        <p>No timeline entries available for this day.</p>
+        <p>No activities, plans, or notes for this day.</p>
       }
     </section>
     @if (activityState().status === 'ready' && activityGroups().length) {
-      <section class="calendar-day-context-section" aria-label="Activity mix on selected day">
-        <h3>Activity mix</h3>
+      <section class="calendar-day-context-section" aria-label="Activities by sport">
+        <h3>Activities by sport</h3>
         <app-activity-calendar-volume-list [rows]="activityGroups()"></app-activity-calendar-volume-list>
       </section>
     }

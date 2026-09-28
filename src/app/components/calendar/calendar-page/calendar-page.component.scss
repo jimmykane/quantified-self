@@ -140,6 +140,11 @@
   margin: 0;
 }
 
+.calendar-page--day {
+  .calendar-period-summary,
+  .calendar-progress-slot { margin-bottom: 0; }
+}
+
 .calendar-status-announcement {
   position: absolute;
   width: 1px;

@@ -73,7 +73,7 @@ describe('calendar day health summary', () => {
       ...noEvidence(), derived, readinessError: true, recoveryError: true,
     }, { nowMs });
     expect(summary.readiness.status).toBe('ready');
-    expect(summary.readiness.detail).toContain('could not be refreshed');
+    expect(summary.readiness.detail).toContain("Today's score · some signals could not be refreshed");
     expect(summary.recovery?.status).toBe('ready');
     expect(summary.recovery?.detail).toContain('could not refresh estimate');
   });
