@@ -12,7 +12,7 @@
     @for (month of visibleMonths; track month.id) {
     <section class="activity-calendar-month"
       [class.activity-calendar-month--surface]="!compact"
-      [class.qs-glass-card-panel]="!compact"
+      [class.qs-glass-card-panel]="!compact && !(calmMonth && model.view === 'month')"
       [attr.aria-label]="month.label">
       @if (model.view === 'year') {
       <h2>{{ month.label }}</h2>

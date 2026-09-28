@@ -20,6 +20,7 @@ describe('ActivityCalendarGridComponent', () => {
     fixture.detectChanges();
     const day = fixture.nativeElement.querySelector('[aria-label*="1 Timeline note"]') as HTMLElement;
     expect(fixture.nativeElement.querySelector('.activity-calendar--calm-month')).toBeTruthy();
+    expect(fixture.nativeElement.querySelector('.activity-calendar-month--surface').classList).not.toContain('qs-glass-card-panel');
     expect(day.querySelector('.activity-calendar-calm-note')).toBeTruthy();
     expect(day.querySelector('.activity-calendar-note-indicator')).toBeNull();
     expect(day.querySelector('.activity-calendar-marker')).toBeTruthy();
@@ -27,6 +28,7 @@ describe('ActivityCalendarGridComponent', () => {
     fixture.componentRef.setInput('calmMonth', false);
     fixture.detectChanges();
     expect(fixture.nativeElement.querySelector('.activity-calendar-calm-legend')).toBeNull();
+    expect(fixture.nativeElement.querySelector('.activity-calendar-month--surface').classList).toContain('qs-glass-card-panel');
   });
   it('does not advertise an adjacent-month note in the calm legend', async () => {
     const fixture = await renderGrid('month', false, []);

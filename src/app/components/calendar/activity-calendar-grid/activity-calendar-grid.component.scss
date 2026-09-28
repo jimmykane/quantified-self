@@ -537,7 +537,7 @@
 // retaining their activity circles, note cue, and existing month navigation.
 // Keep the shared picker, Week, and Year marker semantics unchanged.
 .activity-calendar--calm-month {
-  .activity-calendar-month--surface { padding: 0; border: 0; border-radius: 0; background: transparent; box-shadow: none; }
+  .activity-calendar-month--surface { padding: 0; overflow: visible; border: 0; border-radius: 0; background: transparent; box-shadow: none; }
   .activity-calendar-weekdays { min-height: 34px; }
   .activity-calendar-day,
   &.activity-calendar--compact .activity-calendar-day {
