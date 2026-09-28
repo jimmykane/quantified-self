@@ -564,7 +564,7 @@ async function prepareResidualWorkoutCleanupJobs(
     mutationId: string,
     createdAtMs: number,
     nowMs: number,
-): Promise<void> {
+): Promise<boolean> {
     const stateRef = db.collection('users').doc(uid).collection('trainingPlanState').doc('current');
     const tombstonesRef = stateRef.collection(TRAINING_SCHEDULE_DELETION_TOMBSTONES_COLLECTION_ID);
     const planJobRef = trainingCleanupJobRef(db, uid, 'plan', planId);
@@ -585,6 +585,10 @@ async function prepareResidualWorkoutCleanupJobs(
             if (deletionGuard.shouldSkip) return false;
             const planJob = await transaction.get(planJobRef);
             if (!planJob.exists) return false;
+            const owner = documentData(planJob);
+            if (owner.kind !== 'plan' || owner.entityId !== planId || owner.mutationId !== mutationId) {
+                throw new TrainingScheduleMutationError('failed-precondition', 'A different plan deletion owns this cleanup job.');
+            }
             const [existing, jobs] = await Promise.all([
                 Promise.all(values.map(value => transaction.get(value.ref))),
                 Promise.all(values.map(value => transaction.get(value.jobRef))),
@@ -612,8 +616,9 @@ async function prepareResidualWorkoutCleanupJobs(
             });
             return true;
         });
-        if (!shouldContinue) return;
+        if (!shouldContinue) return false;
     }
+    return true;
 }
 
 async function persistPlanDeletionResumeReceipt(
@@ -772,27 +777,37 @@ export async function cleanupDeletedPlanData(
     response: DeleteTrainingPlanResponseV1,
     nowMs: number,
 ): Promise<void> {
-    const shouldSkip = await db.runTransaction(async transaction => (
-        await getUserDeletionGuardStateInTransaction(db, transaction, uid, nowMs)
-    )).then(guard => guard.shouldSkip);
-    if (shouldSkip) return;
+    const ownsCleanup = await db.runTransaction(async transaction => {
+        if ((await getUserDeletionGuardStateInTransaction(db, transaction, uid, nowMs)).shouldSkip) return false;
+        const job = await transaction.get(trainingCleanupJobRef(db, uid, 'plan', response.removedPlanId));
+        if (!job.exists) return false; // An exact retry after successful cleanup has no job left.
+        const owner = documentData(job);
+        if (owner.kind !== 'plan' || owner.entityId !== response.removedPlanId
+            || owner.mutationId !== response.mutationId) {
+            throw new TrainingScheduleMutationError('failed-precondition', 'A different plan deletion owns this cleanup job.');
+        }
+        return true;
+    });
+    if (!ownsCleanup) return;
     const userRef = db.collection('users').doc(uid);
     const workoutsRef = userRef.collection(SCHEDULED_WORKOUTS_COLLECTION_ID);
     await db.recursiveDelete(userRef.collection(TRAINING_PLANS_COLLECTION_ID).doc(response.removedPlanId));
-    const cleanupWorkoutPage = async (workoutIds: string[]): Promise<void> => {
-        if (workoutIds.length === 0) return;
-        await prepareResidualWorkoutCleanupJobs(
+    const cleanupWorkoutPage = async (workoutIds: string[]): Promise<boolean> => {
+        if (workoutIds.length === 0) return true;
+        const staged = await prepareResidualWorkoutCleanupJobs(
             db, uid, response.removedPlanId, workoutIds, response.mutationId,
             response.state.updatedAtMs, nowMs,
         );
+        if (!staged) return false;
         // Stage durable child jobs before removing roots. Once a root disappears,
         // a later planId query cannot rediscover its revision subcollections.
         await recursivelyDeleteInChunks(db, workoutIds.map(id => (
             userRef.collection(TRAINING_WORKOUT_COMPLETIONS_COLLECTION_ID).doc(id)
         )));
         await recursivelyDeleteInChunks(db, workoutIds.map(id => workoutsRef.doc(id)));
+        return true;
     };
-    await cleanupWorkoutPage(response.permanentlyDeletedWorkoutIds);
+    if (!await cleanupWorkoutPage(response.permanentlyDeletedWorkoutIds)) return;
     // Deleted history is not subject to the 400-current-workout ceiling. Consume
     // and remove the first bounded page repeatedly instead of retaining an
     // unbounded planId query result or relying on a moving deletion cursor.
@@ -800,7 +815,7 @@ export async function cleanupDeletedPlanData(
         const residual = await workoutsRef.where('planId', '==', response.removedPlanId)
             .limit(RESIDUAL_WORKOUT_CLEANUP_PAGE_SIZE).get();
         if (residual.empty) break;
-        await cleanupWorkoutPage(residual.docs.map(snapshot => snapshot.id));
+        if (!await cleanupWorkoutPage(residual.docs.map(snapshot => snapshot.id))) return;
     }
 
     const stateRef = userRef.collection('trainingPlanState').doc('current');

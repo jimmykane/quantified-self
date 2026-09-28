@@ -578,7 +578,9 @@ packed Sports Lib package. That gate is tracked by GitHub issue #654 under epic 
   scans due jobs every five minutes, leases each job, checks the account-deletion guard and matching deletion
   tombstone, then retries with bounded backoff. Plan cleanup creates independent workout cleanup jobs before deleting
   residual workout roots in pages of 100, so unbounded recoverably deleted history cannot exhaust the cleanup worker
-  and a partial recursive delete cannot orphan a history subtree after its root disappears.
+  and a partial recursive delete cannot orphan a history subtree after its root disappears. Before any subtree removal,
+  cleanup checks the matching plan job; if that job disappears while a residual page is being staged, it stops without
+  deleting that page's workout roots. Exact retries after completed cleanup remain no-ops.
   A malformed due job is deferred for an hour so it cannot repeatedly occupy the front of the bounded scan; its
   tombstone and payload still require operator inspection rather than a guessed deletion target.
   Jobs are leaves denied to browser reads/writes; the worker can safely repeat cleanup after a lost response. Deploy
@@ -596,6 +598,8 @@ packed Sports Lib package. That gate is tracked by GitHub issue #654 under epic 
 - MCP impact for large-write preflight: no tool, schema, scope, consent, projection, or provider action changes. The
   existing batch apply may fall back to sequential transactions when its estimated payload is too large; a single
   oversized shift returns the existing limit-error category without applying a partial schedule.
+- MCP impact for plan-cleanup ownership recheck: no tool or wire change; existing approved plan deletion still uses its
+  saved idempotent receipt, while a cleanup worker cannot remove residual workouts after its owning plan job is gone.
 
 ### UI and calendar contract
 
