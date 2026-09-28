@@ -97,7 +97,7 @@ describe('training derived metric normalizers', () => {
     }));
     const payload = {
       formulaVersion: 4,
-      evidenceVersion: 1,
+      evidenceVersion: 2,
       dayBoundary: 'UTC',
       asOfDayMs,
       generatedAtMs: asOfDayMs + (12 * 60 * 60 * 1000),

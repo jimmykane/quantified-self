@@ -749,8 +749,12 @@ describe('help.content', () => {
     expect(trainingSection?.content).toContain('Garmin Health sleep summaries currently provide neither');
     expect(trainingSection?.content).toContain('rolling **60-day personal range**');
     expect(trainingSection?.content).toContain('Changing a chart to one year does not change these windows');
-    expect(trainingSection?.content).toContain('Failed load or sleep reads are identified separately');
-    expect(trainingSection?.content).toContain('Sleep already loaded before a listener failure remains visible only while eligible');
+    expect(trainingSection?.content).toContain(
+      'Failed or stale load, recovery, or sleep sources contribute no current value',
+    );
+    expect(trainingSection?.content).toContain('sleep refresh failure clears previously loaded readiness sleep evidence immediately');
+    expect(trainingSection?.content).toContain('multiple sleep fragments');
+    expect(trainingSection?.content).toContain('**No current HRV**');
     expect(trainingSection?.content).toContain('context, not a workout instruction');
     expect(trainingSection?.content).toContain('**14-day trend**');
     expect(trainingSection?.content).toContain('without scanning activity history');

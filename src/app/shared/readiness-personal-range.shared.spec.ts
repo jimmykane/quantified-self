@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { buildReadinessSignals, buildReadinessHrvPersonalRange, readinessHrvObservations,
+  READINESS_EVIDENCE_VERSION,
   resolveReadinessHrvRecentTrend, resolveReadinessHrvScore,
   type ReadinessSleepEvidencePoint } from '@shared/readiness';
 import { calculatePersonalMetricRange, HRV_PERSONAL_RANGE_OPTIONS } from '@shared/personal-metric-range';
@@ -79,17 +80,16 @@ describe('readiness shared HRV personal range', () => {
     }
   });
 
-  it('preserves the chart daily median when a night contains several sleep fragments', () => {
+  it('withholds current HRV when the latest night contains several sleep fragments', () => {
     const points = history();
     const last = points.at(-1)!;
     const fragments = [20, 30, 100].map((value, index) => ({ ...last, averageHrvMs: value,
       endTimeMs: last.endTimeMs! - (2 - index) * 3600000 }));
-    const grouped = { ...last, averageHrvMs: 50, hrvObservations: fragments.flatMap(readinessHrvObservations) };
-    const result = buildReadinessHrvPersonalRange([...points.slice(0, -1), grouped], now)!;
-    const chart = calculatePersonalMetricRange([...points.slice(0, -1), ...fragments].flatMap(readinessHrvObservations),
-      now, HRV_PERSONAL_RANGE_OPTIONS);
-    expect(result).toEqual({ ...chart, latestMs: 100, latestAtMs: last.endTimeMs });
-    expect(result.currentAverage).toBeCloseTo((31 * 6 + 30) / 7);
+    const grouped = { ...last, averageHrvMs: 50, sleepFragmentCount: fragments.length,
+      sleepFragmentEndTimesMs: fragments.map(fragment => fragment.endTimeMs!),
+      hrvObservations: fragments.flatMap(readinessHrvObservations) };
+    expect(buildReadinessHrvPersonalRange([...points.slice(0, -1), grouped], now)).toBeNull();
+    expect(buildReadinessSignals({ sleepPoints: [...points.slice(0, -1), grouped], nowMs: now })?.hrvRatio).toBeNull();
   });
 
   it('keeps completed HRV fragments when another fragment of the same night ends after the cutoff', () => {
@@ -102,12 +102,12 @@ describe('readiness shared HRV personal range', () => {
       .toEqual(buildReadinessHrvPersonalRange(points, now));
   });
 
-  it('keeps the weekly HRV signal when the latest sleep has no HRV, and leaves other drivers unchanged', () => {
+  it('withholds the weekly HRV signal when the latest sleep has no HRV, and leaves other drivers unchanged', () => {
     const points = history();
     points.at(-1)!.averageHrvMs = null;
     const result = buildReadinessSignals({ sleepPoints: points, nowMs: now });
-    expect(result?.availableSignalCount).toBe(3);
-    expect(result?.hrvPersonalRange?.currentObservationDayCount).toBe(6);
+    expect(result?.availableSignalCount).toBe(2);
+    expect(result?.hrvPersonalRange).toBeNull();
     expect(result?.averageHeartRateRatio).toBe(1);
     expect(result?.minimumHeartRateRatio).toBe(1);
   });
@@ -145,14 +145,14 @@ describe('readiness shared HRV personal range', () => {
     expect(view.rangeText).toMatch(/^60-day range [\d.]+–[\d.]+ ms$/);
     expect(view.latestText).toBe('Latest HRV 32 ms · Today');
     expect(JSON.stringify(view)).not.toContain('%');
-    expect(buildReadinessHrvDisplay(null)).toMatchObject({ valueText: '—', statusText: 'No recent HRV', latestText: '' });
+    expect(buildReadinessHrvDisplay(null)).toMatchObject({ valueText: '—', statusText: 'No current HRV', latestText: '' });
     expect(buildReadinessHrvDisplay(buildReadinessHrvPersonalRange(nights(Array(5).fill(40)), now)))
       .toMatchObject({ valueText: '—', statusText: 'Building range · 5/14 nights' });
     expect(buildReadinessHrvDisplay(buildReadinessHrvPersonalRange(history(), now), null, 'falling').statusText)
       .toBe('Below range · falling');
   });
 
-  it('labels retained HRV as a previous reading when the latest sleep has no HRV', () => {
+  it('does not present an earlier HRV value when the latest sleep has no HRV', () => {
     const points = history();
     const latestSleepAtMs = points.at(-1)!.endTimeMs!;
     points.at(-1)!.averageHrvMs = null;
@@ -161,7 +161,7 @@ describe('readiness shared HRV personal range', () => {
       nowMs: now,
     });
 
-    expect(view.latestText).toBe('Latest night has no HRV · Previous reading 31 ms · Yesterday');
+    expect(view).toMatchObject({ valueText: '—', statusText: 'No current HRV', latestText: '' });
   });
 
   it('validates current history and rejects stale formulas, inconsistent scores, missing ranges and future evidence', () => {
@@ -171,7 +171,7 @@ describe('readiness shared HRV personal range', () => {
       const cutoff = index === 13 ? now : dayMs + day - 1;
       return { dayMs, ...buildReadinessSignals({ form: 10, sleepPoints: history(), nowMs: cutoff })! };
     });
-    const payload = { formulaVersion: 4, evidenceVersion: 1, dayBoundary: 'UTC', asOfDayMs,
+    const payload = { formulaVersion: 4, evidenceVersion: READINESS_EVIDENCE_VERSION, dayBoundary: 'UTC', asOfDayMs,
       generatedAtMs: now, historyDays: 14, points };
     expect(normalizeDerivedTrainingReadinessMetricPayload(payload)).toEqual(payload);
     expect(normalizeDerivedTrainingReadinessMetricPayload({ ...payload, formulaVersion: 3 })).toBeNull();

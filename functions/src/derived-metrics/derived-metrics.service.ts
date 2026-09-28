@@ -3735,6 +3735,8 @@ function resolveTrainingReadinessSleepEvidence(
             provider,
             sourceKey: sleepEvidenceSourceKey(data as unknown as SleepSession),
             hrvSourceKey: sleepHrvSourceKey(data as unknown as SleepSession),
+            sleepFragmentCount: 1,
+            sleepFragmentEndTimesMs: [endTimeMs],
             startTimeMs,
             endTimeMs,
             totalSeconds: durationSeconds,
@@ -3769,6 +3771,8 @@ function resolveTrainingReadinessSleepEvidence(
             endTimeMs: Math.max(...points.map(point => point.endTimeMs as number)),
             totalSeconds: points.reduce((total, point) => total + Math.max(0, point.totalSeconds || 0), 0),
             ...aggregateNightlyHrvEvidence(points),
+            sleepFragmentCount: points.reduce((total, point) => total + (point.sleepFragmentCount ?? 1), 0),
+            sleepFragmentEndTimesMs: points.flatMap(point => point.sleepFragmentEndTimesMs ?? [point.endTimeMs as number]),
             hrvObservations: points.flatMap(readinessHrvObservations),
             averageHeartRateBpm: averageHeartRateValues.length
                 ? averageHeartRateValues.reduce((total, value) => total + value, 0) / averageHeartRateValues.length

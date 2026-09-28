@@ -870,7 +870,7 @@ describe('TrainingWorkspaceComponent', () => {
     fixture.destroy();
   });
 
-  it('retains eligible sleep evidence when the live listener fails after loading', async () => {
+  it('drops eligible sleep evidence when the live listener fails after loading', async () => {
     const nowMs = Date.now();
     const sleepSession = {
       id: 'retained-sleep',
@@ -922,8 +922,10 @@ describe('TrainingWorkspaceComponent', () => {
     fixture.detectChanges();
     const panel = fixture.nativeElement.querySelector('.training-readiness-panel') as HTMLElement;
 
-    expect(panel.textContent).toContain('88/100');
-    expect(panel.textContent).toContain('showing the last loaded evidence');
+    expect(panel.textContent).toContain('90/100');
+    expect(panel.textContent).not.toContain('88/100');
+    expect(panel.textContent).toContain('showing available load signals only');
+    expect(panel.textContent).toContain('SleepUnavailable');
     fixture.destroy();
   });
 

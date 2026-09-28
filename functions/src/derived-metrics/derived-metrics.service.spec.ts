@@ -976,6 +976,7 @@ describe('buildTrainingReadinessMetricPayload', () => {
 
         expect(result.payload).toMatchObject({
             formulaVersion: 4,
+            evidenceVersion: 2,
             dayBoundary: 'UTC',
             asOfDayMs: Date.UTC(2026, 6, 16),
             generatedAtMs: nowMs,
@@ -998,7 +999,43 @@ describe('buildTrainingReadinessMetricPayload', () => {
         expect(today?.overnightHeartRateRatio).toBeCloseTo(0.918);
     });
 
-    it('does not copy a current weekly-HRV-only score into legacy history when the latest sleep has expired', async () => {
+    it('does not promote the last value from a fragmented current night to current HRV', async () => {
+        const { buildTrainingReadinessMetricPayload } = await import('./derived-metrics.service');
+        const nowMs = Date.UTC(2026, 8, 28, 12);
+        const dayMs = 24 * 60 * 60 * 1000;
+        const buildDoc = (id: string, sleepDate: string, startTimeMs: number, endTimeMs: number, hrv: number) => ({
+            id,
+            data: () => ({
+                source: { provider: 'SuuntoApp', sourceSessionKey: id },
+                sleepDate,
+                startTimeMs,
+                endTimeMs,
+                durationSeconds: Math.round((endTimeMs - startTimeMs) / 1000),
+                timezoneOffsetSeconds: 3 * 60 * 60,
+                isNap: false,
+                score: { value: 80 },
+                vitals: { averageHrvMs: hrv },
+            }),
+        });
+        const baseline = Array.from({ length: 15 }, (_, index) => {
+            const endTimeMs = nowMs - (15 - index) * dayMs - (4 * 60 * 60 * 1000);
+            return buildDoc(`baseline-${index}`, new Date(endTimeMs).toISOString().slice(0, 10),
+                endTimeMs - (8 * 60 * 60 * 1000), endTimeMs, 34);
+        });
+        const sleepDate = '2026-09-28';
+        const fragments = [
+            buildDoc('part-1', sleepDate, Date.UTC(2026, 8, 27, 18, 57), Date.UTC(2026, 8, 27, 23, 54), 29),
+            buildDoc('part-2', sleepDate, Date.UTC(2026, 8, 28, 0, 1), Date.UTC(2026, 8, 28, 4), 40),
+        ];
+
+        const today = buildTrainingReadinessMetricPayload([], 0, [...baseline, ...fragments] as any, nowMs)
+            .payload.points.at(-1);
+
+        expect(today).toMatchObject({ sleepScore: 80, availableSignalCount: 1,
+            hrvPersonalRange: null, hrvRatio: null });
+    });
+
+    it('withholds current HRV when the latest sleep has expired', async () => {
         const { buildTrainingReadinessMetricPayload } = await import('./derived-metrics.service');
         const nowMs = Date.UTC(2026, 8, 13, 12);
         const docs = Array.from({ length: 60 }, (_, index) => {
@@ -1009,8 +1046,8 @@ describe('buildTrainingReadinessMetricPayload', () => {
                 vitals: { averageHrvMs: 40 } }) };
         });
         const { payload } = buildTrainingReadinessMetricPayload([], 0, docs as any, nowMs);
-        expect(payload.points[payload.points.length - 1]).toMatchObject({ score: 50, availableSignalCount: 1,
-            latestSleepAtMs: null, hrvPersonalRange: { currentObservationDayCount: 4 } });
+        expect(payload.points[payload.points.length - 1]).toMatchObject({ score: null, availableSignalCount: 0,
+            latestSleepAtMs: null, hrvPersonalRange: null, hrvRatio: null });
         expect(payload.legacyPoints![payload.legacyPoints!.length - 1]).toMatchObject({ score: null,
             label: null, confidence: null, availableSignalCount: 0, hrvRatio: null });
     });

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { enrichSleepWithNightlyHrv, nightlyHealthAccountKey, type NightlyHrvRecord, aggregateNightlyHrvEvidence } from '../../../shared/nightly-hrv';
 import { encodeSleepSessionSportsLibData } from '../../../shared/sports-lib-health-data';
 import { type SleepSession, type SleepProvider, SLEEP_PROVIDERS } from '../../../shared/sleep';
+import { READINESS_EVIDENCE_VERSION } from '../../../shared/readiness';
 import { mapGarminHealthSummaries } from '../garmin/health';
 import { buildHealthSourceRecordWrite } from '../health/writer';
 import { mapGarminSleepSummary } from './provider-mappers';
@@ -41,7 +42,7 @@ describe('shared nightly HRV', () => {
     const documents = await supplementNightlyHrvSleepDocuments(uid, inputs.map(session => ({id: session.id!,
       data: encodeSleepSessionSportsLibData(session) as unknown as Record<string, unknown>})), async () => ({records}));
     const result = buildTrainingReadinessMetricPayload([], 0, documents.map(doc => ({id: doc.id, data: () => doc.data})), end + 3600000);
-    expect(result.payload.evidenceVersion).toBe(1);
+    expect(result.payload.evidenceVersion).toBe(READINESS_EVIDENCE_VERSION);
     const today = result.payload.points[result.payload.points.length - 1];
     expect(today.hrvPersonalRange).toMatchObject({ observationDayCount: 16, currentObservationDayCount: 7,
       latestMs: 55, baselineAverage: 50 + 5 / 16 });

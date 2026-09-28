@@ -1539,6 +1539,9 @@ describe('SummariesComponent', () => {
     (component as any).derivedFormNowContext = { value: 12, latestDayMs: nowMs };
     (component as any).derivedRampRateContext = { rampRate: 1, latestDayMs: nowMs };
     (component as any).derivedRecoveryNowContext = { totalSeconds: 7_200, endTimeMs: nowMs };
+    (component as any).derivedFormNowStatus = 'ready';
+    (component as any).derivedRampRateStatus = 'ready';
+    (component as any).derivedRecoveryNowStatus = 'ready';
     (component as any).readinessSleepSessions = [
       ...Array.from({ length: 15 }, (_, index) => ({
         id: `baseline-${index}`,
@@ -1758,7 +1761,7 @@ describe('SummariesComponent', () => {
       sleep$.error(new Error('refresh failed'));
       vi.advanceTimersToNextFrame();
       render();
-      expect(readiness.querySelector('.dashboard-readiness-method[role="status"]')?.textContent).toContain('Sleep could not be refreshed');
+      expect(readiness.querySelector('.dashboard-readiness-method[role="status"]')?.textContent).toContain('Sleep could not be loaded');
       expect(host.querySelector('.dashboard-readiness-recovery-indicator')).not.toBeNull();
       expect(reservations()).toEqual(pendingLayout);
 
@@ -1790,18 +1793,15 @@ describe('SummariesComponent', () => {
       expect(fixture.nativeElement.textContent).not.toContain('No eligible night');
     });
 
-    it('keeps eligible sleep after a refresh failure, then expires it normally', async () => {
+    it('drops previously loaded sleep immediately after a refresh failure', () => {
       load$.next(loadState);
       vi.advanceTimersToNextFrame();
       sleep$.next(nights);
       vi.advanceTimersToNextFrame();
       sleep$.error(new Error('refresh failed'));
       vi.advanceTimersToNextFrame();
-      expect(component.dashboardTodayReadiness).toMatchObject({ loading: false, score: 67, availableSignalCount: 3 });
-      expect(render().querySelector('.dashboard-current-state-primary [role="status"]')?.textContent).toContain('Sleep could not be refreshed');
-      await vi.advanceTimersByTimeAsync(DASHBOARD_READINESS_SLEEP_MAX_AGE_MS + 1);
-      vi.advanceTimersToNextFrame();
       expect(component.dashboardTodayReadiness).toMatchObject({ loading: false, score: 75, availableSignalCount: 1, sleepContextText: 'Sleep unavailable' });
+      expect(render().querySelector('.dashboard-current-state-primary [role="status"]')?.textContent).toContain('Sleep could not be loaded');
     });
 
     it('clears prior evidence when Today is reopened and ignores the old listener', () => {
@@ -1859,6 +1859,7 @@ describe('SummariesComponent', () => {
       formSameDay: -12,
       formPriorDay: -10,
     }];
+    (component as any).derivedFormStatus = 'ready';
     (component as any).derivedRampRateContext = {
       latestDayMs: nowMs,
       ctlToday: 102,
@@ -1896,12 +1897,18 @@ describe('SummariesComponent', () => {
       formSameDay: -8,
       formPriorDay: -4,
     }];
+    (component as any).derivedFormStatus = 'ready';
     (component as any).derivedFormNowContext = { value: -99, latestDayMs: Date.UTC(2026, 6, 11) };
     (component as any).derivedRampRateContext = { rampRate: 99, latestDayMs: Date.UTC(2026, 6, 11) };
 
     const readiness = (component as any).buildDashboardTodayReadiness();
 
     expect(readiness.loadText).toBe('+18.5 / -6.5');
+
+    (component as any).derivedFormStatus = 'stale';
+    (component as any).derivedFormNowStatus = 'stale';
+    (component as any).derivedRampRateStatus = 'stale';
+    expect((component as any).buildDashboardTodayReadiness().loadText).toBe('-- / --');
   });
 
   it('should delegate tile building with dashboard tiles, events, preferences, and logger on input changes', async () => {

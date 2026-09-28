@@ -15,6 +15,8 @@ import { getDateTimeFormatter } from './date-time-format.helper';
 export interface DashboardSleepTrendPoint {
   sourceKey?: string;
   hrvSourceKey?: string;
+  sleepFragmentCount?: number;
+  sleepFragmentEndTimesMs?: readonly number[];
   hrvObservations?: ReadinessSleepEvidencePoint['hrvObservations'];
   id: string;
   sleepDate: string;
@@ -331,6 +333,8 @@ function buildPoint(session: SleepSession): DashboardSleepTrendPoint | null {
     sleepDate: resolvedSleepDate,
     sourceKey: sleepEvidenceSourceKey(session),
     hrvSourceKey: sleepHrvSourceKey(session),
+    sleepFragmentCount: 1,
+    sleepFragmentEndTimesMs: [endTimeMs],
     hrvObservations: readinessHrvObservations({ sleepDate: session.sleepDate || resolvedSleepDate,
       startTimeMs, endTimeMs, hrvSourceKey: sleepHrvSourceKey(session),
       averageHrvMs: toPositiveMetric(session.vitals?.averageHrvMs ?? session.vitals?.overnightHrvMs) }),
@@ -439,6 +443,8 @@ function aggregatePointGroup(points: readonly DashboardSleepTrendPoint[]): Dashb
     averageHeartRateBpm: aggregateFiniteMetrics(primaryPoints.map(point => point.averageHeartRateBpm)),
     minimumHeartRateBpm: minFiniteMetric(primaryPoints.map(point => point.minimumHeartRateBpm)),
     ...aggregateNightlyHrvEvidence(primaryPoints),
+    sleepFragmentCount: primaryPoints.reduce((total, point) => total + (point.sleepFragmentCount ?? 1), 0),
+    sleepFragmentEndTimesMs: primaryPoints.flatMap(point => point.sleepFragmentEndTimesMs ?? [point.endTimeMs]),
     hrvObservations: primaryPoints.flatMap(readinessHrvObservations),
     maxSpo2Percent: maxFiniteMetric(primaryPoints.map(point => point.maxSpo2Percent)),
     isNap: sleepPoints.length === 0 && napPoints.length > 0,

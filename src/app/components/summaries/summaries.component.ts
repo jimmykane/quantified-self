@@ -273,7 +273,7 @@ function createEmptyDashboardTodayReadinessViewModel(loading = false): Dashboard
     sleepScore: null,
     sleepContextText: loading ? 'Loading sleep…' : 'No eligible night',
     hrvText: '--',
-    hrvStatusText: 'No recent HRV',
+    hrvStatusText: 'No current HRV',
     hrvRangeText: '60-day personal range',
     hrvLatestText: '',
     hrvTone: 'neutral',
@@ -1169,8 +1169,9 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
         this.tileRebuild.request();
       },
       error: () => {
-        // Keep previously loaded nights subject to the normal age/baseline rules.
-        // A failed first read must also settle loading, even with no sessions.
+        // A failed current read invalidates the in-memory Today evidence. Never
+        // carry a previously loaded night forward as if it were still current.
+        this.readinessSleepSessions = [];
         this.readinessSleepStatus = 'error';
         this.updateReadinessSleepRefreshTimer();
         this.tileRebuild.request();
@@ -1985,15 +1986,19 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
       return createEmptyDashboardTodayReadinessViewModel(true);
     }
     const warningText = this.readinessSleepStatus === 'error'
-      ? (this.readinessSleepSessions.length
-        ? 'Sleep could not be refreshed. Showing available data.'
-        : 'Sleep could not be loaded. Showing available signals.')
+      ? 'Sleep could not be loaded. Showing available current signals.'
       : '';
     const nowMs = Date.now();
-    const formNow = resolveDashboardFormNowContextFromPoints(this.derivedFormPoints, nowMs)
-      || this.derivedFormNowContext;
-    const rampRate = resolveDashboardRampRateContextFromPoints(this.derivedFormPoints, nowMs)
-      || this.derivedRampRateContext;
+    const formNowFromSeries = this.derivedFormStatus === 'ready'
+      ? resolveDashboardFormNowContextFromPoints(this.derivedFormPoints, nowMs)
+      : null;
+    const rampRateFromSeries = this.derivedFormStatus === 'ready'
+      ? resolveDashboardRampRateContextFromPoints(this.derivedFormPoints, nowMs)
+      : null;
+    const formNow = formNowFromSeries
+      || (this.derivedFormNowStatus === 'ready' ? this.derivedFormNowContext : null);
+    const rampRate = rampRateFromSeries
+      || (this.derivedRampRateStatus === 'ready' ? this.derivedRampRateContext : null);
     const sleepTrend = buildDashboardSleepTrendContext(this.readinessSleepSessions);
     const context = buildDashboardReadinessSignalsContext({
       formNow,
@@ -2001,7 +2006,8 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
       sleepTrend,
       nowMs,
     });
-    const recovery = buildDashboardRecoveryPresentation(this.derivedRecoveryNowContext, {
+    const recovery = buildDashboardRecoveryPresentation(
+      this.derivedRecoveryNowStatus === 'ready' ? this.derivedRecoveryNowContext : null, {
       locale: this.locale,
       nowMs,
       unitSettings: this.user?.settings?.unitSettings,
@@ -2011,7 +2017,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
     const recoveryFinishTimeMs = recovery?.finishTimeMs ?? null;
     const recoveryFinishText = recovery?.finishText ?? '';
     const loadBars = buildDashboardTodayLoadBars(
-      this.derivedFormPoints,
+      this.derivedFormStatus === 'ready' ? this.derivedFormPoints : null,
       this.dashboardTodayTrainingState.label,
       nowMs,
     );
@@ -2075,9 +2081,9 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
 
   private buildDashboardTodayTrainingState(): DashboardTodayTrainingStateViewModel {
     const state = buildCurrentTrainingStateContext({
-      formPoints: this.derivedFormPoints,
-      fallbackFormNow: this.derivedFormNowContext,
-      fallbackRampRate: this.derivedRampRateContext,
+      formPoints: this.derivedFormStatus === 'ready' ? this.derivedFormPoints : null,
+      fallbackFormNow: this.derivedFormNowStatus === 'ready' ? this.derivedFormNowContext : null,
+      fallbackRampRate: this.derivedRampRateStatus === 'ready' ? this.derivedRampRateContext : null,
     }).state;
     const label = state.label || 'Awaiting data';
     const scale = resolveDashboardTodayTrainingStateScale(label);

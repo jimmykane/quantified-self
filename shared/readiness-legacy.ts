@@ -8,6 +8,10 @@ export interface ReadinessSleepEvidencePoint {
   id: string;
   sourceKey?: string;
   hrvSourceKey?: string;
+  /** Number of normalized main-sleep records represented by this point. */
+  sleepFragmentCount?: number;
+  /** Completion times for represented fragments, used by historical cutoffs. */
+  sleepFragmentEndTimesMs?: readonly number[];
   /** Internal original HRV observations survive sleep-fragment grouping for formula 4. */
   hrvObservations?: readonly { timestampMs: number; calendarDate: string; value: number; sourceKey?: string }[];
   sleepDate: string;

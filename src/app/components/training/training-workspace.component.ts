@@ -1842,6 +1842,7 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
         this.changeDetector.markForCheck();
       },
       error: () => {
+        this.readinessSleepSessions = [];
         this.readinessSleepLoading = false;
         this.readinessSleepFailed = true;
         this.updateTrainingReadinessSleepRefreshTimer();
@@ -1853,12 +1854,16 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
 
   private refreshTrainingReadiness(): void {
     const nowMs = Date.now();
-    const formNowFromSeries = resolveDashboardFormNowContextFromPoints(this.derivedState.formPoints, nowMs);
-    const rampRateFromSeries = resolveDashboardRampRateContextFromPoints(this.derivedState.formPoints, nowMs);
+    const formNowFromSeries = this.derivedState.formStatus === 'ready'
+      ? resolveDashboardFormNowContextFromPoints(this.derivedState.formPoints, nowMs)
+      : null;
+    const rampRateFromSeries = this.derivedState.formStatus === 'ready'
+      ? resolveDashboardRampRateContextFromPoints(this.derivedState.formPoints, nowMs)
+      : null;
     const formNow = formNowFromSeries
-      || this.derivedState.formNow;
+      || (this.derivedState.formNowStatus === 'ready' ? this.derivedState.formNow : null);
     const rampRate = rampRateFromSeries
-      || this.derivedState.rampRate;
+      || (this.derivedState.rampRateStatus === 'ready' ? this.derivedState.rampRate : null);
     const loadStatuses = [
       formNowFromSeries ? this.derivedState.formStatus : this.derivedState.formNowStatus,
       rampRateFromSeries ? this.derivedState.formStatus : this.derivedState.rampRateStatus,

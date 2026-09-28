@@ -2018,7 +2018,7 @@ Training state and Readiness are fixed inside the optional Today summary:
   recovery builders use the same resolver over their bounded Sleep windows;
   separate historical benchmark windows have separate Health reads. Existing normalized history needs no reimport.
   HRV Health creates, updates, and deletes invalidate only readiness and build comparison via the existing ingress queue.
-  `training_readiness.payload.evidenceVersion = 1` lets the frontend and backend freshness gate rebuild old readiness
+  `training_readiness.payload.evidenceVersion = 2` lets the frontend and backend freshness gate rebuild old readiness
   inputs independently from the formula version. Readiness formula 4 adds the shared HRV range. Recovery version 4 withholds HRV comparison across incompatible sources.
   MCP projects out the internal readiness evidence version. Registered readiness and recovery tools retain their
   version-3 formulas and wire shapes; additive current-readiness tools expose formula 4. Rebuilds use the ordinary
@@ -2365,10 +2365,13 @@ the other supplies the driver. Lower HR supports the score only relative to the 
 and is not a universal medical claim. Missing drivers are excluded and available weights are renormalized rather than treating
 missing evidence as zero.
 
-HRV uses `shared/personal-metric-range.ts`, exactly as the Health and Dashboard nightly HRV charts do. Multiple
-readings on the same provider calendar date reduce to a median; original fragment observations survive sleep grouping
-so the readiness input cannot become a different mean. Each original HRV observation is filtered at the cutoff before
-selecting its source; a later fragment of the same night cannot hide an already completed reading. The baseline is the mean ± one population standard deviation
+HRV uses `shared/personal-metric-range.ts`, exactly as the Health and Dashboard nightly HRV charts do. Historical
+readings on the same provider calendar date reduce to a median for the baseline, and original observations survive
+sleep grouping so that history is not changed into an average of averages. Current readiness is stricter: the latest
+eligible night must have ended within 48 hours and must represent exactly one completed main-sleep fragment with one
+HRV observation. A split latest night therefore contributes no current HRV; Readiness never promotes its last fragment
+or an invented fragment average to a nightly value. Each observation is filtered at the cutoff before selecting its
+source. The baseline is the mean ± one population standard deviation
 over the preceding 60 days, including current observations. At least 14 observed days are required, plus three observed
 days in the last seven days for the current average. Every historical date uses only observations completed by its own
 cutoff. Selecting a year of chart history changes the view, never these calculation windows. Dedicated overnight and
@@ -2379,9 +2382,8 @@ Outside either bound, its component is `max(0, 50 - 100 × distanceOutsideRange 
 earns no automatic bonus. This is the QS scoring policy, not a reproduction of a provider's proprietary algorithm.
 The unchanged weighted score renormalizes around unavailable drivers. The UI shows the weekly average, numeric range,
 range status, recent direction and date-labelled latest HRV reading separately, instead of a percentage against a different short median.
-When a newer sleep exists without HRV, the shared formatter says that the latest night has no HRV and labels the retained
-value as the previous reading rather than presenting it as current. Weekly HRV
-can remain available without a night in the last 48 hours while at least three recent days remain.
+When the latest eligible night has no single authoritative HRV value, the current HRV driver shows **No current HRV**
+and exposes no previous numeric reading as current evidence.
 
 The formula version invalidates only `training_readiness`; the normal ensure lifecycle rebuilds its 14-day series from
 the existing Form seed and bounded Sleep/Health evidence. No event reparse, global derived-schema bump or bulk migration
@@ -2403,8 +2405,10 @@ or evidence leaves the 7/30/60-day windows, even if Firestore emits nothing. Sco
 count, driver values, and driver freshness are shown separately. Combined Form/ramp freshness is the oldest contributing
 timestamp. The training implication is deliberately non-prescriptive: it summarizes whether evidence is supportive,
 mixed, or strained and directs attention to the drivers rather than choosing a workout. Failed Form/ramp reads and a
-failed sleep listener are identified separately from genuinely missing evidence. Sleep already loaded before a listener
-failure remains visible only while it is still eligible; load-only readiness remains available afterward.
+failed sleep listener are identified separately from genuinely missing evidence. Dashboard Today and live Training
+readiness accept a load or recovery snapshot only while its derived status is `ready`; retained stale, building,
+missing, or failed snapshot payloads do not contribute a current value. A sleep listener failure clears its previously
+loaded readiness evidence immediately, while any independently current load-only readiness remains available.
 
 Dashboard Today and Training withhold the readiness score, category, confidence, and signal count until both the initial
 derived snapshot emission and the bounded sleep listener have resolved for the current account. Dashboard shows
@@ -2412,8 +2416,8 @@ derived snapshot emission and the bounded sleep listener have resolved for the c
 An uninitialized sleep list must never render as **No eligible
 night** or produce an interim load-only score. A successful empty sleep result settles loading and permits the normal
 load-only calculation. A failed first sleep read also settles loading, with explicit unavailable copy alongside any
-available load result. A later listener failure retains eligible sleep evidence, shows a refresh warning, and continues
-the normal age/baseline refresh timer. Hiding Today or switching accounts clears its sleep state, and re-entering waits
+available load result. A later listener failure clears the loaded sleep evidence immediately and shows an unavailable
+warning. Hiding Today or switching accounts clears its sleep state, and re-entering waits
 for that account's first reads again. Later live evidence updates still recalculate readiness normally.
 
 Readiness is the recovery-aware companion to the load model, not a replacement for it. It adds recorded sleep, HRV, and

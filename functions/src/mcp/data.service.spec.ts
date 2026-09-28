@@ -51,6 +51,7 @@ import {
 import {
   buildReadinessSignals,
 } from '../../../shared/readiness-legacy';
+import { READINESS_EVIDENCE_VERSION } from '../../../shared/readiness';
 import { SLEEP_PROVIDERS } from '../../../shared/sleep';
 import {
   HEALTH_COVERAGE_STATUSES,
@@ -5996,7 +5997,7 @@ describe('MCP data service', () => {
     const now = Date.parse('2026-07-27T12:00:00Z');
     const readiness = buildTrainingReadinessMetricPayload([], 0, [], now).payload;
     const recovery = buildTrainingBuildComparisonMetricPayload([], {}, now).payload;
-    expect(readiness.evidenceVersion).toBe(1);
+    expect(readiness.evidenceVersion).toBe(READINESS_EVIDENCE_VERSION);
     expect(recovery.recoveryVersion).toBe(4);
     vi.mocked(dependencies.fetchDerivedSnapshot).mockImplementation(async (_uid, kind) => ({status: 'ready', schemaVersion: DERIVED_METRIC_SCHEMA_VERSION,
       payload: kind === DERIVED_METRIC_KINDS.TrainingReadiness ? readiness : recovery}));
@@ -6043,6 +6044,38 @@ describe('MCP data service', () => {
     expect(oldHistory.payload).toMatchObject({ formulaVersion: 3 });
     expect(JSON.stringify(current)).not.toContain('private');
     expect(JSON.stringify(history)).not.toContain('SourceKey');
+  });
+
+  it('withholds current HRV when the latest provider night is split into multiple fragments', async () => {
+    const now = Date.parse('2026-09-28T09:00:00Z');
+    const day = 86400000;
+    const source = { provider: SLEEP_PROVIDERS.SuuntoApp,
+      sourceSessionKey: 'private-session', providerUserId: 'private-provider-user' };
+    const baseline = Array.from({ length: 15 }, (_, index) => {
+      const endTimeMs = now - (15 - index) * day - (2 * 3600000);
+      return { ...sleepDocument({ source, sleepDate: new Date(endTimeMs).toISOString().slice(0, 10),
+        startTimeMs: endTimeMs - 8 * 3600000, endTimeMs, durationSeconds: 28800,
+        timezoneOffsetSeconds: 3 * 3600, vitals: { averageHrvMs: 34 },
+      }), id: `baseline-${index}` };
+    });
+    const fragments = [{ id: 'part-1', start: '2026-09-27T18:57:00Z', end: '2026-09-27T23:54:00Z', hrv: 29 },
+      { id: 'part-2', start: '2026-09-28T00:01:00Z', end: '2026-09-28T04:00:00Z', hrv: 40 }]
+      .map(fragment => ({ ...sleepDocument({ source, sleepDate: '2026-09-28',
+        startTimeMs: Date.parse(fragment.start), endTimeMs: Date.parse(fragment.end),
+        durationSeconds: (Date.parse(fragment.end) - Date.parse(fragment.start)) / 1000,
+        timezoneOffsetSeconds: 3 * 3600, vitals: { averageHrvMs: fragment.hrv },
+      }), id: fragment.id }));
+    vi.mocked(dependencies.now).mockReturnValue(now);
+    vi.mocked(dependencies.fetchReadinessSleepDocuments).mockResolvedValue([...baseline, ...fragments]);
+
+    const service = createMcpDataService(dependencies);
+    const current = await service.getCurrentReadiness({ uid: 'user-1', timeZone: 'Europe/Helsinki' });
+    const report = await service.getDailyReport({ uid: 'user-1', timeZone: 'Europe/Helsinki' });
+
+    expect(current.drivers.hrv.personalRange).toBeNull();
+    expect(report.readiness.drivers.hrv.personalRange).toBeNull();
+    expect(current.availableSignalCount).toBe(1);
+    expect(JSON.stringify(current)).not.toContain('private-provider-user');
   });
 
   it('supplements daily-report HRV only with explicit Health and Sleep grants', async () => {
@@ -6280,7 +6313,7 @@ describe('MCP data service', () => {
     });
   });
 
-  it('uses the same deterministic same-provider sleep-night grouping for the report and readiness', async () => {
+  it('groups report vitals but withholds current readiness HRV for a fragmented night', async () => {
     const nightlyDocument = (
       id: string,
       sleepDate: string,
@@ -6373,7 +6406,7 @@ describe('MCP data service', () => {
       durationSeconds: 28_800,
       recordedScore: 82,
     });
-    expect(result.readiness.drivers.hrv.personalRange).toMatchObject({ latestMs: 60, reason: 'building_baseline' });
+    expect(result.readiness.drivers.hrv.personalRange).toBeNull();
     expect(result.readiness.drivers.overnightHeartRate).toMatchObject({
       average: {
         latestBpm: 49,

@@ -123,6 +123,7 @@ import {
 } from '../../../shared/sports-lib-health-data';
 import {
   buildReadinessEvaluation,
+  READINESS_EVIDENCE_VERSION as LEGACY_READINESS_EVIDENCE_VERSION,
   READINESS_FORMULA_VERSION,
   READINESS_SLEEP_LOOKBACK_MS,
   READINESS_TOTAL_SIGNAL_COUNT,
@@ -3553,7 +3554,8 @@ export function projectDerivedMetricPayloadForMcp(
       case DERIVED_METRIC_KINDS.TrainingReadiness: {
         const source = payload as DerivedTrainingReadinessMetricPayload;
         const legacy = source.formulaVersion === 4
-          ? normalizeLegacyReadiness({ ...source, formulaVersion: 3, points: source.legacyPoints }) : source;
+          ? normalizeLegacyReadiness({ ...source, formulaVersion: 3,
+            evidenceVersion: LEGACY_READINESS_EVIDENCE_VERSION, points: source.legacyPoints }) : source;
         return legacy ? { formulaVersion: legacy.formulaVersion, dayBoundary: legacy.dayBoundary,
           asOfDayMs: legacy.asOfDayMs, generatedAtMs: legacy.generatedAtMs, historyDays: legacy.historyDays, points: legacy.points } : null;
       }
@@ -4333,6 +4335,8 @@ function buildTodayReadinessSleepNights(
       provider: session.provider,
       sourceKey: sleepEvidenceSourceKey(document.data as unknown as SleepSession),
       hrvSourceKey: sleepHrvSourceKey({ ...document.data, vitals: session.vitals } as unknown as SleepSession),
+      sleepFragmentCount: 1,
+      sleepFragmentEndTimesMs: [session.endTimeMs],
       startTimeMs: session.startTimeMs,
       endTimeMs: session.endTimeMs,
       totalSeconds: session.durationSeconds,
@@ -4394,6 +4398,9 @@ function buildTodayReadinessSleepNights(
       endTimeMs,
       totalSeconds: durationSeconds,
       ...aggregateNightlyHrvEvidence(entries.map(entry => entry.evidence)),
+      sleepFragmentCount: entries.reduce((total, entry) => total + (entry.evidence.sleepFragmentCount ?? 1), 0),
+      sleepFragmentEndTimesMs: entries.flatMap(entry =>
+        entry.evidence.sleepFragmentEndTimesMs ?? [entry.evidence.endTimeMs as number]),
       hrvObservations: entries.flatMap(entry => readinessHrvObservations(entry.evidence)),
       averageHeartRateBpm: average(averageHeartRateValues),
       minimumHeartRateBpm: minimumHeartRateValues.length
