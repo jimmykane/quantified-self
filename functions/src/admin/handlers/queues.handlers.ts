@@ -40,6 +40,7 @@ import {
     SportsLibRouteReparseJobDocData,
 } from '../shared/types';
 import { ACTIVITY_SYNC_QUEUE_COLLECTION_NAME } from '../../activity-sync/constants';
+import { ActivitySyncBreakdownStats } from '../../../../shared/admin-queue-stats';
 import { ROUTE_DELIVERY_SYNC_QUEUE_COLLECTION_NAME } from '../../route-delivery-sync/constants';
 import { ROUTE_SYNC_QUEUE_COLLECTION_NAME } from '../../routes/route-sync.constants';
 import { SLEEP_SYNC_QUEUE_COLLECTION_NAME } from '../../sleep/constants';
@@ -136,6 +137,33 @@ async function getAdminCloudTaskQueueStats(queueId: string): Promise<CloudTaskQu
             enabled: null,
         };
     }
+}
+
+async function getActivitySyncBreakdownStats(
+    db: admin.firestore.Firestore,
+    field: 'deliveryMode' | 'sourceServiceName',
+    value: 'historical' | 'manualUpload',
+): Promise<ActivitySyncBreakdownStats> {
+    const queue = db.collection(ACTIVITY_SYNC_QUEUE_COLLECTION_NAME).where(field, '==', value);
+    const failed = db.collection('failed_jobs')
+        .where('originalCollection', '==', ACTIVITY_SYNC_QUEUE_COLLECTION_NAME)
+        .where(field, '==', value);
+    const count = async (query: admin.firestore.Query, metric: keyof ActivitySyncBreakdownStats): Promise<number | null> => {
+        try {
+            return (await query.count().get()).data().count;
+        } catch (error) {
+            logger.error(`[admin/getQueueStats] Failed to count activity sync ${value} ${metric}:`, error);
+            return null;
+        }
+    };
+    const [pending, succeeded, stuck, manualReconciliationRequired, dead] = await Promise.all([
+        count(queue.where('processed', '==', false).where('retryCount', '<', 10), 'pending'),
+        count(queue.where('resultStatus', '==', 'success'), 'succeeded'),
+        count(queue.where('processed', '==', false).where('retryCount', '>=', 10), 'stuck'),
+        count(queue.where('resultStatus', '==', 'manual_reconciliation_required'), 'manualReconciliationRequired'),
+        count(failed, 'dead'),
+    ]);
+    return { pending, succeeded, stuck, manualReconciliationRequired, dead };
 }
 
 /**
@@ -534,6 +562,10 @@ export const getQueueStats = onAdminCall<GetQueueStatsRequest, QueueStatsRespons
             '8-9': activitySyncRetry8to9Snap?.data().count || 0,
         };
         const activitySyncThroughput = activitySyncThroughputSnap?.data().count || 0;
+        const [historicalActivitySync, manualUploadActivitySync] = await Promise.all([
+            getActivitySyncBreakdownStats(db, 'deliveryMode', 'historical'),
+            getActivitySyncBreakdownStats(db, 'sourceServiceName', 'manualUpload'),
+        ]);
         let activitySyncMaxLagMs = 0;
         const activitySyncOldestPendingDate = activitySyncOldestPendingSnap?.empty === false
             ? activitySyncOldestPendingSnap.docs[0]?.data()?.dateCreated
@@ -1187,6 +1219,10 @@ export const getQueueStats = onAdminCall<GetQueueStatsRequest, QueueStatsRespons
                 manualReconciliationRequired: activitySyncManualReconciliationRequired,
                 stuck: activitySyncStuck,
                 dead: activitySyncDead,
+                breakdowns: {
+                    historical: historicalActivitySync,
+                    manualUploads: manualUploadActivitySync,
+                },
                 dlqByContext: activitySyncByContext,
                 advanced: {
                     throughput: activitySyncThroughput,

@@ -424,6 +424,10 @@ describe('getQueueStats Cloud Function', () => {
             manualReconciliationRequired: 5,
             stuck: 5,
             dead: 5,
+            breakdowns: {
+                historical: { pending: 5, succeeded: 5, stuck: 5, manualReconciliationRequired: 5, dead: 5 },
+                manualUploads: { pending: 5, succeeded: 5, stuck: 5, manualReconciliationRequired: 5, dead: 5 },
+            },
             dlqByContext: expect.arrayContaining([
                 { context: 'NO_TOKEN_FOUND', count: 1 },
                 { context: 'MAX_RETRY_REACHED', count: 1 },
@@ -817,6 +821,19 @@ describe('getQueueStats Cloud Function', () => {
             const has = (field: string, op: string, value?: unknown): boolean =>
                 filters.some((filter) => filter.field === field && filter.op === op && (value === undefined || filter.value === value));
 
+            const historical = has('deliveryMode', '==', 'historical');
+            const manualUpload = has('sourceServiceName', '==', 'manualUpload');
+            if (historical || manualUpload) {
+                const counts = historical
+                    ? { pending: 3, succeeded: 2, stuck: 1, manualReconciliationRequired: 1 }
+                    : { pending: 1, succeeded: 1, stuck: 0, manualReconciliationRequired: 0 };
+                if (has('resultStatus', '==', 'success')) return counts.succeeded;
+                if (has('resultStatus', '==', 'manual_reconciliation_required')) return counts.manualReconciliationRequired;
+                if (has('processed', '==', false) && has('retryCount', '>=', 10)) return counts.stuck;
+                if (has('processed', '==', false) && has('retryCount', '<', 10)) return counts.pending;
+                return 0;
+            }
+
             if (has('successProcessedAt', '>')) {
                 return 1;
             }
@@ -852,9 +869,10 @@ describe('getQueueStats Cloud Function', () => {
                     orderBy: vi.fn(() => buildQuery(filters)),
                     limit: vi.fn(() => buildQuery(filters)),
                     count: vi.fn(() => ({
-                        get: vi.fn().mockResolvedValue({
-                            data: () => ({ count: resolveActivitySyncCount(filters) }),
-                        }),
+                        get: vi.fn(() => filters.some(filter => filter.field === 'sourceServiceName' && filter.value === 'manualUpload')
+                            && filters.some(filter => filter.field === 'resultStatus' && filter.value === 'manual_reconciliation_required')
+                            ? Promise.reject(new Error('index unavailable'))
+                            : Promise.resolve({ data: () => ({ count: resolveActivitySyncCount(filters) }) })),
                     })),
                     get: vi.fn().mockResolvedValue({
                         empty: false,
@@ -883,7 +901,10 @@ describe('getQueueStats Cloud Function', () => {
                     count: vi.fn(() => ({
                         get: vi.fn().mockResolvedValue({
                             data: () => ({
-                                count: filters.some((f) => f.field === 'originalCollection' && f.value === 'activitySyncQueue') ? 2 : 5,
+                                count: filters.some((f) => f.field === 'deliveryMode' && f.value === 'historical')
+                                    || filters.some((f) => f.field === 'sourceServiceName' && f.value === 'manualUpload')
+                                    ? 1
+                                    : filters.some((f) => f.field === 'originalCollection' && f.value === 'activitySyncQueue') ? 2 : 5,
                             }),
                         }),
                     })),
@@ -930,6 +951,10 @@ describe('getQueueStats Cloud Function', () => {
             manualReconciliationRequired: 6,
             stuck: 1,
             dead: 2,
+            breakdowns: {
+                historical: { pending: 3, succeeded: 2, stuck: 1, manualReconciliationRequired: 1, dead: 1 },
+                manualUploads: { pending: 1, succeeded: 1, stuck: 0, manualReconciliationRequired: null, dead: 1 },
+            },
             advanced: expect.objectContaining({
                 throughput: 1,
                 retryHistogram: {

@@ -839,6 +839,8 @@ Provider parity includes operational visibility, not only a user-facing connecti
 
 The current admin UI is aggregate observability. It does not provide provider-specific inspection, replay, or requeue actions for the normal activity-ingestion queues. Do not add a Wahoo-only manual retry control without defining an equivalent safe, audited queue-operation model for every provider it should cover.
 
+The Activity Sync queue view also breaks out historical sends (`deliveryMode: historical`) and manual uploads (`sourceServiceName: manualUpload`). Manual uploads are a subset of historical sends, so the rows must not be added together. Each reports pending, succeeded, stuck, provider reconciliation, and dead-letter counts from the retained queue and failed-job documents; these are not lifetime delivery totals. A reconciliation row can also have a dead-letter copy, so those columns can overlap. Admin count queries need the activity-sync and failed-job composite indexes in `firestore.indexes.json` before the updated callable is released. An unavailable query is shown as **N/A**, not zero.
+
 ### What to monitor after release
 
 - OAuth starts, callback failures, provider denial/cancel rates, duplicate or ambiguous provider identities, and token-refresh failures;
