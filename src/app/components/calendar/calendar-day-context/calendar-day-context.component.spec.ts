@@ -142,6 +142,12 @@ describe('CalendarDayContextComponent', () => {
     fixture.detectChanges();
     const previewNotes = () => fixture.nativeElement.querySelectorAll('[aria-label="Timeline notes on selected day"] button');
     expect(previewNotes()).toHaveLength(2);
+    expect(fixture.nativeElement.querySelectorAll('.calendar-day-context-preview-group')).toHaveLength(3);
+    expect(fixture.nativeElement.querySelector('[aria-label="Activities on selected day"]').textContent)
+      .toContain('None recorded for this day');
+    expect(fixture.nativeElement.querySelector('[aria-label="Planned workouts on selected day"]').textContent)
+      .toContain('None recorded for this day');
+    expect(fixture.nativeElement.textContent).not.toContain('2026-09-13 · 2026-09-13');
     expect(fixture.nativeElement.textContent).toContain('+1 more on the full day');
     fixture.componentRef.setInput('dashboardTile', false);
     fixture.detectChanges();

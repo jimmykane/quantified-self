@@ -76,7 +76,7 @@ export function buildCalendarDayStory(input: CalendarDayStoryInput): CalendarDay
   for (const note of input.notes) {
     items.push({
       key: `note:${note.id}`, kind: 'note', id: note.id, title: note.title,
-      detail: `${TIMELINE_NOTE_LABELS[note.category]} · ${formatNoteDates(note, input.dateKey, input.locale)}`,
+      detail: `${TIMELINE_NOTE_LABELS[note.category]} · ${formatCalendarDayNoteDates(note, input.dateKey, input.locale)}`,
       timeLabel: 'All day', timeMs: null, icon: TIMELINE_NOTE_ICONS[note.category], color: timelineNoteColor(note),
     });
   }
@@ -119,7 +119,7 @@ function localDateKey(nowMs: number): string {
   return `${date.getFullYear()}-${`${date.getMonth() + 1}`.padStart(2, '0')}-${`${date.getDate()}`.padStart(2, '0')}`;
 }
 
-function formatNoteDates(note: TimelineNote, selectedDateKey: string, locale?: string): string {
+export function formatCalendarDayNoteDates(note: TimelineNote, selectedDateKey: string, locale?: string): string {
   const showYear = note.startDate.slice(0, 4) !== selectedDateKey.slice(0, 4)
     || (note.endDate !== null && note.endDate.slice(0, 4) !== selectedDateKey.slice(0, 4));
   const formatter = getDateTimeFormatter(locale, { day: 'numeric', month: 'short', ...(showYear ? { year: 'numeric' as const } : {}) });

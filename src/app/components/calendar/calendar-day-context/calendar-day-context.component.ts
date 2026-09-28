@@ -1,7 +1,7 @@
 import { ChangeDetectionStrategy, Component, ElementRef, computed, effect, inject, input, output, signal, untracked } from '@angular/core';
 import { Router } from '@angular/router';
 import { ViewportScroller } from '@angular/common';
-import { isTimelineNoteVisible, timelineNoteOverlaps, TIMELINE_NOTE_LABELS, timelineNoteDates } from '@shared/timeline-notes';
+import { isTimelineNoteVisible, timelineNoteOverlaps, TIMELINE_NOTE_LABELS } from '@shared/timeline-notes';
 import type { TimelineNote } from '@shared/timeline-notes';
 import { AppThemes, type EventInterface } from '@sports-alliance/sports-lib';
 import { SharedModule } from '../../../modules/shared.module';
@@ -19,7 +19,7 @@ import { ActivityCalendarVolumeListComponent } from '../activity-calendar-volume
 import { TIMELINE_NOTE_ICONS, timelineNoteColor } from '../../../helpers/timeline-note-appearance.helper';
 import { formatManualWorkoutStructure } from '../../../helpers/planned-workout-editor.helper';
 import { getDateTimeFormatter } from '../../../helpers/date-time-format.helper';
-import { buildCalendarDayStory } from '../../../helpers/calendar-day-story.helper';
+import { buildCalendarDayStory, formatCalendarDayNoteDates } from '../../../helpers/calendar-day-story.helper';
 import type { CalendarDayDetailsData } from '../calendar-day-details/calendar-day-details.component';
 
 interface HealthState {
@@ -76,7 +76,8 @@ export class CalendarDayContextComponent {
   readonly noteRows = computed(() => (this.data().timelineNotes?.() ?? [])
     .filter(note => isTimelineNoteVisible(note) && timelineNoteOverlaps(note, {
       startDate: this.data().day.dateKey, endDate: this.data().day.dateKey,
-    })).map(note => ({ note, label: TIMELINE_NOTE_LABELS[note.category], dates: timelineNoteDates(note),
+    })).map(note => ({ note, label: TIMELINE_NOTE_LABELS[note.category],
+      dates: formatCalendarDayNoteDates(note, this.data().day.dateKey, this.data().locale),
       icon: TIMELINE_NOTE_ICONS[note.category], color: timelineNoteColor(note) })));
   readonly notesStatus = computed(() => this.data().timelineNotesStatusSource?.() ?? 'ready');
   readonly plannedWorkouts = computed(() => this.data().plannedWorkoutsSource?.()
