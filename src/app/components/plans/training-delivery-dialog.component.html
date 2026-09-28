@@ -271,6 +271,10 @@
         <p>Sent means Suunto accepted the Guide for your account. QS cannot verify whether it is visible in the Suunto app, selected or pinned, or available on your watch.</p>
         <p>Hiding or removing a Guide in Suunto can leave its cloud record visible to partners, so QS never recreates it automatically from a cloud-presence check.</p>
       }
+      @if (activeRow()?.provider === 'garmin') {
+        <p>Found in connected app means Garmin returned the exact Workout and dated Schedule for your connected account. It does not confirm a watch download.</p>
+        <p>Could not check workout means the latest check did not confirm both records. Last sent still records Garmin's earlier acceptance; a missing Workout response alone does not prove safe deletion, so QS will not create a replacement Workout automatically. A confirmed missing calendar entry can be restored using the original Workout.</p>
+      }
       @if (showsCorosGuidance()) {
         @if (activeRow()?.setupAvailable) {
           <p>QS sends each upcoming workout to your COROS training calendar. The COROS app manages watch synchronization; Sent does not confirm that your watch received it.</p>

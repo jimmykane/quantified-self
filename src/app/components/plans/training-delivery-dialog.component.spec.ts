@@ -357,6 +357,9 @@ describe('Training provider delivery controls', () => {
     expect(button.some(item => item.textContent?.trim() === 'Check Garmin')).toBe(true);
     expect(fixture.nativeElement.textContent).toContain('Last sent'); expect(fixture.nativeElement.textContent).toContain('Last checked');
     expect(fixture.nativeElement.textContent).toContain('does not confirm a device download');
+    const guidance: HTMLElement = fixture.nativeElement.querySelector('#delivery-guidance-details');
+    expect(guidance.textContent).toContain('exact Workout and dated Schedule');
+    expect(guidance.textContent).toContain('will not create a replacement Workout automatically');
     await fixture.componentInstance.checkProvider('garmin'); fixture.detectChanges();
     expect(service.check).toHaveBeenCalledWith(expect.objectContaining({ action: 'check', scope: 'workout',
       scopeId: 'w', expectedScheduleRevision: 3, expectedScopeRevision: 2, expectedSettingsRevision: 0 }), expect.any(Function));

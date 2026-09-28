@@ -257,10 +257,13 @@ the Health UI display may use pounds when selected. No tool, schema, scope, cons
 or bundled skill changes. The separate Strength Training feature uses this preference only at its app editor boundary;
 its MCP read and preview continue to use canonical kilograms.
 
-Garmin schedule-only remote repair also preserves the registered MCP contract. The existing sanitized delivery status
-already stops a confirmed missing copy from counting as synced and represents restoration as a non-success outcome.
+Garmin schedule-only remote repair and #769's frontend-only check wording preserve the registered MCP contract.
+The existing sanitized delivery status already stops a confirmed missing copy from counting as synced and represents
+restoration as a non-success outcome.
 Artifact-specific inspection authority, retained provider IDs and repair evidence remain private; MCP performs no live
-provider check or repair and gains no tool, field, scope, consent or write authority.
+provider check or repair and gains no tool, field, scope, consent or write authority. In particular, a `synced` MCP
+delivery outcome records the last accepted send, not a fresh Garmin cloud read; an inconclusive later Workout check
+cannot be promoted to `confirmed_missing` and the frozen v1 tool exposes no verification-state field.
 
 COROS Training delivery (#648) uses the public provider-readiness boundary with no wire-contract change. Explicit COROS
 proposals and `all_connected` use the same existing eligibility, proposal and approval checks as the other providers.

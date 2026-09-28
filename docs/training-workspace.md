@@ -1562,7 +1562,19 @@ same retained Workout is adopted under its new Schedule ID; multiple matches rem
 another copy. Changed dates/owners/associations require attention. Evidence-binding changes clear confirmed absence
 before a new observation chain begins. A missing Workout is
 non-authoritative, remains `unknown`, does not reduce the copy to a confirmed missing state and cannot trigger recreation.
-The replacement-workout path remains fixture-gated pending #703/#645 proof. Repairs reuse the operation journal and
+An owner-account #769 probe found both retained Workout and Schedule IDs returning 404, with a separate same-account QS
+Workout returning 200 and no matching date-list association. A Schedule POST against that missing Workout was rejected
+with 404 and created no artifact. This proves the exact retained pair was not readable in that probe; it does not prove
+that Workout 404 always means safely deleted rather than a permission, account, or other provider condition. Positive
+exact Workout and Schedule reads *do* confirm the cloud pair and association, never device receipt. Before permitting
+automatic Workout replacement, require provider-supported, same-owner not-found semantics distinguishable from
+permission/account errors; two unchanged observations at least 15 minutes apart under the same binding; no surviving
+or reappearing association; and bounded recovery for an uncertain root Workout POST that cannot duplicate provider
+records. Account-side create/update/delete proof must establish that full lifecycle. Until then, the check remains
+inconclusive, retains the prior Last sent timestamp, and never starts another Workout POST. The compact workout row
+reads the bounded current verification projection so a later inconclusive check no longer appears simply as Synced;
+plan totals and MCP sync status continue to describe accepted delivery, not a fresh live cloud inventory.
+The replacement-workout path remains fixture-gated pending #769 proof. Repairs reuse the operation journal and
 stable QS identity; unknown replacement-POST acceptance remains blocked, including Retry. Stop, pause, transfers and
 deletion supersede repair. Pro expiry pauses it; past/provider-confirmed completed workouts remain protected. Successful
 repair cycles are limited to two per delivery per rolling day, then deferred until capacity returns. The production

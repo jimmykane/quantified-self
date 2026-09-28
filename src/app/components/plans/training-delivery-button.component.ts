@@ -10,7 +10,7 @@ import { TrainingDeliveryDialogComponent, type TrainingDeliveryDialogData } from
 import type { ScheduledWorkoutV1, TrainingPlanV1 } from '@shared/training-plans';
 import type { TrainingWorkoutCompletionV1 } from '@shared/training-workout-completion';
 import { trainingDeliveryLocalDate } from '@shared/training-provider-delivery';
-import { buildTrainingDeliverySummaries, type TrainingDeliverySummary } from '../../helpers/training-delivery-summary.helper';
+import { buildTrainingDeliverySummaries, withGarminWorkoutCheck, type TrainingDeliverySummary } from '../../helpers/training-delivery-summary.helper';
 import { ServiceSourceIconComponent } from '../event-summary/service-source-icon/service-source-icon.component';
 
 interface DeliveryReadState { uid: string; hasRecords: boolean; view: TrainingDeliveryView | null; loaded: boolean; error: boolean; }
@@ -73,11 +73,14 @@ export class TrainingDeliveryButtonComponent {
     toObservable(this.summaryDayKey)]).pipe(switchMap(
     ([read, workouts, plan, completions, context]) => {
     const empty = { uid: read.uid, rows: [] as TrainingDeliverySummary[], error: read.error };
-    if (!read.view || workouts === null || context.scope === 'history') return of(empty);
+    const view = read.view;
+    if (!view || workouts === null || context.scope === 'history') return of(empty);
+    const currentWorkout = context.scope === 'workout' ? workouts.find(workout => workout.id === context.id) : undefined;
     return from(buildTrainingDeliverySummaries({ uid: read.uid, scope: context.scope, id: context.id, workouts, plan,
-      ...read.view, completions,
-      complete: read.view.summaryComplete !== false && read.view.statuses.length < TRAINING_DELIVERY_SUMMARY_LIMIT,
-      nowMs: this.summaryNowMs() ?? Date.now() })).pipe(
+      ...view, completions,
+      complete: view.summaryComplete !== false && view.statuses.length < TRAINING_DELIVERY_SUMMARY_LIMIT,
+      nowMs: this.summaryNowMs() ?? Date.now() }).then(async rows => context.scope === 'workout'
+        ? Promise.all(rows.map(row => withGarminWorkoutCheck(row, read.uid, currentWorkout, view))) : rows)).pipe(
       map(rows => ({ ...empty, rows })), startWith(empty), catchError(() => of({ ...empty, error: true })));
   })), { initialValue: { uid: '', rows: [] as TrainingDeliverySummary[], error: false } });
   readonly summaries = computed(() => this.summaryState().uid === this.users.user()?.uid ? this.summaryState().rows : []);

@@ -46,10 +46,12 @@ describe('Training summary read bounds and ownership', () => {
     expect(collectionData).toHaveBeenCalledTimes(2);
     expect(call).not.toHaveBeenCalled();
   });
-  it('reads only parent settings alongside a plan-bound workout, not all of its siblings', async () => {
+  it('reads the bounded workout verification and parent settings, not sibling workouts', async () => {
     await firstValueFrom(TestBed.inject(TrainingDeliveryService).watchSummaryScope('owner', 'workout', 'w', 'p'));
     expect(where).toHaveBeenCalledWith('workoutId', '==', 'w'); expect(where).not.toHaveBeenCalledWith('planId', '==', 'p');
-    expect(collectionData).toHaveBeenCalledTimes(1); expect(docData).toHaveBeenCalledTimes(8);
+    expect(collectionData).toHaveBeenCalledTimes(2); expect(docData).toHaveBeenCalledTimes(8);
+    expect(query).toHaveBeenCalledWith('users/owner/trainingDeliveryVerifications',
+      { where: ['workoutId', '==', 'w'] }, { orderBy: '__name__' }, { limit: TRAINING_DELIVERY_SUMMARY_LIMIT });
     expect(vi.mocked(docData).mock.calls.map(([path]) => path)).toEqual(expect.arrayContaining([
       'users/owner/trainingDeliverySettings/workout_w_garmin', 'users/owner/trainingDeliverySettings/plan_p_garmin',
     ]));
