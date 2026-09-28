@@ -63,6 +63,42 @@ describe('ActivityCalendarGridComponent', () => {
     fixture.componentRef.setInput('plannedWorkoutsByDate', null); fixture.detectChanges();
     expect(fixture.nativeElement.querySelector('[aria-label*="planned workout"]')).toBeNull();
   });
+  it('keeps plan titles in the Calendar month while preserving compact and other-view markers', async () => {
+    const first = { workout: createWorkout('tempo', 'planned'), planName: 'Autumn build', color: 'purple' };
+    const second = { workout: createWorkout('rest', 'skipped'), planName: null, color: 'gray' };
+    const plannedWorkoutsByDate: PlannedWorkoutCalendarOverlay = {
+      '2026-08-03': {
+        entries: [first, second], visibleEntries: [first, second], overflowCount: 0,
+        hasSkipped: true, ariaLabel: '1 planned workout, 1 skipped workout',
+      },
+    };
+    const fixture = await renderGrid('month', false, [], DaysOfTheWeek.Monday, plannedWorkoutsByDate);
+    fixture.componentRef.setInput('calmMonth', true);
+    fixture.detectChanges();
+    const day = fixture.nativeElement.querySelector('[aria-label*="1 planned workout, 1 skipped workout"]') as HTMLButtonElement;
+    expect(day.classList).toContain('activity-calendar-day--has-plan');
+    expect(day.querySelector('.activity-calendar-workout-preview')?.textContent).toContain('tempo');
+    expect(day.querySelector('.activity-calendar-workout-preview-more')?.textContent).toBe('+1');
+    expect(day.querySelectorAll('.planned-workout-markers mat-icon')).toHaveLength(2);
+    expect(day.querySelector('.activity-calendar-workout-preview')?.getAttribute('aria-hidden')).toBe('true');
+
+    fixture.componentRef.setInput('calmMonth', false);
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('.activity-calendar-workout-preview')).toBeNull();
+    expect(fixture.nativeElement.querySelector('.planned-workout-markers')).toBeTruthy();
+
+    fixture.componentRef.setInput('compact', true);
+    fixture.componentRef.setInput('calmMonth', true);
+    fixture.componentRef.setInput('hideOutsideDays', true);
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('.activity-calendar--dense-dashboard-month')).toBeTruthy();
+    fixture.componentRef.setInput('model', buildActivityCalendarViewModel([], {
+      view: 'month', anchorDate: new Date(2026, 8, 1), startOfWeek: DaysOfTheWeek.Monday,
+      now: new Date(2026, 8, 1),
+    }));
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('.activity-calendar--dense-dashboard-month')).toBeNull();
+  });
   it.each(['week', 'month', 'year'] as const)('marks note-only days without activity markers in %s view', async view => {
     const fixture = await renderGrid(view, false, []);
     const note: TimelineNote = { id: 'a'.repeat(64), category: 'vacation', title: 'Vacation', startDate: '2026-08-03', endDate: '2026-08-03', timeZone: 'UTC', revision: 1, createdAtMs: 1, updatedAtMs: 1 };

@@ -39,6 +39,7 @@ export class ActivityCalendarGridComponent implements OnChanges {
   hasVisibleNotes = false;
   hasVisiblePlans = false;
   isMonthPicker = false;
+  isDenseDashboardMonth = false;
 
   ngOnChanges(): void {
     this.isMonthPicker = this.compact && !this.fillHeight && this.model?.view === 'month';
@@ -59,6 +60,8 @@ export class ActivityCalendarGridComponent implements OnChanges {
         weekendBackground: this.weekendColumnBackground(month.weekdays),
       };
     });
+    this.isDenseDashboardMonth = this.calmMonth && this.compact && this.fillHeight
+      && this.visibleMonths.some(month => month.days.length > 35);
   }
 
   private weekendColumnBackground(weekdays: ActivityCalendarMonthViewModel['weekdays']): string {

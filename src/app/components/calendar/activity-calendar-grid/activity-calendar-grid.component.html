@@ -6,6 +6,7 @@
   [class.activity-calendar--fill-height]="compact && fillHeight"
   [class.activity-calendar--dashboard-context]="dashboardDayContext"
   [class.activity-calendar--calm-month]="calmMonth && model.view === 'month'"
+  [class.activity-calendar--dense-dashboard-month]="isDenseDashboardMonth"
   [class.activity-calendar--picker]="isMonthPicker">
   <div class="activity-calendar-months">
     @for (month of visibleMonths; track month.id) {
@@ -34,6 +35,7 @@
             [class.activity-calendar-day--today]="day.isToday"
             [class.activity-calendar-day--selected]="selectedDateKey === day.dateKey"
             [class.activity-calendar-day--weekend]="day.isWeekend"
+            [class.activity-calendar-day--has-plan]="calmMonth && model.view === 'month' && !!plannedDay"
             [attr.aria-pressed]="selectedDateKey ? selectedDateKey === day.dateKey : null"
             [attr.aria-label]="(dayNotes?.ariaLabel ?? day.ariaLabel) + (plannedDay ? ' ' + plannedDay.ariaLabel + '.' : plannedWorkoutsByDate ? ' No planned workouts.' : '')"
             matRipple
@@ -82,6 +84,17 @@
                   <span>+{{ plannedDay.overflowCount }}</span>
                 }
               </span>
+              @if (calmMonth && model.view === 'month' && plannedDay.visibleEntries[0]; as firstWorkout) {
+                <span class="activity-calendar-workout-preview" aria-hidden="true"
+                  [style.color]="firstWorkout.color"
+                  [class.activity-calendar-workout-preview--skipped]="firstWorkout.workout.lifecycle === 'skipped'"
+                  [class.activity-calendar-workout-preview--completed]="firstWorkout.completed">
+                  <span class="activity-calendar-workout-preview-title">{{ firstWorkout.workout.title }}</span>
+                  @if (plannedDay.entries.length > 1) {
+                    <span class="activity-calendar-workout-preview-more">+{{ plannedDay.entries.length - 1 }}</span>
+                  }
+                </span>
+              }
             }
           </button>
         } @else {

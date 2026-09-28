@@ -533,14 +533,15 @@
   }
 }
 
-// Opt-in month presentation used by the Calendar route and dashboard tile.
+// The Calendar route and dashboard use Training's stronger day structure, while
+// retaining their activity circles, note cue, and existing month navigation.
 // Keep the shared picker, Week, and Year marker semantics unchanged.
 .activity-calendar--calm-month {
   .activity-calendar-month--surface { padding: 0; border: 0; border-radius: 0; background: transparent; box-shadow: none; }
   .activity-calendar-weekdays { min-height: 34px; }
   .activity-calendar-day,
   &.activity-calendar--compact .activity-calendar-day {
-    min-height: 64px;
+    min-height: 78px;
     align-items: flex-start;
     gap: 5px;
     padding: 7px;
@@ -550,6 +551,13 @@
   }
   .activity-calendar-day:nth-child(7n) { border-right: 0; }
   .activity-calendar-day--selected { background: color-mix(in srgb, var(--mat-sys-primary) 8%, transparent); }
+  .activity-calendar-day--today .activity-calendar-day-number {
+    background: transparent;
+    color: var(--mat-sys-on-surface);
+    font-weight: 700;
+    text-decoration: underline;
+    text-underline-offset: 4px;
+  }
   .activity-calendar-day-number,
   &.activity-calendar--compact .activity-calendar-day-number {
     width: 24px;
@@ -601,29 +609,53 @@
   .planned-workout-markers,
   &.activity-calendar--compact .planned-workout-markers {
     position: absolute;
-    top: auto;
-    right: 7px;
-    bottom: 4px;
-    width: auto;
-    max-width: 22px;
-    height: 14px;
-    flex-direction: row;
-    align-items: center;
+    top: 26px;
+    right: auto;
+    bottom: 0;
+    left: 0;
+    width: 3px;
+    max-width: none;
+    height: auto;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 1px;
     overflow: hidden;
     padding: 0;
     background: transparent;
   }
   .planned-workout-markers mat-icon,
   &.activity-calendar--compact .planned-workout-markers mat-icon {
-    width: 9px;
-    height: 3px;
-    flex: 0 0 9px;
+    width: 3px;
+    height: auto;
+    flex: 1 1 0;
     border: 0;
-    border-bottom: 3px solid currentColor;
+    border-inline-start: 3px solid currentColor;
     font-size: 0;
     line-height: 0;
   }
-  .planned-workout-marker--skipped { border-bottom-style: dashed; }
+  .planned-workout-markers .planned-workout-marker--skipped { border-inline-start-style: dashed; }
+  .planned-workout-markers > span { display: none; }
+  .activity-calendar-workout-preview {
+    position: absolute;
+    right: 5px;
+    bottom: 5px;
+    left: 7px;
+    display: flex;
+    min-width: 0;
+    align-items: center;
+    gap: 3px;
+    font: var(--mat-sys-label-small);
+    pointer-events: none;
+  }
+  .activity-calendar-workout-preview-title {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .activity-calendar-workout-preview-more { flex: 0 0 auto; }
+  .activity-calendar-workout-preview--skipped .activity-calendar-workout-preview-title { text-decoration: line-through; }
+  .activity-calendar-workout-preview--completed { font-weight: 600; }
   .activity-calendar-calm-legend {
     display: flex;
     flex-wrap: wrap;
@@ -641,23 +673,28 @@
     background: var(--mat-sys-primary);
   }
   .activity-calendar-calm-legend .activity-calendar-calm-legend-plan {
-    width: 10px;
-    height: 3px;
+    width: 3px;
+    height: 10px;
     border-radius: 0;
     background: var(--mat-sys-outline);
   }
 }
 
 .activity-calendar--calm-month.activity-calendar--dashboard-context {
-  .activity-calendar-day { min-height: 48px; gap: 1px; padding: 5px; }
+  .activity-calendar-day { min-height: 64px; gap: 3px; padding: 5px; }
   .activity-calendar-day-number { width: 21px; height: 21px; flex-basis: 21px; }
+  .activity-calendar-marker-stage { height: 14px; }
 }
 
+// A six-week dashboard month uses shorter fixed-height rows. Keep its colored
+// plan rail and accessible name, and leave the full title to the day preview.
+.activity-calendar--dense-dashboard-month .activity-calendar-workout-preview { display: none; }
+
 // The shared narrow-grid rules use concentric markers. Calm month keeps its
-// separate dots and 64px date cells until the phone layout takes over.
+// separate dots and readable date cells until the phone layout takes over.
 @container (max-width: 700px) {
   .activity-calendar--calm-month:not(.activity-calendar--year):not(.activity-calendar--compact) {
-    .activity-calendar-day { min-height: 64px; align-items: flex-start; gap: 5px; padding: 7px; }
+    .activity-calendar-day { min-height: 78px; align-items: flex-start; gap: 5px; padding: 7px; }
     .activity-calendar-marker-stage { position: static; width: auto; height: 16px; flex: 0 1 auto; }
     .activity-calendar-marker { position: static; width: 13px; height: 13px; border: 2px solid var(--mat-sys-surface); transform: none; }
   }
@@ -667,7 +704,7 @@
   .activity-calendar--calm-month {
     .activity-calendar-day,
     &.activity-calendar--compact .activity-calendar-day {
-      min-height: 46px;
+      min-height: 52px;
       align-items: center;
       gap: 2px;
       padding: 4px 1px;
@@ -678,10 +715,15 @@
     .activity-calendar-marker { width: 8px; height: 8px; margin-right: -3px; border-width: 1px; }
     .activity-calendar-marker-overflow { display: none; }
     .activity-calendar-calm-note { position: absolute; right: 2px; bottom: 7px; width: 2px; height: 12px; }
+    .activity-calendar-workout-preview { display: none; }
+    .planned-workout-markers,
+    &.activity-calendar--compact .planned-workout-markers { top: 18px; width: 2px; }
+    .planned-workout-markers mat-icon,
+    &.activity-calendar--compact .planned-workout-markers mat-icon { width: 2px; border-inline-start-width: 2px; }
   }
-  .activity-calendar--calm-month.activity-calendar--dashboard-context .activity-calendar-day { min-height: 44px; }
+  .activity-calendar--calm-month.activity-calendar--dashboard-context .activity-calendar-day { min-height: 48px; }
   .activity-calendar--calm-month:not(.activity-calendar--year):not(.activity-calendar--compact) {
-    .activity-calendar-day { min-height: 46px; align-items: center; gap: 2px; padding: 4px 1px; }
+    .activity-calendar-day { min-height: 52px; align-items: center; gap: 2px; padding: 4px 1px; }
     .activity-calendar-day-number { width: 19px; height: 19px; flex-basis: 19px; font: var(--mat-sys-label-small); }
     .activity-calendar-marker-stage { width: auto; height: 12px; flex: 0 1 auto; }
     .activity-calendar-marker { width: 8px; height: 8px; border-width: 1px; }
