@@ -9,7 +9,12 @@ import { getUserDeletionGuardState } from '../shared/user-deletion-guard';
 import { supplementNightlyHrvSleepDocuments } from '../sleep/nightly-hrv';
 import { aggregateNightlyHrvEvidence, sleepEvidenceSourceKey } from '../../../shared/nightly-hrv';
 import * as admin from 'firebase-admin';
-import { firestoreHrvRangeReads, HrvRangeInput, queryHrvPersonalRange } from './hrv-personal-range.service';
+import {
+  firestoreHrvRangeReads,
+  HrvRangeInput,
+  MCP_SLEEP_CANONICAL_TIME_FIELDS,
+  queryHrvPersonalRange,
+} from './hrv-personal-range.service';
 import {
   firestoreActivityDescriptionReads, McpActivityDescriptionInput, McpActivityDescriptionReads,
   MCP_ACTIVITY_DESCRIPTION_MAX_BYTES, MCP_ACTIVITY_DESCRIPTION_MAX_LENGTH, MCP_ACTIVITY_DESCRIPTION_MAX_RESULT_BYTES,
@@ -840,13 +845,12 @@ const defaultDependencies: McpDataServiceDependencies = {
         ...Object.values(SLEEP_SPORTS_LIB_METRIC_FIELDS)
           .map(field => new FieldPath('sportsLibData', 'metrics', field)),
         'inBedDurationSeconds',
-        'timezoneOffsetSeconds',
+        ...MCP_SLEEP_CANONICAL_TIME_FIELDS,
         'isNap',
         ...Object.values(SLEEP_STAGES)
           .map(stage => new FieldPath('stageDurationsSeconds', stage)),
         new FieldPath('score', 'value'),
         new FieldPath('score', 'qualifier'),
-        new FieldPath('providerFields', 'suunto', 'SleepOnsetLatencyDuration'),
         ...SAFE_SLEEP_VITAL_KEYS.map(key => new FieldPath('vitals', key)),
       );
     if (cursor) {
@@ -890,7 +894,7 @@ const defaultDependencies: McpDataServiceDependencies = {
         new FieldPath('sportsLibData', 'metrics', SLEEP_SPORTS_LIB_METRIC_FIELDS.HrvSampleCount),
         new FieldPath('sportsLibData', 'metrics', SLEEP_SPORTS_LIB_METRIC_FIELDS.AverageHeartRate),
         new FieldPath('sportsLibData', 'metrics', SLEEP_SPORTS_LIB_METRIC_FIELDS.MinimumHeartRate),
-        'timezoneOffsetSeconds',
+        ...MCP_SLEEP_CANONICAL_TIME_FIELDS,
         'isNap',
         new FieldPath('score', 'value'),
         new FieldPath('vitals', 'averageHrvMs'),
@@ -898,7 +902,6 @@ const defaultDependencies: McpDataServiceDependencies = {
         new FieldPath('vitals', 'hrvSampleCount'),
         new FieldPath('vitals', 'averageHeartRateBpm'),
         new FieldPath('vitals', 'minimumHeartRateBpm'),
-        new FieldPath('providerFields', 'suunto', 'SleepOnsetLatencyDuration'),
         ...(includeDailyReportFields
           ? [
               'inBedDurationSeconds',

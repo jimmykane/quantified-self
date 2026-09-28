@@ -7573,7 +7573,7 @@ describe('MCP data service', () => {
     expect(result.sessions).toEqual([]);
   });
 
-  it('uses canonical sleep dates without merging raw sessions and rejects impossible timestamps', async () => {
+  it('uses current and legacy Suunto offsets without merging raw sessions or accepting impossible timestamps', async () => {
     const impossibleTime = sleepDocument({
       startTimeMs: Number.MAX_SAFE_INTEGER - 1,
       endTimeMs: Number.MAX_SAFE_INTEGER,
@@ -7591,9 +7591,23 @@ describe('MCP data service', () => {
       timezoneOffsetSeconds: 2 * 60 * 60,
     });
     suuntoLocalWakeDate.id = 'suunto-local-wake-date';
+    const legacySuuntoLocalWakeDate = sleepDocument({
+      source: {
+        provider: SLEEP_PROVIDERS.SuuntoApp,
+        sourceSessionKey: 'private-legacy-suunto-source-key',
+        providerUserId: 'private-suunto-user',
+      },
+      sleepDate: '2024-03-30',
+      startTimeMs: Date.parse('2024-03-30T20:00:00.000Z'),
+      endTimeMs: Date.parse('2024-03-30T23:30:00.000Z'),
+      timezoneOffsetSeconds: null,
+      providerFields: { suunto: { timestamp: '2024-03-30T22:00:00.000+02:00' } },
+    });
+    legacySuuntoLocalWakeDate.id = 'legacy-suunto-local-wake-date';
     vi.mocked(dependencies.fetchSleepDocuments).mockResolvedValue([
       sleepDocument({ sleepDate: undefined }),
       suuntoLocalWakeDate,
+      legacySuuntoLocalWakeDate,
       impossibleTime,
     ]);
 
@@ -7615,7 +7629,13 @@ describe('MCP data service', () => {
         sleepDate: '2024-04-01',
         endTimeMs: Date.parse('2024-03-31T23:30:00.000Z'),
       }),
+      expect.objectContaining({
+        provider: SLEEP_PROVIDERS.SuuntoApp,
+        sleepDate: '2024-03-31',
+        endTimeMs: Date.parse('2024-03-30T23:30:00.000Z'),
+      }),
     ]);
+    expect(JSON.stringify(result)).not.toMatch(/private|providerFields|timezoneOffsetSeconds|\+02:00/);
   });
 
   it('rejects plaintext or tampered pagination cursors', async () => {
