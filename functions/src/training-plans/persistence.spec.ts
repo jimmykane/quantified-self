@@ -404,7 +404,7 @@ describe('mutateTrainingScheduleForUser persistence', () => {
         expect(db.read('users/user-1/scheduledWorkouts/workout-399')).toMatchObject({ localDate: '2026-09-03', revision: 3 });
     });
 
-    it('preflights high-entropy shift history without partially moving workouts', async () => {
+    it('stages high-entropy shift history before one current-schedule commit', async () => {
         db.seed('users/user-1/trainingPlanState/current', {
             ...createEmptyTrainingPlanState(), activePlanId: 'plan-1', revision: 1, currentWorkoutCount: 400,
         });
@@ -428,8 +428,6 @@ describe('mutateTrainingScheduleForUser persistence', () => {
             operation: { kind: 'shift-plan', planId: 'plan-1', days: 1 },
         };
 
-        await expect(mutateTrainingScheduleForUser('user-1', shift, { db: db as never, nowMs: NOW_MS }))
-            .rejects.toMatchObject({ code: 'limit-exceeded' });
         const batchError = await mutateTrainingScheduleBatchForUser('user-1', [shift, {
             mutationId: 'rename-after-oversized-shift',
             expectedRevisions: [
@@ -444,6 +442,16 @@ describe('mutateTrainingScheduleForUser persistence', () => {
         expect(db.read('users/user-1/scheduledWorkouts/workout-399')).toMatchObject({ localDate: '2026-09-02' });
         expect(db.updatedPaths).toEqual([]);
         expect(db.read('users/user-1/trainingPlans/plan-1/revisions/0000000004')).toBeUndefined();
+
+        const shifted = await mutateTrainingScheduleForUser('user-1', shift, { db: db as never, nowMs: NOW_MS });
+        expect(shifted.state.revision).toBe(2);
+        expect(db.read('users/user-1/scheduledWorkouts/workout-399'))
+            .toMatchObject({ localDate: '2026-09-03', revision: 3 });
+        expect(db.read('users/user-1/trainingPlans/plan-1/revisions/0000000004'))
+            .toMatchObject({ mutationId: shift.mutationId, revision: 4 });
+        expect(db.read('users/user-1/trainingPlanState/current/planDeletionLocks/_bulk_shift')).toBeUndefined();
+        expect(await mutateTrainingScheduleForUser('user-1', shift, { db: db as never, nowMs: NOW_MS + 1 }))
+            .toEqual(shifted);
     });
 
     it('persists colors in current plans, history and exact retry receipts without touching workouts', async () => {

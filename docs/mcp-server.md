@@ -50,6 +50,11 @@ delivery preview/apply remains authoritative.
 `training-plans.service.ts` owns explicit field masks and read-only Firestore snapshot transactions, not new persistence.
 Fresh schedule/account-deletion/plan-deletion fences run before and after results, as do external connection consent and
 grant-generation checks. Settings fingerprints are read only to correlate current delivery evidence and never returned.
+An oversized manual plan shift may temporarily hold the same internal bulk-operation fence while its immutable history
+is staged. During that interval, planning reads return the existing temporary-unavailability result instead of a
+partly staged schedule; after the atomic commit they read the new revision. This adds no MCP field, tool, scope,
+projection, provider action, or wider write authority. Approval-gated MCP shifts retain their existing bounded
+transaction path and may still reject an oversized request before writing.
 No credentials, private ledgers, attempts, artifacts, approval digests, issue text, receipts or history are read. Reads do
 not import transports or write Training data; normal OAuth usage counters remain permitted infrastructure behavior.
 

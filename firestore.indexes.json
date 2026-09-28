@@ -64,6 +64,10 @@
       "fields": [{ "fieldPath": "nextAttemptAtMs", "order": "ASCENDING" }, { "fieldPath": "__name__", "order": "ASCENDING" }]
     },
     {
+      "collectionGroup": "planDeletionLocks", "queryScope": "COLLECTION_GROUP",
+      "fields": [{ "fieldPath": "nextAttemptAtMs", "order": "ASCENDING" }, { "fieldPath": "__name__", "order": "ASCENDING" }]
+    },
+    {
       "collectionGroup": "trainingDeliverySettings",
       "queryScope": "COLLECTION",
       "fields": [
@@ -2553,6 +2557,12 @@
     {
       "collectionGroup": "trainingCleanupJobs",
       "fieldPath": "response",
+      "ttl": false,
+      "indexes": []
+    },
+    {
+      "collectionGroup": "planDeletionLocks",
+      "fieldPath": "request",
       "ttl": false,
       "indexes": []
     }

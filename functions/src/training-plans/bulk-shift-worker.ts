@@ -1,0 +1,91 @@
+import * as admin from 'firebase-admin';
+import * as logger from 'firebase-functions/logger';
+import { TRAINING_PLAN_DELETION_LOCKS_COLLECTION_ID } from '../../../shared/training-plans';
+import { getUserDeletionGuardStateInTransaction } from '../shared/user-deletion-guard';
+import {
+    BULK_SHIFT_LEASE_MS,
+    BULK_SHIFT_LOCK_ID,
+    readBulkShiftLock,
+    stageLargeTrainingPlanShiftForUser,
+} from './staged-shift';
+
+const MAX_RETRY_MS = 60 * 60 * 1000;
+
+function ownerFromLockPath(path: string): string | null {
+    const segments = path.split('/');
+    return segments.length === 6 && segments[0] === 'users' && segments[2] === 'trainingPlanState'
+        && segments[3] === 'current' && segments[4] === TRAINING_PLAN_DELETION_LOCKS_COLLECTION_ID
+        && segments[5] === BULK_SHIFT_LOCK_ID ? segments[1] : null;
+}
+
+/** A timed-out callable leaves the old schedule visible; a later invocation finishes its staged revision. */
+export async function processTrainingBulkShift(
+    db: admin.firestore.Firestore,
+    ref: admin.firestore.DocumentReference,
+    nowMs: number,
+): Promise<boolean> {
+    const uid = ownerFromLockPath(ref.path);
+    if (!uid) return false;
+    const claimed = await db.runTransaction(async transaction => {
+        if ((await getUserDeletionGuardStateInTransaction(db, transaction, uid, nowMs)).shouldSkip) return null;
+        const snapshot = await transaction.get(ref);
+        if (!snapshot.exists) return null;
+        const lock = readBulkShiftLock(snapshot.data());
+        if (lock.nextAttemptAtMs > nowMs) return null;
+        const attempt = lock.attempts + 1;
+        transaction.update(ref, { attempts: attempt, nextAttemptAtMs: nowMs + BULK_SHIFT_LEASE_MS });
+        return { lock, attempt };
+    });
+    if (!claimed) return false;
+    try {
+        await stageLargeTrainingPlanShiftForUser(uid, claimed.lock.request, { db, nowMs });
+        return true;
+    } catch (error) {
+        const retryMs = Math.min(MAX_RETRY_MS, 60_000 * 2 ** Math.min(claimed.attempt, 6));
+        await db.runTransaction(async transaction => {
+            if ((await getUserDeletionGuardStateInTransaction(db, transaction, uid, nowMs)).shouldSkip) return;
+            const snapshot = await transaction.get(ref);
+            if (!snapshot.exists) return;
+            const current = readBulkShiftLock(snapshot.data());
+            if (current.mutationId === claimed.lock.mutationId && current.attempts === claimed.attempt) {
+                transaction.update(ref, { nextAttemptAtMs: nowMs + retryMs });
+            }
+        });
+        throw error;
+    }
+}
+
+/** Bound each scheduled run to one large shift; ordinary cleanup retains its own scan budget. */
+export async function reconcileTrainingBulkShifts(
+    db: admin.firestore.Firestore,
+    nowMs = Date.now(),
+): Promise<{ scanned: number; completed: number; failed: number }> {
+    const due = await db.collectionGroup(TRAINING_PLAN_DELETION_LOCKS_COLLECTION_ID)
+        .where('nextAttemptAtMs', '<=', nowMs).orderBy('nextAttemptAtMs').limit(1).get();
+    const snapshot = due.docs[0];
+    if (!snapshot) return { scanned: 0, completed: 0, failed: 0 };
+    try {
+        const completed = await processTrainingBulkShift(db, snapshot.ref, nowMs);
+        return { scanned: 1, completed: Number(completed), failed: 0 };
+    } catch (error) {
+        const uid = ownerFromLockPath(snapshot.ref.path);
+        if (uid) {
+            try {
+                await db.runTransaction(async transaction => {
+                    if ((await getUserDeletionGuardStateInTransaction(db, transaction, uid, nowMs)).shouldSkip) return;
+                    const current = await transaction.get(snapshot.ref);
+                    if (current.exists && typeof current.data()?.nextAttemptAtMs === 'number'
+                        && current.data()!.nextAttemptAtMs <= nowMs) {
+                        transaction.update(snapshot.ref, { nextAttemptAtMs: nowMs + MAX_RETRY_MS });
+                    }
+                });
+            } catch {
+                // Preserve the record for operator investigation if even deferral fails.
+            }
+        }
+        logger.warn('[TrainingBulkShift]', {
+            event: 'resume_failed', errorName: error instanceof Error ? error.name : 'UnknownError',
+        });
+        return { scanned: 1, completed: 0, failed: 1 };
+    }
+}

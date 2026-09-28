@@ -568,11 +568,22 @@ packed Sports Lib package. That gate is tracked by GitHub issue #654 under epic 
   bounded to 100 writes and about 2 MiB of serialized payload; its final transaction patches only plan association,
   revision, and timestamp. A plan restore likewise patches scalar-only changes and preflights estimated write payload;
   an oversized full-prescription restore returns a stable `limit-exceeded` error before any write. Schedule mutation
-  batches, including high-entropy plan shifts, also preflight compressed revision chunks and current-record writes
-  against a conservative 7 MiB budget; an oversized single change fails before a write and an oversized multi-change
-  batch uses the existing sequential fallback. This remains a safety guard, not the
-  resumable oversized restore/shift workflow required to complete #657. The canonical workout JSON and the published
-  400-workout limit do not change.
+  batches preflight compressed revision chunks and current-record writes against a conservative 7 MiB budget;
+  an oversized multi-change batch uses the existing sequential fallback. For an oversized single **manual plan shift**,
+  the server instead creates an owner-scoped `_bulk_shift` lock in `planDeletionLocks` with the exact validated request,
+  base revisions, mutation ID, and retry schedule. It writes immutable compressed history chunks below a missing
+  revision envelope in bounded idempotent transactions. Current state, plan, and workout roots remain unchanged and
+  visible during staging. A final transaction checks the same base revisions, patches only dates/revisions on the
+  current workouts, creates the revision envelope and receipts, queues delivery reconciliation, and removes the lock.
+  History readers cannot discover staged child chunks before that envelope exists. An exact retry or a browser reload
+  with a replacement mutation ID for the same intent resumes the locked shift; both IDs receive receipts on commit.
+  Other schedule mutations, restores, deletions, provider delivery, and MCP Training reads are fenced while the lock
+  exists. The existing five-minute cleanup scheduler also leases and resumes one due shift per invocation after a
+  timed-out callable, with bounded backoff and account-deletion fencing. Its scan failure cannot starve permanent-delete
+  cleanup. Deploy the `planDeletionLocks(nextAttemptAtMs, __name__)` collection-group index and unindexed `request`
+  field before enabling this worker. Inspect `[TrainingBulkShift] resume_failed` or `scan_failed` logs and the lock's
+  retry schedule if a shift remains pending; do not manually remove a lock without examining its revision and receipts.
+  The canonical workout JSON and published 400-workout limit do not change.
 - A permanent workout or plan deletion creates a server-internal `trainingCleanupJobs` record in the same transaction
   as its canonical receipt. The callable attempts recursive cleanup immediately; `reconcileTrainingPlanCleanup`
   scans due jobs every five minutes, leases each job, checks the account-deletion guard and matching deletion
@@ -588,16 +599,18 @@ packed Sports Lib package. That gate is tracked by GitHub issue #654 under epic 
   enabling the worker. Inspect `[TrainingCleanup] cleanup_retry_failed` logs and due jobs when a lock persists; do not
   delete a lock or job by hand without checking its receipt and tombstone.
 - #657 remains open for a resumable, atomically visible **full-prescription plan restore** of 400 high-complexity
-  structures and for staging oversized shift-history chunks. Date-only 400-workout restore, shift, and conversion pass
-  isolated demo-emulator lifecycle tests, but arbitrary structure rewrites still exceed an atomic request and are not
-  accepted. Do not lower v1 limits or report the bulk workflow complete until failure-injection and emulator
-  request-size/concurrency tests prove the staged operation's visibility and retries.
+  structures, and for extending staged single-shift behavior to the approval-gated MCP mutation path. Date-only
+  400-workout restore, shift, and conversion pass isolated demo-emulator lifecycle tests, but arbitrary structure
+  rewrites still exceed an atomic request and are not accepted. Do not lower v1 limits or report the full bulk workflow
+  complete until failure-injection and emulator request-size/concurrency tests cover the remaining restore path.
 - MCP impact for the paging and cleanup slice: existing Training MCP current reads already exclude deleted workouts;
   internal cleanup jobs and UI-only deleted-history paging expose no new MCP field, permission, mutation kind, provider
   action, or approval route. Existing MCP plan deletion continues through the same idempotent server path.
-- MCP impact for large-write preflight: no tool, schema, scope, consent, projection, or provider action changes. The
-  existing batch apply may fall back to sequential transactions when its estimated payload is too large; a single
-  oversized shift returns the existing limit-error category without applying a partial schedule.
+- MCP impact for staged shifts: no tool, schema, scope, consent, projection, or provider action changes. Existing
+  Training reads return their established temporary-unavailability result while a bulk lock is held rather than
+  exposing a partly staged plan. Approval-gated MCP mutations retain their current bounded transaction and can still
+  reject an oversized shift with the existing limit-error category; they do not silently enter the manual shift path.
+  The existing batch apply may fall back to sequential transactions when its estimated payload is too large.
 - MCP impact for plan-cleanup ownership recheck: no tool or wire change; existing approved plan deletion still uses its
   saved idempotent receipt, while a cleanup worker cannot remove residual workouts after its owning plan job is gone.
 

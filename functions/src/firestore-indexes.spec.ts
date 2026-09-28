@@ -40,11 +40,20 @@ describe('firestore indexes', () => {
             ['revisions', 'snapshot'],
             ['chunks', 'payloadBase64'],
             ['trainingCleanupJobs', 'response'],
+            ['planDeletionLocks', 'request'],
         ]) {
             expect(config.fieldOverrides).toContainEqual({ collectionGroup, fieldPath, ttl: false, indexes: [] });
         }
         expect(config.indexes).toContainEqual({
             collectionGroup: 'trainingCleanupJobs',
+            queryScope: 'COLLECTION_GROUP',
+            fields: [
+                { fieldPath: 'nextAttemptAtMs', order: 'ASCENDING' },
+                { fieldPath: '__name__', order: 'ASCENDING' },
+            ],
+        });
+        expect(config.indexes).toContainEqual({
+            collectionGroup: 'planDeletionLocks',
             queryScope: 'COLLECTION_GROUP',
             fields: [
                 { fieldPath: 'nextAttemptAtMs', order: 'ASCENDING' },

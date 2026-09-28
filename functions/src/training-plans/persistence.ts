@@ -231,6 +231,7 @@ export function buildTrainingScheduleRevisionWrites(
     applied: AppliedTrainingScheduleMutationV1,
     request: { mutationId: string; operation: { kind: string } },
     nowMs: number,
+    allowStagedChunkWrites = false,
 ): TrainingScheduleRevisionWritesV1 {
     const planRevisions = new Map<string, TrainingPlanRevisionDocumentV1>();
     const planRevisionChunks = new Map<string, TrainingPlanRevisionChunkDocumentV1[]>();
@@ -323,8 +324,8 @@ export function buildTrainingScheduleRevisionWrites(
         + applied.permanentlyDeletedWorkoutIds.length * 3
         + standaloneWorkoutRevisions.size
         + [...planRevisionChunks.values()].reduce((total, chunks) => total + chunks.length, 0);
-    if (estimatedWriteCount > FIRESTORE_TRANSACTION_WRITE_BUDGET) {
-        throw new TrainingScheduleMutationError(
+    if (!allowStagedChunkWrites && estimatedWriteCount > FIRESTORE_TRANSACTION_WRITE_BUDGET) {
+        throw new TrainingScheduleOversizedMutationError(
             'limit-exceeded',
             'This change produces too much revision history for one atomic operation. Split it into smaller changes.',
         );
@@ -333,7 +334,7 @@ export function buildTrainingScheduleRevisionWrites(
     return { planRevisions, planRevisionChunks, standaloneWorkoutRevisions };
 }
 
-function parseStoredMutationResponse(value: unknown): MutateTrainingScheduleResponseV1 {
+export function parseStoredMutationResponse(value: unknown): MutateTrainingScheduleResponseV1 {
     if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('Invalid mutation receipt response.');
     const record = value as Record<string, unknown>;
     if (typeof record.mutationId !== 'string' || !Array.isArray(record.plans) || !Array.isArray(record.workouts)) {
@@ -392,7 +393,7 @@ function documentData(snapshot: admin.firestore.DocumentSnapshot): Record<string
     return (snapshot.data() ?? {}) as Record<string, unknown>;
 }
 
-async function readTrainingScheduleSnapshotInTransaction(
+export async function readTrainingScheduleSnapshotInTransaction(
     transaction: admin.firestore.Transaction,
     userRef: admin.firestore.DocumentReference,
     requests: readonly MutateTrainingScheduleRequestV1[],
@@ -495,6 +496,10 @@ export class TrainingScheduleBatchWriteLimitError extends TrainingScheduleMutati
     }
 }
 
+export class TrainingScheduleOversizedMutationError extends TrainingScheduleMutationError {
+    override name = 'TrainingScheduleOversizedMutationError';
+}
+
 interface AppliedBatchItem {
     request: MutateTrainingScheduleRequestV1;
     applied: AppliedTrainingScheduleMutationV1;
@@ -574,7 +579,7 @@ function assertBoundedBatchWritePayload(items: readonly AppliedBatchItem[], addi
     }
     if (estimated > FIRESTORE_TRANSACTION_ESTIMATED_WRITE_BYTES_BUDGET) {
         if (items.length > 1) throw new TrainingScheduleBatchWriteLimitError();
-        throw new TrainingScheduleMutationError(
+        throw new TrainingScheduleOversizedMutationError(
             'limit-exceeded',
             'This Training change is too large for one atomic change. No changes were applied; contact support.',
         );
@@ -803,6 +808,16 @@ export async function mutateTrainingScheduleForUser(
     request: MutateTrainingScheduleRequestV1,
     options: TrainingScheduleMutationOptions = {},
 ): Promise<MutateTrainingScheduleResponseV1> {
-    const responses = await mutateTrainingScheduleBatchForUser(uid, [request], options);
-    return responses[0];
+    try {
+        const responses = await mutateTrainingScheduleBatchForUser(uid, [request], options);
+        return responses[0];
+    } catch (error) {
+        if (request.operation.kind !== 'shift-plan' || options.transactionPrecondition
+            || options.transactionPostcondition || options.additionalWriteBudget
+            || !(error instanceof TrainingScheduleOversizedMutationError
+                || (error instanceof TrainingScheduleMutationError && error.code === 'failed-precondition'
+                    && error.message.includes('deletion is in progress')))) throw error;
+        const { stageLargeTrainingPlanShiftForUser } = await import('./staged-shift');
+        return stageLargeTrainingPlanShiftForUser(uid, request, options);
+    }
 }

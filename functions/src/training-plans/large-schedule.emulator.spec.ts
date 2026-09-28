@@ -5,6 +5,8 @@ import { Firestore } from 'firebase-admin/firestore';
 import { afterAll, describe, expect, it } from 'vitest';
 import { deleteTrainingPlanForUser } from './delete-training-plan';
 import { restoreTrainingScheduleRevisionForUser } from './restore';
+import { reconcileTrainingBulkShifts } from './bulk-shift-worker';
+import { BULK_SHIFT_LEASE_MS, stageLargeTrainingPlanShiftForUser } from './staged-shift';
 import {
     TRAINING_PLAN_REVISION_CHUNK_ENCODING,
     TRAINING_PLAN_REVISION_CHUNK_MAX_BASE64_CHARACTERS,
@@ -144,7 +146,62 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('400-workout Training muta
         expect(saved).not.toHaveProperty('deletedAtMs');
     });
 
-    it('rejects oversized 400-prescription restore and shift before changing any current record', async () => {
+    it('automatically resumes a staged shift after an interrupted callable', async () => {
+        const uid = `large-${randomUUID()}`; uids.push(uid);
+        const user = db.collection('users').doc(uid);
+        const stateRef = user.collection('trainingPlanState').doc('current');
+        const planRef = user.collection('trainingPlans').doc('auto-plan');
+        const workoutRef = user.collection('scheduledWorkouts').doc('auto-workout');
+        await user.set({ test: true });
+        await stateRef.set({ schemaVersion: 1, activePlanId: 'auto-plan', revision: 1,
+            currentWorkoutCount: 1, updatedAtMs: nowMs });
+        await planRef.set({ schemaVersion: 1, id: 'auto-plan', name: 'Synthetic worker recovery',
+            lifecycle: 'active', startLocalDate: '2026-10-01', endLocalDate: '2026-10-31',
+            revision: 1, lastCheckpointRevision: 1, workoutCount: 1, createdAtMs: nowMs, updatedAtMs: nowMs });
+        await workoutRef.set({ schemaVersion: 1, id: 'auto-workout', planId: 'auto-plan',
+            localDate: '2026-10-02', lifecycle: 'planned', title: 'Synthetic run',
+            structure: { version: 1, sport: ActivityTypes.Running, nodes: [{ kind: 'step', id: 'run',
+                purpose: 'work', ending: { kind: 'time', seconds: 300 }, targets: [] }] },
+            revision: 1, createdAtMs: nowMs, updatedAtMs: nowMs });
+        const shift = { mutationId: 'auto-shift', expectedRevisions: [
+            { scope: 'state' as const, id: 'current', revision: 1 },
+            { scope: 'plan' as const, id: 'auto-plan', revision: 1 },
+        ], operation: { kind: 'shift-plan' as const, planId: 'auto-plan', days: 1 } };
+        const staged = planRef.collection('revisions').doc(trainingScheduleRevisionDocumentId(2));
+        let interrupted = false;
+        const interrupt = { collection: (id: string) => db.collection(id),
+            runTransaction: async (handler: (transaction: FirebaseFirestore.Transaction) => Promise<unknown>) => {
+                const response = await db.runTransaction(handler);
+                if (!interrupted && !(await staged.collection('chunks').limit(1).get()).empty && !(await staged.get()).exists) {
+                    interrupted = true;
+                    throw new Error('synthetic interrupted callable');
+                }
+                return response;
+            } } as unknown as Firestore;
+        await expect(stageLargeTrainingPlanShiftForUser(uid, shift, { db: interrupt, nowMs }))
+            .rejects.toThrow('synthetic interrupted callable');
+        expect((await workoutRef.get()).data()).toMatchObject({ localDate: '2026-10-02', revision: 1 });
+        expect((await stateRef.get()).data()).toMatchObject({ revision: 1 });
+        expect((await staged.get()).exists).toBe(false);
+        const lockNextAttemptAtMs = (await stateRef.collection('planDeletionLocks').doc('_bulk_shift').get())
+            .data()!.nextAttemptAtMs as number;
+        expect(lockNextAttemptAtMs).toBeGreaterThanOrEqual(nowMs + BULK_SHIFT_LEASE_MS);
+        expect(await reconcileTrainingBulkShifts(db, lockNextAttemptAtMs - 1))
+            .toEqual({ scanned: 0, completed: 0, failed: 0 });
+        const concurrent = await Promise.all([
+            reconcileTrainingBulkShifts(db, lockNextAttemptAtMs + 1),
+            reconcileTrainingBulkShifts(db, lockNextAttemptAtMs + 1),
+        ]);
+        expect(concurrent.reduce((count, result) => count + result.completed, 0)).toBe(1);
+        expect(concurrent.every(result => result.failed === 0)).toBe(true);
+        expect((await stateRef.get()).data()).toMatchObject({ revision: 2 });
+        expect((await workoutRef.get()).data()).toMatchObject({ localDate: '2026-10-03', revision: 2 });
+        expect((await staged.get()).exists).toBe(true);
+        expect((await stateRef.collection('planDeletionLocks').doc('_bulk_shift').get()).exists).toBe(false);
+        expect((await stateRef.collection('mutationReceipts').doc('auto-shift').get()).exists).toBe(true);
+    });
+
+    it('rejects oversized 400-prescription restore and stages a high-entropy shift', async () => {
         const uid = `large-${randomUUID()}`; uids.push(uid);
         const user = db.collection('users').doc(uid);
         await user.set({ test: true });
@@ -235,12 +292,46 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('400-workout Training muta
             expectedRevisions: [{ scope: 'state' as const, id: 'current', revision: 3 },
                 { scope: 'plan' as const, id: plan.id, revision: 3 }],
             operation: { kind: 'shift-plan' as const, planId: plan.id, days: 1 } };
-        await expect(mutateTrainingScheduleForUser(uid, shift, { db, nowMs: nowMs + 2 }))
-            .rejects.toMatchObject({ code: 'limit-exceeded' });
-        expect((await stateRef.get()).data()).toMatchObject({ revision: 3 });
-        expect((await planRef.get()).data()).toMatchObject({ revision: 3 });
+        const pendingRevision = planRef.collection('revisions').doc(trainingScheduleRevisionDocumentId(4));
+        let interrupted = false;
+        const interruptAfterFirstChunk = {
+            collection: (id: string) => db.collection(id),
+            runTransaction: async (handler: (transaction: FirebaseFirestore.Transaction) => Promise<unknown>) => {
+                const result = await db.runTransaction(handler);
+                if (!interrupted && !(await pendingRevision.collection('chunks').limit(1).get()).empty
+                    && !(await pendingRevision.get()).exists) {
+                    interrupted = true;
+                    expect((await stateRef.get()).data()).toMatchObject({ revision: 3 });
+                    expect((await planRef.get()).data()).toMatchObject({ revision: 3 });
+                    expect((await user.collection('scheduledWorkouts').doc('workout-399').get()).data())
+                        .toMatchObject({ localDate: '2026-10-02', revision: 3 });
+                    throw new Error('synthetic lost stage response');
+                }
+                return result;
+            },
+        } as unknown as Firestore;
+        await expect(mutateTrainingScheduleForUser(uid, shift, { db: interruptAfterFirstChunk, nowMs: nowMs + 2 }))
+            .rejects.toThrow('synthetic lost stage response');
+        expect(interrupted).toBe(true);
+        expect((await stateRef.collection('planDeletionLocks').doc('_bulk_shift').get()).exists).toBe(true);
+        expect((await pendingRevision.get()).exists).toBe(false);
+        await expect(mutateTrainingScheduleForUser(uid, {
+            mutationId: 'conflicting-rename', expectedRevisions: shift.expectedRevisions,
+            operation: { kind: 'rename-plan', planId: plan.id, name: 'Must not overwrite staged shift' },
+        }, { db, nowMs: nowMs + 3 })).rejects.toMatchObject({ code: 'failed-precondition' });
+        const resumedShift = { ...shift, mutationId: 'resumed-oversized-shift' };
+        const shifted = await mutateTrainingScheduleForUser(uid, resumedShift, { db, nowMs: nowMs + 4 });
+        expect(shifted.mutationId).toBe(shift.mutationId);
+        expect(shifted.state.revision).toBe(4);
+        expect((await stateRef.get()).data()).toMatchObject({ revision: 4 });
+        expect((await planRef.get()).data()).toMatchObject({ revision: 4 });
         expect((await user.collection('scheduledWorkouts').doc('workout-399').get()).data())
-            .toMatchObject({ localDate: '2026-10-02', revision: 3 });
-        expect((await stateRef.collection('mutationReceipts').doc(shift.mutationId).get()).exists).toBe(false);
+            .toMatchObject({ localDate: '2026-10-03', revision: 4 });
+        expect((await stateRef.collection('mutationReceipts').doc(shift.mutationId).get()).exists).toBe(true);
+        expect((await stateRef.collection('mutationReceipts').doc(resumedShift.mutationId).get()).exists).toBe(true);
+        expect((await planRef.collection('revisions').doc(trainingScheduleRevisionDocumentId(4)).get()).exists).toBe(true);
+        expect((await stateRef.collection('planDeletionLocks').doc('_bulk_shift').get()).exists).toBe(false);
+        expect(await mutateTrainingScheduleForUser(uid, shift, { db, nowMs: nowMs + 3 })).toEqual(shifted);
+        expect(await mutateTrainingScheduleForUser(uid, resumedShift, { db, nowMs: nowMs + 5 })).toEqual(shifted);
     });
 });

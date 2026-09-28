@@ -614,6 +614,8 @@ describe('help.content', () => {
     expect(planningSection?.content).toContain('browser Back and Forward');
     expect(planningSection?.content).toContain('**Plan actions -> Plan color**');
     expect(planningSection?.content).toContain('restoring plan history also restores its saved color');
+    expect(planningSection?.content).toContain('Your existing plan and workout dates remain visible until the shift commits together');
+    expect(planningSection?.content).toContain('full-prescription history restore can still be rejected safely');
     expect(HELP_SECTIONS.find(section => section.id === 'activity-calendar')?.content)
       .toContain('Standalone workouts stay neutral');
     expect(planningSection?.content).toContain('Workout delivery to Garmin, Suunto, and Wahoo is available to connected Pro members');

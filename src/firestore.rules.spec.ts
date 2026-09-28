@@ -1728,6 +1728,8 @@ describe('Firestore Security Rules', () => {
                     await userRef.collection('trainingPlanState').doc('current')
                         .collection('planDeletionLocks').doc('plan-1').set({ requestHash: 'private' });
                     await userRef.collection('trainingPlanState').doc('current')
+                        .collection('planDeletionLocks').doc('_bulk_shift').set({ requestHash: 'private' });
+                    await userRef.collection('trainingPlanState').doc('current')
                         .collection('deletionTombstones').doc('hashed-entity-id').set({ entityIdHash: 'private' });
                     await userRef.collection('trainingPlanState').doc('current')
                         .collection('trainingCleanupJobs').doc('workout_cleanup').set({ kind: 'workout', mutationId: 'private' });
@@ -1814,6 +1816,7 @@ describe('Firestore Security Rules', () => {
                     `users/${userId}/scheduledWorkouts/workout-1/revisions/0000000001`,
                     `users/${userId}/trainingPlanState/current/mutationReceipts/mutation-1`,
                     `users/${userId}/trainingPlanState/current/planDeletionLocks/plan-1`,
+                    `users/${userId}/trainingPlanState/current/planDeletionLocks/_bulk_shift`,
                     `users/${userId}/trainingPlanState/current/deletionTombstones/hashed-entity-id`,
                 ];
                 for (const path of internalPaths) {
