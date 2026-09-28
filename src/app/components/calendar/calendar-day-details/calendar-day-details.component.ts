@@ -34,6 +34,7 @@ import { getDateTimeFormatter } from '../../../helpers/date-time-format.helper';
 export interface CalendarDayDetailsData {
   day: ActivityCalendarDayViewModel;
   userId: string;
+  returnToDashboard?: boolean;
   privateHealthEnabled?: boolean;
   planningEnabled?: boolean;
   locale?: string;
@@ -98,6 +99,7 @@ export class CalendarDayDetailsComponent {
   });
   readonly canOpenFullDay = computed(() => this.data.privateHealthEnabled !== false
     && this.users.user()?.uid === this.data.userId);
+  readonly fullDayQueryParams = this.data.returnToDashboard ? { from: 'dashboard' } : null;
   private readonly titleFormatter = getDateTimeFormatter(this.data.locale, {
     weekday: 'long',
     month: 'long',

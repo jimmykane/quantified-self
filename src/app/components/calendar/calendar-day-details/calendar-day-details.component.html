@@ -8,6 +8,7 @@
   <div class="bottom-sheet-content calendar-day-details-content">
     @if (canOpenFullDay()) {
       <a mat-button appHapticTap class="calendar-day-details-full-day" [routerLink]="['/calendar/day', data.day.dateKey]"
+        [queryParams]="fullDayQueryParams"
         (click)="prepareFullDayNavigation()">
         Open full day <mat-icon iconPositionEnd aria-hidden="true">arrow_forward</mat-icon>
       </a>

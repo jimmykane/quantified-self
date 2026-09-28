@@ -106,7 +106,7 @@ describe('ActivityCalendarTileComponent', () => {
     expect(fixture.nativeElement.querySelector('.activity-calendar-tile-navigation > span')?.textContent.trim())
       .toBe(fixture.componentInstance.calendarModel().periodLabel);
     const fullDayLink = fixture.nativeElement.querySelector('a[aria-label="Open selected day page"]');
-    expect(fullDayLink?.getAttribute('href')).toBe(`/calendar/day/${day.dateKey}`);
+    expect(fullDayLink?.getAttribute('href')).toBe(`/calendar/day/${day.dateKey}?from=dashboard`);
     expect(openBottomSheet).not.toHaveBeenCalled();
     fixture.componentRef.setInput('privateHealthEnabled', false); fixture.detectChanges();
     expect(fixture.nativeElement.querySelector('a[aria-label="Open selected day page"]')).toBeNull();
@@ -202,7 +202,7 @@ describe('ActivityCalendarTileComponent', () => {
     expect(fixture.nativeElement.querySelectorAll('.calendar-day-context-preview-plan')).toHaveLength(2);
     expect(fixture.nativeElement.textContent).toContain('+2 more on the full day');
     expect(fixture.nativeElement.querySelector('a[aria-label="Open selected day page"]')?.getAttribute('href'))
-      .toBe(`/calendar/day/${dateKey}`);
+      .toBe(`/calendar/day/${dateKey}?from=dashboard`);
   });
 
   it('restores the inline selected date while its month activities are still loading', async () => {
@@ -330,6 +330,7 @@ describe('ActivityCalendarTileComponent', () => {
   });
 
   it('opens the shared day details sheet from an activity day', async () => {
+    vi.spyOn(TestBed.inject(Router), 'url', 'get').mockReturnValue('/dashboard');
     const fixture = TestBed.createComponent(ActivityCalendarTileComponent);
     fixture.componentRef.setInput('user', user);
     fixture.detectChanges();
@@ -344,6 +345,7 @@ describe('ActivityCalendarTileComponent', () => {
     expect(openBottomSheet).toHaveBeenCalledWith(expect.any(Function), expect.objectContaining({
       data: expect.objectContaining({
         userId: planningUserUid,
+        returnToDashboard: true,
         unitSettings: user.settings.unitSettings,
       }),
     }));

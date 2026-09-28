@@ -129,6 +129,7 @@ export class CalendarDayContextComponent {
     this.data().unitSettings, this.data().locale,
   ));
   readonly fullDayRoute = computed(() => ['/calendar/day', this.data().day.dateKey]);
+  readonly fullDayQueryParams = computed(() => this.dashboardTile() ? { from: 'dashboard' } : null);
   readonly dayStory = computed(() => buildCalendarDayStory({
     dateKey: this.data().day.dateKey,
     locale: this.data().locale,

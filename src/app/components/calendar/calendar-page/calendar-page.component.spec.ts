@@ -200,6 +200,33 @@ describe('CalendarPageComponent', () => {
     expect(fixture.componentInstance.selectedDay()?.dateKey).toBe('2026-08-03');
   });
 
+  it('returns to the dashboard only when the full day was opened from its calendar tile', async () => {
+    queryParams.next(convertToParamMap({ from: 'dashboard' }));
+    activatedRoute.snapshot.queryParamMap = queryParams.value;
+    activatedRoute.snapshot.data = { calendarMode: 'day' };
+    activatedRoute.snapshot.paramMap = convertToParamMap({ date: '2026-08-03' });
+    routeParams.next(activatedRoute.snapshot.paramMap);
+    const fixture = TestBed.createComponent(CalendarPageComponent);
+    fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+
+    const back = fixture.nativeElement.querySelector('.calendar-day-toolbar a');
+    expect(back?.getAttribute('href')).toBe('/dashboard');
+    expect(back?.getAttribute('aria-label')).toBe('Back to dashboard');
+    expect(back?.textContent).toContain('Dashboard');
+
+    fixture.componentInstance.navigatePeriod(1);
+    expect(navigate).toHaveBeenCalledWith(['/calendar/day', '2026-08-04'], {
+      queryParams: { from: 'dashboard' },
+    });
+    routeParams.next(convertToParamMap({ date: '2026-08-04' }));
+    fixture.detectChanges();
+    expect(back?.getAttribute('href')).toBe('/dashboard');
+
+    queryParams.next(convertToParamMap({}));
+    fixture.detectChanges();
+    expect(back?.getAttribute('href')).toBe('/calendar?view=month&date=2026-08-04');
+  });
+
   it('reads and exposes planning for any signed-in account while completed activities remain visible', async () => {
     const otherUser = { ...user, uid: 'another-user' };
     watchSchedule.mockReturnValue(of(trainingSchedule()));

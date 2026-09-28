@@ -123,6 +123,9 @@ export class CalendarPageComponent {
   ];
   readonly familyVolumeTooltip = ACTIVITY_CALENDAR_VOLUME_TOOLTIP;
   readonly routeState = toSignal(this.routeState$, { initialValue: this.initialRouteState });
+  readonly openedFromDashboard = toSignal(this.route.queryParamMap.pipe(map(params => params.get('from') === 'dashboard')), {
+    initialValue: this.route.snapshot.queryParamMap.get('from') === 'dashboard',
+  });
   private readonly explicitDateParam = toSignal(this.route.queryParamMap.pipe(map(params => params.get('date'))), {
     initialValue: this.route.snapshot.queryParamMap.get('date'),
   });
@@ -266,6 +269,9 @@ export class CalendarPageComponent {
   readonly calendarBackQuery = computed(() => ({
     view: 'month', date: formatActivityCalendarDateParam(this.routeState().anchorDate),
   }));
+  readonly dayBackNavigation = computed(() => this.openedFromDashboard()
+    ? { route: ['/dashboard'], query: null, label: 'Dashboard', ariaLabel: 'Back to dashboard' }
+    : { route: ['/calendar'], query: this.calendarBackQuery(), label: 'Calendar', ariaLabel: 'Back to calendar for this day' });
   readonly selectedDay = computed(() => {
     const dateKey = formatActivityCalendarDateParam(this.routeState().anchorDate);
     return this.calendarModel().months.flatMap(month => month.days)
@@ -331,7 +337,7 @@ export class CalendarPageComponent {
     const routeDate = this.dayRouteDateParam();
     const canonicalDate = formatActivityCalendarDateParam(parseActivityCalendarDate(routeDate));
     if (routeDate !== canonicalDate) {
-      void this.router.navigate(['/calendar/day', canonicalDate], { replaceUrl: true });
+      this.navigateToDay(canonicalDate, true);
     }
   });
 
@@ -392,7 +398,7 @@ export class CalendarPageComponent {
 
   private navigateToState(state: ActivityCalendarRouteState, revealDay = false): void {
     if (this.isDayRoute) {
-      void this.router.navigate(['/calendar/day', formatActivityCalendarDateParam(state.anchorDate)]);
+      this.navigateToDay(formatActivityCalendarDateParam(state.anchorDate));
       return;
     }
     const viewChanged = state.view !== this.routeState().view;
@@ -441,6 +447,19 @@ export class CalendarPageComponent {
         this.pendingScrollRestore = null;
       }
     });
+  }
+
+  private navigateToDay(dateKey: string, replaceUrl = false): void {
+    const route = ['/calendar/day', dateKey];
+    const origin = this.openedFromDashboard() ? { from: 'dashboard' } : null;
+    if (origin || replaceUrl) {
+      void this.router.navigate(route, {
+        ...(origin ? { queryParams: origin } : {}),
+        ...(replaceUrl ? { replaceUrl: true } : {}),
+      });
+      return;
+    }
+    void this.router.navigate(route);
   }
 }
 

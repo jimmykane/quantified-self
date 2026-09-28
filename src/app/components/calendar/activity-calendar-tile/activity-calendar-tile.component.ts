@@ -376,6 +376,7 @@ export class ActivityCalendarTileComponent {
         data: {
           day,
           userId,
+          returnToDashboard: this.router.url.startsWith('/dashboard'),
           privateHealthEnabled: this.privateHealthEnabled(),
           planningEnabled: this.hasTrainingPlanningUIAccess(),
           timelineNotes,

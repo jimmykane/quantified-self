@@ -44,6 +44,12 @@ describe('CalendarDayDetailsComponent', () => {
     expect(haptics).toHaveBeenCalledOnce();
   });
 
+  it('marks a full day opened from the dashboard Today calendar for a dashboard return', async () => {
+    const fixture = await renderDayDetails([], { returnToDashboard: true });
+    const link = fixture.nativeElement.querySelector('.calendar-day-details-full-day') as HTMLAnchorElement;
+    expect(link?.getAttribute('href')).toBe('/calendar/day/2026-08-03?from=dashboard');
+  });
+
   it('keeps the full-day link out of public day sheets', async () => {
     const fixture = await renderDayDetails([], { privateHealthEnabled: false });
     expect(fixture.nativeElement.querySelector('.calendar-day-details-full-day')).toBeNull();

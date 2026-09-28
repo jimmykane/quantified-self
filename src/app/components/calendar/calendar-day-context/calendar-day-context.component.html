@@ -5,7 +5,8 @@
       <h2>{{ dashboardTile() || calmMonth() ? dashboardTitle() : title() }}</h2>
     </div>
     @if (showFullDayLink()) {
-      <a mat-button appHapticTap [routerLink]="fullDayRoute()" (click)="prepareNavigation()" aria-label="Open selected day page">
+      <a mat-button appHapticTap [routerLink]="fullDayRoute()" [queryParams]="fullDayQueryParams()"
+        (click)="prepareNavigation()" aria-label="Open selected day page">
         {{ dashboardTile() ? 'Full day' : calmMonth() ? 'View day' : 'Open full day' }} <mat-icon iconPositionEnd aria-hidden="true">arrow_forward</mat-icon>
       </a>
     }

@@ -166,12 +166,13 @@ describe('help.content', () => {
     }
     expect(searchHelpSections(HELP_SECTIONS, 'Timeline notes').map(section => section.id)).toEqual(expect.arrayContaining(['health', 'training-analysis']));
     const calendar = HELP_SECTIONS.find(section => section.id === 'activity-calendar')?.content;
-    expect(calendar).toContain('a slim colored tick marks days');
+    expect(calendar).toContain('a slim colored tick on the right marks days');
     expect(calendar).toContain('notes and their individual colors');
     expect(calendar).toContain('Week, Year, and the Today mini-calendar keep their existing note icons');
     expect(calendar).toContain('Activity circles keep their own colors');
     expect(calendar).toContain('Show on charts and calendar');
     expect(calendar).toContain('The **Today** card opens a month calendar');
+    expect(calendar).toContain("offers **Dashboard** to return when opened from the dashboard tile or Today's mini-calendar");
     const dashboard = HELP_SECTIONS.find(section => section.id === 'getting-started')?.content;
     expect(dashboard).toContain('HRV, Sleep, Form, and Freshness Forecast show the same note markers');
     expect(dashboard).toContain('shared profiles and chart-library previews do not include them');

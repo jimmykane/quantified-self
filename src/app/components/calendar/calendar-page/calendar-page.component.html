@@ -2,9 +2,9 @@
   [class.calendar-page--calm-month]="!isDayRoute && calendarModel().view === 'month'" aria-labelledby="calendar-page-title">
   @if (isDayRoute) {
     <header class="calendar-day-toolbar">
-      <a class="calendar-day-back" mat-button appHapticTap [routerLink]="['/calendar']" [queryParams]="calendarBackQuery()"
-        aria-label="Back to calendar for this day">
-        <mat-icon aria-hidden="true">arrow_back</mat-icon>Calendar
+      <a class="calendar-day-back" mat-button appHapticTap [routerLink]="dayBackNavigation().route"
+        [queryParams]="dayBackNavigation().query" [attr.aria-label]="dayBackNavigation().ariaLabel">
+        <mat-icon aria-hidden="true">arrow_back</mat-icon>{{ dayBackNavigation().label }}
       </a>
       <app-timeline-notes-workspace [visibleRange]="timelineNoteRange()"></app-timeline-notes-workspace>
     </header>
