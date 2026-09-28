@@ -551,7 +551,7 @@ packed Sports Lib package. That gate is tracked by GitHub issue #654 under epic 
 - Ordinary workout deletion remains recoverable through history. Permanent deletion requires its own confirmation. Plan
   deletion requires choosing whether its current workouts become standalone or are deleted; either choice removes the
   plan history, while Archive remains the non-destructive choice.
-- Permanent deletion removes the workout root and its standalone revision subtree, then retains a server-internal hash
+- Permanent deletion removes the workout root, its standalone revision subtree, and its completion-projection subtree, then retains a server-internal hash
   tombstone so the retired ID cannot be reused. A plan-bound workout can still occur in that plan's immutable revision
   audit until the plan itself is deleted; it is tombstoned, cannot be restored, and this retention is disclosed in the
   confirmation UI. Plan deletion removes the complete plan revision subtree.
@@ -573,7 +573,10 @@ packed Sports Lib package. That gate is tracked by GitHub issue #654 under epic 
   as its canonical receipt. The callable attempts recursive cleanup immediately; `reconcileTrainingPlanCleanup`
   scans due jobs every five minutes, leases each job, checks the account-deletion guard and matching deletion
   tombstone, then retries with bounded backoff. Plan cleanup creates independent workout cleanup jobs before deleting
-  residual workout roots, so a partial recursive delete cannot orphan a history subtree after its root disappears.
+  residual workout roots in pages of 100, so unbounded recoverably deleted history cannot exhaust the cleanup worker
+  and a partial recursive delete cannot orphan a history subtree after its root disappears.
+  A malformed due job is deferred for an hour so it cannot repeatedly occupy the front of the bounded scan; its
+  tombstone and payload still require operator inspection rather than a guessed deletion target.
   Jobs are leaves denied to browser reads/writes; the worker can safely repeat cleanup after a lost response. Deploy
   the `trainingCleanupJobs(nextAttemptAtMs, __name__)` collection-group index and the unindexed `response` field before
   enabling the worker. Inspect `[TrainingCleanup] cleanup_retry_failed` logs and due jobs when a lock persists; do not

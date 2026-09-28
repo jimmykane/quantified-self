@@ -58,10 +58,12 @@ class FakeQuery {
         readonly db: FakeFirestore,
         readonly path: string,
         readonly filters: Filter[] = [],
+        readonly limitCount: number | null = null,
     ) {}
     where(field: string, operator: string, value: unknown): FakeQuery {
-        return new FakeQuery(this.db, this.path, [...this.filters, { field, operator, value }]);
+        return new FakeQuery(this.db, this.path, [...this.filters, { field, operator, value }], this.limitCount);
     }
+    limit(count: number): FakeQuery { return new FakeQuery(this.db, this.path, this.filters, count); }
     async get(): Promise<{ docs: FakeSnapshot[]; empty: boolean }> {
         const docs = this.db.query(this);
         return { docs, empty: docs.length === 0 };
@@ -127,6 +129,7 @@ class FakeBatch {
 
 class FakeFirestore {
     readonly docs = new Map<string, Stored>();
+    readonly queries: FakeQuery[] = [];
     readonly transactionWriteCounts: number[] = [];
     readonly transactionWriteBytes: number[] = [];
     readonly recursiveDelete = vi.fn(async (ref: FakeDocumentReference) => {
@@ -148,8 +151,9 @@ class FakeFirestore {
     }
     snapshot(ref: FakeDocumentReference): FakeSnapshot { return new FakeSnapshot(ref, this.docs.get(ref.path)); }
     query(query: FakeQuery): FakeSnapshot[] {
+        this.queries.push(query);
         const prefix = `${query.path}/`;
-        return [...this.docs.entries()]
+        const matching = [...this.docs.entries()]
             .filter(([path]) => path.startsWith(prefix) && !path.slice(prefix.length).includes('/'))
             .filter(([, value]) => query.filters.every((filter) => {
                 if (filter.operator === '==') return value[filter.field] === filter.value;
@@ -159,6 +163,7 @@ class FakeFirestore {
                 throw new Error(`Unsupported operator ${filter.operator}`);
             }))
             .map(([path, value]) => new FakeSnapshot(new FakeDocumentReference(this, path), value));
+        return query.limitCount === null ? matching : matching.slice(0, query.limitCount);
     }
     seed(path: string, value: unknown): void { this.docs.set(path, clone(value as Stored)); }
     read(path: string): Stored | undefined { return this.docs.get(path); }
@@ -388,6 +393,35 @@ describe('deleteTrainingPlanForUser persistence', () => {
         expect(Math.max(...db.transactionWriteCounts)).toBeLessThanOrEqual(500);
         expect(db.read('users/user-1/scheduledWorkouts/workout-399')).toBeUndefined();
         expect(db.read('users/user-1/trainingWorkoutCompletions/workout-399')).toBeUndefined();
+    });
+
+    it('pages unbounded recoverably deleted plan history before retiring each subtree', async () => {
+        const deleted = Array.from({ length: 520 }, (_, index) => ({
+            ...workout(`deleted-${`${index}`.padStart(3, '0')}`),
+            lifecycle: 'deleted' as const,
+            deletedAtMs: NOW_MS - 1,
+        }));
+        seed(db, deleted);
+        deleted.forEach(item => db.seed(
+            `users/user-1/scheduledWorkouts/${item.id}/revisions/0000000002`,
+            { privateHistory: true },
+        ));
+
+        const response = await deleteTrainingPlanForUser('user-1', request('delete-workouts'), {
+            db: db as never, nowMs: NOW_MS,
+        });
+
+        expect(response.permanentlyDeletedWorkoutIds).toEqual([]);
+        const residualQueries = db.queries.filter(item => item.path === 'users/user-1/scheduledWorkouts'
+            && item.filters.length === 1 && item.filters[0].field === 'planId');
+        expect(residualQueries.length).toBeGreaterThan(5);
+        expect(residualQueries.every(item => item.limitCount === 100)).toBe(true);
+        for (const item of deleted) {
+            expect(db.read(`users/user-1/scheduledWorkouts/${item.id}`)).toBeUndefined();
+            expect(db.read(`users/user-1/scheduledWorkouts/${item.id}/revisions/0000000002`)).toBeUndefined();
+            expect(db.read(trainingCleanupJobRef(db as never, 'user-1', 'workout', item.id).path))
+                .toMatchObject({ mutationId: response.mutationId });
+        }
     });
 
     it('rechecks account deletion before acquiring or finalizing a lock', async () => {

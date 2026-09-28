@@ -752,6 +752,7 @@ export async function mutateTrainingScheduleBatchForUser(
 
     const permanentlyDeletedWorkoutIds = new Set(responses.flatMap(response => response.permanentlyDeletedWorkoutIds));
     for (const workoutId of permanentlyDeletedWorkoutIds) {
+        await db.recursiveDelete(userRef.collection(TRAINING_WORKOUT_COMPLETIONS_COLLECTION_ID).doc(workoutId));
         await db.recursiveDelete(userRef.collection(SCHEDULED_WORKOUTS_COLLECTION_ID).doc(workoutId));
         const response = responses.find(item => item.permanentlyDeletedWorkoutIds.includes(workoutId))!;
         await finishTrainingCleanupJob(db, uid, 'workout', workoutId, response.mutationId, nowMs);

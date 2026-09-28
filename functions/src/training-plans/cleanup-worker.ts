@@ -5,6 +5,7 @@ import { FUNCTIONS_MANIFEST } from '../../../shared/functions-manifest';
 import {
     TRAINING_SCHEDULE_DELETION_TOMBSTONES_COLLECTION_ID,
     SCHEDULED_WORKOUTS_COLLECTION_ID,
+    TRAINING_PLAN_SCHEMA_VERSION,
 } from '../../../shared/training-plans';
 import { TRAINING_WORKOUT_COMPLETIONS_COLLECTION_ID } from '../../../shared/training-workout-completion';
 import { getUserDeletionGuardStateInTransaction } from '../shared/user-deletion-guard';
@@ -19,7 +20,9 @@ import { trainingScheduleDeletionTombstoneDocumentId } from './persistence';
 
 const SCAN_PAGE_SIZE = 25;
 const MAX_SCAN = 100;
-const LEASE_MS = 5 * 60 * 1000;
+// Stay beyond the scheduled Function's 300-second timeout so a timed-out
+// invocation cannot overlap the next claim at the lease boundary.
+const LEASE_MS = 7 * 60 * 1000;
 const MAX_RETRY_MS = 60 * 60 * 1000;
 
 function ownerFromJobPath(path: string): string | null {
@@ -64,11 +67,15 @@ export async function processTrainingCleanupJob(
         if (!snapshot.exists) return null;
         const job = parseJob(snapshot.data());
         if (job.nextAttemptAtMs > nowMs || ref.path !== trainingCleanupJobRef(db, uid, job.kind, job.entityId).path) return null;
+        const entityIdHash = trainingScheduleDeletionTombstoneDocumentId(job.kind, job.entityId);
         const tombstoneRef = db.collection('users').doc(uid).collection('trainingPlanState').doc('current')
             .collection(TRAINING_SCHEDULE_DELETION_TOMBSTONES_COLLECTION_ID)
-            .doc(trainingScheduleDeletionTombstoneDocumentId(job.kind, job.entityId));
+            .doc(entityIdHash);
         const tombstone = await transaction.get(tombstoneRef);
-        if (!tombstone.exists || tombstone.data()?.mutationId !== job.mutationId) {
+        const tombstoneData = tombstone.data();
+        if (!tombstone.exists || tombstoneData?.schemaVersion !== TRAINING_PLAN_SCHEMA_VERSION
+            || tombstoneData?.entityKind !== job.kind || tombstoneData?.entityIdHash !== entityIdHash
+            || tombstoneData?.mutationId !== job.mutationId) {
             throw new Error('Training cleanup tombstone mismatch.');
         }
         const attempt = job.attempts + 1;
@@ -103,6 +110,25 @@ export async function processTrainingCleanupJob(
     }
 }
 
+async function deferUnclaimedTrainingCleanupJob(
+    db: admin.firestore.Firestore,
+    ref: admin.firestore.DocumentReference,
+    nowMs: number,
+): Promise<void> {
+    const uid = ownerFromJobPath(ref.path);
+    if (!uid) return;
+    await db.runTransaction(async transaction => {
+        if ((await getUserDeletionGuardStateInTransaction(db, transaction, uid, nowMs)).shouldSkip) return;
+        const snapshot = await transaction.get(ref);
+        if (!snapshot.exists) return;
+        const nextAttemptAtMs = snapshot.data()?.nextAttemptAtMs;
+        // A claimed job already received a lease or backoff in its own path.
+        // Only malformed/unclaimable due records need this head-of-line guard.
+        if (typeof nextAttemptAtMs !== 'number' || nextAttemptAtMs > nowMs) return;
+        transaction.update(ref, { nextAttemptAtMs: nowMs + MAX_RETRY_MS });
+    });
+}
+
 export async function reconcileTrainingCleanupJobs(
     db: admin.firestore.Firestore,
     nowMs = Date.now(),
@@ -123,6 +149,12 @@ export async function reconcileTrainingCleanupJobs(
                 if (await processTrainingCleanupJob(db, snapshot.ref, nowMs)) completed += 1;
             } catch {
                 failed += 1;
+                try {
+                    await deferUnclaimedTrainingCleanupJob(db, snapshot.ref, nowMs);
+                } catch {
+                    // Keep the original job for operator investigation; one
+                    // failed deferral must not abort the rest of this scan.
+                }
                 logger.warn('[TrainingCleanup]', { event: 'cleanup_retry_failed' });
             }
         }

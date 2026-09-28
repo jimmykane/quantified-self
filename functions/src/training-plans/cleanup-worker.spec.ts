@@ -14,7 +14,7 @@ vi.mock('./delete-training-plan', () => ({
 
 import { processTrainingCleanupJob } from './cleanup-worker';
 import { trainingCleanupJob, trainingCleanupJobRef } from './cleanup-job-contract';
-import { trainingScheduleDeletionTombstoneDocumentId } from './persistence';
+import { buildTrainingScheduleDeletionTombstone, trainingScheduleDeletionTombstoneDocumentId } from './persistence';
 
 type Stored = Record<string, unknown>;
 
@@ -69,7 +69,8 @@ describe('durable Training cleanup worker', () => {
     function seedWorkout(): FakeRef {
         const ref = jobRef('workout', 'workout-1') as unknown as FakeRef;
         db.docs.set(ref.path, trainingCleanupJob('workout', 'workout-1', 'mutation-1', nowMs));
-        db.docs.set(tombstonePath('workout', 'workout-1'), { mutationId: 'mutation-1' });
+        db.docs.set(tombstonePath('workout', 'workout-1'),
+            buildTrainingScheduleDeletionTombstone('workout', 'workout-1', 'mutation-1', nowMs));
         db.docs.set(`users/${uid}/scheduledWorkouts/workout-1/revisions/0000000001`, { privateHistory: true });
         return ref;
     }
@@ -117,6 +118,7 @@ describe('durable Training cleanup worker', () => {
         });
         const first = processTrainingCleanupJob(db as never, ref as never, nowMs);
         await started;
+        expect(db.docs.get(ref.path)?.nextAttemptAtMs).toBe(nowMs + 7 * 60 * 1000);
         expect(await processTrainingCleanupJob(db as never, ref as never, nowMs)).toBe(false);
         release();
         expect(await first).toBe(true);
@@ -130,5 +132,16 @@ describe('durable Training cleanup worker', () => {
         expect(db.recursiveDelete).not.toHaveBeenCalled();
         mocks.guard.mockResolvedValue({ shouldSkip: true });
         expect(await processTrainingCleanupJob(db as never, ref as never, nowMs)).toBe(false);
+    });
+
+    it('refuses deletion when the tombstone has the right receipt but the wrong entity kind', async () => {
+        const ref = seedWorkout();
+        db.docs.set(tombstonePath('workout', 'workout-1'), {
+            ...buildTrainingScheduleDeletionTombstone('workout', 'workout-1', 'mutation-1', nowMs),
+            entityKind: 'plan',
+        });
+        await expect(processTrainingCleanupJob(db as never, ref as never, nowMs))
+            .rejects.toThrow('tombstone mismatch');
+        expect(db.recursiveDelete).not.toHaveBeenCalled();
     });
 });

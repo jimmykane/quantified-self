@@ -43,6 +43,7 @@ import { finishTrainingCleanupJob, trainingCleanupJob, trainingCleanupJobRef } f
 const DELETE_PLAN_RECEIPT_RETENTION_MS = 30 * 24 * 60 * 60 * 1000;
 const RECURSIVE_DELETE_CONCURRENCY = 20;
 const TOMBSTONE_BATCH_SIZE = 200;
+const RESIDUAL_WORKOUT_CLEANUP_PAGE_SIZE = 100;
 // Leave ample room below Firestore's 10 MiB request ceiling for document names,
 // protocol overhead, and index updates. A revision is staged before the
 // canonical plan deletion, so multiple transactions do not expose mixed state.
@@ -778,28 +779,29 @@ export async function cleanupDeletedPlanData(
     const userRef = db.collection('users').doc(uid);
     const workoutsRef = userRef.collection(SCHEDULED_WORKOUTS_COLLECTION_ID);
     await db.recursiveDelete(userRef.collection(TRAINING_PLANS_COLLECTION_ID).doc(response.removedPlanId));
-    const residual = await workoutsRef.where('planId', '==', response.removedPlanId).get();
-    const residualWorkoutIds = residual.docs.map(snapshot => snapshot.id);
-    const workoutRefs = new Map<string, admin.firestore.DocumentReference>();
-    response.permanentlyDeletedWorkoutIds.forEach(id => workoutRefs.set(id, workoutsRef.doc(id)));
-    residualWorkoutIds.forEach(id => workoutRefs.set(id, workoutsRef.doc(id)));
-    await prepareResidualWorkoutCleanupJobs(
-        db,
-        uid,
-        response.removedPlanId,
-        [...workoutRefs.keys()].sort(),
-        response.mutationId,
-        response.state.updatedAtMs,
-        nowMs,
-    );
-    const completionRefs = [...workoutRefs.keys()].map(id => (
-        userRef.collection(TRAINING_WORKOUT_COMPLETIONS_COLLECTION_ID).doc(id)
-    ));
-    // Keep projection cleanup outside the finalization transaction: a 400-workout
-    // plan already needs one write per workout there. Delete projections first so
-    // an interrupted cleanup can still rediscover residual workout roots safely.
-    await recursivelyDeleteInChunks(db, completionRefs);
-    await recursivelyDeleteInChunks(db, [...workoutRefs.values()]);
+    const cleanupWorkoutPage = async (workoutIds: string[]): Promise<void> => {
+        if (workoutIds.length === 0) return;
+        await prepareResidualWorkoutCleanupJobs(
+            db, uid, response.removedPlanId, workoutIds, response.mutationId,
+            response.state.updatedAtMs, nowMs,
+        );
+        // Stage durable child jobs before removing roots. Once a root disappears,
+        // a later planId query cannot rediscover its revision subcollections.
+        await recursivelyDeleteInChunks(db, workoutIds.map(id => (
+            userRef.collection(TRAINING_WORKOUT_COMPLETIONS_COLLECTION_ID).doc(id)
+        )));
+        await recursivelyDeleteInChunks(db, workoutIds.map(id => workoutsRef.doc(id)));
+    };
+    await cleanupWorkoutPage(response.permanentlyDeletedWorkoutIds);
+    // Deleted history is not subject to the 400-current-workout ceiling. Consume
+    // and remove the first bounded page repeatedly instead of retaining an
+    // unbounded planId query result or relying on a moving deletion cursor.
+    while (true) {
+        const residual = await workoutsRef.where('planId', '==', response.removedPlanId)
+            .limit(RESIDUAL_WORKOUT_CLEANUP_PAGE_SIZE).get();
+        if (residual.empty) break;
+        await cleanupWorkoutPage(residual.docs.map(snapshot => snapshot.id));
+    }
 
     const stateRef = userRef.collection('trainingPlanState').doc('current');
     const lockRef = stateRef.collection(TRAINING_PLAN_DELETION_LOCKS_COLLECTION_ID).doc(response.removedPlanId);
