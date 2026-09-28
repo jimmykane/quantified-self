@@ -21,6 +21,7 @@ const DESTINATION_NAMESPACE_VERSION = 'destination-v1';
 export interface ActivitySyncOutboundFingerprintIds {
   exactFingerprintId: string;
   fingerprintIds: string[];
+  activityTypes: string[];
 }
 
 export interface ActivitySyncOutboundFingerprintRecord extends ActivitySyncOutboundFingerprintIds {
@@ -58,9 +59,15 @@ function epochSecond(value: unknown): number | null {
   return Number.isFinite(timestamp) ? Math.round(timestamp / 1000) : null;
 }
 
-async function buildSemanticFingerprintId(fileBuffer: Buffer): Promise<string | null> {
+interface SemanticFingerprintResult {
+  fingerprintId: string | null;
+  activityTypes: string[];
+}
+
+async function buildSemanticFingerprint(fileBuffer: Buffer): Promise<SemanticFingerprintResult> {
   try {
     const event = await EventImporterFIT.getFromArrayBuffer(toArrayBuffer(fileBuffer), createParsingOptions());
+    const activityTypes = event.getActivityTypesAsArray();
     const activities = event.getActivities().map(activity => ({
       start: epochSecond(activity.startDate),
       end: epochSecond(activity.endDate),
@@ -69,7 +76,7 @@ async function buildSemanticFingerprintId(fileBuffer: Buffer): Promise<string | 
       distance: finiteRounded(activity.getDistance()?.getValue?.()),
     }));
     if (activities.length === 0 || activities.every(activity => activity.start === null)) {
-      return null;
+      return { fingerprintId: null, activityTypes };
     }
 
     const semanticDigest = sha256(`${SEMANTIC_FINGERPRINT_VERSION}\0${JSON.stringify({
@@ -77,7 +84,10 @@ async function buildSemanticFingerprintId(fileBuffer: Buffer): Promise<string | 
       eventEnd: epochSecond(event.endDate),
       activities,
     })}`);
-    return `${SEMANTIC_FINGERPRINT_VERSION}-${semanticDigest}`;
+    return {
+      fingerprintId: `${SEMANTIC_FINGERPRINT_VERSION}-${semanticDigest}`,
+      activityTypes,
+    };
   } catch (error) {
     // Exact-byte suppression remains available when an otherwise provider-
     // accepted FIT cannot be normalized by the local parser.
@@ -85,18 +95,19 @@ async function buildSemanticFingerprintId(fileBuffer: Buffer): Promise<string | 
       ...getActivityParserDiagnostics(error, fileBuffer, 'fit'),
       fallback: 'exact_only',
     });
-    return null;
+    return { fingerprintId: null, activityTypes: [] };
   }
 }
 
 export async function buildActivitySyncOutboundFingerprintIds(fileBuffer: Buffer): Promise<ActivitySyncOutboundFingerprintIds> {
   const exactFingerprintId = `${EXACT_FINGERPRINT_VERSION}-${sha256(fileBuffer)}`;
-  const semanticFingerprintId = await buildSemanticFingerprintId(fileBuffer);
+  const semanticFingerprint = await buildSemanticFingerprint(fileBuffer);
   return {
     exactFingerprintId,
-    fingerprintIds: semanticFingerprintId
-      ? [exactFingerprintId, semanticFingerprintId]
+    fingerprintIds: semanticFingerprint.fingerprintId
+      ? [exactFingerprintId, semanticFingerprint.fingerprintId]
       : [exactFingerprintId],
+    activityTypes: semanticFingerprint.activityTypes,
   };
 }
 

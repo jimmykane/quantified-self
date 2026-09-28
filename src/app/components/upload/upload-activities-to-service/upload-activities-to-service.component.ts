@@ -41,6 +41,7 @@ interface ServiceUploadRow {
   message: string | null;
   jobId?: string;
   uploadId?: string;
+  expectedWorkoutTypeId?: number;
   providerUserId?: string;
   ownerUid?: string;
   destinationServiceName?: ServiceNames;
@@ -57,6 +58,7 @@ interface ServiceUploadResult {
   duplicate: boolean;
   pending?: boolean;
   uploadId?: string;
+  expectedWorkoutTypeId?: number;
   providerUserId?: string;
   message?: string;
 }
@@ -66,12 +68,14 @@ interface ServiceUploadCallableResponse {
   code?: string;
   message?: string;
   uploadId?: string;
+  expectedWorkoutTypeId?: unknown;
   providerUserId?: string;
   result?: {
     status?: string;
     code?: string;
     message?: string;
     uploadId?: string;
+    expectedWorkoutTypeId?: unknown;
     providerUserId?: string;
   };
 }
@@ -483,6 +487,7 @@ export class UploadActivitiesToServiceComponent extends UploadAbstractDirective 
           progress: 75,
           message,
           uploadId: result.uploadId || row.uploadId,
+          expectedWorkoutTypeId: result.expectedWorkoutTypeId ?? row.expectedWorkoutTypeId,
           providerUserId: result.providerUserId || row.providerUserId,
         });
         this.processingService.updateJob(jobId, { status: 'processing', progress: 75, details: message });
@@ -661,7 +666,7 @@ export class UploadActivitiesToServiceComponent extends UploadAbstractDirective 
   }
 
   private async getServiceUploadStatusResult(
-    row: Pick<ServiceUploadRow, 'uploadId' | 'providerUserId'>,
+    row: Pick<ServiceUploadRow, 'uploadId' | 'expectedWorkoutTypeId' | 'providerUserId'>,
   ): Promise<ServiceUploadResult> {
     if (!row.uploadId) {
       throw new Error(`Missing ${this.destinationName} upload identifier.`);
@@ -681,7 +686,12 @@ export class UploadActivitiesToServiceComponent extends UploadAbstractDirective 
       : 'getWahooAPIWorkoutFileUploadStatus';
     const payload = this.serviceName === ServiceNames.COROSAPI
       ? { uploadId: row.uploadId, providerUserId: row.providerUserId }
-      : { uploadId: row.uploadId };
+      : {
+        uploadId: row.uploadId,
+        ...(row.expectedWorkoutTypeId !== undefined
+          ? { expectedWorkoutTypeId: row.expectedWorkoutTypeId }
+          : {}),
+      };
     const response = await this.functionsService.call<any, ServiceUploadCallableResponse>(
       callableFunction,
       payload,
@@ -903,7 +913,9 @@ export class UploadActivitiesToServiceComponent extends UploadAbstractDirective 
     return {};
   }
 
-  private getUploadResumeStateUpdate(error: unknown): Pick<ServiceUploadRow, 'uploadId' | 'providerUserId'> | Record<string, never> {
+  private getUploadResumeStateUpdate(
+    error: unknown,
+  ): Pick<ServiceUploadRow, 'uploadId' | 'expectedWorkoutTypeId' | 'providerUserId'> | Record<string, never> {
     return this.serviceName === ServiceNames.SuuntoApp
       ? this.getSuuntoResumeStateUpdate(error)
       : this.getAsynchronousUploadStateUpdate(error);
@@ -911,19 +923,22 @@ export class UploadActivitiesToServiceComponent extends UploadAbstractDirective 
 
   private getAsynchronousUploadStateUpdate(
     error: unknown,
-  ): Pick<ServiceUploadRow, 'uploadId' | 'providerUserId'> | Record<string, never> {
+  ): Pick<ServiceUploadRow, 'uploadId' | 'expectedWorkoutTypeId' | 'providerUserId'> | Record<string, never> {
     const details = (error as { details?: unknown } | null)?.details;
     if (!details || typeof details !== 'object') {
       return {};
     }
     const retryMode = `${(details as { retryMode?: unknown }).retryMode || ''}`.trim();
     if (retryMode === 'restart') {
-      return { uploadId: undefined, providerUserId: undefined };
+      return { uploadId: undefined, expectedWorkoutTypeId: undefined, providerUserId: undefined };
     }
     if (this.serviceName === ServiceNames.WahooAPI && retryMode === 'resume') {
       const uploadId = `${(details as { resumeUploadId?: unknown }).resumeUploadId || ''}`.trim();
+      const expectedWorkoutTypeId = this.normalizeExpectedWorkoutTypeId(
+        (details as { expectedWorkoutTypeId?: unknown }).expectedWorkoutTypeId,
+      );
       return uploadId
-        ? { uploadId, providerUserId: undefined }
+        ? { uploadId, expectedWorkoutTypeId, providerUserId: undefined }
         : {};
     }
     if (this.serviceName === ServiceNames.COROSAPI && retryMode === 'resume') {
@@ -936,12 +951,17 @@ export class UploadActivitiesToServiceComponent extends UploadAbstractDirective 
 
   private toServiceUploadResult(
     response: ServiceUploadCallableResponse | undefined,
-    resumeState?: Pick<ServiceUploadRow, 'uploadId' | 'providerUserId'>,
+    resumeState?: Pick<ServiceUploadRow, 'uploadId' | 'expectedWorkoutTypeId' | 'providerUserId'>,
   ): ServiceUploadResult {
     const responseCode = response?.code || response?.result?.code;
     const responseMessage = response?.message || response?.result?.message;
     const responseStatus = `${response?.status || response?.result?.status || ''}`.trim().toLowerCase();
     const uploadId = response?.uploadId || response?.result?.uploadId || resumeState?.uploadId;
+    const expectedWorkoutTypeId = this.normalizeExpectedWorkoutTypeId(
+      response?.expectedWorkoutTypeId
+        ?? response?.result?.expectedWorkoutTypeId
+        ?? resumeState?.expectedWorkoutTypeId,
+    );
     const providerUserId = response?.providerUserId || response?.result?.providerUserId || resumeState?.providerUserId;
     if (responseCode === 'ALREADY_EXISTS') {
       return { success: true, duplicate: true, message: responseMessage };
@@ -957,6 +977,7 @@ export class UploadActivitiesToServiceComponent extends UploadAbstractDirective 
         duplicate: false,
         pending: true,
         uploadId,
+        expectedWorkoutTypeId,
         providerUserId,
         message: responseMessage,
       };
@@ -970,6 +991,12 @@ export class UploadActivitiesToServiceComponent extends UploadAbstractDirective 
       duplicate: false,
       message: responseMessage || `Uploaded to ${this.destinationName}`,
     };
+  }
+
+  private normalizeExpectedWorkoutTypeId(value: unknown): number | undefined {
+    return typeof value === 'number' && Number.isInteger(value)
+      ? value
+      : undefined;
   }
 
   private get usesAsynchronousStatusPolling(): boolean {

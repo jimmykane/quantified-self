@@ -130,6 +130,7 @@ function parsedEvent() {
     startDate: activity.startDate,
     endDate: activity.endDate,
     getActivities: () => [activity],
+    getActivityTypesAsArray: () => ['Running'],
   };
 }
 
@@ -149,12 +150,14 @@ describe('activity sync outbound fingerprints', () => {
     expect(first.exactFingerprintId).not.toBe(second.exactFingerprintId);
     expect(first.fingerprintIds).toHaveLength(2);
     expect(first.fingerprintIds[1]).toBe(second.fingerprintIds[1]);
+    expect(first.activityTypes).toEqual(['Running']);
   });
 
   it('keeps exact-only suppression with safe diagnostics when semantic parsing fails', async () => {
     mocks.importer.mockRejectedValueOnce(new Error('File CRC mismatch'));
     const result = await buildActivitySyncOutboundFingerprintIds(Buffer.from('bad-fit'));
     expect(result.fingerprintIds).toEqual([result.exactFingerprintId]);
+    expect(result.activityTypes).toEqual([]);
     expect(mocks.loggerWarn).toHaveBeenCalledWith(
       '[ActivitySync] Could not create a semantic outbound FIT fingerprint.',
       expect.objectContaining({ errorName: 'Error', errorMessage: 'File CRC mismatch', payloadBytes: 7, fallback: 'exact_only' }),

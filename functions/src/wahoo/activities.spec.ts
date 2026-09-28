@@ -207,6 +207,7 @@ describe('Wahoo activity uploads', () => {
     } as never)).resolves.toMatchObject({
       status: 'pending',
       uploadId: 'upload-1',
+      expectedWorkoutTypeId: 9,
     });
 
     expect(mocks.recordActivitySyncOutboundFingerprint).toHaveBeenCalledWith({
@@ -348,7 +349,7 @@ describe('Wahoo activity uploads', () => {
     expect(mocks.requestWahooAPI).not.toHaveBeenCalled();
   });
 
-  it('keeps Wahoo inferred type during a direct upload status check', async () => {
+  it('echoes the server-derived type and corrects a completed direct upload', async () => {
     mocks.requestWahooAPI.mockResolvedValueOnce({
       data: { token: 'upload-status-resume', status: 'pending' },
     });
@@ -356,25 +357,178 @@ describe('Wahoo activity uploads', () => {
       auth: { uid: 'user-1' },
       app: { appId: 'test-app' },
       data: { file: Buffer.from('FIT').toString('base64') },
-    } as never)).resolves.toMatchObject({ status: 'pending', uploadId: 'upload-status-resume' });
+    } as never)).resolves.toMatchObject({
+      status: 'pending',
+      uploadId: 'upload-status-resume',
+      expectedWorkoutTypeId: 9,
+    });
 
     mocks.requestWahooAPI
       .mockResolvedValueOnce({
         data: { token: 'upload-status-resume', status: 'complete', workout_id: 485861654 },
-      });
+      })
+      .mockResolvedValueOnce({ data: { id: 485861654 } });
 
     await expect(getWahooAPIWorkoutFileUploadStatus({
       auth: { uid: 'user-1' },
       app: { appId: 'test-app' },
       data: {
         uploadId: 'upload-status-resume',
-        // Deliberately ignored: direct uploads retain Wahoo's inferred type.
         expectedWorkoutTypeId: 9,
       },
-    } as never)).resolves.toMatchObject({ status: 'success' });
+    } as never)).resolves.toMatchObject({ status: 'success', expectedWorkoutTypeId: 9 });
 
     expect(mocks.requestWahooAPI.mock.calls.map(([, , request]) => request?.method || 'GET'))
-      .toEqual(['POST', 'GET']);
+      .toEqual(['POST', 'GET', 'PUT']);
+    const [, correctionPath, correctionRequest] = mocks.requestWahooAPI.mock.calls[2];
+    expect(correctionPath).toBe('/v1/workouts/485861654');
+    expect(correctionRequest.form.get('workout[workout_type_id]')).toBe('9');
+    expect(correctionRequest.form.get('workout[name]')).toBeNull();
+  });
+
+  it('keeps Wahoo inference for an unmapped direct FIT activity type', async () => {
+    mocks.recordActivitySyncOutboundFingerprint.mockResolvedValueOnce({
+      exactFingerprintId: 'exact-v1-unmapped',
+      fingerprintIds: ['exact-v1-unmapped'],
+      operationId: 'operation-unmapped',
+      activityTypes: ['Badminton'],
+    });
+    mocks.requestWahooAPI.mockResolvedValueOnce({
+      data: { token: 'upload-unmapped-direct', status: 'pending' },
+    });
+
+    await expect(importActivityToWahooAPI({
+      auth: { uid: 'user-1' },
+      app: { appId: 'test-app' },
+      data: { file: Buffer.from('FIT').toString('base64') },
+    } as never)).resolves.toEqual({
+      status: 'pending',
+      message: 'Wahoo is processing the activity.',
+      uploadId: 'upload-unmapped-direct',
+      workoutKey: undefined,
+    });
+
+    expect(mocks.requestWahooAPI).toHaveBeenCalledTimes(1);
+  });
+
+  it('maps multiple direct FIT activity types to Wahoo MULTISPORT', async () => {
+    mocks.recordActivitySyncOutboundFingerprint.mockResolvedValueOnce({
+      exactFingerprintId: 'exact-v1-multisport',
+      fingerprintIds: ['exact-v1-multisport'],
+      operationId: 'operation-multisport',
+      activityTypes: ['Running', 'Cycling'],
+    });
+    mocks.requestWahooAPI.mockResolvedValueOnce({
+      data: { token: 'upload-multisport', status: 'pending' },
+    });
+
+    await expect(importActivityToWahooAPI({
+      auth: { uid: 'user-1' },
+      app: { appId: 'test-app' },
+      data: { file: Buffer.from('FIT').toString('base64') },
+    } as never)).resolves.toMatchObject({
+      status: 'pending',
+      expectedWorkoutTypeId: 62,
+    });
+  });
+
+  it.each([999, '9', { id: 9 }])(
+    'rejects invalid direct-upload status workout type %j before Wahoo I/O',
+    async (expectedWorkoutTypeId) => {
+      await expect(getWahooAPIWorkoutFileUploadStatus({
+        auth: { uid: 'user-1' },
+        app: { appId: 'test-app' },
+        data: { uploadId: 'upload-invalid-type', expectedWorkoutTypeId },
+      } as never)).rejects.toMatchObject({ code: 'invalid-argument' });
+      expect(mocks.requestWahooAPI).not.toHaveBeenCalled();
+    },
+  );
+
+  it('keeps Wahoo inference when a legacy direct-upload status check omits the mapped type', async () => {
+    mocks.requestWahooAPI.mockResolvedValueOnce({
+      data: { token: 'upload-legacy-status', status: 'complete', workout_id: 485861657 },
+    });
+
+    await expect(getWahooAPIWorkoutFileUploadStatus({
+      auth: { uid: 'user-1' },
+      app: { appId: 'test-app' },
+      data: { uploadId: 'upload-legacy-status' },
+    } as never)).resolves.toEqual({
+      status: 'success',
+      message: 'Activity uploaded to Wahoo.',
+      uploadId: 'upload-legacy-status',
+      workoutKey: '485861657',
+    });
+
+    expect(mocks.requestWahooAPI.mock.calls.map(([, , request]) => request?.method || 'GET'))
+      .toEqual(['GET']);
+  });
+
+  it('accepts an altered but explicitly mapped direct-upload status type for the same users workout', async () => {
+    mocks.requestWahooAPI
+      .mockResolvedValueOnce({
+        data: { token: 'upload-altered-type', status: 'complete', workout_id: 485861655 },
+      })
+      .mockResolvedValueOnce({ data: { id: 485861655 } });
+
+    await expect(getWahooAPIWorkoutFileUploadStatus({
+      auth: { uid: 'user-1' },
+      app: { appId: 'test-app' },
+      data: { uploadId: 'upload-altered-type', expectedWorkoutTypeId: 1 },
+    } as never)).resolves.toMatchObject({
+      status: 'success',
+      expectedWorkoutTypeId: 1,
+    });
+
+    const [, correctionPath, correctionRequest] = mocks.requestWahooAPI.mock.calls[1];
+    expect(correctionPath).toBe('/v1/workouts/485861655');
+    expect(correctionRequest.form.get('workout[workout_type_id]')).toBe('1');
+  });
+
+  it('returns direct-upload correction resume state without reposting the FIT', async () => {
+    mocks.requestWahooAPI
+      .mockResolvedValueOnce({
+        data: { token: 'upload-direct-resume', status: 'complete', workout_id: 485861656 },
+      })
+      .mockRejectedValueOnce(new WahooAPIRequestError('temporary', 500));
+
+    await expect(importActivityToWahooAPI({
+      auth: { uid: 'user-1' },
+      app: { appId: 'test-app' },
+      data: { file: Buffer.from('FIT').toString('base64') },
+    } as never)).rejects.toMatchObject({
+      code: 'unavailable',
+      details: {
+        retryMode: 'resume',
+        resumeUploadId: 'upload-direct-resume',
+        expectedWorkoutTypeId: 9,
+      },
+    });
+
+    expect(mocks.requestWahooAPI.mock.calls.map(([, , request]) => request?.method || 'GET'))
+      .toEqual(['POST', 'PUT']);
+  });
+
+  it('returns a terminal direct-upload result when Wahoo omits the completed workout ID', async () => {
+    mocks.requestWahooAPI.mockResolvedValueOnce({
+      data: { token: 'upload-direct-no-workout', status: 'complete' },
+    });
+
+    await expect(importActivityToWahooAPI({
+      auth: { uid: 'user-1' },
+      app: { appId: 'test-app' },
+      data: { file: Buffer.from('FIT').toString('base64') },
+    } as never)).rejects.toMatchObject({
+      code: 'failed-precondition',
+      message: 'Wahoo completed the activity upload without returning the workout identifier required to correct its type.',
+      details: {
+        retryMode: 'resume',
+        resumeUploadId: 'upload-direct-no-workout',
+        expectedWorkoutTypeId: 9,
+      },
+    });
+    expect(mocks.requestWahooAPI.mock.calls.map(([, , request]) => request?.method || 'GET'))
+      .toEqual(['POST']);
   });
 
   it('stops before Wahoo when the direct-upload echo receipt cannot be written', async () => {
