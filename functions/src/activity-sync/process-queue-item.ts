@@ -22,7 +22,16 @@ import {
     type QueueManualReconciliationState,
     updateToProcessed,
 } from '../queue-utils';
-import { ACTIVITY_SYNC_ROUTES } from '../../../shared/activity-sync-routes';
+import { ActivityDeliverySource, ActivitySyncRouteId, getActivityDeliveryRoute } from '../../../shared/activity-sync-routes';
+import {
+    HISTORICAL_FIT_MAX_BYTES,
+    HistoricalOriginalIneligibleError,
+    isStorageObjectMissing,
+    MANUAL_UPLOAD_ORIGIN_DOC_ID,
+    matchesLegacyManualUploadID,
+    readHistoricalManualFit,
+} from './historical-manual-original';
+import { inspectFitPayload } from '../shared/fit-payload';
 import { isActivitySyncRouteEnabledForUser } from './settings';
 import { getServiceConnectionMeta } from '../service-connection-meta';
 import {
@@ -124,6 +133,10 @@ const TRANSIENT_ACTIVITY_SYNC_ERROR_CODES = new Set([
     'deadline-exceeded',
     'unavailable',
     'resource-exhausted',
+    'etimedout',
+    'econnreset',
+    'econnrefused',
+    'eai-again',
 ]);
 
 const TRANSIENT_ACTIVITY_SYNC_GRPC_CODES = new Set([
@@ -168,7 +181,9 @@ function isTransientActivitySyncError(error: unknown): boolean {
     const grpcStatus = toFiniteNumber(errorLike.status);
     if (
         (grpcCode !== null && TRANSIENT_ACTIVITY_SYNC_GRPC_CODES.has(grpcCode)) ||
-        (grpcStatus !== null && TRANSIENT_ACTIVITY_SYNC_GRPC_CODES.has(grpcStatus))
+        (grpcStatus !== null && TRANSIENT_ACTIVITY_SYNC_GRPC_CODES.has(grpcStatus)) ||
+        (grpcCode !== null && TRANSIENT_ACTIVITY_SYNC_STATUS_CODES.has(grpcCode)) ||
+        (grpcStatus !== null && TRANSIENT_ACTIVITY_SYNC_STATUS_CODES.has(grpcStatus))
     ) {
         return true;
     }
@@ -278,10 +293,15 @@ function getAcceptedUploadIdFromPendingDisconnectError(error: unknown): string |
 
 async function getPendingDisconnectServiceForRoute(
     userID: string,
-    route: typeof ACTIVITY_SYNC_ROUTES[keyof typeof ACTIVITY_SYNC_ROUTES],
+    route: NonNullable<ReturnType<typeof getActivityDeliveryRoute>>,
+    historical: boolean,
 ): Promise<ServiceNames | null> {
+    if (historical) {
+        const destinationMeta = await getServiceConnectionMeta(userID, route.destinationServiceName);
+        return isDisconnectPendingServiceConnection(destinationMeta) ? route.destinationServiceName : null;
+    }
     const [sourceMeta, destinationMeta] = await Promise.all([
-        getServiceConnectionMeta(userID, route.sourceServiceName),
+        getServiceConnectionMeta(userID, route.sourceServiceName as ServiceNames),
         getServiceConnectionMeta(userID, route.destinationServiceName),
     ]);
 
@@ -319,7 +339,7 @@ async function getWahooReconnectRequiredServiceForRoute(
 
 type DestinationConnectionStatus = 'connected' | 'not_connected' | 'disconnect_pending' | 'reconnect_required';
 
-async function getDestinationConnectionStatus(userID: string, destinationServiceName: ServiceNames): Promise<DestinationConnectionStatus> {
+export async function getDestinationConnectionStatus(userID: string, destinationServiceName: ServiceNames): Promise<DestinationConnectionStatus> {
     switch (destinationServiceName) {
         case ServiceNames.SuuntoApp: {
             const meta = await getServiceConnectionMeta(userID, destinationServiceName);
@@ -384,15 +404,89 @@ async function getDestinationConnectionStatus(userID: string, destinationService
 }
 
 async function downloadOriginalFile(queueItem: ActivitySyncQueueItemInterface): Promise<Buffer> {
+    if (queueItem.deliveryMode === 'historical' && queueItem.sourceServiceName === 'manualUpload') {
+        const eventRef = admin.firestore().doc(`users/${queueItem.userID}/events/${queueItem.eventID}`);
+        const [event, marker] = await Promise.all([
+            eventRef.get(),
+            eventRef.collection('metaData').doc(MANUAL_UPLOAD_ORIGIN_DOC_ID).get(),
+        ]);
+        const eventData = event.data();
+        const files = Array.isArray(eventData?.originalFiles) && eventData.originalFiles.length > 0
+            ? eventData.originalFiles : eventData?.originalFile ? [eventData.originalFile] : [];
+        if (!event.exists || eventData?.mergeType || eventData?.isMerge || eventData?.toolSource
+            || files.length !== 1 || files[0]?.path !== queueItem.originalFile.path
+            || (files[0]?.generation && `${files[0].generation}` !== queueItem.originalFile.generation)) {
+            throw new HistoricalOriginalIneligibleError(
+                'Manual activity provenance changed before send.',
+                !event.exists ? 'historical_event_missing' : 'historical_provenance_changed',
+            );
+        }
+        const loaded = await readHistoricalManualFit(queueItem.userID, queueItem.eventID, queueItem.originalFile);
+        const trustedMarker = marker.data()?.kind === 'manualUpload' && marker.data()?.version === 1;
+        if (!trustedMarker && !matchesLegacyManualUploadID(queueItem.userID, queueItem.eventID, loaded.fit)) {
+            throw new HistoricalOriginalIneligibleError('Manual activity provenance cannot be verified.', 'not_manual_upload');
+        }
+        return loaded.fit;
+    }
     const originalPath = `${queueItem.originalFile?.path || ''}`.trim();
     if (!originalPath) {
-        throw new Error('Missing original file path on activity sync queue item.');
+        throw queueItem.deliveryMode === 'historical'
+            ? new HistoricalOriginalIneligibleError('Historical activity original path is missing.')
+            : new Error('Missing original file path on activity sync queue item.');
     }
 
     const bucketName = `${queueItem.originalFile?.bucket || ''}`.trim();
     const bucket = bucketName.length > 0 ? admin.storage().bucket(bucketName) : admin.storage().bucket();
-    const [buffer] = await bucket.file(originalPath).download();
-    return buffer;
+    if (queueItem.deliveryMode === 'historical'
+        && !originalPath.startsWith(`users/${queueItem.userID}/events/${queueItem.eventID}/`)) {
+        throw new HistoricalOriginalIneligibleError('Historical activity original path is invalid.');
+    }
+    if (queueItem.deliveryMode === 'historical') {
+        const eventRef = admin.firestore().doc(`users/${queueItem.userID}/events/${queueItem.eventID}`);
+        const [event, sourceMeta] = await Promise.all([
+            eventRef.get(),
+            eventRef.collection('metaData').doc(queueItem.sourceServiceName).get(),
+        ]);
+        const eventData = event.data();
+        const files = Array.isArray(eventData?.originalFiles) && eventData.originalFiles.length > 0
+            ? eventData.originalFiles : eventData?.originalFile ? [eventData.originalFile] : [];
+        if (!event.exists) throw new HistoricalOriginalIneligibleError('Historical activity event is missing.', 'historical_event_missing');
+        if (!sourceMeta.exists) throw new HistoricalOriginalIneligibleError('Historical activity source is missing.', 'not_imported_from_source');
+        if (eventData?.mergeType || eventData?.isMerge || eventData?.toolSource) {
+            throw new HistoricalOriginalIneligibleError('Historical activity is merged or derived.', 'merged_or_derived_event');
+        }
+        if (!files.some((candidate: { path?: unknown; generation?: unknown }) => candidate?.path === originalPath
+            && (!candidate.generation || `${candidate.generation}` === queueItem.originalFile.generation))) {
+            throw new HistoricalOriginalIneligibleError('Historical activity original changed before send.', 'historical_provenance_changed');
+        }
+    }
+    const file = bucket.file(originalPath);
+    try {
+        if (queueItem.deliveryMode === 'historical') {
+            const [metadata] = await file.getMetadata();
+            const size = Number(metadata.size);
+            if (!queueItem.originalFile.generation || `${metadata.generation || ''}` !== queueItem.originalFile.generation
+                || !Number.isFinite(size) || size <= 0 || size > HISTORICAL_FIT_MAX_BYTES) {
+                throw new HistoricalOriginalIneligibleError('Historical activity original changed or exceeds the send limit.');
+            }
+        }
+        const [buffer] = await (queueItem.deliveryMode === 'historical'
+            ? bucket.file(originalPath, { generation: queueItem.originalFile.generation })
+            : file).download();
+        if (queueItem.deliveryMode === 'historical') {
+            const [metadata] = await file.getMetadata();
+            if (`${metadata.generation || ''}` !== queueItem.originalFile.generation
+                || buffer.length > HISTORICAL_FIT_MAX_BYTES || !inspectFitPayload(buffer).isCompleteFit) {
+                throw new HistoricalOriginalIneligibleError('Historical activity original changed or is not a supported FIT.');
+            }
+        }
+        return buffer;
+    } catch (error) {
+        if (queueItem.deliveryMode === 'historical' && isStorageObjectMissing(error)) {
+            throw new HistoricalOriginalIneligibleError('Historical activity original is missing.');
+        }
+        throw error;
+    }
 }
 
 interface UploadActivityFileResult {
@@ -409,7 +503,7 @@ interface ActivitySyncRouteMeta {
     routeId: ActivitySyncQueueItemInterface['routeId'];
     userID: string;
     eventID: string;
-    sourceServiceName: ServiceNames;
+    sourceServiceName: ActivityDeliverySource;
     destinationServiceName: ServiceNames;
     manual: boolean;
 }
@@ -463,7 +557,9 @@ async function uploadToDestination(
                 throw new Error('Wahoo activity upload is missing its source file.');
             }
             return uploadActivityFileToWahoo(queueItem.userID, fileBuffer, {
-                filename: queueItem.originalFile.originalFilename || queueItem.originalFile.path.split('/').pop(),
+                filename: queueItem.sourceServiceName === 'manualUpload'
+                    ? 'activity.fit'
+                    : queueItem.originalFile.originalFilename || queueItem.originalFile.path.split('/').pop(),
                 expectedWorkoutTypeId: expectedWahooWorkoutTypeId,
             });
         case ServiceNames.COROSAPI:
@@ -1408,6 +1504,7 @@ export async function processActivitySyncQueueItem(
         sourceServiceName: queueItem.sourceServiceName,
         destinationServiceName: queueItem.destinationServiceName,
         manual: queueItem.manual === true,
+        requireEventExists: queueItem.deliveryMode === 'historical',
     };
 
     let duringDestinationUpload = false;
@@ -1453,7 +1550,7 @@ export async function processActivitySyncQueueItem(
         // otherwise the provider may finish while QS records a false skip.
         const shouldResumePersistedDestinationUpload = hasPersistedDestinationUpload(queueItem);
 
-        const route = ACTIVITY_SYNC_ROUTES[queueItem.routeId];
+        const route = getActivityDeliveryRoute(queueItem.routeId);
         if (!route) {
             const error = new Error(`Unknown activity sync route ${queueItem.routeId}`) as Error & { dlqContext?: string };
             error.dlqContext = 'UNKNOWN_ACTIVITY_SYNC_ROUTE';
@@ -1505,11 +1602,12 @@ export async function processActivitySyncQueueItem(
 
         if (!shouldResumePersistedDestinationUpload) {
             const isManualRun = queueItem.manual === true;
+            const isHistoricalRun = queueItem.deliveryMode === 'historical';
             // Read the setting before lifecycle state. If a reconnect-required
             // transition disables the route concurrently, the later lifecycle
             // read parks the row instead of permanently completing it as disabled.
-            const enabled = await isActivitySyncRouteEnabledForUser(queueItem.userID, queueItem.routeId);
-            const pendingDisconnectService = await getPendingDisconnectServiceForRoute(queueItem.userID, route);
+            const enabled = isHistoricalRun ? false : await isActivitySyncRouteEnabledForUser(queueItem.userID, queueItem.routeId as ActivitySyncRouteId);
+            const pendingDisconnectService = await getPendingDisconnectServiceForRoute(queueItem.userID, route, isHistoricalRun);
             if (pendingDisconnectService) {
                 return deferActivitySyncQueueItemForPendingDisconnect(
                     queueItem,
@@ -1520,7 +1618,7 @@ export async function processActivitySyncQueueItem(
             }
             const reconnectRequiredService = await getWahooReconnectRequiredServiceForRoute(
                 queueItem.userID,
-                route.sourceServiceName,
+                isHistoricalRun ? null : route.sourceServiceName,
                 route.destinationServiceName,
             );
             if (reconnectRequiredService) {
@@ -1564,9 +1662,9 @@ export async function processActivitySyncQueueItem(
                 const routeDisabledResult = await finalizeDisabledSyncRouteIfCurrent({
                     queueItem,
                     userID: queueItem.userID,
-                    routeId: queueItem.routeId,
+                    routeId: queueItem.routeId as ActivitySyncRouteId,
                     settingsKind: 'activitySyncRoutes',
-                    serviceNames: [route.sourceServiceName, route.destinationServiceName],
+                    serviceNames: [route.sourceServiceName as ServiceNames, route.destinationServiceName],
                     isCurrent: currentQueueItem => isSameActivitySyncProviderState(currentQueueItem, queueItem),
                 });
                 if (routeDisabledResult.result === DisabledSyncRouteTransitionResult.Enabled) {
@@ -1609,7 +1707,8 @@ export async function processActivitySyncQueueItem(
                 }
             }
 
-            const extension = toExtension(queueItem.originalFile?.path, queueItem.originalFile?.extension);
+            const extension = queueItem.sourceServiceName === 'manualUpload' && queueItem.originalFile?.path?.endsWith('.fit.gz')
+                ? 'fit.gz' : toExtension(queueItem.originalFile?.path, queueItem.originalFile?.extension);
             if (!route.supportedFileExtensions.includes(extension)) {
                 await setActivitySyncSkippedMetadata({
                     ...routeMeta,
@@ -1971,6 +2070,20 @@ export async function processActivitySyncQueueItem(
 
         if (isAccountDeletionSkipError(error)) {
             return markActivitySyncQueueItemSkippedForDeletedUser(queueItem, bulkWriter);
+        }
+
+        if (queueItem.deliveryMode === 'historical' && !duringDestinationUpload
+            && !hasPersistedDestinationUpload(queueItem) && error instanceof HistoricalOriginalIneligibleError) {
+            await safelyWriteMetadata(() => setActivitySyncSkippedMetadata({
+                ...routeMeta,
+                skippedReason: error.skippedReason,
+                detail: error.message,
+            }));
+            return finalizeActivitySyncQueueItemIfCurrent(queueItem, {
+                skippedReason: error.skippedReason,
+                destinationUploadContinuation: null,
+                resultStatus: 'skipped',
+            }, 'activity_sync_historical_original_skip', 'historical original skip');
         }
 
         if (isTokenUseSkippedForPendingDisconnectError(error)) {

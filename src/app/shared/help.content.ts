@@ -408,7 +408,7 @@ HRV and Sleep each have their own date range and older/newer navigation. While a
 - Dashboard **Action prompts** are contextual setup cards shown above your dashboard when an account action needs attention after activity data exists.
 - New users can choose a kilometers or miles preset from the dashboard **Default units** action prompt; choose **Advanced settings** there, or open **Settings → Units**, to fine-tune individual unit preferences later. **Weight** starts in kg for both presets and can be changed to lb independently; changing a distance preset does not reset that choice.
 - Pro users with activity data but without a connected activity service may see a one-time **Connect a service** action prompt; dismissing it hides the prompt permanently, and services can still be connected later from **Services**.
-- Pro users with Suunto plus Garmin and/or COROS connected may see a **Send new activities to Suunto** action prompt when automatic activity sync is off. Turning it on affects new Garmin or COROS activities only; use **Sync past activities** in **Services** for activities already in Quantified Self. Dismissing the prompt hides it permanently.
+- Pro users with Suunto plus Garmin and/or COROS connected may see a **Send new activities to Suunto** action prompt when automatic activity sync is off. Turning it on affects new Garmin or COROS activities only; use **Send past activities** in **Services** for activities already in Quantified Self. Dismissing the prompt hides it permanently.
 - If Suunto disconnects server-side or stops accepting the stored token, the dashboard can show a **Reconnect Suunto** action prompt. Reconnecting restarts sleep sync, history imports, and upload tools. Automatic Garmin to Suunto and COROS to Suunto activity sync stays off until you turn it on again in **Services**; dismissing the card only hides the reminder.
 - Distance values in dashboards, event charts, activity chips, and CSV exports follow your kilometers or miles preference from **Settings -> Units**; jump distances display in feet when miles are selected.
 - **Map** tiles can use activity events or saved route previews as their source. Activity map tiles use their own tile date-range and activity filters, independent from the event table search; **Routes** map tiles show recent saved routes from lightweight route previews and do not use event filters.
@@ -1027,7 +1027,7 @@ Garmin to Suunto activity sync requires:
 - turn on automatic activity sync in Garmin Services,
 - and allow Activity Export in Garmin.
 
-Garmin Services also offers Wahoo and COROS as opt-in activity destinations. Automatic delivery applies only to new imported FIT activities. **Sync past activities** can send a selected stored date range to any supported destination without turning on future delivery.
+Garmin Services also offers Wahoo and COROS as opt-in activity destinations. Automatic delivery applies only to new imported FIT activities. **Send past activities** in the destination's Services card lets you preview and send saved Garmin imports, other supported provider imports, and manual FIT uploads from a selected date range without turning on future delivery.
 
 Disconnecting Garmin, COROS, Suunto, or Wahoo turns off related automatic activity or route delivery. After reconnecting, turn each route on again if you want automatic sync to resume.
 
@@ -1035,11 +1035,11 @@ If a provider revokes access, Quantified Self marks that connection as **Reconne
 
 Automatic sync runs only for newly imported Garmin activities and uses the stored original activity file from your event.
 
-**Sync past activities** is available in Garmin Services: choose a supported destination and date range to send Garmin activities already imported into Quantified Self. It uses the original files already saved with those activities.
+For a one-time send, open **Send past activities** under the destination service in Services. Select **Garmin imports** and any other sources you want, including **Manual uploads**, then choose dates and preview. The server checks each saved original before scheduling delivery. Only retained FIT files are eligible; manual FIT.gz uploads are expanded for sending. GPX, TCX, merged or derived events, missing files, and activities already sent or already in a one-time send for that destination are skipped. An automatic send that has not begun its destination upload can be converted to a one-time send.
 
-You can sync past activities while automatic activity sync is off. This does not turn on automatic sync for future imports.
+You can send past activities while automatic activity sync is off. A source connection is not required for a saved import, but the destination must be connected. This does not turn on automatic sync for future imports. Preview does not send anything; **Send** schedules background delivery, which may still fail or be rejected by the destination. Retrying the same selection safely skips one-time sends already queued or completed.
 
-When Garmin and Suunto are connected, the dashboard may offer a one-time action prompt to turn on automatic Garmin to Suunto activity sync. Dismissing the prompt hides it permanently; **Sync past activities** remains available in Services.
+When Garmin and Suunto are connected, the dashboard may offer a one-time action prompt to turn on automatic Garmin to Suunto activity sync. Dismissing the prompt hides it permanently; **Send past activities** remains available in Services.
 
 ## COROS
 
@@ -1054,8 +1054,8 @@ COROS tools currently include:
 - uploading FIT activities to COROS,
 - uploading selected GPX or FIT routes to COROS without saving them in Quantified Self,
 - sending saved routes to COROS individually or in selected-row bulk batches,
-- automatically sending new Garmin, Suunto, or Wahoo activities to COROS, or backfilling a stored date range,
-- automatically sending new COROS activities to Suunto or Wahoo, or backfilling a stored date range,
+- automatically sending new Garmin, Suunto, or Wahoo activities to COROS, or sending saved FIT imports and manual uploads from a selected date range,
+- automatically sending new COROS activities to Suunto or Wahoo, or sending saved COROS FIT imports from a selected date range,
 - and opting in to new/updated or existing saved Suunto route delivery to COROS.
 
 COROS activity upload, activity delivery, and route delivery are available to all eligible connected Pro users.
@@ -1090,13 +1090,13 @@ COROS to Suunto activity sync requires:
 
 Automatic sync runs only for newly imported COROS activities and uses the stored original activity file from your event. COROS Services also offers Wahoo as a destination.
 
-**Sync past activities** is available in COROS Services: choose a date range to send COROS activities already imported into Quantified Self to Suunto or Wahoo.
+**Send past activities** is available under the Suunto or Wahoo destination card in Services. Select **COROS imports** and a date range to send COROS activities already saved in Quantified Self; you can also select supported other imports or manual uploads.
 
-You can sync past activities while automatic activity sync is off. This does not turn on automatic sync for future imports.
+You can send past activities while automatic activity sync is off. This does not turn on automatic sync for future imports.
 
-When COROS and Suunto are connected, the dashboard may offer a one-time action prompt to turn on automatic COROS to Suunto activity sync. Dismissing the prompt hides it permanently; **Sync past activities** remains available in Services.
+When COROS and Suunto are connected, the dashboard may offer a one-time action prompt to turn on automatic COROS to Suunto activity sync. Dismissing the prompt hides it permanently; **Send past activities** remains available in Services.
 
-Garmin, Suunto, and Wahoo Services each offer COROS as an activity destination. Connect both services and turn on only the route you want. Automatic delivery is off by default; a date-range backfill does not enable it. The original stored FIT is sent, so events without a supported retained original file are skipped.
+The COROS Services card offers **Send past activities** for saved Garmin, Suunto, and Wahoo imports, plus manual FIT or FIT.gz uploads. Select sources and dates, preview eligible files, then schedule the send. Automatic delivery remains off unless you enable it separately. The retained original FIT is sent, so unsupported or unavailable originals are skipped.
 
 Before an activity is sent to any provider, Quantified Self stores short-lived, server-only exact-file and semantic FIT fingerprints. If COROS, Suunto, or Wahoo later returns that activity through its import feed, the matching provider echo is acknowledged without creating another event or starting another fan-out. These receipts expire after about 120 days and contain hashes and routing metadata, not the source file.
 
@@ -1113,7 +1113,7 @@ Wahoo is a **Pro** activity integration. Connect Wahoo from Services to:
 - send a FIT activity file directly to Wahoo without creating a Quantified Self activity,
 - send a GPX or FIT course or route file directly to Wahoo without creating a Quantified Self route,
 - automatically send new Garmin, COROS, or Suunto activities to Wahoo,
-- or choose a date range to send past Garmin, COROS, or Suunto activities already in Quantified Self to Wahoo,
+- or choose sources and dates to send saved Garmin, COROS, Suunto, or manual-upload activities to Wahoo,
 - automatically send new and updated Suunto routes already saved in Quantified Self to Wahoo, or send those saved routes now,
 - automatically send new Wahoo activities to Suunto, or choose a date range to send past retained Wahoo activities to Suunto,
 - automatically send new Wahoo activities to COROS, or choose a date range to send past retained Wahoo activities to COROS.
@@ -1135,7 +1135,7 @@ Wahoo to Suunto or COROS activity sync requires:
 - keep both service connections active,
 - and use Wahoo activities with a retained original FIT file.
 
-Automatic sync runs only for newly imported eligible Wahoo activities. **Sync past activities** in Wahoo Services sends retained Wahoo FIT activities from the date range you choose to Suunto or COROS. You can sync past activities while automatic activity sync is off; this does not turn on automatic sync for future Wahoo imports.
+Automatic sync runs only for newly imported eligible Wahoo activities. **Send past activities** under the Suunto or COROS destination card can send retained Wahoo FIT imports from your chosen date range. Select **Wahoo imports** and optionally other supported imports or manual uploads. You can send past activities while automatic activity sync is off; this does not turn on automatic sync for future Wahoo imports.
 
 Disconnecting Wahoo revokes future access and stops new imports and deliveries. It does **not** delete activities already imported into Quantified Self. Delete individual activities yourself, or delete the account to remove all associated data. Wahoo-origin FIT activities can be delivered to Suunto or COROS after explicit opt-in. Suunto-to-Wahoo saved-route delivery is a separate, opt-in route workflow in Suunto Services; direct Wahoo GPX/FIT course/route delivery is a separate, user-selected Wahoo-only upload. Wahoo-owned plans are not imported, and plans or sleep are not forwarded between providers.
 

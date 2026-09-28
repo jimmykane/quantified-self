@@ -217,7 +217,21 @@ export interface SyncPipelineQueueStats {
     advanced: QueueAdvancedStats;
 }
 
-export type ActivitySyncQueueStats = SyncPipelineQueueStats;
+export interface ActivitySyncBreakdownStats {
+    pending: number | null;
+    succeeded: number | null;
+    stuck: number | null;
+    manualReconciliationRequired: number | null;
+    dead: number | null;
+}
+
+export interface ActivitySyncQueueStats extends SyncPipelineQueueStats {
+    /** Manual uploads are a subset of historical sends; counts reflect retained queue/DLQ rows. */
+    breakdowns?: {
+        historical: ActivitySyncBreakdownStats;
+        manualUploads: ActivitySyncBreakdownStats;
+    };
+}
 
 export interface RouteDeliverySyncQueueStats extends SyncPipelineQueueStats {
     skipped: number;

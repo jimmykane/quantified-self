@@ -312,6 +312,14 @@
     </button>
   </div>
   <mat-dialog-content class="service-tools-dialog__content qs-scrollbar">
+    @if (managedTool === 'historical-send') {
+      <app-historical-activity-send
+        [user]="user"
+        [destinationServiceName]="serviceNameByProviderSection[service]"
+        [destinationConnected]="serviceConnectionState[service]"
+        [hasProAccess]="hasProAccess">
+      </app-historical-activity-send>
+    } @else {
     @switch (service) {
       @case ('garmin') {
       <app-services-garmin
@@ -362,6 +370,7 @@
         (connectionStateChanged)="setServiceConnectionState('wahoo', $event)">
       </app-services-wahoo>
       }
+    }
     }
   </mat-dialog-content>
   }

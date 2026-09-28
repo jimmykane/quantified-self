@@ -2,7 +2,7 @@ import * as admin from 'firebase-admin';
 import { FieldValue } from 'firebase-admin/firestore';
 import * as logger from 'firebase-functions/logger';
 import { ServiceNames } from '@sports-alliance/sports-lib';
-import { ActivitySyncRouteId } from '../../../shared/activity-sync-routes';
+import { ActivityDeliveryRouteId, ActivityDeliverySource } from '../../../shared/activity-sync-routes';
 import { ACTIVITY_SYNC_METADATA_DOC_PREFIX } from './constants';
 import { getUserDeletionGuardStateInTransaction, UserDeletionGuardReadError } from '../shared/user-deletion-guard';
 
@@ -66,7 +66,7 @@ export function toActivitySyncMetadataError(error: unknown): ActivitySyncMetadat
     };
 }
 
-export function getActivitySyncMetadataDocId(routeId: ActivitySyncRouteId): string {
+export function getActivitySyncMetadataDocId(routeId: ActivityDeliveryRouteId): string {
     return `${ACTIVITY_SYNC_METADATA_DOC_PREFIX}${routeId}`;
 }
 
@@ -74,7 +74,7 @@ function getActivitySyncMetadataRef(
     db: admin.firestore.Firestore,
     userID: string,
     eventID: string,
-    routeId: ActivitySyncRouteId,
+    routeId: ActivityDeliveryRouteId,
 ) {
     return db
         .collection('users')
@@ -106,17 +106,30 @@ async function setActivitySyncMetadata(
             return;
         }
 
+        if (params.requireEventExists) {
+            const eventRef = db.collection('users').doc(params.userID).collection('events').doc(params.eventID);
+            if (!(await transaction.get(eventRef)).exists) return;
+        }
+
+        // Queue admission and Cloud Task processing are independent. Once a
+        // destination has accepted an activity, no late queue/worker write may
+        // make that route eligible for another provider upload.
+        if (status !== 'success' && (await transaction.get(ref)).data()?.status === 'success') {
+            return;
+        }
+
         transaction.set(ref, payload, { merge: true });
     });
 }
 
 interface BaseMetadataParams {
-    routeId: ActivitySyncRouteId;
+    routeId: ActivityDeliveryRouteId;
     userID: string;
     eventID: string;
-    sourceServiceName: ServiceNames;
+    sourceServiceName: ActivityDeliverySource;
     destinationServiceName: ServiceNames;
     manual: boolean;
+    requireEventExists?: boolean;
 }
 
 export async function setActivitySyncQueuedMetadata(params: BaseMetadataParams): Promise<void> {
@@ -248,9 +261,17 @@ export async function setActivitySyncRetryingMetadataIfQueueItemDeferred(
             return false;
         }
 
+        if (params.requireEventExists) {
+            const eventRef = db.collection('users').doc(params.userID).collection('events').doc(params.eventID);
+            if (!(await transaction.get(eventRef)).exists) return false;
+        }
+
         const queueSnapshot = await transaction.get(params.queueItemRef);
         const queueData = queueSnapshot.data() as Record<string, unknown> | undefined;
         if (!queueSnapshot.exists || queueData?.deferredReason !== params.deferredReason) {
+            return false;
+        }
+        if ((await transaction.get(metadataRef)).data()?.status === 'success') {
             return false;
         }
 

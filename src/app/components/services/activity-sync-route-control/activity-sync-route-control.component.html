@@ -41,7 +41,7 @@
     Connect both services before syncing activities.
   </app-status-info>
   } @else if (routeId) {
-  <mat-slide-toggle class="activity-sync-route-control__toggle" [checked]="routeEnabled" [disabled]="isSaving || isBackfilling"
+  <mat-slide-toggle class="activity-sync-route-control__toggle" [checked]="routeEnabled" [disabled]="isSaving"
     (change)="onRouteToggle($event.checked)">
     Automatically send new {{ sourceName }} activities to {{ destinationName }}
   </mat-slide-toggle>
@@ -50,56 +50,5 @@
   <p class="activity-sync-route-control__description">If Wahoo was connected before activity sending was available, reconnect it once to grant workout write access.</p>
   }
 
-  <mat-divider></mat-divider>
-  <div class="activity-sync-route-control__section-title">Sync past activities</div>
-  <app-status-info type="info" title="Choose which activities to send">
-    Choose a date range to schedule {{ sourceName }} activities previously imported into Quantified Self for {{ destinationName }}. Activities already queued or delivered are not duplicated; automatic sync can stay off.
-  </app-status-info>
-  <div class="activity-sync-route-control__date-fields">
-    <mat-form-field appearance="outline">
-      <mat-label>From</mat-label>
-      <input matInput [matDatepicker]="activitySyncStartDatePicker" [max]="backfillEndDate" [(ngModel)]="backfillStartDate"
-        [ngModelOptions]="{standalone: true}" (click)="activitySyncStartDatePicker.open()">
-      <mat-datepicker-toggle matSuffix [for]="activitySyncStartDatePicker"></mat-datepicker-toggle>
-      <mat-datepicker #activitySyncStartDatePicker></mat-datepicker>
-    </mat-form-field>
-    <mat-form-field appearance="outline">
-      <mat-label>To</mat-label>
-      <input matInput [matDatepicker]="activitySyncEndDatePicker" [min]="backfillStartDate" [(ngModel)]="backfillEndDate"
-        [ngModelOptions]="{standalone: true}" (click)="activitySyncEndDatePicker.open()">
-      <mat-datepicker-toggle matSuffix [for]="activitySyncEndDatePicker"></mat-datepicker-toggle>
-      <mat-datepicker #activitySyncEndDatePicker></mat-datepicker>
-    </mat-form-field>
-  </div>
-
-  <button mat-flat-button class="qs-mat-primary activity-sync-route-control__action"
-    [disabled]="isBackfilling || isBackfillDateRangeInvalid"
-    [attr.aria-busy]="isBackfilling"
-    (click)="runBackfill($event)">
-    <span class="activity-sync-route-control__action-content">
-      @if (isBackfilling) {
-      <mat-spinner diameter="18" class="qs-spinner-accent"></mat-spinner>
-      <span>Scheduling activities…</span>
-      } @else {
-      <span>Schedule activities</span>
-      }
-    </span>
-  </button>
-
-  @if (backfillSummary) {
-  <app-status-info type="success" title="Activity sync scheduling complete">
-    <div>Events in selected dates: {{ backfillSummary.scanned }}</div>
-    @if (backfillSummary.sourceActivityCount !== undefined) {
-    <div>Imported from {{ sourceName }}: {{ backfillSummary.sourceActivityCount }}</div>
-    }
-    <div>Newly scheduled: {{ backfillSummary.queued }}</div>
-    @if (backfillSummaryReasonText) {
-    <div class="activity-sync-route-control__summary-detail">{{ backfillSummaryReasonText }}</div>
-    }
-    @if (backfillSummary.failedCount > 0) {
-    <div>Could not schedule: {{ backfillSummary.failedCount }}</div>
-    }
-  </app-status-info>
-  }
   }
 </section>

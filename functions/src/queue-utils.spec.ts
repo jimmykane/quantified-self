@@ -217,6 +217,8 @@ describe('queue-utils', () => {
                 ref: { parent: { id: 'activitySyncQueue' }, id: 'guarded-q1' },
                 dateCreated: 1,
                 retryCount: 0,
+                deliveryMode: 'historical',
+                sourceServiceName: 'manualUpload',
                 destinationUploadContinuation: {
                     type: 'suunto_blob_put_v1',
                     uploadUrl: 'https://blob.example/signed',
@@ -248,6 +250,11 @@ describe('queue-utils', () => {
                 expect.any(Object),
             );
             const failedPayload = hoisted.transaction.set.mock.calls[0][1];
+            expect(failedPayload).toMatchObject({
+                originalCollection: 'activitySyncQueue',
+                deliveryMode: 'historical',
+                sourceServiceName: 'manualUpload',
+            });
             expect(failedPayload).not.toHaveProperty('destinationUploadContinuation');
             expect(failedPayload).not.toHaveProperty('callbackURL');
             expect(failedPayload).not.toHaveProperty('garminCallbackURLs');

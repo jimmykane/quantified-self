@@ -1,0 +1,76 @@
+<section class="historical-send">
+  <p>Send activities already saved in Quantified Self. Choose their sources and dates, then preview what can be sent.</p>
+
+  @if (!hasProAccess) {
+    <app-status-info type="info" title="Pro required">Sending saved activities is a Pro feature.</app-status-info>
+  } @else if (!destinationConnected) {
+    <app-status-info type="info" title="Connect destination first">Connect this service before sending saved activities.</app-status-info>
+  }
+
+  <div class="historical-send__dates">
+    <mat-form-field appearance="outline">
+      <mat-label>From</mat-label>
+      <input matInput [matDatepicker]="startPicker" [(ngModel)]="startDate" [max]="endDate"
+        (dateChange)="onDateChange()" (click)="startPicker.open()" [disabled]="!!busy">
+      <mat-datepicker-toggle matSuffix [for]="startPicker"></mat-datepicker-toggle>
+      <mat-datepicker #startPicker></mat-datepicker>
+    </mat-form-field>
+    <mat-form-field appearance="outline">
+      <mat-label>To</mat-label>
+      <input matInput [matDatepicker]="endPicker" [(ngModel)]="endDate" [min]="startDate" [max]="today"
+        (dateChange)="onDateChange()" (click)="endPicker.open()" [disabled]="!!busy">
+      <mat-datepicker-toggle matSuffix [for]="endPicker"></mat-datepicker-toggle>
+      <mat-datepicker #endPicker></mat-datepicker>
+    </mat-form-field>
+  </div>
+
+  <fieldset class="historical-send__sources" [disabled]="!!busy">
+    <legend>Include activities from</legend>
+    @for (option of sourceOptions; track option.id) {
+      <mat-checkbox [checked]="option.selected" (change)="onSourceChange(option, $event.checked)">
+        {{ option.label }}
+      </mat-checkbox>
+    }
+  </fieldset>
+  <p class="historical-send__note">Manual uploads include retained FIT and FIT.gz files. Merged activities and other file formats are skipped. Imported activities can be sent after their source service is disconnected if the original FIT remains saved.</p>
+
+  <div class="historical-send__actions">
+    <button mat-stroked-button type="button" [disabled]="!canPreview" [attr.aria-busy]="busy === 'preview'"
+      (click)="runPreview()">
+      <span class="historical-send__button-content">
+        @if (busy === 'preview') { <mat-spinner diameter="18"></mat-spinner> }
+        <span>{{ busy === 'preview' ? 'Previewing…' : 'Preview' }}</span>
+      </span>
+    </button>
+    <button mat-flat-button class="qs-mat-primary" type="button" [disabled]="!canSend"
+      [attr.aria-busy]="busy === 'send'" (click)="runSend()">
+      <span class="historical-send__button-content">
+        @if (busy === 'send') { <mat-spinner diameter="18"></mat-spinner> }
+        <span>{{ busy === 'send' ? 'Scheduling…' : 'Send' }}</span>
+      </span>
+    </button>
+  </div>
+
+  @if (error) {
+    <app-status-info type="error" title="Could not complete request">{{ error }}</app-status-info>
+  }
+  @if (preview) {
+    <app-status-info type="info" title="Preview complete">
+      <div>Events checked: {{ preview.scanned }}</div>
+      @for (option of sourceOptions; track option.id) {
+        @if (option.selected) {
+          <div>{{ option.label }}: {{ preview.eligibleBySource[option.id] || 0 }} eligible · {{ preview.skippedBySource[option.id] || 0 }} skipped</div>
+        }
+      }
+      <div>Already queued: {{ preview.skippedByReason['already_queued'] || 0 }} · Already sent: {{ preview.skippedByReason['already_sent'] || 0 }}</div>
+      <div>Skipped source matches and unavailable files: {{ previewSkippedCount }}</div>
+    </app-status-info>
+  }
+  @if (sendResult) {
+    <app-status-info [type]="error ? 'info' : 'success'" [title]="error ? 'Scheduling progress' : 'Scheduling complete'">
+      <div>Scheduled: {{ sendResult.queued }}</div>
+      <div>Could not schedule: {{ sendResult.failedCount }}</div>
+      <div>Provider delivery continues in the background.</div>
+    </app-status-info>
+  }
+</section>
