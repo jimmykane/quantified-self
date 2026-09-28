@@ -32,8 +32,14 @@ describe('plan schedule calendar', () => {
     const last = buildPlanScheduleMonth(plan, [], '2026-10-01', options);
     expect(last.previousDate).toBe(plan.startLocalDate);
     expect(last.nextDate).toBeNull();
+    expect(last.days).toHaveLength(35);
+    expect(last.days[0].localDate).toBe('2026-09-28');
+    expect(last.days.at(-1)?.localDate).toBe('2026-11-01');
     expect(last.days.find(day => day.localDate === plan.endLocalDate)).toMatchObject({ boundary: 'Plan ends', inRange: true });
     expect(last.days.find(day => day.localDate === '2026-10-07')).toMatchObject({ inRange: false });
+    const selectedEnd = buildPlanScheduleMonth(plan, [], plan.endLocalDate, options);
+    expect(selectedEnd.days.map(day => day.localDate)).toEqual(last.days.map(day => day.localDate));
+    expect(selectedEnd.days.find(day => day.selected)?.localDate).toBe(plan.endLocalDate);
   });
 
   it('isolates the selected plan, excludes deleted workouts, and retains skipped/multiple workouts without totals', () => {
@@ -45,6 +51,17 @@ describe('plan schedule calendar', () => {
     expect(day.overflowCount).toBe(1);
     expect(day.ariaLabel).toContain('3 workouts. 1 skipped.');
     expect(day).not.toHaveProperty('totalDurationSeconds');
+  });
+
+  it('keeps wholly out-of-range weeks before a late plan start', () => {
+    const late = { ...plan, startLocalDate: '2026-09-29' };
+    const month = buildPlanScheduleMonth(late, [], late.startLocalDate, options);
+    expect(month.days).toHaveLength(35);
+    expect(month.days.find(day => day.localDate === '2026-09-01')).toMatchObject({ inRange: false });
+    expect(month.days.find(day => day.localDate === late.startLocalDate)).toMatchObject({
+      inRange: true, selected: true, boundary: 'Plan starts',
+    });
+    expect(month.nextDate).toBe('2026-10-01');
   });
 
   it('respects Sunday preferences and local dates across DST and leap years', () => {
@@ -71,9 +88,11 @@ describe('plan schedule calendar', () => {
         expect(day.weekday).toBe(weekday.label);
         expect(day.isWeekend).toBe(weekday.isWeekend);
       });
-      expect(month.days.find(day => day.localDate === '2027-01-01')?.isWeekend).toBe(false);
-      expect(month.days.find(day => day.localDate === '2027-01-02')?.isWeekend).toBe(true);
-      expect(month.days.find(day => day.localDate === '2027-01-03')?.isWeekend).toBe(true);
+      if (date === '2027-01-01') {
+        expect(month.days.find(day => day.localDate === '2027-01-01')?.isWeekend).toBe(false);
+        expect(month.days.find(day => day.localDate === '2027-01-02')?.isWeekend).toBe(true);
+        expect(month.days.find(day => day.localDate === '2027-01-03')?.isWeekend).toBe(true);
+      }
     }
   });
 
@@ -117,12 +136,13 @@ describe('plan schedule calendar', () => {
 
   it('handles a single-day plan and a 366-day cross-year plan without unbounded rendering', () => {
     const single = buildPlanScheduleMonth({ ...plan, endLocalDate: plan.startLocalDate }, [], plan.startLocalDate, options);
+    expect(single.days).toHaveLength(35);
     expect(single.days.filter(day => day.inRange)).toHaveLength(1);
     expect(single.days.find(day => day.inRange)?.boundary).toBe('Plan starts and ends');
     expect(single.previousDate).toBeNull();
     expect(single.nextDate).toBeNull();
     const year = buildPlanScheduleMonth({ id: 'plan', startLocalDate: '2026-09-09', endLocalDate: '2027-09-09' }, [], '2026-12-31', options);
-    expect(year.days).toHaveLength(42);
+    expect(year.days).toHaveLength(35);
     expect(year.nextDate).toBe('2027-01-01');
   });
 });
