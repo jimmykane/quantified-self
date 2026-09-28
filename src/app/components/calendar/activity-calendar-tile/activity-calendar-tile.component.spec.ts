@@ -105,6 +105,7 @@ describe('ActivityCalendarTileComponent', () => {
     expect(fixture.nativeElement.querySelector('.activity-calendar-tile')?.getAttribute('aria-label')).toBe('Calendar');
     expect(fixture.nativeElement.querySelector('.activity-calendar-tile-navigation > span')?.textContent.trim())
       .toBe(fixture.componentInstance.calendarModel().periodLabel);
+    expect(fixture.nativeElement.querySelector('.activity-calendar-tile > .activity-calendar-tile-navigation')).toBeTruthy();
     const fullDayLink = fixture.nativeElement.querySelector('a[aria-label="Open selected day page"]');
     expect(fullDayLink?.getAttribute('href')).toBe(`/calendar/day/${day.dateKey}?from=dashboard`);
     expect(openBottomSheet).not.toHaveBeenCalled();
@@ -180,7 +181,7 @@ describe('ActivityCalendarTileComponent', () => {
     expect(watchHealth).toHaveBeenCalledWith(user.uid, earlierDay.dateKey, expect.any(Number), expect.any(AbortSignal));
   });
 
-  it('limits the dashboard day preview while leaving every planned workout in the calendar', async () => {
+  it('shows every planned workout in the scrollable dashboard day panel', async () => {
     const dateKey = currentLocalDate(2);
     const schedule = scheduleForDate(dateKey);
     const structure = schedule.workouts[0].structure;
@@ -199,8 +200,8 @@ describe('ActivityCalendarTileComponent', () => {
     fixture.detectChanges();
 
     expect(fixture.componentInstance.selectedDayPlanned()).toHaveLength(4);
-    expect(fixture.nativeElement.querySelectorAll('.calendar-day-context-preview-plan')).toHaveLength(2);
-    expect(fixture.nativeElement.textContent).toContain('+2 more on the full day');
+    expect(fixture.nativeElement.querySelectorAll('.calendar-day-context-preview-plan')).toHaveLength(4);
+    expect(fixture.nativeElement.textContent).not.toContain('more on the full day');
     expect(fixture.nativeElement.querySelector('a[aria-label="Open selected day page"]')?.getAttribute('href'))
       .toBe(`/calendar/day/${dateKey}?from=dashboard`);
   });

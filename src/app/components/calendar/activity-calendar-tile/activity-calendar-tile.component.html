@@ -12,26 +12,26 @@
   </header>
   }
 
+  @if (showNavigation() || dayContextEnabled()) {
+    <nav class="activity-calendar-tile-navigation" aria-label="Calendar month navigation">
+      <button mat-icon-button type="button" appHapticTap matTooltip="Previous month" aria-label="Previous month"
+        (click)="navigateMonth(-1)">
+        <mat-icon aria-hidden="true">chevron_left</mat-icon>
+      </button>
+      <span aria-live="polite">{{ calendarModel().periodLabel }}</span>
+      @if (dayContextEnabled()) {
+        <button mat-icon-button type="button" appHapticTap matTooltip="Go to today" aria-label="Go to today"
+          (click)="goToToday()"><mat-icon aria-hidden="true">today</mat-icon></button>
+      }
+      <button mat-icon-button type="button" appHapticTap matTooltip="Next month" aria-label="Next month"
+        (click)="navigateMonth(1)">
+        <mat-icon aria-hidden="true">chevron_right</mat-icon>
+      </button>
+    </nav>
+  }
+
   <div class="activity-calendar-day-layout">
     <div class="activity-calendar-month-pane">
-      @if (showNavigation() || dayContextEnabled()) {
-        <nav class="activity-calendar-tile-navigation" aria-label="Calendar month navigation">
-          <button mat-icon-button type="button" appHapticTap matTooltip="Previous month" aria-label="Previous month"
-            (click)="navigateMonth(-1)">
-            <mat-icon aria-hidden="true">chevron_left</mat-icon>
-          </button>
-          <span aria-live="polite">{{ calendarModel().periodLabel }}</span>
-          @if (dayContextEnabled()) {
-            <button mat-icon-button type="button" appHapticTap matTooltip="Go to today" aria-label="Go to today"
-              (click)="goToToday()"><mat-icon aria-hidden="true">today</mat-icon></button>
-          }
-          <button mat-icon-button type="button" appHapticTap matTooltip="Next month" aria-label="Next month"
-            (click)="navigateMonth(1)">
-            <mat-icon aria-hidden="true">chevron_right</mat-icon>
-          </button>
-        </nav>
-      }
-
       <div class="activity-calendar-tile-progress">
         @if (isLoading()) {
           <mat-progress-bar mode="indeterminate" aria-label="Loading calendar activities"></mat-progress-bar>

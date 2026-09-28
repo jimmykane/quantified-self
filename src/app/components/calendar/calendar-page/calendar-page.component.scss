@@ -338,15 +338,15 @@
   .calendar-period-summary { height: 52px; margin: 8px 0 0; border-top: 1px solid var(--mat-sys-outline-variant); }
   .calendar-period-summary-value { font-size: 19px; }
   .calendar-progress-slot { margin-bottom: 0; }
-  .calendar-day-layout { grid-template-columns: minmax(0, 1.55fr) minmax(250px, .85fr); align-items: stretch; }
-  .calendar-selected-day { padding: 0 0 0 16px; border: 0; border-left: 1px solid var(--mat-sys-outline-variant); border-radius: 0; background: transparent; box-shadow: none; }
+  .calendar-day-layout { position: relative; grid-template-columns: minmax(0, 1.55fr) minmax(250px, .85fr); align-items: stretch; }
+  .calendar-selected-day { position: absolute; grid-column: 2; grid-row: 1; inset: 0; min-height: 0; padding: 0 0 0 16px; border: 0; border-left: 1px solid var(--mat-sys-outline-variant); border-radius: 0; background: transparent; box-shadow: none; }
 }
 
 @media (max-width: 900px) {
   .calendar-page--calm-month {
     .calendar-main-surface { padding: 10px; }
     .calendar-day-layout { grid-template-columns: minmax(0, 1fr); gap: 13px; }
-    .calendar-selected-day { padding: 13px 0 0; border-top: 1px solid var(--mat-sys-outline-variant); border-left: 0; }
+    .calendar-selected-day { position: static; grid-column: 1; grid-row: 2; height: auto; padding: 13px 0 0; border-top: 1px solid var(--mat-sys-outline-variant); border-left: 0; }
   }
 }
 

@@ -65,8 +65,8 @@ export class CalendarDayContextComponent {
     weekday: 'short', day: 'numeric', month: 'short',
   }).format(this.data().day.date));
   private readonly healthDateKey = computed(() => this.data().day.dateKey);
-  private readonly resetDashboardScroll = effect(() => {
-    if (this.dashboardTile()) {
+  private readonly resetMonthDayScroll = effect(() => {
+    if (this.calmMonth()) {
       this.healthDateKey();
       const scrollBody = this.elementRef.nativeElement.querySelector<HTMLElement>('.calendar-day-context-body');
       if (scrollBody) scrollBody.scrollTop = 0;
@@ -97,10 +97,9 @@ export class CalendarDayContextComponent {
     && this.notesStatus() === 'ready'
     && this.noteRows().length === 0
     && (!this.canPlan() || (this.plannedStatus() === 'ready' && this.plannedRows().length === 0)));
-  private readonly previewCount = computed(() => this.calmMonth() && !this.dashboardTile() ? 1 : 2);
-  readonly previewActivities = computed(() => this.activities().slice(0, this.previewCount()));
-  readonly previewNotes = computed(() => this.noteRows().slice(0, this.previewCount()));
-  readonly previewPlans = computed(() => this.plannedRows().slice(0, this.previewCount()));
+  readonly previewActivities = computed(() => this.calmMonth() ? this.activities() : this.activities().slice(0, 2));
+  readonly previewNotes = computed(() => this.calmMonth() ? this.noteRows() : this.noteRows().slice(0, 2));
+  readonly previewPlans = computed(() => this.calmMonth() ? this.plannedRows() : this.plannedRows().slice(0, 2));
   readonly canPlan = computed(() => this.data().planningEnabled !== false && this.users.user()?.uid === this.data().userId);
   readonly healthState = signal<HealthState>({ status: 'loading', dateKey: null, ownerUid: null, summary: null, sleepPoint: null });
   readonly fullDayReady = computed(() => {

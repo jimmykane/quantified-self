@@ -125,12 +125,15 @@ app-activity-calendar-grid {
   height: auto;
   container-type: inline-size;
   .activity-calendar-tile { height: auto; padding: 12px; }
-  .activity-calendar-day-layout { display: grid; height: auto; flex: none; grid-template-columns: minmax(0, 1fr) minmax(300px, 370px); align-items: start; gap: 16px; }
+  .activity-calendar-day-layout { display: grid; position: relative; height: auto; flex: none; grid-template-columns: minmax(0, 1.55fr) minmax(250px, .85fr); align-items: stretch; gap: 16px; }
   .activity-calendar-month-pane { min-width: 0; height: auto; flex: none; }
   app-activity-calendar-grid { min-height: 0; flex: none; overflow: visible; }
-  app-calendar-day-context { box-sizing: border-box; min-width: 0; height: auto; padding: 12px 14px; border-radius: 12px; background: var(--mat-sys-surface-container-low); }
+  app-calendar-day-context { box-sizing: border-box; position: absolute; grid-column: 2; grid-row: 1; inset: 0; min-width: 0; min-height: 0; padding-left: 16px; border-left: 1px solid var(--mat-sys-outline-variant); }
   .activity-calendar-tile-navigation { grid-template-columns: 40px minmax(0, 1fr) 40px 40px; }
 }
 @container (max-width: 900px) {
-  :host(.activity-calendar-tile--day-context) .activity-calendar-day-layout { grid-template-columns: minmax(0, 1fr); }
+  :host(.activity-calendar-tile--day-context) {
+    .activity-calendar-day-layout { grid-template-columns: minmax(0, 1fr); gap: 13px; }
+    app-calendar-day-context { position: static; grid-column: 1; grid-row: 2; height: auto; padding: 13px 0 0; border-top: 1px solid var(--mat-sys-outline-variant); border-left: 0; }
+  }
 }
