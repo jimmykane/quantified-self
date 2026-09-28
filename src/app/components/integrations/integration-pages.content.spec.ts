@@ -33,7 +33,9 @@ describe('integration-pages.content', () => {
     expect(PROVIDER_INTEGRATION_PAGES.wahoo.syncFlows.some(flow => flow.title === 'Planned workouts to Wahoo')).toBe(true);
     expect(PROVIDER_INTEGRATION_PAGES.wahoo.syncFlows.find(flow => flow.title === 'Direct GPX/FIT course/route delivery')?.copy)
       .toContain('send flow offers a reconnect action');
-    expect(PROVIDER_INTEGRATION_PAGES.wahoo.syncFlows.some(flow => flow.title === 'Direct FIT activity delivery')).toBe(true);
+    const directActivity = PROVIDER_INTEGRATION_PAGES.wahoo.syncFlows.find(flow => flow.title === 'Direct FIT activity delivery');
+    expect(directActivity?.copy).toContain('canonical activity type server-side');
+    expect(directActivity?.copy).toContain('preserving its title');
     expect(PROVIDER_INTEGRATION_PAGES.wahoo.syncFlows.some(flow => flow.title === 'Direct GPX/FIT course/route delivery')).toBe(true);
     expect(PROVIDER_INTEGRATION_PAGES.wahoo.syncFlows.some(flow => flow.title === 'Suunto saved routes to Wahoo')).toBe(true);
     expect(PROVIDER_INTEGRATION_PAGES.wahoo.syncFlows.some(flow => flow.title === 'Wahoo to Suunto sync')).toBe(true);

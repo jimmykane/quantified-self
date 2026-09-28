@@ -53,6 +53,7 @@ import {
 } from './account';
 import {
   getWahooWorkoutTypeById,
+  resolveWahooWorkoutType,
   WahooWorkoutType,
 } from '../../../shared/wahoo-activity-types';
 
@@ -82,7 +83,9 @@ export interface WahooActivityUploadOptions {
   timeZone?: unknown;
   expectedWorkoutTypeId?: number | null;
   /** Runs after account validation and immediately before the provider request. */
-  beforeProviderRequest?: () => Promise<void>;
+  beforeProviderRequest?: () => Promise<{
+    expectedWorkoutTypeId?: number | null;
+  } | void>;
   /** Rolls back preparation only when no provider request was issued. */
   onProviderRequestAborted?: () => Promise<void>;
   /** Promote pre-request state; account ownership is revalidated before I/O. */
@@ -332,7 +335,10 @@ function getAmbiguousWahooActivityUploadError(error: unknown): ProviderOperation
 
 async function withWahooWorkoutWriteToken<T>(
   userID: string,
-  operation: (accessToken: string) => Promise<T>,
+  operation: (
+    accessToken: string,
+    preparation?: { expectedWorkoutTypeId?: number | null },
+  ) => Promise<T>,
   hooks: Pick<
     WahooActivityUploadOptions,
     'beforeProviderRequest'
@@ -368,8 +374,9 @@ async function withWahooWorkoutWriteToken<T>(
     let providerPreparationCompleted = false;
     let providerRequestStarted = false;
     try {
+      let preparation: { expectedWorkoutTypeId?: number | null } | undefined;
       if (hooks.beforeProviderRequest) {
-        await hooks.beforeProviderRequest();
+        preparation = await hooks.beforeProviderRequest() || undefined;
         providerPreparationCompleted = true;
         await assertWahooActivityUploadProviderActionAllowed(userID, 'after_pre_request_write');
       }
@@ -384,7 +391,7 @@ async function withWahooWorkoutWriteToken<T>(
       }
       providerRequestStarted = true;
       try {
-        return await operation(token.accessToken);
+        return await operation(token.accessToken, preparation);
       } finally {
         if (hooks.onProviderRequestFinished) {
           try {
@@ -455,7 +462,34 @@ function toWahooActivityTypeCorrectionError(
       expectedWorkoutTypeId,
     );
   }
-  if (isTerminalServiceAuthError(error)) {
+  if (isProviderOperationError(error)) {
+    throw new WahooActivityTypeCorrectionError({
+      serviceName: ServiceNames.WahooAPI,
+      operation: 'activity_upload_status',
+      disposition: error.disposition,
+      retryMode: error.retryMode,
+      code: error.code,
+      message: error.message,
+      statusCode: error.statusCode,
+      retryAfterSeconds: error.retryAfterSeconds,
+      providerOperationId: uploadId,
+      dlqContext: error.dlqContext,
+    }, expectedWorkoutTypeId);
+  }
+  const callableCode = error instanceof HttpsError ? error.code : undefined;
+  const rawLifecycleStatusCode = error && typeof error === 'object'
+    ? (error as { statusCode?: unknown }).statusCode
+    : undefined;
+  const lifecycleStatusCode = typeof rawLifecycleStatusCode === 'number'
+    && Number.isFinite(rawLifecycleStatusCode)
+    && rawLifecycleStatusCode > 0
+    ? rawLifecycleStatusCode
+    : undefined;
+  if (
+    isWahooReconnectRequiredError(error)
+    || isTerminalServiceAuthError(error)
+    || callableCode === 'unauthenticated'
+  ) {
     throw new WahooActivityTypeCorrectionError({
       serviceName: ServiceNames.WahooAPI,
       operation: 'activity_upload_status',
@@ -463,9 +497,47 @@ function toWahooActivityTypeCorrectionError(
       retryMode: 'none',
       code: 'unauthenticated',
       message: 'Reconnect Wahoo before updating this accepted activity.',
-      statusCode: error.statusCode || undefined,
+      statusCode: lifecycleStatusCode,
       providerOperationId: uploadId,
       dlqContext: 'WAHOO_ACTIVITY_TYPE_CORRECTION_AUTH_RECONCILIATION_REQUIRED',
+    }, expectedWorkoutTypeId);
+  }
+  if (error instanceof WahooWorkoutWriteScopeRequiredError || callableCode === 'permission-denied') {
+    throw new WahooActivityTypeCorrectionError({
+      serviceName: ServiceNames.WahooAPI,
+      operation: 'activity_upload_status',
+      disposition: 'permission_required',
+      retryMode: 'none',
+      code: 'permission-denied',
+      message: 'Reconnect Wahoo and allow workout access before updating this accepted activity.',
+      providerOperationId: uploadId,
+      dlqContext: 'WAHOO_ACTIVITY_TYPE_CORRECTION_PERMISSION_RECONCILIATION_REQUIRED',
+    }, expectedWorkoutTypeId);
+  }
+  const retryableCallableError = callableCode === 'aborted'
+    || callableCode === 'deadline-exceeded'
+    || callableCode === 'resource-exhausted'
+    || callableCode === 'unavailable';
+  if (
+    isWahooRefreshBackoffError(error)
+    || isWahooRefreshContentionError(error)
+    || error instanceof UserDeletionGuardReadError
+    || retryableCallableError
+  ) {
+    throw new WahooActivityTypeCorrectionError({
+      serviceName: ServiceNames.WahooAPI,
+      operation: 'activity_upload_status',
+      disposition: 'retryable',
+      retryMode: 'resume',
+      code: callableCode === 'resource-exhausted' ? 'resource-exhausted' : 'unavailable',
+      message: callableCode === 'resource-exhausted'
+        ? 'Wahoo is rate-limiting workout updates. Please retry shortly.'
+        : 'Wahoo is temporarily unable to update the workout type. Please retry.',
+      retryAfterSeconds: isWahooRefreshBackoffError(error)
+        ? Math.max(0, Math.ceil((error.retryAt - Date.now()) / 1000))
+        : undefined,
+      providerOperationId: uploadId,
+      dlqContext: 'WAHOO_ACTIVITY_TYPE_CORRECTION_RETRY_EXHAUSTED',
     }, expectedWorkoutTypeId);
   }
   const statusCode = error instanceof WahooAPIRequestError ? error.statusCode : undefined;
@@ -522,7 +594,26 @@ function toWahooActivityTypeCorrectionError(
       dlqContext: 'WAHOO_ACTIVITY_TYPE_CORRECTION_REJECTED',
     }, expectedWorkoutTypeId);
   }
-  throw error;
+  const accountUnavailable = error instanceof WahooActivityUploadSkippedForDeletedUserError;
+  if (!accountUnavailable) {
+    logger.error('Could not complete a Wahoo activity type correction after upload acceptance.', {
+      error: getWahooErrorLogDetails(error),
+    });
+  }
+  throw new WahooActivityTypeCorrectionError({
+    serviceName: ServiceNames.WahooAPI,
+    operation: 'activity_upload_status',
+    disposition: 'permanent',
+    retryMode: 'none',
+    code: 'failed-precondition',
+    message: accountUnavailable
+      ? 'Account is being deleted or no longer exists.'
+      : 'Wahoo accepted the activity, but its type could not be updated. Check its status before trying again.',
+    providerOperationId: uploadId,
+    dlqContext: accountUnavailable
+      ? 'WAHOO_ACTIVITY_TYPE_CORRECTION_ACCOUNT_UNAVAILABLE'
+      : 'WAHOO_ACTIVITY_TYPE_CORRECTION_INTERNAL_RECONCILIATION_REQUIRED',
+  }, expectedWorkoutTypeId);
 }
 
 async function correctCompletedWahooActivityType(params: {
@@ -611,8 +702,10 @@ export async function uploadActivityFileToWahoo(
     expectedWorkoutType: WahooWorkoutType | null;
   };
   try {
-    acceptedUpload = await withWahooWorkoutWriteToken(userID, async (accessToken) => {
-      const expectedWorkoutType = configuredExpectedWorkoutType;
+    acceptedUpload = await withWahooWorkoutWriteToken(userID, async (accessToken, preparation) => {
+      const expectedWorkoutType = preparation?.expectedWorkoutTypeId !== undefined
+        ? resolveExpectedWahooWorkoutType(preparation.expectedWorkoutTypeId)
+        : configuredExpectedWorkoutType;
       const form = new URLSearchParams();
       form.set('workout_file_upload[file]', `data:application/vnd.fit;base64,${fileBuffer.toString('base64')}`);
       const filename = normalizeFilename(options.filename);
@@ -743,14 +836,29 @@ function throwWahooActivityCallableError(error: unknown): never {
   ) {
     throw new HttpsError('failed-precondition', 'Account is being deleted or no longer exists.');
   }
+  if (error instanceof WahooActivityTypeCorrectionPendingDisconnectError) {
+    throw new HttpsError('failed-precondition', error.message, {
+      retryMode: 'resume',
+      resumeUploadId: error.providerOperationId,
+      expectedWorkoutTypeId: error.expectedWorkoutTypeId,
+    });
+  }
   if (!isProviderOperationError(error)) {
     throw error;
   }
+  const correctionResumeDetails = error instanceof WahooActivityTypeCorrectionError
+    && error.providerOperationId
+    ? {
+      retryMode: 'resume',
+      resumeUploadId: error.providerOperationId,
+      expectedWorkoutTypeId: error.expectedWorkoutTypeId,
+    }
+    : undefined;
   if (error.disposition === 'auth_required') {
-    throw new HttpsError('unauthenticated', error.message);
+    throw new HttpsError('unauthenticated', error.message, correctionResumeDetails);
   }
   if (error.disposition === 'permission_required') {
-    throw new HttpsError('permission-denied', error.message);
+    throw new HttpsError('permission-denied', error.message, correctionResumeDetails);
   }
   if (error.disposition === 'retryable') {
     throw new HttpsError(
@@ -759,13 +867,16 @@ function throwWahooActivityCallableError(error: unknown): never {
       {
         retryMode: error.retryMode,
         resumeUploadId: error.providerOperationId,
+        ...(error instanceof WahooActivityTypeCorrectionError
+          ? { expectedWorkoutTypeId: error.expectedWorkoutTypeId }
+          : {}),
         ...(error.retryAfterSeconds !== undefined
           ? { retryAfterSeconds: error.retryAfterSeconds }
           : {}),
       },
     );
   }
-  throw new HttpsError('failed-precondition', error.message);
+  throw new HttpsError('failed-precondition', error.message, correctionResumeDetails);
 }
 
 export const importActivityToWahooAPI = onCall({
@@ -789,6 +900,8 @@ export const importActivityToWahooAPI = onCall({
           fileBuffer,
           provisional: true,
         });
+        const expectedWorkoutType = resolveWahooWorkoutType(outboundFingerprint.activityTypes);
+        return { expectedWorkoutTypeId: expectedWorkoutType?.id ?? null };
       },
       onProviderRequestStarting: async () => {
         if (!outboundFingerprint) {
@@ -836,7 +949,11 @@ export const getWahooAPIWorkoutFileUploadStatus = onCall({
     if (!uploadId) {
       throw new HttpsError('invalid-argument', 'Invalid Wahoo upload identifier.');
     }
-    return await getWahooActivityUploadStatus(userID, uploadId);
+    return await getWahooActivityUploadStatus(
+      userID,
+      uploadId,
+      request.data?.expectedWorkoutTypeId,
+    );
   } catch (error) {
     return throwWahooActivityCallableError(error);
   }

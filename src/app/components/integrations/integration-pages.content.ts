@@ -584,7 +584,7 @@ export const PROVIDER_INTEGRATION_PAGES: Record<IntegrationProviderKey, Provider
       {
         icon: 'upload_file',
         title: 'Direct FIT activity delivery',
-        copy: 'Choose a FIT activity file in Wahoo Services to send it directly to Wahoo. This does not create or retain a Quantified Self activity.',
+        copy: 'Choose a FIT activity file in Wahoo Services to send it directly to Wahoo. Quantified Self parses its canonical activity type server-side and, when explicitly mapped, corrects only the Wahoo workout type after processing while preserving its title. This does not create or retain a Quantified Self activity.',
       },
       {
         icon: 'route',
@@ -624,7 +624,7 @@ export const PROVIDER_INTEGRATION_PAGES: Record<IntegrationProviderKey, Provider
       {
         icon: 'sync',
         title: 'Asynchronous upload status',
-        copy: 'Wahoo can process a FIT upload asynchronously. Quantified Self keeps the Wahoo upload identifier for status checks without posting the same source file again.',
+        copy: 'Wahoo can process a FIT upload asynchronously. Quantified Self keeps the Wahoo upload identifier and optional validated mapped type in the browser row for status checks without posting the same source file again.',
       },
       {
         icon: 'route',
