@@ -18,6 +18,8 @@ import {
     mutateTrainingScheduleForUser,
     trainingScheduleDeletionTombstoneDocumentId,
 } from './persistence';
+import { trainingCleanupJobRef } from './cleanup-job-contract';
+import { processTrainingCleanupJob } from './cleanup-worker';
 
 const NOW_MS = Date.UTC(2026, 8, 2, 14);
 const STRUCTURE = {
@@ -79,6 +81,7 @@ class FakeDocumentReference {
 class FakeTransaction {
     constructor(private readonly db: FakeFirestore) {}
     writeCount = 0;
+    writeBytes = 0;
     async get(ref: FakeDocumentReference | FakeQuery): Promise<FakeSnapshot | { docs: FakeSnapshot[]; empty: boolean }> {
         if (ref instanceof FakeDocumentReference) return this.db.snapshot(ref);
         const docs = this.db.query(ref);
@@ -86,7 +89,15 @@ class FakeTransaction {
     }
     set(ref: FakeDocumentReference, value: unknown): void {
         this.writeCount += 1;
+        this.writeBytes += Buffer.byteLength(JSON.stringify(value), 'utf8') + Buffer.byteLength(ref.path, 'utf8') + 1024;
         this.db.docs.set(ref.path, clone(value as Stored));
+    }
+    update(ref: FakeDocumentReference, value: Stored): void {
+        const current = this.db.docs.get(ref.path);
+        if (!current) throw new Error(`Document missing: ${ref.path}`);
+        this.writeCount += 1;
+        this.writeBytes += Buffer.byteLength(JSON.stringify(value), 'utf8') + Buffer.byteLength(ref.path, 'utf8') + 1024;
+        this.db.docs.set(ref.path, { ...current, ...clone(value) });
     }
     create(ref: FakeDocumentReference, value: unknown): void {
         if (this.db.docs.has(ref.path)) throw new Error(`Document exists: ${ref.path}`);
@@ -94,6 +105,7 @@ class FakeTransaction {
     }
     delete(ref: FakeDocumentReference): void {
         this.writeCount += 1;
+        this.writeBytes += Buffer.byteLength(ref.path, 'utf8') + 1024;
         this.db.docs.delete(ref.path);
     }
 }
@@ -116,6 +128,7 @@ class FakeBatch {
 class FakeFirestore {
     readonly docs = new Map<string, Stored>();
     readonly transactionWriteCounts: number[] = [];
+    readonly transactionWriteBytes: number[] = [];
     readonly recursiveDelete = vi.fn(async (ref: FakeDocumentReference) => {
         [...this.docs.keys()].forEach((path) => {
             if (path === ref.path || path.startsWith(`${ref.path}/`)) this.docs.delete(path);
@@ -127,6 +140,7 @@ class FakeFirestore {
         const transaction = new FakeTransaction(this);
         const result = await handler(transaction);
         this.transactionWriteCounts.push(transaction.writeCount);
+        this.transactionWriteBytes.push(transaction.writeBytes);
         return result;
     }
     async getAll(...refs: FakeDocumentReference[]): Promise<FakeSnapshot[]> {
@@ -333,10 +347,18 @@ describe('deleteTrainingPlanForUser persistence', () => {
         })).rejects.toMatchObject({ code: 'already-exists' });
     });
 
-    it('preserves the declared 400-current-workout limit in the in-memory transaction model', async () => {
-        // Emulator request-size and resumable-operation coverage is tracked by
-        // https://github.com/jimmykane/quantified-self/issues/657.
-        const workouts = Array.from({ length: 400 }, (_, index) => workout(`workout-${`${index}`.padStart(3, '0')}`));
+    it('stages 400 high-complexity conversion snapshots in bounded chunks and patches current roots atomically', async () => {
+        const largeStructure = { ...STRUCTURE, nodes: Array.from({ length: 100 }, (_, index) => ({
+            kind: 'step' as const,
+            id: `step-${index}`,
+            purpose: 'work' as const,
+            ending: { kind: 'time' as const, seconds: 30 },
+            targets: [{ kind: 'heart-rate' as const, mode: 'absolute' as const, minimumBpm: 130, maximumBpm: 145 }],
+            note: 'High-complexity workout segment. '.repeat(14).slice(0, 490),
+        })) };
+        const workouts = Array.from({ length: 400 }, (_, index) => ({
+            ...workout(`workout-${`${index}`.padStart(3, '0')}`), structure: largeStructure,
+        }));
         seed(db, workouts);
 
         const response = await deleteTrainingPlanForUser(
@@ -345,6 +367,9 @@ describe('deleteTrainingPlanForUser persistence', () => {
 
         expect(response.convertedWorkoutIds).toHaveLength(400);
         expect(db.read('users/user-1/scheduledWorkouts/workout-399')).toMatchObject({ planId: null, revision: 3 });
+        expect(db.transactionWriteCounts.length).toBeGreaterThan(5);
+        expect(Math.max(...db.transactionWriteCounts)).toBeLessThan(500);
+        expect(Math.max(...db.transactionWriteBytes)).toBeLessThan(3 * 1024 * 1024);
     });
 
     it('permanently deletes 400 workouts without exceeding the Firestore transaction write limit', async () => {
@@ -399,6 +424,7 @@ describe('deleteTrainingPlanForUser persistence', () => {
         expect(db.read('users/user-1/trainingPlans/plan-1')).toBeDefined();
         expect(db.read('users/user-1/scheduledWorkouts/workout-1')).toBeDefined();
         expect(db.read('users/user-1/trainingPlanState/current/planDeletionLocks/plan-1')).toBeDefined();
+        expect(db.read(trainingCleanupJobRef(db as never, 'user-1', 'plan', 'plan-1').path)).toBeUndefined();
         expect([...db.docs.keys()].some(path => path.includes('/deletionTombstones/'))).toBe(false);
     });
 
@@ -424,6 +450,7 @@ describe('deleteTrainingPlanForUser persistence', () => {
         );
 
         expect(response.mutationId).toBe(original.mutationId);
+        expect(db.read(trainingCleanupJobRef(db as never, 'user-1', 'plan', 'plan-1').path)).toBeUndefined();
         expect(db.read('users/user-1/trainingPlans/plan-1')).toBeUndefined();
         expect(db.read('users/user-1/scheduledWorkouts/workout-1')).toMatchObject({ planId: null, revision: 3 });
         expect(db.read('users/user-1/scheduledWorkouts/workout-1/revisions/0000000003')).toMatchObject({
@@ -453,6 +480,8 @@ describe('deleteTrainingPlanForUser persistence', () => {
         expect(db.read(`users/user-1/trainingPlanState/current/mutationReceipts/${original.mutationId}`))
             .toMatchObject({ response: { mutationId: original.mutationId } });
         expect(db.read('users/user-1/trainingPlanState/current/planDeletionLocks/plan-1')).toBeDefined();
+        expect(db.read(trainingCleanupJobRef(db as never, 'user-1', 'plan', 'plan-1').path))
+            .toMatchObject({ mutationId: original.mutationId, kind: 'plan' });
 
         const retry = { ...original, mutationId: 'delete-after-committed-reload' };
         const response = await deleteTrainingPlanForUser(
@@ -461,8 +490,41 @@ describe('deleteTrainingPlanForUser persistence', () => {
 
         expect(response.mutationId).toBe(original.mutationId);
         expect(db.read('users/user-1/trainingPlanState/current/planDeletionLocks/plan-1')).toBeUndefined();
+        expect(db.read(trainingCleanupJobRef(db as never, 'user-1', 'plan', 'plan-1').path)).toBeUndefined();
         expect(db.read('users/user-1/trainingPlanState/current/mutationReceipts/delete-after-committed-reload'))
             .toMatchObject({ response: { mutationId: original.mutationId } });
+    });
+
+    it('retains residual workout IDs when recursive deletion removes a root before its children', async () => {
+        const retired = { ...workout('old-deleted'), lifecycle: 'deleted' as const, deletedAtMs: NOW_MS - 100 };
+        seed(db, [workout('current'), retired]);
+        const revisionPath = 'users/user-1/scheduledWorkouts/old-deleted/revisions/0000000002';
+        db.seed(revisionPath, { privateHistory: true });
+        const partialPath = 'users/user-1/scheduledWorkouts/old-deleted';
+        let interrupted = false;
+        db.recursiveDelete.mockImplementation(async ref => {
+            if (ref.path === partialPath && !interrupted) {
+                interrupted = true;
+                db.docs.delete(ref.path);
+                throw new Error('partial recursive cleanup');
+            }
+            for (const path of [...db.docs.keys()]) {
+                if (path === ref.path || path.startsWith(`${ref.path}/`)) db.docs.delete(path);
+            }
+        });
+        const deletion = request('convert-to-standalone');
+        await expect(deleteTrainingPlanForUser('user-1', deletion, { db: db as never, nowMs: NOW_MS }))
+            .rejects.toThrow('partial recursive cleanup');
+        expect(db.read(partialPath)).toBeUndefined();
+        expect(db.read(revisionPath)).toBeDefined();
+        const orphanJob = trainingCleanupJobRef(db as never, 'user-1', 'workout', 'old-deleted');
+        expect(db.read(orphanJob.path)).toMatchObject({ kind: 'workout', entityId: 'old-deleted' });
+
+        await processTrainingCleanupJob(db as never, orphanJob, NOW_MS + 1);
+        expect(db.read(revisionPath)).toBeUndefined();
+
+        await deleteTrainingPlanForUser('user-1', deletion, { db: db as never, nowMs: NOW_MS + 1 });
+        expect(db.read(trainingCleanupJobRef(db as never, 'user-1', 'plan', 'plan-1').path)).toBeUndefined();
     });
 
     it('does not stage deletion records after account deletion starts', async () => {

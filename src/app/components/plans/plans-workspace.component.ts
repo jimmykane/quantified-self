@@ -136,6 +136,14 @@ interface HistoryPanelState {
   error: string | null;
 }
 
+interface DeletedWorkoutPanelState {
+  scopeKey: string;
+  status: 'idle' | 'loading' | 'ready' | 'error';
+  workouts: ScheduledWorkoutV1[];
+  nextAfterId: string | null;
+  error: string | null;
+}
+
 const EMPTY_SCHEDULE: CurrentTrainingScheduleV1 = {
   state: { schemaVersion: 1, activePlanId: null, revision: 0, currentWorkoutCount: 0, updatedAtMs: 0 },
   plans: [],
@@ -185,6 +193,7 @@ export class PlansWorkspaceComponent {
   private navigationSequence = 0;
   private routeOwner: string | undefined;
   private historyRequestSequence = 0;
+  private deletedWorkoutRequestSequence = 0;
   private nodeSequence = 1;
 
   readonly sportOptionGroups: ReadonlyArray<{
@@ -293,6 +302,7 @@ export class PlansWorkspaceComponent {
   readonly busyAction = signal<string | null>(null);
   readonly historyPanel = signal<HistoryPanelState | null>(null);
   readonly deletedWorkoutsExpanded = signal(false);
+  readonly deletedWorkoutPanel = signal<DeletedWorkoutPanelState | null>(null);
   readonly browsing = computed(() => !this.editor() && !this.showPlanForm());
   readonly savedEditorWorkout = computed(() => {
     const id = this.editor()?.original?.id;
@@ -366,7 +376,27 @@ export class PlansWorkspaceComponent {
     : this.currentWorkoutRows().filter(row => row.workout.localDate === this.planScheduleDate()));
   // Standalone defaults resolve at the actual click, even just after midnight before the clock ticks.
   readonly addWorkoutDate = computed(() => this.view() === 'plans' ? this.planScheduleDate() ?? undefined : undefined);
-  readonly deletedWorkoutRows = computed(() => this.workoutRows().filter(row => row.workout.lifecycle === 'deleted'));
+  readonly deletedWorkoutRows = computed<WorkoutRow[]>(() => (this.deletedWorkoutPanel()?.workouts ?? []).map(workout => ({
+    workout,
+    completion: null,
+    summary: formatManualWorkoutStructure(
+      workout.structure,
+      this.currentUser()?.settings?.unitSettings ?? null,
+      this.locale,
+    ),
+    actionBusy: this.busyAction() === `permanent-${workout.id}`,
+    historyScope: workout.planId
+      ? { kind: 'plan', id: workout.planId }
+      : { kind: 'workout', id: workout.id },
+  })));
+  readonly deletedWorkoutScope = computed(() => {
+    const uid = this.currentUser()?.uid;
+    if (!uid) return null;
+    const planId = this.view() === 'plans' ? this.selectedPlanId() : null;
+    if (this.view() === 'plans' && !planId) return null;
+    return { uid, planId,
+      key: `${uid}:${planId === null ? 'standalone' : `plan:${planId}`}:${this.schedule().state.revision}` };
+  });
   readonly pageStatus = computed(() => {
     if (this.scheduleState().status === 'loading') return 'pending' as const;
     if (this.scheduleState().status === 'error') return 'warning' as const;
@@ -407,6 +437,16 @@ export class PlansWorkspaceComponent {
     const selected = this.selectedPlanId();
     if (selected && plans.some(plan => plan.id === selected)) return;
     this.selectedPlanId.set(this.schedule().state.activePlanId ?? plans[0]?.id ?? null);
+  });
+
+  private readonly deletedWorkoutScopeEffect = effect(() => {
+    const key = this.deletedWorkoutScope()?.key ?? null;
+    if (this.deletedWorkoutPanel()?.scopeKey === key) return;
+    this.deletedWorkoutRequestSequence += 1;
+    this.deletedWorkoutsExpanded.set(false);
+    this.deletedWorkoutPanel.set(key ? {
+      scopeKey: key, status: 'idle', workouts: [], nextAfterId: null, error: null,
+    } : null);
   });
 
   private readonly acknowledgedPlanEffect = effect(() => {
@@ -1270,6 +1310,42 @@ export class PlansWorkspaceComponent {
     if (response) this.snackBar.open(confirmation.removePastProviderCopies
       ? 'Workout deleted permanently. Past provider cleanup is pending where supported; check Workout sync history.'
       : 'Workout permanently retired and can no longer be restored.', 'Dismiss', { duration: 6000 });
+    if (response) this.deletedWorkoutPanel.update(panel => panel ? {
+      ...panel, workouts: panel.workouts.filter(item => item.id !== workout.id),
+    } : null);
+  }
+
+  async toggleDeletedWorkouts(): Promise<void> {
+    const expanded = !this.deletedWorkoutsExpanded();
+    this.deletedWorkoutsExpanded.set(expanded);
+    if (expanded && this.deletedWorkoutPanel()?.status === 'idle') await this.loadDeletedWorkouts();
+  }
+
+  async loadDeletedWorkouts(): Promise<void> {
+    const scope = this.deletedWorkoutScope();
+    const panel = this.deletedWorkoutPanel();
+    if (!scope || !panel || panel.scopeKey !== scope.key || panel.status === 'loading'
+      || (panel.status === 'ready' && panel.nextAfterId === null)) return;
+    const requestSequence = ++this.deletedWorkoutRequestSequence;
+    this.deletedWorkoutPanel.set({ ...panel, status: 'loading', error: null });
+    try {
+      const page = await this.plansService.getDeletedWorkoutsPage(scope.uid, scope.planId, panel.nextAfterId);
+      if (requestSequence !== this.deletedWorkoutRequestSequence
+        || this.deletedWorkoutScope()?.key !== scope.key) return;
+      const byId = new Map([...panel.workouts, ...page.workouts].map(item => [item.id, item]));
+      this.deletedWorkoutPanel.set({
+        scopeKey: scope.key,
+        status: 'ready',
+        workouts: [...byId.values()].sort((left, right) => left.id.localeCompare(right.id)),
+        nextAfterId: page.nextAfterId,
+        error: null,
+      });
+    } catch (error) {
+      if (requestSequence !== this.deletedWorkoutRequestSequence
+        || this.deletedWorkoutScope()?.key !== scope.key) return;
+      this.haptics.error();
+      this.deletedWorkoutPanel.set({ ...panel, status: 'error', error: errorMessage(error) });
+    }
   }
 
   async openHistory(scope: TrainingScheduleRevisionScope): Promise<void> {

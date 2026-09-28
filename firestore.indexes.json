@@ -60,6 +60,10 @@
       "fields": [{ "fieldPath": "provider", "order": "ASCENDING" }, { "fieldPath": "status", "order": "ASCENDING" }, { "fieldPath": "hasRemoteCopy", "order": "ASCENDING" }]
     },
     {
+      "collectionGroup": "trainingCleanupJobs", "queryScope": "COLLECTION_GROUP",
+      "fields": [{ "fieldPath": "nextAttemptAtMs", "order": "ASCENDING" }, { "fieldPath": "__name__", "order": "ASCENDING" }]
+    },
+    {
       "collectionGroup": "trainingDeliverySettings",
       "queryScope": "COLLECTION",
       "fields": [
@@ -2543,6 +2547,12 @@
     {
       "collectionGroup": "chunks",
       "fieldPath": "payloadBase64",
+      "ttl": false,
+      "indexes": []
+    },
+    {
+      "collectionGroup": "trainingCleanupJobs",
+      "fieldPath": "response",
       "ttl": false,
       "indexes": []
     }

@@ -36,6 +36,7 @@ import {
 import { assertNoTrainingPlanDeletionInProgress } from './deletion-lock';
 import { invalidateTrainingWorkoutConsent, stagePastWorkoutCleanup, stageTrainingDeliveryReconciliation } from './delivery/marker';
 import { TRAINING_WORKOUT_COMPLETIONS_COLLECTION_ID } from '../../../shared/training-workout-completion';
+import { finishTrainingCleanupJob, trainingCleanupJob, trainingCleanupJobRef } from './cleanup-job-contract';
 
 const MUTATION_RECEIPT_RETENTION_MS = 30 * 24 * 60 * 60 * 1000;
 const FIRESTORE_TRANSACTION_WRITE_BUDGET = 490;
@@ -538,7 +539,7 @@ function estimateBatchWriteCount(
         + historyWrites
         + uniqueDocumentCount(invalidatedWorkouts)
         + uniqueDocumentCount(pastCleanupWorkouts)
-        + uniqueDocumentCount(permanentlyDeletedWorkouts) * 3
+        + uniqueDocumentCount(permanentlyDeletedWorkouts) * 4
         + items.length // One idempotency receipt per newly applied request.
         + additionalWriteBudget;
 }
@@ -668,11 +669,23 @@ export async function mutateTrainingScheduleBatchForUser(
             transaction.set(planRef, cloneValue(plan));
         }
         const changedWorkoutIds = new Set(items.flatMap(item => item.applied.changedWorkoutIds));
+        const patchShiftedWorkouts = pendingRequests.length === 1
+            && pendingRequests[0].operation.kind === 'shift-plan';
         for (const workoutId of changedWorkoutIds) {
             const workout = finalSnapshot.workouts.get(workoutId);
             if (!workout) continue;
             const workoutRef = userRef.collection(SCHEDULED_WORKOUTS_COLLECTION_ID).doc(workoutId);
-            transaction.set(workoutRef, cloneValue(workout));
+            if (patchShiftedWorkouts) {
+                // A date shift never changes the structure. Avoid resending up
+                // to 400 full recipes in the atomic commit.
+                transaction.update(workoutRef, {
+                    localDate: workout.localDate,
+                    revision: workout.revision,
+                    updatedAtMs: workout.updatedAtMs,
+                });
+            } else {
+                transaction.set(workoutRef, cloneValue(workout));
+            }
             const strength = finalSnapshot.strengthDetails?.get(workoutId);
             if (strength && items.some(item => !valuesEqual(
                 item.applied.before.strengthDetails?.get(workoutId), item.applied.after.strengthDetails?.get(workoutId),
@@ -713,6 +726,9 @@ export async function mutateTrainingScheduleBatchForUser(
                 deletingItem.nowMs,
             );
             transaction.create(deletionTombstonesRef.doc(tombstone.entityIdHash), tombstone);
+            transaction.create(trainingCleanupJobRef(db, uid, 'workout', workoutId), trainingCleanupJob(
+                'workout', workoutId, deletingItem.request.mutationId, deletingItem.nowMs,
+            ));
             transaction.delete(userRef.collection(SCHEDULED_WORKOUTS_COLLECTION_ID).doc(workoutId));
             transaction.delete(userRef.collection(TRAINING_WORKOUT_COMPLETIONS_COLLECTION_ID).doc(workoutId));
         }
@@ -737,6 +753,8 @@ export async function mutateTrainingScheduleBatchForUser(
     const permanentlyDeletedWorkoutIds = new Set(responses.flatMap(response => response.permanentlyDeletedWorkoutIds));
     for (const workoutId of permanentlyDeletedWorkoutIds) {
         await db.recursiveDelete(userRef.collection(SCHEDULED_WORKOUTS_COLLECTION_ID).doc(workoutId));
+        const response = responses.find(item => item.permanentlyDeletedWorkoutIds.includes(workoutId))!;
+        await finishTrainingCleanupJob(db, uid, 'workout', workoutId, response.mutationId, nowMs);
     }
     return responses;
 }

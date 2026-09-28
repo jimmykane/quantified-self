@@ -1709,6 +1709,11 @@ describe('Firestore Security Rules', () => {
                     await userRef.collection('scheduledWorkouts').doc('workout-1').set({
                         id: 'workout-1', planId: 'plan-1', localDate: '2026-09-02', lifecycle: 'planned',
                     });
+                    for (const id of ['deleted-a', 'deleted-b']) {
+                        await userRef.collection('scheduledWorkouts').doc(id).set({
+                            id, planId: 'plan-1', localDate: '2026-09-01', lifecycle: 'deleted',
+                        });
+                    }
                     await userRef.collection('scheduledWorkouts').doc('workout-1')
                         .collection('strengthDetails').doc('current').set({ version: 1, privatePrescription: true });
                     await userRef.collection('trainingPlans').doc('plan-1')
@@ -1724,6 +1729,8 @@ describe('Firestore Security Rules', () => {
                         .collection('planDeletionLocks').doc('plan-1').set({ requestHash: 'private' });
                     await userRef.collection('trainingPlanState').doc('current')
                         .collection('deletionTombstones').doc('hashed-entity-id').set({ entityIdHash: 'private' });
+                    await userRef.collection('trainingPlanState').doc('current')
+                        .collection('trainingCleanupJobs').doc('workout_cleanup').set({ kind: 'workout', mutationId: 'private' });
                 });
             };
 
@@ -1745,6 +1752,27 @@ describe('Firestore Security Rules', () => {
                 const ownerPath = `users/${userId}/scheduledWorkouts/workout-1`;
                 await assertFails(testEnv.authenticatedContext(otherId).firestore().doc(ownerPath).get());
                 await assertFails(testEnv.unauthenticatedContext().firestore().doc(ownerPath).get());
+            });
+
+            it('allows only the owner to page deleted workouts while cleanup jobs remain internal', async () => {
+                await seedCurrentTrainingData();
+                const path = `users/${userId}/scheduledWorkouts`;
+                const owner = testEnv.authenticatedContext(userId).firestore();
+                const other = testEnv.authenticatedContext(otherId).firestore();
+                const page = owner.collection(path).where('planId', '==', 'plan-1')
+                    .where('lifecycle', '==', 'deleted').orderBy('__name__').limit(1);
+                const first = await assertSucceeds(page.get());
+                expect(first.docs.map(doc => doc.id)).toEqual(['deleted-a']);
+                const second = await assertSucceeds(owner.collection(path).where('planId', '==', 'plan-1')
+                    .where('lifecycle', '==', 'deleted').orderBy('__name__').startAfter(first.docs[0].id).limit(1).get());
+                expect(second.docs.map(doc => doc.id)).toEqual(['deleted-b']);
+                await assertFails(other.collection(path).where('planId', '==', 'plan-1')
+                    .where('lifecycle', '==', 'deleted').orderBy('__name__').limit(1).get());
+                const internal = `users/${userId}/trainingPlanState/current/trainingCleanupJobs/workout_cleanup`;
+                for (const client of [owner, other, testEnv.unauthenticatedContext().firestore()]) {
+                    await assertFails(client.doc(internal).get());
+                    await assertFails(client.doc(internal).set({ forged: true }));
+                }
             });
 
             it('allows only owner reads of current strength details and denies every browser write', async () => {

@@ -33,6 +33,33 @@ function loadFirestoreIndexes(): FirestoreIndexesConfig {
 }
 
 describe('firestore indexes', () => {
+    it('keeps large Training history payloads unindexed and cleanup retries queryable', () => {
+        const config = loadFirestoreIndexes();
+        for (const [collectionGroup, fieldPath] of [
+            ['scheduledWorkouts', 'structure'],
+            ['revisions', 'snapshot'],
+            ['chunks', 'payloadBase64'],
+            ['trainingCleanupJobs', 'response'],
+        ]) {
+            expect(config.fieldOverrides).toContainEqual({ collectionGroup, fieldPath, ttl: false, indexes: [] });
+        }
+        expect(config.indexes).toContainEqual({
+            collectionGroup: 'trainingCleanupJobs',
+            queryScope: 'COLLECTION_GROUP',
+            fields: [
+                { fieldPath: 'nextAttemptAtMs', order: 'ASCENDING' },
+                { fieldPath: '__name__', order: 'ASCENDING' },
+            ],
+        });
+        expect(config.indexes).toContainEqual({
+            collectionGroup: 'scheduledWorkouts', queryScope: 'COLLECTION', density: 'SPARSE_ALL',
+            fields: [
+                { fieldPath: 'planId', order: 'ASCENDING' },
+                { fieldPath: 'lifecycle', order: 'ASCENDING' },
+                { fieldPath: '__name__', order: 'ASCENDING' },
+            ],
+        });
+    });
     it('adds marketing recipient cleanup lookup without disabling default collection indexes', () => {
         const config = loadFirestoreIndexes();
         expect(config.fieldOverrides).toContainEqual({

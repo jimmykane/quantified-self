@@ -558,10 +558,34 @@ packed Sports Lib package. That gate is tracked by GitHub issue #654 under epic 
 - Plan deletion uses a user-scoped durable lock while it prepares bounded tombstones and standalone revision snapshots.
   An exact retry remains idempotent, and a same-disposition retry with the locked state/plan revisions may resume the
   original operation after a browser reload even when the caller no longer has the original mutation ID.
-- Resumable processing at the full 400-current-workout boundary, paged recoverable-workout history, and durable retry of
-  post-commit recursive cleanup are tracked explicitly by epic subissue #657. Until that slice lands, unusually large
-  structure payloads may still reach Firestore's atomic request-size limit even when their write count is valid; do not
-  lower the public v1 limits or hide this boundary in an anonymous TODO.
+- Current schedule listeners query only `planned` and `skipped` workout roots. Plans and Standalone fetch recoverably
+  deleted roots only when the deleted section opens, in owner-scoped 25-record pages ordered by document ID with a
+  document-ID cursor. A schedule revision or account/scope switch invalidates the page so an older response cannot
+  leak into a new view. The `scheduledWorkouts(planId, lifecycle, __name__)` collection index supports this query;
+  browser rules allow owner reads but no writes or internal history access.
+- A single plan shift patches only each workout's date and revision fields in its atomic commit, rather than resending
+  up to 400 full structures. Plan-to-standalone deletion stages complete standalone snapshots in idempotent transactions
+  bounded to 100 writes and about 2 MiB of serialized payload; its final transaction patches only plan association,
+  revision, and timestamp. A plan restore likewise patches scalar-only changes and preflights estimated write payload;
+  an oversized full-prescription restore returns a stable `limit-exceeded` error before any write. The canonical workout
+  JSON and the published 400-workout limit do not change.
+- A permanent workout or plan deletion creates a server-internal `trainingCleanupJobs` record in the same transaction
+  as its canonical receipt. The callable attempts recursive cleanup immediately; `reconcileTrainingPlanCleanup`
+  scans due jobs every five minutes, leases each job, checks the account-deletion guard and matching deletion
+  tombstone, then retries with bounded backoff. Plan cleanup creates independent workout cleanup jobs before deleting
+  residual workout roots, so a partial recursive delete cannot orphan a history subtree after its root disappears.
+  Jobs are leaves denied to browser reads/writes; the worker can safely repeat cleanup after a lost response. Deploy
+  the `trainingCleanupJobs(nextAttemptAtMs, __name__)` collection-group index and the unindexed `response` field before
+  enabling the worker. Inspect `[TrainingCleanup] cleanup_retry_failed` logs and due jobs when a lock persists; do not
+  delete a lock or job by hand without checking its receipt and tombstone.
+- #657 remains open for a resumable, atomically visible **full-prescription plan restore** of 400 high-complexity
+  structures and for staging oversized shift-history chunks. Date-only 400-workout restore, shift, and conversion pass
+  isolated demo-emulator lifecycle tests, but arbitrary structure rewrites still exceed an atomic request and are not
+  accepted. Do not lower v1 limits or report the bulk workflow complete until failure-injection and emulator
+  request-size/concurrency tests prove the staged operation's visibility and retries.
+- MCP impact for the paging and cleanup slice: existing Training MCP current reads already exclude deleted workouts;
+  internal cleanup jobs and UI-only deleted-history paging expose no new MCP field, permission, mutation kind, provider
+  action, or approval route. Existing MCP plan deletion continues through the same idempotent server path.
 
 ### UI and calendar contract
 

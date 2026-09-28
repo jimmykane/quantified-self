@@ -700,14 +700,26 @@
     </section>
     }
 
-    @if (browsing() && deletedWorkoutRows().length) {
+    @if (browsing() && deletedWorkoutScope()) {
       <section class="deleted-workouts-panel" aria-label="Deleted workouts">
-        <button mat-button type="button" appHapticTap (click)="deletedWorkoutsExpanded.set(!deletedWorkoutsExpanded())"
+        <button mat-button type="button" appHapticTap (click)="toggleDeletedWorkouts()"
           [attr.aria-expanded]="deletedWorkoutsExpanded()" aria-controls="deleted-workout-list">
           <mat-icon aria-hidden="true">{{ deletedWorkoutsExpanded() ? 'expand_less' : 'expand_more' }}</mat-icon>
-          Deleted workouts · {{ deletedWorkoutRows().length }} recoverable
+          Deleted workouts
         </button>
         <mat-list id="deleted-workout-list" [hidden]="!deletedWorkoutsExpanded()">
+          @if (deletedWorkoutPanel()?.status === 'loading' && !deletedWorkoutRows().length) {
+            <div class="history-status"><mat-spinner diameter="24"></mat-spinner><span>Loading deleted workouts…</span></div>
+          }
+          @if (deletedWorkoutPanel()?.status === 'error') {
+            <div class="history-status history-status--error" role="alert">
+              <span>Could not load deleted workouts. {{ deletedWorkoutPanel()?.error }}</span>
+              <button appHapticTap mat-button type="button" (click)="loadDeletedWorkouts()">Retry</button>
+            </div>
+          }
+          @if (deletedWorkoutPanel()?.status === 'ready' && !deletedWorkoutRows().length) {
+            <p>No deleted workouts in this {{ view() === 'plans' ? 'plan' : 'Standalone view' }}.</p>
+          }
           @for (row of deletedWorkoutRows(); track row.workout.id) {
             <mat-list-item>
               <mat-icon matListItemIcon aria-hidden="true">delete</mat-icon>
@@ -729,6 +741,12 @@
                 </button>
               </div>
             </mat-list-item>
+          }
+          @if (deletedWorkoutPanel()?.nextAfterId) {
+            <button appHapticTap mat-button type="button" (click)="loadDeletedWorkouts()"
+              [disabled]="deletedWorkoutPanel()?.status === 'loading'">
+              Show more deleted workouts
+            </button>
           }
         </mat-list>
       </section>

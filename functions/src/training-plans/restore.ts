@@ -51,6 +51,7 @@ import {
 import { assertNoTrainingPlanDeletionInProgress } from './deletion-lock';
 
 const RESTORE_RECEIPT_RETENTION_MS = 30 * 24 * 60 * 60 * 1000;
+const RESTORE_MAX_ESTIMATED_WRITE_BYTES = 7 * 1024 * 1024;
 
 interface AppliedTrainingScheduleRestoreV1 {
     applied: AppliedTrainingScheduleMutationV1;
@@ -455,6 +456,47 @@ function parseStoredRestoreResponse(value: unknown): RestoreTrainingScheduleRevi
     };
 }
 
+function canPatchRestoredWorkout(
+    before: ScheduledWorkoutV1 | undefined,
+    after: ScheduledWorkoutV1,
+    strengthChanged: boolean,
+): boolean {
+    return !!before
+        && JSON.stringify(before.structure) === JSON.stringify(after.structure)
+        && !strengthChanged
+        && !(before.deletedAtMs !== undefined && after.deletedAtMs === undefined);
+}
+
+function assertBoundedRestorePayload(
+    restored: AppliedTrainingScheduleRestoreV1,
+    revisions: ReturnType<typeof buildTrainingScheduleRevisionWrites>,
+): void {
+    const bytes = (value: unknown): number => Buffer.byteLength(JSON.stringify(value), 'utf8') + 1024;
+    let estimated = 8 * 1024 + bytes(restored.response) + bytes(restored.applied.after.state);
+    for (const planId of restored.applied.affectedPlanIds) {
+        estimated += bytes(restored.applied.after.plans.get(planId));
+        const revision = revisions.planRevisions.get(planId);
+        if (revision) estimated += bytes(revision);
+        for (const chunk of revisions.planRevisionChunks.get(planId) ?? []) estimated += bytes(chunk);
+    }
+    for (const workoutId of restored.applied.changedWorkoutIds) {
+        const before = restored.applied.before.workouts.get(workoutId);
+        const after = restored.applied.after.workouts.get(workoutId)!;
+        const strength = restored.applied.after.strengthDetails?.get(workoutId);
+        const strengthChanged = JSON.stringify(restored.applied.before.strengthDetails?.get(workoutId)) !== JSON.stringify(strength);
+        estimated += canPatchRestoredWorkout(before, after, strengthChanged) ? 1024 : bytes(after);
+        if (strength && strengthChanged) estimated += bytes(strength);
+        const revision = revisions.standaloneWorkoutRevisions.get(workoutId);
+        if (revision) estimated += bytes(revision);
+    }
+    if (estimated > RESTORE_MAX_ESTIMATED_WRITE_BYTES) {
+        throw new TrainingScheduleMutationError(
+            'limit-exceeded',
+            'This saved plan revision is too large to restore atomically right now. No changes were applied; contact support.',
+        );
+    }
+}
+
 async function readCompletedRestoreReceiptBeforeHistory(
     db: admin.firestore.Firestore,
     uid: string,
@@ -534,6 +576,7 @@ export async function restoreTrainingScheduleRevisionForUser(
             operation: { kind: request.scope.kind === 'plan' ? 'restore-plan-revision' : 'restore-workout-revision' },
         };
         const revisions = buildTrainingScheduleRevisionWrites(restored.applied, revisionRequest, nowMs);
+        assertBoundedRestorePayload(restored, revisions);
         stageTrainingDeliveryReconciliation(transaction, db, uid);
         for (const id of restored.applied.changedWorkoutIds) {
             if (restored.applied.before.workouts.get(id)?.planId !== restored.applied.after.workouts.get(id)?.planId
@@ -563,9 +606,29 @@ export async function restoreTrainingScheduleRevisionForUser(
         restored.applied.changedWorkoutIds.forEach((workoutId) => {
             const workoutRef = userRef.collection(SCHEDULED_WORKOUTS_COLLECTION_ID).doc(workoutId);
             const workout = restored.applied.after.workouts.get(workoutId)!;
-            transaction.set(workoutRef, workout);
+            const beforeWorkout = restored.applied.before.workouts.get(workoutId);
             const strength = restored.applied.after.strengthDetails?.get(workoutId);
-            if (strength && JSON.stringify(restored.applied.before.strengthDetails?.get(workoutId)) !== JSON.stringify(strength)) transaction.set(
+            const strengthChanged = JSON.stringify(restored.applied.before.strengthDetails?.get(workoutId)) !== JSON.stringify(strength);
+            if (beforeWorkout && canPatchRestoredWorkout(beforeWorkout, workout, strengthChanged)) {
+                // A date/lifecycle/title restore can touch hundreds of large
+                // prescriptions. Patch only the changed scalars in the atomic
+                // commit, preserving the exact v1 structure JSON.
+                const patch: admin.firestore.UpdateData<admin.firestore.DocumentData> = {
+                    planId: workout.planId,
+                    localDate: workout.localDate,
+                    lifecycle: workout.lifecycle,
+                    title: workout.title,
+                    revision: workout.revision,
+                    updatedAtMs: workout.updatedAtMs,
+                };
+                if (beforeWorkout.deletedAtMs !== workout.deletedAtMs) {
+                    patch.deletedAtMs = workout.deletedAtMs;
+                }
+                transaction.update(workoutRef, patch);
+            } else {
+                transaction.set(workoutRef, workout);
+            }
+            if (strength && strengthChanged) transaction.set(
                 workoutRef.collection(STRENGTH_DETAILS_COLLECTION_ID).doc(STRENGTH_DETAILS_DOCUMENT_ID),
                 strength,
             );

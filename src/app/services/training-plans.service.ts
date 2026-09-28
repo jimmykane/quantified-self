@@ -5,7 +5,14 @@ import {
   collectionData,
   doc,
   docData,
+  documentId,
   getDoc,
+  getDocsFromServer,
+  limit,
+  orderBy,
+  query,
+  startAfter,
+  where,
 } from 'app/firebase/firestore';
 import { combineLatest, map, Observable, of, shareReplay } from 'rxjs';
 import {
@@ -50,6 +57,13 @@ export interface CurrentTrainingScheduleV1 {
   plans: TrainingPlanV1[];
   workouts: ScheduledWorkoutV1[];
 }
+
+export interface DeletedTrainingWorkoutsPageV1 {
+  workouts: ScheduledWorkoutV1[];
+  nextAfterId: string | null;
+}
+
+const DELETED_WORKOUT_PAGE_SIZE = 25;
 
 function emptyTrainingSchedule(): CurrentTrainingScheduleV1 {
   return {
@@ -106,7 +120,7 @@ export class TrainingPlansService {
     const schedule$ = combineLatest([
       docData(stateRef),
       collectionData(plansRef, { idField: 'id' }),
-      collectionData(workoutsRef, { idField: 'id' }),
+      collectionData(query(workoutsRef, where('lifecycle', 'in', ['planned', 'skipped'])), { idField: 'id' }),
     ]).pipe(
       map(([stateValue, planValues, workoutValues]) => {
         const plans = (planValues as unknown[]).map(parseTrainingPlanV1)
@@ -125,6 +139,34 @@ export class TrainingPlansService {
     );
     this.scheduleStreams.set(uid, schedule$);
     return schedule$;
+  }
+
+  async getDeletedWorkoutsPage(
+    userId: string,
+    planId: string | null,
+    afterId: string | null = null,
+  ): Promise<DeletedTrainingWorkoutsPageV1> {
+    const uid = `${userId || ''}`.trim();
+    if (!uid) throw new Error('Sign in to view deleted workouts.');
+    const workoutsRef = collection(this.firestore, 'users', uid, SCHEDULED_WORKOUTS_COLLECTION_ID);
+    const constraints = [
+      where('planId', '==', planId),
+      where('lifecycle', '==', 'deleted'),
+      orderBy(documentId()),
+      ...(afterId ? [startAfter(afterId)] : []),
+      limit(DELETED_WORKOUT_PAGE_SIZE + 1),
+    ];
+    const snapshot = await getDocsFromServer(query(workoutsRef, ...constraints));
+    const visible = snapshot.docs.slice(0, DELETED_WORKOUT_PAGE_SIZE);
+    const workouts = visible.map(item => parseScheduledWorkoutV1(item.data()));
+    if (workouts.some((workout, index) => workout.id !== visible[index].id
+      || workout.planId !== planId || workout.lifecycle !== 'deleted')) {
+      throw new Error('Deleted workout history is inconsistent. Reload and try again.');
+    }
+    return {
+      workouts,
+      nextAfterId: snapshot.docs.length > DELETED_WORKOUT_PAGE_SIZE ? visible.at(-1)!.id : null,
+    };
   }
 
   watchCalendarWorkouts(userId: string | null | undefined): Observable<ScheduledWorkoutV1[]> {

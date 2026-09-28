@@ -28,6 +28,7 @@ import {
     mutateTrainingScheduleForUser,
     trainingScheduleDeletionTombstoneDocumentId,
 } from './persistence';
+import { trainingCleanupJobRef } from './cleanup-job-contract';
 
 const NOW_MS = Date.UTC(2026, 8, 2, 10);
 const STRUCTURE = {
@@ -118,6 +119,7 @@ class FakeTransaction {
     update(ref: FakeDocumentReference, value: unknown): void {
         const current = this.db.documents.get(ref.path);
         if (!current) throw new Error(`Document does not exist: ${ref.path}`);
+        this.db.updatedPaths.push(ref.path);
         this.set(ref, { ...current, ...(value as FakeDocumentData) });
     }
 
@@ -133,6 +135,7 @@ class FakeTransaction {
 
 class FakeFirestore {
     readonly documents = new Map<string, FakeDocumentData>();
+    readonly updatedPaths: string[] = [];
     transactionCount = 0;
     readonly recursiveDelete = vi.fn(async (ref: FakeDocumentReference) => {
         for (const path of [...this.documents.keys()]) {
@@ -366,6 +369,37 @@ describe('mutateTrainingScheduleForUser persistence', () => {
         db = new FakeFirestore();
         guard.result = { shouldSkip: false };
         guard.getUserDeletionGuardStateInTransaction.mockImplementation(async () => guard.result);
+    });
+
+    it('shifts 400 structured workouts with scalar patches and one canonical revision', async () => {
+        const largeStructure = { ...STRUCTURE, nodes: Array.from({ length: 100 }, (_, index) => ({
+            kind: 'step' as const, id: `step-${index}`, purpose: 'work' as const,
+            ending: { kind: 'time' as const, seconds: 30 }, targets: [],
+            note: 'High-complexity workout segment. '.repeat(14).slice(0, 490),
+        })) };
+        db.seed('users/user-1/trainingPlanState/current', {
+            ...createEmptyTrainingPlanState(), activePlanId: 'plan-1', revision: 1, currentWorkoutCount: 400,
+        });
+        db.seed('users/user-1/trainingPlans/plan-1', plan({ workoutCount: 400 }));
+        for (let index = 0; index < 400; index += 1) {
+            const id = `workout-${`${index}`.padStart(3, '0')}`;
+            db.seed(`users/user-1/scheduledWorkouts/${id}`, workout({ id, planId: 'plan-1', structure: largeStructure }));
+        }
+        const shift: MutateTrainingScheduleRequestV1 = {
+            mutationId: 'shift-400',
+            expectedRevisions: [
+                { scope: 'state', id: 'current', revision: 1 },
+                { scope: 'plan', id: 'plan-1', revision: 3 },
+            ],
+            operation: { kind: 'shift-plan', planId: 'plan-1', days: 1 },
+        };
+
+        const first = await mutateTrainingScheduleForUser('user-1', shift, { db: db as never, nowMs: NOW_MS });
+        const retry = await mutateTrainingScheduleForUser('user-1', shift, { db: db as never, nowMs: NOW_MS + 1 });
+        expect(retry).toEqual(first);
+        expect(first.state.revision).toBe(2);
+        expect(db.updatedPaths.filter(path => /^users\/user-1\/scheduledWorkouts\/workout-/.test(path))).toHaveLength(400);
+        expect(db.read('users/user-1/scheduledWorkouts/workout-399')).toMatchObject({ localDate: '2026-09-03', revision: 3 });
     });
 
     it('persists colors in current plans, history and exact retry receipts without touching workouts', async () => {
@@ -657,5 +691,30 @@ describe('mutateTrainingScheduleForUser persistence', () => {
             db: db as never,
             nowMs: NOW_MS + 1,
         })).rejects.toMatchObject({ code: 'already-exists' });
+    });
+
+    it('keeps a durable workout cleanup job after a post-commit recursive failure', async () => {
+        const deletedWorkout = workout({ lifecycle: 'deleted', deletedAtMs: NOW_MS - 1 });
+        db.seed('users/user-1/trainingPlanState/current', { ...createEmptyTrainingPlanState(), revision: 2 });
+        db.seed(`users/user-1/scheduledWorkouts/${deletedWorkout.id}`, deletedWorkout);
+        db.seed(`users/user-1/scheduledWorkouts/${deletedWorkout.id}/revisions/0000000002`, { revision: 2 });
+        const mutation: MutateTrainingScheduleRequestV1 = {
+            mutationId: 'cleanup-retry',
+            expectedRevisions: [
+                { scope: 'state', id: 'current', revision: 2 },
+                { scope: 'workout', id: deletedWorkout.id, revision: deletedWorkout.revision },
+            ],
+            operation: { kind: 'permanently-delete-workout', workoutId: deletedWorkout.id, confirmPermanentDeletion: true },
+        };
+        db.recursiveDelete.mockRejectedValueOnce(new Error('temporary cleanup failure'));
+        await expect(mutateTrainingScheduleForUser('user-1', mutation, { db: db as never, nowMs: NOW_MS }))
+            .rejects.toThrow('temporary cleanup failure');
+        const jobPath = trainingCleanupJobRef(db as never, 'user-1', 'workout', deletedWorkout.id).path;
+        expect(db.read(jobPath)).toMatchObject({ mutationId: mutation.mutationId, kind: 'workout' });
+        expect(db.read(`users/user-1/scheduledWorkouts/${deletedWorkout.id}/revisions/0000000002`)).toBeDefined();
+        expect(db.read('users/user-1/trainingPlanState/current/mutationReceipts/cleanup-retry')).toBeDefined();
+        await expect(mutateTrainingScheduleForUser('user-1', mutation, { db: db as never, nowMs: NOW_MS + 1 }))
+            .resolves.toMatchObject({ mutationId: mutation.mutationId });
+        expect(db.read(jobPath)).toBeUndefined();
     });
 });
