@@ -15,7 +15,7 @@
 }
 
 .form-chart-header {
-  padding: 8px 10px 0;
+  padding: 8px var(--qs-dashboard-chart-content-inset, 10px) 0;
   border-bottom: 1px solid color-mix(in srgb, var(--mat-sys-outline-variant), transparent 45%);
 }
 
@@ -124,7 +124,7 @@
 
 @media (max-width: 640px) {
   .form-chart-header {
-    padding: 4px 8px 0;
+    padding: 4px var(--qs-dashboard-chart-content-inset, 8px) 0;
   }
 
   .form-status-row {

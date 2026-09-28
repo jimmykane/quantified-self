@@ -2,6 +2,8 @@ section{
   position: relative;
   isolation: isolate;
   --tile-header-controls-height: 48px;
+  --qs-dashboard-chart-content-inset: 8px;
+  --qs-dashboard-chart-outer-inset: 0px;
   width: 100%;
   height: 100%;
 }

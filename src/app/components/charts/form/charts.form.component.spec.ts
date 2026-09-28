@@ -482,7 +482,7 @@ describe('ChartsFormComponent', () => {
     const styles = readFileSync(stylesPath, 'utf8');
 
     expect(styles).toContain('@media (max-width: 640px)');
-    expect(styles).toContain('padding: 4px 8px 0;');
+    expect(styles).toContain('padding: 4px var(--qs-dashboard-chart-content-inset, 8px) 0;');
     expect(styles).toContain('gap: 4px;');
     expect(styles).toContain('margin-bottom: 4px;');
     expect(styles).toContain('font-size: 1.08rem;');
