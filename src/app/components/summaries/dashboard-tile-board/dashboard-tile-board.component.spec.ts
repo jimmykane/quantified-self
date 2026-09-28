@@ -60,8 +60,11 @@ describe('DashboardTileBoardComponent', () => {
     expect(boardStyles).toContain(':host(.dashboard-tile-board--activity-calendar)');
     expect(boardStyles).toContain('grid-auto-rows: minmax(var(--dashboard-tile-board-row-height, 150px), auto);');
     expect(ownerStyles).not.toMatch(/\.dashboard-calendar-cell\s*\{[^}]*min-height:/);
-    expect(calendarStyles).toContain('.activity-calendar-day-layout { display: grid; height: 360px; flex: none;');
-    expect(calendarStyles).toContain('.activity-calendar-day-layout { height: auto; grid-template-columns: minmax(0, 1fr);');
+    expect(calendarStyles).toContain('.activity-calendar-day-layout { display: grid; position: relative; height: auto; flex: none;');
+    expect(calendarStyles).toContain('.activity-calendar-month-pane { min-width: 0; height: auto; flex: none; }');
+    expect(calendarStyles).not.toContain('height: 360px');
+    expect(calendarStyles).toContain('.activity-calendar-day-layout { grid-template-columns: minmax(0, 1fr); gap: 13px; }');
+    expect(calendarStyles).toContain('app-calendar-day-context { position: static; grid-column: 1; grid-row: 2; height: auto;');
     expect(ownerStyles).not.toContain('min-height: 760px');
   });
 });
