@@ -1,0 +1,58 @@
+.historical-send {
+  display: grid;
+  gap: 16px;
+  min-width: 0;
+}
+
+.historical-send p {
+  margin: 0;
+}
+
+.historical-send__dates {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.historical-send__dates mat-form-field {
+  min-width: 0;
+}
+
+.historical-send__sources {
+  display: grid;
+  gap: 4px;
+  border: 0;
+  padding: 0;
+  margin: 0;
+}
+
+.historical-send__sources legend {
+  margin-bottom: 8px;
+}
+
+.historical-send__note {
+  color: var(--mat-sys-on-surface-variant);
+}
+
+.historical-send__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.historical-send__button-content {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+@media (max-width: 480px) {
+  .historical-send__dates {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .historical-send__actions button {
+    flex: 1 1 120px;
+  }
+}

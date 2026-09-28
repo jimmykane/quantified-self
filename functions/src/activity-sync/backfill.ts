@@ -8,6 +8,8 @@ import { EnqueueActivitySyncOriginalFileMetadata, enqueueActivitySyncJobsForImpo
 import { getActivitySyncMetadataDocId, setActivitySyncSkippedMetadata } from './metadata';
 import * as logger from 'firebase-functions/logger';
 import { getActivitySyncRouteAllowlistConfigError, isActivitySyncRouteUserAllowlisted } from './allowlist';
+import { runHistoricalSendPage } from './historical-send';
+import { HistoricalSendRequest, HistoricalSendResponse } from '../../../shared/historical-activity-send';
 
 interface BackfillActivitySyncRouteRequest {
     sourceServiceName: ServiceNames;
@@ -233,7 +235,7 @@ export const backfillActivitySyncRoute = onCall({
     cors: ALLOWED_CORS_ORIGINS,
     timeoutSeconds: 540,
     memory: '1GiB',
-}, async (request): Promise<BackfillActivitySyncRouteResponse> => {
+}, async (request): Promise<BackfillActivitySyncRouteResponse | HistoricalSendResponse> => {
     enforceAppCheck(request);
 
     if (!request.auth) {
@@ -244,6 +246,10 @@ export const backfillActivitySyncRoute = onCall({
     if (!(await hasProAccess(userID))) {
         logger.warn(`Blocking activity sync backfill for non-pro user ${userID}`);
         throw new HttpsError('permission-denied', PRO_REQUIRED_MESSAGE);
+    }
+
+    if ((request.data as { version?: unknown } | null)?.version === 2) {
+        return runHistoricalSendPage(userID, request.data as HistoricalSendRequest);
     }
 
     const payload = request.data as BackfillActivitySyncRouteRequest;

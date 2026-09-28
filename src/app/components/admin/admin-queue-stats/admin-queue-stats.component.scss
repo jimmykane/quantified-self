@@ -38,6 +38,51 @@
     min-width: 6rem;
 }
 
+.activity-sync-breakdown {
+    margin-bottom: 1.5rem;
+    padding: 1.25rem;
+
+    h4 {
+        margin: 0 0 0.35rem;
+        color: var(--mat-sys-on-surface);
+    }
+
+    p {
+        margin: 0 0 0.75rem;
+        color: var(--mat-sys-on-surface-variant);
+    }
+}
+
+.activity-sync-breakdown-row {
+    padding: 0.75rem 0;
+    border-top: 1px solid var(--mat-sys-outline-variant);
+
+    strong {
+        display: block;
+        margin-bottom: 0.5rem;
+    }
+
+    dl {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
+        gap: 0.75rem;
+        margin: 0;
+    }
+
+    dt {
+        color: var(--mat-sys-on-surface-variant);
+        font-size: 0.8rem;
+    }
+
+    dd {
+        margin: 0;
+        color: var(--mat-sys-on-surface);
+        font-family: 'Barlow Condensed', sans-serif;
+        font-size: 1.5rem;
+        font-weight: 600;
+    }
+}
+
 .reparse-settings-card {
     margin-bottom: 1.5rem;
     padding: 1.25rem;

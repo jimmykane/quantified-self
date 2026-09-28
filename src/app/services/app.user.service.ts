@@ -92,6 +92,7 @@ import {
   SuuntoHealthSyncAvailabilityResponse,
 } from '@shared/sleep-backfill';
 import { ActivitySyncRouteId } from '@shared/activity-sync-routes';
+import { HistoricalSendRequest, HistoricalSendResponse } from '@shared/historical-activity-send';
 import { RouteDeliverySyncRouteId } from '@shared/route-delivery-sync-routes';
 import { buildSuuntoServiceConnectionViewModel, SuuntoServiceConnectionViewModel } from '../helpers/suunto-service-connection.helper';
 import {
@@ -1472,6 +1473,13 @@ export class AppUserService implements OnDestroy {
       endDate: normalizedEndDate.toISOString(),
     });
     return result.data as ActivitySyncBackfillSummary;
+  }
+
+  async historicalSendActivityPage(request: HistoricalSendRequest): Promise<HistoricalSendResponse> {
+    const result = await this.functionsService.call<HistoricalSendRequest, HistoricalSendResponse>(
+      'backfillActivitySyncRoute', request,
+    );
+    return result.data;
   }
 
   async backfillRouteDeliverySyncRouteForCurrentUser(

@@ -387,6 +387,16 @@ async function persistProcessingMetadata(userID: string, eventID: string): Promi
   );
 }
 
+async function persistManualUploadOrigin(userID: string, eventID: string): Promise<void> {
+  await setEventDocumentIfUserActive(
+    userID,
+    'activity_upload_origin_metadata',
+    admin.firestore().doc(`users/${userID}/events/${eventID}/metaData/manualUploadOrigin`),
+    { kind: 'manualUpload', version: 1 },
+    { merge: true },
+  );
+}
+
 export const uploadActivity = onRequest({
   region: FUNCTIONS_MANIFEST.uploadActivity.region,
   ...ACTIVITY_PROCESSING_HTTPS_RUNTIME_OPTIONS,
@@ -477,6 +487,7 @@ export const uploadActivity = onRequest({
     const writer = new EventWriter(getFirestoreAdapter(userID), getStorageAdapter(userID));
     await writer.writeAllEventData(userID, event, originalFile);
     await persistProcessingMetadata(userID, eventID);
+    await persistManualUploadOrigin(userID, eventID);
 
     response.status(200).json({
       eventId: eventID,

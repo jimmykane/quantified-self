@@ -317,7 +317,7 @@
           Connect Garmin and Suunto before syncing activities.
         </app-status-info>
         } @else {
-        <mat-slide-toggle [checked]="isGarminToSuuntoRouteEnabled" [disabled]="isSavingSyncRoute || isBackfillingSync"
+        <mat-slide-toggle [checked]="isGarminToSuuntoRouteEnabled" [disabled]="isSavingSyncRoute"
           (change)="onGarminToSuuntoRouteToggle($event.checked)">
           Automatically send new Garmin activities to Suunto
         </mat-slide-toggle>
@@ -332,60 +332,6 @@
         </div>
         }
 
-        <mat-divider class="tool-divider"></mat-divider>
-
-        <div class="tool-section-title">Sync past activities</div>
-        <app-status-info type="info" title="Choose which activities to send">
-          Choose a date range to send Garmin activities already in Quantified Self to Suunto. You can do this even
-          when automatic activity sync is off.
-        </app-status-info>
-        <div class="date-fields">
-          <mat-form-field appearance="outline">
-            <mat-label>From</mat-label>
-            <input matInput [matDatepicker]="syncStartDatePicker" [max]="backfillEndDate" [(ngModel)]="backfillStartDate"
-              [ngModelOptions]="{standalone: true}" (click)="syncStartDatePicker.open()">
-            <mat-datepicker-toggle matSuffix [for]="syncStartDatePicker"></mat-datepicker-toggle>
-            <mat-datepicker #syncStartDatePicker></mat-datepicker>
-          </mat-form-field>
-          <mat-form-field appearance="outline">
-            <mat-label>To</mat-label>
-            <input matInput [matDatepicker]="syncEndDatePicker" [min]="backfillStartDate" [(ngModel)]="backfillEndDate"
-              [ngModelOptions]="{standalone: true}" (click)="syncEndDatePicker.open()">
-            <mat-datepicker-toggle matSuffix [for]="syncEndDatePicker"></mat-datepicker-toggle>
-            <mat-datepicker #syncEndDatePicker></mat-datepicker>
-          </mat-form-field>
-        </div>
-
-        <button mat-flat-button class="qs-mat-primary service-tool-primary-action"
-          [disabled]="isBackfillingSync || isBackfillDateRangeInvalid"
-          (click)="runGarminToSuuntoBackfill($event)">
-          @if (isBackfillingSync) {
-          <span class="service-action-content">
-            <mat-spinner diameter="20" class="qs-spinner-accent"></mat-spinner>
-            Scheduling activities…
-          </span>
-          } @else {
-          <span class="service-action-content">
-            Schedule activities
-          </span>
-          }
-        </button>
-
-        @if (backfillSummary) {
-        <app-status-info type="success" title="Activity sync started">
-          <div>Found: {{ backfillSummary.scanned }} | Scheduled: {{ backfillSummary.queued }}</div>
-          @if (backfillSummary.failedCount > 0) {
-          <div>Could not schedule: {{ backfillSummary.failedCount }}</div>
-          @if (backfillSummary.failedEvents?.length) {
-          <ul class="backfill-summary-list">
-            <li *ngFor="let failedEvent of backfillSummary.failedEvents">
-              <code>{{ failedEvent.eventID }}</code>: {{ failedEvent.message }}
-            </li>
-          </ul>
-          }
-          }
-        </app-status-info>
-        }
         }
         }
 

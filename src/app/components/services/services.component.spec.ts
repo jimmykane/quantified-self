@@ -712,13 +712,13 @@ describe('ServicesComponent', () => {
 
     it('maps provider overview cards to distinct tools', () => {
         expect(component.serviceOverviewCardsBySection.garmin.map(card => card.tool)).toEqual(['history', 'history', 'uploads', 'auto-sync']);
-        expect(component.serviceOverviewCardsBySection.suunto.map(card => card.tool)).toEqual(['history', 'history', 'routes', 'uploads', 'activity-sync']);
+        expect(component.serviceOverviewCardsBySection.suunto.map(card => card.tool)).toEqual(['history', 'history', 'routes', 'uploads', 'historical-send', 'activity-sync']);
         expect(component.serviceOverviewCardsBySection.suunto[3].description)
             .toBe('Send FIT activity files or GPX/FIT route files to the Suunto app.');
-        expect(component.serviceOverviewCardsBySection.coros.map(card => card.tool)).toEqual(['history', 'history', 'uploads', 'auto-sync']);
+        expect(component.serviceOverviewCardsBySection.coros.map(card => card.tool)).toEqual(['history', 'history', 'uploads', 'historical-send', 'auto-sync']);
         expect(component.serviceOverviewCardsBySection.coros[2].description)
             .toBe('Send a FIT activity directly to COROS without adding it to your Quantified Self archive.');
-        expect(component.serviceOverviewCardsBySection.wahoo.map(card => card.tool)).toEqual(['history', 'uploads', 'auto-sync']);
+        expect(component.serviceOverviewCardsBySection.wahoo.map(card => card.tool)).toEqual(['history', 'uploads', 'historical-send', 'auto-sync']);
     });
 
     it('does not repeat the Pro plan in provider feature details', () => {
@@ -901,14 +901,15 @@ describe('ServicesComponent', () => {
         const activePanel = fixture.nativeElement.querySelector('[aria-label="Suunto App"]');
         const manageButtons = activePanel.querySelectorAll('.service-overview-card button') as NodeListOf<HTMLButtonElement>;
 
-        expect(manageButtons).toHaveLength(5);
+        expect(manageButtons).toHaveLength(6);
         expect(activePanel.textContent).toContain('Sleep & 24/7 Health history');
         expect(activePanel.textContent).toContain('Backfill Suunto sleep and available 24/7 Health metrics.');
         expect(activePanel.textContent).toContain('Historical Sleep and 24/7 Health backfill · 7-day cooldown');
         expect(manageButtons[1].getAttribute('aria-label')).toBe('Import history for Suunto');
         expect(manageButtons[2].getAttribute('aria-label')).toBe('Route sync settings for Suunto');
         expect(manageButtons[3].getAttribute('aria-label')).toBe('Upload files for Suunto');
-        expect(manageButtons[4].getAttribute('aria-label')).toBe('Activity sync settings for Suunto');
+        expect(manageButtons[4].getAttribute('aria-label')).toBe('Send past activities for Suunto');
+        expect(manageButtons[5].getAttribute('aria-label')).toBe('Activity sync settings for Suunto');
 
         manageButtons[1].click();
         expect(component.managedService).toBe('suunto');
@@ -932,6 +933,12 @@ describe('ServicesComponent', () => {
         manageButtons[4].click();
 
         expect(component.managedService).toBe('suunto');
+        expect(component.managedTool).toBe('historical-send');
+
+        dialogClosed$.next();
+        manageButtons[5].click();
+
+        expect(component.managedService).toBe('suunto');
         expect(component.managedTool).toBe('activity-sync');
         expect(component.managedToolTitle).toBe('Send activities to connected services');
     });
@@ -943,7 +950,7 @@ describe('ServicesComponent', () => {
         const activePanel = fixture.nativeElement.querySelector('.service-detail[aria-label="COROS"]');
         const manageButtons = activePanel.querySelectorAll('.service-overview-card button') as NodeListOf<HTMLButtonElement>;
 
-        expect(manageButtons).toHaveLength(4);
+        expect(manageButtons).toHaveLength(5);
         expect(activePanel.textContent).toContain('Sleep & daily Health history');
         expect(activePanel.textContent).toContain('Backfill COROS sleep and available daily Health metrics.');
         expect(activePanel.textContent).toContain('Historical Sleep and daily Health backfill · 7-day cooldown');

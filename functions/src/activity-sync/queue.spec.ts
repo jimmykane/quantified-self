@@ -31,7 +31,9 @@ const {
     set: typeof mockTransactionSet;
     update: typeof mockTransactionUpdate;
   }) => unknown) => runner({
-    get: mockTransactionGet,
+    get: ((ref: { metadata?: boolean }) => ref.metadata
+      ? Promise.resolve({ exists: false, data: () => undefined })
+      : mockTransactionGet(ref)) as typeof mockTransactionGet,
     set: mockTransactionSet,
     update: mockTransactionUpdate,
   }));
@@ -67,6 +69,7 @@ const {
 vi.mock('firebase-admin', () => ({
   firestore: () => ({
     collection: mockCollection,
+    doc: () => ({ metadata: true }),
     runTransaction: mockRunTransaction,
     recursiveDelete: mockRecursiveDelete,
   }),
@@ -129,7 +132,9 @@ describe('activity-sync/queue', () => {
       set: typeof mockTransactionSet;
       update: typeof mockTransactionUpdate;
     }) => unknown) => runner({
-      get: mockTransactionGet,
+      get: ((ref: { metadata?: boolean }) => ref.metadata
+        ? Promise.resolve({ exists: false, data: () => undefined })
+        : mockTransactionGet(ref)) as typeof mockTransactionGet,
       set: mockTransactionSet,
       update: mockTransactionUpdate,
     }));
@@ -261,6 +266,95 @@ describe('activity-sync/queue', () => {
       queueItemId: 'activitySync__GarminAPI_to_SuuntoApp__user-1__event-1',
       reason: 'already_pending',
     });
+    expect(mockTransactionSet).not.toHaveBeenCalled();
+    expect(mockEnqueueActivitySyncTask).not.toHaveBeenCalled();
+  });
+
+  it('promotes an unaccepted automatic row to a fresh historical task generation', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(1700000000000);
+    mockTransactionGet
+      .mockResolvedValueOnce({
+        exists: true,
+        data: () => ({
+          processed: false,
+          dateCreated: 1700000000000,
+          dispatchedToCloudTask: 123,
+          resultStatus: 'deferred',
+          deferredReason: 'service_reconnect_required',
+          routeId: ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_SuuntoApp,
+          userID: 'user-1',
+          eventID: 'event-1',
+          sourceServiceName: ServiceNames.GarminAPI,
+          destinationServiceName: ServiceNames.SuuntoApp,
+        }),
+      })
+      .mockResolvedValueOnce({
+        exists: true,
+        data: () => ({ processed: false, dateCreated: 1700000000001, dispatchedToCloudTask: null }),
+      });
+
+    const result = await enqueueActivitySyncQueueItem({
+      routeId: ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_SuuntoApp,
+      sourceServiceName: ServiceNames.GarminAPI,
+      destinationServiceName: ServiceNames.SuuntoApp,
+      userID: 'user-1',
+      eventID: 'event-1',
+      originalFile: { path: 'p.fit', extension: 'fit', generation: '42' },
+      manual: true,
+      deliveryMode: 'historical',
+    });
+
+    expect(result.enqueued).toBe(true);
+    const promoted = mockTransactionSet.mock.calls[0][1];
+    expect(promoted).toMatchObject({
+      dateCreated: 1700000000001,
+      deliveryMode: 'historical',
+      manual: true,
+      originalFile: { generation: '42' },
+      dispatchedToCloudTask: null,
+    });
+    expect(promoted).not.toHaveProperty('deferredReason');
+    expect(promoted).not.toHaveProperty('resultStatus');
+    expect(mockEnqueueActivitySyncTask).toHaveBeenCalledWith(
+      'activitySync__GarminAPI_to_SuuntoApp__user-1__event-1',
+      1700000000001,
+    );
+  });
+
+  it.each([
+    { dispatchedToCloudTask: Number.MAX_SAFE_INTEGER - 1, providerOperationStartedAt: 123 },
+    { destinationUploadID: 'accepted-upload' },
+    { destinationUploadContinuation: { type: 'upload', uploadUrl: 'https://example.invalid' } },
+    { resultStatus: 'manual_reconciliation_required' },
+  ])('keeps pending provider state out of historical promotion: %j', async providerState => {
+    mockTransactionGet.mockResolvedValueOnce({
+      exists: true,
+      data: () => ({
+        processed: false,
+        dateCreated: 1700000000000,
+        dispatchedToCloudTask: 123,
+        routeId: ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_SuuntoApp,
+        userID: 'user-1',
+        eventID: 'event-1',
+        sourceServiceName: ServiceNames.GarminAPI,
+        destinationServiceName: ServiceNames.SuuntoApp,
+        ...providerState,
+      }),
+    });
+
+    const result = await enqueueActivitySyncQueueItem({
+      routeId: ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_SuuntoApp,
+      sourceServiceName: ServiceNames.GarminAPI,
+      destinationServiceName: ServiceNames.SuuntoApp,
+      userID: 'user-1',
+      eventID: 'event-1',
+      originalFile: { path: 'p.fit', extension: 'fit' },
+      manual: true,
+      deliveryMode: 'historical',
+    });
+
+    expect(result).toMatchObject({ enqueued: false, reason: 'already_pending' });
     expect(mockTransactionSet).not.toHaveBeenCalled();
     expect(mockEnqueueActivitySyncTask).not.toHaveBeenCalled();
   });
@@ -668,6 +762,28 @@ describe('activity-sync/queue', () => {
       queueItemId: 'activitySync__GarminAPI_to_SuuntoApp__user-1__event-1',
       reason: 'already_processed',
     });
+    expect(mockTransactionSet).not.toHaveBeenCalled();
+    expect(mockEnqueueActivitySyncTask).not.toHaveBeenCalled();
+  });
+
+  it('does not re-enqueue a successful provider upload when success metadata is missing', async () => {
+    mockTransactionGet.mockResolvedValueOnce({
+      exists: true,
+      data: () => ({ processed: true, resultStatus: 'success' }),
+    });
+
+    const result = await enqueueActivitySyncQueueItem({
+      routeId: ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_SuuntoApp,
+      sourceServiceName: ServiceNames.GarminAPI,
+      destinationServiceName: ServiceNames.SuuntoApp,
+      userID: 'user-1',
+      eventID: 'event-1',
+      originalFile: { path: 'p.fit', extension: 'fit' },
+      manual: true,
+      deliveryMode: 'historical',
+    });
+
+    expect(result).toMatchObject({ enqueued: false, reason: 'already_processed' });
     expect(mockTransactionSet).not.toHaveBeenCalled();
     expect(mockEnqueueActivitySyncTask).not.toHaveBeenCalled();
   });

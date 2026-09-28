@@ -30,7 +30,7 @@ import {
 } from '../shared/provider-data-flow-matrix/provider-data-flow-matrix.helper';
 
 type ServiceSectionId = ProviderServiceSectionId | 'mcp';
-type ServiceToolId = 'history' | 'uploads' | ProviderDataFlowToolId;
+type ServiceToolId = 'history' | 'uploads' | 'historical-send' | ProviderDataFlowToolId;
 type ServiceDataFlowActivityDestination = ProviderDataFlowActivityDestination;
 
 interface ServiceSectionOption {
@@ -154,6 +154,12 @@ export class ServicesComponent implements OnInit, OnDestroy {
     wahoo: getProviderDisplayName(ServiceNames.WahooAPI, 'source'),
     mcp: 'MCP',
   };
+  public readonly serviceNameByProviderSection: Record<ProviderServiceSectionId, ServiceNames> = {
+    garmin: ServiceNames.GarminAPI,
+    suunto: ServiceNames.SuuntoApp,
+    coros: ServiceNames.COROSAPI,
+    wahoo: ServiceNames.WahooAPI,
+  };
   public readonly serviceSectionOptions: readonly ServiceSectionOption[] = [
     {
       id: 'garmin',
@@ -219,8 +225,8 @@ export class ServicesComponent implements OnInit, OnDestroy {
       },
       {
         title: 'Send activities to connected services',
-        description: 'Automatically send new Garmin activities to Suunto, Wahoo, or COROS, or sync past activities by date.',
-        detail: 'Automatic and past activity sync',
+        description: 'Automatically send new Garmin activities to Suunto, Wahoo, or COROS.',
+        detail: 'Automatic activity sync',
         icon: 'published_with_changes',
         actionLabel: 'Activity sync settings',
         tool: 'auto-sync',
@@ -260,9 +266,17 @@ export class ServicesComponent implements OnInit, OnDestroy {
         tool: 'uploads',
       },
       {
+        title: 'Send past activities to Suunto',
+        description: 'Choose saved provider imports and manual FIT uploads, preview them, and send a date range to Suunto.',
+        detail: 'One-time historical activity delivery',
+        icon: 'history',
+        actionLabel: 'Send past activities',
+        tool: 'historical-send',
+      },
+      {
         title: 'Send activities to connected services',
-        description: 'Automatically send new Suunto activities to Wahoo or COROS, or sync past activities by date.',
-        detail: 'Automatic and past activity sync',
+        description: 'Automatically send new Suunto activities to Wahoo or COROS.',
+        detail: 'Automatic activity sync',
         icon: 'published_with_changes',
         actionLabel: 'Activity sync settings',
         tool: 'activity-sync',
@@ -294,9 +308,17 @@ export class ServicesComponent implements OnInit, OnDestroy {
         tool: 'uploads',
       },
       {
+        title: 'Send past activities to COROS',
+        description: 'Choose saved provider imports and manual FIT uploads, preview them, and send a date range to COROS.',
+        detail: 'One-time historical activity delivery',
+        icon: 'history',
+        actionLabel: 'Send past activities',
+        tool: 'historical-send',
+      },
+      {
         title: 'Send activities to connected services',
-        description: 'Automatically send new COROS activities to Suunto or Wahoo, or sync past activities by date.',
-        detail: 'Automatic and past activity sync',
+        description: 'Automatically send new COROS activities to Suunto or Wahoo.',
+        detail: 'Automatic activity sync',
         icon: 'published_with_changes',
         actionLabel: 'Activity sync settings',
         tool: 'auto-sync',
@@ -320,9 +342,17 @@ export class ServicesComponent implements OnInit, OnDestroy {
         tool: 'uploads',
       },
       {
+        title: 'Send past activities to Wahoo',
+        description: 'Choose saved provider imports and manual FIT uploads, preview them, and send a date range to Wahoo.',
+        detail: 'One-time historical activity delivery',
+        icon: 'history',
+        actionLabel: 'Send past activities',
+        tool: 'historical-send',
+      },
+      {
         title: 'Send activities to connected services',
-        description: 'Automatically send new Wahoo activities to Suunto or COROS, or sync past activities by date.',
-        detail: 'Automatic and past activity sync',
+        description: 'Automatically send new Wahoo activities to Suunto or COROS.',
+        detail: 'Automatic activity sync',
         icon: 'published_with_changes',
         actionLabel: 'Activity sync settings',
         tool: 'auto-sync',

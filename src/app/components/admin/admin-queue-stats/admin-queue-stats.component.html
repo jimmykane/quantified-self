@@ -365,6 +365,31 @@
             </mat-card>
         </div>
 
+        <mat-card class="activity-sync-breakdown" *ngIf="queueView === 'activity-sync' && stats?.activitySync?.breakdowns">
+            <h4>Historical delivery breakdown</h4>
+            <p>Manual uploads are included in historical sends. Counts cover retained queue and dead-letter records, not all-time deliveries. Needs review means provider reconciliation and can overlap with dead letter.</p>
+            <div class="activity-sync-breakdown-row">
+                <strong>Historical sends</strong>
+                <dl>
+                    <div><dt>Pending</dt><dd>{{ stats?.activitySync?.breakdowns?.historical?.pending ?? 'N/A' }}</dd></div>
+                    <div><dt>Succeeded</dt><dd>{{ stats?.activitySync?.breakdowns?.historical?.succeeded ?? 'N/A' }}</dd></div>
+                    <div><dt>Stuck</dt><dd>{{ stats?.activitySync?.breakdowns?.historical?.stuck ?? 'N/A' }}</dd></div>
+                    <div><dt>Needs review</dt><dd>{{ stats?.activitySync?.breakdowns?.historical?.manualReconciliationRequired ?? 'N/A' }}</dd></div>
+                    <div><dt>Dead letter</dt><dd>{{ stats?.activitySync?.breakdowns?.historical?.dead ?? 'N/A' }}</dd></div>
+                </dl>
+            </div>
+            <div class="activity-sync-breakdown-row">
+                <strong>Manual uploads</strong>
+                <dl>
+                    <div><dt>Pending</dt><dd>{{ stats?.activitySync?.breakdowns?.manualUploads?.pending ?? 'N/A' }}</dd></div>
+                    <div><dt>Succeeded</dt><dd>{{ stats?.activitySync?.breakdowns?.manualUploads?.succeeded ?? 'N/A' }}</dd></div>
+                    <div><dt>Stuck</dt><dd>{{ stats?.activitySync?.breakdowns?.manualUploads?.stuck ?? 'N/A' }}</dd></div>
+                    <div><dt>Needs review</dt><dd>{{ stats?.activitySync?.breakdowns?.manualUploads?.manualReconciliationRequired ?? 'N/A' }}</dd></div>
+                    <div><dt>Dead letter</dt><dd>{{ stats?.activitySync?.breakdowns?.manualUploads?.dead ?? 'N/A' }}</dd></div>
+                </dl>
+            </div>
+        </mat-card>
+
         <div class="pipeline-grid" *ngIf="queueView === 'activity-sync'">
             <mat-card style="margin-bottom: 0;">
                 <h3 class="chart-header">Retry Distribution (Pending Items)</h3>

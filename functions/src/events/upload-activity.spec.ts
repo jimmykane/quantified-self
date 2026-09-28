@@ -1002,6 +1002,13 @@ describe('uploadActivity', () => {
         originalFilename: 'run.fit',
       }),
     );
+    expect(hoisted.mockSetEventDocumentIfUserActive).toHaveBeenCalledWith(
+      'user-1',
+      'activity_upload_origin_metadata',
+      expect.anything(),
+      { kind: 'manualUpload', version: 1 },
+      { merge: true },
+    );
     expect(response.status).toHaveBeenCalledWith(200);
     expect(response.json).toHaveBeenCalledWith(expect.objectContaining({
       eventId: expectedEventID,

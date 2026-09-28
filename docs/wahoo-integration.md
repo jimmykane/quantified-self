@@ -13,13 +13,15 @@ This is the Wahoo-specific architecture and release record. For the reusable imp
 - Manual history import from the descending, paginated `GET /v1/workouts` endpoint, with the latest two calendar years selected by default and a user-editable range.
 - FIT parsing through `@sports-alliance/sports-lib`, stable event IDs based on the Wahoo workout ID, and original FIT-file retention with the imported event.
 - FIT activity delivery from Wahoo imported events to Suunto or COROS through the shared activity-sync queue, with separate opt-in automatic delivery for new imports and date-range backfill for retained FIT files.
-- FIT activity delivery to Wahoo from Garmin, COROS, and Suunto imported events through the shared activity-sync queue.
+- FIT activity delivery to Wahoo from Garmin, COROS, and Suunto imported events, plus one-time sends of retained manual FIT/FIT.gz uploads, through the shared activity-sync queue.
 - Direct, user-selected FIT-file delivery from Wahoo Services. This sends the file only to Wahoo; it does not create or retain a Quantified Self event.
 - Direct, user-selected GPX or FIT course/route delivery from Wahoo Services. The callable parses the source route to provide Wahoo's required metadata, converts a GPX route to FIT in memory, looks up Quantified Self's deterministic external ID based on the selected source file, then creates or updates the Wahoo route. It does not create or retain a Quantified Self route.
 - Opt-in automatic and backfill delivery of Suunto routes already saved in Quantified Self. This uses the shared saved-route delivery queue and the same Wahoo uploader. The opaque external ID is derived from the Quantified Self saved-route ID, so a newer Suunto revision updates the corresponding Wahoo route instead of creating a duplicate.
 - Disconnect through `DELETE /v1/permissions`, followed by recursive local token, queue, and pending-state cleanup.
 
 Workouts without an available FIT file are skipped. Wahoo records identified as originating from a third-party fitness application are also skipped. Existing imported events and their retained original files are not deleted when the connection is removed or Pro access expires.
+
+For one-time historical sends, a deleted event or changed/missing original before Wahoo upload is a skipped queue result. Temporary Storage failures retry, while an already accepted Wahoo upload retains its reconciliation state.
 
 ## Data flow
 
