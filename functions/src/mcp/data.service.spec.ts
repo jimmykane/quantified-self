@@ -6436,7 +6436,7 @@ describe('MCP data service', () => {
     });
   });
 
-  it('uses the canonical Suunto night window when a fragment is missing in-bed duration', async () => {
+  it('keeps canonical Suunto in-bed duration unavailable when a fragment is missing it', async () => {
     const firstEndTimeMs = Date.parse('2026-07-27T02:00:00.000Z');
     const secondEndTimeMs = Date.parse('2026-07-27T06:00:00.000Z');
     vi.mocked(dependencies.fetchReadinessSleepDocuments).mockResolvedValue([
@@ -6479,7 +6479,7 @@ describe('MCP data service', () => {
 
     expect(result.sleep.latestSession).toMatchObject({
       durationSeconds: 28_800,
-      inBedDurationSeconds: 28_800,
+      inBedDurationSeconds: null,
     });
   });
 
@@ -6798,6 +6798,7 @@ describe('MCP data service', () => {
           startTimeMs: Date.parse('2026-09-27T18:57:00.000Z'),
           endTimeMs: Date.parse('2026-09-27T23:54:00.000Z'),
           durationSeconds: 15_840,
+          inBedDurationSeconds: 15_840,
           score: { value: 62, qualifier: null },
           providerFields: { suunto: { SleepOnsetLatencyDuration: 360 } },
         }),
@@ -6810,6 +6811,7 @@ describe('MCP data service', () => {
           startTimeMs: Date.parse('2026-09-28T00:01:00.000Z'),
           endTimeMs: Date.parse('2026-09-28T04:00:00.000Z'),
           durationSeconds: 13_320,
+          inBedDurationSeconds: 13_320,
           score: { value: 72, qualifier: null },
           providerFields: { suunto: { SleepOnsetLatencyDuration: 480 } },
         }),
@@ -6827,7 +6829,7 @@ describe('MCP data service', () => {
       startTimeMs: Date.parse('2026-09-27T19:03:00.000Z'),
       endTimeMs: Date.parse('2026-09-28T04:00:00.000Z'),
       durationSeconds: 29_160,
-      inBedDurationSeconds: 32_220,
+      inBedDurationSeconds: 29_160,
       score: { value: 72, qualifier: null },
     });
   });

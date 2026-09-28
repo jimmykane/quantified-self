@@ -3818,6 +3818,12 @@ function aggregateSafeSleepDocumentGroup(group: readonly SafeSleepDocument[]): S
   const startTimeMs = Math.min(...sessions.map(session => session.startTimeMs));
   const endTimeMs = Math.max(...sessions.map(session => session.endTimeMs));
   const interruptionSeconds = sumSleepFragmentInterruptionSeconds(sessions);
+  const inBedDurationValues = sessions.map(session => session.inBedDurationSeconds);
+  const inBedDurationSeconds = inBedDurationValues.every(
+    (value): value is number => typeof value === 'number',
+  )
+    ? inBedDurationValues.reduce((sum, value) => sum + value, 0)
+    : null;
   const hrv = aggregateNightlyHrvEvidence(sessions.map(session => ({
     averageHrvMs: session.vitals?.averageHrvMs ?? null,
     hrvSampleCount: session.vitals?.hrvSampleCount ?? null,
@@ -3854,7 +3860,7 @@ function aggregateSafeSleepDocumentGroup(group: readonly SafeSleepDocument[]): S
       startTimeMs,
       endTimeMs,
       durationSeconds: sessions.reduce((sum, session) => sum + session.durationSeconds, 0),
-      inBedDurationSeconds: Math.max(0, Math.round((endTimeMs - startTimeMs) / 1000)),
+      inBedDurationSeconds,
       stageDurationsSeconds,
       vitals: Object.keys(vitals).length ? vitals : null,
     },

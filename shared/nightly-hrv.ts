@@ -1,6 +1,14 @@
 import { type HealthMetricEntry, HEALTH_UNITS } from './health';
 import { decodeHealthMetricSportsLibData, decodeSleepSessionSportsLibData } from './sports-lib-health-data';
-import { normalizeSleepProvider, type SleepSession } from './sleep';
+import {
+  groupCanonicalSleepNightFragments,
+  normalizeSleepProvider,
+  resolveSleepDisplayDate,
+  resolveSleepEffectiveStartTimeMs,
+  SLEEP_PROVIDERS,
+  type SleepProvider,
+  type SleepSession,
+} from './sleep';
 import { HRV_PERSONAL_RANGE_VARIANTS } from './personal-metric-range';
 
 /** Read-time evidence only. Never persist these identities or expose them through MCP. */
@@ -101,11 +109,66 @@ function validDate(value: unknown): value is string {
     && Number.isFinite(Date.parse(value)) && new Date(value).toISOString().slice(0, 10) === value;
 }
 
+function validTimestamp(value: unknown): value is number {
+  return Number.isSafeInteger(value) && Number.isFinite(new Date(value as number).getTime());
+}
+
+interface NightlyHrvSleepCandidate {
+  index: number;
+  provider: SleepProvider;
+  providerUserId: string | null;
+  sleepDate: string;
+  isNap: false;
+  startTimeMs: number;
+  endTimeMs: number;
+}
+
+function nightlyHrvSleepCandidateGroups(
+  sessions: readonly SleepSession[],
+): NightlyHrvSleepCandidate[][] {
+  const suunto: NightlyHrvSleepCandidate[] = [];
+  const other = new Map<string, NightlyHrvSleepCandidate[]>();
+  sessions.forEach((session, index) => {
+    const provider = normalizeSleepProvider(session.source?.provider);
+    const sleepDate = resolveSleepDisplayDate(session);
+    const startTimeMs = resolveSleepEffectiveStartTimeMs(session);
+    const endTimeMs = session.endTimeMs;
+    if (session.isNap || !provider || !validDate(sleepDate)
+      || !validTimestamp(startTimeMs) || !validTimestamp(endTimeMs)
+      || endTimeMs <= startTimeMs) return;
+    const candidate: NightlyHrvSleepCandidate = {
+      index,
+      provider,
+      providerUserId: typeof session.source?.providerUserId === 'string'
+        ? session.source.providerUserId.trim() || null
+        : null,
+      sleepDate,
+      isNap: false,
+      startTimeMs,
+      endTimeMs,
+    };
+    if (provider === SLEEP_PROVIDERS.SuuntoApp) {
+      suunto.push(candidate);
+      return;
+    }
+    const key = JSON.stringify([sleepEvidenceSourceKey(session), sleepDate]);
+    other.set(key, [...(other.get(key) || []), candidate]);
+  });
+  return [
+    ...other.values(),
+    ...groupCanonicalSleepNightFragments(suunto),
+  ];
+}
+
 export function nightlyHrvDateRange(sessions: readonly SleepSession[]): { startDate: string; endDate: string } | null {
-  const dates = sessions.filter(session => !session.isNap && normalizeSleepProvider(session.source?.provider)
-    && session.source?.providerUserId && validDate(session.sleepDate)
-    && !positiveNightlyHrv(session.vitals?.averageHrvMs) && !positiveNightlyHrv(session.vitals?.overnightHrvMs))
-    .map(session => session.sleepDate).sort();
+  const dates = nightlyHrvSleepCandidateGroups(sessions).flatMap(group => {
+    if (!group[0]?.providerUserId || group.some(candidate => {
+      const session = sessions[candidate.index];
+      return positiveNightlyHrv(session.vitals?.averageHrvMs)
+        || positiveNightlyHrv(session.vitals?.overnightHrvMs);
+    })) return [];
+    return [group[0].sleepDate];
+  }).sort();
   return dates.length ? { startDate: dates[0], endDate: dates[dates.length - 1] } : null;
 }
 
@@ -130,21 +193,16 @@ export async function enrichSleepWithNightlyHrv(
   assertNightlyHrvRecordBudget(records);
   const sessions = input.map(session => decodeSleepSessionSportsLibData(session));
   if (!records.length) return sessions;
-  const groups = new Map<string, number[]>();
-  sessions.forEach((session, index) => {
-    if (session.isNap || !normalizeSleepProvider(session.source?.provider) || !validDate(session.sleepDate)
-      || !Number.isSafeInteger(session.startTimeMs) || !Number.isSafeInteger(session.endTimeMs)
-      || session.endTimeMs <= session.startTimeMs) return;
-    const key = JSON.stringify([sleepEvidenceSourceKey(session), session.sleepDate]);
-    groups.set(key, [...(groups.get(key) || []), index]);
-  });
   const accountKeys = new Map<string, Promise<string>>();
   const result: NightlyHrvSleepSession[] = [...sessions];
-  for (const indexes of groups.values()) {
+  for (const group of nightlyHrvSleepCandidateGroups(sessions)) {
+    const indexes = group.map(candidate => candidate.index);
     if (indexes.some(index => positiveNightlyHrv(sessions[index].vitals?.averageHrvMs)
       || positiveNightlyHrv(sessions[index].vitals?.overnightHrvMs))) continue;
-    const index = [...indexes].sort((a, b) => sessions[b].endTimeMs - sessions[a].endTimeMs
-      || sessions[b].startTimeMs - sessions[a].startTimeMs || (sessions[b].id || '').localeCompare(sessions[a].id || ''))[0];
+    const candidate = [...group].sort((left, right) => right.endTimeMs - left.endTimeMs
+      || right.startTimeMs - left.startTimeMs
+      || (sessions[right.index].id || '').localeCompare(sessions[left.index].id || ''))[0];
+    const index = candidate.index;
     const session = sessions[index];
     const providerAccountId = session.source.providerUserId;
     if (!providerAccountId || providerAccountId.length > 1024 || (session.userID && session.userID !== uid)) continue;
@@ -154,12 +212,12 @@ export async function enrichSleepWithNightlyHrv(
     const candidates = new Map<string, Set<number>>();
     for (const record of records) {
       if (record.userID !== uid || record.schemaVersion !== 1 || record.source?.provider !== session.source.provider
-        || record.source.accountKey !== accountKey || record.calendarDate !== session.sleepDate
+        || record.source.accountKey !== accountKey || record.calendarDate !== candidate.sleepDate
         || !['interval_summary', 'daily_summary'].includes(record.kind) || !Array.isArray(record.metrics)
         || !Number.isSafeInteger(record.startTimeMs) || !Number.isSafeInteger(record.endTimeMs)
         || record.endTimeMs <= record.startTimeMs) continue;
       // An overnight interval must overlap this night's real sleep, not just share its date.
-      if (!indexes.some(i => record.startTimeMs < sessions[i].endTimeMs && record.endTimeMs > sessions[i].startTimeMs)) continue;
+      if (!group.some(item => record.startTimeMs < item.endTimeMs && record.endTimeMs > item.startTimeMs)) continue;
       for (const raw of record.metrics) {
         let entry: HealthMetricEntry;
         try { entry = decodeHealthMetricSportsLibData(raw); } catch { continue; }

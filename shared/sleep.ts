@@ -138,6 +138,22 @@ function finiteSleepTime(value: unknown): number | null {
   return typeof value === 'number' && Number.isFinite(value) ? value : null;
 }
 
+function validSleepTimestampMs(value: unknown): number | null {
+  const timestampMs = finiteSleepTime(value);
+  return timestampMs !== null && Number.isFinite(new Date(timestampMs).getTime())
+    ? timestampMs
+    : null;
+}
+
+function validSleepDate(value: unknown): string | null {
+  const sleepDate = typeof value === 'string' ? value.trim() : '';
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(sleepDate)) return null;
+  const dayMs = Date.parse(`${sleepDate}T00:00:00.000Z`);
+  return Number.isFinite(dayMs) && new Date(dayMs).toISOString().slice(0, 10) === sleepDate
+    ? sleepDate
+    : null;
+}
+
 export function parseSleepDateTimeOffsetSeconds(value: unknown): number | null {
   const stringValue = typeof value === 'string' ? value.trim() : '';
   if (!stringValue) return null;
@@ -172,11 +188,11 @@ export function resolveSleepTimezoneOffsetSeconds(
 export function resolveSleepDisplayDate(
   session: Pick<SleepSession, 'source' | 'sleepDate' | 'startTimeMs' | 'endTimeMs' | 'timezoneOffsetSeconds' | 'isNap' | 'providerFields'>,
 ): string | null {
-  const startTimeMs = finiteSleepTime(session.startTimeMs);
-  const endTimeMs = finiteSleepTime(session.endTimeMs);
-  const storedSleepDate = typeof session.sleepDate === 'string' && session.sleepDate.trim()
-    ? session.sleepDate.trim()
-    : null;
+  const startTimeMs = validSleepTimestampMs(session.startTimeMs);
+  const endTimeMs = validSleepTimestampMs(session.endTimeMs);
+  const suppliedSleepDate = typeof session.sleepDate === 'string' ? session.sleepDate.trim() : '';
+  const storedSleepDate = validSleepDate(session.sleepDate);
+  if (suppliedSleepDate && storedSleepDate === null) return null;
   const fallbackSleepDate = endTimeMs === null
     ? storedSleepDate
     : storedSleepDate || new Date(endTimeMs).toISOString().slice(0, 10);

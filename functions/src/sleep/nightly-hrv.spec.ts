@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { enrichSleepWithNightlyHrv, nightlyHealthAccountKey, type NightlyHrvRecord, aggregateNightlyHrvEvidence } from '../../../shared/nightly-hrv';
+import { enrichSleepWithNightlyHrv, nightlyHealthAccountKey, nightlyHrvDateRange, type NightlyHrvRecord, aggregateNightlyHrvEvidence } from '../../../shared/nightly-hrv';
 import { encodeSleepSessionSportsLibData } from '../../../shared/sports-lib-health-data';
 import { type SleepSession, type SleepProvider, SLEEP_PROVIDERS } from '../../../shared/sleep';
 import { READINESS_EVIDENCE_VERSION } from '../../../shared/readiness';
@@ -123,6 +123,46 @@ describe('shared nightly HRV', () => {
     const result = await enrichSleepWithNightlyHrv(uid, fragments, [await record()]);
     expect(result.filter(s => s.vitals?.overnightHrvMs === 44)).toHaveLength(1);
     expect(result[0].vitals?.overnightHrvMs).toBe(44);
+  });
+  it('uses the resolved Suunto wake date for the Health query and join', async () => {
+    const suunto = {
+      ...sleep(SLEEP_PROVIDERS.SuuntoApp),
+      sleepDate: '2026-09-10',
+      timezoneOffsetSeconds: 3 * 3600,
+    };
+    const matching = {
+      ...await record(SLEEP_PROVIDERS.SuuntoApp),
+      calendarDate: '2026-09-11',
+    };
+    expect(nightlyHrvDateRange([suunto])).toEqual({
+      startDate: '2026-09-11',
+      endDate: '2026-09-11',
+    });
+    expect((await enrichSleepWithNightlyHrv(uid, [suunto], [matching]))[0].vitals?.overnightHrvMs).toBe(44);
+  });
+  it('does not attach an earlier sleep HRV record to a later separate Suunto sleep', async () => {
+    const earlier = {
+      ...sleep(SLEEP_PROVIDERS.SuuntoApp),
+      id: 'earlier',
+      startTimeMs: start,
+      endTimeMs: start + 3 * 3600000,
+      durationSeconds: 3 * 3600,
+    };
+    const later = {
+      ...sleep(SLEEP_PROVIDERS.SuuntoApp),
+      id: 'later',
+      startTimeMs: start + 5 * 3600000,
+      endTimeMs: start + 8 * 3600000,
+      durationSeconds: 3 * 3600,
+    };
+    const matchingEarlier = {
+      ...await record(SLEEP_PROVIDERS.SuuntoApp),
+      startTimeMs: earlier.startTimeMs,
+      endTimeMs: earlier.endTimeMs,
+    };
+    const result = await enrichSleepWithNightlyHrv(uid, [earlier, later], [matchingEarlier]);
+    expect(result[0].vitals?.overnightHrvMs).toBe(44);
+    expect(result[1].vitals).toBeUndefined();
   });
   it.each(['owner', 'account', 'provider', 'date', 'interval', 'spot', 'maximum', 'manual', 'zero', 'nan', 'unknown'])('rejects %s mismatches', async kind => {
     const r = await record();

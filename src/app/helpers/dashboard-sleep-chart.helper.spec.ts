@@ -54,6 +54,18 @@ describe('dashboard-sleep-chart.helper', () => {
       providerFields: null,
     })).toBe('2026-09-27');
     expect(parseSleepDateTimeOffsetSeconds('2026-09-28T07:00:00+19:00')).toBeNull();
+    expect(resolveSleepDisplayDate({
+      ...session,
+      sleepDate: 'not-a-date',
+      endTimeMs: Date.parse('2026-09-28T04:00:00Z'),
+      timezoneOffsetSeconds: null,
+      providerFields: null,
+    })).toBeNull();
+    expect(resolveSleepDisplayDate({
+      ...session,
+      sleepDate: '',
+      endTimeMs: Number.MAX_SAFE_INTEGER,
+    })).toBeNull();
   });
 
   it('builds stacked sleep points for staged provider sessions', () => {
