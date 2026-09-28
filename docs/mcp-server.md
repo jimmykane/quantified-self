@@ -1725,6 +1725,10 @@ The usual period is an equivalent 28-day comparison normalized from the snapshot
 its workout count may be fractional. Provider identity, raw vitals, stages, score components, sessions, locations,
 activities, body measurements, and source fields are absent from this projection.
 
+The latest session and comparison use the same canonical Suunto-night reconciliation as sleep trends and the daily
+report. Adjacent same-account records are combined before choosing the latest night; the raw session-list tool remains
+the audit surface for the individual provider records, while their stored SleepIds remain unchanged.
+
 It also reads the current `training_readiness` snapshot through its exact strict payload schema, but returns only its
 freshness, score, label, confidence, and aggregate evidence counts. Readiness itself remains UTC-day based. A snapshot
 whose `asOfDayMs` is not the current UTC day is reported as `stale` with score and evidence fields withheld; missing or
@@ -1742,8 +1746,11 @@ and `end` instants with timezone offsets, up to 366 days, and loads a bounded ad
 semantic variants. Daily medians, mean/population deviation, 14-day minimum baseline, seven-day/three-day headline,
 historical classifications and missing-day baseline evaluation therefore share the Health chart's calculation.
 
-Only eligible canonical nightly Health scalars and normalized non-nap average/overnight Sleep HRV are used. The Sleep
-field mask also includes canonical duration, required by the shared Sports Lib decoder; it is never returned by this tool. Health
+Only eligible canonical nightly Health scalars and normalized non-nap average/overnight Sleep HRV are used. Adjacent
+same-account Suunto SleepIds on one wake date are partitioned with the shared 30-minute/onset rule before entering the
+range: average HRV is sample-weighted only when every fragment has positive count evidence, and unidentified or
+ambiguous fragments are withheld. The Sleep field mask also includes canonical duration, required by the shared Sports
+Lib decoder; it is never returned by this tool. Health
 Sleep references are skipped; normalized sessions are read through the separately required Sleep grant. Health and
 Sleep remain separately labelled series, including provider, response-local account ordinal and fixed semantics.
 The projection never guesses equivalence between opaque Health account keys and Sleep provider identities. The

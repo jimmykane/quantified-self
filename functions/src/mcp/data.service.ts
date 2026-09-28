@@ -6787,10 +6787,10 @@ export function createMcpDataService(
           'The daily briefing sleep query returned more data than requested.',
         );
       }
-      const sessions = docs
-        .flatMap(doc => {
-          const session = toSafeSleepSession(doc.data);
-          return session && !session.isNap && session.endTimeMs <= nowTimeMs
+      const sessions = canonicalizeSafeSleepDocuments(docs)
+        .flatMap(candidate => {
+          const { session } = candidate;
+          return !session.isNap && session.endTimeMs <= nowTimeMs
             ? [session]
             : [];
         })

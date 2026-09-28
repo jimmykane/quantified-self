@@ -19,6 +19,9 @@ describe('derived source invalidation', () => {
         expect(hasDerivedMetricSourceChange('sleep', {}, { sportsLibData: { metrics: { [SLEEP_SPORTS_LIB_METRIC_FIELDS.OvernightHrv]: 45 } } })).toBe(true);
         expect(hasDerivedMetricSourceChange('sleep', { source: { providerUserId: 'a' } }, { source: { providerUserId: 'b' } })).toBe(true);
         expect(hasDerivedMetricSourceChange('sleep', {}, { providerFields: { suunto: { timestamp: 'offset-changed' } } })).toBe(true);
+        expect(hasDerivedMetricSourceChange('sleep', {}, {
+            providerFields: { suunto: { SleepOnsetLatencyDuration: 480 } },
+        })).toBe(true);
     });
     it('ignores Health watermarks but retains source, date and measurement changes', () => {
         const data = { source: { provider: 'SuuntoApp', maxObservedRevisionOrder: 1 } };

@@ -522,7 +522,8 @@ export function buildDashboardSleepTrendContext(
       }
       return left.startTimeMs - right.startTimeMs;
     }));
-  const latestPoint = realPoints.reduce<DashboardSleepTrendPoint | null>((latest, point) => {
+  const canonicalRealPoints = points.filter(point => point.isPlaceholder !== true);
+  const latestPoint = canonicalRealPoints.reduce<DashboardSleepTrendPoint | null>((latest, point) => {
     if (!latest || compareSleepRecency(latest, point) < 0) {
       return point;
     }
@@ -532,7 +533,7 @@ export function buildDashboardSleepTrendContext(
   return {
     points,
     latestPoint,
-    hasRealPoints: realPoints.length > 0,
+    hasRealPoints: canonicalRealPoints.length > 0,
   };
 }
 

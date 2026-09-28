@@ -6785,6 +6785,53 @@ describe('MCP data service', () => {
     expect(serialized).not.toContain('windowEndDayMs');
   });
 
+  it('uses the canonical Suunto night in the frozen daily briefing', async () => {
+    const nowTimeMs = Date.parse('2026-09-28T12:00:00.000Z');
+    const source = { provider: SLEEP_PROVIDERS.SuuntoApp, providerUserId: 'private-suunto-user' };
+    vi.mocked(dependencies.now).mockReturnValue(nowTimeMs);
+    vi.mocked(dependencies.fetchDerivedSnapshot).mockResolvedValue(null);
+    vi.mocked(dependencies.fetchSleepDocuments).mockResolvedValue([
+      {
+        ...sleepDocument({
+          source: { ...source, sourceSessionKey: 'part-1' },
+          sleepDate: '2026-09-28',
+          startTimeMs: Date.parse('2026-09-27T18:57:00.000Z'),
+          endTimeMs: Date.parse('2026-09-27T23:54:00.000Z'),
+          durationSeconds: 15_840,
+          score: { value: 62, qualifier: null },
+          providerFields: { suunto: { SleepOnsetLatencyDuration: 360 } },
+        }),
+        id: 'part-1',
+      },
+      {
+        ...sleepDocument({
+          source: { ...source, sourceSessionKey: 'part-2' },
+          sleepDate: '2026-09-28',
+          startTimeMs: Date.parse('2026-09-28T00:01:00.000Z'),
+          endTimeMs: Date.parse('2026-09-28T04:00:00.000Z'),
+          durationSeconds: 13_320,
+          score: { value: 72, qualifier: null },
+          providerFields: { suunto: { SleepOnsetLatencyDuration: 480 } },
+        }),
+        id: 'part-2',
+      },
+    ]);
+
+    const result = await createMcpDataService(dependencies).getDailyBriefing({
+      uid: 'user-1',
+      timeZone: 'Europe/Helsinki',
+    });
+
+    expect(result.sleep.latestSession).toEqual({
+      sleepDate: '2026-09-28',
+      startTimeMs: Date.parse('2026-09-27T19:03:00.000Z'),
+      endTimeMs: Date.parse('2026-09-28T04:00:00.000Z'),
+      durationSeconds: 29_160,
+      inBedDurationSeconds: 32_220,
+      score: { value: 72, qualifier: null },
+    });
+  });
+
   it('makes unavailable daily-briefing inputs explicit without returning a stale readiness score', async () => {
     vi.mocked(dependencies.fetchDerivedSnapshot).mockResolvedValue(null);
 

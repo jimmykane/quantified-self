@@ -484,6 +484,7 @@ describe('fetchTrainingBuildSleepDocs', () => {
             'sportsLibData.metrics.hrvSampleCount',
             'isNap',
             'providerFields.suunto.timestamp',
+            'providerFields.suunto.SleepOnsetLatencyDuration',
             'vitals.overnightHrvMs',
             'vitals.averageHrvMs',
         );
@@ -568,6 +569,7 @@ describe('fetchTrainingReadinessSleepDocs', () => {
             'isNap',
             'score.value',
             'providerFields.suunto.timestamp',
+            'providerFields.suunto.SleepOnsetLatencyDuration',
             'vitals.overnightHrvMs',
             'vitals.averageHrvMs',
             'vitals.averageHeartRateBpm',
@@ -1039,6 +1041,58 @@ describe('buildTrainingReadinessMetricPayload', () => {
         expect(today?.hrvRatio).toBeCloseTo(1);
     });
 
+    it('uses Suunto sleep onset when enforcing the fragment gap boundary', async () => {
+        const { buildTrainingReadinessMetricPayload } = await import('./derived-metrics.service');
+        const nowMs = Date.UTC(2026, 8, 28, 12);
+        const source = { provider: 'SuuntoApp', providerUserId: 'suunto-user' };
+        const baseline = Array.from({ length: 5 }, (_, index) => {
+            const endTimeMs = nowMs - ((index + 2) * 24 * 60 * 60 * 1000);
+            return { id: `baseline-${index}`, data: () => ({
+                source: { ...source, sourceSessionKey: `baseline-${index}` },
+                sleepDate: new Date(endTimeMs).toISOString().slice(0, 10),
+                startTimeMs: endTimeMs - (8 * 60 * 60 * 1000),
+                endTimeMs,
+                durationSeconds: 8 * 60 * 60,
+                timezoneOffsetSeconds: 0,
+                isNap: false,
+                score: { value: 80 },
+                vitals: { averageHeartRateBpm: 60 },
+            }) };
+        });
+        const firstEndTimeMs = Date.UTC(2026, 8, 28, 0);
+        const docs = [
+            ...baseline,
+            { id: 'part-1', data: () => ({
+                source: { ...source, sourceSessionKey: 'part-1' },
+                sleepDate: '2026-09-28',
+                startTimeMs: firstEndTimeMs - (4 * 60 * 60 * 1000),
+                endTimeMs: firstEndTimeMs,
+                durationSeconds: 4 * 60 * 60,
+                timezoneOffsetSeconds: 0,
+                isNap: false,
+                score: { value: 70 },
+                vitals: { averageHeartRateBpm: 50 },
+            }) },
+            { id: 'part-2', data: () => ({
+                source: { ...source, sourceSessionKey: 'part-2' },
+                sleepDate: '2026-09-28',
+                startTimeMs: firstEndTimeMs + (25 * 60 * 1000),
+                endTimeMs: firstEndTimeMs + (4 * 60 * 60 * 1000),
+                durationSeconds: 3 * 60 * 60,
+                timezoneOffsetSeconds: 0,
+                isNap: false,
+                score: { value: 82 },
+                providerFields: { suunto: { SleepOnsetLatencyDuration: 10 * 60 } },
+                vitals: { averageHeartRateBpm: 70 },
+            }) },
+        ];
+
+        const today = buildTrainingReadinessMetricPayload([], 0, docs as any, nowMs).payload.points.at(-1);
+
+        expect(today).toMatchObject({ sleepScore: 82, latestSleepAtMs: firstEndTimeMs + (4 * 60 * 60 * 1000) });
+        expect(today?.averageHeartRateRatio).toBeCloseTo(70 / 60);
+    });
+
     it('withholds current HRV when the latest sleep has expired', async () => {
         const { buildTrainingReadinessMetricPayload } = await import('./derived-metrics.service');
         const nowMs = Date.UTC(2026, 8, 13, 12);
@@ -1371,6 +1425,91 @@ describe('buildTrainingBuildComparisonMetricPayload', () => {
             reference: { periodDays: 56, averageSleepSeconds: 6.5 * 3600 },
         });
         expect(result.payload.disciplines.find(item => item.discipline === 'cycling')?.recovery).toBeNull();
+    });
+
+    it('uses one canonical Suunto night for recovery duration, timing, and sample-weighted HRV', async () => {
+        const { buildTrainingBuildComparisonMetricPayload } = await import('./derived-metrics.service');
+        const nowMs = Date.UTC(2026, 5, 30, 12);
+        const dayMs = 24 * 60 * 60 * 1000;
+        const docs = Array.from({ length: 5 }, (_, index) => {
+            const sleepDayMs = Date.UTC(2026, 5, 26) + (index * dayMs);
+            const source = { provider: 'SuuntoApp', providerUserId: 'suunto-user' };
+            return [
+                { id: `part-1-${index}`, data: () => ({
+                    source: { ...source, sourceSessionKey: `part-1-${index}` },
+                    sleepDate: new Date(sleepDayMs).toISOString().slice(0, 10),
+                    startTimeMs: sleepDayMs - (5 * 60 * 60 * 1000) - (3 * 60 * 1000),
+                    endTimeMs: sleepDayMs - (6 * 60 * 1000),
+                    timezoneOffsetSeconds: 3 * 60 * 60,
+                    durationSeconds: 15_840,
+                    isNap: false,
+                    providerFields: { suunto: { SleepOnsetLatencyDuration: 360 } },
+                    vitals: { averageHrvMs: 29, hrvSampleCount: 46 },
+                }) },
+                { id: `part-2-${index}`, data: () => ({
+                    source: { ...source, sourceSessionKey: `part-2-${index}` },
+                    sleepDate: new Date(sleepDayMs).toISOString().slice(0, 10),
+                    startTimeMs: sleepDayMs + (1 * 60 * 1000),
+                    endTimeMs: sleepDayMs + (4 * 60 * 60 * 1000),
+                    timezoneOffsetSeconds: 3 * 60 * 60,
+                    durationSeconds: 13_320,
+                    isNap: false,
+                    providerFields: { suunto: { SleepOnsetLatencyDuration: 480 } },
+                    vitals: { averageHrvMs: 40, hrvSampleCount: 35 },
+                }) },
+            ];
+        }).flat();
+
+        const result = buildTrainingBuildComparisonMetricPayload([], {}, nowMs, docs as any);
+
+        expect(result.payload.recovery.current).toMatchObject({
+            provider: 'SuuntoApp',
+            recordedNightCount: 5,
+            averageSleepSeconds: 29_160,
+            typicalLocalStartMinutes: (22 * 60) + 3,
+            typicalLocalEndMinutes: 7 * 60,
+            medianOvernightHrvMs: 33.8,
+            overnightHrvNightCount: 5,
+        });
+    });
+
+    it('retains a short Suunto fragment when its canonical night is long enough', async () => {
+        const { buildTrainingBuildComparisonMetricPayload } = await import('./derived-metrics.service');
+        const nowMs = Date.UTC(2026, 5, 30, 12);
+        const dayMs = 24 * 60 * 60 * 1000;
+        const docs = Array.from({ length: 5 }, (_, index) => {
+            const sleepDayMs = Date.UTC(2026, 5, 26) + (index * dayMs);
+            const source = { provider: 'SuuntoApp', providerUserId: 'suunto-user' };
+            return [
+                { id: `main-${index}`, data: () => ({
+                    source: { ...source, sourceSessionKey: `main-${index}` },
+                    sleepDate: new Date(sleepDayMs).toISOString().slice(0, 10),
+                    startTimeMs: sleepDayMs - (7.5 * 60 * 60 * 1000),
+                    endTimeMs: sleepDayMs,
+                    timezoneOffsetSeconds: 0,
+                    durationSeconds: 7.5 * 60 * 60,
+                    isNap: false,
+                    vitals: {},
+                }) },
+                { id: `short-${index}`, data: () => ({
+                    source: { ...source, sourceSessionKey: `short-${index}` },
+                    sleepDate: new Date(sleepDayMs).toISOString().slice(0, 10),
+                    startTimeMs: sleepDayMs + (5 * 60 * 1000),
+                    endTimeMs: sleepDayMs + (35 * 60 * 1000),
+                    timezoneOffsetSeconds: 0,
+                    durationSeconds: 30 * 60,
+                    isNap: false,
+                    vitals: {},
+                }) },
+            ];
+        }).flat();
+
+        const result = buildTrainingBuildComparisonMetricPayload([], {}, nowMs, docs as any);
+
+        expect(result.payload.recovery.current).toMatchObject({
+            recordedNightCount: 5,
+            averageSleepSeconds: 8 * 60 * 60,
+        });
     });
 
     it('withholds recovery comparability across providers and keeps absent HRV null', async () => {

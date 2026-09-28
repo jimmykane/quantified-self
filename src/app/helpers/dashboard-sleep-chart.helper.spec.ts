@@ -290,6 +290,8 @@ describe('dashboard-sleep-chart.helper', () => {
       calendarDate: '2026-09-28',
       value: context.points[0].averageHrvMs,
     })]);
+    expect(context.latestPoint).toBe(context.points[0]);
+    expect(context.latestPoint?.averageHrvMs).toBeCloseTo(33.753086, 5);
   });
 
   it('keeps non-adjacent Suunto sleeps separate even when their wake date matches', () => {

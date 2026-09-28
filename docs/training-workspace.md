@@ -2472,6 +2472,13 @@ controls; collapsing its details never hides an active countdown. The expandable
 - Main overnight sleep only; naps excluded.
 - Metrics: average sleep per night, a typical local sleep window, recorded-night coverage, bedtime variation, and median overnight HRV.
 
+Suunto recovery windows use the same canonical-night partition as Readiness. Same-account records on one wake date
+merge only when their effective sleep-onset windows overlap or are at most 30 minutes apart. Their actual sleep
+durations are summed, and local timing uses the first onset and final wake. Different average-HRV values are combined
+only with complete positive sample-count evidence across fragments; identical readings remain unambiguous without
+weighting. Larger gaps remain separate candidates, and identity-less fragments are never combined or promoted into
+recovery HRV.
+
 Comparative deltas require the same provider and sufficient coverage in both windows. The minimum is at least seven
 nights and at least half of each window (`14/28` and `42/84` for the normal comparison). Bedtime regularity requires a
 usable timezone; the builder must not fabricate local bedtime from UTC timestamps. Garmin normally supplies this as

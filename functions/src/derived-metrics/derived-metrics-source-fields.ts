@@ -18,6 +18,7 @@ export const DERIVED_METRICS_TRAINING_SLEEP_FIELDS = [
     `sportsLibData.metrics.${SLEEP_SPORTS_LIB_METRIC_FIELDS.HrvSampleCount}`,
     'isNap',
     'providerFields.suunto.timestamp',
+    'providerFields.suunto.SleepOnsetLatencyDuration',
     'vitals.overnightHrvMs',
     'vitals.averageHrvMs',
 ] as const;
@@ -40,6 +41,7 @@ export const DERIVED_METRICS_TRAINING_READINESS_SLEEP_FIELDS = [
     'isNap',
     'score.value',
     'providerFields.suunto.timestamp',
+    'providerFields.suunto.SleepOnsetLatencyDuration',
     'vitals.overnightHrvMs',
     'vitals.averageHrvMs',
     'vitals.averageHeartRateBpm',

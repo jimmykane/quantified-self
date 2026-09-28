@@ -162,6 +162,7 @@ import {
 import {
     normalizeSleepProvider,
     partitionSleepNightFragments,
+    resolveSleepEffectiveStartTimeMs,
     SLEEP_PROVIDERS,
     SLEEP_SESSIONS_COLLECTION_ID,
     type SleepProvider,
@@ -3502,8 +3503,10 @@ interface ResolvedTrainingSleepNight {
 }
 
 interface TrainingSleepNightCandidate {
-    accountNightKey: string;
+    id: string;
+    sourceKey: string;
     hrvSourceKey?: string;
+    hrvSampleCount: number | null;
     provider: SleepProvider;
     sleepDayMs: number;
     durationSeconds: number;
@@ -3588,12 +3591,7 @@ function decodeTrainingSleepDocument(
 function resolveTrainingSleepNights(
     sleepDocs: readonly FirestoreQueryDocumentSnapshot[],
 ): ResolvedTrainingSleepNight[] {
-    const candidates = new Map<string, TrainingSleepNightCandidate>();
-    const hrvByAccountNight = new Map<string, Array<{
-        averageHrvMs: number | null;
-        hrvSampleCount?: number | null;
-        hrvSourceKey?: string;
-    }>>();
+    const candidateGroups = new Map<string, TrainingSleepNightCandidate[]>();
     sleepDocs.forEach((doc) => {
         const data = decodeTrainingSleepDocument(doc);
         if (!data) return;
@@ -3605,24 +3603,29 @@ function resolveTrainingSleepNights(
             : {};
         const provider = normalizeSleepProvider(source.provider);
         const sleepDayMs = resolveSleepDateDayMs(data.sleepDate);
-        const startTimeMs = toFiniteNumber(data.startTimeMs);
+        const storedStartTimeMs = toFiniteNumber(data.startTimeMs);
         const endTimeMs = toFiniteNumber(data.endTimeMs);
         const storedDurationSeconds = toFiniteNumber(data.durationSeconds);
         const durationSeconds = storedDurationSeconds !== null && storedDurationSeconds > 0
             ? storedDurationSeconds
-            : (startTimeMs !== null && endTimeMs !== null && endTimeMs > startTimeMs
-                ? (endTimeMs - startTimeMs) / 1000
+            : (storedStartTimeMs !== null && endTimeMs !== null && endTimeMs > storedStartTimeMs
+                ? (endTimeMs - storedStartTimeMs) / 1000
                 : null);
         if (
             !provider
             || sleepDayMs === null
-            || startTimeMs === null
+            || storedStartTimeMs === null
             || durationSeconds === null
-            || durationSeconds < DERIVED_TRAINING_RECOVERY_MIN_VALID_SLEEP_SECONDS
+            || durationSeconds <= 0
+            || (provider !== SLEEP_PROVIDERS.SuuntoApp
+                && durationSeconds < DERIVED_TRAINING_RECOVERY_MIN_VALID_SLEEP_SECONDS)
             || durationSeconds > DERIVED_TRAINING_RECOVERY_MAX_VALID_SLEEP_SECONDS
         ) {
             return;
         }
+        const startTimeMs = provider === SLEEP_PROVIDERS.SuuntoApp
+            ? resolveSleepEffectiveStartTimeMs(data as unknown as SleepSession)
+            : storedStartTimeMs;
         const timezoneOffsetSeconds = resolveTrainingSleepTimezoneOffsetSeconds(data, provider);
         const localStartTimeMs = startTimeMs + ((timezoneOffsetSeconds || 0) * 1000);
         if (
@@ -3637,58 +3640,48 @@ function resolveTrainingSleepNights(
             : {};
         const overnightHrvMs = toFinitePositiveNumber(vitals.averageHrvMs)
             ?? toFinitePositiveNumber(vitals.overnightHrvMs);
-        const accountNightKey = JSON.stringify([sleepEvidenceSourceKey(data as unknown as SleepSession), sleepDayMs]);
-        hrvByAccountNight.set(accountNightKey, [...(hrvByAccountNight.get(accountNightKey) || []), {
-            averageHrvMs: overnightHrvMs,
-            hrvSampleCount: toFiniteNumber(vitals.hrvSampleCount),
-            hrvSourceKey: sleepHrvSourceKey(data as unknown as SleepSession),
-        }]);
-        const hasValidEndTime = hasValidTrainingSleepEndTime(startTimeMs, endTimeMs);
+        const sourceKey = sleepEvidenceSourceKey(data as unknown as SleepSession);
         const key = `${provider}:${formatUtcDayKey(sleepDayMs)}`;
-        const existing = candidates.get(key);
-        const existingHasValidEndTime = existing
-            ? hasValidTrainingSleepEndTime(existing.startTimeMs, existing.endTimeMs)
-            : false;
-        const shouldKeepExisting = existing
-            && (
-                existing.durationSeconds > durationSeconds
-                || (existing.durationSeconds === durationSeconds
-                    && existing.overnightHrvMs !== null
-                    && overnightHrvMs === null)
-                || (existing.durationSeconds === durationSeconds
-                    && (existing.overnightHrvMs !== null) === (overnightHrvMs !== null)
-                    && existing.timezoneOffsetSeconds !== null
-                    && timezoneOffsetSeconds === null)
-                || (existing.durationSeconds === durationSeconds
-                    && (existing.overnightHrvMs !== null) === (overnightHrvMs !== null)
-                    && (existing.timezoneOffsetSeconds !== null) === (timezoneOffsetSeconds !== null)
-                    && existingHasValidEndTime
-                    && !hasValidEndTime)
-                || (existing.durationSeconds === durationSeconds
-                    && (existing.overnightHrvMs !== null) === (overnightHrvMs !== null)
-                    && (existing.timezoneOffsetSeconds !== null) === (timezoneOffsetSeconds !== null)
-                    && existingHasValidEndTime === hasValidEndTime
-                    && existing.startTimeMs <= startTimeMs)
-            );
-        if (shouldKeepExisting) {
-            return;
-        }
-        candidates.set(key, {
-            accountNightKey,
+        const hasCanonicalNightIdentity = provider !== SLEEP_PROVIDERS.SuuntoApp
+            || isIdentifiedSleepEvidenceSourceKey(provider, sourceKey);
+        const candidate: TrainingSleepNightCandidate = {
+            id: doc.id,
+            sourceKey,
             provider,
             sleepDayMs,
             durationSeconds,
             startTimeMs,
             endTimeMs,
             timezoneOffsetSeconds,
-            overnightHrvMs,
-            hrvSourceKey: sleepHrvSourceKey(data as unknown as SleepSession),
-        });
+            overnightHrvMs: hasCanonicalNightIdentity ? overnightHrvMs : null,
+            hrvSampleCount: hasCanonicalNightIdentity ? toFiniteNumber(vitals.hrvSampleCount) : null,
+            hrvSourceKey: hasCanonicalNightIdentity
+                ? sleepHrvSourceKey(data as unknown as SleepSession)
+                : undefined,
+        };
+        candidateGroups.set(key, [...(candidateGroups.get(key) || []), candidate]);
     });
 
-    return [...candidates.values()].map((night): ResolvedTrainingSleepNight => {
-        const hrv = aggregateNightlyHrvEvidence(hrvByAccountNight.get(night.accountNightKey) || []);
-        return {
+    return [...candidateGroups.values()].flatMap((group): ResolvedTrainingSleepNight[] => {
+        const canonicalCandidates = group[0]?.provider === SLEEP_PROVIDERS.SuuntoApp
+            ? canonicalizeTrainingSuuntoSleepCandidates(group)
+            : group;
+        const validCandidates = canonicalCandidates.filter(candidate => (
+            candidate.durationSeconds >= DERIVED_TRAINING_RECOVERY_MIN_VALID_SLEEP_SECONDS
+            && candidate.durationSeconds <= DERIVED_TRAINING_RECOVERY_MAX_VALID_SLEEP_SECONDS
+        ));
+        if (!validCandidates.length) return [];
+        const night = validCandidates.reduce((selected, candidate) => (
+            keepExistingTrainingSleepCandidate(selected, candidate) ? selected : candidate
+        ));
+        const hrv = night.provider === SLEEP_PROVIDERS.SuuntoApp
+            ? { averageHrvMs: night.overnightHrvMs, hrvSourceKey: night.hrvSourceKey }
+            : aggregateNightlyHrvEvidence(group.filter(candidate => candidate.sourceKey === night.sourceKey).map(candidate => ({
+                averageHrvMs: candidate.overnightHrvMs,
+                hrvSampleCount: candidate.hrvSampleCount,
+                hrvSourceKey: candidate.hrvSourceKey,
+            })));
+        return [{
             provider: night.provider,
             sleepDayMs: night.sleepDayMs,
             durationSeconds: night.durationSeconds,
@@ -3701,8 +3694,77 @@ function resolveTrainingSleepNights(
                 : resolveLocalClockMinutes(night.endTimeMs, night.timezoneOffsetSeconds),
             overnightHrvMs: hrv.averageHrvMs,
             hrvSourceKey: hrv.hrvSourceKey,
-        };
+        }];
     });
+}
+
+function keepExistingTrainingSleepCandidate(
+    existing: TrainingSleepNightCandidate,
+    candidate: TrainingSleepNightCandidate,
+): boolean {
+    const existingHasValidEndTime = hasValidTrainingSleepEndTime(existing.startTimeMs, existing.endTimeMs);
+    const candidateHasValidEndTime = hasValidTrainingSleepEndTime(candidate.startTimeMs, candidate.endTimeMs);
+    return existing.durationSeconds > candidate.durationSeconds
+        || (existing.durationSeconds === candidate.durationSeconds
+            && existing.overnightHrvMs !== null && candidate.overnightHrvMs === null)
+        || (existing.durationSeconds === candidate.durationSeconds
+            && (existing.overnightHrvMs !== null) === (candidate.overnightHrvMs !== null)
+            && existing.timezoneOffsetSeconds !== null && candidate.timezoneOffsetSeconds === null)
+        || (existing.durationSeconds === candidate.durationSeconds
+            && (existing.overnightHrvMs !== null) === (candidate.overnightHrvMs !== null)
+            && (existing.timezoneOffsetSeconds !== null) === (candidate.timezoneOffsetSeconds !== null)
+            && existingHasValidEndTime && !candidateHasValidEndTime)
+        || (existing.durationSeconds === candidate.durationSeconds
+            && (existing.overnightHrvMs !== null) === (candidate.overnightHrvMs !== null)
+            && (existing.timezoneOffsetSeconds !== null) === (candidate.timezoneOffsetSeconds !== null)
+            && existingHasValidEndTime === candidateHasValidEndTime
+            && (existing.startTimeMs < candidate.startTimeMs
+                || (existing.startTimeMs === candidate.startTimeMs && existing.id.localeCompare(candidate.id) <= 0)));
+}
+
+function canonicalizeTrainingSuuntoSleepCandidates(
+    candidates: readonly TrainingSleepNightCandidate[],
+): TrainingSleepNightCandidate[] {
+    const sourceGroups = new Map<string, TrainingSleepNightCandidate[]>();
+    for (const candidate of candidates) {
+        const sourceGroupKey = isIdentifiedSleepEvidenceSourceKey(candidate.provider, candidate.sourceKey)
+            ? candidate.sourceKey
+            : candidate.id;
+        sourceGroups.set(sourceGroupKey, [...(sourceGroups.get(sourceGroupKey) || []), candidate]);
+    }
+    return [...sourceGroups.values()].flatMap(sourceGroup => (
+        partitionSleepNightFragments(SLEEP_PROVIDERS.SuuntoApp, sourceGroup)
+            .map(aggregateTrainingSuuntoSleepCandidateGroup)
+    ));
+}
+
+function aggregateTrainingSuuntoSleepCandidateGroup(
+    candidates: readonly TrainingSleepNightCandidate[],
+): TrainingSleepNightCandidate {
+    if (candidates.length === 1) return candidates[0];
+    const sorted = [...candidates].sort((left, right) => left.startTimeMs - right.startTimeMs
+        || (left.endTimeMs ?? 0) - (right.endTimeMs ?? 0) || left.id.localeCompare(right.id));
+    const byRecency = [...sorted].sort((left, right) => (left.endTimeMs ?? 0) - (right.endTimeMs ?? 0)
+        || left.startTimeMs - right.startTimeMs || left.id.localeCompare(right.id));
+    const latest = byRecency[byRecency.length - 1];
+    const endTimes = sorted.flatMap(candidate => candidate.endTimeMs === null ? [] : [candidate.endTimeMs]);
+    const timezoneOffsets = new Set(sorted.map(candidate => candidate.timezoneOffsetSeconds));
+    const hrv = aggregateNightlyHrvEvidence(sorted.map(candidate => ({
+        averageHrvMs: candidate.overnightHrvMs,
+        hrvSampleCount: candidate.hrvSampleCount,
+        hrvSourceKey: candidate.hrvSourceKey,
+    })), { requireEveryPoint: true });
+    return {
+        ...latest,
+        id: sorted.map(candidate => candidate.id).join('|'),
+        durationSeconds: sorted.reduce((total, candidate) => total + candidate.durationSeconds, 0),
+        startTimeMs: Math.min(...sorted.map(candidate => candidate.startTimeMs)),
+        endTimeMs: endTimes.length === sorted.length ? Math.max(...endTimes) : null,
+        timezoneOffsetSeconds: timezoneOffsets.size === 1 ? sorted[0].timezoneOffsetSeconds : null,
+        overnightHrvMs: hrv.averageHrvMs,
+        hrvSampleCount: hrv.hrvSampleCount ?? null,
+        hrvSourceKey: hrv.hrvSourceKey,
+    };
 }
 
 function resolveTrainingReadinessSleepEvidence(
@@ -3719,14 +3781,18 @@ function resolveTrainingReadinessSleepEvidence(
             ? data.source as Record<string, unknown>
             : {};
         const provider = normalizeSleepProvider(source.provider);
-        const startTimeMs = toFiniteNumber(data.startTimeMs);
+        const storedStartTimeMs = toFiniteNumber(data.startTimeMs);
         const endTimeMs = toFiniteNumber(data.endTimeMs);
         const sleepDayMs = endTimeMs === null
             ? null
             : resolveTrainingReadinessSleepDayMs(data, provider, endTimeMs);
-        if (!provider || sleepDayMs === null || startTimeMs === null || endTimeMs === null || endTimeMs <= startTimeMs) {
+        if (!provider || sleepDayMs === null || storedStartTimeMs === null
+            || endTimeMs === null || endTimeMs <= storedStartTimeMs) {
             return;
         }
+        const startTimeMs = provider === SLEEP_PROVIDERS.SuuntoApp
+            ? resolveSleepEffectiveStartTimeMs(data as unknown as SleepSession)
+            : storedStartTimeMs;
         const storedDurationSeconds = toFiniteNumber(data.durationSeconds);
         const durationSeconds = storedDurationSeconds !== null && storedDurationSeconds > 0
             ? Math.floor(storedDurationSeconds)

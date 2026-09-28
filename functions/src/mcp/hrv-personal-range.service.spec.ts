@@ -15,7 +15,8 @@ const input: HrvRangeInput = { uid: 'owner', scopes: ['health:read', 'sleep:read
 function reads(count = 70): HrvRangeReads {
   const documents = Array.from({ length: count }, (_, i) => {
     const time = end - i * DAY;
-    return { cursor: `private-${i}`, data: { endTimeMs: time, sleepDate: new Date(time).toISOString().slice(0, 10),
+    return { cursor: `private-${i}`, data: { startTimeMs: time - (8 * 60 * 60 * 1000), endTimeMs: time,
+      durationSeconds: 8 * 60 * 60, sleepDate: new Date(time).toISOString().slice(0, 10),
       source: { provider: 'SuuntoApp', providerUserId: 'private-account', callbackURL: 'private-url' },
       vitals: { averageHrvMs: 40 + i % 5 }, private: 'private-data' } };
   });
@@ -27,7 +28,8 @@ function reads(count = 70): HrvRangeReads {
 }
 describe('MCP shared HRV personal range', () => {
   it('reads the required canonical duration alongside Sports Lib-only HRV through the Firestore mask', async () => {
-    const encoded = encodeSleepSessionSportsLibData({ durationSeconds: 28800, vitals: { averageHrvMs: 42, overnightHrvMs: 44 } } as SleepSession);
+    const encoded = encodeSleepSessionSportsLibData({ durationSeconds: 28800,
+      vitals: { averageHrvMs: 42, hrvSampleCount: 96, overnightHrvMs: 44 } } as SleepSession);
     const selectedMetrics: Record<string, unknown> = {};
     const query = {
       where: vi.fn().mockReturnThis(), orderBy: vi.fn().mockReturnThis(), limit: vi.fn().mockReturnThis(),
@@ -40,7 +42,8 @@ describe('MCP shared HRV personal range', () => {
         return query;
       }),
       get: vi.fn(async () => ({ docs: [{ data: () => ({
-        endTimeMs: end, sleepDate: '2026-09-10', source: { provider: 'SuuntoApp', providerUserId: 'private-account' },
+        startTimeMs: end - (8 * 60 * 60 * 1000), endTimeMs: end, sleepDate: '2026-09-10',
+        source: { provider: 'SuuntoApp', providerUserId: 'private-account' },
         sportsLibData: { schemaVersion: encoded.sportsLibData!.schemaVersion, metrics: selectedMetrics },
       }) }] })),
     };
@@ -51,6 +54,7 @@ describe('MCP shared HRV personal range', () => {
     expect(result.excludedValues).toBe(0);
     expect(result.series.map(series => series.readings[0].value)).toEqual([42, 44]);
     expect(selectedMetrics).toHaveProperty(SLEEP_SPORTS_LIB_METRIC_FIELDS.Duration);
+    expect(selectedMetrics).toHaveProperty(SLEEP_SPORTS_LIB_METRIC_FIELDS.HrvSampleCount);
     expect(JSON.stringify(result)).not.toMatch(/duration|private-account|sportsLibData/);
   });
   it('keeps HRV in milliseconds with non-default unit preferences', async () => {
@@ -64,7 +68,8 @@ describe('MCP shared HRV personal range', () => {
     const deps = reads(0);
     vi.mocked(deps.fetchPage).mockImplementation(async (_uid, source) => source === 'health' ? []
       : Array.from({ length: 20 }, (_, i) => ({ cursor: i + 1, data: {
-        source: { provider: 'SuuntoApp', providerUserId: 'secret' }, endTimeMs: end - (i + 8) * DAY,
+        source: { provider: 'SuuntoApp', providerUserId: 'secret' },
+        startTimeMs: end - (i + 8) * DAY - (8 * 60 * 60 * 1000), endTimeMs: end - (i + 8) * DAY,
         sleepDate: new Date(end - (i + 8) * DAY).toISOString().slice(0, 10), vitals: { averageHrvMs: 40 + i % 3 },
       } })));
     const result = await queryHrvPersonalRange(input, deps);
@@ -76,7 +81,8 @@ describe('MCP shared HRV personal range', () => {
   it('keeps Health accounts and Sleep separate and excludes spot HRV and nulls', async () => {
     const deps = reads(0);
     vi.mocked(deps.fetchPage).mockImplementation(async (_uid, source) => source === 'sleep' ? [
-      { cursor: 's', data: { endTimeMs: end, sleepDate: '2026-09-10', source: { provider: 'SuuntoApp', providerUserId: 'secret' },
+      { cursor: 's', data: { startTimeMs: end - (8 * 60 * 60 * 1000), endTimeMs: end,
+        sleepDate: '2026-09-10', source: { provider: 'SuuntoApp', providerUserId: 'secret' },
         vitals: { averageHrvMs: null, overnightHrvMs: 45 } } },
     ] : ['first-account', 'second-account'].map((accountKey, i) => ({ cursor: accountKey, data: {
       userID: 'owner', schemaVersion: 1, calendarDate: '2026-09-10', endTimeMs: end,
@@ -107,6 +113,39 @@ describe('MCP shared HRV personal range', () => {
     expect(result.series[0].readings[0].display?.unit).toBe('ms');
     expect(MCP_HRV_RANGE_SCHEMA.safeParse({ ...result, sourceKey: 'private' }).success).toBe(false);
     expect(MCP_HRV_RANGE_SCHEMA.safeParse({ ...result, series: [{ ...result.series[0], accountKey: 'private' }] }).success).toBe(false);
+  });
+  it('reconciles adjacent Suunto HRV fragments and withholds unidentified fragments', async () => {
+    const deps = reads(0);
+    const source = { provider: 'SuuntoApp', providerUserId: 'private-account' };
+    vi.mocked(deps.fetchPage).mockImplementation(async (_uid, requestedSource) => requestedSource === 'health' ? [] : [
+      { cursor: 'part-1', data: {
+        source: { ...source, sourceSessionKey: 'part-1' }, sleepDate: '2026-09-10',
+        startTimeMs: Date.parse('2026-09-09T18:57:00.000Z'), endTimeMs: Date.parse('2026-09-09T23:54:00.000Z'),
+        durationSeconds: 15_840, isNap: false,
+        providerFields: { suunto: { SleepOnsetLatencyDuration: 360 } },
+        vitals: { averageHrvMs: 29, hrvSampleCount: 46 },
+      } },
+      { cursor: 'part-2', data: {
+        source: { ...source, sourceSessionKey: 'part-2' }, sleepDate: '2026-09-10',
+        startTimeMs: Date.parse('2026-09-10T00:01:00.000Z'), endTimeMs: Date.parse('2026-09-10T04:00:00.000Z'),
+        durationSeconds: 13_320, isNap: false,
+        providerFields: { suunto: { SleepOnsetLatencyDuration: 480 } },
+        vitals: { averageHrvMs: 40, hrvSampleCount: 35 },
+      } },
+      { cursor: 'unidentified', data: {
+        source: { provider: 'SuuntoApp', sourceSessionKey: 'unidentified' }, sleepDate: '2026-09-09',
+        startTimeMs: Date.parse('2026-09-08T22:00:00.000Z'), endTimeMs: Date.parse('2026-09-09T06:00:00.000Z'),
+        durationSeconds: 28_800, isNap: false, vitals: { averageHrvMs: 99, hrvSampleCount: 80 },
+      } },
+    ]);
+
+    const result = await queryHrvPersonalRange(input, deps);
+
+    expect(result.series).toHaveLength(1);
+    expect(result.series[0].semanticVariant).toBe('sleep_session_average_hrv');
+    expect(result.series[0].readings).toEqual([
+      expect.objectContaining({ date: '2026-09-10', value: ((29 * 46) + (40 * 35)) / 81 }),
+    ]);
   });
   it.each([{ scopes: [] }, { scopes: ['health:read'] }, { scopes: ['sleep:read'] }])('rejects missing permissions before reads: $scopes', async ({ scopes }) => {
     const deps = reads();
