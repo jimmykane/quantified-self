@@ -553,9 +553,35 @@
   .activity-calendar-day--today .activity-calendar-day-number {
     background: transparent;
     color: var(--mat-sys-on-surface);
-    font-weight: 700;
-    text-decoration: underline;
-    text-underline-offset: 4px;
+    font-weight: 600;
+  }
+  .activity-calendar-today-corner {
+    position: absolute;
+    top: 10px;
+    right: 8px;
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    color: var(--mat-sys-primary);
+    pointer-events: none;
+  }
+  .activity-calendar-today-label { font: var(--mat-sys-label-small); }
+  .activity-calendar-today-dot {
+    position: relative;
+    display: block;
+    width: 6px;
+    height: 6px;
+    flex: 0 0 6px;
+    border-radius: 50%;
+    background: currentColor;
+  }
+  .activity-calendar-today-dot::after {
+    position: absolute;
+    inset: -1px;
+    border: 1px solid currentColor;
+    border-radius: 50%;
+    content: '';
+    animation: activity-calendar-today-pulse 2.4s ease-out infinite;
   }
   .activity-calendar-day-number,
   &.activity-calendar--compact .activity-calendar-day-number {
@@ -679,6 +705,15 @@
   }
 }
 
+@keyframes activity-calendar-today-pulse {
+  0% { opacity: 0.7; transform: scale(1); }
+  75%, 100% { opacity: 0; transform: scale(2.2); }
+}
+
+@container (max-width: 600px) {
+  .activity-calendar--calm-month .activity-calendar-today-label { display: none; }
+}
+
 .activity-calendar--calm-month.activity-calendar--dashboard-context {
   .activity-calendar-day { min-height: 64px; gap: 3px; padding: 5px; }
   .activity-calendar-day-number { width: 21px; height: 21px; flex-basis: 21px; }
@@ -708,6 +743,8 @@
 
 @container (max-width: 540px) {
   .activity-calendar--calm-month {
+    // Keep the pulse ring inside the clipped phone-sized day cell.
+    .activity-calendar-today-corner { top: 8px; right: 8px; }
     .activity-calendar-day,
     &.activity-calendar--compact .activity-calendar-day {
       min-height: 52px;
@@ -826,6 +863,11 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .activity-calendar-today-dot::after {
+    animation: none;
+    opacity: 0.45;
+    transform: scale(2.2);
+  }
   .activity-calendar-day-button {
     scroll-behavior: auto;
   }

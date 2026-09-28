@@ -10,6 +10,29 @@ import { calendarTimelineNotesByDate } from '../../../helpers/calendar-timeline-
 import type { PlannedWorkoutCalendarOverlay } from '../../../helpers/planned-workout-calendar.helper';
 
 describe('ActivityCalendarGridComponent', () => {
+  it('distinguishes today from selection in every shared month surface', async () => {
+    const fixture = await renderGrid('month', false, []);
+    fixture.componentRef.setInput('calmMonth', true);
+    fixture.componentRef.setInput('selectedDateKey', '2026-08-04');
+    fixture.detectChanges();
+    const today = fixture.nativeElement.querySelector('.activity-calendar-day--today') as HTMLButtonElement;
+    const selected = fixture.nativeElement.querySelector('.activity-calendar-day--selected') as HTMLButtonElement;
+    expect(today).not.toBe(selected);
+    expect(today.getAttribute('aria-label')).toMatch(/^Today\. /);
+    expect(today.querySelector('.activity-calendar-today-corner')?.getAttribute('aria-hidden')).toBe('true');
+    expect(today.querySelector('.activity-calendar-today-dot')).toBeTruthy();
+    expect(fixture.nativeElement.querySelectorAll('.activity-calendar-today-corner')).toHaveLength(1);
+
+    fixture.componentRef.setInput('compact', true);
+    fixture.componentRef.setInput('fillHeight', false);
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('.activity-calendar--picker .activity-calendar-day--today .activity-calendar-today-dot')).toBeTruthy();
+
+    fixture.componentRef.setInput('calmMonth', false);
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('.activity-calendar-today-corner')).toBeNull();
+    expect(fixture.nativeElement.querySelector('.activity-calendar-day--today .activity-calendar-day-number')).toBeTruthy();
+  });
   it('shows calm month dots and one note cue only when opted in', async () => {
     const fixture = await renderGrid('month', false, [
       createEvent('run-1', new Date(2026, 7, 3, 8), ActivityTypes.Running, 3600),
