@@ -67,7 +67,6 @@ interface SemanticFingerprintResult {
 async function buildSemanticFingerprint(fileBuffer: Buffer): Promise<SemanticFingerprintResult> {
   try {
     const event = await EventImporterFIT.getFromArrayBuffer(toArrayBuffer(fileBuffer), createParsingOptions());
-    const activityTypes = event.getActivityTypesAsArray();
     const activities = event.getActivities().map(activity => ({
       start: epochSecond(activity.startDate),
       end: epochSecond(activity.endDate),
@@ -75,6 +74,20 @@ async function buildSemanticFingerprint(fileBuffer: Buffer): Promise<SemanticFin
       duration: finiteRounded(activity.getDuration()?.getValue?.()),
       distance: finiteRounded(activity.getDistance()?.getValue?.()),
     }));
+    let activityTypes: string[] = [];
+    try {
+      const parsedActivityTypes = event.getActivityTypesAsArray();
+      activityTypes = Array.isArray(parsedActivityTypes)
+        ? parsedActivityTypes.filter((activityType): activityType is string => typeof activityType === 'string')
+        : [];
+    } catch (error) {
+      // Type extraction is optional metadata for destination correction. It
+      // must not disable the semantic receipt used for echo suppression.
+      logger.warn('[ActivitySync] Could not derive activity types from a parsed outbound FIT.', {
+        ...getActivityParserDiagnostics(error, fileBuffer, 'fit'),
+        fallback: 'provider_inference',
+      });
+    }
     if (activities.length === 0 || activities.every(activity => activity.start === null)) {
       return { fingerprintId: null, activityTypes };
     }

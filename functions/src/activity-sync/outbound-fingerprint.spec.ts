@@ -164,6 +164,24 @@ describe('activity sync outbound fingerprints', () => {
     );
   });
 
+  it('keeps the semantic receipt when optional activity-type extraction fails', async () => {
+    mocks.importer.mockResolvedValueOnce({
+      ...parsedEvent(),
+      getActivityTypesAsArray: () => {
+        throw new Error('Activity type extraction failed');
+      },
+    });
+
+    const result = await buildActivitySyncOutboundFingerprintIds(Buffer.from('valid-fit'));
+
+    expect(result.fingerprintIds).toHaveLength(2);
+    expect(result.activityTypes).toEqual([]);
+    expect(mocks.loggerWarn).toHaveBeenCalledWith(
+      '[ActivitySync] Could not derive activity types from a parsed outbound FIT.',
+      expect.objectContaining({ fallback: 'provider_inference' }),
+    );
+  });
+
   it('writes receipts under the user root before provider delivery', async () => {
     const result = await recordActivitySyncOutboundFingerprint({
       userID: 'user-1',

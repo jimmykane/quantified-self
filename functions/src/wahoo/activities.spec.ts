@@ -509,6 +509,102 @@ describe('Wahoo activity uploads', () => {
       .toEqual(['POST', 'PUT']);
   });
 
+  it('retains direct-upload resume state when reconnect is required before the correction PUT', async () => {
+    mocks.requestWahooAPI.mockResolvedValueOnce({
+      data: { token: 'upload-direct-reconnect', status: 'complete', workout_id: 485861658 },
+    });
+    mocks.assertWahooConnectionAvailable
+      .mockResolvedValueOnce(undefined)
+      .mockResolvedValueOnce(undefined)
+      .mockResolvedValueOnce(undefined)
+      .mockRejectedValueOnce(Object.assign(new Error('Reconnect Wahoo.'), {
+        name: 'WahooReconnectRequiredError',
+      }));
+
+    await expect(importActivityToWahooAPI({
+      auth: { uid: 'user-1' },
+      app: { appId: 'test-app' },
+      data: { file: Buffer.from('FIT').toString('base64') },
+    } as never)).rejects.toMatchObject({
+      code: 'unauthenticated',
+      details: {
+        retryMode: 'resume',
+        resumeUploadId: 'upload-direct-reconnect',
+        expectedWorkoutTypeId: 9,
+      },
+    });
+
+    expect(mocks.requestWahooAPI.mock.calls.map(([, , request]) => request?.method || 'GET'))
+      .toEqual(['POST']);
+  });
+
+  it('retains direct-upload resume state during correction token-refresh contention', async () => {
+    mocks.requestWahooAPI.mockResolvedValueOnce({
+      data: { token: 'upload-direct-contention', status: 'complete', workout_id: 485861659 },
+    });
+    mocks.getTokenData
+      .mockResolvedValueOnce({
+        serviceName: ServiceNames.WahooAPI,
+        accessToken: 'access-token',
+        wahooUserID: 'wahoo-user',
+        scope: 'user_read workouts_read workouts_write offline_data',
+      })
+      .mockRejectedValueOnce(Object.assign(new Error('Refresh in progress.'), {
+        name: 'TokenRefreshInProgressError',
+      }));
+
+    await expect(importActivityToWahooAPI({
+      auth: { uid: 'user-1' },
+      app: { appId: 'test-app' },
+      data: { file: Buffer.from('FIT').toString('base64') },
+    } as never)).rejects.toMatchObject({
+      code: 'unavailable',
+      details: {
+        retryMode: 'resume',
+        resumeUploadId: 'upload-direct-contention',
+        expectedWorkoutTypeId: 9,
+      },
+    });
+
+    expect(mocks.requestWahooAPI.mock.calls.map(([, , request]) => request?.method || 'GET'))
+      .toEqual(['POST']);
+  });
+
+  it('retains direct-upload resume state when refreshed credentials lack workout access', async () => {
+    mocks.requestWahooAPI.mockResolvedValueOnce({
+      data: { token: 'upload-direct-scope', status: 'complete', workout_id: 485861660 },
+    });
+    mocks.getTokenData
+      .mockResolvedValueOnce({
+        serviceName: ServiceNames.WahooAPI,
+        accessToken: 'access-token',
+        wahooUserID: 'wahoo-user',
+        scope: 'user_read workouts_read workouts_write offline_data',
+      })
+      .mockResolvedValueOnce({
+        serviceName: ServiceNames.WahooAPI,
+        accessToken: 'replacement-access-token',
+        wahooUserID: 'wahoo-user',
+        scope: 'user_read workouts_read offline_data',
+      });
+
+    await expect(importActivityToWahooAPI({
+      auth: { uid: 'user-1' },
+      app: { appId: 'test-app' },
+      data: { file: Buffer.from('FIT').toString('base64') },
+    } as never)).rejects.toMatchObject({
+      code: 'permission-denied',
+      details: {
+        retryMode: 'resume',
+        resumeUploadId: 'upload-direct-scope',
+        expectedWorkoutTypeId: 9,
+      },
+    });
+
+    expect(mocks.requestWahooAPI.mock.calls.map(([, , request]) => request?.method || 'GET'))
+      .toEqual(['POST']);
+  });
+
   it('returns a terminal direct-upload result when Wahoo omits the completed workout ID', async () => {
     mocks.requestWahooAPI.mockResolvedValueOnce({
       data: { token: 'upload-direct-no-workout', status: 'complete' },

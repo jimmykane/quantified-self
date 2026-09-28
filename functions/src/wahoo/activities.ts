@@ -462,7 +462,34 @@ function toWahooActivityTypeCorrectionError(
       expectedWorkoutTypeId,
     );
   }
-  if (isTerminalServiceAuthError(error)) {
+  if (isProviderOperationError(error)) {
+    throw new WahooActivityTypeCorrectionError({
+      serviceName: ServiceNames.WahooAPI,
+      operation: 'activity_upload_status',
+      disposition: error.disposition,
+      retryMode: error.retryMode,
+      code: error.code,
+      message: error.message,
+      statusCode: error.statusCode,
+      retryAfterSeconds: error.retryAfterSeconds,
+      providerOperationId: uploadId,
+      dlqContext: error.dlqContext,
+    }, expectedWorkoutTypeId);
+  }
+  const callableCode = error instanceof HttpsError ? error.code : undefined;
+  const rawLifecycleStatusCode = error && typeof error === 'object'
+    ? (error as { statusCode?: unknown }).statusCode
+    : undefined;
+  const lifecycleStatusCode = typeof rawLifecycleStatusCode === 'number'
+    && Number.isFinite(rawLifecycleStatusCode)
+    && rawLifecycleStatusCode > 0
+    ? rawLifecycleStatusCode
+    : undefined;
+  if (
+    isWahooReconnectRequiredError(error)
+    || isTerminalServiceAuthError(error)
+    || callableCode === 'unauthenticated'
+  ) {
     throw new WahooActivityTypeCorrectionError({
       serviceName: ServiceNames.WahooAPI,
       operation: 'activity_upload_status',
@@ -470,9 +497,47 @@ function toWahooActivityTypeCorrectionError(
       retryMode: 'none',
       code: 'unauthenticated',
       message: 'Reconnect Wahoo before updating this accepted activity.',
-      statusCode: error.statusCode || undefined,
+      statusCode: lifecycleStatusCode,
       providerOperationId: uploadId,
       dlqContext: 'WAHOO_ACTIVITY_TYPE_CORRECTION_AUTH_RECONCILIATION_REQUIRED',
+    }, expectedWorkoutTypeId);
+  }
+  if (error instanceof WahooWorkoutWriteScopeRequiredError || callableCode === 'permission-denied') {
+    throw new WahooActivityTypeCorrectionError({
+      serviceName: ServiceNames.WahooAPI,
+      operation: 'activity_upload_status',
+      disposition: 'permission_required',
+      retryMode: 'none',
+      code: 'permission-denied',
+      message: 'Reconnect Wahoo and allow workout access before updating this accepted activity.',
+      providerOperationId: uploadId,
+      dlqContext: 'WAHOO_ACTIVITY_TYPE_CORRECTION_PERMISSION_RECONCILIATION_REQUIRED',
+    }, expectedWorkoutTypeId);
+  }
+  const retryableCallableError = callableCode === 'aborted'
+    || callableCode === 'deadline-exceeded'
+    || callableCode === 'resource-exhausted'
+    || callableCode === 'unavailable';
+  if (
+    isWahooRefreshBackoffError(error)
+    || isWahooRefreshContentionError(error)
+    || error instanceof UserDeletionGuardReadError
+    || retryableCallableError
+  ) {
+    throw new WahooActivityTypeCorrectionError({
+      serviceName: ServiceNames.WahooAPI,
+      operation: 'activity_upload_status',
+      disposition: 'retryable',
+      retryMode: 'resume',
+      code: callableCode === 'resource-exhausted' ? 'resource-exhausted' : 'unavailable',
+      message: callableCode === 'resource-exhausted'
+        ? 'Wahoo is rate-limiting workout updates. Please retry shortly.'
+        : 'Wahoo is temporarily unable to update the workout type. Please retry.',
+      retryAfterSeconds: isWahooRefreshBackoffError(error)
+        ? Math.max(0, Math.ceil((error.retryAt - Date.now()) / 1000))
+        : undefined,
+      providerOperationId: uploadId,
+      dlqContext: 'WAHOO_ACTIVITY_TYPE_CORRECTION_RETRY_EXHAUSTED',
     }, expectedWorkoutTypeId);
   }
   const statusCode = error instanceof WahooAPIRequestError ? error.statusCode : undefined;
@@ -529,7 +594,26 @@ function toWahooActivityTypeCorrectionError(
       dlqContext: 'WAHOO_ACTIVITY_TYPE_CORRECTION_REJECTED',
     }, expectedWorkoutTypeId);
   }
-  throw error;
+  const accountUnavailable = error instanceof WahooActivityUploadSkippedForDeletedUserError;
+  if (!accountUnavailable) {
+    logger.error('Could not complete a Wahoo activity type correction after upload acceptance.', {
+      error: getWahooErrorLogDetails(error),
+    });
+  }
+  throw new WahooActivityTypeCorrectionError({
+    serviceName: ServiceNames.WahooAPI,
+    operation: 'activity_upload_status',
+    disposition: 'permanent',
+    retryMode: 'none',
+    code: 'failed-precondition',
+    message: accountUnavailable
+      ? 'Account is being deleted or no longer exists.'
+      : 'Wahoo accepted the activity, but its type could not be updated. Check its status before trying again.',
+    providerOperationId: uploadId,
+    dlqContext: accountUnavailable
+      ? 'WAHOO_ACTIVITY_TYPE_CORRECTION_ACCOUNT_UNAVAILABLE'
+      : 'WAHOO_ACTIVITY_TYPE_CORRECTION_INTERNAL_RECONCILIATION_REQUIRED',
+  }, expectedWorkoutTypeId);
 }
 
 async function correctCompletedWahooActivityType(params: {
