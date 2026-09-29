@@ -24,6 +24,8 @@ const TARGET_LOADERS: Readonly<Record<string, ModuleLoader>> = Object.freeze({
     () => module.require('./events/event-tag-catalog.trigger') as FunctionModule,
   reconcileTrainingPlanCleanup:
     () => module.require('./training-plans/cleanup-worker') as FunctionModule,
+  reconcileTrainingBulkShift:
+    () => module.require('./training-plans/bulk-shift-worker') as FunctionModule,
 });
 
 export const OPTIMIZED_FUNCTION_TARGETS = Object.freeze(Object.keys(TARGET_LOADERS));

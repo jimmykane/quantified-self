@@ -149,6 +149,7 @@ export const FUNCTIONS_MANIFEST = {
     restoreTrainingScheduleRevision: { name: 'restoreTrainingScheduleRevision', region: 'europe-west2' },
     deleteTrainingPlan: { name: 'deleteTrainingPlan', region: 'europe-west2' },
     reconcileTrainingPlanCleanup: { name: 'reconcileTrainingPlanCleanup', region: 'europe-west2' },
+    reconcileTrainingBulkShift: { name: 'reconcileTrainingBulkShift', region: 'europe-west2' },
     processDerivedMetricsIngressTask: { name: 'processDerivedMetricsIngressTask', region: 'europe-west2' },
 } as const;
 

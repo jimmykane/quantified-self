@@ -578,10 +578,12 @@ packed Sports Lib package. That gate is tracked by GitHub issue #654 under epic 
   History readers cannot discover staged child chunks before that envelope exists. An exact retry or a browser reload
   with a replacement mutation ID for the same intent resumes the locked shift; both IDs receive receipts on commit.
   Other schedule mutations, restores, deletions, provider delivery, and MCP Training reads are fenced while the lock
-  exists. The existing five-minute cleanup scheduler also leases and resumes one due shift per invocation after a
-  timed-out callable, with bounded backoff and account-deletion fencing. Its scan failure cannot starve permanent-delete
-  cleanup. Deploy the `planDeletionLocks(nextAttemptAtMs, __name__)` collection-group index and unindexed `request`
-  field before enabling this worker. Inspect `[TrainingBulkShift] resume_failed` or `scan_failed` logs and the lock's
+  exists. The separate five-minute `reconcileTrainingBulkShift` scheduler leases and resumes one due shift per
+  invocation after a timed-out callable, with bounded backoff and account-deletion fencing. It scans up to 100 due
+  locks, skipping unclaimable deleted-account records so one orphan cannot block another owner's recovery. This worker
+  has its own runtime budget and cannot starve `reconcileTrainingPlanCleanup`'s permanent-deletion jobs. Deploy the
+  `planDeletionLocks(nextAttemptAtMs, __name__)` collection-group index and unindexed `request` field before enabling
+  this worker. Inspect `[TrainingBulkShift] resume_failed` or `scan_failed` logs and the lock's
   retry schedule if a shift remains pending; do not manually remove a lock without examining its revision and receipts.
   The canonical workout JSON and published 400-workout limit do not change.
 - A permanent workout or plan deletion creates a server-internal `trainingCleanupJobs` record in the same transaction

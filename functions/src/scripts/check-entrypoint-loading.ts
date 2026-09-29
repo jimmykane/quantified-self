@@ -11,7 +11,7 @@ const NO_TARGET = '__NO_TARGET__';
 // Exercise a property inherited from Object.prototype so the fallback check
 // also guards against accidental prototype-based routing.
 const UNKNOWN_TARGET = 'toString';
-const EXPECTED_FULL_EXPORT_COUNT = 165;
+const EXPECTED_FULL_EXPORT_COUNT = 166;
 const MARKETING_TARGETS = new Set([
   'listMarketingCampaigns',
   'saveMarketingCampaign',
@@ -44,6 +44,7 @@ interface DiscoveredEndpoint {
   platform?: string;
   region?: string[];
   availableMemoryMb?: number;
+  timeoutSeconds?: number;
   entryPoint?: string;
   secretEnvironmentVariables?: Array<{ key?: string }>;
   callableTrigger?: unknown;
@@ -252,8 +253,9 @@ async function check(): Promise<void> {
     if (target === 'projectEventTagCatalog') {
       assert(endpoint.availableMemoryMb === 256, `${target} memory configuration changed.`);
       assert(secretKeys.length === 0, `${target} secret bindings changed.`);
-    } else if (target === 'reconcileTrainingPlanCleanup') {
+    } else if (target === 'reconcileTrainingPlanCleanup' || target === 'reconcileTrainingBulkShift') {
       assert(endpoint.availableMemoryMb === 512, `${target} memory configuration changed.`);
+      assert(endpoint.timeoutSeconds === 300, `${target} timeout configuration changed.`);
       assert(secretKeys.length === 0, `${target} secret bindings changed.`);
       assert(endpoint.scheduleTrigger?.schedule === 'every 5 minutes'
         && endpoint.scheduleTrigger.timeZone === 'UTC', `${target} schedule changed.`);

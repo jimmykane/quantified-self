@@ -188,12 +188,16 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('400-workout Training muta
         expect(lockNextAttemptAtMs).toBeGreaterThanOrEqual(nowMs + BULK_SHIFT_LEASE_MS);
         expect(await reconcileTrainingBulkShifts(db, lockNextAttemptAtMs - 1))
             .toEqual({ scanned: 0, completed: 0, failed: 0 });
+        const deletedAccountUid = `large-${randomUUID()}`; uids.push(deletedAccountUid);
+        await db.collection('users').doc(deletedAccountUid).collection('trainingPlanState').doc('current')
+            .collection('planDeletionLocks').doc('_bulk_shift').set({ nextAttemptAtMs: nowMs });
         const concurrent = await Promise.all([
             reconcileTrainingBulkShifts(db, lockNextAttemptAtMs + 1),
             reconcileTrainingBulkShifts(db, lockNextAttemptAtMs + 1),
         ]);
         expect(concurrent.reduce((count, result) => count + result.completed, 0)).toBe(1);
         expect(concurrent.every(result => result.failed === 0)).toBe(true);
+        expect(concurrent.some(result => result.scanned >= 2)).toBe(true);
         expect((await stateRef.get()).data()).toMatchObject({ revision: 2 });
         expect((await workoutRef.get()).data()).toMatchObject({ localDate: '2026-10-03', revision: 2 });
         expect((await staged.get()).exists).toBe(true);

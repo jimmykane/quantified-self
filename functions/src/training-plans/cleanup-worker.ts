@@ -17,7 +17,6 @@ import {
 } from './cleanup-job-contract';
 import { cleanupDeletedPlanData, parseStoredDeleteResponse } from './delete-training-plan';
 import { trainingScheduleDeletionTombstoneDocumentId } from './persistence';
-import { reconcileTrainingBulkShifts } from './bulk-shift-worker';
 
 const SCAN_PAGE_SIZE = 25;
 const MAX_SCAN = 100;
@@ -172,16 +171,6 @@ export const reconcileTrainingPlanCleanup = onSchedule({
     memory: '512MiB',
     timeoutSeconds: 300,
 }, async () => {
-    const db = admin.firestore();
-    try {
-        const shifts = await reconcileTrainingBulkShifts(db);
-        if (shifts.scanned > 0) logger.info('[TrainingBulkShift]', shifts);
-    } catch (error) {
-        // A missing index or transient scan failure must not starve permanent-delete cleanup.
-        logger.warn('[TrainingBulkShift]', {
-            event: 'scan_failed', errorName: error instanceof Error ? error.name : 'UnknownError',
-        });
-    }
-    const result = await reconcileTrainingCleanupJobs(db);
+    const result = await reconcileTrainingCleanupJobs(admin.firestore());
     if (result.scanned > 0) logger.info('[TrainingCleanup]', result);
 });

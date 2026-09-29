@@ -1,5 +1,7 @@
 import * as admin from 'firebase-admin';
 import * as logger from 'firebase-functions/logger';
+import { onSchedule } from 'firebase-functions/v2/scheduler';
+import { FUNCTIONS_MANIFEST } from '../../../shared/functions-manifest';
 import { TRAINING_PLAN_DELETION_LOCKS_COLLECTION_ID } from '../../../shared/training-plans';
 import { getUserDeletionGuardStateInTransaction } from '../shared/user-deletion-guard';
 import {
@@ -10,6 +12,8 @@ import {
 } from './staged-shift';
 
 const MAX_RETRY_MS = 60 * 60 * 1000;
+const SCAN_PAGE_SIZE = 25;
+const MAX_SCAN = 100;
 
 function ownerFromLockPath(path: string): string | null {
     const segments = path.split('/');
@@ -60,32 +64,62 @@ export async function reconcileTrainingBulkShifts(
     db: admin.firestore.Firestore,
     nowMs = Date.now(),
 ): Promise<{ scanned: number; completed: number; failed: number }> {
-    const due = await db.collectionGroup(TRAINING_PLAN_DELETION_LOCKS_COLLECTION_ID)
-        .where('nextAttemptAtMs', '<=', nowMs).orderBy('nextAttemptAtMs').limit(1).get();
-    const snapshot = due.docs[0];
-    if (!snapshot) return { scanned: 0, completed: 0, failed: 0 };
-    try {
-        const completed = await processTrainingBulkShift(db, snapshot.ref, nowMs);
-        return { scanned: 1, completed: Number(completed), failed: 0 };
-    } catch (error) {
-        const uid = ownerFromLockPath(snapshot.ref.path);
-        if (uid) {
+    const due = db.collectionGroup(TRAINING_PLAN_DELETION_LOCKS_COLLECTION_ID)
+        .where('nextAttemptAtMs', '<=', nowMs).orderBy('nextAttemptAtMs');
+    let cursor: admin.firestore.QueryDocumentSnapshot | null = null;
+    let scanned = 0;
+    let failed = 0;
+    while (scanned < MAX_SCAN) {
+        const page = await (cursor ? due.startAfter(cursor) : due)
+            .limit(Math.min(SCAN_PAGE_SIZE, MAX_SCAN - scanned)).get();
+        if (page.empty) break;
+        for (const snapshot of page.docs) {
+            scanned += 1;
             try {
-                await db.runTransaction(async transaction => {
-                    if ((await getUserDeletionGuardStateInTransaction(db, transaction, uid, nowMs)).shouldSkip) return;
-                    const current = await transaction.get(snapshot.ref);
-                    if (current.exists && typeof current.data()?.nextAttemptAtMs === 'number'
-                        && current.data()!.nextAttemptAtMs <= nowMs) {
-                        transaction.update(snapshot.ref, { nextAttemptAtMs: nowMs + MAX_RETRY_MS });
+                if (await processTrainingBulkShift(db, snapshot.ref, nowMs)) {
+                    return { scanned, completed: 1, failed };
+                }
+            } catch (error) {
+                failed += 1;
+                const uid = ownerFromLockPath(snapshot.ref.path);
+                if (uid) {
+                    try {
+                        await db.runTransaction(async transaction => {
+                            if ((await getUserDeletionGuardStateInTransaction(db, transaction, uid, nowMs)).shouldSkip) return;
+                            const current = await transaction.get(snapshot.ref);
+                            if (current.exists && typeof current.data()?.nextAttemptAtMs === 'number'
+                                && current.data()!.nextAttemptAtMs <= nowMs) {
+                                transaction.update(snapshot.ref, { nextAttemptAtMs: nowMs + MAX_RETRY_MS });
+                            }
+                        });
+                    } catch {
+                        // Preserve the record for operator investigation if even deferral fails.
                     }
+                }
+                logger.warn('[TrainingBulkShift]', {
+                    event: 'resume_failed', errorName: error instanceof Error ? error.name : 'UnknownError',
                 });
-            } catch {
-                // Preserve the record for operator investigation if even deferral fails.
             }
         }
-        logger.warn('[TrainingBulkShift]', {
-            event: 'resume_failed', errorName: error instanceof Error ? error.name : 'UnknownError',
-        });
-        return { scanned: 1, completed: 0, failed: 1 };
+        cursor = page.docs[page.docs.length - 1];
+        if (page.size < SCAN_PAGE_SIZE) break;
     }
+    return { scanned, completed: 0, failed };
 }
+
+export const reconcileTrainingBulkShift = onSchedule({
+    schedule: 'every 5 minutes',
+    timeZone: 'UTC',
+    region: FUNCTIONS_MANIFEST.reconcileTrainingBulkShift.region,
+    memory: '512MiB',
+    timeoutSeconds: 300,
+}, async () => {
+    try {
+        const result = await reconcileTrainingBulkShifts(admin.firestore());
+        if (result.scanned > 0) logger.info('[TrainingBulkShift]', result);
+    } catch (error) {
+        logger.warn('[TrainingBulkShift]', {
+            event: 'scan_failed', errorName: error instanceof Error ? error.name : 'UnknownError',
+        });
+    }
+});
