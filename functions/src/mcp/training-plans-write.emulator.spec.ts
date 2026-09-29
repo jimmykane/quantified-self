@@ -210,6 +210,26 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Training MCP write propos
     expect((await planRef.get()).get('revision')).toBe(1);
   }, 120_000);
 
+  it('does not revive an expired staged approval on a late direct retry', async () => {
+    const { user, planRef, preview } = await prepareOversizedShift();
+    const revisionRef = await interruptOversizedShift(planRef, preview.proposalRef);
+    const proposal = (await user.collection('trainingMcpProposals').get()).docs[0];
+    const approvedAtMs = deps.now();
+    await proposal.ref.update({ status: 'applying', leaseUntilMs: approvedAtMs + 30_000,
+      expiresAtMs: approvedAtMs + 60_000 });
+    deps = { ...deps, now: () => approvedAtMs + 120_000 };
+    const lockRef = user.collection('trainingPlanState').doc('current')
+      .collection('planDeletionLocks').doc('_bulk_shift');
+
+    await expect(applyTrainingChanges({ uid, connectionId: 'connection', scopes,
+      arguments: { proposalRef: preview.proposalRef, permissionMode: 'schedule' } }, deps))
+      .rejects.toThrow('lost its permission or expired');
+    expect((await lockRef.get()).exists).toBe(false);
+    expect((await revisionRef.collection('chunks').limit(1).get()).empty).toBe(true);
+    expect((await planRef.get()).get('revision')).toBe(1);
+    expect((await proposal.ref.get()).get('cancelledAtMs')).toBeTypeOf('number');
+  }, 120_000);
+
   it('cancels unpublished MCP shift staging when its stored proposal is malformed', async () => {
     const { user, planRef, preview } = await prepareOversizedShift();
     const revisionRef = await interruptOversizedShift(planRef, preview.proposalRef);
@@ -266,6 +286,30 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Training MCP write propos
       .toMatchObject({ revision: 2, localDate: '2026-10-03' });
     expect((await revisionRef.collection('chunks').get()).empty).toBe(false);
     expect((await planRef.collection('revisions').get()).size).toBe(1);
+  }, 120_000);
+
+  it('resumes its own staged lock on a direct approved retry before the worker runs', async () => {
+    const { user, planRef, preview } = await prepareOversizedShift('connection', scopes, true);
+    const otherPreview = await previewTrainingChanges({ uid, connectionId: 'connection', scopes,
+      arguments: { expectedScheduleRevision: 1, changes: [{ kind: 'rename-plan',
+        plan: { ref: encodeOpaqueValue('training_read', { kind: 'plan', id: 'bulk-plan', createdAtMs: 1 },
+          uid, 'connection') }, name: 'Unrelated proposal' }] } }, deps);
+    const revisionRef = await interruptOversizedShift(planRef, preview.proposalRef);
+    const lockRef = user.collection('trainingPlanState').doc('current')
+      .collection('planDeletionLocks').doc('_bulk_shift');
+    await expect(applyTrainingChanges({ uid, connectionId: 'connection', scopes,
+      arguments: { proposalRef: otherPreview.proposalRef, permissionMode: 'schedule' } }, deps))
+      .rejects.toThrow('in progress');
+    expect((await planRef.get()).get('name')).toBe('Approved bulk shift');
+    const result = await applyTrainingChanges({ uid, connectionId: 'connection', scopes,
+      arguments: { proposalRef: preview.proposalRef, permissionMode: 'schedule' } }, deps);
+    expect(result.status).toBe('applied');
+    expect(result.changes.map(change => change.kind)).toEqual(['shift-plan', 'rename-plan']);
+    expect((await lockRef.get()).exists).toBe(false);
+    expect((await revisionRef.get()).exists).toBe(true);
+    expect((await planRef.get()).data()).toMatchObject({ revision: 3,
+      name: 'After staged shift', startLocalDate: '2026-10-02' });
+    expect((await planRef.collection('revisions').get()).size).toBe(2);
   }, 120_000);
 
   it('continues later approved proposal changes after the worker finishes a staged shift', async () => {

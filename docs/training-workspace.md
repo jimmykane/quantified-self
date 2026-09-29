@@ -655,7 +655,9 @@ packed Sports Lib package. That gate is tracked by GitHub issue #654 under epic 
   Training reads return their established temporary-unavailability result while a bulk lock is held rather than
   exposing a partly staged plan. The existing MCP proposal/confirmation contract now routes an oversized approved
   shift to the staged worker without weakening owner, connection, grant, Assistant confirmation, or revision checks;
-  approval loss cancels unpublished chunks. The existing batch apply may fall back to sequential transactions when
+  a direct retry may resume only its own staged lock, and approval time is checked separately from the stable mutation
+  timestamp. Approval loss cancels unpublished chunks without extending an expired proposal. The existing batch apply
+  may fall back to sequential transactions when
   its estimated payload is too large. No MCP read projection, registered schema, or plugin artifact changes.
 - MCP impact for plan-cleanup ownership recheck: no tool or wire change; existing approved plan deletion still uses its
   saved idempotent receipt, while a cleanup worker cannot remove residual workouts after its owning plan job is gone.

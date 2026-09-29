@@ -113,7 +113,9 @@ Compatible schedule operations are applied in one bounded Firestore transaction 
 and idempotency receipt per operation. A write-budget overflow falls back to the existing sequential path; authority is
 still checked in every authored-write transaction. An oversized approved plan shift stages immutable history behind a
 private lock and atomically publishes current dates, the revision, receipts, and the proposal cursor. The same approved
-proposal is retryable after an interrupted apply; the worker can finish that staged shift without a new client call.
+proposal is retryable after an interrupted apply: a direct retry resumes its own staged lock, or the worker can finish
+that staged shift without a new client call. Approval expiry is checked against retry time, independently of the stable
+workout-mutation timestamp; an expired retry cancels unpublished staging instead of extending its approval.
 Any later changes or provider actions in the proposal still require the same approved apply to be retried. Grant
 revocation, Assistant confirmation change, or proposal expiry before publication cancels the unpublished shift and
 prevents reuse of its approval. No new tool, scope, consent, schema, or provider action is exposed, so this

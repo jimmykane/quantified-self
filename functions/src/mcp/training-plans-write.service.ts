@@ -7,6 +7,7 @@ import { HttpsError } from 'firebase-functions/v2/https';
 import { z } from 'zod';
 import { ActivityTypes } from '@sports-alliance/sports-lib';
 import {
+  TRAINING_PLAN_DELETION_LOCKS_COLLECTION_ID,
   parseMutateTrainingScheduleRequestV1,
   parseDeleteTrainingPlanRequestV1,
   parseScheduledWorkoutV1,
@@ -33,7 +34,8 @@ import { applyTrainingScheduleMutation, createEmptyTrainingPlanState, TrainingSc
 import { TrainingScheduleBatchWriteLimitError, mutateTrainingScheduleBatchForUser,
   mutateTrainingScheduleForUser, TrainingScheduleOversizedMutationError,
   hashTrainingScheduleMutationRequest } from '../training-plans/persistence';
-import { stageLargeTrainingPlanShiftForUser, type StagedShiftMcpAuthorityV1 } from '../training-plans/staged-shift';
+import { BULK_SHIFT_LOCK_ID, abortUnapprovedMcpShift, stageLargeTrainingPlanShiftForUser, StagedShiftApprovalLostError,
+  type StagedShiftMcpAuthorityV1 } from '../training-plans/staged-shift';
 import { applyTrainingPlanDeletion, deleteTrainingPlanForUser,
   TrainingPlanDeletionResumeRequiredError } from '../training-plans/delete-training-plan';
 import { trainingDeliveryCommand } from '../training-plans/delivery/commands';
@@ -1123,15 +1125,27 @@ async function applyTrainingChangesInternal(
   const ref = current.ref;
   const proposalRefDoc = deps.db.collection('users').doc(input.uid).collection(PROPOSALS).doc(current.id);
   let proposal = await deps.db.runTransaction(async tx => {
-    await assertAuthorityInTransaction(deps, tx, input.uid, input.connectionId, current.proposal.requiredScopes,
-      current.proposal.accessGeneration,
-      input.connectionId.startsWith('first-party-assistant-v1:') ? current.ref : undefined);
     const snapshot = await tx.get(proposalRefDoc);
     const value = snapshot.data() as StoredProposal | undefined;
     if (!value || value.createdAtMs !== current.proposal.createdAtMs) invalid('This Training proposal is unavailable.');
     if (value.cancelledAtMs !== undefined) {
       invalid('This Training proposal was cancelled. Earlier changes may have applied; review the current plan, then prepare and approve a new change.');
     }
+    const locks = await tx.get(deps.db.collection('users').doc(input.uid).collection('trainingPlanState').doc('current')
+      .collection(TRAINING_PLAN_DELETION_LOCKS_COLLECTION_ID));
+    const activeShift = locks.docs.length === 1 && locks.docs[0].id === BULK_SHIFT_LOCK_ID ? locks.docs[0] : null;
+    const pendingRequest = value.scheduleRequests?.[value.nextScheduleOperation]?.request;
+    const resumingOwnShift = !value.result && pendingRequest?.operation.kind === 'shift-plan'
+      && activeShift?.get('cancelling') !== true
+      && activeShift?.get('mcpAuthority.proposalId') === current.id
+      && activeShift?.get('mcpAuthority.proposalRef') === current.ref
+      && activeShift?.get('mcpAuthority.proposalCreatedAtMs') === value.createdAtMs
+      && activeShift?.get('mcpAuthority.connectionId') === input.connectionId
+      && activeShift?.get('mcpAuthority.scheduleIndex') === value.nextScheduleOperation
+      && activeShift?.get('mutationId') === pendingRequest?.mutationId;
+    await assertAuthorityInTransaction(deps, tx, input.uid, input.connectionId, current.proposal.requiredScopes,
+      current.proposal.accessGeneration,
+      input.connectionId.startsWith('first-party-assistant-v1:') ? current.ref : undefined, resumingOwnShift);
     if (value.result) return value;
     const now = deps.now();
     if (value.expiresAtMs <= now && value.status === 'pending') invalid('This Training proposal expired. Prepare it again.');
@@ -1194,6 +1208,8 @@ async function applyTrainingChangesInternal(
       status: 'applied' as const,
       message: describeOperation(stored.request.operation),
     }));
+    const stagedLockRef = deps.db.collection('users').doc(input.uid).collection('trainingPlanState').doc('current')
+      .collection(TRAINING_PLAN_DELETION_LOCKS_COLLECTION_ID).doc(BULK_SHIFT_LOCK_ID);
     const applyStagedShift = async (stored: StoredScheduleOperation, scheduleIndex: number): Promise<void> => {
       const authority: StagedShiftMcpAuthorityV1 = {
         kind: 'mcp-approved-shift', proposalId: current.id, proposalRef: current.ref,
@@ -1203,11 +1219,20 @@ async function applyTrainingChangesInternal(
       };
       try {
         await stageLargeTrainingPlanShiftForUser(input.uid, stored.request, {
-          db: deps.db, nowMs: proposal.createdAtMs + scheduleIndex, stagedShiftAuthority: authority,
+          db: deps.db, nowMs: proposal.createdAtMs + scheduleIndex, approvalNow: deps.now,
+          stagedShiftAuthority: authority,
         });
       } catch (error) {
-        const lock = await deps.db.collection('users').doc(input.uid).collection('trainingPlanState').doc('current')
-          .collection('planDeletionLocks').doc('_bulk_shift').get();
+        const lock = await stagedLockRef.get();
+        if (error instanceof StagedShiftApprovalLostError) {
+          if (lock.exists && lock.data()?.mcpAuthority?.proposalId === current.id) {
+            let cancelled = false;
+            try { cancelled = await abortUnapprovedMcpShift(deps.db, input.uid, stagedLockRef, deps.now()); }
+            catch { unavailable('The approved shift lost its permission or expired. Its unpublished staging needs cleanup; review the plan before preparing a new change.'); }
+            if (!cancelled) unavailable('The staged shift changed while its approval was checked. Read the current plan before retrying.');
+          }
+          invalid('The approved shift lost its permission or expired. Review the current plan, then prepare and approve a new change.');
+        }
         if (lock.exists && lock.data()?.mcpAuthority?.proposalId === current.id) {
           await preserveResumableTrainingProposal(proposalRefDoc, deps.now());
           throw new McpDataError('temporarily_unavailable',
@@ -1234,15 +1259,30 @@ async function applyTrainingChangesInternal(
       });
       changeResults.push(...appliedResults);
     } catch (error) {
-      if ((error instanceof TrainingScheduleOversizedMutationError
+      const firstPending = pendingSchedule[0];
+      const stagedLock = error instanceof TrainingScheduleMutationError
+        && error.code === 'failed-precondition' && firstPending.request.operation.kind === 'shift-plan'
+        ? await stagedLockRef.get() : null;
+      const resumeStagedShift = stagedLock?.exists === true
+        && stagedLock.get('mcpAuthority.proposalId') === current.id
+        && stagedLock.get('mcpAuthority.connectionId') === input.connectionId
+        && stagedLock.get('mcpAuthority.scheduleIndex') === proposal.nextScheduleOperation
+        && stagedLock.get('mutationId') === firstPending.request.mutationId;
+      if (((error instanceof TrainingScheduleOversizedMutationError
         || error instanceof TrainingScheduleBatchWriteLimitError)
-        && pendingSchedule.length === 1 && pendingSchedule[0].request.operation.kind === 'shift-plan') {
-        await applyStagedShift(pendingSchedule[0], proposal.nextScheduleOperation);
+        && pendingSchedule.length === 1 && firstPending.request.operation.kind === 'shift-plan')
+        || (resumeStagedShift && pendingSchedule.length === 1)) {
+        await applyStagedShift(firstPending, proposal.nextScheduleOperation);
         changeResults.push(appliedResults[0]);
-      } else if (error instanceof TrainingScheduleBatchWriteLimitError) {
+      } else if (error instanceof TrainingScheduleBatchWriteLimitError || resumeStagedShift) {
         for (let offset = 0; offset < pendingSchedule.length; offset += 1) {
           const stored = pendingSchedule[offset];
           const appliedResult = appliedResults[offset];
+          if (offset === 0 && resumeStagedShift) {
+            await applyStagedShift(stored, proposal.nextScheduleOperation);
+            changeResults.push(appliedResult);
+            continue;
+          }
           try {
             await mutateTrainingScheduleForUser(input.uid, stored.request, {
               db: deps.db,

@@ -64,7 +64,11 @@ export class StagedShiftApprovalLostError extends TrainingScheduleMutationError 
     }
 }
 
-type StagedShiftOptions = TrainingScheduleMutationOptions & { stagedShiftAuthority?: StagedShiftMcpAuthorityV1 };
+type StagedShiftOptions = TrainingScheduleMutationOptions & {
+    stagedShiftAuthority?: StagedShiftMcpAuthorityV1;
+    /** Approval time must advance independently of the stable mutation timestamp. */
+    approvalNow?: () => number;
+};
 
 async function approvedMcpShift(
     db: admin.firestore.Firestore, transaction: admin.firestore.Transaction, uid: string,
@@ -253,6 +257,7 @@ async function stageLargeTrainingPlanShiftInternal(
     }
     const db = options.db ?? admin.firestore();
     const nowMs = options.nowMs ?? Date.now();
+    const approvalNowMs = () => Math.max(nowMs, options.approvalNow?.() ?? nowMs);
     const userRef = db.collection('users').doc(uid);
     const stateRef = userRef.collection('trainingPlanState').doc('current');
     const locksRef = stateRef.collection(TRAINING_PLAN_DELETION_LOCKS_COLLECTION_ID);
@@ -299,7 +304,7 @@ async function stageLargeTrainingPlanShiftInternal(
             if (JSON.stringify(lock.mcpAuthority ?? null) !== JSON.stringify(options.stagedShiftAuthority ?? lock.mcpAuthority ?? null)) {
                 throw new StagedShiftApprovalLostError();
             }
-            await approvedMcpShift(db, transaction, uid, lock.mcpAuthority, lock.request, nowMs);
+            await approvedMcpShift(db, transaction, uid, lock.mcpAuthority, lock.request, approvalNowMs());
             if (request.operation.kind !== 'shift-plan' || lock.intentHash !== shiftIntentHash(request)
                 || lock.planId !== request.operation.planId) {
                 throw new TrainingScheduleMutationError('failed-precondition', 'Another Training change is in progress. Retry it before starting a different change.');
@@ -321,7 +326,7 @@ async function stageLargeTrainingPlanShiftInternal(
             return { kind: 'locked' as const, lock: updated };
         }
         if (!state.exists || !plan.exists) throw new TrainingScheduleMutationError('not-found', 'The Training plan is unavailable.');
-        const approved = await approvedMcpShift(db, transaction, uid, options.stagedShiftAuthority, request, nowMs);
+        const approved = await approvedMcpShift(db, transaction, uid, options.stagedShiftAuthority, request, approvalNowMs());
         const currentState = parseTrainingPlanStateV1(state.data());
         const currentPlan = parseTrainingPlanV1(plan.data());
         if (request.expectedRevisions.find(item => item.scope === 'state' && item.id === 'current')?.revision !== currentState.revision
@@ -356,7 +361,7 @@ async function stageLargeTrainingPlanShiftInternal(
         const currentLock = await transaction.get(lockRef);
         if (!currentLock.exists) throw new TrainingScheduleMutationError('failed-precondition', 'The staged Training shift is unavailable.');
         requireLock(currentLock.data(), request);
-        await approvedMcpShift(db, transaction, uid, lock.mcpAuthority, canonicalRequest, nowMs);
+        await approvedMcpShift(db, transaction, uid, lock.mcpAuthority, canonicalRequest, approvalNowMs());
         const snapshot = await readTrainingScheduleSnapshotInTransaction(transaction, userRef, [canonicalRequest]);
         const applied = applyTrainingScheduleMutation(snapshot, canonicalRequest, lock.createdAtMs);
         if (snapshot.state.revision !== lock.stateRevision
@@ -410,7 +415,7 @@ async function stageLargeTrainingPlanShiftInternal(
         }
         if (!currentLock.exists) throw new TrainingScheduleMutationError('failed-precondition', 'The staged Training shift is unavailable.');
         const finalLock = requireLock(currentLock.data(), request);
-        const approved = await approvedMcpShift(db, transaction, uid, finalLock.mcpAuthority, canonicalRequest, nowMs);
+        const approved = await approvedMcpShift(db, transaction, uid, finalLock.mcpAuthority, canonicalRequest, approvalNowMs());
         if (!state.exists || !plan.exists
             || parseTrainingPlanStateV1(state.data()).revision !== lock.stateRevision
             || parseTrainingPlanV1(plan.data()).revision !== lock.planRevision) {
