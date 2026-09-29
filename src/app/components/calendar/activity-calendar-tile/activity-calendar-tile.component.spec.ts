@@ -100,6 +100,7 @@ describe('ActivityCalendarTileComponent', () => {
     expect(selectedDates).toEqual([day.dateKey]);
     expect(fixture.nativeElement.querySelector('.activity-calendar-day--selected')).toBeTruthy();
     expect(fixture.nativeElement.querySelector('app-calendar-day-context')).toBeTruthy();
+    expect(fixture.nativeElement.querySelector('.calendar-day-context-totals')).toBeNull();
     expect(fixture.nativeElement.querySelector('.activity-calendar--dashboard-context')).toBeTruthy();
     expect(fixture.nativeElement.querySelector('.activity-calendar-tile-header')).toBeNull();
     expect(fixture.nativeElement.querySelector('.activity-calendar-tile')?.getAttribute('aria-label')).toBe('Calendar');

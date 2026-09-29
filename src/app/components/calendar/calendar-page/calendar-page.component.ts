@@ -2,8 +2,7 @@ import { ChangeDetectionStrategy, Component, DestroyRef, ElementRef, HostListene
 import { ViewportScroller } from '@angular/common';
 import { takeUntilDestroyed, toObservable, toSignal } from '@angular/core/rxjs-interop';
 import { ActivatedRoute, ParamMap, Router, Scroll } from '@angular/router';
-import { DataAscent, DataDistance, type EventInterface } from '@sports-alliance/sports-lib';
-import { formatUnitAwareDataValue } from '@shared/unit-aware-display';
+import type { EventInterface } from '@sports-alliance/sports-lib';
 import { catchError, combineLatest, distinctUntilChanged, filter, map, of, shareReplay, startWith, switchMap, take, type Subscription } from 'rxjs';
 import type { AppUserInterface } from '../../../models/app-user.interface';
 import { SharedModule } from '../../../modules/shared.module';
@@ -19,11 +18,12 @@ import {
 } from '../../../services/training-plans.service';
 import {
   type ActivityCalendarDayViewModel,
+  type ActivityCalendarSummaryMetric,
   type ActivityCalendarRouteState,
   type ActivityCalendarView,
   buildActivityCalendarViewModel,
   formatActivityCalendarDateParam,
-  formatActivityCalendarDuration,
+  formatActivityCalendarSummaryMetrics,
   navigateActivityCalendarDay,
   navigateActivityCalendarDate,
   normalizeActivityCalendarView,
@@ -63,12 +63,6 @@ interface CalendarViewOption {
   value: ActivityCalendarView;
   label: string;
   icon: string;
-}
-
-interface CalendarSummaryMetric {
-  label: string;
-  icon: string;
-  value: string;
 }
 
 @Component({
@@ -209,41 +203,10 @@ export class CalendarPageComponent {
     const notes = this.currentUser()?.uid === workspace?.service.uid() ? workspace?.context().notes ?? [] : [];
     return calendarTimelineNotesByDate(this.calendarModel(), notes, this.today().getTime());
   });
-  readonly periodSummaryMetrics = computed<CalendarSummaryMetric[]>(() => {
-    if (this.eventState().status !== 'ready') {
-      return [
-        { label: 'Distance', icon: 'route', value: '--' },
-        { label: 'Duration', icon: 'schedule', value: '--' },
-        { label: 'Ascent', icon: 'landscape', value: '--' },
-      ];
-    }
-
-    const summary = this.calendarModel().summary;
-    const unitSettings = this.currentUser()?.settings?.unitSettings ?? null;
-    return [
-      {
-        label: 'Distance',
-        icon: 'route',
-        value: formatUnitAwareDataValue(DataDistance.type, summary.totalDistanceMeters, unitSettings, {
-          stripRepeatedUnit: true,
-          locale: this.locale,
-        }) || '0',
-      },
-      {
-        label: 'Duration',
-        icon: 'schedule',
-        value: formatActivityCalendarDuration(summary.totalDurationSeconds),
-      },
-      {
-        label: 'Ascent',
-        icon: 'landscape',
-        value: formatUnitAwareDataValue(DataAscent.type, summary.totalAscentMeters, unitSettings, {
-          stripRepeatedUnit: true,
-          locale: this.locale,
-        }) || '0',
-      },
-    ];
-  });
+  readonly periodSummaryMetrics = computed<ActivityCalendarSummaryMetric[]>(() => formatActivityCalendarSummaryMetrics(
+    this.eventState().status === 'ready' ? this.calendarModel().summary : null,
+    this.currentUser()?.settings?.unitSettings, this.locale,
+  ));
   readonly familyVolumeRows = computed(() => {
     if (this.eventState().status !== 'ready') {
       return [];

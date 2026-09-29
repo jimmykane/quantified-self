@@ -115,6 +115,7 @@
     @if (selectedDayData(); as dayData) {
       <app-calendar-day-context class="calendar-selected-day" [class.qs-glass-card-panel]="calendarModel().view !== 'month'"
         [data]="dayData" [showFullDayLink]="true"
+        [showActivityTotals]="true"
         [calmMonth]="calendarModel().view === 'month'"
         (noteSelected)="selectDayNote($event.id)"></app-calendar-day-context>
     }

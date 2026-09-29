@@ -13,7 +13,14 @@ import { TrainingWorkoutDuplicateService } from '../../../services/training-work
 import { buildCalendarDayHealthSummary, buildCalendarDaySleepFacts, resolveCalendarDaySleepPoint, type CalendarDayHealthSummary } from '../../../helpers/calendar-day-health.helper';
 import type { DashboardSleepTrendPoint } from '../../../helpers/dashboard-sleep-chart.helper';
 import { HealthSleepStageSummaryComponent } from '../../health/health-sleep-stage-summary.component';
-import { resolveActivityCalendarEventLabel, formatActivityCalendarDuration, resolveActivityCalendarEventDurationSeconds, buildActivityCalendarPeriodSummary, resolveEventFamilyIdentity } from '../../../helpers/activity-calendar.helper';
+import {
+  buildActivityCalendarPeriodSummary,
+  formatActivityCalendarDuration,
+  formatActivityCalendarSummaryMetrics,
+  resolveActivityCalendarEventDurationSeconds,
+  resolveActivityCalendarEventLabel,
+  resolveEventFamilyIdentity,
+} from '../../../helpers/activity-calendar.helper';
 import { buildActivityCalendarFamilyVolumeRows } from '../../../helpers/activity-calendar-volume.helper';
 import { ActivityCalendarVolumeListComponent } from '../activity-calendar-volume-list/activity-calendar-volume-list.component';
 import { TIMELINE_NOTE_ICONS, timelineNoteColor } from '../../../helpers/timeline-note-appearance.helper';
@@ -52,6 +59,7 @@ export class CalendarDayContextComponent {
   readonly data = input.required<CalendarDayDetailsData>();
   readonly compact = input(false);
   readonly showFullDayLink = input(false);
+  readonly showActivityTotals = input(false);
   readonly standaloneDayPage = input(false);
   readonly dashboardTile = input(false);
   readonly calmMonth = input(false);
@@ -75,6 +83,13 @@ export class CalendarDayContextComponent {
   private readonly healthOwnerUid = computed(() => this.data().userId);
   readonly activityState = computed(() => this.data().activities?.() ?? { status: 'ready' as const, day: this.data().day });
   readonly day = computed(() => this.activityState().day);
+  readonly activitySummary = computed(() => buildActivityCalendarPeriodSummary(
+    this.day().events, this.data().summariesSettings,
+  ));
+  readonly activityTotals = computed(() => formatActivityCalendarSummaryMetrics(
+    this.activityState().status === 'ready' ? this.activitySummary() : null,
+    this.data().unitSettings, this.data().locale,
+  ));
   readonly noteRows = computed(() => (this.data().timelineNotes?.() ?? [])
     .filter(note => isTimelineNoteVisible(note) && timelineNoteOverlaps(note, {
       startDate: this.data().day.dateKey, endDate: this.data().day.dateKey,
@@ -134,7 +149,7 @@ export class CalendarDayContextComponent {
       ? ['/user', this.data().userId, 'event', event.getID()] : null,
   })));
   readonly activityGroups = computed(() => buildActivityCalendarFamilyVolumeRows(
-    buildActivityCalendarPeriodSummary(this.day().events, this.data().summariesSettings),
+    this.activitySummary(),
     this.data().unitSettings, this.data().locale,
   ));
   readonly fullDayRoute = computed(() => ['/calendar/day', this.data().day.dateKey]);

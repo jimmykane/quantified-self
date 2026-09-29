@@ -1,4 +1,4 @@
-import type { EventInterface } from '@sports-alliance/sports-lib';
+import type { EventInterface, UserUnitSettingsInterface } from '@sports-alliance/sports-lib';
 import {
   ActivityTypeGroups,
   ActivityTypes,
@@ -11,6 +11,7 @@ import {
   type ActivityTypeGroup,
 } from '@sports-alliance/sports-lib';
 import { getActivityTypeGroupLabel } from '@shared/activity-type-group.metadata';
+import { formatUnitAwareDataValue } from '@shared/unit-aware-display';
 import { AppActivityTypeGroupColors } from '../services/color/app.activity-type-group.colors';
 import { AppEventUtilities } from '../utils/app.event.utilities';
 import type { SummaryStatsSettingsLike } from './summary-stats.helper';
@@ -94,6 +95,32 @@ export interface ActivityCalendarPeriodSummary {
   totalAscentMeters: number;
   totalDescentMeters: number;
   families: ActivityCalendarPeriodFamilySummary[];
+}
+
+export interface ActivityCalendarSummaryMetric {
+  label: 'Distance' | 'Duration' | 'Ascent';
+  icon: 'route' | 'schedule' | 'landscape';
+  value: string;
+}
+
+/** Share the same completed-activity totals and unit formatting across calendar surfaces. */
+export function formatActivityCalendarSummaryMetrics(
+  summary: ActivityCalendarPeriodSummary | null,
+  unitSettings?: UserUnitSettingsInterface | null,
+  locale?: string,
+): ActivityCalendarSummaryMetric[] {
+  if (!summary) return [
+    { label: 'Distance', icon: 'route', value: '--' },
+    { label: 'Duration', icon: 'schedule', value: '--' },
+    { label: 'Ascent', icon: 'landscape', value: '--' },
+  ];
+  return [
+    { label: 'Distance', icon: 'route', value: formatUnitAwareDataValue(
+      DataDistance.type, summary.totalDistanceMeters, unitSettings, { stripRepeatedUnit: true, locale }) || '0' },
+    { label: 'Duration', icon: 'schedule', value: formatActivityCalendarDuration(summary.totalDurationSeconds) },
+    { label: 'Ascent', icon: 'landscape', value: formatUnitAwareDataValue(
+      DataAscent.type, summary.totalAscentMeters, unitSettings, { stripRepeatedUnit: true, locale }) || '0' },
+  ];
 }
 
 export interface ActivityCalendarViewModel {

@@ -15,6 +15,10 @@
 .calendar-day-context-header { margin-bottom: 12px; }
 .calendar-day-context-header h2 { margin: 0; font: var(--mat-sys-title-medium); overflow-wrap: anywhere; }
 .calendar-day-context-header a { flex: 0 0 auto; }
+.calendar-day-context-totals { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin-bottom: 12px; }
+.calendar-day-context-totals > div { min-width: 0; padding-top: 7px; border-top: 1px solid var(--mat-sys-outline-variant); }
+.calendar-day-context-totals span { display: block; color: var(--mat-sys-on-surface-variant); font: var(--mat-sys-label-small); }
+.calendar-day-context-totals strong { display: block; margin-top: 2px; overflow-wrap: anywhere; font-family: 'Barlow Condensed', sans-serif; font-size: 18px; font-weight: 600; line-height: 1.15; }
 .calendar-day-context-metrics { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
 .calendar-day-context-health--full .calendar-day-context-metrics { grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); }
 .calendar-day-context-health-heading { margin-bottom: 12px; }

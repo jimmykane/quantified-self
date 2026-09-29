@@ -29,6 +29,14 @@
       <div class="calendar-day-context-loading-timeline" aria-hidden="true"></div>
     </div>
   } @else {
+  @if (showActivityTotals()) {
+    <div class="calendar-day-context-totals" role="group" [attr.aria-label]="title() + ' activity totals'"
+      [attr.aria-busy]="activityState().status === 'loading'">
+      @for (metric of activityTotals(); track metric.label) {
+        <div><span>{{ metric.label }}</span><strong>{{ metric.value }}</strong></div>
+      }
+    </div>
+  }
   @if (healthState().status !== 'private' && healthState().status !== 'hidden') {
     <section class="calendar-day-context-health" [class.calendar-day-context-health--full]="standaloneDayPage()" aria-label="Recovery and sleep">
       @if (standaloneDayPage()) {

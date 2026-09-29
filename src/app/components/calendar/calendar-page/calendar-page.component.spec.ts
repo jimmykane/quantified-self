@@ -158,6 +158,12 @@ describe('CalendarPageComponent', () => {
       { label: 'Duration', value: '1h' },
       { label: 'Ascent', value: '450 m' },
     ]);
+    const selectedDayTotals = [...fixture.nativeElement.querySelectorAll('.calendar-selected-day .calendar-day-context-totals > div')]
+      .map((metric: HTMLElement) => ({
+        label: metric.querySelector('span')?.textContent?.trim(),
+        value: metric.querySelector('strong')?.textContent?.trim(),
+      }));
+    expect(selectedDayTotals).toEqual(summaryMetrics);
     expect(fixture.nativeElement.textContent).toContain('August 2026');
   });
 
@@ -170,6 +176,17 @@ describe('CalendarPageComponent', () => {
     expect(fixture.componentInstance.eventState().status).toBe('ready');
     expect(fixture.componentInstance.plansState().status).toBe('error');
     expect(fixture.componentInstance.plannedWorkoutsByDate()).toEqual({});
+  });
+
+  it('shows zero selected-day totals for an empty date without changing month totals', async () => {
+    const fixture = TestBed.createComponent(CalendarPageComponent);
+    fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+    queryParams.next(convertToParamMap({ view: 'month', date: '2026-08-04' }));
+    fixture.detectChanges();
+    expect(fixture.componentInstance.selectedDay()?.dateKey).toBe('2026-08-04');
+    expect([...fixture.nativeElement.querySelectorAll('.calendar-selected-day .calendar-day-context-totals strong')]
+      .map((value: HTMLElement) => value.textContent?.trim())).toEqual(['0.0 m', '0m', '0 m']);
+    expect(fixture.nativeElement.querySelector('.calendar-period-summary')?.textContent).toContain('10.00 Km');
   });
 
   it('opens a bounded standalone day with its context and no calendar grid', async () => {
@@ -188,6 +205,7 @@ describe('CalendarPageComponent', () => {
     expect(fixture.componentInstance.dayShortTitle()).toContain('Aug');
     expect(fixture.nativeElement.querySelector('.activity-calendar-day-button')).toBeNull();
     expect(fixture.nativeElement.querySelector('app-calendar-day-context')).toBeTruthy();
+    expect(fixture.nativeElement.querySelector('.calendar-day-context-totals')).toBeNull();
     expect(watchEvents).toHaveBeenCalledWith(user, {
       startMs: new Date(2026, 7, 3).getTime(), endExclusiveMs: new Date(2026, 7, 4).getTime(),
     });
@@ -517,6 +535,8 @@ describe('CalendarPageComponent', () => {
     expect(fixture.nativeElement.querySelectorAll('.activity-calendar-day-button')).toHaveLength(
       fixture.componentInstance.calendarModel().months[0].days.filter(day => day.inPrimaryPeriod).length);
     expect(fixture.nativeElement.querySelector('.planned-workout-markers')).toBeTruthy();
+    expect([...fixture.nativeElement.querySelectorAll('.calendar-selected-day .calendar-day-context-totals strong')]
+      .map((value: HTMLElement) => value.textContent?.trim())).toEqual(['--', '--', '--']);
     expect(fixture.nativeElement.textContent).not.toContain('No completed activities in August 2026');
   });
   it('loads notes for empty days and opens them from the inline panel', async () => {
