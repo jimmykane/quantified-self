@@ -96,6 +96,26 @@ type RecoverableAssistantToolErrorCode =
 const RECOVERABLE_ASSISTANT_TOOL_ERROR_CODE_SET = new Set<string>(
   RECOVERABLE_ASSISTANT_TOOL_ERROR_CODES,
 );
+const MCP_TOOL_ERROR_CODE_SET = new Set<string>([
+  ...RECOVERABLE_ASSISTANT_TOOL_ERROR_CODES,
+  'temporarily_unavailable',
+  'internal_error',
+]);
+
+export type AssistantMcpToolFailureCode = McpDataErrorCode | 'internal_error'
+  | 'invalid_tool_input' | 'client_call_failed' | 'missing_structured_result' | 'unclassified_error';
+export type AssistantMcpToolFailureStage = 'input_validation' | 'tool_response'
+  | 'client_call' | 'result_validation';
+
+export class AssistantMcpToolFailure extends Error {
+  constructor(
+    readonly code: AssistantMcpToolFailureCode,
+    readonly stage: AssistantMcpToolFailureStage,
+  ) {
+    super('The Assistant MCP tool could not complete the request.');
+    this.name = 'AssistantMcpToolFailure';
+  }
+}
 
 const ASSISTANT_TOOL_ERROR_GUIDANCE: Record<
   RecoverableAssistantToolErrorCode,
@@ -171,7 +191,7 @@ const ASSISTANT_CONTENT_TOOL_COPY: Record<AssistantContentProposalTool, { title:
   },
 };
 
-function recoverableAssistantToolError(message: string): AssistantRecoverableMcpToolError | null {
+function parseMcpToolErrorCode(message: string): McpDataErrorCode | 'internal_error' | null {
   let payload: unknown;
   try {
     payload = JSON.parse(message);
@@ -182,7 +202,15 @@ function recoverableAssistantToolError(message: string): AssistantRecoverableMcp
     return null;
   }
   const code = (payload as { error?: unknown }).error;
-  if (typeof code !== 'string' || !RECOVERABLE_ASSISTANT_TOOL_ERROR_CODE_SET.has(code)) {
+  if (typeof code !== 'string' || !MCP_TOOL_ERROR_CODE_SET.has(code)) {
+    return null;
+  }
+  return code as McpDataErrorCode | 'internal_error';
+}
+
+function recoverableAssistantToolError(message: string): AssistantRecoverableMcpToolError | null {
+  const code = parseMcpToolErrorCode(message);
+  if (!code || !RECOVERABLE_ASSISTANT_TOOL_ERROR_CODE_SET.has(code)) {
     return null;
   }
   return new AssistantRecoverableMcpToolError(
@@ -204,10 +232,12 @@ async function callAssistantMcpTool(
   name: AssistantMcpToolName,
   args: Record<string, unknown>,
 ): Promise<AssistantMcpToolResult> {
-  const result = await client.callTool({
-    name,
-    arguments: args,
-  });
+  let result: Awaited<ReturnType<Client['callTool']>>;
+  try {
+    result = await client.callTool({ name, arguments: args });
+  } catch {
+    throw new AssistantMcpToolFailure('client_call_failed', 'client_call');
+  }
   if ('isError' in result && result.isError) {
     const content = 'content' in result && Array.isArray(result.content)
       ? result.content
@@ -221,12 +251,15 @@ async function callAssistantMcpTool(
     if (recoverableError) {
       throw recoverableError;
     }
-    throw new Error(message || `The ${name} tool could not complete the request.`);
+    if (message.includes('Input validation error: Invalid arguments for tool ')) {
+      throw new AssistantMcpToolFailure('invalid_tool_input', 'input_validation');
+    }
+    throw new AssistantMcpToolFailure(parseMcpToolErrorCode(message) ?? 'unclassified_error', 'tool_response');
   }
   if (!('structuredContent' in result)
     || !result.structuredContent
     || typeof result.structuredContent !== 'object') {
-    throw new Error(`The ${name} tool returned no structured result.`);
+    throw new AssistantMcpToolFailure('missing_structured_result', 'result_validation');
   }
   const structuredContent = result.structuredContent as Record<string, unknown>;
   if (name === 'prepare_training_metrics'

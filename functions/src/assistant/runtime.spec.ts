@@ -19,6 +19,7 @@ import {
   generateAssistantModelAnswer,
   getAssistantRuntimeErrorReason,
   getAssistantRuntimeErrorToolName,
+  getAssistantRuntimeToolFailureDiagnostic,
   selectAssistantTrainingPreviewTool,
   type AssistantRuntimeTool,
 } from './runtime';
@@ -26,7 +27,7 @@ import type {
   AssistantMcpSession,
   AssistantMcpToolName,
 } from './mcp-session';
-import { AssistantRecoverableMcpToolError } from './mcp-session';
+import { AssistantMcpToolFailure, AssistantRecoverableMcpToolError } from './mcp-session';
 
 function createSession() {
   const close = vi.fn().mockResolvedValue(undefined);
@@ -1398,7 +1399,38 @@ describe('Assistant runtime', () => {
 
     expect(getAssistantRuntimeErrorReason(caught)).toBe('mcp_tool_failed');
     expect(getAssistantRuntimeErrorToolName(caught)).toBe('get_daily_report');
+    expect(getAssistantRuntimeToolFailureDiagnostic(caught)).toEqual({
+      toolErrorCode: 'unclassified_error',
+      toolFailureStage: 'assistant_tool_execution',
+    });
     expect(caught).not.toHaveProperty('message', 'User-controlled provider message');
+  });
+
+  it('passes only fixed MCP error diagnostics through the runtime boundary', async () => {
+    const { session } = createSession();
+    session.callTool = vi.fn().mockRejectedValue(
+      new AssistantMcpToolFailure('invalid_tool_input', 'input_validation'),
+    );
+    const runtime = createAssistantRuntime({
+      createMcpSession: vi.fn().mockResolvedValue(session),
+      generateAnswer: vi.fn(async ({ tools }) => {
+        await tools[0].execute({ timeZone: 'UTC' });
+        return { answer: 'unreachable', visualRequest: { chart: null, map: null } };
+      }),
+    });
+    let caught: unknown;
+    try {
+      await runtime.answer({
+        uid: 'user-1', appBaseUrl: 'https://quantified-self.io',
+        prompt: 'How am I today?', timeZone: 'UTC', history: [],
+      });
+    } catch (error) {
+      caught = error;
+    }
+    expect(getAssistantRuntimeToolFailureDiagnostic(caught)).toEqual({
+      toolErrorCode: 'invalid_tool_input',
+      toolFailureStage: 'input_validation',
+    });
   });
 
   it('lets the model correct a server-classified tool query failure within one turn', async () => {
