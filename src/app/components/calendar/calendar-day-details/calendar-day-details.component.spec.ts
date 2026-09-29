@@ -25,6 +25,7 @@ import { CalendarDayDetailsNavigationService } from '../../../services/calendar-
 import { TrainingWorkoutDuplicateService } from '../../../services/training-workout-duplicate.service';
 import type { PlannedWorkoutCalendarEntry } from '../../../helpers/planned-workout-calendar.helper';
 import { CalendarDayDetailsComponent, type CalendarDayDetailsData } from './calendar-day-details.component';
+import { buildTrainingLoadPoints } from '@shared/training-load';
 
 const planningUserUid = 'planning-user';
 
@@ -117,6 +118,26 @@ describe('CalendarDayDetailsComponent', () => {
       .map((part: HTMLElement) => part.textContent?.trim())).toEqual(['8:30 AM', '1h']);
     expect([...fixture.nativeElement.querySelectorAll('h3')].map((heading: HTMLElement) => heading.textContent?.trim()))
       .toEqual(['Planned workouts', 'Completed activities', 'Completed activity details']);
+  });
+
+  it('shows the day total and per-activity Training impact in the Dashboard day sheet', async () => {
+    const event = createEvent('Morning run', undefined, 'Running', {
+      'Training Stress Score': 42,
+    });
+    const startDate = event.startDate as Date;
+    const dayMs = Date.UTC(startDate.getUTCFullYear(), startDate.getUTCMonth(), startDate.getUTCDate());
+    const formPoints = buildTrainingLoadPoints([{ dayMs, load: 42 }]).map(point => ({
+      time: point.dayMs, trainingStressScore: point.load, ctl: point.ctl, atl: point.atl,
+      formSameDay: point.formSameDay, formPriorDay: point.formPriorDay,
+    }));
+    const fixture = await renderDayDetails(event, {
+      trainingImpact: signal({ status: 'ready', formPoints }),
+    });
+
+    expect(fixture.nativeElement.querySelector('app-training-impact[title="Day training impact"]')).toBeTruthy();
+    expect(fixture.nativeElement.querySelector('.calendar-day-event-item app-training-impact')).toBeTruthy();
+    expect(fixture.nativeElement.textContent).toContain('Fitness load (CTL)');
+    expect(fixture.nativeElement.textContent).toContain('+1 CTL · +6 ATL · −5 Form');
   });
 
   it('keeps planned workouts separate and offers active-plan and standalone add paths', async () => {

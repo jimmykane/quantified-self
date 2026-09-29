@@ -48,6 +48,7 @@ import {
   buildPlannedWorkoutCalendarOverlay,
   type PlannedWorkoutCalendarOverlay,
 } from '../../../helpers/planned-workout-calendar.helper';
+import { TrainingImpactService, type TrainingImpactSnapshotState } from '../../../services/training-impact.service';
 
 interface ActivityCalendarTileState {
   status: 'loading' | 'ready' | 'error';
@@ -76,6 +77,7 @@ export class ActivityCalendarTileComponent {
   private readonly bottomSheet = inject(MatBottomSheet);
   private readonly router = inject(Router);
   private readonly dayDetailsNavigation = inject(CalendarDayDetailsNavigationService);
+  private readonly trainingImpact = inject(TrainingImpactService);
   private readonly locale = inject(LOCALE_ID);
   private readonly elementRef = inject<ElementRef<HTMLElement>>(ElementRef);
   private readonly anchorDate = signal(startOfCurrentMonth());
@@ -84,6 +86,16 @@ export class ActivityCalendarTileComponent {
   private readonly today = signal(new Date());
 
   readonly user = input<User | null | undefined>(null);
+  private readonly trainingImpactSource = computed(() => {
+    const uid = this.user()?.uid;
+    return uid
+      ? this.trainingImpact.watch(uid)
+      : of({ status: 'private', formPoints: null } as TrainingImpactSnapshotState);
+  });
+  readonly trainingImpactState = toSignal(
+    toObservable(this.trainingImpactSource).pipe(switchMap(source => source)),
+    { initialValue: { status: 'private', formPoints: null } as TrainingImpactSnapshotState },
+  );
   readonly hasTrainingPlanningUIAccess = computed(() => {
     const viewerUid = this.users.user()?.uid;
     return !!viewerUid && this.user()?.uid === viewerUid;
@@ -206,6 +218,7 @@ export class ActivityCalendarTileComponent {
       plannedWorkoutsSource: this.selectedDayPlanned,
       plannedWorkoutsStatusSource: () => this.plansState().status,
       scheduleSource: () => this.users.user()?.uid === user.uid ? this.plansState().schedule : null,
+      trainingImpact: this.trainingImpactState,
     };
   });
   selectDayNote(noteId: string): void {
@@ -393,6 +406,7 @@ export class ActivityCalendarTileComponent {
           plannedWorkoutsSource: plannedWorkouts,
           plannedWorkoutsStatusSource: () => plansState().status,
           scheduleSource: () => this.users.user()?.uid === userId ? plansState().schedule : null,
+          trainingImpact: this.trainingImpactState,
         },
       });
       sheet.afterDismissed().pipe(take(1), finalize(release)).subscribe(result => {

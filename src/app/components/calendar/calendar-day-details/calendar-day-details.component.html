@@ -91,6 +91,10 @@
       <strong>{{ day().durationLabel }}</strong>
     </div>
 
+    @if (trainingImpactState().status !== 'private' && eventRows().length) {
+    <app-training-impact [impact]="dayTrainingImpact()" variant="summary" title="Day training impact"></app-training-impact>
+    }
+
     @if (familyVolumeRows().length) {
     <section class="calendar-day-details-group" aria-labelledby="calendar-day-family-title">
       <h3 id="calendar-day-family-title">Completed activities</h3>
@@ -125,6 +129,10 @@
               <app-activity-calendar-volume-stats class="calendar-day-event-metrics"
                 [stats]="event.metricStats"></app-activity-calendar-volume-stats>
               }
+              @if (trainingImpactState().status !== 'private') {
+              <app-training-impact class="calendar-day-event-impact" [impact]="event.trainingImpact"
+                variant="compact"></app-training-impact>
+              }
             </div>
             <span matListItemMeta class="calendar-day-item-meta" aria-hidden="true">
               <mat-icon>chevron_right</mat-icon>
@@ -148,6 +156,10 @@
               @if (event.metricStats.length) {
               <app-activity-calendar-volume-stats class="calendar-day-event-metrics"
                 [stats]="event.metricStats"></app-activity-calendar-volume-stats>
+              }
+              @if (trainingImpactState().status !== 'private') {
+              <app-training-impact class="calendar-day-event-impact" [impact]="event.trainingImpact"
+                variant="compact"></app-training-impact>
               }
             </div>
           </div>

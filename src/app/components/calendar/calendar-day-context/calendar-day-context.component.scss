@@ -49,6 +49,7 @@
 .calendar-day-context-preview-group > p { margin: 4px 0 0; color: var(--mat-sys-on-surface-variant); font: var(--mat-sys-body-small); line-height: 1.4; }
 .calendar-day-context-preview-group h3 { display: flex; justify-content: space-between; gap: 8px; margin: 0 0 4px; font: var(--mat-sys-title-small); }
 .calendar-day-context-preview-row { min-width: 0; }
+.calendar-day-context-preview-row > app-training-impact { display: block; max-width: 100%; margin-top: 3px; }
 .calendar-day-context-preview-row > a, .calendar-day-context-preview-row > button { max-width: 100%; min-width: 0; height: auto; min-height: 36px; padding-inline: 0; text-align: left; justify-content: flex-start; white-space: normal; overflow-wrap: anywhere; }
 .calendar-day-context-navigation-link { display: inline-flex; align-items: center; color: var(--mat-sys-primary); font: var(--mat-sys-body-medium); text-decoration: none; }
 .calendar-day-context-navigation-link:hover { text-decoration: underline; }
@@ -117,7 +118,8 @@
     text-transform: uppercase;
     letter-spacing: .04em;
   }
-  .calendar-day-context-preview-row { display: flex; min-height: 30px; align-items: center; gap: 7px; }
+  .calendar-day-context-preview-row { display: flex; min-height: 30px; flex-wrap: wrap; align-items: center; gap: 7px; }
+  .calendar-day-context-preview-row > app-training-impact { flex: 1 0 100%; margin-top: 0; }
   .calendar-day-context-preview-row > a,
   .calendar-day-context-preview-row > button {
     min-height: 30px;

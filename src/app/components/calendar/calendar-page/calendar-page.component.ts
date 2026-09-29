@@ -47,6 +47,7 @@ import {
   buildPlannedWorkoutCalendarOverlay,
   type PlannedWorkoutCalendarOverlay,
 } from '../../../helpers/planned-workout-calendar.helper';
+import { TrainingImpactService, type TrainingImpactSnapshotState } from '../../../services/training-impact.service';
 
 interface CalendarEventsState {
   status: 'loading' | 'ready' | 'error';
@@ -91,6 +92,7 @@ export class CalendarPageComponent {
   private readonly calendarService = inject(ActivityCalendarService);
   private readonly plansService = inject(TrainingPlansService);
   private readonly dayDetailsNavigation = inject(CalendarDayDetailsNavigationService);
+  private readonly trainingImpact = inject(TrainingImpactService);
   private readonly locale = inject(LOCALE_ID);
   private readonly notesWorkspace = viewChild(TimelineNotesWorkspaceComponent);
   private readonly reloadSequence = signal(0);
@@ -128,6 +130,16 @@ export class CalendarPageComponent {
     initialValue: this.route.snapshot.paramMap.get('date'),
   });
   readonly currentUser = computed(() => this.userService.user() as AppUserInterface | null);
+  private readonly trainingImpactSource = computed(() => {
+    const uid = this.currentUser()?.uid;
+    return uid
+      ? this.trainingImpact.watch(uid)
+      : of({ status: 'private', formPoints: null } as TrainingImpactSnapshotState);
+  });
+  readonly trainingImpactState = toSignal(
+    toObservable(this.trainingImpactSource).pipe(switchMap(source => source)),
+    { initialValue: { status: 'private', formPoints: null } as TrainingImpactSnapshotState },
+  );
   readonly hasTrainingPlanningUIAccess = computed(() => !!this.currentUser()?.uid);
   readonly eventState = toSignal(combineLatest([
     this.userService.user$,
@@ -269,6 +281,7 @@ export class CalendarPageComponent {
       plannedWorkoutsSource: this.selectedDayPlanned,
       plannedWorkoutsStatusSource: () => this.plansState().status,
       scheduleSource: () => this.currentUser()?.uid === user.uid ? this.plansState().schedule : null,
+      trainingImpact: this.trainingImpactState,
     };
   });
   private readonly restoreDayDetailsEffect = effect(() => {

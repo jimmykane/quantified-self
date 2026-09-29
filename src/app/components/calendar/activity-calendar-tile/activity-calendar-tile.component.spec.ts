@@ -21,6 +21,7 @@ import { CalendarDayHealthService } from '../../../services/calendar-day-health.
 import { TrainingWorkoutDuplicateService } from '../../../services/training-workout-duplicate.service';
 import { ActivityCalendarTileComponent } from './activity-calendar-tile.component';
 import { STANDALONE_WORKOUT_COLOR, trainingPlanAppearance } from '../../../helpers/training-plan-appearance.helper';
+import { TrainingImpactService } from '../../../services/training-impact.service';
 
 describe('ActivityCalendarTileComponent', () => {
   const planningUserUid = 'planning-user';
@@ -66,6 +67,7 @@ describe('ActivityCalendarTileComponent', () => {
         { provide: ActivityCalendarService, useValue: { watchEvents } },
         { provide: TrainingPlansService, useValue: { watchSchedule, watchWorkoutCompletions } },
         { provide: CalendarDayHealthService, useValue: { watch: watchHealth } },
+        { provide: TrainingImpactService, useValue: { watch: vi.fn(() => of({ status: 'private', formPoints: null })) } },
         { provide: TrainingWorkoutDuplicateService, useValue: { duplicate: vi.fn() } },
         { provide: CalendarDayDetailsNavigationService, useValue: dayDetailsNavigation },
       ],

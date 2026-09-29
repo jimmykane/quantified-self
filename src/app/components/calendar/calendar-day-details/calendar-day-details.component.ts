@@ -30,6 +30,13 @@ import { ActivityCalendarVolumeStatsComponent } from '../activity-calendar-volum
 import type { PlannedWorkoutCalendarEntry } from '../../../helpers/planned-workout-calendar.helper';
 import { formatManualWorkoutStructure } from '../../../helpers/planned-workout-editor.helper';
 import { getDateTimeFormatter } from '../../../helpers/date-time-format.helper';
+import { TrainingImpactComponent } from '../../training-impact/training-impact.component';
+import {
+  buildTrainingDayImpactView,
+  buildTrainingSessionImpactView,
+  type TrainingSessionImpactView,
+} from '../../../helpers/training-impact.helper';
+import type { TrainingImpactSnapshotState } from '../../../services/training-impact.service';
 
 export interface CalendarDayDetailsData {
   day: ActivityCalendarDayViewModel;
@@ -47,6 +54,7 @@ export interface CalendarDayDetailsData {
   plannedWorkoutsSource?: () => readonly PlannedWorkoutCalendarEntry[];
   plannedWorkoutsStatusSource?: () => 'loading' | 'ready' | 'error';
   scheduleSource?: () => CurrentTrainingScheduleV1 | null;
+  trainingImpact?: Signal<TrainingImpactSnapshotState>;
 }
 
 export type CalendarDayDetailsResult = string | DuplicatedWorkoutResult;
@@ -70,6 +78,7 @@ interface CalendarDayEventRow {
   detailLabel: string;
   detailParts: CalendarDayEventDetailPart[];
   metricStats: ActivityCalendarFamilyVolumeStat[];
+  trainingImpact: TrainingSessionImpactView;
   route: string[] | null;
 }
 
@@ -81,7 +90,7 @@ interface CalendarDayEventDetailPart {
 @Component({
   selector: 'app-calendar-day-details',
   standalone: true,
-  imports: [SharedModule, ActivityCalendarVolumeListComponent, ActivityCalendarVolumeStatsComponent, CalendarDayContextComponent],
+  imports: [SharedModule, ActivityCalendarVolumeListComponent, ActivityCalendarVolumeStatsComponent, CalendarDayContextComponent, TrainingImpactComponent],
   templateUrl: './calendar-day-details.component.html',
   styleUrls: ['./calendar-day-details.component.scss'],
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -113,6 +122,12 @@ export class CalendarDayDetailsComponent {
   readonly activityState = computed(() => this.data.activities?.() ?? { status: 'ready', day: this.data.day });
   readonly day = computed(() => this.activityState().day);
   readonly eventRows = computed(() => this.day().events.map(event => this.buildEventRow(event)));
+  readonly trainingImpactState = computed(() => this.data.trainingImpact?.()
+    ?? ({ status: 'private', formPoints: null } as TrainingImpactSnapshotState));
+  readonly dayTrainingImpact = computed(() => buildTrainingDayImpactView(
+    this.day().events,
+    this.trainingImpactState(),
+  ));
   readonly familyVolumeRows = computed(() => this.buildFamilyVolumeRows());
   readonly noteRows = computed(() => (this.data.timelineNotes?.() ?? []).map(note => ({
     note, category: TIMELINE_NOTE_LABELS[note.category], dates: timelineNoteDates(note),
@@ -226,6 +241,7 @@ export class CalendarDayDetailsComponent {
       detailLabel: detailParts.map(part => part.text).join(' - '),
       detailParts,
       metricStats,
+      trainingImpact: buildTrainingSessionImpactView(event, this.trainingImpactState()),
       route: eventId && this.data.userId
         ? ['/user', this.data.userId, 'event', eventId]
         : null,
