@@ -31,7 +31,9 @@ import { assertNoTrainingPlanDeletionInProgress } from '../training-plans/deleti
 import { applyTrainingScheduleMutation, createEmptyTrainingPlanState, TrainingScheduleMutationError,
   type TrainingScheduleSnapshotV1 } from '../training-plans/mutation';
 import { TrainingScheduleBatchWriteLimitError, mutateTrainingScheduleBatchForUser,
-  mutateTrainingScheduleForUser } from '../training-plans/persistence';
+  mutateTrainingScheduleForUser, TrainingScheduleOversizedMutationError,
+  hashTrainingScheduleMutationRequest } from '../training-plans/persistence';
+import { stageLargeTrainingPlanShiftForUser, type StagedShiftMcpAuthorityV1 } from '../training-plans/staged-shift';
 import { applyTrainingPlanDeletion, deleteTrainingPlanForUser,
   TrainingPlanDeletionResumeRequiredError } from '../training-plans/delete-training-plan';
 import { trainingDeliveryCommand } from '../training-plans/delivery/commands';
@@ -111,6 +113,7 @@ interface StoredProposal {
   changeResults: ApplyResult['changes'];
   providerResults: ApplyResult['providers'];
   result?: ApplyResult;
+  approvedAtMs?: number;
 }
 
 export interface TrainingWriteInput {
@@ -191,7 +194,7 @@ function accessGeneration(data: FirebaseFirestore.DocumentData): string {
 }
 
 async function assertAuthorityInTransaction(
-  deps: TrainingWriteDependencies,
+  deps: Pick<TrainingWriteDependencies, 'db' | 'now'>,
   tx: FirebaseFirestore.Transaction,
   uid: string,
   connectionId: string,
@@ -242,6 +245,66 @@ async function assertAuthorityInTransaction(
     invalid('The MCP permission grant changed. Prepare the Training change again.');
   }
   return generation;
+}
+
+/** Reconstruct approval from a private proposal on every staged final commit, including worker retries. */
+export async function approvedStagedShiftProposalInTransaction(
+  db: FirebaseFirestore.Firestore,
+  tx: FirebaseFirestore.Transaction,
+  uid: string,
+  authority: StagedShiftMcpAuthorityV1,
+  request: MutateTrainingScheduleRequestV1,
+  nowMs: number,
+): Promise<{ ref: FirebaseFirestore.DocumentReference; proposal: StoredProposal } | null> {
+  let decoded: Record<string, unknown>;
+  try {
+    decoded = decodeOpaqueValue('training_proposal', authority.proposalRef, uid,
+      authority.connectionId, 'Training proposal');
+  } catch { return null; }
+  const boundRef = proposalPayload.safeParse(decoded);
+  if (!boundRef.success || boundRef.data.id !== authority.proposalId
+    || boundRef.data.createdAtMs !== authority.proposalCreatedAtMs) return null;
+  const ref = db.collection('users').doc(uid).collection(PROPOSALS).doc(authority.proposalId);
+  const snapshot = await tx.get(ref);
+  const proposal = snapshot.data() as StoredProposal | undefined;
+  if (!proposal || proposal.schemaVersion !== 1 || proposal.uid !== uid
+    || proposal.connectionId !== authority.connectionId
+    || proposal.createdAtMs !== authority.proposalCreatedAtMs
+    || !Number.isSafeInteger(proposal.expiresAtMs) || proposal.expiresAtMs <= nowMs
+    || proposal.accessGeneration !== authority.accessGeneration
+    || JSON.stringify(proposal.requiredScopes) !== JSON.stringify(authority.requiredScopes)
+    || !Number.isSafeInteger(proposal.approvedAtMs)
+    || !['pending', 'applying'].includes(proposal.status)
+    || proposal.result
+    || !Array.isArray(proposal.scheduleRequests) || !Array.isArray(proposal.changeResults)
+    || proposal.nextScheduleOperation !== authority.scheduleIndex
+    || proposal.scheduleRequests[authority.scheduleIndex]?.request.mutationId !== request.mutationId
+    || hashTrainingScheduleMutationRequest(proposal.scheduleRequests[authority.scheduleIndex].request)
+      !== hashTrainingScheduleMutationRequest(request)) return null;
+  try {
+    await assertAuthorityInTransaction({ db, now: () => nowMs }, tx, uid, authority.connectionId,
+      authority.requiredScopes, authority.accessGeneration,
+      authority.connectionId.startsWith('first-party-assistant-v1:') ? authority.proposalRef : undefined, true);
+  } catch (error) {
+    if (error instanceof McpDataError) return null;
+    throw error;
+  }
+  return { ref, proposal };
+}
+
+export function completeApprovedStagedShiftInTransaction(
+  tx: FirebaseFirestore.Transaction,
+  approved: { ref: FirebaseFirestore.DocumentReference; proposal: StoredProposal },
+  authority: StagedShiftMcpAuthorityV1,
+  request: MutateTrainingScheduleRequestV1,
+): void {
+  const stored = approved.proposal.scheduleRequests[authority.scheduleIndex];
+  tx.update(approved.ref, {
+    nextScheduleOperation: authority.scheduleIndex + 1,
+    changeResults: [...approved.proposal.changeResults, { index: stored.index, kind: request.operation.kind,
+      status: 'applied', message: describeOperation(request.operation) }],
+    status: 'pending', leaseUntilMs: null,
+  });
 }
 
 async function loadSnapshot(
@@ -1025,11 +1088,11 @@ async function resetProposalLease(
   catch { /* Preserve the original apply failure. The lease still expires safely. */ }
 }
 
-async function preserveResumablePlanDeletionProposal(
+async function preserveResumableTrainingProposal(
   proposalRefDoc: FirebaseFirestore.DocumentReference,
   nowMs: number,
 ): Promise<void> {
-  const expiresAtMs = nowMs + PROPOSAL_RESULT_LIFETIME_MS;
+  const expiresAtMs = Math.max(Date.now(), nowMs) + PROPOSAL_RESULT_LIFETIME_MS;
   try {
     await proposalRefDoc.set({
       status: 'pending',
@@ -1039,7 +1102,7 @@ async function preserveResumablePlanDeletionProposal(
     }, { merge: true });
   } catch {
     // Preserve the original interruption. The current lease still expires and
-    // the deletion lock keeps unrelated schedule writes fenced.
+    // the bulk-operation lock keeps unrelated schedule writes fenced.
   }
 }
 
@@ -1063,8 +1126,10 @@ async function applyTrainingChangesInternal(
     const now = deps.now();
     if (value.expiresAtMs <= now && value.status === 'pending') invalid('This Training proposal expired. Prepare it again.');
     if (value.status === 'applying' && (value.leaseUntilMs ?? 0) > now) invalid('This Training proposal is already being applied.');
-    const next = { ...value, status: 'applying' as const, leaseUntilMs: now + APPLY_LEASE_MS };
-    tx.update(proposalRefDoc, { status: next.status, leaseUntilMs: next.leaseUntilMs });
+    const next = { ...value, status: 'applying' as const, leaseUntilMs: now + APPLY_LEASE_MS,
+      approvedAtMs: value.approvedAtMs ?? now };
+    tx.update(proposalRefDoc, { status: next.status, leaseUntilMs: next.leaseUntilMs,
+      approvedAtMs: next.approvedAtMs });
     return next;
   });
   timing.operationCount = proposal.scheduleRequests.length + proposal.providerOperations.length
@@ -1096,7 +1161,7 @@ async function applyTrainingChangesInternal(
       await proposalRefDoc.update({ changeResults, leaseUntilMs: deps.now() + APPLY_LEASE_MS });
     } catch (error) {
       if (error instanceof TrainingPlanDeletionResumeRequiredError) {
-        await preserveResumablePlanDeletionProposal(proposalRefDoc, deps.now());
+        await preserveResumableTrainingProposal(proposalRefDoc, deps.now());
         throw new McpDataError(
           'temporarily_unavailable',
           'The approved plan deletion was interrupted. Retry the same approved change; it resumes safely without repeating completed work.',
@@ -1119,6 +1184,28 @@ async function applyTrainingChangesInternal(
       status: 'applied' as const,
       message: describeOperation(stored.request.operation),
     }));
+    const applyStagedShift = async (stored: StoredScheduleOperation, scheduleIndex: number): Promise<void> => {
+      const authority: StagedShiftMcpAuthorityV1 = {
+        kind: 'mcp-approved-shift', proposalId: current.id, proposalRef: current.ref,
+        proposalCreatedAtMs: proposal.createdAtMs, connectionId: input.connectionId,
+        accessGeneration: proposal.accessGeneration, requiredScopes: proposal.requiredScopes,
+        scheduleIndex,
+      };
+      try {
+        await stageLargeTrainingPlanShiftForUser(input.uid, stored.request, {
+          db: deps.db, nowMs: proposal.createdAtMs + scheduleIndex, stagedShiftAuthority: authority,
+        });
+      } catch (error) {
+        const lock = await deps.db.collection('users').doc(input.uid).collection('trainingPlanState').doc('current')
+          .collection('planDeletionLocks').doc('_bulk_shift').get();
+        if (lock.exists && lock.data()?.mcpAuthority?.proposalId === current.id) {
+          await preserveResumableTrainingProposal(proposalRefDoc, deps.now());
+          throw new McpDataError('temporarily_unavailable',
+            'The approved plan shift was interrupted. Retry the same approved change; it resumes safely.');
+        }
+        throw error;
+      }
+    };
     try {
       await mutateTrainingScheduleBatchForUser(input.uid, pendingSchedule.map(stored => stored.request), {
         db: deps.db,
@@ -1137,7 +1224,12 @@ async function applyTrainingChangesInternal(
       });
       changeResults.push(...appliedResults);
     } catch (error) {
-      if (error instanceof TrainingScheduleBatchWriteLimitError) {
+      if ((error instanceof TrainingScheduleOversizedMutationError
+        || error instanceof TrainingScheduleBatchWriteLimitError)
+        && pendingSchedule.length === 1 && pendingSchedule[0].request.operation.kind === 'shift-plan') {
+        await applyStagedShift(pendingSchedule[0], proposal.nextScheduleOperation);
+        changeResults.push(appliedResults[0]);
+      } else if (error instanceof TrainingScheduleBatchWriteLimitError) {
         for (let offset = 0; offset < pendingSchedule.length; offset += 1) {
           const stored = pendingSchedule[offset];
           const appliedResult = appliedResults[offset];
@@ -1160,6 +1252,13 @@ async function applyTrainingChangesInternal(
             });
             changeResults.push(appliedResult);
           } catch (sequentialError) {
+            if ((sequentialError instanceof TrainingScheduleOversizedMutationError
+              || sequentialError instanceof TrainingScheduleBatchWriteLimitError)
+              && stored.request.operation.kind === 'shift-plan') {
+              await applyStagedShift(stored, proposal.nextScheduleOperation + offset);
+              changeResults.push(appliedResult);
+              continue;
+            }
             const message = publicErrorMessage(sequentialError);
             if (!message) {
               await resetProposalLease(proposalRefDoc);

@@ -1,4 +1,4 @@
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { Firestore } from 'firebase-admin/firestore';
 import { ActivityTypes } from '@sports-alliance/sports-lib';
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
@@ -11,6 +11,9 @@ import { WahooTrainingTransport } from '../training-plans/delivery/wahoo/transpo
 import { reconcileTrainingDeliveryPage } from '../training-plans/delivery/store';
 import { processTrainingDelivery } from '../training-plans/delivery/worker';
 import { parseStrengthWorkoutDetailsV1 } from '../../../shared/strength-workout';
+import { encodeOpaqueValue } from './data.service';
+import { processTrainingBulkShift, reconcileTrainingBulkShifts } from '../training-plans/bulk-shift-worker';
+import { mutateTrainingScheduleForUser } from '../training-plans/persistence';
 import { applyTrainingChanges, previewCreatePlannedWorkout, previewTrainingChanges,
   previewStrengthWorkoutChange, previewPlannedWorkoutV2Change,
   type TrainingWriteDependencies } from './training-plans-write.service';
@@ -72,6 +75,165 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Training MCP write propos
       ] } }, deps))
       .rejects.toMatchObject({ code: 'failed-precondition' });
   });
+
+  const prepareOversizedShift = async (connectionId = 'connection', grantedScopes = scopes) => {
+    const user = db.collection('users').doc(uid);
+    await user.collection('trainingPlanState').doc('current').update({ activePlanId: 'bulk-plan',
+      currentWorkoutCount: 400 });
+    const planRef = user.collection('trainingPlans').doc('bulk-plan');
+    await planRef.set({ schemaVersion: 1, id: 'bulk-plan', name: 'Approved bulk shift', lifecycle: 'active',
+      startLocalDate: '2026-10-01', endLocalDate: '2026-10-31', revision: 1, lastCheckpointRevision: 1,
+      workoutCount: 400, createdAtMs: 1, updatedAtMs: 1 });
+    for (let offset = 0; offset < 400; offset += 100) {
+      const batch = db.batch();
+      for (let index = offset; index < offset + 100; index += 1) {
+        const id = `bulk-${`${index}`.padStart(3, '0')}`;
+        const nodes = Array.from({ length: 100 }, (_, step) => ({ kind: 'step', id: `step-${step}`,
+          purpose: 'work', ending: { kind: 'time', seconds: 30 }, targets: [],
+          note: Array.from({ length: 3 }, (_, part) => createHash('sha256')
+            .update(`${index}:${step}:${part}`).digest('hex')).join(''),
+        }));
+        batch.set(user.collection('scheduledWorkouts').doc(id), { schemaVersion: 1, id, planId: 'bulk-plan',
+          localDate: '2026-10-02', lifecycle: 'planned', title: `Bulk workout ${index}`,
+          structure: { version: 1, sport: ActivityTypes.Running, nodes },
+          revision: 1, createdAtMs: 1, updatedAtMs: 1 });
+      }
+      await batch.commit();
+    }
+    const plan = encodeOpaqueValue('training_read', { kind: 'plan', id: 'bulk-plan', createdAtMs: 1 }, uid, connectionId);
+    const preview = await previewTrainingChanges({ uid, connectionId, scopes: grantedScopes,
+      arguments: { expectedScheduleRevision: 1, changes: [{ kind: 'shift-plan', plan: { ref: plan }, days: 1 }] } }, deps);
+    if (connectionId.startsWith('first-party-assistant-v1:')) {
+      await user.collection('assistantConversations').doc('active').update({ pendingTrainingProposal: preview });
+    }
+    return { user, planRef, preview };
+  };
+
+  const interruptOversizedShift = async (planRef: FirebaseFirestore.DocumentReference, proposalRef: string,
+    connectionId = 'connection', grantedScopes = scopes) => {
+    const revisionRef = planRef.collection('revisions').doc('0000000002');
+    let interrupted = false;
+    const interruptedDb = {
+      collection: (id: string) => db.collection(id),
+      runTransaction: async (handler: (transaction: FirebaseFirestore.Transaction) => Promise<unknown>) => {
+        const result = await db.runTransaction(handler);
+        if (!interrupted && !(await revisionRef.collection('chunks').limit(1).get()).empty
+          && !(await revisionRef.get()).exists) {
+          interrupted = true;
+          throw new Error('synthetic lost MCP shift stage response');
+        }
+        return result;
+      },
+    } as unknown as Firestore;
+    await expect(applyTrainingChanges({ uid, connectionId, scopes: grantedScopes,
+      arguments: { proposalRef, permissionMode: 'schedule' } },
+    { ...deps, db: interruptedDb })).rejects.toThrow('Retry the same approved change');
+    expect(interrupted).toBe(true);
+    return revisionRef;
+  };
+
+  it('applies an approved oversized plan shift without losing the proposal authority boundary', async () => {
+    const { user, planRef, preview } = await prepareOversizedShift();
+    const result = await applyTrainingChanges({ uid, connectionId: 'connection', scopes,
+      arguments: { proposalRef: preview.proposalRef, permissionMode: 'schedule' } }, deps);
+    expect(result.status).toBe('applied');
+    expect((await planRef.get()).data()).toMatchObject({ revision: 2, startLocalDate: '2026-10-02' });
+    expect((await user.collection('scheduledWorkouts').doc('bulk-399').get()).data())
+      .toMatchObject({ revision: 2, localDate: '2026-10-03' });
+  }, 120_000);
+
+  it('cancels unpublished MCP shift staging after the connection grant is revoked', async () => {
+    const { user, planRef, preview } = await prepareOversizedShift();
+    const revisionRef = await interruptOversizedShift(planRef, preview.proposalRef);
+    expect((await planRef.get()).get('revision')).toBe(1);
+    const lockRef = user.collection('trainingPlanState').doc('current')
+      .collection('planDeletionLocks').doc('_bulk_shift');
+    const dueAtMs = (await lockRef.get()).get('nextAttemptAtMs') as number;
+    await user.collection('mcpConnections').doc('connection').update({ revokedAtMs: dueAtMs });
+    expect(await reconcileTrainingBulkShifts(db, dueAtMs + 1)).toEqual({ scanned: 1, completed: 0, failed: 0 });
+    expect((await lockRef.get()).exists).toBe(false);
+    expect((await revisionRef.get()).exists).toBe(false);
+    expect((await revisionRef.collection('chunks').limit(1).get()).empty).toBe(true);
+    expect((await planRef.get()).data()).toMatchObject({ revision: 1, startLocalDate: '2026-10-01' });
+    expect((await user.collection('scheduledWorkouts').doc('bulk-399').get()).data())
+      .toMatchObject({ revision: 1, localDate: '2026-10-02' });
+  }, 120_000);
+
+  it('cancels unpublished MCP shift staging when its approved proposal expires', async () => {
+    const { user, planRef, preview } = await prepareOversizedShift();
+    const revisionRef = await interruptOversizedShift(planRef, preview.proposalRef);
+    const lockRef = user.collection('trainingPlanState').doc('current')
+      .collection('planDeletionLocks').doc('_bulk_shift');
+    const dueAtMs = (await lockRef.get()).get('nextAttemptAtMs') as number;
+    const proposals = await user.collection('trainingMcpProposals').get();
+    expect(proposals.size).toBe(1);
+    await proposals.docs[0].ref.update({ expiresAtMs: dueAtMs });
+    expect(await reconcileTrainingBulkShifts(db, dueAtMs + 1)).toEqual({ scanned: 1, completed: 0, failed: 0 });
+    expect((await lockRef.get()).exists).toBe(false);
+    expect((await revisionRef.collection('chunks').limit(1).get()).empty).toBe(true);
+    expect((await planRef.get()).get('revision')).toBe(1);
+  }, 120_000);
+
+  it('cancels an unpublished Assistant shift when its in-app confirmation changes', async () => {
+    const user = db.collection('users').doc(uid);
+    await user.collection('assistantConversations').doc('active').set({ conversationId: 'chat-1',
+      trainingPlansEnabled: true, trainingPlanChangesEnabled: true, trainingDeliveryEnabled: false });
+    const assistantScopes = [TRAINING_PLANS_SCOPE, TRAINING_PLANS_WRITE_SCOPE];
+    const connectionId = 'first-party-assistant-v1:chat-1';
+    const { planRef, preview } = await prepareOversizedShift(connectionId, assistantScopes);
+    const revisionRef = await interruptOversizedShift(planRef, preview.proposalRef, connectionId, assistantScopes);
+    const lockRef = user.collection('trainingPlanState').doc('current')
+      .collection('planDeletionLocks').doc('_bulk_shift');
+    const dueAtMs = (await lockRef.get()).get('nextAttemptAtMs') as number;
+    await user.collection('assistantConversations').doc('active')
+      .update({ pendingTrainingProposal: { proposalRef: 'newer-proposal' } });
+    expect(await reconcileTrainingBulkShifts(db, dueAtMs + 1)).toEqual({ scanned: 1, completed: 0, failed: 0 });
+    expect((await lockRef.get()).exists).toBe(false);
+    expect((await revisionRef.collection('chunks').limit(1).get()).empty).toBe(true);
+    expect((await planRef.get()).get('revision')).toBe(1);
+  }, 120_000);
+
+  it('resumes an interrupted approved MCP shift once and replays its result', async () => {
+    const { user, planRef, preview } = await prepareOversizedShift();
+    const revisionRef = await interruptOversizedShift(planRef, preview.proposalRef);
+    const lockRef = user.collection('trainingPlanState').doc('current')
+      .collection('planDeletionLocks').doc('_bulk_shift');
+    const dueAtMs = (await lockRef.get()).get('nextAttemptAtMs') as number;
+    expect(await reconcileTrainingBulkShifts(db, dueAtMs + 1)).toEqual({ scanned: 1, completed: 1, failed: 0 });
+    expect((await lockRef.get()).exists).toBe(false);
+    expect((await revisionRef.get()).exists).toBe(true);
+    const result = await applyTrainingChanges({ uid, connectionId: 'connection', scopes,
+      arguments: { proposalRef: preview.proposalRef, permissionMode: 'schedule' } }, deps);
+    expect(result.status).toBe('applied');
+    expect((await planRef.get()).data()).toMatchObject({ revision: 2, startLocalDate: '2026-10-02' });
+    expect((await user.collection('scheduledWorkouts').doc('bulk-399').get()).data())
+      .toMatchObject({ revision: 2, localDate: '2026-10-03' });
+    expect((await revisionRef.collection('chunks').get()).empty).toBe(false);
+    expect((await planRef.collection('revisions').get()).size).toBe(1);
+  }, 120_000);
+
+  it('fences a conflicting edit and lets only one worker publish an approved MCP shift', async () => {
+    const { user, planRef, preview } = await prepareOversizedShift();
+    await interruptOversizedShift(planRef, preview.proposalRef);
+    await expect(mutateTrainingScheduleForUser(uid, {
+      mutationId: 'conflicting-mcp-shift-rename',
+      expectedRevisions: [{ scope: 'state', id: 'current', revision: 1 },
+        { scope: 'plan', id: 'bulk-plan', revision: 1 }],
+      operation: { kind: 'rename-plan', planId: 'bulk-plan', name: 'Must wait for shift' },
+    }, { db, nowMs: deps.now() })).rejects.toMatchObject({ code: 'failed-precondition' });
+    const lockRef = user.collection('trainingPlanState').doc('current')
+      .collection('planDeletionLocks').doc('_bulk_shift');
+    const dueAtMs = (await lockRef.get()).get('nextAttemptAtMs') as number;
+    const outcomes = await Promise.all([
+      processTrainingBulkShift(db, lockRef, dueAtMs + 1),
+      processTrainingBulkShift(db, lockRef, dueAtMs + 1),
+    ]);
+    expect(outcomes.sort()).toEqual([false, true]);
+    expect((await planRef.get()).data()).toMatchObject({ revision: 2,
+      name: 'Approved bulk shift', startLocalDate: '2026-10-02' });
+    expect((await planRef.collection('revisions').get()).size).toBe(1);
+    expect((await lockRef.get()).exists).toBe(false);
+  }, 120_000);
 
   it('creates a focused standalone-workout proposal without a client operation kind or local key', async () => {
     const preview = await previewCreatePlannedWorkout({ uid, connectionId: 'connection', scopes,

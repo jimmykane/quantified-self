@@ -572,7 +572,8 @@ packed Sports Lib package. That gate is tracked by GitHub issue #654 under epic 
   revision, and timestamp. A plan restore likewise patches scalar-only changes and preflights estimated write payload;
   an oversized full-prescription restore returns a stable `limit-exceeded` error before any write. Schedule mutation
   batches preflight compressed revision chunks and current-record writes against a conservative 7 MiB budget;
-  an oversized multi-change batch uses the existing sequential fallback. For an oversized single **manual plan shift**,
+  an oversized multi-change batch uses the existing sequential fallback. For an oversized single manual or
+  separately approved MCP plan shift,
   the server instead creates an owner-scoped `_bulk_shift` lock in `planDeletionLocks` with the exact validated request,
   base revisions, mutation ID, and retry schedule. It writes immutable compressed history chunks below a missing
   revision envelope in bounded idempotent transactions. Current state, plan, and workout roots remain unchanged and
@@ -589,12 +590,20 @@ packed Sports Lib package. That gate is tracked by GitHub issue #654 under epic 
   account-deletion fence and returns that committed result. Receipt retention starts at commit, not lock creation, so
   a long-stalled shift does not immediately lose its idempotency record.
   Other schedule mutations, restores, deletions, provider delivery, and MCP Training reads are fenced while the lock
-  exists. The separate five-minute `reconcileTrainingBulkShift` scheduler leases and resumes one due shift per
+  exists. An MCP lock also stores a private owner/connection/proposal/grant/index binding, never client-supplied input.
+  Its first apply must pass the existing preview and approval path; lock acquisition, preparation, and final commit
+  recheck that the proposal was approved for the exact shift and that its grant or Assistant confirmation is still
+  current. The final transaction advances the proposal cursor and per-change result alongside the schedule revision, so a lost
+  response cannot replay the shift. Acquisition extends that approved proposal's retry lifetime to 30 days. If its
+  permission or proposal is lost before publication, the worker fences final commit, recursively removes the
+  unpublished staged history, and releases the lock without changing current dates. This is not a new MCP mutation
+  kind or permission, and it does not authorize provider delivery.
+  The separate five-minute `reconcileTrainingBulkShift` scheduler leases and resumes one due shift per
   invocation after a timed-out callable, with bounded backoff and account-deletion fencing. It scans up to 100 due
   locks, skipping unclaimable deleted-account records so one orphan cannot block another owner's recovery. This worker
   has its own runtime budget and cannot starve `reconcileTrainingPlanCleanup`'s permanent-deletion jobs. Deploy the
-  `planDeletionLocks(nextAttemptAtMs, __name__)` collection-group index and unindexed `request` field before enabling
-  this worker. Inspect `[TrainingBulkShift] resume_failed` or `scan_failed` logs and the lock's
+  `planDeletionLocks(nextAttemptAtMs, __name__)` collection-group index and unindexed `request` and `mcpAuthority`
+  fields before enabling this worker. Inspect `[TrainingBulkShift] resume_failed` or `scan_failed` logs and the lock's
   retry schedule if a shift remains pending; do not manually remove a lock without examining its revision and receipts.
   The canonical workout JSON and published 400-workout limit do not change.
 - A permanent workout or plan deletion creates a server-internal `trainingCleanupJobs` record in the same transaction
@@ -630,19 +639,19 @@ packed Sports Lib package. That gate is tracked by GitHub issue #654 under epic 
   the schedule unavailable: inspect `[TrainingBulkShift] resume_failed`, the lock phase/cursor and receipt before manual
   intervention. Never delete an applying lock without a verified rollback plan. The v1 workout JSON and 400-workout
   limit remain unchanged; old clients with already-open workout listeners may need a reload after a restore.
-- #657 remains open for extending oversized single-shift behavior to the approval-gated MCP mutation path and any
-  remaining failure/concurrency coverage. MCP plan/workout reads report temporary unavailability while either bulk
-  lock exists. The restore adds no MCP field, tool, permission, or mutation kind: MCP history restore remains excluded
-  from its registered write contract. Approval-gated MCP shifts still use the bounded transaction path and reject an
-  oversized shift rather than bypassing the proposal/authority checks.
+- MCP plan/workout reads report temporary unavailability while either bulk lock exists. The restore adds no MCP
+  field, tool, permission, or mutation kind: MCP history restore remains excluded from its registered write contract.
+  An approved oversized MCP shift uses the same staged history path with private authority checks on worker retry;
+  ordinary bounded MCP changes still use the existing transaction or sequential fallback.
 - MCP impact for the paging and cleanup slice: existing Training MCP current reads already exclude deleted workouts;
   internal cleanup jobs and UI-only deleted-history paging expose no new MCP field, permission, mutation kind, provider
   action, or approval route. Existing MCP plan deletion continues through the same idempotent server path.
 - MCP impact for staged shifts: no tool, schema, scope, consent, projection, or provider action changes. Existing
   Training reads return their established temporary-unavailability result while a bulk lock is held rather than
-  exposing a partly staged plan. Approval-gated MCP mutations retain their current bounded transaction and can still
-  reject an oversized shift with the existing limit-error category; they do not silently enter the manual shift path.
-  The existing batch apply may fall back to sequential transactions when its estimated payload is too large.
+  exposing a partly staged plan. The existing MCP proposal/confirmation contract now routes an oversized approved
+  shift to the staged worker without weakening owner, connection, grant, Assistant confirmation, or revision checks;
+  approval loss cancels unpublished chunks. The existing batch apply may fall back to sequential transactions when
+  its estimated payload is too large. No MCP read projection, registered schema, or plugin artifact changes.
 - MCP impact for plan-cleanup ownership recheck: no tool or wire change; existing approved plan deletion still uses its
   saved idempotent receipt, while a cleanup worker cannot remove residual workouts after its owning plan job is gone.
 

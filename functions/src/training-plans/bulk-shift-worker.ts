@@ -7,6 +7,8 @@ import { getUserDeletionGuardStateInTransaction } from '../shared/user-deletion-
 import {
     BULK_SHIFT_LEASE_MS,
     BULK_SHIFT_LOCK_ID,
+    StagedShiftApprovalLostError,
+    abortUnapprovedMcpShift,
     readBulkShiftLock,
     stageLargeTrainingPlanShiftForUser,
 } from './staged-shift';
@@ -58,6 +60,11 @@ export async function processTrainingBulkShift(
         }
         return true;
     } catch (error) {
+        if (error instanceof StagedShiftApprovalLostError
+            && await abortUnapprovedMcpShift(db, uid, ref, nowMs)) {
+            logger.warn('[TrainingBulkShift]', { event: 'revoked_mcp_shift_cancelled' });
+            return false;
+        }
         const retryMs = Math.min(MAX_RETRY_MS, 60_000 * 2 ** Math.min(claimed.attempt, 6));
         await db.runTransaction(async transaction => {
             if ((await getUserDeletionGuardStateInTransaction(db, transaction, uid, nowMs)).shouldSkip) return;

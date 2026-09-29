@@ -50,11 +50,12 @@ delivery preview/apply remains authoritative.
 `training-plans.service.ts` owns explicit field masks and read-only Firestore snapshot transactions, not new persistence.
 Fresh schedule/account-deletion/plan-deletion fences run before and after results, as do external connection consent and
 grant-generation checks. Settings fingerprints are read only to correlate current delivery evidence and never returned.
-An oversized manual plan shift may temporarily hold the same internal bulk-operation fence while its immutable history
-is staged. During that interval, planning reads return the existing temporary-unavailability result instead of a
+An oversized manual or separately approved MCP plan shift may temporarily hold the same internal bulk-operation fence
+while its immutable history is staged. During that interval, planning reads return the existing temporary-unavailability result instead of a
 partly staged schedule; after the atomic commit they read the new revision. This adds no MCP field, tool, scope,
-projection, provider action, or wider write authority. Approval-gated MCP shifts retain their existing bounded
-transaction path and may still reject an oversized request before writing.
+projection, provider action, or wider write authority. An oversized MCP shift uses the approved proposal's private
+owner/connection/grant binding; the worker rechecks it before publishing and cancels unpublished history if approval
+is lost. Ordinary MCP shifts retain the bounded transaction path.
 No credentials, private ledgers, attempts, artifacts, approval digests, issue text, receipts or history are read. Reads do
 not import transports or write Training data; normal OAuth usage counters remain permitted infrastructure behavior.
 
@@ -109,8 +110,13 @@ history restoration remain deliberately absent.
 
 Compatible schedule operations are applied in one bounded Firestore transaction while retaining one immutable revision
 and idempotency receipt per operation. A write-budget overflow falls back to the existing sequential path; authority is
-still checked in every authored-write transaction. Apply diagnostics contain only operation counts, total/stage durations,
-terminal outcome and the slowest stage—never owner IDs, references, titles, notes or arguments. Applies taking at least
+still checked in every authored-write transaction. An oversized approved plan shift stages immutable history behind a
+private lock and atomically publishes current dates, the revision, receipts, and the proposal cursor. The same approved
+proposal is retryable after an interrupted apply; the worker can finish it without a new client call. Grant revocation,
+Assistant confirmation change, or proposal expiry before publication cancels the unpublished shift. No new tool,
+scope, consent, schema, or provider action is exposed, so this implementation-only change does not require a plugin
+rebuild; deployment and registered-client availability remain separate. Apply diagnostics contain only operation
+counts, total/stage durations, terminal outcome and the slowest stage—never owner IDs, references, titles, notes or arguments. Applies taking at least
 five seconds emit one structured slow warning for operational investigation.
 
 Delivery actions resolve the destination account on the server and reuse the existing #646 command/reconciliation path.

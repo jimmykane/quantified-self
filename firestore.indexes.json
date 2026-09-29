@@ -2565,6 +2565,12 @@
       "fieldPath": "request",
       "ttl": false,
       "indexes": []
+    },
+    {
+      "collectionGroup": "planDeletionLocks",
+      "fieldPath": "mcpAuthority",
+      "ttl": false,
+      "indexes": []
     }
   ]
 }

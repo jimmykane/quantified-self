@@ -41,6 +41,7 @@ describe('firestore indexes', () => {
             ['chunks', 'payloadBase64'],
             ['trainingCleanupJobs', 'response'],
             ['planDeletionLocks', 'request'],
+            ['planDeletionLocks', 'mcpAuthority'],
         ]) {
             expect(config.fieldOverrides).toContainEqual({ collectionGroup, fieldPath, ttl: false, indexes: [] });
         }
