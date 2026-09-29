@@ -99,6 +99,7 @@ interface DiscoveredEndpoint {
     retryConfig?: {
       maxAttempts?: number;
       maxDoublings?: number;
+      maxRetrySeconds?: number | null;
       minBackoffSeconds?: number;
       maxBackoffSeconds?: number;
     };
@@ -161,6 +162,16 @@ function probe(targetArgument: string): void {
       || path.endsWith('/lib/functions/src/admin/shared/subscription.constants.js')
     );
   });
+
+  if (runtimeTarget && OPTIMIZED_FUNCTION_TARGETS.includes(runtimeTarget)) {
+    // Snapshot the isolated import graph above, then compare with discovery's
+    // authoritative export. Importing the full entrypoint before that snapshot
+    // would make every isolated target appear to load the entire application.
+    const fullEntrypoint = module.require(
+      resolve(__dirname, '..', 'full-entrypoint'),
+    ) as Record<string, unknown>;
+    matchesFullEntrypoint = entrypoint[runtimeTarget] === fullEntrypoint[runtimeTarget];
+  }
 
   const result: ProbeResult = {
     target,
@@ -263,6 +274,7 @@ async function check(): Promise<void> {
       `${target} exposed unexpected exports: ${optimized.exports.join(', ')}`,
     );
     assert(optimized.preservesHandlerIdentity, `${target} did not preserve its Firebase handler object.`);
+    assert(optimized.matchesFullEntrypoint, `${target} differs from the full-entrypoint handler.`);
     assert(
       optimized.forbiddenModules.length === 0,
       `${target} loaded unrelated modules: ${optimized.forbiddenModules.join(', ')}`,
@@ -314,6 +326,10 @@ async function check(): Promise<void> {
     } else if (target === 'reconcileTrainingPlanCleanup' || target === 'reconcileTrainingBulkShift') {
       assert(endpoint.availableMemoryMb === 512, `${target} memory configuration changed.`);
       assert(endpoint.timeoutSeconds === 300, `${target} timeout configuration changed.`);
+      assert(JSON.stringify(endpoint.concurrency) === 'null'
+        && JSON.stringify(endpoint.maxInstances) === 'null'
+        && JSON.stringify(endpoint.minInstances) === 'null',
+      `${target} instance settings changed.`);
       assert(secretKeys.length === 0, `${target} secret bindings changed.`);
       assert(endpoint.scheduleTrigger?.schedule === 'every 5 minutes'
         && endpoint.scheduleTrigger.timeZone === 'UTC'
@@ -344,11 +360,13 @@ async function check(): Promise<void> {
         );
       } else if (expected.trigger === 'schedule') {
         assert(endpoint.scheduleTrigger?.schedule === expected.schedule
+          && endpoint.scheduleTrigger?.timeZone === undefined
           && JSON.stringify(endpoint.scheduleTrigger?.retryConfig) === '{}',
         `${target} schedule changed.`);
       } else {
         assert(endpoint.taskQueueTrigger?.retryConfig?.maxAttempts === 10
           && endpoint.taskQueueTrigger.retryConfig.maxDoublings === 4
+          && JSON.stringify(endpoint.taskQueueTrigger.retryConfig.maxRetrySeconds) === 'null'
           && endpoint.taskQueueTrigger.retryConfig.minBackoffSeconds === 900
           && endpoint.taskQueueTrigger.retryConfig.maxBackoffSeconds === 14_400,
         `${target} task retry configuration changed.`);
