@@ -372,6 +372,9 @@ The readiness, power-system, and durability charts are the same standalone compo
 their tooltip, haptic, theme, resize, and disposal behavior. Training and the explorer both use
 `TrainingMixDetailsComponent` and `TrainingBuildMetricsComponent` under `shared/training-summary/`; keep their
 markup and responsive styles there rather than copying them into a public page.
+On a selected sport, the live Training mix comparison uses the full section width. Its summary, intensity balance, and
+sport-context metrics form a responsive internal grid on wide containers and collapse into the same ordered stack on
+narrow cards and phones. Do not reserve a sibling grid column for the Overview-only intensity chart.
 The explorer supplies deterministic synthetic view models from `training-explorer-preview.data.ts`, visibly labeled
 as example data and wrapped in native `data-nosnippet`. It does not load account data, trigger snapshot refreshes, or
 import the Training workspace/module. Public SSR retains descriptive copy and placeholders; the explorer is deferred

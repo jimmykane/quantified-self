@@ -403,6 +403,26 @@ describe('TrainingWorkspaceComponent', () => {
     expect(adjacentContextRule).toContain('border-top: 1px solid var(--training-mix-context-divider-color);');
   });
 
+  it('uses the full section width for one sport and rearranges its comparison inside the card', () => {
+    const workspaceStyles = readFileSync(
+      resolve(process.cwd(), 'src/app/components/training/training-workspace.component.scss'),
+      'utf8',
+    );
+    const detailsStyles = readFileSync(
+      resolve(process.cwd(), 'src/app/components/shared/training-summary/training-mix-details.component.scss'),
+      'utf8',
+    );
+
+    expect(workspaceStyles).toMatch(/\.training-mix-grid--single\s*\{\s*grid-template-columns:\s*minmax\(0, 1fr\);/);
+    expect(workspaceStyles).not.toContain('grid-template-columns: minmax(280px, 340px) minmax(0, 1fr)');
+    expect(detailsStyles).toContain('@container (min-width: 760px)');
+    expect(detailsStyles).toMatch(/\.training-mix-details--single\s*\{[^}]*grid-template-columns:\s*minmax\(280px, \.9fr\) minmax\(340px, 1\.1fr\)/s);
+    expect(detailsStyles).toContain('@container (min-width: 760px) and (max-width: 1119px)');
+    expect(detailsStyles).toContain('@container (min-width: 1120px)');
+    expect(detailsStyles).toContain('.training-mix-details--single > .training-mix-zone-comparison');
+    expect(detailsStyles).toContain('.training-mix-details--single > .training-mix-contexts');
+  });
+
   it('renders activity-family icons for sport-specific training driver cards and TSS in the overview mix', async () => {
     const coverage = {
       totalCount: 4,
@@ -1364,7 +1384,6 @@ describe('TrainingWorkspaceComponent', () => {
       .toBe('Set benchmark');
     expect(element.querySelectorAll('.training-mix-panel')).toHaveLength(1);
     expect(element.querySelector('.training-mix-grid')?.classList.contains('training-mix-grid--single')).toBe(true);
-    expect(element.querySelector('.training-mix-panel')?.classList.contains('training-mix-panel--single')).toBe(true);
     expect(element.querySelector('.training-mix-zone-comparison')?.textContent).toContain('Intensity balance');
     expect(element.querySelectorAll('.training-mix-zone-track')).toHaveLength(3);
     expect(element.textContent).toContain('Cycling capacity evidence');
