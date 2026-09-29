@@ -13,6 +13,10 @@ interface TrainingPlansHomeRow {
 export const TRAINING_PLANS_HOME_CONTENT = {
   title: 'Plan What Comes Next',
   intro: 'Build structured running, cycling, swimming, walking, hiking, rowing, or strength workouts, organize them into dated plans or keep them standalone, and choose how you want to manage and deliver them.',
+  mcpExample: {
+    title: 'Create Today\'s Workout with Your Training Data',
+    prompt: 'Create a workout for today based on my readiness—using my HRV, sleep, overnight heart rate, and recent training load—and the workouts already in my plan. Show me the proposed session before adding it.',
+  },
   preview: 'training-plans' satisfies PublicFeaturePreviewKey,
   cta: {
     label: 'Explore Training Plans',

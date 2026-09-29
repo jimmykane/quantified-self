@@ -429,6 +429,39 @@
         margin-bottom: 1.5rem;
     }
 
+    .training-plans-mcp-example {
+        display: grid;
+        grid-template-columns: auto minmax(0, 1fr);
+        gap: 1rem;
+        max-width: 1024px;
+        margin: 0 auto 1.5rem;
+        padding: 1.25rem;
+        text-align: left;
+        background: var(--mat-sys-surface-container-low);
+        border: 1px solid var(--mat-sys-outline-variant);
+        border-radius: 1rem;
+
+        > mat-icon {
+            color: var(--mat-sys-primary);
+        }
+
+        h3 {
+            margin: 0 0 0.5rem;
+            font: var(--mat-sys-title-medium);
+            color: var(--mat-sys-on-surface);
+        }
+
+        blockquote,
+        p {
+            margin: 0;
+        }
+
+        p {
+            color: var(--mat-sys-on-surface-variant);
+            line-height: 1.6;
+        }
+    }
+
     .training-plans-home-preview {
         display: block;
         max-width: 1024px;

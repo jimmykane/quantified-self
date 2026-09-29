@@ -381,6 +381,8 @@ describe('HomeComponent', () => {
 
         expect(text).toContain(TRAINING_PLANS_HOME_CONTENT.title);
         expect(text).toContain(TRAINING_PLANS_HOME_CONTENT.intro);
+        expect(text).toContain(TRAINING_PLANS_HOME_CONTENT.mcpExample.title);
+        expect(text).toContain(TRAINING_PLANS_HOME_CONTENT.mcpExample.prompt);
         for (const row of TRAINING_PLANS_HOME_CONTENT.rows) {
             expect(text).toContain(row.title);
             expect(text).toContain(row.copy);
@@ -395,6 +397,7 @@ describe('HomeComponent', () => {
         expect(text).toContain('never sends workouts by itself');
         expect(text).toContain('without adding them to recorded totals or Training analysis');
         expect(rows).toHaveLength(TRAINING_PLANS_HOME_CONTENT.rows.length);
+        expect(section.querySelectorAll('.training-plans-mcp-example')).toHaveLength(1);
         expect(links).toHaveLength(1);
         expect(links[0].getAttribute('href')).toBe(TRAINING_PLANS_HOME_CONTENT.cta.routerLink);
         expect(preview).toBeTruthy();

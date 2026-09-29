@@ -49,6 +49,12 @@ describe('public-seo-pages.content', () => {
     expect(page.freeOfferDescription).toBe(TRAINING_PLANS_SEO_CONTENT.freeOfferDescription);
     expect(page.sections.slice(0, TRAINING_PLANS_PAGE_SECTIONS.length)).toEqual(TRAINING_PLANS_PAGE_SECTIONS);
     expect(TRAINING_PLANS_HOME_CONTENT.cta.routerLink).toBe(`/${page.path}`);
+    expect(TRAINING_PLANS_HOME_CONTENT.mcpExample.prompt).toContain('workout for today');
+    expect(TRAINING_PLANS_HOME_CONTENT.mcpExample.prompt).toContain('readiness');
+    expect(TRAINING_PLANS_HOME_CONTENT.mcpExample.prompt).toContain('HRV');
+    expect(TRAINING_PLANS_HOME_CONTENT.mcpExample.prompt).toContain('sleep');
+    expect(TRAINING_PLANS_HOME_CONTENT.mcpExample.prompt).toContain('training load');
+    expect(TRAINING_PLANS_HOME_CONTENT.mcpExample.prompt).toContain('already in my plan');
   });
   it('defines distinct public feature and guide paths', () => {
     expect(PUBLIC_FEATURE_PATHS).toEqual({
