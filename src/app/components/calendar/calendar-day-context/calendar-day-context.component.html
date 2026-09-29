@@ -37,6 +37,11 @@
       }
     </div>
   }
+  @if (!compact() && trainingImpactState().status !== 'private' && activities().length) {
+    <app-training-impact [impact]="dayTrainingImpact()"
+      [variant]="dashboardTile() || calmMonth() ? 'compact' : 'summary'"
+      title="Day training impact"></app-training-impact>
+  }
   @if (healthState().status !== 'private' && healthState().status !== 'hidden') {
     <section class="calendar-day-context-health" [class.calendar-day-context-health--full]="standaloneDayPage()" aria-label="Recovery and sleep">
       @if (standaloneDayPage()) {
@@ -135,6 +140,10 @@
                   }
                 }
                 <small>{{ item.detail }}</small>
+                @if (item.kind === 'activity' && trainingImpactState().status !== 'private'
+                  && trainingImpactByEventId().get(item.id); as impact) {
+                  <app-training-impact [impact]="impact" variant="compact"></app-training-impact>
+                }
               </div>
               @if (item.kind === 'plan') {
                 <button mat-icon-button appHapticTap type="button" matTooltip="Duplicate to…"
@@ -193,6 +202,9 @@
                   [routerLink]="activity.route" (click)="prepareNavigation()">{{ activity.name }}</a>
               } @else { <strong>{{ activity.name }}</strong> }
               <small>{{ activity.duration }}</small>
+              @if (trainingImpactState().status !== 'private') {
+                <app-training-impact [impact]="activity.trainingImpact" variant="compact"></app-training-impact>
+              }
             </div>
           }
           @if (activities().length > previewActivities().length) {
@@ -269,10 +281,17 @@
           @if (activity.route) {
             <a mat-list-item [routerLink]="activity.route" (click)="prepareNavigation()">
               <span matListItemTitle>{{ activity.name }}</span><span matListItemLine>{{ activity.duration }}</span>
+              @if (trainingImpactState().status !== 'private') {
+                <app-training-impact matListItemLine [impact]="activity.trainingImpact" variant="compact"></app-training-impact>
+              }
               <span matListItemMeta aria-hidden="true"><mat-icon>chevron_right</mat-icon></span>
             </a>
           } @else {
-            <div mat-list-item><span matListItemTitle>{{ activity.name }}</span><span matListItemLine>{{ activity.duration }}</span></div>
+            <div mat-list-item><span matListItemTitle>{{ activity.name }}</span><span matListItemLine>{{ activity.duration }}</span>
+              @if (trainingImpactState().status !== 'private') {
+                <app-training-impact matListItemLine [impact]="activity.trainingImpact" variant="compact"></app-training-impact>
+              }
+            </div>
           }
         }
       </mat-nav-list>

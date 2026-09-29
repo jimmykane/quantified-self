@@ -31,6 +31,7 @@ import { CalendarDayDetailsNavigationService } from '../../../services/calendar-
 import { TrainingPlansService, type CurrentTrainingScheduleV1 } from '../../../services/training-plans.service';
 import { ActivityRangeTableSectionComponent } from '../../event-table/activity-range-table-section.component';
 import { CalendarPageComponent } from './calendar-page.component';
+import { TrainingImpactService } from '../../../services/training-impact.service';
 
 @Component({
   selector: 'app-activity-range-table-section',
@@ -118,6 +119,7 @@ describe('CalendarPageComponent', () => {
         { provide: TrainingPlansService, useValue: { watchSchedule, watchWorkoutCompletions } },
         { provide: CalendarDayDetailsNavigationService, useValue: dayDetailsNavigation },
         { provide: CalendarDayHealthService, useValue: { watch: vi.fn(() => of({ sessions: [], hrvSeries: [], derived: null, sleepError: false, hrvError: false, readinessError: false, recoveryError: false })) } },
+        { provide: TrainingImpactService, useValue: { watch: vi.fn(() => of({ status: 'private', formPoints: null })) } },
         { provide: AppTimelineNotesService, useValue: notesService },
         { provide: AppHapticsService, useValue: haptics },
         { provide: AppEventColorService, useValue: {

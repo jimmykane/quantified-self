@@ -1,5 +1,6 @@
 import { signal } from '@angular/core';
-import { AppThemes, DistanceUnits } from '@sports-alliance/sports-lib';
+import { AppThemes, DistanceUnits, type EventInterface } from '@sports-alliance/sports-lib';
+import { buildTrainingLoadPoints } from '@shared/training-load';
 import { normalizeUserUnitSettings } from '@shared/unit-aware-display';
 import type { TimelineNote } from '@shared/timeline-notes';
 import { TestBed } from '@angular/core/testing';
@@ -186,5 +187,43 @@ describe('CalendarDayContextComponent', () => {
     });
     fixture.detectChanges();
     expect(fixture.nativeElement.querySelector('[aria-label="Timeline notes on selected day"]')).toBeNull();
+
+    const trainingEvent = {
+      startDate: new Date('2026-09-13T20:00:00.000Z'),
+      getID: () => 'training-event',
+      getActivityTypesAsArray: () => ['Running'],
+      getActivityTypesAsString: () => 'Running',
+      getStat: (type: string) => type === 'Training Stress Score'
+        ? { getValue: () => 42 }
+        : type === 'Duration' ? { getValue: () => 3600 } : null,
+    } as unknown as EventInterface;
+    const model = buildActivityCalendarViewModel([trainingEvent], {
+      view: 'month', anchorDate: new Date('2026-09-13T12:00:00'), locale: 'en-US',
+    });
+    const trainingDay = model.months[0].days.find(day => day.dateKey === '2026-09-13')!;
+    const formPoints = buildTrainingLoadPoints([{
+      dayMs: Date.UTC(2026, 8, 13), load: 42,
+    }]).map(point => ({
+      time: point.dayMs, trainingStressScore: point.load, ctl: point.ctl, atl: point.atl,
+      formSameDay: point.formSameDay, formPriorDay: point.formPriorDay,
+    }));
+    fixture.componentRef.setInput('privateHealthEnabled', true);
+    fixture.componentRef.setInput('calmMonth', true);
+    fixture.componentRef.setInput('data', {
+      ...data('2026-09-13'), day: trainingDay,
+      trainingImpact: signal({ status: 'ready' as const, formPoints }),
+    });
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelectorAll('app-training-impact')).toHaveLength(2);
+    expect(fixture.nativeElement.textContent).toContain('+1 CTL · +6 ATL · −5 Form');
+
+    fixture.componentRef.setInput('calmMonth', false);
+    fixture.componentRef.setInput('standaloneDayPage', true);
+    fixture.componentInstance.healthState.set({
+      status: 'ready', dateKey: '2026-09-13', ownerUid: 'owner', summary: null, sleepPoint: null,
+    });
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('app-training-impact .training-impact')).toBeTruthy();
+    expect(fixture.nativeElement.querySelector('.calendar-day-timeline-content app-training-impact')).toBeTruthy();
   });
 });

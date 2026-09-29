@@ -2792,6 +2792,36 @@ load metrics are intentionally independent of sleep, HRV, overnight heart rate, 
 signals appear only in Readiness today, which adds recovery context without changing Freshness/Form or the Training
 state.
 
+#### Activity and selected-day Training impact
+
+Owner-only activity details and selected-day Calendar surfaces reuse the current Form snapshot to explain how each
+completed activity's recorded TSS participates in this model. They do not query activity history or create a separate
+derived snapshot. For one activity:
+
+```text
+Fitness load (CTL) contribution = activity TSS / 42
+Fatigue load (ATL) contribution = activity TSS / 7
+Freshness (Form) contribution   = CTL contribution - ATL contribution
+```
+
+The contribution is not the same as the actual day-over-day CTL change. The day outcome applies the full recurrence
+above, including normal decay from the prior UTC Training day, and reports whether CTL rose, held, or declined. Session
+headlines compare the complete UTC day's TSS with prior CTL: a session can push the day above maintenance, add load to
+a day that was already above maintenance, or offset decay while the day remains below maintenance. Valid zero TSS is
+shown as no modeled load contribution; missing TSS stays unavailable rather than becoming zero.
+
+Selected-day totals sum the visible completed activities' contributions. A local calendar date can contain activities
+from two UTC Training days, so the UI keeps one contribution total but shows a separate dated outcome for each UTC day
+instead of combining their net changes. Merge and benchmark records are excluded from Training, and their event detail
+pages do not render the Training-impact card. Planned workouts do not contribute. Stale, building, or refreshing Form
+data is labelled as updating; the UI never substitutes a local guess. The presentation is not included on compact
+calendar grid cells or public activity shares.
+
+This is a TSS-based model of sustained training load, not a measurement of physiological adaptation. The implementation
+adds only pure shared contribution/day-outcome interfaces beside the canonical Training-load model and consumes the
+existing Form snapshot. It adds no persisted field, schema version, derived-metric kind, backend mutation, provider
+action, consent scope, or MCP wire payload. MCP and Assistant exposure require a separate identity-safe contract review.
+
 The card starts with a concise interpretation of Form (recent fatigue relative to longer-term fitness) and labels the
 model as TSS-backed workouts only. When the no-workout forecast exists, the only follow-up prompt is to compare that
 scenario with today; it does not imply that the athlete should stop training.

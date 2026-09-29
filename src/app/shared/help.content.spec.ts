@@ -583,6 +583,9 @@ describe('help.content', () => {
     expect(calendarSection?.content).toContain('tag filter lists your saved activity tags across all dates');
     expect(calendarSection?.content).toContain('independent from the dashboard event table');
     expect(calendarSection?.content).toContain('Select any date, including an empty one');
+    expect(calendarSection?.content).toContain('Private selected-day views also show **Training impact**');
+    expect(calendarSection?.content).toContain('one local calendar date can show two dated UTC outcomes');
+    expect(calendarSection?.content).toContain('planned workouts never contribute');
     expect(calendarSection?.content).toContain('standalone workouts plus workouts from the active plan');
     expect(calendarSection?.content).toContain('Planned workouts never change recorded period totals');
     expect(calendarSection?.content).toContain('Merge and benchmark records are excluded');
@@ -685,6 +688,10 @@ describe('help.content', () => {
     const trainingSection = HELP_SECTIONS.find(section => section.id === 'training-analysis');
 
     expect(trainingSection?.content).toContain('What drove this');
+    expect(trainingSection?.content).toContain('**Training impact** appears for completed activities');
+    expect(trainingSection?.content).toContain('TSS divided by 42');
+    expect(trainingSection?.content).toContain('their event detail pages do not show the card');
+    expect(trainingSection?.content).toContain('Public activity shares and planned workouts do not show Training impact');
     expect(trainingSection?.content).toContain('compact line above the **Training** title');
     expect(trainingSection?.content).toContain('content does not shift');
     expect(trainingSection?.content).toContain('failed update adds **Retry**');

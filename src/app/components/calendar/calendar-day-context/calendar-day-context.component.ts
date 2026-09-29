@@ -28,6 +28,9 @@ import { formatManualWorkoutStructure } from '../../../helpers/planned-workout-e
 import { getDateTimeFormatter } from '../../../helpers/date-time-format.helper';
 import { buildCalendarDayStory, formatCalendarDayNoteDates } from '../../../helpers/calendar-day-story.helper';
 import type { CalendarDayDetailsData } from '../calendar-day-details/calendar-day-details.component';
+import { TrainingImpactComponent } from '../../training-impact/training-impact.component';
+import { buildTrainingDayImpactView, buildTrainingSessionImpactView } from '../../../helpers/training-impact.helper';
+import type { TrainingImpactSnapshotState } from '../../../services/training-impact.service';
 
 interface HealthState {
   status: 'loading' | 'ready' | 'private' | 'hidden';
@@ -41,7 +44,7 @@ interface HealthState {
   selector: 'app-calendar-day-context',
   standalone: true,
   host: { '[class.calendar-day-context--dashboard]': 'dashboardTile()', '[class.calendar-day-context--calm-month]': 'calmMonth()' },
-  imports: [SharedModule, ActivityCalendarVolumeListComponent, HealthSleepStageSummaryComponent],
+  imports: [SharedModule, ActivityCalendarVolumeListComponent, HealthSleepStageSummaryComponent, TrainingImpactComponent],
   templateUrl: './calendar-day-context.component.html',
   styleUrls: ['./calendar-day-context.component.scss'],
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -83,6 +86,12 @@ export class CalendarDayContextComponent {
   private readonly healthOwnerUid = computed(() => this.data().userId);
   readonly activityState = computed(() => this.data().activities?.() ?? { status: 'ready' as const, day: this.data().day });
   readonly day = computed(() => this.activityState().day);
+  readonly trainingImpactState = computed(() => this.data().trainingImpact?.()
+    ?? ({ status: 'private', formPoints: null } as TrainingImpactSnapshotState));
+  readonly dayTrainingImpact = computed(() => buildTrainingDayImpactView(
+    this.day().events,
+    this.trainingImpactState(),
+  ));
   readonly activitySummary = computed(() => buildActivityCalendarPeriodSummary(
     this.day().events, this.data().summariesSettings,
   ));
@@ -145,9 +154,13 @@ export class CalendarDayContextComponent {
       const seconds = resolveActivityCalendarEventDurationSeconds(event);
       return seconds === null ? 'Duration unavailable' : formatActivityCalendarDuration(seconds);
     })(),
+    trainingImpact: buildTrainingSessionImpactView(event, this.trainingImpactState()),
     route: event.getID?.() && this.data().userId
       ? ['/user', this.data().userId, 'event', event.getID()] : null,
   })));
+  readonly trainingImpactByEventId = computed(() => new Map(
+    this.activities().map(activity => [activity.id, activity.trainingImpact]),
+  ));
   readonly activityGroups = computed(() => buildActivityCalendarFamilyVolumeRows(
     this.activitySummary(),
     this.data().unitSettings, this.data().locale,

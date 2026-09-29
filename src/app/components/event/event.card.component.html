@@ -18,6 +18,10 @@
     [selectedActivities]="selectedActivitiesInstant()" [unitSettings]="userUnitSettings()"
     [statsToShow]="basicStatsTypes">
 
+    @if (trainingImpact(); as impact) {
+    <app-training-impact after-stats [impact]="impact"></app-training-impact>
+    }
+
     <!-- Keep performance charts first, followed by the pinned dive profile and ordinary charts. -->
     @if (hasDiveProfileFlag() || hasPerformanceChartsFlag()) {
     <div after-stats class="event-charts-summary-wrapper">

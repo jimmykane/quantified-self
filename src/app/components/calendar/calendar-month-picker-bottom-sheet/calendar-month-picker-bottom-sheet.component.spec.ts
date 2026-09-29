@@ -8,6 +8,7 @@ import { MAT_BOTTOM_SHEET_DATA, MatBottomSheet, MatBottomSheetRef } from '@angul
 import { of } from 'rxjs';
 import { ActivityCalendarService } from '../../../services/activity-calendar.service';
 import { TrainingPlansService } from '../../../services/training-plans.service';
+import { TrainingImpactService } from '../../../services/training-impact.service';
 import {
   CalendarMonthPickerBottomSheetComponent,
   type CalendarMonthPickerBottomSheetData,
@@ -31,6 +32,7 @@ describe('CalendarMonthPickerBottomSheetComponent', () => {
         { provide: MatBottomSheetRef, useValue: { dismiss } },
         { provide: MatBottomSheet, useValue: { open: vi.fn() } },
         { provide: ActivityCalendarService, useValue: { watchEvents: vi.fn().mockReturnValue(of([])) } },
+        { provide: TrainingImpactService, useValue: { watch: vi.fn(() => of({ status: 'private', formPoints: null })) } },
         {
           provide: TrainingPlansService,
           useValue: {
