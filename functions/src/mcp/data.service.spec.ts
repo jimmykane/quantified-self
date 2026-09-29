@@ -2385,6 +2385,106 @@ describe('MCP data service', () => {
     expect(secondPage.nextCursor).toBeNull();
   });
 
+  it('binds Training impact to opaque activity references and the existing Form snapshot', async () => {
+    vi.mocked(dependencies.fetchActivityDocuments).mockResolvedValue([
+      activityDocument(),
+    ]);
+    const trainingImpactReads = {
+      activeOwner: vi.fn().mockResolvedValue(true),
+      fetchActivities: vi.fn().mockResolvedValue([{
+        id: 'activity-1',
+        data: {
+          eventID: 'event-1',
+          startDate: Date.parse('2026-07-01T08:00:00.000Z'),
+          endDate: Date.parse('2026-07-01T09:00:00.000Z'),
+          stats: { 'Training Stress Score': 42 },
+        },
+      }]),
+      fetchEvents: vi.fn().mockResolvedValue([{
+        id: 'event-1',
+        data: {},
+      }]),
+      fetchFormSnapshot: vi.fn().mockResolvedValue({
+        entryType: DERIVED_METRICS_ENTRY_TYPES.Snapshot,
+        metricKind: DERIVED_METRIC_KINDS.Form,
+        schemaVersion: DERIVED_METRIC_SCHEMA_VERSION,
+        status: 'ready',
+        payload: {
+          dayBoundary: 'UTC',
+          rangeStartDayMs: Date.parse('2026-07-01T00:00:00.000Z'),
+          rangeEndDayMs: Date.parse('2026-07-01T00:00:00.000Z'),
+          dailyLoads: [{
+            dayMs: Date.parse('2026-07-01T00:00:00.000Z'),
+            load: 42,
+          }],
+          excludesMergedEvents: true,
+        },
+      }),
+    };
+    dependencies.trainingImpactReads = trainingImpactReads;
+    const service = createMcpDataService(dependencies);
+    const listed = await service.listActivities({
+      uid: 'user-1',
+      connectionId: 'connection-1',
+      appBaseUrl: 'https://quantified-self.io',
+    });
+    const activityRef = listed.activities[0].activityRef;
+
+    await expect(service.getTrainingImpact({
+      uid: 'user-1',
+      connectionId: 'connection-1',
+      mode: 'session',
+      activityRef,
+    })).resolves.toMatchObject({
+      status: 'ready',
+      contribution: {
+        trainingStressScore: 42,
+        fitnessLoadCtlContribution: 1,
+      },
+    });
+    await expect(service.getTrainingImpact({
+      uid: 'user-1',
+      connectionId: 'connection-1',
+      mode: 'day',
+      activityRefs: [activityRef],
+      localDate: '2026-07-01',
+      timeZone: 'UTC',
+    })).resolves.toMatchObject({
+      mode: 'day',
+      localDate: '2026-07-01',
+      timeZone: 'UTC',
+      status: 'ready',
+      sessionRole: null,
+    });
+    expect(trainingImpactReads.fetchActivities).toHaveBeenCalledWith(
+      'user-1',
+      ['activity-1'],
+    );
+    expect(trainingImpactReads.fetchEvents).toHaveBeenCalledWith(
+      'user-1',
+      ['event-1'],
+    );
+
+    vi.clearAllMocks();
+    for (const change of [
+      { uid: 'other-user' },
+      { connectionId: 'other-connection' },
+      { activityRef: `${activityRef.slice(0, -8)}tampered` },
+    ]) {
+      await expect(service.getTrainingImpact({
+        uid: 'user-1',
+        connectionId: 'connection-1',
+        mode: 'session',
+        activityRef,
+        ...change,
+      })).rejects.toMatchObject({ code: 'invalid_request' });
+    }
+    expect(trainingImpactReads.activeOwner).not.toHaveBeenCalled();
+    expect(trainingImpactReads.fetchActivities).not.toHaveBeenCalled();
+    expect(trainingImpactReads.fetchEvents).not.toHaveBeenCalled();
+    expect(trainingImpactReads.fetchFormSnapshot).not.toHaveBeenCalled();
+  });
+
   it('binds activity list cursors to the original date range', async () => {
     const secondActivity = activityDocument({
       eventID: 'event-2',

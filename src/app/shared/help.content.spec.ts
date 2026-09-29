@@ -358,6 +358,9 @@ describe('help.content', () => {
     expect(assistantSection?.content).toContain('route geometry');
     expect(assistantSection?.content).toContain('ranks the matching Mountain Biking activities');
     expect(assistantSection?.content).toContain('instead of comparing jump counts');
+    expect(assistantSection?.content).toContain('identity-free **Training impact**');
+    expect(assistantSection?.content).toContain('A local date can have two UTC outcomes');
+    expect(assistantSection?.content).toContain('not measured physiological adaptation');
     expect(assistantSection?.content).toContain('Use [Connections -> MCP](/services?serviceName=mcp)');
     expect(assistantSection?.links).toContainEqual({
       label: 'MCP Connections',
@@ -397,6 +400,10 @@ describe('help.content', () => {
     expect(dataAndPrivacySection?.content).toContain('separate default-off Activity tag changes choice');
     expect(dataAndPrivacySection?.content).toContain('Oversized rankings fail');
     expect(dataAndPrivacySection?.content).toContain('jump count is not treated as jump quality');
+    expect(dataAndPrivacySection?.content).toContain('request identity-safe **Training impact**');
+    expect(dataAndPrivacySection?.content).toContain('up to 32 exact activity references');
+    expect(dataAndPrivacySection?.content).toContain('never per-session day rows');
+    expect(dataAndPrivacySection?.content).toContain('adds no write access or provider action');
     expect(dataAndPrivacySection?.content).toContain('missing or insufficient-history states');
     expect(dataAndPrivacySection?.content).toContain('today’s Readiness drivers');
     expect(dataAndPrivacySection?.content).toContain('daily report with sleep HRV and sleep heart rate');
@@ -404,6 +411,7 @@ describe('help.content', () => {
     expect(dataAndPrivacySection?.content).toContain('### If an MCP permission is missing');
     expect(dataAndPrivacySection?.content).toContain('Missing tools do not mean you have no plans, workouts, or recorded data.');
     expect(dataAndPrivacySection?.content).toContain('**Training plans and planned workouts**');
+    expect(dataAndPrivacySection?.content).toContain('For completed-session or local-day Training impact');
     expect(dataAndPrivacySection?.content).toContain('Do not disconnect an app just to add a permission.');
     expect(dataAndPrivacySection?.content).toContain('**Quantified Self** -> **Reconnect**');
     expect(dataAndPrivacySection?.content).toContain('Uninstall and reinstall is a last resort');

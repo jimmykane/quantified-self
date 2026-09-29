@@ -33,6 +33,7 @@ export const ASSISTANT_BASE_MCP_TOOL_NAMES = [
   'query_metrics',
   'list_training_metrics',
   'get_training_metric',
+  'get_training_impact',
   'prepare_training_metrics',
   'list_sleep_vitals',
   'list_sleep_sessions',

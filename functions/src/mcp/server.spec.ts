@@ -342,6 +342,13 @@ describe('MCP HTTP scope enforcement', () => {
     })).toEqual([MCP_OAUTH_SCOPES.MetricsRead]);
     expect(requiredScopesForRequest({
       method: 'tools/call',
+      params: { name: 'get_training_impact' },
+    })).toEqual([
+      MCP_OAUTH_SCOPES.MetricsRead,
+      MCP_OAUTH_SCOPES.ActivityDetailsRead,
+    ]);
+    expect(requiredScopesForRequest({
+      method: 'tools/call',
       params: { name: 'query_measurements' },
     })).toEqual([MCP_OAUTH_SCOPES.MeasurementsRead]);
     expect(requiredScopesForRequest({
@@ -798,6 +805,7 @@ describe('MCP HTTP scope enforcement', () => {
       'get_activity_metrics',
       'get_activity_overview',
       'get_activity_samples',
+      'get_training_impact',
       'get_training_metric',
       'list_activities',
       'list_activity_chart_metrics',
