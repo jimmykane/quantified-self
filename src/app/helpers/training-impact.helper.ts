@@ -60,9 +60,10 @@ export function buildTrainingSessionImpactView(
   if (isMergeOrBenchmarkEvent(event)) {
     return unavailable('excluded', 'Merged benchmark events are excluded from Training.', eventId);
   }
+  const dayMs = resolveTrainingImpactUtcDayMs(event);
   const trainingStressScore = resolveDashboardFormTrainingStressScore(event);
   if (trainingStressScore === null) {
-    return unavailable('missing-tss', 'Training impact unavailable — this activity has no TSS.', eventId);
+    return unavailable('missing-tss', 'Training impact unavailable — this activity has no TSS.', eventId, dayMs);
   }
   if (source.status !== 'ready') {
     const message = source.status === 'error'
@@ -70,9 +71,8 @@ export function buildTrainingSessionImpactView(
       : source.status === 'private'
         ? 'Training impact is private.'
         : 'Updating Training impact…';
-    return unavailable(source.status, message, eventId);
+    return unavailable(source.status, message, eventId, dayMs);
   }
-  const dayMs = resolveTrainingImpactUtcDayMs(event);
   if (dayMs === null) {
     return unavailable('unavailable', 'Training impact unavailable — this activity has no valid start time.', eventId);
   }
@@ -103,10 +103,15 @@ export function buildTrainingDayImpactView(
   const readySessions = sessions.filter((session): session is TrainingSessionImpactView & {
     impact: TrainingSessionLoadImpact;
   } => session.availability === 'ready' && session.impact !== null);
-  const outcomes = [...new Map(readySessions.map(session => [
-    session.impact.day.dayMs,
-    session.impact.day,
-  ])).values()].sort((left, right) => left.dayMs - right.dayMs);
+  const points = source.status === 'ready' ? toTrainingLoadPoints(source.formPoints) : [];
+  const outcomes = source.status === 'ready'
+    ? [...new Set(sessions.flatMap(session => (
+      session.availability !== 'excluded' && session.dayMs !== null ? [session.dayMs] : []
+    )))]
+      .map(dayMs => resolveTrainingLoadDayImpact(points, dayMs))
+      .filter((outcome): outcome is TrainingLoadDayImpact => outcome !== null)
+      .sort((left, right) => left.dayMs - right.dayMs)
+    : [];
   const totals = readySessions.reduce((total, session) => ({
     trainingStressScore: total.trainingStressScore + session.impact.trainingStressScore,
     ctlContribution: total.ctlContribution + session.impact.ctlContribution,

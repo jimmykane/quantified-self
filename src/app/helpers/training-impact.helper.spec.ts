@@ -97,13 +97,33 @@ describe('training impact view helper', () => {
   });
 
   it('retains a ready partial total while counting unavailable activities', () => {
-    const dayMs = Date.UTC(2026, 0, 1);
+    const firstDayMs = Date.UTC(2026, 0, 1);
+    const secondDayMs = Date.UTC(2026, 0, 2);
     const view = buildTrainingDayImpactView([
       event('loaded', '2026-01-01T10:00:00Z', 42),
-      event('missing', '2026-01-01T12:00:00Z', null),
-    ], ready([{ dayMs, load: 42 }]));
+      event('missing', '2026-01-02T00:30:00Z', null),
+    ], ready([
+      { dayMs: firstDayMs, load: 42 },
+      { dayMs: secondDayMs, load: 0 },
+    ]));
     expect(view.availability).toBe('ready');
     expect(view.unavailableSessionCount).toBe(1);
     expect(view.message).toContain('Some completed activities');
+    expect(view.headline).toBe('Activities span 2 UTC Training days');
+    expect(view.outcomes.map(outcome => outcome.dayMs)).toEqual([firstDayMs, secondDayMs]);
+  });
+
+  it('does not add an outcome for an excluded benchmark Training day', () => {
+    const firstDayMs = Date.UTC(2026, 0, 1);
+    const secondDayMs = Date.UTC(2026, 0, 2);
+    const view = buildTrainingDayImpactView([
+      event('loaded', '2026-01-01T10:00:00Z', 42),
+      event('benchmark', '2026-01-02T00:30:00Z', 84, { isBenchmark: true }),
+    ], ready([
+      { dayMs: firstDayMs, load: 42 },
+      { dayMs: secondDayMs, load: 84 },
+    ]));
+
+    expect(view.outcomes.map(outcome => outcome.dayMs)).toEqual([firstDayMs]);
   });
 });
