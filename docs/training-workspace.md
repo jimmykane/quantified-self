@@ -644,15 +644,16 @@ packed Sports Lib package. That gate is tracked by GitHub issue #654 under epic 
   independent so remote withdrawal/reconciliation can finish. Plan-bound immutable revision audit remains until plan
   deletion and cannot recreate an expired/tombstoned workout. This is intentional audit retention, not recoverable
   deleted history. The scan requires the `scheduledWorkouts(lifecycle, deletedAtMs, __name__)` collection-group index.
-  It is **disabled by default** behind `TRAINING_DELETED_WORKOUT_EXPIRY_ENABLED=true`; a code deployment alone must
-  not purge existing data. Before an approved production enablement, deploy/verify both indexes, count expired roots
-  and owner distribution without exporting prescriptions, inspect cleanup-job backlog and provider state, then obtain
-  separate approval identifying the exact project and legacy-root scope. Enable with a bounded observation window;
+  It runs on every five-minute `reconcileTrainingPlanCleanup` invocation, without an environment switch. Deploy/verify
+  both indexes before deploying the updated Function. Existing deleted roots at or beyond 90 days, including legacy
+  roots, then become eligible for the same bounded cleanup; no migration or special grandfathering applies. Before
+  production deployment, count expired roots and owner distribution without exporting prescriptions, and inspect the
+  cleanup-job backlog and provider state. Observe the initial rollout closely;
   monitor `[TrainingWorkoutExpiry]` scanned/deleted/deferred/failed counters and `[TrainingCleanup]` retry failures.
   Paging lets a blocked first page yield to later candidates; 100 persistently malformed or deferred older roots can
   still block later roots, so sustained failed/deferred counts require operator inspection rather than a guessed manual
-  delete. Roll back by
-  disabling the flag; already committed tombstones and deletions are not reversible. Queue TTL remains a separate
+  delete. Roll back by deploying the previous Function revision; already committed tombstones and deletions are not
+  reversible. Queue TTL remains a separate
   assessment in #776, not part of this policy.
 - A plan restore that exceeds either the single-transaction payload or write-count budget (including strength
   companion writes) uses an owner-scoped `_bulk_restore` lock and a separate owner-readable

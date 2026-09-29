@@ -258,6 +258,14 @@ export async function reconcileTrainingCleanupJobs(
     return { scanned, completed, failed };
 }
 
+/** Both maintenance passes run on every scheduled invocation. */
+export async function runTrainingPlanCleanup(db: admin.firestore.Firestore, nowMs = Date.now()): Promise<void> {
+    const result = await reconcileTrainingCleanupJobs(db, nowMs);
+    if (result.scanned > 0) logger.info('[TrainingCleanup]', result);
+    const expired = await reconcileExpiredDeletedWorkouts(db, nowMs);
+    if (expired.scanned > 0) logger.info('[TrainingWorkoutExpiry]', expired);
+}
+
 export const reconcileTrainingPlanCleanup = onSchedule({
     schedule: 'every 5 minutes',
     timeZone: 'UTC',
@@ -265,12 +273,5 @@ export const reconcileTrainingPlanCleanup = onSchedule({
     memory: '512MiB',
     timeoutSeconds: 300,
 }, async () => {
-    const result = await reconcileTrainingCleanupJobs(admin.firestore());
-    if (result.scanned > 0) logger.info('[TrainingCleanup]', result);
-    // A deployment alone must not authorize a production purge. Enable only
-    // after the scoped #772 rollout and index deployment have separate approval.
-    if (process.env.TRAINING_DELETED_WORKOUT_EXPIRY_ENABLED === 'true') {
-        const expired = await reconcileExpiredDeletedWorkouts(admin.firestore());
-        if (expired.scanned > 0) logger.info('[TrainingWorkoutExpiry]', expired);
-    }
+    await runTrainingPlanCleanup(admin.firestore());
 });
