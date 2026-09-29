@@ -25,11 +25,17 @@ export interface AssistantPromptWorkflow {
   mapSourceToolName?: 'list_activity_jumps';
 }
 
-export interface AssistantPromptExample extends AssistantPromptWorkflow {
+export interface AssistantPromptCard {
+  id: string;
   prompt: string;
   shortLabel: string;
   icon: string;
 }
+
+export interface AssistantPromptExample extends AssistantPromptWorkflow, AssistantPromptCard {}
+
+export const ASSISTANT_CREATE_TODAYS_WORKOUT_PROMPT =
+  'Create one new standalone workout for today based on my readiness—using my HRV, sleep, overnight heart rate, and recent training load. Consider the workouts already in my plan so the session does not duplicate or conflict with them. Show me the proposed session before adding it.';
 
 export const ASSISTANT_PROMPT_EXAMPLES = [
   {
@@ -82,6 +88,26 @@ export const ASSISTANT_PROMPT_EXAMPLES = [
     routingHint: 'Discover the Mountain Biking activityGroup, pass that exact group to the ranking tool with the server-mapped Maximum Jump Distance metric, and rank all of its server-expanded activity types across all available history. Treat the top ranked metric value and unit as authoritative, and use that same result\'s exact ISO startTime when stating when it happened; never substitute the current date. Do not spend the bounded workflow on jump-detail pagination unless the user explicitly asks for subrecord details, and never substitute jump count or an activity-page sample for the ranking.',
   },
 ] as const satisfies readonly AssistantPromptExample[];
+
+/**
+ * Starter questions whose reads and proposal shape depend on the current day.
+ * They intentionally bypass the fixed deterministic workflows above so the
+ * Assistant can collect its server-owned daily workout context before asking
+ * the model for one focused proposal.
+ */
+export const ASSISTANT_CONTEXTUAL_PROMPT_EXAMPLES = [
+  {
+    id: 'create-todays-workout',
+    prompt: ASSISTANT_CREATE_TODAYS_WORKOUT_PROMPT,
+    shortLabel: "Today's workout",
+    icon: 'edit_calendar',
+  },
+] as const satisfies readonly AssistantPromptCard[];
+
+export const ASSISTANT_PROMPT_CARDS = [
+  ...ASSISTANT_PROMPT_EXAMPLES,
+  ...ASSISTANT_CONTEXTUAL_PROMPT_EXAMPLES,
+] as const satisfies readonly AssistantPromptCard[];
 
 export type AssistantPublishedPromptExample =
   typeof ASSISTANT_PROMPT_EXAMPLES[number];
@@ -206,7 +232,7 @@ type AssistantAnalyticalPromptWorkflowId =
   typeof ASSISTANT_ANALYTICAL_PROMPT_WORKFLOWS[number]['id'];
 
 export const ASSISTANT_STARTER_PROMPTS: readonly string[] =
-  ASSISTANT_PROMPT_EXAMPLES.map(example => example.prompt);
+  ASSISTANT_PROMPT_CARDS.map(example => example.prompt);
 
 export const ASSISTANT_COMPOSER_EXAMPLE_PROMPT =
   ASSISTANT_PROMPT_EXAMPLES[1].prompt;

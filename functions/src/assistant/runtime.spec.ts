@@ -4,6 +4,7 @@ import { retry } from 'genkit/model/middleware';
 import { ChartDataCategoryTypes, DataDuration, TimeIntervals } from '@sports-alliance/sports-lib';
 import {
   ASSISTANT_ANALYTICAL_PROMPT_WORKFLOWS,
+  ASSISTANT_CREATE_TODAYS_WORKOUT_PROMPT,
   ASSISTANT_PROMPT_EXAMPLES,
   findAssistantPromptExample,
   findAssistantPromptWorkflow,
@@ -97,6 +98,8 @@ function createDailyWorkoutSession() {
 
 describe('Training preview model-tool selection', () => {
   it('keeps a single focused preview for a workout recommendation with Garmin and Suunto delivery', () => {
+    expect(selectAssistantTrainingPreviewTool(ASSISTANT_CREATE_TODAYS_WORKOUT_PROMPT))
+      .toBe('preview_create_planned_workout');
     expect(selectAssistantTrainingPreviewTool('Review sleep, HRV and load, then suggest one standalone workout for today and sync it to Garmin and Suunto.'))
       .toBe('preview_create_planned_workout');
     expect(selectAssistantTrainingPreviewTool('Suggest whether another workout today is sensible. If it is, propose one standalone workout for today and delivery to Garmin and Suunto, but leave any change for my in-app review.'))
@@ -169,6 +172,45 @@ describe('Training preview model-tool selection', () => {
     expect(modelTools).toContain('preview_create_planned_workout');
     expect(modelTools.filter(name => name.startsWith('preview_'))).toEqual(['preview_create_planned_workout']);
     expect(session.tools.map(tool => tool.name)).toContain('preview_training_changes');
+  });
+
+  it('keeps provider delivery out of a daily create unless the current prompt requests it', async () => {
+    const { session, callTool } = createDailyWorkoutSession();
+    session.tools.push({ name: 'preview_create_planned_workout', title: 'Preview workout',
+      description: 'Prepare one workout for review.', inputSchema: { type: 'object', properties: {} } });
+    const proposal = { proposalRef: 'schedule-only-proposal', permissionMode: 'schedule',
+      scheduleRevision: 7, expiresAtMs: Date.parse('2026-09-25T13:15:00Z'),
+      summary: 'Create one recovery ride.', requiresConfirmation: true,
+      changes: [{ index: 0, kind: 'create-workout', summary: 'Create recovery ride.' }],
+      providerPreviews: [] };
+    const baseCall = callTool.getMockImplementation()!;
+    callTool.mockImplementation(async (name, args) => name === 'preview_create_planned_workout'
+      ? { structuredContent: proposal }
+      : baseCall(name, args));
+    const runtime = createAssistantRuntime({ createMcpSession: vi.fn().mockResolvedValue(session),
+      now: () => new Date('2026-09-25T12:00:00.000Z'),
+      generateAnswer: async input => {
+        await input.tools.find(tool => tool.name === 'preview_create_planned_workout')!.execute({
+          expectedScheduleRevision: 7, planRef: null, localDate: '2026-09-25',
+          title: 'Recovery ride', structure: { version: 1, sport: 'Cycling', nodes: [{
+            kind: 'step', id: 'easy', purpose: 'recovery',
+            ending: { kind: 'time', seconds: 1800 }, targets: [],
+          }] },
+          delivery: { providers: ['suunto'], timeZone: 'Europe/Helsinki' },
+        });
+        return { answer: 'Review the recovery ride before adding it.',
+          visualRequest: { chart: null, map: null } };
+      } });
+
+    const result = await runtime.answer({ uid: 'owner', appBaseUrl: 'https://quantified-self.io',
+      prompt: ASSISTANT_CREATE_TODAYS_WORKOUT_PROMPT, timeZone: 'Europe/Helsinki', history: [],
+      trainingPlansEnabled: true, trainingPlanChangesEnabled: true, trainingDeliveryEnabled: true,
+      assertTrainingPlansAccess: vi.fn().mockResolvedValue(undefined),
+      assertTrainingWriteAccess: vi.fn().mockResolvedValue(undefined) });
+
+    const previewCall = callTool.mock.calls.find(([name]) => name === 'preview_create_planned_workout');
+    expect(previewCall?.[1]).not.toHaveProperty('delivery');
+    expect(result.pendingTrainingProposal).toMatchObject({ permissionMode: 'schedule' });
   });
 
   it('keeps a suggestion read-only even when Training changes are enabled', async () => {
@@ -1226,7 +1268,7 @@ describe('Assistant runtime', () => {
       activitiesToday: { scanComplete: true, activities: [] },
       timelineNotes: { access: 'disabled' as const, scanComplete: null, notes: [] },
       plannedWorkouts: { access: 'disabled' as const, scanComplete: null,
-        workouts: [], completionChecked: false },
+        scheduleRevision: null, workouts: [], completionChecked: false },
       trainingSnapshots: { preparationStatus: 'ready', form: {}, rampRate: {},
         trainingSummary: {} },
     };
@@ -1240,6 +1282,47 @@ describe('Assistant runtime', () => {
     expect(generate).toHaveBeenCalledWith(expect.objectContaining({ toolChoice: 'auto',
       system: expect.stringContaining('An ended note is not evidence of current illness'),
       prompt: expect.stringContaining('"matchingWeekdayCount":2'),
+    }));
+  });
+
+  it('requires one preview tool call for an explicit daily workout change', async () => {
+    const generate = vi.spyOn(assistantGenkit, 'generate').mockResolvedValueOnce({
+      toolRequests: [],
+      text: JSON.stringify({ answer: 'Review the proposed session.',
+        visuals: { chart: null, map: null } }),
+    } as never);
+    const dailyWorkoutContext = {
+      localDate: '2026-09-25', weekday: 'Friday', windowStartDate: '2026-08-29',
+      dailyReport: { readiness: { score: 61 } },
+      weekdayConsistency: { recordedDates: [], matchingWeekdayDates: [],
+        matchingWeekdayCount: 0, weekdayOpportunities: 4,
+        missingBucketsAreUnknown: true as const },
+      activitiesToday: { scanComplete: true, activities: [] },
+      timelineNotes: { access: 'disabled' as const, scanComplete: null, notes: [] },
+      plannedWorkouts: { access: 'enabled' as const, scanComplete: true,
+        scheduleRevision: 7, workouts: [], completionChecked: true },
+      trainingSnapshots: { preparationStatus: 'ready', form: {}, rampRate: {},
+        trainingSummary: {} },
+    };
+
+    await generateAssistantModelAnswer({
+      currentTime: '2026-09-25T12:00:00.000Z', timeZone: 'Europe/Helsinki',
+      prompt: ASSISTANT_CREATE_TODAYS_WORKOUT_PROMPT, history: [],
+      mcpInstructions: 'Use current data.', tools: [], workflow: null,
+      dailyWorkoutContext, onBillableAttempt: vi.fn().mockResolvedValue(undefined),
+    });
+
+    expect(generate).toHaveBeenCalledWith(expect.objectContaining({
+      toolChoice: 'required',
+      system: expect.stringContaining(
+        'call the available Training preview tool exactly once',
+      ),
+    }));
+    expect(generate).toHaveBeenCalledWith(expect.objectContaining({
+      system: expect.stringContaining('use an empty targets array'),
+    }));
+    expect(generate).toHaveBeenCalledWith(expect.objectContaining({
+      system: expect.stringContaining('does not request provider delivery'),
     }));
   });
 

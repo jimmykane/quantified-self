@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { DataDuration } from '@sports-alliance/sports-lib';
 import { DERIVED_METRIC_KINDS } from '../../../shared/derived-metrics';
+import { ASSISTANT_CREATE_TODAYS_WORKOUT_PROMPT } from '../../../shared/assistant.prompts';
 import {
   collectDailyWorkoutContext,
   dailyWorkoutFacts,
@@ -72,6 +73,8 @@ describe('daily workout context', () => {
     expect(requestsDailyWorkoutChange('Suggest a workout for today, but do not send it.')).toBe(false);
     expect(requestsDailyWorkoutChange('Suggest a workout for today and sync it to Garmin.')).toBe(true);
     expect(requestsDailyWorkoutChange('Create one workout for today and send it to Suunto.')).toBe(true);
+    expect(requestsDailyWorkoutContext(ASSISTANT_CREATE_TODAYS_WORKOUT_PROMPT, [])).toBe(true);
+    expect(requestsDailyWorkoutChange(ASSISTANT_CREATE_TODAYS_WORKOUT_PROMPT)).toBe(true);
   });
 
   it('reads exact completion and prepared snapshots, counts today, and dates an ended note', async () => {
@@ -90,6 +93,7 @@ describe('daily workout context', () => {
       endDate: '2026-09-10' });
     expect(result.plannedWorkouts.workouts[2]).toMatchObject({ title: 'Wahoo test',
       completion: { state: 'linked', provider: 'wahoo' } });
+    expect(result.plannedWorkouts.scheduleRevision).toBe(7);
     expect(result.trainingSnapshots.form?.metricKind).toBe(DERIVED_METRIC_KINDS.Form);
     expect(result.trainingSnapshots.rampRate?.metricKind).toBe(DERIVED_METRIC_KINDS.RampRate);
     expect(result.trainingSnapshots.trainingSummary?.metricKind).toBe(DERIVED_METRIC_KINDS.TrainingSummary);

@@ -84,7 +84,7 @@ export interface DailyWorkoutContext {
   timelineNotes: { access: 'enabled' | 'disabled'; scanComplete: boolean | null;
     notes: RecordValue[] };
   plannedWorkouts: { access: 'enabled' | 'disabled'; scanComplete: boolean | null;
-    workouts: RecordValue[]; completionChecked: boolean };
+    scheduleRevision: number | null; workouts: RecordValue[]; completionChecked: boolean };
   trainingSnapshots: { preparationStatus: string; form: RecordValue | null;
     rampRate: RecordValue | null; trainingSummary: RecordValue | null };
 }
@@ -165,6 +165,7 @@ export async function collectDailyWorkoutContext(input: {
   const plannedWorkouts: DailyWorkoutContext['plannedWorkouts'] = {
     access: input.trainingPlansEnabled ? 'enabled' : 'disabled',
     scanComplete: input.trainingPlansEnabled ? false : null,
+    scheduleRevision: null,
     workouts: [],
     completionChecked: false,
   };
@@ -172,6 +173,11 @@ export async function collectDailyWorkoutContext(input: {
     const schedule = await input.read('query_planned_workouts_by_date', {
       startDate: day.date, endDate: day.date, limit: WORKOUT_LIMIT,
     });
+    if (!Number.isSafeInteger(schedule.scheduleRevision)
+      || Number(schedule.scheduleRevision) < 0) {
+      throw new Error('The Assistant received an invalid Training schedule revision.');
+    }
+    plannedWorkouts.scheduleRevision = Number(schedule.scheduleRevision);
     plannedWorkouts.scanComplete = schedule.scanComplete === true;
     const workouts = records(schedule.workouts);
     const workoutRefs = workouts.map(workout => workout.workoutRef);

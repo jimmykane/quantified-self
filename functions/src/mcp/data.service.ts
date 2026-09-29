@@ -4585,9 +4585,6 @@ function buildTodayReadinessSleepNights(
         vitals: {
           averageHrvMs: average(averageHrvValues),
           overnightHrvMs: average(overnightHrvValues),
-          ...(typeof evidence.hrvSampleCount === 'number'
-            ? { hrvSampleCount: evidence.hrvSampleCount }
-            : {}),
           averageHeartRateBpm: average(averageHeartRateValues),
           minimumHeartRateBpm: minimumHeartRateValues.length
             ? Math.min(...minimumHeartRateValues)

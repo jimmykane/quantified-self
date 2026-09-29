@@ -149,6 +149,35 @@ describe('Assistant tool input boundary', () => {
     });
   });
 
+  it('canonicalizes model-friendly sport casing across Training preview shapes', () => {
+    const structure = {
+      version: 1,
+      sport: 'cycling',
+      nodes: [{ kind: 'step', id: 'easy', purpose: 'recovery',
+        ending: { kind: 'time', seconds: 1800 }, targets: [] }],
+    };
+    expect(normalizeAssistantToolInput('preview_create_planned_workout', {
+      expectedScheduleRevision: 3,
+      localDate: '2026-09-29',
+      title: 'Recovery ride',
+      structure,
+    }, 'Europe/Helsinki')).toMatchObject({ structure: { sport: 'Cycling' } });
+    expect(normalizeAssistantToolInput('preview_planned_workout_v2_change', {
+      expectedScheduleRevision: 3,
+      change: { kind: 'create-workout', localKey: 'swim', localDate: '2026-09-29',
+        title: 'Easy swim', structure: { ...structure, sport: 'swimming' } },
+    }, 'Europe/Helsinki')).toMatchObject({
+      change: { structure: { sport: 'Swimming' } },
+    });
+    expect(normalizeAssistantToolInput('preview_training_changes', {
+      expectedScheduleRevision: 3,
+      changes: [{ kind: 'create-workout', localKey: 'run', localDate: '2026-09-29',
+        title: 'Easy run', structure: { ...structure, sport: 'running' } }],
+    }, 'Europe/Helsinki')).toMatchObject({
+      changes: [{ structure: { sport: 'Running' } }],
+    });
+  });
+
   it('normalizes local date-only ranges without adding a timezone to activity tools', () => {
     expect(normalizeAssistantToolInput('query_activities', {
       start: '2026-03-29',

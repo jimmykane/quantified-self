@@ -1,6 +1,7 @@
 import type { CompactRowTone } from '../shared/compact-row/compact-row.component';
 import type { PublicFeaturePreviewKey } from './public-feature-preview.types';
 import { PUBLIC_FEATURE_PATHS } from './public-seo-pages.paths';
+import { ASSISTANT_CREATE_TODAYS_WORKOUT_PROMPT } from '@shared/assistant.prompts';
 
 interface TrainingPlansHomeRow {
   icon: string;
@@ -15,7 +16,7 @@ export const TRAINING_PLANS_HOME_CONTENT = {
   intro: 'Build structured running, cycling, swimming, walking, hiking, rowing, or strength workouts, organize them into dated plans or keep them standalone, and choose how you want to manage and deliver them.',
   mcpExample: {
     title: 'Create Today\'s Workout with Your Training Data',
-    prompt: 'Create a workout for today based on my readiness—using my HRV, sleep, overnight heart rate, and recent training load—and the workouts already in my plan. Show me the proposed session before adding it.',
+    prompt: ASSISTANT_CREATE_TODAYS_WORKOUT_PROMPT,
   },
   preview: 'training-plans' satisfies PublicFeaturePreviewKey,
   cta: {

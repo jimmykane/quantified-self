@@ -8,7 +8,10 @@ import { MatIconTestingModule } from '@angular/material/icon/testing';
 import { NoopAnimationsModule } from '@angular/platform-browser/animations';
 import { RouterTestingModule } from '@angular/router/testing';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { ASSISTANT_PROMPT_EXAMPLES } from '@shared/assistant.prompts';
+import {
+  ASSISTANT_CREATE_TODAYS_WORKOUT_PROMPT,
+  ASSISTANT_PROMPT_CARDS,
+} from '@shared/assistant.prompts';
 import { AssistantExploreBottomSheetComponent } from './assistant-explore-bottom-sheet.component';
 import { writeFileSync, readFileSync } from 'node:fs';
 
@@ -48,11 +51,15 @@ describe('AssistantExploreBottomSheetComponent', () => {
       fixture.nativeElement.querySelectorAll('.assistant-explore-prompts button'),
     ) as HTMLButtonElement[];
 
-    expect(buttons).toHaveLength(ASSISTANT_PROMPT_EXAMPLES.length);
-    ASSISTANT_PROMPT_EXAMPLES.forEach((prompt, index) => {
+    expect(buttons).toHaveLength(ASSISTANT_PROMPT_CARDS.length);
+    ASSISTANT_PROMPT_CARDS.forEach((prompt, index) => {
       expect(buttons[index].textContent).toContain(prompt.shortLabel);
       expect(buttons[index].getAttribute('aria-label')).toContain(prompt.prompt);
     });
+    expect(buttons.at(-1)?.textContent).toContain("Today's workout");
+    expect(buttons.at(-1)?.getAttribute('aria-label')).toContain(
+      ASSISTANT_CREATE_TODAYS_WORKOUT_PROMPT,
+    );
     expect(fixture.nativeElement.textContent).toContain('Your data stays in your control');
     expect(fixture.nativeElement.textContent).toContain('Precise activity locations');
     expect(fixture.nativeElement.textContent).toContain('starts a new chat');
@@ -97,7 +104,7 @@ describe('AssistantExploreBottomSheetComponent', () => {
   });
 
   it('returns a chosen prompt to the Assistant page', () => {
-    const prompt = ASSISTANT_PROMPT_EXAMPLES[0].prompt;
+    const prompt = ASSISTANT_PROMPT_CARDS[0].prompt;
 
     component.selectPrompt(prompt);
 

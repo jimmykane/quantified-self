@@ -457,14 +457,15 @@ describe('Assistant MCP session', () => {
     }
   });
 
-  it('classifies strict MCP input rejection without logging the rejected arguments', async () => {
+  it('returns fixed corrective guidance for strict input rejection without retaining rejected arguments', async () => {
     const session = await createAssistantMcpSession('user-1', 'https://quantified-self.io');
     try {
       await expect(session.callTool('query_activities', { relativePeriod: 'today' })).rejects.toMatchObject({
-        name: 'AssistantMcpToolFailure',
+        name: 'AssistantRecoverableMcpToolError',
         code: 'invalid_tool_input',
-        stage: 'input_validation',
-      } satisfies Partial<AssistantMcpToolFailure>);
+        guidance: expect.stringContaining('advertised input schema exactly'),
+        message: 'The Assistant MCP tool needs corrected input.',
+      } satisfies Partial<AssistantRecoverableMcpToolError>);
     } finally {
       await session.close();
     }

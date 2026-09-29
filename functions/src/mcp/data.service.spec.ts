@@ -7304,6 +7304,7 @@ describe('MCP data service', () => {
         minimumHeartRateBpm: 40,
         averageHrvMs: 54,
         overnightHrvMs: 56,
+        hrvSampleCount: 47,
         maxSpo2Percent: 98,
         averageRespirationBrpm: 13,
       },
@@ -7338,6 +7339,7 @@ describe('MCP data service', () => {
       'averageHeartRateBpm',
       'minimumHeartRateBpm',
       'averageHrvMs',
+      'hrvSampleCount',
       'overnightHrvMs',
       'maxSpo2Percent',
       'averageRespirationBrpm',
@@ -7346,6 +7348,7 @@ describe('MCP data service', () => {
       averageHeartRateBpm: 49,
       minimumHeartRateBpm: 40,
       averageHrvMs: 54,
+      hrvSampleCount: 47,
       overnightHrvMs: 56,
       maxSpo2Percent: 98,
       averageRespirationBrpm: 13,
@@ -7358,6 +7361,7 @@ describe('MCP data service', () => {
     });
     expect(JSON.stringify(report)).not.toContain('maxSpo2Percent');
     expect(JSON.stringify(report)).not.toContain('averageRespirationBrpm');
+    expect(JSON.stringify(report)).not.toContain('hrvSampleCount');
   });
 
   it('averages session-level SpO2 maxima and respiration averages in trend buckets', async () => {

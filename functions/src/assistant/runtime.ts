@@ -317,7 +317,7 @@ export function selectAssistantTrainingPreviewTool(prompt: string): typeof TRAIN
   // A safety qualifier such as "do not update anything else" is not another
   // requested mutation and should not force a one-workout create into batch.
   const question = prompt.toLowerCase().replace(
-    /\b(?:don't|do not|never|without)\s+(?:(?:also|any|other|existing)\s+){0,3}(?:edit|update|move|copy|duplicate|delete|skip|archive|rename|change|modify)\b/gu,
+    /\b(?:don't|do not|does not|never|without)\s+(?:(?:also|any|other|existing)\s+){0,3}(?:edit|update|move|copy|duplicate|delete|skip|archive|rename|change|modify)\b/gu,
     '',
   );
   const createsPlan = /\b(create|add|build|make)\s+(?:(?:a|an|new|my|the)\s+){0,3}(?:training\s+)?plan\b/u.test(question);
@@ -350,6 +350,14 @@ export function selectAssistantTrainingPreviewTool(prompt: string): typeof TRAIN
   return createsWorkout && !createsPlan && !multipleWorkouts && !changesExisting
     ? 'preview_create_planned_workout'
     : 'preview_training_changes';
+}
+
+function requestsAssistantTrainingDelivery(prompt: string): boolean {
+  const request = prompt.toLowerCase().replace(
+    /\b(?:don't|do not|does not|never|without)\s+(?:(?:also|any|this|that|the|my|workout|session)\s+){0,4}(?:send|sync|deliver)\b/gu,
+    '',
+  );
+  return /\b(?:send|sync|deliver)\b/u.test(request);
 }
 
 function projectAssistantToolResultForModel(
@@ -846,6 +854,9 @@ export function getAssistantRuntimeErrorReason(error: unknown): string | null {
 }
 
 export const generateAssistantModelAnswer: AssistantRuntimeDependencies['generateAnswer'] = async (input) => {
+  const dailyWorkoutChangeRequested = input.dailyWorkoutContext !== undefined
+    && requestsDailyWorkoutChange(input.prompt);
+  const trainingDeliveryRequested = requestsAssistantTrainingDelivery(input.prompt);
   const createGenkitTools = () => input.tools.map(tool => assistantGenkit.dynamicTool({
     name: tool.name,
     description: tool.description,
@@ -871,9 +882,14 @@ export const generateAssistantModelAnswer: AssistantRuntimeDependencies['generat
     input.locationAccess === 'precise_activity'
       ? ASSISTANT_PRECISE_ACTIVITY_LOCATION_INSTRUCTIONS
       : ASSISTANT_INTERNAL_BOUNDARY_INSTRUCTIONS,
+    trainingDeliveryRequested
+      ? 'The current message expressly requests a provider delivery action. Keep it inside the reviewable Training proposal and never claim it succeeded before the apply result confirms it.'
+      : 'The current message does not request provider delivery. Do not add delivery to a Training proposal and do not mention syncing, sending, a provider, or a watch as an effect of the proposed change.',
     workflowInstructions,
     input.dailyWorkoutContext
-      ? 'The server already collected the current daily workout context through validated MCP reads. Use it as the authoritative source for today, notes, planned-workout completion, weekday counts, and ready Training snapshots. A preparation status is not a metric value. An ended note is not evidence of current illness or recovery. Write only a cautious recommendation and its main reasoning; the server appends the exact checked facts. Do not repeat completion counts, note counts or dates, weekday counts, or snapshot availability. You may use an additional tool only when the requested answer or an expressly requested proposal needs it.'
+      ? `The server already collected the current daily workout context through validated MCP reads. Use it as the authoritative source for today, notes, planned-workout completion, weekday counts, and ready Training snapshots. A preparation status is not a metric value. An ended note is not evidence of current illness or recovery. ${dailyWorkoutChangeRequested
+        ? 'The user expressly requested a workout change. After assessing the evidence, call the available Training preview tool exactly once to prepare one complete, cautious proposal for review; do not answer with only a recommendation. A relative heart-rate, power, speed, or cadence target requires an exact numeric reference in the context. If that reference is unavailable, use an empty targets array and put simple effort guidance in the step note instead of inventing a reference.'
+        : 'Write only a cautious recommendation and its main reasoning.'} The server appends the exact checked facts. Do not repeat completion counts, note counts or dates, weekday counts, or snapshot availability. You may use an additional tool only when the requested answer or an expressly requested proposal needs it.`
       : '',
   ].filter(Boolean).join(' ');
   await input.onBillableAttempt();
@@ -887,7 +903,7 @@ export const generateAssistantModelAnswer: AssistantRuntimeDependencies['generat
       ...(input.dailyWorkoutContext ? { dailyWorkoutContext: input.dailyWorkoutContext } : {}),
     }),
     tools: createGenkitTools(),
-    toolChoice: input.dailyWorkoutContext ? 'auto' : 'required',
+    toolChoice: input.dailyWorkoutContext && !dailyWorkoutChangeRequested ? 'auto' : 'required',
     returnToolRequests: true,
     config: {
       maxOutputTokens: ASSISTANT_INITIAL_MODEL_MAX_OUTPUT_TOKENS,
@@ -1034,6 +1050,7 @@ export function createAssistantRuntime(
       try {
         const currentTime = dependencies.now();
         const dailyWorkoutRequested = requestsDailyWorkoutContext(input.prompt, input.history);
+        const trainingDeliveryRequested = requestsAssistantTrainingDelivery(input.prompt);
         const promptWorkflow = dailyWorkoutRequested ? null : findAssistantPromptWorkflow(input.prompt);
         const metricTrendIntent = promptWorkflow || dailyWorkoutRequested
           ? null
@@ -1114,11 +1131,18 @@ export function createAssistantRuntime(
                   ...metricTrendIntent.toolInput,
                 }
               : workflowToolInput;
-            const resolvedToolInput = normalizeAssistantToolInput(
+            let resolvedToolInput = normalizeAssistantToolInput(
               tool.name,
               policyToolInput,
               input.timeZone,
             );
+            if (tool.name === 'preview_create_planned_workout'
+              && !trainingDeliveryRequested
+              && 'delivery' in resolvedToolInput) {
+              const scheduleOnlyInput = { ...resolvedToolInput };
+              delete scheduleOnlyInput.delivery;
+              resolvedToolInput = scheduleOnlyInput;
+            }
             assertContentProposalPrerequisite(tool.name, resolvedToolInput, invocations);
             assertJumpDetailActivityRef(
               workflow,

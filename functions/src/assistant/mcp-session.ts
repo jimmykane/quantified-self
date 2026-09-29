@@ -88,7 +88,10 @@ const RECOVERABLE_ASSISTANT_TOOL_ERROR_CODES = [
   'metric_not_ready',
   'detail_not_available',
   'query_too_large',
-] as const satisfies readonly Exclude<McpDataErrorCode, 'temporarily_unavailable'>[];
+  'invalid_tool_input',
+] as const satisfies readonly (
+  Exclude<McpDataErrorCode, 'temporarily_unavailable'> | 'invalid_tool_input'
+)[];
 
 type RecoverableAssistantToolErrorCode =
   typeof RECOVERABLE_ASSISTANT_TOOL_ERROR_CODES[number];
@@ -127,6 +130,7 @@ const ASSISTANT_TOOL_ERROR_GUIDANCE: Record<
   metric_not_ready: 'Call prepare_training_metrics for this kind first; when it reports ready, read the snapshot.',
   detail_not_available: 'Select another available record or explain that this detail is unavailable.',
   query_too_large: 'Use a valid, narrower date range. Long activity-metric histories are paged automatically by the Assistant.',
+  invalid_tool_input: 'Correct the request to match the advertised input schema exactly, without unadvertised fields. For workout recipes, use an exact supported sport, version 1, and steps with stable unique ids, purpose, ending, and a targets array. A relative target requires its exact numeric reference; when that value is unavailable, omit the target instead of inventing it.',
 };
 
 /**
@@ -252,7 +256,10 @@ async function callAssistantMcpTool(
       throw recoverableError;
     }
     if (message.includes('Input validation error: Invalid arguments for tool ')) {
-      throw new AssistantMcpToolFailure('invalid_tool_input', 'input_validation');
+      throw new AssistantRecoverableMcpToolError(
+        'invalid_tool_input',
+        ASSISTANT_TOOL_ERROR_GUIDANCE.invalid_tool_input,
+      );
     }
     throw new AssistantMcpToolFailure(parseMcpToolErrorCode(message) ?? 'unclassified_error', 'tool_response');
   }
