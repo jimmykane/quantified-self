@@ -490,11 +490,11 @@ The bundled skills divide ownership deliberately:
 | Skill | Responsibility | Primary permission |
 | --- | --- | --- |
 | `analyze-quantified-self` | Comparisons that need two or more data domains; explicit Timeline-note changes | Every domain used by the comparison; optional `timeline-notes:write` with its read parent |
-| `analyze-quantified-self-training` | Current plans/planned workouts and sync summaries; recorded load, volume and Training-derived metrics | `training-plans:read` for planning; `metrics:read` for recorded metrics |
+| `analyze-quantified-self-training` | Current plans/planned workouts and sync summaries; recorded load, volume, Training-derived metrics, and identity-safe completed-activity impact | `training-plans:read` for planning; `metrics:read` for recorded metrics; impact also needs `activity-details:read` |
 | `analyze-quantified-self-sleep` | Sleep sessions, stages, duration, safe aggregate vitals, naps, and sleep-oriented trends | `sleep:read` |
 | `analyze-quantified-self-health` | Recorded all-day Health metrics and bounded representative sample trends | `health:read`; body composition also requires `measurements:read` |
 | `analyze-quantified-self-measurements` | Recorded body-measurement history and trends | `measurements:read` |
-| `analyze-quantified-self-activity` | Individual activities, subrecords, metrics, charts, optional descriptions/locations, and explicit shared-tag changes | `activity-details:read`; optional metric/description/location/tag-write grants |
+| `analyze-quantified-self-activity` | Individual activities, identity-safe Training impact, subrecords, metrics, charts, optional descriptions/locations, and explicit shared-tag changes | `activity-details:read`; impact and selected metrics also need `metrics:read`; optional description/location/tag-write grants |
 | `explore-quantified-self-routes` | Saved-route summaries, geometry, waypoints, and nearby searches | `routes:read`; optional `route-location:read` |
 
 All seven skills allow implicit or explicit invocation and declare the same hosted permission-scoped MCP dependency. Most
@@ -846,6 +846,7 @@ The analytics and map entries follow the
 | `list_training_metrics` | `metrics:read` | Human-readable Training metric catalog with current snapshot availability metadata but no payloads or provenance |
 | `prepare_training_metrics` | `metrics:read` | Queue or join preparation for one to eight registered Training snapshots and return readiness with retry guidance, without metric values |
 | `get_training_metric` | `metrics:read` | One ready, redacted Training-derived snapshot |
+| `get_training_impact` | `metrics:read` + `activity-details:read` | TSS-based contribution and actual UTC Training-day outcome for one exact completed activity or one identity-free local-day aggregate |
 | `get_activity_metrics` | `metrics:read` + `activity-details:read` | Up to 25 explicitly selected canonical numeric Sports Lib metrics for one referenced activity |
 | `get_activity_overview` | `metrics:read` + `activity-details:read` | Coordinate-free activity type plus actual metric, detail, and chart-source availability |
 | `rank_activities_by_metric` | `metrics:read` + `activity-details:read` | Highest or lowest activities for one persisted numeric metric over an explicit bounded range or a bounded all-history scan |
@@ -1554,6 +1555,44 @@ tool after the suggested delay while it is preparing; once ready, call the uncha
 The response exposes neither snapshot values nor private worker state. A failed or disabled queue reports
 `unavailable` rather than inventing a ready value. Existing clients need a deployed server update and tool-catalog
 refresh to discover this additive tool; the pending contract record does not make it available by itself.
+
+### Training impact
+
+`get_training_impact` is an additive read-only tool that requires both `metrics:read` and
+`activity-details:read`. It reuses the existing Form snapshot and canonical 42-day CTL / 7-day ATL model; it is not a
+new derived-metric kind and persists nothing. Clients must call `prepare_training_metrics` for Form first. Session mode
+accepts exactly one opaque, owner- and connection-bound activity reference. Day mode accepts 1–32 unique references
+already returned by one complete bounded activity read for an exact `localDate` and IANA `timeZone`. The server
+validates that every referenced activity started on that local date. Planned workouts and references from another date
+are invalid input.
+
+The service reads only those exact activity and parent-event documents plus `users/{uid}/derivedMetrics/form`; it does
+not query activity history. Its field masks retain only the event link, start/end times, current or legacy TSS, and the
+event merge/benchmark flags. Account deletion is checked before and after the reads. Activity and event documents are
+queried in Firestore `in` batches of at most 30, so the public 32-reference limit remains bounded without a composite
+index. The complete result is limited to 16 KiB and still uses the ordinary per-connection MCP request limit.
+
+The result exposes the selected sessions only as coverage counts. It never echoes opaque references and never returns
+event/activity IDs, titles, labels, exact start times, devices, provider names, or source provenance. Session mode may
+return one modeled role; day mode never returns per-session details. Day mode instead returns one summed TSS/CTL/ATL/Form
+contribution and one or two dated UTC Training-day outcomes, preserving the case where a local calendar date spans two
+UTC days. Each outcome reports prior/current/change values and whether CTL rose, held, or declined after normal decay.
+The model metadata fixes CTL to `TSS / 42`, ATL to `TSS / 7`, Form contribution to CTL minus ATL, and explicitly says
+that this does not measure physiological adaptation.
+
+Statuses distinguish `ready`, `partial`, `updating`, `unavailable`, and `excluded`. Reasons preserve partial coverage,
+missing TSS, benchmark/merge exclusion, incomplete activities, Form building/staleness/failure, no usable selected
+session, and a UTC Training day outside the retained snapshot. Zero TSS remains a valid modeled contribution. Current
+TSS takes precedence over the legacy Power Training Stress Score field. A ready Form payload must match the current
+internal schema, identify the Form kind, and assert merged-event exclusion; otherwise the tool fails closed as updating.
+
+The built-in Assistant allowlists the same tool. It resolves exact opaque references through its existing completed-
+activity workflow, prepares Form, preserves separate UTC outcomes, and renders compact deterministic evidence without
+references or provenance. The focused Activity and Training plugin skills plus the cross-domain skill carry the same
+routing and interpretation boundary. No mutation, approval step, provider request, persistence, or new OAuth grant is
+introduced. Because this is a public tool/schema/instruction addition, release still requires deploying the existing
+MCP Function, refreshing/rescanning the registered developer app, synchronizing the bundled plugin, and testing in a
+new conversation; clients that already have both grants need a tool-catalog refresh but no reauthorization.
 
 Training calculation, schema, invalidation, rebuild, and extension guidance remains in
 [`training-workspace.md`](training-workspace.md). Adding a kind requires its normal derived pipeline, exact safe MCP

@@ -66,6 +66,9 @@ import {
   MCP_CONTENT_WRITE_INPUTS,
   type McpContentWriteTool,
 } from './content-write.schemas';
+import {
+  MCP_TRAINING_IMPACT_MAX_ACTIVITIES,
+} from './training-impact.service';
 
 const defaultDataService = createMcpDataService();
 let oauthService: ReturnType<typeof createMcpOAuthService> | null = null;
@@ -750,7 +753,7 @@ function buildMcpServerInstructions(auth: AuthenticatedMcpRequest): string {
     && auth.scopes.includes(MCP_OAUTH_SCOPES.ActivityDetailsRead)
   ) {
     instructions.push(
-      'Use get_activity_overview before granular activity reads. For highest or lowest activities by one metric, use rank_activities_by_metric. For an MTB jump superlative, discover the Mountain Biking activityGroup, pass it to rank_activities_by_metric, and use the corresponding persisted Maximum Jump Distance, Height, Hang Time, Speed, or Score metric. The server expands the group to every canonical type. Treat the ranked metric value as authoritative. When stating when the record happened, use that ranked activity\'s exact ISO startTime; never substitute the current date. Read list_activity_jumps only when jump-level details are requested and preserve pagination completeness. Never rank jump quality by jumpCount.',
+      'Use get_activity_overview before granular activity reads. For Training impact, prepare the form metric first, then call get_training_impact with one selected activityRef or with the exact unique activityRefs already returned for one local calendar date. Day mode returns only an identity-free aggregate and separate UTC Training-day outcomes; never add planned workouts or references from another local date. For highest or lowest activities by one metric, use rank_activities_by_metric. For an MTB jump superlative, discover the Mountain Biking activityGroup, pass it to rank_activities_by_metric, and use the corresponding persisted Maximum Jump Distance, Height, Hang Time, Speed, or Score metric. The server expands the group to every canonical type. Treat the ranked metric value as authoritative. When stating when the record happened, use that ranked activity\'s exact ISO startTime; never substitute the current date. Read list_activity_jumps only when jump-level details are requested and preserve pagination completeness. Never rank jump quality by jumpCount.',
     );
   }
   if (auth.scopes.includes(MCP_OAUTH_SCOPES.RoutesRead)) {
@@ -1871,6 +1874,57 @@ export function createMcpServer(
     auth.scopes.includes(MCP_OAUTH_SCOPES.MetricsRead)
     && auth.scopes.includes(MCP_OAUTH_SCOPES.ActivityDetailsRead)
   ) {
+    registerMcpTool(server, 'get_training_impact', {
+      title: 'Get Training impact',
+      description: `Explain TSS-based fitness-load, fatigue-load, and freshness contributions for one selected completed activity or an aggregate of up to ${MCP_TRAINING_IMPACT_MAX_ACTIVITIES} selected activities from one local calendar date. Prepare the form metric first. Session mode accepts activityRef only. Day mode accepts localDate, timeZone, and the exact activityRefs already returned for that date. The response never echoes activity references, event IDs, labels, exact start times, devices, or provider provenance.`,
+      inputSchema: z.object({
+        mode: z.enum(['session', 'day']),
+        activityRef: MCP_OPAQUE_REFERENCE_SCHEMA
+          .describe('Session mode only: one opaque reference returned by activity discovery.')
+          .optional(),
+        activityRefs: z.array(MCP_OPAQUE_REFERENCE_SCHEMA)
+          .min(1)
+          .max(MCP_TRAINING_IMPACT_MAX_ACTIVITIES)
+          .describe('Day mode only: unique opaque references already returned for the selected local date.')
+          .optional(),
+        localDate: z.string()
+          .regex(/^\d{4}-\d{2}-\d{2}$/)
+          .describe('Day mode only: real local calendar date in YYYY-MM-DD format.')
+          .optional(),
+        timeZone: z.string()
+          .min(1)
+          .max(80)
+          .describe('Day mode only: IANA timezone used to validate every selected activity.')
+          .optional(),
+      }).strict().superRefine((input, context) => {
+        const sessionShape = input.mode === 'session'
+          && input.activityRef !== undefined
+          && input.activityRefs === undefined
+          && input.localDate === undefined
+          && input.timeZone === undefined;
+        const dayShape = input.mode === 'day'
+          && input.activityRef === undefined
+          && input.activityRefs !== undefined
+          && input.localDate !== undefined
+          && input.timeZone !== undefined;
+        if (!sessionShape && !dayShape) {
+          context.addIssue({
+            code: 'custom',
+            message: 'Session mode requires activityRef only; day mode requires activityRefs, localDate, and timeZone.',
+          });
+        }
+      }),
+      outputSchema: outputSchemas.get_training_impact,
+      annotations: READ_ONLY_TOOL_ANNOTATIONS,
+    }, input => runReadOnlyTool(
+      'get_training_impact',
+      () => dataService.getTrainingImpact({
+        ...input,
+        uid: auth.uid,
+        connectionId: auth.connectionId,
+      }),
+    ));
+
     registerMcpTool(server, 'get_activity_overview', {
       title: 'Get activity overview',
       description: 'Inspect coordinate-free activity capabilities before granular reads.',
@@ -2119,6 +2173,7 @@ export function requiredScopesForRequest(body: unknown): McpOAuthScope[] {
   if ([
     'get_activity_metrics',
     'get_activity_overview',
+    'get_training_impact',
     'rank_activities_by_metric',
   ].includes(toolName)) {
     return [

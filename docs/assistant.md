@@ -89,6 +89,8 @@ The internal session always grants `metrics:read`, `measurements:read`, `sleep:r
 - daily report and live Readiness;
 - normalized sleep sessions, trends, and safe aggregate vitals;
 - Training and activity metric discovery and bounded queries;
+- identity-safe TSS-based Training impact for one exact completed session or one bounded local-date activity selection,
+  with separate UTC Training-day outcomes and no activity/event identity or provider provenance;
 - first-class body-measurement discovery and bounded history;
 - bounded activity lists, overview, selected metrics, rankings, laps, MTB jumps, swim lengths, and on-demand chart series;
 - coordinate-free saved-route summaries filtered by canonical activity type, name, or recency.
@@ -382,6 +384,8 @@ not authored by the model. The evidence adapter:
   exact ISO start time, rank, and scan count;
 - presents a jump's relative `timestampMs` as human-readable elapsed activity time rather than a raw implementation
   field;
+- presents Training impact as status, TSS, CTL, ATL, Form, and dated CTL-outcome facts while omitting the selected
+  opaque references, labels, exact start times, and provenance;
 - removes identifiers, cursors, source/provider/device provenance, tokens, and similar fields again before display;
 - accepts production links only on exact HTTPS Quantified Self origins, with explicit loopback origins permitted only
   while running the Functions emulator;

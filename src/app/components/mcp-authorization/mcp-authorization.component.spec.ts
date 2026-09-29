@@ -106,6 +106,8 @@ describe('McpAuthorizationComponent', () => {
     expect(content).toContain('Read bounded identity-free body-measurement history such as weight');
     expect(content).toContain('exact source timestamps');
     expect(content).toContain('selected canonical numeric metrics for one activity');
+    expect(content).toContain('identity-safe TSS-based Training impact');
+    expect(content).toContain('not measured physiological adaptation');
     expect(content).toContain('Sleep summaries');
     expect(content).toContain('available aggregate HRV');
     expect(content).toContain('Individual activity details');

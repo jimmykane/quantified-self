@@ -676,7 +676,7 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
           {
             icon: 'monitoring',
             title: 'Training and measurement trends',
-            copy: 'Review load, readiness, intensity, durability, sport-specific evidence, and body-weight history across the period you ask about.',
+            copy: 'Review load, readiness, intensity, durability, sport-specific evidence, body-weight history, and identity-safe TSS-based Training impact for an exact completed activity or local date.',
           },
           {
             icon: 'monitor_heart',
@@ -741,6 +741,10 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
       {
         question: 'Can I analyze detailed workout samples instead of the 400-point chart?',
         answer: 'Yes. A separate read-only tool returns all available elapsed-second samples for selected supported metrics in bounded pages, including gaps. It uses your existing Individual activity details permission; no new permission or provider reconnection is required. Your client may need to refresh its available tools. It can request a particular interval and follow the continuation to complete it. Charts remain compact overviews, and original-file availability and processing limits still apply.',
+      },
+      {
+        question: 'Can an MCP client explain a completed workout’s Training impact?',
+        answer: 'Yes, when both Activity and Training metrics and Individual activity details are approved. The read-only result uses the existing TSS-based Form model for one exact completed activity or an aggregate of exact activities from one local date. It separates the CTL, ATL and Form contribution from the actual UTC Training-day outcome after decay; one local date can span two UTC outcomes. It excludes activity/event identities, labels, exact start times, devices and provider provenance. Missing TSS, benchmark/merge exclusions, partial coverage and updating Form stay explicit. This models sustained training load, not measured physiological adaptation.',
       },
       {
         question: 'Can an MCP client find workouts by tag?',
@@ -811,7 +815,7 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
           {
             icon: 'monitoring',
             title: 'Training and activity context',
-            copy: 'Compare current load, Form, ramp, volume, intensity, and recent workouts. You can also ask about recorded details such as laps, swim lengths, and MTB jump records.',
+            copy: 'Compare current load, Form, ramp, volume, intensity, and recent workouts. Ask how one completed session or local day contributed to modeled CTL, ATL, and Form, separately from the actual UTC Training-day outcome after decay. You can also ask about recorded details such as laps, swim lengths, and MTB jump records.',
           },
           {
             icon: 'scale',
@@ -857,7 +861,7 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
     faqItems: [
       {
         question: 'What can the Quantified Self Assistant answer?',
-        answer: 'It can answer questions about daily readiness, sleep and recorded vitals, Training metrics, body measurements, recent activities, laps, jumps, swim lengths, workout charts, and saved routes. Exact activity locations, nearby activity search, and activity maps are available only after you enable precise activity locations for a new chat.',
+        answer: 'It can answer questions about daily readiness, sleep and recorded vitals, Training metrics, identity-safe TSS-based Training impact for a completed session or local day, body measurements, recent activities, laps, jumps, swim lengths, workout charts, and saved routes. Training impact is modeled load, not measured physiological adaptation. Exact activity locations, nearby activity search, and activity maps are available only after you enable precise activity locations for a new chat.',
       },
       {
         question: 'Does the Assistant send raw files or route locations to Gemini?',
