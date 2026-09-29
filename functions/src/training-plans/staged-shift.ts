@@ -38,6 +38,7 @@ const STAGE_WRITES = 10;
 const RECEIPT_RETENTION_MS = 30 * 24 * 60 * 60 * 1000;
 export const BULK_SHIFT_LEASE_MS = 7 * 60 * 1000;
 const MAX_REPLACEMENT_IDS = 8;
+const HASH_PATTERN = /^[a-f0-9]{64}$/;
 
 interface ReceiptAliasV1 {
     mutationId: string;
@@ -65,10 +66,11 @@ export function readBulkShiftLock(value: unknown): BulkShiftLockV1 {
     const lock = value as Partial<BulkShiftLockV1>;
     if (lock.schemaVersion !== TRAINING_PLAN_SCHEMA_VERSION || lock.kind !== 'shift-plan'
         || typeof lock.mutationId !== 'string' || typeof lock.requestHash !== 'string'
-        || typeof lock.intentHash !== 'string' || !Array.isArray(lock.receiptAliases)
+        || !HASH_PATTERN.test(lock.requestHash) || typeof lock.intentHash !== 'string'
+        || !HASH_PATTERN.test(lock.intentHash) || !Array.isArray(lock.receiptAliases)
         || lock.receiptAliases.length > MAX_REPLACEMENT_IDS
         || lock.receiptAliases.some(alias => !alias || typeof alias.mutationId !== 'string'
-            || typeof alias.requestHash !== 'string')
+            || typeof alias.requestHash !== 'string' || !HASH_PATTERN.test(alias.requestHash))
         || typeof lock.planId !== 'string' || !Number.isSafeInteger(lock.stateRevision)
         || !Number.isSafeInteger(lock.planRevision) || !Number.isSafeInteger(lock.createdAtMs)
         || !Number.isSafeInteger(lock.nextAttemptAtMs) || !Number.isSafeInteger(lock.attempts)
@@ -79,13 +81,12 @@ export function readBulkShiftLock(value: unknown): BulkShiftLockV1 {
         throw new Error('Invalid bulk shift lock.');
     }
     const request = parseMutateTrainingScheduleRequestV1(lock.request);
+    // Alias hashes belong to the exact retry payload. Equivalent expected-revision arrays
+    // can arrive in another order, so they cannot be recomputed from the canonical request.
     if (request.operation.kind !== 'shift-plan' || request.mutationId !== lock.mutationId
         || request.operation.planId !== lock.planId
         || hashTrainingScheduleMutationRequest(request) !== lock.requestHash
-        || shiftIntentHash(request) !== lock.intentHash
-        || lock.receiptAliases.some(alias => hashTrainingScheduleMutationRequest({
-            ...request, mutationId: alias.mutationId,
-        }) !== alias.requestHash)) {
+        || shiftIntentHash(request) !== lock.intentHash) {
         throw new Error('Invalid bulk shift lock request.');
     }
     return lock as BulkShiftLockV1;

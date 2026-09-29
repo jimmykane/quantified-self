@@ -578,7 +578,8 @@ packed Sports Lib package. That gate is tracked by GitHub issue #654 under epic 
   History readers cannot discover staged child chunks before that envelope exists. An exact retry or a browser reload
   with a replacement mutation ID for the same intent resumes the locked shift; both IDs receive receipts on commit.
   A short-lived, owner-scoped intent receipt also recognizes an exact late retry after the lock has gone, without
-  shifting the plan twice; it uses the existing mutation-receipt TTL and is not browser-readable.
+  shifting the plan twice; equivalent expected-revision order is accepted without weakening the exact request hash
+  stored for each mutation ID. It uses the existing mutation-receipt TTL and is not browser-readable.
   If a competing retry commits first or the final response is lost, an invocation checks its exact receipt under the
   account-deletion fence and returns that committed result. Receipt retention starts at commit, not lock creation, so
   a long-stalled shift does not immediately lose its idempotency record.

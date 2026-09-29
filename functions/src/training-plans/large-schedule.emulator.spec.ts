@@ -347,7 +347,9 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('400-workout Training muta
             mutationId: 'conflicting-rename', expectedRevisions: shift.expectedRevisions,
             operation: { kind: 'rename-plan', planId: plan.id, name: 'Must not overwrite staged shift' },
         }, { db, nowMs: nowMs + 3 })).rejects.toMatchObject({ code: 'failed-precondition' });
-        const resumedShift = { ...shift, mutationId: 'resumed-oversized-shift' };
+        // Equivalent revision order must not poison the persisted lock's alias validation.
+        const resumedShift = { ...shift, mutationId: 'resumed-oversized-shift',
+            expectedRevisions: [...shift.expectedRevisions].reverse() };
         let completedElsewhere = false;
         const finishDuringRetry = {
             collection: (id: string) => db.collection(id),
@@ -376,7 +378,8 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('400-workout Training muta
         expect((await stateRef.collection('planDeletionLocks').doc('_bulk_shift').get()).exists).toBe(false);
         expect(await mutateTrainingScheduleForUser(uid, shift, { db, nowMs: nowMs + 3 })).toEqual(shifted);
         expect(await mutateTrainingScheduleForUser(uid, resumedShift, { db, nowMs: nowMs + 5 })).toEqual(shifted);
-        const lateRetry = { ...shift, mutationId: 'late-oversized-shift' };
+        const lateRetry = { ...shift, mutationId: 'late-oversized-shift',
+            expectedRevisions: [...shift.expectedRevisions].reverse() };
         expect(await mutateTrainingScheduleForUser(uid, lateRetry, { db, nowMs: nowMs + 6 })).toEqual(shifted);
         expect((await stateRef.collection('mutationReceipts').doc(lateRetry.mutationId).get()).data())
             .toMatchObject({ response: shifted });
