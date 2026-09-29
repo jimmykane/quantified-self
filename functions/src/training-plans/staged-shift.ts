@@ -185,7 +185,10 @@ export async function abortUnapprovedMcpShift(
         return lock;
     });
     if (!locked) return false;
+    const authority = locked.mcpAuthority;
+    if (!authority) return false;
     const planRef = userRef.collection(TRAINING_PLANS_COLLECTION_ID).doc(locked.planId);
+    const proposalRef = userRef.collection('trainingMcpProposals').doc(authority.proposalId);
     const revisionRef = planRef.collection(TRAINING_PLAN_REVISIONS_COLLECTION_ID)
         .doc(trainingScheduleRevisionDocumentId(locked.planRevision + 1));
     // The cancellation flag fences concurrent final commits before removing the
@@ -194,16 +197,23 @@ export async function abortUnapprovedMcpShift(
     await db.recursiveDelete(revisionRef);
     return db.runTransaction(async transaction => {
         if ((await getUserDeletionGuardStateInTransaction(db, transaction, uid, nowMs)).shouldSkip) return false;
-        const [snapshot, state, plan] = await Promise.all([
+        const [snapshot, state, plan, proposal] = await Promise.all([
             transaction.get(lockRef), transaction.get(userRef.collection('trainingPlanState').doc('current')),
-            transaction.get(planRef),
+            transaction.get(planRef), transaction.get(proposalRef),
         ]);
         if (!snapshot.exists) return false;
         const current = readBulkShiftLock(snapshot.data());
         if (!current.cancelling || current.requestHash !== locked.requestHash
+            || JSON.stringify(current.mcpAuthority ?? null) !== JSON.stringify(authority)
             || state.get('revision') !== locked.stateRevision
             || plan.get('revision') !== locked.planRevision) {
             throw new Error('A cancelled shift changed before its staged history was removed.');
+        }
+        if (proposal.exists && proposal.get('uid') === uid
+            && proposal.get('connectionId') === authority.connectionId
+            && proposal.get('createdAtMs') === authority.proposalCreatedAtMs
+            && !proposal.get('result')) {
+            transaction.update(proposalRef, { cancelledAtMs: Math.max(Date.now(), nowMs), leaseUntilMs: null });
         }
         transaction.delete(lockRef); // The lock is a leaf; staged revision descendants were recursively removed.
         return true;
@@ -323,7 +333,7 @@ async function stageLargeTrainingPlanShiftInternal(
             kind: 'shift-plan', mutationId: request.mutationId, requestHash,
             intentHash, receiptAliases: [],
             planId: currentPlan.id, stateRevision: currentState.revision, planRevision: currentPlan.revision,
-            createdAtMs: nowMs, nextAttemptAtMs: nowMs + BULK_SHIFT_LEASE_MS, attempts: 0,
+            createdAtMs: nowMs, nextAttemptAtMs: Math.max(Date.now(), nowMs) + BULK_SHIFT_LEASE_MS, attempts: 0,
             request,
             ...(options.stagedShiftAuthority ? { mcpAuthority: options.stagedShiftAuthority } : {}),
         };

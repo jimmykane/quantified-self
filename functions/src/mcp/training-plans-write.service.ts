@@ -114,6 +114,7 @@ interface StoredProposal {
   providerResults: ApplyResult['providers'];
   result?: ApplyResult;
   approvedAtMs?: number;
+  cancelledAtMs?: number;
 }
 
 export interface TrainingWriteInput {
@@ -274,13 +275,16 @@ export async function approvedStagedShiftProposalInTransaction(
     || proposal.accessGeneration !== authority.accessGeneration
     || JSON.stringify(proposal.requiredScopes) !== JSON.stringify(authority.requiredScopes)
     || !Number.isSafeInteger(proposal.approvedAtMs)
+    || proposal.cancelledAtMs !== undefined
     || !['pending', 'applying'].includes(proposal.status)
     || proposal.result
     || !Array.isArray(proposal.scheduleRequests) || !Array.isArray(proposal.changeResults)
-    || proposal.nextScheduleOperation !== authority.scheduleIndex
-    || proposal.scheduleRequests[authority.scheduleIndex]?.request.mutationId !== request.mutationId
-    || hashTrainingScheduleMutationRequest(proposal.scheduleRequests[authority.scheduleIndex].request)
-      !== hashTrainingScheduleMutationRequest(request)) return null;
+    || proposal.nextScheduleOperation !== authority.scheduleIndex) return null;
+  const storedRequest = proposal.scheduleRequests[authority.scheduleIndex]?.request;
+  if (!storedRequest || storedRequest.mutationId !== request.mutationId) return null;
+  try {
+    if (hashTrainingScheduleMutationRequest(storedRequest) !== hashTrainingScheduleMutationRequest(request)) return null;
+  } catch { return null; }
   try {
     await assertAuthorityInTransaction({ db, now: () => nowMs }, tx, uid, authority.connectionId,
       authority.requiredScopes, authority.accessGeneration,
@@ -972,6 +976,9 @@ async function readProposal(input: TrainingWriteInput, deps: TrainingWriteDepend
     || proposal.connectionId !== input.connectionId || proposal.createdAtMs !== decoded.createdAtMs) {
     invalid('This Training proposal is unavailable. Prepare it again.');
   }
+  if (proposal.cancelledAtMs !== undefined) {
+    invalid('This Training proposal was cancelled. Earlier changes may have applied; review the current plan, then prepare and approve a new change.');
+  }
   assertScopes(input.scopes, proposal.requiredScopes);
   if (args.data.permissionMode !== permissionMode(proposal.requiredScopes)) {
     invalid('The proposal permission mode does not match. Prepare it again.');
@@ -1122,6 +1129,9 @@ async function applyTrainingChangesInternal(
     const snapshot = await tx.get(proposalRefDoc);
     const value = snapshot.data() as StoredProposal | undefined;
     if (!value || value.createdAtMs !== current.proposal.createdAtMs) invalid('This Training proposal is unavailable.');
+    if (value.cancelledAtMs !== undefined) {
+      invalid('This Training proposal was cancelled. Earlier changes may have applied; review the current plan, then prepare and approve a new change.');
+    }
     if (value.result) return value;
     const now = deps.now();
     if (value.expiresAtMs <= now && value.status === 'pending') invalid('This Training proposal expired. Prepare it again.');

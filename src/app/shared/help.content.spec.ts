@@ -67,6 +67,7 @@ describe('help.content', () => {
     expect(content).toContain('Previewing a change never contacts a provider');
     expect(content).toContain('Retry the same approved proposal to retrieve its result');
     expect(content).toContain('revoke the connection or its Training permission before commit');
+    expect(content).toContain('Restoring permission requires a new preview and approval');
     expect(content).toContain('## Send workouts to connected providers');
     expect(section.links.some(link => link.label === 'MCP Connections')).toBe(true);
     expect(section.links.some(link => link.label === 'Connected services')).toBe(true);

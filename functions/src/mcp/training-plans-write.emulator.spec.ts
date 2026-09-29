@@ -14,6 +14,7 @@ import { parseStrengthWorkoutDetailsV1 } from '../../../shared/strength-workout'
 import { encodeOpaqueValue } from './data.service';
 import { processTrainingBulkShift, reconcileTrainingBulkShifts } from '../training-plans/bulk-shift-worker';
 import { mutateTrainingScheduleForUser } from '../training-plans/persistence';
+import { BULK_SHIFT_LEASE_MS } from '../training-plans/staged-shift';
 import { applyTrainingChanges, previewCreatePlannedWorkout, previewTrainingChanges,
   previewStrengthWorkoutChange, previewPlannedWorkoutV2Change,
   type TrainingWriteDependencies } from './training-plans-write.service';
@@ -76,7 +77,8 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Training MCP write propos
       .rejects.toMatchObject({ code: 'failed-precondition' });
   });
 
-  const prepareOversizedShift = async (connectionId = 'connection', grantedScopes = scopes) => {
+  const prepareOversizedShift = async (connectionId = 'connection', grantedScopes = scopes,
+    includeRename = false) => {
     const user = db.collection('users').doc(uid);
     await user.collection('trainingPlanState').doc('current').update({ activePlanId: 'bulk-plan',
       currentWorkoutCount: 400 });
@@ -102,7 +104,10 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Training MCP write propos
     }
     const plan = encodeOpaqueValue('training_read', { kind: 'plan', id: 'bulk-plan', createdAtMs: 1 }, uid, connectionId);
     const preview = await previewTrainingChanges({ uid, connectionId, scopes: grantedScopes,
-      arguments: { expectedScheduleRevision: 1, changes: [{ kind: 'shift-plan', plan: { ref: plan }, days: 1 }] } }, deps);
+      arguments: { expectedScheduleRevision: 1, changes: [
+        { kind: 'shift-plan', plan: { ref: plan }, days: 1 },
+        ...(includeRename ? [{ kind: 'rename-plan', plan: { ref: plan }, name: 'After staged shift' }] : []),
+      ] } }, deps);
     if (connectionId.startsWith('first-party-assistant-v1:')) {
       await user.collection('assistantConversations').doc('active').update({ pendingTrainingProposal: preview });
     }
@@ -142,6 +147,33 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Training MCP write propos
       .toMatchObject({ revision: 2, localDate: '2026-10-03' });
   }, 120_000);
 
+  it('starts the recovery lease at approval time, not at the older preview timestamp', async () => {
+    const { user, preview } = await prepareOversizedShift();
+    const lockRef = user.collection('trainingPlanState').doc('current')
+      .collection('planDeletionLocks').doc('_bulk_shift');
+    let acquired: { createdAtMs: number; nextAttemptAtMs: number } | null = null;
+    const interruptedDb = {
+      collection: (id: string) => db.collection(id),
+      runTransaction: async (handler: (transaction: FirebaseFirestore.Transaction) => Promise<unknown>) => {
+        const result = await db.runTransaction(handler);
+        const lock = await lockRef.get();
+        if (!acquired && lock.exists) {
+          acquired = { createdAtMs: lock.get('createdAtMs'), nextAttemptAtMs: lock.get('nextAttemptAtMs') };
+          throw new Error('synthetic lost lock response');
+        }
+        return result;
+      },
+    } as unknown as Firestore;
+    await expect(applyTrainingChanges({ uid, connectionId: 'connection', scopes,
+      arguments: { proposalRef: preview.proposalRef, permissionMode: 'schedule' } },
+    { ...deps, db: interruptedDb })).rejects.toThrow('Retry the same approved change');
+    expect(acquired).not.toBeNull();
+    expect(acquired!.createdAtMs).toBe(deps.now());
+    expect(acquired!.nextAttemptAtMs).toBeGreaterThan(Date.now() + BULK_SHIFT_LEASE_MS - 60_000);
+    expect(await processTrainingBulkShift(db, lockRef, acquired!.nextAttemptAtMs + 1)).toBe(true);
+    expect((await lockRef.get()).exists).toBe(false);
+  }, 120_000);
+
   it('cancels unpublished MCP shift staging after the connection grant is revoked', async () => {
     const { user, planRef, preview } = await prepareOversizedShift();
     const revisionRef = await interruptOversizedShift(planRef, preview.proposalRef);
@@ -157,6 +189,10 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Training MCP write propos
     expect((await planRef.get()).data()).toMatchObject({ revision: 1, startLocalDate: '2026-10-01' });
     expect((await user.collection('scheduledWorkouts').doc('bulk-399').get()).data())
       .toMatchObject({ revision: 1, localDate: '2026-10-02' });
+    await user.collection('mcpConnections').doc('connection').update({ revokedAtMs: null });
+    await expect(applyTrainingChanges({ uid, connectionId: 'connection', scopes,
+      arguments: { proposalRef: preview.proposalRef, permissionMode: 'schedule' } }, deps))
+      .rejects.toThrow('cancelled');
   }, 120_000);
 
   it('cancels unpublished MCP shift staging when its approved proposal expires', async () => {
@@ -168,6 +204,21 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Training MCP write propos
     const proposals = await user.collection('trainingMcpProposals').get();
     expect(proposals.size).toBe(1);
     await proposals.docs[0].ref.update({ expiresAtMs: dueAtMs });
+    expect(await reconcileTrainingBulkShifts(db, dueAtMs + 1)).toEqual({ scanned: 1, completed: 0, failed: 0 });
+    expect((await lockRef.get()).exists).toBe(false);
+    expect((await revisionRef.collection('chunks').limit(1).get()).empty).toBe(true);
+    expect((await planRef.get()).get('revision')).toBe(1);
+  }, 120_000);
+
+  it('cancels unpublished MCP shift staging when its stored proposal is malformed', async () => {
+    const { user, planRef, preview } = await prepareOversizedShift();
+    const revisionRef = await interruptOversizedShift(planRef, preview.proposalRef);
+    const lockRef = user.collection('trainingPlanState').doc('current')
+      .collection('planDeletionLocks').doc('_bulk_shift');
+    const dueAtMs = (await lockRef.get()).get('nextAttemptAtMs') as number;
+    const proposals = await user.collection('trainingMcpProposals').get();
+    expect(proposals.size).toBe(1);
+    await proposals.docs[0].ref.update({ scheduleRequests: [{ index: 0, request: null }] });
     expect(await reconcileTrainingBulkShifts(db, dueAtMs + 1)).toEqual({ scanned: 1, completed: 0, failed: 0 });
     expect((await lockRef.get()).exists).toBe(false);
     expect((await revisionRef.collection('chunks').limit(1).get()).empty).toBe(true);
@@ -191,6 +242,11 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Training MCP write propos
     expect((await lockRef.get()).exists).toBe(false);
     expect((await revisionRef.collection('chunks').limit(1).get()).empty).toBe(true);
     expect((await planRef.get()).get('revision')).toBe(1);
+    await user.collection('assistantConversations').doc('active')
+      .update({ pendingTrainingProposal: preview });
+    await expect(applyTrainingChanges({ uid, connectionId, scopes: assistantScopes,
+      arguments: { proposalRef: preview.proposalRef, permissionMode: 'schedule' } }, deps))
+      .rejects.toThrow('cancelled');
   }, 120_000);
 
   it('resumes an interrupted approved MCP shift once and replays its result', async () => {
@@ -210,6 +266,27 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Training MCP write propos
       .toMatchObject({ revision: 2, localDate: '2026-10-03' });
     expect((await revisionRef.collection('chunks').get()).empty).toBe(false);
     expect((await planRef.collection('revisions').get()).size).toBe(1);
+  }, 120_000);
+
+  it('continues later approved proposal changes after the worker finishes a staged shift', async () => {
+    const { user, planRef, preview } = await prepareOversizedShift('connection', scopes, true);
+    await interruptOversizedShift(planRef, preview.proposalRef);
+    const lockRef = user.collection('trainingPlanState').doc('current')
+      .collection('planDeletionLocks').doc('_bulk_shift');
+    const dueAtMs = (await lockRef.get()).get('nextAttemptAtMs') as number;
+    expect(await reconcileTrainingBulkShifts(db, dueAtMs + 1)).toEqual({ scanned: 1, completed: 1, failed: 0 });
+    expect((await planRef.get()).data()).toMatchObject({ revision: 2,
+      name: 'Approved bulk shift', startLocalDate: '2026-10-02' });
+    const result = await applyTrainingChanges({ uid, connectionId: 'connection', scopes,
+      arguments: { proposalRef: preview.proposalRef, permissionMode: 'schedule' } }, deps);
+    expect(result.status).toBe('applied');
+    expect(result.changes).toEqual([
+      expect.objectContaining({ kind: 'shift-plan', status: 'applied' }),
+      expect.objectContaining({ kind: 'rename-plan', status: 'applied' }),
+    ]);
+    expect((await planRef.get()).data()).toMatchObject({ revision: 3,
+      name: 'After staged shift', startLocalDate: '2026-10-02' });
+    expect((await planRef.collection('revisions').get()).size).toBe(2);
   }, 120_000);
 
   it('fences a conflicting edit and lets only one worker publish an approved MCP shift', async () => {

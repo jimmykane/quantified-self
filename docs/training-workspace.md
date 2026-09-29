@@ -583,6 +583,8 @@ packed Sports Lib package. That gate is tracked by GitHub issue #654 under epic 
   with a replacement mutation ID for the same intent resumes the locked shift; both IDs receive receipts on commit.
   The stored original request, rather than a retry's ordering of equivalent revision preconditions, remains the
   authoritative input for the staged history and final result.
+  The retry lease starts from the actual lock-acquisition time even when an MCP preview supplied an older deterministic
+  mutation timestamp, so the recovery worker cannot claim a shift while its initial apply is still staging.
   A short-lived, owner-scoped intent receipt also recognizes an exact late retry after the lock has gone, without
   shifting the plan twice; equivalent expected-revision order is accepted without weakening the exact request hash
   stored for each mutation ID. It uses the existing mutation-receipt TTL and is not browser-readable.
@@ -593,11 +595,14 @@ packed Sports Lib package. That gate is tracked by GitHub issue #654 under epic 
   exists. An MCP lock also stores a private owner/connection/proposal/grant/index binding, never client-supplied input.
   Its first apply must pass the existing preview and approval path; lock acquisition, preparation, and final commit
   recheck that the proposal was approved for the exact shift and that its grant or Assistant confirmation is still
-  current. The final transaction advances the proposal cursor and per-change result alongside the schedule revision, so a lost
-  response cannot replay the shift. Acquisition extends that approved proposal's retry lifetime to 30 days. If its
-  permission or proposal is lost before publication, the worker fences final commit, recursively removes the
-  unpublished staged history, and releases the lock without changing current dates. This is not a new MCP mutation
-  kind or permission, and it does not authorize provider delivery.
+  current. The final transaction advances the proposal cursor and per-change result alongside the schedule revision,
+  so a lost response cannot replay the shift. For a multi-change proposal, the worker completes the staged shift but
+  the same approved apply must be retried to continue later changes or provider actions. Acquisition extends that
+  approved proposal's retry lifetime to 30 days. If its permission or proposal is lost before publication, the worker
+  fences final commit, recursively removes the unpublished staged history, marks the old proposal cancelled, and
+  releases the lock without changing current dates.
+  Restoring the same grant or Assistant confirmation cannot revive that proposal; a new preview and approval are
+  required. This is not a new MCP mutation kind or permission, and it does not authorize provider delivery.
   The separate five-minute `reconcileTrainingBulkShift` scheduler leases and resumes one due shift per
   invocation after a timed-out callable, with bounded backoff and account-deletion fencing. It scans up to 100 due
   locks, skipping unclaimable deleted-account records so one orphan cannot block another owner's recovery. This worker

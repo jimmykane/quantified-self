@@ -54,8 +54,9 @@ An oversized manual or separately approved MCP plan shift may temporarily hold t
 while its immutable history is staged. During that interval, planning reads return the existing temporary-unavailability result instead of a
 partly staged schedule; after the atomic commit they read the new revision. This adds no MCP field, tool, scope,
 projection, provider action, or wider write authority. An oversized MCP shift uses the approved proposal's private
-owner/connection/grant binding; the worker rechecks it before publishing and cancels unpublished history if approval
-is lost. Ordinary MCP shifts retain the bounded transaction path.
+owner/connection/grant binding; the worker rechecks it before publishing and cancels unpublished history and the old
+proposal if approval is lost. A restored grant requires a new preview and approval. Ordinary MCP shifts retain the
+bounded transaction path.
 No credentials, private ledgers, attempts, artifacts, approval digests, issue text, receipts or history are read. Reads do
 not import transports or write Training data; normal OAuth usage counters remain permitted infrastructure behavior.
 
@@ -112,12 +113,14 @@ Compatible schedule operations are applied in one bounded Firestore transaction 
 and idempotency receipt per operation. A write-budget overflow falls back to the existing sequential path; authority is
 still checked in every authored-write transaction. An oversized approved plan shift stages immutable history behind a
 private lock and atomically publishes current dates, the revision, receipts, and the proposal cursor. The same approved
-proposal is retryable after an interrupted apply; the worker can finish it without a new client call. Grant revocation,
-Assistant confirmation change, or proposal expiry before publication cancels the unpublished shift. No new tool,
-scope, consent, schema, or provider action is exposed, so this implementation-only change does not require a plugin
-rebuild; deployment and registered-client availability remain separate. Apply diagnostics contain only operation
-counts, total/stage durations, terminal outcome and the slowest stage—never owner IDs, references, titles, notes or arguments. Applies taking at least
-five seconds emit one structured slow warning for operational investigation.
+proposal is retryable after an interrupted apply; the worker can finish that staged shift without a new client call.
+Any later changes or provider actions in the proposal still require the same approved apply to be retried. Grant
+revocation, Assistant confirmation change, or proposal expiry before publication cancels the unpublished shift and
+prevents reuse of its approval. No new tool, scope, consent, schema, or provider action is exposed, so this
+implementation-only change does not require a plugin rebuild; deployment and registered-client availability remain
+separate. Apply diagnostics contain only operation counts, total/stage durations, terminal outcome and the slowest
+stage—never owner IDs, references, titles, notes or arguments. Applies taking at least five seconds emit one structured
+slow warning for operational investigation.
 
 Delivery actions resolve the destination account on the server and reuse the existing #646 command/reconciliation path.
 They never accept credentials or remote IDs. `all_connected` fans out only to connected, rollout-ready, compatible providers shown
