@@ -398,9 +398,9 @@ describe('TrainingWorkspaceComponent', () => {
     const styles = readFileSync(stylePath, 'utf8');
     const adjacentContextRule = styles.match(/\.training-mix-contexts section \+ section \{([^}]*)\}/)?.[1];
 
-    expect(styles).toContain('--training-mix-context-divider-color: color-mix(in srgb, var(--mat-sys-outline) 28%, transparent);');
+    expect(styles).toContain('--mix-divider: color-mix(in srgb, var(--mat-sys-outline) 28%, transparent);');
     expect(adjacentContextRule).toContain('padding-top: 12px;');
-    expect(adjacentContextRule).toContain('border-top: 1px solid var(--training-mix-context-divider-color);');
+    expect(adjacentContextRule).toContain('border-top: 1px solid var(--mix-divider);');
   });
 
   it('uses the full section width for one sport and rearranges its comparison inside the card', () => {
@@ -421,6 +421,7 @@ describe('TrainingWorkspaceComponent', () => {
     expect(detailsStyles).toContain('@container (min-width: 1120px)');
     expect(detailsStyles).toContain('.training-mix-details--single > .training-mix-zone-comparison');
     expect(detailsStyles).toContain('.training-mix-details--single > .training-mix-contexts');
+    expect(detailsStyles).toContain('section:last-child:nth-child(odd) { grid-column: 1 / -1; padding-right: 0; }');
   });
 
   it('renders activity-family icons for sport-specific training driver cards and TSS in the overview mix', async () => {
