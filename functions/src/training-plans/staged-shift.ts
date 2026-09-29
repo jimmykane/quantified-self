@@ -228,7 +228,8 @@ async function stageLargeTrainingPlanShiftInternal(
     });
     if (acquired.kind === 'completed') return acquired.response;
     const lock = acquired.lock;
-    const canonicalRequest = { ...request, mutationId: lock.mutationId };
+    // Retry payloads authorize the lock, but the original persisted request defines its result.
+    const canonicalRequest = lock.request;
 
     const prepared = await db.runTransaction(async transaction => {
         if ((await getUserDeletionGuardStateInTransaction(db, transaction, uid, nowMs)).shouldSkip) {

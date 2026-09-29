@@ -577,6 +577,8 @@ packed Sports Lib package. That gate is tracked by GitHub issue #654 under epic 
   current workouts, creates the revision envelope and receipts, queues delivery reconciliation, and removes the lock.
   History readers cannot discover staged child chunks before that envelope exists. An exact retry or a browser reload
   with a replacement mutation ID for the same intent resumes the locked shift; both IDs receive receipts on commit.
+  The stored original request, rather than a retry's ordering of equivalent revision preconditions, remains the
+  authoritative input for the staged history and final result.
   A short-lived, owner-scoped intent receipt also recognizes an exact late retry after the lock has gone, without
   shifting the plan twice; equivalent expected-revision order is accepted without weakening the exact request hash
   stored for each mutation ID. It uses the existing mutation-receipt TTL and is not browser-readable.

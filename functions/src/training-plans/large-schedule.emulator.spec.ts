@@ -227,6 +227,31 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('400-workout Training muta
         expect(committed.state.revision).toBe(3);
         expect((await workoutRef.get()).data()).toMatchObject({ localDate: '2026-10-04', revision: 3 });
         expect((await stateRef.collection('planDeletionLocks').doc('_bulk_shift').get()).exists).toBe(false);
+
+        const retryShift = { mutationId: 'canonical-third-shift', expectedRevisions: [
+            { scope: 'state' as const, id: 'current', revision: 3 },
+            { scope: 'plan' as const, id: 'auto-plan', revision: 3 },
+        ], operation: { kind: 'shift-plan' as const, planId: 'auto-plan', days: 1 } };
+        const lockRef = stateRef.collection('planDeletionLocks').doc('_bulk_shift');
+        let interruptedAfterLock = false;
+        const interruptLock = { collection: (id: string) => db.collection(id),
+            runTransaction: async (handler: (transaction: FirebaseFirestore.Transaction) => Promise<unknown>) => {
+                const response = await db.runTransaction(handler);
+                if (!interruptedAfterLock && (await lockRef.get()).exists) {
+                    interruptedAfterLock = true;
+                    throw new Error('synthetic lost lock response');
+                }
+                return response;
+            } } as unknown as Firestore;
+        await expect(stageLargeTrainingPlanShiftForUser(uid, retryShift, { db: interruptLock, nowMs: nowMs + 2 }))
+            .rejects.toThrow('synthetic lost lock response');
+        const replacement = { ...retryShift, mutationId: 'reordered-third-shift',
+            expectedRevisions: [...retryShift.expectedRevisions].reverse() };
+        const resumed = await stageLargeTrainingPlanShiftForUser(uid, replacement, { db, nowMs: nowMs + 3 });
+        expect(resumed.mutationId).toBe(retryShift.mutationId);
+        expect(resumed.state.revision).toBe(4);
+        expect((await workoutRef.get()).data()).toMatchObject({ localDate: '2026-10-05', revision: 4 });
+        expect((await lockRef.get()).exists).toBe(false);
     });
 
     it('rejects oversized 400-prescription restore and stages a high-entropy shift', async () => {
