@@ -6411,11 +6411,11 @@ describe('MCP data service', () => {
       },
       vitals: {
         averageHrvMs: ((29 * 46) + (40 * 35)) / 81,
-        hrvSampleCount: 81,
         averageHeartRateBpm: 49,
         minimumHeartRateBpm: 40,
       },
     });
+    expect(result.sleep.latestSession?.vitals).not.toHaveProperty('hrvSampleCount');
     expect(result.readiness.drivers.sleep).toMatchObject({
       durationSeconds: 28_800,
       recordedScore: 82,
