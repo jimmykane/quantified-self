@@ -3,6 +3,7 @@ import { gzipSync } from 'node:zlib';
 import { ActivityTypes } from '@sports-alliance/sports-lib';
 import { Firestore } from 'firebase-admin/firestore';
 import { afterAll, describe, expect, it } from 'vitest';
+import { projectStrengthWorkoutToV1 } from '../../../shared/strength-workout';
 import { deleteTrainingPlanForUser } from './delete-training-plan';
 import { restoreTrainingScheduleRevisionForUser } from './restore';
 import { reconcileTrainingBulkShifts } from './bulk-shift-worker';
@@ -144,6 +145,81 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('400-workout Training muta
         const saved = (await workoutRef.get()).data();
         expect(saved).toMatchObject({ lifecycle: 'planned', revision: 3 });
         expect(saved).not.toHaveProperty('deletedAtMs');
+    });
+
+    it('stages a small-payload strength restore when companion writes exceed the transaction budget', async () => {
+        const uid = `large-${randomUUID()}`; uids.push(uid);
+        const user = db.collection('users').doc(uid);
+        const stateRef = user.collection('trainingPlanState').doc('current');
+        const planRef = user.collection('trainingPlans').doc('strength-plan');
+        const workoutCount = 250;
+        const plan = {
+            schemaVersion: 1, id: 'strength-plan', name: 'Strength restore write budget', lifecycle: 'active',
+            startLocalDate: '2026-10-01', endLocalDate: '2026-10-31', revision: 3,
+            lastCheckpointRevision: 2, workoutCount, createdAtMs: nowMs, updatedAtMs: nowMs,
+        };
+        await user.set({ test: true });
+        await stateRef.set({ schemaVersion: 1, activePlanId: plan.id, revision: 3,
+            currentWorkoutCount: workoutCount, updatedAtMs: nowMs });
+        await planRef.set(plan);
+        const desired = [];
+        for (let offset = 0; offset < workoutCount; offset += 50) {
+            const batch = db.batch();
+            for (let index = offset; index < offset + 50; index += 1) {
+                const id = `strength-${`${index}`.padStart(3, '0')}`;
+                const details = (load: number, revision: number) => ({
+                    version: 1 as const, workoutId: id, revision,
+                    exercises: [{ id: 'squat', name: 'Squat', sets: [{
+                        id: 'set', ending: { kind: 'repetitions' as const, repetitions: 5 }, externalLoadKg: load,
+                    }] }],
+                });
+                const workout = { schemaVersion: 1, id, planId: plan.id, localDate: '2026-10-02',
+                    lifecycle: 'planned', title: `Strength workout ${index}`,
+                    structure: projectStrengthWorkoutToV1(details(10, 3)), revision: 3,
+                    createdAtMs: nowMs, updatedAtMs: nowMs };
+                const workoutRef = user.collection('scheduledWorkouts').doc(id);
+                batch.set(workoutRef, workout);
+                batch.set(workoutRef.collection('strengthDetails').doc('current'), details(10, 3));
+                desired.push({ workout: { ...workout, revision: 2 }, strength: details(20, 2) });
+            }
+            await batch.commit();
+        }
+        expect(Buffer.byteLength(JSON.stringify(desired), 'utf8')).toBeLessThan(7 * 1024 * 1024);
+        const checkpointPlan = { ...plan, revision: 2 };
+        const payload = gzipSync(Buffer.from(JSON.stringify(desired), 'utf8')).toString('base64');
+        const chunkCount = Math.ceil(payload.length / TRAINING_PLAN_REVISION_CHUNK_MAX_BASE64_CHARACTERS);
+        const revisionRef = planRef.collection('revisions').doc(trainingScheduleRevisionDocumentId(2));
+        await revisionRef.set({
+            schemaVersion: 1, revision: 2, mutationId: 'strength-checkpoint', operationKind: 'edit-workout',
+            createdAtMs: nowMs, checkpointRevision: 2,
+            delta: { planBefore: null, planAfter: checkpointPlan, workoutCount: 0, workoutChunkCount: 0,
+                workoutEncoding: TRAINING_PLAN_REVISION_CHUNK_ENCODING },
+            checkpoint: { plan: checkpointPlan, workoutCount, workoutChunkCount: chunkCount,
+                workoutEncoding: TRAINING_PLAN_REVISION_CHUNK_ENCODING },
+        });
+        for (let index = 0; index < chunkCount; index += 1) {
+            await revisionRef.collection('chunks').doc(trainingPlanRevisionChunkDocumentId('checkpoint-workouts', index)).set({
+                schemaVersion: 1, revision: 2, kind: 'checkpoint-workouts', chunkIndex: index,
+                chunkCount, encoding: TRAINING_PLAN_REVISION_CHUNK_ENCODING,
+                payloadBase64: payload.slice(index * TRAINING_PLAN_REVISION_CHUNK_MAX_BASE64_CHARACTERS,
+                    (index + 1) * TRAINING_PLAN_REVISION_CHUNK_MAX_BASE64_CHARACTERS),
+            });
+        }
+        const request = { mutationId: 'strength-write-budget-restore', scope: { kind: 'plan' as const, id: plan.id },
+            targetRevision: 2, expectedRevisions: [
+                { scope: 'state' as const, id: 'current', revision: 3 },
+                { scope: 'plan' as const, id: plan.id, revision: 3 },
+            ] };
+        const restored = await restoreTrainingScheduleRevisionForUser(uid, request, { db, nowMs: nowMs + 1 });
+        expect(restored.mutation.workoutsDeferred).toBe(true);
+        expect((await stateRef.get()).data()).toMatchObject({ revision: 4 });
+        const lastWorkout = user.collection('scheduledWorkouts').doc('strength-249');
+        expect((await lastWorkout.get()).data()).toMatchObject({ revision: 4 });
+        expect((await lastWorkout.collection('strengthDetails').doc('current').get()).data())
+            .toMatchObject({ revision: 4, exercises: [{ sets: [{ externalLoadKg: 20 }] }] });
+        expect((await stateRef.collection('planDeletionLocks').doc('_bulk_restore').get()).exists).toBe(false);
+        expect(await restoreTrainingScheduleRevisionForUser(uid, request, { db, nowMs: nowMs + 2 }))
+            .toEqual(restored);
     });
 
     it('automatically resumes a staged shift after an interrupted callable', async () => {

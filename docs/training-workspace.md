@@ -611,7 +611,8 @@ packed Sports Lib package. That gate is tracked by GitHub issue #654 under epic 
   the `trainingCleanupJobs(nextAttemptAtMs, __name__)` collection-group index and the unindexed `response` field before
   enabling the worker. Inspect `[TrainingCleanup] cleanup_retry_failed` logs and due jobs when a lock persists; do not
   delete a lock or job by hand without checking its receipt and tombstone.
-- An oversized full-prescription plan restore uses an owner-scoped `_bulk_restore` lock and a separate owner-readable
+- A plan restore that exceeds either the single-transaction payload or write-count budget (including strength
+  companion writes) uses an owner-scoped `_bulk_restore` lock and a separate owner-readable
   `trainingPlanState/current/availability/restore` leaf. A lock acquisition freezes other schedule mutations,
   delivery workers, and MCP Training reads. Browser rules deny workout and strength-companion reads while the lock
   exists; the availability listener pauses all three app calendar surfaces and the Plans workspace, then reconnects

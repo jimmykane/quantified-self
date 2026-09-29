@@ -207,7 +207,7 @@ async function stageRestore(
         const restored = applyPlanRevisionRestore(snapshot, desired, lock.request, lock.createdAtMs);
         const revisions = buildTrainingScheduleRevisionWrites(restored.applied, {
             mutationId: lock.request.mutationId, operation: { kind: 'restore-plan-revision' },
-        }, lock.createdAtMs);
+        }, lock.createdAtMs, true);
         const workouts: StagedWorkout[] = [...restored.applied.changedWorkoutIds].sort().map(workoutId => {
             const before = restored.applied.before.workouts.get(workoutId)!;
             const after = restored.applied.after.workouts.get(workoutId)!;

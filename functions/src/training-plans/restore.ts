@@ -44,6 +44,7 @@ import {
 } from './mutation';
 import {
     TRAINING_PLAN_REVISION_CHUNKS_COLLECTION_ID,
+    TrainingScheduleOversizedMutationError,
     buildTrainingScheduleRevisionWrites,
     hashTrainingScheduleRequestPayload,
     trainingPlanRevisionChunkDocumentId,
@@ -670,8 +671,9 @@ export async function restoreTrainingScheduleRevisionForUser(
         return restored.response;
         });
     } catch (error) {
-        if (request.scope.kind !== 'plan' && !(error instanceof TrainingScheduleRestoreWriteLimitError)) throw error;
-        if (request.scope.kind === 'plan' && !(error instanceof TrainingScheduleRestoreWriteLimitError)) {
+        if (request.scope.kind !== 'plan') throw error;
+        if (!(error instanceof TrainingScheduleRestoreWriteLimitError
+            || error instanceof TrainingScheduleOversizedMutationError)) {
             const lock = await stateRef.collection(TRAINING_PLAN_DELETION_LOCKS_COLLECTION_ID).doc('_bulk_restore').get();
             if (!lock.exists) throw error;
         }
