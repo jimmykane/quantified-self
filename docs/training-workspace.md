@@ -577,6 +577,11 @@ packed Sports Lib package. That gate is tracked by GitHub issue #654 under epic 
   current workouts, creates the revision envelope and receipts, queues delivery reconciliation, and removes the lock.
   History readers cannot discover staged child chunks before that envelope exists. An exact retry or a browser reload
   with a replacement mutation ID for the same intent resumes the locked shift; both IDs receive receipts on commit.
+  A short-lived, owner-scoped intent receipt also recognizes an exact late retry after the lock has gone, without
+  shifting the plan twice; it uses the existing mutation-receipt TTL and is not browser-readable.
+  If a competing retry commits first or the final response is lost, an invocation checks its exact receipt under the
+  account-deletion fence and returns that committed result. Receipt retention starts at commit, not lock creation, so
+  a long-stalled shift does not immediately lose its idempotency record.
   Other schedule mutations, restores, deletions, provider delivery, and MCP Training reads are fenced while the lock
   exists. The separate five-minute `reconcileTrainingBulkShift` scheduler leases and resumes one due shift per
   invocation after a timed-out callable, with bounded backoff and account-deletion fencing. It scans up to 100 due

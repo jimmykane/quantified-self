@@ -32,6 +32,7 @@ import {
 // Existing mutation/restore/plan-deletion paths already check this collection.
 // A child of an absent revision envelope stays invisible to history readers.
 export const BULK_SHIFT_LOCK_ID = '_bulk_shift';
+const SHIFT_INTENT_RECEIPT_PREFIX = '_shift_intent_';
 const STAGE_WRITE_BYTES = 2 * 1024 * 1024;
 const STAGE_WRITES = 10;
 const RECEIPT_RETENTION_MS = 30 * 24 * 60 * 60 * 1000;
@@ -133,7 +134,7 @@ function stageGroups(chunks: readonly TrainingPlanRevisionChunkDocumentV1[]): Tr
 }
 
 /** Stage only immutable history children; current plan/workout roots change in one final transaction. */
-export async function stageLargeTrainingPlanShiftForUser(
+async function stageLargeTrainingPlanShiftInternal(
     uid: string,
     request: MutateTrainingScheduleRequestV1,
     options: TrainingScheduleMutationOptions = {},
@@ -150,18 +151,35 @@ export async function stageLargeTrainingPlanShiftForUser(
     const planRef = userRef.collection(TRAINING_PLANS_COLLECTION_ID).doc(request.operation.planId);
     const receiptRef = stateRef.collection(TRAINING_PLAN_MUTATION_RECEIPTS_COLLECTION_ID).doc(request.mutationId);
     const requestHash = hashTrainingScheduleMutationRequest(request);
+    const intentHash = shiftIntentHash(request);
+    const intentReceiptRef = stateRef.collection(TRAINING_PLAN_MUTATION_RECEIPTS_COLLECTION_ID)
+        .doc(`${SHIFT_INTENT_RECEIPT_PREFIX}${intentHash}`);
 
     const acquired = await db.runTransaction(async transaction => {
         if ((await getUserDeletionGuardStateInTransaction(db, transaction, uid, nowMs)).shouldSkip) {
             throw new TrainingScheduleMutationError('failed-precondition', 'This account is being deleted or is no longer available.');
         }
-        const [receipt, locks, state, plan] = await Promise.all([
-            transaction.get(receiptRef), transaction.get(locksRef), transaction.get(stateRef), transaction.get(planRef),
+        const [receipt, intentReceipt, locks, state, plan] = await Promise.all([
+            transaction.get(receiptRef), transaction.get(intentReceiptRef), transaction.get(locksRef),
+            transaction.get(stateRef), transaction.get(planRef),
         ]);
         if (receipt.exists) {
             const value = receipt.data();
             if (value?.requestHash !== requestHash) throw new TrainingScheduleMutationError('failed-precondition', 'This mutation ID was already used differently.');
             return { kind: 'completed' as const, response: parseStoredMutationResponse(value.response) };
+        }
+        if (intentReceipt.exists) {
+            const value = intentReceipt.data();
+            if (value?.schemaVersion !== TRAINING_PLAN_SCHEMA_VERSION || value.kind !== 'shift-intent'
+                || value.intentHash !== intentHash) throw new Error('Invalid staged shift intent receipt.');
+            const response = parseStoredMutationResponse(value.response);
+            const receivedAtMs = Math.max(Date.now(), nowMs);
+            transaction.create(receiptRef, {
+                schemaVersion: TRAINING_PLAN_SCHEMA_VERSION,
+                requestHash, response, createdAtMs: receivedAtMs,
+                expireAt: Timestamp.fromMillis(receivedAtMs + RECEIPT_RETENTION_MS),
+            });
+            return { kind: 'completed' as const, response };
         }
         if (locks.docs.some(snapshot => snapshot.id !== BULK_SHIFT_LOCK_ID)) {
             throw new TrainingScheduleMutationError('failed-precondition', 'Another Training plan operation is in progress. Retry after it finishes.');
@@ -199,7 +217,7 @@ export async function stageLargeTrainingPlanShiftForUser(
         const lock: BulkShiftLockV1 = {
             schemaVersion: TRAINING_PLAN_SCHEMA_VERSION,
             kind: 'shift-plan', mutationId: request.mutationId, requestHash,
-            intentHash: shiftIntentHash(request), receiptAliases: [],
+            intentHash, receiptAliases: [],
             planId: currentPlan.id, stateRevision: currentState.revision, planRevision: currentPlan.revision,
             createdAtMs: nowMs, nextAttemptAtMs: nowMs + BULK_SHIFT_LEASE_MS, attempts: 0,
             request,
@@ -286,18 +304,53 @@ export async function stageLargeTrainingPlanShiftForUser(
             });
         }
         transaction.create(revisionRef, revision);
+        const committedAtMs = Math.max(Date.now(), nowMs);
+        transaction.create(intentReceiptRef, {
+            schemaVersion: TRAINING_PLAN_SCHEMA_VERSION,
+            kind: 'shift-intent', intentHash: finalLock.intentHash,
+            response: prepared.applied.response,
+            createdAtMs: committedAtMs,
+            expireAt: Timestamp.fromMillis(committedAtMs + RECEIPT_RETENTION_MS),
+        });
         for (const alias of [{ mutationId: finalLock.mutationId, requestHash: finalLock.requestHash },
             ...finalLock.receiptAliases]) {
             transaction.create(stateRef.collection(TRAINING_PLAN_MUTATION_RECEIPTS_COLLECTION_ID).doc(alias.mutationId), {
                 schemaVersion: TRAINING_PLAN_SCHEMA_VERSION,
                 requestHash: alias.requestHash,
                 response: prepared.applied.response,
-                createdAtMs: lock.createdAtMs,
-                expireAt: Timestamp.fromMillis(lock.createdAtMs + RECEIPT_RETENTION_MS),
+                createdAtMs: committedAtMs,
+                expireAt: Timestamp.fromMillis(committedAtMs + RECEIPT_RETENTION_MS),
             });
         }
         stageTrainingDeliveryReconciliation(transaction, db, uid);
         transaction.delete(lockRef); // A lock is a leaf; its staged chunks live under the revision.
         return prepared.applied.response;
     });
+}
+
+/** A competing retry may commit after this invocation has read the lock. Resolve that race by its exact receipt. */
+export async function stageLargeTrainingPlanShiftForUser(
+    uid: string,
+    request: MutateTrainingScheduleRequestV1,
+    options: TrainingScheduleMutationOptions = {},
+): Promise<MutateTrainingScheduleResponseV1> {
+    const db = options.db ?? admin.firestore();
+    try {
+        return await stageLargeTrainingPlanShiftInternal(uid, request, { ...options, db });
+    } catch (error) {
+        try {
+            const receiptRef = db.collection('users').doc(uid).collection('trainingPlanState').doc('current')
+                .collection(TRAINING_PLAN_MUTATION_RECEIPTS_COLLECTION_ID).doc(request.mutationId);
+            const response = await db.runTransaction(async transaction => {
+                if ((await getUserDeletionGuardStateInTransaction(db, transaction, uid, Date.now())).shouldSkip) return null;
+                const receipt = await transaction.get(receiptRef);
+                if (!receipt.exists || receipt.data()?.requestHash !== hashTrainingScheduleMutationRequest(request)) return null;
+                return parseStoredMutationResponse(receipt.data()?.response);
+            });
+            if (response) return response;
+        } catch {
+            // Preserve the original failure when the confirmation read is unavailable or malformed.
+        }
+        throw error;
+    }
 }

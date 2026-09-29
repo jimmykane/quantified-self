@@ -816,7 +816,8 @@ export async function mutateTrainingScheduleForUser(
             || options.transactionPostcondition || options.additionalWriteBudget
             || !(error instanceof TrainingScheduleOversizedMutationError
                 || (error instanceof TrainingScheduleMutationError && error.code === 'failed-precondition'
-                    && error.message.includes('deletion is in progress')))) throw error;
+                    && error.message.includes('deletion is in progress'))
+                || (error instanceof TrainingScheduleMutationError && error.code === 'revision-conflict'))) throw error;
         const { stageLargeTrainingPlanShiftForUser } = await import('./staged-shift');
         return stageLargeTrainingPlanShiftForUser(uid, request, options);
     }

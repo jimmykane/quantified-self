@@ -202,7 +202,31 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('400-workout Training muta
         expect((await workoutRef.get()).data()).toMatchObject({ localDate: '2026-10-03', revision: 2 });
         expect((await staged.get()).exists).toBe(true);
         expect((await stateRef.collection('planDeletionLocks').doc('_bulk_shift').get()).exists).toBe(false);
-        expect((await stateRef.collection('mutationReceipts').doc('auto-shift').get()).exists).toBe(true);
+        const firstReceipt = (await stateRef.collection('mutationReceipts').doc('auto-shift').get()).data()!;
+        expect(firstReceipt.createdAtMs).toBeGreaterThanOrEqual(lockNextAttemptAtMs + 1);
+        expect(firstReceipt.expireAt.toMillis()).toBe(firstReceipt.createdAtMs + 30 * 24 * 60 * 60 * 1000);
+
+        const nextShift = { mutationId: 'lost-final-response', expectedRevisions: [
+            { scope: 'state' as const, id: 'current', revision: 2 },
+            { scope: 'plan' as const, id: 'auto-plan', revision: 2 },
+        ], operation: { kind: 'shift-plan' as const, planId: 'auto-plan', days: 1 } };
+        const nextReceipt = stateRef.collection('mutationReceipts').doc(nextShift.mutationId);
+        let lostFinalResponse = false;
+        const loseFinalResponse = { collection: (id: string) => db.collection(id),
+            runTransaction: async (handler: (transaction: FirebaseFirestore.Transaction) => Promise<unknown>) => {
+                const response = await db.runTransaction(handler);
+                if (!lostFinalResponse && (await nextReceipt.get()).exists) {
+                    lostFinalResponse = true;
+                    throw new Error('synthetic lost final response');
+                }
+                return response;
+            } } as unknown as Firestore;
+        const committed = await stageLargeTrainingPlanShiftForUser(uid, nextShift,
+            { db: loseFinalResponse, nowMs: nowMs + 1 });
+        expect(lostFinalResponse).toBe(true);
+        expect(committed.state.revision).toBe(3);
+        expect((await workoutRef.get()).data()).toMatchObject({ localDate: '2026-10-04', revision: 3 });
+        expect((await stateRef.collection('planDeletionLocks').doc('_bulk_shift').get()).exists).toBe(false);
     });
 
     it('rejects oversized 400-prescription restore and stages a high-entropy shift', async () => {
@@ -324,7 +348,22 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('400-workout Training muta
             operation: { kind: 'rename-plan', planId: plan.id, name: 'Must not overwrite staged shift' },
         }, { db, nowMs: nowMs + 3 })).rejects.toMatchObject({ code: 'failed-precondition' });
         const resumedShift = { ...shift, mutationId: 'resumed-oversized-shift' };
-        const shifted = await mutateTrainingScheduleForUser(uid, resumedShift, { db, nowMs: nowMs + 4 });
+        let completedElsewhere = false;
+        const finishDuringRetry = {
+            collection: (id: string) => db.collection(id),
+            runTransaction: async (handler: (transaction: FirebaseFirestore.Transaction) => Promise<unknown>) => {
+                const result = await db.runTransaction(handler);
+                const currentLock = (await stateRef.collection('planDeletionLocks').doc('_bulk_shift').get()).data();
+                if (!completedElsewhere && currentLock?.receiptAliases?.some((alias: { mutationId: string }) =>
+                    alias.mutationId === resumedShift.mutationId)) {
+                    completedElsewhere = true;
+                    await stageLargeTrainingPlanShiftForUser(uid, shift, { db, nowMs: nowMs + 4 });
+                }
+                return result;
+            },
+        } as unknown as Firestore;
+        const shifted = await mutateTrainingScheduleForUser(uid, resumedShift, { db: finishDuringRetry, nowMs: nowMs + 4 });
+        expect(completedElsewhere).toBe(true);
         expect(shifted.mutationId).toBe(shift.mutationId);
         expect(shifted.state.revision).toBe(4);
         expect((await stateRef.get()).data()).toMatchObject({ revision: 4 });
@@ -337,5 +376,17 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('400-workout Training muta
         expect((await stateRef.collection('planDeletionLocks').doc('_bulk_shift').get()).exists).toBe(false);
         expect(await mutateTrainingScheduleForUser(uid, shift, { db, nowMs: nowMs + 3 })).toEqual(shifted);
         expect(await mutateTrainingScheduleForUser(uid, resumedShift, { db, nowMs: nowMs + 5 })).toEqual(shifted);
+        const lateRetry = { ...shift, mutationId: 'late-oversized-shift' };
+        expect(await mutateTrainingScheduleForUser(uid, lateRetry, { db, nowMs: nowMs + 6 })).toEqual(shifted);
+        expect((await stateRef.collection('mutationReceipts').doc(lateRetry.mutationId).get()).data())
+            .toMatchObject({ response: shifted });
+        expect((await stateRef.get()).data()).toMatchObject({ revision: 4 });
+        await expect(mutateTrainingScheduleForUser(uid, {
+            ...lateRetry, operation: { ...lateRetry.operation, days: 2 },
+        }, { db, nowMs: nowMs + 7 })).rejects.toMatchObject({ code: 'failed-precondition' });
+        await expect(mutateTrainingScheduleForUser(uid, {
+            ...shift, mutationId: 'stale-different-shift', operation: { ...shift.operation, days: 2 },
+        }, { db, nowMs: nowMs + 8 })).rejects.toMatchObject({ code: 'revision-conflict' });
+        expect((await stateRef.collection('planDeletionLocks').doc('_bulk_shift').get()).exists).toBe(false);
     });
 });
