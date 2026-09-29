@@ -48,10 +48,10 @@
           }
         </div>
         @if (standaloneDayPage() && healthState().sleepPoint; as sleepPoint) {
-          <div id="day-sleep-stages" class="calendar-day-context-sleep-stages" [attr.aria-label]="sleepPoint.providerLabel + ' sleep stages for ' + title()">
+          <div id="day-sleep-stages" class="calendar-day-context-sleep-stages" role="group" [attr.aria-label]="sleepPoint.providerLabel + ' overnight sleep for ' + title()">
             <span class="calendar-day-context-sleep-source">{{ sleepPoint.providerLabel }} · overnight sleep</span>
             @if (sleepFacts(); as facts) {
-              <div class="calendar-day-context-sleep-facts" aria-label="Overnight sleep details">
+              <div class="calendar-day-context-sleep-facts" role="group" aria-label="Overnight sleep details">
                 @if (facts.duration) { <span>Duration <strong>{{ facts.duration }}</strong></span> }
                 @if (facts.window) { <span>Sleep window <strong>{{ facts.window }}</strong></span> }
                 @if (facts.averageHeartRate) { <span>Average overnight HR <strong>{{ facts.averageHeartRate }}</strong></span> }

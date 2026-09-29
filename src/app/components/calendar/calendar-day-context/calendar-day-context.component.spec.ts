@@ -87,10 +87,20 @@ describe('CalendarDayContextComponent', () => {
     }] } as typeof emptyEvidence); fixture.detectChanges();
     expect(fixture.nativeElement.querySelector('app-health-sleep-stage-summary')?.textContent).toContain('Sleep stages');
     expect(fixture.nativeElement.querySelector('.calendar-day-context-sleep-stages')?.textContent).toContain('Suunto · overnight sleep');
+    expect(fixture.nativeElement.querySelector('#day-sleep-stages')?.getAttribute('aria-label'))
+      .toContain('Suunto overnight sleep for');
+    expect(fixture.nativeElement.querySelector('.calendar-day-context-sleep-facts')?.getAttribute('role'))
+      .toBe('group');
     expect(fixture.nativeElement.querySelector('.calendar-day-context-sleep-facts')?.textContent)
       .toContain('Duration 08h 00m');
     expect(fixture.nativeElement.querySelector('.calendar-day-context-sleep-facts')?.textContent)
       .toContain('Average overnight HR 58 bpm');
+    const currentHealth = fixture.componentInstance.healthState();
+    fixture.componentInstance.healthState.set({ ...currentHealth, ownerUid: 'another-owner' });
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('.calendar-day-context-sleep-facts')).toBeNull();
+    fixture.componentInstance.healthState.set(currentHealth);
+    fixture.detectChanges();
     expect(fixture.nativeElement.querySelector('.calendar-day-context-timeline')).toBeTruthy();
     expect(fixture.nativeElement.querySelector('.calendar-day-context-health-heading')?.textContent).toContain('Recovery & sleep');
     expect(fixture.nativeElement.querySelector('#calendar-day-timeline-title')?.textContent).toContain('Your day');

@@ -102,10 +102,16 @@ export class CalendarDayContextComponent {
   readonly previewPlans = computed(() => this.calmMonth() ? this.plannedRows() : this.plannedRows().slice(0, 2));
   readonly canPlan = computed(() => this.data().planningEnabled !== false && this.users.user()?.uid === this.data().userId);
   readonly healthState = signal<HealthState>({ status: 'loading', dateKey: null, ownerUid: null, summary: null, sleepPoint: null });
-  readonly sleepFacts = computed(() => this.standaloneDayPage()
-    ? buildCalendarDaySleepFacts(this.healthDateKey(), this.healthState().sleepPoint, {
+  readonly sleepFacts = computed(() => {
+    const health = this.healthState();
+    if (!this.standaloneDayPage() || !this.privateHealthEnabled() || this.hideHealth()
+      || this.users.user()?.uid !== this.healthOwnerUid()
+      || health.status !== 'ready' || health.dateKey !== this.healthDateKey()
+      || health.ownerUid !== this.healthOwnerUid()) return null;
+    return buildCalendarDaySleepFacts(this.healthDateKey(), health.sleepPoint, {
       locale: this.data().locale, unitSettings: this.data().unitSettings,
-    }) : null);
+    });
+  });
   readonly fullDayReady = computed(() => {
     const health = this.healthState();
     return health.dateKey === this.healthDateKey()
