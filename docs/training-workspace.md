@@ -3682,6 +3682,15 @@ Inspect authenticated `/training` at desktop, tablet, and narrow-mobile widths. 
 Start with the repository workflows in `.agent/workflows/serve-local.md` and
 `.agent/workflows/start-emulators.md`. Build Functions before starting the emulators.
 
+The Training schedule, provider-delivery, derived-metric, and Assistant proposal endpoints are configured to use direct
+`FUNCTION_TARGET` loaders in `functions/src/function-target-loader.ts`; Firebase discovery still loads the complete
+entrypoint. After changing a handler's module or Function options, run `npm --prefix functions run entrypoint:check`
+and the cold-import benchmark (`npm --prefix functions run entrypoint:benchmark`). The check verifies the complete
+manifest, isolated export identity, and each Training target's trigger, region, memory, timeout, concurrency, applicable retry,
+and secret bindings. This loader routing changes no Training API, MCP tool, schema, scope, consent, projection,
+Assistant approval contract, or provider action. Keep the Assistant and derived-refresh endpoints' existing shared
+MCP imports explicit in the check rather than treating those imports as a new MCP wire surface.
+
 Functions runtime code must import `FieldValue`, `Timestamp`, and `FieldPath` from `firebase-admin/firestore`. Do not
 access those statics through `admin.firestore`: the Functions emulator replaces that namespace with a callable proxy
 that does not retain the Admin SDK's legacy static exports.

@@ -6,7 +6,7 @@ import {
 } from './function-target-loader';
 
 describe('function target loader', () => {
-  it('optimizes the Suunto OAuth, marketing, event tag, and Training workers', () => {
+  it('optimizes the Suunto OAuth, marketing, event tag, and Training endpoints', () => {
     expect(OPTIMIZED_FUNCTION_TARGETS).toEqual([
       'getSuuntoAPIAuthRequestTokenRedirectURI',
       'requestAndSetSuuntoAPIAccessToken',
@@ -24,6 +24,27 @@ describe('function target loader', () => {
       'projectEventTagCatalog',
       'reconcileTrainingPlanCleanup',
       'reconcileTrainingBulkShift',
+      'applyAssistantTrainingProposal',
+      'ensureDerivedMetrics',
+      'setTrainingBuildBenchmark',
+      'mutateTrainingSchedule',
+      'getTrainingScheduleHistory',
+      'previewTrainingScheduleRestore',
+      'restoreTrainingScheduleRevision',
+      'deleteTrainingPlan',
+      'previewTrainingProviderDelivery',
+      'mutateTrainingProviderDelivery',
+      'processTrainingDeliveryTask',
+      'onTrainingDeliveryQueued',
+      'dispatchTrainingDelivery',
+      'onTrainingDeliveryConnectionChanged',
+      'onTrainingDeliveryEntitlementChanged',
+      'onDashboardDerivedMetricsActivityWrite',
+      'onDashboardDerivedMetricsEventWrite',
+      'onDashboardDerivedMetricsSleepWrite',
+      'onDashboardDerivedMetricsHealthWrite',
+      'processDerivedMetricsTask',
+      'processDerivedMetricsIngressTask',
     ]);
   });
 
