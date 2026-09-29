@@ -113,8 +113,9 @@ header strong {
   line-height: 1.25;
 }
 
-.training-impact-compact span,
-.training-impact-compact strong {
+.training-impact-compact > span,
+.training-impact-compact > strong,
+.training-impact-compact-outcomes > span {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -133,6 +134,11 @@ header strong {
   font-family: inherit;
   font-size: inherit;
   font-weight: 400;
+}
+
+.training-impact-compact-outcomes {
+  display: grid;
+  gap: 1px;
 }
 
 @media (max-width: 767px) {

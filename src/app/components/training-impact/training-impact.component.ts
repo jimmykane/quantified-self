@@ -24,6 +24,7 @@ export class TrainingImpactComponent {
   readonly variant = input<TrainingImpactVariant>('card');
   readonly title = input('Training impact');
   readonly isReady = computed(() => this.impact().availability === 'ready');
+  readonly isDayImpact = computed(() => 'sessions' in this.impact());
   readonly compactText = computed(() => {
     const impact = this.impact();
     if (impact.availability !== 'ready') return impact.message;
@@ -39,6 +40,9 @@ export class TrainingImpactComponent {
       `Fitness load (CTL) ${values.ctl}`,
       `Fatigue load (ATL) ${values.atl}`,
       `Freshness (Form) ${values.form}`,
+      ...('sessions' in impact ? this.outcomes().map(outcome => (
+        `${outcome.date}: ${outcome.headline}, ${outcome.ctlChange} CTL`
+      )) : []),
     ].filter(Boolean).join('. ');
   });
   readonly values = computed(() => {

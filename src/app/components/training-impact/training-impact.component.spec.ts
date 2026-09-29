@@ -52,6 +52,7 @@ describe('TrainingImpactComponent', () => {
     const text = element.textContent;
     expect(text).toContain('Helped push the day above maintenance');
     expect(text).toContain('+2 CTL · +12 ATL · −10 Form');
+    expect(element.querySelector('.training-impact-compact').getAttribute('role')).toBe('group');
     expect(element.querySelector('.training-impact-compact').getAttribute('aria-label'))
       .toContain('Fitness load (CTL) +2. Fatigue load (ATL) +12. Freshness (Form) −10');
   });
@@ -87,5 +88,26 @@ describe('TrainingImpactComponent', () => {
     const element = render(view, 'summary').nativeElement;
     expect(element.textContent).toContain('Activities span 2 UTC Training days');
     expect(element.querySelectorAll('.training-impact-outcomes > div')).toHaveLength(2);
+  });
+
+  it('renders separate UTC outcome lines for a compact multi-day total', () => {
+    const first = session();
+    const secondPoints = buildTrainingLoadPoints([
+      { dayMs: Date.UTC(2026, 0, 1), load: 84 },
+      { dayMs: Date.UTC(2026, 0, 2), load: 42 },
+    ]);
+    const secondDay = resolveTrainingLoadDayImpact(secondPoints, Date.UTC(2026, 0, 2))!;
+    const view: TrainingDayImpactView = {
+      availability: 'ready', message: '', headline: 'Activities span 2 UTC Training days',
+      sessions: [first], trainingStressScore: 126, ctlContribution: 3,
+      atlContribution: 18, formContribution: -15,
+      outcomes: [first.impact!.day, secondDay], unavailableSessionCount: 0,
+    };
+    const element = render(view, 'compact').nativeElement;
+    const outcomeLines = element.querySelectorAll('.training-impact-compact-outcomes > span');
+    expect(outcomeLines).toHaveLength(2);
+    expect(outcomeLines[0].textContent).toContain('Jan 1, 2026');
+    expect(outcomeLines[0].textContent).toContain('Fitness load rose after normal decay');
+    expect(outcomeLines[1].textContent).toContain('Jan 2, 2026');
   });
 });

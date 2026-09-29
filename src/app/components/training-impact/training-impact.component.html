@@ -2,9 +2,16 @@
   <span class="training-impact-compact" [class.training-impact-compact--unavailable]="!isReady()"
     [attr.aria-label]="compactAriaLabel()"
     [attr.aria-busy]="impact().availability === 'updating'"
-    [attr.role]="impact().availability === 'error' ? 'alert' : !isReady() ? 'status' : null">
+    [attr.role]="impact().availability === 'error' ? 'alert' : !isReady() ? 'status' : 'group'">
     @if (impact().headline) { <span>{{ impact().headline }}</span> }
     <strong>{{ compactText() }}</strong>
+    @if (isDayImpact() && outcomes().length > 1) {
+      <span class="training-impact-compact-outcomes" aria-label="Training-day outcomes">
+        @for (outcome of outcomes(); track outcome.dayMs) {
+          <span>{{ outcome.date }} · {{ outcome.headline }} · {{ outcome.ctlChange }} CTL</span>
+        }
+      </span>
+    }
   </span>
 } @else {
   <section class="training-impact" [class.training-impact--summary]="variant() === 'summary'"
