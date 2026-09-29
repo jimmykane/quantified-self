@@ -17,6 +17,7 @@ import {
 import { catchError, combineLatest, from, map, Observable, of, retry, shareReplay, switchMap, throwError } from 'rxjs';
 import {
   SCHEDULED_WORKOUTS_COLLECTION_ID,
+  DELETED_WORKOUT_RECOVERY_MS,
   TRAINING_PLAN_SCHEMA_VERSION,
   TRAINING_PLAN_STATE_COLLECTION_ID,
   TRAINING_PLAN_STATE_DOCUMENT_ID,
@@ -62,7 +63,7 @@ export interface CurrentTrainingScheduleV1 {
 
 export interface DeletedTrainingWorkoutsPageV1 {
   workouts: ScheduledWorkoutV1[];
-  nextAfterId: string | null;
+  nextCursor: { deletedAtMs: number; id: string } | null;
 }
 
 const DELETED_WORKOUT_PAGE_SIZE = 25;
@@ -159,7 +160,7 @@ export class TrainingPlansService {
   async getDeletedWorkoutsPage(
     userId: string,
     planId: string | null,
-    afterId: string | null = null,
+    cursor: DeletedTrainingWorkoutsPageV1['nextCursor'] = null,
   ): Promise<DeletedTrainingWorkoutsPageV1> {
     const uid = `${userId || ''}`.trim();
     if (!uid) throw new Error('Sign in to view deleted workouts.');
@@ -167,8 +168,10 @@ export class TrainingPlansService {
     const constraints = [
       where('planId', '==', planId),
       where('lifecycle', '==', 'deleted'),
-      orderBy(documentId()),
-      ...(afterId ? [startAfter(afterId)] : []),
+      where('deletedAtMs', '>', Date.now() - DELETED_WORKOUT_RECOVERY_MS),
+      orderBy('deletedAtMs', 'desc'),
+      orderBy(documentId(), 'desc'),
+      ...(cursor ? [startAfter(cursor.deletedAtMs, cursor.id)] : []),
       limit(DELETED_WORKOUT_PAGE_SIZE + 1),
     ];
     const snapshot = await getDocsFromServer(query(workoutsRef, ...constraints));
@@ -180,7 +183,8 @@ export class TrainingPlansService {
     }
     return {
       workouts,
-      nextAfterId: snapshot.docs.length > DELETED_WORKOUT_PAGE_SIZE ? visible.at(-1)!.id : null,
+      nextCursor: snapshot.docs.length > DELETED_WORKOUT_PAGE_SIZE
+        ? { deletedAtMs: workouts.at(-1)!.deletedAtMs!, id: workouts.at(-1)!.id } : null,
     };
   }
 

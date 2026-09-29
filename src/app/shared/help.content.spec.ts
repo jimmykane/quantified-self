@@ -652,8 +652,10 @@ describe('help.content', () => {
     expect(planningSection?.content).toContain('with a review warning');
     expect(planningSection?.content).toContain('only one can be active');
     expect(planningSection?.content).toContain('Move a workout between plans or between a plan and **Standalone**');
-    expect(planningSection?.content).toContain('Ordinary deletion is recoverable from history');
+    expect(planningSection?.content).toContain('Ordinary deletion is recoverable for');
     expect(planningSection?.content).toContain('Show more deleted workouts');
+    expect(planningSection?.content).toContain('90 days from the time you delete the workout');
+    expect(planningSection?.content).toContain('Deleted workouts (90 days)');
     expect(planningSection?.content).toContain('Every visible date');
     expect(planningSection?.content).toContain('Planned workouts and completed activities are separate');
     expect(planningSection?.content).toContain('Separate MCP read/preview tools support an authored pool length');

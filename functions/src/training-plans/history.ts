@@ -14,6 +14,7 @@ import {
     TRAINING_PLANS_COLLECTION_ID,
     TrainingPlanContractError,
     parseScheduledWorkoutV1,
+    isDeletedWorkoutRecoverable,
     parseTrainingPlanStateV1,
     parseTrainingPlanV1,
     type PreviewTrainingScheduleRestoreRequestV1,
@@ -333,12 +334,24 @@ export async function getTrainingScheduleHistoryForUser(
     uid: string,
     request: TrainingScheduleHistoryRequestV1,
     db: admin.firestore.Firestore = admin.firestore(),
+    nowMs = Date.now(),
 ): Promise<TrainingScheduleHistoryResponseV1> {
     await requireAvailableUser(db, uid);
     const userRef = db.collection('users').doc(uid);
     const ownerRef = request.scope.kind === 'plan'
         ? userRef.collection(TRAINING_PLANS_COLLECTION_ID).doc(request.scope.id)
         : userRef.collection(SCHEDULED_WORKOUTS_COLLECTION_ID).doc(request.scope.id);
+    if (request.scope.kind === 'workout') {
+        const current = await ownerRef.get();
+        if (!current.exists) throw new TrainingScheduleMutationError('not-found', 'The workout is no longer available.');
+        const workout = parseScheduledWorkoutV1(documentData(current));
+        if (workout.id !== request.scope.id || workout.planId !== null) {
+            throw new TrainingScheduleMutationError('failed-precondition', 'Standalone history is unavailable for this workout.');
+        }
+        if (workout.lifecycle === 'deleted' && !isDeletedWorkoutRecoverable(workout, nowMs)) {
+            throw new TrainingScheduleMutationError('failed-precondition', 'This workout\'s 90-day recovery window has ended.');
+        }
+    }
     let query: admin.firestore.Query = ownerRef.collection(TRAINING_PLAN_REVISIONS_COLLECTION_ID)
         .orderBy('revision', 'desc');
     if (request.beforeRevision !== undefined) query = query.where('revision', '<', request.beforeRevision);
@@ -518,6 +531,7 @@ export async function previewTrainingScheduleRestoreForUser(
     uid: string,
     request: PreviewTrainingScheduleRestoreRequestV1,
     db: admin.firestore.Firestore = admin.firestore(),
+    nowMs = Date.now(),
 ): Promise<TrainingScheduleRestorePreviewV1> {
     await requireAvailableUser(db, uid);
     const userRef = db.collection('users').doc(uid);
@@ -528,7 +542,9 @@ export async function previewTrainingScheduleRestoreForUser(
         const current = currentSnapshot.exists ? parseScheduledWorkoutV1(documentData(currentSnapshot)) : null;
         const selectedRevisionIsPlanBound = desired.planId !== null;
         const moved = current?.planId !== null && current?.planId !== undefined;
-        const blocked = selectedRevisionIsPlanBound || moved;
+        const expired = current?.lifecycle === 'deleted' && !isDeletedWorkoutRecoverable(current, nowMs);
+        const missing = current === null;
+        const blocked = selectedRevisionIsPlanBound || moved || expired || missing;
         await readRestorePreviewFence(userRef, initialStateRevision);
         return {
             scope: request.scope,
@@ -540,6 +556,10 @@ export async function previewTrainingScheduleRestoreForUser(
                 ? ['The selected revision belongs to a plan and cannot be restored from standalone history.']
                 : moved
                     ? ['The workout now belongs to a plan and will not be reclaimed automatically.']
+                    : expired
+                        ? ['The workout\'s 90-day recovery window has ended.']
+                        : missing
+                            ? ['The workout is no longer available for restoration.']
                     : [],
         };
     }
@@ -564,6 +584,7 @@ export async function previewTrainingScheduleRestoreForUser(
         )));
     const movedIds = new Set<string>();
     const permanentlyDeletedIds = new Set<string>();
+    const expiredIds = new Set<string>();
     desiredSnapshots.forEach((snapshot, index) => {
         if (!snapshot.exists) {
             permanentlyDeletedIds.add(desiredWorkoutIds[index]);
@@ -572,12 +593,14 @@ export async function previewTrainingScheduleRestoreForUser(
         const current = parseScheduledWorkoutV1(documentData(snapshot));
         currentWorkouts.set(current.id, current);
         if (current.planId !== request.scope.id) movedIds.add(current.id);
+        if (current.lifecycle === 'deleted' && !isDeletedWorkoutRecoverable(current, nowMs)) expiredIds.add(current.id);
     });
     const changedWorkoutIds = new Set<string>();
     desired.workouts.forEach((workout, workoutId) => {
         if (
             !movedIds.has(workoutId)
             && !permanentlyDeletedIds.has(workoutId)
+            && !expiredIds.has(workoutId)
             && !logicalWorkoutValuesEqual(currentWorkouts.get(workoutId), workout)
         ) {
             changedWorkoutIds.add(workoutId);
@@ -592,13 +615,16 @@ export async function previewTrainingScheduleRestoreForUser(
             changedWorkoutIds.add(workoutId);
         }
     });
-    const skippedWorkoutIds = [...new Set([...movedIds, ...permanentlyDeletedIds])].sort();
+    const skippedWorkoutIds = [...new Set([...movedIds, ...permanentlyDeletedIds, ...expiredIds])].sort();
     const warnings: string[] = [];
     if (movedIds.size > 0) {
         warnings.push(`${movedIds.size} workout${movedIds.size === 1 ? '' : 's'} moved to another scope and will not be reclaimed.`);
     }
     if (permanentlyDeletedIds.size > 0) {
         warnings.push(`${permanentlyDeletedIds.size} permanently deleted workout${permanentlyDeletedIds.size === 1 ? '' : 's'} will remain deleted.`);
+    }
+    if (expiredIds.size > 0) {
+        warnings.push(`${expiredIds.size} workout${expiredIds.size === 1 ? '' : 's'} past the 90-day recovery window will remain deleted.`);
     }
     await readRestorePreviewFence(userRef, initialStateRevision);
     return {

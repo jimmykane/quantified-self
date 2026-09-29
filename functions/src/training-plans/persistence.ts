@@ -37,6 +37,7 @@ import { assertNoTrainingPlanDeletionInProgress } from './deletion-lock';
 import { invalidateTrainingWorkoutConsent, stagePastWorkoutCleanup, stageTrainingDeliveryReconciliation } from './delivery/marker';
 import { TRAINING_WORKOUT_COMPLETIONS_COLLECTION_ID } from '../../../shared/training-workout-completion';
 import { finishTrainingCleanupJob, trainingCleanupJob, trainingCleanupJobRef } from './cleanup-job-contract';
+import { cleanupPermanentlyDeletedWorkoutData } from './cleanup-workout';
 
 const MUTATION_RECEIPT_RETENTION_MS = 30 * 24 * 60 * 60 * 1000;
 const FIRESTORE_TRANSACTION_WRITE_BUDGET = 490;
@@ -795,8 +796,7 @@ export async function mutateTrainingScheduleBatchForUser(
 
     const permanentlyDeletedWorkoutIds = new Set(responses.flatMap(response => response.permanentlyDeletedWorkoutIds));
     for (const workoutId of permanentlyDeletedWorkoutIds) {
-        await db.recursiveDelete(userRef.collection(TRAINING_WORKOUT_COMPLETIONS_COLLECTION_ID).doc(workoutId));
-        await db.recursiveDelete(userRef.collection(SCHEDULED_WORKOUTS_COLLECTION_ID).doc(workoutId));
+        await cleanupPermanentlyDeletedWorkoutData(db, uid, workoutId);
         const response = responses.find(item => item.permanentlyDeletedWorkoutIds.includes(workoutId))!;
         await finishTrainingCleanupJob(db, uid, 'workout', workoutId, response.mutationId, nowMs);
     }

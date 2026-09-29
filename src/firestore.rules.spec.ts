@@ -1709,9 +1709,9 @@ describe('Firestore Security Rules', () => {
                     await userRef.collection('scheduledWorkouts').doc('workout-1').set({
                         id: 'workout-1', planId: 'plan-1', localDate: '2026-09-02', lifecycle: 'planned',
                     });
-                    for (const id of ['deleted-a', 'deleted-b']) {
+                    for (const [id, deletedAtMs] of [['deleted-a', 100], ['deleted-b', 101]] as const) {
                         await userRef.collection('scheduledWorkouts').doc(id).set({
-                            id, planId: 'plan-1', localDate: '2026-09-01', lifecycle: 'deleted',
+                            id, planId: 'plan-1', localDate: '2026-09-01', lifecycle: 'deleted', deletedAtMs,
                         });
                     }
                     await userRef.collection('scheduledWorkouts').doc('workout-1')
@@ -1789,14 +1789,18 @@ describe('Firestore Security Rules', () => {
                 const owner = testEnv.authenticatedContext(userId).firestore();
                 const other = testEnv.authenticatedContext(otherId).firestore();
                 const page = owner.collection(path).where('planId', '==', 'plan-1')
-                    .where('lifecycle', '==', 'deleted').orderBy('__name__').limit(1);
+                    .where('lifecycle', '==', 'deleted').where('deletedAtMs', '>', 99)
+                    .orderBy('deletedAtMs', 'desc').orderBy('__name__', 'desc').limit(1);
                 const first = await assertSucceeds(page.get());
-                expect(first.docs.map(doc => doc.id)).toEqual(['deleted-a']);
+                expect(first.docs.map(doc => doc.id)).toEqual(['deleted-b']);
                 const second = await assertSucceeds(owner.collection(path).where('planId', '==', 'plan-1')
-                    .where('lifecycle', '==', 'deleted').orderBy('__name__').startAfter(first.docs[0].id).limit(1).get());
-                expect(second.docs.map(doc => doc.id)).toEqual(['deleted-b']);
+                    .where('lifecycle', '==', 'deleted').where('deletedAtMs', '>', 99)
+                    .orderBy('deletedAtMs', 'desc').orderBy('__name__', 'desc')
+                    .startAfter(101, first.docs[0].id).limit(1).get());
+                expect(second.docs.map(doc => doc.id)).toEqual(['deleted-a']);
                 await assertFails(other.collection(path).where('planId', '==', 'plan-1')
-                    .where('lifecycle', '==', 'deleted').orderBy('__name__').limit(1).get());
+                    .where('lifecycle', '==', 'deleted').where('deletedAtMs', '>', 99)
+                    .orderBy('deletedAtMs', 'desc').orderBy('__name__', 'desc').limit(1).get());
                 const internal = `users/${userId}/trainingPlanState/current/trainingCleanupJobs/workout_cleanup`;
                 for (const client of [owner, other, testEnv.unauthenticatedContext().firestore()]) {
                     await assertFails(client.doc(internal).get());

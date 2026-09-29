@@ -68,7 +68,17 @@ class FakeQuery {
     constructor(
         readonly collectionRef: FakeCollectionReference,
         readonly filter?: { field: string; operator: string; value: unknown },
+        readonly limitCount?: number,
     ) {}
+
+    limit(count: number): FakeQuery {
+        return new FakeQuery(this.collectionRef, this.filter, count);
+    }
+
+    async get(): Promise<{ empty: boolean; docs: FakeDocumentSnapshot[] }> {
+        const docs = this.collectionRef.db.querySnapshots(this);
+        return { empty: docs.length === 0, docs };
+    }
 }
 
 class FakeDocumentReference {
@@ -167,8 +177,10 @@ class FakeFirestore {
                 if (query.filter.operator === 'in' && Array.isArray(query.filter.value)) {
                     return query.filter.value.includes(value[query.filter.field]);
                 }
+                if (query.filter.operator === '==') return value[query.filter.field] === query.filter.value;
                 return false;
             })
+            .slice(0, query.limitCount)
             .map(([path, value]) => new FakeDocumentSnapshot(new FakeDocumentReference(this, path), value));
     }
 
@@ -704,6 +716,9 @@ describe('mutateTrainingScheduleForUser persistence', () => {
         db.seed(`users/user-1/trainingWorkoutCompletions/${deletedWorkout.id}/evidence/provider`, {
             privateMarker: true,
         });
+        db.seed('users/user-1/trainingActivityCompletionLinks/activity-link', {
+            workoutId: deletedWorkout.id,
+        });
         const mutation: MutateTrainingScheduleRequestV1 = {
             mutationId: 'permanent-delete',
             expectedRevisions: [
@@ -729,6 +744,10 @@ describe('mutateTrainingScheduleForUser persistence', () => {
         expect(db.read(`users/user-1/scheduledWorkouts/${deletedWorkout.id}/revisions/0000000002`)).toBeUndefined();
         expect(db.read(`users/user-1/trainingWorkoutCompletions/${deletedWorkout.id}`)).toBeUndefined();
         expect(db.read(`users/user-1/trainingWorkoutCompletions/${deletedWorkout.id}/evidence/provider`)).toBeUndefined();
+        expect(db.read('users/user-1/trainingActivityCompletionLinks/activity-link')).toBeUndefined();
+        expect(db.recursiveDelete).toHaveBeenCalledWith(expect.objectContaining({
+            path: 'users/user-1/trainingActivityCompletionLinks/activity-link',
+        }));
         const tombstoneId = trainingScheduleDeletionTombstoneDocumentId('workout', deletedWorkout.id);
         expect(db.read(`users/user-1/trainingPlanState/current/deletionTombstones/${tombstoneId}`)).toMatchObject({
             entityKind: 'workout',

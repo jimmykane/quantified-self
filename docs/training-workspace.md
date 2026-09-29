@@ -551,10 +551,17 @@ packed Sports Lib package. That gate is tracked by GitHub issue #654 under epic 
   history uses immutable deltas and compressed child-document checkpoint chunks every 20 revisions and after bulk
   operations, keeping revision envelopes below Firestore document limits. A restore creates a new revision and cannot
   reclaim a workout that has moved to a different scope or recreate a permanently deleted workout.
-- Ordinary workout deletion remains recoverable through history. Permanent deletion requires its own confirmation. Plan
+- Ordinary workout deletion remains recoverable through history for 90 days from `deletedAtMs`, not the scheduled date.
+  The boundary is exclusive: at `deletedAtMs + 90 days` restore is refused even if physical cleanup lags. Standalone
+  revision-history listing is also refused after expiry; plan-level immutable revision audit remains separately visible.
+  Preview and apply both enforce the restore cutoff, including a staged restore evaluated at lock acquisition. A restored workout that is deleted
+  again receives a new clock. Legacy deleted roots use their already-required `deletedAtMs` with no grandfathering or
+  migration; production cleanup remains disabled until a separately approved rollout. Permanent deletion requires its
+  own confirmation. Plan
   deletion requires choosing whether its current workouts become standalone or are deleted; either choice removes the
   plan history, while Archive remains the non-destructive choice.
-- Permanent deletion removes the workout root, its standalone revision subtree, and its completion-projection subtree, then retains a server-internal hash
+- Permanent deletion removes the workout root, its standalone revision subtree, completion-projection subtree, and
+  reverse activity-completion links, then retains a server-internal hash
   tombstone so the retired ID cannot be reused. A plan-bound workout can still occur in that plan's immutable revision
   audit until the plan itself is deleted; it is tombstoned, cannot be restored, and this retention is disclosed in the
   confirmation UI. Plan deletion removes the complete plan revision subtree.
@@ -562,9 +569,11 @@ packed Sports Lib package. That gate is tracked by GitHub issue #654 under epic 
   An exact retry remains idempotent, and a same-disposition retry with the locked state/plan revisions may resume the
   original operation after a browser reload even when the caller no longer has the original mutation ID.
 - Current schedule listeners query only `planned` and `skipped` workout roots. Plans and Standalone fetch recoverably
-  deleted roots only when the deleted section opens, in owner-scoped 25-record pages ordered by document ID with a
-  document-ID cursor. A schedule revision or account/scope switch invalidates the page so an older response cannot
-  leak into a new view. The `scheduledWorkouts(planId, lifecycle, __name__)` collection index supports this query;
+  deleted roots only when the deleted section opens, in owner-scoped 25-record pages constrained to `deletedAtMs` newer
+  than the 90-day cutoff, ordered newest-first with a `(deletedAtMs, document ID)` cursor. Expired roots therefore
+  disappear before physical cleanup, and equal deletion timestamps paginate deterministically. A schedule revision or
+  account/scope switch invalidates the page so an older response cannot leak into a new view. The
+  `scheduledWorkouts(planId, lifecycle, deletedAtMs desc, __name__ desc)` collection index supports this query;
   browser rules allow owner reads but no writes or internal history access.
 - A single plan shift patches only each workout's date and revision fields in its atomic commit, rather than resending
   up to 400 full structures. Plan-to-standalone deletion stages complete standalone snapshots in idempotent transactions
@@ -625,6 +634,24 @@ packed Sports Lib package. That gate is tracked by GitHub issue #654 under epic 
   the `trainingCleanupJobs(nextAttemptAtMs, __name__)` collection-group index and the unindexed `response` field before
   enabling the worker. Inspect `[TrainingCleanup] cleanup_retry_failed` logs and due jobs when a lock persists; do not
   delete a lock or job by hand without checking its receipt and tombstone.
+- Deleted-workout expiry uses **no Firestore TTL on workout roots**: TTL would not remove child history and could bypass
+  revision, delivery and completion reconciliation. The existing `reconcileTrainingPlanCleanup` scheduler can scan up
+  to 30 expired roots per invocation and permanently delete at most 10 through the normal idempotent mutation and
+  durable cleanup-job path. It rechecks the exact deletion timestamp inside the transaction, plus expected state,
+  workout and plan revisions, account-deletion guard and plan locks. Concurrent restore, transfer, plan deletion or
+  another worker makes the stale candidate defer rather than deleting a changed root. The normal cleanup job retries
+  interrupted subtree and reverse-link deletion; delivery ledgers and prior explicit past-copy consent remain
+  independent so remote withdrawal/reconciliation can finish. Plan-bound immutable revision audit remains until plan
+  deletion and cannot recreate an expired/tombstoned workout. This is intentional audit retention, not recoverable
+  deleted history. The scan requires the `scheduledWorkouts(lifecycle, deletedAtMs, __name__)` collection-group index.
+  It is **disabled by default** behind `TRAINING_DELETED_WORKOUT_EXPIRY_ENABLED=true`; a code deployment alone must
+  not purge existing data. Before an approved production enablement, deploy/verify both indexes, count expired roots
+  and owner distribution without exporting prescriptions, inspect cleanup-job backlog and provider state, then obtain
+  separate approval identifying the exact project and legacy-root scope. Enable with a bounded observation window;
+  monitor `[TrainingWorkoutExpiry]` scanned/deleted/deferred/failed counters and `[TrainingCleanup]` retry failures.
+  A repeatedly deferred root or failed cleanup job needs inspection, not a guessed manual delete. Roll back by
+  disabling the flag; already committed tombstones and deletions are not reversible. Queue TTL remains a separate
+  assessment in #776, not part of this policy.
 - A plan restore that exceeds either the single-transaction payload or write-count budget (including strength
   companion writes) uses an owner-scoped `_bulk_restore` lock and a separate owner-readable
   `trainingPlanState/current/availability/restore` leaf. A lock acquisition freezes other schedule mutations,
@@ -651,6 +678,10 @@ packed Sports Lib package. That gate is tracked by GitHub issue #654 under epic 
 - MCP impact for the paging and cleanup slice: existing Training MCP current reads already exclude deleted workouts;
   internal cleanup jobs and UI-only deleted-history paging expose no new MCP field, permission, mutation kind, provider
   action, or approval route. Existing MCP plan deletion continues through the same idempotent server path.
+- MCP impact for 90-day recovery: registered Training reads still expose only current planned/skipped workouts and
+  their existing completion links, not deleted-history pages. Existing MCP mutation kinds do not include single-workout
+  permanent deletion or history restore, so no MCP schema, consent, tool, or approval contract changes. Plan deletion
+  keeps its existing confirmed path. The new expiry scan invokes that same server mutation internally, not an MCP tool.
 - MCP impact for staged shifts: no tool, schema, scope, consent, projection, or provider action changes. Existing
   Training reads return their established temporary-unavailability result while a bulk lock is held rather than
   exposing a partly staged plan. The existing MCP proposal/confirmation contract now routes an oversized approved

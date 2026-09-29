@@ -25,6 +25,23 @@ class FakeRef {
 class FakeCollection {
     constructor(readonly db: FakeDb, readonly path: string) {}
     doc(id: string): FakeRef { return new FakeRef(this.db, `${this.path}/${id}`); }
+    where(field: string, operator: string, value: unknown): FakeFilteredCollection {
+        return new FakeFilteredCollection(this.db, this.path, field, operator, value);
+    }
+}
+class FakeFilteredCollection {
+    private max = 25;
+    constructor(readonly db: FakeDb, readonly path: string,
+        readonly field: string, readonly operator: string, readonly value: unknown) {}
+    limit(count: number): FakeFilteredCollection { this.max = count; return this; }
+    async get(): Promise<{ empty: boolean; docs: Array<{ ref: FakeRef }> }> {
+        const prefix = `${this.path}/`;
+        const docs = [...this.db.docs.entries()]
+            .filter(([path, data]) => path.startsWith(prefix) && !path.slice(prefix.length).includes('/')
+                && this.operator === '==' && data[this.field] === this.value)
+            .slice(0, this.max).map(([path]) => ({ ref: new FakeRef(this.db, path) }));
+        return { empty: docs.length === 0, docs };
+    }
 }
 class FakeDb {
     readonly docs = new Map<string, Stored>();
@@ -72,13 +89,17 @@ describe('durable Training cleanup worker', () => {
         db.docs.set(tombstonePath('workout', 'workout-1'),
             buildTrainingScheduleDeletionTombstone('workout', 'workout-1', 'mutation-1', nowMs));
         db.docs.set(`users/${uid}/scheduledWorkouts/workout-1/revisions/0000000001`, { privateHistory: true });
+        db.docs.set(`users/${uid}/trainingActivityCompletionLinks/activity-1`, { workoutId: 'workout-1' });
         return ref;
     }
 
     it('recursively removes a permanently deleted workout subtree and its leaf job', async () => {
         const ref = seedWorkout();
         expect(await processTrainingCleanupJob(db as never, ref as never, nowMs)).toBe(true);
-        expect(db.recursiveDelete).toHaveBeenCalledTimes(2);
+        expect(db.recursiveDelete).toHaveBeenCalledTimes(3);
+        expect(db.recursiveDelete).toHaveBeenCalledWith(expect.objectContaining({
+            path: `users/${uid}/trainingActivityCompletionLinks/activity-1`,
+        }));
         expect(db.recursiveDelete).toHaveBeenCalledWith(expect.objectContaining({
             path: `users/${uid}/trainingWorkoutCompletions/workout-1`,
         }));

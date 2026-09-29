@@ -8,6 +8,8 @@ export const TRAINING_PLAN_SCHEMA_VERSION = 1 as const;
 export const TRAINING_PLAN_MAX_DAYS = 366;
 export const TRAINING_PLAN_MAX_CURRENT_WORKOUTS = 400;
 export const TRAINING_PLAN_CHECKPOINT_INTERVAL = 20;
+export const DELETED_WORKOUT_RECOVERY_DAYS = 90;
+export const DELETED_WORKOUT_RECOVERY_MS = DELETED_WORKOUT_RECOVERY_DAYS * 24 * 60 * 60 * 1000;
 
 export const TRAINING_PLAN_STATE_COLLECTION_ID = 'trainingPlanState';
 export const TRAINING_PLAN_STATE_DOCUMENT_ID = 'current';
@@ -68,6 +70,17 @@ export interface ScheduledWorkoutV1 {
   createdAtMs: number;
   updatedAtMs: number;
   deletedAtMs?: number;
+}
+
+/** The deletion instant, not the scheduled date, starts the recovery window. */
+export function isDeletedWorkoutRecoverable(
+  workout: Pick<ScheduledWorkoutV1, 'lifecycle' | 'deletedAtMs'>,
+  nowMs: number,
+): boolean {
+  return workout.lifecycle === 'deleted'
+    && Number.isSafeInteger(workout.deletedAtMs)
+    && Number.isSafeInteger(nowMs)
+    && nowMs - workout.deletedAtMs! < DELETED_WORKOUT_RECOVERY_MS;
 }
 
 export type TrainingScheduleRevisionScope =

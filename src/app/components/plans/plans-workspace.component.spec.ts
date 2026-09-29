@@ -88,7 +88,7 @@ describe('PlansWorkspaceComponent', () => {
       permanentlyDeletedWorkoutIds: [],
     }));
     getHistory = vi.fn();
-    getDeletedWorkoutsPage = vi.fn().mockResolvedValue({ workouts: [], nextAfterId: null });
+    getDeletedWorkoutsPage = vi.fn().mockResolvedValue({ workouts: [], nextCursor: null });
     getStrengthDetails = vi.fn();
     previewRestore = vi.fn();
     restoreSchedule = vi.fn();
@@ -1451,7 +1451,7 @@ describe('PlansWorkspaceComponent', () => {
   it('keeps long revision histories bounded and deleted-workout details surface-free', async () => {
     const deleted = { ...schedule.workouts[0], id: 'deleted', title: 'Deleted review run',
       lifecycle: 'deleted' as const, deletedAtMs: 1_789_000_000_000 };
-    getDeletedWorkoutsPage.mockResolvedValue({ workouts: [deleted], nextAfterId: null });
+    getDeletedWorkoutsPage.mockResolvedValue({ workouts: [deleted], nextCursor: null });
     const fixture = await renderPlans();
     fixture.componentInstance.historyPanel.set({ scope: { kind: 'plan', id: 'active-plan' }, status: 'ready',
       entries: Array.from({ length: 50 }, (_, index) => ({ revision: 50 - index, operationKind: 'update-workout',
@@ -1488,10 +1488,10 @@ describe('PlansWorkspaceComponent', () => {
   it('loads deleted workouts only on demand and advances a stable cursor', async () => {
     const first = { ...schedule.workouts[0], id: 'deleted-1', title: 'First deleted run',
       lifecycle: 'deleted' as const, deletedAtMs: 1_789_000_000_000 };
-    const second = { ...first, id: 'deleted-2', title: 'Second deleted run' };
+    const second = { ...first, id: 'deleted-2', title: 'Second deleted run', deletedAtMs: first.deletedAtMs - 1 };
     getDeletedWorkoutsPage
-      .mockResolvedValueOnce({ workouts: [first], nextAfterId: first.id })
-      .mockResolvedValueOnce({ workouts: [second], nextAfterId: null });
+      .mockResolvedValueOnce({ workouts: [first], nextCursor: { deletedAtMs: first.deletedAtMs!, id: first.id } })
+      .mockResolvedValueOnce({ workouts: [second], nextCursor: null });
     const fixture = await renderPlans();
     expect(getDeletedWorkoutsPage).not.toHaveBeenCalled();
 
@@ -1504,7 +1504,8 @@ describe('PlansWorkspaceComponent', () => {
     const more = [...fixture.nativeElement.querySelectorAll('button')]
       .find((button: HTMLButtonElement) => button.textContent?.includes('Show more deleted workouts')) as HTMLButtonElement;
     more.click(); await fixture.whenStable(); fixture.detectChanges();
-    expect(getDeletedWorkoutsPage).toHaveBeenNthCalledWith(2, user.uid, 'active-plan', first.id);
+    expect(getDeletedWorkoutsPage).toHaveBeenNthCalledWith(2, user.uid, 'active-plan',
+      { deletedAtMs: first.deletedAtMs, id: first.id });
     expect(fixture.nativeElement.textContent).toContain('Second deleted run');
     expect([...fixture.nativeElement.querySelectorAll('#deleted-workout-list mat-list-item')]).toHaveLength(2);
     expect(fixture.nativeElement.textContent).not.toContain('Show more deleted workouts');
@@ -1523,13 +1524,13 @@ describe('PlansWorkspaceComponent', () => {
     await fixture.whenStable(); fixture.detectChanges();
     expect(fixture.nativeElement.textContent).toContain('No deleted workouts in this plan');
 
-    let resolvePage!: (value: { workouts: ScheduledWorkoutV1[]; nextAfterId: string | null }) => void;
+    let resolvePage!: (value: { workouts: ScheduledWorkoutV1[]; nextCursor: { deletedAtMs: number; id: string } | null }) => void;
     getDeletedWorkoutsPage.mockImplementationOnce(() => new Promise(resolve => { resolvePage = resolve; }));
     fixture.componentInstance.deletedWorkoutPanel.update(panel => panel && { ...panel, status: 'idle' });
     const pending = fixture.componentInstance.loadDeletedWorkouts();
     userSignal.set(null); userSubject.next(null); fixture.detectChanges();
     resolvePage({ workouts: [{ ...schedule.workouts[0], id: 'private-deleted', lifecycle: 'deleted',
-      deletedAtMs: 1_789_000_000_000 }], nextAfterId: null });
+      deletedAtMs: 1_789_000_000_000 }], nextCursor: null });
     await pending; await fixture.whenStable(); fixture.detectChanges();
     expect(fixture.componentInstance.deletedWorkoutPanel()).toBeNull();
     expect(fixture.nativeElement.textContent).not.toContain('private-deleted');

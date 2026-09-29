@@ -20,6 +20,7 @@ import {
     TrainingPlanContractError,
     normalizeTrainingScheduleMutationId,
     parseScheduledWorkoutV1,
+    isDeletedWorkoutRecoverable,
     parseTrainingPlanStateV1,
     parseTrainingPlanV1,
     type ExpectedTrainingScheduleRevision,
@@ -227,7 +228,8 @@ export function applyPlanRevisionRestore(
             skippedWorkoutIds.add(workoutId);
             return;
         }
-        if (current && current.planId !== currentPlan.id) {
+        if (current && (current.planId !== currentPlan.id
+            || (current.lifecycle === 'deleted' && !isDeletedWorkoutRecoverable(current, nowMs)))) {
             skippedWorkoutIds.add(workoutId);
             return;
         }
@@ -340,12 +342,16 @@ export function applyStandaloneRevisionRestore(
             'This workout now belongs to a plan and cannot be reclaimed automatically.',
         );
     }
+    if (current.lifecycle === 'deleted' && !isDeletedWorkoutRecoverable(current, nowMs)) {
+        throw new TrainingScheduleMutationError('failed-precondition', 'This workout\'s 90-day recovery window has ended.');
+    }
     const restored = parseScheduledWorkoutV1({
         ...desired,
         planId: null,
         revision: current.revision + 1,
         createdAtMs: current.createdAtMs,
         updatedAtMs: nowMs,
+        ...(desired.lifecycle === 'deleted' ? { deletedAtMs: nowMs } : {}),
     });
     if (restored.structure.sport === ActivityTypes.StrengthTraining) {
         if (!desiredStrength || !strengthProjectionMatchesDetails(restored.structure, desiredStrength)) {

@@ -71,6 +71,7 @@ import {
   type ManualWorkoutTarget,
 } from '../../helpers/planned-workout-editor.helper';
 import {
+  DELETED_WORKOUT_RECOVERY_DAYS,
   normalizeTrainingLocalDate,
   type DeleteTrainingPlanRequestV1,
   type DeleteTrainingPlanResponseV1,
@@ -140,7 +141,7 @@ interface DeletedWorkoutPanelState {
   scopeKey: string;
   status: 'idle' | 'loading' | 'ready' | 'error';
   workouts: ScheduledWorkoutV1[];
-  nextAfterId: string | null;
+  nextCursor: { deletedAtMs: number; id: string } | null;
   error: string | null;
 }
 
@@ -159,6 +160,7 @@ const EMPTY_SCHEDULE: CurrentTrainingScheduleV1 = {
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class PlansWorkspaceComponent {
+  readonly deletedWorkoutRecoveryDays = DELETED_WORKOUT_RECOVERY_DAYS;
   readonly strengthSport = ActivityTypes.StrengthTraining;
   private readonly userService = inject(AppUserService);
   private readonly plansService = inject(TrainingPlansService);
@@ -448,7 +450,7 @@ export class PlansWorkspaceComponent {
     this.deletedWorkoutRequestSequence += 1;
     this.deletedWorkoutsExpanded.set(false);
     this.deletedWorkoutPanel.set(key ? {
-      scopeKey: key, status: 'idle', workouts: [], nextAfterId: null, error: null,
+      scopeKey: key, status: 'idle', workouts: [], nextCursor: null, error: null,
     } : null);
   });
 
@@ -1328,19 +1330,20 @@ export class PlansWorkspaceComponent {
     const scope = this.deletedWorkoutScope();
     const panel = this.deletedWorkoutPanel();
     if (!scope || !panel || panel.scopeKey !== scope.key || panel.status === 'loading'
-      || (panel.status === 'ready' && panel.nextAfterId === null)) return;
+      || (panel.status === 'ready' && panel.nextCursor === null)) return;
     const requestSequence = ++this.deletedWorkoutRequestSequence;
     this.deletedWorkoutPanel.set({ ...panel, status: 'loading', error: null });
     try {
-      const page = await this.plansService.getDeletedWorkoutsPage(scope.uid, scope.planId, panel.nextAfterId);
+      const page = await this.plansService.getDeletedWorkoutsPage(scope.uid, scope.planId, panel.nextCursor);
       if (requestSequence !== this.deletedWorkoutRequestSequence
         || this.deletedWorkoutScope()?.key !== scope.key) return;
       const byId = new Map([...panel.workouts, ...page.workouts].map(item => [item.id, item]));
       this.deletedWorkoutPanel.set({
         scopeKey: scope.key,
         status: 'ready',
-        workouts: [...byId.values()].sort((left, right) => left.id.localeCompare(right.id)),
-        nextAfterId: page.nextAfterId,
+        workouts: [...byId.values()].sort((left, right) => (right.deletedAtMs ?? 0) - (left.deletedAtMs ?? 0)
+          || right.id.localeCompare(left.id)),
+        nextCursor: page.nextCursor,
         error: null,
       });
     } catch (error) {

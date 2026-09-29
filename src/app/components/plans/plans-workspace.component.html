@@ -705,7 +705,7 @@
         <button mat-button type="button" appHapticTap (click)="toggleDeletedWorkouts()"
           [attr.aria-expanded]="deletedWorkoutsExpanded()" aria-controls="deleted-workout-list">
           <mat-icon aria-hidden="true">{{ deletedWorkoutsExpanded() ? 'expand_less' : 'expand_more' }}</mat-icon>
-          Deleted workouts
+          Deleted workouts ({{ deletedWorkoutRecoveryDays }} days)
         </button>
         <mat-list id="deleted-workout-list" [hidden]="!deletedWorkoutsExpanded()">
           @if (deletedWorkoutPanel()?.status === 'loading' && !deletedWorkoutRows().length) {
@@ -742,7 +742,7 @@
               </div>
             </mat-list-item>
           }
-          @if (deletedWorkoutPanel()?.nextAfterId) {
+          @if (deletedWorkoutPanel()?.nextCursor) {
             <button appHapticTap mat-button type="button" (click)="loadDeletedWorkouts()"
               [disabled]="deletedWorkoutPanel()?.status === 'loading'">
               Show more deleted workouts
