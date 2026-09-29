@@ -11,4 +11,7 @@ on:
 
 jobs:
   run-tests:
+    # A develop push is already tested once by the beta deployment workflow.
+    # pull_request.branches filters the base branch, so exclude this head explicitly.
+    if: github.event_name != 'pull_request' || github.head_ref != 'develop'
     uses: ./.github/workflows/_run-tests.yml
