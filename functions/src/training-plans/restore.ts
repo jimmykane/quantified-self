@@ -12,6 +12,7 @@ import {
 import {
     SCHEDULED_WORKOUTS_COLLECTION_ID,
     TRAINING_PLAN_MUTATION_RECEIPTS_COLLECTION_ID,
+    TRAINING_PLAN_DELETION_LOCKS_COLLECTION_ID,
     TRAINING_PLAN_REVISIONS_COLLECTION_ID,
     TRAINING_PLAN_SCHEMA_VERSION,
     TRAINING_PLAN_MAX_CURRENT_WORKOUTS,
@@ -52,6 +53,13 @@ import { assertNoTrainingPlanDeletionInProgress } from './deletion-lock';
 
 const RESTORE_RECEIPT_RETENTION_MS = 30 * 24 * 60 * 60 * 1000;
 const RESTORE_MAX_ESTIMATED_WRITE_BYTES = 7 * 1024 * 1024;
+
+export class TrainingScheduleRestoreWriteLimitError extends TrainingScheduleMutationError {
+    constructor() {
+        super('limit-exceeded', 'This saved plan revision needs a staged restore. Retry the same restore request.');
+        this.name = 'TrainingScheduleRestoreWriteLimitError';
+    }
+}
 
 interface AppliedTrainingScheduleRestoreV1 {
     applied: AppliedTrainingScheduleMutationV1;
@@ -380,7 +388,7 @@ function documentData(snapshot: admin.firestore.DocumentSnapshot): Record<string
     return (snapshot.data() ?? {}) as Record<string, unknown>;
 }
 
-async function readCurrentScheduleForRestore(
+export async function readCurrentScheduleForRestore(
     transaction: admin.firestore.Transaction,
     userRef: admin.firestore.DocumentReference,
     desiredWorkoutIds: string[],
@@ -423,7 +431,7 @@ async function readCurrentScheduleForRestore(
     return { state: parseTrainingPlanStateV1(documentData(stateSnapshot)), plans, workouts, strengthDetails };
 }
 
-function parseStoredRestoreResponse(value: unknown): RestoreTrainingScheduleRevisionResponseV1 {
+export function parseStoredRestoreResponse(value: unknown): RestoreTrainingScheduleRevisionResponseV1 {
     const record = asRecord(value, '$receipt.response');
     const mutation = asRecord(record.mutation, '$receipt.response.mutation');
     if (
@@ -446,6 +454,7 @@ function parseStoredRestoreResponse(value: unknown): RestoreTrainingScheduleRevi
             state: parseTrainingPlanStateV1(mutation.state),
             plans: mutation.plans.map(parseTrainingPlanV1),
             workouts: mutation.workouts.map(parseScheduledWorkoutV1),
+            ...(mutation.workoutsDeferred === true ? { workoutsDeferred: true as const } : {}),
             removedPlanIds: readStringArray(mutation.removedPlanIds, 'mutation.removedPlanIds'),
             permanentlyDeletedWorkoutIds: readStringArray(
                 mutation.permanentlyDeletedWorkoutIds,
@@ -490,10 +499,7 @@ function assertBoundedRestorePayload(
         if (revision) estimated += bytes(revision);
     }
     if (estimated > RESTORE_MAX_ESTIMATED_WRITE_BYTES) {
-        throw new TrainingScheduleMutationError(
-            'limit-exceeded',
-            'This saved plan revision is too large to restore atomically right now. No changes were applied; contact support.',
-        );
+        throw new TrainingScheduleRestoreWriteLimitError();
     }
 }
 
@@ -545,6 +551,20 @@ export async function restoreTrainingScheduleRevisionForUser(
     );
     if (completed) return completed;
 
+    // A retry after a timed-out callable must resume the locked restore before
+    // reading partially applied current workout roots.
+    if (request.scope.kind === 'plan') {
+        const { stageLargeTrainingPlanRestoreForUser, stagedRestoreIntentHash } = await import('./staged-restore');
+        const [lock, intent] = await Promise.all([
+            stateRef.collection(TRAINING_PLAN_DELETION_LOCKS_COLLECTION_ID).doc('_bulk_restore').get(),
+            stateRef.collection(TRAINING_PLAN_MUTATION_RECEIPTS_COLLECTION_ID)
+                .doc(`_restore_intent_${stagedRestoreIntentHash(request)}`).get(),
+        ]);
+        if (lock.exists || intent.exists) {
+            return stageLargeTrainingPlanRestoreForUser(uid, request, { db, nowMs });
+        }
+    }
+
     const desiredPlan = request.scope.kind === 'plan'
         ? await readPlanSnapshotAtRevision(db, uid, request.scope.id, request.targetRevision)
         : null;
@@ -553,7 +573,8 @@ export async function restoreTrainingScheduleRevisionForUser(
         : null;
     const desiredWorkoutIds = desiredPlan ? [...desiredPlan.workouts.keys()] : [request.scope.id];
 
-    return db.runTransaction(async (transaction) => {
+    try {
+        return await db.runTransaction(async (transaction) => {
         const guard = await getUserDeletionGuardStateInTransaction(db, transaction, uid, nowMs);
         if (guard.shouldSkip) {
             throw new TrainingScheduleMutationError('failed-precondition', 'This account is being deleted or is no longer available.');
@@ -647,5 +668,14 @@ export async function restoreTrainingScheduleRevisionForUser(
             expireAt: Timestamp.fromMillis(nowMs + RESTORE_RECEIPT_RETENTION_MS),
         });
         return restored.response;
-    });
+        });
+    } catch (error) {
+        if (request.scope.kind !== 'plan' && !(error instanceof TrainingScheduleRestoreWriteLimitError)) throw error;
+        if (request.scope.kind === 'plan' && !(error instanceof TrainingScheduleRestoreWriteLimitError)) {
+            const lock = await stateRef.collection(TRAINING_PLAN_DELETION_LOCKS_COLLECTION_ID).doc('_bulk_restore').get();
+            if (!lock.exists) throw error;
+        }
+        const { stageLargeTrainingPlanRestoreForUser } = await import('./staged-restore');
+        return stageLargeTrainingPlanRestoreForUser(uid, request, { db, nowMs });
+    }
 }

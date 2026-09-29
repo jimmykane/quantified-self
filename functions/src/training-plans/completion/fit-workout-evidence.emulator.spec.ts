@@ -87,6 +87,17 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)(
       expect((await user().collection('trainingActivityCompletionLinks').get()).size).toBe(1);
     });
 
+    it('defers an exact Garmin candidate during staged restore and links after publication', async () => {
+      const lock = user().collection('trainingPlanState').doc('current')
+        .collection('planDeletionLocks').doc('_bulk_restore');
+      await lock.set({ test: true });
+      await expect(retain()).rejects.toThrow('plan restore is in progress');
+      expect((await user().collection('trainingWorkoutCompletions').doc('workout').get()).exists).toBe(false);
+      await lock.delete();
+      expect(await retain()).toBe(true);
+      expect((await evidence().get()).data()?.correlationState).toBe('linked');
+    });
+
     it('checks the persisted Garmin file identity and activity before linking', async () => {
       const metadata = event().collection('metaData').doc(ServiceNames.GarminAPI);
       const storedActivity = user().collection('activities').doc('activity');

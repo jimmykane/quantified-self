@@ -14,6 +14,7 @@ import {
 } from '../../../shared/training-workout-completion';
 import { SPORTS_LIB_VERSION } from '../shared/sports-lib-version.node';
 import { getUserDeletionGuardStateInTransaction } from '../shared/user-deletion-guard';
+import { assertNoTrainingBulkRestoreInProgress } from '../training-plans/deletion-lock';
 import { fitWorkoutEvidencePayload, readFITWorkoutReferenceEvidence } from '../training-plans/completion/fit-workout-evidence';
 import type { FITWorkoutReferenceEvidence } from '../training-plans/completion/fit-workout-evidence';
 import { DELIVERY_LEDGER, type DeliveryLedgerV1 } from '../training-plans/delivery/contracts';
@@ -172,6 +173,9 @@ export async function retainSuuntoGuideCompletions(
     for (const workoutId of conflictedWorkoutIds) uniqueByWorkout.delete(workoutId);
 
     const candidates = [...uniqueByWorkout.values()];
+    if (candidates.length > 0) {
+      await assertNoTrainingBulkRestoreInProgress(tx, user.collection('trainingPlanState').doc('current'));
+    }
     const related = await Promise.all(candidates.map(async candidate => {
       const reverseId = activityLinkId(uid, eventId, candidate.session.sessionIndex);
       const [workout, completion, reverse] = await Promise.all([

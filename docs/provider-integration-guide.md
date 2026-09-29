@@ -348,6 +348,12 @@ require same-account reconnect. Explicit disconnect invalidates Training consent
 copies; authentication failure preserves consent but blocks the failed connection generation. A changed account requires
 fresh consent. Do not reuse activity/route auto-restoration rules for Training.
 
+During an oversized staged Training plan restore, the owner schedule is briefly unavailable behind the `_bulk_restore`
+lock. Inbound Garmin, COROS, Wahoo, and Suunto activity imports may retain their recorded event, but an exact planned-
+workout completion candidate must retry its link until the final plan revision is published. Read the lock in the same
+transaction as the candidate workout and completion write; never link against a partly restored occurrence. This
+does not change provider marker matching, consent, delivery, or device-receipt semantics.
+
 Deleting a plan or workout still withdraws eligible uncompleted future copies by default. The browser offers a separate,
 unchecked past-copy cleanup choice. The server commits that choice beside the deletion under `trainingDeliveryState/current/pastCleanup`
 and requires the matching current deletion before a reconciler may attempt any past removal; a later deletion without opt-in

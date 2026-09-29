@@ -9,7 +9,7 @@
     @if (browsing()) {
     <div pageHeaderActions class="plans-header-actions">
       <app-training-delivery-button scope="history" entityId="current" title="Plans and standalone workouts"
-        [disabled]="busyAction() !== null"></app-training-delivery-button>
+        [disabled]="busyAction() !== null || scheduleState().status !== 'ready'"></app-training-delivery-button>
       <a mat-button routerLink="/calendar" appHapticTap>
         <mat-icon aria-hidden="true">calendar_month</mat-icon>
         <span>Main Calendar</span>
@@ -47,7 +47,7 @@
   @if (scheduleState().status === 'loading') {
     <section class="plans-status" aria-live="polite">
       <mat-spinner diameter="28"></mat-spinner>
-      <span>Loading your training schedule…</span>
+      <span>{{ scheduleState().message ?? 'Loading your training schedule…' }}</span>
     </section>
   } @else if (scheduleState().status === 'error') {
     <section class="plans-status plans-status--error" role="alert">

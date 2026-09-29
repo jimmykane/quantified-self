@@ -1749,6 +1749,33 @@ describe('Firestore Security Rules', () => {
                 await assertFails(userRef.collection('trainingPlanState').get());
             });
 
+            it('hides workout roots during a staged restore and exposes only its availability leaf', async () => {
+                await seedCurrentTrainingData();
+                const base = `users/${userId}/trainingPlanState/current`;
+                await testEnv.withSecurityRulesDisabled(async context => {
+                    const db = context.firestore();
+                    await db.doc(`${base}/planDeletionLocks/_bulk_restore`).set({ requestHash: 'private' });
+                    await db.doc(`${base}/availability/restore`).set({ schemaVersion: 1, status: 'restoring' });
+                });
+                const owner = testEnv.authenticatedContext(userId).firestore();
+                const other = testEnv.authenticatedContext(otherId).firestore();
+                await assertSucceeds(owner.doc(`${base}/availability/restore`).get());
+                await assertFails(other.doc(`${base}/availability/restore`).get());
+                await assertFails(owner.doc(`${base}/planDeletionLocks/_bulk_restore`).get());
+                await assertFails(owner.collection(`${base}/availability`).get());
+                await assertFails(owner.doc(`${base}/availability/restore`).set({ status: 'ready' }));
+                await assertSucceeds(owner.doc(`users/${userId}/trainingPlans/plan-1`).get());
+                await assertFails(owner.doc(`users/${userId}/scheduledWorkouts/workout-1`).get());
+                await assertFails(owner.collection(`users/${userId}/scheduledWorkouts`).get());
+                await assertFails(owner.doc(`users/${userId}/scheduledWorkouts/workout-1/strengthDetails/current`).get());
+                await testEnv.withSecurityRulesDisabled(async context => {
+                    const db = context.firestore();
+                    await db.doc(`${base}/availability/restore`).delete();
+                    await db.doc(`${base}/planDeletionLocks/_bulk_restore`).delete();
+                });
+                await assertSucceeds(owner.doc(`users/${userId}/scheduledWorkouts/workout-1`).get());
+            });
+
             it('denies cross-user and unauthenticated reads of current training data', async () => {
                 await seedCurrentTrainingData();
                 const ownerPath = `users/${userId}/scheduledWorkouts/workout-1`;

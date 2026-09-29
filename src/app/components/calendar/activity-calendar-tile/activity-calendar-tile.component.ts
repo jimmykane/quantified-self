@@ -57,6 +57,7 @@ interface ActivityCalendarTileState {
 interface ActivityCalendarTilePlansState {
   status: 'loading' | 'ready' | 'error';
   schedule: CurrentTrainingScheduleV1 | null;
+  restoreInProgress?: boolean;
 }
 
 @Component({
@@ -134,7 +135,9 @@ export class ActivityCalendarTileComponent {
       map(viewer => viewer?.uid ?? null),
       distinctUntilChanged(),
       switchMap(viewerUid => viewerUid === user.uid ? this.plansService.watchSchedule(user.uid).pipe(
-        map(schedule => ({ status: 'ready', schedule }) as ActivityCalendarTilePlansState),
+        map(schedule => schedule.restoreUnavailable
+          ? ({ status: 'error', schedule: null, restoreInProgress: true } as ActivityCalendarTilePlansState)
+          : ({ status: 'ready', schedule } as ActivityCalendarTilePlansState)),
         startWith({ status: 'loading', schedule: null } as ActivityCalendarTilePlansState),
         catchError(() => of({ status: 'error', schedule: null } as ActivityCalendarTilePlansState)),
       ) : of({ status: 'ready', schedule: null } as ActivityCalendarTilePlansState)),

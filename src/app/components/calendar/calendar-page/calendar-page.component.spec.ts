@@ -161,6 +161,17 @@ describe('CalendarPageComponent', () => {
     expect(fixture.nativeElement.textContent).toContain('August 2026');
   });
 
+  it('keeps completed activities visible while a staged restore hides planned workouts', async () => {
+    watchSchedule.mockReturnValue(of({ ...trainingSchedule(), restoreUnavailable: true }));
+    const fixture = TestBed.createComponent(CalendarPageComponent);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+    expect(fixture.componentInstance.eventState().status).toBe('ready');
+    expect(fixture.componentInstance.plansState().status).toBe('error');
+    expect(fixture.componentInstance.plannedWorkoutsByDate()).toEqual({});
+  });
+
   it('opens a bounded standalone day with its context and no calendar grid', async () => {
     activatedRoute.snapshot.data = { calendarMode: 'day' };
     activatedRoute.snapshot.paramMap = convertToParamMap({ date: '2026-08-03' });

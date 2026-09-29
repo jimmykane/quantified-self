@@ -254,7 +254,7 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('400-workout Training muta
         expect((await lockRef.get()).exists).toBe(false);
     });
 
-    it('rejects oversized 400-prescription restore and stages a high-entropy shift', async () => {
+    it('stages an oversized 400-prescription restore and a high-entropy shift', async () => {
         const uid = `large-${randomUUID()}`; uids.push(uid);
         const user = db.collection('users').doc(uid);
         await user.set({ test: true });
@@ -326,26 +326,83 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('400-workout Training muta
             targetRevision: 2,
             expectedRevisions: [{ scope: 'state' as const, id: 'current', revision: 3 },
                 { scope: 'plan' as const, id: plan.id, revision: 3 }] };
-        await expect(restoreTrainingScheduleRevisionForUser(uid, request, { db, nowMs: nowMs + 1 }))
-            .rejects.toMatchObject({ code: 'limit-exceeded' });
+        const restoreLockRef = stateRef.collection('planDeletionLocks').doc('_bulk_restore');
+        let lostLockResponse = false;
+        const interruptBeforeStage = {
+            collection: (id: string) => db.collection(id),
+            getAll: (...refs: FirebaseFirestore.DocumentReference[]) => db.getAll(...refs),
+            runTransaction: async (handler: (transaction: FirebaseFirestore.Transaction) => Promise<unknown>) => {
+                const result = await db.runTransaction(handler);
+                if (!lostLockResponse && (await restoreLockRef.get()).exists) {
+                    lostLockResponse = true;
+                    throw new Error('synthetic lost restore lock response');
+                }
+                return result;
+            },
+        } as unknown as Firestore;
+        await expect(restoreTrainingScheduleRevisionForUser(uid, request, { db: interruptBeforeStage, nowMs: nowMs + 1 }))
+            .rejects.toThrow('synthetic lost restore lock response');
+        expect(lostLockResponse).toBe(true);
+        expect((await stateRef.get()).data()).toMatchObject({ revision: 3 });
+        expect((await user.collection('scheduledWorkouts').doc('workout-000').get()).data())
+            .toMatchObject({ revision: 3 });
+        let interruptedRestore = false;
+        const interruptRestore = {
+            collection: (id: string) => db.collection(id),
+            getAll: (...refs: FirebaseFirestore.DocumentReference[]) => db.getAll(...refs),
+            runTransaction: async (handler: (transaction: FirebaseFirestore.Transaction) => Promise<unknown>) => {
+                const result = await db.runTransaction(handler);
+                const lock = (await restoreLockRef.get()).data();
+                if (!interruptedRestore && lock?.phase === 'applying' && lock.nextIndex > 0) {
+                    interruptedRestore = true;
+                    throw new Error('synthetic lost restore chunk response');
+                }
+                return result;
+            },
+        } as unknown as Firestore;
+        await expect(restoreTrainingScheduleRevisionForUser(uid, request, { db: interruptRestore, nowMs: nowMs + 1 }))
+            .rejects.toThrow('synthetic lost restore chunk response');
+        expect(interruptedRestore).toBe(true);
         expect((await stateRef.get()).data()).toMatchObject({ revision: 3 });
         expect((await planRef.get()).data()).toMatchObject({ revision: 3 });
+        expect((await user.collection('scheduledWorkouts').doc('workout-000').get()).data())
+            .toMatchObject({ revision: 4 });
         expect((await user.collection('scheduledWorkouts').doc('workout-399').get()).data())
-            .toMatchObject({ revision: 3, structure: { nodes: [{ id: 'run' }] } });
+            .toMatchObject({ revision: 3 });
+        expect((await stateRef.collection('availability').doc('restore').get()).data())
+            .toMatchObject({ status: 'restoring' });
+        const pendingResponse = (await restoreLockRef.get()).data()?.response;
+        expect(pendingResponse?.mutation).toMatchObject({ workouts: [], workoutsDeferred: true });
+        expect(Buffer.byteLength(JSON.stringify(pendingResponse), 'utf8')).toBeLessThan(100_000);
         expect((await stateRef.collection('mutationReceipts').doc(request.mutationId).get()).exists).toBe(false);
-
-        for (let offset = 0; offset < desired.length; offset += 100) {
-            const batch = db.batch();
-            for (const workout of desired.slice(offset, offset + 100)) {
-                batch.set(user.collection('scheduledWorkouts').doc(workout.id), { ...workout, revision: 3 });
-            }
-            await batch.commit();
-        }
+        const resumeAt = (await restoreLockRef.get()).data()!.nextAttemptAtMs as number;
+        const workers = await Promise.all([
+            reconcileTrainingBulkShifts(db, resumeAt + 1),
+            reconcileTrainingBulkShifts(db, resumeAt + 1),
+        ]);
+        expect(workers.reduce((total, result) => total + result.completed, 0)).toBe(1);
+        const restored = await restoreTrainingScheduleRevisionForUser(uid, request, { db, nowMs: resumeAt + 2 });
+        expect(restored.mutation.state.revision).toBe(4);
+        expect(restored.mutation.workoutsDeferred).toBe(true);
+        expect(restored.mutation.workouts).toEqual([]);
+        expect((await stateRef.get()).data()).toMatchObject({ revision: 4 });
+        expect((await planRef.get()).data()).toMatchObject({ revision: 4 });
+        const restoredWorkout = (await user.collection('scheduledWorkouts').doc('workout-399').get()).data()!;
+        expect(restoredWorkout.revision).toBe(4);
+        expect((restoredWorkout.structure as { nodes: { id: string }[] }).nodes).toHaveLength(100);
+        expect((restoredWorkout.structure as { nodes: { id: string }[] }).nodes[0].id).toBe('step-0');
+        expect((await stateRef.collection('mutationReceipts').doc(request.mutationId).get()).exists).toBe(true);
+        expect((await restoreLockRef.get()).exists).toBe(false);
+        expect((await stateRef.collection('availability').doc('restore').get()).exists).toBe(false);
+        const replacementRestore = { ...request, mutationId: 'oversized-restore-retry',
+            expectedRevisions: [...request.expectedRevisions].reverse() };
+        expect(await restoreTrainingScheduleRevisionForUser(uid, replacementRestore, { db, nowMs: resumeAt + 3 }))
+            .toEqual(restored);
         const shift = { mutationId: 'oversized-shift',
-            expectedRevisions: [{ scope: 'state' as const, id: 'current', revision: 3 },
-                { scope: 'plan' as const, id: plan.id, revision: 3 }],
+            expectedRevisions: [{ scope: 'state' as const, id: 'current', revision: 4 },
+                { scope: 'plan' as const, id: plan.id, revision: 4 }],
             operation: { kind: 'shift-plan' as const, planId: plan.id, days: 1 } };
-        const pendingRevision = planRef.collection('revisions').doc(trainingScheduleRevisionDocumentId(4));
+        const pendingRevision = planRef.collection('revisions').doc(trainingScheduleRevisionDocumentId(5));
         let interrupted = false;
         const interruptAfterFirstChunk = {
             collection: (id: string) => db.collection(id),
@@ -354,10 +411,10 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('400-workout Training muta
                 if (!interrupted && !(await pendingRevision.collection('chunks').limit(1).get()).empty
                     && !(await pendingRevision.get()).exists) {
                     interrupted = true;
-                    expect((await stateRef.get()).data()).toMatchObject({ revision: 3 });
-                    expect((await planRef.get()).data()).toMatchObject({ revision: 3 });
+                    expect((await stateRef.get()).data()).toMatchObject({ revision: 4 });
+                    expect((await planRef.get()).data()).toMatchObject({ revision: 4 });
                     expect((await user.collection('scheduledWorkouts').doc('workout-399').get()).data())
-                        .toMatchObject({ localDate: '2026-10-02', revision: 3 });
+                        .toMatchObject({ localDate: '2026-10-02', revision: 4 });
                     throw new Error('synthetic lost stage response');
                 }
                 return result;
@@ -392,14 +449,14 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('400-workout Training muta
         const shifted = await mutateTrainingScheduleForUser(uid, resumedShift, { db: finishDuringRetry, nowMs: nowMs + 4 });
         expect(completedElsewhere).toBe(true);
         expect(shifted.mutationId).toBe(shift.mutationId);
-        expect(shifted.state.revision).toBe(4);
-        expect((await stateRef.get()).data()).toMatchObject({ revision: 4 });
-        expect((await planRef.get()).data()).toMatchObject({ revision: 4 });
+        expect(shifted.state.revision).toBe(5);
+        expect((await stateRef.get()).data()).toMatchObject({ revision: 5 });
+        expect((await planRef.get()).data()).toMatchObject({ revision: 5 });
         expect((await user.collection('scheduledWorkouts').doc('workout-399').get()).data())
-            .toMatchObject({ localDate: '2026-10-03', revision: 4 });
+            .toMatchObject({ localDate: '2026-10-03', revision: 5 });
         expect((await stateRef.collection('mutationReceipts').doc(shift.mutationId).get()).exists).toBe(true);
         expect((await stateRef.collection('mutationReceipts').doc(resumedShift.mutationId).get()).exists).toBe(true);
-        expect((await planRef.collection('revisions').doc(trainingScheduleRevisionDocumentId(4)).get()).exists).toBe(true);
+        expect((await planRef.collection('revisions').doc(trainingScheduleRevisionDocumentId(5)).get()).exists).toBe(true);
         expect((await stateRef.collection('planDeletionLocks').doc('_bulk_shift').get()).exists).toBe(false);
         expect(await mutateTrainingScheduleForUser(uid, shift, { db, nowMs: nowMs + 3 })).toEqual(shifted);
         expect(await mutateTrainingScheduleForUser(uid, resumedShift, { db, nowMs: nowMs + 5 })).toEqual(shifted);
@@ -408,7 +465,7 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('400-workout Training muta
         expect(await mutateTrainingScheduleForUser(uid, lateRetry, { db, nowMs: nowMs + 6 })).toEqual(shifted);
         expect((await stateRef.collection('mutationReceipts').doc(lateRetry.mutationId).get()).data())
             .toMatchObject({ response: shifted });
-        expect((await stateRef.get()).data()).toMatchObject({ revision: 4 });
+        expect((await stateRef.get()).data()).toMatchObject({ revision: 5 });
         await expect(mutateTrainingScheduleForUser(uid, {
             ...lateRetry, operation: { ...lateRetry.operation, days: 2 },
         }, { db, nowMs: nowMs + 7 })).rejects.toMatchObject({ code: 'failed-precondition' });

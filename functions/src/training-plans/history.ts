@@ -14,6 +14,7 @@ import {
     TRAINING_PLANS_COLLECTION_ID,
     TrainingPlanContractError,
     parseScheduledWorkoutV1,
+    parseTrainingPlanStateV1,
     parseTrainingPlanV1,
     type PreviewTrainingScheduleRestoreRequestV1,
     type ScheduledWorkoutV1,
@@ -493,6 +494,26 @@ function logicalWorkoutValuesEqual(
     return valuesEqual(logicalValue(left), logicalValue(right));
 }
 
+async function readRestorePreviewFence(
+    userRef: admin.firestore.DocumentReference,
+    expectedRevision?: number | null,
+): Promise<number | null> {
+    const stateRef = userRef.collection('trainingPlanState').doc('current');
+    const [state, lock] = await Promise.all([
+        stateRef.get(), stateRef.collection('planDeletionLocks').doc('_bulk_restore').get(),
+    ]);
+    if (lock.exists) {
+        throw new TrainingScheduleMutationError('failed-precondition',
+            'A Training plan restore is in progress. Retry this preview after it finishes.');
+    }
+    const revision = state.exists ? parseTrainingPlanStateV1(documentData(state)).revision : null;
+    if (expectedRevision !== undefined && revision !== expectedRevision) {
+        throw new TrainingScheduleMutationError('revision-conflict',
+            'The Training schedule changed while the restore preview was being prepared. Retry it.');
+    }
+    return revision;
+}
+
 export async function previewTrainingScheduleRestoreForUser(
     uid: string,
     request: PreviewTrainingScheduleRestoreRequestV1,
@@ -500,6 +521,7 @@ export async function previewTrainingScheduleRestoreForUser(
 ): Promise<TrainingScheduleRestorePreviewV1> {
     await requireAvailableUser(db, uid);
     const userRef = db.collection('users').doc(uid);
+    const initialStateRevision = await readRestorePreviewFence(userRef);
     if (request.scope.kind === 'workout') {
         const desired = await readStandaloneWorkoutAtRevision(db, uid, request.scope.id, request.targetRevision);
         const currentSnapshot = await userRef.collection(SCHEDULED_WORKOUTS_COLLECTION_ID).doc(request.scope.id).get();
@@ -507,6 +529,7 @@ export async function previewTrainingScheduleRestoreForUser(
         const selectedRevisionIsPlanBound = desired.planId !== null;
         const moved = current?.planId !== null && current?.planId !== undefined;
         const blocked = selectedRevisionIsPlanBound || moved;
+        await readRestorePreviewFence(userRef, initialStateRevision);
         return {
             scope: request.scope,
             targetRevision: request.targetRevision,
@@ -577,6 +600,7 @@ export async function previewTrainingScheduleRestoreForUser(
     if (permanentlyDeletedIds.size > 0) {
         warnings.push(`${permanentlyDeletedIds.size} permanently deleted workout${permanentlyDeletedIds.size === 1 ? '' : 's'} will remain deleted.`);
     }
+    await readRestorePreviewFence(userRef, initialStateRevision);
     return {
         scope: request.scope,
         targetRevision: request.targetRevision,

@@ -255,7 +255,10 @@ export class PlansWorkspaceComponent {
   readonly scheduleState = toSignal(this.userService.user$.pipe(
     switchMap(user => user?.uid
       ? this.plansService.watchSchedule(user.uid).pipe(
-        map(schedule => ({ status: 'ready', schedule, message: null }) as ScheduleLoadState),
+        map(schedule => schedule.restoreUnavailable
+          ? ({ status: 'loading', schedule: EMPTY_SCHEDULE,
+              message: 'Restoring your training plan…' } as ScheduleLoadState)
+          : ({ status: 'ready', schedule, message: null } as ScheduleLoadState)),
         startWith({ status: 'loading', schedule: EMPTY_SCHEDULE, message: null } as ScheduleLoadState),
         catchError(error => of({
           status: 'error',

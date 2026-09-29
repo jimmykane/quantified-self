@@ -14,3 +14,15 @@ export async function assertNoTrainingPlanDeletionInProgress(
         );
     }
 }
+
+/** Completion imports may persist their activity during a staged restore, but
+ * must retry an exact workout link until the replacement plan is published. */
+export async function assertNoTrainingBulkRestoreInProgress(
+    transaction: admin.firestore.Transaction,
+    stateRef: admin.firestore.DocumentReference,
+): Promise<void> {
+    const lock = await transaction.get(stateRef.collection(TRAINING_PLAN_DELETION_LOCKS_COLLECTION_ID).doc('_bulk_restore'));
+    if (lock.exists) {
+        throw new Error('Training completion link deferred while plan restore is in progress.');
+    }
+}

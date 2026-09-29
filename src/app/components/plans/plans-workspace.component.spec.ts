@@ -173,6 +173,14 @@ describe('PlansWorkspaceComponent', () => {
     expect(haptics.success).not.toHaveBeenCalled();
   });
 
+  it('pauses the plan workspace while a staged restore hides workout roots', async () => {
+    watchSchedule.mockReturnValue(of({ ...schedule, restoreUnavailable: true }));
+    const fixture = await renderPlans();
+    expect(fixture.nativeElement.textContent).toContain('Restoring your training plan…');
+    expect(fixture.nativeElement.querySelector('.workout-list')).toBeNull();
+    expect(fixture.componentInstance.scheduleState().status).toBe('loading');
+  });
+
   it('uses shared compact rows with labelled headings, actions, and dividers between workouts', async () => {
     schedule.workouts.push({ ...schedule.workouts[0], id: 'recovery', title: 'Recovery', lifecycle: 'skipped' });
     schedule.state.currentWorkoutCount = 3;

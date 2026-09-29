@@ -198,6 +198,8 @@ export interface MutateTrainingScheduleResponseV1 {
   state: TrainingPlanStateV1;
   plans: TrainingPlanV1[];
   workouts: ScheduledWorkoutV1[];
+  /** A staged restore persisted the changed workouts; re-read the schedule for their full recipes. */
+  workoutsDeferred?: true;
   removedPlanIds: string[];
   permanentlyDeletedWorkoutIds: string[];
 }

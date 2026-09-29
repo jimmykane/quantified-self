@@ -10,6 +10,7 @@ import {
   type TrainingWorkoutCompletionV1,
 } from '../../../shared/training-workout-completion';
 import { getUserDeletionGuardStateInTransaction } from '../shared/user-deletion-guard';
+import { assertNoTrainingBulkRestoreInProgress } from '../training-plans/deletion-lock';
 import { DELIVERY_LEDGER, type DeliveryLedgerV1 } from '../training-plans/delivery/contracts';
 import { readTrainingDeliveryAuthority } from '../training-plans/delivery/connection';
 import { projectDelivery } from '../training-plans/delivery/store';
@@ -150,6 +151,9 @@ export async function retainCOROSTrainingCompletion(
       return candidate ? [candidate] : [];
     });
     const candidate = candidates.length === 1 ? candidates[0] : null;
+    if (candidate) {
+      await assertNoTrainingBulkRestoreInProgress(tx, user.collection('trainingPlanState').doc('current'));
+    }
     const reverseId = reverseLinkId(uid, eventId);
     const related = candidate ? await Promise.all([
       tx.get(user.collection('scheduledWorkouts').doc(candidate.ledger.workoutId)),

@@ -219,6 +219,9 @@ describe('training schedule history reads', () => {
         vi.clearAllMocks();
         guard.getUserDeletionGuardState.mockResolvedValue({ shouldSkip: false });
         db = new FakeDb();
+        db.seed('users/user-1/trainingPlanState/current', {
+            schemaVersion: 1, activePlanId: null, revision: 1, currentWorkoutCount: 0, updatedAtMs: 1,
+        });
     });
 
     it('returns only safe revision envelopes with pagination', async () => {
@@ -287,6 +290,13 @@ describe('training schedule history reads', () => {
         expect(preview.skippedWorkoutIds).toEqual(['workout-1']);
         expect(preview.changedWorkoutIds).toEqual([]);
         expect(preview.warnings[0]).toContain('will not be reclaimed');
+    });
+
+    it('refuses a restore preview while a bulk restore has hidden current workouts', async () => {
+        db.seed('users/user-1/trainingPlanState/current/planDeletionLocks/_bulk_restore', { phase: 'applying' });
+        await expect(previewTrainingScheduleRestoreForUser('user-1', {
+            scope: { kind: 'plan', id: 'plan-1' }, targetRevision: 1,
+        }, db as never)).rejects.toMatchObject({ code: 'failed-precondition' });
     });
 
     it('does not report metadata-only workout revision differences as plan restore changes', async () => {

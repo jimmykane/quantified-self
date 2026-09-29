@@ -142,6 +142,16 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)(
         .toMatchObject({ scheduledLocalDate: '2026-09-17', workoutRevisionAtLink: 2 });
     });
 
+    it('defers a candidate link during staged restore and retries against the published plan', async () => {
+      const lock = user().collection('trainingPlanState').doc('current')
+        .collection('planDeletionLocks').doc('_bulk_restore');
+      await lock.set({ test: true });
+      await expect(retain()).rejects.toThrow('plan restore is in progress');
+      expect((await user().collection('trainingWorkoutCompletions').doc('workout').get()).exists).toBe(false);
+      await lock.delete();
+      expect((await retain()).linkedWorkoutIds).toEqual(['workout']);
+    });
+
     it('uses a started reserved identity to resolve an ambiguous first send', async () => {
       const workout = (await user().collection('scheduledWorkouts').doc('workout').get()).data();
       const attemptId = randomUUID();

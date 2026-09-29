@@ -72,6 +72,8 @@
   <div class="activity-calendar-tile-status" role="status">No completed activities this month</div>
   }
   @if (hasTrainingPlanningUIAccess() && plansState().status === 'error') {
-  <div class="activity-calendar-tile-status" role="status">Planned workouts unavailable</div>
+  <div class="activity-calendar-tile-status" role="status">{{ plansState().restoreInProgress
+    ? 'Training plan restore in progress. Planned workouts will return shortly.'
+    : 'Planned workouts unavailable' }}</div>
   }
 </section>

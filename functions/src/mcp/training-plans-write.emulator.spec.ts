@@ -62,6 +62,17 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Training MCP write propos
         providers: 'all_connected', action: 'send', timeZone: 'Europe/Helsinki' },
     ] } }, deps);
 
+  it('does not preview a mixed schedule while a full-prescription restore is staged', async () => {
+    await db.collection('users').doc(uid).collection('trainingPlanState').doc('current')
+      .collection('planDeletionLocks').doc('_bulk_restore').set({ phase: 'applying' });
+    await expect(previewTrainingChanges({ uid, connectionId: 'connection', scopes,
+      arguments: { expectedScheduleRevision: 1, changes: [
+        { kind: 'create-workout', localKey: 'deferred', plan: null, localDate: '2026-09-18',
+          title: 'Deferred run', structure },
+      ] } }, deps))
+      .rejects.toMatchObject({ code: 'failed-precondition' });
+  });
+
   it('creates a focused standalone-workout proposal without a client operation kind or local key', async () => {
     const preview = await previewCreatePlannedWorkout({ uid, connectionId: 'connection', scopes,
       arguments: { expectedScheduleRevision: 1, localDate: '2026-09-18', title: 'Focused easy run', structure } }, deps);

@@ -56,6 +56,7 @@ interface CalendarEventsState {
 interface CalendarPlansState {
   status: 'loading' | 'ready' | 'error';
   schedule: CurrentTrainingScheduleV1 | null;
+  restoreInProgress?: boolean;
 }
 
 interface CalendarViewOption {
@@ -155,7 +156,9 @@ export class CalendarPageComponent {
   readonly plansState = toSignal(this.userService.user$.pipe(
     switchMap(user => user?.uid
       ? this.plansService.watchSchedule(user.uid).pipe(
-        map(schedule => ({ status: 'ready', schedule }) as CalendarPlansState),
+        map(schedule => schedule.restoreUnavailable
+          ? ({ status: 'error', schedule: null, restoreInProgress: true } as CalendarPlansState)
+          : ({ status: 'ready', schedule } as CalendarPlansState)),
         startWith({ status: 'loading', schedule: null } as CalendarPlansState),
         catchError(() => of({ status: 'error', schedule: null } as CalendarPlansState)),
       )

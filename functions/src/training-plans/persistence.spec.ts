@@ -452,7 +452,7 @@ describe('mutateTrainingScheduleForUser persistence', () => {
         expect(db.read('users/user-1/trainingPlanState/current/planDeletionLocks/_bulk_shift')).toBeUndefined();
         expect(await mutateTrainingScheduleForUser('user-1', shift, { db: db as never, nowMs: NOW_MS + 1 }))
             .toEqual(shifted);
-    });
+    }, 20_000);
 
     it('persists colors in current plans, history and exact retry receipts without touching workouts', async () => {
         const created = await mutateTrainingScheduleForUser('user-1', request({

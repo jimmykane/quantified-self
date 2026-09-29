@@ -611,11 +611,29 @@ packed Sports Lib package. That gate is tracked by GitHub issue #654 under epic 
   the `trainingCleanupJobs(nextAttemptAtMs, __name__)` collection-group index and the unindexed `response` field before
   enabling the worker. Inspect `[TrainingCleanup] cleanup_retry_failed` logs and due jobs when a lock persists; do not
   delete a lock or job by hand without checking its receipt and tombstone.
-- #657 remains open for a resumable, atomically visible **full-prescription plan restore** of 400 high-complexity
-  structures, and for extending staged single-shift behavior to the approval-gated MCP mutation path. Date-only
-  400-workout restore, shift, and conversion pass isolated demo-emulator lifecycle tests, but arbitrary structure
-  rewrites still exceed an atomic request and are not accepted. Do not lower v1 limits or report the full bulk workflow
-  complete until failure-injection and emulator request-size/concurrency tests cover the remaining restore path.
+- An oversized full-prescription plan restore uses an owner-scoped `_bulk_restore` lock and a separate owner-readable
+  `trainingPlanState/current/availability/restore` leaf. A lock acquisition freezes other schedule mutations,
+  delivery workers, and MCP Training reads. Browser rules deny workout and strength-companion reads while the lock
+  exists; the availability listener pauses all three app calendar surfaces and the Plans workspace, then reconnects
+  them after the final commit. The server first stages compressed history below missing revision envelopes and stages
+  the exact desired workout roots as private leaves. It then applies at most eight workouts per transaction, consuming
+  each staging leaf and advancing a durable cursor in the same transaction. A final transaction creates the revision
+  envelopes, state/plan revisions, idempotent receipts, and delivery-reconciliation marker while removing both the lock
+  and availability leaf. Thus no mixed current schedule is available to owner reads, even if a callable times out after
+  any chunk. The staged restore's completion receipt has `workoutsDeferred: true` and an empty `workouts` array so a
+  400-workout prescription cannot exceed one Firestore document or callable response; the unchanged v1 workout roots
+  are read through the normal schedule listener after publication. Exact provider completion candidates from Garmin,
+  COROS, Wahoo, and Suunto defer linking during the lock and retry against the final roots; imported activities remain
+  separate records. The existing five-minute `reconcileTrainingBulkShift` scheduler also resumes due restore locks; its name is
+  historical. Exact and equivalent replacement-ID retries converge through a 30-day intent receipt. A stuck lock keeps
+  the schedule unavailable: inspect `[TrainingBulkShift] resume_failed`, the lock phase/cursor and receipt before manual
+  intervention. Never delete an applying lock without a verified rollback plan. The v1 workout JSON and 400-workout
+  limit remain unchanged; old clients with already-open workout listeners may need a reload after a restore.
+- #657 remains open for extending oversized single-shift behavior to the approval-gated MCP mutation path and any
+  remaining failure/concurrency coverage. MCP plan/workout reads report temporary unavailability while either bulk
+  lock exists. The restore adds no MCP field, tool, permission, or mutation kind: MCP history restore remains excluded
+  from its registered write contract. Approval-gated MCP shifts still use the bounded transaction path and reject an
+  oversized shift rather than bypassing the proposal/authority checks.
 - MCP impact for the paging and cleanup slice: existing Training MCP current reads already exclude deleted workouts;
   internal cleanup jobs and UI-only deleted-history paging expose no new MCP field, permission, mutation kind, provider
   action, or approval route. Existing MCP plan deletion continues through the same idempotent server path.

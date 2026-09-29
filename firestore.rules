@@ -326,6 +326,14 @@ service cloud.firestore {
           allow read: if isOwner() && stateID == 'current';
           allow write: if false;
 
+          // A staged full-prescription restore temporarily hides workout roots.
+          // This leaf lets current clients pause and restart their listeners
+          // without exposing the internal lock, request, or history payloads.
+          match /availability/{availabilityID} {
+            allow get: if isOwner() && stateID == 'current' && availabilityID == 'restore';
+            allow list, write: if false;
+          }
+
           match /{document=**} {
             allow read, write: if false;
           }
@@ -341,13 +349,14 @@ service cloud.firestore {
         }
 
         match /scheduledWorkouts/{workoutID} {
-          allow read: if isOwner();
+          allow read: if isOwner() && !exists(/databases/$(database)/documents/users/$(userID)/trainingPlanState/current/planDeletionLocks/_bulk_restore);
           allow write: if false;
 
           // Full strength prescription is owner-readable. Only the server may
           // derive and persist its V1 workout projection and companion together.
           match /strengthDetails/{detailsID} {
-            allow read: if isOwner() && detailsID == 'current';
+            allow read: if isOwner() && detailsID == 'current'
+              && !exists(/databases/$(database)/documents/users/$(userID)/trainingPlanState/current/planDeletionLocks/_bulk_restore);
             allow write: if false;
           }
 

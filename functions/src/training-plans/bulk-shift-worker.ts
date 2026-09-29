@@ -10,6 +10,12 @@ import {
     readBulkShiftLock,
     stageLargeTrainingPlanShiftForUser,
 } from './staged-shift';
+import {
+    BULK_RESTORE_LEASE_MS,
+    BULK_RESTORE_LOCK_ID,
+    readBulkRestoreLock,
+    stageLargeTrainingPlanRestoreForUser,
+} from './staged-restore';
 
 const MAX_RETRY_MS = 60 * 60 * 1000;
 const SCAN_PAGE_SIZE = 25;
@@ -19,7 +25,8 @@ function ownerFromLockPath(path: string): string | null {
     const segments = path.split('/');
     return segments.length === 6 && segments[0] === 'users' && segments[2] === 'trainingPlanState'
         && segments[3] === 'current' && segments[4] === TRAINING_PLAN_DELETION_LOCKS_COLLECTION_ID
-        && segments[5] === BULK_SHIFT_LOCK_ID ? segments[1] : null;
+        && (segments[5] === BULK_SHIFT_LOCK_ID || segments[5] === BULK_RESTORE_LOCK_ID)
+        ? segments[1] : null;
 }
 
 /** A timed-out callable leaves the old schedule visible; a later invocation finishes its staged revision. */
@@ -34,15 +41,21 @@ export async function processTrainingBulkShift(
         if ((await getUserDeletionGuardStateInTransaction(db, transaction, uid, nowMs)).shouldSkip) return null;
         const snapshot = await transaction.get(ref);
         if (!snapshot.exists) return null;
-        const lock = readBulkShiftLock(snapshot.data());
+        const lock = ref.id === BULK_RESTORE_LOCK_ID
+            ? readBulkRestoreLock(snapshot.data()) : readBulkShiftLock(snapshot.data());
         if (lock.nextAttemptAtMs > nowMs) return null;
         const attempt = lock.attempts + 1;
-        transaction.update(ref, { attempts: attempt, nextAttemptAtMs: nowMs + BULK_SHIFT_LEASE_MS });
+        transaction.update(ref, { attempts: attempt, nextAttemptAtMs: nowMs
+            + (ref.id === BULK_RESTORE_LOCK_ID ? BULK_RESTORE_LEASE_MS : BULK_SHIFT_LEASE_MS) });
         return { lock, attempt };
     });
     if (!claimed) return false;
     try {
-        await stageLargeTrainingPlanShiftForUser(uid, claimed.lock.request, { db, nowMs });
+        if (claimed.lock.kind === 'restore-plan') {
+            await stageLargeTrainingPlanRestoreForUser(uid, claimed.lock.request, { db, nowMs });
+        } else {
+            await stageLargeTrainingPlanShiftForUser(uid, claimed.lock.request, { db, nowMs });
+        }
         return true;
     } catch (error) {
         const retryMs = Math.min(MAX_RETRY_MS, 60_000 * 2 ** Math.min(claimed.attempt, 6));
@@ -50,8 +63,12 @@ export async function processTrainingBulkShift(
             if ((await getUserDeletionGuardStateInTransaction(db, transaction, uid, nowMs)).shouldSkip) return;
             const snapshot = await transaction.get(ref);
             if (!snapshot.exists) return;
-            const current = readBulkShiftLock(snapshot.data());
-            if (current.mutationId === claimed.lock.mutationId && current.attempts === claimed.attempt) {
+            const current = ref.id === BULK_RESTORE_LOCK_ID
+                ? readBulkRestoreLock(snapshot.data()) : readBulkShiftLock(snapshot.data());
+            const currentId = current.kind === 'restore-plan' ? current.request.mutationId : current.mutationId;
+            const claimedId = claimed.lock.kind === 'restore-plan'
+                ? claimed.lock.request.mutationId : claimed.lock.mutationId;
+            if (currentId === claimedId && current.attempts === claimed.attempt) {
                 transaction.update(ref, { nextAttemptAtMs: nowMs + retryMs });
             }
         });

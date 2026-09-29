@@ -93,7 +93,9 @@
     <span class="calendar-status-announcement" role="status">{{ emptyStateLabel() }}</span>
     }
     @if (hasTrainingPlanningUIAccess() && plansState().status === 'error') {
-    <span class="calendar-status-announcement" role="status">Planned workouts could not be loaded.</span>
+    <span class="calendar-status-announcement" role="status">{{ plansState().restoreInProgress
+      ? 'Training plan restore in progress. Planned workouts will return shortly.'
+      : 'Planned workouts could not be loaded.' }}</span>
     }
     @if (isDayRoute) {
       @if (selectedDayData(); as dayData) {

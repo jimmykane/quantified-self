@@ -326,6 +326,22 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Suunto worker with real F
       actual: { completed: true },
     });
   });
+  it('defers an exact Guide link during staged restore and links after publication', async () => {
+    const delivered = await send();
+    const externalId = delivered.actual?.ids.externalId;
+    expect(externalId).toBeTruthy();
+    const event = user().collection('events').doc('restored-event');
+    await event.set({ test: true });
+    const lock = user().collection('trainingPlanState').doc('current')
+      .collection('planDeletionLocks').doc('_bulk_restore');
+    await lock.set({ test: true });
+    const retain = () => retainSuuntoGuideCompletions(db, uid, event.id, 'account', 'retained',
+      suuntoFitFixture(['qs'], [externalId!]), 'qs');
+    await expect(retain()).rejects.toThrow('plan restore is in progress');
+    expect((await user().collection('trainingWorkoutCompletions').doc('w').get()).exists).toBe(false);
+    await lock.delete();
+    expect((await retain()).linkedWorkoutIds).toEqual(['w']);
+  });
   it.each([
     ['rescheduling', { localDate: '2026-09-18', revision: 2 }],
     ['plan transfer', { planId: 'another-plan', revision: 2 }],
