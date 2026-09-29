@@ -13,12 +13,13 @@ const betaWorkflow = readFileSync(
 
 describe('GitHub Actions configuration', () => {
   it('tests develop once in the beta workflow before deployment', () => {
-    expect(testingWorkflow).toContain(
-      "if: github.event_name != 'pull_request' || github.head_ref != 'develop'",
+    expect(testingWorkflow).not.toContain('pull_request:');
+    expect(testingWorkflow).toMatch(
+      /push:\s*\n\s+branches-ignore:\s*\n\s+- develop\s*\n\s+- main/,
     );
     expect(betaWorkflow).toMatch(
-      /test:\s*\n\s+uses: \.\/\.github\/workflows\/_run-tests\.yml/,
+      /run-tests:\s*\n\s+uses: \.\/\.github\/workflows\/_run-tests\.yml/,
     );
-    expect(betaWorkflow).toMatch(/deploy:\s*\n\s+needs: test/);
+    expect(betaWorkflow).toMatch(/deploy:\s*\n\s+needs: run-tests/);
   });
 });
