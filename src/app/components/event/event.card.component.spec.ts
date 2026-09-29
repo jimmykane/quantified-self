@@ -46,6 +46,7 @@ import { AppEventService } from '../../services/app.event.service';
 import { PerformanceCurveDataService } from '../../services/performance-curve-data.service';
 import { AppBenchmarkFlowService } from '../../services/app.benchmark-flow.service';
 import { TrainingImpactService } from '../../services/training-impact.service';
+import type { AppEventInterface } from '@shared/app-event.interface';
 
 vi.mock('../../helpers/intensity-zones-chart-data-helper', () => ({
     shouldRenderIntensityZonesChart: vi.fn(),
@@ -276,6 +277,18 @@ describe('EventCardComponent', () => {
 
         expect(component.isOwner()).toBe(false);
         expect(component.trainingImpact()).toBeNull();
+        expect(fixture.nativeElement.querySelector('app-training-impact')).toBeNull();
+    });
+
+    it('does not show or load Training impact for benchmark event details', () => {
+        mockTrainingImpactService.watch.mockClear();
+        component.event.set({ ...mockEvent, hasBenchmark: true } as AppEventInterface);
+        fixture.detectChanges();
+
+        expect(component.trainingImpact()).toBeNull();
+        expect(component.trainingImpactState().status).toBe('private');
+        expect(fixture.nativeElement.querySelector('app-training-impact')).toBeNull();
+        expect(mockTrainingImpactService.watch).not.toHaveBeenCalled();
     });
 
     it('should initialize event from route data as signal', () => {

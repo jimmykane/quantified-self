@@ -23,13 +23,23 @@ export class TrainingImpactComponent {
   readonly impact = input.required<TrainingSessionImpactView | TrainingDayImpactView>();
   readonly variant = input<TrainingImpactVariant>('card');
   readonly title = input('Training impact');
-  readonly isDay = computed((): boolean => 'sessions' in this.impact());
   readonly isReady = computed(() => this.impact().availability === 'ready');
   readonly compactText = computed(() => {
     const impact = this.impact();
     if (impact.availability !== 'ready') return impact.message;
     const values = this.values();
     return `${values.ctl} CTL · ${values.atl} ATL · ${values.form} Form`;
+  });
+  readonly compactAriaLabel = computed(() => {
+    const impact = this.impact();
+    if (impact.availability !== 'ready') return impact.message;
+    const values = this.values();
+    return [
+      impact.headline,
+      `Fitness load (CTL) ${values.ctl}`,
+      `Fatigue load (ATL) ${values.atl}`,
+      `Freshness (Form) ${values.form}`,
+    ].filter(Boolean).join('. ');
   });
   readonly values = computed(() => {
     const impact = this.impact();

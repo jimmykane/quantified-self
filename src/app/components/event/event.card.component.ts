@@ -53,6 +53,7 @@ import {
 } from '../../helpers/event-dive-profile.helper';
 import { TrainingImpactService, type TrainingImpactSnapshotState } from '../../services/training-impact.service';
 import { buildTrainingSessionImpactView } from '../../helpers/training-impact.helper';
+import { isMergeOrBenchmarkEvent } from '../../helpers/event-visibility.helper';
 
 @Component({
   selector: 'app-event-card',
@@ -180,7 +181,8 @@ export class EventCardComponent implements OnInit {
 
   private trainingImpactSource = computed(() => {
     const uid = this.currentUser()?.uid;
-    return this.isOwner() && uid
+    const event = this.event();
+    return this.isOwner() && uid && event && !isMergeOrBenchmarkEvent(event)
       ? this.trainingImpactService.watch(uid)
       : of({ status: 'private', formPoints: null } as TrainingImpactSnapshotState);
   });
@@ -192,7 +194,7 @@ export class EventCardComponent implements OnInit {
 
   public trainingImpact = computed(() => {
     const event = this.event();
-    return event && this.isOwner()
+    return event && this.isOwner() && !isMergeOrBenchmarkEvent(event)
       ? buildTrainingSessionImpactView(event, this.trainingImpactState())
       : null;
   });

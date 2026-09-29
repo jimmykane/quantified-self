@@ -1,6 +1,6 @@
 import { inject, Injectable } from '@angular/core';
 import { DERIVED_METRIC_KINDS } from '@shared/derived-metrics';
-import { catchError, distinctUntilChanged, map, Observable, of, shareReplay, startWith, switchMap, tap } from 'rxjs';
+import { catchError, distinctUntilChanged, finalize, map, Observable, of, shareReplay, startWith, switchMap, tap } from 'rxjs';
 import type { DashboardFormPoint } from '../helpers/dashboard-form.helper';
 import { AppUserService } from './app.user.service';
 import {
@@ -46,6 +46,7 @@ export class TrainingImpactService {
       map(state => this.toImpactState(state)),
       startWith(UPDATING_STATE),
       catchError(() => of(ERROR_STATE)),
+      finalize(() => this.ownerStreams.delete(uid)),
       shareReplay({ bufferSize: 1, refCount: true }),
     );
     this.ownerStreams.set(uid, stream);

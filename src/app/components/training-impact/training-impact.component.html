@@ -1,6 +1,6 @@
 @if (variant() === 'compact') {
   <span class="training-impact-compact" [class.training-impact-compact--unavailable]="!isReady()"
-    [attr.aria-label]="impact().headline ? impact().headline + '. ' + compactText() : compactText()"
+    [attr.aria-label]="compactAriaLabel()"
     [attr.aria-busy]="impact().availability === 'updating'"
     [attr.role]="impact().availability === 'error' ? 'alert' : !isReady() ? 'status' : null">
     @if (impact().headline) { <span>{{ impact().headline }}</span> }

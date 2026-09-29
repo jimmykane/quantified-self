@@ -48,9 +48,12 @@ describe('TrainingImpactComponent', () => {
 
   it('renders the compact headline and all three contributions', () => {
     const fixture = render(session(), 'compact');
-    const text = fixture.nativeElement.textContent;
+    const element = fixture.nativeElement;
+    const text = element.textContent;
     expect(text).toContain('Helped push the day above maintenance');
     expect(text).toContain('+2 CTL · +12 ATL · −10 Form');
+    expect(element.querySelector('.training-impact-compact').getAttribute('aria-label'))
+      .toContain('Fitness load (CTL) +2. Fatigue load (ATL) +12. Freshness (Form) −10');
   });
 
   it('renders updating and error states without guessed values', () => {

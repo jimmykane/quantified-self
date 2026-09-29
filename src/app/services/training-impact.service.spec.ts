@@ -70,6 +70,10 @@ describe('TrainingImpactService', () => {
     expect(snapshots.observed).toBe(true);
     second.unsubscribe();
     expect(snapshots.observed).toBe(false);
+
+    const third = instance.watch('owner').subscribe();
+    expect(derived.watch).toHaveBeenCalledTimes(2);
+    third.unsubscribe();
   });
 
   it('maps a failed Form snapshot to an error state', () => {
@@ -81,5 +85,24 @@ describe('TrainingImpactService', () => {
     const values: string[] = [];
     service().watch('owner').subscribe(value => values.push(value.status)).unsubscribe();
     expect(values).toEqual(['updating', 'error']);
+  });
+
+  it.each(['stale', 'building'] as const)('keeps a %s Form snapshot in updating state', (formStatus) => {
+    vi.clearAllMocks();
+    viewer$.next({ uid: 'owner' });
+    derived.watch.mockReturnValueOnce(of({
+      ...createDashboardDerivedMetricsMissingState(),
+      formStatus,
+      formPoints: [{
+        time: Date.UTC(2026, 0, 1), trainingStressScore: 42, ctl: 1, atl: 6,
+        formSameDay: -5, formPriorDay: null,
+      }],
+    }));
+    const values: Array<{ status: string; formPoints: unknown }> = [];
+    service().watch('owner').subscribe(value => values.push(value)).unsubscribe();
+    expect(values).toEqual([
+      { status: 'updating', formPoints: null },
+      { status: 'updating', formPoints: null },
+    ]);
   });
 });

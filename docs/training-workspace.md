@@ -2810,9 +2810,10 @@ shown as no modeled load contribution; missing TSS stays unavailable rather than
 
 Selected-day totals sum the visible completed activities' contributions. A local calendar date can contain activities
 from two UTC Training days, so the UI keeps one contribution total but shows a separate dated outcome for each UTC day
-instead of combining their net changes. Merged benchmark records are excluded from Training, and planned workouts do
-not contribute. Stale, building, or refreshing Form data is labelled as updating; the UI never substitutes a local
-guess. The presentation is not included on compact calendar grid cells or public activity shares.
+instead of combining their net changes. Merge and benchmark records are excluded from Training, and their event detail
+pages do not render the Training-impact card. Planned workouts do not contribute. Stale, building, or refreshing Form
+data is labelled as updating; the UI never substitutes a local guess. The presentation is not included on compact
+calendar grid cells or public activity shares.
 
 This is a TSS-based model of sustained training load, not a measurement of physiological adaptation. The implementation
 adds only pure shared contribution/day-outcome interfaces beside the canonical Training-load model and consumes the
