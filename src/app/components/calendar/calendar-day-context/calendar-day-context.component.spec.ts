@@ -82,10 +82,15 @@ describe('CalendarDayContextComponent', () => {
       id: 'night', sleepDate: '2026-09-11', startTimeMs: new Date(2026, 8, 10, 23).getTime(),
       endTimeMs: new Date(2026, 8, 11, 7).getTime(), durationSeconds: 8 * 3600,
       score: { value: 74 }, stageDurationsSeconds: { deep: 7200, light: 14_400, rem: 5400, awake: 1800 },
+      vitals: { averageHeartRateBpm: 58 },
       source: { provider: 'SuuntoApp' },
     }] } as typeof emptyEvidence); fixture.detectChanges();
     expect(fixture.nativeElement.querySelector('app-health-sleep-stage-summary')?.textContent).toContain('Sleep stages');
     expect(fixture.nativeElement.querySelector('.calendar-day-context-sleep-stages')?.textContent).toContain('Suunto · overnight sleep');
+    expect(fixture.nativeElement.querySelector('.calendar-day-context-sleep-facts')?.textContent)
+      .toContain('Duration 08h 00m');
+    expect(fixture.nativeElement.querySelector('.calendar-day-context-sleep-facts')?.textContent)
+      .toContain('Average overnight HR 58 bpm');
     expect(fixture.nativeElement.querySelector('.calendar-day-context-timeline')).toBeTruthy();
     expect(fixture.nativeElement.querySelector('.calendar-day-context-health-heading')?.textContent).toContain('Recovery & sleep');
     expect(fixture.nativeElement.querySelector('#calendar-day-timeline-title')?.textContent).toContain('Your day');

@@ -1,4 +1,6 @@
 import { HEALTH_METRIC_IDS } from '@shared/health';
+import { SLEEP_SPORTS_LIB_METRIC_FIELDS } from '@shared/sleep';
+import { formatCanonicalSleepMetricSportsLibValue } from '@shared/sports-lib-health-data';
 import type { UserUnitSettingsInterface } from '@sports-alliance/sports-lib';
 import type { HealthWorkspaceSeries, HealthWorkspaceSleepSession } from './health-workspace.helper';
 import { formatHealthValue } from './health-workspace.helper';
@@ -11,6 +13,7 @@ import {
 import { buildDashboardRecoveryPresentation } from './dashboard-recovery-now.helper';
 import type { DashboardDerivedMetricsState } from '../services/dashboard-derived-metrics.service';
 import { isDerivedMetricPendingStatus } from './derived-metric-status.helper';
+import { getDateTimeFormatter } from './date-time-format.helper';
 
 export type CalendarDayMetricStatus = 'ready' | 'empty' | 'updating' | 'error';
 
@@ -25,6 +28,38 @@ export interface CalendarDayHealthSummary {
   sleep: CalendarDayMetric;
   hrv: CalendarDayMetric;
   recovery: CalendarDayMetric | null;
+}
+
+export interface CalendarDaySleepFacts {
+  duration: string | null;
+  window: string | null;
+  averageHeartRate: string | null;
+}
+
+/** Keep the full-day sleep facts tied to the same overnight session as the stages. */
+export function buildCalendarDaySleepFacts(
+  dateKey: string,
+  point: DashboardSleepTrendPoint | null,
+  options: { locale?: string; unitSettings?: UserUnitSettingsInterface | null } = {},
+): CalendarDaySleepFacts | null {
+  if (!point || point.isPlaceholder || point.isNap || point.sleepDate !== dateKey) return null;
+  const durationDisplay = Number.isFinite(point.totalSeconds) && point.totalSeconds > 0
+    ? formatCanonicalSleepMetricSportsLibValue(SLEEP_SPORTS_LIB_METRIC_FIELDS.Duration,
+      point.totalSeconds, options.unitSettings, { compactDuration: true }) : null;
+  const heartRateDisplay = point.averageHeartRateBpm !== null
+    && Number.isFinite(point.averageHeartRateBpm) && point.averageHeartRateBpm > 0
+    ? formatCanonicalSleepMetricSportsLibValue(SLEEP_SPORTS_LIB_METRIC_FIELDS.AverageHeartRate,
+      point.averageHeartRateBpm, options.unitSettings) : null;
+  const window = Number.isFinite(point.startTimeMs) && Number.isFinite(point.endTimeMs)
+    && point.endTimeMs > point.startTimeMs
+    ? (() => {
+      const clock = getDateTimeFormatter(options.locale, { hour: 'numeric', minute: '2-digit' });
+      return `${clock.format(point.startTimeMs)}–${clock.format(point.endTimeMs)}`;
+    })() : null;
+  const display = (value: { value: string; unit: string } | null): string | null =>
+    value ? [value.value, value.unit].filter(Boolean).join(' ') : null;
+  const facts = { duration: display(durationDisplay), window, averageHeartRate: display(heartRateDisplay) };
+  return facts.duration || facts.window || facts.averageHeartRate ? facts : null;
 }
 
 export interface CalendarDayHealthEvidence {

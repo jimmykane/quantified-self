@@ -26,6 +26,9 @@
 .calendar-day-context-sleep-stages { margin-top: 16px; padding-top: 12px; border-top: 1px solid var(--mat-sys-outline-variant); min-width: 0; }
 #day-sleep-stages { scroll-margin-top: calc(var(--qs-visible-top-offset, 0px) + 60px); }
 .calendar-day-context-sleep-source { color: var(--mat-sys-on-surface-variant); font: var(--mat-sys-body-small); }
+.calendar-day-context-sleep-facts { display: flex; flex-wrap: wrap; gap: 4px 18px; margin: 6px 0 10px; font: var(--mat-sys-body-small); }
+.calendar-day-context-sleep-facts span { color: var(--mat-sys-on-surface-variant); }
+.calendar-day-context-sleep-facts strong { margin-left: 4px; color: var(--mat-sys-on-surface); font-weight: 600; }
 .calendar-day-context-section { margin-top: 16px; padding-top: 12px; border-top: 1px solid var(--mat-sys-outline-variant); }
 .calendar-day-context-section h3 { margin: 0; font: var(--mat-sys-title-small); }
 .calendar-day-context-section p { margin: 8px 0 0; color: var(--mat-sys-on-surface-variant); font: var(--mat-sys-body-small); }

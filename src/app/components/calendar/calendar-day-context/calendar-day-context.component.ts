@@ -10,7 +10,7 @@ import { CalendarDayHealthService } from '../../../services/calendar-day-health.
 import { AppThemeService } from '../../../services/app.theme.service';
 import { CalendarDayDetailsNavigationService } from '../../../services/calendar-day-details-navigation.service';
 import { TrainingWorkoutDuplicateService } from '../../../services/training-workout-duplicate.service';
-import { buildCalendarDayHealthSummary, resolveCalendarDaySleepPoint, type CalendarDayHealthSummary } from '../../../helpers/calendar-day-health.helper';
+import { buildCalendarDayHealthSummary, buildCalendarDaySleepFacts, resolveCalendarDaySleepPoint, type CalendarDayHealthSummary } from '../../../helpers/calendar-day-health.helper';
 import type { DashboardSleepTrendPoint } from '../../../helpers/dashboard-sleep-chart.helper';
 import { HealthSleepStageSummaryComponent } from '../../health/health-sleep-stage-summary.component';
 import { resolveActivityCalendarEventLabel, formatActivityCalendarDuration, resolveActivityCalendarEventDurationSeconds, buildActivityCalendarPeriodSummary, resolveEventFamilyIdentity } from '../../../helpers/activity-calendar.helper';
@@ -102,6 +102,10 @@ export class CalendarDayContextComponent {
   readonly previewPlans = computed(() => this.calmMonth() ? this.plannedRows() : this.plannedRows().slice(0, 2));
   readonly canPlan = computed(() => this.data().planningEnabled !== false && this.users.user()?.uid === this.data().userId);
   readonly healthState = signal<HealthState>({ status: 'loading', dateKey: null, ownerUid: null, summary: null, sleepPoint: null });
+  readonly sleepFacts = computed(() => this.standaloneDayPage()
+    ? buildCalendarDaySleepFacts(this.healthDateKey(), this.healthState().sleepPoint, {
+      locale: this.data().locale, unitSettings: this.data().unitSettings,
+    }) : null);
   readonly fullDayReady = computed(() => {
     const health = this.healthState();
     return health.dateKey === this.healthDateKey()

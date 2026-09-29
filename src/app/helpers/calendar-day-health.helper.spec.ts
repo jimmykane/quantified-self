@@ -3,7 +3,7 @@ import { DistanceUnits } from '@sports-alliance/sports-lib';
 import { HEALTH_METRIC_IDS, HEALTH_UNITS } from '@shared/health';
 import { normalizeUserUnitSettings } from '@shared/unit-aware-display';
 import { createDashboardDerivedMetricsMissingState } from '../services/dashboard-derived-metrics.service';
-import { buildCalendarDayHealthSummary, resolveCalendarDaySleepPoint, selectCalendarDaySleepPoint, type CalendarDayHealthEvidence } from './calendar-day-health.helper';
+import { buildCalendarDayHealthSummary, buildCalendarDaySleepFacts, resolveCalendarDaySleepPoint, selectCalendarDaySleepPoint, type CalendarDayHealthEvidence } from './calendar-day-health.helper';
 import type { HealthWorkspaceSeries } from './health-workspace.helper';
 
 const nowMs = new Date(2026, 8, 25, 12).getTime();
@@ -12,6 +12,27 @@ const noEvidence = (): CalendarDayHealthEvidence => ({
 });
 
 describe('calendar day health summary', () => {
+  it('shows date-matched sleep duration, local session times, and overnight HR without mixing sources', () => {
+    const sessions = [
+      { id: 'garmin', sleepDate: '2026-09-24', startTimeMs: new Date(2026, 8, 23, 22).getTime(),
+        endTimeMs: new Date(2026, 8, 24, 6).getTime(), durationSeconds: 8 * 3600,
+        vitals: { averageHeartRateBpm: 65 }, stageDurationsSeconds: {}, source: { provider: 'GarminAPI' } },
+      { id: 'suunto', sleepDate: '2026-09-24', startTimeMs: new Date(2026, 8, 23, 23).getTime(),
+        endTimeMs: new Date(2026, 8, 24, 7).getTime(), durationSeconds: 8 * 3600,
+        vitals: { averageHeartRateBpm: 58 }, stageDurationsSeconds: {}, source: { provider: 'SuuntoApp' } },
+    ] as CalendarDayHealthEvidence['sessions'];
+    const point = selectCalendarDaySleepPoint('2026-09-24', sessions);
+    expect(point?.providerLabel).toBe('Suunto');
+    for (const unitSettings of [null, normalizeUserUnitSettings({ distanceUnits: DistanceUnits.Miles })]) {
+      expect(buildCalendarDaySleepFacts('2026-09-24', point, { locale: 'en-US', unitSettings })).toEqual({
+        duration: '08h 00m', window: '11:00 PM–7:00 AM', averageHeartRate: '58 bpm',
+      });
+    }
+    expect(buildCalendarDaySleepFacts('2026-09-25', point)).toBeNull();
+    expect(buildCalendarDaySleepFacts('2026-09-24', null)).toBeNull();
+    expect(buildCalendarDaySleepFacts('2026-09-24', { ...point!, isNap: true })).toBeNull();
+    expect(buildCalendarDaySleepFacts('2026-09-24', { ...point!, averageHeartRateBpm: null })?.averageHeartRate).toBeNull();
+  });
   it('never uses a last-known reading or current recovery for a past day', () => {
     const evidence = noEvidence();
     evidence.hrvSeries = [{
