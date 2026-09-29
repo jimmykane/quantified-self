@@ -45,6 +45,10 @@ import {
   MCP_TRAINING_METRIC_CATEGORIES,
 } from './training-metric-catalog';
 import {
+  MCP_TRAINING_IMPACT_MAX_ACTIVITIES,
+  MCP_TRAINING_IMPACT_SCHEMA_VERSION,
+} from './training-impact.service';
+import {
   MCP_CONTENT_WRITE_OUTPUTS,
   MCP_CONTENT_WRITE_TOOLS,
 } from './content-write.schemas';
@@ -65,6 +69,7 @@ export const PUBLIC_MCP_TOOL_NAMES = [
   'query_metrics',
   'list_training_metrics',
   'get_training_metric',
+  'get_training_impact',
   'prepare_training_metrics',
   'list_sleep_vitals',
   'list_sleep_sessions',
@@ -348,6 +353,178 @@ const trainingMetricOutput = z.strictObject({
   additionalProperties: false,
   definitions: derivedPayloadDefinitions,
   allOf: derivedPayloadConditionals,
+});
+
+const trainingImpactContribution = z.strictObject({
+  trainingStressScore: nonNegativeNumber,
+  fitnessLoadCtlContribution: nonNegativeNumber,
+  fatigueLoadAtlContribution: nonNegativeNumber,
+  freshnessFormContribution: number,
+});
+const trainingImpactOutcome = z.strictObject({
+  trainingDay: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  trainingStressScore: nonNegativeNumber,
+  previousFitnessLoadCtl: nonNegativeNumber,
+  fitnessLoadCtl: nonNegativeNumber,
+  fitnessLoadCtlChange: number,
+  previousFatigueLoadAtl: nonNegativeNumber,
+  fatigueLoadAtl: nonNegativeNumber,
+  fatigueLoadAtlChange: number,
+  previousFreshnessForm: number,
+  freshnessForm: number,
+  freshnessFormChange: number,
+  fitnessLoadOutcome: z.enum(['raised', 'held', 'declined']),
+});
+const trainingImpactOutput = z.strictObject({
+  schemaVersion: z.literal(MCP_TRAINING_IMPACT_SCHEMA_VERSION),
+  mode: z.enum(['session', 'day']),
+  localDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable(),
+  timeZone: z.string().min(1).max(80).nullable(),
+  status: z.enum(['ready', 'partial', 'updating', 'unavailable', 'excluded']),
+  reason: z.enum([
+    'partial_coverage',
+    'form_updating',
+    'form_failed',
+    'missing_tss',
+    'benchmark_or_merge',
+    'not_completed',
+    'no_usable_sessions',
+    'training_day_not_available',
+  ]).nullable(),
+  model: z.strictObject({
+    basis: z.literal('TSS'),
+    ctlTimeConstantDays: z.literal(42),
+    atlTimeConstantDays: z.literal(7),
+    measuresPhysiologicalAdaptation: z.literal(false),
+  }),
+  coverage: z.strictObject({
+    requestedSessionCount: count.min(1).max(MCP_TRAINING_IMPACT_MAX_ACTIVITIES),
+    eligibleSessionCount: count.max(MCP_TRAINING_IMPACT_MAX_ACTIVITIES),
+    modeledSessionCount: count.max(MCP_TRAINING_IMPACT_MAX_ACTIVITIES),
+    missingTssSessionCount: count.max(MCP_TRAINING_IMPACT_MAX_ACTIVITIES),
+    excludedSessionCount: count.max(MCP_TRAINING_IMPACT_MAX_ACTIVITIES),
+    benchmarkOrMergeSessionCount: count.max(MCP_TRAINING_IMPACT_MAX_ACTIVITIES),
+    notCompletedSessionCount: count.max(MCP_TRAINING_IMPACT_MAX_ACTIVITIES),
+    unavailableSessionCount: count.max(MCP_TRAINING_IMPACT_MAX_ACTIVITIES),
+  }),
+  contribution: trainingImpactContribution.nullable(),
+  sessionRole: z.enum([
+    'pushed-above-maintenance',
+    'added-to-building-day',
+    'offset-fitness-decay',
+    'no-load',
+  ]).nullable(),
+  outcomes: z.array(trainingImpactOutcome).max(2),
+}).superRefine((value, context) => {
+  const { coverage } = value;
+  const reasonMatchesStatus = value.status === 'ready'
+    ? value.reason === null
+    : value.status === 'partial'
+      ? value.reason === 'partial_coverage'
+      : value.status === 'updating'
+        ? value.reason === 'form_updating'
+        : value.status === 'excluded'
+          ? value.reason === 'benchmark_or_merge'
+            || value.reason === 'not_completed'
+            || value.reason === 'no_usable_sessions'
+          : value.reason === 'form_failed'
+            || value.reason === 'missing_tss'
+            || value.reason === 'no_usable_sessions'
+            || value.reason === 'training_day_not_available';
+  if (!reasonMatchesStatus) {
+    context.addIssue({
+      code: 'custom',
+      path: ['reason'],
+      message: 'Training impact status and reason must match.',
+    });
+  }
+  if (
+    coverage.eligibleSessionCount
+      + coverage.missingTssSessionCount
+      + coverage.excludedSessionCount
+      !== coverage.requestedSessionCount
+    || coverage.modeledSessionCount + coverage.unavailableSessionCount
+      !== coverage.eligibleSessionCount
+    || coverage.benchmarkOrMergeSessionCount + coverage.notCompletedSessionCount
+      !== coverage.excludedSessionCount
+  ) {
+    context.addIssue({
+      code: 'custom',
+      path: ['coverage'],
+      message: 'Training impact coverage counts must reconcile.',
+    });
+  }
+  if (value.mode === 'session') {
+    if (
+      value.localDate !== null
+      || value.timeZone !== null
+      || coverage.requestedSessionCount !== 1
+      || (value.status === 'partial')
+      || ((value.status === 'ready') && value.outcomes.length !== 1)
+    ) {
+      context.addIssue({
+        code: 'custom',
+        path: ['mode'],
+        message: 'Session Training impact must describe exactly one private selection.',
+      });
+    }
+  } else if (
+    value.localDate === null
+    || value.timeZone === null
+    || value.sessionRole !== null
+  ) {
+    context.addIssue({
+      code: 'custom',
+      path: ['mode'],
+      message: 'Day Training impact must retain its local date and timezone.',
+    });
+  }
+  const calculated = value.status === 'ready' || value.status === 'partial';
+  if (calculated) {
+    if (
+      value.contribution === null
+      || value.outcomes.length < 1
+      || coverage.modeledSessionCount < 1
+      || (value.mode === 'session' && value.sessionRole === null)
+      || (value.status === 'ready' && (
+        value.reason !== null
+        || coverage.modeledSessionCount !== coverage.requestedSessionCount
+        || coverage.unavailableSessionCount !== 0
+      ))
+      || (value.status === 'partial' && (
+        value.reason !== 'partial_coverage'
+        || coverage.modeledSessionCount >= coverage.requestedSessionCount
+      ))
+    ) {
+      context.addIssue({
+        code: 'custom',
+        path: ['status'],
+        message: 'Calculated Training impact fields must match readiness and coverage.',
+      });
+    }
+  } else if (
+    value.reason === null
+    || value.contribution !== null
+    || value.sessionRole !== null
+    || value.outcomes.length !== 0
+    || coverage.modeledSessionCount !== 0
+    || coverage.unavailableSessionCount !== coverage.eligibleSessionCount
+    || (value.status === 'excluded'
+      && coverage.excludedSessionCount !== coverage.requestedSessionCount)
+  ) {
+    context.addIssue({
+      code: 'custom',
+      path: ['status'],
+      message: 'Unavailable Training impact must not expose calculated fields.',
+    });
+  }
+  if (new Set(value.outcomes.map(outcome => outcome.trainingDay)).size !== value.outcomes.length) {
+    context.addIssue({
+      code: 'custom',
+      path: ['outcomes'],
+      message: 'Training impact outcomes must use unique UTC Training days.',
+    });
+  }
 });
 
 const sleepProvider = z.enum([
@@ -1450,6 +1627,7 @@ export function createMcpOutputSchemaRegistry(scope: McpOutputSchemaScope) {
       metrics: trainingMetricCatalog,
     }),
     get_training_metric: trainingMetricOutput,
+    get_training_impact: trainingImpactOutput,
     prepare_training_metrics: z.strictObject({
       status: z.enum(['ready', 'preparing', 'unavailable']),
       metricKinds: z.array(z.enum(DERIVED_METRIC_KINDS)).min(1).max(8),

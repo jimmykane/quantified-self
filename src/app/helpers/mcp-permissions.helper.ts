@@ -59,7 +59,7 @@ export const MCP_SCOPE_CONTENT: Record<McpScope, {
   },
   'metrics:read': {
     title: 'Activity and Training metrics',
-    description: 'Read persisted numeric activity metrics and redacted Training-derived snapshots. When individual activity access is also granted, the client can request selected canonical numeric metrics for one activity.',
+    description: 'Read persisted numeric activity metrics and redacted Training-derived snapshots. When Individual activity details is also granted, the client can request selected canonical numeric metrics for one activity, or identity-safe TSS-based Training impact for an exact completed activity or local day. Training impact excludes identities, labels, exact start times, devices, and provider provenance; it is modeled load, not measured physiological adaptation.',
   },
   'measurements:read': {
     title: 'Body measurements',
@@ -71,7 +71,7 @@ export const MCP_SCOPE_CONTENT: Record<McpScope, {
   },
   'activity-details:read': {
     title: 'Individual activity details',
-    description: 'Read non-location activity summaries and their event tags, filter workouts by exact case-insensitive tags, and read laps, swim lengths, MTB jump measurements, selected activity metrics, bounded on-demand chart series, and paginated detailed samples for selected metrics from existing original files. Activities from the same event share tags. Tags can contain personal, health, or location context and are treated as untrusted labels. Detailed samples include every available elapsed-second value with missing readings marked. Exact locations and breadcrumb traces require the separate activity-location permission.',
+    description: 'Read non-location activity summaries and their event tags, filter workouts by exact case-insensitive tags, and read laps, swim lengths, MTB jump measurements, selected activity metrics, bounded on-demand chart series, and paginated detailed samples for selected metrics from existing original files. With Activity and Training metrics access, this also allows identity-safe TSS-based Training impact for exact completed activities or one local date. Activities from the same event share tags. Tags can contain personal, health, or location context and are treated as untrusted labels. Detailed samples include every available elapsed-second value with missing readings marked. Exact locations and breadcrumb traces require the separate activity-location permission.',
   },
   'events:write': {
     title: 'Change events',

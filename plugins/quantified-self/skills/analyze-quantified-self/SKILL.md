@@ -31,6 +31,13 @@ rules, permissions, and coverage distinct until they are aligned for comparison.
    activity types before filtering; use timezone-aware relative periods for today or yesterday, and preserve the same
    filters across bounded scan cursors until the scan is complete. For saved routes, use the same canonical type filter
    and optional case-insensitive route-name search, preserving both filters with every cursor.
+   If a cross-domain comparison needs one completed session's or one local day's Training impact, prepare Form and use
+   the advertised identity-safe impact capability only after resolving the exact activity reference(s). A day request
+   uses the complete bounded activity result for that one local date and timezone, never planned workouts or unrelated
+   history. Keep its single contribution aggregate separate from one or two dated UTC Training-day outcomes. Preserve
+   partial, missing, excluded, updating, and unavailable states, and describe CTL/ATL/Form as a TSS-based load model,
+   not physiological adaptation. Do not expose opaque references, event/activity identity, labels, exact start times,
+   device/provider provenance, or per-session detail reconstructed from a day aggregate.
    For external completed-activity reads, prefer the advertised simple-schema listing. If a strict date-mode query
    fails in the connector before reaching QS, switch to the listing with identical filters once; do not loop on the
    rejected schema or treat the connector error as evidence of no recorded activity.
@@ -69,7 +76,8 @@ rules, permissions, and coverage distinct until they are aligned for comparison.
 - Map each domain to its grant: authored plans/workouts use `training-plans:read`; Training-derived and aggregate
   metrics use `metrics:read`; body measurements use
   `measurements:read`, sleep uses `sleep:read`, individual activities use `activity-details:read`, and saved routes use
-  `routes:read`. Selected per-activity metrics also need `metrics:read`.
+  `routes:read`. Selected per-activity metrics and identity-safe Training impact need `metrics:read` together with
+  `activity-details:read`.
 - All-day Health uses `health:read`, with an additional `measurements:read` grant for identity-free body composition.
   Health sample times are UTC while their calendar dates retain the provider's day. Keep returned provider/account
   series separate; local account ordinals are not stable across calls. Do not blend all-day HRV with Sleep-owned HRV.

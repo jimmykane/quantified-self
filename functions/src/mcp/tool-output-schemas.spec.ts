@@ -478,6 +478,51 @@ const trainingPreviewFixture = { proposalRef: 'opaque-proposal-reference', expir
 const trainingApplyFixture = { proposalRef: 'opaque-proposal-reference', status: 'applied' as const,
   scheduleRevision: 2, changes: [{ index: 0, kind: 'rename-plan', status: 'applied' as const,
     message: 'Renamed the plan.' }], providers: [], createdReferences: [] };
+const trainingImpactFixture = {
+  schemaVersion: 1 as const,
+  mode: 'session' as const,
+  localDate: null,
+  timeZone: null,
+  status: 'ready' as const,
+  reason: null,
+  model: {
+    basis: 'TSS' as const,
+    ctlTimeConstantDays: 42 as const,
+    atlTimeConstantDays: 7 as const,
+    measuresPhysiologicalAdaptation: false as const,
+  },
+  coverage: {
+    requestedSessionCount: 1,
+    eligibleSessionCount: 1,
+    modeledSessionCount: 1,
+    missingTssSessionCount: 0,
+    excludedSessionCount: 0,
+    benchmarkOrMergeSessionCount: 0,
+    notCompletedSessionCount: 0,
+    unavailableSessionCount: 0,
+  },
+  contribution: {
+    trainingStressScore: 42,
+    fitnessLoadCtlContribution: 1,
+    fatigueLoadAtlContribution: 6,
+    freshnessFormContribution: -5,
+  },
+  sessionRole: 'pushed-above-maintenance' as const,
+  outcomes: [{
+    trainingDay: '2026-07-01',
+    trainingStressScore: 42,
+    previousFitnessLoadCtl: 0,
+    fitnessLoadCtl: 1,
+    fitnessLoadCtlChange: 1,
+    previousFatigueLoadAtl: 0,
+    fatigueLoadAtl: 6,
+    fatigueLoadAtlChange: 6,
+    previousFreshnessForm: 0,
+    freshnessForm: -5,
+    freshnessFormChange: -5,
+    fitnessLoadOutcome: 'raised' as const,
+  }],
+};
 
 function createFixtureDataService(
   options: {
@@ -711,6 +756,7 @@ function createFixtureDataService(
         payload: derivedPayloadFixtures[metricKind],
       }),
     ),
+    getTrainingImpact: vi.fn().mockResolvedValue(trainingImpactFixture),
     listSleepVitals: vi.fn().mockResolvedValue({
       matchedSessionCount: 1,
       vitals: [{
@@ -1367,6 +1413,10 @@ const successfulToolArguments: Record<
   get_training_metric: {
     metricKind: DERIVED_METRIC_KINDS.Form,
   },
+  get_training_impact: {
+    mode: 'session',
+    activityRef: ACTIVITY_REF,
+  },
   prepare_training_metrics: { metricKinds: [DERIVED_METRIC_KINDS.Form] },
   list_sleep_vitals: {
     start: '2026-07-01T00:00:00.000Z',
@@ -1953,13 +2003,16 @@ describe.each<FixtureTransport>(['in-memory', 'legacy-http', 'modern-http'])('MC
       openWorldHint: false,
     });
     const sampleTools = tools.filter(tool => tool.name === 'get_activity_samples');
+    const trainingImpactTools = tools.filter(tool => tool.name === 'get_training_impact');
     const readinessTools = tools.filter(tool => ['get_current_readiness', 'get_readiness_history', 'get_daily_report'].includes(tool.name));
     expect(Buffer.byteLength(JSON.stringify(readinessTools), 'utf8')).toBeLessThan(32 * 1024);
     expect(Buffer.byteLength(JSON.stringify(sampleTools), 'utf8')).toBeLessThan(12 * 1024);
+    expect(Buffer.byteLength(JSON.stringify(trainingImpactTools), 'utf8')).toBeLessThan(16 * 1024);
     expect(Buffer.byteLength(JSON.stringify(healthTools), 'utf8')).toBeLessThan(24 * 1024);
     expect(Buffer.byteLength(JSON.stringify(tools.filter(tool => !planTools.includes(tool) && !planWriteTools.includes(tool)
       && !healthTools.includes(tool) && !noteTools.includes(tool) && !sampleTools.includes(tool)
-      && !contentWriteTools.includes(tool) && !readinessTools.includes(tool))), 'utf8'))
+      && !contentWriteTools.includes(tool) && !readinessTools.includes(tool)
+      && !trainingImpactTools.includes(tool))), 'utf8'))
       .toBeLessThan(256 * 1024);
     collectObjectSchemas(tools.map(tool => tool.outputSchema))
       .forEach(schema => expect(schema.additionalProperties).toBe(false));
@@ -2330,6 +2383,244 @@ describe.each<FixtureTransport>(['in-memory', 'legacy-http', 'modern-http'])('MC
         const result = await connection.client.callTool({ name: tool, arguments: successfulToolArguments[tool] });
         expect(result.isError).toBe(true); expect(result).not.toHaveProperty('structuredContent');
         expect(JSON.stringify(result)).not.toContain('PRIVATE-TRAINING-CANARY');
+      }
+    }
+  });
+
+  it('requires metric and activity grants for identity-free Training impact on every transport', async () => {
+    const service = createFixtureDataService();
+    for (const scopes of [
+      [],
+      [MCP_OAUTH_SCOPES.MetricsRead],
+      [MCP_OAUTH_SCOPES.ActivityDetailsRead],
+    ]) {
+      const denied = await connectFixtureServer(service, scopes);
+      connections.push(denied);
+      expect((await denied.client.listTools()).tools.map(tool => tool.name))
+        .not.toContain('get_training_impact');
+    }
+    const connection = await connectFixtureServer(service, [
+      MCP_OAUTH_SCOPES.MetricsRead,
+      MCP_OAUTH_SCOPES.ActivityDetailsRead,
+    ]);
+    connections.push(connection);
+    expect((await connection.client.listTools()).tools.map(tool => tool.name))
+      .toContain('get_training_impact');
+    const args = successfulToolArguments.get_training_impact;
+    for (const injected of [
+      { uid: 'attacker' },
+      { connectionId: 'attacker' },
+      { activityRefs: [ACTIVITY_REF] },
+      { localDate: '2026-07-01' },
+      { timeZone: 'UTC' },
+    ]) {
+      vi.mocked(service.getTrainingImpact).mockClear();
+      const result = await connection.client.callTool({
+        name: 'get_training_impact',
+        arguments: { ...args, ...injected },
+      });
+      expect(result.isError).toBe(true);
+      expect(service.getTrainingImpact).not.toHaveBeenCalled();
+    }
+
+    const ready = await connection.client.callTool({
+      name: 'get_training_impact',
+      arguments: args,
+    });
+    expect(ready.isError).not.toBe(true);
+    expect(ready.structuredContent).toEqual(trainingImpactFixture);
+    expect(service.getTrainingImpact).toHaveBeenLastCalledWith({
+      ...args,
+      uid: 'user-1',
+      connectionId: 'connection-1',
+    });
+
+    const dayArgs = {
+      mode: 'day' as const,
+      activityRefs: [ACTIVITY_REF, 'opaque-activity-reference-2'],
+      localDate: '2026-07-01',
+      timeZone: 'Europe/Helsinki',
+    };
+    const statusCases = [
+      {
+        args,
+        output: {
+          ...trainingImpactFixture,
+          status: 'updating' as const,
+          reason: 'form_updating' as const,
+          coverage: {
+            ...trainingImpactFixture.coverage,
+            modeledSessionCount: 0,
+            unavailableSessionCount: 1,
+          },
+          contribution: null,
+          sessionRole: null,
+          outcomes: [],
+        },
+      },
+      {
+        args,
+        output: {
+          ...trainingImpactFixture,
+          status: 'unavailable' as const,
+          reason: 'missing_tss' as const,
+          coverage: {
+            ...trainingImpactFixture.coverage,
+            eligibleSessionCount: 0,
+            modeledSessionCount: 0,
+            missingTssSessionCount: 1,
+          },
+          contribution: null,
+          sessionRole: null,
+          outcomes: [],
+        },
+      },
+      {
+        args,
+        output: {
+          ...trainingImpactFixture,
+          status: 'excluded' as const,
+          reason: 'benchmark_or_merge' as const,
+          coverage: {
+            ...trainingImpactFixture.coverage,
+            eligibleSessionCount: 0,
+            modeledSessionCount: 0,
+            excludedSessionCount: 1,
+            benchmarkOrMergeSessionCount: 1,
+          },
+          contribution: null,
+          sessionRole: null,
+          outcomes: [],
+        },
+      },
+      {
+        args: dayArgs,
+        output: {
+          ...trainingImpactFixture,
+          mode: 'day' as const,
+          localDate: dayArgs.localDate,
+          timeZone: dayArgs.timeZone,
+          status: 'partial' as const,
+          reason: 'partial_coverage' as const,
+          coverage: {
+            ...trainingImpactFixture.coverage,
+            requestedSessionCount: 2,
+            eligibleSessionCount: 2,
+            unavailableSessionCount: 1,
+          },
+          sessionRole: null,
+        },
+      },
+      {
+        args: dayArgs,
+        output: {
+          ...trainingImpactFixture,
+          mode: 'day' as const,
+          localDate: dayArgs.localDate,
+          timeZone: dayArgs.timeZone,
+          coverage: {
+            ...trainingImpactFixture.coverage,
+            requestedSessionCount: 2,
+            eligibleSessionCount: 2,
+            modeledSessionCount: 2,
+          },
+          sessionRole: null,
+          outcomes: [
+            trainingImpactFixture.outcomes[0],
+            {
+              ...trainingImpactFixture.outcomes[0],
+              trainingDay: '2026-07-02',
+            },
+          ],
+        },
+      },
+    ];
+    for (const statusCase of statusCases) {
+      service.getTrainingImpact = vi.fn().mockResolvedValue(statusCase.output);
+      const result = await connection.client.callTool({
+        name: 'get_training_impact',
+        arguments: statusCase.args,
+      });
+      expect(result.isError, statusCase.output.status).not.toBe(true);
+      expect(result.structuredContent).toEqual(statusCase.output);
+    }
+
+    for (const invalidOutput of [
+      {
+        ...trainingImpactFixture,
+        status: 'updating' as const,
+        reason: 'form_failed' as const,
+        coverage: {
+          ...trainingImpactFixture.coverage,
+          modeledSessionCount: 0,
+          unavailableSessionCount: 1,
+        },
+        contribution: null,
+        sessionRole: null,
+        outcomes: [],
+      },
+      {
+        ...trainingImpactFixture,
+        outcomes: [
+          trainingImpactFixture.outcomes[0],
+          {
+            ...trainingImpactFixture.outcomes[0],
+            trainingDay: '2026-07-02',
+          },
+        ],
+      },
+    ]) {
+      service.getTrainingImpact = vi.fn().mockResolvedValue(invalidOutput);
+      const result = await connection.client.callTool({
+        name: 'get_training_impact',
+        arguments: args,
+      });
+      expect(result.isError).toBe(true);
+      expect(result).not.toHaveProperty('structuredContent');
+    }
+
+    const forbiddenFields = [
+      'eventId',
+      'eventID',
+      'activityId',
+      'activityRef',
+      'title',
+      'label',
+      'provider',
+      'device',
+      'sourceKey',
+      'sourceFingerprint',
+      'source',
+      'filename',
+      'fileName',
+      'connectedAccountId',
+      'providerAccountId',
+      'startTimeMs',
+    ];
+    for (const field of forbiddenFields) {
+      for (const projection of [
+        { ...trainingImpactFixture, [field]: 'PRIVATE-IMPACT-CANARY' },
+        { ...trainingImpactFixture, contribution: {
+          ...trainingImpactFixture.contribution,
+          [field]: 'PRIVATE-IMPACT-CANARY',
+        } },
+        { ...trainingImpactFixture, outcomes: [{
+          ...trainingImpactFixture.outcomes[0],
+          [field]: 'PRIVATE-IMPACT-CANARY',
+        }] },
+        { ...trainingImpactFixture, model: {
+          ...trainingImpactFixture.model,
+          [field]: 'PRIVATE-IMPACT-CANARY',
+        } },
+      ]) {
+        service.getTrainingImpact = vi.fn().mockResolvedValue(projection);
+        const result = await connection.client.callTool({
+          name: 'get_training_impact',
+          arguments: args,
+        });
+        expect(result.isError, field).toBe(true);
+        expect(result).not.toHaveProperty('structuredContent');
+        expect(JSON.stringify(result)).not.toContain('PRIVATE-IMPACT-CANARY');
       }
     }
   });

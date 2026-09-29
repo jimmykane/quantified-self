@@ -82,6 +82,8 @@ describe('McpConnectionsComponent', () => {
     expect(content).toContain('Change Timeline notes');
     expect(content).toContain('Change events');
     expect(content).toContain('Activity and Training metrics');
+    expect(MCP_SCOPE_CONTENT['metrics:read'].description)
+      .toContain('identity-safe TSS-based Training impact');
     expect(content).toContain('Body measurements');
     expect(content).toContain('Health metrics');
     expect(content).toContain('Sleep summaries');

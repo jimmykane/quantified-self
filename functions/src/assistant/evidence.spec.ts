@@ -282,6 +282,92 @@ describe('Assistant evidence', () => {
     expect(evidence.facts).toEqual([]);
   });
 
+  it('presents Training impact as identity-free modeled load evidence', () => {
+    const evidence = buildAssistantEvidence({
+      name: 'get_training_impact',
+      title: 'Get Training impact',
+    }, {
+      status: 'ready',
+      activityRef: 'opaque-ref-must-not-leak',
+      title: 'Private ride title',
+      provider: 'private-provider',
+      contribution: {
+        trainingStressScore: 84,
+        fitnessLoadCtlContribution: 2,
+        fatigueLoadAtlContribution: 12,
+        freshnessFormContribution: -10,
+        eventId: 'private-event-id',
+      },
+      outcomes: [{
+        trainingDay: '2026-09-20',
+        fitnessLoadOutcome: 'rose',
+        fitnessLoadCtlChange: 0.74,
+        startTimeMs: 1_758_345_600_000,
+      }, {
+        trainingDay: '2026-09-21',
+        fitnessLoadOutcome: 'declined',
+        fitnessLoadCtlChange: -0.18,
+      }],
+    });
+
+    expect(evidence.summary).toBe(
+      'TSS-based Training impact is ready; it does not measure physiological adaptation.',
+    );
+    expect(evidence.facts).toEqual([
+      { label: 'Training stress score', value: '84 TSS' },
+      { label: 'Fitness load (CTL)', value: '2' },
+      { label: 'Fatigue load (ATL)', value: '12' },
+      { label: 'Freshness (Form)', value: '-10' },
+      { label: '2026-09-20', value: 'Fitness load rose (0.74 CTL)' },
+      { label: '2026-09-21', value: 'Fitness load declined (-0.18 CTL)' },
+    ]);
+    expect(evidence.links).toEqual([]);
+    expect(JSON.stringify(evidence)).not.toMatch(
+      /opaque-ref|Private ride|private-provider|private-event|startTimeMs|1758345600000/,
+    );
+
+    const session = buildAssistantEvidence({
+      name: 'get_training_impact',
+      title: 'Get Training impact',
+    }, {
+      status: 'ready',
+      sessionRole: 'pushed-above-maintenance',
+      contribution: {
+        trainingStressScore: 42,
+        fitnessLoadCtlContribution: 1,
+        fatigueLoadAtlContribution: 6,
+        freshnessFormContribution: -5,
+      },
+      outcomes: [{
+        trainingDay: '2026-09-20',
+        fitnessLoadOutcome: 'raised',
+        fitnessLoadCtlChange: 1,
+      }],
+    });
+    expect(session.facts).toContainEqual({
+      label: 'Session role',
+      value: 'Helped push the day above maintenance',
+    });
+    expect(session.facts).toContainEqual({
+      label: '2026-09-20',
+      value: 'Fitness load rose (1 CTL)',
+    });
+
+    const excluded = buildAssistantEvidence({
+      name: 'get_training_impact',
+      title: 'Get Training impact',
+    }, {
+      status: 'excluded',
+      reason: 'benchmark_or_merge',
+      contribution: null,
+      outcomes: [],
+    });
+    expect(excluded.facts).toEqual([
+      { label: 'Status', value: 'Excluded' },
+      { label: 'Reason', value: 'Benchmark or merge' },
+    ]);
+  });
+
   it('summarizes bulk exact completion evidence without retaining opaque references', () => {
     const evidence = buildAssistantEvidence({
       name: 'get_planned_workout_completions',

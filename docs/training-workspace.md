@@ -2853,7 +2853,18 @@ calendar grid cells or public activity shares.
 This is a TSS-based model of sustained training load, not a measurement of physiological adaptation. The implementation
 adds only pure shared contribution/day-outcome interfaces beside the canonical Training-load model and consumes the
 existing Form snapshot. It adds no persisted field, schema version, derived-metric kind, backend mutation, provider
-action, consent scope, or MCP wire payload. MCP and Assistant exposure require a separate identity-safe contract review.
+action, or consent scope.
+
+The public MCP and built-in Assistant expose the same calculation through one additive, read-only identity-safe
+contract. It requires both `metrics:read` and `activity-details:read`, prepares the existing Form snapshot, and accepts
+either one previously returned opaque activity reference or 1–32 unique references from a complete bounded activity
+read for one local date and IANA timezone. Session output includes the modeled role. Day output has one aggregate
+contribution and one or two dated UTC Training-day outcomes; it never returns per-session rows. Missing TSS,
+benchmark/merge exclusions, incomplete sessions, partial coverage, stale/building Form, failed Form, and dates outside
+the retained snapshot range stay explicit. The response never echoes opaque references or exposes event/activity IDs,
+titles, labels, exact start times, devices, providers, or source provenance. Reads fetch only the exact referenced
+activity/event documents and the existing Form snapshot; they do not scan activity history. This adds no persisted
+field, derived-metric kind, internal derived schema version, mutation, provider action, or new OAuth scope.
 
 The card starts with a concise interpretation of Form (recent fatigue relative to longer-term fitness) and labels the
 model as TSS-backed workouts only. When the no-workout forecast exists, the only follow-up prompt is to compare that

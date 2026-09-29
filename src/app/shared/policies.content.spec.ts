@@ -156,6 +156,10 @@ describe('MCP client access policy', () => {
     expect(content).toContain('Oversized rankings fail instead of returning a partial result');
     expect(content).toContain('jump count is not treated as jump quality');
     expect(content).toContain('Metric permission');
+    expect(content).toContain('TSS-based Training impact');
+    expect(content).toContain('up to 32 exact activity references');
+    expect(content).toContain('one or two dated UTC Training-day outcomes');
+    expect(content).toContain('models sustained load rather than measured physiological adaptation');
     expect(content).toContain('Body-measurement permission');
     expect(content).toContain('Activity locations and event changes depend on activity details');
     expect(content).toContain('Event changes');

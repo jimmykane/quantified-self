@@ -20,10 +20,17 @@ use the live metric catalog instead of assuming that a metric or Training-derive
    timezone, and activity filters. For a Training-derived snapshot, use the advertised preparation capability for the
    selected catalog kind before reading it. If preparation is pending, retry after its returned delay; read only after
    it reports ready. Use a ready Training snapshot only when its documented window and freshness match the question.
-4. Preserve the returned aggregation, interval, units, sample counts, missing buckets, and snapshot freshness.
-5. Compare totals only with totals and rates or averages only with compatible values. Do not combine unlike activity
+4. For the Training impact of one completed session, first resolve its opaque activity reference. For one local
+   calendar day, complete one bounded activity read for that exact date and timezone, then pass only the unique
+   references returned for that date to the advertised identity-safe impact capability. Prepare Form first. Keep the
+   returned contribution aggregate separate from each dated UTC Training-day outcome; one local date can span two UTC
+   days. Do not add planned workouts, scan unrelated history, reconstruct per-session results from a day aggregate, or
+   expose references, labels, exact times, devices, providers, or source provenance. Preserve partial coverage and
+   missing/excluded/updating states. CTL, ATL, and Form here are modeled from TSS, not measured adaptation.
+5. Preserve the returned aggregation, interval, units, sample counts, missing buckets, and snapshot freshness.
+6. Compare totals only with totals and rates or averages only with compatible values. Do not combine unlike activity
    types unless the user requests an overall view.
-6. For the current recovery-aware readiness score, prefer the server's advertised live-readiness tool when the user
+7. For the current recovery-aware readiness score, prefer the server's advertised live-readiness tool when the user
    also granted `sleep:read`; supply an explicit IANA timezone. Preserve its UTC-day score boundary, local-day context,
    load freshness, recorded-versus-duration sleep score source, seven-day HRV average and source-matched 60-day range,
    separate latest nightly HRV and overnight-heart-rate baselines,
@@ -32,7 +39,7 @@ use the live metric catalog instead of assuming that a metric or Training-derive
    scores use its matching current-history capability with Training, Sleep and Health grants; saved HRV can include
    overnight Health readings. A legacy result is not today's app formula.
    The HRV range matches Health for the same source and evaluation date, independent of the visible chart range.
-7. For a morning or daily readout, use the server's advertised daily report tool only when the user also granted
+8. For a morning or daily readout, use the server's advertised daily report tool only when the user also granted
    `sleep:read`; supply an explicit IANA timezone. Lead with the latest sleep and recorded aggregate HRV/heart-rate
    values, summarize Readiness in one sentence using at most two relevant available drivers, then present the
    current-versus-usual equivalent 28-day Training summary and Running/Cycling/Swimming mix. Treat UTC-day readiness
@@ -42,6 +49,8 @@ use the live metric catalog instead of assuming that a metric or Training-derive
 
 - If a requested metric analysis needs missing `metrics:read`, explain that Activity and Training metrics access must
   be granted through reauthorization. This grant is not needed for planning-only reads.
+- Session/day Training impact also needs `activity-details:read`; it never authorizes activity locations, descriptions,
+  changes, planned-workout reads, or provider actions.
 - The live-readiness and daily-report tools additionally need `sleep:read`; do not reconstruct either from raw sleep
   or turn the result into a workout prescription.
 - Treat an unsupported metric, a supported but not-ready Training snapshot, missing permission, and incomplete page as

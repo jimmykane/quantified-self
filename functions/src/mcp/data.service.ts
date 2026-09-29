@@ -159,6 +159,14 @@ import {
   McpTrainingMetricDescriptor,
 } from './training-metric-catalog';
 import {
+  firestoreTrainingImpactReads,
+  getMcpTrainingImpact,
+  MCP_TRAINING_IMPACT_MAX_ACTIVITIES,
+  McpTrainingImpactError,
+  type McpTrainingImpactMode,
+  type McpTrainingImpactReads,
+} from './training-impact.service';
+import {
   McpMetricDescriptor,
   projectSportsLibNumericMetricValue,
   resolveAvailableSportsLibMetrics,
@@ -524,6 +532,7 @@ export interface McpDataServiceDependencies {
   contentWriteDependencies?: McpContentWriteDependencies;
   trainingReads?: import('./training-plans.service').TrainingReads;
   healthReads?: McpHealthReadDependencies;
+  trainingImpactReads?: McpTrainingImpactReads;
   now: () => number;
   fetchMetricDiscoveryDocuments: (
     uid: string,
@@ -4963,6 +4972,16 @@ export interface GetActivityOverviewInput {
   activityRef: string;
 }
 
+export interface GetTrainingImpactInput {
+  uid: string;
+  connectionId: string;
+  mode: McpTrainingImpactMode;
+  activityRef?: string;
+  activityRefs?: readonly string[];
+  localDate?: string;
+  timeZone?: string;
+}
+
 export interface RankActivitiesByMetricInput {
   uid: string;
   connectionId: string;
@@ -6691,6 +6710,68 @@ export function createMcpDataService(
         sourceEventCount: asNonNegativeNumber(snapshot.sourceEventCount),
         payload: safePayload,
       };
+    },
+
+    async getTrainingImpact(input: GetTrainingImpactInput) {
+      const sessionMode = input.mode === 'session';
+      const dayMode = input.mode === 'day';
+      const rawReferences = sessionMode && typeof input.activityRef === 'string'
+        ? [input.activityRef]
+        : dayMode && Array.isArray(input.activityRefs)
+          ? [...input.activityRefs]
+          : [];
+      if (
+        (!sessionMode && !dayMode)
+        || (sessionMode && (
+          rawReferences.length !== 1
+          || input.activityRefs !== undefined
+          || input.localDate !== undefined
+          || input.timeZone !== undefined
+        ))
+        || (dayMode && (
+          input.activityRef !== undefined
+          || rawReferences.length < 1
+          || rawReferences.length > MCP_TRAINING_IMPACT_MAX_ACTIVITIES
+          || typeof input.localDate !== 'string'
+          || typeof input.timeZone !== 'string'
+        ))
+      ) {
+        throw new McpDataError(
+          'invalid_request',
+          'Choose either one session activityRef or a bounded local day activityRefs selection.',
+        );
+      }
+      const references = rawReferences.map(activityRef => decodeActivityReference(
+        activityRef,
+        input.uid,
+        input.connectionId,
+      ));
+      const reads = dependencies.trainingImpactReads
+        ?? (dependencies === defaultDependencies ? firestoreTrainingImpactReads : null);
+      if (!reads) {
+        throw new McpDataError(
+          'temporarily_unavailable',
+          'Training impact reads are unavailable.',
+        );
+      }
+      try {
+        return await getMcpTrainingImpact({
+          uid: input.uid,
+          mode: input.mode,
+          references,
+          localDate: dayMode ? input.localDate as string : null,
+          timeZone: dayMode ? input.timeZone as string : null,
+          nowMs: dependencies.now(),
+        }, reads);
+      } catch (error) {
+        if (error instanceof McpTrainingImpactError) {
+          throw new McpDataError(error.code, error.message);
+        }
+        throw new McpDataError(
+          'temporarily_unavailable',
+          'Training impact could not be read safely. Try again later.',
+        );
+      }
     },
 
     async getTodayReadiness(
