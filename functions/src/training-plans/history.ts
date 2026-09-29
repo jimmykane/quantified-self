@@ -345,9 +345,12 @@ export async function getTrainingScheduleHistoryForUser(
         const current = await ownerRef.get();
         if (!current.exists) throw new TrainingScheduleMutationError('not-found', 'The workout is no longer available.');
         const workout = parseScheduledWorkoutV1(documentData(current));
-        if (workout.id !== request.scope.id || workout.planId !== null) {
-            throw new TrainingScheduleMutationError('failed-precondition', 'Standalone history is unavailable for this workout.');
+        if (workout.id !== request.scope.id) {
+            throw new TrainingScheduleMutationError('failed-precondition', 'Workout history identity is invalid.');
         }
+        // A workout can retain earlier standalone revisions after joining a
+        // plan. Those immutable entries remain readable, though restore must
+        // still refuse to reclaim it from its current plan.
         if (workout.lifecycle === 'deleted' && !isDeletedWorkoutRecoverable(workout, nowMs)) {
             throw new TrainingScheduleMutationError('failed-precondition', 'This workout\'s 90-day recovery window has ended.');
         }

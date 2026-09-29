@@ -258,6 +258,19 @@ describe('training schedule history reads', () => {
         }, db as never, nowMs)).resolves.toMatchObject({ entries: [] });
     });
 
+    it('keeps earlier standalone history readable after the workout joins a plan', async () => {
+        db.seed('users/user-1/scheduledWorkouts/workout-1', workout({ planId: 'plan-1', revision: 3 }));
+        db.seed('users/user-1/scheduledWorkouts/workout-1/revisions/0000000001', {
+            schemaVersion: 1, revision: 1, operationKind: 'create-workout',
+            mutationId: 'standalone-create', createdAtMs: 1,
+        });
+
+        const response = await getTrainingScheduleHistoryForUser('user-1', {
+            scope: { kind: 'workout', id: 'workout-1' }, limit: 20,
+        }, db as never);
+        expect(response.entries.map(entry => entry.revision)).toEqual([1]);
+    });
+
     it('reconstructs a plan from its nearest checkpoint and immutable deltas', async () => {
         const initialWorkout = workout();
         const updatedWorkout = workout({ revision: 2, title: 'Updated workout', updatedAtMs: 2 });

@@ -636,8 +636,8 @@ packed Sports Lib package. That gate is tracked by GitHub issue #654 under epic 
   delete a lock or job by hand without checking its receipt and tombstone.
 - Deleted-workout expiry uses **no Firestore TTL on workout roots**: TTL would not remove child history and could bypass
   revision, delivery and completion reconciliation. The existing `reconcileTrainingPlanCleanup` scheduler can scan up
-  to 30 expired roots per invocation and permanently delete at most 10 through the normal idempotent mutation and
-  durable cleanup-job path. It rechecks the exact deletion timestamp inside the transaction, plus expected state,
+  to 100 expired roots per invocation in pages of 30 and permanently delete at most 10 through the normal idempotent
+  mutation and durable cleanup-job path. It rechecks the exact deletion timestamp inside the transaction, plus expected state,
   workout and plan revisions, account-deletion guard and plan locks. Concurrent restore, transfer, plan deletion or
   another worker makes the stale candidate defer rather than deleting a changed root. The normal cleanup job retries
   interrupted subtree and reverse-link deletion; delivery ledgers and prior explicit past-copy consent remain
@@ -649,7 +649,9 @@ packed Sports Lib package. That gate is tracked by GitHub issue #654 under epic 
   and owner distribution without exporting prescriptions, inspect cleanup-job backlog and provider state, then obtain
   separate approval identifying the exact project and legacy-root scope. Enable with a bounded observation window;
   monitor `[TrainingWorkoutExpiry]` scanned/deleted/deferred/failed counters and `[TrainingCleanup]` retry failures.
-  A repeatedly deferred root or failed cleanup job needs inspection, not a guessed manual delete. Roll back by
+  Paging lets a blocked first page yield to later candidates; 100 persistently malformed or deferred older roots can
+  still block later roots, so sustained failed/deferred counts require operator inspection rather than a guessed manual
+  delete. Roll back by
   disabling the flag; already committed tombstones and deletions are not reversible. Queue TTL remains a separate
   assessment in #776, not part of this policy.
 - A plan restore that exceeds either the single-transaction payload or write-count budget (including strength

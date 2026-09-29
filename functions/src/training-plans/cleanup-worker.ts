@@ -33,6 +33,7 @@ const MAX_SCAN = 100;
 const LEASE_MS = 7 * 60 * 1000;
 const MAX_RETRY_MS = 60 * 60 * 1000;
 const EXPIRED_SCAN_SIZE = 30;
+const MAX_EXPIRED_SCAN = 100;
 const MAX_EXPIRED_DELETIONS = 10;
 
 function expiredWorkoutOwner(path: string): string | null {
@@ -46,69 +47,79 @@ export async function reconcileExpiredDeletedWorkouts(
     db: admin.firestore.Firestore,
     nowMs = Date.now(),
 ): Promise<{ scanned: number; deleted: number; deferred: number; failed: number }> {
-    const page = await db.collectionGroup(SCHEDULED_WORKOUTS_COLLECTION_ID)
+    const due = db.collectionGroup(SCHEDULED_WORKOUTS_COLLECTION_ID)
         .where('lifecycle', '==', 'deleted')
         .where('deletedAtMs', '<=', nowMs - DELETED_WORKOUT_RECOVERY_MS)
-        .orderBy('deletedAtMs').limit(EXPIRED_SCAN_SIZE).get();
+        .orderBy('deletedAtMs');
+    let cursor: admin.firestore.QueryDocumentSnapshot | null = null;
+    let scanned = 0;
     let deleted = 0;
     let deferred = 0;
     let failed = 0;
-    for (const snapshot of page.docs) {
-        if (deleted >= MAX_EXPIRED_DELETIONS) break;
-        const uid = expiredWorkoutOwner(snapshot.ref.path);
-        if (!uid) { deferred += 1; continue; }
-        try {
-            const workout = parseScheduledWorkoutV1(snapshot.data());
-            if (workout.id !== snapshot.id || isDeletedWorkoutRecoverable(workout, nowMs)) {
-                deferred += 1; continue;
+    while (scanned < MAX_EXPIRED_SCAN && deleted < MAX_EXPIRED_DELETIONS) {
+        const pageSize = Math.min(EXPIRED_SCAN_SIZE, MAX_EXPIRED_SCAN - scanned);
+        const page = await (cursor ? due.startAfter(cursor) : due).limit(pageSize).get();
+        if (page.empty) break;
+        for (const snapshot of page.docs) {
+            if (deleted >= MAX_EXPIRED_DELETIONS) break;
+            scanned += 1;
+            const uid = expiredWorkoutOwner(snapshot.ref.path);
+            if (!uid) { deferred += 1; continue; }
+            try {
+                const workout = parseScheduledWorkoutV1(snapshot.data());
+                if (workout.id !== snapshot.id || isDeletedWorkoutRecoverable(workout, nowMs)) {
+                    deferred += 1; continue;
+                }
+                const user = db.collection('users').doc(uid);
+                const [stateDoc, planDoc, pastCleanupDoc] = await Promise.all([
+                    user.collection('trainingPlanState').doc('current').get(),
+                    workout.planId ? user.collection('trainingPlans').doc(workout.planId).get() : Promise.resolve(null),
+                    user.collection('trainingDeliveryState').doc('current').collection('pastCleanup')
+                        .doc(`workout_${workout.id}`).get(),
+                ]);
+                if (!stateDoc.exists || (workout.planId && !planDoc?.exists)) {
+                    deferred += 1; continue;
+                }
+                const state = parseTrainingPlanStateV1(stateDoc.data());
+                const plan = planDoc ? parseTrainingPlanV1(planDoc.data()) : null;
+                const marker = pastCleanupDoc.data();
+                const removePastProviderCopies = marker?.schemaVersion === 1 && marker.scope === 'workout'
+                    && marker.scopeId === workout.id && marker.enabled === true
+                    && marker.deletedAtMs === workout.deletedAtMs;
+                const mutationId = `expiry_${createHash('sha256')
+                    .update(JSON.stringify([uid, workout.id, workout.deletedAtMs])).digest('hex').slice(0, 48)}`;
+                await mutateTrainingScheduleForUser(uid, {
+                    mutationId,
+                    expectedRevisions: [
+                        { scope: 'state', id: 'current', revision: state.revision },
+                        { scope: 'workout', id: workout.id, revision: workout.revision },
+                        ...(plan ? [{ scope: 'plan' as const, id: plan.id, revision: plan.revision }] : []),
+                    ],
+                    operation: { kind: 'permanently-delete-workout', workoutId: workout.id,
+                        confirmPermanentDeletion: true, removePastProviderCopies },
+                }, {
+                    db, nowMs,
+                    transactionPrecondition: async transaction => {
+                        const latest = await transaction.get(snapshot.ref);
+                        if (!latest.exists) throw new TrainingScheduleMutationError('revision-conflict', 'Workout changed during expiry.');
+                        const current = parseScheduledWorkoutV1(latest.data());
+                        if (current.id !== workout.id || current.deletedAtMs !== workout.deletedAtMs
+                            || isDeletedWorkoutRecoverable(current, nowMs)) {
+                            throw new TrainingScheduleMutationError('revision-conflict', 'Workout changed during expiry.');
+                        }
+                    },
+                });
+                deleted += 1;
+            } catch (error) {
+                if (error instanceof TrainingScheduleMutationError
+                    && ['revision-conflict', 'not-found', 'failed-precondition'].includes(error.code)) deferred += 1;
+                else failed += 1;
             }
-            const user = db.collection('users').doc(uid);
-            const [stateDoc, planDoc, pastCleanupDoc] = await Promise.all([
-                user.collection('trainingPlanState').doc('current').get(),
-                workout.planId ? user.collection('trainingPlans').doc(workout.planId).get() : Promise.resolve(null),
-                user.collection('trainingDeliveryState').doc('current').collection('pastCleanup')
-                    .doc(`workout_${workout.id}`).get(),
-            ]);
-            if (!stateDoc.exists || (workout.planId && !planDoc?.exists)) {
-                deferred += 1; continue;
-            }
-            const state = parseTrainingPlanStateV1(stateDoc.data());
-            const plan = planDoc ? parseTrainingPlanV1(planDoc.data()) : null;
-            const marker = pastCleanupDoc.data();
-            const removePastProviderCopies = marker?.schemaVersion === 1 && marker.scope === 'workout'
-                && marker.scopeId === workout.id && marker.enabled === true
-                && marker.deletedAtMs === workout.deletedAtMs;
-            const mutationId = `expiry_${createHash('sha256')
-                .update(JSON.stringify([uid, workout.id, workout.deletedAtMs])).digest('hex').slice(0, 48)}`;
-            await mutateTrainingScheduleForUser(uid, {
-                mutationId,
-                expectedRevisions: [
-                    { scope: 'state', id: 'current', revision: state.revision },
-                    { scope: 'workout', id: workout.id, revision: workout.revision },
-                    ...(plan ? [{ scope: 'plan' as const, id: plan.id, revision: plan.revision }] : []),
-                ],
-                operation: { kind: 'permanently-delete-workout', workoutId: workout.id,
-                    confirmPermanentDeletion: true, removePastProviderCopies },
-            }, {
-                db, nowMs,
-                transactionPrecondition: async transaction => {
-                    const latest = await transaction.get(snapshot.ref);
-                    if (!latest.exists) throw new TrainingScheduleMutationError('revision-conflict', 'Workout changed during expiry.');
-                    const current = parseScheduledWorkoutV1(latest.data());
-                    if (current.id !== workout.id || current.deletedAtMs !== workout.deletedAtMs
-                        || isDeletedWorkoutRecoverable(current, nowMs)) {
-                        throw new TrainingScheduleMutationError('revision-conflict', 'Workout changed during expiry.');
-                    }
-                },
-            });
-            deleted += 1;
-        } catch (error) {
-            if (error instanceof TrainingScheduleMutationError
-                && ['revision-conflict', 'not-found', 'failed-precondition'].includes(error.code)) deferred += 1;
-            else failed += 1;
         }
+        cursor = page.docs[page.docs.length - 1];
+        if (page.size < pageSize) break;
     }
-    return { scanned: page.size, deleted, deferred, failed };
+    return { scanned, deleted, deferred, failed };
 }
 
 function ownerFromJobPath(path: string): string | null {

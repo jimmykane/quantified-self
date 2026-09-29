@@ -39,12 +39,14 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Training cleanup in isola
         const eligible = user.collection('scheduledWorkouts').doc('eligible');
         await expired.set(deletedWorkout('expired', nowMs - DELETED_WORKOUT_RECOVERY_MS));
         await expired.collection('revisions').doc('0000000001').set({ privateHistory: true });
+        await expired.collection('strengthDetails').doc('current').set({ privateCompanion: true });
         await eligible.set(deletedWorkout('eligible', nowMs - DELETED_WORKOUT_RECOVERY_MS + 1));
         await user.collection('trainingActivityCompletionLinks').doc('old-link').set({ workoutId: 'expired' });
         const result = await reconcileExpiredDeletedWorkouts(db, nowMs);
         expect(result).toMatchObject({ deleted: 1, failed: 0 });
         expect((await expired.get()).exists).toBe(false);
         expect((await expired.collection('revisions').doc('0000000001').get()).exists).toBe(false);
+        expect((await expired.collection('strengthDetails').doc('current').get()).exists).toBe(false);
         expect((await user.collection('trainingActivityCompletionLinks').doc('old-link').get()).exists).toBe(false);
         expect((await eligible.get()).exists).toBe(true);
         expect((await reconcileExpiredDeletedWorkouts(db, nowMs)).deleted).toBe(0);
@@ -99,6 +101,27 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Training cleanup in isola
         } finally {
             await db.recursiveDelete(tombstone);
         }
+    });
+
+    it('pages past a blocked first expiry page to reach a later valid workout', async () => {
+        const uid = `expiry-${randomUUID()}`; uids.push(uid);
+        const user = db.collection('users').doc(uid);
+        await user.set({ test: true });
+        await user.collection('trainingPlanState').doc('current').set(createEmptyTrainingPlanState(nowMs));
+        const malformedDeletedAtMs = nowMs - DELETED_WORKOUT_RECOVERY_MS - 1_000;
+        await Promise.all(Array.from({ length: 30 }, (_, index) => {
+            const id = `invalid-${String(index).padStart(2, '0')}`;
+            return user.collection('scheduledWorkouts').doc(id).set({
+                ...deletedWorkout(id, malformedDeletedAtMs), title: '',
+            });
+        }));
+        const valid = user.collection('scheduledWorkouts').doc('valid-after-blocked-page');
+        await valid.set(deletedWorkout(valid.id, nowMs - DELETED_WORKOUT_RECOVERY_MS));
+
+        const result = await reconcileExpiredDeletedWorkouts(db, nowMs);
+        expect(result.scanned).toBeGreaterThan(30);
+        expect(result.failed).toBeGreaterThanOrEqual(30);
+        expect((await valid.get()).exists).toBe(false);
     });
 
     it('reconciles a committed workout receipt and recursively removes orphaned history', async () => {
