@@ -857,7 +857,16 @@ export const generateAssistantModelAnswer: AssistantRuntimeDependencies['generat
   const dailyWorkoutChangeRequested = input.dailyWorkoutContext !== undefined
     && requestsDailyWorkoutChange(input.prompt);
   const trainingDeliveryRequested = requestsAssistantTrainingDelivery(input.prompt);
-  const createGenkitTools = () => input.tools.map(tool => assistantGenkit.dynamicTool({
+  const requiredDeliveryPreview = trainingDeliveryRequested
+    ? input.tools.find(tool => (TRAINING_PREVIEW_TOOLS as readonly string[]).includes(tool.name))
+    : undefined;
+  const deliveryPreviewInputGuidance = requiredDeliveryPreview?.name === 'preview_training_changes'
+    ? 'For one existing provider-delivery target, pass the exact schedule revision from the read and one change shaped as {kind:"provider-delivery",targetType:"workout" or "plan",target:{ref:"the exact read reference"},providers:["the requested lowercase provider id"],action:"send",timeZone:"the explicit IANA timezone"}. Do not add fields or use a title as the target reference.'
+    : '';
+  const createGenkitTools = (
+    allowedToolNames?: ReadonlySet<AssistantMcpToolName>,
+  ) => input.tools.filter(tool => !allowedToolNames || allowedToolNames.has(tool.name))
+    .map(tool => assistantGenkit.dynamicTool({
     name: tool.name,
     description: tool.description,
     inputJsonSchema: tool.inputJsonSchema,
@@ -883,7 +892,7 @@ export const generateAssistantModelAnswer: AssistantRuntimeDependencies['generat
       ? ASSISTANT_PRECISE_ACTIVITY_LOCATION_INSTRUCTIONS
       : ASSISTANT_INTERNAL_BOUNDARY_INSTRUCTIONS,
     trainingDeliveryRequested
-      ? 'The current message expressly requests a provider delivery action. Keep it inside the reviewable Training proposal and never claim it succeeded before the apply result confirms it.'
+      ? `The current message expressly requests a provider delivery action. Keep it inside the reviewable Training proposal and never claim it succeeded before the apply result confirms it. ${deliveryPreviewInputGuidance}`
       : 'The current message does not request provider delivery. Do not add delivery to a Training proposal and do not mention syncing, sending, a provider, or a watch as an effect of the proposed change.',
     workflowInstructions,
     input.dailyWorkoutContext
@@ -919,12 +928,33 @@ export const generateAssistantModelAnswer: AssistantRuntimeDependencies['generat
   const toolsByName = new Map(input.tools.map(tool => [tool.name, tool]));
   let response = initialResponse;
   let cumulativeToolCallCount = 0;
+  let deliveryPreviewCompleted = false;
+  let deliveryPreviewCorrectionIssued = false;
   for (
     let continuationTurn = 0;
     continuationTurn < ASSISTANT_MAX_MODEL_TURNS_AFTER_INITIAL;
     continuationTurn += 1
   ) {
     if (response.toolRequests.length === 0) {
+      if (requiredDeliveryPreview && !deliveryPreviewCompleted) {
+        if (deliveryPreviewCorrectionIssued) {
+          throw new Error('The Assistant did not prepare the requested provider delivery preview.');
+        }
+        deliveryPreviewCorrectionIssued = true;
+        await input.onBillableAttempt();
+        response = await assistantGenkit.generate({
+          system: `${system} The requested provider delivery still has no reviewable preview. The reads are complete. Call ${requiredDeliveryPreview.name} exactly once now; do not answer with explanatory text instead. ${deliveryPreviewInputGuidance}`,
+          messages: response.messages.filter(message => message.role !== 'system'),
+          tools: createGenkitTools(new Set([requiredDeliveryPreview.name])),
+          toolChoice: 'required',
+          returnToolRequests: true,
+          config: {
+            maxOutputTokens: ASSISTANT_RESPONSE_MODEL_MAX_OUTPUT_TOKENS,
+          },
+          use: [retry(ASSISTANT_MODEL_RETRY_OPTIONS)],
+        });
+        continue;
+      }
       return parseAssistantModelText(response.text);
     }
     cumulativeToolCallCount += response.toolRequests.length;
@@ -938,6 +968,10 @@ export const generateAssistantModelAnswer: AssistantRuntimeDependencies['generat
         throw new Error('The Assistant model selected an unavailable tool.');
       }
       const output = await tool.execute(asToolInput(request.toolRequest.input));
+      if (tool.name === requiredDeliveryPreview?.name
+        && !(typeof output === 'object' && output !== null && 'assistantToolError' in output)) {
+        deliveryPreviewCompleted = true;
+      }
       toolResponses.push({
         toolResponse: {
           name: request.toolRequest.name,

@@ -1326,6 +1326,65 @@ describe('Assistant runtime', () => {
     }));
   });
 
+  it('forces a delivery preview when the model stops after reading the workout', async () => {
+    const readTool: AssistantRuntimeTool = {
+      name: 'get_planned_workout',
+      description: 'Read one planned workout.',
+      inputJsonSchema: { type: 'object', properties: {} },
+      execute: vi.fn().mockResolvedValue({
+        workoutRef: 'workout-ref', title: 'Recovery ride', localDate: '2026-09-25',
+      }),
+    };
+    const previewTool: AssistantRuntimeTool = {
+      name: 'preview_training_changes',
+      description: 'Prepare delivery changes for review.',
+      inputJsonSchema: { type: 'object', properties: {} },
+      execute: vi.fn().mockResolvedValue({ proposalRef: 'proposal-ref' }),
+    };
+    const generate = vi.spyOn(assistantGenkit, 'generate')
+      .mockResolvedValueOnce({
+        toolRequests: [{ toolRequest: { name: 'get_planned_workout',
+          input: { workoutRef: 'workout-ref' }, ref: 'read-1' } }],
+        messages: [],
+      } as never)
+      .mockResolvedValueOnce({
+        toolRequests: [],
+        text: JSON.stringify({ answer: 'A technical issue prevented the preview.',
+          visuals: { chart: null, map: null } }),
+        messages: [],
+      } as never)
+      .mockResolvedValueOnce({
+        toolRequests: [{ toolRequest: { name: 'preview_training_changes',
+          input: { expectedScheduleRevision: 8, changes: [] }, ref: 'preview-1' } }],
+        messages: [],
+      } as never)
+      .mockResolvedValueOnce({
+        toolRequests: [],
+        text: JSON.stringify({ answer: 'Review the Suunto delivery proposal before applying it.',
+          visuals: { chart: null, map: null } }),
+        messages: [],
+      } as never);
+
+    await expect(generateAssistantModelAnswer({
+      currentTime: '2026-09-25T12:00:00.000Z', timeZone: 'Europe/Helsinki',
+      prompt: 'Send the Recovery ride scheduled for today to Suunto. Show me the proposal before applying it.',
+      history: [], mcpInstructions: 'Use current data.', tools: [readTool, previewTool],
+      workflow: null, onBillableAttempt: vi.fn().mockResolvedValue(undefined),
+    })).resolves.toMatchObject({
+      answer: 'Review the Suunto delivery proposal before applying it.',
+    });
+
+    expect(previewTool.execute).toHaveBeenCalledTimes(1);
+    expect(generate).toHaveBeenCalledTimes(4);
+    expect(generate.mock.calls[2]?.[0]).toEqual(expect.objectContaining({
+      toolChoice: 'required',
+      system: expect.stringContaining('still has no reviewable preview'),
+      tools: expect.any(Array),
+    }));
+    expect(generate.mock.calls[2]?.[0].system).toContain('kind:"provider-delivery"');
+    expect(generate.mock.calls[2]?.[0].tools).toHaveLength(1);
+  });
+
   it('rejects non-JSON final model text without enabling provider JSON mode', async () => {
     const tool: AssistantRuntimeTool = {
       name: 'get_daily_report',
