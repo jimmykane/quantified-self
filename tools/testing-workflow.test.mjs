@@ -123,6 +123,8 @@ test('CodeQL keeps branch baselines, fork/feature PR coverage and its scheduled 
   });
   const job = codeql.jobs.analyze;
   assert.equal(job.needs, 'scan_route');
+  // Skipped jobs may display expressions literally; keep the title static.
+  assert.equal(job.name, 'Analyze');
   assert.deepEqual(job.permissions, { actions: 'read', contents: 'read', 'security-events': 'write' });
   assert.deepEqual(job.strategy.matrix.language, ['javascript']);
   const checkout = job.steps.find(step => step.uses === 'actions/checkout@v4');
@@ -151,18 +153,18 @@ test('CodeQL skips only PR duplicates whose own repository branch is push-scanne
     const scan = readFileSync(outputFile, 'utf8').match(/^scan=(true|false)\n$/)?.[1];
     assert.ok(scan, 'The actual routing script must emit one valid scan output');
     const extraContext = { needs: { scan_route: { outputs: { scan } } } };
-    return { runs: evaluate(job.if, github, extraContext), name: evaluate(job.name, github, extraContext) };
+    return evaluate(job.if, github, extraContext);
   }
   for (const branch of ['main', 'develop', 'feature/change', 'feature/nested/change']) {
-    assert.deepEqual(decision('push', false, branch), { runs: true, name: 'Analyze' });
-    assert.deepEqual(decision('pull_request', false, branch), { runs: false, name: 'Internal PR - covered by push' });
-    assert.deepEqual(decision('pull_request', true, branch), { runs: true, name: 'Analyze' });
+    assert.equal(decision('push', false, branch), true);
+    assert.equal(decision('pull_request', false, branch), false);
+    assert.equal(decision('pull_request', true, branch), true);
   }
   for (const branch of ['codex/change', 'fix/change', 'feature-not-covered/change', 'release/change',
     'Main', 'Develop', 'Feature/change']) {
     for (const fork of [false, true]) {
-      assert.deepEqual(decision('pull_request', fork, branch), { runs: true, name: 'Analyze' });
+      assert.equal(decision('pull_request', fork, branch), true);
     }
   }
-  assert.deepEqual(decision('schedule'), { runs: true, name: 'Analyze' });
+  assert.equal(decision('schedule'), true);
 });

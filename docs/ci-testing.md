@@ -27,8 +27,9 @@ explicit dev dependency reusing the already locked parser; it adds no app or Fun
 ## CodeQL routing
 
 CodeQL keeps push scans for `main`, `develop` and `feature/**`, plus its existing weekly scan of the default branch.
-Internal PRs sourced from those branches skip the duplicate analysis with a distinct `Internal PR - covered by push`
-check name. Other internal source branches (including `codex/*`) and all forks still get a PR scan when targeting
+Internal PRs sourced from those branches skip the duplicate analysis. The job uses the static name `Analyze`,
+because GitHub can display name expressions literally for skipped jobs. Other internal source branches
+(including `codex/*`) and all forks still get a PR scan when targeting
 `main` or `develop`; a fork's `develop` or `feature/*` name never counts as coverage from this repository's push run.
 The lightweight routing job uses no token permissions or checkout. Its shell branch matching is case-sensitive:
 `Develop` and `Feature/*` are not treated as the push-scanned `develop` and `feature/**` branches.
@@ -38,7 +39,7 @@ GitHub [maps push-scan findings to open PRs](https://docs.github.com/en/code-sec
 PR-only scans retain checkout's default merge ref. No `pull_request_target`, secrets or deployment permissions are added;
 CodeQL's existing SARIF upload permissions and analysis configuration remain unchanged. The existing in-flight runs
 are unaffected by this routing change. `npm run test:workflows` covers the actual YAML conditions, source branches,
-forks, scan names, permissions and schedule.
+forks, the static scan name, permissions and schedule.
 The routing tests pass a separate temporary regular file as `GITHUB_OUTPUT` for each invocation, read the actual
 script output, and remove the files after the test. Do not replace that file with `/dev/stdout`: reopening a Node
 child-process pipe through that path fails on Linux CI even when it works locally on macOS.
