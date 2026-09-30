@@ -30,6 +30,7 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('COROS strength / producti
   let runtime: DeliveryRuntime;
   let remote: Map<number, CorosTrainingWorkoutV1>;
   let fetcher: ReturnType<typeof vi.fn<typeof fetch>>;
+  let beforeRequest: (() => Promise<void>) | null;
   let afterAcceptance: (() => Promise<void>) | null;
   const user = () => db.collection('users').doc(uid);
   const root = () => db.collection(service.tokens).doc(uid);
@@ -73,7 +74,7 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('COROS strength / producti
 
   beforeEach(async () => {
     uid = `coros-strength-${randomUUID()}`; users.push(uid); now = Date.parse('2026-09-17T10:00:00Z'); pro = true;
-    remote = new Map(); afterAcceptance = null;
+    remote = new Map(); beforeRequest = null; afterAcceptance = null;
     fetcher = vi.fn(async (_url, init) => {
       const form = new URLSearchParams(String(init!.body));
       expect(form.get('openId')).toBe('account-a'); expect(form.get('token')).toBe('synthetic-only');
@@ -91,7 +92,11 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('COROS strength / producti
     });
     const policy = productionDeliveryRuntime(db).transport('coros', uid)!;
     const bind = (operation: Pick<DeliveryOperation, 'destinationKey' | 'connectionGeneration'>) => new CorosTrainingTransport(
-      createCorosTrainingClient(() => authorizeCorosTrainingRequest(db, uid, operation), fetcher, () => now), () => now);
+      createCorosTrainingClient(async () => {
+        const authority = await authorizeCorosTrainingRequest(db, uid, operation);
+        const callback = beforeRequest; beforeRequest = null; if (callback) await callback();
+        return authority;
+      }, fetcher, () => now), () => now);
     runtime = { ...productionDeliveryRuntime(db), now: () => now, hasPro: async () => pro,
       transport: provider => provider !== 'coros' ? null : { ...policy,
         batch: { ...policy.batch!, execute: (operations, beforeSend, guard) => bind(operations[0]).batch.execute(operations, beforeSend, guard) } } };
@@ -150,6 +155,74 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('COROS strength / producti
     if (failure === 'invalid') await companion.update({ exercises: [{ ...draft().exercises[0], sets: [{ ...draft().exercises[0].sets[0], externalLoadKg: -1 }] }] });
     await expect(command()).rejects.toThrow(); expect(fetcher).not.toHaveBeenCalled();
     expect((await user().collection('trainingDeliverySettings').get()).empty).toBe(true);
+  });
+
+  it('keeps local strength compatibility exact when delivery is unavailable without granting consent', async () => {
+    runtime.transport = () => null;
+    const state = await user().collection('trainingPlanState').doc('current').get();
+    const workout = await user().collection('scheduledWorkouts').doc('w').get();
+    const request = { schemaVersion: 1, mutationId: randomUUID(), scope: 'workout', scopeId: 'w', provider: 'coros',
+      action: 'send', timeZone: 'Europe/Helsinki', expectedScheduleRevision: state.get('revision'),
+      expectedScopeRevision: workout.get('revision'), expectedSettingsRevision: 0 };
+    await expect(trainingDeliveryCommand(runtime, uid, request, true)).resolves.toMatchObject({
+      available: false, workoutCompatibility: 'exact', warningCount: 0, approvalRequiredCount: 0,
+    });
+    await expect(trainingDeliveryCommand(runtime, uid, request, false)).rejects.toThrow('not yet available');
+    expect((await user().collection('trainingDeliverySettings').get()).empty).toBe(true);
+    expect(fetcher).not.toHaveBeenCalled();
+  });
+
+  it.each(['edit', 'stop'] as const)('fences a %s committed after payload construction but before HTTP', async change => {
+    const id = await send();
+    beforeRequest = async () => { if (change === 'edit') await save(82.5); else await command('stop'); };
+    await processTrainingDelivery(runtime, uid, id);
+    expect(fetcher).not.toHaveBeenCalled(); expect(remote.size).toBe(0);
+    expect((await ledger()).attempt).toBeNull();
+    await drain(); await processTrainingDelivery(runtime, uid, id);
+    if (change === 'stop') {
+      expect(fetcher).not.toHaveBeenCalled();
+      expect(await ledger()).toMatchObject({ status: 'removed', desired: 'absent', actual: null, attempt: null });
+    } else {
+      expect(fetcher).toHaveBeenCalledTimes(1); expect((await ledger()).status).toBe('delivered');
+      expect([...remote.values()][0].Structure[0]).toMatchObject({ IntensityTarget: { Value: 82.5 } });
+    }
+  });
+
+  it.each(['edit', 'stop'] as const)('retains one accepted identity and reconciles a concurrent %s without replaying stale strength', async change => {
+    const id = await send();
+    afterAcceptance = async () => {
+      if (change === 'edit') await save(82.5); else await command('stop');
+      await drain();
+    };
+    await processTrainingDelivery(runtime, uid, id);
+    const original = (await ledger()).actual!;
+    expect((await ledger()).status).toBe('pending'); expect(remote.size).toBe(1);
+    await drain(); await processTrainingDelivery(runtime, uid, id);
+    expect(fetcher).toHaveBeenCalledTimes(2);
+    if (change === 'stop') {
+      expect(remote.size).toBe(0); expect((await ledger()).status).toBe('removed');
+    } else {
+      expect(remote.size).toBe(1); expect((await ledger()).status).toBe('delivered');
+      expect((await ledger()).actual!.ids).toEqual(original.ids);
+      expect(remote.get(Number(original.ids.workout))!.Structure[0]).toMatchObject({ IntensityTarget: { Value: 82.5 } });
+    }
+  });
+
+  it('removes a future retained strength copy after permanent local deletion without recreating the companion', async () => {
+    const id = await send(); await processTrainingDelivery(runtime, uid, id);
+    const original = (await ledger()).actual!;
+    await mutate({ kind: 'delete-workout', workoutId: 'w' });
+    await mutate({ kind: 'permanently-delete-workout', workoutId: 'w', confirmPermanentDeletion: true });
+    const workout = user().collection('scheduledWorkouts').doc('w');
+    expect((await workout.get()).exists).toBe(false);
+    expect((await workout.collection('strengthDetails').get()).empty).toBe(true);
+    await drain(); pro = false; await processTrainingDelivery(runtime, uid, id);
+    expect(remote.size).toBe(0); expect((await ledger()).status).toBe('removed');
+    expect(fetcher).toHaveBeenCalledTimes(2);
+    const deletion = new URLSearchParams(String(fetcher.mock.calls[1][1]!.body));
+    expect(JSON.parse(deletion.get('workoutIds')!)).toEqual([Number(original.ids.workout)]);
+    expect((await workout.get()).exists).toBe(false);
+    expect((await workout.collection('strengthDetails').get()).empty).toBe(true);
   });
 
   it('retains uncertain accepted strength without blindly repeating the push, even after Retry', async () => {

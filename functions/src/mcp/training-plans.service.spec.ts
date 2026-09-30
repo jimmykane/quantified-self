@@ -80,6 +80,11 @@ describe('Training plan MCP reads', () => {
     await expect(f.run('assess_planned_workout_compatibility', { workoutRef, providers: ['coros'] })).rejects.toThrow();
     f.strengthDocs.w1 = { ...details, workoutId: 'foreign-workout' };
     await expect(f.run('assess_planned_workout_compatibility', { workoutRef, providers: ['coros'] })).rejects.toThrow();
+    f.strengthDocs.w1 = { ...details, exercises: [{ ...details.exercises[0],
+      sets: [{ ...details.exercises[0].sets[0], externalLoadKg: -1 }] }] };
+    await expect(f.run('assess_planned_workout_compatibility', { workoutRef, providers: ['coros'] })).rejects.toThrow();
+    delete f.strengthDocs.w1;
+    await expect(f.run('assess_planned_workout_compatibility', { workoutRef, providers: ['coros'] })).rejects.toThrow();
   });
   it('keeps plan reads available to any consenting owner without a frontend rollout identity', async () => {
     const f = fixture();

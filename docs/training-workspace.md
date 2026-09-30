@@ -1339,9 +1339,13 @@ projection to 100 nodes, including rests. QS's kg/lb presentation remains Sports
 Assessment, the production wrapper and batch payload construction all use the companion. Missing, foreign, malformed or
 projection-mismatched details fail closed before HTTP. The full exercises participate in strength mapping/content
 digests: load-only edits cannot be mistaken for already delivered content, and payload construction rejects a stale
-digest before the started request journal. Existing non-strength digests/fixtures are unchanged. Deletion works from
-retained IDs without requiring the companion; only unexecuted today/future copies are eligible, even with explicit
-past-cleanup opt-in. Synthetic production-policy/HTTP/demo-Firestore tests cover standalone/active-plan create, update,
+digest before the started request journal. The no-transport preview fallback also receives the complete companion:
+local compatibility can remain exact while delivery is unavailable, without granting consent or permitting a send.
+Load-only edits or Stop committed before HTTP supersede the stale attempt; edits/Stop during acceptance retain the
+accepted identity and reconcile the latest intent rather than replaying stale strength. Existing non-strength
+digests/fixtures are unchanged. After permanent source deletion, transport withdrawal uses retained IDs without
+recreating or requiring a companion; existing source records still require valid matching details. Only unexecuted
+today/future copies are eligible, even with explicit past-cleanup opt-in. Synthetic production-policy/HTTP/demo-Firestore tests cover standalone/active-plan create, update,
 reschedule, duplicate/concurrent dispatch, uncertain acceptance, reconnect, owner/account isolation and deletion fencing.
 Live COROS entitlement, push/update/delete and app/watch evidence are deliberately omitted from this implementation
 at the owner's request and remain unchecked in #741. The Coming soon browser gate and backend enablement are unchanged.
