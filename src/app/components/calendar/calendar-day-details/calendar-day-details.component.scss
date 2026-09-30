@@ -28,6 +28,8 @@
   letter-spacing: 0;
   // Small contribution text needs contrast on the shared overlay in both themes.
   --training-impact-compact-value-color: var(--mat-sys-on-surface);
+  // Keep dated CTL outcomes and unavailable reasons readable on narrow sheets.
+  --training-impact-compact-white-space: normal;
 }
 
 .calendar-day-details-content {

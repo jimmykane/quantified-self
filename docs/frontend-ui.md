@@ -251,7 +251,9 @@ Preview and sheet row titles use on-surface text for readability in both themes;
 primary color. Loading/error copy uses the same compact metadata typography, and numeric counts retain
 Barlow Condensed without inheriting a metadata font reset.
 The sheet reuses the previews' compact Training-impact variant: an outcome headline and CTL/ATL/Form contribution line,
-with separate dated lines when activities span two UTC Training days. Partial-coverage warnings remain visible beside
+with separate dated lines when activities span two UTC Training days. Sheet impact text wraps at narrow widths so
+dated CTL results and unavailable reasons remain readable; the component's whitespace token keeps other previews unchanged.
+Partial-coverage warnings remain visible beside
 the total; updating/unavailable/error copy and accessible full metric labels stay explicit. The full day retains its
 detailed impact summary and model disclaimer. Compact contribution values in the sheet use on-surface text via the
 component's compact-value foreground token so small numeric text remains readable on both overlay themes; other

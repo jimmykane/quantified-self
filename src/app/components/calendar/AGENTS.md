@@ -14,3 +14,4 @@
   the full day, selected-day previews, and Plans; do not remove those actions when simplifying the sheet.
 - The sheet uses the shared compact Training-impact variant and one wrapping scope/status metadata line per workout.
   Keep step details in the opened workout; preserve impact coverage warnings, statuses, and separate UTC-day outcomes.
+  Compact impact text in the sheet must wrap rather than truncate outcome values or unavailable reasons on a narrow screen.

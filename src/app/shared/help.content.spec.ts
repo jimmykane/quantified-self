@@ -184,6 +184,7 @@ describe('help.content', () => {
     expect(calendar).toContain('one plan/status metadata line; tap a workout to read its steps');
     expect(calendar).toContain('same compact **Training impact** summary as Calendar and Dashboard previews');
     expect(calendar).toContain('Separate UTC-day outcomes and missing-data warnings stay explicit');
+    expect(calendar).toContain('Impact text wraps on narrow screens so outcome values and unavailable reasons remain readable');
     expect(calendar).toContain("offers **Dashboard** to return when opened from the dashboard tile or Today's mini-calendar");
     const dashboard = HELP_SECTIONS.find(section => section.id === 'getting-started')?.content;
     expect(dashboard).toContain('HRV, Sleep, Form, and Freshness Forecast show the same note markers');

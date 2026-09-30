@@ -2895,7 +2895,9 @@ calendar grid cells or public activity shares.
 
 The day bottom sheet and Calendar/Dashboard previews use the same compact Training-impact variant: the day outcome
 headline plus CTL/ATL/Form contributions, with separate dated outcome lines for two UTC Training days. The sheet keeps
-partial-coverage warnings beside that total and explicit updating, unavailable, and failure states; full metric labels
+partial-coverage warnings beside that total and explicit updating, unavailable, and failure states. Compact impact text
+wraps within the sheet instead of clipping dated CTL changes or unavailable reasons on a narrow screen; other previews
+retain their existing layout. Full metric labels
 and exact day outcomes remain accessible. **Full day** provides the detailed impact breakdown and model disclaimer.
 This density change reuses the existing Form data and does not change MCP/Assistant contracts, scopes, consent,
 calculations, provider behavior, or refresh subscriptions.

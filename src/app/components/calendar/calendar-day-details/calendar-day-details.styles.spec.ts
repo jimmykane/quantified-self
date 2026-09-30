@@ -47,6 +47,26 @@ describe('compact day-sheet styles', () => {
     expect(declarations(container, '--training-impact-compact-value-color')).toEqual(['var(--mat-sys-on-surface)']);
   });
 
+  it('wraps compact impact text in the sheet without changing other preview layouts', () => {
+    const container = document.querySelector('.calendar-day-details')!;
+    expect(declarations(container, '--training-impact-compact-white-space')).toEqual(['normal']);
+    const impact = compile('src/app/components/training-impact/training-impact.component.scss');
+    const textRules: Rule[] = [];
+    impact.walkRules(rule => {
+      if (rule.selector.includes('.training-impact-compact > span')) textRules.push(rule);
+    });
+    expect(textRules).toHaveLength(1);
+    expect(textRules[0].selector).toContain('.training-impact-compact > strong');
+    expect(textRules[0].selector).toContain('.training-impact-compact-outcomes > span');
+    const wrapping: string[] = [];
+    textRules[0].walkDecls('white-space', declaration => { wrapping.push(declaration.value); });
+    expect(wrapping).toEqual(['var(--training-impact-compact-white-space, nowrap)']);
+    const context = compile('src/app/components/calendar/calendar-day-context/calendar-day-context.component.scss');
+    const previewOverrides: string[] = [];
+    context.walkDecls('--training-impact-compact-white-space', declaration => { previewOverrides.push(declaration.value); });
+    expect(previewOverrides).toEqual([]);
+  });
+
   it('shares compact recovery typography without shrinking the full-day metrics', () => {
     const context = compile('src/app/components/calendar/calendar-day-context/calendar-day-context.component.scss');
     const compactRules: Rule[] = [];
