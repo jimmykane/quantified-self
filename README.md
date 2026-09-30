@@ -161,6 +161,8 @@ Never commit environment files, service-account JSON, API tokens, private keys, 
 | Functions tests | `npm --prefix functions test` | One-shot Vitest suite |
 | Functions coverage | `npm --prefix functions run test:coverage` | Writes the Functions coverage report |
 | Functions build | `npm --prefix functions run build` | Compiles TypeScript to `functions/lib` |
+| Functions emulator tests | `npm run test:functions-emulators -- lifecycle` | Builds first; use no argument for all four isolated demo groups |
+| Emulator CI coverage guard | `npm run test:emulator-coverage` | Rejects missing/duplicate suites, unsafe environments and skipped coverage |
 | Functions lint | `npm --prefix functions run lint` | Runs ESLint with `--fix` and may edit files |
 | Install Git hooks | `npm run hooks:install` | Reinstalls the repository Lefthook hooks; `npm ci` normally installs them automatically |
 | Test the local credential guard | `npm run credentials:test` | Checks the staged-file rejection policy without reading credential values |
@@ -223,6 +225,7 @@ Unified health history under `users/{uid}/healthSourceRecords` and `healthSample
 
 ## Architecture documentation
 
+- [CI test coverage and emulator isolation](docs/ci-testing.md)
 - [Reusable event tag catalog and backfill](docs/event-tag-catalog.md)
 - [Firebase Functions target-aware entrypoint loading](docs/functions-entrypoint-loading.md)
 - [Admin dashboard aggregate user history](docs/admin-dashboard-history.md)

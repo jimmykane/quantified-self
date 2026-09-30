@@ -49,6 +49,9 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Check emulator suite coverage and safety
+        run: npm run test:emulator-coverage
+
       - name: Validate local Quantified Self plugin
         env:
           QS_CHATGPT_APP_ID: plugin_asdk_app_ci_fixture
@@ -89,13 +92,53 @@ jobs:
       - name: Run firestore rules tests
         run: npm run test:rules
 
-      - name: Test interrupted provider disconnects against Firestore
-        run: npm run test:disconnect
-
-      - name: Test training delivery lifecycle against Firestore
-        run: npm run test:training-delivery
-
       - name: Run app tests
         env:
           NODE_OPTIONS: --max-old-space-size=3072
         run: npm run test -- --run
+
+  functions_emulators:
+    name: Functions emulators (${{ matrix.group }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        group: ["delivery", "lifecycle", "completion", "mcp-data"]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref || github.sha }}
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            functions/package-lock.json
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '21'
+
+      - name: Cache emulator binaries
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/firebase/emulators
+          key: firebase-emulators-${{ runner.os }}-v1
+
+      - name: Install dependencies and Firebase Tools
+        run: |
+          npm ci
+          npm --prefix functions ci
+          npm install -g firebase-tools
+
+      - name: Check emulator suite coverage and safety
+        run: npm run test:emulator-coverage
+
+      - name: Run isolated Functions emulator tests
+        run: npm run test:functions-emulators -- ${{ matrix.group }}
