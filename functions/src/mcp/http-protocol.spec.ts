@@ -9,7 +9,7 @@ import {
   PROTOCOL_VERSION_META_KEY,
 } from '@modelcontextprotocol/server';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-import { MCP_OAUTH_SCOPES, McpOAuthError } from './oauth.service';
+import { MCP_OAUTH_SCOPES, McpBearerAuthenticationError, McpOAuthError } from './oauth.service';
 import { McpTrainingPreviewLoopGuardError } from './training-preview-loop-guard';
 import { mcpApi } from './server';
 
@@ -213,6 +213,50 @@ describe('MCP Function protocol compatibility', () => {
     expect(response.status).toBe(401);
     expect(response.headers.get('www-authenticate')).toContain('resource_metadata=');
     expect(authenticateBearer).not.toHaveBeenCalled();
+    expect(info).toHaveBeenCalledExactlyOnceWith('[MCP] Bearer authentication challenge', {
+      reason: 'missing_bearer', clientFamily: 'claude',
+    });
+    expect(warn).not.toHaveBeenCalled();
+  });
+
+  it('uses an informational challenge for a Grok request without credentials', async () => {
+    const response = await fetch(url, { method: 'GET', headers: { 'user-agent': 'Grok' } });
+    expect(response.status).toBe(401);
+    expect(response.headers.get('www-authenticate')).toContain('resource_metadata=');
+    expect(authenticateBearer).not.toHaveBeenCalled();
+    expect(info).toHaveBeenCalledExactlyOnceWith('[MCP] Bearer authentication challenge', {
+      reason: 'missing_bearer', clientFamily: 'grok',
+    });
+    expect(warn).not.toHaveBeenCalled();
+  });
+
+  it.each(['Basic private-secret', 'Bearer private secret'])('warns on malformed credentials without logging them', async authorization => {
+    const response = await post(modernRequest(), {
+      authorization, 'user-agent': 'grok-connectors-manager/0.1.0',
+    });
+    expect(response.status).toBe(401);
+    expect(response.headers.get('www-authenticate')).toContain('resource_metadata=');
+    expect(authenticateBearer).not.toHaveBeenCalled();
+    expect(warn).toHaveBeenCalledExactlyOnceWith('[MCP] Bearer authentication rejected', {
+      reason: 'malformed_bearer', clientFamily: 'grok',
+    });
+    expect(info).not.toHaveBeenCalled();
+    expect(JSON.stringify(warn.mock.calls)).not.toContain('private-secret');
+    expect(JSON.stringify(warn.mock.calls)).not.toContain('private secret');
+  });
+
+  it('keeps superseded grants as warnings and leaves the 401 challenge unchanged', async () => {
+    authenticateBearer.mockRejectedValueOnce(new McpBearerAuthenticationError(
+      'superseded_grant', 'The MCP authorization grant was superseded.',
+    ));
+    const response = await post(modernRequest(), {
+      'user-agent': 'grok-connectors-manager/0.1.0',
+    });
+    expect(response.status).toBe(401);
+    expect(response.headers.get('www-authenticate')).toContain('error="invalid_token"');
+    expect(warn).toHaveBeenCalledExactlyOnceWith('[MCP] Bearer authentication rejected', {
+      reason: 'superseded_grant', clientFamily: 'grok',
+    });
     expect(info).not.toHaveBeenCalled();
   });
 
