@@ -259,6 +259,61 @@ describe('durable Training cleanup worker', () => {
         expect(collectionGroup).not.toHaveBeenCalled();
     });
 
+    it('retains completed-batch progress when its checkpoint save fails and the release retries it', async () => {
+        let nextIndex = 0;
+        let pageSize = 30;
+        const deletedAtMs = nowMs - 100_000_000_000;
+        const query = {
+            where: vi.fn(), orderBy: vi.fn(), limit: vi.fn(), startAfter: vi.fn(),
+            get: vi.fn(async () => {
+                const docs = Array.from({ length: pageSize }, () => {
+                    const id = `invalid-${nextIndex++}`;
+                    return { id, ref: { path: `users/owner-1/scheduledWorkouts/${id}` },
+                        get: () => deletedAtMs, data: () => ({}) };
+                });
+                return { empty: false, size: docs.length, docs };
+            }),
+        };
+        for (const method of ['where', 'orderBy', 'startAfter'] as const) query[method].mockReturnValue(query);
+        query.limit.mockImplementation(count => { pageSize = count; return query; });
+        const expiryDb = Object.assign(new FakeDb(), { collectionGroup: vi.fn(() => query) });
+        const transaction = expiryDb.runTransaction.bind(expiryDb);
+        const transactionSpy = vi.spyOn(expiryDb, 'runTransaction')
+            .mockImplementationOnce(transaction)
+            .mockRejectedValueOnce(new Error('checkpoint write unavailable'));
+        try {
+            await expect(runTrainingWorkoutExpiry(expiryDb as never, nowMs))
+                .rejects.toThrow('checkpoint write unavailable');
+        } finally {
+            transactionSpy.mockRestore();
+        }
+        const cursor = { deletedAtMs, documentPath: 'users/owner-1/scheduledWorkouts/invalid-99' };
+        expect(expiryDb.docs.get(WORKOUT_EXPIRY_CHECKPOINT_PATH)).toMatchObject({
+            cursor, leaseId: null, leaseUntilMs: 0,
+        });
+        expect(logger.error).toHaveBeenCalledWith('[TrainingWorkoutExpiry]', {
+            event: 'sweep_failed', scanned: 100, deleted: 0, deferred: 0, failed: 100,
+            batches: 1, moreDue: null, stopReason: 'sweep-error',
+        });
+        query.get.mockResolvedValue({ empty: true, size: 0, docs: [] });
+        await runTrainingWorkoutExpiry(expiryDb as never, nowMs);
+        expect(query.startAfter).toHaveBeenLastCalledWith(deletedAtMs,
+            expect.objectContaining({ path: cursor.documentPath }));
+        expect(expiryDb.docs.get(WORKOUT_EXPIRY_CHECKPOINT_PATH)?.cursor).toBeNull();
+    });
+
+    it('rejects checkpoint writes after lease expiry even without a replacement worker', async () => {
+        const lease = (await claimWorkoutExpiryCheckpoint(db as never))!;
+        const cursor = { deletedAtMs: nowMs, documentPath: 'users/owner-1/scheduledWorkouts/deleted' };
+        await saveWorkoutExpiryCheckpoint(db as never, lease.leaseId, cursor);
+        db.docs.set(WORKOUT_EXPIRY_CHECKPOINT_PATH, {
+            ...db.docs.get(WORKOUT_EXPIRY_CHECKPOINT_PATH), leaseUntilMs: Date.now() - 1,
+        });
+        await expect(saveWorkoutExpiryCheckpoint(db as never, lease.leaseId, null, true))
+            .rejects.toThrow('lease lost');
+        expect(db.docs.get(WORKOUT_EXPIRY_CHECKPOINT_PATH)).toMatchObject({ cursor, leaseId: lease.leaseId });
+    });
+
     function seedWorkout(): FakeRef {
         const ref = jobRef('workout', 'workout-1') as unknown as FakeRef;
         db.docs.set(ref.path, trainingCleanupJob('workout', 'workout-1', 'mutation-1', nowMs));
