@@ -19,11 +19,15 @@
       <h3 id="calendar-day-notes-title">Timeline notes</h3>
       <mat-action-list>
         @for (row of noteRows(); track row.note.id) {
-        <button mat-list-item appHapticTap [lines]="3" type="button" (click)="selectNote(row.note.id)">
-          <mat-icon matListItemIcon [style.color]="row.color" aria-hidden="true">{{ row.icon }}</mat-icon>
-          <span matListItemTitle>{{ row.note.title }}</span>
-          <span matListItemLine>{{ row.category }}</span>
-          <span matListItemLine>{{ row.dates }}</span>
+        <button mat-list-item appHapticTap class="calendar-day-entry-item" type="button" (click)="selectNote(row.note.id)">
+          <span class="calendar-day-entry">
+            <mat-icon class="calendar-day-entry-icon" [style.color]="row.color" aria-hidden="true">{{ row.icon }}</mat-icon>
+            <span class="calendar-day-entry-copy">
+              <span class="calendar-day-entry-title">{{ row.note.title }}</span>
+              <span class="calendar-day-entry-supporting">{{ row.category }}</span>
+              <span class="calendar-day-entry-supporting">{{ row.dates }}</span>
+            </span>
+          </span>
         </button>
         }
       </mat-action-list>
@@ -54,16 +58,18 @@
         @for (planned of plannedWorkoutRows(); track planned.id) {
         <div class="calendar-day-planned-row" role="presentation" [style.--planned-workout-color]="planned.color">
           <span class="calendar-day-planned-accent" aria-hidden="true"></span>
-          <a mat-list-item appHapticTap class="calendar-day-planned-item" [routerLink]="['/training/plans/workout', planned.id]"
+          <a mat-list-item appHapticTap class="calendar-day-entry-item calendar-day-planned-item" [routerLink]="['/training/plans/workout', planned.id]"
             (click)="prepareWorkoutNavigation()">
-            <app-activity-type-icon matListItemIcon [activityType]="planned.sport" size="24px"
-              aria-hidden="true"></app-activity-type-icon>
-            <span matListItemTitle>{{ planned.title }}</span>
-            <span matListItemLine>{{ planned.scopeLabel }} · {{ planned.lifecycleLabel }}</span>
-            <span matListItemLine class="calendar-day-planned-summary">{{ planned.summary.join(' · ') }}</span>
-            <span matListItemMeta class="calendar-day-item-meta" aria-hidden="true">
-              <mat-icon>chevron_right</mat-icon>
-            </span>
+            <div class="calendar-day-entry">
+              <app-activity-type-icon class="calendar-day-entry-icon" [activityType]="planned.sport" size="20px"
+                aria-hidden="true"></app-activity-type-icon>
+              <div class="calendar-day-entry-copy">
+                <span class="calendar-day-entry-title">{{ planned.title }}</span>
+                <span class="calendar-day-entry-supporting">{{ planned.scopeLabel }} · {{ planned.lifecycleLabel }}</span>
+                <span class="calendar-day-entry-supporting">{{ planned.summary.join(' · ') }}</span>
+              </div>
+              <mat-icon class="calendar-day-item-meta" aria-hidden="true">chevron_right</mat-icon>
+            </div>
           </a>
           <button mat-icon-button appHapticTap type="button" matTooltip="Duplicate to…"
             [attr.aria-label]="'Duplicate ' + planned.title + ' to a chosen date'"
@@ -110,57 +116,61 @@
       <mat-nav-list>
         @for (event of eventRows(); track event.id) {
           @if (event.route) {
-          <a mat-list-item appHapticTap class="calendar-day-event-item"
-            [class.calendar-day-event-item-with-metrics]="event.metricStats.length > 0" [routerLink]="event.route"
+          <a mat-list-item appHapticTap class="calendar-day-entry-item calendar-day-event-item" [routerLink]="event.route"
             (click)="prepareEventNavigation(event.route)">
-            <app-activity-type-icon matListItemIcon class="calendar-day-event-icon" [activityType]="event.activityType" size="24px"
-              aria-hidden="true"></app-activity-type-icon>
-            <span matListItemTitle>{{ event.label }}</span>
-            <div matListItemLine class="calendar-day-event-supporting">
-              <span class="calendar-day-event-detail">
-                @for (part of event.detailParts; track $index) {
-                  @if (!$first) {
-                    <span> - </span>
+            <div class="calendar-day-entry">
+              <app-activity-type-icon class="calendar-day-entry-icon" [activityType]="event.activityType" size="20px"
+                aria-hidden="true"></app-activity-type-icon>
+              <div class="calendar-day-entry-copy">
+                <span class="calendar-day-entry-title">{{ event.label }}</span>
+                <div class="calendar-day-event-supporting">
+                  <span class="calendar-day-event-detail">
+                    @for (part of event.detailParts; track $index) {
+                      @if (!$first) {
+                        <span> - </span>
+                      }
+                      <span [class.calendar-day-event-metric]="part.isNumeric">{{ part.text }}</span>
+                    }
+                  </span>
+                  @if (event.metricStats.length) {
+                  <app-activity-calendar-volume-stats class="calendar-day-event-metrics"
+                    [stats]="event.metricStats"></app-activity-calendar-volume-stats>
                   }
-                  <span [class.calendar-day-event-metric]="part.isNumeric">{{ part.text }}</span>
-                }
-              </span>
-              @if (event.metricStats.length) {
-              <app-activity-calendar-volume-stats class="calendar-day-event-metrics"
-                [stats]="event.metricStats"></app-activity-calendar-volume-stats>
-              }
-              @if (trainingImpactState().status !== 'private') {
-              <app-training-impact class="calendar-day-event-impact" [impact]="event.trainingImpact"
-                variant="compact"></app-training-impact>
-              }
+                  @if (trainingImpactState().status !== 'private') {
+                  <app-training-impact class="calendar-day-event-impact" [impact]="event.trainingImpact"
+                    variant="compact"></app-training-impact>
+                  }
+                </div>
+              </div>
+              <mat-icon class="calendar-day-item-meta" aria-hidden="true">chevron_right</mat-icon>
             </div>
-            <span matListItemMeta class="calendar-day-item-meta" aria-hidden="true">
-              <mat-icon>chevron_right</mat-icon>
-            </span>
           </a>
           } @else {
-          <div mat-list-item class="calendar-day-event-item"
-            [class.calendar-day-event-item-with-metrics]="event.metricStats.length > 0">
-            <app-activity-type-icon matListItemIcon class="calendar-day-event-icon" [activityType]="event.activityType" size="24px"
-              aria-hidden="true"></app-activity-type-icon>
-            <span matListItemTitle>{{ event.label }}</span>
-            <div matListItemLine class="calendar-day-event-supporting">
-              <span class="calendar-day-event-detail">
-                @for (part of event.detailParts; track $index) {
-                  @if (!$first) {
-                    <span> - </span>
+          <div mat-list-item class="calendar-day-entry-item calendar-day-event-item">
+            <div class="calendar-day-entry">
+              <app-activity-type-icon class="calendar-day-entry-icon" [activityType]="event.activityType" size="20px"
+                aria-hidden="true"></app-activity-type-icon>
+              <div class="calendar-day-entry-copy">
+                <span class="calendar-day-entry-title">{{ event.label }}</span>
+                <div class="calendar-day-event-supporting">
+                  <span class="calendar-day-event-detail">
+                    @for (part of event.detailParts; track $index) {
+                      @if (!$first) {
+                        <span> - </span>
+                      }
+                      <span [class.calendar-day-event-metric]="part.isNumeric">{{ part.text }}</span>
+                    }
+                  </span>
+                  @if (event.metricStats.length) {
+                  <app-activity-calendar-volume-stats class="calendar-day-event-metrics"
+                    [stats]="event.metricStats"></app-activity-calendar-volume-stats>
                   }
-                  <span [class.calendar-day-event-metric]="part.isNumeric">{{ part.text }}</span>
-                }
-              </span>
-              @if (event.metricStats.length) {
-              <app-activity-calendar-volume-stats class="calendar-day-event-metrics"
-                [stats]="event.metricStats"></app-activity-calendar-volume-stats>
-              }
-              @if (trainingImpactState().status !== 'private') {
-              <app-training-impact class="calendar-day-event-impact" [impact]="event.trainingImpact"
-                variant="compact"></app-training-impact>
-              }
+                  @if (trainingImpactState().status !== 'private') {
+                  <app-training-impact class="calendar-day-event-impact" [impact]="event.trainingImpact"
+                    variant="compact"></app-training-impact>
+                  }
+                </div>
+              </div>
             </div>
           </div>
           }

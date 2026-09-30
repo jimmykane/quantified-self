@@ -1,3 +1,6 @@
+@use '@angular/material' as mat;
+@use '../calendar-day-presentation' as day;
+
 :host {
   box-sizing: border-box;
   display: flex;
@@ -22,6 +25,10 @@
 }
 
 .calendar-day-details-content {
+  @include mat.list-overrides((
+    active-indicator-shape: 0,
+    list-item-one-line-container-height: auto,
+  ));
   box-sizing: border-box;
   display: block;
   max-width: 100%;
@@ -50,12 +57,12 @@ app-calendar-day-context {
   display: flex;
   width: max-content;
   max-width: 100%;
-  margin: 0 0 12px auto;
+  margin: 0 0 4px auto;
 }
 
 .calendar-day-details-group {
-  margin-top: 12px;
-  padding-top: 12px;
+  margin-top: 8px;
+  padding-top: 8px;
   border-top: 1px solid var(--mat-sys-outline-variant);
 }
 
@@ -71,10 +78,11 @@ app-calendar-day-context {
 }
 
 .calendar-day-total span {
-  color: var(--mat-sys-on-surface-variant);
-  font: var(--mat-sys-body-medium);
+  @include day.supporting-text;
   letter-spacing: 0;
 }
+
+.calendar-day-total > span { display: flex; flex-wrap: wrap; gap: 4px; }
 
 .calendar-day-number,
 .calendar-day-event-metric {
@@ -84,23 +92,21 @@ app-calendar-day-context {
 
 .calendar-day-total strong {
   font-family: 'Barlow Condensed', sans-serif;
-  font-size: 1.75rem;
+  font-size: 22px;
   font-weight: 600;
+  line-height: 1.1;
   letter-spacing: 0;
 }
 
 .calendar-day-event-impact {
   display: block;
   max-width: 100%;
-  margin-top: 5px;
+  margin-top: 0;
 }
 
 h3 {
-  margin: 0 0 8px;
-  color: var(--mat-sys-on-surface-variant);
-  font: var(--mat-sys-label-medium);
-  letter-spacing: .04em;
-  text-transform: uppercase;
+  @include day.section-heading;
+  margin: 0 0 4px;
 }
 
 .calendar-day-section-heading {
@@ -141,51 +147,75 @@ h3 {
 .calendar-day-planned-item {
   flex: 1 1 auto;
   min-width: 0;
-  height: auto;
-  min-height: 72px;
 }
 
-.calendar-day-planned-summary {
+.calendar-day-planned-row > button {
+  flex: 0 0 48px;
+  width: 48px;
+  height: 48px;
+}
+
+// Content-sized app rows inside Material list items avoid the fixed multi-line
+// baselines/clamping, while Material still owns focus, ripple and interaction.
+.calendar-day-entry-item {
+  height: auto;
+  min-height: 44px;
+  padding: 4px 0;
+}
+
+.calendar-day-entry {
+  display: grid;
+  grid-template-columns: 24px minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 8px;
+  min-width: 0;
   white-space: normal;
+  letter-spacing: 0;
+}
+
+.calendar-day-entry-copy { min-width: 0; overflow-wrap: anywhere; }
+.calendar-day-entry-title { display: block; font: var(--mat-sys-body-medium); }
+a.calendar-day-entry-item .calendar-day-entry-title {
+  @include day.navigation-link;
+  display: flex;
+}
+.calendar-day-entry-supporting { @include day.supporting-text; }
+
+.calendar-day-entry-icon {
+  display: flex;
+  width: 24px;
+  height: 20px;
+  align-items: center;
+  justify-content: center;
+  margin: 0;
+  font-size: 20px;
+  line-height: 20px;
 }
 
 .calendar-day-item-meta {
-  display: inline-flex !important;
-  align-self: center !important;
-  align-items: center;
-  justify-content: center;
+  align-self: center;
+  width: 20px;
+  height: 20px;
+  font-size: 20px;
+  color: var(--mat-sys-on-surface-variant);
 }
 
 .calendar-day-empty {
   margin: 12px 0 0;
   color: var(--mat-sys-on-surface-variant);
-  font: var(--mat-sys-body-medium);
+  font: var(--mat-sys-body-small);
 }
 
 mat-nav-list,
 mat-action-list {
-  padding-top: 0;
-}
-
-.calendar-day-event-item-with-metrics {
-  height: auto;
-  min-height: 88px;
-}
-
-.calendar-day-event-item-with-metrics .calendar-day-event-icon {
-  align-self: center !important;
-  margin-top: 0 !important;
+  padding: 0;
 }
 
 .calendar-day-event-supporting {
   display: grid;
-  gap: 4px;
+  gap: 3px;
   overflow: visible;
   white-space: normal;
-}
-
-.calendar-day-event-supporting::before {
-  content: none;
 }
 
 .calendar-day-event-metrics {
@@ -195,8 +225,7 @@ mat-action-list {
 }
 
 .calendar-day-event-detail {
-  color: var(--mat-sys-on-surface-variant);
-  font: var(--mat-sys-body-medium);
+  @include day.supporting-text;
   letter-spacing: 0;
 }
 

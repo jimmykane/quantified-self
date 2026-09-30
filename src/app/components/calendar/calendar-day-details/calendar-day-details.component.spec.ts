@@ -84,8 +84,10 @@ describe('CalendarDayDetailsComponent', () => {
     expect(button.textContent).toContain('Travel');
     expect(button.querySelector('mat-icon')?.textContent).toBe('flight');
     expect((button.querySelector('mat-icon') as HTMLElement).style.color).toBe('rgb(158, 108, 236)');
-    expect([...button.querySelectorAll('[matListItemLine]')].map(line => line.textContent?.trim()))
+    expect([...button.querySelectorAll('.calendar-day-entry-supporting')].map(line => line.textContent?.trim()))
       .toEqual(['Travel', '2026-08-01 – ongoing']);
+    expect(button.querySelector('.calendar-day-entry-title')?.textContent).toBe('<b>Trip</b>');
+    expect(button.querySelector('.calendar-day-entry')?.tagName).toBe('SPAN');
     expect(button.querySelector('b')).toBeNull();
     expect(fixture.nativeElement.querySelector('#calendar-day-activities-title')?.textContent)
       .toContain('Completed activity details');
@@ -152,7 +154,7 @@ describe('CalendarDayDetailsComponent', () => {
       .toBe('/training/plans/workout/workout-1');
     expect(fixture.nativeElement.querySelector('.calendar-day-planned-item')?.textContent)
       .toContain('Autumn build · Planned');
-    expect(fixture.nativeElement.querySelector('.calendar-day-planned-summary')?.textContent).toContain('30m 00s');
+    expect(fixture.nativeElement.querySelector('.calendar-day-planned-item')?.textContent).toContain('30m 00s');
     expect((fixture.nativeElement.querySelector('.calendar-day-planned-row') as HTMLElement).style.getPropertyValue('--planned-workout-color')).toBe('purple');
     expect(fixture.nativeElement.querySelector('.calendar-day-planned-accent')?.getAttribute('aria-hidden')).toBe('true');
     expect(addButton?.getAttribute('aria-label')).toBe('Add workout for selected day');
@@ -203,30 +205,22 @@ describe('CalendarDayDetailsComponent', () => {
     expect(fixture.nativeElement.querySelector('.calendar-day-total')?.textContent).toContain('0 completed activities');
   });
 
-  it('centers trailing navigation icons and keeps the rounded plan accent outside the Material row', async () => {
+  it('keeps navigation icons decorative and duplicate actions separate from workout links', async () => {
     const fixture = await renderDayDetails(createEvent(), {
       plannedWorkouts: [{ workout: createPlannedWorkout(), planName: 'Autumn build' }],
     });
     const metaSlots = [...fixture.nativeElement.querySelectorAll('.calendar-day-item-meta')] as HTMLElement[];
-    const styles = readFileSync(
-      resolve(process.cwd(), 'src/app/components/calendar/calendar-day-details/calendar-day-details.component.scss'),
-      'utf8',
-    );
-
     expect(metaSlots).toHaveLength(2);
-    expect(metaSlots.every(slot => slot.tagName === 'SPAN' && slot.hasAttribute('matListItemMeta'))).toBe(true);
-    expect(metaSlots.map(slot => slot.querySelector('mat-icon')?.textContent?.trim()))
+    expect(metaSlots.every(slot => slot.getAttribute('aria-hidden') === 'true')).toBe(true);
+    expect(metaSlots.map(slot => slot.textContent?.trim()))
       .toEqual(['chevron_right', 'chevron_right']);
-    expect(styles).toMatch(
-      /\.calendar-day-item-meta\s*\{[^}]*display:\s*inline-flex !important[^}]*align-self:\s*center !important[^}]*align-items:\s*center[^}]*justify-content:\s*center/s,
-    );
-    expect(styles).toMatch(
-      /\.calendar-day-planned-row\s*\{[^}]*margin-inline-start:\s*-7px[^}]*padding-inline-start:\s*7px/s,
-    );
-    expect(styles).toMatch(
-      /\.calendar-day-planned-accent\s*\{[^}]*position:\s*absolute[^}]*inset-block:\s*8px[^}]*inset-inline-start:\s*0[^}]*width:\s*3px[^}]*border-radius:\s*9999px/s,
-    );
-    expect(styles).not.toMatch(/\.calendar-day-planned-item\s*\{[^}]*border-inline-start:/s);
+    const sportIcons = [...fixture.nativeElement.querySelectorAll('.calendar-day-entry app-activity-type-icon')];
+    expect(sportIcons).toHaveLength(2);
+    expect(sportIcons.every(icon => icon.getAttribute('size') === '20px' && icon.getAttribute('aria-hidden') === 'true')).toBe(true);
+    const plannedRow = fixture.nativeElement.querySelector('.calendar-day-planned-row');
+    expect(plannedRow.querySelector('a button')).toBeNull();
+    expect(plannedRow.querySelector('button')?.getAttribute('aria-label')).toContain('Duplicate');
+    expect(plannedRow.querySelector('.calendar-day-planned-accent')?.getAttribute('aria-hidden')).toBe('true');
   });
 
   it('updates an already-open day when the planned-workout listener finishes', async () => {
@@ -352,7 +346,7 @@ describe('CalendarDayDetailsComponent', () => {
       'Distance 20.00 Km',
       'Descent 1,200 m',
     ]);
-    const eventItem = fixture.nativeElement.querySelector('.calendar-day-event-item-with-metrics');
+    const eventItem = fixture.nativeElement.querySelector('.calendar-day-event-item');
     expect(eventItem?.querySelector('.calendar-day-event-supporting .calendar-day-event-detail')?.textContent?.trim())
       .toBe('Downhill Cycling - 8:30 AM - 1h');
     expect(eventItem?.querySelector('.calendar-day-event-metrics')).not.toBeNull();
@@ -400,19 +394,6 @@ describe('CalendarDayDetailsComponent', () => {
     expect(componentStyles).toMatch(/@media \(max-width:\s*360px\)\s*\{[\s\S]*?\.calendar-day-section-heading\s*\{[^}]*flex-direction:\s*column/s);
   });
 
-  it('uses a content-sized activity row for event metrics', () => {
-    const styles = readFileSync(
-      resolve(process.cwd(), 'src/app/components/calendar/calendar-day-details/calendar-day-details.component.scss'),
-      'utf8',
-    );
-
-    expect(styles).toMatch(/\.calendar-day-event-item-with-metrics\s*\{[^}]*height:\s*auto[^}]*min-height:\s*88px/s);
-    expect(styles).toMatch(
-      /\.calendar-day-event-item-with-metrics \.calendar-day-event-icon\s*\{[^}]*align-self:\s*center !important[^}]*margin-top:\s*0 !important/s,
-    );
-    expect(styles).toMatch(/\.calendar-day-event-supporting\s*\{[^}]*display:\s*grid[^}]*overflow:\s*visible/s);
-    expect(styles).toMatch(/\.calendar-day-event-metrics\s*\{[^}]*--calendar-volume-stats-column-gap:\s*8px/s);
-  });
 });
 
 async function renderDayDetails(eventOrEvents: EventInterface | EventInterface[], overrides: Partial<CalendarDayDetailsData> = {}) {

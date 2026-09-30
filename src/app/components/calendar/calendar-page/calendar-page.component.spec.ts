@@ -339,7 +339,7 @@ describe('CalendarPageComponent', () => {
       .toBe('progressbar');
   });
 
-  it('shows only positive recorded totals beneath each sport-family bar', async () => {
+  it('does not repeat the sole duration total beneath a single-activity sport-family bar', async () => {
     watchEvents.mockReturnValue(of([createEvent(
       new Date(2026, 7, 3, 8),
       ActivityTypes.Running,
@@ -356,7 +356,8 @@ describe('CalendarPageComponent', () => {
 
     const recordedTotals = [...fixture.nativeElement.querySelectorAll('.calendar-family-volume > app-activity-calendar-volume-list .calendar-family-volume-stat')]
       .map((stat: HTMLElement) => stat.getAttribute('aria-label'));
-    expect(recordedTotals).toEqual(['Duration 1h']);
+    expect(recordedTotals).toEqual([]);
+    expect(fixture.nativeElement.querySelector('.calendar-family-volume-value')?.textContent?.trim()).toBe('1h');
   });
 
   it('omits alpine-ski ascent while retaining its recorded descent', async () => {

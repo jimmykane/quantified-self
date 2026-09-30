@@ -232,6 +232,14 @@ shadow for in-flow cards or add route-local card shadows.
 
 ## Dashboard calendar popup
 
+Selected-day presentation is shared by the full day page, Dashboard day preview, Calendar day preview, and day
+bottom sheet through `components/calendar/_calendar-day-presentation.scss`. Reuse its navigation, supporting-text,
+and section-heading mixins instead of copying typography. The previews and full day retain their existing layouts.
+The sheet uses content-sized app-owned rows inside Material list items: 14px/body-medium titles, body-small metadata,
+20px sport/note icons, and 48px duplicate actions. Long titles, notes, workout summaries, and activity metrics wrap
+without fixed multi-line heights or clamping. Material retains navigation, focus and ripple behavior. Keep the
+shared overlay surface, fixed header, and bounded content scroll; do not add an inset card or enlarge the rows.
+
 The Today month popup uses the existing compact calendar with `fillHeight=false` on both its tile and grid.
 The grid opts into `activity-calendar--picker`: readable 28px date badges, 64px rows, and a separate
 indicator row for activity circles and Timeline notes. Note colors sit under the note icon; planned workouts use
