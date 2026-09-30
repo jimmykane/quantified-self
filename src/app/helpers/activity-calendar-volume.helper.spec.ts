@@ -11,6 +11,27 @@ import { buildActivityCalendarPeriodSummary } from './activity-calendar.helper';
 import { buildActivityCalendarFamilyVolumeRows, buildActivityCalendarVolumeStats } from './activity-calendar-volume.helper';
 
 describe('activity-calendar-volume helper', () => {
+  it('omits a single activity’s duplicate duration-only detail while retaining the duration headline', () => {
+    const [row] = buildActivityCalendarFamilyVolumeRows(buildActivityCalendarPeriodSummary([
+      createEvent('indoor', ActivityTypes.IndoorSports, { [DataDuration.type]: 6720 }),
+    ]), null, 'en-US');
+
+    expect(row.eventCount).toBe(1);
+    expect(row.valueLabel).toBe('1h 52m');
+    expect(row.ariaLabel).toContain('Duration 1h 52m');
+    expect(row.stats).toEqual([]);
+  });
+
+  it('keeps the duration detail for multiple activities with no other recorded metric', () => {
+    const [row] = buildActivityCalendarFamilyVolumeRows(buildActivityCalendarPeriodSummary([
+      createEvent('indoor-1', ActivityTypes.IndoorSports, { [DataDuration.type]: 3600 }),
+      createEvent('indoor-2', ActivityTypes.IndoorSports, { [DataDuration.type]: 1800 }),
+    ]), null, 'en-US');
+
+    expect(row.eventCount).toBe(2);
+    expect(row.stats.map(stat => stat.ariaLabel)).toEqual(['Duration 1h 30m']);
+  });
+
   it('builds duration bars with available distance and elevation statistics', () => {
     const rows = buildActivityCalendarFamilyVolumeRows(buildActivityCalendarPeriodSummary([
       createEvent('run', ActivityTypes.Running, {
