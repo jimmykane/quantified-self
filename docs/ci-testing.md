@@ -25,12 +25,15 @@ cases took about 24 seconds within `lifecycle`, so they remain in the normal gat
 
 `tools/functions-emulator-suites.mjs` lists exact files, avoiding redundant execution of provider unit tests.
 `npm run test:emulator-coverage` compares the registry with every `*.emulator.spec.ts` and `*.integration.spec.ts` below
-`functions/src` and with the CI matrix. A newly added, removed or duplicated suite fails the gate until the registry
+`functions/src`, plus any ordinary `*.spec.ts` referencing the Firestore/Auth emulator host variables, and with the
+CI matrix. A newly added, removed or duplicated suite fails the gate until the registry
 is updated. `queue-integration.spec.ts` is an ordinary mocked unit test, not an emulator file, and remains in the
 ordinary Functions test suite.
 
 The runner also validates Vitest's JSON report: every selected file must contain passing tests, with no skipped,
-pending or TODO assertions. Missing emulator environment variables cannot silently turn a mandatory suite green.
+pending or TODO assertions. All counters must be non-negative integers, passing counts must match totals, and the
+reported assertion count must equal the total test count. Missing or inconsistent report fields fail closed.
+Missing emulator environment variables cannot silently turn a mandatory suite green.
 Vitest failures, unhandled errors, setup/teardown failures and a missing report remain failures.
 
 ## Local commands and isolation

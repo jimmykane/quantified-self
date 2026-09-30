@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { readFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { dirname, resolve } from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
@@ -18,6 +19,24 @@ test('every real emulator/integration file is registered exactly once', () => {
   assert.throws(() => assertSuiteCoverage([], { empty: [] }), /Empty/);
   assert.throws(() => suiteFiles('all_connected'), /Unknown emulator group/);
   assert.throws(() => suiteFiles('__proto__'), /Unknown emulator group/);
+});
+
+test('emulator host consumers cannot disappear behind an ordinary spec filename', () => {
+  const temporary = mkdtempSync(resolve(tmpdir(), 'qs-emulator-discovery-'));
+  try {
+    mkdirSync(resolve(temporary, 'src/nested'), { recursive: true });
+    writeFileSync(resolve(temporary, 'src/nested/legacy.spec.ts'),
+      'describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)("legacy", () => {});');
+    writeFileSync(resolve(temporary, 'src/auth.spec.ts'),
+      'const enabled = !!process.env.FIREBASE_AUTH_EMULATOR_HOST;');
+    writeFileSync(resolve(temporary, 'src/named.emulator.spec.ts'), 'describe("named", () => {});');
+    writeFileSync(resolve(temporary, 'src/unit.spec.ts'), 'describe("mocked", () => {});');
+    const discovered = discoverEmulatorSpecs(temporary);
+    assert.deepEqual(discovered, ['src/auth.spec.ts', 'src/named.emulator.spec.ts', 'src/nested/legacy.spec.ts']);
+    assert.throws(() => assertSuiteCoverage(discovered, { named: ['src/named.emulator.spec.ts'] }), /Unregistered/);
+  } finally {
+    rmSync(temporary, { recursive: true, force: true });
+  }
 });
 
 test('CI matrix gates every registered group, including the 400-workout stress test', () => {
@@ -61,6 +80,7 @@ test('provider credentials, ADC and inherited emulator endpoints are not forward
 
 function report() {
   return { success: true, numTotalTests: 1, numPassedTests: 1, numFailedTests: 0, numFailedTestSuites: 0,
+    numTotalTestSuites: 2, numPassedTestSuites: 2,
     numPendingTests: 0, numPendingTestSuites: 0, numTodoTests: 0, testResults: [{
       name: resolve(functionsRoot, 'src/example.emulator.spec.ts'), status: 'passed',
       assertionResults: [{ status: 'passed' }],
@@ -98,4 +118,18 @@ test('missing files, skipped assertions, TODOs and empty or failing runs fail cl
   empty.testResults[0].assertionResults = [];
   assert.throws(() => assertExecutedReport(empty, expected, functionsRoot), /skipped assertions/);
   assert.throws(() => assertExecutedReport(report(), [...expected, 'src/missing.emulator.spec.ts'], functionsRoot));
+});
+
+test('missing, malformed or inconsistent counters and omitted assertions fail closed', () => {
+  for (const counter of ['numTotalTests', 'numPassedTests', 'numFailedTests', 'numPendingTests', 'numTodoTests',
+    'numTotalTestSuites', 'numPassedTestSuites', 'numFailedTestSuites', 'numPendingTestSuites']) {
+    for (const value of [undefined, null, '1', -1, Infinity, 0.5]) {
+      assert.throws(() => assertExecutedReport({ ...report(), [counter]: value }, expected, functionsRoot), /Malformed/);
+    }
+  }
+  assert.throws(() => assertExecutedReport({ ...report(), numPassedTests: 0 }, expected, functionsRoot), /Inconsistent/);
+  assert.throws(() => assertExecutedReport({ ...report(), numPassedTestSuites: 1 }, expected, functionsRoot), /Inconsistent/);
+  assert.throws(() => assertExecutedReport({ ...report(), numTotalTests: 100, numPassedTests: 100 }, expected, functionsRoot), /Incomplete/);
+  assert.throws(() => assertExecutedReport({ ...report(), testResults: null }, expected, functionsRoot), /Malformed/);
+  assert.throws(() => assertExecutedReport(null, expected, functionsRoot), /Malformed/);
 });

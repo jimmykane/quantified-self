@@ -1,4 +1,4 @@
-import { readdirSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 
 // Exact emulator files only: the ordinary Functions suite already covers mocks.
@@ -36,7 +36,13 @@ export function discoverEmulatorSpecs(functionsRoot, directory = 'src') {
   return readdirSync(join(functionsRoot, directory), { withFileTypes: true }).flatMap(entry => {
     const path = `${directory}/${entry.name}`;
     if (entry.isDirectory()) return discoverEmulatorSpecs(functionsRoot, path);
-    return /\.(emulator|integration)\.spec\.ts$/.test(entry.name) ? [path] : [];
+    if (!entry.isFile() || !entry.name.endsWith('.spec.ts')) return [];
+    // Naming alone must not hide a describe.skipIf(emulatorMissing) suite in
+    // the ordinary Functions run. Require explicit coverage for host consumers.
+    const named = /\.(emulator|integration)\.spec\.ts$/.test(entry.name);
+    const needsEmulator = /FIRESTORE_EMULATOR_HOST|FIREBASE_AUTH_EMULATOR_HOST/
+      .test(readFileSync(join(functionsRoot, path), 'utf8'));
+    return named || needsEmulator ? [path] : [];
   }).sort();
 }
 
@@ -80,17 +86,30 @@ export function emulatorEnvironment(env) {
 }
 
 export function assertExecutedReport(report, files, functionsRoot) {
-  if (report.success !== true || !(report.numTotalTests > 0) || report.numFailedTests
+  const counters = ['numTotalTests', 'numPassedTests', 'numFailedTests', 'numPendingTests', 'numTodoTests',
+    'numTotalTestSuites', 'numPassedTestSuites', 'numFailedTestSuites', 'numPendingTestSuites'];
+  if (!report || counters.some(key => !Number.isSafeInteger(report[key]) || report[key] < 0)
+      || !Array.isArray(report.testResults)) {
+    throw new Error('Malformed emulator test report.');
+  }
+  if (report.success !== true || report.numTotalTests === 0 || report.numFailedTests
       || report.numFailedTestSuites || report.numPendingTests || report.numPendingTestSuites || report.numTodoTests) {
     throw new Error('Emulator tests failed, were empty, or were skipped.');
+  }
+  if (report.numPassedTests !== report.numTotalTests
+      || report.numPassedTestSuites !== report.numTotalTestSuites) {
+    throw new Error('Inconsistent emulator test report counters.');
   }
   const expected = files.map(path => resolve(functionsRoot, path)).sort();
   const actual = report.testResults.map(result => resolve(result.name)).sort();
   if (JSON.stringify(expected) !== JSON.stringify(actual)) throw new Error('Not every selected emulator file ran.');
+  let assertions = 0;
   for (const result of report.testResults) {
-    if (result.status !== 'passed' || !result.assertionResults.length
+    if (result.status !== 'passed' || !Array.isArray(result.assertionResults) || !result.assertionResults.length
         || result.assertionResults.some(assertion => assertion.status !== 'passed')) {
       throw new Error(`Emulator file failed or skipped assertions: ${result.name}`);
     }
+    assertions += result.assertionResults.length;
   }
+  if (assertions !== report.numTotalTests) throw new Error('Incomplete emulator test report assertions.');
 }
