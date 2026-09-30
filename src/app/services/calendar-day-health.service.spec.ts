@@ -14,7 +14,7 @@ describe('CalendarDayHealthService', () => {
     loadSleepRange: vi.fn().mockResolvedValue([]),
     loadMetricRange: vi.fn().mockRejectedValue(new Error('HRV offline')),
   };
-  const derived = { watch: vi.fn(() => of({ trainingReadinessStatus: 'missing' })) };
+  const derived = { watch: vi.fn(() => of({ trainingReadinessStatus: 'missing' })), ensureForDashboard: vi.fn() };
   const service = () => {
     TestBed.configureTestingModule({ providers: [
       { provide: HealthMetricQueryService, useValue: queries },
@@ -29,6 +29,9 @@ describe('CalendarDayHealthService', () => {
     const result = await read(service(), 'owner', '2026-09-10', new Date('2026-09-15T12:00:00').getTime(), new AbortController().signal);
     expect(queries.loadMetricRange).toHaveBeenCalledWith('owner', expect.objectContaining({ startDate: '2026-09-10', endDate: '2026-09-10', includeSamples: true }), 30, expect.any(AbortSignal));
     expect(derived.watch).toHaveBeenCalledWith({ uid: 'owner' }, { metricKinds: [DERIVED_METRIC_KINDS.TrainingReadiness], reportReadErrors: true });
+    expect(derived.ensureForDashboard).toHaveBeenCalledWith({ uid: 'owner' }, expect.anything(), {
+      metricKinds: [DERIVED_METRIC_KINDS.TrainingReadiness],
+    });
     expect(result.hrvError).toBe(true);
     expect(result.sleepError).toBe(false);
     expect(result.readinessError).toBe(false);
@@ -81,6 +84,78 @@ describe('CalendarDayHealthService', () => {
     await expect(read(instance, 'other', '2026-09-10', Date.now(), new AbortController().signal)).rejects.toThrow('owner-only');
     await expect(read(instance, 'owner', '2026-02-30', Date.now(), new AbortController().signal)).rejects.toThrow('Invalid calendar date');
     expect(queries.loadSleepRange).not.toHaveBeenCalled();
+    expect(derived.ensureForDashboard).not.toHaveBeenCalled();
+  });
+  it('requests one scoped refresh for stale readiness and never repeats it on snapshot updates', async () => {
+    vi.clearAllMocks();
+    const snapshots = new Subject<ReturnType<typeof createDashboardDerivedMetricsMissingState>>();
+    derived.watch.mockReturnValueOnce(snapshots.asObservable());
+    const controller = new AbortController();
+    const subscription = service().watch('owner', '2026-09-10', new Date(2026, 8, 15, 12).getTime(), controller.signal).subscribe();
+    for (const status of ['stale', 'queued', 'building', 'ready', 'stale'] as const) {
+      snapshots.next({ ...createDashboardDerivedMetricsMissingState(), trainingReadinessStatus: status });
+    }
+    expect(derived.ensureForDashboard).toHaveBeenCalledTimes(1);
+    expect(derived.ensureForDashboard).toHaveBeenCalledWith({ uid: 'owner' }, expect.objectContaining({ trainingReadinessStatus: 'stale' }), {
+      metricKinds: [DERIVED_METRIC_KINDS.TrainingReadiness],
+    });
+    controller.abort();
+    expect(snapshots.observed).toBe(false);
+    subscription.unsubscribe();
+  });
+  it('does not rebuild unsupported dates, healthy or pending snapshots, or failed reads', async () => {
+    vi.clearAllMocks();
+    const instance = service();
+    const now = new Date(2026, 8, 15, 12).getTime();
+    for (const dateKey of ['2026-08-01', '2026-09-16']) {
+      await read(instance, 'owner', dateKey, now, new AbortController().signal);
+    }
+    for (const status of ['ready', 'queued', 'building', 'failed'] as const) {
+      derived.watch.mockReturnValueOnce(of({ trainingReadinessStatus: status }));
+      await read(instance, 'owner', '2026-09-10', now, new AbortController().signal);
+    }
+    expect(derived.ensureForDashboard).not.toHaveBeenCalled();
+  });
+  it('does not refresh after cancellation or an account change', async () => {
+    vi.clearAllMocks();
+    const instance = service();
+    const controller = new AbortController();
+    controller.abort();
+    await expect(read(instance, 'owner', '2026-09-10', Date.now(), controller.signal)).rejects.toThrow('cancelled');
+    expect(derived.watch).not.toHaveBeenCalled();
+    const snapshots = new Subject<ReturnType<typeof createDashboardDerivedMetricsMissingState>>();
+    derived.watch.mockReturnValueOnce(snapshots.asObservable());
+    const subscription = instance.watch('owner', '2026-09-10', new Date(2026, 8, 15, 12).getTime(), new AbortController().signal)
+      .subscribe({ error: () => undefined });
+    queries.isOwner.mockReturnValueOnce(false);
+    snapshots.next(createDashboardDerivedMetricsMissingState());
+    expect(derived.ensureForDashboard).not.toHaveBeenCalled();
+    subscription.unsubscribe();
+  });
+  it('checks cancellation and ownership again before a deferred subscription starts private reads', async () => {
+    vi.clearAllMocks();
+    const instance = service();
+    const controller = new AbortController();
+    const cancelled$ = instance.watch('owner', '2026-09-10', Date.now(), controller.signal);
+    controller.abort();
+    await expect(firstValueFrom(cancelled$)).rejects.toThrow('cancelled');
+    const switched$ = instance.watch('owner', '2026-09-10', Date.now(), new AbortController().signal);
+    queries.isOwner.mockReturnValueOnce(false);
+    await expect(firstValueFrom(switched$)).rejects.toThrow('cancelled');
+    expect(queries.loadSleepRange).not.toHaveBeenCalled();
+    expect(queries.loadMetricRange).not.toHaveBeenCalled();
+    expect(derived.watch).not.toHaveBeenCalled();
+    expect(derived.ensureForDashboard).not.toHaveBeenCalled();
+  });
+  it('requests only the current load and recovery scope for a stale today selection', async () => {
+    vi.clearAllMocks();
+    const state = { ...createDashboardDerivedMetricsMissingState(), formStatus: 'stale' as const };
+    derived.watch.mockReturnValueOnce(of(state));
+    await read(service(), 'owner', '2026-09-15', new Date(2026, 8, 15, 12).getTime(), new AbortController().signal);
+    expect(derived.ensureForDashboard).toHaveBeenCalledOnce();
+    expect(derived.ensureForDashboard).toHaveBeenCalledWith({ uid: 'owner' }, state, {
+      metricKinds: [DERIVED_METRIC_KINDS.Form, DERIVED_METRIC_KINDS.FormNow, DERIVED_METRIC_KINDS.RampRate, DERIVED_METRIC_KINDS.RecoveryNow],
+    });
   });
   it('updates readiness without repeating the bounded Sleep and HRV reads', async () => {
     vi.clearAllMocks();
