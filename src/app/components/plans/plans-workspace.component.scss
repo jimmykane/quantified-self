@@ -32,6 +32,16 @@
   .library-placement .form-actions > button { flex: 1 1 auto; }
 }
 
+@media (max-width: 360px) {
+  .workout-library .workout-row-actions {
+    display: grid;
+    grid-template-columns: auto auto;
+    justify-content: start;
+  }
+
+  .workout-library .workout-row-actions > button[mat-flat-button] { grid-column: 1 / -1; }
+}
+
 .deleted-workouts-panel [hidden] { display: none; }
 
 .plan-color-label {

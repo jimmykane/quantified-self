@@ -1460,8 +1460,13 @@ export class PlansWorkspaceComponent {
       try { response = await this.libraryService.place(request); }
       catch (error) {
         const message = errorMessage(error);
-        if (!/requires extending/i.test(message)
-          || !await this.confirm('Extend plan dates?', message, 'Extend and add workouts')) throw error;
+        if (!plan || !/requires extending/i.test(message)) throw error;
+        const extendedStart = dates[0] < plan.startLocalDate ? dates[0] : plan.startLocalDate;
+        const finalDate = dates[dates.length - 1];
+        const extendedEnd = finalDate > plan.endLocalDate ? finalDate : plan.endLocalDate;
+        const placementMessage = `Adding ${dates.length} ${dates.length === 1 ? 'workout' : 'workouts'} `
+          + `will extend ${plan.name} to ${extendedStart}–${extendedEnd}.`;
+        if (!await this.confirm('Extend plan dates?', placementMessage, 'Extend and add workouts')) return;
         response = await this.libraryService.place({ ...request, confirmPlanRangeExtension: true });
       }
       if (uid !== this.currentUser()?.uid) return;

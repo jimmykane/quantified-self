@@ -220,6 +220,58 @@ describe('PlansWorkspaceComponent', () => {
     expect(component.placementItem()).toBeNull();
   });
 
+  it('labels the standalone placement destination and gives saved rows full-width mobile actions', async () => {
+    const item: WorkoutLibraryItemV1 = { schemaVersion: 1, id: 'library-1', title: 'Long saved workout title',
+      structure: schedule.workouts[0].structure, status: 'active', revision: 1,
+      createdAtMs: 1, updatedAtMs: 1 };
+    libraryItems.next([item]);
+    setRouteState({ mode: 'library-browse' });
+    const fixture = await renderPlans();
+    const row = fixture.nativeElement.querySelector('.workout-library app-compact-row') as HTMLElement;
+    expect(row.classList.contains('compact-row-host--mobile-action-full')).toBe(true);
+
+    fixture.componentInstance.beginLibraryPlacement(item);
+    fixture.componentInstance.placementPlanId.set(null);
+    fixture.detectChanges();
+    const destination = fixture.debugElement.query(By.directive(MatSelect)).componentInstance as MatSelect;
+    expect(destination.value).toBe('standalone');
+  });
+
+  it.each([false, true])('explains library range extension and %s confirmation without an error toast', async confirmed => {
+    const item: WorkoutLibraryItemV1 = { schemaVersion: 1, id: 'library-1', title: 'Base run',
+      structure: schedule.workouts[0].structure, status: 'active', revision: 1,
+      createdAtMs: 1, updatedAtMs: 1 };
+    libraryItems.next([item]);
+    libraryPlace.mockRejectedValueOnce(new Error('Moving this workout requires extending Autumn build to include 2026-10-10.'));
+    if (confirmed) libraryPlace.mockResolvedValueOnce({ mutationId: 'mutation-1', workoutIds: ['copy-1', 'copy-2'],
+      dates: ['2026-10-03', '2026-10-10'], stateRevision: 5, planRevision: 3 });
+    setRouteState({ mode: 'library-browse' });
+    const fixture = await renderPlans();
+    const component = fixture.componentInstance;
+    const componentDialog = (component as unknown as { dialog: MatDialog }).dialog;
+    const confirmDialog = vi.spyOn(componentDialog, 'open')
+      .mockReturnValue({ afterClosed: () => of(confirmed) } as never);
+    component.beginLibraryPlacement(item);
+    component.placementStartDate.set('2026-10-03');
+    component.placementEndDate.set('2026-10-10');
+    component.placementWeekdays.set([6]);
+    expect(component.placementError()).toBeNull();
+    expect(component.placementDates()).toEqual(['2026-10-03', '2026-10-10']);
+    expect(component.placementPlanId()).toBe('active-plan');
+
+    await component.placeLibraryItem();
+
+    expect(libraryPlace).toHaveBeenCalledTimes(confirmed ? 2 : 1);
+    expect(confirmDialog).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
+      data: expect.objectContaining({ message: 'Adding 2 workouts will extend Autumn build to 2026-09-01–2026-10-10.' }),
+    }));
+    expect(snackBarOpen).not.toHaveBeenCalledWith(
+      expect.stringContaining('requires extending'), expect.anything(), expect.anything(),
+    );
+    if (!confirmed) expect(snackBarOpen).not.toHaveBeenCalled();
+    expect(component.placementItem()).toBe(confirmed ? null : item);
+  });
+
   it('reads saved recipes only while a library route is open', async () => {
     const fixture = await renderPlans();
     expect(libraryWatch).not.toHaveBeenCalled();

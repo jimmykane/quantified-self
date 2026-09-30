@@ -267,4 +267,17 @@
       .compact-row__action { grid-row: 3; }
     }
   }
+
+  :host(.compact-row-host--mobile-action-full) .compact-row--compact.compact-row--stacked.compact-row--without-icon {
+    grid-template-columns: minmax(0, 1fr);
+
+    .compact-row__title { grid-column: 1; grid-row: 1; }
+    .compact-row__body { grid-column: 1; grid-row: 2; }
+    .compact-row__action {
+      grid-column: 1;
+      grid-row: 3;
+      justify-self: start;
+      width: 100%;
+    }
+  }
 }

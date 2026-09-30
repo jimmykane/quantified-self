@@ -582,6 +582,9 @@ listener runs only on library routes, and editor Cancel returns through a record
 or replaces a direct link with the safe browse route. Placement selects a destination,
 inclusive dates and weekdays, previews count/overlaps, and honors the account week-start preference in weekday order.
 It supports empty/loading/error states, keyboard-accessible Material controls, haptics and narrow-screen wrapping.
+At mobile widths, each saved recipe's actions move below its full-width title and summary. Standalone is explicitly
+named in the destination selector; a bulk placement that needs a longer plan range shows the resulting plan range, and
+cancelling that confirmation keeps the placement open without reporting an error.
 Existing plan and workout URLs remain unchanged; library items use path IDs, not query IDs. Help explains the separate
 library and calendar semantics. MCP impact: additive `list_saved_workouts` and `get_saved_workout` use the existing
 Training read grant, bounded pages/response sizes, opaque owner-bound references, full strength drafts on exact reads,

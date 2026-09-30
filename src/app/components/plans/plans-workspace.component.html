@@ -332,7 +332,7 @@
           </div>
         }
         @for (row of libraryRows(); track row.item.id; let last = $last) {
-          <app-compact-row class="workout-row" layout="stacked" density="compact" [title]="row.item.title"
+          <app-compact-row class="workout-row" layout="stacked" density="compact" [mobileActionFullWidth]="true" [title]="row.item.title"
             [titleId]="'saved-workout-' + row.item.id" [headingLevel]="3" [showDivider]="!last">
             <div class="workout-row-meta">
               <app-activity-type-icon [activityType]="row.item.structure.sport" size="18px" aria-hidden="true"></app-activity-type-icon>
@@ -382,8 +382,9 @@
             <fieldset [disabled]="busyAction() !== null">
               <div class="library-placement-fields">
                 <mat-form-field><mat-label>Save to</mat-label>
-                  <mat-select [value]="placementPlanId()" (selectionChange)="placementPlanId.set($event.value); haptics.selection()">
-                    <mat-option [value]="null">Standalone</mat-option>
+                  <mat-select [value]="placementPlanId() ?? 'standalone'"
+                    (selectionChange)="placementPlanId.set($event.value === 'standalone' ? null : $event.value); haptics.selection()">
+                    <mat-option value="standalone">Standalone</mat-option>
                     @for (plan of planOptions(); track plan.id) {
                       @if (plan.lifecycle !== 'archived') { <mat-option [value]="plan.id">{{ plan.name }}</mat-option> }
                     }
