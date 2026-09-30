@@ -198,6 +198,9 @@ describe('AppRoutingModule routes', () => {
     expect(plansRoute?.data?.['description']).toContain('standalone workouts');
     expect(planRoutes.map(route => route.path)).toEqual([
       'training/plans/workout/:workoutId',
+      'training/plans/library/new',
+      'training/plans/library/:itemId',
+      'training/plans/library',
       'training/plans/standalone/new',
       'training/plans/plan/:planId/new',
       'training/plans/new',
@@ -212,6 +215,12 @@ describe('AppRoutingModule routes', () => {
     expect(planRoutes.every(route => route.data?.['disableRouteAnimation'] === true)).toBe(true);
     expect(planRoutes.find(route => route.path === 'training/plans/workout/:workoutId')?.data)
       .toMatchObject({ trainingPlansMode: 'edit', trainingPlansScope: 'plans' });
+    expect(planRoutes.find(route => route.path === 'training/plans/library/new')?.data)
+      .toMatchObject({ trainingPlansMode: 'library-create' });
+    expect(planRoutes.find(route => route.path === 'training/plans/library/:itemId')?.data)
+      .toMatchObject({ trainingPlansMode: 'library-edit' });
+    expect(planRoutes.find(route => route.path === 'training/plans/library')?.data)
+      .toMatchObject({ trainingPlansMode: 'library-browse' });
     expect(planRoutes.find(route => route.path === 'training/plans/plan/:planId/new')?.data)
       .toMatchObject({ trainingPlansMode: 'create', trainingPlansScope: 'plans' });
     expect(planRoutes.find(route => route.path === 'training/plans/standalone/new')?.data)

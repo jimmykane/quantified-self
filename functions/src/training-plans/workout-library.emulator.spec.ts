@@ -34,6 +34,9 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('workout library Firestore
             itemId: 'template-1', title: 'Easy run', structure } };
         const created = await mutateWorkoutLibraryForUser(uid, create, { db, nowMs });
         expect(created.item?.revision).toBe(1);
+        expect((await ref.collection('trainingPlanState').doc('current')
+            .collection('workoutLibraryMutationReceipts').doc(create.mutationId).get())
+            .get('expireAt').toMillis()).toBe(nowMs + 30 * 86_400_000);
         expect(await mutateWorkoutLibraryForUser(uid, create, { db, nowMs: nowMs + 1 })).toEqual(created);
         const copied = await mutateWorkoutLibraryForUser(uid, { mutationId: 'copy-1', operation: {
             kind: 'copy', itemId: 'template-copy', sourceItemId: 'template-1', expectedSourceRevision: 1,
@@ -45,6 +48,9 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('workout library Firestore
         const placed = await placeWorkoutLibraryForUser(uid, place, { db, nowMs: nowMs + 2 });
         expect(placed.workoutIds).toHaveLength(3);
         expect(placed.stateRevision).toBe(1);
+        expect((await ref.collection('trainingPlanState').doc('current')
+            .collection('workoutLibraryPlacementReceipts').doc(place.mutationId).get())
+            .get('expireAt').toMillis()).toBe(nowMs + 2 + 30 * 86_400_000);
         expect(await placeWorkoutLibraryForUser(uid, place, { db, nowMs: nowMs + 3 })).toEqual(placed);
         const first = (await ref.collection('scheduledWorkouts').doc(placed.workoutIds[0]).get()).data()!;
         expect(first).toMatchObject({ title: 'Easy run', planId: null, localDate: '2026-10-01', lifecycle: 'planned' });
@@ -75,6 +81,14 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('workout library Firestore
         await expect(placeWorkoutLibraryForUser(uid, { mutationId: 'place-archived', itemId: 'template-1',
             expectedTemplateRevision: 2, expectedStateRevision: 0, planId: null, expectedPlanRevision: null,
             dates: ['2026-10-01'], confirmPlanRangeExtension: false }, { db })).rejects.toThrow('changed');
+        await mutateWorkoutLibraryForUser(uid, { mutationId: 'unicode-create', operation: { kind: 'create',
+            itemId: 'unicode', title: '🧱'.repeat(60), structure,
+        } }, { db, nowMs });
+        const unicodeCopy = await mutateWorkoutLibraryForUser(uid, { mutationId: 'unicode-copy', operation: {
+            kind: 'copy', itemId: 'unicode-copy', sourceItemId: 'unicode', expectedSourceRevision: 1,
+        } }, { db, nowMs });
+        expect(unicodeCopy.item?.title).toBe(new TextDecoder().decode(new TextEncoder().encode(unicodeCopy.item!.title)));
+        expect(unicodeCopy.item?.title.endsWith(' copy')).toBe(true);
     });
 
     it('places into a plan only with explicit range extension and leaves delivery consent unset', async () => {
@@ -126,6 +140,18 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('workout library Firestore
             expect(details.get('exercises')).toEqual(strength.exercises);
             expect(details.get('workoutId')).toBe(workoutId);
         }
+        await mutateTrainingScheduleForUser(uid, { mutationId: 'strength-skip', expectedRevisions: [
+            { scope: 'state', id: 'current', revision: 1 },
+            { scope: 'workout', id: placed.workoutIds[0], revision: 1 },
+        ], operation: { kind: 'set-workout-lifecycle', workoutId: placed.workoutIds[0], lifecycle: 'skipped' } },
+        { db, nowMs: nowMs + 2 });
+        expect((await ref.collection('scheduledWorkouts').doc(placed.workoutIds[0])
+            .collection('strengthDetails').doc('current').get()).get('revision')).toBe(1);
+        const saved = await mutateWorkoutLibraryForUser(uid, { mutationId: 'strength-save-after-skip', operation: {
+            kind: 'save-workout', itemId: 'strength-saved', sourceWorkoutId: placed.workoutIds[0],
+            expectedSourceRevision: 2,
+        } }, { db, nowMs: nowMs + 3 });
+        expect(saved.item?.strength).toEqual(strength);
     });
 
     it('handles the 100-date placement bound in one resumable schedule mutation', async () => {

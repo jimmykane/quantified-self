@@ -52,6 +52,7 @@ describe('PlansWorkspaceComponent', () => {
   let getDeletedWorkoutsPage: ReturnType<typeof vi.fn>;
   let getStrengthDetails: ReturnType<typeof vi.fn>;
   let libraryItems: BehaviorSubject<WorkoutLibraryItemV1[]>;
+  let libraryWatch: ReturnType<typeof vi.fn>;
   let libraryMutate: ReturnType<typeof vi.fn>;
   let libraryPlace: ReturnType<typeof vi.fn>;
   let libraryGet: ReturnType<typeof vi.fn>;
@@ -97,6 +98,7 @@ describe('PlansWorkspaceComponent', () => {
     getDeletedWorkoutsPage = vi.fn().mockResolvedValue({ workouts: [], nextCursor: null });
     getStrengthDetails = vi.fn();
     libraryItems = new BehaviorSubject<WorkoutLibraryItemV1[]>([]);
+    libraryWatch = vi.fn().mockImplementation(() => libraryItems);
     libraryMutate = vi.fn();
     libraryPlace = vi.fn();
     libraryGet = vi.fn();
@@ -114,7 +116,7 @@ describe('PlansWorkspaceComponent', () => {
         { provide: ActivatedRoute, useValue: route },
         { provide: AppUserService, useValue: { user: userSignal, user$: userSubject } },
         { provide: AppHapticsService, useValue: haptics },
-        { provide: WorkoutLibraryService, useValue: { watch: () => libraryItems,
+        { provide: WorkoutLibraryService, useValue: { watch: libraryWatch,
           get: libraryGet, mutate: libraryMutate, place: libraryPlace } },
         { provide: TrainingDeliveryService, useValue: { anyReady: () => false, watchPresence: () => of(false),
           isSetupAvailable: () => false,
@@ -200,6 +202,10 @@ describe('PlansWorkspaceComponent', () => {
     expect(fixture.nativeElement.querySelector('.plan-scope')).toBeNull();
     expect(fixture.nativeElement.textContent).toContain('Weekly easy run');
     const component = fixture.componentInstance;
+    component.busyAction.set(`library-${item.id}`);
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('.workout-library .workout-row-actions mat-spinner')).not.toBeNull();
+    component.busyAction.set(null);
     component.beginLibraryPlacement(item);
     component.placementStartDate.set('2026-09-09');
     component.placementEndDate.set('2026-09-16');
@@ -212,6 +218,36 @@ describe('PlansWorkspaceComponent', () => {
     }));
     expect(mutate).not.toHaveBeenCalled();
     expect(component.placementItem()).toBeNull();
+  });
+
+  it('reads saved recipes only while a library route is open', async () => {
+    const fixture = await renderPlans();
+    expect(libraryWatch).not.toHaveBeenCalled();
+
+    setRouteState({ mode: 'library-browse' }, true);
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    expect(libraryWatch).toHaveBeenCalledWith(user.uid);
+  });
+
+  it('starts placement inside a future active plan instead of suggesting an unwanted extension', async () => {
+    const futureYear = new Date().getFullYear() + 1;
+    const planStart = `${futureYear}-10-01`;
+    schedule = { ...schedule, plans: schedule.plans.map(plan => ({ ...plan,
+      startLocalDate: planStart, endLocalDate: `${futureYear + 1}-03-31` })) };
+    watchSchedule.mockReturnValue(of(schedule));
+    const item: WorkoutLibraryItemV1 = { schemaVersion: 1, id: 'library-1', title: 'Base run',
+      structure: schedule.workouts[0].structure, status: 'active', revision: 1,
+      createdAtMs: 1, updatedAtMs: 1 };
+    setRouteState({ mode: 'library-browse' });
+    const fixture = await renderPlans();
+
+    fixture.componentInstance.beginLibraryPlacement(item);
+
+    expect(fixture.componentInstance.placementPlanId()).toBe('active-plan');
+    expect(fixture.componentInstance.placementStartDate()).toBe(planStart);
+    expect(fixture.componentInstance.placementEndDate()).toBe(planStart);
   });
 
   it('creates a saved recipe through the existing editor without a date or schedule mutation', async () => {
@@ -227,6 +263,38 @@ describe('PlansWorkspaceComponent', () => {
       operation: expect.objectContaining({ kind: 'create', title: 'Saved aerobic run' }),
     }));
     expect(mutate).not.toHaveBeenCalled();
+    expect(TestBed.inject(Router).navigate).toHaveBeenCalledWith(
+      ['/training/plans/library'], { replaceUrl: true });
+  });
+
+  it('returns from a library editor through its recorded browse entry', async () => {
+    setRouteState({ mode: 'library-create' });
+    const fixture = await renderPlans();
+    const location = TestBed.inject(Location);
+    const back = vi.spyOn(location, 'back').mockImplementation(() => undefined);
+    vi.spyOn(location, 'getState').mockReturnValue({
+      trainingPlansEditorReturn: { uid: user.uid, url: '/training/plans/library' },
+    });
+
+    fixture.componentInstance.cancelEditor();
+
+    expect(back).toHaveBeenCalledOnce();
+    expect(TestBed.inject(Router).navigate).not.toHaveBeenCalledWith(
+      ['/training/plans/library'], expect.anything());
+  });
+
+  it('replaces a direct library editor link on Cancel instead of reopening it on Back', async () => {
+    setRouteState({ mode: 'library-create' });
+    const fixture = await renderPlans();
+    const location = TestBed.inject(Location);
+    const back = vi.spyOn(location, 'back').mockImplementation(() => undefined);
+    vi.spyOn(location, 'getState').mockReturnValue({});
+
+    fixture.componentInstance.cancelEditor();
+
+    expect(back).not.toHaveBeenCalled();
+    expect(TestBed.inject(Router).navigate).toHaveBeenCalledWith(
+      ['/training/plans/library'], { replaceUrl: true });
   });
 
   it('pauses the plan workspace while a staged restore hides workout roots', async () => {

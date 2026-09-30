@@ -15,7 +15,7 @@ import {
   viewChild,
 } from '@angular/core';
 import { Location } from '@angular/common';
-import { toSignal } from '@angular/core/rxjs-interop';
+import { toObservable, toSignal } from '@angular/core/rxjs-interop';
 import { MatDialog } from '@angular/material/dialog';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { ActivatedRoute, Router, type NavigationExtras } from '@angular/router';
@@ -265,8 +265,8 @@ export class PlansWorkspaceComponent {
       : this.editor()?.unitSettings.paceUnits[0] === PaceUnits.MinutesPerMile ? 'min/mi' : 'min/km');
   readonly hasTrainingPlanningUIAccess = computed(() => !!this.currentUser()?.uid);
   readonly libraryView = computed(() => this.routeState().mode.startsWith('library-'));
-  readonly libraryState = toSignal(this.userService.user$.pipe(
-    switchMap(user => user?.uid ? this.libraryService.watch(user.uid).pipe(
+  readonly libraryState = toSignal(combineLatest([this.userService.user$, toObservable(this.libraryView)]).pipe(
+    switchMap(([user, enabled]) => user?.uid && enabled ? this.libraryService.watch(user.uid).pipe(
       map(items => ({ status: 'ready', items, message: null } as LibraryLoadState)),
       startWith({ status: 'loading', items: [], message: null } as LibraryLoadState),
       catchError(error => of({ status: 'error', items: [], message: errorMessage(error) } as LibraryLoadState)),
@@ -433,7 +433,7 @@ export class PlansWorkspaceComponent {
           this.currentUser()?.settings?.unitSettings ?? null,
           this.locale,
         ),
-        actionBusy: ['copy', 'skip', 'delete', 'permanent'].some(action => this.busyAction() === `${action}-${workout.id}`),
+        actionBusy: ['copy', 'skip', 'delete', 'permanent', 'library'].some(action => this.busyAction() === `${action}-${workout.id}`),
         historyScope: workout.planId
           ? { kind: 'plan', id: workout.planId }
           : { kind: 'workout', id: workout.id },
@@ -990,13 +990,17 @@ export class PlansWorkspaceComponent {
     if (this.busyAction() || !this.editor()) return;
     this.editorGeneration += 1;
     this.editor.set(null);
-    if (this.libraryView()) {
-      this.libraryEditorItem.set(null);
-      void this.router.navigate(['/training/plans/library']);
-      return;
-    }
     const state = this.location.getState() as { trainingPlansEditorReturn?: { uid?: string; url?: string } } | null;
     const previous = state?.trainingPlansEditorReturn;
+    if (this.libraryView()) {
+      this.libraryEditorItem.set(null);
+      if (previous?.uid === this.currentUser()?.uid && previous.url === '/training/plans/library') {
+        this.location.back();
+      } else {
+        void this.router.navigate(['/training/plans/library'], { replaceUrl: true });
+      }
+      return;
+    }
     // Only go Back for an entry we pushed from this owner's Plans screen; direct links get a safe local fallback.
     if (previous?.uid === this.currentUser()?.uid && isTrainingPlansBrowseUrl(previous?.url)) {
       this.location.back();
@@ -1290,7 +1294,7 @@ export class PlansWorkspaceComponent {
         this.editor.set(null);
         this.libraryEditorItem.set(null);
         this.snackBar.open(item ? 'Saved workout updated.' : 'Workout saved to your library.', 'Dismiss', { duration: 4000 });
-        void this.router.navigate(['/training/plans/library']);
+        void this.router.navigate(['/training/plans/library'], { replaceUrl: true });
       } catch (error) { this.showError(error); }
       finally { this.busyAction.set(null); }
       return;
@@ -1412,9 +1416,11 @@ export class PlansWorkspaceComponent {
 
   beginLibraryPlacement(item: WorkoutLibraryItemV1): void {
     if (this.busyAction() || item.status !== 'active') return;
-    const date = todayLocalDate();
+    const plan = this.activePlan();
+    const today = todayLocalDate();
+    const date = plan && today < plan.startLocalDate ? plan.startLocalDate : today;
     this.placementItem.set(item);
-    this.placementPlanId.set(this.activePlan()?.id ?? null);
+    this.placementPlanId.set(plan?.id ?? null);
     this.placementStartDate.set(date);
     this.placementEndDate.set(date);
     this.placementWeekdays.set([new Date(`${date}T12:00:00Z`).getUTCDay()]);

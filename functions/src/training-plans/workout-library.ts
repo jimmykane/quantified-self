@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import * as admin from 'firebase-admin';
+import { Timestamp } from 'firebase-admin/firestore';
 import { ActivityTypes } from '@sports-alliance/sports-lib';
 import {
     WORKOUT_LIBRARY_COLLECTION_ID,
@@ -22,6 +23,7 @@ import {
     STRENGTH_DETAILS_COLLECTION_ID,
     STRENGTH_DETAILS_DOCUMENT_ID,
     parseStrengthWorkoutDetailsV1,
+    strengthProjectionMatchesDetails,
 } from '../../../shared/strength-workout';
 import { getUserDeletionGuardState, getUserDeletionGuardStateInTransaction } from '../shared/user-deletion-guard';
 import { TrainingScheduleMutationError } from './mutation';
@@ -30,9 +32,19 @@ import { mutateTrainingScheduleForUser, TrainingScheduleOversizedMutationError }
 const LIBRARY_RECEIPTS = 'workoutLibraryMutationReceipts';
 const PLACEMENT_RECEIPTS = 'workoutLibraryPlacementReceipts';
 const LIBRARY_TOMBSTONES = 'workoutLibraryTombstones';
+const RECEIPT_RETENTION_MS = 30 * 24 * 60 * 60 * 1000;
 
 function hash(value: unknown): string {
     return createHash('sha256').update(JSON.stringify(value)).digest('hex');
+}
+
+function copyTitle(title: string): string {
+    let prefix = '';
+    for (const character of title) {
+        if (prefix.length + character.length > 115) break;
+        prefix += character;
+    }
+    return `${prefix.trimEnd()} copy`;
 }
 
 function sameRequest(snapshot: admin.firestore.DocumentSnapshot, requestHash: string): void {
@@ -91,7 +103,7 @@ export async function mutateWorkoutLibraryForUser(
                 if (previous.id !== operation.sourceItemId || previous.revision !== operation.expectedSourceRevision) {
                     throw new TrainingScheduleMutationError('revision-conflict', 'The saved workout changed. Reload it first.');
                 }
-                prescription = parseWorkoutLibraryPrescription(`${previous.title.slice(0, 115)} copy`,
+                prescription = parseWorkoutLibraryPrescription(copyTitle(previous.title),
                     previous.structure, previous.strength);
             } else {
                 const source = await transaction.get(user.collection(SCHEDULED_WORKOUTS_COLLECTION_ID).doc(operation.sourceWorkoutId));
@@ -109,7 +121,7 @@ export async function mutateWorkoutLibraryForUser(
                         .doc(STRENGTH_DETAILS_DOCUMENT_ID));
                     if (!details.exists) throw new TrainingScheduleMutationError('failed-precondition', 'Strength details are missing.');
                     const parsed = parseStrengthWorkoutDetailsV1(details.data());
-                    if (parsed.workoutId !== workout.id || parsed.revision !== workout.revision) {
+                    if (parsed.workoutId !== workout.id || !strengthProjectionMatchesDetails(workout.structure, parsed)) {
                         throw new TrainingScheduleMutationError('failed-precondition', 'Strength details do not match the workout.');
                     }
                     strength = { version: parsed.version, exercises: parsed.exercises } as const;
@@ -127,6 +139,7 @@ export async function mutateWorkoutLibraryForUser(
                 throw new TrainingScheduleMutationError('revision-conflict', 'This library workout changed. Reload it first.');
             }
             if (operation.kind === 'delete') {
+                // Library entries are leaf documents. Receipts and ID tombstones live under trainingPlanState.
                 transaction.delete(itemRef);
                 transaction.create(tombstoneRef, { deletedAtMs: nowMs });
             } else {
@@ -145,7 +158,8 @@ export async function mutateWorkoutLibraryForUser(
         const priorRevision = libraryStateSnapshot.exists ? libraryStateSnapshot.get('revision') : 0;
         if (!Number.isSafeInteger(priorRevision) || priorRevision < 0) throw new Error('Invalid workout library state.');
         transaction.set(libraryStateRef, { revision: priorRevision + 1, updatedAtMs: nowMs });
-        transaction.create(receiptRef, { requestHash, response, createdAtMs: nowMs });
+        transaction.create(receiptRef, { requestHash, response, createdAtMs: nowMs,
+            expireAt: Timestamp.fromMillis(nowMs + RECEIPT_RETENTION_MS) });
         return response;
     });
 }
@@ -216,7 +230,8 @@ export async function placeWorkoutLibraryForUser(
                     stateRevision: result.state.revision,
                     planRevision: request.planId === null ? null
                         : (result.plans.find(plan => plan.id === request.planId)?.revision ?? null) };
-                transaction.create(receiptRef, { requestHash, response: placed, createdAtMs: nowMs });
+                transaction.create(receiptRef, { requestHash, response: placed, createdAtMs: nowMs,
+                    expireAt: Timestamp.fromMillis(nowMs + RECEIPT_RETENTION_MS) });
             },
         });
     } catch (error) {

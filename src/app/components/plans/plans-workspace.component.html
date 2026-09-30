@@ -17,7 +17,8 @@
       </a>
       } @else {
         <a mat-button routerLink="/training/plans" appHapticTap><mat-icon aria-hidden="true">arrow_back</mat-icon>Plans</a>
-        <a mat-flat-button routerLink="/training/plans/library/new" appHapticTap>
+        <a mat-flat-button routerLink="/training/plans/library/new" appHapticTap
+          [state]="{ trainingPlansEditorReturn: { uid: currentUser()?.uid, url: '/training/plans/library' } }">
           <mat-icon aria-hidden="true">add</mat-icon>New saved workout
         </a>
       }
@@ -347,10 +348,16 @@
                   [disabled]="busyAction() !== null"><mat-icon aria-hidden="true">event_available</mat-icon> Add to dates</button>
               }
               <a mat-button [routerLink]="['/training/plans/library', row.item.id]" appHapticTap
+                [state]="{ trainingPlansEditorReturn: { uid: currentUser()?.uid, url: '/training/plans/library' } }"
                 [attr.aria-label]="'Edit saved workout ' + row.item.title"><mat-icon aria-hidden="true">edit</mat-icon> Edit</a>
               <button mat-icon-button type="button" appHapticTap [matMenuTriggerFor]="libraryActions"
-                [attr.aria-label]="'More actions for ' + row.item.title" [disabled]="busyAction() !== null">
-                <mat-icon aria-hidden="true">more_vert</mat-icon>
+                [attr.aria-label]="busyAction() === 'library-' + row.item.id ? 'Updating ' + row.item.title : 'More actions for ' + row.item.title"
+                [disabled]="busyAction() !== null">
+                @if (busyAction() === 'library-' + row.item.id) {
+                  <mat-spinner diameter="18" aria-hidden="true"></mat-spinner>
+                } @else {
+                  <mat-icon aria-hidden="true">more_vert</mat-icon>
+                }
               </button>
               <mat-menu #libraryActions="matMenu" class="qs-menu-panel">
                 <button mat-menu-item type="button" appHapticTap (click)="copyLibraryItem(row.item)">

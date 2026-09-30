@@ -542,7 +542,9 @@ and Sports Lib unit boundary are unchanged. Browser rules permit owner reads onl
 create, snapshot-from-current-workout, update, status and confirmed deletion. It verifies Auth, App Check, account
 deletion, expected item/source revision, a 200-entry cap and an idempotent mutation receipt. IDs deleted from the
 library are tombstoned against reuse. Each library edit increments private library state for MCP cursor invalidation;
-all receipts, tombstones and state live under `trainingPlanState/current` and are server-only. Account cleanup
+mutation and placement receipts carry the existing 30-day Training retention field and their collection groups have
+Firestore TTL policies; ID tombstones remain durable.
+All receipts, tombstones and state live under `trainingPlanState/current` and are server-only. Account cleanup
 recursively deletes library entries and that private subtree.
 
 `placeWorkoutLibrary` resolves the active, exact-revision saved prescription on the server and atomically instantiates
@@ -556,7 +558,9 @@ multi-date placement. Preflight write/byte bounds can reject a large prescriptio
 The existing delivery reconciliation marker applies to new active-plan workouts, while Standalone copies receive no
 Send opt-in. No template edit, save, archive or placement changes completed-event totals.
 
-The library UI uses the existing unit-aware manual/strength editor and compact rows. Placement selects a destination,
+The library UI uses the existing unit-aware manual/strength editor and compact rows. Its owner-visible collection
+listener runs only on library routes, and editor Cancel returns through a recorded same-owner library browse entry
+or replaces a direct link with the safe browse route. Placement selects a destination,
 inclusive dates and weekdays, previews count/overlaps, and honors the account week-start preference in weekday order.
 It supports empty/loading/error states, keyboard-accessible Material controls, haptics and narrow-screen wrapping.
 Existing plan and workout URLs remain unchanged; library items use path IDs, not query IDs. Help explains the separate
