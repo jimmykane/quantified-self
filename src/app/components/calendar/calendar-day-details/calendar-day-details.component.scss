@@ -130,32 +130,6 @@ h3 {
   white-space: nowrap;
 }
 
-.calendar-day-planned-row {
-  display: flex;
-  align-items: center;
-  min-width: 0;
-}
-
-.calendar-day-planned-item {
-  flex: 1 1 auto;
-  min-width: 0;
-}
-
-.calendar-day-planned-row > button {
-  @include mat.icon-button-overrides((state-layer-size: 48px));
-  flex: 0 0 48px;
-  width: 48px;
-  height: 48px;
-}
-
-.calendar-day-duplicate-icon {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 24px;
-  height: 24px;
-}
-
 // Content-sized app rows inside Material list items avoid the fixed multi-line
 // baselines/clamping, while Material still owns focus, ripple and interaction.
 .calendar-day-entry-item {

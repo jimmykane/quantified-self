@@ -728,12 +728,14 @@ packed Sports Lib package. That gate is tracked by GitHub issue #654 under epic 
 history/restore, activation, pause, archive, and date-shift actions. Calendar-originated creation defaults to the active
 plan when one exists and provides an explicit standalone action; without an active plan it defaults to standalone.
 
-**Duplicate to…** is a date-picker action on plan/standalone workout rows and the planned-workout section of Calendar
-day details. It defaults to the source calendar day, supports same-day and cross-year copies, and keeps the source's
-scope. A plan destination outside its range uses explicit range-extension confirmation before any write. It calls the
+**Duplicate to…** is a date-picker action on plan/standalone workout rows, the full Calendar day page, and selected-day
+previews in Calendar and Dashboard. The compact day bottom sheet has navigation-only workout rows without duplicate/copy
+buttons; open the workout or full day for richer actions. The picker defaults to the source calendar day, supports
+same-day and cross-year copies, and keeps the source's scope. A plan destination outside its range uses explicit
+range-extension confirmation before any write. It calls the
 existing revision-checked `copy-workout` mutation with fresh workout/mutation IDs; the duplicate starts planned with no
 completion link or inherited standalone provider consent. Existing active-plan opt-in can deliver the new workout.
-Success selects the destination day in Plans or Calendar, or focuses the new Standalone row. Dashboard/Today day details
+Success selects the destination day in Plans or Calendar, or focuses the new Standalone row. Dashboard day previews
 route to that day in full Calendar. A cancelled picker or range confirmation does not mutate the schedule; source and
 completed-activity totals are unchanged. The one-shot Calendar destination is owner-bound and cleared on sign-out.
 The compact dialog uses the account week-start preference, app scrollbar
@@ -741,6 +743,10 @@ styling and action haptics. MCP impact: no new tool, schema, field, scope or pro
 `copy-workout` preview/apply operation already covers same-scope duplication; Assistant and bundled guidance now route
 explicit duplication to it, with exact-source/revision reads and native or app-owned confirmation. Firestore-emulator
 tests cover copy identity, scope, range extension, revision conflict and idempotent apply.
+
+Removing the day-sheet duplication shortcut has no MCP wire impact: the existing `copy-workout` operation, read
+projections, strict preview/apply contract, scopes, consent, Assistant routing, and provider behavior are unchanged.
+No plugin rebuild or registered-client rescan is required.
 
 The workspace presents one scope selector and one contextual **Add workout** action. The selected plan's name, lifecycle,
 and date range appear once; there is no separate overview strip or repeated plan/standalone heading. An account without
@@ -831,11 +837,12 @@ marked. Every rendered date is selectable, including empty dates. Day details ke
 activities in separate sections. Their navigation rows retain a visible trailing affordance at narrow widths, with
 supporting text yielding before that affordance. Planned workouts never enter recorded activity counts, durations, distance, elevation,
 group bars, activity tables, or Training-derived metrics.
-Planned and skipped icons use their current plan's color; standalone icons stay theme-neutral. An exact stored completion
+In the calendar grid, planned and skipped markers use their current plan's color; standalone markers stay theme-neutral. An exact stored completion
 link changes the overlay icon to a task check and the day-detail state to **Completed · activity linked**; it does not
-duplicate or restyle the completed activity. The day-details planned
-rows repeat that accent as a rounded rail outside the Material row highlight, keeping the selection surface and color
-edge visually separate. Trailing navigation chevrons stay vertically centered for multi-line rows. The overlay resolves
+duplicate or restyle the completed activity. Selected-day rows use sport icons rather than the compact grid's status
+markers, and the bottom sheet has no decorative rails beside those icons. The sheet shares compact title/metadata and
+recovery typography with selected-day previews on the app's standard overlay surface. Trailing navigation chevrons stay
+vertically centered for multi-line rows. The overlay resolves
 colors from the live plans, so recoloring or moving
 a workout changes its appearance without rewriting workout snapshots. Up to two icons are shown, reserving one for
 each scope when standalone and active-plan workouts share a day; extra workouts retain an overflow count. Compact and

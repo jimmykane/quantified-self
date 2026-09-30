@@ -236,7 +236,9 @@ Selected-day presentation is shared by the full day page, Dashboard day preview,
 bottom sheet through `components/calendar/_calendar-day-presentation.scss`. Reuse its navigation, supporting-text,
 section-heading, entry-row, entry-title, and entry-icon mixins instead of copying presentation rules. The full day retains
 its timeline layout. Previews and the sheet share 14px/body-medium titles, body-small metadata, 20px sport/note icons,
-24px icon slots, and 48px duplicate actions; month/mobile styles must not shrink their row text independently.
+24px icon slots; month/mobile styles must not shrink their row text independently. Day-sheet workout rows are single
+navigation links without duplicate/copy buttons, leaving more room for titles. Duplication remains in the full day,
+selected-day previews, and Plans.
 Compact recovery metrics in the sheet and previews share label-small labels/supporting copy and 19px Barlow values;
 the full day retains its larger 22px values. The day sheet establishes body-medium typography and zero tracking on its
 app-owned container so Material overlay body-large tracking cannot leak into nested metrics or Training-impact text.
@@ -247,7 +249,8 @@ shared overlay surface, fixed header, and bounded content scroll; do not add an 
 Preview and sheet row titles use on-surface text for readability in both themes; full-day links keep their existing
 primary color. Loading/error copy uses the same compact metadata typography, and numeric counts retain
 Barlow Condensed without inheriting a metadata font reset.
-Duplicate icons and pending spinners share a centered 24px box inside a public-token-sized 48px Material button.
+Where duplication is available, its icons and pending spinners share a centered 24px box inside a public-token-sized
+48px Material button.
 Ready days without recorded activities omit the sheet's completed totals, sport breakdown, and detail section entirely,
 including the zero count/duration and empty-activity message. Loading/error states remain visible, and notes, recovery,
 and planning are independent. Linked plans do not create completed activity totals. This calendar presentation-only

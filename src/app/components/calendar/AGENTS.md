@@ -10,3 +10,5 @@
   Reset overlay tracking on the day-sheet content; do not let Material's body-large typography leak into nested content.
 - Hide completed-activity totals and sections on ready days without recorded activities. Keep loading/error states
   and other day content visible; a linked planned workout alone is not a recorded activity.
+- Keep day-sheet workout rows navigation-only, without duplicate/copy buttons. Duplication remains available in
+  the full day, selected-day previews, and Plans; do not remove those actions when simplifying the sheet.

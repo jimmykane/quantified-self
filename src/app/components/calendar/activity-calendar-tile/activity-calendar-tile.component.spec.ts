@@ -262,18 +262,18 @@ describe('ActivityCalendarTileComponent', () => {
     expect(fixture.componentInstance.selectedDateKey()).toBe(currentLocalDate(new Date().getDate()));
   });
 
-  it.each([false, true])('opens the destination in full Calendar after a duplicate from a tile (navigation: %s)', async showNavigation => {
-    const duplicate = { kind: 'duplicated-workout', workoutId: 'copy', planId: null, localDate: currentLocalDate(5) };
-    openBottomSheet.mockReturnValue({ afterDismissed: () => of(duplicate) });
+  it.each([false, true])('keeps the selected day when its navigation-only sheet closes (navigation: %s)', async showNavigation => {
     const navigate = vi.spyOn(TestBed.inject(Router), 'navigate').mockResolvedValue(true);
     const fixture = TestBed.createComponent(ActivityCalendarTileComponent);
     fixture.componentRef.setInput('user', user);
     fixture.componentRef.setInput('showNavigation', showNavigation);
     fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
     vi.spyOn(fixture.debugElement.injector.get(MatBottomSheet), 'open').mockImplementation(openBottomSheet);
+    const selectedDate = fixture.componentInstance.selectedDateKey();
     fixture.componentInstance.openDay(fixture.componentInstance.calendarModel().months[0].days[5]);
-    expect(dayDetailsNavigation.prepareWorkoutDestination).toHaveBeenCalledWith(planningUserUid, duplicate.localDate);
-    expect(navigate).toHaveBeenCalledWith(['/calendar'], { queryParams: { view: 'month', date: duplicate.localDate } });
+    expect(dayDetailsNavigation.prepareWorkoutDestination).not.toHaveBeenCalled();
+    expect(navigate).not.toHaveBeenCalled();
+    expect(fixture.componentInstance.selectedDateKey()).toBe(selectedDate);
   });
 
   it.each([false, true])('hides planning for a different displayed account (mini calendar: %s)', async showNavigation => {

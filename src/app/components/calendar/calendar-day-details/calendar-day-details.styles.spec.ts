@@ -21,8 +21,7 @@ describe('compact day-sheet styles', () => {
     <div class="calendar-day-details"></div>
     <div class="calendar-day-details-content">
       <div class="calendar-day-total"><span><span class="calendar-day-number">2</span> completed activities</span></div>
-      <a class="calendar-day-entry-item"><span class="calendar-day-entry-title">Long workout title</span></a>
-      <div class="calendar-day-planned-row"><button><span class="calendar-day-duplicate-icon"></span></button></div>
+      <a class="calendar-day-entry-item calendar-day-planned-item"><span class="calendar-day-entry-title">Long workout title</span></a>
       <p class="calendar-day-empty" role="status">Loading activities…</p>
     </div>
   </section>`, 'text/html');
@@ -96,19 +95,10 @@ describe('compact day-sheet styles', () => {
     expect(heightTokens).toEqual(['auto']);
   });
 
-  it('centers both duplicate states in one box and sizes the Material button through public tokens', () => {
-    const button = document.querySelector('.calendar-day-planned-row > button')!;
-    expect(declarations(button, '--mat-icon-button-state-layer-size')).toEqual(['48px']);
-    const iconBox = button.querySelector('.calendar-day-duplicate-icon')!;
-    for (const [property, expected] of [['display', 'flex'], ['align-items', 'center'],
-      ['justify-content', 'center'], ['width', '24px'], ['height', '24px']]) {
-      expect(declarations(iconBox, property)).toEqual([expected]);
-    }
-  });
-
   it('keeps planned rows aligned without decorative rails or compensating indentation', () => {
     expect(rules.some(rule => rule.selector.includes('calendar-day-planned-accent'))).toBe(false);
-    const row = document.querySelector('.calendar-day-planned-row')!;
+    expect(rules.some(rule => /calendar-day-(planned-row|duplicate-icon)/.test(rule.selector))).toBe(false);
+    const row = document.querySelector('.calendar-day-planned-item')!;
     for (const property of ['margin-inline-start', 'padding-inline-start', 'border-left', 'border-inline-start']) {
       expect(declarations(row, property)).toEqual([]);
     }

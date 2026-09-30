@@ -56,7 +56,6 @@
       } @else if (plannedWorkoutRows().length) {
       <mat-nav-list>
         @for (planned of plannedWorkoutRows(); track planned.id) {
-        <div class="calendar-day-planned-row" role="presentation">
           <a mat-list-item appHapticTap class="calendar-day-entry-item calendar-day-planned-item" [routerLink]="['/training/plans/workout', planned.id]"
             (click)="prepareWorkoutNavigation()">
             <div class="calendar-day-entry">
@@ -70,15 +69,6 @@
               <mat-icon class="calendar-day-item-meta" aria-hidden="true">chevron_right</mat-icon>
             </div>
           </a>
-          <button mat-icon-button appHapticTap type="button" matTooltip="Duplicate to…"
-            [attr.aria-label]="'Duplicate ' + planned.title + ' to a chosen date'"
-            [disabled]="duplicatingId() !== null || !data.scheduleSource" (click)="duplicateWorkout(planned.workout)">
-            <span class="calendar-day-duplicate-icon" aria-hidden="true">
-              @if (duplicatingId() === planned.id) { <mat-spinner diameter="18" aria-hidden="true"></mat-spinner> }
-              @else { <mat-icon aria-hidden="true">content_copy</mat-icon> }
-            </span>
-          </button>
-        </div>
         }
       </mat-nav-list>
       } @else {
