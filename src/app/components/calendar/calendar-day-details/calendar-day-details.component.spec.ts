@@ -381,7 +381,6 @@ describe('CalendarDayDetailsComponent', () => {
     )]
       .map((stat: HTMLElement) => stat.getAttribute('aria-label'));
     expect(groupStats).toEqual([
-      'Duration 1h',
       'Distance 20.00 Km',
       'Descent 1,200 m',
     ]);

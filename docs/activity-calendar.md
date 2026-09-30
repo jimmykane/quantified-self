@@ -86,7 +86,7 @@ Activities are grouped with the shared Sports Lib activity-type groups and app c
 
 The top summary shows distance, duration, and ascent for the selected primary period. The Activities section groups the same period by activity group and compares each group's recorded duration with the longest-duration group.
 
-- Duration is the bar metric. Positive recorded duration, distance, ascent, and descent values appear beneath the bar.
+- Duration is the bar metric and appears once beside the bar. Only other positive recorded totals (distance, ascent, and descent) appear beneath it; duration-only groups have no supporting metric strip. All Calendar surfaces use this shared projection.
 - The inline selected-day panel and Today day-details sheet reuse these exact group rows for the selected local day; their bars compare only that day's activity groups.
 - Planned workouts never contribute to distance, duration, ascent, descent, activity counts, group bars, or the activity table. Day details render them in a separate **Planned workouts** section.
 - Missing values remain unavailable rather than being inferred. A group without recorded duration uses `--` and has no progressbar semantics.

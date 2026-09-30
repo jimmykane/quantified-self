@@ -22,14 +22,15 @@ describe('activity-calendar-volume helper', () => {
     expect(row.stats).toEqual([]);
   });
 
-  it('keeps the duration detail for multiple activities with no other recorded metric', () => {
+  it('does not repeat duration for multiple activities with no other recorded metric', () => {
     const [row] = buildActivityCalendarFamilyVolumeRows(buildActivityCalendarPeriodSummary([
       createEvent('indoor-1', ActivityTypes.IndoorSports, { [DataDuration.type]: 3600 }),
       createEvent('indoor-2', ActivityTypes.IndoorSports, { [DataDuration.type]: 1800 }),
     ]), null, 'en-US');
 
     expect(row.eventCount).toBe(2);
-    expect(row.stats.map(stat => stat.ariaLabel)).toEqual(['Duration 1h 30m']);
+    expect(row.valueLabel).toBe('1h 30m');
+    expect(row.stats).toEqual([]);
   });
 
   it('builds duration bars with available distance and elevation statistics', () => {
@@ -51,13 +52,11 @@ describe('activity-calendar-volume helper', () => {
       { label: 'Cycling', barPercent: 50 },
     ]);
     expect(rows[0].stats.map(stat => stat.ariaLabel)).toEqual([
-      'Duration 1h',
       'Distance 10.00 Km',
       'Ascent 450 m',
       'Descent 420 m',
     ]);
     expect(rows[1].stats.map(stat => stat.ariaLabel)).toEqual([
-      'Duration 30m',
       'Distance 5.00 Km',
     ]);
   });
@@ -72,7 +71,6 @@ describe('activity-calendar-volume helper', () => {
     ]), null, 'en-US');
 
     expect(rows[0].stats.map(stat => stat.ariaLabel)).toEqual([
-      'Duration 1h',
       'Descent 1,200 m',
     ]);
   });
