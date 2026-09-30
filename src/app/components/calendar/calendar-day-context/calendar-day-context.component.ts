@@ -19,7 +19,6 @@ import {
   formatActivityCalendarSummaryMetrics,
   resolveActivityCalendarEventDurationSeconds,
   resolveActivityCalendarEventLabel,
-  resolveEventFamilyIdentity,
 } from '../../../helpers/activity-calendar.helper';
 import { buildActivityCalendarFamilyVolumeRows } from '../../../helpers/activity-calendar-volume.helper';
 import { ActivityCalendarVolumeListComponent } from '../activity-calendar-volume-list/activity-calendar-volume-list.component';
@@ -149,7 +148,7 @@ export class CalendarDayContextComponent {
   readonly activities = computed(() => this.day().events.map((event: EventInterface) => ({
     id: `${event.getID?.() || ''}`,
     name: resolveActivityCalendarEventLabel(event),
-    color: resolveEventFamilyIdentity(event).color,
+    activityType: `${event.getActivityTypesAsString?.() || 'Activity'}`,
     duration: (() => {
       const seconds = resolveActivityCalendarEventDurationSeconds(event);
       return seconds === null ? 'Duration unavailable' : formatActivityCalendarDuration(seconds);

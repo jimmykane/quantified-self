@@ -174,13 +174,7 @@ h3 {
 }
 
 .calendar-day-entry {
-  display: grid;
-  grid-template-columns: 24px minmax(0, 1fr) auto;
-  align-items: start;
-  gap: 8px;
-  min-width: 0;
-  white-space: normal;
-  letter-spacing: 0;
+  @include day.entry-row;
 }
 
 .calendar-day-entry-copy { min-width: 0; overflow-wrap: anywhere; }
@@ -188,20 +182,12 @@ h3 {
 a.calendar-day-entry-item .calendar-day-entry-title {
   // Keep Material list text readable in both themes; the brand primary is not
   // a contrast-safe small-text color on the shared sheet surface.
-  @include day.navigation-link($color: var(--mat-sys-on-surface));
-  display: flex;
+  @include day.entry-title;
 }
 .calendar-day-entry-supporting { @include day.supporting-text; }
 
 .calendar-day-entry-icon {
-  display: flex;
-  width: 24px;
-  height: 20px;
-  align-items: center;
-  justify-content: center;
-  margin: 0;
-  font-size: 20px;
-  line-height: 20px;
+  @include day.entry-icon;
 }
 
 .calendar-day-item-meta {

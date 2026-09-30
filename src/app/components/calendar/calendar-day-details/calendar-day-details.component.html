@@ -93,13 +93,13 @@
     <p class="calendar-day-empty" role="status">Loading activities…</p>
     } @else if (activityState().status === 'error') {
     <p class="calendar-day-empty" role="status">Activities could not be loaded. Close this sheet and retry the calendar.</p>
-    } @else {
+    } @else if (eventRows().length) {
     <div class="calendar-day-total" aria-label="Completed activity total">
       <span><span class="calendar-day-number">{{ day().eventCount }}</span> completed {{ day().eventCount === 1 ? 'activity' : 'activities' }}</span>
       <strong>{{ day().durationLabel }}</strong>
     </div>
 
-    @if (trainingImpactState().status !== 'private' && eventRows().length) {
+    @if (trainingImpactState().status !== 'private') {
     <app-training-impact [impact]="dayTrainingImpact()" variant="summary" title="Day training impact"></app-training-impact>
     }
 
@@ -114,7 +114,6 @@
 
     <section class="calendar-day-details-group" aria-labelledby="calendar-day-activities-title">
       <h3 id="calendar-day-activities-title">Completed activity details</h3>
-      @if (eventRows().length) {
       <mat-nav-list>
         @for (event of eventRows(); track event.id) {
           @if (event.route) {
@@ -178,9 +177,6 @@
           }
         }
       </mat-nav-list>
-      } @else {
-      <p class="calendar-day-empty">No completed activities for this day.</p>
-      }
     </section>
     }
   </div>

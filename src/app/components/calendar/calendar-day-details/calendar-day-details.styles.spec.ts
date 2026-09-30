@@ -69,4 +69,35 @@ describe('compact day-sheet styles', () => {
       expect(declarations(iconBox, property)).toEqual([expected]);
     }
   });
+
+  it('shares sheet typography and icon layout with previews without smaller month/mobile overrides', () => {
+    const context = compile('src/app/components/calendar/calendar-day-context/calendar-day-context.component.scss');
+    const contextValues = (selector: string, property: string) => {
+      const values: string[] = [];
+      context.walkRules(rule => {
+        if (rule.selector === selector) rule.walkDecls(property, declaration => { values.push(declaration.value); });
+      });
+      return values;
+    };
+    for (const [property, expected] of [['font', 'var(--mat-sys-body-medium)'], ['color', 'var(--mat-sys-on-surface)']]) {
+      expect(contextValues('.calendar-day-context-preview-title', property).at(-1)).toBe(expected);
+    }
+    expect(contextValues('.calendar-day-context-preview-copy small', 'font')).toEqual(['var(--mat-sys-body-small)']);
+    expect(contextValues('.calendar-day-context-preview-entry', 'grid-template-columns')).toEqual(['24px minmax(0, 1fr) auto']);
+    expect(contextValues('.calendar-day-context-preview-entry', 'min-height')).toEqual(['44px']);
+    expect(contextValues('.calendar-day-context-preview-icon', 'height')).toEqual(['20px']);
+    expect(contextValues('.calendar-day-context-preview-note-entry', 'grid-template-columns')).toEqual(['24px minmax(0, 1fr) auto']);
+    expect(contextValues('.calendar-day-context-preview-note-button', 'min-height')).toEqual(['44px']);
+    expect(contextValues('.calendar-day-context-preview-note-button', '--mat-button-text-with-icon-horizontal-padding')).toEqual(['0']);
+    expect(contextValues('.calendar-day-context-preview-note-button', '--mat-button-text-container-height')).toEqual(['auto']);
+    expect(contextValues('.calendar-day-context-preview-plan > button', '--mat-icon-button-state-layer-size')).toEqual(['48px']);
+    context.walkRules(rule => {
+      if (rule.selector.includes('calendar-day-context--calm-month') && /preview-(title|entry|icon|copy)/.test(rule.selector)) {
+        const overridden: string[] = [];
+        rule.walkDecls(declaration => { overridden.push(declaration.prop); });
+        expect(overridden).not.toContain('font');
+        expect(overridden).not.toContain('font-size');
+      }
+    });
+  });
 });

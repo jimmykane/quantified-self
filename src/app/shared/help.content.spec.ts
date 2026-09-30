@@ -176,6 +176,9 @@ describe('help.content', () => {
     expect(calendar).toContain('Activity circles keep their own colors');
     expect(calendar).toContain('Show on charts and calendar');
     expect(calendar).toContain('The **Today** card opens a compact month calendar');
+    expect(calendar).toContain('use sport icons for planned workouts and completed activities');
+    expect(calendar).toContain('the sheet hides completed-activity totals and sections');
+    expect(calendar).toContain('Activity loading and errors are still labeled');
     expect(calendar).toContain("offers **Dashboard** to return when opened from the dashboard tile or Today's mini-calendar");
     const dashboard = HELP_SECTIONS.find(section => section.id === 'getting-started')?.content;
     expect(dashboard).toContain('HRV, Sleep, Form, and Freshness Forecast show the same note markers');

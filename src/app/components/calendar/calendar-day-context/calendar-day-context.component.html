@@ -195,17 +195,27 @@
         @else if (activityState().status === 'error') { <p role="alert">Activities could not be loaded.</p> }
         @else if (previewActivities().length) {
           @for (activity of previewActivities(); track activity.id) {
-            <div class="calendar-day-context-preview-row">
-              <span class="calendar-day-context-activity-dot" [style.background-color]="activity.color" aria-hidden="true"></span>
-              @if (activity.route) {
-                <a class="calendar-day-context-navigation-link" appHapticTap
-                  [routerLink]="activity.route" (click)="prepareNavigation()">{{ activity.name }}</a>
-              } @else { <strong>{{ activity.name }}</strong> }
-              <small>{{ activity.duration }}</small>
-              @if (trainingImpactState().status !== 'private') {
-                <app-training-impact [impact]="activity.trainingImpact" variant="compact"></app-training-impact>
-              }
-            </div>
+            <ng-template #activityContent>
+              <app-activity-type-icon class="calendar-day-context-preview-icon" [activityType]="activity.activityType"
+                size="20px" aria-hidden="true"></app-activity-type-icon>
+              <div class="calendar-day-context-preview-copy">
+                <span class="calendar-day-context-preview-title">{{ activity.name }}</span>
+                <small>{{ activity.duration }}</small>
+                @if (trainingImpactState().status !== 'private') {
+                  <app-training-impact [impact]="activity.trainingImpact" variant="compact"></app-training-impact>
+                }
+              </div>
+            </ng-template>
+            @if (activity.route) {
+              <a class="calendar-day-context-preview-entry" appHapticTap
+                [routerLink]="activity.route" (click)="prepareNavigation()">
+                <ng-container [ngTemplateOutlet]="activityContent"></ng-container>
+              </a>
+            } @else {
+              <div class="calendar-day-context-preview-entry">
+                <ng-container [ngTemplateOutlet]="activityContent"></ng-container>
+              </div>
+            }
           }
           @if (activities().length > previewActivities().length) {
             <span class="calendar-day-context-preview-more">+{{ activities().length - previewActivities().length }} more on the full day</span>
@@ -219,11 +229,15 @@
         @if (notesStatus() === 'error') { <p role="alert">Timeline notes could not be loaded.</p> }
         @else if (previewNotes().length) {
           @for (row of previewNotes(); track row.note.id) {
-            <div class="calendar-day-context-preview-row">
-              <span class="calendar-day-context-note-mark" [style.background-color]="row.color" aria-hidden="true"></span>
-              <button mat-button appHapticTap type="button" (click)="selectNote(row.note)">{{ row.note.title }}</button>
-              <small>{{ row.label }} · {{ row.dates }}</small>
-            </div>
+            <button mat-button appHapticTap class="calendar-day-context-preview-note-button" type="button" (click)="selectNote(row.note)">
+              <span class="calendar-day-context-preview-note-entry">
+                <mat-icon class="calendar-day-context-preview-icon" [style.color]="row.color" aria-hidden="true">{{ row.icon }}</mat-icon>
+                <span class="calendar-day-context-preview-copy">
+                  <span class="calendar-day-context-preview-title">{{ row.note.title }}</span>
+                  <small>{{ row.label }} · {{ row.dates }}</small>
+                </span>
+              </span>
+            </button>
           }
           @if (noteRows().length > previewNotes().length) {
             <span class="calendar-day-context-preview-more">+{{ noteRows().length - previewNotes().length }} more on the full day</span>
@@ -238,18 +252,23 @@
           @else if (plannedStatus() === 'error') { <p role="alert">Planned workouts could not be loaded.</p> }
           @else if (previewPlans().length) {
             @for (entry of previewPlans(); track entry.workout.id) {
-              <div class="calendar-day-context-preview-plan" [style.--planned-workout-color]="entry.color">
-                <span class="calendar-day-context-plan-mark" aria-hidden="true"></span>
-                <div class="calendar-day-context-preview-row">
-                  <a class="calendar-day-context-navigation-link" appHapticTap
-                    [routerLink]="['/training/plans/workout', entry.workout.id]" (click)="prepareNavigation()">{{ entry.workout.title }}</a>
-                  <small>{{ entry.planName || 'Standalone' }} · {{ entry.lifecycle }}</small>
-                </div>
+              <div class="calendar-day-context-preview-plan">
+                <a class="calendar-day-context-preview-entry" appHapticTap
+                  [routerLink]="['/training/plans/workout', entry.workout.id]" (click)="prepareNavigation()">
+                  <app-activity-type-icon class="calendar-day-context-preview-icon" [activityType]="entry.workout.structure.sport"
+                    size="20px" aria-hidden="true"></app-activity-type-icon>
+                  <div class="calendar-day-context-preview-copy">
+                    <span class="calendar-day-context-preview-title">{{ entry.workout.title }}</span>
+                    <small>{{ entry.planName || 'Standalone' }} · {{ entry.lifecycle }}</small>
+                  </div>
+                </a>
                 <button mat-icon-button appHapticTap type="button" matTooltip="Duplicate to…"
                   [attr.aria-label]="'Duplicate ' + entry.workout.title + ' to another date'"
                   [disabled]="duplicatingId() !== null || !data().scheduleSource" (click)="duplicateWorkout(entry.workout.id)">
-                  @if (duplicatingId() === entry.workout.id) { <mat-spinner diameter="18" aria-hidden="true"></mat-spinner> }
-                  @else { <mat-icon aria-hidden="true">content_copy</mat-icon> }
+                  <span class="calendar-day-context-duplicate-icon" aria-hidden="true">
+                    @if (duplicatingId() === entry.workout.id) { <mat-spinner diameter="18" aria-hidden="true"></mat-spinner> }
+                    @else { <mat-icon aria-hidden="true">content_copy</mat-icon> }
+                  </span>
                 </button>
               </div>
             }

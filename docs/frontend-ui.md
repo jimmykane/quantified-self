@@ -234,15 +234,22 @@ shadow for in-flow cards or add route-local card shadows.
 
 Selected-day presentation is shared by the full day page, Dashboard day preview, Calendar day preview, and day
 bottom sheet through `components/calendar/_calendar-day-presentation.scss`. Reuse its navigation, supporting-text,
-and section-heading mixins instead of copying typography. The previews and full day retain their existing layouts.
-The sheet uses content-sized app-owned rows inside Material list items: 14px/body-medium titles, body-small metadata,
-20px sport/note icons, and 48px duplicate actions. Long titles, notes, workout summaries, and activity metrics wrap
+section-heading, entry-row, entry-title, and entry-icon mixins instead of copying presentation rules. The full day retains
+its timeline layout. Previews and the sheet share 14px/body-medium titles, body-small metadata, 20px sport/note icons,
+24px icon slots, and 48px duplicate actions; month/mobile styles must not shrink their row text independently.
+The sheet uses content-sized app-owned rows inside Material list items. Long titles, notes, workout summaries, and
+activity metrics wrap
 without fixed multi-line heights or clamping. Material retains navigation, focus and ripple behavior. Keep the
 shared overlay surface, fixed header, and bounded content scroll; do not add an inset card or enlarge the rows.
-Sheet row titles retain Material's on-surface text color for readability in both themes; other day-view links keep
-their existing primary color. Loading/error copy uses the same compact metadata typography, and numeric counts retain
+Preview and sheet row titles use on-surface text for readability in both themes; full-day links keep their existing
+primary color. Loading/error copy uses the same compact metadata typography, and numeric counts retain
 Barlow Condensed without inheriting a metadata font reset.
 Duplicate icons and pending spinners share a centered 24px box inside a public-token-sized 48px Material button.
+Ready days without recorded activities omit the sheet's completed totals, sport breakdown, and detail section entirely,
+including the zero count/duration and empty-activity message. Loading/error states remain visible, and notes, recovery,
+and planning are independent. Linked plans do not create completed activity totals. This calendar presentation-only
+change has no MCP wire impact: reads, projections, scopes, consent, mutations, and provider behavior are unchanged;
+no plugin rebuild or registered-client rescan is required.
 
 The Today month popup uses the existing compact calendar with `fillHeight=false` on both its tile and grid.
 The grid opts into `activity-calendar--picker`: readable 28px date badges, 64px rows, and a separate

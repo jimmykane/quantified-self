@@ -10,6 +10,7 @@ import { BehaviorSubject, of, Subject, throwError } from 'rxjs';
 import { AppUserService } from '../../../services/app.user.service';
 import { AppThemeService } from '../../../services/app.theme.service';
 import { AppHapticsService } from '../../../services/app.haptics.service';
+import { AppEventColorService } from '../../../services/color/app.event.color.service';
 import type { TimelineNote, TimelineNoteRange } from '@shared/timeline-notes';
 import type { TimelineNoteChartContext } from '../../../helpers/timeline-notes-chart.helper';
 import type { CalendarDayDetailsData } from '../calendar-day-details/calendar-day-details.component';
@@ -64,6 +65,9 @@ describe('ActivityCalendarTileComponent', () => {
         { provide: AppUserService, useValue: { user: viewer, user$: viewer$ } },
         { provide: AppThemeService, useValue: { appTheme: signal(AppThemes.Normal) } },
         { provide: AppHapticsService, useValue: haptics },
+        { provide: AppEventColorService, useValue: {
+          getActivityColor: vi.fn(), getColorForActivityTypeByActivityTypeGroup: vi.fn(),
+        } },
         { provide: ActivityCalendarService, useValue: { watchEvents } },
         { provide: TrainingPlansService, useValue: { watchSchedule, watchWorkoutCompletions } },
         { provide: CalendarDayHealthService, useValue: { watch: watchHealth } },

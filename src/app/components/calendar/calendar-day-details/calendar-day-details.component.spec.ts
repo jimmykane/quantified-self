@@ -78,7 +78,8 @@ describe('CalendarDayDetailsComponent', () => {
     const notes = signal<readonly TimelineNote[]>([note]);
     const fixture = await renderDayDetails([], { timelineNotes: notes });
     expect(fixture.nativeElement.querySelector('#calendar-day-notes-title')?.textContent).toBe('Timeline notes');
-    expect(fixture.nativeElement.textContent).toContain('No completed activities for this day');
+    expect(fixture.nativeElement.textContent).not.toContain('No completed activities for this day');
+    expect(fixture.nativeElement.querySelector('.calendar-day-total')).toBeNull();
     const button = fixture.nativeElement.querySelector('mat-action-list button') as HTMLButtonElement;
     expect(button.textContent).toContain('<b>Trip</b>');
     expect(button.textContent).toContain('Travel');
@@ -89,8 +90,7 @@ describe('CalendarDayDetailsComponent', () => {
     expect(button.querySelector('.calendar-day-entry-title')?.textContent).toBe('<b>Trip</b>');
     expect(button.querySelector('.calendar-day-entry')?.tagName).toBe('SPAN');
     expect(button.querySelector('b')).toBeNull();
-    expect(fixture.nativeElement.querySelector('#calendar-day-activities-title')?.textContent)
-      .toContain('Completed activity details');
+    expect(fixture.nativeElement.querySelector('#calendar-day-activities-title')).toBeNull();
     button.click();
     expect(TestBed.inject(MatBottomSheetRef).dismiss).toHaveBeenCalledExactlyOnceWith(note.id);
     notes.set([{ ...note, color: 'default' }]); fixture.detectChanges();
@@ -171,7 +171,8 @@ describe('CalendarDayDetailsComponent', () => {
     actions[0].click();
     expect(prepareReturn).toHaveBeenCalledWith('/', '2026-08-03');
     expect(TestBed.inject(MatBottomSheetRef).dismiss).toHaveBeenCalledOnce();
-    expect(fixture.nativeElement.textContent).toContain('No completed activities for this day.');
+    expect(fixture.nativeElement.textContent).not.toContain('No completed activities for this day.');
+    expect(fixture.nativeElement.querySelector('.calendar-day-total')).toBeNull();
     expect(fixture.nativeElement.querySelector('[aria-labelledby="calendar-day-family-title"]')).toBeNull();
   });
 
@@ -202,7 +203,9 @@ describe('CalendarDayDetailsComponent', () => {
 
     expect(fixture.nativeElement.querySelector('.calendar-day-planned-item')?.textContent)
       .toContain('Autumn build · Completed · activity linked');
-    expect(fixture.nativeElement.querySelector('.calendar-day-total')?.textContent).toContain('0 completed activities');
+    expect(fixture.nativeElement.querySelector('.calendar-day-total')).toBeNull();
+    expect(fixture.nativeElement.querySelector('#calendar-day-activities-title')).toBeNull();
+    expect(fixture.componentInstance.day().eventCount).toBe(0);
   });
 
   it('keeps the duplicate icon box stable while pending and silent for a disabled repeat click', async () => {
@@ -408,6 +411,21 @@ describe('CalendarDayDetailsComponent', () => {
     activities.set({ status: 'ready', day }); fixture.detectChanges();
     expect(fixture.nativeElement.textContent).toContain('Morning run');
     expect(fixture.nativeElement.querySelector('.calendar-day-number')?.textContent).toBe('1');
+    activities.set({ status: 'ready', day: { ...day, eventCount: 0, events: [] } }); fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('.calendar-day-total')).toBeNull();
+    expect(fixture.nativeElement.querySelector('#calendar-day-activities-title')).toBeNull();
+    expect(fixture.nativeElement.querySelector('app-training-impact')).toBeNull();
+    expect(fixture.nativeElement.textContent).not.toContain('No completed activities');
+  });
+
+  it('omits the entire completed section on an empty ready day but retains recovery and planning', async () => {
+    const fixture = await renderDayDetails([]);
+    expect(fixture.nativeElement.querySelector('.calendar-day-total')).toBeNull();
+    expect(fixture.nativeElement.querySelector('#calendar-day-family-title')).toBeNull();
+    expect(fixture.nativeElement.querySelector('#calendar-day-activities-title')).toBeNull();
+    expect(fixture.nativeElement.textContent).not.toContain('No completed activities');
+    expect(fixture.nativeElement.querySelector('app-calendar-day-context')).toBeTruthy();
+    expect(fixture.nativeElement.querySelector('.calendar-day-plan-add')).toBeTruthy();
   });
 
   it('keeps the header outside the day-detail scroll region', () => {
