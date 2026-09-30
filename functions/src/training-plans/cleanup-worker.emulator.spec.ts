@@ -8,11 +8,14 @@ import { reconcileExpiredDeletedWorkouts, reconcileTrainingCleanupJobs, runTrain
 import { buildTrainingScheduleDeletionTombstone, trainingScheduleDeletionTombstoneDocumentId } from './persistence';
 import { createEmptyTrainingPlanState } from './mutation';
 
-describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Training cleanup in isolated demo Firestore', { timeout: 60_000 }, () => {
-    if (process.env.FIRESTORE_EMULATOR_HOST && !/^(127\.0\.0\.1|localhost):\d+$/.test(process.env.FIRESTORE_EMULATOR_HOST)) {
-        throw new Error('A loopback Firestore emulator is required.');
+const emulatorHost = process.env.FIRESTORE_EMULATOR_HOST;
+const demoProjectId = 'demo-training-657';
+describe.skipIf(!emulatorHost)('Training cleanup in isolated demo Firestore', { timeout: 360_000 }, () => {
+    if (emulatorHost && (!/^(127\.0\.0\.1|localhost):\d+$/.test(emulatorHost)
+        || process.env.TRAINING_TEST_DEMO_PROJECT_ID !== demoProjectId)) {
+        throw new Error('A loopback Firestore emulator with the exact demo-training-657 project is required.');
     }
-    const db = new Firestore({ projectId: 'demo-training-657' });
+    const db = new Firestore({ projectId: demoProjectId });
     const uids: string[] = [];
     const nowMs = Date.parse('2026-09-28T10:00:00Z');
 
@@ -121,6 +124,57 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Training cleanup in isola
         expect(result.scanned).toBeGreaterThan(30);
         expect(result.failed).toBeGreaterThanOrEqual(30);
         expect((await valid.get()).exists).toBe(false);
+    });
+
+    it('sweeps 10-at-a-time across owners without skipping a fetched-page tail or exceeding 100 daily deletes', async () => {
+        // This eligibility window is earlier than the malformed fixtures in
+        // the preceding test, so the stress assertions count only these roots.
+        const stressNowMs = nowMs - 30 * 24 * 60 * 60 * 1_000;
+        const owners = Array.from({ length: 2 }, () => `expiry-stress-${randomUUID()}`);
+        uids.push(...owners);
+        const batch = db.batch();
+        for (const uid of owners) {
+            const user = db.collection('users').doc(uid);
+            batch.set(user, { test: true });
+            batch.set(user.collection('trainingPlanState').doc('current'), createEmptyTrainingPlanState(stressNowMs));
+        }
+        const roots = Array.from({ length: 125 }, (_, index) => {
+            const id = `stress-${String(index).padStart(3, '0')}`;
+            const root = db.collection('users').doc(owners[index < 80 ? 0 : 1])
+                .collection('scheduledWorkouts').doc(id);
+            // Shared timestamps cross both query pages and 10-delete batch
+            // boundaries, exercising Firestore's implicit document-ID tie-break.
+            batch.set(root, deletedWorkout(id, stressNowMs - DELETED_WORKOUT_RECOVERY_MS - 125
+                + Math.floor(index / 17)));
+            return root;
+        });
+        const recent = db.collection('users').doc(owners[1]).collection('scheduledWorkouts').doc('recent');
+        const active = db.collection('users').doc(owners[1]).collection('scheduledWorkouts').doc('active');
+        batch.set(recent, deletedWorkout(recent.id, stressNowMs - DELETED_WORKOUT_RECOVERY_MS + 1));
+        const activeRecord: Record<string, unknown> = {
+            ...deletedWorkout(active.id, stressNowMs - DELETED_WORKOUT_RECOVERY_MS - 1), lifecycle: 'planned',
+        };
+        delete activeRecord.deletedAtMs;
+        batch.set(active, activeRecord);
+        await batch.commit();
+        for (const index of [0, 99, 124]) {
+            await roots[index].collection('revisions').doc('0000000001').set({ privateHistory: true });
+        }
+
+        const first = await runTrainingWorkoutExpiry(db, stressNowMs);
+        expect(first).toMatchObject({ deleted: 100, failed: 0, moreDue: true, stopReason: 'deletion-limit' });
+        expect(first.batches).toBeGreaterThanOrEqual(10);
+        expect(first.scanned).toBe(100);
+        expect((await roots[99].get()).exists).toBe(false);
+        expect((await roots[100].get()).exists).toBe(true);
+        expect((await roots[99].collection('revisions').doc('0000000001').get()).exists).toBe(false);
+
+        const second = await runTrainingWorkoutExpiry(db, stressNowMs);
+        expect(second).toMatchObject({ deleted: 25, failed: 0, moreDue: false, stopReason: 'drained' });
+        expect((await roots[124].get()).exists).toBe(false);
+        expect((await roots[124].collection('revisions').doc('0000000001').get()).exists).toBe(false);
+        expect((await recent.get()).exists).toBe(true);
+        expect((await active.get()).exists).toBe(true);
     });
 
     it('reconciles a committed workout receipt and recursively removes orphaned history', async () => {

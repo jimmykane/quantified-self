@@ -636,9 +636,11 @@ packed Sports Lib package. That gate is tracked by GitHub issue #654 under epic 
   delete a lock or job by hand without checking its receipt and tombstone.
 - Deleted-workout expiry uses **no Firestore TTL on workout roots**: TTL would not remove child history and could bypass
   revision, delivery and completion reconciliation. The separate daily `reconcileTrainingWorkoutExpiry` scheduler
-  runs at 03:00 UTC and can scan up to 100 expired roots per invocation in pages of 30 and permanently delete at most
-  10 through the normal idempotent mutation and durable cleanup-job path. This 10-per-day cap is global; inspect the
-  expiry backlog before rollout and revisit the bound if new expirations outpace it. The worker rechecks the exact
+  runs at 03:00 UTC in batches of up to 10 deletions and 100 inspected roots, permanently deleting at most 100
+  workouts globally per invocation. The daily scan stops after 1,000 inspected roots or four minutes, whichever
+  comes first, leaving at least a minute below the Function's five-minute timeout. A batch resumes after its last
+  inspected root even when it stopped partway through a fetched page. Expired roots not processed within these bounds
+  remain eligible for the next daily run. The worker rechecks the exact
   deletion timestamp inside the transaction, plus expected state, workout and plan revisions, account-deletion guard
   and plan locks. Concurrent restore, transfer, plan deletion or
   another worker makes the stale candidate defer rather than deleting a changed root. The normal cleanup job retries
@@ -651,13 +653,16 @@ packed Sports Lib package. That gate is tracked by GitHub issue #654 under epic 
   roots, then become eligible for the same bounded cleanup; no migration or special grandfathering applies. Before
   production deployment, count expired roots and owner distribution without exporting prescriptions, and inspect the
   cleanup-job backlog and provider state. Observe the initial rollout closely;
-  monitor daily `[TrainingWorkoutExpiry]` scanned/deleted/deferred/failed counters (including zero-count runs) and
+  monitor daily `[TrainingWorkoutExpiry]` scanned/deleted/deferred/failed/batches, `stopReason`, and `moreDue`
+  (including zero-count runs) and
   `[TrainingCleanup]` retry failures.
   MCP Training reads and mutation contracts do not change: logical deletion is immediate, while these jobs only
   remove internal expired records and retry already-approved permanent-deletion cleanup.
-  Paging lets a blocked first page yield to later candidates; 100 persistently malformed or deferred older roots can
-  still block later roots, so sustained failed/deferred counts require operator inspection rather than a guessed manual
-  delete. Rollback needs a separately approved, coordinated change to both scheduled Functions: restoring the old
+  `moreDue` is a fresh one-document due query after the sweep, not a full backlog count; it may be `null` if the
+  runtime budget was reached or that check failed. Paging lets a blocked first page yield to later candidates;
+  1,000 persistently malformed or deferred older roots can still block later roots, so sustained failed/deferred counts
+  or `scan-limit` runs require operator inspection rather than a guessed manual delete. Rollback needs a separately
+  approved, coordinated change to both scheduled Functions: restoring the old
   combined `reconcileTrainingPlanCleanup` revision while leaving the daily expiry Function active would run both expiry
   scans. Already committed tombstones and deletions are not reversible. Queue TTL remains a separate
   assessment in #776, not part of this policy.

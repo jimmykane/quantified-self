@@ -33,6 +33,8 @@ require restarting. Dates remain calendar labels; no plan timezone is invented. 
 The 90-day deleted-workout recovery rule changes no MCP wire contract: these reads already exclude deleted workouts,
 and the registered Training write union includes neither standalone-history restore nor permanent single-workout
 deletion. The internal expiry worker uses the existing server mutation path and grants no MCP client cleanup authority.
+Increasing the worker's bounded daily throughput changes only when expired internal records are purged; it does not
+change MCP selection, projections, scopes, schemas, or proposal/confirmation behavior.
 Selected input includes every fetched page entry (even unused lookahead/tail entries) and cached records are counted
 once per fetch. It is bounded to 2 MiB, an individual record to 128 KiB and complete structured-plus-JSON-text responses to
 256 KiB. Oversized records fail without truncating instructions. Canonical values remain alongside Sports Lib display;

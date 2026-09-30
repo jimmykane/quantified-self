@@ -21,7 +21,9 @@ vi.mock('./delete-training-plan', () => ({
     parseStoredDeleteResponse: (value: unknown) => value,
 }));
 
-import { processTrainingCleanupJob, reconcileTrainingPlanCleanup, reconcileTrainingWorkoutExpiry } from './cleanup-worker';
+import {
+    processTrainingCleanupJob, reconcileTrainingPlanCleanup, reconcileTrainingWorkoutExpiry, runTrainingWorkoutExpiry,
+} from './cleanup-worker';
 import { TRAINING_CLEANUP_JOBS_COLLECTION_ID, trainingCleanupJob, trainingCleanupJobRef } from './cleanup-job-contract';
 import { buildTrainingScheduleDeletionTombstone, trainingScheduleDeletionTombstoneDocumentId } from './persistence';
 import { SCHEDULED_WORKOUTS_COLLECTION_ID } from '../../../shared/training-plans';
@@ -123,10 +125,26 @@ describe('durable Training cleanup worker', () => {
 
         queriedCollections.length = 0;
         await (reconcileTrainingWorkoutExpiry as unknown as () => Promise<void>)();
-        expect(queriedCollections).toEqual([SCHEDULED_WORKOUTS_COLLECTION_ID]);
+        expect(queriedCollections).toEqual([SCHEDULED_WORKOUTS_COLLECTION_ID, SCHEDULED_WORKOUTS_COLLECTION_ID]);
         expect(logger.info).toHaveBeenCalledWith('[TrainingWorkoutExpiry]', {
             scanned: 0, deleted: 0, deferred: 0, failed: 0,
+            batches: 1, moreDue: false, stopReason: 'drained',
         });
+    });
+
+    it('stops before scanning when the daily time budget is spent', async () => {
+        const query = {
+            where: vi.fn(), orderBy: vi.fn(), limit: vi.fn(),
+            get: vi.fn(async () => ({ empty: true, docs: [] })),
+        };
+        query.where.mockReturnValue(query);
+        query.orderBy.mockReturnValue(query);
+        query.limit.mockReturnValue(query);
+        const collectionGroup = vi.fn(() => query);
+        const clock = vi.fn().mockReturnValueOnce(0).mockReturnValue(240_000);
+        const result = await runTrainingWorkoutExpiry({ collectionGroup } as never, nowMs, clock);
+        expect(result).toMatchObject({ scanned: 0, deleted: 0, batches: 0, moreDue: null, stopReason: 'time-budget' });
+        expect(collectionGroup).not.toHaveBeenCalled();
     });
 
     function seedWorkout(): FakeRef {

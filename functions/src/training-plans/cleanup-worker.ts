@@ -1,5 +1,6 @@
 import * as admin from 'firebase-admin';
 import { createHash } from 'node:crypto';
+import { performance } from 'node:perf_hooks';
 import * as logger from 'firebase-functions/logger';
 import { onSchedule } from 'firebase-functions/v2/scheduler';
 import { FUNCTIONS_MANIFEST } from '../../../shared/functions-manifest';
@@ -35,6 +36,23 @@ const MAX_RETRY_MS = 60 * 60 * 1000;
 const EXPIRED_SCAN_SIZE = 30;
 const MAX_EXPIRED_SCAN = 100;
 const MAX_EXPIRED_DELETIONS = 10;
+const MAX_DAILY_EXPIRED_SCAN = 1_000;
+const MAX_DAILY_EXPIRED_DELETIONS = 100;
+// Leave a minute below the scheduled Function's 300-second timeout.
+const EXPIRY_RUNTIME_BUDGET_MS = 4 * 60 * 1_000;
+
+type ExpiryCounts = { scanned: number; deleted: number; deferred: number; failed: number };
+type ExpiryBatch = ExpiryCounts & {
+    cursor: admin.firestore.QueryDocumentSnapshot | null;
+    exhausted: boolean;
+};
+
+function expiredWorkoutQuery(db: admin.firestore.Firestore, nowMs: number) {
+    return db.collectionGroup(SCHEDULED_WORKOUTS_COLLECTION_ID)
+        .where('lifecycle', '==', 'deleted')
+        .where('deletedAtMs', '<=', nowMs - DELETED_WORKOUT_RECOVERY_MS)
+        .orderBy('deletedAtMs');
+}
 
 function expiredWorkoutOwner(path: string): string | null {
     const parts = path.split('/');
@@ -43,25 +61,32 @@ function expiredWorkoutOwner(path: string): string | null {
 }
 
 /** A missing, restored, re-deleted or concurrently edited root is never purged from a stale scan. */
-export async function reconcileExpiredDeletedWorkouts(
+async function scanExpiredDeletedWorkoutsBatch(
     db: admin.firestore.Firestore,
-    nowMs = Date.now(),
-): Promise<{ scanned: number; deleted: number; deferred: number; failed: number }> {
-    const due = db.collectionGroup(SCHEDULED_WORKOUTS_COLLECTION_ID)
-        .where('lifecycle', '==', 'deleted')
-        .where('deletedAtMs', '<=', nowMs - DELETED_WORKOUT_RECOVERY_MS)
-        .orderBy('deletedAtMs');
-    let cursor: admin.firestore.QueryDocumentSnapshot | null = null;
+    nowMs: number,
+    initialCursor: admin.firestore.QueryDocumentSnapshot | null,
+    maxScan: number,
+    maxDeletes: number,
+    shouldStop: () => boolean,
+): Promise<ExpiryBatch> {
+    const due = expiredWorkoutQuery(db, nowMs);
+    let cursor = initialCursor;
     let scanned = 0;
     let deleted = 0;
     let deferred = 0;
     let failed = 0;
-    while (scanned < MAX_EXPIRED_SCAN && deleted < MAX_EXPIRED_DELETIONS) {
-        const pageSize = Math.min(EXPIRED_SCAN_SIZE, MAX_EXPIRED_SCAN - scanned);
+    let exhausted = false;
+    while (scanned < maxScan && deleted < maxDeletes && !shouldStop()) {
+        const pageSize = Math.min(EXPIRED_SCAN_SIZE, maxScan - scanned);
         const page = await (cursor ? due.startAfter(cursor) : due).limit(pageSize).get();
-        if (page.empty) break;
+        if (page.empty) { exhausted = true; break; }
+        let processedInPage = 0;
         for (const snapshot of page.docs) {
-            if (deleted >= MAX_EXPIRED_DELETIONS) break;
+            if (deleted >= maxDeletes || shouldStop()) break;
+            // A batch may end partway through a fetched page. Resume after the
+            // last inspected root, not the last fetched root, or candidates skip.
+            cursor = snapshot;
+            processedInPage += 1;
             scanned += 1;
             const uid = expiredWorkoutOwner(snapshot.ref.path);
             if (!uid) { deferred += 1; continue; }
@@ -116,9 +141,21 @@ export async function reconcileExpiredDeletedWorkouts(
                 else failed += 1;
             }
         }
-        cursor = page.docs[page.docs.length - 1];
-        if (page.size < pageSize) break;
+        if (processedInPage === page.size && page.size < pageSize) {
+            exhausted = true;
+            break;
+        }
     }
+    return { scanned, deleted, deferred, failed, cursor, exhausted };
+}
+
+export async function reconcileExpiredDeletedWorkouts(
+    db: admin.firestore.Firestore,
+    nowMs = Date.now(),
+): Promise<ExpiryCounts> {
+    const { scanned, deleted, deferred, failed } = await scanExpiredDeletedWorkoutsBatch(
+        db, nowMs, null, MAX_EXPIRED_SCAN, MAX_EXPIRED_DELETIONS, () => false,
+    );
     return { scanned, deleted, deferred, failed };
 }
 
@@ -264,10 +301,48 @@ export async function runTrainingCleanupJobs(db: admin.firestore.Firestore, nowM
     if (result.scanned > 0) logger.info('[TrainingCleanup]', result);
 }
 
-/** Expire recoverably deleted workouts on a separate daily budget. */
-export async function runTrainingWorkoutExpiry(db: admin.firestore.Firestore, nowMs = Date.now()): Promise<void> {
-    const expired = await reconcileExpiredDeletedWorkouts(db, nowMs);
-    logger.info('[TrainingWorkoutExpiry]', expired);
+/** Expire recoverably deleted workouts in bounded daily batches. */
+export async function runTrainingWorkoutExpiry(
+    db: admin.firestore.Firestore,
+    nowMs = Date.now(),
+    clock: () => number = () => performance.now(),
+): Promise<ExpiryCounts & { batches: number; moreDue: boolean | null; stopReason: string }> {
+    const startedAt = clock();
+    const out: ExpiryCounts = { scanned: 0, deleted: 0, deferred: 0, failed: 0 };
+    let cursor: admin.firestore.QueryDocumentSnapshot | null = null;
+    let exhausted = false;
+    let batches = 0;
+    const overTime = () => clock() - startedAt >= EXPIRY_RUNTIME_BUDGET_MS;
+    while (out.scanned < MAX_DAILY_EXPIRED_SCAN && out.deleted < MAX_DAILY_EXPIRED_DELETIONS && !overTime()) {
+        const batch = await scanExpiredDeletedWorkoutsBatch(
+            db, nowMs, cursor,
+            Math.min(MAX_EXPIRED_SCAN, MAX_DAILY_EXPIRED_SCAN - out.scanned),
+            Math.min(MAX_EXPIRED_DELETIONS, MAX_DAILY_EXPIRED_DELETIONS - out.deleted),
+            overTime,
+        );
+        batches += 1;
+        out.scanned += batch.scanned;
+        out.deleted += batch.deleted;
+        out.deferred += batch.deferred;
+        out.failed += batch.failed;
+        cursor = batch.cursor;
+        exhausted = batch.exhausted;
+        if (exhausted || batch.scanned === 0) break;
+    }
+    const stopReason = overTime() ? 'time-budget'
+        : out.deleted >= MAX_DAILY_EXPIRED_DELETIONS ? 'deletion-limit'
+            : out.scanned >= MAX_DAILY_EXPIRED_SCAN ? 'scan-limit' : 'drained';
+    let moreDue: boolean | null = null;
+    if (!overTime()) {
+        try {
+            moreDue = !(await expiredWorkoutQuery(db, nowMs).limit(1).get()).empty;
+        } catch {
+            logger.warn('[TrainingWorkoutExpiry]', { event: 'backlog_check_failed' });
+        }
+    }
+    const result = { ...out, batches, moreDue, stopReason };
+    logger.info('[TrainingWorkoutExpiry]', result);
+    return result;
 }
 
 export const reconcileTrainingPlanCleanup = onSchedule({
