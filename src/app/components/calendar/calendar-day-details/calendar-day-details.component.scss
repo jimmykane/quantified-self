@@ -22,6 +22,10 @@
   flex-direction: column;
   overflow: hidden;
   color: var(--mat-sys-on-surface);
+  // Do not inherit the overlay's body-large tracking into app-owned content,
+  // including nested metric and Training-impact components.
+  font: var(--mat-sys-body-medium);
+  letter-spacing: 0;
 }
 
 .calendar-day-details-content {

@@ -18,6 +18,7 @@ describe('compact day-sheet styles', () => {
     return values;
   });
   const document = new DOMParser().parseFromString(`<section>
+    <div class="calendar-day-details"></div>
     <div class="calendar-day-details-content">
       <div class="calendar-day-total"><span><span class="calendar-day-number">2</span> completed activities</span></div>
       <a class="calendar-day-entry-item"><span class="calendar-day-entry-title">Long workout title</span></a>
@@ -38,6 +39,41 @@ describe('compact day-sheet styles', () => {
       }
     });
     expect(linkColors).toEqual(['var(--mat-sys-primary)']);
+  });
+
+  it('resets inherited overlay typography for all app-owned sheet content', () => {
+    const container = document.querySelector('.calendar-day-details')!;
+    expect(declarations(container, 'font')).toEqual(['var(--mat-sys-body-medium)']);
+    expect(declarations(container, 'letter-spacing')).toEqual(['0']);
+  });
+
+  it('shares compact recovery typography without shrinking the full-day metrics', () => {
+    const context = compile('src/app/components/calendar/calendar-day-context/calendar-day-context.component.scss');
+    const compactRules: Rule[] = [];
+    context.walkRules(rule => {
+      if (/calendar-day-context--(compact|calm-month)/.test(rule.selector)
+        && /calendar-day-context-metric (span|small|strong)/.test(rule.selector)) compactRules.push(rule);
+    });
+    expect(compactRules).toHaveLength(2);
+    for (const rule of compactRules) {
+      expect(rule.selector).toContain(':host(.calendar-day-context--compact)');
+      expect(rule.selector).toContain(':host(.calendar-day-context--calm-month)');
+    }
+    const labels: string[] = [];
+    const values: string[] = [];
+    compactRules.forEach(rule => {
+      rule.walkDecls('font', declaration => { labels.push(declaration.value); });
+      rule.walkDecls('font-size', declaration => { values.push(declaration.value); });
+    });
+    expect(labels).toEqual(['var(--mat-sys-label-small)']);
+    expect(values).toEqual(['19px']);
+    const fullDayValues: string[] = [];
+    context.walkRules(rule => {
+      if (rule.selector === '.calendar-day-context-metric strong') {
+        rule.walkDecls('font-size', declaration => { fullDayValues.push(declaration.value); });
+      }
+    });
+    expect(fullDayValues).toEqual(['22px']);
   });
 
   it('does not reset the numeric count font through supporting-text descendants', () => {

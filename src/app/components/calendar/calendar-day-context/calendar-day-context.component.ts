@@ -42,7 +42,11 @@ interface HealthState {
 @Component({
   selector: 'app-calendar-day-context',
   standalone: true,
-  host: { '[class.calendar-day-context--dashboard]': 'dashboardTile()', '[class.calendar-day-context--calm-month]': 'calmMonth()' },
+  host: {
+    '[class.calendar-day-context--dashboard]': 'dashboardTile()',
+    '[class.calendar-day-context--calm-month]': 'calmMonth()',
+    '[class.calendar-day-context--compact]': 'compact()',
+  },
   imports: [SharedModule, ActivityCalendarVolumeListComponent, HealthSleepStageSummaryComponent, TrainingImpactComponent],
   templateUrl: './calendar-day-context.component.html',
   styleUrls: ['./calendar-day-context.component.scss'],
