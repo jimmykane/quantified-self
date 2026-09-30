@@ -1865,6 +1865,8 @@ describe('MCP HTTP scope enforcement', () => {
     expect(classifyMcpDiagnosticClientFamily('codex-mcp-client/0.151.0-alpha.7.2'))
       .toBe('codex');
     expect(classifyMcpDiagnosticClientFamily('Claude-User')).toBe('claude');
+    expect(classifyMcpDiagnosticClientFamily('Grok')).toBe('grok');
+    expect(classifyMcpDiagnosticClientFamily('grok-connectors-manager/0.1.0')).toBe('grok');
     expect(classifyMcpDiagnosticClientFamily('curl/8.7.1')).toBe('automation');
     expect(classifyMcpDiagnosticClientFamily(undefined)).toBe('unknown');
 

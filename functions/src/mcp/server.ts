@@ -2321,6 +2321,7 @@ export interface McpBearerFailure {
 export type McpDiagnosticClientFamily =
   | 'codex'
   | 'claude'
+  | 'grok'
   | 'browser'
   | 'automation'
   | 'other'
@@ -2339,6 +2340,9 @@ export function classifyMcpDiagnosticClientFamily(
   if (normalized.includes('claude')) {
     return 'claude';
   }
+  if (normalized === 'grok' || normalized.startsWith('grok-connectors-manager/')) {
+    return 'grok';
+  }
   if (normalized.includes('mozilla/') || normalized.includes('safari/')) {
     return 'browser';
   }
@@ -2354,7 +2358,8 @@ export function classifyMcpDiagnosticClientFamily(
 }
 
 export type McpBearerRejectionReason =
-  | 'missing_or_malformed_bearer'
+  | 'missing_bearer'
+  | 'malformed_bearer'
   | 'request_rate_limited'
   | 'unclassified_bearer_state'
   | 'unexpected_authentication_error'
@@ -2457,10 +2462,15 @@ function logMcpBearerRejection(
   reason: McpBearerRejectionReason,
   request: Request,
 ): void {
-  logger.warn('[MCP] Bearer authentication rejected', {
+  const diagnostic = {
     reason,
     clientFamily: classifyMcpDiagnosticClientFamily(request.get('user-agent')),
-  });
+  };
+  if (reason === 'missing_bearer') {
+    logger.info('[MCP] Bearer authentication challenge', diagnostic);
+    return;
+  }
+  logger.warn('[MCP] Bearer authentication rejected', diagnostic);
 }
 
 function logMcpTransportRejection(
@@ -2650,9 +2660,15 @@ export const mcpApi = onRequest(MCP_API_RUNTIME_OPTIONS, async (request, respons
     });
     return;
   }
-  const bearerToken = parseMcpBearerToken(request.get('authorization'));
+  const authorizationHeader = request.get('authorization');
+  const bearerToken = parseMcpBearerToken(authorizationHeader);
   if (!bearerToken) {
-    logMcpBearerRejection('missing_or_malformed_bearer', request);
+    logMcpBearerRejection(
+      typeof authorizationHeader === 'string' && authorizationHeader.trim()
+        ? 'malformed_bearer'
+        : 'missing_bearer',
+      request,
+    );
     response.set(
       'WWW-Authenticate',
       `Bearer resource_metadata="${metadataUrl}", scope="${Object.values(MCP_OAUTH_SCOPES).join(' ')}"`,

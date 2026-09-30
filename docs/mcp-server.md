@@ -755,6 +755,15 @@ record therefore invalidates the superseded access and refresh credentials witho
 fan-out. The hash-keyed credential documents remain inaccessible and expire through their existing TTLs; revocation
 never deletes or changes the CIMD client.
 
+An MCP request with no usable Authorization header still receives the required HTTP 401 bearer challenge pointing to the
+public protected-resource metadata. An absent or blank header has an INFO application diagnostic with the fixed
+`missing_bearer` reason; a nonempty malformed header and rejected credentials (including `superseded_grant`) remain
+WARNING. The fixed client family can identify Grok without logging its raw user agent, but this user-agent hint is not
+an authenticated client identity. No header value, token, client ID, account identity, or
+request body enters these diagnostics. Cloud Run request logs retain their HTTP 401 severity independently of the
+application log level; investigate repeated 401s by reason and client family rather than treating one initial challenge
+as a failed tool call.
+
 Connections > MCP remains the authoritative user control because an external client may not call the revocation
 endpoint when the user removes or uninstalls it. Bearer authentication performs the same account-deletion check before
 recording usage or running a tool, while account deletion recursively removes connection and OAuth state. OAuth cleanup
