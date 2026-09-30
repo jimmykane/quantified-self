@@ -205,6 +205,37 @@ describe('CalendarDayDetailsComponent', () => {
     expect(fixture.nativeElement.querySelector('.calendar-day-total')?.textContent).toContain('0 completed activities');
   });
 
+  it('keeps the duplicate icon box stable while pending and silent for a disabled repeat click', async () => {
+    let finish: (result: null) => void;
+    const pending = new Promise<null>(resolve => { finish = resolve; });
+    const fixture = await renderDayDetails([], {
+      plannedWorkouts: [{ workout: createPlannedWorkout() }],
+      scheduleSource: () => null,
+    });
+    const duplicate = vi.fn(() => pending);
+    TestBed.inject(TrainingWorkoutDuplicateService).duplicate = duplicate;
+    const button = fixture.nativeElement.querySelector('.calendar-day-planned-row > button') as HTMLButtonElement;
+    const iconBox = button.querySelector('.calendar-day-duplicate-icon');
+    expect(iconBox?.getAttribute('aria-hidden')).toBe('true');
+    expect(iconBox?.querySelector('mat-icon')?.textContent?.trim()).toBe('content_copy');
+
+    button.click(); fixture.detectChanges();
+    expect(button.disabled).toBe(true);
+    expect(button.querySelector('.calendar-day-duplicate-icon')).toBe(iconBox);
+    expect(iconBox?.querySelector('mat-spinner')?.getAttribute('diameter')).toBe('18');
+    expect(iconBox?.querySelector('mat-icon')).toBeNull();
+    button.click();
+    expect(duplicate).toHaveBeenCalledOnce();
+    expect(TestBed.inject(AppHapticsService).selection).toHaveBeenCalledOnce();
+
+    finish(null); await fixture.whenStable(); fixture.detectChanges();
+    expect(button.disabled).toBe(false);
+    expect(button.querySelector('.calendar-day-duplicate-icon')).toBe(iconBox);
+    expect(iconBox?.querySelector('mat-icon')?.textContent?.trim()).toBe('content_copy');
+    expect(iconBox?.querySelector('mat-spinner')).toBeNull();
+    expect(TestBed.inject(MatBottomSheetRef).dismiss).not.toHaveBeenCalled();
+  });
+
   it('keeps navigation icons decorative and duplicate actions separate from workout links', async () => {
     const fixture = await renderDayDetails(createEvent(), {
       plannedWorkouts: [{ workout: createPlannedWorkout(), planName: 'Autumn build' }],
@@ -368,9 +399,11 @@ describe('CalendarDayDetailsComponent', () => {
     const activities = signal({ status: 'loading' as 'loading' | 'ready' | 'error', day });
     const fixture = await renderDayDetails([], { activities });
     expect(fixture.nativeElement.textContent).toContain('Loading activities');
+    expect(fixture.nativeElement.querySelector('.calendar-day-details-content > p[role="status"]')?.classList.contains('calendar-day-empty')).toBe(true);
     expect(fixture.nativeElement.textContent).not.toContain('No activities on this day');
     activities.set({ status: 'error', day }); fixture.detectChanges();
     expect(fixture.nativeElement.textContent).toContain('Activities could not be loaded');
+    expect(fixture.nativeElement.querySelector('.calendar-day-details-content > p[role="status"]')?.classList.contains('calendar-day-empty')).toBe(true);
     expect(fixture.nativeElement.textContent).not.toContain('No activities on this day');
     activities.set({ status: 'ready', day }); fixture.detectChanges();
     expect(fixture.nativeElement.textContent).toContain('Morning run');

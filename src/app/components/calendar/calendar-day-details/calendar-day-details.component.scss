@@ -77,12 +77,13 @@ app-calendar-day-context {
   margin-top: 16px;
 }
 
-.calendar-day-total span {
+.calendar-day-total > span {
   @include day.supporting-text;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
   letter-spacing: 0;
 }
-
-.calendar-day-total > span { display: flex; flex-wrap: wrap; gap: 4px; }
 
 .calendar-day-number,
 .calendar-day-event-metric {
@@ -150,9 +151,18 @@ h3 {
 }
 
 .calendar-day-planned-row > button {
+  @include mat.icon-button-overrides((state-layer-size: 48px));
   flex: 0 0 48px;
   width: 48px;
   height: 48px;
+}
+
+.calendar-day-duplicate-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
 }
 
 // Content-sized app rows inside Material list items avoid the fixed multi-line
@@ -176,7 +186,9 @@ h3 {
 .calendar-day-entry-copy { min-width: 0; overflow-wrap: anywhere; }
 .calendar-day-entry-title { display: block; font: var(--mat-sys-body-medium); }
 a.calendar-day-entry-item .calendar-day-entry-title {
-  @include day.navigation-link;
+  // Keep Material list text readable in both themes; the brand primary is not
+  // a contrast-safe small-text color on the shared sheet surface.
+  @include day.navigation-link($color: var(--mat-sys-on-surface));
   display: flex;
 }
 .calendar-day-entry-supporting { @include day.supporting-text; }

@@ -6,10 +6,10 @@
   font: var(--mat-sys-body-small);
 }
 
-@mixin navigation-link {
+@mixin navigation-link($color: var(--mat-sys-primary)) {
   display: inline-flex;
   align-items: center;
-  color: var(--mat-sys-primary);
+  color: $color;
   font: var(--mat-sys-body-medium);
   text-decoration: none;
 

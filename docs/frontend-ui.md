@@ -239,6 +239,10 @@ The sheet uses content-sized app-owned rows inside Material list items: 14px/bod
 20px sport/note icons, and 48px duplicate actions. Long titles, notes, workout summaries, and activity metrics wrap
 without fixed multi-line heights or clamping. Material retains navigation, focus and ripple behavior. Keep the
 shared overlay surface, fixed header, and bounded content scroll; do not add an inset card or enlarge the rows.
+Sheet row titles retain Material's on-surface text color for readability in both themes; other day-view links keep
+their existing primary color. Loading/error copy uses the same compact metadata typography, and numeric counts retain
+Barlow Condensed without inheriting a metadata font reset.
+Duplicate icons and pending spinners share a centered 24px box inside a public-token-sized 48px Material button.
 
 The Today month popup uses the existing compact calendar with `fillHeight=false` on both its tile and grid.
 The grid opts into `activity-calendar--picker`: readable 28px date badges, 64px rows, and a separate
