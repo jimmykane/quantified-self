@@ -70,6 +70,14 @@ describe('compact day-sheet styles', () => {
     }
   });
 
+  it('keeps planned rows aligned without decorative rails or compensating indentation', () => {
+    expect(rules.some(rule => rule.selector.includes('calendar-day-planned-accent'))).toBe(false);
+    const row = document.querySelector('.calendar-day-planned-row')!;
+    for (const property of ['margin-inline-start', 'padding-inline-start', 'border-left', 'border-inline-start']) {
+      expect(declarations(row, property)).toEqual([]);
+    }
+  });
+
   it('shares sheet typography and icon layout with previews without smaller month/mobile overrides', () => {
     const context = compile('src/app/components/calendar/calendar-day-context/calendar-day-context.component.scss');
     const contextValues = (selector: string, property: string) => {

@@ -237,9 +237,9 @@ bottom sheet through `components/calendar/_calendar-day-presentation.scss`. Reus
 section-heading, entry-row, entry-title, and entry-icon mixins instead of copying presentation rules. The full day retains
 its timeline layout. Previews and the sheet share 14px/body-medium titles, body-small metadata, 20px sport/note icons,
 24px icon slots, and 48px duplicate actions; month/mobile styles must not shrink their row text independently.
-The sheet uses content-sized app-owned rows inside Material list items. Long titles, notes, workout summaries, and
-activity metrics wrap
-without fixed multi-line heights or clamping. Material retains navigation, focus and ripple behavior. Keep the
+The sheet uses content-sized app-owned rows inside Material list items, without decorative vertical rails beside the
+sport icons. Long titles, notes, workout summaries, and activity metrics wrap without fixed multi-line heights or
+clamping. Material retains navigation, focus and ripple behavior. Keep the
 shared overlay surface, fixed header, and bounded content scroll; do not add an inset card or enlarge the rows.
 Preview and sheet row titles use on-surface text for readability in both themes; full-day links keep their existing
 primary color. Loading/error copy uses the same compact metadata typography, and numeric counts retain

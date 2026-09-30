@@ -155,8 +155,8 @@ describe('CalendarDayDetailsComponent', () => {
     expect(fixture.nativeElement.querySelector('.calendar-day-planned-item')?.textContent)
       .toContain('Autumn build · Planned');
     expect(fixture.nativeElement.querySelector('.calendar-day-planned-item')?.textContent).toContain('30m 00s');
-    expect((fixture.nativeElement.querySelector('.calendar-day-planned-row') as HTMLElement).style.getPropertyValue('--planned-workout-color')).toBe('purple');
-    expect(fixture.nativeElement.querySelector('.calendar-day-planned-accent')?.getAttribute('aria-hidden')).toBe('true');
+    expect(fixture.nativeElement.querySelector('.calendar-day-planned-accent')).toBeNull();
+    expect(fixture.nativeElement.querySelector('.calendar-day-planned-item app-activity-type-icon')).toBeTruthy();
     expect(addButton?.getAttribute('aria-label')).toBe('Add workout for selected day');
     addButton.click();
     fixture.detectChanges();
@@ -254,7 +254,7 @@ describe('CalendarDayDetailsComponent', () => {
     const plannedRow = fixture.nativeElement.querySelector('.calendar-day-planned-row');
     expect(plannedRow.querySelector('a button')).toBeNull();
     expect(plannedRow.querySelector('button')?.getAttribute('aria-label')).toContain('Duplicate');
-    expect(plannedRow.querySelector('.calendar-day-planned-accent')?.getAttribute('aria-hidden')).toBe('true');
+    expect(plannedRow.querySelector('.calendar-day-planned-accent')).toBeNull();
   });
 
   it('updates an already-open day when the planned-workout listener finishes', async () => {

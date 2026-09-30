@@ -56,8 +56,7 @@
       } @else if (plannedWorkoutRows().length) {
       <mat-nav-list>
         @for (planned of plannedWorkoutRows(); track planned.id) {
-        <div class="calendar-day-planned-row" role="presentation" [style.--planned-workout-color]="planned.color">
-          <span class="calendar-day-planned-accent" aria-hidden="true"></span>
+        <div class="calendar-day-planned-row" role="presentation">
           <a mat-list-item appHapticTap class="calendar-day-entry-item calendar-day-planned-item" [routerLink]="['/training/plans/workout', planned.id]"
             (click)="prepareWorkoutNavigation()">
             <div class="calendar-day-entry">
