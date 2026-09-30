@@ -1,7 +1,8 @@
 import { trainingDeliveryLocalDate } from '../../../../../shared/training-provider-delivery';
 import { normalizeTrainingLocalDate, type ScheduledWorkoutV1 } from '../../../../../shared/training-plans';
-import { serializeGarminWorkoutV1 } from '../../providers/garmin-workout.serializer';
-import { assessTrainingDeliveryMapping } from '../mapping';
+import type { StrengthWorkoutDetailsV1 } from '../../../../../shared/strength-workout';
+import { ActivityTypes } from '@sports-alliance/sports-lib';
+import { assessTrainingDeliveryMapping, garminWorkoutMapping } from '../mapping';
 import { TrainingDeliveryTransportError, type DeliveryArtifact, type DeliveryCheckpoint, type DeliveryOperation,
   type DeliveryRecovery, type DeliveryRequestGuard, type DeliveryTransportProgress, type TrainingDeliveryTransport } from '../contracts';
 import { GarminTrainingHttpError, garminBody, garminId, type GarminTrainingClient, type GarminTrainingRequest, type GarminTrainingResponse } from './http';
@@ -44,14 +45,18 @@ export class GarminTrainingTransport implements TrainingDeliveryTransport {
     inspectionPolicy: InspectionPolicy = GARMIN_INSPECTION_POLICY) {
     this.inspection = createGarminInspection(client, inspectionPolicy);
   }
-  assess(workout: ScheduledWorkoutV1, destinationKey: string, timeZone: string) {
-    return assessTrainingDeliveryMapping('garmin', workout, destinationKey, timeZone);
+  assess(workout: ScheduledWorkoutV1, destinationKey: string, timeZone: string, strength?: StrengthWorkoutDetailsV1 | null) {
+    return assessTrainingDeliveryMapping('garmin', workout, destinationKey, timeZone, strength);
   }
   canRemove(artifact: DeliveryArtifact, today: string, allowPastRemoval = false): boolean {
     return !artifact.completed && (artifact.localDate >= today || allowPastRemoval);
   }
 
   private validate(operation: DeliveryOperation): void {
+    if (operation.kind === 'upsert' && operation.workout?.structure.sport === ActivityTypes.StrengthTraining
+      && this.assess(operation.workout, operation.destinationKey, operation.timeZone, operation.strength).level === 'unsupported') {
+      throw new TrainingDeliveryTransportError('terminal');
+    }
     const progress = operation.progress;
     if (progress && (progress.version !== 1 || !STEPS.includes(progress.step as Step)
       || !['ready', 'started', 'rejected', 'accepted'].includes(progress.state))) throw new TrainingDeliveryTransportError('uncertain');
@@ -204,9 +209,9 @@ export class GarminTrainingTransport implements TrainingDeliveryTransport {
     const workout = operation.workout!;
     // The shared worker binds approval to the exact assessment digest. Rechecking here
     // prevents an adapter/serializer version mismatch from silently changing the payload.
-    const assessment = this.assess(workout, operation.destinationKey, operation.timeZone);
+    const assessment = this.assess(workout, operation.destinationKey, operation.timeZone, operation.strength);
     if (assessment.digest !== operation.digest || assessment.level === 'unsupported') throw new TrainingDeliveryTransportError('terminal');
-    const payload = serializeGarminWorkoutV1(workout.structure, { name: workout.title, allowDegraded: true }).artifact;
+    const payload = garminWorkoutMapping(workout, operation.strength).artifact;
     let currentSchedule: ReturnType<typeof schedule> | null = null;
     if (operation.artifact?.ids.schedule) currentSchedule = await this.ownedSchedule(operation, checkpoint, guard);
     if (operation.artifact) {

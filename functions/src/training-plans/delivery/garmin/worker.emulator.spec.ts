@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { Firestore } from 'firebase-admin/firestore';
 import { ActivityTypes } from '@sports-alliance/sports-lib';
+import { projectStrengthWorkoutToV1, type StrengthWorkoutDraftV1 } from '../../../../../shared/strength-workout';
 import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ScheduledWorkoutV1 } from '../../../../../shared/training-plans';
 import type { TrainingDeliveryCommandV1 } from '../../../../../shared/training-provider-delivery';
@@ -59,6 +60,33 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Garmin delivery / real Fi
     await user().collection('trainingPlanState').doc('current').update({ revision: 2 });
     await mark(); await drain();
   };
+  const strengthDraft = (load = 80): StrengthWorkoutDraftV1 => ({ version: 1, exercises: [
+    { id: 'squat', name: 'Barbell back squat', sets: [{ id: 'set-one', ending: { kind: 'repetitions', repetitions: 5 },
+      externalLoadKg: load, restAfterSeconds: 120 }] },
+    { id: 'plank', name: 'Plank', sets: [{ id: 'set-two', ending: { kind: 'time', seconds: 30 } }] },
+  ] });
+  const mutate = async (operation: Parameters<typeof mutateTrainingScheduleForUser>[1]['operation']) => {
+    const [state, workout, plan] = await Promise.all([user().collection('trainingPlanState').doc('current').get(),
+      user().collection('scheduledWorkouts').doc('w').get(), user().collection('trainingPlans').doc('p').get()]);
+    await mutateTrainingScheduleForUser(uid, { mutationId: randomUUID(), expectedRevisions: [
+      { scope: 'state', id: 'current', revision: state.get('revision') },
+      { scope: 'workout', id: 'w', revision: workout.exists ? workout.get('revision') : 0 },
+      ...(plan.exists ? [{ scope: 'plan' as const, id: 'p', revision: plan.get('revision') }] : []),
+    ], operation }, { db, nowMs: now });
+  };
+  const seedStrength = async (load = 80, planId: string | null = null) => {
+    const current = await user().collection('scheduledWorkouts').doc('w').get();
+    const existingStrength = current.get('structure.sport') === ActivityTypes.StrengthTraining;
+    if (!existingStrength) {
+      // Replace only this suite's synthetic baseline. Sport changes deliberately require a new workout.
+      await db.recursiveDelete(current.ref);
+      await user().collection('trainingPlanState').doc('current').update({ currentWorkoutCount: 0 });
+    }
+    const strength = strengthDraft(load);
+    await mutate({ kind: existingStrength ? 'update-workout' : 'create-workout', workoutId: 'w', planId,
+      localDate: '2026-09-20', title: 'Synthetic strength QA',
+      structure: projectStrengthWorkoutToV1({ ...strength, workoutId: 'w', revision: 1 }), strength, confirmPlanRangeExtension: false });
+  };
   beforeEach(async () => {
     vi.mocked(logger.warn).mockClear();
     uid = `garmin-delivery-test-${randomUUID()}`; users.push(uid);
@@ -102,6 +130,59 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Garmin delivery / real Fi
     }
     await db.terminate();
   }, 120_000);
+
+  it.each(['standalone', 'plan'] as const)('delivers %s strength through real mutations, duplicate dispatch, load edit, reschedule and Stop', async scope => {
+    await seedStrength();
+    const planCommand = async (action: 'configure' | 'stop') => {
+      const [state, plan, settings] = await Promise.all([user().collection('trainingPlanState').doc('current').get(),
+        user().collection('trainingPlans').doc('p').get(), user().collection('trainingDeliverySettings').doc('plan_p_garmin').get()]);
+      await trainingDeliveryCommand(runtime, uid, { schemaVersion: 1, mutationId: randomUUID(), scope: 'plan', scopeId: 'p',
+        provider: 'garmin', action, timeZone: 'Europe/Helsinki', expectedScheduleRevision: state.get('revision'),
+        expectedScopeRevision: plan.get('revision'), expectedSettingsRevision: settings.get('revision') ?? 0 }, false);
+    };
+    if (scope === 'plan') {
+      await mutate({ kind: 'create-plan', planId: 'p', name: 'Synthetic strength plan', startLocalDate: '2026-09-20',
+        endLocalDate: '2026-09-27', activate: true });
+      await mutate({ kind: 'move-workout', workoutId: 'w', planId: 'p', localDate: '2026-09-20', confirmPlanRangeExtension: false });
+      await planCommand('configure');
+    } else await command();
+    await drain(); const id = (await ledger()).id;
+    await Promise.all([processTrainingDelivery(runtime, uid, id), processTrainingDelivery(runtime, uid, id)]); await drain();
+    const original = (await ledger()).actual!;
+    expect((await ledger()).status).toBe('delivered');
+    expect(server.workouts.get(original.ids.workout)).toMatchObject({ sport: 'STRENGTH_TRAINING',
+      segments: [{ steps: [{ exerciseName: 'BARBELL_BACK_SQUAT', weightValue: 80, durationType: 'REPS' },
+        { durationValue: 120, intensity: 'REST' }, { exerciseName: 'PLANK', durationType: 'TIME' }] }] });
+    const before = (await ledger()).contentDigest;
+    await seedStrength(82.5, scope === 'plan' ? 'p' : null);
+    await drain(); await processTrainingDelivery(runtime, uid, id); await drain();
+    expect((await ledger()).contentDigest).not.toBe(before);
+    expect((await ledger()).actual!.ids).toEqual(original.ids);
+    expect(server.workouts.get(original.ids.workout)).toMatchObject({ segments: [{ steps: [{ weightValue: 82.5 }, {}, {}] }] });
+    await mutate({ kind: 'move-workout', workoutId: 'w', planId: scope === 'plan' ? 'p' : null,
+      localDate: '2026-09-21', confirmPlanRangeExtension: false });
+    await drain(); await processTrainingDelivery(runtime, uid, id); await drain();
+    expect(server.schedules.get(original.ids.schedule)).toMatchObject({ date: '2026-09-21' });
+    expect(server.calls.filter(call => call.method === 'POST')).toHaveLength(2);
+    if (scope === 'plan') await planCommand('stop'); else await command('stop');
+    await drain(); await processTrainingDelivery(runtime, uid, id); await drain();
+    expect(server.workouts.size + server.schedules.size).toBe(0);
+  });
+
+  it.each(['missing', 'foreign', 'mismatch', 'invalid', 'unknown'] as const)('blocks %s strength companions before provider I/O', async failure => {
+    await seedStrength();
+    const companion = user().collection('scheduledWorkouts').doc('w').collection('strengthDetails').doc('current');
+    if (failure === 'missing') await companion.delete(); // Synthetic leaf, no descendants by design.
+    if (failure === 'foreign') await companion.update({ workoutId: 'foreign-workout' });
+    if (failure === 'mismatch' || failure === 'unknown') await companion.update({ exercises: [{ ...strengthDraft().exercises[0], name: 'Custom unsupported exercise' }] });
+    if (failure === 'unknown') {
+      const invalid = { ...strengthDraft(), exercises: [{ ...strengthDraft().exercises[0], name: 'Custom unsupported exercise' }] };
+      await user().collection('scheduledWorkouts').doc('w').update({ structure: projectStrengthWorkoutToV1({ ...invalid, workoutId: 'w', revision: 1 }) });
+    }
+    if (failure === 'invalid') await companion.update({ exercises: [{ ...strengthDraft().exercises[0], sets: [{ id: 'set-one', ending: { kind: 'repetitions', repetitions: 5 }, externalLoadKg: -1 }] }] });
+    await expect(command()).rejects.toThrow();
+    expect(server.calls).toHaveLength(0);
+  });
 
   it('keeps one pool-swim Workout and Schedule through plan opt-in, edit, reschedule and Stop', async () => {
     const plan = user().collection('trainingPlans').doc('p');
@@ -531,7 +612,8 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Garmin delivery / real Fi
     expect((await ledger()).status).toBe('needs_attention'); expect(server.calls).toHaveLength(1);
   });
 
-  it('shows permission repair before consent and resumes a rejected request only after same-account reconnect', async () => {
+  it.each(['running', 'strength'])('shows permission repair and resumes %s only after same-account reconnect', async sport => {
+    if (sport === 'strength') await seedStrength();
     await credential().update({ permissions: ['ACTIVITY_EXPORT'] });
     const authority = await db.runTransaction(tx => runtime.connection(tx, uid, 'garmin'));
     expect(authority).toMatchObject({ state: 'connection_repair', issues: [expect.stringContaining('Garmin Training permission')] });
@@ -547,7 +629,8 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Garmin delivery / real Fi
     expect((await ledger()).status).toBe('delivered');
   });
 
-  it('invalidates old consent after a different account reconnect or explicit disconnect', async () => {
+  it.each(['running', 'strength'])('invalidates %s consent after a different account reconnect or explicit disconnect', async sport => {
+    if (sport === 'strength') await seedStrength();
     const id = await send(); await processTrainingDelivery(runtime, uid, id);
     const requests = server.calls.length;
     await credential().update({ userID: 'account-b' });
@@ -559,7 +642,8 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Garmin delivery / real Fi
     expect(server.calls).toHaveLength(requests); expect(server.workouts.size).toBe(1);
   });
 
-  it('fences further HTTP and local record recreation after deletion wins during provider acceptance', async () => {
+  it.each(['running', 'strength'])('fences %s HTTP and recreation after deletion wins during acceptance', async sport => {
+    if (sport === 'strength') await seedStrength();
     const id = await send();
     server.afterHandle = async () => {
       server.afterHandle = null;

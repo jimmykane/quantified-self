@@ -251,8 +251,15 @@ consent is added. Exercise names are untrusted user text. Suunto Gym Guide compa
 need manual transitions. The existing Send/Enable sync consent covers that standard limitation, disclosed in the
 delivery preview without separate per-workout/per-edit mapping approval; additional mapping loss still needs review.
 Normal owner/grant-bound MCP proposal confirmation and apply remain required. No registered schema, scope, permission,
-provider action or response field changes for this policy. COROS new-send remains Coming soon, and Garmin/Wahoo are
-unsupported. New additive tools need
+provider action or response field changes for this policy. COROS new-send remains Coming soon and Wahoo strength is
+unsupported. #782 adds local Garmin strength compatibility using the validated owner-scoped companion and a small
+verified Appendix B exercise-name allowlist. Reps/time, exact kilogram load and rest map to native Training API fields;
+unknown names remain unsupported without substitution. Missing, foreign or projection-mismatched companions fail
+closed. Compatibility is local contract evidence, never provider/cloud/device acceptance. Existing provider Send and
+plan-sync previews use the full companion, including load-only changes, and retain their independent delivery grant
+and normal proposal confirmation. No registered tool, schema, issue-code enum, response field or permission changes;
+no client catalog refresh or plugin rebuild is required for this mapping-only change. Live proof remains in #782.
+New additive tools need
 a client catalog refresh after release; the registered v1 recipe input/output stays unchanged. The app's strength
 editor may display or accept pounds using Sports Lib 21.3.0, but MCP external-load input and output remain canonical
 kilograms; the owner's display preference does not alter the wire contract.

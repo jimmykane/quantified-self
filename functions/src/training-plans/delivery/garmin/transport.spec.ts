@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ActivityTypes } from '@sports-alliance/sports-lib';
+import { projectStrengthWorkoutToV1 } from '../../../../../shared/strength-workout';
 import type { ScheduledWorkoutV1 } from '../../../../../shared/training-plans';
 import { GarminTrainingTransport } from './transport';
 import { GarminTrainingHttpError } from './http';
@@ -20,7 +21,7 @@ describe('Garmin workout/schedule lifecycle, synthetic HTTP only', () => {
   const nextOperation = (previous: DeliveryOperation, patch: Partial<ScheduledWorkoutV1> = {}): DeliveryOperation => {
     const workout = { ...previous.workout!, ...patch };
     return { ...previous, id: `${previous.id}-next`, workout, generation: previous.generation + 1, progress: null,
-      digest: transport.assess(workout, previous.destinationKey, previous.timeZone).digest };
+      digest: transport.assess(workout, previous.destinationKey, previous.timeZone, previous.strength).digest };
   };
   beforeEach(() => {
     server = new GarminHttpFixture(); transport = new GarminTrainingTransport(server.request, () => now); journal = [];
@@ -38,6 +39,59 @@ describe('Garmin workout/schedule lifecycle, synthetic HTTP only', () => {
   const execute = () => transport.execute(operation, checkpoint, guard);
   const recover = () => transport.recover(operation, checkpoint, guard);
   const writes = () => server.calls.filter(call => call.method !== 'GET');
+  const strengthOperation = () => {
+    const strength = { version: 1 as const, workoutId: operation.workout!.id, revision: 1, exercises: [
+      { id: 'squat', name: 'Barbell back squat', sets: [{ id: 'one', ending: { kind: 'repetitions' as const, repetitions: 5 },
+        externalLoadKg: 80, restAfterSeconds: 120 }] },
+      { id: 'plank', name: 'Plank', sets: [{ id: 'two', ending: { kind: 'time' as const, seconds: 30 } }] },
+    ] };
+    operation = { ...operation, strength, workout: { ...operation.workout!, structure: projectStrengthWorkoutToV1(strength) } };
+    operation.digest = transport.assess(operation.workout!, operation.destinationKey, operation.timeZone, strength).digest;
+  };
+  it('delivers full strength details, updates load-only edits, reschedules and removes retained identities', async () => {
+    strengthOperation();
+    const first = (await execute())!;
+    expect(server.workouts.get(first.ids.workout)).toMatchObject({ sport: 'STRENGTH_TRAINING',
+      segments: [{ steps: [{ exerciseName: 'BARBELL_BACK_SQUAT', weightValue: 80 }, { durationValue: 120 }, { durationValue: 30 }] }] });
+    const originalDigest = operation.digest;
+    operation.strength!.exercises[0].sets[0].externalLoadKg = 82.5;
+    operation = nextOperation(operation);
+    expect(operation.digest).not.toBe(originalDigest);
+    expect(await execute()).toEqual(first);
+    expect(server.workouts.get(first.ids.workout)).toMatchObject({ segments: [{ steps: [{ weightValue: 82.5 }, {}, {}] }] });
+    operation = nextOperation(operation, { localDate: '2026-09-16' });
+    const moved = (await execute())!;
+    expect(moved.ids).toEqual(first.ids);
+    expect(server.schedules.get(first.ids.schedule)).toMatchObject({ date: '2026-09-16' });
+    expect(writes().filter(call => call.method === 'POST')).toHaveLength(2);
+    operation = { ...nextOperation(operation), kind: 'remove', workout: null, strength: null };
+    expect(await execute()).toBeNull();
+    expect(server.workouts.size + server.schedules.size).toBe(0);
+  });
+  it.each(['missing', 'foreign', 'mismatch', 'unknown-name', 'invalid-load', 'old-digest'] as const)(
+    'rejects a %s strength prescription before any provider I/O', async failure => {
+      strengthOperation();
+      if (failure === 'missing') operation.strength = null;
+      if (failure === 'foreign') operation.strength!.workoutId = 'someone-elses-workout';
+      if (failure === 'mismatch') operation.strength!.exercises[0].sets[0].ending = { kind: 'time', seconds: 10 };
+      if (failure === 'unknown-name') operation.strength!.exercises[0].name = 'Custom unsupported exercise';
+      if (failure === 'invalid-load') operation.strength!.exercises[0].sets[0].externalLoadKg = -1;
+      if (failure === 'old-digest') operation.strength!.exercises[0].sets[0].externalLoadKg = 81;
+      await expect(execute()).rejects.toThrow();
+      expect(server.calls).toHaveLength(0);
+    });
+  it('keeps uncertain strength POST acceptance blocked without duplicating it', async () => {
+    strengthOperation();
+    server.afterHandle = async request => {
+      if (request.method !== 'POST') return;
+      server.afterHandle = null; throw new GarminTrainingHttpError('uncertain', false);
+    };
+    await expect(execute()).rejects.toThrow();
+    expect(await recover()).toEqual({ kind: 'uncertain' });
+    expect(await recover()).toEqual({ kind: 'uncertain' });
+    expect(server.workouts.size).toBe(1);
+    expect(writes()).toHaveLength(1);
+  });
   it('retains one workout identity across synthetic 25 m pool create, edit, reschedule and withdrawal', async () => {
     const pool: ScheduledWorkoutV1 = { ...operation.workout!, title: 'Four 25 m lengths', structure: {
       version: 1, sport: ActivityTypes.Swimming, poolLength: { meters: 25, presentation: 'meters' },
