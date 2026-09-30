@@ -163,6 +163,7 @@ Never commit environment files, service-account JSON, API tokens, private keys, 
 | Functions build | `npm --prefix functions run build` | Compiles TypeScript to `functions/lib` |
 | Functions emulator tests | `npm run test:functions-emulators -- lifecycle` | Builds first; use no argument for all four isolated demo groups |
 | Emulator CI coverage guard | `npm run test:emulator-coverage` | Rejects missing/duplicate suites, unsafe environments and skipped coverage |
+| CI workflow regression tests | `npm run test:workflows` | Fork/internal trigger routing and the required aggregate test result |
 | Functions lint | `npm --prefix functions run lint` | Runs ESLint with `--fix` and may edit files |
 | Install Git hooks | `npm run hooks:install` | Reinstalls the repository Lefthook hooks; `npm ci` normally installs them automatically |
 | Test the local credential guard | `npm run credentials:test` | Checks the staged-file rejection policy without reading credential values |

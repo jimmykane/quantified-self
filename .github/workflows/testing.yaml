@@ -3,12 +3,22 @@ name: Testing
 # Internal PR commits are tested on push, and the resulting check is attached to
 # the same commit shown by the PR. Develop is tested by the beta workflow so its
 # successful result can gate deployment without a duplicate pull-request run.
+# Fork pushes do not reach this repository, so their PRs need a separate path.
 on:
   push:
     branches-ignore:
       - develop
       - main
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: read
+  pull-requests: read
 
 jobs:
   run-tests:
+    # A skipped internal PR must not publish the required push check's name.
+    name: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && 'Internal PR - covered by push' || 'run-tests' }}
+    if: ${{ github.event_name == 'push' || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository) }}
     uses: ./.github/workflows/_run-tests.yml

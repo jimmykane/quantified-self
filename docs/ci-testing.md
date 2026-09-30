@@ -1,10 +1,28 @@
 # CI test coverage
 
-`.github/workflows/_run-tests.yml` is the shared test gate for branch pushes, beta/main builds and approved manual
-deployment workflows. Its existing job runs credential/plugin checks, ordinary Functions tests, compiled
-entrypoint/MCP contract checks, lint, Firestore/Storage Rules tests and frontend tests. A reusable workflow caller
-finishes successfully only when **all** of its jobs succeed; existing deployment `needs: run-tests` gates therefore
-include the emulator matrix, not just the ordinary test job.
+`.github/workflows/_run-tests.yml` is the shared test gate for branch pushes, fork pull requests, beta/main builds and
+approved manual deployment workflows. `unit_tests` runs credential/plugin checks, ordinary Functions tests, compiled
+entrypoint/MCP contract checks, lint, Firestore/Storage Rules tests and frontend tests. The final `run_tests` job waits
+for both `unit_tests` and the complete emulator matrix, then fails unless both succeeded (including failed, cancelled
+or skipped dependencies). It preserves the protected-branch check name `run-tests / run_tests`; an emulator failure
+must not leave the required check green. Reusable-workflow deployment dependencies also wait for all jobs.
+
+## Trigger policy without duplicate test runs
+
+- Internal feature-branch pushes run Testing; opening/updating an internal PR does not repeat the suites.
+- `develop` pushes run the beta workflow, and `main` pushes run the main workflow, each with the same test gate.
+- Fork PRs run Testing on `opened`, `synchronize` and `reopened`. Fork pushes cannot trigger this repository's push
+  workflow. First-time contributors may still need GitHub's normal maintainer approval before their tests run.
+
+`testing.yaml` uses `pull_request`, never `pull_request_target`, with only read permissions and no inherited secrets,
+deployment environment or deploy job. Fork runs use the default PR merge SHA; the MCP comparison uses the PR base SHA.
+The caller's job condition runs suites only for pushes or PRs whose head repository differs from this repository.
+Skipped internal PR callers use the distinct name `Internal PR - covered by push`, so a skipped duplicate cannot
+publish the protected push check's name. They may appear as a skipped entry, but perform no test/dependency setup.
+
+`npm run test:workflows` parses the real YAML and tests fork/internal event routing, check names, permissions,
+deployment dependencies and all success/failure/cancelled/skipped combinations of the final gate. `js-yaml` is an
+explicit dev dependency reusing the already locked parser; it adds no app or Functions runtime dependency.
 
 ## Functions emulator matrix
 

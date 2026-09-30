@@ -13,7 +13,7 @@ permissions:
   pull-requests: read
 
 jobs:
-  run_tests:
+  unit_tests:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -51,6 +51,9 @@ jobs:
 
       - name: Check emulator suite coverage and safety
         run: npm run test:emulator-coverage
+
+      - name: Check CI trigger and required-result contracts
+        run: npm run test:workflows
 
       - name: Validate local Quantified Self plugin
         env:
@@ -96,6 +99,25 @@ jobs:
         env:
           NODE_OPTIONS: --max-old-space-size=3072
         run: npm run test -- --run
+
+  # Preserve the existing protected-branch context: run-tests / run_tests.
+  # The unit runner alone must not satisfy it after an emulator failure.
+  run_tests:
+    needs: [unit_tests, functions_emulators]
+    if: ${{ always() }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Require all test jobs to succeed
+        env:
+          UNIT_RESULT: ${{ needs.unit_tests.result }}
+          EMULATOR_RESULT: ${{ needs.functions_emulators.result }}
+        run: |
+          if [[ "$UNIT_RESULT" != "success" || "$EMULATOR_RESULT" != "success" ]]; then
+            echo "Required test gate failed: unit=$UNIT_RESULT, emulators=$EMULATOR_RESULT"
+            exit 1
+          fi
+          echo "All unit, app, rules and emulator jobs passed."
 
   functions_emulators:
     name: Functions emulators (${{ matrix.group }})
