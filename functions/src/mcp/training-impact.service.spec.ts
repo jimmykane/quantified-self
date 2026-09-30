@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
+  DERIVED_FORM_PAYLOAD_VERSION,
   DERIVED_METRIC_KINDS,
   DERIVED_METRIC_SCHEMA_VERSION,
   DERIVED_METRICS_ENTRY_TYPES,
@@ -25,10 +26,11 @@ function formSnapshot(
     schemaVersion: DERIVED_METRIC_SCHEMA_VERSION,
     status,
     payload: status === 'ready' ? {
+      payloadVersion: DERIVED_FORM_PAYLOAD_VERSION,
       dayBoundary: 'UTC',
       rangeStartDayMs: dailyLoads[0]?.dayMs ?? null,
       rangeEndDayMs: dailyLoads[dailyLoads.length - 1]?.dayMs ?? null,
-      dailyLoads,
+      dailyLoads: dailyLoads.map(entry => ({ ...entry, activityCount: 1 })),
       excludesMergedEvents: true,
     } : null,
   };

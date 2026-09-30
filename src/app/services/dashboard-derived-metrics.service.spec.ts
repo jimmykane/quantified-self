@@ -5,6 +5,7 @@ import { Firestore, doc, docData } from 'app/firebase/firestore';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { READINESS_EVIDENCE_VERSION, READINESS_FORMULA_VERSION } from '@shared/readiness';
 import {
+  DERIVED_FORM_PAYLOAD_VERSION,
   DERIVED_METRIC_KINDS,
   DERIVED_METRIC_SCHEMA_VERSION,
   DERIVED_METRICS_COLLECTION_ID,
@@ -22,6 +23,23 @@ const hoisted = vi.hoisted(() => ({
   docMock: vi.fn(),
   docDataMock: vi.fn(),
 }));
+
+function buildFormPayload(
+  dailyLoads: Array<{ dayMs: number; load: number; activityCount?: number }>,
+) {
+  const countedLoads = dailyLoads.map(entry => ({
+    ...entry,
+    activityCount: entry.activityCount ?? 1,
+  }));
+  return {
+    payloadVersion: DERIVED_FORM_PAYLOAD_VERSION,
+    dayBoundary: 'UTC',
+    rangeStartDayMs: countedLoads[0]?.dayMs ?? null,
+    rangeEndDayMs: countedLoads[countedLoads.length - 1]?.dayMs ?? null,
+    dailyLoads: countedLoads,
+    excludesMergedEvents: true,
+  };
+}
 
 vi.mock('app/firebase/firestore', async (importOriginal) => {
   const actual = await importOriginal<typeof import('app/firebase/firestore')>();
@@ -129,7 +147,11 @@ describe('DashboardDerivedMetricsService', () => {
       metricKinds: [DERIVED_METRIC_KINDS.Form, DERIVED_METRIC_KINDS.Acwr], reportReadErrors: true,
     }).subscribe(state => states.push(state));
     source$.next({ status: 'ready', schemaVersion: DERIVED_METRIC_SCHEMA_VERSION,
-      payload: { dailyLoads: [{ dayMs: Math.floor(Date.now() / 86400000) * 86400000 - 86400000, load: 30 }] } });
+      sourceEventCount: 1,
+      payload: buildFormPayload([{
+        dayMs: Math.floor(Date.now() / 86400000) * 86400000 - 86400000,
+        load: 30,
+      }]) });
     const points = states.at(-1)!.formPoints;
     expect(points?.length).toBeGreaterThan(0);
     source$.error(new Error('permission-denied'));
@@ -156,12 +178,11 @@ describe('DashboardDerivedMetricsService', () => {
       .mockReturnValueOnce(of({
         status: 'ready',
         schemaVersion: DERIVED_METRIC_SCHEMA_VERSION,
-        payload: {
-          dailyLoads: [
-            { dayMs: Date.UTC(2026, 0, 1), load: 30 },
-            { dayMs: Date.UTC(2026, 0, 3), load: 10 },
-          ],
-        },
+        sourceEventCount: 3,
+        payload: buildFormPayload([
+          { dayMs: Date.UTC(2026, 0, 1), load: 30, activityCount: 2 },
+          { dayMs: Date.UTC(2026, 0, 3), load: 10 },
+        ]),
       }))
       .mockReturnValueOnce(of({
         status: 'ready',
@@ -205,6 +226,7 @@ describe('DashboardDerivedMetricsService', () => {
       Date.UTC(2026, 0, 3),
     ]);
     expect(state.formPoints?.map(point => point.trainingStressScore)).toEqual([30, 0, 10]);
+    expect(state.formPoints?.map(point => point.activityCount)).toEqual([2, 0, 1]);
     expect(state.recoveryNow).toEqual({
       totalSeconds: 5400,
       endTimeMs: Date.UTC(2026, 0, 3, 12, 0, 0),
@@ -233,12 +255,11 @@ describe('DashboardDerivedMetricsService', () => {
           return of({
             status: 'ready',
             schemaVersion: DERIVED_METRIC_SCHEMA_VERSION,
-            payload: {
-              dailyLoads: [
-                { dayMs: Date.UTC(2026, 3, 24), load: 60 },
-                { dayMs: Date.UTC(2026, 3, 26), load: 275.4 },
-              ],
-            },
+            sourceEventCount: 2,
+            payload: buildFormPayload([
+              { dayMs: Date.UTC(2026, 3, 24), load: 60 },
+              { dayMs: Date.UTC(2026, 3, 26), load: 275.4 },
+            ]),
           });
         }
         if (path.endsWith('/form_now')) {
@@ -307,7 +328,7 @@ describe('DashboardDerivedMetricsService', () => {
     }
   });
 
-  it('supports legacy tuple daily-load payloads for backward compatibility', async () => {
+  it('marks legacy count-less Form payloads stale and withholds guessed activity counts', async () => {
     const uid = 'user-1';
     const formDocRef = { path: `users/${uid}/${DERIVED_METRICS_COLLECTION_ID}/${getDerivedMetricDocId(DERIVED_METRIC_KINDS.Form)}` };
     const recoveryDocRef = { path: `users/${uid}/${DERIVED_METRICS_COLLECTION_ID}/${getDerivedMetricDocId(DERIVED_METRIC_KINDS.RecoveryNow)}` };
@@ -330,8 +351,26 @@ describe('DashboardDerivedMetricsService', () => {
 
     const state = await firstValueFrom(service.watch({ uid }));
 
-    expect(state.formPoints?.map(point => point.trainingStressScore)).toEqual([20, 0, 5]);
+    expect(state.formStatus).toBe('stale');
+    expect(state.formPoints).toBeNull();
     expect(state.recoveryNow).toBeNull();
+  });
+
+  it('marks Form stale when exact daily activity counts do not match sourceEventCount', async () => {
+    const uid = 'user-1';
+    hoisted.docDataMock.mockReturnValueOnce(of({
+      status: 'ready',
+      schemaVersion: DERIVED_METRIC_SCHEMA_VERSION,
+      sourceEventCount: 2,
+      payload: buildFormPayload([
+        { dayMs: Date.UTC(2026, 0, 1), load: 30, activityCount: 1 },
+      ]),
+    })).mockReturnValue(of(undefined));
+
+    const state = await firstValueFrom(service.watch({ uid }));
+
+    expect(state.formStatus).toBe('stale');
+    expect(state.formPoints).toBeNull();
   });
 
   it('marks ready snapshots with older schema versions as stale for self-heal', async () => {

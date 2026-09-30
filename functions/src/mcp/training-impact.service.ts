@@ -4,6 +4,7 @@ import {
   DERIVED_METRIC_KINDS,
   DERIVED_METRIC_SCHEMA_VERSION,
   DERIVED_METRICS_ENTRY_TYPES,
+  resolveDerivedFormMetricPayload,
   type DerivedFormMetricPayload,
 } from '../../../shared/derived-metrics';
 import { isBenchmarkEventForTrainingMetrics } from '../../../shared/event-classification';
@@ -14,13 +15,11 @@ import {
   resolveTrainingLoadDayImpact,
   TRAINING_LOAD_ATL_TIME_CONSTANT_DAYS,
   TRAINING_LOAD_CTL_TIME_CONSTANT_DAYS,
-  TRAINING_LOAD_DAY_MS,
   type TrainingLoadContribution,
   type TrainingLoadDayImpact,
   type TrainingSessionLoadImpact,
 } from '../../../shared/training-load';
 import { getUserDeletionGuardState } from '../shared/user-deletion-guard';
-import { MCP_DERIVED_PAYLOAD_SCHEMAS } from './derived-output-schemas';
 
 const CURRENT_TSS_TYPE = 'Training Stress Score';
 const LEGACY_TSS_TYPE = 'Power Training Stress Score';
@@ -431,30 +430,13 @@ function formSnapshotState(snapshot: Record<string, unknown> | null):
   ) {
     return { status: 'updating', payload: null };
   }
-  const parsed = MCP_DERIVED_PAYLOAD_SCHEMAS[DERIVED_METRIC_KINDS.Form]
-    .safeParse(snapshot.payload);
-  if (!parsed.success || parsed.data.excludesMergedEvents !== true) {
-    return { status: 'updating', payload: null };
-  }
-  const { dailyLoads, rangeStartDayMs, rangeEndDayMs } = parsed.data;
-  const validDailyLoads = dailyLoads.every((entry, index) => (
-    Number.isSafeInteger(entry.dayMs)
-    && entry.dayMs >= 0
-    && entry.dayMs % TRAINING_LOAD_DAY_MS === 0
-    && Number.isFinite(entry.load)
-    && entry.load >= 0
-    && (index === 0 || dailyLoads[index - 1].dayMs < entry.dayMs)
-  ));
-  const validRange = dailyLoads.length === 0
-    ? rangeStartDayMs === null && rangeEndDayMs === null
-    : rangeStartDayMs === dailyLoads[0].dayMs
-      && rangeEndDayMs === dailyLoads[dailyLoads.length - 1].dayMs;
-  if (!validDailyLoads || !validRange) {
+  const parsed = resolveDerivedFormMetricPayload(snapshot.payload);
+  if (!parsed) {
     return { status: 'updating', payload: null };
   }
   return {
     status: 'ready',
-    payload: parsed.data as DerivedFormMetricPayload,
+    payload: parsed,
   };
 }
 

@@ -1540,6 +1540,8 @@ profile metrics with bounded pre-19 Cadence read compatibility. The registered M
 current snapshots to its frozen wire schema version 15 and three-family shape through an explicit projection before
 redaction and strict validation:
 
+- `form` strips the internal Form payload version and exact per-day activity counts used by the owner-only Training
+  impact recap. Its frozen public daily rows remain exactly `{dayMs, load}`.
 - `training_summary` and `training_build_comparison` retain only Running, Cycling, and Swimming and reconstruct their
   exact registered window objects, so internal `contexts`, profile IDs, and profile metrics cannot leak.
 - `training_explanation` retains those three named families, folds Rowing, Walking & Hiking, Nordic Skiing, Strength,
@@ -1598,7 +1600,8 @@ Statuses distinguish `ready`, `partial`, `updating`, `unavailable`, and `exclude
 missing TSS, benchmark/merge exclusion, incomplete activities, Form building/staleness/failure, no usable selected
 session, and a UTC Training day outside the retained snapshot. Zero TSS remains a valid modeled contribution. Current
 TSS takes precedence over the legacy Power Training Stress Score field. A ready Form payload must match the current
-internal schema, identify the Form kind, and assert merged-event exclusion; otherwise the tool fails closed as updating.
+internal Form payload version, identify the Form kind, and assert merged-event exclusion; otherwise the tool fails closed
+as updating.
 
 The built-in Assistant allowlists the same tool. It resolves exact opaque references through its existing completed-
 activity workflow, prepares Form, preserves separate UTC outcomes, and renders compact deterministic evidence without
@@ -1607,6 +1610,11 @@ routing and interpretation boundary. No mutation, approval step, provider reques
 introduced. Because this is a public tool/schema/instruction addition, release still requires deploying the existing
 MCP Function, refreshing/rescanning the registered developer app, synchronizing the bundled plugin, and testing in a
 new conversation; clients that already have both grants need a tool-catalog refresh but no reauthorization.
+
+The owner-only Training impact recap adds an internal per-day activity count to Form, but the projection above removes
+it before public validation. The existing Training-impact service continues to derive coverage from its exact selected
+references rather than this count. The recap therefore changes no MCP tool, schema, scope, consent meaning, mutation,
+provider action, Assistant routing, registered-app contract, or bundled plugin and needs no additional rescan or sync.
 
 Training calculation, schema, invalidation, rebuild, and extension guidance remains in
 [`training-workspace.md`](training-workspace.md). Adding a kind requires its normal derived pipeline, exact safe MCP

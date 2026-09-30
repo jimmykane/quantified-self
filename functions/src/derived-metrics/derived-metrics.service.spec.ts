@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
+    DERIVED_FORM_PAYLOAD_VERSION,
     DERIVED_METRIC_KINDS,
     DERIVED_METRIC_SCHEMA_VERSION,
     DERIVED_RECOVERY_LOOKBACK_WINDOW_SECONDS,
@@ -285,8 +286,10 @@ describe('fetchDerivedFormSnapshotSeed', () => {
     const dayMs = Date.UTC(2026, 8, 14);
     const valid = () => ({ entryType: 'snapshot', metricKind: DERIVED_METRIC_KINDS.Form,
         status: 'ready', schemaVersion: DERIVED_METRIC_SCHEMA_VERSION, builtFromEventMutationVersion: 7,
-        sourceEventCount: 1, sourceDocCount: 2, payload: { dayBoundary: 'UTC', excludesMergedEvents: true,
-            rangeStartDayMs: dayMs, rangeEndDayMs: dayMs, dailyLoads: [{ dayMs, load: 50 }] } });
+        sourceEventCount: 1, sourceDocCount: 2, payload: { payloadVersion: DERIVED_FORM_PAYLOAD_VERSION,
+            dayBoundary: 'UTC', excludesMergedEvents: true,
+            rangeStartDayMs: dayMs, rangeEndDayMs: dayMs,
+            dailyLoads: [{ dayMs, load: 50, activityCount: 1 }] } });
     beforeEach(() => vi.clearAllMocks());
     async function read(data: unknown) {
         const { fetchDerivedFormSnapshotSeed } = await import('./derived-metrics.service');
@@ -294,22 +297,35 @@ describe('fetchDerivedFormSnapshotSeed', () => {
         return fetchDerivedFormSnapshotSeed('user-1');
     }
     it('accepts canonical loads and genuine zero-load histories', async () => {
-        expect(await read(valid())).toMatchObject({ dailyLoads: [{ dayMs, load: 50 }], sourceEventCount: 1 });
+        expect(await read(valid())).toMatchObject({
+            dailyLoads: [{ dayMs, load: 50, activityCount: 1 }],
+            sourceEventCount: 1,
+        });
         const zero = valid(); zero.payload.dailyLoads[0].load = 0;
-        expect(await read(zero)).toMatchObject({ dailyLoads: [{ dayMs, load: 0 }], sourceEventCount: 1 });
+        expect(await read(zero)).toMatchObject({
+            dailyLoads: [{ dayMs, load: 0, activityCount: 1 }],
+            sourceEventCount: 1,
+        });
         const empty = valid(); empty.sourceEventCount = 0;
         Object.assign(empty.payload, { dailyLoads: [], rangeStartDayMs: null, rangeEndDayMs: null });
         expect(await read(empty)).toMatchObject({ dailyLoads: [], sourceEventCount: 0, sourceDocCount: 2 });
     });
     it.each([
         { payload: null }, { payload: { ...valid().payload, dailyLoads: undefined } },
-        { payload: { ...valid().payload, dailyLoads: [{ dayMs, load: Number.NaN }] } },
-        { payload: { ...valid().payload, dailyLoads: [{ dayMs, load: -1 }] } },
+        { payload: { ...valid().payload, payloadVersion: 1 } },
+        { payload: { ...valid().payload, dailyLoads: [{ dayMs, load: Number.NaN, activityCount: 1 }] } },
+        { payload: { ...valid().payload, dailyLoads: [{ dayMs, load: -1, activityCount: 1 }] } },
+        { payload: { ...valid().payload, dailyLoads: [{ dayMs, load: 50 }] } },
+        { payload: { ...valid().payload, dailyLoads: [{ dayMs, load: 50, activityCount: 2 }] } },
         { payload: { ...valid().payload, rangeStartDayMs: dayMs + 1, rangeEndDayMs: dayMs + 1,
-            dailyLoads: [{ dayMs: dayMs + 1, load: 50 }] } },
-        { sourceEventCount: 2, payload: { ...valid().payload, dailyLoads: [{ dayMs, load: 20 }, { dayMs, load: 30 }] } },
+            dailyLoads: [{ dayMs: dayMs + 1, load: 50, activityCount: 1 }] } },
+        { payload: { ...valid().payload, rangeStartDayMs: -86_400_000, rangeEndDayMs: -86_400_000,
+            dailyLoads: [{ dayMs: -86_400_000, load: 50, activityCount: 1 }] } },
+        { sourceEventCount: 2, payload: { ...valid().payload,
+            dailyLoads: [{ dayMs, load: 20, activityCount: 1 }, { dayMs, load: 30, activityCount: 1 }] } },
         { sourceEventCount: 2, payload: { ...valid().payload, rangeStartDayMs: dayMs + 86_400_000,
-            dailyLoads: [{ dayMs: dayMs + 86_400_000, load: 20 }, { dayMs, load: 30 }] } },
+            dailyLoads: [{ dayMs: dayMs + 86_400_000, load: 20, activityCount: 1 },
+                { dayMs, load: 30, activityCount: 1 }] } },
         { payload: { ...valid().payload, rangeEndDayMs: dayMs - 86_400_000 } },
         { payload: { ...valid().payload, dailyLoads: [], rangeStartDayMs: null, rangeEndDayMs: null } },
         { sourceDocCount: 0 }, { sourceEventCount: undefined },
@@ -5063,6 +5079,25 @@ describe('writeDerivedMetricSnapshotsReady', () => {
         return (call?.[1] || {}) as Record<string, unknown>;
     }
 
+    it('rejects a reused Form context when exact daily counts do not match sourceEventCount', async () => {
+        const { writeDerivedMetricSnapshotsReady } = await import('./derived-metrics.service');
+        await expect(writeDerivedMetricSnapshotsReady(
+            'user-1',
+            [DERIVED_METRIC_KINDS.FormNow],
+            { formDocs: [], recoveryNowDocs: [] },
+            {
+                formDailyLoads: [{
+                    dayMs: Date.UTC(2026, 8, 14),
+                    load: 50,
+                    activityCount: 1,
+                }],
+                formSourceEventCount: 2,
+                formSourceDocCount: 2,
+            },
+        )).rejects.toThrow('daily activity counts must match sourceEventCount');
+        expect(hoisted.transactionSet).not.toHaveBeenCalled();
+    });
+
     it('warms internal reuse metadata and retains original source counts and expiry on recovery-only writes', async () => {
         const { writeDerivedMetricSnapshotsReady } = await import('./derived-metrics.service');
         const { resolveTrainingBuildWorkoutSeed, trainingBuildSettingsKey } = await import('./training-build-workout-seed');
@@ -5273,10 +5308,11 @@ describe('writeDerivedMetricSnapshotsReady', () => {
         expect(formPersistedSnapshot.builtFromEventMutationVersion).toBe(42);
         expect(formPersistedSnapshot.sourceDocCount).toBe(formDocs.length);
         const formPayload = formPersistedSnapshot.payload as Record<string, unknown>;
+        expect(formPayload.payloadVersion).toBe(DERIVED_FORM_PAYLOAD_VERSION);
         expect(formPayload.dailyLoads).toEqual([
-            { dayMs: Date.UTC(2026, 0, 1), load: 10 },
-            { dayMs: Date.UTC(2026, 0, 2), load: 20 },
-            { dayMs: Date.UTC(2026, 0, 3), load: 30 },
+            { dayMs: Date.UTC(2026, 0, 1), load: 10, activityCount: 1 },
+            { dayMs: Date.UTC(2026, 0, 2), load: 20, activityCount: 1 },
+            { dayMs: Date.UTC(2026, 0, 3), load: 30, activityCount: 1 },
         ]);
 
         const acwrPayload = findPersistedPayload(DERIVED_METRIC_KINDS.Acwr).payload as Record<string, unknown>;
@@ -5510,6 +5546,24 @@ describe('writeDerivedMetricSnapshotsReady', () => {
                 },
             }),
             buildEventDoc({
+                startDate: Date.UTC(2026, 0, 2, 23, 59, 0),
+                stats: {
+                    'Power Training Stress Score': 5,
+                },
+            }),
+            buildEventDoc({
+                startDate: Date.UTC(2026, 0, 3, 0, 1, 0),
+                stats: {
+                    'Training Stress Score': 0,
+                },
+            }),
+            buildEventDoc({
+                startDate: Date.UTC(2026, 0, 3, 7, 0, 0),
+                stats: {
+                    [DataDuration.type]: 1_800,
+                },
+            }),
+            buildEventDoc({
                 startDate: Date.UTC(2026, 0, 3, 8, 0, 0),
                 endDate: Date.UTC(2026, 0, 3, 9, 0, 0),
                 stats: {
@@ -5532,11 +5586,11 @@ describe('writeDerivedMetricSnapshotsReady', () => {
         );
 
         const formPersistedSnapshot = findPersistedPayload(DERIVED_METRIC_KINDS.Form);
-        expect(formPersistedSnapshot.sourceEventCount).toBe(2);
+        expect(formPersistedSnapshot.sourceEventCount).toBe(4);
         const formPayload = formPersistedSnapshot.payload as Record<string, unknown>;
         expect(formPayload.dailyLoads).toEqual([
-            { dayMs: Date.UTC(2026, 0, 2), load: 40 },
-            { dayMs: Date.UTC(2026, 0, 3), load: 10 },
+            { dayMs: Date.UTC(2026, 0, 2), load: 45, activityCount: 2 },
+            { dayMs: Date.UTC(2026, 0, 3), load: 10, activityCount: 2 },
         ]);
 
         const recoveryPayload = findPersistedPayload(DERIVED_METRIC_KINDS.RecoveryNow).payload as Record<string, unknown>;

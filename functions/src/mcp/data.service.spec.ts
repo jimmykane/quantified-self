@@ -44,6 +44,7 @@ import {
 } from '@sports-alliance/sports-lib';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
+  DERIVED_FORM_PAYLOAD_VERSION,
   DERIVED_METRIC_KINDS,
   DERIVED_METRIC_SCHEMA_VERSION,
   DERIVED_METRICS_ENTRY_TYPES,
@@ -2410,12 +2411,14 @@ describe('MCP data service', () => {
         schemaVersion: DERIVED_METRIC_SCHEMA_VERSION,
         status: 'ready',
         payload: {
+          payloadVersion: DERIVED_FORM_PAYLOAD_VERSION,
           dayBoundary: 'UTC',
           rangeStartDayMs: Date.parse('2026-07-01T00:00:00.000Z'),
           rangeEndDayMs: Date.parse('2026-07-01T00:00:00.000Z'),
           dailyLoads: [{
             dayMs: Date.parse('2026-07-01T00:00:00.000Z'),
             load: 42,
+            activityCount: 1,
           }],
           excludesMergedEvents: true,
         },
@@ -5230,6 +5233,64 @@ describe('MCP data service', () => {
     expect(serialized).not.toContain('stroke-rate');
   });
 
+  it('projects the versioned internal Form payload without exact activity counts', () => {
+    const dayMs = Date.UTC(2026, 8, 29);
+    const projected = projectDerivedMetricPayloadForMcp(
+      DERIVED_METRIC_KINDS.Form,
+      {
+        payloadVersion: DERIVED_FORM_PAYLOAD_VERSION,
+        dayBoundary: 'UTC',
+        rangeStartDayMs: dayMs,
+        rangeEndDayMs: dayMs,
+        dailyLoads: [{ dayMs, load: 42, activityCount: 2 }],
+        excludesMergedEvents: true,
+      },
+    );
+
+    expect(projected).toEqual({
+      dayBoundary: 'UTC',
+      rangeStartDayMs: dayMs,
+      rangeEndDayMs: dayMs,
+      dailyLoads: [{ dayMs, load: 42 }],
+      excludesMergedEvents: true,
+    });
+    expect(JSON.stringify(projected)).not.toContain('payloadVersion');
+    expect(JSON.stringify(projected)).not.toContain('activityCount');
+    expect(MCP_DERIVED_PAYLOAD_SCHEMAS[DERIVED_METRIC_KINDS.Form].safeParse(projected).success).toBe(true);
+  });
+
+  it('returns the frozen public Form shape from a versioned exact-count snapshot', async () => {
+    const dayMs = Date.UTC(2026, 8, 29);
+    vi.mocked(dependencies.fetchDerivedSnapshot).mockResolvedValue({
+      status: 'ready',
+      schemaVersion: DERIVED_METRIC_SCHEMA_VERSION,
+      updatedAtMs: dayMs,
+      sourceEventCount: 2,
+      payload: {
+        payloadVersion: DERIVED_FORM_PAYLOAD_VERSION,
+        dayBoundary: 'UTC',
+        rangeStartDayMs: dayMs,
+        rangeEndDayMs: dayMs,
+        dailyLoads: [{ dayMs, load: 42, activityCount: 2 }],
+        excludesMergedEvents: true,
+      },
+    });
+
+    const result = await createMcpDataService(dependencies).getTrainingMetric(
+      'user-1',
+      DERIVED_METRIC_KINDS.Form,
+    );
+    expect(result.payload).toEqual({
+      dayBoundary: 'UTC',
+      rangeStartDayMs: dayMs,
+      rangeEndDayMs: dayMs,
+      dailyLoads: [{ dayMs, load: 42 }],
+      excludesMergedEvents: true,
+    });
+    expect(JSON.stringify(result)).not.toContain('activityCount');
+    expect(JSON.stringify(result)).not.toContain('payloadVersion');
+  });
+
   it('strips internal context metrics and added families from Training build projection', () => {
     const buildWindow = {
       periodWeeks: 8,
@@ -5681,9 +5742,9 @@ describe('MCP data service', () => {
     const nowTimeMs = Date.parse('2026-07-27T12:00:00.000Z');
     const asOfDayMs = Date.parse('2026-07-27T00:00:00.000Z');
     const dailyLoads = [
-      { dayMs: Date.parse('2026-07-18T00:00:00.000Z'), load: 100 },
-      { dayMs: Date.parse('2026-07-20T00:00:00.000Z'), load: 40 },
-      { dayMs: Date.parse('2026-07-25T00:00:00.000Z'), load: 80 },
+      { dayMs: Date.parse('2026-07-18T00:00:00.000Z'), load: 100, activityCount: 1 },
+      { dayMs: Date.parse('2026-07-20T00:00:00.000Z'), load: 40, activityCount: 1 },
+      { dayMs: Date.parse('2026-07-25T00:00:00.000Z'), load: 80, activityCount: 1 },
     ];
     const loadPoints = buildTrainingLoadPoints(dailyLoads, asOfDayMs);
     const latestLoad = loadPoints[loadPoints.length - 1];
@@ -5754,6 +5815,7 @@ describe('MCP data service', () => {
       updatedAtMs: Date.parse('2026-07-27T08:00:00.000Z'),
       sourceEventCount: 3,
       payload: {
+        payloadVersion: DERIVED_FORM_PAYLOAD_VERSION,
         dayBoundary: 'UTC',
         rangeStartDayMs: dailyLoads[0].dayMs,
         rangeEndDayMs: dailyLoads[dailyLoads.length - 1].dayMs,

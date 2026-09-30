@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   DERIVED_METRIC_KINDS,
   DERIVED_METRIC_SCHEMA_VERSION,
+  DERIVED_FORM_PAYLOAD_VERSION,
   DERIVED_RECOVERY_LOOKBACK_WINDOW_SECONDS,
   DERIVED_RECOVERY_MAX_SUPPORTED_SECONDS,
   DERIVED_RECOVERY_QUERY_DURATION_BUFFER_SECONDS,
@@ -24,6 +25,8 @@ import {
   normalizeDerivedFormDailyLoads,
   normalizeDerivedMetricKinds,
   normalizeDerivedMetricKindsStrict,
+  resolveDerivedFormMetricPayload,
+  hasMatchingDerivedFormSourceEventCount,
 } from '@shared/derived-metrics';
 
 describe('derived-metrics shared helpers', () => {
@@ -133,10 +136,55 @@ describe('derived-metrics shared helpers', () => {
     expect(buildDerivedFormDailyLoads(new Map([
       [Date.UTC(2026, 0, 3), 4],
       [Date.UTC(2026, 0, 1), 9],
+    ]), new Map([
+      [Date.UTC(2026, 0, 3), 1],
+      [Date.UTC(2026, 0, 1), 2],
     ]))).toEqual([
-      { dayMs: Date.UTC(2026, 0, 1), load: 9 },
-      { dayMs: Date.UTC(2026, 0, 3), load: 4 },
+      { dayMs: Date.UTC(2026, 0, 1), load: 9, activityCount: 2 },
+      { dayMs: Date.UTC(2026, 0, 3), load: 4, activityCount: 1 },
     ]);
+  });
+
+  it('validates the exact internal Form payload without accepting legacy count-less loads', () => {
+    const dayMs = Date.UTC(2026, 0, 1);
+    expect(resolveDerivedFormMetricPayload({
+      payloadVersion: DERIVED_FORM_PAYLOAD_VERSION,
+      dayBoundary: 'UTC',
+      rangeStartDayMs: dayMs,
+      rangeEndDayMs: dayMs,
+      dailyLoads: [{ dayMs, load: 0, activityCount: 1 }],
+      excludesMergedEvents: true,
+    })).toEqual({
+      payloadVersion: DERIVED_FORM_PAYLOAD_VERSION,
+      dayBoundary: 'UTC',
+      rangeStartDayMs: dayMs,
+      rangeEndDayMs: dayMs,
+      dailyLoads: [{ dayMs, load: 0, activityCount: 1 }],
+      excludesMergedEvents: true,
+    });
+    expect(resolveDerivedFormMetricPayload({
+      payloadVersion: DERIVED_FORM_PAYLOAD_VERSION,
+      dayBoundary: 'UTC',
+      rangeStartDayMs: dayMs,
+      rangeEndDayMs: dayMs,
+      dailyLoads: [{ dayMs, load: 10 }],
+      excludesMergedEvents: true,
+    })).toBeNull();
+
+    const validPayload = {
+      payloadVersion: DERIVED_FORM_PAYLOAD_VERSION,
+      dayBoundary: 'UTC',
+      rangeStartDayMs: dayMs,
+      rangeEndDayMs: dayMs,
+      dailyLoads: [{ dayMs, load: 10, activityCount: 2 }],
+      excludesMergedEvents: true,
+    };
+    expect(hasMatchingDerivedFormSourceEventCount(validPayload, 2)).toBe(true);
+    expect(hasMatchingDerivedFormSourceEventCount(validPayload, 1)).toBe(false);
+    expect(resolveDerivedFormMetricPayload({
+      ...validPayload,
+      rangeStartDayMs: `${dayMs}`,
+    })).toBeNull();
   });
 
   it('exposes recovery lookback constants for bounded derived recovery scans', () => {

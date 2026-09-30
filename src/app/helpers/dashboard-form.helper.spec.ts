@@ -80,8 +80,8 @@ describe('dashboard-form.helper', () => {
 
   it('should parse object-based daily loads used by Firestore snapshots', () => {
     const points = buildDashboardFormPointsFromDailyLoads([
-      { dayMs: Date.UTC(2024, 0, 1), load: 30 },
-      { dayMs: Date.UTC(2024, 0, 3), load: 10 },
+      { dayMs: Date.UTC(2024, 0, 1), load: 30, activityCount: 2 },
+      { dayMs: Date.UTC(2024, 0, 3), load: 10, activityCount: 1 },
     ]);
 
     expect(points).toHaveLength(3);
@@ -91,6 +91,7 @@ describe('dashboard-form.helper', () => {
       Date.UTC(2024, 0, 3),
     ]);
     expect(points.map(point => point.trainingStressScore)).toEqual([30, 0, 10]);
+    expect(points.map(point => point.activityCount)).toEqual([2, 0, 1]);
   });
 
   it('should bucket training stress by runtime local calendar day boundaries', () => {

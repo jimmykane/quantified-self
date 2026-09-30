@@ -95,6 +95,7 @@ export const CALENDAR_SENSITIVE_DERIVED_METRIC_KINDS: DerivedMetricKind[] = [
 export const DERIVED_METRICS_COLLECTION_ID = 'derivedMetrics';
 export const DERIVED_METRICS_COORDINATOR_DOC_ID = 'coordinator';
 export const DERIVED_METRIC_SCHEMA_VERSION = 20;
+export const DERIVED_FORM_PAYLOAD_VERSION = 2;
 export const DERIVED_RECOVERY_MAX_SUPPORTED_SECONDS = 14 * 24 * 60 * 60;
 export const DERIVED_RECOVERY_QUERY_DURATION_BUFFER_SECONDS = 2 * 24 * 60 * 60;
 export const DERIVED_RECOVERY_LOOKBACK_WINDOW_SECONDS =
@@ -137,6 +138,10 @@ export interface DerivedFormDailyLoadEntry {
   load: number;
 }
 
+export interface DerivedFormDailyLoadEntryWithActivityCount extends DerivedFormDailyLoadEntry {
+  activityCount: number;
+}
+
 export type LegacyDerivedFormDailyLoadEntry = readonly [number, number];
 
 export interface DerivedMetricSnapshotBase<TPayload> {
@@ -152,10 +157,11 @@ export interface DerivedMetricSnapshotBase<TPayload> {
 }
 
 export interface DerivedFormMetricPayload {
+  payloadVersion: typeof DERIVED_FORM_PAYLOAD_VERSION;
   dayBoundary: 'UTC';
   rangeStartDayMs: number | null;
   rangeEndDayMs: number | null;
-  dailyLoads: DerivedFormDailyLoadEntry[];
+  dailyLoads: DerivedFormDailyLoadEntryWithActivityCount[];
   excludesMergedEvents: boolean;
 }
 
@@ -1291,8 +1297,138 @@ export function normalizeDerivedFormDailyLoads(
 
 export function buildDerivedFormDailyLoads(
   loadByDayMs: ReadonlyMap<number, number>,
-): DerivedFormDailyLoadEntry[] {
-  return normalizeDerivedFormDailyLoads(
-    [...loadByDayMs.entries()].map(([dayMs, load]) => ({ dayMs, load })),
+  activityCountByDayMs: ReadonlyMap<number, number>,
+): DerivedFormDailyLoadEntryWithActivityCount[] {
+  return normalizeDerivedFormDailyLoadsWithActivityCounts(
+    [...loadByDayMs.entries()].map(([dayMs, load]) => ({
+      dayMs,
+      load,
+      activityCount: activityCountByDayMs.get(dayMs),
+    })),
   );
+}
+
+export function normalizeDerivedFormDailyLoadsWithActivityCounts(
+  dailyLoads: unknown,
+): DerivedFormDailyLoadEntryWithActivityCount[] {
+  const entries = Array.isArray(dailyLoads) ? dailyLoads : [];
+  const loadByDayMs = new Map<number, { load: number; activityCount: number }>();
+  for (const candidate of entries) {
+    if (!candidate || typeof candidate !== 'object' || Array.isArray(candidate)) {
+      continue;
+    }
+    const entry = candidate as Record<string, unknown>;
+    const dayMs = toFiniteNumber(entry.dayMs);
+    const load = toFiniteNumber(entry.load);
+    if (
+      dayMs === null
+      || dayMs < 0
+      || load === null
+      || load < 0
+      || !Number.isSafeInteger(entry.activityCount)
+      || Number(entry.activityCount) <= 0
+    ) {
+      continue;
+    }
+    const normalizedDayMs = Math.floor(dayMs);
+    const previous = loadByDayMs.get(normalizedDayMs);
+    loadByDayMs.set(normalizedDayMs, {
+      load: (previous?.load || 0) + load,
+      activityCount: (previous?.activityCount || 0) + Number(entry.activityCount),
+    });
+  }
+  return [...loadByDayMs.entries()]
+    .sort((left, right) => left[0] - right[0])
+    .map(([dayMs, values]) => ({ dayMs, ...values }));
+}
+
+export function resolveDerivedFormMetricPayload(
+  payload: unknown,
+): DerivedFormMetricPayload | null {
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+    return null;
+  }
+  const source = payload as Record<string, unknown>;
+  if (
+    source.payloadVersion !== DERIVED_FORM_PAYLOAD_VERSION
+    || source.dayBoundary !== 'UTC'
+    || source.excludesMergedEvents !== true
+    || !Array.isArray(source.dailyLoads)
+  ) {
+    return null;
+  }
+
+  const dailyLoads: DerivedFormDailyLoadEntryWithActivityCount[] = [];
+  let previousDayMs = -Infinity;
+  for (const candidate of source.dailyLoads) {
+    if (!candidate || typeof candidate !== 'object' || Array.isArray(candidate)) {
+      return null;
+    }
+    const entry = candidate as Record<string, unknown>;
+    if (
+      !Number.isSafeInteger(entry.dayMs)
+      || Number(entry.dayMs) < 0
+      || Number(entry.dayMs) % (24 * 60 * 60 * 1000) !== 0
+      || Number(entry.dayMs) <= previousDayMs
+      || typeof entry.load !== 'number'
+      || !Number.isFinite(entry.load)
+      || entry.load < 0
+      || !Number.isSafeInteger(entry.activityCount)
+      || Number(entry.activityCount) <= 0
+    ) {
+      return null;
+    }
+    dailyLoads.push({
+      dayMs: Number(entry.dayMs),
+      load: entry.load,
+      activityCount: Number(entry.activityCount),
+    });
+    previousDayMs = Number(entry.dayMs);
+  }
+
+  const rangeStartDayMs = source.rangeStartDayMs === null
+    ? null
+    : Number.isSafeInteger(source.rangeStartDayMs)
+      ? Number(source.rangeStartDayMs)
+      : undefined;
+  const rangeEndDayMs = source.rangeEndDayMs === null
+    ? null
+    : Number.isSafeInteger(source.rangeEndDayMs)
+      ? Number(source.rangeEndDayMs)
+      : undefined;
+  if (
+    rangeStartDayMs === undefined
+    || rangeEndDayMs === undefined
+    || rangeStartDayMs !== (dailyLoads[0]?.dayMs ?? null)
+    || rangeEndDayMs !== (dailyLoads[dailyLoads.length - 1]?.dayMs ?? null)
+  ) {
+    return null;
+  }
+
+  return {
+    payloadVersion: DERIVED_FORM_PAYLOAD_VERSION,
+    dayBoundary: 'UTC',
+    rangeStartDayMs,
+    rangeEndDayMs,
+    dailyLoads,
+    excludesMergedEvents: true,
+  };
+}
+
+export function hasMatchingDerivedFormSourceEventCount(
+  payload: unknown,
+  sourceEventCount: unknown,
+): boolean {
+  const resolvedPayload = resolveDerivedFormMetricPayload(payload);
+  if (
+    !resolvedPayload
+    || !Number.isSafeInteger(sourceEventCount)
+    || Number(sourceEventCount) < 0
+  ) {
+    return false;
+  }
+  return resolvedPayload.dailyLoads.reduce(
+    (total, entry) => total + entry.activityCount,
+    0,
+  ) === Number(sourceEventCount);
 }

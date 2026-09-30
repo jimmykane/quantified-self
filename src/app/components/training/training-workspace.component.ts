@@ -398,6 +398,7 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
   public trainingRecoveryHistoryExpanded = false;
   public readonly isDarkTheme = computed(() => this.themeService.appTheme() === AppThemes.Dark);
   public readonly useTrainingStateDetailsDialog: Signal<boolean>;
+  public trainingImpactRecapNowMs = Date.now();
 
   private readonly subscriptions = new Subscription();
   private dataSubscriptions = new Subscription();
@@ -1928,6 +1929,7 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
     const handleRollover = (): void => {
       this.readinessDayRolloverTimeoutHandle = null;
       const refresh = (): void => {
+        this.trainingImpactRecapNowMs = Date.now();
         this.refreshTrainingReadiness();
         const uid = this.currentUserUID;
         if (uid) {
