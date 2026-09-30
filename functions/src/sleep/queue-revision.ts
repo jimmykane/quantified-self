@@ -92,7 +92,8 @@ export async function claimSleepQueueRevision(
   }
 
   const db = admin.firestore();
-  return db.runTransaction(async transaction => {
+  let claimedWebhookFeedMask: unknown;
+  const claimResult = await db.runTransaction(async transaction => {
     const nowMs = Date.now();
     let deletionGuard;
     try {
@@ -134,8 +135,18 @@ export async function claimSleepQueueRevision(
       processingRevision,
       processingLeaseExpiresAt: nowMs + SLEEP_QUEUE_PROCESSING_LEASE_MS,
     });
+    // The worker's initial read can precede a coalesced notification. The
+    // claim is the final serialized read before the provider requests start.
+    claimedWebhookFeedMask = current.suuntoHealthWebhookFeedMask;
     return 'claimed';
   });
+  if (claimResult === 'claimed' && queueItem.type === 'suunto_health_poll'
+    && queueItem.healthTrigger === 'webhook') {
+    queueItem.suuntoHealthWebhookFeedMask = claimedWebhookFeedMask === 1
+      || claimedWebhookFeedMask === 2 || claimedWebhookFeedMask === 3
+      ? claimedWebhookFeedMask : undefined;
+  }
+  return claimResult;
 }
 
 export async function releaseSleepQueueRevision(

@@ -2,7 +2,7 @@ import { normalizeSleepProvider } from './sleep';
 import {
   buildReadinessEvaluation as buildLegacyReadinessEvaluation,
   calculateReadinessScore as calculateLegacyReadinessScore,
-  resolveReadinessConfidence, resolveReadinessSleepPointTime,
+  READINESS_SLEEP_MAX_AGE_MS, resolveReadinessConfidence, resolveReadinessSleepPointTime,
   type ReadinessSignalsContext as LegacyReadinessSignalsContext,
   type ReadinessEvaluation as LegacyReadinessEvaluation,
   type ReadinessSleepEvidencePoint, type ReadinessScoreContext,
@@ -20,7 +20,7 @@ export {
 } from './readiness-legacy';
 
 export const READINESS_FORMULA_VERSION = 4 as const;
-export const READINESS_EVIDENCE_VERSION = 1 as const;
+export const READINESS_EVIDENCE_VERSION = 3 as const;
 export const READINESS_SLEEP_LOOKBACK_MS = HRV_PERSONAL_RANGE_OPTIONS.baselineWindowDays * 86400000;
 const READINESS_HRV_TREND_MINIMUM_DAYS = 4;
 const READINESS_HRV_TREND_MINIMUM_CHANGE_MS = 1;
@@ -148,24 +148,25 @@ function readinessHrvObservationSeries(
     const observations = readinessHrvObservations(point).filter(observation =>
       Number.isFinite(observation.value) && observation.value > 0 && inWindow(observation.timestampMs));
     const pointTime = resolveReadinessSleepPointTime(point);
-    // A grouped night may include a later fragment. Retain original completed HRV
-    // observations at historical cutoffs instead of withholding the entire group.
     const selectedAtMs = inWindow(pointTime) ? pointTime : Math.max(-Infinity, ...observations.map(value => value.timestampMs));
     return inWindow(selectedAtMs) ? [{ point, observations, selectedAtMs }] : [];
   }).sort((a, b) => a.selectedAtMs - b.selectedAtMs || a.point.id.localeCompare(b.point.id));
   const latestSleep = eligible[eligible.length - 1];
-  if (!latestSleep) return [];
-  const observations = eligible.filter(({ point }) => point.provider === latestSleep.point.provider
+  if (!latestSleep || nowMs - latestSleep.selectedAtMs > READINESS_SLEEP_MAX_AGE_MS) return [];
+  const currentNightObservations = latestSleep.observations
+    .filter(observation => observation.calendarDate === latestSleep.point.sleepDate);
+  // Grouping must yield one authoritative canonical observation. Conflicting
+  // or unweighted fragment values remain unavailable rather than becoming the
+  // current night.
+  if (currentNightObservations.length !== 1) return [];
+  const currentObservation = currentNightObservations[0];
+  return eligible.filter(({ point }) => point.provider === latestSleep.point.provider
     && (point.sourceKey ?? null) === (latestSleep.point.sourceKey ?? null))
     .flatMap(entry => entry.observations)
+    .filter(observation => (observation.sourceKey ?? null) === (currentObservation.sourceKey ?? null))
     .sort((a, b) => a.timestampMs - b.timestampMs || (a.sourceKey ?? '').localeCompare(b.sourceKey ?? ''));
-  const latest = observations[observations.length - 1];
-  return latest
-    ? observations.filter(point => (point.sourceKey ?? null) === (latest.sourceKey ?? null))
-    : [];
 }
 
-/** Keep original per-day readings; averaging fragments first would change the chart's daily median. */
 export function readinessHrvObservations(point: Pick<ReadinessSleepEvidencePoint,
   'averageHrvMs' | 'hrvSourceKey' | 'hrvObservations' | 'sleepDate' | 'startTimeMs' | 'endTimeMs'>) {
   return point.hrvObservations ?? (typeof point.averageHrvMs === 'number' && point.averageHrvMs > 0

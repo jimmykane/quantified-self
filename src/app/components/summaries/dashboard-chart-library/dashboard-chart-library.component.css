@@ -69,7 +69,7 @@ h3 { font: var(--mat-sys-title-medium); margin-block: 8px; }
 .chart-library-new-label { color: var(--mat-sys-primary); font: var(--mat-sys-label-small); }
 
 .chart-library-health-thumbnail { width:88px; height:42px; display:block; }
-.chart-library-health-preview { display:block; height:clamp(360px, 48vh, 430px); min-height:360px; }
+.chart-library-health-preview { --qs-dashboard-chart-content-inset:8px; display:block; height:clamp(360px, 48vh, 430px); min-height:360px; }
 @media(max-width:640px) { .chart-library-health-preview { height:420px; } }
 
 .pin-preview { grid-template-columns:minmax(0,1fr); }

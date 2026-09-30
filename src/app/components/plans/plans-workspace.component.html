@@ -9,7 +9,7 @@
     @if (browsing()) {
     <div pageHeaderActions class="plans-header-actions">
       <app-training-delivery-button scope="history" entityId="current" title="Plans and standalone workouts"
-        [disabled]="busyAction() !== null"></app-training-delivery-button>
+        [disabled]="busyAction() !== null || scheduleState().status !== 'ready'"></app-training-delivery-button>
       <a mat-button routerLink="/calendar" appHapticTap>
         <mat-icon aria-hidden="true">calendar_month</mat-icon>
         <span>Main Calendar</span>
@@ -47,7 +47,7 @@
   @if (scheduleState().status === 'loading') {
     <section class="plans-status" aria-live="polite">
       <mat-spinner diameter="28"></mat-spinner>
-      <span>Loading your training schedule…</span>
+      <span>{{ scheduleState().message ?? 'Loading your training schedule…' }}</span>
     </section>
   } @else if (scheduleState().status === 'error') {
     <section class="plans-status plans-status--error" role="alert">
@@ -256,6 +256,13 @@
                     Permanently delete current workouts
                   </mat-radio-button>
                 </mat-radio-group>
+                <div class="past-provider-cleanup-option">
+                  <mat-checkbox [checked]="removePastProviderCopies()" [disabled]="busyAction() !== null"
+                    (change)="removePastProviderCopies.set($event.checked); haptics.selection()">
+                    Also try to remove past provider copies
+                  </mat-checkbox>
+                  <p>Only uncompleted provider workouts are eligible. COROS cannot remove past workouts. Provider apps and devices may retain copies; completed activities are never deleted.</p>
+                </div>
               </mat-card-content>
               <mat-card-actions align="end">
                 <button appHapticTap mat-button type="button" (click)="deletingPlanId.set(null)" [disabled]="busyAction() !== null">Cancel</button>
@@ -693,14 +700,26 @@
     </section>
     }
 
-    @if (browsing() && deletedWorkoutRows().length) {
+    @if (browsing() && deletedWorkoutScope()) {
       <section class="deleted-workouts-panel" aria-label="Deleted workouts">
-        <button mat-button type="button" appHapticTap (click)="deletedWorkoutsExpanded.set(!deletedWorkoutsExpanded())"
+        <button mat-button type="button" appHapticTap (click)="toggleDeletedWorkouts()"
           [attr.aria-expanded]="deletedWorkoutsExpanded()" aria-controls="deleted-workout-list">
           <mat-icon aria-hidden="true">{{ deletedWorkoutsExpanded() ? 'expand_less' : 'expand_more' }}</mat-icon>
-          Deleted workouts · {{ deletedWorkoutRows().length }} recoverable
+          Deleted workouts ({{ deletedWorkoutRecoveryDays }} days)
         </button>
         <mat-list id="deleted-workout-list" [hidden]="!deletedWorkoutsExpanded()">
+          @if (deletedWorkoutPanel()?.status === 'loading' && !deletedWorkoutRows().length) {
+            <div class="history-status"><mat-spinner diameter="24"></mat-spinner><span>Loading deleted workouts…</span></div>
+          }
+          @if (deletedWorkoutPanel()?.status === 'error') {
+            <div class="history-status history-status--error" role="alert">
+              <span>Could not load deleted workouts. {{ deletedWorkoutPanel()?.error }}</span>
+              <button appHapticTap mat-button type="button" (click)="loadDeletedWorkouts()">Retry</button>
+            </div>
+          }
+          @if (deletedWorkoutPanel()?.status === 'ready' && !deletedWorkoutRows().length) {
+            <p>No deleted workouts in this {{ view() === 'plans' ? 'plan' : 'Standalone view' }}.</p>
+          }
           @for (row of deletedWorkoutRows(); track row.workout.id) {
             <mat-list-item>
               <mat-icon matListItemIcon aria-hidden="true">delete</mat-icon>
@@ -722,6 +741,12 @@
                 </button>
               </div>
             </mat-list-item>
+          }
+          @if (deletedWorkoutPanel()?.nextCursor) {
+            <button appHapticTap mat-button type="button" (click)="loadDeletedWorkouts()"
+              [disabled]="deletedWorkoutPanel()?.status === 'loading'">
+              Show more deleted workouts
+            </button>
           }
         </mat-list>
       </section>

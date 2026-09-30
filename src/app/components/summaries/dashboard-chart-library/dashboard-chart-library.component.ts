@@ -101,7 +101,8 @@ export class DashboardChartLibraryComponent {
     ? 'Choose Create custom chart to select your metrics and chart style.'
     : this.allSections() ? 'Choose another dashboard section to explore more tiles.' : 'All presets in this section are already on your dashboard.'
     : `Choose a ${this.sectionPresentation().singular} from the list to see its preview and details.`);
-  readonly backLabel = computed(() => this.state.configuring() ? this.draftPresentation().back : `Back to ${this.sectionPresentation().plural}`);
+  readonly backLabel = computed(() => this.state.configuring() ? this.draftPresentation().back
+    : this.browseLane() === 'section:calendar' ? 'Back to Calendar' : `Back to ${this.sectionPresentation().plural}`);
   readonly addActionHint = computed(() => this.allSections() ? 'Browse charts, KPIs, maps and more' : this.available().length ? `${this.available().length} presets available` : 'Create a custom chart');
   readonly filtered = computed(() => this.available().filter(entry => `${entry.definition.label} ${entry.definition.description}`.toLowerCase().includes(this.search().toLowerCase()) && (this.browseLane() === 'section:health' && !!this.search().trim() || this.group() === 'all' || entry.definition.category === 'kpi' && entry.definition.kpiGroup === this.group() || entry.definition.category === 'health' && entry.definition.healthGroup === this.group() || entry.definition.id === 'curated-sleep' && this.group() === 'sleep' || entry.definition.id === 'curated-hrv' && this.group() === 'cardiovascular')));
   private readonly availablePreviews = computed(() => this.available().map(entry => {
@@ -166,8 +167,8 @@ export class DashboardChartLibraryComponent {
     return 'Activity data · ' + (DASHBOARD_TILE_EVENT_RANGE_OPTIONS.find(option => option.range === range)?.label || range);
   });
   readonly creatingCustom = computed(() => this.state.editor()?.mode === 'add' && !this.state.selected());
-  readonly pickerTitle = computed(() => this.state.editor()?.mode === 'edit' ? (this.state.canConfigure() ? this.draftPresentation().edit : this.draftPresentation().details) : this.creatingCustom() ? 'Create custom chart' : this.state.configuring() ? this.draftPresentation().settings : `Add ${this.sectionPresentation().plural}`);
-  readonly pickerHeading = computed(() => this.allSections() && this.state.editor()?.mode !== 'edit' && !this.state.configuring() ? 'Add to dashboard' : this.sectionLabel().toLowerCase() === this.sectionPresentation().plural.toLowerCase() ? this.pickerTitle() : `${this.pickerTitle()} · ${this.sectionLabel()}`);
+  readonly pickerTitle = computed(() => this.state.editor()?.mode === 'edit' ? (this.state.canConfigure() ? this.draftPresentation().edit : this.draftPresentation().details) : this.creatingCustom() ? 'Create custom chart' : this.state.configuring() ? this.draftPresentation().settings : this.browseLane() === 'section:calendar' ? 'Add Calendar' : `Add ${this.sectionPresentation().plural}`);
+  readonly pickerHeading = computed(() => this.allSections() && this.state.editor()?.mode !== 'edit' && !this.state.configuring() ? 'Add to dashboard' : this.browseLane() === 'section:calendar' || this.sectionLabel().toLowerCase() === this.sectionPresentation().plural.toLowerCase() ? this.pickerTitle() : `${this.pickerTitle()} · ${this.sectionLabel()}`);
   readonly expanded = computed(() => this.allSections() ? !!this.state.activeLane() : this.state.activeLane() === this.browseLane());
   readonly destination = computed(() => {
     const tile = this.state.draft(); if (!tile) return '';

@@ -3,6 +3,16 @@ type ModuleLoader = () => FunctionModule;
 
 const loadMarketingHandlers = (): FunctionModule =>
   module.require('./admin/marketing/handlers') as FunctionModule;
+const loadTrainingScheduleHistory = (): FunctionModule =>
+  module.require('./training-plans/history-callables') as FunctionModule;
+const loadTrainingDeliveryCommands = (): FunctionModule =>
+  module.require('./training-plans/delivery/commands') as FunctionModule;
+const loadTrainingDeliveryTasks = (): FunctionModule =>
+  module.require('./training-plans/delivery/tasks') as FunctionModule;
+const loadTrainingDeliveryLifecycle = (): FunctionModule =>
+  module.require('./training-plans/delivery/lifecycle') as FunctionModule;
+const loadDashboardDerivedMetricsTriggers = (): FunctionModule =>
+  module.require('./derived-metrics/derived-metrics.trigger') as FunctionModule;
 
 const TARGET_LOADERS: Readonly<Record<string, ModuleLoader>> = Object.freeze({
   getSuuntoAPIAuthRequestTokenRedirectURI:
@@ -22,6 +32,41 @@ const TARGET_LOADERS: Readonly<Record<string, ModuleLoader>> = Object.freeze({
   marketingUnsubscribe: loadMarketingHandlers,
   projectEventTagCatalog:
     () => module.require('./events/event-tag-catalog.trigger') as FunctionModule,
+  reconcileTrainingPlanCleanup:
+    () => module.require('./training-plans/cleanup-worker') as FunctionModule,
+  reconcileTrainingWorkoutExpiry:
+    () => module.require('./training-plans/cleanup-worker') as FunctionModule,
+  reconcileTrainingBulkShift:
+    () => module.require('./training-plans/bulk-shift-worker') as FunctionModule,
+  applyAssistantTrainingProposal:
+    () => module.require('./assistant/callable') as FunctionModule,
+  ensureDerivedMetrics:
+    () => module.require('./derived-metrics/ensure-derived-metrics') as FunctionModule,
+  setTrainingBuildBenchmark:
+    () => module.require('./derived-metrics/set-training-build-benchmark') as FunctionModule,
+  mutateTrainingSchedule:
+    () => module.require('./training-plans/mutate-training-schedule') as FunctionModule,
+  getTrainingScheduleHistory: loadTrainingScheduleHistory,
+  previewTrainingScheduleRestore: loadTrainingScheduleHistory,
+  restoreTrainingScheduleRevision:
+    () => module.require('./training-plans/restore-callable') as FunctionModule,
+  deleteTrainingPlan:
+    () => module.require('./training-plans/delete-training-plan-callable') as FunctionModule,
+  previewTrainingProviderDelivery: loadTrainingDeliveryCommands,
+  mutateTrainingProviderDelivery: loadTrainingDeliveryCommands,
+  processTrainingDeliveryTask: loadTrainingDeliveryTasks,
+  onTrainingDeliveryQueued: loadTrainingDeliveryTasks,
+  dispatchTrainingDelivery: loadTrainingDeliveryTasks,
+  onTrainingDeliveryConnectionChanged: loadTrainingDeliveryLifecycle,
+  onTrainingDeliveryEntitlementChanged: loadTrainingDeliveryLifecycle,
+  onDashboardDerivedMetricsActivityWrite: loadDashboardDerivedMetricsTriggers,
+  onDashboardDerivedMetricsEventWrite: loadDashboardDerivedMetricsTriggers,
+  onDashboardDerivedMetricsSleepWrite: loadDashboardDerivedMetricsTriggers,
+  onDashboardDerivedMetricsHealthWrite: loadDashboardDerivedMetricsTriggers,
+  processDerivedMetricsTask:
+    () => module.require('./tasks/derived-metrics-worker') as FunctionModule,
+  processDerivedMetricsIngressTask:
+    () => module.require('./tasks/derived-metrics-ingress-worker') as FunctionModule,
 });
 
 export const OPTIMIZED_FUNCTION_TARGETS = Object.freeze(Object.keys(TARGET_LOADERS));

@@ -14,6 +14,14 @@ import {
 } from './policies.content';
 
 describe('help.content', () => {
+  it('explains shared horizontal pinch zoom on Event details charts', () => {
+    const content = HELP_SECTIONS.find(section => section.id === 'getting-started')!.content;
+    expect(content).toContain('In **Zoom** chart mode, pinch with two fingers');
+    expect(content).toContain('swipe left or right with one finger to move through the zoomed range');
+    expect(content).toContain('same time or distance range appears across the other event charts');
+    expect(content).toContain('In **Select** mode, one-finger drags select a range and pinching does not change the chart range');
+  });
+
   it('explains separately consented Timeline-note context for workout suggestions', () => {
     const assistant = HELP_SECTIONS.find(section => section.id === 'ai-insights')?.content;
     expect(assistant).toContain('notes about sickness, injury, travel, or vacation');
@@ -57,6 +65,9 @@ describe('help.content', () => {
     expect(content).toContain('Training Plans uses independent MCP permissions');
     expect(content).toContain('The MCP update must be released, discovered by your client, and explicitly authorized');
     expect(content).toContain('Previewing a change never contacts a provider');
+    expect(content).toContain('Retry the same approved proposal to retrieve its result');
+    expect(content).toContain('revoke the connection or its Training permission before commit');
+    expect(content).toContain('Restoring permission requires a new preview and approval');
     expect(content).toContain('## Send workouts to connected providers');
     expect(section.links.some(link => link.label === 'MCP Connections')).toBe(true);
     expect(section.links.some(link => link.label === 'Connected services')).toBe(true);
@@ -158,12 +169,17 @@ describe('help.content', () => {
     }
     expect(searchHelpSections(HELP_SECTIONS, 'Timeline notes').map(section => section.id)).toEqual(expect.arrayContaining(['health', 'training-analysis']));
     const calendar = HELP_SECTIONS.find(section => section.id === 'activity-calendar')?.content;
-    expect(calendar).toContain('a note icon marks days');
-    expect(calendar).toContain("Small color markers show your chosen note colors");
-    expect(calendar).toContain('overlapping notes keep their different colors as separate segments');
+    expect(calendar).toContain('a slim colored tick on the right marks days');
+    expect(calendar).toContain('notes and their individual colors');
+    expect(calendar).toContain('the Today mini-calendar, a slim colored tick on the right marks days');
+    expect(calendar).toContain('Week and Year keep their note icons');
     expect(calendar).toContain('Activity circles keep their own colors');
     expect(calendar).toContain('Show on charts and calendar');
-    expect(calendar).toContain('Today calendar popup show the same private notes');
+    expect(calendar).toContain('The **Today** card opens a compact month calendar');
+    expect(calendar).toContain('use sport icons for planned workouts and completed activities');
+    expect(calendar).toContain('the sheet hides completed-activity totals and sections');
+    expect(calendar).toContain('Activity loading and errors are still labeled');
+    expect(calendar).toContain("offers **Dashboard** to return when opened from the dashboard tile or Today's mini-calendar");
     const dashboard = HELP_SECTIONS.find(section => section.id === 'getting-started')?.content;
     expect(dashboard).toContain('HRV, Sleep, Form, and Freshness Forecast show the same note markers');
     expect(dashboard).toContain('shared profiles and chart-library previews do not include them');
@@ -345,6 +361,10 @@ describe('help.content', () => {
     expect(assistantSection?.content).toContain('route geometry');
     expect(assistantSection?.content).toContain('ranks the matching Mountain Biking activities');
     expect(assistantSection?.content).toContain('instead of comparing jump counts');
+    expect(assistantSection?.content).toContain('identity-free **Training impact**');
+    expect(assistantSection?.content).toContain("latest completed workout and yesterday's training");
+    expect(assistantSection?.content).toContain('A local date can have two UTC outcomes');
+    expect(assistantSection?.content).toContain('not measured physiological adaptation');
     expect(assistantSection?.content).toContain('Use [Connections -> MCP](/services?serviceName=mcp)');
     expect(assistantSection?.links).toContainEqual({
       label: 'MCP Connections',
@@ -384,6 +404,10 @@ describe('help.content', () => {
     expect(dataAndPrivacySection?.content).toContain('separate default-off Activity tag changes choice');
     expect(dataAndPrivacySection?.content).toContain('Oversized rankings fail');
     expect(dataAndPrivacySection?.content).toContain('jump count is not treated as jump quality');
+    expect(dataAndPrivacySection?.content).toContain('request identity-safe **Training impact**');
+    expect(dataAndPrivacySection?.content).toContain('up to 32 exact activity references');
+    expect(dataAndPrivacySection?.content).toContain('never per-session day rows');
+    expect(dataAndPrivacySection?.content).toContain('adds no write access or provider action');
     expect(dataAndPrivacySection?.content).toContain('missing or insufficient-history states');
     expect(dataAndPrivacySection?.content).toContain('today’s Readiness drivers');
     expect(dataAndPrivacySection?.content).toContain('daily report with sleep HRV and sleep heart rate');
@@ -391,6 +415,7 @@ describe('help.content', () => {
     expect(dataAndPrivacySection?.content).toContain('### If an MCP permission is missing');
     expect(dataAndPrivacySection?.content).toContain('Missing tools do not mean you have no plans, workouts, or recorded data.');
     expect(dataAndPrivacySection?.content).toContain('**Training plans and planned workouts**');
+    expect(dataAndPrivacySection?.content).toContain('For completed-session or local-day Training impact');
     expect(dataAndPrivacySection?.content).toContain('Do not disconnect an app just to add a permission.');
     expect(dataAndPrivacySection?.content).toContain('**Quantified Self** -> **Reconnect**');
     expect(dataAndPrivacySection?.content).toContain('Uninstall and reinstall is a last resort');
@@ -507,7 +532,7 @@ describe('help.content', () => {
     expect(gettingStartedSection?.content).toContain('Routes** map tiles show recent saved routes from lightweight route previews');
     expect(gettingStartedSection?.content).toContain('derived tiles stay independent from event table filters and custom/map tile filters');
     expect(gettingStartedSection?.content).toContain('New dashboards start with **Today**');
-    expect(gettingStartedSection?.content).toContain('default 1 x 1 dashboard tile');
+    expect(gettingStartedSection?.content).toContain('full-width dashboard section');
     expect(gettingStartedSection?.content).toContain('intentionally empty dashboards stay as you left them');
     expect(gettingStartedSection?.content).toContain('Open **Training** or **Health** from the main navigation');
     expect(gettingStartedSection?.content).toContain('Select its calendar icon to open a mini calendar for the current month');
@@ -528,11 +553,12 @@ describe('help.content', () => {
     expect(gettingStartedSection?.content).toContain('**Aerobic Capacity**');
     expect(gettingStartedSection?.content).toContain('**Aerobic Durability**');
     expect(gettingStartedSection?.content).toContain('current **Readiness**');
-    expect(gettingStartedSection?.content).toContain('groups chart and map tiles by intent');
+    expect(gettingStartedSection?.content).toContain('KPIs and charts grouped by intent');
+    expect(gettingStartedSection?.content).toContain('**Calendar** after Today, then KPIs');
     expect(gettingStartedSection?.content).toContain('**Training State**, **Health**, **Performance & Power**, **Activity Overview**, and **Routes & Maps**');
     expect(gettingStartedSection?.content).toContain('All custom charts belong in **Activity Overview**');
     expect(gettingStartedSection?.content).toContain('chart-aware default sizes');
-    expect(gettingStartedSection?.content).toContain('Empty editable dashboards show lightweight section guidance');
+    expect(gettingStartedSection?.content).toContain('Empty sections stay hidden');
     expect(gettingStartedSection?.content).toContain('**Cycling Power Curve** and **Running Power Curve** are curated derived snapshots');
     expect(gettingStartedSection?.content).toContain('defaults to **1y**');
     expect(gettingStartedSection?.content).toContain('latest activity or a saved recent-best comparison window');
@@ -543,17 +569,18 @@ describe('help.content', () => {
     const calendarSection = HELP_SECTIONS.find(section => section.id === 'activity-calendar');
 
     expect(calendarSection?.content).toContain('**Week**, **Month**, and **Year** views');
-    expect(calendarSection?.content).toContain('1 x 1 **Activity Calendar** tile');
-    expect(calendarSection?.content).toContain('**Today** card opens a month calendar in a bottom sheet');
+    expect(calendarSection?.content).toContain('same sleep-stage breakdown used in Health');
+    expect(calendarSection?.content).toContain('full-width **Calendar** section');
+    expect(calendarSection?.content).toContain('**Today** card opens a compact month calendar in a bottom sheet');
     expect(calendarSection?.content).toContain('Dashboard and Training headers also link to the full [Calendar](/calendar)');
-    expect(calendarSection?.content).toContain('Existing dashboards keep their saved layout');
-    expect(calendarSection?.content).toContain('out of suggestions until you add it again manually');
-    expect(calendarSection?.content).toContain('place multiple circles concentrically around the same center');
+    expect(calendarSection?.content).toContain('without changing their saved settings');
+    expect(calendarSection?.content).toContain('out of suggestions until you add it manually');
+    expect(calendarSection?.content).toContain('show overlapping activity-group circles');
     expect(calendarSection?.content).toContain('size reflects recorded duration');
-    expect(calendarSection?.content).toContain('individual activities with their available distance and elevation metrics');
-    expect(calendarSection?.content).toContain('activity group containing exactly one activity opens that activity directly');
-    expect(calendarSection?.content).toContain('Browser **Back** restores the same day\'s details sheet');
-    expect(calendarSection?.content).toContain('Deleting an activity from its details page returns to the previous in-app page');
+    expect(calendarSection?.content).toContain('Period totals and activity-group bars remain available below the month');
+    expect(calendarSection?.content).toContain('Select an activity row to open its details');
+    expect(calendarSection?.content).toContain('Browser **Back** returns to the selected calendar day');
+    expect(calendarSection?.content).toContain('The selected view and date are kept in the URL');
     expect(calendarSection?.content).toContain('intentionally have no hover or touch tooltip');
     expect(calendarSection?.content).toContain('recorded **Distance**, **Duration**, and **Ascent**');
     expect(calendarSection?.content).toContain('Month totals exclude adjacent dates');
@@ -568,6 +595,9 @@ describe('help.content', () => {
     expect(calendarSection?.content).toContain('tag filter lists your saved activity tags across all dates');
     expect(calendarSection?.content).toContain('independent from the dashboard event table');
     expect(calendarSection?.content).toContain('Select any date, including an empty one');
+    expect(calendarSection?.content).toContain('Private selected-day views also show **Training impact**');
+    expect(calendarSection?.content).toContain('one local calendar date can show two dated UTC outcomes');
+    expect(calendarSection?.content).toContain('planned workouts never contribute');
     expect(calendarSection?.content).toContain('standalone workouts plus workouts from the active plan');
     expect(calendarSection?.content).toContain('Planned workouts never change recorded period totals');
     expect(calendarSection?.content).toContain('Merge and benchmark records are excluded');
@@ -602,6 +632,9 @@ describe('help.content', () => {
     expect(planningSection?.content).toContain('browser Back and Forward');
     expect(planningSection?.content).toContain('**Plan actions -> Plan color**');
     expect(planningSection?.content).toContain('restoring plan history also restores its saved color');
+    expect(planningSection?.content).toContain('Your existing plan and workout dates remain visible until the shift commits together');
+    expect(planningSection?.content).toContain('A very large history restore may briefly make planned workouts unavailable');
+    expect(planningSection?.content).toContain('Completed activities remain visible');
     expect(HELP_SECTIONS.find(section => section.id === 'activity-calendar')?.content)
       .toContain('Standalone workouts stay neutral');
     expect(planningSection?.content).toContain('Workout delivery to Garmin, Suunto, and Wahoo is available to connected Pro members');
@@ -614,6 +647,9 @@ describe('help.content', () => {
     expect(planningSection?.content).toContain('does not offer a Suunto visibility check');
     expect(planningSection?.content).toContain('never recreates a Guide automatically');
     expect(planningSection?.content).toContain('reconnecting is not required or recommended as a normal QS workflow');
+    expect(planningSection?.content).toContain('Stop requests withdrawal of an eligible cloud Guide');
+    expect(planningSection?.content).toContain('does not guarantee that a Guide already visible in the Suunto app or on your watch disappears');
+    expect(planningSection?.content).toContain('Remove or hide it in Suunto if you no longer want to see it there');
     expect(planningSection?.content).toContain('**Completed · activity linked**');
     expect(planningSection?.content).toContain('A completed Garmin FIT activity can link to a planned workout');
     expect(planningSection?.content).toContain('a second recording of an already-linked workout does not replace the first');
@@ -628,7 +664,10 @@ describe('help.content', () => {
     expect(planningSection?.content).toContain('with a review warning');
     expect(planningSection?.content).toContain('only one can be active');
     expect(planningSection?.content).toContain('Move a workout between plans or between a plan and **Standalone**');
-    expect(planningSection?.content).toContain('Ordinary deletion is recoverable from history');
+    expect(planningSection?.content).toContain('Ordinary deletion is recoverable for');
+    expect(planningSection?.content).toContain('Show more deleted workouts');
+    expect(planningSection?.content).toContain('90 days from the time you delete the workout');
+    expect(planningSection?.content).toContain('Deleted workouts (90 days)');
     expect(planningSection?.content).toContain('Every visible date');
     expect(planningSection?.content).toContain('Planned workouts and completed activities are separate');
     expect(planningSection?.content).toContain('Separate MCP read/preview tools support an authored pool length');
@@ -663,6 +702,14 @@ describe('help.content', () => {
     const trainingSection = HELP_SECTIONS.find(section => section.id === 'training-analysis');
 
     expect(trainingSection?.content).toContain('What drove this');
+    expect(trainingSection?.content).toContain('**Training impact** appears for completed activities');
+    expect(trainingSection?.content).toContain('TSS divided by 42');
+    expect(trainingSection?.content).toContain('their event detail pages do not show the card');
+    expect(trainingSection?.content).toContain('Public activity shares and planned workouts do not show Training impact');
+    expect(trainingSection?.content).toContain('**Training impact recap** appears first under **Load trajectory**');
+    expect(trainingSection?.content).toContain('last 7 completed UTC Training days');
+    expect(trainingSection?.content).toContain('exact number of completed parent activities');
+    expect(trainingSection?.content).toContain('four consecutive 7-day blocks');
     expect(trainingSection?.content).toContain('compact line above the **Training** title');
     expect(trainingSection?.content).toContain('content does not shift');
     expect(trainingSection?.content).toContain('failed update adds **Retry**');
@@ -736,8 +783,13 @@ describe('help.content', () => {
     expect(trainingSection?.content).toContain('Garmin Health sleep summaries currently provide neither');
     expect(trainingSection?.content).toContain('rolling **60-day personal range**');
     expect(trainingSection?.content).toContain('Changing a chart to one year does not change these windows');
-    expect(trainingSection?.content).toContain('Failed load or sleep reads are identified separately');
-    expect(trainingSection?.content).toContain('Sleep already loaded before a listener failure remains visible only while eligible');
+    expect(trainingSection?.content).toContain(
+      'Failed or stale load, recovery, or sleep sources contribute no current value',
+    );
+    expect(trainingSection?.content).toContain('sleep refresh failure clears previously loaded readiness sleep evidence immediately');
+    expect(trainingSection?.content).toContain('weights their HRV by the recorded sample counts');
+    expect(trainingSection?.content).toContain('does not simply use the last record');
+    expect(trainingSection?.content).toContain('**No current HRV**');
     expect(trainingSection?.content).toContain('context, not a workout instruction');
     expect(trainingSection?.content).toContain('**14-day trend**');
     expect(trainingSection?.content).toContain('without scanning activity history');
@@ -814,7 +866,7 @@ describe('help.content', () => {
     expect(gettingStartedSection?.content).toContain('dismissing it hides the prompt permanently');
     expect(gettingStartedSection?.content).toContain('**Send new activities to Suunto** action prompt');
     expect(gettingStartedSection?.content).toContain('Turning it on affects new Garmin or COROS activities only');
-    expect(gettingStartedSection?.content).toContain('use **Sync past activities** in **Services** for activities already in Quantified Self');
+    expect(gettingStartedSection?.content).toContain('use **Send past activities** in **Services** for activities already in Quantified Self');
     expect(gettingStartedSection?.content).toContain('Advanced settings');
     expect(gettingStartedSection?.content).toContain('kilometers or miles');
     expect(gettingStartedSection?.content).toContain('Settings -> Units');
@@ -1215,9 +1267,9 @@ describe('help.content', () => {
     expect(serviceConnectionsSection?.content).toContain('Bulk sends upload routes one at a time');
     expect(serviceConnectionsSection?.content).toContain('Garmin to Suunto activity sync requires');
     expect(serviceConnectionsSection?.content).toContain('allow Activity Export in Garmin');
-    expect(serviceConnectionsSection?.content).toContain('**Sync past activities** is available in Garmin Services');
-    expect(serviceConnectionsSection?.content).toContain('uses the original files already saved with those activities');
-    expect(serviceConnectionsSection?.content).toContain('sync past activities while automatic activity sync is off');
+    expect(serviceConnectionsSection?.content).toContain('open **Send past activities** under the destination service in Services');
+    expect(serviceConnectionsSection?.content).toContain('Only retained FIT files are eligible');
+    expect(serviceConnectionsSection?.content).toContain('send past activities while automatic activity sync is off');
     expect(serviceConnectionsSection?.content).toContain('dashboard may offer a one-time action prompt to turn on automatic Garmin to Suunto activity sync');
     expect(serviceConnectionsSection?.content).toContain('Disconnecting Garmin, COROS, Suunto, or Wahoo turns off related automatic activity or route delivery');
     expect(serviceConnectionsSection?.content).toContain('Sleep sync is server-owned health data');
@@ -1265,8 +1317,8 @@ describe('help.content', () => {
     expect(serviceConnectionsSection?.content).toContain('https://support.coros.com/hc/en-us/articles/360040256971-How-to-Import-Activities-to-Your-COROS-Account');
     expect(serviceConnectionsSection?.content).toContain('uploading selected GPX or FIT routes to COROS');
     expect(serviceConnectionsSection?.content).toContain('sending saved routes to COROS individually or in selected-row bulk batches');
-    expect(serviceConnectionsSection?.content).toContain('Garmin, Suunto, and Wahoo Services each offer COROS as an activity destination');
-    expect(serviceConnectionsSection?.content).toContain('Automatic delivery is off by default');
+    expect(serviceConnectionsSection?.content).toContain('The COROS Services card offers **Send past activities**');
+    expect(serviceConnectionsSection?.content).toContain('Automatic delivery remains off unless you enable it separately');
     expect(serviceConnectionsSection?.content).toContain('one active connected account');
     expect(serviceConnectionsSection?.content).toContain('asks COROS whether that account is still bound');
     expect(serviceConnectionsSection?.content).toContain('related automatic activity and saved-route settings turn off');
@@ -1278,14 +1330,14 @@ describe('help.content', () => {
     expect(serviceConnectionsSection?.content).toContain('expire after about 120 days');
     expect(serviceConnectionsSection?.content).toContain('turn on automatic activity sync in COROS Services');
     expect(serviceConnectionsSection?.content).toContain('Automatic sync runs only for newly imported COROS activities');
-    expect(serviceConnectionsSection?.content).toContain('**Sync past activities** is available in COROS Services');
-    expect(serviceConnectionsSection?.content).toContain('sync past activities while automatic activity sync is off');
+    expect(serviceConnectionsSection?.content).toContain('**Send past activities** is available under the Suunto or Wahoo destination card');
+    expect(serviceConnectionsSection?.content).toContain('send past activities while automatic activity sync is off');
     expect(serviceConnectionsSection?.content).toContain('dashboard may offer a one-time action prompt to turn on automatic COROS to Suunto activity sync');
     expect(serviceConnectionsSection?.content).toContain('Wahoo to Suunto or COROS activity sync requires');
     expect(serviceConnectionsSection?.content).toContain('turn on automatic activity sync in Wahoo Services');
     expect(serviceConnectionsSection?.content).toContain('use Wahoo activities with a retained original FIT file');
     expect(serviceConnectionsSection?.content).toContain('Automatic sync runs only for newly imported eligible Wahoo activities');
-    expect(serviceConnectionsSection?.content).toContain('**Sync past activities** in Wahoo Services');
+    expect(serviceConnectionsSection?.content).toContain('**Send past activities** under the Suunto or COROS destination card');
     expect(serviceConnectionsSection?.content).toContain('authorize the same Wahoo account');
     expect(serviceConnectionsSection?.content).toContain('disconnect the retained account first');
     expect(serviceConnectionsSection?.content).toContain('Suunto users can turn on **Automatically send new and updated routes** in Suunto Services for Garmin, Wahoo, or COROS');
@@ -1444,7 +1496,9 @@ describe('help.content', () => {
     expect(serviceConnectionsSection?.content).toContain('does not turn your saved route settings off');
     expect(serviceConnectionsSection?.content).toContain('automatically synced from Garmin, COROS, or Suunto');
     expect(serviceConnectionsSection?.content).toContain("keeps Wahoo's inferred type instead of guessing");
-    expect(serviceConnectionsSection?.content).toContain("Direct FIT activity uploads keep Wahoo's inferred type");
+    expect(serviceConnectionsSection?.content).toContain('parses the FIT on the server');
+    expect(serviceConnectionsSection?.content).toContain('browser temporarily echoes the server-derived mapped ID');
+    expect(serviceConnectionsSection?.content).toContain('preserves the existing Wahoo workout title');
     expect(serviceConnectionsSection?.content).toContain('send a GPX or FIT course or route file directly to Wahoo');
     expect(serviceConnectionsSection?.content).toContain('select **Reconnect Wahoo** in the displayed dialog');
     expect(serviceConnectionsSection?.content).toContain('Direct course/route delivery accepts GPX and FIT files');
@@ -1541,6 +1595,8 @@ describe('help.content', () => {
     expect(dataAndPrivacySection?.content).toContain('complete no-match result');
     expect(dataAndPrivacySection?.content).toContain('your latest run');
     expect(dataAndPrivacySection?.content).toContain('today’s or yesterday’s workouts');
+    expect(dataAndPrivacySection?.content).toContain('standard activity list with the same date and sport filters');
+    expect(dataAndPrivacySection?.content).toContain('Do not repeatedly retry the rejected query');
     expect(dataAndPrivacySection?.content).toContain('case-insensitive part of the route name');
     expect(dataAndPrivacySection?.content).toContain('older history');
     expect(dataAndPrivacySection?.content).toContain('without a reparse, backfill, cache');

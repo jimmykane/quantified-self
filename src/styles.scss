@@ -598,7 +598,13 @@ mat-table {
 }
 
 /* The dashboard month picker is dense; its header and calendar tile own their spacing. */
+.cdk-overlay-pane.qs-calendar-month-picker-sheet {
+  height: min(530px, 90dvh);
+}
+
 .cdk-overlay-pane.qs-calendar-month-picker-sheet .mat-bottom-sheet-container {
+  height: 100%;
+  max-height: 100%;
   padding: 0 !important;
 }
 

@@ -47,7 +47,9 @@ export class GarminTrainingTransport implements TrainingDeliveryTransport {
   assess(workout: ScheduledWorkoutV1, destinationKey: string, timeZone: string) {
     return assessTrainingDeliveryMapping('garmin', workout, destinationKey, timeZone);
   }
-  canRemove(artifact: DeliveryArtifact, today: string): boolean { return !artifact.completed && artifact.localDate >= today; }
+  canRemove(artifact: DeliveryArtifact, today: string, allowPastRemoval = false): boolean {
+    return !artifact.completed && (artifact.localDate >= today || allowPastRemoval);
+  }
 
   private validate(operation: DeliveryOperation): void {
     const progress = operation.progress;
@@ -110,8 +112,8 @@ export class GarminTrainingTransport implements TrainingDeliveryTransport {
   }
   private assertFuture(operation: DeliveryOperation): void {
     const today = trainingDeliveryLocalDate(this.now(), operation.timeZone);
-    if ((operation.artifact && !this.canRemove(operation.artifact, today))
-      || (operation.repair && !this.canRemove(operation.repair.original, today))
+    if ((operation.artifact && !this.canRemove(operation.artifact, today, operation.kind === 'remove' && operation.allowPastRemoval))
+      || (operation.repair && !this.canRemove(operation.repair.original, today, operation.kind === 'remove' && operation.allowPastRemoval))
       || (operation.kind === 'upsert' && (!operation.workout || operation.workout.localDate < today))) {
       throw new TrainingDeliveryTransportError('uncertain');
     }
@@ -135,7 +137,8 @@ export class GarminTrainingTransport implements TrainingDeliveryTransport {
     const relinking = operation.repair && operation.repair.original.ids.schedule === value.id
       && operation.repair.original.ids.workout === value.workoutId && operation.repair.original.localDate === value.date;
     if (value.id !== artifact.ids.schedule || (value.workoutId !== artifact.ids.workout && !relinking)) throw garminContractFailure('schedule_identity_mismatch');
-    if (value.date < trainingDeliveryLocalDate(this.now(), operation.timeZone)) {
+    if (value.date < trainingDeliveryLocalDate(this.now(), operation.timeZone)
+      && !(operation.kind === 'remove' && operation.allowPastRemoval && value.date === artifact.localDate)) {
       // Retain the provider-observed past date so reconciliation cannot remove or
       // rewrite a copy that was moved into the past outside QS.
       await checkpoint({ ...artifact, localDate: value.date });

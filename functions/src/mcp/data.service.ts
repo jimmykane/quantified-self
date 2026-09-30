@@ -7,9 +7,14 @@ import { ActivitySampleCache } from './activity-sample-cache';
 import { ActivitySampleContext, ActivitySamplesInput, ActivitySamplesDependencies, ActivitySamplesError, queryActivitySamples } from './activity-samples.service';
 import { getUserDeletionGuardState } from '../shared/user-deletion-guard';
 import { supplementNightlyHrvSleepDocuments } from '../sleep/nightly-hrv';
-import { sleepEvidenceSourceKey, sleepHrvSourceKey, aggregateNightlyHrvEvidence } from '../../../shared/nightly-hrv';
+import { aggregateNightlyHrvEvidence, sleepEvidenceSourceKey } from '../../../shared/nightly-hrv';
 import * as admin from 'firebase-admin';
-import { firestoreHrvRangeReads, HrvRangeInput, queryHrvPersonalRange } from './hrv-personal-range.service';
+import {
+  firestoreHrvRangeReads,
+  HrvRangeInput,
+  MCP_SLEEP_CANONICAL_TIME_FIELDS,
+  queryHrvPersonalRange,
+} from './hrv-personal-range.service';
 import {
   firestoreActivityDescriptionReads, McpActivityDescriptionInput, McpActivityDescriptionReads,
   MCP_ACTIVITY_DESCRIPTION_MAX_BYTES, MCP_ACTIVITY_DESCRIPTION_MAX_LENGTH, MCP_ACTIVITY_DESCRIPTION_MAX_RESULT_BYTES,
@@ -69,7 +74,7 @@ import {
   DERIVED_METRIC_SCHEMA_VERSION,
   DERIVED_TRAINING_BUILD_COMPARISON_RECOVERY_VERSION,
   DERIVED_METRICS_ENTRY_TYPES,
-  DerivedFormMetricPayload,
+  DerivedFormDailyLoadEntry,
   DerivedFormNowMetricPayload,
   DerivedBodyWeightTrendMetricPayload,
   DerivedMetricKind,
@@ -84,6 +89,7 @@ import {
   DerivedTrainingExplanationWindowMetrics,
   DerivedTrainingSummaryMetricPayload,
   isDerivedMetricKind,
+  resolveDerivedFormMetricPayload,
 } from '../../../shared/derived-metrics';
 import {
   HEALTH_METRIC_IDS,
@@ -109,6 +115,10 @@ import {
   normalizePersistedEventMetricSemantics,
 } from '../../../shared/sports-lib-metric-semantics';
 import {
+  groupCanonicalSleepNightFragments,
+  resolveSleepDisplayDate,
+  resolveSleepEffectiveStartTimeMs,
+  sumSleepFragmentInterruptionSeconds,
   SLEEP_PROVIDERS,
   SLEEP_SPORTS_LIB_METRIC_FIELDS,
   SLEEP_STAGES,
@@ -123,6 +133,7 @@ import {
 } from '../../../shared/sports-lib-health-data';
 import {
   buildReadinessEvaluation,
+  READINESS_EVIDENCE_VERSION as LEGACY_READINESS_EVIDENCE_VERSION,
   READINESS_FORMULA_VERSION,
   READINESS_SLEEP_LOOKBACK_MS,
   READINESS_TOTAL_SIGNAL_COUNT,
@@ -148,6 +159,14 @@ import {
   getMcpTrainingMetricDescriptors,
   McpTrainingMetricDescriptor,
 } from './training-metric-catalog';
+import {
+  firestoreTrainingImpactReads,
+  getMcpTrainingImpact,
+  MCP_TRAINING_IMPACT_MAX_ACTIVITIES,
+  McpTrainingImpactError,
+  type McpTrainingImpactMode,
+  type McpTrainingImpactReads,
+} from './training-impact.service';
 import {
   McpMetricDescriptor,
   projectSportsLibNumericMetricValue,
@@ -514,6 +533,7 @@ export interface McpDataServiceDependencies {
   contentWriteDependencies?: McpContentWriteDependencies;
   trainingReads?: import('./training-plans.service').TrainingReads;
   healthReads?: McpHealthReadDependencies;
+  trainingImpactReads?: McpTrainingImpactReads;
   now: () => number;
   fetchMetricDiscoveryDocuments: (
     uid: string,
@@ -835,7 +855,7 @@ const defaultDependencies: McpDataServiceDependencies = {
         ...Object.values(SLEEP_SPORTS_LIB_METRIC_FIELDS)
           .map(field => new FieldPath('sportsLibData', 'metrics', field)),
         'inBedDurationSeconds',
-        'timezoneOffsetSeconds',
+        ...MCP_SLEEP_CANONICAL_TIME_FIELDS,
         'isNap',
         ...Object.values(SLEEP_STAGES)
           .map(stage => new FieldPath('stageDurationsSeconds', stage)),
@@ -881,13 +901,15 @@ const defaultDependencies: McpDataServiceDependencies = {
         new FieldPath('sportsLibData', 'metrics', SLEEP_SPORTS_LIB_METRIC_FIELDS.Score),
         new FieldPath('sportsLibData', 'metrics', SLEEP_SPORTS_LIB_METRIC_FIELDS.AverageHrv),
         new FieldPath('sportsLibData', 'metrics', SLEEP_SPORTS_LIB_METRIC_FIELDS.OvernightHrv),
+        new FieldPath('sportsLibData', 'metrics', SLEEP_SPORTS_LIB_METRIC_FIELDS.HrvSampleCount),
         new FieldPath('sportsLibData', 'metrics', SLEEP_SPORTS_LIB_METRIC_FIELDS.AverageHeartRate),
         new FieldPath('sportsLibData', 'metrics', SLEEP_SPORTS_LIB_METRIC_FIELDS.MinimumHeartRate),
-        'timezoneOffsetSeconds',
+        ...MCP_SLEEP_CANONICAL_TIME_FIELDS,
         'isNap',
         new FieldPath('score', 'value'),
         new FieldPath('vitals', 'averageHrvMs'),
         new FieldPath('vitals', 'overnightHrvMs'),
+        new FieldPath('vitals', 'hrvSampleCount'),
         new FieldPath('vitals', 'averageHeartRateBpm'),
         new FieldPath('vitals', 'minimumHeartRateBpm'),
         ...(includeDailyReportFields
@@ -3544,16 +3566,33 @@ function projectBodyWeightTrendForMcp(payload: unknown): unknown {
   };
 }
 
+function projectFormForMcp(payload: unknown): unknown {
+  const source = resolveDerivedFormMetricPayload(payload);
+  if (!source) {
+    return null;
+  }
+  return {
+    dayBoundary: source.dayBoundary,
+    rangeStartDayMs: source.rangeStartDayMs,
+    rangeEndDayMs: source.rangeEndDayMs,
+    dailyLoads: source.dailyLoads.map(({ dayMs, load }) => ({ dayMs, load })),
+    excludesMergedEvents: source.excludesMergedEvents,
+  };
+}
+
 export function projectDerivedMetricPayloadForMcp(
   metricKind: DerivedMetricKind,
   payload: unknown,
 ): unknown {
   try {
     switch (metricKind) {
+      case DERIVED_METRIC_KINDS.Form:
+        return projectFormForMcp(payload);
       case DERIVED_METRIC_KINDS.TrainingReadiness: {
         const source = payload as DerivedTrainingReadinessMetricPayload;
         const legacy = source.formulaVersion === 4
-          ? normalizeLegacyReadiness({ ...source, formulaVersion: 3, points: source.legacyPoints }) : source;
+          ? normalizeLegacyReadiness({ ...source, formulaVersion: 3,
+            evidenceVersion: LEGACY_READINESS_EVIDENCE_VERSION, points: source.legacyPoints }) : source;
         return legacy ? { formulaVersion: legacy.formulaVersion, dayBoundary: legacy.dayBoundary,
           asOfDayMs: legacy.asOfDayMs, generatedAtMs: legacy.generatedAtMs, historyDays: legacy.historyDays, points: legacy.points } : null;
       }
@@ -3581,6 +3620,7 @@ export function projectDerivedMetricPayloadForMcp(
 }
 
 const MCP_PROJECTED_TRAINING_METRIC_KINDS = new Set<DerivedMetricKind>([
+  DERIVED_METRIC_KINDS.Form,
   DERIVED_METRIC_KINDS.TrainingReadiness,
   DERIVED_METRIC_KINDS.TrainingSummary,
   DERIVED_METRIC_KINDS.TrainingExplanation,
@@ -3716,21 +3756,33 @@ function toSafeSleepSession(data: Record<string, unknown>): SafeSleepSession | n
     ? normalizedData.source as Record<string, unknown>
     : {};
   const provider = normalizeSleepProvider(source.provider);
-  const startTimeMs = asFiniteNumber(normalizedData.startTimeMs);
-  const endTimeMs = asFiniteNumber(normalizedData.endTimeMs);
+  const startTimeMs = asSafeOperationalTimestampMs(normalizedData.startTimeMs);
+  const endTimeMs = asSafeOperationalTimestampMs(normalizedData.endTimeMs);
   const durationSeconds = asNonNegativeNumber(normalizedData.durationSeconds);
-  const sleepDate = normalizeCalendarDate(normalizedData.sleepDate);
+  const storedSleepDate = normalizeCalendarDate(normalizedData.sleepDate);
+  const hasExplicitSleepDate = normalizedData.sleepDate !== undefined
+    && normalizedData.sleepDate !== null
+    && !(typeof normalizedData.sleepDate === 'string' && !normalizedData.sleepDate.trim());
   if (
     !provider
     || startTimeMs === null
     || endTimeMs === null
+    || !Number.isFinite(new Date(startTimeMs).getTime())
+    || !Number.isFinite(new Date(endTimeMs).getTime())
     || endTimeMs <= startTimeMs
     || durationSeconds === null
     || durationSeconds <= 0
-    || sleepDate === null
+    || (hasExplicitSleepDate && storedSleepDate === null)
   ) {
     return null;
   }
+  const sleepDate = resolveSleepDisplayDate({
+    ...(normalizedData as unknown as SleepSession),
+    startTimeMs,
+    endTimeMs,
+    sleepDate: storedSleepDate || '',
+  });
+  if (sleepDate === null) return null;
 
   const rawScore = normalizedData.score && typeof normalizedData.score === 'object'
     ? normalizedData.score as Record<string, unknown>
@@ -3741,11 +3793,14 @@ function toSafeSleepSession(data: Record<string, unknown>): SafeSleepSession | n
     && rawScore.qualifier.trim().length <= 120
     ? rawScore.qualifier.trim()
     : null;
+  const effectiveStartTimeMs = resolveSleepEffectiveStartTimeMs(
+    normalizedData as unknown as SleepSession,
+  );
 
   return {
     provider,
     sleepDate,
-    startTimeMs,
+    startTimeMs: effectiveStartTimeMs,
     endTimeMs,
     durationSeconds,
     inBedDurationSeconds: asNonNegativeNumber(normalizedData.inBedDurationSeconds),
@@ -3757,6 +3812,134 @@ function toSafeSleepSession(data: Record<string, unknown>): SafeSleepSession | n
     } : null,
     vitals: normalizeSleepVitals(normalizedData.vitals),
   };
+}
+
+interface SafeSleepDocument {
+  id: string;
+  sourceKey: string;
+  session: SafeSleepSession;
+}
+
+function positiveVitalValues(
+  sessions: readonly SafeSleepSession[],
+  type: McpSleepVitalType,
+): number[] {
+  return sessions.map(session => session.vitals?.[type])
+    .filter((value): value is number => typeof value === 'number' && Number.isFinite(value) && value > 0);
+}
+
+function averageVital(values: readonly number[]): number | undefined {
+  return values.length ? values.reduce((sum, value) => sum + value, 0) / values.length : undefined;
+}
+
+function unambiguousVital(values: readonly number[]): number | undefined {
+  if (!values.length) return undefined;
+  return new Set(values).size === 1 ? values[0] : undefined;
+}
+
+function withoutCanonicalNightHrv(session: SafeSleepSession): SafeSleepSession {
+  if (!session.vitals) return session;
+  const remainingVitals = { ...session.vitals };
+  delete remainingVitals.averageHrvMs;
+  delete remainingVitals.overnightHrvMs;
+  delete remainingVitals.hrvSampleCount;
+  return {
+    ...session,
+    vitals: Object.keys(remainingVitals).length ? remainingVitals : null,
+  };
+}
+
+function aggregateSafeSleepDocumentGroup(group: readonly SafeSleepDocument[]): SafeSleepDocument {
+  if (group.length === 1) return group[0];
+  const sorted = [...group].sort((left, right) => left.session.startTimeMs - right.session.startTimeMs
+    || left.session.endTimeMs - right.session.endTimeMs || left.id.localeCompare(right.id));
+  const byRecency = [...sorted].sort((left, right) => left.session.endTimeMs - right.session.endTimeMs
+    || left.session.startTimeMs - right.session.startTimeMs || left.id.localeCompare(right.id));
+  const latest = byRecency[byRecency.length - 1];
+  const sessions = sorted.map(entry => entry.session);
+  const startTimeMs = Math.min(...sessions.map(session => session.startTimeMs));
+  const endTimeMs = Math.max(...sessions.map(session => session.endTimeMs));
+  const interruptionSeconds = sumSleepFragmentInterruptionSeconds(sessions);
+  const inBedDurationValues = sessions.map(session => session.inBedDurationSeconds);
+  const inBedDurationSeconds = inBedDurationValues.every(
+    (value): value is number => typeof value === 'number',
+  )
+    ? inBedDurationValues.reduce((sum, value) => sum + value, 0)
+    : null;
+  const hrv = aggregateNightlyHrvEvidence(sessions.map(session => ({
+    averageHrvMs: session.vitals?.averageHrvMs ?? null,
+    hrvSampleCount: session.vitals?.hrvSampleCount ?? null,
+    hrvSourceKey: JSON.stringify(['sleep', latest.sourceKey, 'average']),
+  })), { requireEveryPoint: true });
+  const stageDurationsSeconds = Object.fromEntries(Object.values(SLEEP_STAGES).flatMap(stage => {
+    const values = sessions.map(session => session.stageDurationsSeconds[stage])
+      .filter((value): value is number => typeof value === 'number' && Number.isFinite(value) && value >= 0);
+    const total = values.reduce((sum, value) => sum + value, 0)
+      + (stage === SLEEP_STAGES.Awake ? interruptionSeconds : 0);
+    return total > 0 ? [[stage, total]] : [];
+  })) as Partial<Record<SleepStage, number>>;
+  const averageHeartRateBpm = averageVital(positiveVitalValues(sessions, 'averageHeartRateBpm'));
+  const minimumHeartRateValues = positiveVitalValues(sessions, 'minimumHeartRateBpm');
+  const restingHeartRateBpm = averageVital(positiveVitalValues(sessions, 'restingHeartRateBpm'));
+  const overnightHrvMs = unambiguousVital(positiveVitalValues(sessions, 'overnightHrvMs'));
+  const maxSpo2Values = positiveVitalValues(sessions, 'maxSpo2Percent');
+  const averageRespirationBrpm = averageVital(positiveVitalValues(sessions, 'averageRespirationBrpm'));
+  const vitals = Object.fromEntries([
+    ['averageHeartRateBpm', averageHeartRateBpm],
+    ['minimumHeartRateBpm', minimumHeartRateValues.length ? Math.min(...minimumHeartRateValues) : undefined],
+    ['restingHeartRateBpm', restingHeartRateBpm],
+    ['averageHrvMs', hrv.averageHrvMs ?? undefined],
+    ['hrvSampleCount', hrv.hrvSampleCount],
+    ['overnightHrvMs', overnightHrvMs],
+    ['maxSpo2Percent', maxSpo2Values.length ? Math.max(...maxSpo2Values) : undefined],
+    ['averageRespirationBrpm', averageRespirationBrpm],
+  ].filter((entry): entry is [string, number] => typeof entry[1] === 'number')) as McpSafeSleepVitals;
+  return {
+    id: sorted.map(entry => entry.id).join('|'),
+    sourceKey: latest.sourceKey,
+    session: {
+      ...latest.session,
+      startTimeMs,
+      endTimeMs,
+      durationSeconds: sessions.reduce((sum, session) => sum + session.durationSeconds, 0),
+      inBedDurationSeconds,
+      stageDurationsSeconds,
+      vitals: Object.keys(vitals).length ? vitals : null,
+    },
+  };
+}
+
+function canonicalizeSafeSleepDocuments(
+  documents: readonly RawDocument[],
+): SafeSleepDocument[] {
+  const candidates = documents.flatMap(document => {
+    const session = toSafeSleepSession(document.data);
+    if (!session) return [];
+    const rawSource = document.data.source && typeof document.data.source === 'object'
+      ? document.data.source as Record<string, unknown>
+      : {};
+    const providerUserId = typeof rawSource.providerUserId === 'string'
+      ? rawSource.providerUserId.trim() || null
+      : null;
+    const safeDocument = {
+      id: document.id,
+      sourceKey: sleepEvidenceSourceKey(document.data as unknown as SleepSession),
+      session: session.provider === SLEEP_PROVIDERS.SuuntoApp && !providerUserId
+        ? withoutCanonicalNightHrv(session)
+        : session,
+    };
+    return [{
+      safeDocument,
+      provider: session.provider,
+      providerUserId,
+      sleepDate: session.sleepDate,
+      isNap: session.isNap,
+      startTimeMs: session.startTimeMs,
+      endTimeMs: session.endTimeMs,
+    }];
+  });
+  return groupCanonicalSleepNightFragments(candidates)
+    .map(group => aggregateSafeSleepDocumentGroup(group.map(candidate => candidate.safeDocument)));
 }
 
 export interface ListSleepSessionsInput {
@@ -4233,7 +4416,7 @@ function resolveTodayReadinessLoadContext(
   nowTimeMs: number,
 ): TodayReadinessLoadContext {
   const asOfDayMs = resolveUtcDayStartTimeMs(nowTimeMs);
-  const readyForm = parseReadyDerivedPayload<DerivedFormMetricPayload>(
+  const readyForm = parseReadyDerivedPayload<{ dailyLoads: DerivedFormDailyLoadEntry[] }>(
     formSnapshot,
     DERIVED_METRIC_KINDS.Form,
   );
@@ -4306,7 +4489,10 @@ function parseReadyDerivedPayload<T>(
   ) {
     return null;
   }
-  const parsed = MCP_DERIVED_PAYLOAD_SCHEMAS[metricKind].safeParse(snapshot.payload);
+  const payload = metricKind === DERIVED_METRIC_KINDS.Form
+    ? projectFormForMcp(snapshot.payload)
+    : snapshot.payload;
+  const parsed = MCP_DERIVED_PAYLOAD_SCHEMAS[metricKind].safeParse(payload);
   return parsed.success
     ? {
         payload: parsed.data as T,
@@ -4322,17 +4508,22 @@ function buildTodayReadinessSleepNights(
     session: SafeSleepSession;
     evidence: ReadinessSleepEvidencePoint;
   }>>();
-  for (const document of documents) {
-    const session = toSafeSleepSession(document.data);
-    if (!session || session.isNap) {
+  for (const candidate of canonicalizeSafeSleepDocuments(documents)) {
+    const { session } = candidate;
+    if (session.isNap) {
       continue;
     }
     const evidence: ReadinessSleepEvidencePoint = {
-      id: document.id,
-      sleepDate: resolveTodayReadinessSleepDate(document.data, session),
+      id: candidate.id,
+      sleepDate: session.sleepDate,
       provider: session.provider,
-      sourceKey: sleepEvidenceSourceKey(document.data as unknown as SleepSession),
-      hrvSourceKey: sleepHrvSourceKey({ ...document.data, vitals: session.vitals } as unknown as SleepSession),
+      sourceKey: candidate.sourceKey,
+      hrvSourceKey: session.vitals?.averageHrvMs
+        ? JSON.stringify(['sleep', candidate.sourceKey, 'average'])
+        : session.vitals?.overnightHrvMs
+          ? JSON.stringify(['sleep', candidate.sourceKey, 'overnight'])
+          : undefined,
+      hrvSampleCount: session.vitals?.hrvSampleCount ?? null,
       startTimeMs: session.startTimeMs,
       endTimeMs: session.endTimeMs,
       totalSeconds: session.durationSeconds,
@@ -4343,8 +4534,12 @@ function buildTodayReadinessSleepNights(
       averageHeartRateBpm: session.vitals?.averageHeartRateBpm ?? null,
       minimumHeartRateBpm: session.vitals?.minimumHeartRateBpm ?? null,
     };
-    evidence.hrvObservations = readinessHrvObservations({ ...evidence, sleepDate: session.sleepDate });
-    const key = JSON.stringify([evidence.sleepDate, evidence.sourceKey]);
+    evidence.hrvObservations = readinessHrvObservations(evidence);
+    const key = JSON.stringify([
+      evidence.sleepDate,
+      evidence.sourceKey,
+      session.provider === SLEEP_PROVIDERS.SuuntoApp ? candidate.id : null,
+    ]);
     grouped.set(key, [
       ...(grouped.get(key) || []),
       {
@@ -4394,12 +4589,13 @@ function buildTodayReadinessSleepNights(
       endTimeMs,
       totalSeconds: durationSeconds,
       ...aggregateNightlyHrvEvidence(entries.map(entry => entry.evidence)),
-      hrvObservations: entries.flatMap(entry => readinessHrvObservations(entry.evidence)),
+      hrvObservations: undefined,
       averageHeartRateBpm: average(averageHeartRateValues),
       minimumHeartRateBpm: minimumHeartRateValues.length
         ? Math.min(...minimumHeartRateValues)
         : null,
     };
+    evidence.hrvObservations = readinessHrvObservations(evidence);
     return {
       id,
       provider: latest.session.provider,
@@ -4434,24 +4630,6 @@ function buildTodayReadinessSleepNights(
     || right.sleepDate.localeCompare(left.sleepDate)
     || right.id.localeCompare(left.id)
   ));
-}
-
-function resolveTodayReadinessSleepDate(
-  data: Record<string, unknown>,
-  session: SafeSleepSession,
-): string {
-  if (session.provider !== SLEEP_PROVIDERS.SuuntoApp) {
-    return session.sleepDate;
-  }
-  const offsetSeconds = asFiniteNumber(data.timezoneOffsetSeconds);
-  const safeOffsetSeconds = offsetSeconds !== null
-    && Math.abs(offsetSeconds) <= 18 * 60 * 60
-    ? offsetSeconds
-    : 0;
-  const localEndDate = new Date(
-    session.endTimeMs + (safeOffsetSeconds * 1000),
-  ).toISOString().slice(0, 10);
-  return normalizeCalendarDate(localEndDate) || session.sleepDate;
 }
 
 function projectTodayReadinessMetric(
@@ -4813,6 +4991,16 @@ export interface GetActivityOverviewInput {
   uid: string;
   connectionId: string;
   activityRef: string;
+}
+
+export interface GetTrainingImpactInput {
+  uid: string;
+  connectionId: string;
+  mode: McpTrainingImpactMode;
+  activityRef?: string;
+  activityRefs?: readonly string[];
+  localDate?: string;
+  timeZone?: string;
 }
 
 export interface RankActivitiesByMetricInput {
@@ -6084,8 +6272,9 @@ export function createMcpDataService(
         `The query matches more than ${MAX_SLEEP_QUERY_DOCUMENTS} sleep sessions. Narrow the date range.`,
       );
     }
-    return (await supplementAuthorizedSleep(dependencies, input, docs)).flatMap((doc) => {
-      const session = toSafeSleepSession(doc.data);
+    return canonicalizeSafeSleepDocuments(
+      await supplementAuthorizedSleep(dependencies, input, docs),
+    ).flatMap(({ session }) => {
       return session
         && (input.includeNaps || !session.isNap)
         && (!input.provider || session.provider === input.provider)
@@ -6544,6 +6733,68 @@ export function createMcpDataService(
       };
     },
 
+    async getTrainingImpact(input: GetTrainingImpactInput) {
+      const sessionMode = input.mode === 'session';
+      const dayMode = input.mode === 'day';
+      const rawReferences = sessionMode && typeof input.activityRef === 'string'
+        ? [input.activityRef]
+        : dayMode && Array.isArray(input.activityRefs)
+          ? [...input.activityRefs]
+          : [];
+      if (
+        (!sessionMode && !dayMode)
+        || (sessionMode && (
+          rawReferences.length !== 1
+          || input.activityRefs !== undefined
+          || input.localDate !== undefined
+          || input.timeZone !== undefined
+        ))
+        || (dayMode && (
+          input.activityRef !== undefined
+          || rawReferences.length < 1
+          || rawReferences.length > MCP_TRAINING_IMPACT_MAX_ACTIVITIES
+          || typeof input.localDate !== 'string'
+          || typeof input.timeZone !== 'string'
+        ))
+      ) {
+        throw new McpDataError(
+          'invalid_request',
+          'Choose either one session activityRef or a bounded local day activityRefs selection.',
+        );
+      }
+      const references = rawReferences.map(activityRef => decodeActivityReference(
+        activityRef,
+        input.uid,
+        input.connectionId,
+      ));
+      const reads = dependencies.trainingImpactReads
+        ?? (dependencies === defaultDependencies ? firestoreTrainingImpactReads : null);
+      if (!reads) {
+        throw new McpDataError(
+          'temporarily_unavailable',
+          'Training impact reads are unavailable.',
+        );
+      }
+      try {
+        return await getMcpTrainingImpact({
+          uid: input.uid,
+          mode: input.mode,
+          references,
+          localDate: dayMode ? input.localDate as string : null,
+          timeZone: dayMode ? input.timeZone as string : null,
+          nowMs: dependencies.now(),
+        }, reads);
+      } catch (error) {
+        if (error instanceof McpTrainingImpactError) {
+          throw new McpDataError(error.code, error.message);
+        }
+        throw new McpDataError(
+          'temporarily_unavailable',
+          'Training impact could not be read safely. Try again later.',
+        );
+      }
+    },
+
     async getTodayReadiness(
       input: GetTodayReadinessInput,
     ): Promise<GetTodayReadinessResult> {
@@ -6634,10 +6885,10 @@ export function createMcpDataService(
           'The daily briefing sleep query returned more data than requested.',
         );
       }
-      const sessions = docs
-        .flatMap(doc => {
-          const session = toSafeSleepSession(doc.data);
-          return session && !session.isNap && session.endTimeMs <= nowTimeMs
+      const sessions = canonicalizeSafeSleepDocuments(docs)
+        .flatMap(candidate => {
+          const { session } = candidate;
+          return !session.isNap && session.endTimeMs <= nowTimeMs
             ? [session]
             : [];
         })

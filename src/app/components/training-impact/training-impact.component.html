@@ -1,0 +1,52 @@
+@if (variant() === 'compact') {
+  <span class="training-impact-compact" [class.training-impact-compact--unavailable]="!isReady()"
+    [attr.aria-label]="compactAriaLabel()"
+    [attr.aria-busy]="impact().availability === 'updating'"
+    [attr.role]="impact().availability === 'error' ? 'alert' : !isReady() ? 'status' : 'group'">
+    @if (impact().headline) { <span>{{ impact().headline }}</span> }
+    <strong>{{ compactText() }}</strong>
+    @if (isDayImpact() && outcomes().length > 1) {
+      <span class="training-impact-compact-outcomes" aria-label="Training-day outcomes">
+        @for (outcome of outcomes(); track outcome.dayMs) {
+          <span>{{ outcome.date }} · {{ outcome.headline }} · {{ outcome.ctlChange }} CTL</span>
+        }
+      </span>
+    }
+  </span>
+} @else {
+  <section class="training-impact" [class.training-impact--summary]="variant() === 'summary'"
+    [attr.aria-label]="title()" [attr.aria-busy]="impact().availability === 'updating'">
+    <header>
+      <span class="training-impact-icon" aria-hidden="true"><mat-icon>monitoring</mat-icon></span>
+      <div>
+        <h3>{{ title() }}</h3>
+        @if (impact().headline) { <strong>{{ impact().headline }}</strong> }
+      </div>
+    </header>
+
+    @if (isReady()) {
+      <div class="training-impact-metrics" role="group" aria-label="Training impact contributions">
+        <div><span>Fitness load (CTL)</span><strong>{{ values().ctl }}</strong></div>
+        <div><span>Fatigue load (ATL)</span><strong>{{ values().atl }}</strong></div>
+        <div><span>Freshness (Form)</span><strong>{{ values().form }}</strong></div>
+        <div><span>Training Stress Score</span><strong>{{ values().tss }}</strong></div>
+      </div>
+      @if (outcomes().length) {
+        <div class="training-impact-outcomes" aria-label="Training-day outcomes">
+          @for (outcome of outcomes(); track outcome.dayMs) {
+            <div>
+              <span>{{ outcomes().length > 1 ? outcome.date : 'Training-day outcome' }}</span>
+              <strong>{{ outcome.headline }} · {{ outcome.ctlChange }} CTL</strong>
+            </div>
+          }
+        </div>
+      }
+      @if (impact().message) { <p class="training-impact-note">{{ impact().message }}</p> }
+      <p class="training-impact-disclaimer">TSS-based model; CTL reflects sustained training load, not measured physiological adaptation.</p>
+    } @else {
+      <p class="training-impact-state" [attr.role]="impact().availability === 'error' ? 'alert' : 'status'">
+        {{ impact().message }}
+      </p>
+    }
+  </section>
+}

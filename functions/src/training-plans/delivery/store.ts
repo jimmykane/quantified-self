@@ -18,6 +18,7 @@ import { reconciliationJobId } from './marker';
 import { TRAINING_DELIVERY_VERIFICATIONS } from '../../../../shared/training-provider-verification';
 import { readVerificationRequest, stageVerification } from './verification-queue';
 import { TrainingScheduleMutationError } from '../mutation';
+import { readPastCleanupAuthorization } from './marker';
 
 export async function readStrengthDetailsForDelivery(tx: Transaction,
   user: FirebaseFirestore.DocumentReference, workout: ScheduledWorkoutV1): Promise<StrengthWorkoutDetailsV1 | null> {
@@ -34,7 +35,7 @@ export async function readStrengthDetailsForDelivery(tx: Transaction,
 
 export async function readDeliveryContext(runtime: DeliveryRuntime, tx: Transaction, uid: string,
   workout: ScheduledWorkoutV1 | null, provider: PlannedWorkoutProviderId, hasPro: boolean,
-  retainedWorkoutId?: string): Promise<DeliveryContext> {
+  retainedWorkoutId?: string, ledger?: DeliveryLedgerV1 | null): Promise<DeliveryContext> {
   const user = runtime.db.collection('users').doc(uid);
   const connection = await runtime.connection(tx, uid, provider);
   const strength = workout ? await readStrengthDetailsForDelivery(tx, user, workout) : null;
@@ -46,10 +47,11 @@ export async function readDeliveryContext(runtime: DeliveryRuntime, tx: Transact
     workout?.planId ? tx.get(user.collection('trainingPlans').doc(workout.planId)) : null,
   ]) : [null, null, null, null];
   const override = (overrideDoc?.data() ?? null) as TrainingDeliverySettingsV1 | null;
+  const pastCleanup = ledger ? await readPastCleanupAuthorization(tx, runtime.db, uid, ledger, workout) : null;
   return { workout, strength, planActive: planDoc?.data()?.lifecycle === 'active',
     setting: workout?.planId ? (settingDoc?.data() ?? null) as TrainingDeliverySettingsV1 | null : override,
     override, scopeGeneration: scopeDoc?.data()?.generation ?? 0, connection, hasPro,
-    transport: runtime.transport(provider, uid), nowMs: runtime.now() };
+    transport: runtime.transport(provider, uid), nowMs: runtime.now(), pastCleanup };
 }
 
 export function projectDelivery(ledger: DeliveryLedgerV1): TrainingDeliveryStatusV1 {
@@ -98,10 +100,14 @@ function reconcileRecord(runtime: DeliveryRuntime, context: DeliveryContext, uid
   const changed = !previous || previous.desiredDigest !== intent.digest || previous.desired !== intent.desired;
   const retried = settingRevision !== previous?.settingsRevision;
   const record: DeliveryLedgerV1 = { ...(previous?.verification ? { verification: previous.verification } : {}),
+    ...(context.pastCleanup ? { pastCleanup: context.pastCleanup } : {}),
     ...(previous?.providerAccessBlocked && !changed && !retried ? { providerAccessBlocked: true } : {}),
     ...(previous?.repair ? { repair: previous.repair } : {}),
     ...(previous?.completionLinkId ? { completionLinkId: previous.completionLinkId } : {}),
-    schemaVersion: 1, id, workoutId, planId: context.workout ? context.workout.planId : previous?.planId ?? null,
+    schemaVersion: 1, id, workoutId,
+    planId: intent.desired === 'absent' && context.pastCleanup?.scope === 'plan'
+      && (previous?.actual || previous?.repair?.original)
+      ? context.pastCleanup.scopeId : context.workout ? context.workout.planId : previous?.planId ?? null,
     provider, destinationKey,
     desiredGeneration: (previous?.desiredGeneration ?? 0) + (changed ? 1 : 0), desiredDigest: intent.digest,
     connectionEpoch: setting?.connectionEpoch ?? previous?.connectionEpoch ?? context.connection.epoch,
@@ -182,14 +188,16 @@ export async function reconcileTrainingDeliveryPage(runtime: DeliveryRuntime, ui
           if (!context.setting?.enabled || !context.connection.destinationKey) continue;
           const id = deliveryIdentity(uid, provider, context.connection.destinationKey, workout.id);
           const stored = await tx.get(user.collection(DELIVERY_LEDGER).doc(id));
-          const record = reconcileRecord(runtime, context, uid, provider, workout.id, (stored.data() ?? null) as DeliveryLedgerV1 | null);
+          const previous = (stored.data() ?? null) as DeliveryLedgerV1 | null;
+          context.pastCleanup = await readPastCleanupAuthorization(tx, db, uid, previous, workout);
+          const record = reconcileRecord(runtime, context, uid, provider, workout.id, previous);
           if (record) records.push({ record, context, requestedAtMs: context.transport?.inspection ? await readVerificationRequest(runtime, tx, uid, record) : 0 });
         }
       } else {
         const previous = doc.data() as DeliveryLedgerV1;
         const workoutDoc = await tx.get(user.collection('scheduledWorkouts').doc(previous.workoutId));
         const context = await readDeliveryContext(runtime, tx, uid, workoutDoc.exists ? parseScheduledWorkoutV1(workoutDoc.data()) : null,
-          previous.provider, hasPro, previous.workoutId);
+          previous.provider, hasPro, previous.workoutId, previous);
         const record = reconcileRecord(runtime, context, uid, previous.provider, previous.workoutId, previous);
         if (record) records.push({ record, context, requestedAtMs: context.transport?.inspection ? await readVerificationRequest(runtime, tx, uid, record) : 0 });
       }

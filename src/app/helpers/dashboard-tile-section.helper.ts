@@ -18,6 +18,7 @@ import {
 } from './dashboard-special-chart-types';
 
 export type DashboardTileSectionId =
+  | 'calendar'
   | 'health'
   | 'trainingState'
   | 'performancePower'
@@ -33,6 +34,7 @@ export interface DashboardTileSectionDefinition {
 export type DashboardTileLaneKey = 'kpi' | `section:${DashboardTileSectionId}`;
 
 export const DASHBOARD_TILE_SECTION_DEFINITIONS: DashboardTileSectionDefinition[] = [
+  { id: 'calendar', label: 'Calendar', icon: 'calendar_month' },
   { id: 'trainingState', label: 'Training State', icon: 'fitness_center' },
   { id: 'health', label: 'Health', icon: 'cardiology' },
   { id: 'performancePower', label: 'Performance & Power', icon: 'speed' },
@@ -44,7 +46,7 @@ export const DASHBOARD_TILE_SECTION_ORDER: DashboardTileSectionId[] =
   DASHBOARD_TILE_SECTION_DEFINITIONS.map(definition => definition.id);
 
 const SPECIAL_CHART_SECTION_BY_TYPE: Record<string, DashboardTileSectionId> = {
-  [DASHBOARD_ACTIVITY_CALENDAR_CHART_TYPE]: 'activityOverview',
+  [DASHBOARD_ACTIVITY_CALENDAR_CHART_TYPE]: 'calendar',
   [DASHBOARD_FORM_CHART_TYPE]: 'trainingState',
   [DASHBOARD_POWER_CURVE_CHART_TYPE]: 'performancePower',
   [DASHBOARD_EFFICIENCY_TREND_CHART_TYPE]: 'performancePower',
@@ -110,7 +112,9 @@ export function orderDashboardTilesByIntentSections<T extends TileSettingsInterf
   });
 
   return [
+    ...(tilesByLane.get('section:calendar') || []),
     ...(tilesByLane.get('kpi') || []),
-    ...DASHBOARD_TILE_SECTION_ORDER.flatMap(sectionId => tilesByLane.get(`section:${sectionId}`) || []),
+    ...DASHBOARD_TILE_SECTION_ORDER.filter(sectionId => sectionId !== 'calendar')
+      .flatMap(sectionId => tilesByLane.get(`section:${sectionId}`) || []),
   ];
 }

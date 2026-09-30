@@ -66,6 +66,9 @@ import {
   MCP_CONTENT_WRITE_INPUTS,
   type McpContentWriteTool,
 } from './content-write.schemas';
+import {
+  MCP_TRAINING_IMPACT_MAX_ACTIVITIES,
+} from './training-impact.service';
 
 const defaultDataService = createMcpDataService();
 let oauthService: ReturnType<typeof createMcpOAuthService> | null = null;
@@ -750,7 +753,7 @@ function buildMcpServerInstructions(auth: AuthenticatedMcpRequest): string {
     && auth.scopes.includes(MCP_OAUTH_SCOPES.ActivityDetailsRead)
   ) {
     instructions.push(
-      'Use get_activity_overview before granular activity reads. For highest or lowest activities by one metric, use rank_activities_by_metric. For an MTB jump superlative, discover the Mountain Biking activityGroup, pass it to rank_activities_by_metric, and use the corresponding persisted Maximum Jump Distance, Height, Hang Time, Speed, or Score metric. The server expands the group to every canonical type. Treat the ranked metric value as authoritative. When stating when the record happened, use that ranked activity\'s exact ISO startTime; never substitute the current date. Read list_activity_jumps only when jump-level details are requested and preserve pagination completeness. Never rank jump quality by jumpCount.',
+      'Use get_activity_overview before granular activity reads. For Training impact, prepare the form metric first, then call get_training_impact with one selected activityRef or with the exact unique activityRefs already returned for one local calendar date. Day mode returns only an identity-free aggregate and separate UTC Training-day outcomes; never add planned workouts or references from another local date. For highest or lowest activities by one metric, use rank_activities_by_metric. For an MTB jump superlative, discover the Mountain Biking activityGroup, pass it to rank_activities_by_metric, and use the corresponding persisted Maximum Jump Distance, Height, Hang Time, Speed, or Score metric. The server expands the group to every canonical type. Treat the ranked metric value as authoritative. When stating when the record happened, use that ranked activity\'s exact ISO startTime; never substitute the current date. Read list_activity_jumps only when jump-level details are requested and preserve pagination completeness. Never rank jump quality by jumpCount.',
     );
   }
   if (auth.scopes.includes(MCP_OAUTH_SCOPES.RoutesRead)) {
@@ -782,6 +785,9 @@ function buildMcpServerInstructions(auth: AuthenticatedMcpRequest): string {
       instructions.push(`${readGuidance} Construct non-strength workout recipes using stable unique node IDs and canonical seconds, metres, kilojoules, bpm, watts, metres per second, rpm and percentage points. Pace is still stored as metres per second with pace presentation. For a pool swim with an authored pool length, use preview_planned_workout_v2_change for one create/update, preserving its canonical metres and metres-or-yards presentation; a v1 update must not erase a selected pool length. Never infer pool length from workout distance. For StrengthTraining create or update, use preview_strength_workout_change with the complete exercise-aware draft, canonical external load in kilograms, and current schedule revision; the server derives the compatibility summary. Never use a v1-only create/update for strength or invent omitted sets, load or rest. Never invent a threshold or relative-target reference snapshot; ask when required authored inputs are missing. For one new non-strength workout without a pool length, read the current schedule revision and use preview_create_planned_workout exactly once; ${focusedCreateGuidance}. Do not use the batch tool for either focused case. Use preview_training_changes once only for other or genuinely multi-change requests. Plan deletion must be the sole proposed change: never infer whether its workouts should become standalone or be permanently deleted, and state that the plan and its revision history are permanently removed. Present preview effects, then call the separately approval-gated apply_training_changes tool once; the client owns its native approval UI. Never retry a rejected preview unchanged, imply that a preview changed data, or claim provider delivery succeeded before the apply result says so.`);
     } else {
       instructions.push(`${readGuidance} Only provider-delivery changes are available. Use preview_training_changes once with complete input, present its effects, then call the separately approval-gated apply_training_changes tool once; the client owns its native approval UI. Never retry a rejected preview unchanged or claim delivery succeeded before the apply result says so.`);
+    }
+    if (trainingChangesAvailable && auth.scopes.includes(MCP_OAUTH_SCOPES.TrainingDeliveryWrite)) {
+      instructions.push('For a new Suunto-bound workout, omit step notes that were not requested; keep necessary concise instructions within 40 characters when the step also has a duration or target, or 54 characters for a manual-only step. Never discard a user-requested instruction just to fit a watch. If the provider preview reports a mapping adjustment, explain its exact warning before apply. One approved Send proposal also approves the previewed digest-bound adjustment; do not request a second approval for the same unchanged mapping. An applied proposal is not proof that the provider or watch received it.');
     }
   }
   if (auth.scopes.includes(MCP_OAUTH_SCOPES.TimelineNotesRead)) {
@@ -1868,6 +1874,57 @@ export function createMcpServer(
     auth.scopes.includes(MCP_OAUTH_SCOPES.MetricsRead)
     && auth.scopes.includes(MCP_OAUTH_SCOPES.ActivityDetailsRead)
   ) {
+    registerMcpTool(server, 'get_training_impact', {
+      title: 'Get Training impact',
+      description: `Explain TSS-based fitness-load, fatigue-load, and freshness contributions for one selected completed activity or an aggregate of up to ${MCP_TRAINING_IMPACT_MAX_ACTIVITIES} selected activities from one local calendar date. Prepare the form metric first. Session mode accepts activityRef only. Day mode accepts localDate, timeZone, and the exact activityRefs already returned for that date. The response never echoes activity references, event IDs, labels, exact start times, devices, or provider provenance.`,
+      inputSchema: z.object({
+        mode: z.enum(['session', 'day']),
+        activityRef: MCP_OPAQUE_REFERENCE_SCHEMA
+          .describe('Session mode only: one opaque reference returned by activity discovery.')
+          .optional(),
+        activityRefs: z.array(MCP_OPAQUE_REFERENCE_SCHEMA)
+          .min(1)
+          .max(MCP_TRAINING_IMPACT_MAX_ACTIVITIES)
+          .describe('Day mode only: unique opaque references already returned for the selected local date.')
+          .optional(),
+        localDate: z.string()
+          .regex(/^\d{4}-\d{2}-\d{2}$/)
+          .describe('Day mode only: real local calendar date in YYYY-MM-DD format.')
+          .optional(),
+        timeZone: z.string()
+          .min(1)
+          .max(80)
+          .describe('Day mode only: IANA timezone used to validate every selected activity.')
+          .optional(),
+      }).strict().superRefine((input, context) => {
+        const sessionShape = input.mode === 'session'
+          && input.activityRef !== undefined
+          && input.activityRefs === undefined
+          && input.localDate === undefined
+          && input.timeZone === undefined;
+        const dayShape = input.mode === 'day'
+          && input.activityRef === undefined
+          && input.activityRefs !== undefined
+          && input.localDate !== undefined
+          && input.timeZone !== undefined;
+        if (!sessionShape && !dayShape) {
+          context.addIssue({
+            code: 'custom',
+            message: 'Session mode requires activityRef only; day mode requires activityRefs, localDate, and timeZone.',
+          });
+        }
+      }),
+      outputSchema: outputSchemas.get_training_impact,
+      annotations: READ_ONLY_TOOL_ANNOTATIONS,
+    }, input => runReadOnlyTool(
+      'get_training_impact',
+      () => dataService.getTrainingImpact({
+        ...input,
+        uid: auth.uid,
+        connectionId: auth.connectionId,
+      }),
+    ));
+
     registerMcpTool(server, 'get_activity_overview', {
       title: 'Get activity overview',
       description: 'Inspect coordinate-free activity capabilities before granular reads.',
@@ -2116,6 +2173,7 @@ export function requiredScopesForRequest(body: unknown): McpOAuthScope[] {
   if ([
     'get_activity_metrics',
     'get_activity_overview',
+    'get_training_impact',
     'rank_activities_by_metric',
   ].includes(toolName)) {
     return [
@@ -2263,6 +2321,7 @@ export interface McpBearerFailure {
 export type McpDiagnosticClientFamily =
   | 'codex'
   | 'claude'
+  | 'grok'
   | 'browser'
   | 'automation'
   | 'other'
@@ -2281,6 +2340,9 @@ export function classifyMcpDiagnosticClientFamily(
   if (normalized.includes('claude')) {
     return 'claude';
   }
+  if (normalized === 'grok' || normalized.startsWith('grok-connectors-manager/')) {
+    return 'grok';
+  }
   if (normalized.includes('mozilla/') || normalized.includes('safari/')) {
     return 'browser';
   }
@@ -2296,7 +2358,8 @@ export function classifyMcpDiagnosticClientFamily(
 }
 
 export type McpBearerRejectionReason =
-  | 'missing_or_malformed_bearer'
+  | 'missing_bearer'
+  | 'malformed_bearer'
   | 'request_rate_limited'
   | 'unclassified_bearer_state'
   | 'unexpected_authentication_error'
@@ -2346,6 +2409,14 @@ export function sanitizeMcpProtocolVersionForDiagnostics(
     : 'invalid_or_absent';
 }
 
+function isMcpProtocolVersionMismatch(error: unknown): boolean {
+  return error instanceof Error && /^Rejected inbound request \((?:header-body-version-mismatch|notification-header-body-version-mismatch|modern-header-without-claim|initialize-with-modern-header)\):/.test(error.message);
+}
+
+function mismatchProtocolVersionForDiagnostics(value: unknown): string {
+  return value === undefined ? 'missing' : sanitizeMcpProtocolVersionForDiagnostics(value);
+}
+
 export function classifyMcpTransportRejectionReason(
   error: unknown,
 ): McpTransportRejectionReason {
@@ -2391,10 +2462,15 @@ function logMcpBearerRejection(
   reason: McpBearerRejectionReason,
   request: Request,
 ): void {
-  logger.warn('[MCP] Bearer authentication rejected', {
+  const diagnostic = {
     reason,
     clientFamily: classifyMcpDiagnosticClientFamily(request.get('user-agent')),
-  });
+  };
+  if (reason === 'missing_bearer') {
+    logger.info('[MCP] Bearer authentication challenge', diagnostic);
+    return;
+  }
+  logger.warn('[MCP] Bearer authentication rejected', diagnostic);
 }
 
 function logMcpTransportRejection(
@@ -2415,6 +2491,14 @@ function logMcpTransportRejection(
       ? { protocolVersion: sanitizeMcpProtocolVersionForDiagnostics(
         request.get('mcp-protocol-version') ?? request.body?.params?._meta?.[PROTOCOL_VERSION_META_KEY],
       ) }
+      : {}),
+    ...(reason === 'invalid_protocol_envelope' && isMcpProtocolVersionMismatch(error)
+      ? {
+        headerProtocolVersion: mismatchProtocolVersionForDiagnostics(request.get('mcp-protocol-version')),
+        envelopeProtocolVersion: mismatchProtocolVersionForDiagnostics(
+          request.body?.params?._meta?.[PROTOCOL_VERSION_META_KEY],
+        ),
+      }
       : {}),
   });
 }
@@ -2576,9 +2660,15 @@ export const mcpApi = onRequest(MCP_API_RUNTIME_OPTIONS, async (request, respons
     });
     return;
   }
-  const bearerToken = parseMcpBearerToken(request.get('authorization'));
+  const authorizationHeader = request.get('authorization');
+  const bearerToken = parseMcpBearerToken(authorizationHeader);
   if (!bearerToken) {
-    logMcpBearerRejection('missing_or_malformed_bearer', request);
+    logMcpBearerRejection(
+      typeof authorizationHeader === 'string' && authorizationHeader.trim()
+        ? 'malformed_bearer'
+        : 'missing_bearer',
+      request,
+    );
     response.set(
       'WWW-Authenticate',
       `Bearer resource_metadata="${metadataUrl}", scope="${Object.values(MCP_OAUTH_SCOPES).join(' ')}"`,

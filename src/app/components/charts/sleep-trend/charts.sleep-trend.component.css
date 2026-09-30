@@ -25,7 +25,7 @@
   display: grid;
   gap: 4px;
   min-width: 0;
-  padding: 0 10px;
+  padding: 0 var(--qs-dashboard-chart-content-inset, 10px);
 }
 
 .sleep-header.sleep-header-reserve-actions {
@@ -123,7 +123,7 @@
   flex-shrink: 0;
   gap: 4px 12px;
   margin: 6px 0 0;
-  padding: 0 10px;
+  padding: 0 var(--qs-dashboard-chart-content-inset, 10px);
   color: var(--mat-sys-on-surface-variant);
   font-size: 0.7rem;
   line-height: 1.3;

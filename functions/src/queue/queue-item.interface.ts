@@ -1,7 +1,7 @@
 import * as admin from 'firebase-admin';
 import { Timestamp } from 'firebase-admin/firestore';
 import { ServiceNames } from '@sports-alliance/sports-lib';
-import { ActivitySyncRouteId } from '../../../shared/activity-sync-routes';
+import { ActivityDeliveryRouteId, ActivityDeliverySource } from '../../../shared/activity-sync-routes';
 import { RouteDeliverySyncRouteId } from '../../../shared/route-delivery-sync-routes';
 import { SleepProvider } from '../../../shared/sleep';
 import type { GarminSupportedSummaryType } from '../garmin/health-summary-types';
@@ -89,6 +89,7 @@ export interface ActivitySyncOriginalFileMetadata {
   startDate?: number;
   originalFilename?: string;
   extension?: string;
+  generation?: string;
 }
 
 export interface ActivitySyncUploadContinuation {
@@ -98,14 +99,16 @@ export interface ActivitySyncUploadContinuation {
 }
 
 export interface ActivitySyncQueueItemInterface extends QueueItemInterface {
-  routeId: ActivitySyncRouteId;
-  sourceServiceName: ServiceNames;
+  routeId: ActivityDeliveryRouteId;
+  sourceServiceName: ActivityDeliverySource;
   destinationServiceName: ServiceNames;
   userID: string;
   eventID: string;
   sourceActivityID?: string;
   originalFile: ActivitySyncOriginalFileMetadata;
   manual: boolean;
+  /** Historical requests are independent of the source provider's current connection. */
+  deliveryMode?: 'automatic' | 'historical';
   successProcessedAt?: number;
   destinationUploadID?: string | null;
   destinationProviderUserID?: string | null;
@@ -206,6 +209,10 @@ export interface SleepSyncQueueItemInterface extends QueueItemInterface {
   rangeStartMs?: number;
   rangeEndMs?: number;
   healthTrigger?: 'poll' | 'webhook' | 'backfill';
+  /** Activity (1), Recovery (2), or both (3) notifications coalesced into a webhook refetch. */
+  suuntoHealthWebhookFeedMask?: 1 | 2 | 3;
+  /** Earliest dispatch for a coalesced Suunto Health webhook refetch. */
+  dispatchAfterMs?: number;
   /** Webhook-only fence captured from the server-owned Suunto account binding. */
   suuntoHealthTokenCredentialGeneration?: string | null;
   /** Webhook-only fence captured from the current Suunto token-root OAuth revision. */

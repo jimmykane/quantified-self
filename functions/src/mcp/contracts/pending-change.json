@@ -1,7 +1,7 @@
 {
   "formatVersion": 1,
-  "candidateSha256": "6b9c7a99fabc0c99d8178d76cd7ebf72628f70fb14d1bd17e2960b45e53c952d",
+  "candidateSha256": "1e47858b8f179a9396f7feb0ebd63030fd587c2306b5549bad748ead0cd71ab0",
   "lifecycleAction": "developer-refresh",
-  "summary": "Retain prior Training, Health, Timeline, activity, OAuth and PKCE changes. Add event title/description edits, Strength details, pool-length reads/previews, and metrics:read preparation for one to eight Training snapshots. Preserve strict outputs, scope dependencies, current-value checks, benchmark exclusion, frozen v1 recipes, native approval and provider boundaries. Guide clients to list_activities if query_activities oneOf is rejected. Refresh the catalog after deployment.",
+  "summary": "Retain Training, Health, Timeline, activity, OAuth and PKCE changes. Add event title/description edits, Strength details, pool-length reads/previews, Training snapshot preparation, and identity-safe TSS-based Training impact for exact completed sessions/local days under metrics:read plus activity-details:read. Preserve strict outputs, scope dependencies, benchmark/merge exclusion, UTC-day outcomes, native approval and provider boundaries. Refresh and rescan after deployment.",
   "rescanRequired": true
 }

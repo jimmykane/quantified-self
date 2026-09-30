@@ -7,7 +7,7 @@ import { ActivatedRoute } from '@angular/router';
 import { AppFileService } from '../../../services/app.file.service';
 import { AppEventService } from '../../../services/app.event.service';
 import { AppAuthService } from '../../../authentication/app.auth.service';
-import { ActivitySyncBackfillSummary, AppUserService } from '../../../services/app.user.service';
+import { AppUserService } from '../../../services/app.user.service';
 import { AppWindowService } from '../../../services/app.window.service';
 import { ServicesAbstractComponentDirective } from '../services-abstract-component.directive';
 import { COROS_HISTORY_IMPORT_LIMIT_MONTHS } from '../../../constants/coros';
@@ -46,10 +46,6 @@ export class ServicesCorosComponent extends ServicesAbstractComponentDirective {
   public minDate = dayjs().subtract(COROS_HISTORY_IMPORT_LIMIT_MONTHS, 'month').toDate();
   public readonly corosToSuuntoRouteID = ACTIVITY_SYNC_ROUTE_IDS.COROSAPI_to_SuuntoApp;
   public isSavingSyncRoute = false;
-  public isBackfillingSync = false;
-  public backfillStartDate: Date = new Date(Date.now() - (30 * 24 * 60 * 60 * 1000));
-  public backfillEndDate: Date = new Date();
-  public backfillSummary: ActivitySyncBackfillSummary | null = null;
   public activeActivitySyncDestination: 'suunto' | 'wahoo' | 'coros' = 'suunto';
   public isCheckingCOROSBindingState = false;
   public corosBindingStateCheckError = false;
@@ -370,10 +366,6 @@ export class ServicesCorosComponent extends ServicesAbstractComponentDirective {
     return isCOROSRouteUploadUIDAllowlisted(`${this.user?.uid || ''}`);
   }
 
-  get isBackfillDateRangeInvalid(): boolean {
-    return this.backfillStartDate > this.backfillEndDate;
-  }
-
   async onCorosToSuuntoRouteToggle(enabled: boolean): Promise<void> {
     if (!this.user || this.isSavingSyncRoute) {
       return;
@@ -415,60 +407,4 @@ export class ServicesCorosComponent extends ServicesAbstractComponentDirective {
     }
   }
 
-  async runCorosToSuuntoBackfill(event: Event): Promise<void> {
-    event.preventDefault();
-
-    if (!this.user || this.isBackfillingSync) {
-      return;
-    }
-
-    if (!this.isCorosToSuuntoRouteAvailableForUser) {
-      this.snackBar.open('Activity sync is not available for this account.', undefined, { duration: 4000 });
-      return;
-    }
-
-    if (this.isSuuntoReconnectRequired) {
-      this.snackBar.open('Reconnect Suunto before syncing past COROS activities.', undefined, { duration: 4000 });
-      return;
-    }
-
-    if (this.isReconnectRequired) {
-      this.snackBar.open('Reconnect COROS before syncing past activities.', undefined, { duration: 4000 });
-      return;
-    }
-
-    if (!this.isConnectedToService() || !this.isSuuntoConnected) {
-      this.snackBar.open('Connect COROS and Suunto before syncing past activities.', undefined, { duration: 4000 });
-      return;
-    }
-
-    if (this.isBackfillDateRangeInvalid) {
-      this.snackBar.open('The start date must be before the end date.', undefined, { duration: 3500 });
-      return;
-    }
-
-    this.isBackfillingSync = true;
-    try {
-      const summary = await this.userService.backfillActivitySyncRouteForCurrentUser(
-        ServiceNames.COROSAPI,
-        ServiceNames.SuuntoApp,
-        this.backfillStartDate,
-        this.backfillEndDate,
-      );
-
-      this.backfillSummary = summary;
-      this.analyticsService.logActivitySyncRouteBackfill(this.corosToSuuntoRouteID, {
-        scanned: summary.scanned,
-        queued: summary.queued,
-        failedCount: summary.failedCount,
-      });
-      const failureSuffix = summary.failedCount > 0 ? ` Could not schedule: ${summary.failedCount}.` : '';
-      this.snackBar.open(`Activity sync started for ${summary.queued} ${summary.queued === 1 ? 'activity' : 'activities'}.${failureSuffix}`, undefined, { duration: 4000 });
-    } catch (error: any) {
-      this.logger.error(error);
-      this.snackBar.open(`Could not start activity sync: ${error?.message || 'Unknown error'}`, undefined, { duration: 5000 });
-    } finally {
-      this.isBackfillingSync = false;
-    }
-  }
 }

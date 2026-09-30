@@ -270,6 +270,7 @@ describe('Firebase Hosting configuration', () => {
     expect(matchesAnyHostingSource(sources, '/mcp/authorize')).toBe(true);
     expect(matchesAnyHostingSource(sources, '/dashboard')).toBe(true);
     expect(matchesAnyHostingSource(sources, '/calendar')).toBe(true);
+    expect(matchesAnyHostingSource(sources, '/calendar/day/2026-09-25')).toBe(true);
     expect(matchesAnyHostingSource(sources, '/routes')).toBe(true);
     expect(matchesAnyHostingSource(sources, '/admin/queues/workout')).toBe(true);
     expect(matchesAnyHostingSource(sources, '/admin/queues/route-reparse')).toBe(true);
@@ -284,6 +285,7 @@ describe('Firebase Hosting configuration', () => {
     expect(matchesAnyHostingSource(sources, '/definitely-missing')).toBe(false);
     expect(matchesAnyHostingSource(sources, '/integrations/garmin')).toBe(false);
     expect(matchesAnyHostingSource(sources, '/features/activity-calendar')).toBe(false);
+    expect(matchesAnyHostingSource(sources, '/calendar/day/2026-09-25/extra')).toBe(false);
     expect(matchesAnyHostingSource(sources, '/features/ai-insights')).toBe(false);
     expect(matchesAnyHostingSource(sources, '/tools')).toBe(false);
     expect(matchesAnyHostingSource(sources, '/tools/compare')).toBe(false);
@@ -353,7 +355,7 @@ describe('Firebase Hosting configuration', () => {
     expect(sitemapLastmodForUrl(`${siteOrigin}/guides/sync-wahoo-to-suunto`)).toBe('2026-07-21');
     expect(sitemapLastmodForUrl(`${siteOrigin}/guides/centralize-garmin-suunto-coros-workout-data`)).toBe('2026-07-21');
     expect(sitemapLastmodForUrl(`${siteOrigin}/features/training-analysis`)).toBe('2026-09-16');
-    expect(sitemapLastmodForUrl(`${siteOrigin}/features/training-plans`)).toBe('2026-09-21');
+    expect(sitemapLastmodForUrl(`${siteOrigin}/features/training-plans`)).toBe('2026-09-24');
     expect(sitemapLastmodForUrl(`${siteOrigin}/features/training-dashboard`)).toBe('2026-09-02');
     expect(sitemapLastmodForUrl(`${siteOrigin}/features/activity-map`)).toBe('2026-09-02');
     expect(sitemapLastmodForUrl(`${siteOrigin}/features/fit-gpx-tcx-file-analyzer`)).toBe('2026-09-02');

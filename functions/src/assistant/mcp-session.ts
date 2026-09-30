@@ -33,6 +33,7 @@ export const ASSISTANT_BASE_MCP_TOOL_NAMES = [
   'query_metrics',
   'list_training_metrics',
   'get_training_metric',
+  'get_training_impact',
   'prepare_training_metrics',
   'list_sleep_vitals',
   'list_sleep_sessions',
@@ -88,7 +89,10 @@ const RECOVERABLE_ASSISTANT_TOOL_ERROR_CODES = [
   'metric_not_ready',
   'detail_not_available',
   'query_too_large',
-] as const satisfies readonly Exclude<McpDataErrorCode, 'temporarily_unavailable'>[];
+  'invalid_tool_input',
+] as const satisfies readonly (
+  Exclude<McpDataErrorCode, 'temporarily_unavailable'> | 'invalid_tool_input'
+)[];
 
 type RecoverableAssistantToolErrorCode =
   typeof RECOVERABLE_ASSISTANT_TOOL_ERROR_CODES[number];
@@ -96,6 +100,26 @@ type RecoverableAssistantToolErrorCode =
 const RECOVERABLE_ASSISTANT_TOOL_ERROR_CODE_SET = new Set<string>(
   RECOVERABLE_ASSISTANT_TOOL_ERROR_CODES,
 );
+const MCP_TOOL_ERROR_CODE_SET = new Set<string>([
+  ...RECOVERABLE_ASSISTANT_TOOL_ERROR_CODES,
+  'temporarily_unavailable',
+  'internal_error',
+]);
+
+export type AssistantMcpToolFailureCode = McpDataErrorCode | 'internal_error'
+  | 'invalid_tool_input' | 'client_call_failed' | 'missing_structured_result' | 'unclassified_error';
+export type AssistantMcpToolFailureStage = 'input_validation' | 'tool_response'
+  | 'client_call' | 'result_validation';
+
+export class AssistantMcpToolFailure extends Error {
+  constructor(
+    readonly code: AssistantMcpToolFailureCode,
+    readonly stage: AssistantMcpToolFailureStage,
+  ) {
+    super('The Assistant MCP tool could not complete the request.');
+    this.name = 'AssistantMcpToolFailure';
+  }
+}
 
 const ASSISTANT_TOOL_ERROR_GUIDANCE: Record<
   RecoverableAssistantToolErrorCode,
@@ -107,6 +131,7 @@ const ASSISTANT_TOOL_ERROR_GUIDANCE: Record<
   metric_not_ready: 'Call prepare_training_metrics for this kind first; when it reports ready, read the snapshot.',
   detail_not_available: 'Select another available record or explain that this detail is unavailable.',
   query_too_large: 'Use a valid, narrower date range. Long activity-metric histories are paged automatically by the Assistant.',
+  invalid_tool_input: 'Correct the request to match the advertised input schema exactly, without unadvertised fields. For workout recipes, use an exact supported sport, version 1, and steps with stable unique ids, purpose, ending, and a targets array. A relative target requires its exact numeric reference; when that value is unavailable, omit the target instead of inventing it.',
 };
 
 /**
@@ -171,7 +196,7 @@ const ASSISTANT_CONTENT_TOOL_COPY: Record<AssistantContentProposalTool, { title:
   },
 };
 
-function recoverableAssistantToolError(message: string): AssistantRecoverableMcpToolError | null {
+function parseMcpToolErrorCode(message: string): McpDataErrorCode | 'internal_error' | null {
   let payload: unknown;
   try {
     payload = JSON.parse(message);
@@ -182,7 +207,15 @@ function recoverableAssistantToolError(message: string): AssistantRecoverableMcp
     return null;
   }
   const code = (payload as { error?: unknown }).error;
-  if (typeof code !== 'string' || !RECOVERABLE_ASSISTANT_TOOL_ERROR_CODE_SET.has(code)) {
+  if (typeof code !== 'string' || !MCP_TOOL_ERROR_CODE_SET.has(code)) {
+    return null;
+  }
+  return code as McpDataErrorCode | 'internal_error';
+}
+
+function recoverableAssistantToolError(message: string): AssistantRecoverableMcpToolError | null {
+  const code = parseMcpToolErrorCode(message);
+  if (!code || !RECOVERABLE_ASSISTANT_TOOL_ERROR_CODE_SET.has(code)) {
     return null;
   }
   return new AssistantRecoverableMcpToolError(
@@ -204,10 +237,12 @@ async function callAssistantMcpTool(
   name: AssistantMcpToolName,
   args: Record<string, unknown>,
 ): Promise<AssistantMcpToolResult> {
-  const result = await client.callTool({
-    name,
-    arguments: args,
-  });
+  let result: Awaited<ReturnType<Client['callTool']>>;
+  try {
+    result = await client.callTool({ name, arguments: args });
+  } catch {
+    throw new AssistantMcpToolFailure('client_call_failed', 'client_call');
+  }
   if ('isError' in result && result.isError) {
     const content = 'content' in result && Array.isArray(result.content)
       ? result.content
@@ -221,12 +256,18 @@ async function callAssistantMcpTool(
     if (recoverableError) {
       throw recoverableError;
     }
-    throw new Error(message || `The ${name} tool could not complete the request.`);
+    if (message.includes('Input validation error: Invalid arguments for tool ')) {
+      throw new AssistantRecoverableMcpToolError(
+        'invalid_tool_input',
+        ASSISTANT_TOOL_ERROR_GUIDANCE.invalid_tool_input,
+      );
+    }
+    throw new AssistantMcpToolFailure(parseMcpToolErrorCode(message) ?? 'unclassified_error', 'tool_response');
   }
   if (!('structuredContent' in result)
     || !result.structuredContent
     || typeof result.structuredContent !== 'object') {
-    throw new Error(`The ${name} tool returned no structured result.`);
+    throw new AssistantMcpToolFailure('missing_structured_result', 'result_validation');
   }
   const structuredContent = result.structuredContent as Record<string, unknown>;
   if (name === 'prepare_training_metrics'

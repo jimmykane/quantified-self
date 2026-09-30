@@ -12,6 +12,10 @@ import {
 } from '@sports-alliance/sports-lib';
 import { map, Observable, of, startWith, tap } from 'rxjs';
 import type { ActivityCalendarQueryWindow } from '../helpers/activity-calendar.helper';
+import {
+  DASHBOARD_FORM_LEGACY_TRAINING_STRESS_SCORE_TYPE,
+  DASHBOARD_FORM_TRAINING_STRESS_SCORE_TYPE,
+} from '../helpers/dashboard-form.helper';
 import { isNormalActivityEvent } from '../helpers/normal-activity-event.helper';
 import { AppEventService, type EventDocumentData } from './app.event.service';
 
@@ -101,6 +105,12 @@ function toActivityCalendarEvent(document: EventDocumentData): EventInterface | 
     [DataDistance.type]: resolveNonNegativeStatValue(stats[DataDistance.type]),
     [DataAscent.type]: resolveNonNegativeStatValue(stats[DataAscent.type]),
     [DataDescent.type]: resolveNonNegativeStatValue(stats[DataDescent.type]),
+    [DASHBOARD_FORM_TRAINING_STRESS_SCORE_TYPE]: resolveNonNegativeStatValue(
+      stats[DASHBOARD_FORM_TRAINING_STRESS_SCORE_TYPE],
+    ),
+    [DASHBOARD_FORM_LEGACY_TRAINING_STRESS_SCORE_TYPE]: resolveNonNegativeStatValue(
+      stats[DASHBOARD_FORM_LEGACY_TRAINING_STRESS_SCORE_TYPE],
+    ),
   };
   const activityTypes = resolveActivityTypes(stats[DataActivityTypes.type]);
   const name = typeof document.name === 'string' ? document.name : '';
@@ -136,10 +146,15 @@ function resolveDate(value: unknown): Date | null {
 }
 
 function resolveNonNegativeStatValue(value: unknown): number | null {
-  if (value === null || value === undefined || value === '') {
+  const candidate = value && typeof value === 'object' && !Array.isArray(value)
+    ? (value as Record<string, unknown>).value
+      ?? (value as Record<string, unknown>).rawValue
+      ?? (value as Record<string, unknown>)._value
+    : value;
+  if (candidate === null || candidate === undefined || candidate === '') {
     return null;
   }
-  const numericValue = Number(value);
+  const numericValue = Number(candidate);
   return Number.isFinite(numericValue) && numericValue >= 0 ? numericValue : null;
 }
 

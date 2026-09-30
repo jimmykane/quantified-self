@@ -13,6 +13,7 @@ import { ServicesWahooComponent } from '../components/services/wahoo/services.wa
 import { UploadActivitiesToServiceComponent } from '../components/upload/upload-activities-to-service/upload-activities-to-service.component';
 import { ServiceConnectionStatusComponent } from '../components/services/service-connection-status/service-connection-status.component';
 import { ActivitySyncRouteControlComponent } from '../components/services/activity-sync-route-control/activity-sync-route-control.component';
+import { HistoricalActivitySendComponent } from '../components/services/historical-activity-send/historical-activity-send.component';
 import { RouteDeliverySyncRouteControlComponent } from '../components/services/route-delivery-sync-route-control/route-delivery-sync-route-control.component';
 import { McpConnectionsComponent } from '../components/mcp-connections/mcp-connections.component';
 import { ProviderDataFlowMatrixComponent } from '../components/shared/provider-data-flow-matrix/provider-data-flow-matrix.component';
@@ -37,6 +38,7 @@ import { GarminPermissionsComponent } from '../components/services/garmin/garmin
         ServicesWahooComponent,
         ServiceConnectionStatusComponent,
         ActivitySyncRouteControlComponent,
+        HistoricalActivitySendComponent,
         RouteDeliverySyncRouteControlComponent,
         HistoryImportFormComponent,
         UploadRoutesToServiceComponent,

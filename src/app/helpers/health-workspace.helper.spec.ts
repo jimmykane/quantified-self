@@ -52,6 +52,7 @@ import {
   selectActivityHealthObservations,
   selectWorkoutWeightContextFallback,
   sleepSessionHasHrv,
+  sleepSessionsHaveCanonicalHrv,
   sleepSummaryMetricIds,
   type HealthWorkspaceSeries,
 } from './health-workspace.helper';
@@ -1264,6 +1265,71 @@ describe('Health workspace helpers', () => {
     expect(unreferenced.series[0].id).toBe(view.series[0].id);
   });
 
+  it('uses one canonical Suunto night across Health rows, charts, and typed references', () => {
+    const source = { provider: SLEEP_PROVIDERS.SuuntoApp, providerUserId: 'suunto-account' };
+    const first = sleepSession({
+      id: 'suunto-part-1', source: { ...source, sourceSessionKey: 'sleep-id-1' }, sleepDate: '2026-09-28',
+      startTimeMs: Date.parse('2026-09-27T18:57:00Z'), endTimeMs: Date.parse('2026-09-27T23:54:00Z'),
+      timezoneOffsetSeconds: 3 * 3600, durationSeconds: 15_840,
+      stageDurationsSeconds: { deep: 3_900, light: 10_200, rem: 1_740, awake: 1_620 },
+      score: { value: 62 },
+      vitals: { averageHeartRateBpm: 65, minimumHeartRateBpm: 61, averageHrvMs: 29, hrvSampleCount: 46 },
+      providerFields: { suunto: { SleepOnsetLatencyDuration: 360 } },
+    });
+    const second = sleepSession({
+      id: 'suunto-part-2', source: { ...source, sourceSessionKey: 'sleep-id-2' }, sleepDate: '2026-09-28',
+      startTimeMs: Date.parse('2026-09-28T00:01:00Z'), endTimeMs: Date.parse('2026-09-28T04:00:00Z'),
+      timezoneOffsetSeconds: 3 * 3600, durationSeconds: 13_320,
+      stageDurationsSeconds: { deep: 2_280, light: 7_380, rem: 3_660, awake: 540 },
+      score: { value: 72 },
+      vitals: { averageHeartRateBpm: 61, minimumHeartRateBpm: 57, averageHrvMs: 40, hrvSampleCount: 35 },
+      providerFields: { suunto: { SleepOnsetLatencyDuration: 480 } },
+    });
+    const record = sourceRecord({
+      provider: SLEEP_PROVIDERS.SuuntoApp,
+      accountKey: 'opaque-suunto-account',
+      calendarDate: '2026-09-28',
+      metrics: [
+        {
+          kind: 'sleep_reference', metricId: HEALTH_METRIC_IDS.SleepDuration, valueType: HEALTH_VALUE_TYPES.Number,
+          aggregation: 'total', semanticVariant: 'session_duration', origin: HEALTH_VALUE_ORIGINS.ProviderSummary,
+          recordingMethod: HEALTH_RECORDING_METHODS.ProviderCalculated, quality: { status: HEALTH_QUALITY_STATUSES.Valid },
+          reference: { domain: 'sleep', documentId: second.id!, field: 'durationSeconds' },
+        },
+        {
+          kind: 'sleep_reference', metricId: HEALTH_METRIC_IDS.HeartRateVariability, valueType: HEALTH_VALUE_TYPES.Number,
+          aggregation: 'average', semanticVariant: 'sleep_session_average_hrv', origin: HEALTH_VALUE_ORIGINS.ProviderSummary,
+          recordingMethod: HEALTH_RECORDING_METHODS.ProviderCalculated, quality: { status: HEALTH_QUALITY_STATUSES.Valid },
+          reference: { domain: 'sleep', documentId: second.id!, field: 'vitals.averageHrvMs' },
+        },
+      ],
+    });
+    const result = projectLoadedHealthRange([record], [], {
+      startDate: '2026-09-28', endDate: '2026-09-28',
+      metricIds: [HEALTH_METRIC_IDS.SleepDuration, HEALTH_METRIC_IDS.SleepScore,
+        HEALTH_METRIC_IDS.HeartRateVariability],
+    }, { sourceRecordsComplete: true, samplesComplete: true });
+
+    const priorityRows = buildSleepPriorityRows([first, second]);
+    const observationRows = buildSleepObservationRows([first, second]);
+    const view = buildHealthMetricWorkspaceView(result, [first, second]);
+
+    expect(priorityRows).toHaveLength(1);
+    expect(priorityRows[0]).toMatchObject({ valueText: '08h 06m' });
+    expect(priorityRows[0].details).toEqual(expect.arrayContaining([
+      { label: 'Score', valueText: '72' },
+      { label: 'HRV', valueText: '33.8 ms' },
+      { label: 'Avg HR', valueText: '63 bpm' },
+    ]));
+    expect(observationRows).toHaveLength(1);
+    expect(observationRows[0]).toMatchObject({ durationText: '08h 06m', scoreText: '72', hrvText: '33.8 ms' });
+    expect(view.series.find(series => series.metricId === HEALTH_METRIC_IDS.SleepDuration)?.points[0].value).toBe(29_160);
+    expect(view.series.find(series => series.metricId === HEALTH_METRIC_IDS.HeartRateVariability)?.points[0].value)
+      .toBeCloseTo(33.753086, 5);
+    expect(view.series.find(series => series.metricId === HEALTH_METRIC_IDS.SleepScore)?.points[0].value).toBe(72);
+    expect(view.series.flatMap(series => series.points).some(point => point.value === 40)).toBe(false);
+  });
+
   it('keeps average and overnight Sleep HRV as distinct semantic series', () => {
     const result = projectLoadedHealthRange([], [], {
       startDate: '2026-08-01',
@@ -1362,6 +1428,26 @@ describe('Health workspace helpers', () => {
 
     expect(sleepSessionHasHrv(nap)).toBe(false);
     expect(buildHealthMetricWorkspaceView(result, [nap]).series).toEqual([]);
+  });
+
+  it('does not advertise unidentified or incomplete canonical Suunto HRV', () => {
+    const source = { provider: SLEEP_PROVIDERS.SuuntoApp, providerUserId: 'account' };
+    const first = sleepSession({
+      id: 'first', source: { ...source, sourceSessionKey: 'first' },
+      startTimeMs: Date.parse('2026-08-01T22:00:00Z'), endTimeMs: Date.parse('2026-08-02T01:00:00Z'),
+      durationSeconds: 10_800, vitals: { averageHrvMs: 40, hrvSampleCount: 20 },
+    });
+    const second = sleepSession({
+      id: 'second', source: { ...source, sourceSessionKey: 'second' },
+      startTimeMs: Date.parse('2026-08-02T01:10:00Z'), endTimeMs: Date.parse('2026-08-02T06:00:00Z'),
+      durationSeconds: 17_400, vitals: {},
+    });
+    const unidentified = sleepSession({
+      source: { provider: SLEEP_PROVIDERS.SuuntoApp, sourceSessionKey: 'legacy', providerUserId: '' },
+    });
+
+    expect(sleepSessionHasHrv(unidentified)).toBe(false);
+    expect(sleepSessionsHaveCanonicalHrv([first, second])).toBe(false);
   });
 
   it('does not classify provider Health sleep averages as Sleep-session HRV', () => {

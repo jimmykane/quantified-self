@@ -398,9 +398,30 @@ describe('TrainingWorkspaceComponent', () => {
     const styles = readFileSync(stylePath, 'utf8');
     const adjacentContextRule = styles.match(/\.training-mix-contexts section \+ section \{([^}]*)\}/)?.[1];
 
-    expect(styles).toContain('--training-mix-context-divider-color: color-mix(in srgb, var(--mat-sys-outline) 28%, transparent);');
+    expect(styles).toContain('--mix-divider: color-mix(in srgb, var(--mat-sys-outline) 28%, transparent);');
     expect(adjacentContextRule).toContain('padding-top: 12px;');
-    expect(adjacentContextRule).toContain('border-top: 1px solid var(--training-mix-context-divider-color);');
+    expect(adjacentContextRule).toContain('border-top: 1px solid var(--mix-divider);');
+  });
+
+  it('uses the full section width for one sport and rearranges its comparison inside the card', () => {
+    const workspaceStyles = readFileSync(
+      resolve(process.cwd(), 'src/app/components/training/training-workspace.component.scss'),
+      'utf8',
+    );
+    const detailsStyles = readFileSync(
+      resolve(process.cwd(), 'src/app/components/shared/training-summary/training-mix-details.component.scss'),
+      'utf8',
+    );
+
+    expect(workspaceStyles).toMatch(/\.training-mix-grid--single\s*\{\s*grid-template-columns:\s*minmax\(0, 1fr\);/);
+    expect(workspaceStyles).not.toContain('grid-template-columns: minmax(280px, 340px) minmax(0, 1fr)');
+    expect(detailsStyles).toContain('@container (min-width: 760px)');
+    expect(detailsStyles).toMatch(/\.training-mix-details--single\s*\{[^}]*grid-template-columns:\s*minmax\(280px, \.9fr\) minmax\(340px, 1\.1fr\)/s);
+    expect(detailsStyles).toContain('@container (min-width: 760px) and (max-width: 1119px)');
+    expect(detailsStyles).toContain('@container (min-width: 1120px)');
+    expect(detailsStyles).toContain('.training-mix-details--single > .training-mix-zone-comparison');
+    expect(detailsStyles).toContain('.training-mix-details--single > .training-mix-contexts');
+    expect(detailsStyles).toContain('section:last-child:nth-child(odd) { grid-column: 1 / -1; padding-right: 0; }');
   });
 
   it('renders activity-family icons for sport-specific training driver cards and TSS in the overview mix', async () => {
@@ -870,7 +891,7 @@ describe('TrainingWorkspaceComponent', () => {
     fixture.destroy();
   });
 
-  it('retains eligible sleep evidence when the live listener fails after loading', async () => {
+  it('drops eligible sleep evidence when the live listener fails after loading', async () => {
     const nowMs = Date.now();
     const sleepSession = {
       id: 'retained-sleep',
@@ -922,8 +943,10 @@ describe('TrainingWorkspaceComponent', () => {
     fixture.detectChanges();
     const panel = fixture.nativeElement.querySelector('.training-readiness-panel') as HTMLElement;
 
-    expect(panel.textContent).toContain('88/100');
-    expect(panel.textContent).toContain('showing the last loaded evidence');
+    expect(panel.textContent).toContain('90/100');
+    expect(panel.textContent).not.toContain('88/100');
+    expect(panel.textContent).toContain('showing available load signals only');
+    expect(panel.textContent).toContain('SleepUnavailable');
     fixture.destroy();
   });
 
@@ -954,7 +977,7 @@ describe('TrainingWorkspaceComponent', () => {
     fixture.destroy();
   });
 
-  it('requests readiness projections and the body-weight trend at the next UTC day', async () => {
+  it('refreshes the recap clock and readiness projections at the next UTC day', async () => {
     const nowMs = Date.UTC(2026, 6, 16, 23, 59, 59, 500);
     vi.useFakeTimers();
     vi.setSystemTime(nowMs);
@@ -982,9 +1005,12 @@ describe('TrainingWorkspaceComponent', () => {
       }).compileComponents();
       const fixture = TestBed.createComponent(TrainingWorkspaceComponent);
       fixture.detectChanges();
+      expect(fixture.componentInstance.trainingImpactRecapNowMs).toBe(nowMs);
       derivedMetrics.ensureForDashboard.mockClear();
 
       await vi.advanceTimersByTimeAsync(502);
+
+      expect(fixture.componentInstance.trainingImpactRecapNowMs).toBe(nowMs + 501);
 
       expect(derivedMetrics.ensureForDashboard).toHaveBeenCalledWith(
         { uid: 'user-1' },
@@ -1362,7 +1388,6 @@ describe('TrainingWorkspaceComponent', () => {
       .toBe('Set benchmark');
     expect(element.querySelectorAll('.training-mix-panel')).toHaveLength(1);
     expect(element.querySelector('.training-mix-grid')?.classList.contains('training-mix-grid--single')).toBe(true);
-    expect(element.querySelector('.training-mix-panel')?.classList.contains('training-mix-panel--single')).toBe(true);
     expect(element.querySelector('.training-mix-zone-comparison')?.textContent).toContain('Intensity balance');
     expect(element.querySelectorAll('.training-mix-zone-track')).toHaveLength(3);
     expect(element.textContent).toContain('Cycling capacity evidence');

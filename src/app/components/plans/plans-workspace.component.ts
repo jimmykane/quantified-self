@@ -41,7 +41,7 @@ import {
   type CurrentTrainingScheduleV1,
 } from '../../services/training-plans.service';
 import { TrainingWorkoutDuplicateService } from '../../services/training-workout-duplicate.service';
-import { ConfirmationDialogComponent } from '../confirmation-dialog/confirmation-dialog.component';
+import { ConfirmationDialogComponent, type ConfirmationWithPastProviderCleanup } from '../confirmation-dialog/confirmation-dialog.component';
 import { CompactRowComponent } from '../shared/compact-row/compact-row.component';
 import { PlanScheduleCalendarComponent } from './plan-schedule-calendar.component';
 import { TrainingDeliveryButtonComponent } from './training-delivery-button.component';
@@ -71,6 +71,7 @@ import {
   type ManualWorkoutTarget,
 } from '../../helpers/planned-workout-editor.helper';
 import {
+  DELETED_WORKOUT_RECOVERY_DAYS,
   normalizeTrainingLocalDate,
   type DeleteTrainingPlanRequestV1,
   type DeleteTrainingPlanResponseV1,
@@ -136,6 +137,14 @@ interface HistoryPanelState {
   error: string | null;
 }
 
+interface DeletedWorkoutPanelState {
+  scopeKey: string;
+  status: 'idle' | 'loading' | 'ready' | 'error';
+  workouts: ScheduledWorkoutV1[];
+  nextCursor: { deletedAtMs: number; id: string } | null;
+  error: string | null;
+}
+
 const EMPTY_SCHEDULE: CurrentTrainingScheduleV1 = {
   state: { schemaVersion: 1, activePlanId: null, revision: 0, currentWorkoutCount: 0, updatedAtMs: 0 },
   plans: [],
@@ -151,6 +160,7 @@ const EMPTY_SCHEDULE: CurrentTrainingScheduleV1 = {
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class PlansWorkspaceComponent {
+  readonly deletedWorkoutRecoveryDays = DELETED_WORKOUT_RECOVERY_DAYS;
   readonly strengthSport = ActivityTypes.StrengthTraining;
   private readonly userService = inject(AppUserService);
   private readonly plansService = inject(TrainingPlansService);
@@ -185,6 +195,7 @@ export class PlansWorkspaceComponent {
   private navigationSequence = 0;
   private routeOwner: string | undefined;
   private historyRequestSequence = 0;
+  private deletedWorkoutRequestSequence = 0;
   private nodeSequence = 1;
 
   readonly sportOptionGroups: ReadonlyArray<{
@@ -246,7 +257,10 @@ export class PlansWorkspaceComponent {
   readonly scheduleState = toSignal(this.userService.user$.pipe(
     switchMap(user => user?.uid
       ? this.plansService.watchSchedule(user.uid).pipe(
-        map(schedule => ({ status: 'ready', schedule, message: null }) as ScheduleLoadState),
+        map(schedule => schedule.restoreUnavailable
+          ? ({ status: 'loading', schedule: EMPTY_SCHEDULE,
+              message: 'Restoring your training plan…' } as ScheduleLoadState)
+          : ({ status: 'ready', schedule, message: null } as ScheduleLoadState)),
         startWith({ status: 'loading', schedule: EMPTY_SCHEDULE, message: null } as ScheduleLoadState),
         catchError(error => of({
           status: 'error',
@@ -286,12 +300,14 @@ export class PlansWorkspaceComponent {
   readonly shiftDays = signal(1);
   readonly deletingPlanId = signal<string | null>(null);
   readonly deleteDisposition = signal<DeleteTrainingPlanRequestV1['workoutDisposition']>('convert-to-standalone');
+  readonly removePastProviderCopies = signal(false);
   readonly editor = signal<WorkoutEditorSession | null>(null);
   readonly workoutDatePickerValue = computed(() => workoutDatePickerInput(this.editor()?.value.localDate ?? ''));
   readonly workoutDateInputInvalid = signal(false);
   readonly busyAction = signal<string | null>(null);
   readonly historyPanel = signal<HistoryPanelState | null>(null);
   readonly deletedWorkoutsExpanded = signal(false);
+  readonly deletedWorkoutPanel = signal<DeletedWorkoutPanelState | null>(null);
   readonly browsing = computed(() => !this.editor() && !this.showPlanForm());
   readonly savedEditorWorkout = computed(() => {
     const id = this.editor()?.original?.id;
@@ -365,7 +381,27 @@ export class PlansWorkspaceComponent {
     : this.currentWorkoutRows().filter(row => row.workout.localDate === this.planScheduleDate()));
   // Standalone defaults resolve at the actual click, even just after midnight before the clock ticks.
   readonly addWorkoutDate = computed(() => this.view() === 'plans' ? this.planScheduleDate() ?? undefined : undefined);
-  readonly deletedWorkoutRows = computed(() => this.workoutRows().filter(row => row.workout.lifecycle === 'deleted'));
+  readonly deletedWorkoutRows = computed<WorkoutRow[]>(() => (this.deletedWorkoutPanel()?.workouts ?? []).map(workout => ({
+    workout,
+    completion: null,
+    summary: formatManualWorkoutStructure(
+      workout.structure,
+      this.currentUser()?.settings?.unitSettings ?? null,
+      this.locale,
+    ),
+    actionBusy: this.busyAction() === `permanent-${workout.id}`,
+    historyScope: workout.planId
+      ? { kind: 'plan', id: workout.planId }
+      : { kind: 'workout', id: workout.id },
+  })));
+  readonly deletedWorkoutScope = computed(() => {
+    const uid = this.currentUser()?.uid;
+    if (!uid) return null;
+    const planId = this.view() === 'plans' ? this.selectedPlanId() : null;
+    if (this.view() === 'plans' && !planId) return null;
+    return { uid, planId,
+      key: `${uid}:${planId === null ? 'standalone' : `plan:${planId}`}:${this.schedule().state.revision}` };
+  });
   readonly pageStatus = computed(() => {
     if (this.scheduleState().status === 'loading') return 'pending' as const;
     if (this.scheduleState().status === 'error') return 'warning' as const;
@@ -406,6 +442,16 @@ export class PlansWorkspaceComponent {
     const selected = this.selectedPlanId();
     if (selected && plans.some(plan => plan.id === selected)) return;
     this.selectedPlanId.set(this.schedule().state.activePlanId ?? plans[0]?.id ?? null);
+  });
+
+  private readonly deletedWorkoutScopeEffect = effect(() => {
+    const key = this.deletedWorkoutScope()?.key ?? null;
+    if (this.deletedWorkoutPanel()?.scopeKey === key) return;
+    this.deletedWorkoutRequestSequence += 1;
+    this.deletedWorkoutsExpanded.set(false);
+    this.deletedWorkoutPanel.set(key ? {
+      scopeKey: key, status: 'idle', workouts: [], nextCursor: null, error: null,
+    } : null);
   });
 
   private readonly acknowledgedPlanEffect = effect(() => {
@@ -708,10 +754,12 @@ export class PlansWorkspaceComponent {
     this.clearPlanActions();
     this.deletingPlanId.set(plan.id);
     this.deleteDisposition.set('convert-to-standalone');
+    this.removePastProviderCopies.set(false);
   }
 
   async deletePlan(plan: TrainingPlanV1): Promise<void> {
     const disposition = this.deleteDisposition();
+    const removePastProviderCopies = this.removePastProviderCopies();
     const expectedRevisions = this.expectedRevisions({
       planIds: [plan.id],
       planRevisionOverrides: new Map([[plan.id, plan.revision]]),
@@ -733,11 +781,14 @@ export class PlansWorkspaceComponent {
         expectedRevisions,
         workoutDisposition: disposition,
         confirmPlanDeletion: true,
+        ...(removePastProviderCopies ? { removePastProviderCopies: true } : {}),
       });
       this.haptics.success();
       this.deletingPlanId.set(null);
       this.navigateAfterPlanDeletion(response);
-      this.snackBar.open('Training plan deleted.', 'Dismiss', { duration: 4000 });
+      this.snackBar.open(removePastProviderCopies
+        ? 'Training plan deleted. Past provider cleanup is pending where supported; check Workout sync history.'
+        : 'Training plan deleted.', 'Dismiss', { duration: 6000 });
     } catch (error) {
       this.showError(error);
     } finally {
@@ -1222,19 +1273,22 @@ export class PlansWorkspaceComponent {
       workoutRevisionOverrides: new Map([[workout.id, workout.revision]]),
       planIds: workout.planId ? [workout.planId] : [],
     });
-    const confirmed = await this.confirm(
+    const confirmation = await this.confirmWithPastProviderCleanup(
       'Delete workout?',
       'The workout will remain in history and can be restored.',
       'Delete workout',
       'warn',
     );
-    if (!confirmed) return;
+    if (!confirmation) return;
     const response = await this.runMutation({
       mutationId: this.plansService.createMutationId('delete-workout'),
       expectedRevisions,
-      operation: { kind: 'delete-workout', workoutId: workout.id },
+      operation: { kind: 'delete-workout', workoutId: workout.id,
+        ...(confirmation.removePastProviderCopies ? { removePastProviderCopies: true } : {}) },
     }, `delete-${workout.id}`);
-    if (response) this.snackBar.open('Workout deleted. Open history to restore it.', 'Dismiss', { duration: 5000 });
+    if (response) this.snackBar.open(confirmation.removePastProviderCopies
+      ? 'Workout deleted. Past provider cleanup is pending where supported; check Workout sync history.'
+      : 'Workout deleted. Open history to restore it.', 'Dismiss', { duration: 6000 });
   }
 
   async permanentlyDeleteWorkout(workout: ScheduledWorkoutV1): Promise<void> {
@@ -1243,7 +1297,7 @@ export class PlansWorkspaceComponent {
       workoutRevisionOverrides: new Map([[workout.id, workout.revision]]),
       planIds: workout.planId ? [workout.planId] : [],
     });
-    const confirmed = await this.confirm(
+    const confirmation = await this.confirmWithPastProviderCleanup(
       'Permanently delete workout?',
       workout.planId
         ? 'This removes the workout and prevents restoration. Its plan revision audit remains until the plan is deleted. This cannot be undone.'
@@ -1251,13 +1305,53 @@ export class PlansWorkspaceComponent {
       'Delete permanently',
       'warn',
     );
-    if (!confirmed) return;
+    if (!confirmation) return;
     const response = await this.runMutation({
       mutationId: this.plansService.createMutationId('permanent-workout-delete'),
       expectedRevisions,
-      operation: { kind: 'permanently-delete-workout', workoutId: workout.id, confirmPermanentDeletion: true },
+      operation: { kind: 'permanently-delete-workout', workoutId: workout.id, confirmPermanentDeletion: true,
+        ...(confirmation.removePastProviderCopies ? { removePastProviderCopies: true } : {}) },
     }, `permanent-${workout.id}`);
-    if (response) this.snackBar.open('Workout permanently retired and can no longer be restored.', 'Dismiss', { duration: 4000 });
+    if (response) this.snackBar.open(confirmation.removePastProviderCopies
+      ? 'Workout deleted permanently. Past provider cleanup is pending where supported; check Workout sync history.'
+      : 'Workout permanently retired and can no longer be restored.', 'Dismiss', { duration: 6000 });
+    if (response) this.deletedWorkoutPanel.update(panel => panel ? {
+      ...panel, workouts: panel.workouts.filter(item => item.id !== workout.id),
+    } : null);
+  }
+
+  async toggleDeletedWorkouts(): Promise<void> {
+    const expanded = !this.deletedWorkoutsExpanded();
+    this.deletedWorkoutsExpanded.set(expanded);
+    if (expanded && this.deletedWorkoutPanel()?.status === 'idle') await this.loadDeletedWorkouts();
+  }
+
+  async loadDeletedWorkouts(): Promise<void> {
+    const scope = this.deletedWorkoutScope();
+    const panel = this.deletedWorkoutPanel();
+    if (!scope || !panel || panel.scopeKey !== scope.key || panel.status === 'loading'
+      || (panel.status === 'ready' && panel.nextCursor === null)) return;
+    const requestSequence = ++this.deletedWorkoutRequestSequence;
+    this.deletedWorkoutPanel.set({ ...panel, status: 'loading', error: null });
+    try {
+      const page = await this.plansService.getDeletedWorkoutsPage(scope.uid, scope.planId, panel.nextCursor);
+      if (requestSequence !== this.deletedWorkoutRequestSequence
+        || this.deletedWorkoutScope()?.key !== scope.key) return;
+      const byId = new Map([...panel.workouts, ...page.workouts].map(item => [item.id, item]));
+      this.deletedWorkoutPanel.set({
+        scopeKey: scope.key,
+        status: 'ready',
+        workouts: [...byId.values()].sort((left, right) => (right.deletedAtMs ?? 0) - (left.deletedAtMs ?? 0)
+          || right.id.localeCompare(left.id)),
+        nextCursor: page.nextCursor,
+        error: null,
+      });
+    } catch (error) {
+      if (requestSequence !== this.deletedWorkoutRequestSequence
+        || this.deletedWorkoutScope()?.key !== scope.key) return;
+      this.haptics.error();
+      this.deletedWorkoutPanel.set({ ...panel, status: 'error', error: errorMessage(error) });
+    }
   }
 
   async openHistory(scope: TrainingScheduleRevisionScope): Promise<void> {
@@ -1427,6 +1521,19 @@ export class PlansWorkspaceComponent {
       data: { title, message, confirmText, confirmColor },
     });
     return new Promise(resolve => reference.afterClosed().subscribe(value => resolve(value === true)));
+  }
+
+  private async confirmWithPastProviderCleanup(
+    title: string,
+    message: string,
+    confirmText: string,
+    confirmColor: 'primary' | 'accent' | 'warn' = 'warn',
+  ): Promise<ConfirmationWithPastProviderCleanup | null> {
+    const reference = this.dialog.open<ConfirmationDialogComponent, unknown, ConfirmationWithPastProviderCleanup>(
+      ConfirmationDialogComponent,
+      { data: { title, message, confirmText, confirmColor, pastProviderCleanupOption: true } },
+    );
+    return new Promise(resolve => reference.afterClosed().subscribe(value => resolve(value?.confirmed === true ? value : null)));
   }
 
   private showError(error: unknown): void {

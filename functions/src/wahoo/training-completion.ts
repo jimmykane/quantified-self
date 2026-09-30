@@ -11,6 +11,7 @@ import {
   type TrainingWorkoutCompletionV1,
 } from '../../../shared/training-workout-completion';
 import { getUserDeletionGuardStateInTransaction } from '../shared/user-deletion-guard';
+import { assertNoTrainingBulkRestoreInProgress } from '../training-plans/deletion-lock';
 import { DELIVERY_LEDGER, type DeliveryLedgerV1 } from '../training-plans/delivery/contracts';
 import { readTrainingDeliveryAuthority } from '../training-plans/delivery/connection';
 import { projectDelivery } from '../training-plans/delivery/store';
@@ -145,6 +146,9 @@ export async function retainWahooTrainingCompletion(
     // ledger, or one ledger whose Plan/token association disagrees, is a
     // collision rather than permission to select the closest-looking row.
     const candidate = matching.size === 1 && candidates.length === 1 ? candidates[0] : null;
+    if (candidate) {
+      await assertNoTrainingBulkRestoreInProgress(tx, user.collection('trainingPlanState').doc('current'));
+    }
     const reverseId = reverseLinkId(uid, eventId);
     const related = candidate ? await Promise.all([
       tx.get(user.collection('scheduledWorkouts').doc(candidate.ledger.workoutId)),
@@ -191,6 +195,10 @@ export async function retainWahooTrainingCompletion(
           const sameReverse = reverse?.schemaVersion === 1 && reverse.deliveryId === candidate.ledger.id
             && reverse.workoutId === workout.id && reverse.eventId === eventId
             && reverse.sourceSessionIndex === null && reverse.provider === 'wahoo';
+          // Do not let a retained Workout from an earlier plan/date occurrence
+          // complete the current one before the provider copy is updated.
+          if (!sameCompletion && (workout.planId !== candidate.ledger.planId
+            || workout.localDate !== candidate.artifact.localDate)) outcome = 'conflict';
           if (outcome !== 'conflict' && ((completionDocument.exists && !sameCompletion)
             || (reverseDocument.exists && !sameReverse))) outcome = 'conflict';
           if (outcome !== 'conflict') {

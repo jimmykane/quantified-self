@@ -29,6 +29,13 @@ describe('dashboard chart catalog', () => {
     expect(customEntries.every(entry => entry.lane === 'section:activityOverview')).toBe(true);
     expect(getAvailableDashboardCharts('section:activityOverview', []).filter(entry => entry.definition.category === 'custom')).toHaveLength(8);
   });
+  it('offers Calendar only in its own section and keeps it available after removal', () => {
+    const calendar = getDashboardChartCatalog().find(entry => entry.definition.id === 'curated-activity-calendar')!;
+    expect(calendar.lane).toBe('section:calendar');
+    expect(getAvailableDashboardCharts('section:activityOverview', [])).not.toContainEqual(calendar);
+    expect(getAvailableDashboardCharts('section:calendar', [calendar.tile])).toEqual([]);
+    expect(getAvailableDashboardCharts('section:calendar', [])).toEqual([calendar]);
+  });
   it('keeps running and cycling power, and the two map sources, independently available', () => {
     const entries = getDashboardChartCatalog();
     for (const category of ['power', 'map']) {

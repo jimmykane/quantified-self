@@ -1,7 +1,7 @@
 import { ActivityTypes } from '@sports-alliance/sports-lib';
 import { gzipSync } from 'node:zlib';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import type { ScheduledWorkoutV1, TrainingPlanV1 } from '../../../shared/training-plans';
+import { DELETED_WORKOUT_RECOVERY_MS, type ScheduledWorkoutV1, type TrainingPlanV1 } from '../../../shared/training-plans';
 
 const guard = vi.hoisted(() => ({ getUserDeletionGuardState: vi.fn() }));
 vi.mock('../shared/user-deletion-guard', () => ({
@@ -219,6 +219,9 @@ describe('training schedule history reads', () => {
         vi.clearAllMocks();
         guard.getUserDeletionGuardState.mockResolvedValue({ shouldSkip: false });
         db = new FakeDb();
+        db.seed('users/user-1/trainingPlanState/current', {
+            schemaVersion: 1, activePlanId: null, revision: 1, currentWorkoutCount: 0, updatedAtMs: 1,
+        });
     });
 
     it('returns only safe revision envelopes with pagination', async () => {
@@ -237,6 +240,35 @@ describe('training schedule history reads', () => {
         expect(response.entries[0]).not.toHaveProperty('delta');
         expect(response.entries[0]).not.toHaveProperty('checkpoint');
         expect(initialPlan.id).toBe('plan-1');
+    });
+
+    it('refuses expired standalone history even before background cleanup runs', async () => {
+        const nowMs = Date.UTC(2026, 8, 29);
+        db.seed('users/user-1/scheduledWorkouts/workout-1', workout({
+            planId: null, lifecycle: 'deleted', deletedAtMs: nowMs - DELETED_WORKOUT_RECOVERY_MS,
+        }));
+        await expect(getTrainingScheduleHistoryForUser('user-1', {
+            scope: { kind: 'workout', id: 'workout-1' }, limit: 20,
+        }, db as never, nowMs)).rejects.toThrow('90-day recovery window');
+        db.seed('users/user-1/scheduledWorkouts/workout-1', workout({
+            planId: null, lifecycle: 'deleted', deletedAtMs: nowMs - DELETED_WORKOUT_RECOVERY_MS + 1,
+        }));
+        await expect(getTrainingScheduleHistoryForUser('user-1', {
+            scope: { kind: 'workout', id: 'workout-1' }, limit: 20,
+        }, db as never, nowMs)).resolves.toMatchObject({ entries: [] });
+    });
+
+    it('keeps earlier standalone history readable after the workout joins a plan', async () => {
+        db.seed('users/user-1/scheduledWorkouts/workout-1', workout({ planId: 'plan-1', revision: 3 }));
+        db.seed('users/user-1/scheduledWorkouts/workout-1/revisions/0000000001', {
+            schemaVersion: 1, revision: 1, operationKind: 'create-workout',
+            mutationId: 'standalone-create', createdAtMs: 1,
+        });
+
+        const response = await getTrainingScheduleHistoryForUser('user-1', {
+            scope: { kind: 'workout', id: 'workout-1' }, limit: 20,
+        }, db as never);
+        expect(response.entries.map(entry => entry.revision)).toEqual([1]);
     });
 
     it('reconstructs a plan from its nearest checkpoint and immutable deltas', async () => {
@@ -289,6 +321,13 @@ describe('training schedule history reads', () => {
         expect(preview.warnings[0]).toContain('will not be reclaimed');
     });
 
+    it('refuses a restore preview while a bulk restore has hidden current workouts', async () => {
+        db.seed('users/user-1/trainingPlanState/current/planDeletionLocks/_bulk_restore', { phase: 'applying' });
+        await expect(previewTrainingScheduleRestoreForUser('user-1', {
+            scope: { kind: 'plan', id: 'plan-1' }, targetRevision: 1,
+        }, db as never)).rejects.toMatchObject({ code: 'failed-precondition' });
+    });
+
     it('does not report metadata-only workout revision differences as plan restore changes', async () => {
         const desiredWorkout = workout();
         seedPlanRevision(db, 1, plan(), { checkpointWorkouts: [desiredWorkout] });
@@ -322,6 +361,21 @@ describe('training schedule history reads', () => {
         expect(preview.warnings[0]).toContain('permanently deleted');
     });
 
+    it('previews an expired plan workout as skipped before physical cleanup', async () => {
+        const nowMs = Date.UTC(2026, 8, 29);
+        seedPlanRevision(db, 1, plan(), { checkpointWorkouts: [workout()] });
+        db.seed('users/user-1/trainingPlans/plan-1', plan({ revision: 2, workoutCount: 0 }));
+        db.seed('users/user-1/scheduledWorkouts/workout-1', workout({
+            lifecycle: 'deleted', deletedAtMs: nowMs - DELETED_WORKOUT_RECOVERY_MS,
+        }));
+        const preview = await previewTrainingScheduleRestoreForUser('user-1', {
+            scope: { kind: 'plan', id: 'plan-1' }, targetRevision: 1,
+        }, db as never, nowMs);
+        expect(preview.changedWorkoutIds).toEqual([]);
+        expect(preview.skippedWorkoutIds).toEqual(['workout-1']);
+        expect(preview.warnings).toContain('1 workout past the 90-day recovery window will remain deleted.');
+    });
+
     it('previews standalone workouts moved into a plan as conflicts', async () => {
         const standalone = workout({ planId: null });
         db.seed('users/user-1/scheduledWorkouts/workout-1/revisions/0000000001', {
@@ -341,6 +395,24 @@ describe('training schedule history reads', () => {
             changedWorkoutIds: [],
             skippedWorkoutIds: ['workout-1'],
         });
+    });
+
+    it('does not offer expired standalone workout recovery in preview', async () => {
+        const nowMs = Date.UTC(2026, 8, 29);
+        const standalone = workout({ planId: null });
+        db.seed('users/user-1/scheduledWorkouts/workout-1/revisions/0000000001', {
+            schemaVersion: 1, revision: 1, mutationId: 'create', operationKind: 'create-workout',
+            createdAtMs: 1, snapshot: standalone,
+        });
+        db.seed('users/user-1/scheduledWorkouts/workout-1', workout({
+            planId: null, lifecycle: 'deleted', deletedAtMs: nowMs - DELETED_WORKOUT_RECOVERY_MS,
+        }));
+        const preview = await previewTrainingScheduleRestoreForUser('user-1', {
+            scope: { kind: 'workout', id: 'workout-1' }, targetRevision: 1,
+        }, db as never, nowMs);
+        expect(preview.changedWorkoutIds).toEqual([]);
+        expect(preview.skippedWorkoutIds).toEqual(['workout-1']);
+        expect(preview.warnings[0]).toContain('90-day recovery window');
     });
 
     it('does not offer a plan-bound snapshot from the standalone revision stream for restore', async () => {

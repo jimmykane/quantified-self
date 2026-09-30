@@ -97,7 +97,8 @@ export class CorosTrainingTransport implements TrainingDeliveryTransport {
     return assessTrainingDeliveryMapping('coros', workout, destinationKey, timeZone);
   }
 
-  canRemove(remote: DeliveryArtifact, today: string): boolean {
+  canRemove(remote: DeliveryArtifact, today: string, _allowPastRemoval = false): boolean {
+    // COROS's partner contract permits deletion only for unexecuted workouts dated today or later.
     return !remote.completed && remote.localDate >= today;
   }
 

@@ -12,6 +12,7 @@ import {
 import {
     SCHEDULED_WORKOUTS_COLLECTION_ID,
     TRAINING_PLAN_MUTATION_RECEIPTS_COLLECTION_ID,
+    TRAINING_PLAN_DELETION_LOCKS_COLLECTION_ID,
     TRAINING_PLAN_REVISIONS_COLLECTION_ID,
     TRAINING_PLAN_SCHEMA_VERSION,
     TRAINING_PLAN_MAX_CURRENT_WORKOUTS,
@@ -19,6 +20,7 @@ import {
     TrainingPlanContractError,
     normalizeTrainingScheduleMutationId,
     parseScheduledWorkoutV1,
+    isDeletedWorkoutRecoverable,
     parseTrainingPlanStateV1,
     parseTrainingPlanV1,
     type ExpectedTrainingScheduleRevision,
@@ -43,6 +45,7 @@ import {
 } from './mutation';
 import {
     TRAINING_PLAN_REVISION_CHUNKS_COLLECTION_ID,
+    TrainingScheduleOversizedMutationError,
     buildTrainingScheduleRevisionWrites,
     hashTrainingScheduleRequestPayload,
     trainingPlanRevisionChunkDocumentId,
@@ -51,6 +54,14 @@ import {
 import { assertNoTrainingPlanDeletionInProgress } from './deletion-lock';
 
 const RESTORE_RECEIPT_RETENTION_MS = 30 * 24 * 60 * 60 * 1000;
+const RESTORE_MAX_ESTIMATED_WRITE_BYTES = 7 * 1024 * 1024;
+
+export class TrainingScheduleRestoreWriteLimitError extends TrainingScheduleMutationError {
+    constructor() {
+        super('limit-exceeded', 'This saved plan revision needs a staged restore. Retry the same restore request.');
+        this.name = 'TrainingScheduleRestoreWriteLimitError';
+    }
+}
 
 interface AppliedTrainingScheduleRestoreV1 {
     applied: AppliedTrainingScheduleMutationV1;
@@ -217,7 +228,8 @@ export function applyPlanRevisionRestore(
             skippedWorkoutIds.add(workoutId);
             return;
         }
-        if (current && current.planId !== currentPlan.id) {
+        if (current && (current.planId !== currentPlan.id
+            || (current.lifecycle === 'deleted' && !isDeletedWorkoutRecoverable(current, nowMs)))) {
             skippedWorkoutIds.add(workoutId);
             return;
         }
@@ -330,12 +342,16 @@ export function applyStandaloneRevisionRestore(
             'This workout now belongs to a plan and cannot be reclaimed automatically.',
         );
     }
+    if (current.lifecycle === 'deleted' && !isDeletedWorkoutRecoverable(current, nowMs)) {
+        throw new TrainingScheduleMutationError('failed-precondition', 'This workout\'s 90-day recovery window has ended.');
+    }
     const restored = parseScheduledWorkoutV1({
         ...desired,
         planId: null,
         revision: current.revision + 1,
         createdAtMs: current.createdAtMs,
         updatedAtMs: nowMs,
+        ...(desired.lifecycle === 'deleted' ? { deletedAtMs: nowMs } : {}),
     });
     if (restored.structure.sport === ActivityTypes.StrengthTraining) {
         if (!desiredStrength || !strengthProjectionMatchesDetails(restored.structure, desiredStrength)) {
@@ -379,7 +395,7 @@ function documentData(snapshot: admin.firestore.DocumentSnapshot): Record<string
     return (snapshot.data() ?? {}) as Record<string, unknown>;
 }
 
-async function readCurrentScheduleForRestore(
+export async function readCurrentScheduleForRestore(
     transaction: admin.firestore.Transaction,
     userRef: admin.firestore.DocumentReference,
     desiredWorkoutIds: string[],
@@ -422,7 +438,7 @@ async function readCurrentScheduleForRestore(
     return { state: parseTrainingPlanStateV1(documentData(stateSnapshot)), plans, workouts, strengthDetails };
 }
 
-function parseStoredRestoreResponse(value: unknown): RestoreTrainingScheduleRevisionResponseV1 {
+export function parseStoredRestoreResponse(value: unknown): RestoreTrainingScheduleRevisionResponseV1 {
     const record = asRecord(value, '$receipt.response');
     const mutation = asRecord(record.mutation, '$receipt.response.mutation');
     if (
@@ -445,6 +461,7 @@ function parseStoredRestoreResponse(value: unknown): RestoreTrainingScheduleRevi
             state: parseTrainingPlanStateV1(mutation.state),
             plans: mutation.plans.map(parseTrainingPlanV1),
             workouts: mutation.workouts.map(parseScheduledWorkoutV1),
+            ...(mutation.workoutsDeferred === true ? { workoutsDeferred: true as const } : {}),
             removedPlanIds: readStringArray(mutation.removedPlanIds, 'mutation.removedPlanIds'),
             permanentlyDeletedWorkoutIds: readStringArray(
                 mutation.permanentlyDeletedWorkoutIds,
@@ -453,6 +470,44 @@ function parseStoredRestoreResponse(value: unknown): RestoreTrainingScheduleRevi
         },
         skippedWorkoutIds: readStringArray(record.skippedWorkoutIds, 'skippedWorkoutIds'),
     };
+}
+
+function canPatchRestoredWorkout(
+    before: ScheduledWorkoutV1 | undefined,
+    after: ScheduledWorkoutV1,
+    strengthChanged: boolean,
+): boolean {
+    return !!before
+        && JSON.stringify(before.structure) === JSON.stringify(after.structure)
+        && !strengthChanged
+        && !(before.deletedAtMs !== undefined && after.deletedAtMs === undefined);
+}
+
+function assertBoundedRestorePayload(
+    restored: AppliedTrainingScheduleRestoreV1,
+    revisions: ReturnType<typeof buildTrainingScheduleRevisionWrites>,
+): void {
+    const bytes = (value: unknown): number => Buffer.byteLength(JSON.stringify(value), 'utf8') + 1024;
+    let estimated = 8 * 1024 + bytes(restored.response) + bytes(restored.applied.after.state);
+    for (const planId of restored.applied.affectedPlanIds) {
+        estimated += bytes(restored.applied.after.plans.get(planId));
+        const revision = revisions.planRevisions.get(planId);
+        if (revision) estimated += bytes(revision);
+        for (const chunk of revisions.planRevisionChunks.get(planId) ?? []) estimated += bytes(chunk);
+    }
+    for (const workoutId of restored.applied.changedWorkoutIds) {
+        const before = restored.applied.before.workouts.get(workoutId);
+        const after = restored.applied.after.workouts.get(workoutId)!;
+        const strength = restored.applied.after.strengthDetails?.get(workoutId);
+        const strengthChanged = JSON.stringify(restored.applied.before.strengthDetails?.get(workoutId)) !== JSON.stringify(strength);
+        estimated += canPatchRestoredWorkout(before, after, strengthChanged) ? 1024 : bytes(after);
+        if (strength && strengthChanged) estimated += bytes(strength);
+        const revision = revisions.standaloneWorkoutRevisions.get(workoutId);
+        if (revision) estimated += bytes(revision);
+    }
+    if (estimated > RESTORE_MAX_ESTIMATED_WRITE_BYTES) {
+        throw new TrainingScheduleRestoreWriteLimitError();
+    }
 }
 
 async function readCompletedRestoreReceiptBeforeHistory(
@@ -503,6 +558,20 @@ export async function restoreTrainingScheduleRevisionForUser(
     );
     if (completed) return completed;
 
+    // A retry after a timed-out callable must resume the locked restore before
+    // reading partially applied current workout roots.
+    if (request.scope.kind === 'plan') {
+        const { stageLargeTrainingPlanRestoreForUser, stagedRestoreIntentHash } = await import('./staged-restore');
+        const [lock, intent] = await Promise.all([
+            stateRef.collection(TRAINING_PLAN_DELETION_LOCKS_COLLECTION_ID).doc('_bulk_restore').get(),
+            stateRef.collection(TRAINING_PLAN_MUTATION_RECEIPTS_COLLECTION_ID)
+                .doc(`_restore_intent_${stagedRestoreIntentHash(request)}`).get(),
+        ]);
+        if (lock.exists || intent.exists) {
+            return stageLargeTrainingPlanRestoreForUser(uid, request, { db, nowMs });
+        }
+    }
+
     const desiredPlan = request.scope.kind === 'plan'
         ? await readPlanSnapshotAtRevision(db, uid, request.scope.id, request.targetRevision)
         : null;
@@ -511,7 +580,8 @@ export async function restoreTrainingScheduleRevisionForUser(
         : null;
     const desiredWorkoutIds = desiredPlan ? [...desiredPlan.workouts.keys()] : [request.scope.id];
 
-    return db.runTransaction(async (transaction) => {
+    try {
+        return await db.runTransaction(async (transaction) => {
         const guard = await getUserDeletionGuardStateInTransaction(db, transaction, uid, nowMs);
         if (guard.shouldSkip) {
             throw new TrainingScheduleMutationError('failed-precondition', 'This account is being deleted or is no longer available.');
@@ -534,6 +604,7 @@ export async function restoreTrainingScheduleRevisionForUser(
             operation: { kind: request.scope.kind === 'plan' ? 'restore-plan-revision' : 'restore-workout-revision' },
         };
         const revisions = buildTrainingScheduleRevisionWrites(restored.applied, revisionRequest, nowMs);
+        assertBoundedRestorePayload(restored, revisions);
         stageTrainingDeliveryReconciliation(transaction, db, uid);
         for (const id of restored.applied.changedWorkoutIds) {
             if (restored.applied.before.workouts.get(id)?.planId !== restored.applied.after.workouts.get(id)?.planId
@@ -563,9 +634,29 @@ export async function restoreTrainingScheduleRevisionForUser(
         restored.applied.changedWorkoutIds.forEach((workoutId) => {
             const workoutRef = userRef.collection(SCHEDULED_WORKOUTS_COLLECTION_ID).doc(workoutId);
             const workout = restored.applied.after.workouts.get(workoutId)!;
-            transaction.set(workoutRef, workout);
+            const beforeWorkout = restored.applied.before.workouts.get(workoutId);
             const strength = restored.applied.after.strengthDetails?.get(workoutId);
-            if (strength && JSON.stringify(restored.applied.before.strengthDetails?.get(workoutId)) !== JSON.stringify(strength)) transaction.set(
+            const strengthChanged = JSON.stringify(restored.applied.before.strengthDetails?.get(workoutId)) !== JSON.stringify(strength);
+            if (beforeWorkout && canPatchRestoredWorkout(beforeWorkout, workout, strengthChanged)) {
+                // A date/lifecycle/title restore can touch hundreds of large
+                // prescriptions. Patch only the changed scalars in the atomic
+                // commit, preserving the exact v1 structure JSON.
+                const patch: admin.firestore.UpdateData<admin.firestore.DocumentData> = {
+                    planId: workout.planId,
+                    localDate: workout.localDate,
+                    lifecycle: workout.lifecycle,
+                    title: workout.title,
+                    revision: workout.revision,
+                    updatedAtMs: workout.updatedAtMs,
+                };
+                if (beforeWorkout.deletedAtMs !== workout.deletedAtMs) {
+                    patch.deletedAtMs = workout.deletedAtMs;
+                }
+                transaction.update(workoutRef, patch);
+            } else {
+                transaction.set(workoutRef, workout);
+            }
+            if (strength && strengthChanged) transaction.set(
                 workoutRef.collection(STRENGTH_DETAILS_COLLECTION_ID).doc(STRENGTH_DETAILS_DOCUMENT_ID),
                 strength,
             );
@@ -584,5 +675,15 @@ export async function restoreTrainingScheduleRevisionForUser(
             expireAt: Timestamp.fromMillis(nowMs + RESTORE_RECEIPT_RETENTION_MS),
         });
         return restored.response;
-    });
+        });
+    } catch (error) {
+        if (request.scope.kind !== 'plan') throw error;
+        if (!(error instanceof TrainingScheduleRestoreWriteLimitError
+            || error instanceof TrainingScheduleOversizedMutationError)) {
+            const lock = await stateRef.collection(TRAINING_PLAN_DELETION_LOCKS_COLLECTION_ID).doc('_bulk_restore').get();
+            if (!lock.exists) throw error;
+        }
+        const { stageLargeTrainingPlanRestoreForUser } = await import('./staged-restore');
+        return stageLargeTrainingPlanRestoreForUser(uid, request, { db, nowMs });
+    }
 }

@@ -44,7 +44,9 @@ export class SuuntoGuideTransport implements TrainingDeliveryTransport {
   assess(workout: ScheduledWorkoutV1, destination: string, zone: string, strength?: StrengthWorkoutDetailsV1 | null) {
     return assessSuuntoGuide(workout, destination, zone, this.owner, strength);
   }
-  canRemove(artifact: DeliveryArtifact, today: string): boolean { return !artifact.completed && artifact.localDate >= today; }
+  canRemove(artifact: DeliveryArtifact, today: string, allowPastRemoval = false): boolean {
+    return !artifact.completed && (artifact.localDate >= today || allowPastRemoval);
+  }
   private offset(value: string): number {
     if (!/^(0|[1-9]\d{0,6})$/.test(value)) throw new TrainingDeliveryTransportError('uncertain');
     return Number(value);
@@ -109,7 +111,9 @@ export class SuuntoGuideTransport implements TrainingDeliveryTransport {
   }
   private future(operation: DeliveryOperation): void {
     const today = trainingDeliveryLocalDate(this.now(), operation.timeZone);
-    if (operation.artifact && !this.canRemove(operation.artifact, today)) throw new TrainingDeliveryTransportError('uncertain');
+    if (operation.artifact && !this.canRemove(operation.artifact, today, operation.kind === 'remove' && operation.allowPastRemoval)) {
+      throw new TrainingDeliveryTransportError('uncertain');
+    }
     if (operation.kind === 'upsert' && (!operation.workout || operation.workout.localDate < today
       || Date.parse(operation.workout.localDate) - Date.parse(today) > this.horizonDays * 86_400_000)) throw new TrainingDeliveryTransportError('uncertain');
   }

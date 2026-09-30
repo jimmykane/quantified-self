@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
+    DERIVED_FORM_PAYLOAD_VERSION,
     DERIVED_METRIC_KINDS,
     DERIVED_METRIC_SCHEMA_VERSION,
     DERIVED_RECOVERY_LOOKBACK_WINDOW_SECONDS,
@@ -285,8 +286,10 @@ describe('fetchDerivedFormSnapshotSeed', () => {
     const dayMs = Date.UTC(2026, 8, 14);
     const valid = () => ({ entryType: 'snapshot', metricKind: DERIVED_METRIC_KINDS.Form,
         status: 'ready', schemaVersion: DERIVED_METRIC_SCHEMA_VERSION, builtFromEventMutationVersion: 7,
-        sourceEventCount: 1, sourceDocCount: 2, payload: { dayBoundary: 'UTC', excludesMergedEvents: true,
-            rangeStartDayMs: dayMs, rangeEndDayMs: dayMs, dailyLoads: [{ dayMs, load: 50 }] } });
+        sourceEventCount: 1, sourceDocCount: 2, payload: { payloadVersion: DERIVED_FORM_PAYLOAD_VERSION,
+            dayBoundary: 'UTC', excludesMergedEvents: true,
+            rangeStartDayMs: dayMs, rangeEndDayMs: dayMs,
+            dailyLoads: [{ dayMs, load: 50, activityCount: 1 }] } });
     beforeEach(() => vi.clearAllMocks());
     async function read(data: unknown) {
         const { fetchDerivedFormSnapshotSeed } = await import('./derived-metrics.service');
@@ -294,22 +297,35 @@ describe('fetchDerivedFormSnapshotSeed', () => {
         return fetchDerivedFormSnapshotSeed('user-1');
     }
     it('accepts canonical loads and genuine zero-load histories', async () => {
-        expect(await read(valid())).toMatchObject({ dailyLoads: [{ dayMs, load: 50 }], sourceEventCount: 1 });
+        expect(await read(valid())).toMatchObject({
+            dailyLoads: [{ dayMs, load: 50, activityCount: 1 }],
+            sourceEventCount: 1,
+        });
         const zero = valid(); zero.payload.dailyLoads[0].load = 0;
-        expect(await read(zero)).toMatchObject({ dailyLoads: [{ dayMs, load: 0 }], sourceEventCount: 1 });
+        expect(await read(zero)).toMatchObject({
+            dailyLoads: [{ dayMs, load: 0, activityCount: 1 }],
+            sourceEventCount: 1,
+        });
         const empty = valid(); empty.sourceEventCount = 0;
         Object.assign(empty.payload, { dailyLoads: [], rangeStartDayMs: null, rangeEndDayMs: null });
         expect(await read(empty)).toMatchObject({ dailyLoads: [], sourceEventCount: 0, sourceDocCount: 2 });
     });
     it.each([
         { payload: null }, { payload: { ...valid().payload, dailyLoads: undefined } },
-        { payload: { ...valid().payload, dailyLoads: [{ dayMs, load: Number.NaN }] } },
-        { payload: { ...valid().payload, dailyLoads: [{ dayMs, load: -1 }] } },
+        { payload: { ...valid().payload, payloadVersion: 1 } },
+        { payload: { ...valid().payload, dailyLoads: [{ dayMs, load: Number.NaN, activityCount: 1 }] } },
+        { payload: { ...valid().payload, dailyLoads: [{ dayMs, load: -1, activityCount: 1 }] } },
+        { payload: { ...valid().payload, dailyLoads: [{ dayMs, load: 50 }] } },
+        { payload: { ...valid().payload, dailyLoads: [{ dayMs, load: 50, activityCount: 2 }] } },
         { payload: { ...valid().payload, rangeStartDayMs: dayMs + 1, rangeEndDayMs: dayMs + 1,
-            dailyLoads: [{ dayMs: dayMs + 1, load: 50 }] } },
-        { sourceEventCount: 2, payload: { ...valid().payload, dailyLoads: [{ dayMs, load: 20 }, { dayMs, load: 30 }] } },
+            dailyLoads: [{ dayMs: dayMs + 1, load: 50, activityCount: 1 }] } },
+        { payload: { ...valid().payload, rangeStartDayMs: -86_400_000, rangeEndDayMs: -86_400_000,
+            dailyLoads: [{ dayMs: -86_400_000, load: 50, activityCount: 1 }] } },
+        { sourceEventCount: 2, payload: { ...valid().payload,
+            dailyLoads: [{ dayMs, load: 20, activityCount: 1 }, { dayMs, load: 30, activityCount: 1 }] } },
         { sourceEventCount: 2, payload: { ...valid().payload, rangeStartDayMs: dayMs + 86_400_000,
-            dailyLoads: [{ dayMs: dayMs + 86_400_000, load: 20 }, { dayMs, load: 30 }] } },
+            dailyLoads: [{ dayMs: dayMs + 86_400_000, load: 20, activityCount: 1 },
+                { dayMs, load: 30, activityCount: 1 }] } },
         { payload: { ...valid().payload, rangeEndDayMs: dayMs - 86_400_000 } },
         { payload: { ...valid().payload, dailyLoads: [], rangeStartDayMs: null, rangeEndDayMs: null } },
         { sourceDocCount: 0 }, { sourceEventCount: undefined },
@@ -481,8 +497,10 @@ describe('fetchTrainingBuildSleepDocs', () => {
             'sportsLibData.metrics.duration',
             'sportsLibData.metrics.overnightHrv',
             'sportsLibData.metrics.averageHrv',
+            'sportsLibData.metrics.hrvSampleCount',
             'isNap',
             'providerFields.suunto.timestamp',
+            'providerFields.suunto.SleepOnsetLatencyDuration',
             'vitals.overnightHrvMs',
             'vitals.averageHrvMs',
         );
@@ -561,11 +579,13 @@ describe('fetchTrainingReadinessSleepDocs', () => {
             'sportsLibData.metrics.score',
             'sportsLibData.metrics.overnightHrv',
             'sportsLibData.metrics.averageHrv',
+            'sportsLibData.metrics.hrvSampleCount',
             'sportsLibData.metrics.averageHeartRate',
             'sportsLibData.metrics.minimumHeartRate',
             'isNap',
             'score.value',
             'providerFields.suunto.timestamp',
+            'providerFields.suunto.SleepOnsetLatencyDuration',
             'vitals.overnightHrvMs',
             'vitals.averageHrvMs',
             'vitals.averageHeartRateBpm',
@@ -976,6 +996,7 @@ describe('buildTrainingReadinessMetricPayload', () => {
 
         expect(result.payload).toMatchObject({
             formulaVersion: 4,
+            evidenceVersion: 3,
             dayBoundary: 'UTC',
             asOfDayMs: Date.UTC(2026, 6, 16),
             generatedAtMs: nowMs,
@@ -998,7 +1019,97 @@ describe('buildTrainingReadinessMetricPayload', () => {
         expect(today?.overnightHeartRateRatio).toBeCloseTo(0.918);
     });
 
-    it('does not copy a current weekly-HRV-only score into legacy history when the latest sleep has expired', async () => {
+    it('reconciles adjacent Suunto fragments into one sample-weighted current night', async () => {
+        const { buildTrainingReadinessMetricPayload } = await import('./derived-metrics.service');
+        const nowMs = Date.UTC(2026, 8, 28, 12);
+        const dayMs = 24 * 60 * 60 * 1000;
+        const buildDoc = (id: string, sleepDate: string, startTimeMs: number, endTimeMs: number,
+            hrv: number, hrvSampleCount = 35) => ({
+            id,
+            data: () => ({
+                source: { provider: 'SuuntoApp', providerUserId: 'suunto-user', sourceSessionKey: id },
+                sleepDate,
+                startTimeMs,
+                endTimeMs,
+                durationSeconds: Math.round((endTimeMs - startTimeMs) / 1000),
+                timezoneOffsetSeconds: 3 * 60 * 60,
+                isNap: false,
+                score: { value: 80 },
+                vitals: { averageHrvMs: hrv, hrvSampleCount },
+            }),
+        });
+        const baseline = Array.from({ length: 15 }, (_, index) => {
+            const endTimeMs = nowMs - (15 - index) * dayMs - (4 * 60 * 60 * 1000);
+            return buildDoc(`baseline-${index}`, new Date(endTimeMs).toISOString().slice(0, 10),
+                endTimeMs - (8 * 60 * 60 * 1000), endTimeMs, 34);
+        });
+        const sleepDate = '2026-09-28';
+        const fragments = [
+            buildDoc('part-1', sleepDate, Date.UTC(2026, 8, 27, 18, 57), Date.UTC(2026, 8, 27, 23, 54), 29, 46),
+            buildDoc('part-2', sleepDate, Date.UTC(2026, 8, 28, 0, 1), Date.UTC(2026, 8, 28, 4), 40),
+        ];
+
+        const today = buildTrainingReadinessMetricPayload([], 0, [...baseline, ...fragments] as any, nowMs)
+            .payload.points.at(-1);
+
+        expect(today).toMatchObject({ sleepScore: 80, availableSignalCount: 2 });
+        expect(today?.hrvPersonalRange?.latestMs).toBeCloseTo(((29 * 46) + (40 * 35)) / 81);
+        expect(today?.hrvRatio).toBeCloseTo(1);
+    });
+
+    it('uses Suunto sleep onset when enforcing the fragment gap boundary', async () => {
+        const { buildTrainingReadinessMetricPayload } = await import('./derived-metrics.service');
+        const nowMs = Date.UTC(2026, 8, 28, 12);
+        const source = { provider: 'SuuntoApp', providerUserId: 'suunto-user' };
+        const baseline = Array.from({ length: 5 }, (_, index) => {
+            const endTimeMs = nowMs - ((index + 2) * 24 * 60 * 60 * 1000);
+            return { id: `baseline-${index}`, data: () => ({
+                source: { ...source, sourceSessionKey: `baseline-${index}` },
+                sleepDate: new Date(endTimeMs).toISOString().slice(0, 10),
+                startTimeMs: endTimeMs - (8 * 60 * 60 * 1000),
+                endTimeMs,
+                durationSeconds: 8 * 60 * 60,
+                timezoneOffsetSeconds: 0,
+                isNap: false,
+                score: { value: 80 },
+                vitals: { averageHeartRateBpm: 60 },
+            }) };
+        });
+        const firstEndTimeMs = Date.UTC(2026, 8, 28, 0);
+        const docs = [
+            ...baseline,
+            { id: 'part-1', data: () => ({
+                source: { ...source, sourceSessionKey: 'part-1' },
+                sleepDate: '2026-09-28',
+                startTimeMs: firstEndTimeMs - (4 * 60 * 60 * 1000),
+                endTimeMs: firstEndTimeMs,
+                durationSeconds: 4 * 60 * 60,
+                timezoneOffsetSeconds: 0,
+                isNap: false,
+                score: { value: 70 },
+                vitals: { averageHeartRateBpm: 50 },
+            }) },
+            { id: 'part-2', data: () => ({
+                source: { ...source, sourceSessionKey: 'part-2' },
+                sleepDate: '2026-09-28',
+                startTimeMs: firstEndTimeMs + (25 * 60 * 1000),
+                endTimeMs: firstEndTimeMs + (4 * 60 * 60 * 1000),
+                durationSeconds: 3 * 60 * 60,
+                timezoneOffsetSeconds: 0,
+                isNap: false,
+                score: { value: 82 },
+                providerFields: { suunto: { SleepOnsetLatencyDuration: 10 * 60 } },
+                vitals: { averageHeartRateBpm: 70 },
+            }) },
+        ];
+
+        const today = buildTrainingReadinessMetricPayload([], 0, docs as any, nowMs).payload.points.at(-1);
+
+        expect(today).toMatchObject({ sleepScore: 82, latestSleepAtMs: firstEndTimeMs + (4 * 60 * 60 * 1000) });
+        expect(today?.averageHeartRateRatio).toBeCloseTo(70 / 60);
+    });
+
+    it('withholds current HRV when the latest sleep has expired', async () => {
         const { buildTrainingReadinessMetricPayload } = await import('./derived-metrics.service');
         const nowMs = Date.UTC(2026, 8, 13, 12);
         const docs = Array.from({ length: 60 }, (_, index) => {
@@ -1009,8 +1120,8 @@ describe('buildTrainingReadinessMetricPayload', () => {
                 vitals: { averageHrvMs: 40 } }) };
         });
         const { payload } = buildTrainingReadinessMetricPayload([], 0, docs as any, nowMs);
-        expect(payload.points[payload.points.length - 1]).toMatchObject({ score: 50, availableSignalCount: 1,
-            latestSleepAtMs: null, hrvPersonalRange: { currentObservationDayCount: 4 } });
+        expect(payload.points[payload.points.length - 1]).toMatchObject({ score: null, availableSignalCount: 0,
+            latestSleepAtMs: null, hrvPersonalRange: null, hrvRatio: null });
         expect(payload.legacyPoints![payload.legacyPoints!.length - 1]).toMatchObject({ score: null,
             label: null, confidence: null, availableSignalCount: 0, hrvRatio: null });
     });
@@ -1113,6 +1224,7 @@ describe('buildTrainingReadinessMetricPayload', () => {
             sleepScore: 82,
             availableSignalCount: 1,
             confidence: 'low',
+            hrvPersonalRange: null,
             hrvRatio: null,
             averageHeartRateRatio: null,
             minimumHeartRateRatio: null,
@@ -1148,7 +1260,7 @@ describe('buildTrainingReadinessMetricPayload', () => {
         expect(reverse.payload.points.at(-1)?.sleepScore).toBe(90);
     });
 
-    it('matches the live missing-date fallback without accepting an invalid stored date', async () => {
+    it('matches the live missing-date fallback without accepting malformed sessions', async () => {
         const { buildTrainingReadinessMetricPayload } = await import('./derived-metrics.service');
         const nowMs = Date.UTC(2026, 6, 16, 12);
         const buildDoc = (id: string, sleepDate: string | undefined, score: number, endHour: number) => ({
@@ -1168,6 +1280,19 @@ describe('buildTrainingReadinessMetricPayload', () => {
         const result = buildTrainingReadinessMetricPayload([], 0, [
             buildDoc('missing-date', undefined, 84, 6),
             buildDoc('invalid-date', '2026-02-31', 99, 7),
+            {
+                id: 'invalid-time',
+                data: () => ({
+                    source: { provider: 'GarminAPI' },
+                    sleepDate: '2026-07-16',
+                    startTimeMs: Number.MAX_SAFE_INTEGER - 1,
+                    endTimeMs: Number.MAX_SAFE_INTEGER,
+                    durationSeconds: 1,
+                    isNap: false,
+                    score: { value: 100 },
+                    vitals: {},
+                }),
+            },
         ] as any, nowMs);
 
         expect(result.payload.points.at(-1)).toMatchObject({
@@ -1329,6 +1454,91 @@ describe('buildTrainingBuildComparisonMetricPayload', () => {
             reference: { periodDays: 56, averageSleepSeconds: 6.5 * 3600 },
         });
         expect(result.payload.disciplines.find(item => item.discipline === 'cycling')?.recovery).toBeNull();
+    });
+
+    it('uses one canonical Suunto night for recovery duration, timing, and sample-weighted HRV', async () => {
+        const { buildTrainingBuildComparisonMetricPayload } = await import('./derived-metrics.service');
+        const nowMs = Date.UTC(2026, 5, 30, 12);
+        const dayMs = 24 * 60 * 60 * 1000;
+        const docs = Array.from({ length: 5 }, (_, index) => {
+            const sleepDayMs = Date.UTC(2026, 5, 26) + (index * dayMs);
+            const source = { provider: 'SuuntoApp', providerUserId: 'suunto-user' };
+            return [
+                { id: `part-1-${index}`, data: () => ({
+                    source: { ...source, sourceSessionKey: `part-1-${index}` },
+                    sleepDate: new Date(sleepDayMs).toISOString().slice(0, 10),
+                    startTimeMs: sleepDayMs - (5 * 60 * 60 * 1000) - (3 * 60 * 1000),
+                    endTimeMs: sleepDayMs - (6 * 60 * 1000),
+                    timezoneOffsetSeconds: 3 * 60 * 60,
+                    durationSeconds: 15_840,
+                    isNap: false,
+                    providerFields: { suunto: { SleepOnsetLatencyDuration: 360 } },
+                    vitals: { averageHrvMs: 29, hrvSampleCount: 46 },
+                }) },
+                { id: `part-2-${index}`, data: () => ({
+                    source: { ...source, sourceSessionKey: `part-2-${index}` },
+                    sleepDate: new Date(sleepDayMs).toISOString().slice(0, 10),
+                    startTimeMs: sleepDayMs + (1 * 60 * 1000),
+                    endTimeMs: sleepDayMs + (4 * 60 * 60 * 1000),
+                    timezoneOffsetSeconds: 3 * 60 * 60,
+                    durationSeconds: 13_320,
+                    isNap: false,
+                    providerFields: { suunto: { SleepOnsetLatencyDuration: 480 } },
+                    vitals: { averageHrvMs: 40, hrvSampleCount: 35 },
+                }) },
+            ];
+        }).flat();
+
+        const result = buildTrainingBuildComparisonMetricPayload([], {}, nowMs, docs as any);
+
+        expect(result.payload.recovery.current).toMatchObject({
+            provider: 'SuuntoApp',
+            recordedNightCount: 5,
+            averageSleepSeconds: 29_160,
+            typicalLocalStartMinutes: (22 * 60) + 3,
+            typicalLocalEndMinutes: 7 * 60,
+            medianOvernightHrvMs: 33.8,
+            overnightHrvNightCount: 5,
+        });
+    });
+
+    it('retains a short Suunto fragment when its canonical night is long enough', async () => {
+        const { buildTrainingBuildComparisonMetricPayload } = await import('./derived-metrics.service');
+        const nowMs = Date.UTC(2026, 5, 30, 12);
+        const dayMs = 24 * 60 * 60 * 1000;
+        const docs = Array.from({ length: 5 }, (_, index) => {
+            const sleepDayMs = Date.UTC(2026, 5, 26) + (index * dayMs);
+            const source = { provider: 'SuuntoApp', providerUserId: 'suunto-user' };
+            return [
+                { id: `main-${index}`, data: () => ({
+                    source: { ...source, sourceSessionKey: `main-${index}` },
+                    sleepDate: new Date(sleepDayMs).toISOString().slice(0, 10),
+                    startTimeMs: sleepDayMs - (7.5 * 60 * 60 * 1000),
+                    endTimeMs: sleepDayMs,
+                    timezoneOffsetSeconds: 0,
+                    durationSeconds: 7.5 * 60 * 60,
+                    isNap: false,
+                    vitals: {},
+                }) },
+                { id: `short-${index}`, data: () => ({
+                    source: { ...source, sourceSessionKey: `short-${index}` },
+                    sleepDate: new Date(sleepDayMs).toISOString().slice(0, 10),
+                    startTimeMs: sleepDayMs + (5 * 60 * 1000),
+                    endTimeMs: sleepDayMs + (35 * 60 * 1000),
+                    timezoneOffsetSeconds: 0,
+                    durationSeconds: 30 * 60,
+                    isNap: false,
+                    vitals: {},
+                }) },
+            ];
+        }).flat();
+
+        const result = buildTrainingBuildComparisonMetricPayload([], {}, nowMs, docs as any);
+
+        expect(result.payload.recovery.current).toMatchObject({
+            recordedNightCount: 5,
+            averageSleepSeconds: 8 * 60 * 60,
+        });
     });
 
     it('withholds recovery comparability across providers and keeps absent HRV null', async () => {
@@ -4869,6 +5079,25 @@ describe('writeDerivedMetricSnapshotsReady', () => {
         return (call?.[1] || {}) as Record<string, unknown>;
     }
 
+    it('rejects a reused Form context when exact daily counts do not match sourceEventCount', async () => {
+        const { writeDerivedMetricSnapshotsReady } = await import('./derived-metrics.service');
+        await expect(writeDerivedMetricSnapshotsReady(
+            'user-1',
+            [DERIVED_METRIC_KINDS.FormNow],
+            { formDocs: [], recoveryNowDocs: [] },
+            {
+                formDailyLoads: [{
+                    dayMs: Date.UTC(2026, 8, 14),
+                    load: 50,
+                    activityCount: 1,
+                }],
+                formSourceEventCount: 2,
+                formSourceDocCount: 2,
+            },
+        )).rejects.toThrow('daily activity counts must match sourceEventCount');
+        expect(hoisted.transactionSet).not.toHaveBeenCalled();
+    });
+
     it('warms internal reuse metadata and retains original source counts and expiry on recovery-only writes', async () => {
         const { writeDerivedMetricSnapshotsReady } = await import('./derived-metrics.service');
         const { resolveTrainingBuildWorkoutSeed, trainingBuildSettingsKey } = await import('./training-build-workout-seed');
@@ -5079,10 +5308,11 @@ describe('writeDerivedMetricSnapshotsReady', () => {
         expect(formPersistedSnapshot.builtFromEventMutationVersion).toBe(42);
         expect(formPersistedSnapshot.sourceDocCount).toBe(formDocs.length);
         const formPayload = formPersistedSnapshot.payload as Record<string, unknown>;
+        expect(formPayload.payloadVersion).toBe(DERIVED_FORM_PAYLOAD_VERSION);
         expect(formPayload.dailyLoads).toEqual([
-            { dayMs: Date.UTC(2026, 0, 1), load: 10 },
-            { dayMs: Date.UTC(2026, 0, 2), load: 20 },
-            { dayMs: Date.UTC(2026, 0, 3), load: 30 },
+            { dayMs: Date.UTC(2026, 0, 1), load: 10, activityCount: 1 },
+            { dayMs: Date.UTC(2026, 0, 2), load: 20, activityCount: 1 },
+            { dayMs: Date.UTC(2026, 0, 3), load: 30, activityCount: 1 },
         ]);
 
         const acwrPayload = findPersistedPayload(DERIVED_METRIC_KINDS.Acwr).payload as Record<string, unknown>;
@@ -5316,6 +5546,24 @@ describe('writeDerivedMetricSnapshotsReady', () => {
                 },
             }),
             buildEventDoc({
+                startDate: Date.UTC(2026, 0, 2, 23, 59, 0),
+                stats: {
+                    'Power Training Stress Score': 5,
+                },
+            }),
+            buildEventDoc({
+                startDate: Date.UTC(2026, 0, 3, 0, 1, 0),
+                stats: {
+                    'Training Stress Score': 0,
+                },
+            }),
+            buildEventDoc({
+                startDate: Date.UTC(2026, 0, 3, 7, 0, 0),
+                stats: {
+                    [DataDuration.type]: 1_800,
+                },
+            }),
+            buildEventDoc({
                 startDate: Date.UTC(2026, 0, 3, 8, 0, 0),
                 endDate: Date.UTC(2026, 0, 3, 9, 0, 0),
                 stats: {
@@ -5338,11 +5586,11 @@ describe('writeDerivedMetricSnapshotsReady', () => {
         );
 
         const formPersistedSnapshot = findPersistedPayload(DERIVED_METRIC_KINDS.Form);
-        expect(formPersistedSnapshot.sourceEventCount).toBe(2);
+        expect(formPersistedSnapshot.sourceEventCount).toBe(4);
         const formPayload = formPersistedSnapshot.payload as Record<string, unknown>;
         expect(formPayload.dailyLoads).toEqual([
-            { dayMs: Date.UTC(2026, 0, 2), load: 40 },
-            { dayMs: Date.UTC(2026, 0, 3), load: 10 },
+            { dayMs: Date.UTC(2026, 0, 2), load: 45, activityCount: 2 },
+            { dayMs: Date.UTC(2026, 0, 3), load: 10, activityCount: 2 },
         ]);
 
         const recoveryPayload = findPersistedPayload(DERIVED_METRIC_KINDS.RecoveryNow).payload as Record<string, unknown>;

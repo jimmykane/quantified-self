@@ -30,6 +30,7 @@ function mapMutationError(error: TrainingScheduleMutationError): HttpsError {
 export const mutateTrainingSchedule = onCall({
     region: FUNCTIONS_MANIFEST.mutateTrainingSchedule.region,
     memory: '512MiB',
+    timeoutSeconds: 300,
 }, async (request): Promise<MutateTrainingScheduleResponseV1> => {
     if (!request.auth) {
         throw new HttpsError('unauthenticated', 'The function must be called while authenticated.');

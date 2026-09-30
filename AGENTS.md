@@ -13,6 +13,9 @@ Always-on rules:
 - `.agent/rules/canonical-metric-display.md`
 - `.agent/rules/firestore-write-sanitization.md` for any frontend/functions write path that persists event or activity data
 - Never patch or directly modify files under `node_modules/`.
+- Never install or add the official Garmin FIT SDK as a project dependency, development dependency, optional dependency,
+  or vendored project code. Its license prevents its use as a dependency in Quantified Self, sports-lib, and fit-parser.
+  When needed for investigation, run it only as a standalone tool outside those repositories and their dependency trees.
 - Use prefixed commit subjects: `feat:`, `fix:`, `chore:`, `refactor:`, `test:`, `docs:`.
 - Pick the dominant intent; do not create unprefixed commit subjects.
 - When asked to commit, use unsigned commits by default (`git commit --no-gpg-sign`) unless the user explicitly asks for a signed commit.

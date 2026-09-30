@@ -556,6 +556,40 @@ describe('sleep/dispatcher', () => {
         expect(mockLoggerInfo).toHaveBeenCalledWith(expect.stringContaining('Task not enqueued'));
     });
 
+    it('preserves the Suunto webhook delay when recovering an undispatched queue row', async () => {
+        const nowMs = 1_700_000_000_000;
+        vi.useFakeTimers();
+        vi.setSystemTime(nowMs + 45_000);
+        try {
+            const update = vi.fn().mockResolvedValue(undefined);
+            mockQueueGet.mockResolvedValue({
+                empty: false,
+                docs: [{
+                    id: 'coalesced-suunto-health',
+                    data: () => ({
+                        dateCreated: nowMs,
+                        dispatchAfterMs: nowMs + 90_000,
+                        dispatchedToCloudTask: null,
+                        processed: false,
+                        userID: 'suunto-user',
+                        provider: 'SuuntoApp',
+                        providerUserId: 'provider-user',
+                    }),
+                    ref: { update },
+                }],
+            });
+
+            await reconcileSleepSyncQueueDispatches(nowMs);
+            expect(mockEnqueueSleepSyncTask).toHaveBeenCalledWith(
+                'coalesced-suunto-health', nowMs, 45,
+                expect.objectContaining({ queueDateCreated: nowMs }),
+            );
+            expect(update).toHaveBeenCalledWith({ dispatchedToCloudTask: nowMs });
+        } finally {
+            vi.useRealTimers();
+        }
+    });
+
     it('does not write the dispatch marker when deletion starts after Cloud Task enqueue', async () => {
         const nowMs = 1_700_000_000_000;
         const updateUndispatched = vi.fn().mockResolvedValue(undefined);

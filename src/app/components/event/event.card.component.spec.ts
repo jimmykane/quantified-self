@@ -45,6 +45,8 @@ import { shouldRenderIntensityZonesChart } from '../../helpers/intensity-zones-c
 import { AppEventService } from '../../services/app.event.service';
 import { PerformanceCurveDataService } from '../../services/performance-curve-data.service';
 import { AppBenchmarkFlowService } from '../../services/app.benchmark-flow.service';
+import { TrainingImpactService } from '../../services/training-impact.service';
+import type { AppEventInterface } from '@shared/app-event.interface';
 
 vi.mock('../../helpers/intensity-zones-chart-data-helper', () => ({
     shouldRenderIntensityZonesChart: vi.fn(),
@@ -66,6 +68,7 @@ describe('EventCardComponent', () => {
     let mockEventService: any;
     let mockPerformanceCurveDataService: any;
     let mockBenchmarkFlowService: any;
+    let mockTrainingImpactService: any;
     let routeData$: BehaviorSubject<{ event: EventInterface }>;
     let routeUserID: string;
     let routeEventID: string;
@@ -228,6 +231,10 @@ describe('EventCardComponent', () => {
             openBenchmarkReport: vi.fn().mockResolvedValue(undefined),
         };
 
+        mockTrainingImpactService = {
+            watch: vi.fn(() => of({ status: 'ready', formPoints: [] })),
+        };
+
         await TestBed.configureTestingModule({
             declarations: [EventCardComponent],
             providers: [
@@ -243,6 +250,7 @@ describe('EventCardComponent', () => {
                 { provide: AppEventService, useValue: mockEventService },
                 { provide: PerformanceCurveDataService, useValue: mockPerformanceCurveDataService },
                 { provide: AppBenchmarkFlowService, useValue: mockBenchmarkFlowService },
+                { provide: TrainingImpactService, useValue: mockTrainingImpactService },
             ],
             schemas: [NO_ERRORS_SCHEMA]
         })
@@ -257,6 +265,30 @@ describe('EventCardComponent', () => {
 
     it('should create', () => {
         expect(component).toBeTruthy();
+    });
+
+    it('builds owner-only Training impact state without exposing it to public viewers', () => {
+        expect(component.isOwner()).toBe(true);
+        expect(component.trainingImpact()?.availability).toBe('missing-tss');
+        expect(mockTrainingImpactService.watch).toHaveBeenCalledWith('testUser');
+
+        component.targetUserID.set('another-user');
+        fixture.detectChanges();
+
+        expect(component.isOwner()).toBe(false);
+        expect(component.trainingImpact()).toBeNull();
+        expect(fixture.nativeElement.querySelector('app-training-impact')).toBeNull();
+    });
+
+    it('does not show or load Training impact for benchmark event details', () => {
+        mockTrainingImpactService.watch.mockClear();
+        component.event.set({ ...mockEvent, hasBenchmark: true } as AppEventInterface);
+        fixture.detectChanges();
+
+        expect(component.trainingImpact()).toBeNull();
+        expect(component.trainingImpactState().status).toBe('private');
+        expect(fixture.nativeElement.querySelector('app-training-impact')).toBeNull();
+        expect(mockTrainingImpactService.watch).not.toHaveBeenCalled();
     });
 
     it('should initialize event from route data as signal', () => {

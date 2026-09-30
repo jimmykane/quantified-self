@@ -11,6 +11,10 @@ import {
 import { firstValueFrom, of, Subject } from 'rxjs';
 import { ActivityCalendarService } from './activity-calendar.service';
 import { AppEventService } from './app.event.service';
+import {
+  DASHBOARD_FORM_LEGACY_TRAINING_STRESS_SCORE_TYPE,
+  DASHBOARD_FORM_TRAINING_STRESS_SCORE_TYPE,
+} from '../helpers/dashboard-form.helper';
 
 describe('ActivityCalendarService', () => {
   const watchEventDocumentsBy = vi.fn();
@@ -63,8 +67,25 @@ describe('ActivityCalendarService', () => {
     expect(events[0].getStat(DataDistance.type)?.getValue()).toBe(10_000);
     expect(events[0].getStat(DataAscent.type)?.getValue()).toBe(450);
     expect(events[0].getStat(DataDescent.type)?.getValue()).toBe(420);
+    expect(events[0].getStat(DASHBOARD_FORM_TRAINING_STRESS_SCORE_TYPE)?.getValue()).toBe(84);
     expect(events[0].getActivityTypesAsArray()).toEqual([ActivityTypes.Running]);
     expect(events[0].getActivityTypesAsString()).toBe('Running');
+  });
+
+  it('preserves legacy TSS for Training impact when current TSS is missing', async () => {
+    const legacy = eventAt('legacy', new Date(2026, 7, 2));
+    delete legacy.stats[DASHBOARD_FORM_TRAINING_STRESS_SCORE_TYPE];
+    legacy.stats[DASHBOARD_FORM_LEGACY_TRAINING_STRESS_SCORE_TYPE] = { _value: '63' };
+    watchEventDocumentsBy.mockReturnValue(of([legacy]));
+    const service = TestBed.inject(ActivityCalendarService);
+
+    const events = await firstValueFrom(service.watchEvents(
+      { uid: 'user-1' } as User,
+      { startMs: new Date(2026, 7, 1).getTime(), endExclusiveMs: new Date(2026, 8, 1).getTime() },
+    ));
+
+    expect(events[0].getStat(DASHBOARD_FORM_TRAINING_STRESS_SCORE_TYPE)).toBeNull();
+    expect(events[0].getStat(DASHBOARD_FORM_LEGACY_TRAINING_STRESS_SCORE_TYPE)?.getValue()).toBe(63);
   });
 
   it('supports Firestore timestamps and skips records without a usable identity or date', async () => {
@@ -119,7 +140,13 @@ describe('ActivityCalendarService', () => {
   });
 });
 
-function eventAt(id: string, startDate: Date) {
+function eventAt(id: string, startDate: Date): {
+  id: string;
+  startDate: Date;
+  name: string;
+  description: null;
+  stats: Record<string, unknown>;
+} {
   return {
     id,
     startDate,
@@ -130,6 +157,7 @@ function eventAt(id: string, startDate: Date) {
       [DataDistance.type]: 10_000,
       [DataAscent.type]: 450,
       [DataDescent.type]: 420,
+      [DASHBOARD_FORM_TRAINING_STRESS_SCORE_TYPE]: 84,
       [DataActivityTypes.type]: [ActivityTypes.Running],
     },
   };

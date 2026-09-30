@@ -32,3 +32,13 @@ mat-dialog-content {
     }
   }
 }
+.past-provider-cleanup-option {
+  margin-block-start: 16px;
+}
+
+.past-provider-cleanup-option p {
+  color: var(--mat-sys-on-surface-variant);
+  font-size: 0.875rem;
+  line-height: 1.4;
+  margin: 4px 0 0 32px;
+}

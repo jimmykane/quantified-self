@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { ActivityTypes } from '@sports-alliance/sports-lib';
 import { gunzipSync } from 'node:zlib';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -22,12 +23,14 @@ vi.mock('../shared/user-deletion-guard', () => ({
 }));
 
 import {
+    TrainingScheduleBatchWriteLimitError,
     buildTrainingScheduleRevisionWrites,
     hashTrainingScheduleMutationRequest,
     mutateTrainingScheduleBatchForUser,
     mutateTrainingScheduleForUser,
     trainingScheduleDeletionTombstoneDocumentId,
 } from './persistence';
+import { trainingCleanupJobRef } from './cleanup-job-contract';
 
 const NOW_MS = Date.UTC(2026, 8, 2, 10);
 const STRUCTURE = {
@@ -65,7 +68,17 @@ class FakeQuery {
     constructor(
         readonly collectionRef: FakeCollectionReference,
         readonly filter?: { field: string; operator: string; value: unknown },
+        readonly limitCount?: number,
     ) {}
+
+    limit(count: number): FakeQuery {
+        return new FakeQuery(this.collectionRef, this.filter, count);
+    }
+
+    async get(): Promise<{ empty: boolean; docs: FakeDocumentSnapshot[] }> {
+        const docs = this.collectionRef.db.querySnapshots(this);
+        return { empty: docs.length === 0, docs };
+    }
 }
 
 class FakeDocumentReference {
@@ -118,6 +131,7 @@ class FakeTransaction {
     update(ref: FakeDocumentReference, value: unknown): void {
         const current = this.db.documents.get(ref.path);
         if (!current) throw new Error(`Document does not exist: ${ref.path}`);
+        this.db.updatedPaths.push(ref.path);
         this.set(ref, { ...current, ...(value as FakeDocumentData) });
     }
 
@@ -133,6 +147,7 @@ class FakeTransaction {
 
 class FakeFirestore {
     readonly documents = new Map<string, FakeDocumentData>();
+    readonly updatedPaths: string[] = [];
     transactionCount = 0;
     readonly recursiveDelete = vi.fn(async (ref: FakeDocumentReference) => {
         for (const path of [...this.documents.keys()]) {
@@ -162,8 +177,10 @@ class FakeFirestore {
                 if (query.filter.operator === 'in' && Array.isArray(query.filter.value)) {
                     return query.filter.value.includes(value[query.filter.field]);
                 }
+                if (query.filter.operator === '==') return value[query.filter.field] === query.filter.value;
                 return false;
             })
+            .slice(0, query.limitCount)
             .map(([path, value]) => new FakeDocumentSnapshot(new FakeDocumentReference(this, path), value));
     }
 
@@ -367,6 +384,87 @@ describe('mutateTrainingScheduleForUser persistence', () => {
         guard.result = { shouldSkip: false };
         guard.getUserDeletionGuardStateInTransaction.mockImplementation(async () => guard.result);
     });
+
+    it('shifts 400 structured workouts with scalar patches and one canonical revision', async () => {
+        const largeStructure = { ...STRUCTURE, nodes: Array.from({ length: 100 }, (_, index) => ({
+            kind: 'step' as const, id: `step-${index}`, purpose: 'work' as const,
+            ending: { kind: 'time' as const, seconds: 30 }, targets: [],
+            note: 'High-complexity workout segment. '.repeat(14).slice(0, 490),
+        })) };
+        db.seed('users/user-1/trainingPlanState/current', {
+            ...createEmptyTrainingPlanState(), activePlanId: 'plan-1', revision: 1, currentWorkoutCount: 400,
+        });
+        db.seed('users/user-1/trainingPlans/plan-1', plan({ workoutCount: 400 }));
+        for (let index = 0; index < 400; index += 1) {
+            const id = `workout-${`${index}`.padStart(3, '0')}`;
+            db.seed(`users/user-1/scheduledWorkouts/${id}`, workout({ id, planId: 'plan-1', structure: largeStructure }));
+        }
+        const shift: MutateTrainingScheduleRequestV1 = {
+            mutationId: 'shift-400',
+            expectedRevisions: [
+                { scope: 'state', id: 'current', revision: 1 },
+                { scope: 'plan', id: 'plan-1', revision: 3 },
+            ],
+            operation: { kind: 'shift-plan', planId: 'plan-1', days: 1 },
+        };
+
+        const first = await mutateTrainingScheduleForUser('user-1', shift, { db: db as never, nowMs: NOW_MS });
+        const retry = await mutateTrainingScheduleForUser('user-1', shift, { db: db as never, nowMs: NOW_MS + 1 });
+        expect(retry).toEqual(first);
+        expect(first.state.revision).toBe(2);
+        expect(db.updatedPaths.filter(path => /^users\/user-1\/scheduledWorkouts\/workout-/.test(path))).toHaveLength(400);
+        expect(db.read('users/user-1/scheduledWorkouts/workout-399')).toMatchObject({ localDate: '2026-09-03', revision: 3 });
+    });
+
+    it('stages high-entropy shift history before one current-schedule commit', async () => {
+        db.seed('users/user-1/trainingPlanState/current', {
+            ...createEmptyTrainingPlanState(), activePlanId: 'plan-1', revision: 1, currentWorkoutCount: 400,
+        });
+        db.seed('users/user-1/trainingPlans/plan-1', plan({ workoutCount: 400 }));
+        for (let index = 0; index < 400; index += 1) {
+            const id = `workout-${`${index}`.padStart(3, '0')}`;
+            const structure = { ...STRUCTURE, nodes: Array.from({ length: 100 }, (_, step) => ({
+                kind: 'step' as const, id: `step-${step}`, purpose: 'work' as const,
+                ending: { kind: 'time' as const, seconds: 30 }, targets: [],
+                note: Array.from({ length: 3 }, (_, part) => createHash('sha256')
+                    .update(`${index}:${step}:${part}`).digest('hex')).join(''),
+            })) };
+            db.seed(`users/user-1/scheduledWorkouts/${id}`, workout({ id, planId: 'plan-1', structure }));
+        }
+        const shift: MutateTrainingScheduleRequestV1 = {
+            mutationId: 'oversized-shift',
+            expectedRevisions: [
+                { scope: 'state', id: 'current', revision: 1 },
+                { scope: 'plan', id: 'plan-1', revision: 3 },
+            ],
+            operation: { kind: 'shift-plan', planId: 'plan-1', days: 1 },
+        };
+
+        const batchError = await mutateTrainingScheduleBatchForUser('user-1', [shift, {
+            mutationId: 'rename-after-oversized-shift',
+            expectedRevisions: [
+                { scope: 'state', id: 'current', revision: 2 },
+                { scope: 'plan', id: 'plan-1', revision: 4 },
+            ],
+            operation: { kind: 'rename-plan', planId: 'plan-1', name: 'Shifted plan' },
+        }], { db: db as never, nowMs: NOW_MS }).catch(error => error);
+        expect(batchError).toBeInstanceOf(TrainingScheduleBatchWriteLimitError);
+        expect(db.read('users/user-1/trainingPlanState/current')).toMatchObject({ revision: 1 });
+        expect(db.read('users/user-1/trainingPlans/plan-1')).toMatchObject({ revision: 3 });
+        expect(db.read('users/user-1/scheduledWorkouts/workout-399')).toMatchObject({ localDate: '2026-09-02' });
+        expect(db.updatedPaths).toEqual([]);
+        expect(db.read('users/user-1/trainingPlans/plan-1/revisions/0000000004')).toBeUndefined();
+
+        const shifted = await mutateTrainingScheduleForUser('user-1', shift, { db: db as never, nowMs: NOW_MS });
+        expect(shifted.state.revision).toBe(2);
+        expect(db.read('users/user-1/scheduledWorkouts/workout-399'))
+            .toMatchObject({ localDate: '2026-09-03', revision: 3 });
+        expect(db.read('users/user-1/trainingPlans/plan-1/revisions/0000000004'))
+            .toMatchObject({ mutationId: shift.mutationId, revision: 4 });
+        expect(db.read('users/user-1/trainingPlanState/current/planDeletionLocks/_bulk_shift')).toBeUndefined();
+        expect(await mutateTrainingScheduleForUser('user-1', shift, { db: db as never, nowMs: NOW_MS + 1 }))
+            .toEqual(shifted);
+    }, 20_000);
 
     it('persists colors in current plans, history and exact retry receipts without touching workouts', async () => {
         const created = await mutateTrainingScheduleForUser('user-1', request({
@@ -615,6 +713,12 @@ describe('mutateTrainingScheduleForUser persistence', () => {
             schemaVersion: 1,
             workoutId: deletedWorkout.id,
         });
+        db.seed(`users/user-1/trainingWorkoutCompletions/${deletedWorkout.id}/evidence/provider`, {
+            privateMarker: true,
+        });
+        db.seed('users/user-1/trainingActivityCompletionLinks/activity-link', {
+            workoutId: deletedWorkout.id,
+        });
         const mutation: MutateTrainingScheduleRequestV1 = {
             mutationId: 'permanent-delete',
             expectedRevisions: [
@@ -633,9 +737,17 @@ describe('mutateTrainingScheduleForUser persistence', () => {
         expect(db.recursiveDelete).toHaveBeenCalledWith(expect.objectContaining({
             path: `users/user-1/scheduledWorkouts/${deletedWorkout.id}`,
         }));
+        expect(db.recursiveDelete).toHaveBeenCalledWith(expect.objectContaining({
+            path: `users/user-1/trainingWorkoutCompletions/${deletedWorkout.id}`,
+        }));
         expect(db.read(`users/user-1/scheduledWorkouts/${deletedWorkout.id}`)).toBeUndefined();
         expect(db.read(`users/user-1/scheduledWorkouts/${deletedWorkout.id}/revisions/0000000002`)).toBeUndefined();
         expect(db.read(`users/user-1/trainingWorkoutCompletions/${deletedWorkout.id}`)).toBeUndefined();
+        expect(db.read(`users/user-1/trainingWorkoutCompletions/${deletedWorkout.id}/evidence/provider`)).toBeUndefined();
+        expect(db.read('users/user-1/trainingActivityCompletionLinks/activity-link')).toBeUndefined();
+        expect(db.recursiveDelete).toHaveBeenCalledWith(expect.objectContaining({
+            path: 'users/user-1/trainingActivityCompletionLinks/activity-link',
+        }));
         const tombstoneId = trainingScheduleDeletionTombstoneDocumentId('workout', deletedWorkout.id);
         expect(db.read(`users/user-1/trainingPlanState/current/deletionTombstones/${tombstoneId}`)).toMatchObject({
             entityKind: 'workout',
@@ -657,5 +769,30 @@ describe('mutateTrainingScheduleForUser persistence', () => {
             db: db as never,
             nowMs: NOW_MS + 1,
         })).rejects.toMatchObject({ code: 'already-exists' });
+    });
+
+    it('keeps a durable workout cleanup job after a post-commit recursive failure', async () => {
+        const deletedWorkout = workout({ lifecycle: 'deleted', deletedAtMs: NOW_MS - 1 });
+        db.seed('users/user-1/trainingPlanState/current', { ...createEmptyTrainingPlanState(), revision: 2 });
+        db.seed(`users/user-1/scheduledWorkouts/${deletedWorkout.id}`, deletedWorkout);
+        db.seed(`users/user-1/scheduledWorkouts/${deletedWorkout.id}/revisions/0000000002`, { revision: 2 });
+        const mutation: MutateTrainingScheduleRequestV1 = {
+            mutationId: 'cleanup-retry',
+            expectedRevisions: [
+                { scope: 'state', id: 'current', revision: 2 },
+                { scope: 'workout', id: deletedWorkout.id, revision: deletedWorkout.revision },
+            ],
+            operation: { kind: 'permanently-delete-workout', workoutId: deletedWorkout.id, confirmPermanentDeletion: true },
+        };
+        db.recursiveDelete.mockRejectedValueOnce(new Error('temporary cleanup failure'));
+        await expect(mutateTrainingScheduleForUser('user-1', mutation, { db: db as never, nowMs: NOW_MS }))
+            .rejects.toThrow('temporary cleanup failure');
+        const jobPath = trainingCleanupJobRef(db as never, 'user-1', 'workout', deletedWorkout.id).path;
+        expect(db.read(jobPath)).toMatchObject({ mutationId: mutation.mutationId, kind: 'workout' });
+        expect(db.read(`users/user-1/scheduledWorkouts/${deletedWorkout.id}/revisions/0000000002`)).toBeDefined();
+        expect(db.read('users/user-1/trainingPlanState/current/mutationReceipts/cleanup-retry')).toBeDefined();
+        await expect(mutateTrainingScheduleForUser('user-1', mutation, { db: db as never, nowMs: NOW_MS + 1 }))
+            .resolves.toMatchObject({ mutationId: mutation.mutationId });
+        expect(db.read(jobPath)).toBeUndefined();
     });
 });

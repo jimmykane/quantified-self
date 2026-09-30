@@ -240,9 +240,12 @@ describe('Strict Training write proposal contract', () => {
       target: { ref: 'opaque' }, providers: ['wahoo'], action: 'send', timeZone: 'Europe/Helsinki' }).success).toBe(true);
     expect(TRAINING_CHANGE_SCHEMA.safeParse({ kind: 'delete-plan', plan: { ref: 'opaque' },
       workoutDisposition: 'convert-to-standalone' }).success).toBe(true);
+    expect(TRAINING_CHANGE_SCHEMA.safeParse({ kind: 'delete-workout', workout: { ref: 'opaque' } }).success).toBe(true);
     for (const forbidden of [
       { kind: 'permanently-delete-workout', workout: { ref: 'opaque' } },
       { kind: 'delete-plan', plan: { ref: 'opaque' } },
+      { kind: 'delete-plan', plan: { ref: 'opaque' }, workoutDisposition: 'delete-workouts', removePastProviderCopies: true },
+      { kind: 'delete-workout', workout: { ref: 'opaque' }, removePastProviderCopies: true },
       { kind: 'restore-training-revision', revision: 1 },
       { kind: 'provider-delivery', targetType: 'workout', target: { ref: 'opaque' }, providers: ['garmin'], action: 'send', remoteId: 'PRIVATE' },
     ]) expect(TRAINING_CHANGE_SCHEMA.safeParse(forbidden).success).toBe(false);

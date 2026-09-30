@@ -83,7 +83,6 @@ export const FUNCTION_SECRET_BINDINGS = {
   sendMarketingTest: [SECRET_PARAMS.MARKETING_UNSUBSCRIBE_SIGNING_KEY],
   getGarminAPIAuthRequestTokenRedirectURI: GARMIN,
   getSuuntoAPIAuthRequestTokenRedirectURI: SUUNTO,
-  getSuuntoFITFile: SUUNTO_API,
   getUpcomingRenewalAmount: [SECRET_PARAMS.STRIPE_SECRET_KEY],
   getWahooAPIAuthRequestTokenRedirectURI: WAHOO,
   getWahooAPIWorkoutFileUploadStatus: WAHOO,

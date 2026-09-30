@@ -1,7 +1,8 @@
 import { readinessHrvObservations } from '../../../shared/readiness';
 import { buildReadinessSignals as buildLegacyReadinessSignals } from '../../../shared/readiness-legacy';
 import { supplementNightlyHrvSleepDocuments } from '../sleep/nightly-hrv';
-import { sleepEvidenceSourceKey, sleepHrvSourceKey, aggregateNightlyHrvEvidence } from '../../../shared/nightly-hrv';
+import { aggregateNightlyHrvEvidence, isIdentifiedSleepEvidenceSourceKey, isSleepAverageHrvSourceKey,
+    sleepEvidenceSourceKey, sleepHrvSourceKey } from '../../../shared/nightly-hrv';
 import * as admin from 'firebase-admin';
 import { FieldPath } from 'firebase-admin/firestore';
 import * as logger from 'firebase-functions/logger';
@@ -49,6 +50,7 @@ import {
 } from '../../../shared/power-curve';
 import {
     buildDerivedFormDailyLoads,
+    DERIVED_FORM_PAYLOAD_VERSION,
     DERIVED_METRIC_KINDS,
     DERIVED_METRIC_SCHEMA_VERSION,
     DERIVED_METRICS_COLLECTION_ID,
@@ -67,11 +69,14 @@ import {
     DERIVED_TRAINING_RECOVERY_MIN_SLEEP_NIGHTS,
     DERIVED_TRAINING_RECOVERY_MIN_VALID_SLEEP_SECONDS,
     isDerivedTrainingPowerSystemsStatusReasonPair,
+    hasMatchingDerivedFormSourceEventCount,
+    normalizeDerivedFormDailyLoadsWithActivityCounts,
+    resolveDerivedFormMetricPayload,
     PROJECTION_SENSITIVE_DERIVED_METRIC_KINDS,
     type DerivedAcwrMetricPayload,
     type DerivedBodyWeightTrendMetricPayload,
     type DerivedBodyWeightTrendSeries,
-    type DerivedFormDailyLoadEntry,
+    type DerivedFormDailyLoadEntryWithActivityCount,
     type DerivedEasyPercentMetricPayload,
     type DerivedEfficiencyDelta4wMetricPayload,
     type DerivedEfficiencyTrendMetricPayload,
@@ -142,7 +147,6 @@ import {
     normalizeTrainingBuildPeriodEndDayMs,
     normalizeDerivedMetricKinds,
     normalizeDerivedMetricKindsStrict,
-    normalizeDerivedFormDailyLoads,
     type EnsureDerivedMetricsResponse,
 } from '../../../shared/derived-metrics';
 import {
@@ -159,7 +163,11 @@ import {
     type TrainingLoadPoint,
 } from '../../../shared/training-load';
 import {
+    groupCanonicalSleepNightFragments,
     normalizeSleepProvider,
+    resolveSleepDisplayDate,
+    resolveSleepEffectiveStartTimeMs,
+    resolveSleepTimezoneOffsetSeconds,
     SLEEP_PROVIDERS,
     SLEEP_SESSIONS_COLLECTION_ID,
     type SleepProvider,
@@ -242,7 +250,6 @@ const BODY_WEIGHT_COMPARISON_WINDOW_DAYS = 7 as const;
 const BODY_WEIGHT_MIN_COMPARABLE_DAY_COUNT = 3 as const;
 const DERIVED_HEALTH_SOURCE_DOCUMENT_LIMIT = 2_048;
 const TRAINING_CAPACITY_VO2_COMPARISON_MAX_GAP_MS = 14 * DAY_MS;
-const TRAINING_RECOVERY_MAX_TIMEZONE_OFFSET_SECONDS = 18 * 60 * 60;
 const TRAINING_CAPACITY_SESSION_FTP_FACTOR = 0.95;
 const POWER_CURVE_MAX_STORED_POINTS = 128;
 const POWER_CURVE_BENCHMARK_DURATIONS_SECONDS = [5, 60, 300, 1200, 3600] as const;
@@ -694,9 +701,11 @@ function buildDailyLoadContext(
     docs: readonly FirestoreQueryDocumentSnapshot[],
 ): {
     dailyLoadsByUtcDay: Map<number, number>;
+    activityCountsByUtcDay: Map<number, number>;
     sourceEventCount: number;
 } {
     const dailyLoadsByUtcDay = new Map<number, number>();
+    const activityCountsByUtcDay = new Map<number, number>();
     let sourceEventCount = 0;
 
     docs.forEach((doc) => {
@@ -717,28 +726,39 @@ function buildDailyLoadContext(
 
         const dayMs = resolveUtcDayStartMs(startTimeMs);
         dailyLoadsByUtcDay.set(dayMs, (dailyLoadsByUtcDay.get(dayMs) || 0) + stressScore);
+        activityCountsByUtcDay.set(dayMs, (activityCountsByUtcDay.get(dayMs) || 0) + 1);
         sourceEventCount += 1;
     });
 
     return {
         dailyLoadsByUtcDay,
+        activityCountsByUtcDay,
         sourceEventCount,
     };
 }
 
 function buildDailyLoadContextFromDailyLoads(
-    dailyLoads: readonly DerivedFormDailyLoadEntry[],
+    dailyLoads: readonly DerivedFormDailyLoadEntryWithActivityCount[],
     sourceEventCount: number,
 ): {
     dailyLoadsByUtcDay: Map<number, number>;
+    activityCountsByUtcDay: Map<number, number>;
     sourceEventCount: number;
 } {
     const dailyLoadsByUtcDay = dailyLoads.reduce((accumulator, dailyLoad) => {
         accumulator.set(dailyLoad.dayMs, (accumulator.get(dailyLoad.dayMs) || 0) + dailyLoad.load);
         return accumulator;
     }, new Map<number, number>());
+    const activityCountsByUtcDay = dailyLoads.reduce((accumulator, dailyLoad) => {
+        accumulator.set(
+            dailyLoad.dayMs,
+            (accumulator.get(dailyLoad.dayMs) || 0) + dailyLoad.activityCount,
+        );
+        return accumulator;
+    }, new Map<number, number>());
     return {
         dailyLoadsByUtcDay,
+        activityCountsByUtcDay,
         sourceEventCount: Math.max(0, Math.floor(sourceEventCount)),
     };
 }
@@ -825,11 +845,15 @@ function buildFormMetricPayload(
     dailyLoadContext: ReturnType<typeof buildDailyLoadContext>,
 ): DerivedMetricBuildResult<DerivedFormMetricPayload> {
     // Firestore rejects nested arrays, so we persist day/load objects instead of tuple arrays.
-    const sortedDailyLoads = buildDerivedFormDailyLoads(dailyLoadContext.dailyLoadsByUtcDay);
+    const sortedDailyLoads = buildDerivedFormDailyLoads(
+        dailyLoadContext.dailyLoadsByUtcDay,
+        dailyLoadContext.activityCountsByUtcDay,
+    );
 
     return {
         sourceEventCount: dailyLoadContext.sourceEventCount,
         payload: {
+            payloadVersion: DERIVED_FORM_PAYLOAD_VERSION,
             dayBoundary: 'UTC',
             rangeStartDayMs: sortedDailyLoads.length ? sortedDailyLoads[0].dayMs : null,
             rangeEndDayMs: sortedDailyLoads.length ? sortedDailyLoads[sortedDailyLoads.length - 1].dayMs : null,
@@ -3500,9 +3524,13 @@ interface ResolvedTrainingSleepNight {
 }
 
 interface TrainingSleepNightCandidate {
-    accountNightKey: string;
+    id: string;
+    sourceKey: string;
     hrvSourceKey?: string;
+    hrvSampleCount: number | null;
     provider: SleepProvider;
+    providerUserId: string | null;
+    sleepDate: string;
     sleepDayMs: number;
     durationSeconds: number;
     startTimeMs: number;
@@ -3535,29 +3563,6 @@ function resolveLocalClockMinutes(startTimeMs: number, timezoneOffsetSeconds: nu
     return Math.floor(localTimeOfDayMs / (60 * 1000));
 }
 
-function resolveTrainingSleepTimezoneOffsetSeconds(
-    data: Record<string, unknown>,
-    provider: SleepProvider,
-): number | null {
-    const explicitOffsetSeconds = toFiniteNumber(data.timezoneOffsetSeconds);
-    if (
-        explicitOffsetSeconds !== null
-        && Math.abs(explicitOffsetSeconds) <= TRAINING_RECOVERY_MAX_TIMEZONE_OFFSET_SECONDS
-    ) {
-        return explicitOffsetSeconds;
-    }
-    if (provider !== SLEEP_PROVIDERS.SuuntoApp) {
-        return null;
-    }
-    const providerFields = data.providerFields && typeof data.providerFields === 'object' && !Array.isArray(data.providerFields)
-        ? data.providerFields as Record<string, unknown>
-        : {};
-    const suuntoFields = providerFields.suunto && typeof providerFields.suunto === 'object' && !Array.isArray(providerFields.suunto)
-        ? providerFields.suunto as Record<string, unknown>
-        : {};
-    return parseDateTimeOffsetSeconds(suuntoFields.timestamp);
-}
-
 function hasValidTrainingSleepEndTime(startTimeMs: number, endTimeMs: number | null): endTimeMs is number {
     if (endTimeMs === null || endTimeMs <= startTimeMs) {
         return false;
@@ -3586,8 +3591,7 @@ function decodeTrainingSleepDocument(
 function resolveTrainingSleepNights(
     sleepDocs: readonly FirestoreQueryDocumentSnapshot[],
 ): ResolvedTrainingSleepNight[] {
-    const candidates = new Map<string, TrainingSleepNightCandidate>();
-    const hrvByAccountNight = new Map<string, Array<{ averageHrvMs: number | null; hrvSourceKey?: string }>>();
+    const candidateGroups = new Map<string, TrainingSleepNightCandidate[]>();
     sleepDocs.forEach((doc) => {
         const data = decodeTrainingSleepDocument(doc);
         if (!data) return;
@@ -3598,26 +3602,32 @@ function resolveTrainingSleepNights(
             ? data.source as Record<string, unknown>
             : {};
         const provider = normalizeSleepProvider(source.provider);
-        const sleepDayMs = resolveSleepDateDayMs(data.sleepDate);
-        const startTimeMs = toFiniteNumber(data.startTimeMs);
+        const sleepDate = resolveSleepDisplayDate(data as unknown as SleepSession);
+        const sleepDayMs = resolveSleepDateDayMs(sleepDate);
+        const storedStartTimeMs = toFiniteNumber(data.startTimeMs);
         const endTimeMs = toFiniteNumber(data.endTimeMs);
         const storedDurationSeconds = toFiniteNumber(data.durationSeconds);
         const durationSeconds = storedDurationSeconds !== null && storedDurationSeconds > 0
             ? storedDurationSeconds
-            : (startTimeMs !== null && endTimeMs !== null && endTimeMs > startTimeMs
-                ? (endTimeMs - startTimeMs) / 1000
+            : (storedStartTimeMs !== null && endTimeMs !== null && endTimeMs > storedStartTimeMs
+                ? (endTimeMs - storedStartTimeMs) / 1000
                 : null);
         if (
             !provider
             || sleepDayMs === null
-            || startTimeMs === null
+            || storedStartTimeMs === null
             || durationSeconds === null
-            || durationSeconds < DERIVED_TRAINING_RECOVERY_MIN_VALID_SLEEP_SECONDS
+            || durationSeconds <= 0
+            || (provider !== SLEEP_PROVIDERS.SuuntoApp
+                && durationSeconds < DERIVED_TRAINING_RECOVERY_MIN_VALID_SLEEP_SECONDS)
             || durationSeconds > DERIVED_TRAINING_RECOVERY_MAX_VALID_SLEEP_SECONDS
         ) {
             return;
         }
-        const timezoneOffsetSeconds = resolveTrainingSleepTimezoneOffsetSeconds(data, provider);
+        const startTimeMs = provider === SLEEP_PROVIDERS.SuuntoApp
+            ? resolveSleepEffectiveStartTimeMs(data as unknown as SleepSession)
+            : storedStartTimeMs;
+        const timezoneOffsetSeconds = resolveSleepTimezoneOffsetSeconds(data as unknown as SleepSession);
         const localStartTimeMs = startTimeMs + ((timezoneOffsetSeconds || 0) * 1000);
         if (
             !Number.isFinite(localStartTimeMs)
@@ -3631,56 +3641,53 @@ function resolveTrainingSleepNights(
             : {};
         const overnightHrvMs = toFinitePositiveNumber(vitals.averageHrvMs)
             ?? toFinitePositiveNumber(vitals.overnightHrvMs);
-        const accountNightKey = JSON.stringify([sleepEvidenceSourceKey(data as unknown as SleepSession), sleepDayMs]);
-        hrvByAccountNight.set(accountNightKey, [...(hrvByAccountNight.get(accountNightKey) || []), {
-            averageHrvMs: overnightHrvMs, hrvSourceKey: sleepHrvSourceKey(data as unknown as SleepSession),
-        }]);
-        const hasValidEndTime = hasValidTrainingSleepEndTime(startTimeMs, endTimeMs);
+        const sourceKey = sleepEvidenceSourceKey(data as unknown as SleepSession);
+        const providerUserId = typeof source.providerUserId === 'string'
+            ? source.providerUserId.trim() || null
+            : null;
         const key = `${provider}:${formatUtcDayKey(sleepDayMs)}`;
-        const existing = candidates.get(key);
-        const existingHasValidEndTime = existing
-            ? hasValidTrainingSleepEndTime(existing.startTimeMs, existing.endTimeMs)
-            : false;
-        const shouldKeepExisting = existing
-            && (
-                existing.durationSeconds > durationSeconds
-                || (existing.durationSeconds === durationSeconds
-                    && existing.overnightHrvMs !== null
-                    && overnightHrvMs === null)
-                || (existing.durationSeconds === durationSeconds
-                    && (existing.overnightHrvMs !== null) === (overnightHrvMs !== null)
-                    && existing.timezoneOffsetSeconds !== null
-                    && timezoneOffsetSeconds === null)
-                || (existing.durationSeconds === durationSeconds
-                    && (existing.overnightHrvMs !== null) === (overnightHrvMs !== null)
-                    && (existing.timezoneOffsetSeconds !== null) === (timezoneOffsetSeconds !== null)
-                    && existingHasValidEndTime
-                    && !hasValidEndTime)
-                || (existing.durationSeconds === durationSeconds
-                    && (existing.overnightHrvMs !== null) === (overnightHrvMs !== null)
-                    && (existing.timezoneOffsetSeconds !== null) === (timezoneOffsetSeconds !== null)
-                    && existingHasValidEndTime === hasValidEndTime
-                    && existing.startTimeMs <= startTimeMs)
-            );
-        if (shouldKeepExisting) {
-            return;
-        }
-        candidates.set(key, {
-            accountNightKey,
+        const hasCanonicalNightIdentity = provider !== SLEEP_PROVIDERS.SuuntoApp
+            || isIdentifiedSleepEvidenceSourceKey(provider, sourceKey);
+        const candidate: TrainingSleepNightCandidate = {
+            id: doc.id,
+            sourceKey,
             provider,
+            providerUserId,
+            sleepDate: formatUtcDayKey(sleepDayMs),
             sleepDayMs,
             durationSeconds,
             startTimeMs,
             endTimeMs,
             timezoneOffsetSeconds,
-            overnightHrvMs,
-            hrvSourceKey: sleepHrvSourceKey(data as unknown as SleepSession),
-        });
+            overnightHrvMs: hasCanonicalNightIdentity ? overnightHrvMs : null,
+            hrvSampleCount: hasCanonicalNightIdentity ? toFiniteNumber(vitals.hrvSampleCount) : null,
+            hrvSourceKey: hasCanonicalNightIdentity
+                ? sleepHrvSourceKey(data as unknown as SleepSession)
+                : undefined,
+        };
+        candidateGroups.set(key, [...(candidateGroups.get(key) || []), candidate]);
     });
 
-    return [...candidates.values()].map((night): ResolvedTrainingSleepNight => {
-        const hrv = aggregateNightlyHrvEvidence(hrvByAccountNight.get(night.accountNightKey) || []);
-        return {
+    return [...candidateGroups.values()].flatMap((group): ResolvedTrainingSleepNight[] => {
+        const canonicalCandidates = group[0]?.provider === SLEEP_PROVIDERS.SuuntoApp
+            ? canonicalizeTrainingSuuntoSleepCandidates(group)
+            : group;
+        const validCandidates = canonicalCandidates.filter(candidate => (
+            candidate.durationSeconds >= DERIVED_TRAINING_RECOVERY_MIN_VALID_SLEEP_SECONDS
+            && candidate.durationSeconds <= DERIVED_TRAINING_RECOVERY_MAX_VALID_SLEEP_SECONDS
+        ));
+        if (!validCandidates.length) return [];
+        const night = validCandidates.reduce((selected, candidate) => (
+            keepExistingTrainingSleepCandidate(selected, candidate) ? selected : candidate
+        ));
+        const hrv = night.provider === SLEEP_PROVIDERS.SuuntoApp
+            ? { averageHrvMs: night.overnightHrvMs, hrvSourceKey: night.hrvSourceKey }
+            : aggregateNightlyHrvEvidence(group.filter(candidate => candidate.sourceKey === night.sourceKey).map(candidate => ({
+                averageHrvMs: candidate.overnightHrvMs,
+                hrvSampleCount: candidate.hrvSampleCount,
+                hrvSourceKey: candidate.hrvSourceKey,
+            })));
+        return [{
             provider: night.provider,
             sleepDayMs: night.sleepDayMs,
             durationSeconds: night.durationSeconds,
@@ -3693,14 +3700,86 @@ function resolveTrainingSleepNights(
                 : resolveLocalClockMinutes(night.endTimeMs, night.timezoneOffsetSeconds),
             overnightHrvMs: hrv.averageHrvMs,
             hrvSourceKey: hrv.hrvSourceKey,
-        };
+        }];
     });
+}
+
+function keepExistingTrainingSleepCandidate(
+    existing: TrainingSleepNightCandidate,
+    candidate: TrainingSleepNightCandidate,
+): boolean {
+    const existingHasValidEndTime = hasValidTrainingSleepEndTime(existing.startTimeMs, existing.endTimeMs);
+    const candidateHasValidEndTime = hasValidTrainingSleepEndTime(candidate.startTimeMs, candidate.endTimeMs);
+    return existing.durationSeconds > candidate.durationSeconds
+        || (existing.durationSeconds === candidate.durationSeconds
+            && existing.overnightHrvMs !== null && candidate.overnightHrvMs === null)
+        || (existing.durationSeconds === candidate.durationSeconds
+            && (existing.overnightHrvMs !== null) === (candidate.overnightHrvMs !== null)
+            && existing.timezoneOffsetSeconds !== null && candidate.timezoneOffsetSeconds === null)
+        || (existing.durationSeconds === candidate.durationSeconds
+            && (existing.overnightHrvMs !== null) === (candidate.overnightHrvMs !== null)
+            && (existing.timezoneOffsetSeconds !== null) === (candidate.timezoneOffsetSeconds !== null)
+            && existingHasValidEndTime && !candidateHasValidEndTime)
+        || (existing.durationSeconds === candidate.durationSeconds
+            && (existing.overnightHrvMs !== null) === (candidate.overnightHrvMs !== null)
+            && (existing.timezoneOffsetSeconds !== null) === (candidate.timezoneOffsetSeconds !== null)
+            && existingHasValidEndTime === candidateHasValidEndTime
+            && (existing.startTimeMs < candidate.startTimeMs
+                || (existing.startTimeMs === candidate.startTimeMs && existing.id.localeCompare(candidate.id) <= 0)));
+}
+
+function canonicalizeTrainingSuuntoSleepCandidates(
+    candidates: readonly TrainingSleepNightCandidate[],
+): TrainingSleepNightCandidate[] {
+    return groupCanonicalSleepNightFragments(candidates.map(candidate => ({
+        candidate,
+        provider: candidate.provider,
+        providerUserId: candidate.providerUserId,
+        sleepDate: candidate.sleepDate,
+        isNap: false,
+        startTimeMs: candidate.startTimeMs,
+        endTimeMs: candidate.endTimeMs,
+    }))).map(group => aggregateTrainingSuuntoSleepCandidateGroup(
+        group.map(item => item.candidate),
+    ));
+}
+
+function aggregateTrainingSuuntoSleepCandidateGroup(
+    candidates: readonly TrainingSleepNightCandidate[],
+): TrainingSleepNightCandidate {
+    if (candidates.length === 1) return candidates[0];
+    const sorted = [...candidates].sort((left, right) => left.startTimeMs - right.startTimeMs
+        || (left.endTimeMs ?? 0) - (right.endTimeMs ?? 0) || left.id.localeCompare(right.id));
+    const byRecency = [...sorted].sort((left, right) => (left.endTimeMs ?? 0) - (right.endTimeMs ?? 0)
+        || left.startTimeMs - right.startTimeMs || left.id.localeCompare(right.id));
+    const latest = byRecency[byRecency.length - 1];
+    const endTimes = sorted.flatMap(candidate => candidate.endTimeMs === null ? [] : [candidate.endTimeMs]);
+    const timezoneOffsets = new Set(sorted.map(candidate => candidate.timezoneOffsetSeconds));
+    const hrv = aggregateNightlyHrvEvidence(sorted.map(candidate => ({
+        averageHrvMs: candidate.overnightHrvMs,
+        hrvSampleCount: candidate.hrvSampleCount,
+        hrvSourceKey: candidate.hrvSourceKey,
+    })), { requireEveryPoint: true });
+    return {
+        ...latest,
+        id: sorted.map(candidate => candidate.id).join('|'),
+        durationSeconds: sorted.reduce((total, candidate) => total + candidate.durationSeconds, 0),
+        startTimeMs: Math.min(...sorted.map(candidate => candidate.startTimeMs)),
+        endTimeMs: endTimes.length === sorted.length ? Math.max(...endTimes) : null,
+        timezoneOffsetSeconds: timezoneOffsets.size === 1 ? sorted[0].timezoneOffsetSeconds : null,
+        overnightHrvMs: hrv.averageHrvMs,
+        hrvSampleCount: hrv.hrvSampleCount ?? null,
+        hrvSourceKey: hrv.hrvSourceKey,
+    };
 }
 
 function resolveTrainingReadinessSleepEvidence(
     sleepDocs: readonly FirestoreQueryDocumentSnapshot[],
 ): ReadinessSleepEvidencePoint[] {
-    const groups = new Map<string, ReadinessSleepEvidencePoint[]>();
+    const groups = new Map<string, Array<{
+        point: ReadinessSleepEvidencePoint;
+        providerUserId: string | null;
+    }>>();
     sleepDocs.forEach((doc) => {
         const data = decodeTrainingSleepDocument(doc);
         if (!data) return;
@@ -3711,14 +3790,21 @@ function resolveTrainingReadinessSleepEvidence(
             ? data.source as Record<string, unknown>
             : {};
         const provider = normalizeSleepProvider(source.provider);
-        const startTimeMs = toFiniteNumber(data.startTimeMs);
+        const storedStartTimeMs = toFiniteNumber(data.startTimeMs);
         const endTimeMs = toFiniteNumber(data.endTimeMs);
         const sleepDayMs = endTimeMs === null
             ? null
-            : resolveTrainingReadinessSleepDayMs(data, provider, endTimeMs);
-        if (!provider || sleepDayMs === null || startTimeMs === null || endTimeMs === null || endTimeMs <= startTimeMs) {
+            : resolveTrainingReadinessSleepDayMs(data, endTimeMs);
+        if (!provider || sleepDayMs === null || storedStartTimeMs === null
+            || endTimeMs === null
+            || !Number.isFinite(new Date(storedStartTimeMs).getTime())
+            || !Number.isFinite(new Date(endTimeMs).getTime())
+            || endTimeMs <= storedStartTimeMs) {
             return;
         }
+        const startTimeMs = provider === SLEEP_PROVIDERS.SuuntoApp
+            ? resolveSleepEffectiveStartTimeMs(data as unknown as SleepSession)
+            : storedStartTimeMs;
         const storedDurationSeconds = toFiniteNumber(data.durationSeconds);
         const durationSeconds = storedDurationSeconds !== null && storedDurationSeconds > 0
             ? Math.floor(storedDurationSeconds)
@@ -3729,107 +3815,104 @@ function resolveTrainingReadinessSleepEvidence(
         const vitals = data.vitals && typeof data.vitals === 'object' && !Array.isArray(data.vitals)
             ? data.vitals as Record<string, unknown>
             : {};
+        const sourceKey = sleepEvidenceSourceKey(data as unknown as SleepSession);
+        const hasCanonicalNightIdentity = provider !== SLEEP_PROVIDERS.SuuntoApp
+            || isIdentifiedSleepEvidenceSourceKey(provider, sourceKey);
         const point: ReadinessSleepEvidencePoint = {
             id: doc.id,
             sleepDate: formatUtcDayKey(sleepDayMs),
             provider,
-            sourceKey: sleepEvidenceSourceKey(data as unknown as SleepSession),
-            hrvSourceKey: sleepHrvSourceKey(data as unknown as SleepSession),
+            sourceKey,
+            hrvSourceKey: hasCanonicalNightIdentity
+                ? sleepHrvSourceKey(data as unknown as SleepSession)
+                : undefined,
+            hrvSampleCount: hasCanonicalNightIdentity ? toFiniteNumber(vitals.hrvSampleCount) : null,
             startTimeMs,
             endTimeMs,
             totalSeconds: durationSeconds,
             score: toFiniteNumber(score.value),
-            averageHrvMs: toFiniteNumber(vitals.averageHrvMs) ?? toFiniteNumber(vitals.overnightHrvMs),
+            averageHrvMs: hasCanonicalNightIdentity
+                ? toFiniteNumber(vitals.averageHrvMs) ?? toFiniteNumber(vitals.overnightHrvMs)
+                : null,
             averageHeartRateBpm: toFiniteNumber(vitals.averageHeartRateBpm),
             minimumHeartRateBpm: toFiniteNumber(vitals.minimumHeartRateBpm),
         };
-        point.hrvObservations = readinessHrvObservations({ ...point,
-            sleepDate: typeof data.sleepDate === 'string' ? data.sleepDate : point.sleepDate });
-        const key = JSON.stringify([point.sleepDate, point.sourceKey]);
-        groups.set(key, [...(groups.get(key) || []), point]);
+        point.hrvObservations = readinessHrvObservations(point);
+        const providerUserId = typeof source.providerUserId === 'string'
+            ? source.providerUserId.trim() || null
+            : null;
+        const key = JSON.stringify([
+            point.sleepDate,
+            point.sourceKey,
+            provider === SLEEP_PROVIDERS.SuuntoApp
+                && !isIdentifiedSleepEvidenceSourceKey(provider, point.sourceKey)
+                ? point.id
+                : null,
+        ]);
+        groups.set(key, [...(groups.get(key) || []), { point, providerUserId }]);
     });
 
-    return [...groups.values()].map((points): ReadinessSleepEvidencePoint => {
-        const sortedPoints = [...points].sort((left, right) => (
-            (left.endTimeMs || 0) - (right.endTimeMs || 0)
-            || (left.startTimeMs || 0) - (right.startTimeMs || 0)
-            || left.id.localeCompare(right.id)
-        ));
-        const latest = sortedPoints[sortedPoints.length - 1];
-        const averageHeartRateValues = points
-            .map(point => point.averageHeartRateBpm)
-            .filter((value): value is number => Number.isFinite(value) && (value as number) > 0);
-        const minimumHeartRateValues = points
-            .map(point => point.minimumHeartRateBpm)
-            .filter((value): value is number => Number.isFinite(value) && (value as number) > 0);
-        return {
-            ...latest,
-            id: sortedPoints.map(point => point.id).join('|'),
-            startTimeMs: Math.min(...points.map(point => point.startTimeMs as number)),
-            endTimeMs: Math.max(...points.map(point => point.endTimeMs as number)),
-            totalSeconds: points.reduce((total, point) => total + Math.max(0, point.totalSeconds || 0), 0),
-            ...aggregateNightlyHrvEvidence(points),
-            hrvObservations: points.flatMap(readinessHrvObservations),
-            averageHeartRateBpm: averageHeartRateValues.length
-                ? averageHeartRateValues.reduce((total, value) => total + value, 0) / averageHeartRateValues.length
-                : null,
-            minimumHeartRateBpm: minimumHeartRateValues.length
-                ? Math.min(...minimumHeartRateValues)
-                : null,
-        };
+    return [...groups.values()].flatMap(entries => {
+        const canonicalGroups = entries[0]?.point.provider === SLEEP_PROVIDERS.SuuntoApp
+            ? groupCanonicalSleepNightFragments(entries.map(entry => ({
+                ...entry,
+                provider: entry.point.provider,
+                sleepDate: entry.point.sleepDate,
+                isNap: false,
+                startTimeMs: entry.point.startTimeMs ?? null,
+                endTimeMs: entry.point.endTimeMs ?? null,
+            })))
+            : [entries];
+        return canonicalGroups.map((fragmentEntries): ReadinessSleepEvidencePoint => {
+            const fragmentPoints = fragmentEntries.map(entry => entry.point);
+            const sortedPoints = [...fragmentPoints].sort((left, right) => (
+                (left.endTimeMs || 0) - (right.endTimeMs || 0)
+                || (left.startTimeMs || 0) - (right.startTimeMs || 0)
+                || left.id.localeCompare(right.id)
+            ));
+            const latest = sortedPoints[sortedPoints.length - 1];
+            const averageHeartRateValues = fragmentPoints
+                .map(point => point.averageHeartRateBpm)
+                .filter((value): value is number => Number.isFinite(value) && (value as number) > 0);
+            const minimumHeartRateValues = fragmentPoints
+                .map(point => point.minimumHeartRateBpm)
+                .filter((value): value is number => Number.isFinite(value) && (value as number) > 0);
+            const result: ReadinessSleepEvidencePoint = {
+                ...latest,
+                id: sortedPoints.map(point => point.id).join('|'),
+                startTimeMs: Math.min(...fragmentPoints.map(point => point.startTimeMs as number)),
+                endTimeMs: Math.max(...fragmentPoints.map(point => point.endTimeMs as number)),
+                totalSeconds: fragmentPoints.reduce(
+                    (total, point) => total + Math.max(0, point.totalSeconds || 0),
+                    0,
+                ),
+                ...aggregateNightlyHrvEvidence(fragmentPoints, {
+                    requireEveryPoint: latest.provider === SLEEP_PROVIDERS.SuuntoApp
+                        && fragmentPoints.some(point => isSleepAverageHrvSourceKey(point.hrvSourceKey)),
+                }),
+                hrvObservations: undefined,
+                averageHeartRateBpm: averageHeartRateValues.length
+                    ? averageHeartRateValues.reduce((total, value) => total + value, 0)
+                        / averageHeartRateValues.length
+                    : null,
+                minimumHeartRateBpm: minimumHeartRateValues.length
+                    ? Math.min(...minimumHeartRateValues)
+                    : null,
+            };
+            result.hrvObservations = readinessHrvObservations(result);
+            return result;
+        });
     });
 }
 
 function resolveTrainingReadinessSleepDayMs(
     data: Record<string, unknown>,
-    provider: SleepProvider | null,
     endTimeMs: number,
 ): number | null {
-    const storedSleepDate = toSafeString(data.sleepDate);
-    const fallbackDayMs = resolveSleepDateDayMs(storedSleepDate);
-    if (provider !== SLEEP_PROVIDERS.SuuntoApp) {
-        if (storedSleepDate) {
-            return fallbackDayMs;
-        }
-        const endDate = new Date(endTimeMs);
-        return Number.isFinite(endDate.getTime())
-            ? resolveSleepDateDayMs(endDate.toISOString().slice(0, 10))
-            : null;
-    }
-    const offsetSeconds = resolveTrainingSleepTimezoneOffsetSeconds(data, provider);
-    const localEndTimeMs = offsetSeconds === null
-        ? endTimeMs
-        : endTimeMs + (offsetSeconds * 1000);
-    const localEndDate = new Date(localEndTimeMs);
-    const displayDayMs = Number.isFinite(localEndDate.getTime())
-        ? resolveSleepDateDayMs(localEndDate.toISOString().slice(0, 10))
-        : null;
-    return displayDayMs ?? fallbackDayMs;
-}
-
-function parseDateTimeOffsetSeconds(value: unknown): number | null {
-    const stringValue = typeof value === 'string' ? value.trim() : '';
-    if (!stringValue) {
-        return null;
-    }
-    if (/z$/i.test(stringValue)) {
-        return 0;
-    }
-    const match = /([+-])(\d{2}):?(\d{2})$/.exec(stringValue);
-    if (!match) {
-        return null;
-    }
-    const hours = Number(match[2]);
-    const minutes = Number(match[3]);
-    const totalSeconds = ((hours * 60) + minutes) * 60;
-    if (
-        !Number.isFinite(totalSeconds)
-        || minutes >= 60
-        || totalSeconds > TRAINING_RECOVERY_MAX_TIMEZONE_OFFSET_SECONDS
-    ) {
-        return null;
-    }
-    return match[1] === '-' ? -totalSeconds : totalSeconds;
+    return resolveSleepDateDayMs(resolveSleepDisplayDate({
+        ...(data as unknown as SleepSession),
+        endTimeMs,
+    }));
 }
 
 export function buildTrainingReadinessMetricPayload(
@@ -5710,7 +5793,7 @@ export interface DerivedFormSnapshotSeed {
     builtFromEventMutationVersion: number | null;
     sourceEventCount: number;
     sourceDocCount: number;
-    dailyLoads: DerivedFormDailyLoadEntry[];
+    dailyLoads: DerivedFormDailyLoadEntryWithActivityCount[];
 }
 
 export async function fetchTrainingBuildWorkoutSeed(
@@ -5723,36 +5806,29 @@ export async function fetchTrainingBuildWorkoutSeed(
 export async function fetchDerivedFormSnapshotSeed(uid: string): Promise<DerivedFormSnapshotSeed | null> {
     const snapshot = await getMetricDocRef(uid, DERIVED_METRIC_KINDS.Form).get();
     const data = (snapshot.data() || {}) as Record<string, unknown>;
-    const payload = (data.payload && typeof data.payload === 'object')
-        ? data.payload as Record<string, unknown>
-        : {};
+    const payload = resolveDerivedFormMetricPayload(data.payload);
     const isCount = (value: unknown): value is number => typeof value === 'number'
         && Number.isSafeInteger(value) && value >= 0;
-    const loads = payload.dailyLoads;
     // Normalization is appropriate for display, not for cache admission: dropping
     // missing/malformed entries here would silently replace real load with zero.
     if (data.entryType !== DERIVED_METRICS_ENTRY_TYPES.Snapshot || data.metricKind !== DERIVED_METRIC_KINDS.Form
         || data.status !== 'ready' || data.schemaVersion !== DERIVED_METRIC_SCHEMA_VERSION
         || !isCount(data.builtFromEventMutationVersion) || !isCount(data.sourceEventCount) || !isCount(data.sourceDocCount)
-        || data.sourceDocCount < data.sourceEventCount || payload.dayBoundary !== 'UTC'
-        || payload.excludesMergedEvents !== true || !Array.isArray(loads)
-        || loads.length > data.sourceEventCount || (loads.length === 0) !== (data.sourceEventCount === 0)) return null;
-    let previousDay = -Infinity;
-    for (const entry of loads) {
-        if (!entry || typeof entry !== 'object' || !Number.isSafeInteger(entry.dayMs)
-            || entry.dayMs % DAY_MS !== 0 || entry.dayMs <= previousDay
-            || typeof entry.load !== 'number' || !Number.isFinite(entry.load) || entry.load < 0) return null;
-        previousDay = entry.dayMs;
-    }
-    if (payload.rangeStartDayMs !== (loads[0]?.dayMs ?? null)
-        || payload.rangeEndDayMs !== (loads[loads.length - 1]?.dayMs ?? null)) return null;
+        || data.sourceDocCount < data.sourceEventCount || !payload
+        || payload.dailyLoads.length > data.sourceEventCount
+        || (payload.dailyLoads.length === 0) !== (data.sourceEventCount === 0)
+        || !hasMatchingDerivedFormSourceEventCount(payload, data.sourceEventCount)) return null;
     return {
         status: data.status,
         schemaVersion: data.schemaVersion,
         builtFromEventMutationVersion: data.builtFromEventMutationVersion,
         sourceEventCount: data.sourceEventCount,
         sourceDocCount: data.sourceDocCount,
-        dailyLoads: loads.map(entry => ({ dayMs: entry.dayMs, load: entry.load })),
+        dailyLoads: payload.dailyLoads.map(entry => ({
+            dayMs: entry.dayMs,
+            load: entry.load,
+            activityCount: entry.activityCount,
+        })),
     };
 }
 
@@ -6433,7 +6509,7 @@ export async function writeDerivedMetricSnapshotsReady(
     options?: {
         buildAtMs?: number | null;
         builtFromEventMutationVersion?: number | null;
-        formDailyLoads?: readonly DerivedFormDailyLoadEntry[] | null;
+        formDailyLoads?: readonly DerivedFormDailyLoadEntryWithActivityCount[] | null;
         formSourceEventCount?: number | null;
         formSourceDocCount?: number | null;
         workoutInputsVersion?: number;
@@ -6448,13 +6524,20 @@ export async function writeDerivedMetricSnapshotsReady(
         ? options?.buildAtMs as number
         : Date.now();
     const writes: { metricKind: DerivedMetricKind; data: Record<string, unknown> }[] = [];
-    const normalizedFormDailyLoads = normalizeDerivedFormDailyLoads(options?.formDailyLoads || []);
+    const normalizedFormDailyLoads = normalizeDerivedFormDailyLoadsWithActivityCounts(options?.formDailyLoads || []);
     const hasDailyLoadContextOverride = normalizedFormDailyLoads.length > 0
         || Number.isFinite(options?.formSourceEventCount)
         || Number.isFinite(options?.formSourceDocCount);
     const overrideFormSourceEventCount = Number.isFinite(options?.formSourceEventCount)
         ? Math.max(0, Math.floor(options?.formSourceEventCount as number))
         : 0;
+    if (
+        hasDailyLoadContextOverride
+        && normalizedFormDailyLoads.reduce((total, entry) => total + entry.activityCount, 0)
+            !== overrideFormSourceEventCount
+    ) {
+        throw new Error('Derived Form daily activity counts must match sourceEventCount.');
+    }
     const dailyLoadContextOverride = hasDailyLoadContextOverride
         ? buildDailyLoadContextFromDailyLoads(normalizedFormDailyLoads, overrideFormSourceEventCount)
         : null;

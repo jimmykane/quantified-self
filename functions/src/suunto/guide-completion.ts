@@ -14,6 +14,7 @@ import {
 } from '../../../shared/training-workout-completion';
 import { SPORTS_LIB_VERSION } from '../shared/sports-lib-version.node';
 import { getUserDeletionGuardStateInTransaction } from '../shared/user-deletion-guard';
+import { assertNoTrainingBulkRestoreInProgress } from '../training-plans/deletion-lock';
 import { fitWorkoutEvidencePayload, readFITWorkoutReferenceEvidence } from '../training-plans/completion/fit-workout-evidence';
 import type { FITWorkoutReferenceEvidence } from '../training-plans/completion/fit-workout-evidence';
 import { DELIVERY_LEDGER, type DeliveryLedgerV1 } from '../training-plans/delivery/contracts';
@@ -172,6 +173,9 @@ export async function retainSuuntoGuideCompletions(
     for (const workoutId of conflictedWorkoutIds) uniqueByWorkout.delete(workoutId);
 
     const candidates = [...uniqueByWorkout.values()];
+    if (candidates.length > 0) {
+      await assertNoTrainingBulkRestoreInProgress(tx, user.collection('trainingPlanState').doc('current'));
+    }
     const related = await Promise.all(candidates.map(async candidate => {
       const reverseId = activityLinkId(uid, eventId, candidate.session.sessionIndex);
       const [workout, completion, reverse] = await Promise.all([
@@ -204,11 +208,20 @@ export async function retainSuuntoGuideCompletions(
         matchOutcomes.push({ sessionIndex: session.sessionIndex, workoutId: ledger.workoutId, state: 'conflict' });
         continue;
       }
-      const existingReverse = candidate.reverse.data() as { workoutId?: unknown; eventId?: unknown; sourceSessionIndex?: unknown } | undefined;
-      const sameCompletion = existingCompletion?.eventId === eventId
+      const existingReverse = candidate.reverse.data() as { schemaVersion?: unknown; deliveryId?: unknown;
+        workoutId?: unknown; eventId?: unknown; sourceSessionIndex?: unknown; provider?: unknown } | undefined;
+      const sameCompletion = existingCompletion?.workoutId === workout.id
+        && existingCompletion.provider === 'suunto' && existingCompletion.matchMethod === 'provider_marker'
+        && existingCompletion.eventId === eventId
         && existingCompletion.sourceSessionIndex === session.sessionIndex;
-      const sameReverse = existingReverse?.workoutId === workout.id && existingReverse.eventId === eventId
-        && existingReverse.sourceSessionIndex === session.sessionIndex;
+      const sameReverse = existingReverse?.schemaVersion === 1 && existingReverse.deliveryId === ledger.id
+        && existingReverse.workoutId === workout.id && existingReverse.eventId === eventId
+        && existingReverse.sourceSessionIndex === session.sessionIndex && existingReverse.provider === 'suunto';
+      if (!sameCompletion && (workout.id !== ledger.workoutId || workout.planId !== ledger.planId
+        || workout.localDate !== ledger.actual?.localDate)) {
+        matchOutcomes.push({ sessionIndex: session.sessionIndex, workoutId: ledger.workoutId, state: 'conflict' });
+        continue;
+      }
       if ((candidate.completion.exists && !sameCompletion) || (candidate.reverse.exists && !sameReverse)) {
         matchOutcomes.push({ sessionIndex: session.sessionIndex, workoutId: ledger.workoutId, state: 'conflict' });
         continue;

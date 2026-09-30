@@ -5,11 +5,19 @@ import {
   collectionData,
   doc,
   docData,
+  documentId,
   getDoc,
+  getDocsFromServer,
+  limit,
+  orderBy,
+  query,
+  startAfter,
+  where,
 } from 'app/firebase/firestore';
-import { combineLatest, map, Observable, of, shareReplay } from 'rxjs';
+import { catchError, combineLatest, from, map, Observable, of, retry, shareReplay, switchMap, throwError } from 'rxjs';
 import {
   SCHEDULED_WORKOUTS_COLLECTION_ID,
+  DELETED_WORKOUT_RECOVERY_MS,
   TRAINING_PLAN_SCHEMA_VERSION,
   TRAINING_PLAN_STATE_COLLECTION_ID,
   TRAINING_PLAN_STATE_DOCUMENT_ID,
@@ -49,7 +57,16 @@ export interface CurrentTrainingScheduleV1 {
   state: TrainingPlanStateV1;
   plans: TrainingPlanV1[];
   workouts: ScheduledWorkoutV1[];
+  /** Local read state only; never part of the persisted v1 schedule or MCP contract. */
+  restoreUnavailable?: true;
 }
+
+export interface DeletedTrainingWorkoutsPageV1 {
+  workouts: ScheduledWorkoutV1[];
+  nextCursor: { deletedAtMs: number; id: string } | null;
+}
+
+const DELETED_WORKOUT_PAGE_SIZE = 25;
 
 function emptyTrainingSchedule(): CurrentTrainingScheduleV1 {
   return {
@@ -103,28 +120,72 @@ export class TrainingPlansService {
     );
     const plansRef = collection(this.firestore, ...userPath, TRAINING_PLANS_COLLECTION_ID);
     const workoutsRef = collection(this.firestore, ...userPath, SCHEDULED_WORKOUTS_COLLECTION_ID);
-    const schedule$ = combineLatest([
-      docData(stateRef),
-      collectionData(plansRef, { idField: 'id' }),
-      collectionData(workoutsRef, { idField: 'id' }),
-    ]).pipe(
-      map(([stateValue, planValues, workoutValues]) => {
-        const plans = (planValues as unknown[]).map(parseTrainingPlanV1)
-          .sort((left, right) => left.createdAtMs - right.createdAtMs || left.id.localeCompare(right.id));
-        const workouts = (workoutValues as unknown[]).map(parseScheduledWorkoutV1)
-          .sort((left, right) => left.localDate.localeCompare(right.localDate) || left.id.localeCompare(right.id));
-        const state = stateValue === undefined ? emptyTrainingSchedule().state : parseTrainingPlanStateV1(stateValue);
-        // These are three independent Firestore listeners. A transaction can
-        // therefore reach them in adjacent emissions even though its writes
-        // were atomic. The server validates the authoritative count inside
-        // each mutation; turning a transient client-side mismatch into a
-        // terminal observable error would strand every schedule consumer.
-        return { state, plans, workouts };
+    const availabilityRef = doc(this.firestore, ...userPath, TRAINING_PLAN_STATE_COLLECTION_ID,
+      TRAINING_PLAN_STATE_DOCUMENT_ID, 'availability', 'restore');
+    const schedule$ = docData(availabilityRef).pipe(
+      switchMap(availability => {
+        if (availability !== undefined) return of({ ...emptyTrainingSchedule(), restoreUnavailable: true as const });
+        return combineLatest([
+          docData(stateRef),
+          collectionData(plansRef, { idField: 'id' }),
+          collectionData(query(workoutsRef, where('lifecycle', 'in', ['planned', 'skipped'])), { idField: 'id' }),
+        ]).pipe(
+          map(([stateValue, planValues, workoutValues]) => {
+            const plans = (planValues as unknown[]).map(parseTrainingPlanV1)
+              .sort((left, right) => left.createdAtMs - right.createdAtMs || left.id.localeCompare(right.id));
+            const workouts = (workoutValues as unknown[]).map(parseScheduledWorkoutV1)
+              .sort((left, right) => left.localDate.localeCompare(right.localDate) || left.id.localeCompare(right.id));
+            const state = stateValue === undefined ? emptyTrainingSchedule().state : parseTrainingPlanStateV1(stateValue);
+            // These are independent listeners. Adjacent emissions can be
+            // temporarily inconsistent even for a single atomic transaction.
+            return { state, plans, workouts };
+          }),
+          // A workout listener may see the rule fence just before the
+          // availability listener receives the lock. Let that signal cancel
+          // and reattach the inner listeners instead of stranding the page.
+          retry({ count: 2, delay: 1000 }),
+          catchError(error => from(getDoc(availabilityRef)).pipe(
+            switchMap(snapshot => snapshot.exists()
+              ? of({ ...emptyTrainingSchedule(), restoreUnavailable: true as const })
+              : throwError(() => error)),
+          )),
+        );
       }),
       shareReplay({ bufferSize: 1, refCount: true }),
     );
     this.scheduleStreams.set(uid, schedule$);
     return schedule$;
+  }
+
+  async getDeletedWorkoutsPage(
+    userId: string,
+    planId: string | null,
+    cursor: DeletedTrainingWorkoutsPageV1['nextCursor'] = null,
+  ): Promise<DeletedTrainingWorkoutsPageV1> {
+    const uid = `${userId || ''}`.trim();
+    if (!uid) throw new Error('Sign in to view deleted workouts.');
+    const workoutsRef = collection(this.firestore, 'users', uid, SCHEDULED_WORKOUTS_COLLECTION_ID);
+    const constraints = [
+      where('planId', '==', planId),
+      where('lifecycle', '==', 'deleted'),
+      where('deletedAtMs', '>', Date.now() - DELETED_WORKOUT_RECOVERY_MS),
+      orderBy('deletedAtMs', 'desc'),
+      orderBy(documentId(), 'desc'),
+      ...(cursor ? [startAfter(cursor.deletedAtMs, cursor.id)] : []),
+      limit(DELETED_WORKOUT_PAGE_SIZE + 1),
+    ];
+    const snapshot = await getDocsFromServer(query(workoutsRef, ...constraints));
+    const visible = snapshot.docs.slice(0, DELETED_WORKOUT_PAGE_SIZE);
+    const workouts = visible.map(item => parseScheduledWorkoutV1(item.data()));
+    if (workouts.some((workout, index) => workout.id !== visible[index].id
+      || workout.planId !== planId || workout.lifecycle !== 'deleted')) {
+      throw new Error('Deleted workout history is inconsistent. Reload and try again.');
+    }
+    return {
+      workouts,
+      nextCursor: snapshot.docs.length > DELETED_WORKOUT_PAGE_SIZE
+        ? { deletedAtMs: workouts.at(-1)!.deletedAtMs!, id: workouts.at(-1)!.id } : null,
+    };
   }
 
   watchCalendarWorkouts(userId: string | null | undefined): Observable<ScheduledWorkoutV1[]> {

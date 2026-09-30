@@ -159,6 +159,7 @@ export const requestAndSetGarminAPIAccessToken = functions
 
 export const deauthorizeGarminAPI = functions
   .runWith({
+    memory: '512MB',
     timeoutSeconds: 120,
     secrets: FUNCTION_SECRET_BINDINGS.deauthorizeGarminAPI,
   })
@@ -196,7 +197,10 @@ export const deauthorizeGarminAPI = functions
 });
 
 // Webhook for Garmin Deregistration
-export const receiveGarminAPIDeregistration = functions.region(FUNCTIONS_MANIFEST.receiveGarminAPIDeregistration.region).https.onRequest(async (req, res) => {
+export const receiveGarminAPIDeregistration = functions
+  .runWith({ memory: '512MB' })
+  .region(FUNCTIONS_MANIFEST.receiveGarminAPIDeregistration.region)
+  .https.onRequest(async (req, res) => {
   if (req.method !== 'POST') {
     res.status(405).send('Method Not Allowed');
     return;

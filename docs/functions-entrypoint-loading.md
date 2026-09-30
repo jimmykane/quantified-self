@@ -46,7 +46,7 @@ npm --prefix functions run entrypoint:check
 
 The check builds the Functions package and verifies:
 
-- discovery exposes all 165 application exports;
+- discovery exposes all 164 application exports;
 - both Firebase discovery modes ignore an inherited optimized `FUNCTION_TARGET`;
 - an unknown target exposes the same complete export set;
 - a discovered Gen 1 target retains the complete entrypoint fallback;

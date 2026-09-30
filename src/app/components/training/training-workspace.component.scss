@@ -218,10 +218,7 @@ dd { margin: 5px 0 0; font-size: var(--training-card-stat-font-size); font-weigh
 .training-mix-panel { padding: 20px; }
 .training-intensity-chart { grid-column: 1 / -1; }
 @media (min-width: 961px) {
-  .training-mix-grid--single { grid-template-columns: minmax(280px, 340px) minmax(0, 1fr); align-items: stretch; }
-  .training-mix-grid--single > .training-mix-panel { display: flex; flex-direction: column; min-height: 300px; }
-  .training-mix-grid--single > .training-mix-panel app-training-mix-details { flex: 1; --training-mix-zone-margin-top: auto; --training-mix-zone-padding-top: 20px; }
-  .training-mix-grid--single > .training-intensity-chart { grid-column: 2; grid-row: 1; }
+  .training-mix-grid--single { grid-template-columns: minmax(0, 1fr); }
   .training-mix-grid--two { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .training-mix-grid--three { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .training-mix-grid--overview { grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); }

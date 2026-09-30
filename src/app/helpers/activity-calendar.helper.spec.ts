@@ -7,19 +7,24 @@ import {
   DataDistance,
   DataDuration,
   DaysOfTheWeek,
+  DistanceUnits,
   type EventInterface,
 } from '@sports-alliance/sports-lib';
+import { normalizeUserUnitSettings } from '@shared/unit-aware-display';
 import {
   buildActivityCalendarPeriodSummary,
   buildActivityCalendarViewModel,
   formatActivityCalendarDateParam,
   formatActivityCalendarDuration,
+  formatActivityCalendarSummaryMetrics,
   navigateActivityCalendarDate,
+  navigateActivityCalendarDay,
   normalizeActivityCalendarView,
   parseActivityCalendarDate,
   resolveActivityCalendarEventLabel,
   resolveActivityCalendarPrimaryRange,
   resolveActivityCalendarQueryWindow,
+  resolveActivityCalendarDayRange,
 } from './activity-calendar.helper';
 
 function createEvent(
@@ -52,6 +57,27 @@ function createEvent(
 }
 
 describe('activity-calendar helper', () => {
+  it('formats selected-day and period totals with the same user units and loading state', () => {
+    const summary = buildActivityCalendarPeriodSummary([createEvent(
+      'run', new Date(2026, 7, 3, 8), [ActivityTypes.Running], 3600,
+      { distanceMeters: 10_000, ascentMeters: 450 },
+    )]);
+    const metric = formatActivityCalendarSummaryMetrics(summary, null, 'en-US');
+    expect(metric.map(({ label, value }) => ({ label, value }))).toEqual([
+      { label: 'Distance', value: '10.00 Km' },
+      { label: 'Duration', value: '1h' },
+      { label: 'Ascent', value: '450 m' },
+    ]);
+    const miles = formatActivityCalendarSummaryMetrics(summary,
+      normalizeUserUnitSettings({ distanceUnits: DistanceUnits.Miles }), 'en-US');
+    expect(miles[0].value).toMatch(/mi/i);
+    expect(miles[0].value).not.toBe(metric[0].value);
+    expect(miles[1].value).toBe('1h');
+    expect(miles[2].value).toBe('450 m');
+    expect(formatActivityCalendarSummaryMetrics(null).map(item => item.value)).toEqual(['--', '--', '--']);
+    expect(formatActivityCalendarSummaryMetrics(buildActivityCalendarPeriodSummary([]))
+      .map(item => item.value)).toEqual(['0.0 m', '0m', '0 m']);
+  });
   it('normalizes route views and strict local date parameters', () => {
     const fallback = new Date(2026, 7, 3, 18, 30);
 
@@ -96,6 +122,15 @@ describe('activity-calendar helper', () => {
       .toBe('2025-02-28');
     expect(formatActivityCalendarDateParam(navigateActivityCalendarDate(new Date(2026, 7, 3), 'week', -1)))
       .toBe('2026-07-27');
+  });
+
+  it('uses local day boundaries and adjacent dates for a dedicated day', () => {
+    const day = new Date(2026, 9, 25, 12);
+    const range = resolveActivityCalendarDayRange(day);
+    expect(new Date(range.startMs)).toEqual(new Date(2026, 9, 25));
+    expect(new Date(range.endExclusiveMs)).toEqual(new Date(2026, 9, 26));
+    expect(formatActivityCalendarDateParam(navigateActivityCalendarDay(day, -1))).toBe('2026-10-24');
+    expect(formatActivityCalendarDateParam(navigateActivityCalendarDay(day, 1))).toBe('2026-10-26');
   });
 
   it('builds a month grid and aggregates duration by local day and sport family', () => {

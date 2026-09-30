@@ -268,6 +268,7 @@ export async function reconcileSleepSyncQueueDispatches(nowMs = Date.now()): Pro
                 isStale,
                 dispatchedToCloudTask,
                 dateCreated: toDateCreatedTimestamp(data.dateCreated),
+                dispatchAfterMs: toDateCreatedTimestamp(data.dispatchAfterMs),
                 queueRevision: toNonEmptyString(data.queueRevision),
                 needsLeaseRecovery,
                 userID: toNonEmptyString(data.userID),
@@ -338,7 +339,9 @@ export async function reconcileSleepSyncQueueDispatches(nowMs = Date.now()): Pro
             const wasTaskEnqueued = await enqueueTask(
                 candidate.doc.id,
                 candidate.dateCreated,
-                undefined,
+                candidate.dispatchAfterMs === null
+                    ? undefined
+                    : Math.max(1, Math.ceil((candidate.dispatchAfterMs - Date.now()) / 1000)),
                 taskIdentity,
             );
             if (!wasTaskEnqueued) {

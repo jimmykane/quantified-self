@@ -21,7 +21,10 @@ export function buildPlanScheduleMonth(
   const monthStart = new Date(anchor.getFullYear(), anchor.getMonth(), 1);
   const weekStart = Number.isInteger(options.startOfWeek) && options.startOfWeek! >= 0 && options.startOfWeek! <= 6
     ? options.startOfWeek! : 1;
-  const gridStart = new Date(anchor.getFullYear(), anchor.getMonth(), 1 - (monthStart.getDay() - weekStart + 7) % 7);
+  const leadingDays = (monthStart.getDay() - weekStart + 7) % 7;
+  const gridStart = new Date(anchor.getFullYear(), anchor.getMonth(), 1 - leadingDays);
+  const daysInMonth = new Date(anchor.getFullYear(), anchor.getMonth() + 1, 0).getDate();
+  const gridDayCount = Math.ceil((leadingDays + daysInMonth) / 7) * 7;
   const formatter = getDateTimeFormatter(options.locale, { dateStyle: 'full' });
   const weekdayFormatter = getDateTimeFormatter(options.locale, { weekday: 'short' });
   const byDate = new Map<string, ScheduledWorkoutV1[]>();
@@ -31,7 +34,7 @@ export function buildPlanScheduleMonth(
     entries.push(workout);
     byDate.set(workout.localDate, entries);
   }
-  const days = Array.from({ length: 42 }, (_, index) => {
+  const days = Array.from({ length: gridDayCount }, (_, index) => {
     const date = new Date(gridStart.getFullYear(), gridStart.getMonth(), gridStart.getDate() + index);
     const localDate = formatActivityCalendarDateParam(date);
     const inRange = localDate >= plan.startLocalDate && localDate <= plan.endLocalDate;
@@ -71,8 +74,8 @@ export function buildPlanScheduleMonth(
       isWeekend: day.isWeekend,
       isWeekStart: index === 0,
     })),
-    // Keep the boundary weeks for context, but never reserve whole weeks outside the plan.
-    days: days.filter((_, index) => days.slice(Math.floor(index / 7) * 7, Math.floor(index / 7) * 7 + 7).some(day => day.inRange)),
+    // Keep the complete month grid even when the plan starts or ends mid-month.
+    days,
     previousDate: monthKey > plan.startLocalDate.slice(0, 7)
       ? (previousMonth < plan.startLocalDate ? plan.startLocalDate : previousMonth) : null,
     nextDate: monthKey < plan.endLocalDate.slice(0, 7)

@@ -11,6 +11,15 @@ export const SLEEP_PROVIDERS = {
 
 export type SleepProvider = typeof SLEEP_PROVIDERS[keyof typeof SLEEP_PROVIDERS];
 
+export const MAX_SLEEP_TIMEZONE_OFFSET_SECONDS = 18 * 60 * 60;
+
+/**
+ * Suunto can finalize one night as adjacent provider-owned SleepIds. Keep the
+ * raw records, but only reconcile records that overlap or have a short interruption. A
+ * larger gap remains a distinct sleep session even when the wake date matches.
+ */
+export const SUUNTO_SLEEP_FRAGMENT_MAX_GAP_MS = 30 * 60 * 1000;
+
 export const SLEEP_STAGES = {
   Deep: 'deep',
   Light: 'light',
@@ -123,6 +132,204 @@ export interface SleepSession {
   sportsLibData?: SportsLibDataEnvelope<SleepSportsLibMetricField>;
   createdAtMs: number;
   updatedAtMs: number;
+}
+
+function finiteSleepTime(value: unknown): number | null {
+  return typeof value === 'number' && Number.isFinite(value) ? value : null;
+}
+
+function validSleepTimestampMs(value: unknown): number | null {
+  const timestampMs = finiteSleepTime(value);
+  return timestampMs !== null && Number.isFinite(new Date(timestampMs).getTime())
+    ? timestampMs
+    : null;
+}
+
+function validSleepDate(value: unknown): string | null {
+  const sleepDate = typeof value === 'string' ? value.trim() : '';
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(sleepDate)) return null;
+  const dayMs = Date.parse(`${sleepDate}T00:00:00.000Z`);
+  return Number.isFinite(dayMs) && new Date(dayMs).toISOString().slice(0, 10) === sleepDate
+    ? sleepDate
+    : null;
+}
+
+export function parseSleepDateTimeOffsetSeconds(value: unknown): number | null {
+  const stringValue = typeof value === 'string' ? value.trim() : '';
+  if (!stringValue) return null;
+  if (/z$/i.test(stringValue)) return 0;
+  const match = /([+-])(\d{2}):?(\d{2})$/.exec(stringValue);
+  if (!match) return null;
+  const hours = Number(match[2]);
+  const minutes = Number(match[3]);
+  const totalSeconds = ((hours * 60) + minutes) * 60;
+  if (!Number.isFinite(totalSeconds)
+    || minutes >= 60
+    || totalSeconds > MAX_SLEEP_TIMEZONE_OFFSET_SECONDS) {
+    return null;
+  }
+  return match[1] === '-' ? -totalSeconds : totalSeconds;
+}
+
+export function resolveSleepTimezoneOffsetSeconds(
+  session: Pick<SleepSession, 'source' | 'timezoneOffsetSeconds' | 'providerFields'>,
+): number | null {
+  const explicitOffsetSeconds = finiteSleepTime(session.timezoneOffsetSeconds);
+  if (explicitOffsetSeconds !== null
+    && Math.abs(explicitOffsetSeconds) <= MAX_SLEEP_TIMEZONE_OFFSET_SECONDS) {
+    return explicitOffsetSeconds;
+  }
+  return session.source?.provider === SLEEP_PROVIDERS.SuuntoApp
+    ? parseSleepDateTimeOffsetSeconds(session.providerFields?.suunto?.['timestamp'])
+    : null;
+}
+
+/** Resolve the provider-facing calendar date used by read-time Sleep surfaces. */
+export function resolveSleepDisplayDate(
+  session: Pick<SleepSession, 'source' | 'sleepDate' | 'startTimeMs' | 'endTimeMs' | 'timezoneOffsetSeconds' | 'isNap' | 'providerFields'>,
+): string | null {
+  const startTimeMs = validSleepTimestampMs(session.startTimeMs);
+  const endTimeMs = validSleepTimestampMs(session.endTimeMs);
+  const suppliedSleepDate = typeof session.sleepDate === 'string' ? session.sleepDate.trim() : '';
+  const storedSleepDate = validSleepDate(session.sleepDate);
+  if (suppliedSleepDate && storedSleepDate === null) return null;
+  const fallbackSleepDate = endTimeMs === null
+    ? storedSleepDate
+    : storedSleepDate || new Date(endTimeMs).toISOString().slice(0, 10);
+  if (session.source?.provider !== SLEEP_PROVIDERS.SuuntoApp
+    || startTimeMs === null
+    || endTimeMs === null
+    || endTimeMs <= startTimeMs) {
+    return fallbackSleepDate;
+  }
+  const timestampMs = session.isNap ? startTimeMs : endTimeMs;
+  const offsetSeconds = resolveSleepTimezoneOffsetSeconds(session);
+  if (offsetSeconds === null) {
+    return fallbackSleepDate;
+  }
+  const localDate = new Date(timestampMs + (offsetSeconds * 1000));
+  return Number.isFinite(localDate.getTime())
+    ? localDate.toISOString().slice(0, 10)
+    : fallbackSleepDate;
+}
+
+/** Suunto's app displays sleep onset, not the earlier in-bed timestamp. */
+export function resolveSleepEffectiveStartTimeMs(
+  session: Pick<SleepSession, 'source' | 'startTimeMs' | 'endTimeMs' | 'isNap' | 'providerFields'>,
+): number {
+  const startTimeMs = finiteSleepTime(session.startTimeMs) ?? 0;
+  const endTimeMs = finiteSleepTime(session.endTimeMs);
+  if (session.source?.provider !== SLEEP_PROVIDERS.SuuntoApp || session.isNap || endTimeMs === null) {
+    return startTimeMs;
+  }
+  const suunto = session.providerFields?.suunto;
+  const latencySeconds = finiteSleepTime(suunto?.SleepOnsetLatencyDuration);
+  if (latencySeconds === null || latencySeconds < 0) return startTimeMs;
+  const effectiveStartTimeMs = startTimeMs + Math.floor(latencySeconds * 1000);
+  return effectiveStartTimeMs < endTimeMs ? effectiveStartTimeMs : startTimeMs;
+}
+
+/**
+ * Partition one provider/account/date group into canonical nights. Existing
+ * provider behavior is preserved except for Suunto, where only overlapping or
+ * adjacent fragments are combined.
+ */
+export function partitionSleepNightFragments<T extends { startTimeMs: number | null; endTimeMs: number | null }>(
+  provider: SleepProvider | null,
+  input: readonly T[],
+): T[][] {
+  const sorted = [...input].sort((left, right) =>
+    (left.startTimeMs ?? 0) - (right.startTimeMs ?? 0)
+    || (left.endTimeMs ?? 0) - (right.endTimeMs ?? 0));
+  if (provider !== SLEEP_PROVIDERS.SuuntoApp || sorted.length <= 1) return sorted.length ? [sorted] : [];
+
+  const groups: T[][] = [];
+  let currentEndTimeMs = Number.NEGATIVE_INFINITY;
+  for (const point of sorted) {
+    const current = groups[groups.length - 1];
+    const gapMs = Number.isFinite(currentEndTimeMs) && point.startTimeMs !== null
+      ? point.startTimeMs - currentEndTimeMs
+      : Number.POSITIVE_INFINITY;
+    if (current && gapMs <= SUUNTO_SLEEP_FRAGMENT_MAX_GAP_MS) {
+      current.push(point);
+    } else {
+      groups.push([point]);
+      currentEndTimeMs = Number.NEGATIVE_INFINITY;
+    }
+    if (point.endTimeMs !== null) {
+      currentEndTimeMs = Math.max(currentEndTimeMs, point.endTimeMs);
+    }
+  }
+  return groups;
+}
+
+export interface CanonicalSleepNightFragment {
+  provider: SleepProvider | null;
+  providerUserId: string | null;
+  sleepDate: string;
+  isNap: boolean;
+  startTimeMs: number | null;
+  endTimeMs: number | null;
+}
+
+/**
+ * Apply the provider-specific physical-night identity rule once. Non-Suunto,
+ * naps, and unidentified Suunto records remain individual audit records.
+ */
+export function groupCanonicalSleepNightFragments<T extends CanonicalSleepNightFragment>(
+  input: readonly T[],
+): T[][] {
+  const output: Array<{ firstIndex: number; fragments: T[] }> = [];
+  const suuntoGroups = new Map<string, { firstIndex: number; fragments: T[] }>();
+  const inputIndexes = new Map<T, number>();
+  input.forEach((fragment, index) => {
+    inputIndexes.set(fragment, index);
+    const providerUserId = typeof fragment.providerUserId === 'string'
+      ? fragment.providerUserId.trim()
+      : '';
+    if (fragment.provider !== SLEEP_PROVIDERS.SuuntoApp || fragment.isNap || !providerUserId) {
+      output.push({ firstIndex: index, fragments: [fragment] });
+      return;
+    }
+    const key = JSON.stringify([providerUserId, fragment.sleepDate]);
+    const existing = suuntoGroups.get(key);
+    if (existing) {
+      existing.fragments.push(fragment);
+    } else {
+      suuntoGroups.set(key, { firstIndex: index, fragments: [fragment] });
+    }
+  });
+  for (const group of suuntoGroups.values()) {
+    for (const fragments of partitionSleepNightFragments(SLEEP_PROVIDERS.SuuntoApp, group.fragments)) {
+      const firstIndex = fragments.reduce((earliestIndex, fragment) => {
+        const index = inputIndexes.get(fragment) ?? earliestIndex;
+        return index < earliestIndex ? index : earliestIndex;
+      }, group.firstIndex);
+      output.push({ firstIndex, fragments });
+    }
+  }
+  return output
+    .sort((left, right) => left.firstIndex - right.firstIndex)
+    .map(group => group.fragments);
+}
+
+/** Awake time between canonical fragments, excluding overlap and nested records. */
+export function sumSleepFragmentInterruptionSeconds<T extends {
+  startTimeMs: number | null;
+  endTimeMs: number | null;
+}>(input: readonly T[]): number {
+  const sorted = [...input].sort((left, right) =>
+    (left.startTimeMs ?? 0) - (right.startTimeMs ?? 0)
+    || (left.endTimeMs ?? 0) - (right.endTimeMs ?? 0));
+  let latestEndTimeMs: number | null = null;
+  return sorted.reduce((total, point) => {
+    if (point.startTimeMs === null || point.endTimeMs === null) return total;
+    const interruptionMs = latestEndTimeMs === null ? 0 : Math.max(0, point.startTimeMs - latestEndTimeMs);
+    latestEndTimeMs = latestEndTimeMs === null
+      ? point.endTimeMs
+      : Math.max(latestEndTimeMs, point.endTimeMs);
+    return total + Math.round(interruptionMs / 1000);
+  }, 0);
 }
 
 export interface SleepSyncState {

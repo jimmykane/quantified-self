@@ -126,15 +126,12 @@ export function buildTrainingReadinessViewModel(
   const implication = buildTrainingImplication(context.label);
   const sleepEvidenceFailed = options.sleepEvidenceFailed === true;
   const loadEvidenceFailed = options.loadEvidenceFailed === true;
-  const hasRetainedSleepEvidence = sleepEvidenceFailed && context.latestSleepAtMs !== null;
   const evidenceWarnings = [
     loadEvidenceFailed
       ? 'One or more current load snapshots could not be loaded.'
       : null,
     sleepEvidenceFailed
-      ? hasRetainedSleepEvidence
-        ? 'Sleep updates failed; showing the last loaded evidence while it remains eligible.'
-        : 'Recorded sleep evidence could not be loaded; showing available load signals only.'
+      ? 'Recorded sleep evidence could not be loaded; showing available load signals only.'
       : null,
   ].filter((warning): warning is string => warning !== null);
 
@@ -177,9 +174,7 @@ export function buildTrainingReadinessViewModel(
           ? 'Unavailable'
           : `${formatNumber(context.sleepScore, locale, 0)}/100`,
         detailText: sleepEvidenceFailed
-          ? hasRetainedSleepEvidence
-            ? `Sleep updates failed. ${latestSleepText}`
-            : 'Recorded sleep evidence could not be loaded.'
+          ? 'Recorded sleep evidence could not be loaded.'
           : latestSleepText,
         indicatorVariant: 'score',
         indicatorValue: context.sleepScore,

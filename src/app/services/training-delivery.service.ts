@@ -79,7 +79,9 @@ export class TrainingDeliveryService {
     return combineLatest([settings$, statuses$, verifications$]).pipe(map(([settings, statuses, verifications]) => ({ settings, statuses, verifications })));
   }
   watchSummaryScope(uid: string, scope: 'plan' | 'workout', id: string, parentPlanId: string | null): Observable<TrainingDeliveryView> {
-    const view$ = this.watchScope(uid, scope, id, TRAINING_DELIVERY_SUMMARY_LIMIT, false);
+    // A single workout can show its latest remote check beside the accepted-send status.
+    // Keep the plan aggregate bounded to delivery records; it is not a live inventory.
+    const view$ = this.watchScope(uid, scope, id, TRAINING_DELIVERY_SUMMARY_LIMIT, scope === 'workout');
     if (!uid) return view$;
     if (scope === 'plan') {
       const overrides$ = collectionData(query(collection(this.firestore, 'users', uid, TRAINING_DELIVERY_SETTINGS),

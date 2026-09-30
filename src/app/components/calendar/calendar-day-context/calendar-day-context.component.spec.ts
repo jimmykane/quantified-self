@@ -1,0 +1,301 @@
+import { signal } from '@angular/core';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
+import { ActivityTypes, AppThemes, DistanceUnits, type EventInterface } from '@sports-alliance/sports-lib';
+import { buildTrainingLoadPoints } from '@shared/training-load';
+import { normalizeUserUnitSettings } from '@shared/unit-aware-display';
+import type { TimelineNote } from '@shared/timeline-notes';
+import { TestBed } from '@angular/core/testing';
+import { ViewportScroller } from '@angular/common';
+import { provideRouter, Router } from '@angular/router';
+import { Subject } from 'rxjs';
+import { vi, expect, it, describe } from 'vitest';
+import { buildActivityCalendarViewModel } from '../../../helpers/activity-calendar.helper';
+import { AppUserService } from '../../../services/app.user.service';
+import { CalendarDayHealthService } from '../../../services/calendar-day-health.service';
+import { AppThemeService } from '../../../services/app.theme.service';
+import { TrainingWorkoutDuplicateService } from '../../../services/training-workout-duplicate.service';
+import { EChartsLoaderService } from '../../../services/echarts-loader.service';
+import { LoggerService } from '../../../services/logger.service';
+import { AppEventColorService } from '../../../services/color/app.event.color.service';
+import { AppHapticsService } from '../../../services/app.haptics.service';
+import { CalendarDayDetailsNavigationService } from '../../../services/calendar-day-details-navigation.service';
+import type { CalendarDayDetailsData } from '../calendar-day-details/calendar-day-details.component';
+import { CalendarDayContextComponent } from './calendar-day-context.component';
+
+function data(dateKey: string): CalendarDayDetailsData {
+  const model = buildActivityCalendarViewModel([], { view: 'month', anchorDate: new Date(`${dateKey}T12:00:00`), locale: 'en-US' });
+  return { day: model.months[0].days.find(day => day.dateKey === dateKey)!, userId: 'owner', locale: 'en-US' };
+}
+
+const emptyEvidence = { sessions: [], hrvSeries: [], derived: null, sleepError: false, hrvError: false, readinessError: false, recoveryError: false };
+
+describe('CalendarDayContextComponent', () => {
+  it('centers timeline time, mixed icons, and titles in a shared 44px row', () => {
+    const styles = readFileSync(resolve(process.cwd(),
+      'src/app/components/calendar/calendar-day-context/calendar-day-context.component.scss'), 'utf8');
+    const rule = (selector: string) => styles.match(new RegExp(`\\.${selector}\\s*\\{([^}]+)\\}`))?.[1] ?? '';
+
+    expect(rule('calendar-day-timeline-time')).toContain('min-height: 44px; align-items: center;');
+    expect(rule('calendar-day-timeline-icon')).toContain('height: 44px; align-items: center;');
+    expect(rule('calendar-day-timeline-icon')).toContain('margin: 0;');
+    expect(rule('calendar-day-timeline-content > a, .calendar-day-timeline-content > button')).toContain('box-sizing: border-box;');
+    expect(rule('calendar-day-timeline-content > a, .calendar-day-timeline-content > button')).toContain('min-height: 44px;');
+    expect(rule('calendar-day-timeline-content > a')).toContain('align-items: flex-start; padding: 12px 0 0;');
+    expect(rule('calendar-day-timeline-content > strong')).toContain('min-height: 44px; align-items: center;');
+  });
+
+  it('keeps the calendar mounted, cancels an older day read, and fences private health on account change', async () => {
+    const viewer = signal<{ uid: string } | null>({ uid: 'owner' });
+    const pending: Array<Subject<typeof emptyEvidence>> = [];
+    const haptics = { selection: vi.fn() };
+    const watch = vi.fn((_uid, _date, _now, _signal) => {
+      const subject = new Subject<typeof emptyEvidence>();
+      pending.push(subject);
+      return subject.asObservable();
+    });
+    await TestBed.configureTestingModule({ imports: [CalendarDayContextComponent], providers: [
+      provideRouter([]),
+      { provide: ViewportScroller, useValue: { scrollToAnchor: vi.fn() } },
+      { provide: AppUserService, useValue: { user: viewer } },
+      { provide: CalendarDayHealthService, useValue: { watch } },
+      { provide: AppThemeService, useValue: { appTheme: signal(AppThemes.Dark) } },
+      { provide: EChartsLoaderService, useValue: { init: vi.fn().mockResolvedValue(null), dispose: vi.fn() } },
+      { provide: LoggerService, useValue: { error: vi.fn() } },
+      { provide: TrainingWorkoutDuplicateService, useValue: { duplicate: vi.fn() } },
+      { provide: AppEventColorService, useValue: { getActivityColor: vi.fn(), getColorForActivityTypeByActivityTypeGroup: vi.fn() } },
+      { provide: AppHapticsService, useValue: haptics },
+    ] }).compileComponents();
+    const fixture = TestBed.createComponent(CalendarDayContextComponent);
+    fixture.componentRef.setInput('data', data('2026-09-10'));
+    fixture.componentRef.setInput('showFullDayLink', true);
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('.calendar-day-context-header a')?.getAttribute('href'))
+      .toBe('/calendar/day/2026-09-10');
+    const prepareReturn = vi.spyOn(TestBed.inject(CalendarDayDetailsNavigationService), 'prepareReturn');
+    fixture.componentInstance.prepareNavigation();
+    expect(prepareReturn).toHaveBeenCalledWith('/', '2026-09-10');
+    expect(watch).toHaveBeenCalledWith('owner', '2026-09-10', expect.any(Number), expect.any(AbortSignal));
+    const oldSignal = watch.mock.calls[0][3] as AbortSignal;
+    fixture.componentRef.setInput('data', data('2026-09-11'));
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('.calendar-day-context-header a')?.getAttribute('href'))
+      .toBe('/calendar/day/2026-09-11');
+    expect(oldSignal.aborted).toBe(true);
+    expect(pending[0].observed).toBe(false);
+    pending[0].next(emptyEvidence); fixture.detectChanges();
+    expect(fixture.componentInstance.healthState().status).toBe('loading');
+    fixture.componentRef.setInput('standaloneDayPage', true);
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('[aria-label="Loading day details"]')).toBeTruthy();
+    expect(fixture.nativeElement.querySelector('.calendar-day-context-timeline')).toBeNull();
+    fixture.componentRef.setInput('standaloneDayPage', false);
+    pending[1].next(emptyEvidence); fixture.detectChanges();
+    expect(fixture.nativeElement.textContent).toContain('No HRV reading for this day');
+    expect(fixture.nativeElement.querySelector('app-health-sleep-stage-summary')).toBeNull();
+    expect(fixture.nativeElement.querySelector('.calendar-day-context-timeline')).toBeNull();
+    fixture.componentRef.setInput('standaloneDayPage', true);
+    pending[1].next({ ...emptyEvidence, sessions: [{
+      id: 'night', sleepDate: '2026-09-11', startTimeMs: new Date(2026, 8, 10, 23).getTime(),
+      endTimeMs: new Date(2026, 8, 11, 7).getTime(), durationSeconds: 8 * 3600,
+      score: { value: 74 }, stageDurationsSeconds: { deep: 7200, light: 14_400, rem: 5400, awake: 1800 },
+      vitals: { averageHeartRateBpm: 58 },
+      source: { provider: 'SuuntoApp' },
+    }] } as typeof emptyEvidence); fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('app-health-sleep-stage-summary')?.textContent).toContain('Sleep stages');
+    expect(fixture.nativeElement.querySelector('.calendar-day-context-sleep-stages')?.textContent).toContain('Suunto · overnight sleep');
+    expect(fixture.nativeElement.querySelector('#day-sleep-stages')?.getAttribute('aria-label'))
+      .toContain('Suunto overnight sleep for');
+    expect(fixture.nativeElement.querySelector('.calendar-day-context-sleep-facts')?.getAttribute('role'))
+      .toBe('group');
+    expect(fixture.nativeElement.querySelector('.calendar-day-context-sleep-facts')?.textContent)
+      .toContain('Duration 08h 00m');
+    expect(fixture.nativeElement.querySelector('.calendar-day-context-sleep-facts')?.textContent)
+      .toContain('Average overnight HR 58 bpm');
+    const currentHealth = fixture.componentInstance.healthState();
+    fixture.componentInstance.healthState.set({ ...currentHealth, ownerUid: 'another-owner' });
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('.calendar-day-context-sleep-facts')).toBeNull();
+    fixture.componentInstance.healthState.set(currentHealth);
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('.calendar-day-context-timeline')).toBeTruthy();
+    expect(fixture.nativeElement.querySelector('.calendar-day-context-health-heading')?.textContent).toContain('Recovery & sleep');
+    expect(fixture.nativeElement.querySelector('#calendar-day-timeline-title')?.textContent).toContain('Your day');
+    expect(fixture.nativeElement.textContent).not.toContain('sources kept separate');
+    expect(haptics.selection).not.toHaveBeenCalled();
+    expect(fixture.nativeElement.querySelector('[aria-label="Activities on selected day"]')).toBeNull();
+    const scrollToAnchor = vi.spyOn(TestBed.inject(ViewportScroller), 'scrollToAnchor');
+    fixture.nativeElement.querySelector('.calendar-day-timeline-content button')?.click();
+    expect(scrollToAnchor).toHaveBeenCalledWith('day-sleep-stages');
+    expect(haptics.selection).toHaveBeenCalledOnce();
+    expect(fixture.componentInstance.healthState().sleepPoint?.sleepDate).toBe('2026-09-11');
+    for (const unitSettings of [null, normalizeUserUnitSettings({ distanceUnits: DistanceUnits.Miles })]) {
+      fixture.componentRef.setInput('data', { ...data('2026-09-11'), unitSettings });
+      fixture.detectChanges();
+      expect(fixture.nativeElement.querySelector('.sleep-stage-legend')?.textContent).toContain('Deep02h 00m');
+    }
+    pending[1].next({ ...emptyEvidence, sleepError: true }); fixture.detectChanges();
+    expect(fixture.nativeElement.textContent).toContain('Sleep could not be loaded');
+    expect(fixture.nativeElement.querySelector('app-health-sleep-stage-summary')).toBeNull();
+    const notesStatus = signal<'loading' | 'ready' | 'error'>('loading');
+    fixture.componentRef.setInput('data', { ...data('2026-09-11'), timelineNotesStatusSource: notesStatus });
+    fixture.detectChanges();
+    expect(fixture.nativeElement.textContent).not.toContain('Loading notes…');
+    expect(fixture.nativeElement.textContent).not.toContain('No activities, plans, or notes for this day.');
+    notesStatus.set('error'); fixture.detectChanges();
+    expect(fixture.nativeElement.textContent).toContain('Timeline notes could not be loaded.');
+    expect(fixture.nativeElement.textContent).not.toContain('No activities, plans, or notes for this day.');
+    notesStatus.set('ready'); fixture.detectChanges();
+    expect(fixture.nativeElement.textContent).toContain('No activities, plans, or notes for this day.');
+    fixture.componentRef.setInput('data', { ...data('2026-09-11'), userId: 'different-profile' });
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('.calendar-day-context-health')).toBeNull();
+    expect(watch).toHaveBeenCalledTimes(2);
+    viewer.set({ uid: 'another' }); fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('.calendar-day-context-health')).toBeNull();
+    expect(watch).toHaveBeenCalledTimes(2);
+    fixture.componentRef.setInput('privateHealthEnabled', false);
+    viewer.set({ uid: 'owner' }); fixture.detectChanges();
+    expect(watch).toHaveBeenCalledTimes(2);
+
+    fixture.componentRef.setInput('dashboardTile', true);
+    fixture.componentRef.setInput('data', data('2026-09-12'));
+    fixture.detectChanges();
+    const scrollBody = fixture.nativeElement.querySelector('.calendar-day-context-body');
+    expect(scrollBody.getAttribute('tabindex')).toBeNull();
+    fixture.componentRef.setInput('data', data('2026-09-12'));
+    fixture.detectChanges();
+    fixture.componentRef.setInput('data', data('2026-09-13'));
+    fixture.detectChanges();
+
+    const notes: TimelineNote[] = ['First note', 'Second note', 'Third note'].map((title, index) => ({
+      id: `${index + 1}`.repeat(64), category: 'travel', title,
+      startDate: '2026-09-13', endDate: '2026-09-13', timeZone: 'UTC',
+      revision: 1, createdAtMs: 1, updatedAtMs: 1,
+    }));
+    fixture.componentRef.setInput('standaloneDayPage', false);
+    fixture.componentRef.setInput('calmMonth', true);
+    fixture.componentRef.setInput('data', { ...data('2026-09-13'), timelineNotes: signal(notes) });
+    fixture.detectChanges();
+    const previewNotes = () => fixture.nativeElement.querySelectorAll('[aria-label="Timeline notes on selected day"] button');
+    expect(previewNotes()).toHaveLength(3);
+    expect(previewNotes()[0].querySelector('.calendar-day-context-preview-icon')?.textContent?.trim()).toBe('flight');
+    expect(previewNotes()[0].querySelector('.calendar-day-context-preview-title')?.textContent).toBe('First note');
+    expect(previewNotes()[0].querySelector('.calendar-day-context-preview-copy small')?.textContent).toContain('Travel');
+    expect(fixture.nativeElement.querySelectorAll('.calendar-day-context-preview-group')).toHaveLength(1);
+    expect(fixture.nativeElement.querySelector('[aria-label="Activities on selected day"]')).toBeNull();
+    expect(fixture.nativeElement.querySelector('[aria-label="Planned workouts on selected day"]')).toBeNull();
+    expect(fixture.nativeElement.textContent).not.toContain('2026-09-13 · 2026-09-13');
+    expect(fixture.nativeElement.textContent).not.toContain('more on the full day');
+    expect(scrollBody.getAttribute('tabindex')).toBe('0');
+    fixture.componentRef.setInput('dashboardTile', false);
+    fixture.detectChanges();
+    expect(previewNotes()).toHaveLength(3);
+    expect(previewNotes()[0].textContent).toContain('First note');
+    expect(fixture.nativeElement.textContent).not.toContain('more on the full day');
+    expect(fixture.nativeElement.querySelector('a[aria-label="Open selected day page"]')?.textContent).toContain('Full day');
+    fixture.componentRef.setInput('calmMonth', false);
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelectorAll('.calendar-day-context-section button')).toHaveLength(3);
+    fixture.componentRef.setInput('calmMonth', true);
+    const emptyDay = data('2026-09-13');
+    fixture.componentRef.setInput('data', {
+      ...emptyDay,
+      timelineNotes: signal([]),
+      activities: signal({ status: 'error' as const, day: emptyDay.day }),
+    });
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('[aria-label="Timeline notes on selected day"]')).toBeNull();
+
+    const trainingEvent = {
+      startDate: new Date('2026-09-13T20:00:00.000Z'),
+      getID: () => 'training-event',
+      getActivityTypesAsArray: () => ['Running'],
+      getActivityTypesAsString: () => 'Running',
+      getStat: (type: string) => type === 'Training Stress Score'
+        ? { getValue: () => 42 }
+        : type === 'Duration' ? { getValue: () => 3600 } : null,
+    } as unknown as EventInterface;
+    const model = buildActivityCalendarViewModel([trainingEvent], {
+      view: 'month', anchorDate: new Date('2026-09-13T12:00:00'), locale: 'en-US',
+    });
+    const trainingDay = model.months[0].days.find(day => day.dateKey === '2026-09-13')!;
+    const formPoints = buildTrainingLoadPoints([{
+      dayMs: Date.UTC(2026, 8, 13), load: 42,
+    }]).map(point => ({
+      time: point.dayMs, trainingStressScore: point.load, ctl: point.ctl, atl: point.atl,
+      formSameDay: point.formSameDay, formPriorDay: point.formPriorDay,
+    }));
+    fixture.componentRef.setInput('privateHealthEnabled', true);
+    fixture.componentRef.setInput('calmMonth', true);
+    fixture.componentRef.setInput('data', {
+      ...data('2026-09-13'), day: trainingDay,
+      trainingImpact: signal({ status: 'ready' as const, formPoints }),
+    });
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelectorAll('app-training-impact')).toHaveLength(2);
+    expect(fixture.nativeElement.textContent).toContain('+1 CTL · +6 ATL · −5 Form');
+
+    fixture.componentRef.setInput('calmMonth', false);
+    fixture.componentRef.setInput('standaloneDayPage', true);
+    fixture.componentInstance.healthState.set({
+      status: 'ready', dateKey: '2026-09-13', ownerUid: 'owner', summary: null, sleepPoint: null,
+    });
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('app-training-impact .training-impact')).toBeTruthy();
+    expect(fixture.nativeElement.querySelector('.calendar-day-timeline-content app-training-impact')).toBeTruthy();
+
+    fixture.componentRef.setInput('standaloneDayPage', false);
+    fixture.componentRef.setInput('data', {
+      ...data('2026-09-13'), day: trainingDay, plannedWorkouts: [{ workout: {
+        schemaVersion: 1, id: 'workout-1', planId: 'plan-1', localDate: '2026-09-13',
+        lifecycle: 'planned', title: 'Recovery ride',
+        structure: { version: 1, sport: ActivityTypes.Cycling, nodes: [] },
+        revision: 1, createdAtMs: 1, updatedAtMs: 1,
+      } }],
+    });
+    fixture.detectChanges();
+    const activityLink = fixture.nativeElement.querySelector('[aria-label="Activities on selected day"] a[mat-list-item]') as HTMLAnchorElement;
+    const workoutLink = fixture.nativeElement.querySelector('[aria-label="Planned workouts on selected day"] .calendar-day-context-plan a') as HTMLAnchorElement;
+    expect(activityLink?.getAttribute('href')).toContain('/event/training-event');
+    expect(workoutLink?.getAttribute('href')).toBe('/training/plans/workout/workout-1');
+    vi.spyOn(TestBed.inject(Router), 'navigateByUrl').mockResolvedValue(true);
+    for (const dashboardTile of [true, false]) {
+      fixture.componentRef.setInput('dashboardTile', dashboardTile);
+      fixture.componentRef.setInput('calmMonth', true);
+      fixture.detectChanges();
+      const icons = [...fixture.nativeElement.querySelectorAll('.calendar-day-context-preview-entry app-activity-type-icon')];
+      expect(icons).toHaveLength(2);
+      expect(icons.every(icon => icon.getAttribute('size') === '20px' && icon.getAttribute('aria-hidden') === 'true')).toBe(true);
+      expect(icons.map(icon => icon.querySelector('mat-icon')?.textContent?.trim())).toEqual(['directions_run', 'directions_bike']);
+      expect(fixture.nativeElement.querySelector('.calendar-day-context-plan-mark')).toBeNull();
+      expect(fixture.nativeElement.querySelector('.calendar-day-context-activity-dot')).toBeNull();
+      const links = [...fixture.nativeElement.querySelectorAll('a.calendar-day-context-preview-entry')] as HTMLAnchorElement[];
+      expect(links.map(link => link.getAttribute('href'))).toEqual(['/user/owner/event/training-event', '/training/plans/workout/workout-1']);
+      haptics.selection.mockClear();
+      links.forEach(link => link.click());
+      expect(haptics.selection).toHaveBeenCalledTimes(2);
+      let finish: (value: null) => void;
+      const duplicate = vi.fn(() => new Promise<null>(resolve => { finish = resolve; }));
+      fixture.componentRef.setInput('data', { ...fixture.componentInstance.data(), scheduleSource: () => null });
+      TestBed.inject(TrainingWorkoutDuplicateService).duplicate = duplicate;
+      fixture.detectChanges();
+      const duplicateButton = fixture.nativeElement.querySelector('.calendar-day-context-preview-plan > button') as HTMLButtonElement;
+      expect(duplicateButton.querySelector('.calendar-day-context-duplicate-icon mat-icon')?.textContent?.trim()).toBe('content_copy');
+      duplicateButton.click(); fixture.detectChanges();
+      expect(duplicateButton.disabled).toBe(true);
+      expect(duplicateButton.querySelector('.calendar-day-context-duplicate-icon mat-spinner')).toBeTruthy();
+      duplicateButton.click();
+      expect(duplicate).toHaveBeenCalledOnce();
+      expect(haptics.selection).toHaveBeenCalledTimes(3);
+      finish!(null); await fixture.whenStable(); fixture.detectChanges();
+    }
+    fixture.componentRef.setInput('calmMonth', false);
+    fixture.componentRef.setInput('dashboardTile', false);
+    fixture.detectChanges();
+    haptics.selection.mockClear();
+    fixture.nativeElement.querySelector('[aria-label="Activities on selected day"] a[mat-list-item]').click();
+    fixture.nativeElement.querySelector('[aria-label="Planned workouts on selected day"] .calendar-day-context-plan a').click();
+    expect(haptics.selection).toHaveBeenCalledTimes(2);
+  });
+});

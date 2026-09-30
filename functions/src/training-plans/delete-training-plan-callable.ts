@@ -6,7 +6,7 @@ import {
     parseDeleteTrainingPlanRequestV1,
 } from '../../../shared/training-plans';
 import { enforceAppCheck } from '../utils';
-import { deleteTrainingPlanForUser } from './delete-training-plan';
+import { deleteTrainingPlanForUser, TrainingPlanDeletionResumeRequiredError } from './delete-training-plan';
 import { TrainingScheduleMutationError } from './mutation';
 
 function mapDeletionError(error: TrainingScheduleMutationError): HttpsError {
@@ -40,6 +40,16 @@ export const deleteTrainingPlan = onCall({
     } catch (error) {
         if (error instanceof TrainingPlanContractError) throw new HttpsError('invalid-argument', error.message);
         if (error instanceof TrainingScheduleMutationError) throw mapDeletionError(error);
+        if (error instanceof TrainingPlanDeletionResumeRequiredError) {
+            if (error.originalError instanceof TrainingScheduleMutationError) {
+                throw mapDeletionError(error.originalError);
+            }
+            logger.warn('[TrainingPlans] Plan deletion needs a resumable retry.', {
+                errorName: error.originalError instanceof Error ? error.originalError.name : 'UnknownError',
+            });
+            throw new HttpsError('unavailable',
+                'Plan deletion is still being prepared or cleaned up. Retry with the same choice; the operation will resume safely.');
+        }
         if (error instanceof HttpsError) throw error;
         logger.error('[TrainingPlans] Plan deletion failed.', {
             errorName: error instanceof Error ? error.name : 'UnknownError',

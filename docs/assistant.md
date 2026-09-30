@@ -89,6 +89,8 @@ The internal session always grants `metrics:read`, `measurements:read`, `sleep:r
 - daily report and live Readiness;
 - normalized sleep sessions, trends, and safe aggregate vitals;
 - Training and activity metric discovery and bounded queries;
+- identity-safe TSS-based Training impact for one exact completed session or one bounded local-date activity selection,
+  with separate UTC Training-day outcomes and no activity/event identity or provider provenance;
 - first-class body-measurement discovery and bounded history;
 - bounded activity lists, overview, selected metrics, rankings, laps, MTB jumps, swim lengths, and on-demand chart series;
 - coordinate-free saved-route summaries filtered by canonical activity type, name, or recency.
@@ -141,6 +143,10 @@ surface. Applying uses a dedicated Auth + App Check callable that rechecks the s
 then invokes the common proposal service. Dismissal clears the server-owned proposal without changes. New chat, a toggle
 change, account switch, expiry, schedule conflict or stale grant makes the proposal unusable. Provider results are
 independent and a send failure never removes a newly authored workout. Call/output budgets and quotas are unchanged.
+For a Suunto-bound workout, the Assistant omits unrequested step notes and keeps necessary watch instructions concise.
+If a provider must shorten authored instructions or make another mapping adjustment, the proposal review names the
+consequence before the user's one in-app confirmation; that confirmation also approves the current digest-bound Send.
+Changed mappings fail closed, and a queued Send is not a provider or watch receipt.
 Source support does not deploy or promote an app. See the
 [MCP planning contract](mcp-server.md#training-plans-and-planned-workouts-690).
 
@@ -337,6 +343,13 @@ tool is absent or generation does not invoke the declared tools in order. Tests 
 every declared mocked MCP workflow tool and verify each workflow against the production MCP tool registry. The
 Assistant examples are therefore the only user-facing conversational prompt catalog that needs maintenance.
 
+The latest-workout and yesterday Training-impact cards are contextual examples rather than fixed workflow examples.
+They use the ordinary guarded Training-impact routing because the exact activity reference or complete local-day
+selection exists only at request time: discover the completed activity or bounded day, prepare Form, then call the
+identity-safe Training-impact read. The MCP service still validates opaque-reference ownership, completion, local-date
+membership, UTC Training-day coverage, and benchmark exclusion. These cards add no tool, output field, OAuth scope,
+plugin starter, registered-app contract, provider action, or mutation.
+
 `functions/src/assistant/metric-intent.ts` adds one narrow catalog-driven workflow outside that marketing catalog: an
 unambiguous yearly or all-history request for one Sports Lib summary family with explicit average, minimum, or maximum
 semantics. It derives canonical metric selectors and canonical activity types from Sports Lib, derives the bounded
@@ -378,6 +391,8 @@ not authored by the model. The evidence adapter:
   exact ISO start time, rank, and scan count;
 - presents a jump's relative `timestampMs` as human-readable elapsed activity time rather than a raw implementation
   field;
+- presents Training impact as status, TSS, CTL, ATL, Form, and dated CTL-outcome facts while omitting the selected
+  opaque references, labels, exact start times, and provenance;
 - removes identifiers, cursors, source/provider/device provenance, tokens, and similar fields again before display;
 - accepts production links only on exact HTTPS Quantified Self origins, with explicit loopback origins permitted only
   while running the Functions emulator;

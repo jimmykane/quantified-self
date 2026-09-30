@@ -305,8 +305,8 @@ describe('processDerivedMetricsTask', () => {
             sourceEventCount: 5,
             sourceDocCount: 7,
             dailyLoads: [
-                { dayMs: Date.UTC(2026, 0, 1), load: 10 },
-                { dayMs: Date.UTC(2026, 0, 2), load: 20 },
+                { dayMs: Date.UTC(2026, 0, 1), load: 10, activityCount: 2 },
+                { dayMs: Date.UTC(2026, 0, 2), load: 20, activityCount: 3 },
             ],
         });
 
@@ -329,8 +329,8 @@ describe('processDerivedMetricsTask', () => {
             buildAtMs: expect.any(Number),
             builtFromEventMutationVersion: 12,
             formDailyLoads: [
-                { dayMs: Date.UTC(2026, 0, 1), load: 10 },
-                { dayMs: Date.UTC(2026, 0, 2), load: 20 },
+                { dayMs: Date.UTC(2026, 0, 1), load: 10, activityCount: 2 },
+                { dayMs: Date.UTC(2026, 0, 2), load: 20, activityCount: 3 },
             ],
             formSourceEventCount: 5,
             formSourceDocCount: 7,
@@ -351,7 +351,7 @@ describe('processDerivedMetricsTask', () => {
             builtFromEventMutationVersion: 12,
             sourceEventCount: 5,
             sourceDocCount: 7,
-            dailyLoads: [{ dayMs: Date.UTC(2026, 6, 15), load: 30 }],
+            dailyLoads: [{ dayMs: Date.UTC(2026, 6, 15), load: 30, activityCount: 5 }],
         });
 
         await (processDerivedMetricsTask as any)({
@@ -375,7 +375,7 @@ describe('processDerivedMetricsTask', () => {
             },
             expect.objectContaining({
                 builtFromEventMutationVersion: 12,
-                formDailyLoads: [{ dayMs: Date.UTC(2026, 6, 15), load: 30 }],
+                formDailyLoads: [{ dayMs: Date.UTC(2026, 6, 15), load: 30, activityCount: 5 }],
                 formSourceEventCount: 5,
                 formSourceDocCount: 7,
             }),
@@ -394,7 +394,7 @@ describe('processDerivedMetricsTask', () => {
             builtFromEventMutationVersion: 12,
             sourceEventCount: 5,
             sourceDocCount: 7,
-            dailyLoads: [{ dayMs: Date.UTC(2026, 0, 1), load: 10 }],
+            dailyLoads: [{ dayMs: Date.UTC(2026, 0, 1), load: 10, activityCount: 5 }],
         });
         hoisted.fetchDerivedMetricsEventDocs.mockResolvedValueOnce([{ id: 'power-doc' }] as any);
 

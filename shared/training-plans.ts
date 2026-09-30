@@ -8,6 +8,8 @@ export const TRAINING_PLAN_SCHEMA_VERSION = 1 as const;
 export const TRAINING_PLAN_MAX_DAYS = 366;
 export const TRAINING_PLAN_MAX_CURRENT_WORKOUTS = 400;
 export const TRAINING_PLAN_CHECKPOINT_INTERVAL = 20;
+export const DELETED_WORKOUT_RECOVERY_DAYS = 90;
+export const DELETED_WORKOUT_RECOVERY_MS = DELETED_WORKOUT_RECOVERY_DAYS * 24 * 60 * 60 * 1000;
 
 export const TRAINING_PLAN_STATE_COLLECTION_ID = 'trainingPlanState';
 export const TRAINING_PLAN_STATE_DOCUMENT_ID = 'current';
@@ -68,6 +70,17 @@ export interface ScheduledWorkoutV1 {
   createdAtMs: number;
   updatedAtMs: number;
   deletedAtMs?: number;
+}
+
+/** The deletion instant, not the scheduled date, starts the recovery window. */
+export function isDeletedWorkoutRecoverable(
+  workout: Pick<ScheduledWorkoutV1, 'lifecycle' | 'deletedAtMs'>,
+  nowMs: number,
+): boolean {
+  return workout.lifecycle === 'deleted'
+    && Number.isSafeInteger(workout.deletedAtMs)
+    && Number.isSafeInteger(nowMs)
+    && nowMs - workout.deletedAtMs! < DELETED_WORKOUT_RECOVERY_MS;
 }
 
 export type TrainingScheduleRevisionScope =
@@ -162,12 +175,15 @@ export interface SetScheduledWorkoutLifecycleMutationV1 {
 export interface DeleteScheduledWorkoutMutationV1 {
   kind: 'delete-workout';
   workoutId: string;
+  /** Explicit opt-in to remove eligible past provider copies; completed copies stay protected. */
+  removePastProviderCopies?: boolean;
 }
 
 export interface PermanentlyDeleteScheduledWorkoutMutationV1 {
   kind: 'permanently-delete-workout';
   workoutId: string;
   confirmPermanentDeletion: true;
+  removePastProviderCopies?: boolean;
 }
 
 export type TrainingScheduleMutationOperationV1 =
@@ -195,6 +211,8 @@ export interface MutateTrainingScheduleResponseV1 {
   state: TrainingPlanStateV1;
   plans: TrainingPlanV1[];
   workouts: ScheduledWorkoutV1[];
+  /** A staged restore persisted the changed workouts; re-read the schedule for their full recipes. */
+  workoutsDeferred?: true;
   removedPlanIds: string[];
   permanentlyDeletedWorkoutIds: string[];
 }
@@ -249,6 +267,7 @@ export interface DeleteTrainingPlanRequestV1 {
   expectedRevisions: ExpectedTrainingScheduleRevision[];
   workoutDisposition: 'convert-to-standalone' | 'delete-workouts';
   confirmPlanDeletion: true;
+  removePastProviderCopies?: boolean;
 }
 
 export interface DeleteTrainingPlanResponseV1 {
@@ -662,18 +681,26 @@ export function parseMutateTrainingScheduleRequestV1(value: unknown): MutateTrai
       };
       break;
     case 'delete-workout':
-      rejectUnknownFields(operationRecord, ['kind', 'workoutId'], '$.operation');
-      operation = { kind, workoutId: readEntityId(operationRecord.workoutId, '$.operation.workoutId') };
+      rejectUnknownFields(operationRecord, ['kind', 'workoutId', 'removePastProviderCopies'], '$.operation');
+      if ('removePastProviderCopies' in operationRecord && typeof operationRecord.removePastProviderCopies !== 'boolean') {
+        throw new TrainingPlanContractError('$.operation.removePastProviderCopies', 'Expected a boolean.');
+      }
+      operation = { kind, workoutId: readEntityId(operationRecord.workoutId, '$.operation.workoutId'),
+        ...('removePastProviderCopies' in operationRecord ? { removePastProviderCopies: operationRecord.removePastProviderCopies as boolean } : {}) };
       break;
     case 'permanently-delete-workout':
-      rejectUnknownFields(operationRecord, ['kind', 'workoutId', 'confirmPermanentDeletion'], '$.operation');
+      rejectUnknownFields(operationRecord, ['kind', 'workoutId', 'confirmPermanentDeletion', 'removePastProviderCopies'], '$.operation');
       if (operationRecord.confirmPermanentDeletion !== true) {
         throw new TrainingPlanContractError('$.operation.confirmPermanentDeletion', 'Explicit confirmation is required.');
+      }
+      if ('removePastProviderCopies' in operationRecord && typeof operationRecord.removePastProviderCopies !== 'boolean') {
+        throw new TrainingPlanContractError('$.operation.removePastProviderCopies', 'Expected a boolean.');
       }
       operation = {
         kind,
         workoutId: readEntityId(operationRecord.workoutId, '$.operation.workoutId'),
         confirmPermanentDeletion: true,
+        ...('removePastProviderCopies' in operationRecord ? { removePastProviderCopies: operationRecord.removePastProviderCopies as boolean } : {}),
       };
       break;
   }
@@ -688,7 +715,7 @@ export function parseMutateTrainingScheduleRequestV1(value: unknown): MutateTrai
 export function parseDeleteTrainingPlanRequestV1(value: unknown): DeleteTrainingPlanRequestV1 {
   const record = asRecord(value, '$');
   rejectUnknownFields(record, [
-    'mutationId', 'planId', 'expectedRevisions', 'workoutDisposition', 'confirmPlanDeletion',
+    'mutationId', 'planId', 'expectedRevisions', 'workoutDisposition', 'confirmPlanDeletion', 'removePastProviderCopies',
   ], '$');
   const workoutDisposition = readLifecycle(
     record.workoutDisposition,
@@ -698,12 +725,16 @@ export function parseDeleteTrainingPlanRequestV1(value: unknown): DeleteTraining
   if (record.confirmPlanDeletion !== true) {
     throw new TrainingPlanContractError('$.confirmPlanDeletion', 'Explicit plan-deletion confirmation is required.');
   }
+  if ('removePastProviderCopies' in record && typeof record.removePastProviderCopies !== 'boolean') {
+    throw new TrainingPlanContractError('$.removePastProviderCopies', 'Expected a boolean.');
+  }
   return {
     mutationId: normalizeTrainingScheduleMutationId(record.mutationId),
     planId: readEntityId(record.planId, '$.planId'),
     expectedRevisions: parseExpectedRevisions(record.expectedRevisions),
     workoutDisposition,
     confirmPlanDeletion: true,
+    ...('removePastProviderCopies' in record ? { removePastProviderCopies: record.removePastProviderCopies as boolean } : {}),
   };
 }
 

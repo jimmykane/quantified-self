@@ -93,6 +93,20 @@ describe('PlanScheduleCalendarComponent', () => {
     expect(fixture.componentInstance.selectedDate()).toBe(plan.endLocalDate);
   });
 
+  it('keeps the full final month visible when the plan end is selected', async () => {
+    const fixture = await render();
+    (fixture.nativeElement.querySelector('[aria-label="Next plan month"]') as HTMLButtonElement).click();
+    fixture.detectChanges();
+    const end = fixture.nativeElement.querySelector('[data-plan-date="2026-10-06"]') as HTMLButtonElement;
+    end.click();
+    fixture.detectChanges();
+    expect(fixture.componentInstance.selectedDate()).toBe(plan.endLocalDate);
+    expect(fixture.nativeElement.querySelectorAll('.calendar-day')).toHaveLength(35);
+    expect((fixture.nativeElement.querySelector('[data-plan-date="2026-10-07"]') as HTMLButtonElement).disabled).toBe(true);
+    expect(fixture.nativeElement.querySelector('[data-plan-date="2026-11-01"]')).toBeTruthy();
+    expect(selection).toHaveBeenCalledTimes(2);
+  });
+
   it('updates its plan accent without changing dates, weekends, workouts or selection', async () => {
     const fixture = await render();
     const calendar = fixture.nativeElement.querySelector('.plan-calendar') as HTMLElement;
@@ -146,7 +160,7 @@ describe('PlanScheduleCalendarComponent', () => {
     (fixture.nativeElement.querySelector('[data-plan-date="2026-09-12"]') as HTMLButtonElement).click();
     fixture.detectChanges();
     expect(fixture.nativeElement.querySelector('.calendar-day--selected')?.classList).toContain('calendar-day--weekend');
-    const outsideWeekend = fixture.nativeElement.querySelector('[data-plan-date="2026-10-10"]') as HTMLButtonElement;
+    const outsideWeekend = fixture.nativeElement.querySelector('[data-plan-date="2026-09-05"]') as HTMLButtonElement;
     expect(outsideWeekend.disabled).toBe(true);
     expect(outsideWeekend.parentElement?.classList).toContain('calendar-day--weekend');
     expect(outsideWeekend.parentElement?.classList).toContain('calendar-day--outside');

@@ -22,6 +22,7 @@ import {
 } from '../../../../shared/training-workout-completion';
 import { SPORTS_LIB_VERSION } from '../../shared/sports-lib-version.node';
 import { getUserDeletionGuardStateInTransaction } from '../../shared/user-deletion-guard';
+import { assertNoTrainingBulkRestoreInProgress } from '../deletion-lock';
 import type { FITActivityReference } from '../../suunto/guide-completion';
 import { readTrainingDeliveryAuthority } from '../delivery/connection';
 import { DELIVERY_LEDGER, type DeliveryLedgerV1 } from '../delivery/contracts';
@@ -156,6 +157,9 @@ export async function retainGarminFITWorkoutReferences(
     const matching = workoutId ? await tx.get(user.collection(DELIVERY_LEDGER)
       .where('actual.ids.workout', '==', workoutId).limit(2)) : null;
     const ledger = matching?.size === 1 ? garminLedger(matching.docs[0], authority.connection.destinationKey, workoutId!) : null;
+    if (ledger) {
+      await assertNoTrainingBulkRestoreInProgress(tx, user.collection('trainingPlanState').doc('current'));
+    }
     const activity = activities.length === 1 ? activities[0] : null;
     const related = ledger && activity ? await Promise.all([
       tx.get(user.collection('scheduledWorkouts').doc(ledger.workoutId)),

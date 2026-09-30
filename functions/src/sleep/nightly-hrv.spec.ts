@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { enrichSleepWithNightlyHrv, nightlyHealthAccountKey, type NightlyHrvRecord, aggregateNightlyHrvEvidence } from '../../../shared/nightly-hrv';
+import { enrichSleepWithNightlyHrv, nightlyHealthAccountKey, nightlyHrvDateRange, type NightlyHrvRecord, aggregateNightlyHrvEvidence } from '../../../shared/nightly-hrv';
 import { encodeSleepSessionSportsLibData } from '../../../shared/sports-lib-health-data';
 import { type SleepSession, type SleepProvider, SLEEP_PROVIDERS } from '../../../shared/sleep';
+import { READINESS_EVIDENCE_VERSION } from '../../../shared/readiness';
 import { mapGarminHealthSummaries } from '../garmin/health';
 import { buildHealthSourceRecordWrite } from '../health/writer';
 import { mapGarminSleepSummary } from './provider-mappers';
@@ -22,8 +23,20 @@ async function record(provider: string = SLEEP_PROVIDERS.GarminAPI): Promise<Nig
       normalizationStatus: 'canonical', origin: 'provider_summary', recordingMethod: 'provider_calculated', canonical: { value: 44, unit: 'ms' }, native: { metric: 'lastNightAvg', value: 44, unit: 'ms' } }] };
 }
 describe('shared nightly HRV', () => {
-  it('retains a fragment HRV source and rejects mixtures of measurement semantics', () => {
+  it('weights adjacent fragment HRV by sample count and rejects ambiguous evidence', () => {
     expect(aggregateNightlyHrvEvidence([{averageHrvMs: 44, hrvSourceKey: 'a'}, {averageHrvMs: null}]))
+      .toEqual({averageHrvMs: 44, hrvSourceKey: 'a'});
+    expect(aggregateNightlyHrvEvidence(
+      [{averageHrvMs: 44, hrvSourceKey: 'a'}, {averageHrvMs: null}],
+      {requireEveryPoint: true},
+    )).toEqual({averageHrvMs: null});
+    expect(aggregateNightlyHrvEvidence([
+      {averageHrvMs: 29, hrvSampleCount: 46, hrvSourceKey: 'a'},
+      {averageHrvMs: 40, hrvSampleCount: 35, hrvSourceKey: 'a'},
+    ])).toEqual({averageHrvMs: ((29 * 46) + (40 * 35)) / 81, hrvSampleCount: 81, hrvSourceKey: 'a'});
+    expect(aggregateNightlyHrvEvidence([{averageHrvMs: 29, hrvSourceKey: 'a'}, {averageHrvMs: 40, hrvSourceKey: 'a'}]))
+      .toEqual({averageHrvMs: null});
+    expect(aggregateNightlyHrvEvidence([{averageHrvMs: 44, hrvSourceKey: 'a'}, {averageHrvMs: 44, hrvSourceKey: 'a'}]))
       .toEqual({averageHrvMs: 44, hrvSourceKey: 'a'});
     expect(aggregateNightlyHrvEvidence([{averageHrvMs: 44, hrvSourceKey: 'a'}, {averageHrvMs: 44, hrvSourceKey: 'b'}]))
       .toEqual({averageHrvMs: null});
@@ -41,7 +54,7 @@ describe('shared nightly HRV', () => {
     const documents = await supplementNightlyHrvSleepDocuments(uid, inputs.map(session => ({id: session.id!,
       data: encodeSleepSessionSportsLibData(session) as unknown as Record<string, unknown>})), async () => ({records}));
     const result = buildTrainingReadinessMetricPayload([], 0, documents.map(doc => ({id: doc.id, data: () => doc.data})), end + 3600000);
-    expect(result.payload.evidenceVersion).toBe(1);
+    expect(result.payload.evidenceVersion).toBe(READINESS_EVIDENCE_VERSION);
     const today = result.payload.points[result.payload.points.length - 1];
     expect(today.hrvPersonalRange).toMatchObject({ observationDayCount: 16, currentObservationDayCount: 7,
       latestMs: 55, baselineAverage: 50 + 5 / 16 });
@@ -110,6 +123,71 @@ describe('shared nightly HRV', () => {
     const result = await enrichSleepWithNightlyHrv(uid, fragments, [await record()]);
     expect(result.filter(s => s.vitals?.overnightHrvMs === 44)).toHaveLength(1);
     expect(result[0].vitals?.overnightHrvMs).toBe(44);
+  });
+  it('uses the resolved Suunto wake date for the Health query and join', async () => {
+    const suunto = {
+      ...sleep(SLEEP_PROVIDERS.SuuntoApp),
+      sleepDate: '2026-09-10',
+      timezoneOffsetSeconds: 3 * 3600,
+    };
+    const matching = {
+      ...await record(SLEEP_PROVIDERS.SuuntoApp),
+      calendarDate: '2026-09-11',
+    };
+    expect(nightlyHrvDateRange([suunto])).toEqual({
+      startDate: '2026-09-11',
+      endDate: '2026-09-11',
+    });
+    expect((await enrichSleepWithNightlyHrv(uid, [suunto], [matching]))[0].vitals?.overnightHrvMs).toBe(44);
+  });
+  it('does not attach an earlier sleep HRV record to a later separate Suunto sleep', async () => {
+    const earlier = {
+      ...sleep(SLEEP_PROVIDERS.SuuntoApp),
+      id: 'earlier',
+      startTimeMs: start,
+      endTimeMs: start + 3 * 3600000,
+      durationSeconds: 3 * 3600,
+    };
+    const later = {
+      ...sleep(SLEEP_PROVIDERS.SuuntoApp),
+      id: 'later',
+      startTimeMs: start + 5 * 3600000,
+      endTimeMs: start + 8 * 3600000,
+      durationSeconds: 3 * 3600,
+    };
+    const matchingEarlier = {
+      ...await record(SLEEP_PROVIDERS.SuuntoApp),
+      startTimeMs: earlier.startTimeMs,
+      endTimeMs: earlier.endTimeMs,
+    };
+    const result = await enrichSleepWithNightlyHrv(uid, [earlier, later], [matchingEarlier]);
+    expect(result[0].vitals?.overnightHrvMs).toBe(44);
+    expect(result[1].vitals).toBeUndefined();
+  });
+  it('withholds a Health summary spanning separate Suunto sleep groups', async () => {
+    const earlier = {
+      ...sleep(SLEEP_PROVIDERS.SuuntoApp), id: 'earlier',
+      endTimeMs: start + 3 * 3600000, durationSeconds: 3 * 3600,
+    };
+    const later = {
+      ...sleep(SLEEP_PROVIDERS.SuuntoApp), id: 'later',
+      startTimeMs: start + 5 * 3600000, durationSeconds: 3 * 3600,
+    };
+    const spanning = await record(SLEEP_PROVIDERS.SuuntoApp);
+    const ambiguous = await enrichSleepWithNightlyHrv(uid, [earlier, later], [spanning]);
+    expect(ambiguous.every(session => session.vitals?.overnightHrvMs === undefined)).toBe(true);
+
+    const earlierOnly = { ...spanning, endTimeMs: earlier.endTimeMs };
+    const laterOnly = { ...spanning, startTimeMs: later.startTimeMs,
+      metrics: spanning.metrics.map(entry => entry.kind === 'value' && entry.canonical
+        ? { ...entry, canonical: { ...entry.canonical, value: 48 } } : entry) };
+    const specific = await enrichSleepWithNightlyHrv(uid, [earlier, later], [spanning, earlierOnly, laterOnly]);
+    expect(specific.map(session => session.vitals?.overnightHrvMs)).toEqual([44, 48]);
+
+    const native = await enrichSleepWithNightlyHrv(uid,
+      [earlier, { ...later, vitals: { averageHrvMs: 50 } }], [spanning]);
+    expect(native[0].vitals).toBeUndefined();
+    expect(native[1].vitals?.averageHrvMs).toBe(50);
   });
   it.each(['owner', 'account', 'provider', 'date', 'interval', 'spot', 'maximum', 'manual', 'zero', 'nan', 'unknown'])('rejects %s mismatches', async kind => {
     const r = await record();

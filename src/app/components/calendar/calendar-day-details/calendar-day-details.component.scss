@@ -1,3 +1,6 @@
+@use '@angular/material' as mat;
+@use '../calendar-day-presentation' as day;
+
 :host {
   box-sizing: border-box;
   display: flex;
@@ -22,13 +25,16 @@
 }
 
 .calendar-day-details-content {
+  @include mat.list-overrides((
+    active-indicator-shape: 0,
+    list-item-one-line-container-height: auto,
+  ));
   box-sizing: border-box;
-  display: grid;
+  display: block;
   max-width: 100%;
   min-width: 0;
   min-height: 0;
   flex: 1 1 auto;
-  gap: 18px;
   padding: 16px;
   overflow-x: hidden;
   overflow-y: auto;
@@ -40,6 +46,26 @@
   min-width: 0;
 }
 
+// Let the shared day metrics use their existing three-column layout when the
+// sheet is wide, while retaining two columns on a narrow phone.
+app-calendar-day-context {
+  display: block;
+  container-type: inline-size;
+}
+
+.calendar-day-details-full-day {
+  display: flex;
+  width: max-content;
+  max-width: 100%;
+  margin: 0 0 4px auto;
+}
+
+.calendar-day-details-group {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--mat-sys-outline-variant);
+}
+
 .calendar-day-total {
   display: flex;
   align-items: baseline;
@@ -47,9 +73,15 @@
   gap: 16px;
 }
 
-.calendar-day-total span {
-  color: var(--mat-sys-on-surface-variant);
-  font: var(--mat-sys-body-medium);
+.calendar-day-total + app-training-impact {
+  margin-top: 16px;
+}
+
+.calendar-day-total > span {
+  @include day.supporting-text;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
   letter-spacing: 0;
 }
 
@@ -61,16 +93,21 @@
 
 .calendar-day-total strong {
   font-family: 'Barlow Condensed', sans-serif;
-  font-size: 1.75rem;
+  font-size: 22px;
   font-weight: 600;
+  line-height: 1.1;
   letter-spacing: 0;
 }
 
+.calendar-day-event-impact {
+  display: block;
+  max-width: 100%;
+  margin-top: 0;
+}
+
 h3 {
-  margin: 0 0 8px;
-  color: var(--mat-sys-on-surface);
-  font: var(--mat-sys-title-small);
-  letter-spacing: 0;
+  @include day.section-heading;
+  margin: 0 0 4px;
 }
 
 .calendar-day-section-heading {
@@ -84,11 +121,9 @@ h3 {
   margin-bottom: 0;
 }
 
-.calendar-day-plan-actions {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: flex-end;
-  gap: 8px;
+.calendar-day-plan-add {
+  flex: 0 0 auto;
+  white-space: nowrap;
 }
 
 .calendar-day-planned-row {
@@ -113,51 +148,72 @@ h3 {
 .calendar-day-planned-item {
   flex: 1 1 auto;
   min-width: 0;
-  height: auto;
-  min-height: 72px;
 }
 
-.calendar-day-planned-summary {
-  white-space: normal;
+.calendar-day-planned-row > button {
+  @include mat.icon-button-overrides((state-layer-size: 48px));
+  flex: 0 0 48px;
+  width: 48px;
+  height: 48px;
+}
+
+.calendar-day-duplicate-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+}
+
+// Content-sized app rows inside Material list items avoid the fixed multi-line
+// baselines/clamping, while Material still owns focus, ripple and interaction.
+.calendar-day-entry-item {
+  height: auto;
+  min-height: 44px;
+  padding: 4px 0;
+}
+
+.calendar-day-entry {
+  @include day.entry-row;
+}
+
+.calendar-day-entry-copy { min-width: 0; overflow-wrap: anywhere; }
+.calendar-day-entry-title { display: block; font: var(--mat-sys-body-medium); }
+a.calendar-day-entry-item .calendar-day-entry-title {
+  // Keep Material list text readable in both themes; the brand primary is not
+  // a contrast-safe small-text color on the shared sheet surface.
+  @include day.entry-title;
+}
+.calendar-day-entry-supporting { @include day.supporting-text; }
+
+.calendar-day-entry-icon {
+  @include day.entry-icon;
 }
 
 .calendar-day-item-meta {
-  display: inline-flex !important;
-  align-self: center !important;
-  align-items: center;
-  justify-content: center;
+  align-self: center;
+  width: 20px;
+  height: 20px;
+  font-size: 20px;
+  color: var(--mat-sys-on-surface-variant);
 }
 
 .calendar-day-empty {
   margin: 12px 0 0;
   color: var(--mat-sys-on-surface-variant);
-  font: var(--mat-sys-body-medium);
+  font: var(--mat-sys-body-small);
 }
 
 mat-nav-list,
 mat-action-list {
-  padding-top: 0;
-}
-
-.calendar-day-event-item-with-metrics {
-  height: auto;
-  min-height: 88px;
-}
-
-.calendar-day-event-item-with-metrics .calendar-day-event-icon {
-  align-self: center !important;
-  margin-top: 0 !important;
+  padding: 0;
 }
 
 .calendar-day-event-supporting {
   display: grid;
-  gap: 4px;
+  gap: 3px;
   overflow: visible;
   white-space: normal;
-}
-
-.calendar-day-event-supporting::before {
-  content: none;
 }
 
 .calendar-day-event-metrics {
@@ -167,8 +223,7 @@ mat-action-list {
 }
 
 .calendar-day-event-detail {
-  color: var(--mat-sys-on-surface-variant);
-  font: var(--mat-sys-body-medium);
+  @include day.supporting-text;
   letter-spacing: 0;
 }
 
@@ -176,14 +231,12 @@ mat-action-list {
   .calendar-day-details-content {
     padding: 12px;
   }
+}
 
+@media (max-width: 360px) {
   .calendar-day-section-heading {
     align-items: flex-start;
     flex-direction: column;
-  }
-
-  .calendar-day-plan-actions {
-    width: 100%;
-    justify-content: flex-start;
+    gap: 2px;
   }
 }

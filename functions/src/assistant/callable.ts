@@ -43,6 +43,7 @@ import {
   assistantRuntime,
   getAssistantRuntimeErrorReason,
   getAssistantRuntimeErrorToolName,
+  getAssistantRuntimeToolFailureDiagnostic,
   type AssistantRuntimeResult,
 } from './runtime';
 import { FUNCTION_SECRET_BINDINGS } from '../secrets';
@@ -416,6 +417,7 @@ async function answerWithGroundedRetry(
         errorReason: getAssistantRuntimeErrorReason(error) ?? 'unknown',
         errorStatus: getGenkitErrorStatus(error) ?? 'unknown',
         toolName: getAssistantRuntimeErrorToolName(error) ?? 'unknown',
+        ...getAssistantRuntimeToolFailureDiagnostic(error),
       });
     }
   }
@@ -761,6 +763,7 @@ export async function runAssistantChat(
         errorReason: getAssistantRuntimeErrorReason(failure) ?? 'unknown',
         errorStatus: getGenkitErrorStatus(failure) ?? 'unknown',
         toolName: getAssistantRuntimeErrorToolName(failure) ?? 'unknown',
+        ...getAssistantRuntimeToolFailureDiagnostic(failure),
       });
     }
     throw mappedError;

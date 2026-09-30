@@ -1,11 +1,13 @@
 name: Testing
 
+# Internal PR commits are tested on push, and the resulting check is attached to
+# the same commit shown by the PR. Develop is tested by the beta workflow so its
+# successful result can gate deployment without a duplicate pull-request run.
 on:
   push:
     branches-ignore:
       - develop
       - main
-  pull_request:
 
 jobs:
   run-tests:

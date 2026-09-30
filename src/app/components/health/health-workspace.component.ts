@@ -114,7 +114,7 @@ import {
   selectWorkoutWeightContextFallback,
   selectHealthPriorityTrendSeries,
   selectTodayHeartRateHighlightSeries,
-  sleepSessionHasHrv,
+  sleepSessionsHaveCanonicalHrv,
   sleepSummaryMetricIds,
 } from '../../helpers/health-workspace.helper';
 import {
@@ -367,10 +367,10 @@ export class HealthWorkspaceComponent {
 
   readonly healthMetricFilteringActive = computed(() => this.healthMetricAvailabilityStatus() === 'ready');
   readonly sleepMetricFilteringActive = computed(() => this.sleepMetricAvailabilityStatus() === 'ready');
-  readonly hasLoadedSleepHrv = computed(() => [
+  readonly hasLoadedSleepHrv = computed(() => sleepSessionsHaveCanonicalHrv([
     ...this.selectedSleepSessions(),
     ...this.prioritySleepSessions(),
-  ].some(sleepSessionHasHrv));
+  ]));
   readonly sleepHrvAvailabilityStatus = computed<HealthLoadStatus>(() => {
     if (this.hasLoadedSleepHrv()) {
       return 'ready';
@@ -577,17 +577,23 @@ export class HealthWorkspaceComponent {
   readonly availableProviders = computed<HealthProvider[]>(() => {
     const loadedResult = this.selectedHealthLoad()?.result;
     const selectedMetric = this.routeState().metric;
-    const providers = this.selectedIsSleep()
-      ? this.windowedSleepSessions().map(session => session.source.provider as HealthProvider)
+    const windowedSleepSessions = this.windowedSleepSessions();
+    const selectedIsSleep = this.selectedIsSleep();
+    const sleepProviders = selectedIsSleep ? [] : [...new Set(windowedSleepSessions.map(session =>
+      session.source.provider as HealthProvider))].filter(provider => {
+        const providerSessions = windowedSleepSessions.filter(session => session.source.provider === provider);
+        return selectedMetric === HEALTH_METRIC_IDS.HeartRateVariability
+          ? sleepSessionsHaveCanonicalHrv(providerSessions)
+          : providerSessions.some(session => sleepSummaryMetricIds(session).includes(selectedMetric as HealthMetricId));
+      });
+    const providers = selectedIsSleep
+      ? windowedSleepSessions.map(session => session.source.provider as HealthProvider)
       : [
         ...(this.selectedHealthLoad()?.providers || []),
         ...(loadedResult?.observations.map(item => item.provider) || []),
         ...(loadedResult?.sampleChunks.map(item => item.provider) || []),
         ...(this.selectedActivityHealthResult()?.observations.map(item => item.provider) || []),
-        ...this.windowedSleepSessions()
-          .filter(session => selectedMetric === HEALTH_METRIC_IDS.HeartRateVariability
-            ? sleepSessionHasHrv(session) : sleepSummaryMetricIds(session).includes(selectedMetric as HealthMetricId))
-          .map(session => session.source.provider as HealthProvider),
+        ...sleepProviders,
       ];
     return [...new Set(providers)].sort((left, right) => providerLabel(left).localeCompare(providerLabel(right)));
   });

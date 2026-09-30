@@ -1,7 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ServiceNames } from '@sports-alliance/sports-lib';
+import { gzipSync } from 'zlib';
 import * as logger from 'firebase-functions/logger';
-import { ACTIVITY_SYNC_ROUTE_IDS, ACTIVITY_SYNC_ROUTES } from '../../../shared/activity-sync-routes';
+import { ACTIVITY_SYNC_ROUTE_IDS, ACTIVITY_SYNC_ROUTES, HISTORICAL_MANUAL_ACTIVITY_ROUTE_IDS } from '../../../shared/activity-sync-routes';
 import { ActivitySyncQueueItemInterface } from '../queue/queue-item.interface';
 import { ProviderOperationError } from '../shared/provider-operation-error';
 
@@ -35,6 +36,9 @@ function createMockActivitySyncQueueItemRef(currentQueueItem?: Record<string, un
 const {
   mockTokenGet,
   mockEventGet,
+  mockHistoricalEventGet,
+  mockHistoricalMetaGet,
+  mockFileMetadata,
   mockDownload,
   mockUpdateToProcessed,
   mockDeferQueueItemForPendingDisconnect,
@@ -79,6 +83,9 @@ const {
   return {
     mockTokenGet,
     mockEventGet: vi.fn(),
+    mockHistoricalEventGet: vi.fn(),
+    mockHistoricalMetaGet: vi.fn(),
+    mockFileMetadata: vi.fn(),
     mockDownload,
     mockUpdateToProcessed: vi.fn(),
     mockDeferQueueItemForPendingDisconnect: vi.fn(),
@@ -125,6 +132,10 @@ const {
 
 vi.mock('firebase-admin', () => ({
   firestore: () => ({
+    doc: vi.fn(() => ({
+      get: mockHistoricalEventGet,
+      collection: vi.fn(() => ({ doc: vi.fn(() => ({ get: mockHistoricalMetaGet })) })),
+    })),
     collection: vi.fn((collectionName: string) => ({
       doc: vi.fn(() => ({
         collection: vi.fn((nestedCollectionName: string) => (
@@ -143,6 +154,7 @@ vi.mock('firebase-admin', () => ({
     bucket: vi.fn(() => ({
       file: vi.fn(() => ({
         download: mockDownload,
+        getMetadata: mockFileMetadata,
       })),
     })),
   }),
@@ -438,6 +450,192 @@ describe('activity-sync/process-queue-item', () => {
       exists: true,
       data: () => ({ stats: { 'Activity Types': ['Hiking'] } }),
     });
+    mockHistoricalEventGet.mockResolvedValue({
+      exists: true,
+      data: () => ({ originalFiles: [{ path: baseQueueItem.originalFile.path, generation: '42' }] }),
+    });
+    mockHistoricalMetaGet.mockResolvedValue({ exists: true, data: () => ({ kind: 'manualUpload', version: 1 }) });
+    mockFileMetadata.mockResolvedValue([{ generation: '42', size: '14' }]);
+  });
+
+  it('delivers a retained provider import after its source disconnects', async () => {
+    const fit = Buffer.alloc(14);
+    fit[0] = 12;
+    fit.write('.FIT', 8, 'ascii');
+    mockDownload.mockResolvedValue([fit]);
+    mockGetServiceConnectionMeta.mockImplementation(async (_userID: string, serviceName: ServiceNames) => (
+      serviceName === ServiceNames.GarminAPI ? { connectionState: 'disconnect_pending' } : null
+    ));
+    const queueItem: ActivitySyncQueueItemInterface = {
+      ...baseQueueItem,
+      manual: true,
+      deliveryMode: 'historical',
+      originalFile: { ...baseQueueItem.originalFile, generation: '42' },
+    };
+
+    await processActivitySyncQueueItem(queueItem);
+
+    expect(mockGetServiceConnectionMeta).not.toHaveBeenCalledWith('user-1', ServiceNames.GarminAPI);
+    expect(mockUploadActivityFileToSuunto).toHaveBeenCalledWith('user-1', fit, expect.anything());
+    expect(mockSetActivitySyncSuccessMetadata).toHaveBeenCalled();
+  });
+
+  it('does not upload a historical original with missing Storage size metadata', async () => {
+    const queueItem: ActivitySyncQueueItemInterface = {
+      ...baseQueueItem,
+      manual: true,
+      deliveryMode: 'historical',
+      originalFile: { ...baseQueueItem.originalFile, generation: '42' },
+    };
+    mockFileMetadata.mockResolvedValue([{ generation: '42', size: undefined }]);
+
+    await processActivitySyncQueueItem(queueItem);
+
+    expect(mockDownload).not.toHaveBeenCalled();
+    expect(mockUploadActivityFileToSuunto).not.toHaveBeenCalled();
+    expect(mockSetActivitySyncSkippedMetadata).toHaveBeenCalledWith(expect.objectContaining({
+      skippedReason: 'missing_invalid_or_oversized_original', requireEventExists: true,
+    }));
+    expect(mockMoveToDeadLetterQueue).not.toHaveBeenCalled();
+  });
+
+  it('skips a historical send when its event was deleted before delivery', async () => {
+    mockHistoricalEventGet.mockResolvedValue({ exists: false, data: () => undefined });
+    const queueItem: ActivitySyncQueueItemInterface = {
+      ...baseQueueItem, manual: true, deliveryMode: 'historical',
+      originalFile: { ...baseQueueItem.originalFile, generation: '42' },
+    };
+
+    const result = await processActivitySyncQueueItem(queueItem);
+
+    expect(result).toBe(QueueResult.Processed);
+    expect(mockSetActivitySyncSkippedMetadata).toHaveBeenCalledWith(expect.objectContaining({
+      skippedReason: 'historical_event_missing', requireEventExists: true,
+    }));
+    expect(mockUpdateQueueItemIfUserActive).toHaveBeenCalledWith(expect.objectContaining({
+      updateData: expect.objectContaining({ processed: true, resultStatus: 'skipped', skippedReason: 'historical_event_missing' }),
+    }));
+    expect(mockUploadActivityFileToSuunto).not.toHaveBeenCalled();
+    expect(mockMoveToDeadLetterQueue).not.toHaveBeenCalled();
+  });
+
+  it('skips a missing or replaced historical original without using the DLQ', async () => {
+    const queueItem: ActivitySyncQueueItemInterface = {
+      ...baseQueueItem, manual: true, deliveryMode: 'historical',
+      originalFile: { ...baseQueueItem.originalFile, generation: '42' },
+    };
+    mockFileMetadata.mockRejectedValueOnce(Object.assign(new Error('gone'), { code: 404 }));
+    await processActivitySyncQueueItem(queueItem);
+    expect(mockSetActivitySyncSkippedMetadata).toHaveBeenCalledWith(expect.objectContaining({
+      skippedReason: 'missing_invalid_or_oversized_original',
+    }));
+    expect(mockMoveToDeadLetterQueue).not.toHaveBeenCalled();
+
+    vi.clearAllMocks();
+    mockHistoricalEventGet.mockResolvedValue({
+      exists: true,
+      data: () => ({ originalFiles: [{ path: queueItem.originalFile.path, generation: '42' }] }),
+    });
+    mockHistoricalMetaGet.mockResolvedValue({ exists: true });
+    mockFileMetadata.mockResolvedValue([{ generation: '43', size: '14' }]);
+    mockUpdateQueueItemIfUserActive.mockResolvedValue('updated');
+    await processActivitySyncQueueItem(queueItem);
+    expect(mockSetActivitySyncSkippedMetadata).toHaveBeenCalledWith(expect.objectContaining({
+      skippedReason: 'missing_invalid_or_oversized_original',
+    }));
+    expect(mockMoveToDeadLetterQueue).not.toHaveBeenCalled();
+  });
+
+  it('retries transient Storage failures when reading a historical original', async () => {
+    mockFileMetadata.mockRejectedValueOnce(Object.assign(new Error('unavailable'), { code: 503 }));
+    const queueItem: ActivitySyncQueueItemInterface = {
+      ...baseQueueItem, manual: true, deliveryMode: 'historical',
+      originalFile: { ...baseQueueItem.originalFile, generation: '42' },
+    };
+
+    const result = await processActivitySyncQueueItem(queueItem);
+
+    expect(result).toBe(QueueResult.RetryIncremented);
+    expect(mockIncreaseRetryCountForQueueItem).toHaveBeenCalled();
+    expect(mockSetActivitySyncSkippedMetadata).not.toHaveBeenCalled();
+    expect(mockMoveToDeadLetterQueue).not.toHaveBeenCalled();
+  });
+
+  it('retries a transient Storage connection reset before historical upload', async () => {
+    mockFileMetadata.mockRejectedValueOnce(Object.assign(new Error('connection reset'), { code: 'ECONNRESET' }));
+    const queueItem: ActivitySyncQueueItemInterface = {
+      ...baseQueueItem, manual: true, deliveryMode: 'historical',
+      originalFile: { ...baseQueueItem.originalFile, generation: '42' },
+    };
+
+    const result = await processActivitySyncQueueItem(queueItem);
+
+    expect(result).toBe(QueueResult.RetryIncremented);
+    expect(mockSetActivitySyncSkippedMetadata).not.toHaveBeenCalled();
+    expect(mockMoveToDeadLetterQueue).not.toHaveBeenCalled();
+  });
+
+  it('retains reconciliation for a prior accepted upload even if its historical event disappears', async () => {
+    mockHistoricalEventGet.mockResolvedValue({ exists: false, data: () => undefined });
+    const queueItem: ActivitySyncQueueItemInterface = {
+      ...baseQueueItem, manual: true, deliveryMode: 'historical',
+      outboundFingerprintID: null,
+      destinationUploadID: 'accepted-upload',
+      destinationProviderUserID: 'suunto-user-1',
+      originalFile: { ...baseQueueItem.originalFile, generation: '42' },
+    };
+
+    await processActivitySyncQueueItem(queueItem);
+
+    expect(mockSetActivitySyncSkippedMetadata).not.toHaveBeenCalled();
+    expect(mockMoveToDeadLetterQueue).toHaveBeenCalled();
+  });
+
+  it('skips a manual upload whose retained provenance changed before delivery', async () => {
+    const queueItem: ActivitySyncQueueItemInterface = {
+      ...baseQueueItem,
+      routeId: HISTORICAL_MANUAL_ACTIVITY_ROUTE_IDS.SuuntoApp,
+      sourceServiceName: 'manualUpload', manual: true, deliveryMode: 'historical',
+      originalFile: { ...baseQueueItem.originalFile, generation: '42' },
+    };
+    mockHistoricalEventGet.mockResolvedValue({
+      exists: true,
+      data: () => ({ originalFiles: [{ path: 'users/user-1/events/event-1/replaced.fit', generation: '42' }] }),
+    });
+
+    await processActivitySyncQueueItem(queueItem);
+
+    expect(mockSetActivitySyncSkippedMetadata).toHaveBeenCalledWith(expect.objectContaining({
+      skippedReason: 'historical_provenance_changed',
+    }));
+    expect(mockMoveToDeadLetterQueue).not.toHaveBeenCalled();
+  });
+
+  it('expands a retained manual FIT.gz before uploading through the shared adapter', async () => {
+    const fit = Buffer.alloc(14);
+    fit[0] = 12;
+    fit.write('.FIT', 8, 'ascii');
+    const compressed = gzipSync(fit);
+    mockDownload.mockResolvedValue([compressed]);
+    mockFileMetadata.mockResolvedValue([{ generation: '42', size: `${compressed.length}` }]);
+    const path = 'users/user-1/events/event-1/original.fit.gz';
+    mockHistoricalEventGet.mockResolvedValue({
+      exists: true,
+      data: () => ({ originalFiles: [{ path, generation: '42' }] }),
+    });
+    const queueItem: ActivitySyncQueueItemInterface = {
+      ...baseQueueItem,
+      routeId: HISTORICAL_MANUAL_ACTIVITY_ROUTE_IDS.SuuntoApp,
+      sourceServiceName: 'manualUpload',
+      manual: true,
+      deliveryMode: 'historical',
+      originalFile: { path, extension: 'fit.gz', generation: '42' },
+    };
+
+    await processActivitySyncQueueItem(queueItem);
+
+    expect(mockUploadActivityFileToSuunto).toHaveBeenCalledWith('user-1', fit, expect.anything());
+    expect(mockSetActivitySyncSuccessMetadata).toHaveBeenCalled();
   });
 
   it('persists provider-echo fingerprints before starting a new destination upload', async () => {
@@ -460,29 +658,110 @@ describe('activity-sync/process-queue-item', () => {
       .toBeLessThan(mockUploadActivityFileToSuunto.mock.invocationCallOrder[0]);
   });
 
-  it('retries when the dispatch marker changes after enqueue but the item remains unclaimed', async () => {
+  it('continues after the initial dispatch marker arrives behind a fast fingerprint write', async () => {
     delete baseQueueItem.outboundFingerprintID;
     const dispatchedAtMs = Date.now();
-    baseQueueItem.ref = createMockActivitySyncQueueItemRef({
+    const currentQueueItem = {
       ...baseQueueItem,
       processed: false,
       dispatchedToCloudTask: dispatchedAtMs,
+    };
+    baseQueueItem.ref = createMockActivitySyncQueueItemRef(currentQueueItem);
+    mockUpdateQueueItemIfUserActive
+      .mockImplementationOnce(async ({ isCurrent }) => {
+        expect(isCurrent(currentQueueItem)).toBe(false);
+        return 'not_current';
+      })
+      .mockImplementationOnce(async ({ isCurrent }) => {
+        expect(isCurrent(currentQueueItem)).toBe(true);
+        return 'updated';
+      });
+
+    await expect(processActivitySyncQueueItem(baseQueueItem)).resolves.toBe(QueueResult.Processed);
+
+    const fingerprintGuard = mockUpdateQueueItemIfUserActive.mock.calls[0]?.[0];
+    expect(fingerprintGuard.phase).toBe('before_activity_sync_outbound_fingerprint_marker');
+    expect(fingerprintGuard.isCurrent({ ...baseQueueItem, dispatchedToCloudTask: dispatchedAtMs })).toBe(false);
+    expect(baseQueueItem.dispatchedToCloudTask).toBe(PROVIDER_OPERATION_IN_FLIGHT_QUEUE_DISPATCH_MARKER);
+    expect(mockUploadActivityFileToSuunto).toHaveBeenCalledOnce();
+    expect(mockIncreaseRetryCountForQueueItem).not.toHaveBeenCalled();
+    expect(mockMoveToDeadLetterQueue).not.toHaveBeenCalled();
+  });
+
+  it('still retries when an initial dispatch marker arrives with another provider-state change', async () => {
+    delete baseQueueItem.outboundFingerprintID;
+    baseQueueItem.ref = createMockActivitySyncQueueItemRef({
+      ...baseQueueItem,
+      dispatchedToCloudTask: Date.now(),
+      outboundFingerprintID: 'another-worker-fingerprint',
     });
     mockUpdateQueueItemIfUserActive.mockResolvedValueOnce('not_current');
 
     await expect(processActivitySyncQueueItem(baseQueueItem))
       .rejects.toThrow('changed before provider upload but remains unclaimed; retrying the task');
 
-    const fingerprintGuard = mockUpdateQueueItemIfUserActive.mock.calls[0]?.[0];
-    expect(fingerprintGuard.phase).toBe('before_activity_sync_outbound_fingerprint_marker');
-    expect(fingerprintGuard.isCurrent({ ...baseQueueItem, dispatchedToCloudTask: dispatchedAtMs })).toBe(false);
+    expect(mockUpdateQueueItemIfUserActive).toHaveBeenCalledOnce();
+    expect(mockUploadActivityFileToSuunto).not.toHaveBeenCalled();
+  });
+
+  it('does not adopt an initial dispatch marker from a replaced queue revision', async () => {
+    delete baseQueueItem.outboundFingerprintID;
+    baseQueueItem.ref = createMockActivitySyncQueueItemRef({
+      ...baseQueueItem,
+      dateCreated: baseQueueItem.dateCreated + 1,
+      dispatchedToCloudTask: Date.now(),
+    });
+    mockUpdateQueueItemIfUserActive.mockResolvedValueOnce('not_current');
+
+    await expect(processActivitySyncQueueItem(baseQueueItem))
+      .rejects.toThrow('changed before provider upload but remains unclaimed; retrying the task');
+
+    expect(mockUpdateQueueItemIfUserActive).toHaveBeenCalledOnce();
+    expect(mockUploadActivityFileToSuunto).not.toHaveBeenCalled();
+  });
+
+  it('does not adopt a dispatch marker older than the queue revision', async () => {
+    delete baseQueueItem.outboundFingerprintID;
+    baseQueueItem.ref = createMockActivitySyncQueueItemRef({
+      ...baseQueueItem,
+      dispatchedToCloudTask: baseQueueItem.dateCreated - 1,
+    });
+    mockUpdateQueueItemIfUserActive.mockResolvedValueOnce('not_current');
+
+    await expect(processActivitySyncQueueItem(baseQueueItem))
+      .rejects.toThrow('changed before provider upload but remains unclaimed; retrying the task');
+
+    expect(mockUpdateQueueItemIfUserActive).toHaveBeenCalledOnce();
+    expect(mockUploadActivityFileToSuunto).not.toHaveBeenCalled();
+  });
+
+  it('does not upload if another worker claims during the marker refresh', async () => {
+    delete baseQueueItem.outboundFingerprintID;
+    const dispatchedAtMs = Date.now();
+    baseQueueItem.ref = {
+      get: vi.fn()
+        .mockResolvedValueOnce({
+          exists: true,
+          data: () => ({ ...baseQueueItem, dispatchedToCloudTask: dispatchedAtMs }),
+        })
+        .mockResolvedValueOnce({
+          exists: true,
+          data: () => ({
+            ...baseQueueItem,
+            dispatchedToCloudTask: PROVIDER_OPERATION_IN_FLIGHT_QUEUE_DISPATCH_MARKER,
+            providerOperationStartedAt: Date.now(),
+          }),
+        }),
+    } as unknown as MockActivitySyncQueueItemRef;
+    mockUpdateQueueItemIfUserActive
+      .mockResolvedValueOnce('not_current')
+      .mockResolvedValueOnce('not_current');
+
+    await expect(processActivitySyncQueueItem(baseQueueItem)).resolves.toBe(QueueResult.AcknowledgedStale);
+
+    expect(mockUpdateQueueItemIfUserActive).toHaveBeenCalledTimes(2);
     expect(mockUploadActivityFileToSuunto).not.toHaveBeenCalled();
     expect(mockIncreaseRetryCountForQueueItem).not.toHaveBeenCalled();
-    expect(mockMoveToDeadLetterQueue).not.toHaveBeenCalled();
-
-    const retryQueueItem = { ...baseQueueItem, dispatchedToCloudTask: dispatchedAtMs };
-    await expect(processActivitySyncQueueItem(retryQueueItem)).resolves.toBe(QueueResult.Processed);
-    expect(mockUploadActivityFileToSuunto).toHaveBeenCalledOnce();
   });
 
   it('acknowledges a stale fingerprint write only after another worker processed the item', async () => {
@@ -593,6 +872,18 @@ describe('activity-sync/process-queue-item', () => {
       dispatchedToCloudTask: PROVIDER_OPERATION_IN_FLIGHT_QUEUE_DISPATCH_MARKER,
       providerOperationStartedAt,
     })).toBe(false);
+    expect(claim?.isCurrent({
+      ...baseQueueItem,
+      dateCreated: baseQueueItem.dateCreated + 1,
+      processed: false,
+      dispatchedToCloudTask: null,
+      providerOperationStartedAt: undefined,
+      destinationUploadID: undefined,
+      destinationProviderUserID: undefined,
+      destinationWorkoutKey: undefined,
+      destinationInfoCode: undefined,
+      destinationUploadContinuation: undefined,
+    })).toBe(false);
     expect(receipt?.isCurrent({
       ...baseQueueItem,
       processed: false,
@@ -650,18 +941,26 @@ describe('activity-sync/process-queue-item', () => {
     expect(mockUpdateToProcessed).not.toHaveBeenCalled();
   });
 
-  it('retries a stale provider claim when only the dispatch marker changed', async () => {
+  it('claims once when the initial dispatch marker arrives behind a fast provider claim', async () => {
     const dispatchedAtMs = Date.now();
-    baseQueueItem.ref = createMockActivitySyncQueueItemRef({
+    const currentQueueItem = {
       ...baseQueueItem,
       dispatchedToCloudTask: dispatchedAtMs,
-    });
-    mockUpdateQueueItemIfUserActive.mockResolvedValueOnce('not_current');
+    };
+    baseQueueItem.ref = createMockActivitySyncQueueItemRef(currentQueueItem);
+    mockUpdateQueueItemIfUserActive
+      .mockImplementationOnce(async ({ isCurrent }) => {
+        expect(isCurrent(currentQueueItem)).toBe(false);
+        return 'not_current';
+      })
+      .mockImplementationOnce(async ({ isCurrent }) => {
+        expect(isCurrent(currentQueueItem)).toBe(true);
+        return 'updated';
+      });
 
-    await expect(processActivitySyncQueueItem(baseQueueItem))
-      .rejects.toThrow('changed before provider upload but remains unclaimed; retrying the task');
+    await expect(processActivitySyncQueueItem(baseQueueItem)).resolves.toBe(QueueResult.Processed);
 
-    expect(mockUploadActivityFileToSuunto).not.toHaveBeenCalled();
+    expect(mockUploadActivityFileToSuunto).toHaveBeenCalledOnce();
     expect(mockIncreaseRetryCountForQueueItem).not.toHaveBeenCalled();
   });
 

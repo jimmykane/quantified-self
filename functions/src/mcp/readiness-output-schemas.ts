@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { normalizeReadinessHrvPersonalRange } from '../../../shared/readiness-hrv-validation';
 import { normalizeDerivedTrainingReadinessMetricPayload } from '../../../shared/training-readiness-metric';
+import { READINESS_EVIDENCE_VERSION } from '../../../shared/readiness';
 
 export const currentHrvRangeSchema = z.strictObject({
   tone: z.enum(['neutral', 'positive', 'caution', 'negative']),
@@ -28,5 +29,6 @@ export const currentReadinessHistorySchema = z.strictObject({
     latestSleepAtMs: nullableNumber, hrvRatio: nullableNumber, hrvPersonalRange: currentHrvRangeSchema.nullable(),
     averageHeartRateRatio: nullableNumber, minimumHeartRateRatio: nullableNumber, overnightHeartRateRatio: nullableNumber,
   })).length(14),
-}).refine(value => normalizeDerivedTrainingReadinessMetricPayload({ ...value, evidenceVersion: 1 }) !== null,
+}).refine(value => normalizeDerivedTrainingReadinessMetricPayload({ ...value,
+  evidenceVersion: READINESS_EVIDENCE_VERSION }) !== null,
   'Invalid readiness history');

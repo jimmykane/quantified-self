@@ -1673,6 +1673,7 @@ describe('Firestore Security Rules', () => {
                     `users/${userId}/trainingDeliveryLedger/id/attempts/attempt`,
                     `users/${userId}/trainingDeliveryState/current`,
                     `users/${userId}/trainingDeliveryState/current/receipts/mutation`,
+                    `users/${userId}/trainingDeliveryState/current/pastCleanup/workout_w`,
                     `users/${userId}/trainingDeliveryScopes/workout`, 'trainingDeliveryQueue/job', 'trainingProviderCapacity/garmin_app',
                     'trainingDeliveryCorosIntegerClaims/12345',
                     `users/${userId}/trainingProviderCapacity/garmin_account`,
@@ -1708,6 +1709,11 @@ describe('Firestore Security Rules', () => {
                     await userRef.collection('scheduledWorkouts').doc('workout-1').set({
                         id: 'workout-1', planId: 'plan-1', localDate: '2026-09-02', lifecycle: 'planned',
                     });
+                    for (const [id, deletedAtMs] of [['deleted-a', 100], ['deleted-b', 101]] as const) {
+                        await userRef.collection('scheduledWorkouts').doc(id).set({
+                            id, planId: 'plan-1', localDate: '2026-09-01', lifecycle: 'deleted', deletedAtMs,
+                        });
+                    }
                     await userRef.collection('scheduledWorkouts').doc('workout-1')
                         .collection('strengthDetails').doc('current').set({ version: 1, privatePrescription: true });
                     await userRef.collection('trainingPlans').doc('plan-1')
@@ -1722,7 +1728,11 @@ describe('Firestore Security Rules', () => {
                     await userRef.collection('trainingPlanState').doc('current')
                         .collection('planDeletionLocks').doc('plan-1').set({ requestHash: 'private' });
                     await userRef.collection('trainingPlanState').doc('current')
+                        .collection('planDeletionLocks').doc('_bulk_shift').set({ requestHash: 'private' });
+                    await userRef.collection('trainingPlanState').doc('current')
                         .collection('deletionTombstones').doc('hashed-entity-id').set({ entityIdHash: 'private' });
+                    await userRef.collection('trainingPlanState').doc('current')
+                        .collection('trainingCleanupJobs').doc('workout_cleanup').set({ kind: 'workout', mutationId: 'private' });
                 });
             };
 
@@ -1739,11 +1749,63 @@ describe('Firestore Security Rules', () => {
                 await assertFails(userRef.collection('trainingPlanState').get());
             });
 
+            it('hides workout roots during a staged restore and exposes only its availability leaf', async () => {
+                await seedCurrentTrainingData();
+                const base = `users/${userId}/trainingPlanState/current`;
+                await testEnv.withSecurityRulesDisabled(async context => {
+                    const db = context.firestore();
+                    await db.doc(`${base}/planDeletionLocks/_bulk_restore`).set({ requestHash: 'private' });
+                    await db.doc(`${base}/availability/restore`).set({ schemaVersion: 1, status: 'restoring' });
+                });
+                const owner = testEnv.authenticatedContext(userId).firestore();
+                const other = testEnv.authenticatedContext(otherId).firestore();
+                await assertSucceeds(owner.doc(`${base}/availability/restore`).get());
+                await assertFails(other.doc(`${base}/availability/restore`).get());
+                await assertFails(owner.doc(`${base}/planDeletionLocks/_bulk_restore`).get());
+                await assertFails(owner.collection(`${base}/availability`).get());
+                await assertFails(owner.doc(`${base}/availability/restore`).set({ status: 'ready' }));
+                await assertSucceeds(owner.doc(`users/${userId}/trainingPlans/plan-1`).get());
+                await assertFails(owner.doc(`users/${userId}/scheduledWorkouts/workout-1`).get());
+                await assertFails(owner.collection(`users/${userId}/scheduledWorkouts`).get());
+                await assertFails(owner.doc(`users/${userId}/scheduledWorkouts/workout-1/strengthDetails/current`).get());
+                await testEnv.withSecurityRulesDisabled(async context => {
+                    const db = context.firestore();
+                    await db.doc(`${base}/availability/restore`).delete();
+                    await db.doc(`${base}/planDeletionLocks/_bulk_restore`).delete();
+                });
+                await assertSucceeds(owner.doc(`users/${userId}/scheduledWorkouts/workout-1`).get());
+            });
+
             it('denies cross-user and unauthenticated reads of current training data', async () => {
                 await seedCurrentTrainingData();
                 const ownerPath = `users/${userId}/scheduledWorkouts/workout-1`;
                 await assertFails(testEnv.authenticatedContext(otherId).firestore().doc(ownerPath).get());
                 await assertFails(testEnv.unauthenticatedContext().firestore().doc(ownerPath).get());
+            });
+
+            it('allows only the owner to page deleted workouts while cleanup jobs remain internal', async () => {
+                await seedCurrentTrainingData();
+                const path = `users/${userId}/scheduledWorkouts`;
+                const owner = testEnv.authenticatedContext(userId).firestore();
+                const other = testEnv.authenticatedContext(otherId).firestore();
+                const page = owner.collection(path).where('planId', '==', 'plan-1')
+                    .where('lifecycle', '==', 'deleted').where('deletedAtMs', '>', 99)
+                    .orderBy('deletedAtMs', 'desc').orderBy('__name__', 'desc').limit(1);
+                const first = await assertSucceeds(page.get());
+                expect(first.docs.map(doc => doc.id)).toEqual(['deleted-b']);
+                const second = await assertSucceeds(owner.collection(path).where('planId', '==', 'plan-1')
+                    .where('lifecycle', '==', 'deleted').where('deletedAtMs', '>', 99)
+                    .orderBy('deletedAtMs', 'desc').orderBy('__name__', 'desc')
+                    .startAfter(101, first.docs[0].id).limit(1).get());
+                expect(second.docs.map(doc => doc.id)).toEqual(['deleted-a']);
+                await assertFails(other.collection(path).where('planId', '==', 'plan-1')
+                    .where('lifecycle', '==', 'deleted').where('deletedAtMs', '>', 99)
+                    .orderBy('deletedAtMs', 'desc').orderBy('__name__', 'desc').limit(1).get());
+                const internal = `users/${userId}/trainingPlanState/current/trainingCleanupJobs/workout_cleanup`;
+                for (const client of [owner, other, testEnv.unauthenticatedContext().firestore()]) {
+                    await assertFails(client.doc(internal).get());
+                    await assertFails(client.doc(internal).set({ forged: true }));
+                }
             });
 
             it('allows only owner reads of current strength details and denies every browser write', async () => {
@@ -1785,6 +1847,7 @@ describe('Firestore Security Rules', () => {
                     `users/${userId}/scheduledWorkouts/workout-1/revisions/0000000001`,
                     `users/${userId}/trainingPlanState/current/mutationReceipts/mutation-1`,
                     `users/${userId}/trainingPlanState/current/planDeletionLocks/plan-1`,
+                    `users/${userId}/trainingPlanState/current/planDeletionLocks/_bulk_shift`,
                     `users/${userId}/trainingPlanState/current/deletionTombstones/hashed-entity-id`,
                 ];
                 for (const path of internalPaths) {

@@ -7,10 +7,10 @@ import {
   OnInit,
   signal
 } from '@angular/core';
-import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import { takeUntilDestroyed, toObservable, toSignal } from '@angular/core/rxjs-interop';
 import { ActivatedRoute, Router } from '@angular/router';
 import { debounceTime } from 'rxjs/operators';
-import { firstValueFrom, Subscription } from 'rxjs';
+import { firstValueFrom, of, Subscription, switchMap } from 'rxjs';
 
 import { ActivityInterface } from '@sports-alliance/sports-lib';
 import { AppEventInterface, BenchmarkResult, getBenchmarkPairKey } from '@shared/app-event.interface';
@@ -51,6 +51,9 @@ import {
   EVENT_DIVE_PROFILE_SOURCE_STREAM_TYPES,
   hasEventDiveProfileData,
 } from '../../helpers/event-dive-profile.helper';
+import { TrainingImpactService, type TrainingImpactSnapshotState } from '../../services/training-impact.service';
+import { buildTrainingSessionImpactView } from '../../helpers/training-impact.helper';
+import { isMergeOrBenchmarkEvent } from '../../helpers/event-visibility.helper';
 
 @Component({
   selector: 'app-event-card',
@@ -74,6 +77,7 @@ export class EventCardComponent implements OnInit {
   private eventService = inject(AppEventService);
   private performanceCurveDataService = inject(PerformanceCurveDataService);
   private benchmarkFlow = inject(AppBenchmarkFlowService);
+  private trainingImpactService = inject(TrainingImpactService);
 
   // Signal-based state
   public event = signal<AppEventInterface | null>(null);
@@ -173,6 +177,26 @@ export class EventCardComponent implements OnInit {
     const targetUID = this.targetUserID();
     const user = this.currentUser();
     return !!(targetUID && user && targetUID === user.uid);
+  });
+
+  private trainingImpactSource = computed(() => {
+    const uid = this.currentUser()?.uid;
+    const event = this.event();
+    return this.isOwner() && uid && event && !isMergeOrBenchmarkEvent(event)
+      ? this.trainingImpactService.watch(uid)
+      : of({ status: 'private', formPoints: null } as TrainingImpactSnapshotState);
+  });
+
+  public trainingImpactState = toSignal(
+    toObservable(this.trainingImpactSource).pipe(switchMap(source => source)),
+    { initialValue: { status: 'private', formPoints: null } as TrainingImpactSnapshotState },
+  );
+
+  public trainingImpact = computed(() => {
+    const event = this.event();
+    return event && this.isOwner() && !isMergeOrBenchmarkEvent(event)
+      ? buildTrainingSessionImpactView(event, this.trainingImpactState())
+      : null;
   });
 
   public displayUser = computed(() => this.currentUser() ?? this.publicViewerUser());

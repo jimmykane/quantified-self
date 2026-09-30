@@ -5,13 +5,20 @@ import { calculatePersonalMetricRange, calculatePersonalMetricPointRange, calcul
   HRV_PERSONAL_RANGE_OPTIONS, HRV_PERSONAL_RANGE_VARIANTS } from '../../../shared/personal-metric-range';
 import { decodeHealthMetricSportsLibData, decodeSleepSessionSportsLibData, formatCanonicalHealthMetricSportsLibValue } from '../../../shared/sports-lib-health-data';
 import { HealthMetricEntry, HEALTH_UNITS } from '../../../shared/health';
-import { SleepSession, SLEEP_SPORTS_LIB_METRIC_FIELDS } from '../../../shared/sleep';
+import { aggregateNightlyHrvEvidence } from '../../../shared/nightly-hrv';
+import { groupCanonicalSleepNightFragments, resolveSleepDisplayDate, resolveSleepEffectiveStartTimeMs, SleepSession,
+  SLEEP_PROVIDERS, SLEEP_SPORTS_LIB_METRIC_FIELDS } from '../../../shared/sleep';
 import { getUserDeletionGuardState } from '../shared/user-deletion-guard';
 import { McpHealthError, firestoreHealthReads } from './health.service';
 
 const DAY = 86400000;
 const options = HRV_PERSONAL_RANGE_OPTIONS;
 const variants = HRV_PERSONAL_RANGE_VARIANTS;
+export const MCP_SLEEP_CANONICAL_TIME_FIELDS = [
+  'timezoneOffsetSeconds',
+  'providerFields.suunto.timestamp',
+  'providerFields.suunto.SleepOnsetLatencyDuration',
+] as const;
 const reason = z.enum(['building_baseline', 'insufficient_current', 'within_range', 'outside_range', 'far_outside_range']);
 const range = z.strictObject({ min: z.number().nonnegative(), max: z.number().nonnegative() }).nullable();
 const display = z.strictObject({ value: z.string().max(100), unit: z.string().max(100) }).nullable();
@@ -53,11 +60,13 @@ export const firestoreHrvRangeReads: HrvRangeReads = {
         .select('userID', 'schemaVersion', 'source.provider', 'source.accountKey', 'calendarDate', 'endTimeMs', 'metrics')
       : root.collection('sleepSessions').where('endTimeMs', '>=', start).where('endTimeMs', '<=', end)
         .orderBy('endTimeMs').orderBy(FieldPath.documentId())
-        .select('source.provider', 'source.providerUserId', 'sleepDate', 'endTimeMs', 'isNap',
-          'vitals.averageHrvMs', 'vitals.overnightHrvMs', 'sportsLibData.schemaVersion',
+        .select('source.provider', 'source.providerUserId', 'sleepDate', 'startTimeMs', 'endTimeMs', 'isNap',
+          ...MCP_SLEEP_CANONICAL_TIME_FIELDS,
+          'vitals.averageHrvMs', 'vitals.hrvSampleCount', 'vitals.overnightHrvMs', 'sportsLibData.schemaVersion',
           // The shared Sleep decoder requires canonical duration, even for a vital-only projection.
           new FieldPath('sportsLibData', 'metrics', SLEEP_SPORTS_LIB_METRIC_FIELDS.Duration),
           new FieldPath('sportsLibData', 'metrics', SLEEP_SPORTS_LIB_METRIC_FIELDS.AverageHrv),
+          new FieldPath('sportsLibData', 'metrics', SLEEP_SPORTS_LIB_METRIC_FIELDS.HrvSampleCount),
           new FieldPath('sportsLibData', 'metrics', SLEEP_SPORTS_LIB_METRIC_FIELDS.OvernightHrv));
     if (cursor) query = query.startAfter(cursor as admin.firestore.QueryDocumentSnapshot);
     return (await query.limit(limit).get()).docs.map(doc => ({ data: doc.data(), cursor: doc }));
@@ -81,6 +90,7 @@ export async function queryHrvPersonalRange(input: HrvRangeInput, reads: HrvRang
     observations: PersonalMetricRangeObservation[] };
   const series = new Map<string, Series>();
   const accounts = new Map<string, number>();
+  const suuntoSleepSessions: SleepSession[] = [];
   function add(source: 'health' | 'sleep', provider: unknown, account: unknown, date: unknown, timestamp: unknown,
     variant: unknown, value: unknown, aggregation: unknown, origin: unknown, method: unknown) {
     if (!['GarminAPI', 'SuuntoApp', 'COROSAPI'].includes(String(provider)) || typeof account !== 'string' || !account || account.length > 1024
@@ -131,10 +141,22 @@ export async function queryHrvPersonalRange(input: HrvRangeInput, reads: HrvRang
           let session: SleepSession;
           try { session = decodeSleepSessionSportsLibData(d as unknown as SleepSession); } catch { excludedValues++; continue; }
           if (session.isNap) continue;
+          const sleepStartTimeMs = resolveSleepEffectiveStartTimeMs(session);
+          const sleepEndTimeMs = session.endTimeMs;
+          if (!Number.isSafeInteger(sleepStartTimeMs) || !Number.isSafeInteger(sleepEndTimeMs)
+            || !Number.isFinite(new Date(sleepStartTimeMs).getTime())
+            || !Number.isFinite(new Date(sleepEndTimeMs).getTime())
+            || sleepEndTimeMs <= sleepStartTimeMs) { excludedValues++; continue; }
+          const sleepDate = resolveSleepDisplayDate(session);
+          if (!sleepDate) { excludedValues++; continue; }
+          if (session.source?.provider === SLEEP_PROVIDERS.SuuntoApp) {
+            suuntoSleepSessions.push({ ...session, sleepDate });
+            continue;
+          }
           for (const [field, variant] of [['averageHrvMs', 'sleep_session_average_hrv'], ['overnightHrvMs', 'sleep_overnight_hrv']] as const) {
             const value = session.vitals?.[field];
             if (value === null || value === undefined) continue;
-            add(source, session.source?.provider, session.source?.providerUserId || 'default', session.sleepDate,
+            add(source, session.source?.provider, session.source?.providerUserId || 'default', sleepDate,
               session.endTimeMs, variant, value, 'average', 'provider_summary', 'provider_calculated');
           }
         }
@@ -143,6 +165,54 @@ export async function queryHrvPersonalRange(input: HrvRangeInput, reads: HrvRang
       const next = page[page.length - 1]?.cursor;
       if (!next || next === cursor) throw new McpHealthError('temporarily_unavailable', 'HRV pagination failed.');
       cursor = next;
+    }
+  }
+  const suuntoCandidates = suuntoSleepSessions.flatMap(session => {
+    const account = session.source?.providerUserId;
+    const startTimeMs = resolveSleepEffectiveStartTimeMs(session);
+    const endTimeMs = session.endTimeMs;
+    if (!account || account.length > 1024 || !z.iso.date().safeParse(session.sleepDate).success
+      || !Number.isSafeInteger(startTimeMs) || !Number.isSafeInteger(endTimeMs) || endTimeMs <= startTimeMs) {
+      excludedValues++;
+      return [];
+    }
+    return [{
+      session,
+      provider: SLEEP_PROVIDERS.SuuntoApp,
+      providerUserId: account,
+      sleepDate: session.sleepDate,
+      isNap: false,
+      startTimeMs,
+      endTimeMs,
+    }];
+  });
+  for (const cluster of groupCanonicalSleepNightFragments(suuntoCandidates)) {
+    const byRecency = [...cluster].sort((left, right) => left.endTimeMs - right.endTimeMs
+      || left.startTimeMs - right.startTimeMs);
+    const latest = byRecency[byRecency.length - 1];
+    const account = latest.session.source!.providerUserId!;
+    const averageHrv = aggregateNightlyHrvEvidence(cluster.map(({ session }) => ({
+      averageHrvMs: session.vitals?.averageHrvMs ?? null,
+      hrvSampleCount: session.vitals?.hrvSampleCount ?? null,
+      hrvSourceKey: 'suunto-average',
+    })), { requireEveryPoint: true });
+    const overnightHrv = aggregateNightlyHrvEvidence(cluster.map(({ session }) => ({
+      averageHrvMs: session.vitals?.overnightHrvMs ?? null,
+      hrvSourceKey: 'suunto-overnight',
+    })), { requireEveryPoint: true });
+    if (averageHrv.averageHrvMs !== null) {
+      add('sleep', SLEEP_PROVIDERS.SuuntoApp, account, latest.session.sleepDate, latest.endTimeMs,
+        'sleep_session_average_hrv', averageHrv.averageHrvMs,
+        'average', 'provider_summary', 'provider_calculated');
+    } else if (cluster.some(({ session }) => typeof session.vitals?.averageHrvMs === 'number')) {
+      excludedValues++;
+    }
+    if (overnightHrv.averageHrvMs !== null) {
+      add('sleep', SLEEP_PROVIDERS.SuuntoApp, account, latest.session.sleepDate, latest.endTimeMs,
+        'sleep_overnight_hrv', overnightHrv.averageHrvMs,
+        'average', 'provider_summary', 'provider_calculated');
+    } else if (cluster.some(({ session }) => typeof session.vitals?.overnightHrvMs === 'number')) {
+      excludedValues++;
     }
   }
   const clamp = (value: { min: number; max: number } | null) => value ? { min: Math.max(0, value.min), max: value.max } : null;

@@ -10,6 +10,7 @@ import {
 import {
   ASSISTANT_BASE_MCP_TOOL_NAMES,
   ASSISTANT_MCP_TOOL_NAMES,
+  AssistantMcpToolFailure,
   AssistantRecoverableMcpToolError,
   AssistantTrainingMetricsPreparingError,
   createAssistantMcpSession,
@@ -435,6 +436,36 @@ describe('Assistant MCP session', () => {
           guidance: 'Use a valid, narrower date range. Long activity-metric histories are paged automatically by the Assistant.',
         }) satisfies Partial<AssistantRecoverableMcpToolError>,
       );
+    } finally {
+      await session.close();
+    }
+  });
+
+  it('classifies nonrecoverable MCP results without retaining their text', async () => {
+    const session = await createAssistantMcpSession('user-1', 'https://quantified-self.io', {
+      createServer: () => createTestServer({ errorTool: 'query_activities', errorCode: 'temporarily_unavailable' }),
+    });
+    try {
+      await expect(session.callTool('query_activities', {})).rejects.toMatchObject({
+        name: 'AssistantMcpToolFailure',
+        code: 'temporarily_unavailable',
+        stage: 'tool_response',
+        message: 'The Assistant MCP tool could not complete the request.',
+      } satisfies Partial<AssistantMcpToolFailure>);
+    } finally {
+      await session.close();
+    }
+  });
+
+  it('returns fixed corrective guidance for strict input rejection without retaining rejected arguments', async () => {
+    const session = await createAssistantMcpSession('user-1', 'https://quantified-self.io');
+    try {
+      await expect(session.callTool('query_activities', { relativePeriod: 'today' })).rejects.toMatchObject({
+        name: 'AssistantRecoverableMcpToolError',
+        code: 'invalid_tool_input',
+        guidance: expect.stringContaining('advertised input schema exactly'),
+        message: 'The Assistant MCP tool needs corrected input.',
+      } satisfies Partial<AssistantRecoverableMcpToolError>);
     } finally {
       await session.close();
     }

@@ -130,8 +130,8 @@ export const PROVIDER_INTEGRATION_PAGES: Record<IntegrationProviderKey, Provider
       },
       {
         icon: 'published_with_changes',
-        title: 'Sync past Garmin activities to Suunto',
-        copy: 'Choose a date range in Connections to send Garmin activities already stored in Quantified Self to Suunto.',
+        title: 'Send saved activities to Suunto',
+        copy: 'Choose sources and dates under the Suunto destination in Connections. Preview saved FIT imports or manual FIT uploads before scheduling delivery.',
       },
       {
         icon: 'published_with_changes',
@@ -263,8 +263,8 @@ export const PROVIDER_INTEGRATION_PAGES: Record<IntegrationProviderKey, Provider
       },
       {
         icon: 'history',
-        title: 'Sync past activities to Suunto',
-        copy: 'Choose a date range in Connections to send Garmin or COROS activities already stored in Quantified Self to Suunto.',
+        title: 'Send past activities to Suunto',
+        copy: 'Under the Suunto destination in Connections, select saved Garmin, COROS, or Wahoo imports and optional manual FIT uploads, then preview and send.',
       },
       {
         icon: 'published_with_changes',
@@ -434,8 +434,8 @@ export const PROVIDER_INTEGRATION_PAGES: Record<IntegrationProviderKey, Provider
       },
       {
         icon: 'published_with_changes',
-        title: 'Sync past COROS activities to Suunto or Wahoo',
-        copy: 'Choose a date range in Connections to send COROS activities already stored in Quantified Self to Suunto or Wahoo.',
+        title: 'Send past COROS activities to Suunto or Wahoo',
+        copy: 'Choose the destination in Connections, select COROS imports and optionally manual FIT uploads, then preview and send the saved date range.',
       },
       {
         icon: 'upload_file',
@@ -584,7 +584,7 @@ export const PROVIDER_INTEGRATION_PAGES: Record<IntegrationProviderKey, Provider
       {
         icon: 'upload_file',
         title: 'Direct FIT activity delivery',
-        copy: 'Choose a FIT activity file in Wahoo Services to send it directly to Wahoo. This does not create or retain a Quantified Self activity.',
+        copy: 'Choose a FIT activity file in Wahoo Services to send it directly to Wahoo. Quantified Self parses its canonical activity type server-side and, when explicitly mapped, corrects only the Wahoo workout type after processing while preserving its title. This does not create or retain a Quantified Self activity.',
       },
       {
         icon: 'route',
@@ -624,7 +624,7 @@ export const PROVIDER_INTEGRATION_PAGES: Record<IntegrationProviderKey, Provider
       {
         icon: 'sync',
         title: 'Asynchronous upload status',
-        copy: 'Wahoo can process a FIT upload asynchronously. Quantified Self keeps the Wahoo upload identifier for status checks without posting the same source file again.',
+        copy: 'Wahoo can process a FIT upload asynchronously. Quantified Self keeps the Wahoo upload identifier and optional validated mapped type in the browser row for status checks without posting the same source file again.',
       },
       {
         icon: 'route',
@@ -676,7 +676,7 @@ export const PROVIDER_INTEGRATION_PAGES: Record<IntegrationProviderKey, Provider
       },
       {
         question: 'Can I sync Wahoo activities to Suunto automatically?',
-        answer: 'Yes. Connect Wahoo and Suunto, turn on automatic activity sync in Wahoo Services, and newly imported eligible Wahoo FIT activities can be sent to Suunto. Use Sync past activities for retained Wahoo FIT activities already in Quantified Self.',
+        answer: 'Yes. Connect Wahoo and Suunto, turn on automatic activity sync in Wahoo Services, and newly imported eligible Wahoo FIT activities can be sent to Suunto. Use Send past activities under the Suunto destination for retained Wahoo FIT imports or manual FIT uploads already in Quantified Self.',
       },
       {
         question: 'Can I sync Wahoo activities to COROS?',

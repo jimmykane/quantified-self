@@ -21,7 +21,7 @@
   gap: 8px;
   grid-template-columns: minmax(0, 1fr) 94px;
   grid-template-rows: minmax(0, 1fr);
-  padding: 6px 12px;
+  padding: 6px var(--qs-dashboard-chart-content-inset, 12px);
 }
 
 .kpi-layout.kpi-layout-row.kpi-layout-reserve-actions {
@@ -47,7 +47,7 @@
 .kpi-header {
   display: grid;
   gap: 4px;
-  padding: 0 10px;
+  padding: 0 var(--qs-dashboard-chart-content-inset, 10px);
   min-width: 0;
 }
 

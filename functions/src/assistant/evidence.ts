@@ -232,6 +232,91 @@ function buildRankingFacts(
   return facts.slice(0, MAX_FACTS);
 }
 
+function buildTrainingImpactEvidence(
+  tool: Pick<AssistantMcpToolDefinition, 'name' | 'title'>,
+  structuredContent: Record<string, unknown>,
+): AssistantEvidence {
+  const status = typeof structuredContent.status === 'string'
+    ? structuredContent.status
+    : 'unavailable';
+  const contribution = isRecord(structuredContent.contribution)
+    ? structuredContent.contribution
+    : null;
+  const outcomes = Array.isArray(structuredContent.outcomes)
+    ? structuredContent.outcomes.filter(isRecord)
+    : [];
+  const calculated = status === 'ready' || status === 'partial';
+  const facts: AssistantEvidenceFact[] = calculated ? [] : [
+    normalizeAssistantEvidenceFact({
+      label: 'Status',
+      value: humanizeFieldName(status),
+    }),
+  ];
+  if (!calculated && typeof structuredContent.reason === 'string') {
+    facts.push(normalizeAssistantEvidenceFact({
+      label: 'Reason',
+      value: humanizeFieldName(structuredContent.reason),
+    }));
+  }
+  const addMetric = (label: string, key: string, suffix = ''): void => {
+    const value = contribution?.[key];
+    if (typeof value === 'number' && Number.isFinite(value)) {
+      facts.push(normalizeAssistantEvidenceFact({
+        label,
+        value: `${formatFactValue(key, value)}${suffix}`,
+      }));
+    }
+  };
+  addMetric('Training stress score', 'trainingStressScore', ' TSS');
+  addMetric('Fitness load (CTL)', 'fitnessLoadCtlContribution');
+  addMetric('Fatigue load (ATL)', 'fatigueLoadAtlContribution');
+  addMetric('Freshness (Form)', 'freshnessFormContribution');
+  if (calculated && typeof structuredContent.sessionRole === 'string') {
+    const sessionRole = ({
+      'pushed-above-maintenance': 'Helped push the day above maintenance',
+      'added-to-building-day': 'Added to a fitness-building day',
+      'offset-fitness-decay': 'Offset normal fitness-load decay',
+      'no-load': 'No modeled load contribution',
+    } as Record<string, string>)[structuredContent.sessionRole]
+      || humanizeFieldName(structuredContent.sessionRole);
+    facts.push(normalizeAssistantEvidenceFact({
+      label: 'Session role',
+      value: sessionRole,
+    }));
+  }
+  for (const outcome of outcomes) {
+    if (facts.length >= MAX_FACTS) break;
+    const day = typeof outcome.trainingDay === 'string'
+      ? outcome.trainingDay
+      : 'UTC Training day';
+    const rawDirection = typeof outcome.fitnessLoadOutcome === 'string'
+      ? outcome.fitnessLoadOutcome
+      : 'unavailable';
+    const direction = rawDirection === 'raised'
+      ? 'rose'
+      : rawDirection === 'held'
+        ? 'held steady'
+        : rawDirection;
+    const change = typeof outcome.fitnessLoadCtlChange === 'number'
+      && Number.isFinite(outcome.fitnessLoadCtlChange)
+      ? ` (${formatFactValue('fitnessLoadCtlChange', outcome.fitnessLoadCtlChange)} CTL)`
+      : '';
+    facts.push(normalizeAssistantEvidenceFact({
+      label: day,
+      value: `Fitness load ${direction}${change}`,
+    }));
+  }
+  return {
+    toolName: tool.name,
+    title: truncate(tool.title, 160),
+    summary: calculated
+      ? `TSS-based Training impact is ${status}; it does not measure physiological adaptation.`
+      : `TSS-based Training impact is ${status}.`,
+    facts: facts.slice(0, MAX_FACTS),
+    links: [],
+  };
+}
+
 function parseSafeAppUrl(value: unknown): string | null {
   if (typeof value !== 'string' || value.length > 500) {
     return null;
@@ -315,6 +400,9 @@ export function buildAssistantEvidence(
   tool: Pick<AssistantMcpToolDefinition, 'name' | 'title'>,
   structuredContent: Record<string, unknown>,
 ): AssistantEvidence {
+  if (tool.name === 'get_training_impact') {
+    return buildTrainingImpactEvidence(tool, structuredContent);
+  }
   if ((TRAINING_READ_TOOLS as readonly string[]).includes(tool.name)) {
     if (tool.name === 'get_planned_workout_completion' || tool.name === 'get_planned_workout_completions') {
       const raw = tool.name === 'get_planned_workout_completions'

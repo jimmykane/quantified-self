@@ -115,7 +115,7 @@ async function claimBatch(runtime: DeliveryRuntime, uid: string, seedId: string,
       }
       const workoutDoc = await tx.get(user.collection('scheduledWorkouts').doc(ledger.workoutId));
       const workout = workoutDoc.exists ? parseScheduledWorkoutV1(workoutDoc.data()) : null;
-      const context = await readDeliveryContext(runtime, tx, uid, workout, provider, pro, ledger.workoutId);
+      const context = await readDeliveryContext(runtime, tx, uid, workout, provider, pro, ledger.workoutId, ledger);
       const intent = resolveDeliveryIntent(context, ledger);
       if (context.connection.state !== 'connected' || context.connection.destinationKey !== destinationKey
         || ledger.connectionEpoch !== context.connection.epoch || !isSameBatchTransport(context.transport, transport)
@@ -161,6 +161,7 @@ async function claimBatch(runtime: DeliveryRuntime, uid: string, seedId: string,
         workout: kind === 'upsert' ? workout : null,
         ...(kind === 'upsert' && context.strength ? { strength: context.strength } : {}),
         artifact: ledger.actual, progress: null } });
+      if (kind === 'remove' && context.pastCleanup) prepared[prepared.length - 1].operation.allowPastRemoval = true;
     }
 
     const abandonedBatches = await Promise.all([...abandonedBatchIds]
@@ -214,7 +215,7 @@ async function batchAdmission(runtime: DeliveryRuntime, uid: string, claim: Batc
         || ledger.lease.expiresAtMs <= runtime.now()) return false;
       const workoutDoc = await tx.get(user.collection('scheduledWorkouts').doc(ledger.workoutId));
       const context = await readDeliveryContext(runtime, tx, uid,
-        workoutDoc.exists ? parseScheduledWorkoutV1(workoutDoc.data()) : null, claim.provider, pro, ledger.workoutId);
+        workoutDoc.exists ? parseScheduledWorkoutV1(workoutDoc.data()) : null, claim.provider, pro, ledger.workoutId, ledger);
       const intent = resolveDeliveryIntent(context, ledger);
       if (!isSameBatchTransport(context.transport, claim.transport) || context.connection.state !== 'connected'
         || context.connection.destinationKey !== operation.destinationKey
@@ -324,6 +325,7 @@ async function acceptBatch(runtime: DeliveryRuntime, uid: string, claim: BatchCl
       ledger.lease = null; ledger.updatedAtMs = runtime.now();
       if (outcome.state === 'accepted') {
         ledger.actual = outcome.artifact;
+        ledger.pastCleanup = null;
         ledger.acceptedDigest = operation.kind === 'upsert' ? operation.digest : null;
         ledger.acceptedContentDigest = operation.kind === 'upsert' ? operation.contentDigest : null;
         ledger.lastAcceptedAtMs = runtime.now(); ledger.attempt = null; ledger.retries = 0;

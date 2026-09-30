@@ -490,6 +490,91 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Training delivery real Fi
       expect(transport.artifacts.size).toBe(0); // Existing authoring retirement and consent cleanup agree.
     }
   });
+  it.each(['soft', 'permanent'] as const)('withdraws a past uncompleted standalone copy only with explicit %s deletion opt-in', async deletion => {
+    const ledger = await delivered();
+    now = Date.parse('2026-09-12T10:00:00Z');
+    await editSchedule({ kind: 'delete-workout', workoutId: 'w', removePastProviderCopies: true });
+    if (deletion === 'permanent') await editSchedule({ kind: 'permanently-delete-workout', workoutId: 'w',
+      confirmPermanentDeletion: true, removePastProviderCopies: true });
+    await drain();
+    expect((await ledgers())[0].desired).toBe('absent');
+    await processTrainingDelivery(runtime, uid, ledger.id);
+    expect(transport.calls.at(-1)).toMatchObject({ kind: 'remove', allowPastRemoval: true });
+    expect(transport.artifacts.size).toBe(0);
+  });
+  it('keeps a past copy when deletion did not opt in, even after a prior opt-in was revoked', async () => {
+    const ledger = await delivered();
+    now = Date.parse('2026-09-12T10:00:00Z');
+    await editSchedule({ kind: 'move-workout', workoutId: 'w', planId: null,
+      localDate: '2026-09-11', confirmPlanRangeExtension: false });
+    await editSchedule({ kind: 'delete-workout', workoutId: 'w', removePastProviderCopies: true });
+    await restoreTrainingScheduleRevisionForUser(uid, { mutationId: randomUUID(), scope: { kind: 'workout', id: 'w' },
+      targetRevision: 2, expectedRevisions: await revisions() }, { db, nowMs: now });
+    await editSchedule({ kind: 'delete-workout', workoutId: 'w' });
+    await drain();
+    expect((await ledgers())[0]).toMatchObject({ desired: 'preserve', status: 'past' });
+    await processTrainingDelivery(runtime, uid, ledger.id);
+    expect(transport.calls.filter(call => call.kind === 'remove')).toHaveLength(0);
+  });
+  it.each(['convert-to-standalone', 'delete-workouts'] as const)('withdraws an old plan copy after explicit %s opt-in', async workoutDisposition => {
+    await createPlan(); await moveToPlan('p'); await configurePlan(); await drain();
+    const ledger = (await ledgers())[0]; await processTrainingDelivery(runtime, uid, ledger.id);
+    now = Date.parse('2026-09-12T10:00:00Z');
+    const request = { mutationId: randomUUID(), planId: 'p', expectedRevisions: await revisions(),
+      workoutDisposition, confirmPlanDeletion: true as const, removePastProviderCopies: true };
+    const first = await deleteTrainingPlanForUser(uid, request, { db, nowMs: now });
+    expect(await deleteTrainingPlanForUser(uid, request, { db, nowMs: now })).toEqual(first);
+    await drain();
+    expect((await ledgers())[0].desired).toBe('absent');
+    await processTrainingDelivery(runtime, uid, ledger.id);
+    expect(transport.artifacts.size).toBe(0);
+    expect(transport.calls.at(-1)).toMatchObject({ kind: 'remove', allowPastRemoval: true });
+  });
+  it('keeps plan cleanup authorized across a temporary disconnect after conversion to standalone', async () => {
+    await createPlan(); await moveToPlan('p'); await configurePlan(); await drain();
+    const ledger = (await ledgers())[0]; await processTrainingDelivery(runtime, uid, ledger.id);
+    now = Date.parse('2026-09-12T10:00:00Z');
+    await deleteTrainingPlanForUser(uid, { mutationId: randomUUID(), planId: 'p',
+      expectedRevisions: await revisions(), workoutDisposition: 'convert-to-standalone',
+      confirmPlanDeletion: true, removePastProviderCopies: true }, { db, nowMs: now });
+    connectionState = 'reconnect_required';
+    await drain();
+    expect((await ledgers())[0]).toMatchObject({ planId: null, desired: 'preserve',
+      pastCleanup: { scope: 'plan', scopeId: 'p' } });
+    expect(transport.artifacts.size).toBe(1);
+
+    connectionState = 'connected'; await mark(); await drain();
+    expect((await ledgers())[0]).toMatchObject({ desired: 'absent', pastCleanup: { scope: 'plan', scopeId: 'p' } });
+    await processTrainingDelivery(runtime, uid, ledger.id);
+    expect(transport.calls.at(-1)).toMatchObject({ kind: 'remove', allowPastRemoval: true });
+    expect(transport.artifacts.size).toBe(0);
+  });
+  it('respects a later workout deletion that declines a former plan cleanup opt-in', async () => {
+    await createPlan(); await moveToPlan('p'); await configurePlan(); await drain();
+    const ledger = (await ledgers())[0]; await processTrainingDelivery(runtime, uid, ledger.id);
+    now = Date.parse('2026-09-12T10:00:00Z');
+    await deleteTrainingPlanForUser(uid, { mutationId: randomUUID(), planId: 'p',
+      expectedRevisions: await revisions(), workoutDisposition: 'convert-to-standalone',
+      confirmPlanDeletion: true, removePastProviderCopies: true }, { db, nowMs: now });
+    connectionState = 'reconnect_required'; await drain();
+    await editSchedule({ kind: 'delete-workout', workoutId: 'w' });
+    connectionState = 'connected'; await mark(); await drain();
+    expect((await ledgers())[0]).toMatchObject({ desired: 'preserve', status: 'past' });
+    await processTrainingDelivery(runtime, uid, ledger.id);
+    expect(transport.calls.filter(call => call.kind === 'remove')).toHaveLength(0);
+    expect(transport.artifacts.size).toBe(1);
+  });
+  it('never withdraws a copy already marked completed despite past deletion opt-in', async () => {
+    const ledger = await delivered();
+    const ref = db.collection('users').doc(uid).collection(DELIVERY_LEDGER).doc(ledger.id);
+    await ref.update({ 'actual.completed': true });
+    now = Date.parse('2026-09-12T10:00:00Z');
+    await editSchedule({ kind: 'delete-workout', workoutId: 'w', removePastProviderCopies: true });
+    await drain();
+    expect((await ledgers())[0]).toMatchObject({ desired: 'preserve', status: 'completed' });
+    await processTrainingDelivery(runtime, uid, ledger.id);
+    expect(transport.calls.filter(call => call.kind === 'remove')).toHaveLength(0);
+  });
   it('restores authored content without restoring revoked provider consent', async () => {
     const ledger = await send(); await processTrainingDelivery(runtime, uid, ledger.id);
     await editSchedule({ kind: 'move-workout', workoutId: 'w', planId: null, localDate: '2026-09-11', confirmPlanRangeExtension: false });

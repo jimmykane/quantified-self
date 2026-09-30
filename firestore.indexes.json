@@ -1,6 +1,30 @@
 {
   "indexes": [
     {
+      "collectionGroup": "activitySyncQueue", "queryScope": "COLLECTION",
+      "fields": [{ "fieldPath": "deliveryMode", "order": "ASCENDING" }, { "fieldPath": "processed", "order": "ASCENDING" }, { "fieldPath": "retryCount", "order": "ASCENDING" }]
+    },
+    {
+      "collectionGroup": "activitySyncQueue", "queryScope": "COLLECTION",
+      "fields": [{ "fieldPath": "sourceServiceName", "order": "ASCENDING" }, { "fieldPath": "processed", "order": "ASCENDING" }, { "fieldPath": "retryCount", "order": "ASCENDING" }]
+    },
+    {
+      "collectionGroup": "activitySyncQueue", "queryScope": "COLLECTION",
+      "fields": [{ "fieldPath": "deliveryMode", "order": "ASCENDING" }, { "fieldPath": "resultStatus", "order": "ASCENDING" }]
+    },
+    {
+      "collectionGroup": "activitySyncQueue", "queryScope": "COLLECTION",
+      "fields": [{ "fieldPath": "sourceServiceName", "order": "ASCENDING" }, { "fieldPath": "resultStatus", "order": "ASCENDING" }]
+    },
+    {
+      "collectionGroup": "failed_jobs", "queryScope": "COLLECTION",
+      "fields": [{ "fieldPath": "originalCollection", "order": "ASCENDING" }, { "fieldPath": "deliveryMode", "order": "ASCENDING" }]
+    },
+    {
+      "collectionGroup": "failed_jobs", "queryScope": "COLLECTION",
+      "fields": [{ "fieldPath": "originalCollection", "order": "ASCENDING" }, { "fieldPath": "sourceServiceName", "order": "ASCENDING" }]
+    },
+    {
       "collectionGroup": "marketingCampaigns", "queryScope": "COLLECTION",
       "fields": [{ "fieldPath": "status", "order": "ASCENDING" }, { "fieldPath": "createdAt", "order": "ASCENDING" }]
     },
@@ -94,6 +118,27 @@
           "fieldPath": "__name__",
           "order": "ASCENDING"
         }
+      ],
+      "density": "SPARSE_ALL"
+    },
+    {
+      "collectionGroup": "scheduledWorkouts",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "planId", "order": "ASCENDING" },
+        { "fieldPath": "lifecycle", "order": "ASCENDING" },
+        { "fieldPath": "deletedAtMs", "order": "DESCENDING" },
+        { "fieldPath": "__name__", "order": "DESCENDING" }
+      ],
+      "density": "SPARSE_ALL"
+    },
+    {
+      "collectionGroup": "scheduledWorkouts",
+      "queryScope": "COLLECTION_GROUP",
+      "fields": [
+        { "fieldPath": "lifecycle", "order": "ASCENDING" },
+        { "fieldPath": "deletedAtMs", "order": "ASCENDING" },
+        { "fieldPath": "__name__", "order": "ASCENDING" }
       ],
       "density": "SPARSE_ALL"
     },
@@ -1657,6 +1702,24 @@
   ],
   "fieldOverrides": [
     {
+      "collectionGroup": "trainingCleanupJobs", "fieldPath": "nextAttemptAtMs", "ttl": false,
+      "indexes": [
+        { "order": "ASCENDING", "queryScope": "COLLECTION" },
+        { "order": "DESCENDING", "queryScope": "COLLECTION" },
+        { "arrayConfig": "CONTAINS", "queryScope": "COLLECTION" },
+        { "order": "ASCENDING", "queryScope": "COLLECTION_GROUP" }
+      ]
+    },
+    {
+      "collectionGroup": "planDeletionLocks", "fieldPath": "nextAttemptAtMs", "ttl": false,
+      "indexes": [
+        { "order": "ASCENDING", "queryScope": "COLLECTION" },
+        { "order": "DESCENDING", "queryScope": "COLLECTION" },
+        { "arrayConfig": "CONTAINS", "queryScope": "COLLECTION" },
+        { "order": "ASCENDING", "queryScope": "COLLECTION_GROUP" }
+      ]
+    },
+    {
       "collectionGroup": "trainingDeliveryStatuses", "fieldPath": "status", "ttl": false,
       "indexes": [
         { "order": "ASCENDING", "queryScope": "COLLECTION" },
@@ -2519,6 +2582,24 @@
     {
       "collectionGroup": "chunks",
       "fieldPath": "payloadBase64",
+      "ttl": false,
+      "indexes": []
+    },
+    {
+      "collectionGroup": "trainingCleanupJobs",
+      "fieldPath": "response",
+      "ttl": false,
+      "indexes": []
+    },
+    {
+      "collectionGroup": "planDeletionLocks",
+      "fieldPath": "request",
+      "ttl": false,
+      "indexes": []
+    },
+    {
+      "collectionGroup": "planDeletionLocks",
+      "fieldPath": "mcpAuthority",
       "ttl": false,
       "indexes": []
     }

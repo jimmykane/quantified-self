@@ -25,7 +25,7 @@ export function buildReadinessHrvDisplay(
   const valueText = format(range?.currentAverage);
   const latestText = buildLatestHrvText(range, format, options);
   if (!range || !range.normalRange) {
-    const statusText = !range ? 'No recent HRV' : range.reason === 'building_baseline'
+    const statusText = !range ? 'No current HRV' : range.reason === 'building_baseline'
       ? `Building range · ${range.observationDayCount}/14 nights`
       : `Not enough recent HRV · ${range.currentObservationDayCount}/3 nights`;
     return { valueText, statusText, rangeText: '60-day personal range', latestText, tone: 'neutral' as const };
@@ -49,19 +49,9 @@ function buildLatestHrvText(
   format: (value: number | null | undefined) => string,
   options: ReadinessHrvDisplayOptions,
 ): string {
-  if (!range?.latestMs || !Number.isFinite(range.latestAtMs)) return '';
+  if (range?.latestMs === null || !Number.isFinite(range?.latestAtMs)) return '';
   const nowMs = Number.isFinite(options.nowMs) ? options.nowMs! : Date.now();
   const relativeDay = formatDashboardRelativeDay(range.latestAtMs, { nowMs, locale: options.locale });
   const value = format(range.latestMs);
-  const latestSleepAtMs = options.latestSleepAtMs;
-  if (Number.isFinite(latestSleepAtMs)
-    && localDayStart(latestSleepAtMs as number) > localDayStart(range.latestAtMs as number)) {
-    return `Latest night has no HRV · Previous reading ${value} · ${relativeDay}`;
-  }
   return `Latest HRV ${value} · ${relativeDay}`;
-}
-
-function localDayStart(timestampMs: number): number {
-  const date = new Date(timestampMs);
-  return new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime();
 }

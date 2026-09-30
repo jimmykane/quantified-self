@@ -2,6 +2,7 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { MAT_DIALOG_DATA, MatDialogRef } from '@angular/material/dialog';
 import { MatBottomSheetRef } from '@angular/material/bottom-sheet';
 import { MatButtonModule } from '@angular/material/button';
+import { MatCheckboxModule } from '@angular/material/checkbox';
 import { MatDialogModule } from '@angular/material/dialog';
 import { ConfirmationDialogComponent } from './confirmation-dialog.component';
 import { AppHapticsService } from '../../services/app.haptics.service';
@@ -26,7 +27,7 @@ describe('ConfirmationDialogComponent', () => {
 
     await TestBed.configureTestingModule({
       declarations: [ConfirmationDialogComponent],
-      imports: [MatDialogModule, MatButtonModule],
+      imports: [MatDialogModule, MatButtonModule, MatCheckboxModule],
       providers: [
         { provide: MatDialogRef, useValue: dialogRefMock },
         { provide: MatBottomSheetRef, useValue: bottomSheetRefMock },
@@ -71,7 +72,7 @@ describe('ConfirmationDialogComponent', () => {
     await TestBed.resetTestingModule();
     await TestBed.configureTestingModule({
       declarations: [ConfirmationDialogComponent],
-      imports: [MatDialogModule, MatButtonModule],
+      imports: [MatDialogModule, MatButtonModule, MatCheckboxModule],
       providers: [
         { provide: MatDialogRef, useValue: dialogRefMock },
         { provide: MatBottomSheetRef, useValue: bottomSheetRefMock },
@@ -103,7 +104,7 @@ describe('ConfirmationDialogComponent', () => {
     await TestBed.resetTestingModule();
     await TestBed.configureTestingModule({
       declarations: [ConfirmationDialogComponent],
-      imports: [MatDialogModule, MatButtonModule],
+      imports: [MatDialogModule, MatButtonModule, MatCheckboxModule],
       providers: [
         { provide: MatDialogRef, useValue: dialogRefMock },
         { provide: MatBottomSheetRef, useValue: bottomSheetRefMock },
@@ -130,7 +131,7 @@ describe('ConfirmationDialogComponent', () => {
     await TestBed.resetTestingModule();
     await TestBed.configureTestingModule({
       declarations: [ConfirmationDialogComponent],
-      imports: [MatDialogModule, MatButtonModule],
+      imports: [MatDialogModule, MatButtonModule, MatCheckboxModule],
       providers: [
         { provide: MatDialogRef, useValue: dialogRefMock },
         { provide: MatBottomSheetRef, useValue: bottomSheetRefMock },
@@ -159,11 +160,34 @@ describe('ConfirmationDialogComponent', () => {
     expect(hapticsServiceMock.selection).toHaveBeenCalledOnce();
   });
 
+  it('returns past-provider cleanup only when explicitly selected', async () => {
+    await TestBed.resetTestingModule();
+    await TestBed.configureTestingModule({
+      declarations: [ConfirmationDialogComponent],
+      imports: [MatDialogModule, MatButtonModule, MatCheckboxModule],
+      providers: [
+        { provide: MatDialogRef, useValue: dialogRefMock },
+        { provide: MatBottomSheetRef, useValue: bottomSheetRefMock },
+        { provide: AppHapticsService, useValue: hapticsServiceMock },
+        { provide: MAT_DIALOG_DATA, useValue: { title: 'Delete workout?', pastProviderCleanupOption: true } },
+      ],
+    }).compileComponents();
+    fixture = TestBed.createComponent(ConfirmationDialogComponent);
+    component = fixture.componentInstance;
+    fixture.detectChanges();
+    expect(fixture.nativeElement.textContent).toContain('COROS cannot remove past workouts');
+    component.onConfirm();
+    expect(dialogRefMock.close).toHaveBeenLastCalledWith({ confirmed: true, removePastProviderCopies: false });
+    component.onPastProviderCleanupChange(true);
+    component.onConfirm();
+    expect(dialogRefMock.close).toHaveBeenLastCalledWith({ confirmed: true, removePastProviderCopies: true });
+  });
+
   it('should support label aliases and hide cancel when requested', async () => {
     await TestBed.resetTestingModule();
     await TestBed.configureTestingModule({
       declarations: [ConfirmationDialogComponent],
-      imports: [MatDialogModule, MatButtonModule],
+      imports: [MatDialogModule, MatButtonModule, MatCheckboxModule],
       providers: [
         { provide: MatDialogRef, useValue: dialogRefMock },
         { provide: MatBottomSheetRef, useValue: bottomSheetRefMock },

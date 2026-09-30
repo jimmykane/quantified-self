@@ -8,6 +8,7 @@ import { MAT_BOTTOM_SHEET_DATA, MatBottomSheet, MatBottomSheetRef } from '@angul
 import { of } from 'rxjs';
 import { ActivityCalendarService } from '../../../services/activity-calendar.service';
 import { TrainingPlansService } from '../../../services/training-plans.service';
+import { TrainingImpactService } from '../../../services/training-impact.service';
 import {
   CalendarMonthPickerBottomSheetComponent,
   type CalendarMonthPickerBottomSheetData,
@@ -31,6 +32,7 @@ describe('CalendarMonthPickerBottomSheetComponent', () => {
         { provide: MatBottomSheetRef, useValue: { dismiss } },
         { provide: MatBottomSheet, useValue: { open: vi.fn() } },
         { provide: ActivityCalendarService, useValue: { watchEvents: vi.fn().mockReturnValue(of([])) } },
+        { provide: TrainingImpactService, useValue: { watch: vi.fn(() => of({ status: 'private', formPoints: null })) } },
         {
           provide: TrainingPlansService,
           useValue: {
@@ -56,6 +58,8 @@ describe('CalendarMonthPickerBottomSheetComponent', () => {
     expect(fixture.debugElement.query(element => element.name === 'app-activity-calendar-tile').componentInstance.timelineNotes()).toBe(timelineNotes);
     const tile = fixture.debugElement.query(element => element.name === 'app-activity-calendar-tile').componentInstance;
     expect(tile.fillHeight()).toBe(false);
+    expect(tile.calmMonth()).toBe(true);
+    expect(fixture.nativeElement.querySelector('.activity-calendar--calm-month')).not.toBeNull();
     expect(fixture.nativeElement.querySelector('.activity-calendar--fill-height')).toBeNull();
     expect(fixture.nativeElement.querySelector('.activity-calendar-tile--auto-height')).not.toBeNull();
     expect(selection).not.toHaveBeenCalled();

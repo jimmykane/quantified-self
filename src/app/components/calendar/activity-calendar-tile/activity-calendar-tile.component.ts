@@ -1,12 +1,14 @@
 import {
   ChangeDetectionStrategy,
   Component,
+  ElementRef,
   HostListener,
   LOCALE_ID,
   computed,
   effect,
   inject,
   input,
+  output,
   signal,
   type Signal,
 } from '@angular/core';
@@ -18,6 +20,7 @@ import { catchError, distinctUntilChanged, finalize, map, of, shareReplay, start
 import { isTimelineNoteVisible, timelineNoteOverlaps } from '@shared/timeline-notes';
 import type { TimelineNoteChartContext } from '../../../helpers/timeline-notes-chart.helper';
 import { calendarTimelineNoteRange, calendarTimelineNotesByDate } from '../../../helpers/calendar-timeline-notes.helper';
+import { revealCalendarDayContext } from '../../../helpers/reveal-calendar-day-context.helper';
 import {
   type ActivityCalendarDayViewModel,
   buildActivityCalendarViewModel,
@@ -35,6 +38,7 @@ import {
   type CurrentTrainingScheduleV1,
 } from '../../../services/training-plans.service';
 import { ActivityCalendarGridComponent } from '../activity-calendar-grid/activity-calendar-grid.component';
+import { CalendarDayContextComponent } from '../calendar-day-context/calendar-day-context.component';
 import {
   CalendarDayDetailsComponent,
   type CalendarDayDetailsData,
@@ -44,6 +48,7 @@ import {
   buildPlannedWorkoutCalendarOverlay,
   type PlannedWorkoutCalendarOverlay,
 } from '../../../helpers/planned-workout-calendar.helper';
+import { TrainingImpactService, type TrainingImpactSnapshotState } from '../../../services/training-impact.service';
 
 interface ActivityCalendarTileState {
   status: 'loading' | 'ready' | 'error';
@@ -53,16 +58,17 @@ interface ActivityCalendarTileState {
 interface ActivityCalendarTilePlansState {
   status: 'loading' | 'ready' | 'error';
   schedule: CurrentTrainingScheduleV1 | null;
+  restoreInProgress?: boolean;
 }
 
 @Component({
   selector: 'app-activity-calendar-tile',
   standalone: true,
-  imports: [SharedModule, ActivityCalendarGridComponent],
+  imports: [SharedModule, ActivityCalendarGridComponent, CalendarDayContextComponent],
   templateUrl: './activity-calendar-tile.component.html',
   styleUrls: ['./activity-calendar-tile.component.scss'],
   changeDetection: ChangeDetectionStrategy.OnPush,
-  host: { '[class.activity-calendar-tile--auto-height]': '!fillHeight()' },
+  host: { '[class.activity-calendar-tile--auto-height]': '!fillHeight()', '[class.activity-calendar-tile--day-context]': 'dayContextEnabled()' },
 })
 export class ActivityCalendarTileComponent {
   private readonly calendarService = inject(ActivityCalendarService);
@@ -71,19 +77,32 @@ export class ActivityCalendarTileComponent {
   private readonly bottomSheet = inject(MatBottomSheet);
   private readonly router = inject(Router);
   private readonly dayDetailsNavigation = inject(CalendarDayDetailsNavigationService);
+  private readonly trainingImpact = inject(TrainingImpactService);
   private readonly locale = inject(LOCALE_ID);
+  private readonly elementRef = inject<ElementRef<HTMLElement>>(ElementRef);
   private readonly anchorDate = signal(startOfCurrentMonth());
   private readonly followsCurrentMonth = signal(true);
   private readonly reloadSequence = signal(0);
   private readonly today = signal(new Date());
 
   readonly user = input<User | null | undefined>(null);
+  private readonly trainingImpactSource = computed(() => {
+    const uid = this.user()?.uid;
+    return uid
+      ? this.trainingImpact.watch(uid)
+      : of({ status: 'private', formPoints: null } as TrainingImpactSnapshotState);
+  });
+  readonly trainingImpactState = toSignal(
+    toObservable(this.trainingImpactSource).pipe(switchMap(source => source)),
+    { initialValue: { status: 'private', formPoints: null } as TrainingImpactSnapshotState },
+  );
   readonly hasTrainingPlanningUIAccess = computed(() => {
     const viewerUid = this.users.user()?.uid;
     return !!viewerUid && this.user()?.uid === viewerUid;
   });
   /** Keep the workspace signal live even when the month popup is replaced by a day sheet. */
   readonly timelineNotes = input<Signal<TimelineNoteChartContext | null> | null>(null);
+  readonly timelineNotesStatus = input<Signal<'loading' | 'ready' | 'error'> | null>(null);
   private readonly notesContext = computed(() => {
     const context = this.timelineNotes()?.();
     return this.user()?.uid && context?.ownerUid === this.user()?.uid ? context : null;
@@ -92,6 +111,14 @@ export class ActivityCalendarTileComponent {
   readonly showHeading = input(true);
   readonly fillHeight = input(true);
   readonly showNavigation = input(false);
+  readonly dayContextEnabled = input(false);
+  /** Keep the Today sheet's month cells in step with the dashboard and Calendar route. */
+  readonly calmMonth = input(false);
+  readonly privateHealthEnabled = input(true);
+  readonly initialDateKey = input<string | null>(null);
+  readonly selectedDateKey = signal(localDateKey(new Date()));
+  readonly selectedDateKeyChange = output<string>();
+  private openedInitialDateKey: string | null = null;
   // Share each concrete query with an open day sheet. Material destroys the month popup when
   // replacing it, but the selected day's pending data must continue until its own sheet closes.
   private readonly eventsSource = computed(() => {
@@ -120,7 +147,9 @@ export class ActivityCalendarTileComponent {
       map(viewer => viewer?.uid ?? null),
       distinctUntilChanged(),
       switchMap(viewerUid => viewerUid === user.uid ? this.plansService.watchSchedule(user.uid).pipe(
-        map(schedule => ({ status: 'ready', schedule }) as ActivityCalendarTilePlansState),
+        map(schedule => schedule.restoreUnavailable
+          ? ({ status: 'error', schedule: null, restoreInProgress: true } as ActivityCalendarTilePlansState)
+          : ({ status: 'ready', schedule } as ActivityCalendarTilePlansState)),
         startWith({ status: 'loading', schedule: null } as ActivityCalendarTilePlansState),
         catchError(() => of({ status: 'error', schedule: null } as ActivityCalendarTilePlansState)),
       ) : of({ status: 'ready', schedule: null } as ActivityCalendarTilePlansState)),
@@ -164,6 +193,39 @@ export class ActivityCalendarTileComponent {
     now: this.today(),
   }));
   readonly isLoading = computed(() => this.eventState().status === 'loading');
+  readonly selectedDay = computed(() => this.calendarModel().months.flatMap(month => month.days)
+    .find(day => day.dateKey === this.selectedDateKey())
+    ?? this.calendarModel().months.flatMap(month => month.days).find(day => day.inPrimaryPeriod)
+    ?? null);
+  readonly selectedDayActivities = computed(() => ({
+    day: this.selectedDay()!, status: this.eventState().status,
+  }));
+  readonly selectedDayNotes = computed(() => this.notesByDate().get(this.selectedDay()?.dateKey || '')?.notes ?? []);
+  readonly selectedDayPlanned = computed(() => this.plannedWorkoutsByDate()[this.selectedDay()?.dateKey || '']?.entries ?? []);
+  readonly selectedDayData = computed<CalendarDayDetailsData | null>(() => {
+    const day = this.selectedDay();
+    const user = this.user();
+    if (!day || !user?.uid) return null;
+    return {
+      day, userId: user.uid, locale: this.locale,
+      privateHealthEnabled: this.privateHealthEnabled(),
+      planningEnabled: this.hasTrainingPlanningUIAccess(),
+      unitSettings: user.settings?.unitSettings ?? null,
+      summariesSettings: user.settings?.summariesSettings ?? null,
+      timelineNotes: this.selectedDayNotes,
+      timelineNotesStatusSource: () => this.timelineNotesStatus()?.() ?? 'ready',
+      activities: this.selectedDayActivities,
+      plannedWorkoutsSource: this.selectedDayPlanned,
+      plannedWorkoutsStatusSource: () => this.plansState().status,
+      scheduleSource: () => this.users.user()?.uid === user.uid ? this.plansState().schedule : null,
+      trainingImpact: this.trainingImpactState,
+    };
+  });
+  selectDayNote(noteId: string): void {
+    const note = this.selectedDayNotes().find(candidate => candidate.id === noteId);
+    const context = this.notesContext();
+    if (note && context?.ownerUid === this.users.user()?.uid) context.select([note]);
+  }
   readonly notesByDate = computed(() => calendarTimelineNotesByDate(this.calendarModel(), this.notesContext()?.notes ?? [], this.today().getTime()));
   private readonly notesRange = computed(() => calendarTimelineNoteRange(this.calendarModel()));
   private readonly notesRangeEffect = effect(onCleanup => {
@@ -178,8 +240,12 @@ export class ActivityCalendarTileComponent {
   )));
   private readonly restoreDayDetailsEffect = effect(() => {
     const restoration = this.dayDetailsNavigation.restorationFor(this.router.url);
-    if (!restoration) {
+    if (!restoration || restoration.surface === 'today-sheet') {
       return;
+    }
+
+    if (this.dayContextEnabled() && this.selectedDateKey() !== restoration.dateKey) {
+      this.selectDate(restoration.dateKey);
     }
 
     const restoredMonth = startOfCurrentMonth(parseActivityCalendarDate(restoration.dateKey));
@@ -202,8 +268,24 @@ export class ActivityCalendarTileComponent {
       return;
     }
     if (day) {
-      this.openDay(day);
+      this.openDay(day, false);
     }
+  });
+  private readonly openInitialDayEffect = effect(() => {
+    const dateKey = this.initialDateKey();
+    if (!dateKey || !this.user()?.uid || this.dayContextEnabled() || this.openedInitialDateKey === dateKey) return;
+    const date = parseActivityCalendarDate(dateKey);
+    const month = startOfCurrentMonth(date);
+    if (month.getTime() !== this.anchorDate().getTime()) {
+      this.followsCurrentMonth.set(false);
+      this.anchorDate.set(month);
+      return;
+    }
+    const day = this.calendarModel().months.flatMap(value => value.days)
+      .find(candidate => candidate.dateKey === dateKey);
+    if (!day) return;
+    this.openedInitialDateKey = dateKey;
+    this.openDay(day, false);
   });
 
   @HostListener('window:focus')
@@ -230,10 +312,34 @@ export class ActivityCalendarTileComponent {
 
   navigateMonth(direction: -1 | 1): void {
     this.followsCurrentMonth.set(false);
-    this.anchorDate.set(navigateActivityCalendarDate(this.anchorDate(), 'month', direction));
+    const target = navigateActivityCalendarDate(this.anchorDate(), 'month', direction);
+    this.anchorDate.set(target);
+    const selected = new Date(`${this.selectedDateKey()}T12:00:00`);
+    const dayOfMonth = Number.isFinite(selected.getTime()) ? selected.getDate() : 1;
+    const next = new Date(target.getFullYear(), target.getMonth(), Math.min(dayOfMonth, new Date(target.getFullYear(), target.getMonth() + 1, 0).getDate()));
+    this.selectDate(localDateKey(next));
   }
 
-  openDay(day: ActivityCalendarDayViewModel): void {
+  goToToday(): void {
+    const today = new Date();
+    this.today.set(today);
+    this.anchorDate.set(new Date(today.getFullYear(), today.getMonth(), 1));
+    this.followsCurrentMonth.set(true);
+    this.selectDate(localDateKey(today));
+  }
+
+  private selectDate(dateKey: string): void {
+    if (this.selectedDateKey() === dateKey) return;
+    this.selectedDateKey.set(dateKey);
+    this.selectedDateKeyChange.emit(dateKey);
+  }
+
+  openDay(day: ActivityCalendarDayViewModel, revealDay = true): void {
+    if (this.dayContextEnabled()) {
+      this.selectDate(day.dateKey);
+      if (revealDay) requestAnimationFrame(() => revealCalendarDayContext(this.elementRef.nativeElement));
+      return;
+    }
     const user = this.user();
     const userId = `${user?.uid || ''}`.trim();
     if (!userId) {
@@ -288,6 +394,9 @@ export class ActivityCalendarTileComponent {
         data: {
           day,
           userId,
+          returnToDashboard: this.router.url.startsWith('/dashboard'),
+          privateHealthEnabled: this.privateHealthEnabled(),
+          planningEnabled: this.hasTrainingPlanningUIAccess(),
           timelineNotes,
           activities,
           locale: this.locale,
@@ -297,6 +406,7 @@ export class ActivityCalendarTileComponent {
           plannedWorkoutsSource: plannedWorkouts,
           plannedWorkoutsStatusSource: () => plansState().status,
           scheduleSource: () => this.users.user()?.uid === userId ? plansState().schedule : null,
+          trainingImpact: this.trainingImpactState,
         },
       });
       sheet.afterDismissed().pipe(take(1), finalize(release)).subscribe(result => {
@@ -318,4 +428,8 @@ export class ActivityCalendarTileComponent {
 
 function startOfCurrentMonth(now = new Date()): Date {
   return new Date(now.getFullYear(), now.getMonth(), 1);
+}
+
+function localDateKey(date: Date): string {
+  return `${date.getFullYear()}-${`${date.getMonth() + 1}`.padStart(2, '0')}-${`${date.getDate()}`.padStart(2, '0')}`;
 }

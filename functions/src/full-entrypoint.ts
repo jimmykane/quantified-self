@@ -139,7 +139,6 @@ export { importRouteToSuuntoApp } from './suunto/routes';
 export { importRouteToGarminAPI } from './garmin/manual-route-upload';
 export { sendRoutesToService } from './routes/send-routes-to-service';
 export { backfillRouteDeliverySyncRoute } from './route-delivery-sync/backfill';
-export { getSuuntoFITFile } from './suunto/get-suunto-fit-file';
 export { importActivityToCOROSAPI, getCOROSAPIWorkoutFileUploadStatus } from './coros/activities';
 
 // Events
@@ -182,6 +181,8 @@ export { restoreTrainingScheduleRevision } from './training-plans/restore-callab
 export { deleteTrainingPlan } from './training-plans/delete-training-plan-callable';
 export { previewTrainingProviderDelivery, mutateTrainingProviderDelivery } from './training-plans/delivery/commands';
 export { processTrainingDeliveryTask, onTrainingDeliveryQueued, dispatchTrainingDelivery } from './training-plans/delivery/tasks';
+export { reconcileTrainingPlanCleanup, reconcileTrainingWorkoutExpiry } from './training-plans/cleanup-worker';
+export { reconcileTrainingBulkShift } from './training-plans/bulk-shift-worker';
 export { onTrainingDeliveryConnectionChanged, onTrainingDeliveryEntitlementChanged } from './training-plans/delivery/lifecycle';
 export {
   onDashboardDerivedMetricsActivityWrite,

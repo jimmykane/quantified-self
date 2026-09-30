@@ -119,7 +119,8 @@ export async function trainingDeliveryCommand(runtime: DeliveryRuntime, uid: str
         && (!transport || (Date.parse(item.localDate) - Date.parse(today)) / 86_400_000 <= transport.horizonDays)).length,
       warningCount: assessments.filter(item => item.level !== 'exact').length,
       issues: [...new Set([...(connection.issues ?? []), ...assessments.flatMap(item => item.issues)])].slice(0, 20),
-      approvalDigest: workout && assessments[0]?.level === 'degraded' ? assessments[0].digest : null };
+      approvalDigest: workout && assessments[0]?.level === 'degraded' ? assessments[0].digest : null,
+      workoutCompatibility: workout ? assessments[0]?.level ?? null : null };
     if (previewOnly) return preview;
     const removal = command.action === 'stop';
     // Retry never grants consent. Workers still enforce Pro for creates/updates, while
@@ -128,6 +129,9 @@ export async function trainingDeliveryCommand(runtime: DeliveryRuntime, uid: str
     if (!removal && !transport) throw new HttpsError('failed-precondition', 'This provider is not yet available for workout delivery.');
     if (!removal && connection.state !== 'connected') throw new HttpsError('failed-precondition', 'Repair or reconnect this provider connection first.');
     if (command.action === 'send' && workout?.planId) throw new HttpsError('failed-precondition', 'Plan workouts use plan provider settings.');
+    if (workout && ['send', 'resume'].includes(command.action) && assessments[0]?.level === 'unsupported') {
+      throw new HttpsError('failed-precondition', 'This workout cannot be sent to the selected provider. Review its sport and step endings before enabling sync.');
+    }
     if (retired && retained!.connectionEpoch !== connection.epoch) {
       throw new HttpsError('failed-precondition', 'Access was explicitly revoked. Provider-held copies may need removing in the provider app.');
     }
@@ -141,7 +145,7 @@ export async function trainingDeliveryCommand(runtime: DeliveryRuntime, uid: str
     }
     if (workout?.planId && enable && (!planSetting?.enabled || planSetting.destinationKey !== connection.destinationKey
       || planSetting.connectionEpoch !== connection.epoch)) throw new HttpsError('failed-precondition', 'Enable this provider on the plan first.');
-    if (command.action === 'approve' && (preview.approvalDigest !== command.approvalDigest || !preview.approvalDigest)) {
+    if (command.approvalDigest && preview.approvalDigest !== command.approvalDigest) {
       throw new HttpsError('aborted', 'The compatibility preview changed. Review the latest warnings.');
     }
     const revision = (state.data()?.revision ?? 0) + 1;
@@ -151,7 +155,8 @@ export async function trainingDeliveryCommand(runtime: DeliveryRuntime, uid: str
       destinationKey: removal ? previous?.destinationKey ?? planSetting?.destinationKey ?? connection.destinationKey : connection.destinationKey,
       connectionEpoch: removal ? previous?.connectionEpoch ?? planSetting?.connectionEpoch ?? connection.epoch : connection.epoch,
       scopeGeneration: generationDoc.data()?.generation ?? 0, associationPlanId: workout?.planId ?? null,
-      approvedDigest: command.action === 'approve' ? command.approvalDigest! : command.action === 'retry' ? previous?.approvedDigest ?? null : null,
+      approvedDigest: command.action === 'approve' || command.action === 'send'
+        ? command.approvalDigest ?? null : command.action === 'retry' ? previous?.approvedDigest ?? null : null,
       updatedAtMs: runtime.now() };
     tx.set(settingRef, result);
     tx.set(privateState, { revision }, { merge: true });

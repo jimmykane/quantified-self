@@ -278,6 +278,22 @@ describe('Training provider delivery controls', () => {
     fixture.componentInstance.reconnectWahooTraining();
     expect(open).toHaveBeenCalledTimes(1); expect(service.mutate).not.toHaveBeenCalled();
   });
+  it('explains an unsupported Wahoo workout and prevents confirmation', async () => {
+    service.isReady.mockImplementation(provider => provider === 'wahoo');
+    service.preview.mockResolvedValue({ schemaVersion: 1, available: true, connection: 'connected', hasPro: true,
+      timeZone: 'Europe/Helsinki', effect: 'enable', settingsRevision: 0, eligibleCount: 1, warningCount: 1,
+      issues: ['Wahoo requires time-based steps.'], approvalDigest: null, workoutCompatibility: 'unsupported' });
+    const fixture = TestBed.createComponent(TrainingDeliveryDialogComponent); fixture.detectChanges();
+    await fixture.componentInstance.begin('wahoo', 'send'); fixture.detectChanges();
+    expect(fixture.nativeElement.textContent).toContain('Wahoo cannot receive this workout');
+    expect(fixture.nativeElement.textContent).toContain('Wahoo requires time-based steps');
+    expect(fixture.nativeElement.textContent).toContain('an earlier copy may remain unchanged');
+    expect(fixture.nativeElement.textContent).not.toContain('Nothing has been sent');
+    expect(fixture.componentInstance.canConfirm()).toBe(false);
+    await fixture.componentInstance.confirm();
+    expect(service.mutate).not.toHaveBeenCalled();
+    expect(haptics.success).not.toHaveBeenCalled();
+  });
   it.each([false, true])('makes review primary and keeps plan exclusion in a secondary menu, even when paused: %s', async paused => {
     service.isReady.mockImplementation(provider => provider === 'suunto' && !paused);
     service.watchScope.mockReturnValue(of({ settings: [], statuses: [{ ...status, provider: 'suunto', planId: 'p',
@@ -341,6 +357,9 @@ describe('Training provider delivery controls', () => {
     expect(button.some(item => item.textContent?.trim() === 'Check Garmin')).toBe(true);
     expect(fixture.nativeElement.textContent).toContain('Last sent'); expect(fixture.nativeElement.textContent).toContain('Last checked');
     expect(fixture.nativeElement.textContent).toContain('does not confirm a device download');
+    const guidance: HTMLElement = fixture.nativeElement.querySelector('#delivery-guidance-details');
+    expect(guidance.textContent).toContain('exact Workout and dated Schedule');
+    expect(guidance.textContent).toContain('will not create a replacement Workout automatically');
     await fixture.componentInstance.checkProvider('garmin'); fixture.detectChanges();
     expect(service.check).toHaveBeenCalledWith(expect.objectContaining({ action: 'check', scope: 'workout',
       scopeId: 'w', expectedScheduleRevision: 3, expectedScopeRevision: 2, expectedSettingsRevision: 0 }), expect.any(Function));

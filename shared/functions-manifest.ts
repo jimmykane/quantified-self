@@ -80,7 +80,6 @@ export const FUNCTIONS_MANIFEST = {
     importRouteToSuuntoApp: { name: 'importRouteToSuuntoApp', region: 'europe-west2' },
     sendRoutesToService: { name: 'sendRoutesToService', region: 'europe-west2' },
     importActivityToSuuntoApp: { name: 'importActivityToSuuntoApp', region: 'europe-west2' },
-    getSuuntoFITFile: { name: 'getSuuntoFITFile', region: 'europe-west2' },
 
     // Garmin Functions
     getGarminAPIAuthRequestTokenRedirectURI: { name: 'getGarminAPIAuthRequestTokenRedirectURI', region: 'europe-west2' },
@@ -149,6 +148,9 @@ export const FUNCTIONS_MANIFEST = {
     previewTrainingScheduleRestore: { name: 'previewTrainingScheduleRestore', region: 'europe-west2' },
     restoreTrainingScheduleRevision: { name: 'restoreTrainingScheduleRevision', region: 'europe-west2' },
     deleteTrainingPlan: { name: 'deleteTrainingPlan', region: 'europe-west2' },
+    reconcileTrainingPlanCleanup: { name: 'reconcileTrainingPlanCleanup', region: 'europe-west2' },
+    reconcileTrainingWorkoutExpiry: { name: 'reconcileTrainingWorkoutExpiry', region: 'europe-west2' },
+    reconcileTrainingBulkShift: { name: 'reconcileTrainingBulkShift', region: 'europe-west2' },
     processDerivedMetricsIngressTask: { name: 'processDerivedMetricsIngressTask', region: 'europe-west2' },
 } as const;
 

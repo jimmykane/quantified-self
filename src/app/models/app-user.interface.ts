@@ -194,6 +194,7 @@ export interface AppDashboardSettingsInterface extends UserDashboardSettingsInte
     includeMergedEvents?: boolean;
     showTodaySummary?: boolean;
     dismissedCuratedRecoveryNowTile?: boolean;
+    calendarDayContextLayoutVersion?: number;
     sleepTrend?: AppDashboardSleepTrendSettingsInterface;
     hrvTrend?: AppDashboardSleepTrendSettingsInterface;
     autoTiles?: AppDashboardAutoTiles;

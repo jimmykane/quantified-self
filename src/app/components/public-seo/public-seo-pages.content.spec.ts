@@ -49,6 +49,12 @@ describe('public-seo-pages.content', () => {
     expect(page.freeOfferDescription).toBe(TRAINING_PLANS_SEO_CONTENT.freeOfferDescription);
     expect(page.sections.slice(0, TRAINING_PLANS_PAGE_SECTIONS.length)).toEqual(TRAINING_PLANS_PAGE_SECTIONS);
     expect(TRAINING_PLANS_HOME_CONTENT.cta.routerLink).toBe(`/${page.path}`);
+    expect(TRAINING_PLANS_HOME_CONTENT.mcpExample.prompt).toContain('workout for today');
+    expect(TRAINING_PLANS_HOME_CONTENT.mcpExample.prompt).toContain('readiness');
+    expect(TRAINING_PLANS_HOME_CONTENT.mcpExample.prompt).toContain('HRV');
+    expect(TRAINING_PLANS_HOME_CONTENT.mcpExample.prompt).toContain('sleep');
+    expect(TRAINING_PLANS_HOME_CONTENT.mcpExample.prompt).toContain('training load');
+    expect(TRAINING_PLANS_HOME_CONTENT.mcpExample.prompt).toContain('already in my plan');
   });
   it('defines distinct public feature and guide paths', () => {
     expect(PUBLIC_FEATURE_PATHS).toEqual({
@@ -198,6 +204,12 @@ describe('public-seo-pages.content', () => {
     expect(PUBLIC_SEO_PAGES.mcpServer.sections.some(section => (
       section.items?.some(item => item.copy.includes('recent training trends'))
     ))).toBe(true);
+    expect(PUBLIC_SEO_PAGES.mcpServer.sections.some(section => (
+      section.items?.some(item => item.copy.includes('identity-safe TSS-based Training impact'))
+    ))).toBe(true);
+    expect(PUBLIC_SEO_PAGES.mcpServer.faqItems.find(item => (
+      item.question.includes('Training impact')
+    ))?.answer).toContain('one local date can span two UTC outcomes');
     expect(PUBLIC_SEO_PAGES.mcpServer.description).toContain('measurements, routes, Timeline notes, activity tags and descriptions');
     expect(PUBLIC_SEO_PAGES.mcpServer.faqItems.find(item => item.question.includes('read my activity descriptions'))?.answer)
       .toContain('description checkbox starts checked; uncheck it before approving to withhold access');
@@ -224,6 +236,9 @@ describe('public-seo-pages.content', () => {
     expect(PUBLIC_SEO_PAGES.assistant.h1).not.toContain('complete training history');
     expect(PUBLIC_SEO_PAGES.assistant.description).toContain('sleep, readiness, training, measurements, activities, and routes');
     expect(PUBLIC_SEO_PAGES.assistant.description).toContain('answers grounded in your recorded data');
+    expect(PUBLIC_SEO_PAGES.assistant.faqItems.find(item => (
+      item.question === 'What can the Quantified Self Assistant answer?'
+    ))?.answer).toContain('identity-safe TSS-based Training impact');
     expect(PUBLIC_SEO_PAGES.assistant.sections.some(section => (
       section.items.some(item => item.title === 'Grounded every turn')
     ))).toBe(true);

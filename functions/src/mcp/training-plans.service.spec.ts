@@ -395,6 +395,36 @@ describe('Training plan MCP reads', () => {
     await expect(f.run('get_planned_workout_completions', { workoutRefs: [refs[0], refs[0]] }))
       .rejects.toThrow('Invalid Training read arguments');
   });
+  it('keeps an exact link readable after a workout transfer while fencing private completion refs', async () => {
+    const f = fixture();
+    const list = TRAINING_READ_OUTPUTS.query_planned_workouts_by_date.parse(await f.run(
+      'query_planned_workouts_by_date', { startDate: '2026-09-01', endDate: '2027-01-01' },
+    ));
+    const workoutRef = list.workouts.find(item => item.title === 'Easy run')!.workoutRef;
+    f.collections.trainingWorkoutCompletions.w1 = { schemaVersion: 1, workoutId: 'w1', planId: 'p1', provider: 'suunto',
+      matchMethod: 'provider_marker', eventId: 'private-event', activityId: 'private-activity', sourceSessionIndex: 0,
+      activityStartAtMs: 1_789_404_000_000, scheduledLocalDate: '2026-09-15', workoutRevisionAtLink: 1,
+      timing: 'on_date', linkedAtMs: 1_789_404_100_000, updatedAtMs: 1_789_404_100_000 };
+    Object.assign(f.collections.scheduledWorkouts.w1, { planId: null, localDate: '2026-09-18', revision: 2 });
+    const result = TRAINING_READ_OUTPUTS.get_planned_workout_completion.parse(await f.run(
+      'get_planned_workout_completion', { workoutRef }, [TRAINING_PLANS_SCOPE, 'activity-details:read'],
+    ));
+    expect(result).toMatchObject({ state: 'linked', provider: 'suunto', scheduledDate: '2026-09-15',
+      workoutRevision: 2, linkedWorkoutRevision: 1, workoutChangedSinceCompletion: true });
+    expect(result.activityRef).toMatch(/^activity-/);
+    expect(JSON.stringify(result)).not.toMatch(/private-event|private-activity/);
+    const bulk = TRAINING_READ_OUTPUTS.get_planned_workout_completions.parse(await f.run(
+      'get_planned_workout_completions', { workoutRefs: [workoutRef] }, [TRAINING_PLANS_SCOPE],
+    ));
+    expect(bulk.completions).toMatchObject([{ state: 'linked', workoutChangedSinceCompletion: true, activityRef: null }]);
+    await expect(f.run('get_planned_workout_completion', { workoutRef }, [TRAINING_PLANS_SCOPE], 'other-connection'))
+      .rejects.toThrow('connection');
+    await expect(f.run('get_planned_workout_completion', { workoutRef }, [TRAINING_PLANS_SCOPE], 'connection', 'other-user'))
+      .rejects.toThrow();
+    await expect(f.run('get_planned_workout_completion', { workoutRef }, [])).rejects.toThrow();
+    f.collections.trainingWorkoutCompletions.w1.workoutId = 'different-workout';
+    await expect(f.run('get_planned_workout_completion', { workoutRef })).rejects.toThrow();
+  });
   it('assesses safe provider mapping fidelity without connection or transport state', async () => {
     const f = fixture();
     const list = TRAINING_READ_OUTPUTS.query_planned_workouts_by_date.parse(await f.run(

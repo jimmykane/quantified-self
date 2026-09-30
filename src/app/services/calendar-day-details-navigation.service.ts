@@ -7,6 +7,7 @@ import { AppUserService } from './app.user.service';
 export interface CalendarDayDetailsRestoration {
   sourceUrl: string;
   dateKey: string;
+  surface?: 'today-sheet';
   deletedEventId?: string;
 }
 
@@ -27,7 +28,7 @@ export class CalendarDayDetailsNavigationService {
     ).subscribe(event => this.handleNavigationStart(event));
   }
 
-  prepareReturn(sourceUrl: string, dateKey: string): boolean {
+  prepareReturn(sourceUrl: string, dateKey: string, surface?: 'today-sheet'): boolean {
     const normalizedSourceUrl = normalizeLocalUrl(sourceUrl);
     const normalizedDateKey = normalizeDateKey(dateKey);
     if (!normalizedSourceUrl || !normalizedDateKey) {
@@ -37,6 +38,7 @@ export class CalendarDayDetailsNavigationService {
     this.pendingReturn = {
       sourceUrl: normalizedSourceUrl,
       dateKey: normalizedDateKey,
+      ...(surface ? { surface } : {}),
     };
     this.restoration.set(null);
     return true;
@@ -91,6 +93,7 @@ export class CalendarDayDetailsNavigationService {
       !current
       || current.sourceUrl !== restoration.sourceUrl
       || current.dateKey !== restoration.dateKey
+      || current.surface !== restoration.surface
       || current.deletedEventId !== restoration.deletedEventId
     ) {
       return false;
@@ -117,7 +120,7 @@ export class CalendarDayDetailsNavigationService {
       return;
     }
 
-    if (targetUrl && (isEventDetailsUrl(targetUrl) || isTrainingPlansUrl(targetUrl))) {
+    if (targetUrl && (isEventDetailsUrl(targetUrl) || isTrainingPlansUrl(targetUrl) || isCalendarDayUrl(targetUrl))) {
       return;
     }
 
@@ -152,4 +155,8 @@ function normalizeDateKey(value: unknown): string | null {
 
 function isEventDetailsUrl(url: string): boolean {
   return /^\/user\/[^/?#]+\/event\/[^/?#]+(?:[?#]|$)/.test(url);
+}
+
+function isCalendarDayUrl(url: string): boolean {
+  return /^\/calendar\/day\/\d{4}-\d{2}-\d{2}(?:[?#]|$)/.test(url);
 }

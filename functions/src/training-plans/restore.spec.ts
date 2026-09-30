@@ -1,6 +1,7 @@
 import { ActivityTypes } from '@sports-alliance/sports-lib';
 import { describe, expect, it } from 'vitest';
 import {
+    DELETED_WORKOUT_RECOVERY_MS,
     TRAINING_PLAN_MAX_CURRENT_WORKOUTS,
     type RestoreTrainingScheduleRevisionRequestV1,
     type ScheduledWorkoutV1,
@@ -191,6 +192,19 @@ describe('applyPlanRevisionRestore', () => {
         expect(result.applied.after.plans.get('plan-1')?.workoutCount).toBe(0);
     });
 
+    it('skips an expired deleted workout even while its root and plan audit remain', () => {
+        const desiredWorkout = workout({ revision: 1, title: 'Old prescription' });
+        const deleted = workout({ lifecycle: 'deleted', deletedAtMs: NOW_MS - DELETED_WORKOUT_RECOVERY_MS });
+        const desired: ReconstructedTrainingPlanRevisionV1 = {
+            plan: plan({ revision: 2, lastCheckpointRevision: 1 }),
+            workouts: new Map([[desiredWorkout.id, desiredWorkout]]),
+        };
+        const result = applyPlanRevisionRestore(snapshot([plan({ workoutCount: 0 })], [deleted]), desired, planRequest(), NOW_MS);
+        expect(result.response.skippedWorkoutIds).toEqual([deleted.id]);
+        expect(result.applied.after.workouts.get(deleted.id)).toEqual(deleted);
+        expect(result.applied.after.state.currentWorkoutCount).toBe(0);
+    });
+
     it('atomically pauses the previous active plan when restoring an active lifecycle', () => {
         const currentPlan = plan();
         const previousActive = plan({ id: 'plan-2', name: 'Active plan', lifecycle: 'active', revision: 7 });
@@ -237,7 +251,7 @@ describe('applyPlanRevisionRestore', () => {
         const recoverablyDeleted = workout({
             id: desiredWorkout.id,
             lifecycle: 'deleted',
-            deletedAtMs: 5,
+            deletedAtMs: NOW_MS - DELETED_WORKOUT_RECOVERY_MS + 1,
         });
         const desired: ReconstructedTrainingPlanRevisionV1 = {
             plan: plan({ workoutCount: 1, revision: 2, lastCheckpointRevision: 1 }),
@@ -289,7 +303,7 @@ describe('applyStandaloneRevisionRestore', () => {
     });
 
     it('does not resurrect a standalone workout beyond the account limit', () => {
-        const deleted = workout({ planId: null, lifecycle: 'deleted', deletedAtMs: 5 });
+        const deleted = workout({ planId: null, lifecycle: 'deleted', deletedAtMs: NOW_MS - 1 });
         const current = Array.from({ length: TRAINING_PLAN_MAX_CURRENT_WORKOUTS }, (_, index) => workout({
             id: `standalone-${index}`,
             planId: null,
@@ -302,5 +316,16 @@ describe('applyStandaloneRevisionRestore', () => {
             standaloneRequest(),
             NOW_MS,
         )).toThrow(expect.objectContaining({ code: 'limit-exceeded' }));
+    });
+
+    it('rejects recovery at the exact 90-day deadline while a deleted root still exists', () => {
+        const deleted = workout({ planId: null, lifecycle: 'deleted', deletedAtMs: NOW_MS - DELETED_WORKOUT_RECOVERY_MS });
+        expect(() => applyStandaloneRevisionRestore(
+            snapshot([], [deleted]), workout({ planId: null }), standaloneRequest(), NOW_MS,
+        )).toThrow(expect.objectContaining({ code: 'failed-precondition' }));
+        expect(() => applyStandaloneRevisionRestore(
+            snapshot([], [{ ...deleted, deletedAtMs: deleted.deletedAtMs! + 1 }]),
+            workout({ planId: null }), standaloneRequest(), NOW_MS,
+        )).not.toThrow();
     });
 });

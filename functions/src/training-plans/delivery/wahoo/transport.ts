@@ -82,8 +82,9 @@ export class WahooTrainingTransport implements TrainingDeliveryTransport {
     } };
   }
   assess(workout: ScheduledWorkoutV1, destination: string, zone: string) { return assessWahooDelivery(workout, destination, zone); }
-  canRemove(artifact: DeliveryArtifact, today: string): boolean {
-    return !artifact.completed && artifact.localDate >= (artifact.timeZone ? trainingDeliveryLocalDate(this.now(), artifact.timeZone) : today);
+  canRemove(artifact: DeliveryArtifact, today: string, allowPastRemoval = false): boolean {
+    return !artifact.completed && (artifact.localDate >= (artifact.timeZone ? trainingDeliveryLocalDate(this.now(), artifact.timeZone) : today)
+      || allowPastRemoval);
   }
   private validate(operation: DeliveryOperation): void {
     if (operation.repair || operation.recoveryBlocked) uncertain();
@@ -96,7 +97,7 @@ export class WahooTrainingTransport implements TrainingDeliveryTransport {
   }
   private assertFuture(operation: DeliveryOperation): void {
     const today = trainingDeliveryLocalDate(this.now(), operation.timeZone);
-    if (operation.artifact && !this.canRemove(operation.artifact, today)) uncertain();
+    if (operation.artifact && !this.canRemove(operation.artifact, today, operation.kind === 'remove' && operation.allowPastRemoval)) uncertain();
     if (operation.kind === 'upsert') {
       const last = new Date(Date.parse(`${today}T00:00:00Z`) + this.horizonDays * 86_400_000).toISOString().slice(0, 10);
       if (!operation.workout || operation.workout.localDate < today || operation.workout.localDate > last) uncertain();
@@ -152,7 +153,8 @@ export class WahooTrainingTransport implements TrainingDeliveryTransport {
     const timeZone = desiredStarts ? operation.timeZone : retainedZone;
     const date = wahooWorkoutDate(value.starts, timeZone);
     const completed = isCompleted(value);
-    if (completed || date < trainingDeliveryLocalDate(this.now(), timeZone)) {
+    if (completed || (date < trainingDeliveryLocalDate(this.now(), timeZone)
+      && !(operation.kind === 'remove' && operation.allowPastRemoval && date === artifact.localDate))) {
       const protectedArtifact = { ...artifact, completed: artifact.completed || completed, localDate: date, timeZone };
       await checkpoint(protectedArtifact); operation.artifact = protectedArtifact;
       // Recovery can now retire the superseded operation against protected

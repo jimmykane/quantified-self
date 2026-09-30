@@ -229,6 +229,7 @@ export function buildDashboardReadinessSignalsContext(input: {
       provider: point.provider,
       sourceKey: point.sourceKey,
       hrvSourceKey: point.hrvSourceKey,
+      hrvSampleCount: point.hrvSampleCount,
       hrvObservations: point.hrvObservations,
       startTimeMs: toFiniteNumber(point.startTimeMs),
       endTimeMs: toFiniteNumber(point.endTimeMs),

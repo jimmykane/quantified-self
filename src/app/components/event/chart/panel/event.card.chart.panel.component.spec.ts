@@ -62,6 +62,7 @@ describe('EventCardChartPanelComponent', () => {
     }),
     setOption: vi.fn(),
     convertFromPixel: vi.fn((_finder: unknown, value: number | number[]) => value),
+    convertToPixel: vi.fn((_finder: unknown, value: number | number[]) => value),
     resize: vi.fn(),
     dispose: vi.fn(),
     isDisposed: vi.fn().mockReturnValue(false),
@@ -397,6 +398,7 @@ describe('EventCardChartPanelComponent', () => {
     expect(chart.on).not.toHaveBeenCalled();
     expect(zr.on).not.toHaveBeenCalled();
     expect(intersectionObserverObserveSpies).toHaveLength(0);
+    expect(fixture.nativeElement.querySelector('.event-chart-panel__chart--pinch-enabled')).toBeNull();
   });
 
   it('keeps compact preview chrome while enabling the production tooltip and interactions', async () => {
@@ -807,8 +809,10 @@ describe('EventCardChartPanelComponent', () => {
     expect(chart.dispatchAction).not.toHaveBeenCalledWith(expect.objectContaining({ type: 'dataZoom' }));
   });
 
-  it('zooms from the first horizontal mobile drag', async () => {
+  it('pans a zoomed chart from the first horizontal mobile drag and syncs the range', async () => {
     setMobileViewport();
+    chart.getOption.mockReturnValue({ dataZoom: [{ startValue: 20, endValue: 80 }] });
+    const zoomRangeEmit = vi.spyOn(component.zoomRangeChange, 'emit');
     await renderComponent();
     const boundsSpy = vi.spyOn(component.chartDiv.nativeElement, 'getBoundingClientRect').mockReturnValue({
       left: 0,
@@ -824,23 +828,88 @@ describe('EventCardChartPanelComponent', () => {
     chart.dispatchAction.mockClear();
 
     try {
-      dispatchChartTouch('touchstart', [createTouch(1, 20, 100)]);
-      const moveEvent = dispatchChartTouch('touchmove', [createTouch(1, 80, 103)]);
-      dispatchChartTouch('touchend', [], [createTouch(1, 80, 103)]);
+      dispatchChartTouch('touchstart', [createTouch(1, 80, 100)]);
+      const moveEvent = dispatchChartTouch('touchmove', [createTouch(1, 90, 103)]);
+      dispatchChartTouch('touchend', [], [createTouch(1, 100, 103)]);
 
       expect(moveEvent.defaultPrevented).toBe(false);
-      expect(chart.dispatchAction).toHaveBeenCalledWith(expect.objectContaining({
-        type: 'brush',
-        areas: [expect.objectContaining({ coordRange: [20, 80] })],
-      }));
-      expect(chart.dispatchAction).toHaveBeenCalledWith(expect.objectContaining({
+      expect(chart.dispatchAction).not.toHaveBeenCalledWith(expect.objectContaining({ type: 'brush' }));
+      expect(chart.dispatchAction).toHaveBeenNthCalledWith(1, {
         type: 'dataZoom',
-        startValue: 20,
-        endValue: 80,
-      }));
+        startValue: 10,
+        endValue: 70,
+        $from: 'event-chart-touch-zoom',
+      });
+      expect(chart.dispatchAction).toHaveBeenLastCalledWith({
+        type: 'dataZoom',
+        startValue: 0,
+        endValue: 60,
+        $from: 'event-chart-touch-zoom',
+      });
+      expect(zoomRangeEmit).toHaveBeenLastCalledWith({ start: 0, end: 60 });
     } finally {
       boundsSpy.mockRestore();
     }
+  });
+
+  it('leaves an unzoomed chart in place during a horizontal mobile drag', async () => {
+    setMobileViewport();
+    await renderComponent();
+    chart.dispatchAction.mockClear();
+    const zoomRangeEmit = vi.spyOn(component.zoomRangeChange, 'emit');
+
+    dispatchChartTouch('touchstart', [createTouch(1, 40, 100)]);
+    dispatchChartTouch('touchmove', [createTouch(1, 80, 102)]);
+    dispatchChartTouch('touchend', [], [createTouch(1, 100, 102)]);
+
+    expect(chart.dispatchAction).not.toHaveBeenCalledWith(expect.objectContaining({ type: 'dataZoom' }));
+    expect(zoomRangeEmit).not.toHaveBeenCalled();
+  });
+
+  it('starts a pinch from the panned range when a second finger joins', async () => {
+    setMobileViewport();
+    await renderComponent();
+    let visibleRange = { start: 20, end: 80 };
+    chart.getOption.mockImplementation(() => ({ dataZoom: [{
+      startValue: visibleRange.start,
+      endValue: visibleRange.end,
+    }] }));
+    chart.dispatchAction.mockImplementation((action: { type: string; startValue?: number; endValue?: number }) => {
+      if (action.type === 'dataZoom') {
+        visibleRange = { start: action.startValue!, end: action.endValue! };
+      }
+    });
+    dispatchChartTouch('touchstart', [createTouch(1, 40, 100)]);
+    dispatchChartTouch('touchmove', [createTouch(1, 50, 102)]);
+    expect(visibleRange).toEqual({ start: 10, end: 70 });
+
+    dispatchChartTouch('touchstart', [createTouch(1, 50, 102), createTouch(2, 70, 102)],
+      [createTouch(2, 70, 102)]);
+    expect(chart.convertToPixel).toHaveBeenCalledWith({ xAxisIndex: 0 }, 10);
+    expect(chart.convertToPixel).toHaveBeenCalledWith({ xAxisIndex: 0 }, 70);
+    dispatchChartTouch('touchmove', [createTouch(1, 40, 102), createTouch(2, 80, 102)]);
+
+    expect(visibleRange.end - visibleRange.start).toBe(30);
+  });
+
+  it('stops a chart pan when the mode changes to selection', async () => {
+    setMobileViewport();
+    chart.getOption.mockReturnValue({ dataZoom: [{ startValue: 20, endValue: 80 }] });
+    await renderComponent();
+
+    dispatchChartTouch('touchstart', [createTouch(1, 80, 100)]);
+    dispatchChartTouch('touchmove', [createTouch(1, 90, 102)]);
+    component.cursorBehaviour = ChartCursorBehaviours.SelectX;
+    component.ngOnChanges({
+      cursorBehaviour: new SimpleChange(ChartCursorBehaviours.ZoomX, ChartCursorBehaviours.SelectX, false),
+    });
+    chart.dispatchAction.mockClear();
+    const zoomRangeEmit = vi.spyOn(component.zoomRangeChange, 'emit');
+
+    dispatchChartTouch('touchend', [], [createTouch(1, 110, 102)]);
+
+    expect(chart.dispatchAction).not.toHaveBeenCalledWith(expect.objectContaining({ type: 'dataZoom' }));
+    expect(zoomRangeEmit).not.toHaveBeenCalled();
   });
 
   it('selects from the first horizontal mobile drag', async () => {
@@ -2088,8 +2157,8 @@ describe('EventCardChartPanelComponent', () => {
     expect(option?.grid).toEqual(expect.objectContaining({
       left: 12,
       right: 44,
-      top: 8,
-      bottom: 24,
+      top: 4,
+      bottom: 16,
     }));
     expect(option?.dataZoom?.[0]?.type).toBe('slider');
     expect(option?.dataZoom?.[0]?.show).toBe(true);
@@ -2238,6 +2307,74 @@ describe('EventCardChartPanelComponent', () => {
     await new Promise<void>((resolve) => setTimeout(resolve, 20));
 
     expect(emitSpy).toHaveBeenCalledWith({ start: 15, end: 75 });
+  });
+
+  it('pinches a panel on the x-axis and emits its range for the other charts', async () => {
+    const emitSpy = vi.spyOn(component.zoomRangeChange, 'emit');
+    await renderComponent();
+    chart.dispatchAction.mockClear();
+
+    dispatchChartTouch('touchstart', [createTouch(1, 30, 20)]);
+    dispatchChartTouch('touchstart', [createTouch(1, 30, 20), createTouch(2, 90, 20)],
+      [createTouch(2, 90, 20)]);
+    dispatchChartTouch('touchmove', [createTouch(1, 15, 20), createTouch(2, 105, 20)]);
+    dispatchChartTouch('touchend', [createTouch(1, 15, 20)], [createTouch(2, 105, 20)]);
+
+    expect(chart.dispatchAction).toHaveBeenCalledWith({
+      type: 'dataZoom', startValue: 20, endValue: 100, $from: 'event-chart-touch-zoom',
+    });
+    expect(emitSpy).toHaveBeenCalledWith({ start: 20, end: 100 });
+    expect(fixture.nativeElement.querySelector('.event-chart-panel__chart--pinch-enabled')).not.toBeNull();
+  });
+
+  it('leaves the chart range unchanged when pinching in selection mode', async () => {
+    component.cursorBehaviour = ChartCursorBehaviours.SelectX;
+    await renderComponent();
+    chart.dispatchAction.mockClear();
+    const emitSpy = vi.spyOn(component.zoomRangeChange, 'emit');
+
+    dispatchChartTouch('touchstart', [createTouch(1, 30, 20), createTouch(2, 90, 20)]);
+    dispatchChartTouch('touchmove', [createTouch(1, 15, 20), createTouch(2, 105, 20)]);
+    dispatchChartTouch('touchend', [], [createTouch(1, 15, 20), createTouch(2, 105, 20)]);
+
+    expect(chart.dispatchAction).not.toHaveBeenCalledWith(expect.objectContaining({ type: 'dataZoom' }));
+    expect(emitSpy).not.toHaveBeenCalled();
+    expect(fixture.nativeElement.querySelector('.event-chart-panel__chart--pinch-enabled')).toBeNull();
+  });
+
+  it('stops an active pinch when chart mode changes to selection', async () => {
+    await renderComponent();
+    dispatchChartTouch('touchstart', [createTouch(1, 30, 20), createTouch(2, 90, 20)]);
+
+    component.cursorBehaviour = ChartCursorBehaviours.SelectX;
+    component.ngOnChanges({
+      cursorBehaviour: new SimpleChange(ChartCursorBehaviours.ZoomX, ChartCursorBehaviours.SelectX, false),
+    });
+    fixture.detectChanges();
+    chart.dispatchAction.mockClear();
+    const emitSpy = vi.spyOn(component.zoomRangeChange, 'emit');
+
+    dispatchChartTouch('touchmove', [createTouch(1, 15, 20), createTouch(2, 105, 20)]);
+    dispatchChartTouch('touchend', [], [createTouch(1, 15, 20), createTouch(2, 105, 20)]);
+
+    expect(chart.dispatchAction).not.toHaveBeenCalledWith(expect.objectContaining({ type: 'dataZoom' }));
+    expect(emitSpy).not.toHaveBeenCalled();
+    expect(fixture.nativeElement.querySelector('.event-chart-panel__chart--pinch-enabled')).toBeNull();
+  });
+
+  it('zooms horizontally from a vertical pinch and applies its final touch position', async () => {
+    const emitSpy = vi.spyOn(component.zoomRangeChange, 'emit');
+    await renderComponent();
+    chart.dispatchAction.mockClear();
+
+    dispatchChartTouch('touchstart', [createTouch(1, 60, 20), createTouch(2, 60, 120)]);
+    dispatchChartTouch('touchmove', [createTouch(1, 60, -10), createTouch(2, 60, 150)]);
+    dispatchChartTouch('touchend', [], [createTouch(1, 60, -30), createTouch(2, 60, 170)]);
+
+    expect(chart.dispatchAction).toHaveBeenLastCalledWith({
+      type: 'dataZoom', startValue: 30, endValue: 90, $from: 'event-chart-touch-zoom',
+    });
+    expect(emitSpy).toHaveBeenLastCalledWith({ start: 30, end: 90 });
   });
 
   it('renders empty-axis no-data option when panel is null outside zoom mode', async () => {

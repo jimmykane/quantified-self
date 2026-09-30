@@ -193,6 +193,16 @@
       }
     </div>
 
+    <aside class="training-plans-mcp-example animate-on-scroll" aria-labelledby="home-training-plans-example-title">
+      <mat-icon aria-hidden="true">auto_awesome</mat-icon>
+      <div>
+        <h3 id="home-training-plans-example-title">{{ trainingPlansFeature.mcpExample.title }}</h3>
+        <blockquote>
+          <p>“{{ trainingPlansFeature.mcpExample.prompt }}”</p>
+        </blockquote>
+      </div>
+    </aside>
+
     <app-public-feature-preview
       class="training-plans-home-preview animate-on-scroll"
       [previewKey]="trainingPlansFeature.preview"

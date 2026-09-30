@@ -1,5 +1,5 @@
 import * as admin from 'firebase-admin';
-import { retireTrainingPlanDeliverySettings, stageTrainingDeliveryReconciliation } from './delivery/marker';
+import { retireTrainingPlanDeliverySettings, stagePastPlanCleanup, stageTrainingDeliveryReconciliation } from './delivery/marker';
 import { TRAINING_WORKOUT_COMPLETIONS_COLLECTION_ID } from '../../../shared/training-workout-completion';
 import { Timestamp } from 'firebase-admin/firestore';
 import { ActivityTypes } from '@sports-alliance/sports-lib';
@@ -38,10 +38,17 @@ import {
     trainingScheduleRevisionDocumentId,
     type StandaloneWorkoutRevisionDocumentV1,
 } from './persistence';
+import { finishTrainingCleanupJob, trainingCleanupJob, trainingCleanupJobRef } from './cleanup-job-contract';
 
 const DELETE_PLAN_RECEIPT_RETENTION_MS = 30 * 24 * 60 * 60 * 1000;
 const RECURSIVE_DELETE_CONCURRENCY = 20;
-const TOMBSTONE_BATCH_SIZE = 400;
+const TOMBSTONE_BATCH_SIZE = 200;
+const RESIDUAL_WORKOUT_CLEANUP_PAGE_SIZE = 100;
+// Leave ample room below Firestore's 10 MiB request ceiling for document names,
+// protocol overhead, and index updates. A revision is staged before the
+// canonical plan deletion, so multiple transactions do not expose mixed state.
+const PREPARE_REVISION_TRANSACTION_BYTES = 2 * 1024 * 1024;
+const PREPARE_REVISION_TRANSACTION_WRITES = 100;
 
 interface PlanDeletionLockWorkoutV1 {
     id: string;
@@ -56,6 +63,7 @@ interface PlanDeletionLockV1 {
     stateRevision: number;
     planRevision: number;
     workoutDisposition: DeleteTrainingPlanRequestV1['workoutDisposition'];
+    removePastProviderCopies?: boolean;
     workouts: PlanDeletionLockWorkoutV1[];
     createdAtMs: number;
 }
@@ -196,7 +204,7 @@ async function readStrengthDetailsForPlanWorkouts(
     return details;
 }
 
-function parseStoredDeleteResponse(value: unknown): DeleteTrainingPlanResponseV1 {
+export function parseStoredDeleteResponse(value: unknown): DeleteTrainingPlanResponseV1 {
     if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('Invalid plan-deletion receipt.');
     const record = value as Record<string, unknown>;
     if (
@@ -233,6 +241,7 @@ function parsePlanDeletionLock(value: unknown): PlanDeletionLockV1 {
         || !Number.isSafeInteger(record.stateRevision)
         || !Number.isSafeInteger(record.planRevision)
         || (record.workoutDisposition !== 'convert-to-standalone' && record.workoutDisposition !== 'delete-workouts')
+        || (record.removePastProviderCopies !== undefined && typeof record.removePastProviderCopies !== 'boolean')
         || !Array.isArray(record.workouts)
         || !Number.isSafeInteger(record.createdAtMs)
     ) throw new Error('Invalid plan-deletion lock.');
@@ -252,6 +261,7 @@ function parsePlanDeletionLock(value: unknown): PlanDeletionLockV1 {
         stateRevision: record.stateRevision as number,
         planRevision: record.planRevision as number,
         workoutDisposition: record.workoutDisposition,
+        ...(record.removePastProviderCopies === true ? { removePastProviderCopies: true } : {}),
         workouts,
         createdAtMs: record.createdAtMs as number,
     };
@@ -336,7 +346,8 @@ async function ensurePlanDeletionLock(
         }
         if (lockSnapshot?.exists) {
             const lock = parsePlanDeletionLock(documentData(lockSnapshot));
-            if (lock.workoutDisposition !== request.workoutDisposition) {
+            if (lock.workoutDisposition !== request.workoutDisposition
+                || !!lock.removePastProviderCopies !== !!request.removePastProviderCopies) {
                 throw new TrainingScheduleMutationError(
                     'failed-precondition',
                     'This plan already has a deletion in progress with a different workout choice.',
@@ -376,6 +387,7 @@ async function ensurePlanDeletionLock(
             stateRevision: snapshot.state.revision,
             planRevision: plan.revision,
             workoutDisposition: request.workoutDisposition,
+            ...(request.removePastProviderCopies === true ? { removePastProviderCopies: true } : {}),
             workouts: [...applied.convertedWorkouts.size > 0
                 ? applied.convertedWorkouts.values()
                 : currentPlanWorkouts(snapshot, request.planId)]
@@ -437,22 +449,11 @@ async function prepareStandaloneRevisionSnapshots(
             throw new TrainingScheduleMutationError('failed-precondition', `Strength details are mismatched for ${workout.id}.`);
         }
     });
-    const revisionRefs = converted.map(workout => workoutsRef.doc(workout.id)
-        .collection(TRAINING_PLAN_REVISIONS_COLLECTION_ID)
-        .doc(trainingScheduleRevisionDocumentId(workout.revision)));
-    await db.runTransaction(async (transaction) => {
-        const deletionGuard = await getUserDeletionGuardStateInTransaction(db, transaction, uid, nowMs);
-        if (deletionGuard.shouldSkip) {
-            throw new TrainingScheduleMutationError(
-                'failed-precondition',
-                'This account is being deleted or is no longer available.',
-            );
-        }
-        await transactionPrecondition?.(transaction);
-        const revisionSnapshots = await Promise.all(revisionRefs.map(ref => transaction.get(ref)));
-        revisionSnapshots.forEach((snapshot, index) => {
-            const workout = converted[index];
-            const revision: StandaloneWorkoutRevisionDocumentV1 = {
+    const revisions = converted.map(workout => ({
+        ref: workoutsRef.doc(workout.id)
+            .collection(TRAINING_PLAN_REVISIONS_COLLECTION_ID)
+            .doc(trainingScheduleRevisionDocumentId(workout.revision)),
+        value: {
                 schemaVersion: TRAINING_PLAN_SCHEMA_VERSION,
                 revision: workout.revision,
                 mutationId: lock.mutationId,
@@ -460,19 +461,49 @@ async function prepareStandaloneRevisionSnapshots(
                 createdAtMs: lock.createdAtMs,
                 snapshot: workout,
                 ...(strengthById.has(workout.id) ? { strength: strengthById.get(workout.id)! } : {}),
-            };
-            if (!snapshot.exists) {
-                transaction.create(revisionRefs[index], revision);
-                return;
-            }
-            if (!valuesEqual(documentData(snapshot), revision)) {
+        } satisfies StandaloneWorkoutRevisionDocumentV1,
+    }));
+    let offset = 0;
+    while (offset < revisions.length) {
+        let end = offset;
+        let bytes = 0;
+        while (end < revisions.length && end - offset < PREPARE_REVISION_TRANSACTION_WRITES) {
+            const nextBytes = Buffer.byteLength(JSON.stringify(revisions[end].value), 'utf8') + 1024;
+            if (nextBytes > PREPARE_REVISION_TRANSACTION_BYTES) {
                 throw new TrainingScheduleMutationError(
-                    'failed-precondition',
-                    'A workout revision conflicts with this plan deletion.',
+                    'limit-exceeded',
+                    'A workout history snapshot is too large to stage safely. Reduce that workout before deleting the plan.',
                 );
             }
+            if (end > offset && bytes + nextBytes > PREPARE_REVISION_TRANSACTION_BYTES) break;
+            bytes += nextBytes;
+            end += 1;
+        }
+        const chunk = revisions.slice(offset, end);
+        await db.runTransaction(async (transaction) => {
+            const deletionGuard = await getUserDeletionGuardStateInTransaction(db, transaction, uid, nowMs);
+            if (deletionGuard.shouldSkip) {
+                throw new TrainingScheduleMutationError(
+                    'failed-precondition',
+                    'This account is being deleted or is no longer available.',
+                );
+            }
+            await transactionPrecondition?.(transaction);
+            const snapshots = await Promise.all(chunk.map(item => transaction.get(item.ref)));
+            snapshots.forEach((snapshot, index) => {
+                const item = chunk[index];
+                if (!snapshot.exists) {
+                    transaction.create(item.ref, item.value);
+                } else if (!valuesEqual(documentData(snapshot), item.value)) {
+                    throw new TrainingScheduleMutationError(
+                        'failed-precondition',
+                        'A workout revision conflicts with this plan deletion.',
+                    );
+                }
+            });
         });
-    });
+        offset = end;
+    }
 }
 
 async function preparePlanDeletionTombstones(
@@ -525,20 +556,24 @@ async function preparePlanDeletionTombstones(
     });
 }
 
-async function prepareResidualWorkoutTombstones(
+async function prepareResidualWorkoutCleanupJobs(
     db: admin.firestore.Firestore,
     uid: string,
+    planId: string,
     workoutIds: string[],
     mutationId: string,
     createdAtMs: number,
     nowMs: number,
-): Promise<void> {
+): Promise<boolean> {
     const stateRef = db.collection('users').doc(uid).collection('trainingPlanState').doc('current');
     const tombstonesRef = stateRef.collection(TRAINING_SCHEDULE_DELETION_TOMBSTONES_COLLECTION_ID);
+    const planJobRef = trainingCleanupJobRef(db, uid, 'plan', planId);
     for (let index = 0; index < workoutIds.length; index += TOMBSTONE_BATCH_SIZE) {
         const values = workoutIds.slice(index, index + TOMBSTONE_BATCH_SIZE).map(workoutId => ({
             ref: tombstonesRef.doc(trainingScheduleDeletionTombstoneDocumentId('workout', workoutId)),
             value: buildTrainingScheduleDeletionTombstone('workout', workoutId, mutationId, createdAtMs),
+            jobRef: trainingCleanupJobRef(db, uid, 'workout', workoutId),
+            job: trainingCleanupJob('workout', workoutId, mutationId, createdAtMs),
         }));
         const shouldContinue = await db.runTransaction(async (transaction) => {
             const deletionGuard = await getUserDeletionGuardStateInTransaction(
@@ -548,7 +583,16 @@ async function prepareResidualWorkoutTombstones(
                 nowMs,
             );
             if (deletionGuard.shouldSkip) return false;
-            const existing = await Promise.all(values.map(value => transaction.get(value.ref)));
+            const planJob = await transaction.get(planJobRef);
+            if (!planJob.exists) return false;
+            const owner = documentData(planJob);
+            if (owner.kind !== 'plan' || owner.entityId !== planId || owner.mutationId !== mutationId) {
+                throw new TrainingScheduleMutationError('failed-precondition', 'A different plan deletion owns this cleanup job.');
+            }
+            const [existing, jobs] = await Promise.all([
+                Promise.all(values.map(value => transaction.get(value.ref))),
+                Promise.all(values.map(value => transaction.get(value.jobRef))),
+            ]);
             values.forEach((value, valueIndex) => {
                 if (existing[valueIndex].exists) {
                     if (!valuesEqual(documentData(existing[valueIndex]), value.value)) {
@@ -557,14 +601,24 @@ async function prepareResidualWorkoutTombstones(
                             'A deletion tombstone conflicts with this plan cleanup.',
                         );
                     }
-                    return;
+                } else {
+                    transaction.create(value.ref, value.value);
                 }
-                transaction.create(value.ref, value.value);
+                if (jobs[valueIndex].exists) {
+                    const stored = documentData(jobs[valueIndex]);
+                    if (stored.kind !== 'workout' || stored.entityId !== value.job.entityId
+                        || stored.mutationId !== mutationId) {
+                        throw new TrainingScheduleMutationError('failed-precondition', 'A workout cleanup job conflicts with this plan deletion.');
+                    }
+                } else {
+                    transaction.create(value.jobRef, value.job);
+                }
             });
             return true;
         });
-        if (!shouldContinue) return;
+        if (!shouldContinue) return false;
     }
+    return true;
 }
 
 async function persistPlanDeletionResumeReceipt(
@@ -678,10 +732,18 @@ async function finalizePlanDeletion(
         };
         const applied = applyTrainingPlanDeletion(snapshot, finalRequest, lock.createdAtMs);
         stageTrainingDeliveryReconciliation(transaction, db, uid);
+        if (lock.removePastProviderCopies) {
+            stagePastPlanCleanup(transaction, db, uid, request.planId,
+                lock.workouts.map(workout => workout.id), lock.mutationId, lock.createdAtMs);
+        }
         retireTrainingPlanDeliverySettings(transaction, db, uid, request.planId);
         transaction.set(stateRef, applied.after.state);
         if (request.workoutDisposition === 'convert-to-standalone') {
-            applied.convertedWorkouts.forEach((workout) => transaction.set(workoutsRef.doc(workout.id), workout));
+            applied.convertedWorkouts.forEach((workout) => transaction.update(workoutsRef.doc(workout.id), {
+                planId: null,
+                revision: workout.revision,
+                updatedAtMs: workout.updatedAtMs,
+            }));
         } else {
             applied.response.permanentlyDeletedWorkoutIds.forEach(id => transaction.delete(workoutsRef.doc(id)));
         }
@@ -693,6 +755,9 @@ async function finalizePlanDeletion(
             createdAtMs: nowMs,
             expireAt: Timestamp.fromMillis(nowMs + DELETE_PLAN_RECEIPT_RETENTION_MS),
         });
+        transaction.create(trainingCleanupJobRef(db, uid, 'plan', request.planId), trainingCleanupJob(
+            'plan', request.planId, lock.mutationId, lock.createdAtMs, applied.response,
+        ));
         return applied.response;
     });
 }
@@ -706,36 +771,52 @@ async function recursivelyDeleteInChunks(
     }
 }
 
-async function cleanupDeletedPlanData(
+export async function cleanupDeletedPlanData(
     db: admin.firestore.Firestore,
     uid: string,
     response: DeleteTrainingPlanResponseV1,
     nowMs: number,
 ): Promise<void> {
+    const ownsCleanup = await db.runTransaction(async transaction => {
+        if ((await getUserDeletionGuardStateInTransaction(db, transaction, uid, nowMs)).shouldSkip) return false;
+        const job = await transaction.get(trainingCleanupJobRef(db, uid, 'plan', response.removedPlanId));
+        if (!job.exists) return false; // An exact retry after successful cleanup has no job left.
+        const owner = documentData(job);
+        if (owner.kind !== 'plan' || owner.entityId !== response.removedPlanId
+            || owner.mutationId !== response.mutationId) {
+            throw new TrainingScheduleMutationError('failed-precondition', 'A different plan deletion owns this cleanup job.');
+        }
+        return true;
+    });
+    if (!ownsCleanup) return;
     const userRef = db.collection('users').doc(uid);
     const workoutsRef = userRef.collection(SCHEDULED_WORKOUTS_COLLECTION_ID);
     await db.recursiveDelete(userRef.collection(TRAINING_PLANS_COLLECTION_ID).doc(response.removedPlanId));
-    const residual = await workoutsRef.where('planId', '==', response.removedPlanId).get();
-    const workoutRefs = new Map<string, admin.firestore.DocumentReference>();
-    response.permanentlyDeletedWorkoutIds.forEach(id => workoutRefs.set(id, workoutsRef.doc(id)));
-    residual.docs.forEach(snapshot => workoutRefs.set(snapshot.id, snapshot.ref));
-    const residualWorkoutIds = residual.docs.map(snapshot => snapshot.id).sort();
-    await prepareResidualWorkoutTombstones(
-        db,
-        uid,
-        residualWorkoutIds,
-        response.mutationId,
-        response.state.updatedAtMs,
-        nowMs,
-    );
-    const completionRefs = [...workoutRefs.keys()].map(id => (
-        userRef.collection(TRAINING_WORKOUT_COMPLETIONS_COLLECTION_ID).doc(id)
-    ));
-    // Keep projection cleanup outside the finalization transaction: a 400-workout
-    // plan already needs one write per workout there. Delete projections first so
-    // an interrupted cleanup can still rediscover residual workout roots safely.
-    await recursivelyDeleteInChunks(db, completionRefs);
-    await recursivelyDeleteInChunks(db, [...workoutRefs.values()]);
+    const cleanupWorkoutPage = async (workoutIds: string[]): Promise<boolean> => {
+        if (workoutIds.length === 0) return true;
+        const staged = await prepareResidualWorkoutCleanupJobs(
+            db, uid, response.removedPlanId, workoutIds, response.mutationId,
+            response.state.updatedAtMs, nowMs,
+        );
+        if (!staged) return false;
+        // Stage durable child jobs before removing roots. Once a root disappears,
+        // a later planId query cannot rediscover its revision subcollections.
+        await recursivelyDeleteInChunks(db, workoutIds.map(id => (
+            userRef.collection(TRAINING_WORKOUT_COMPLETIONS_COLLECTION_ID).doc(id)
+        )));
+        await recursivelyDeleteInChunks(db, workoutIds.map(id => workoutsRef.doc(id)));
+        return true;
+    };
+    if (!await cleanupWorkoutPage(response.permanentlyDeletedWorkoutIds)) return;
+    // Deleted history is not subject to the 400-current-workout ceiling. Consume
+    // and remove the first bounded page repeatedly instead of retaining an
+    // unbounded planId query result or relying on a moving deletion cursor.
+    while (true) {
+        const residual = await workoutsRef.where('planId', '==', response.removedPlanId)
+            .limit(RESIDUAL_WORKOUT_CLEANUP_PAGE_SIZE).get();
+        if (residual.empty) break;
+        if (!await cleanupWorkoutPage(residual.docs.map(snapshot => snapshot.id))) return;
+    }
 
     const stateRef = userRef.collection('trainingPlanState').doc('current');
     const lockRef = stateRef.collection(TRAINING_PLAN_DELETION_LOCKS_COLLECTION_ID).doc(response.removedPlanId);
@@ -797,6 +878,7 @@ export async function deleteTrainingPlanForUser(
                     ...request,
                     mutationId: lockResult.lock.mutationId,
                     workoutDisposition: lockResult.lock.workoutDisposition,
+                    ...(lockResult.lock.removePastProviderCopies ? { removePastProviderCopies: true } : {}),
                 };
                 return finalizePlanDeletion(
                     db,
@@ -810,6 +892,7 @@ export async function deleteTrainingPlanForUser(
             })();
         await persistPlanDeletionResumeReceipt(db, uid, request, requestHash, response, nowMs);
         await cleanupDeletedPlanData(db, uid, response, nowMs);
+        await finishTrainingCleanupJob(db, uid, 'plan', response.removedPlanId, response.mutationId, nowMs);
         return response;
     } catch (error) {
         // Once the lock lookup succeeds, either a resumable lock or the

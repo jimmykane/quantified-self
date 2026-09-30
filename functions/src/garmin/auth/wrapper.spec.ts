@@ -67,7 +67,10 @@ vi.mock('firebase-functions/v1', async () => {
                         hoisted.callableOptions.set(handler, options);
                         return handler;
                     },
-                    onRequest: (handler: unknown) => handler,
+                    onRequest: (handler: unknown) => {
+                        hoisted.callableOptions.set(handler, options);
+                        return handler;
+                    },
                 },
             }),
         }),
@@ -114,6 +117,7 @@ import {
     getGarminAPIAuthRequestTokenRedirectURI,
     requestAndSetGarminAPIAccessToken,
     deauthorizeGarminAPI,
+    deauthorizeGarminAPIUsers,
     receiveGarminAPIDeregistration,
     receiveGarminAPIUserPermissions,
 } from './wrapper';
@@ -128,6 +132,8 @@ describe('Garmin Auth Wrapper', () => {
     it.each([
         ['getGarminAPIAuthRequestTokenRedirectURI', getGarminAPIAuthRequestTokenRedirectURI],
         ['requestAndSetGarminAPIAccessToken', requestAndSetGarminAPIAccessToken],
+        ['deauthorizeGarminAPI', deauthorizeGarminAPI],
+        ['deauthorizeGarminAPIUsers', deauthorizeGarminAPIUsers],
     ])('configures %s with 512 MiB', (_name, callable) => {
         expect(hoisted.callableOptions.get(callable)).toMatchObject({ memory: '512MB' });
     });

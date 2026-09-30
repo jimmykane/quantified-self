@@ -180,10 +180,11 @@ export function buildDashboardExamplePreview(tile: TileSettingsInterface): Dashb
   }
   if (vm.type === TileTypes.Chart && C.isDashboardSleepTrendChartType((vm as DashboardChartTileViewModel).chartType)) {
     const points: DashboardSleepTrendPoint[] = Array.from({ length: 14 }, (_, i) => ({
-      id: `example-sleep-${i}`, sleepDate: new Date(ANCHOR-(13-i)*DAY).toISOString().slice(0,10), provider: SLEEP_PROVIDERS.GarminAPI, providerLabel: 'Example source', categoryLabel: '',
+      id: `example-sleep-${i}`, sourceSessionIds: [`example-sleep-${i}`], sleepDate: new Date(ANCHOR-(13-i)*DAY).toISOString().slice(0,10), provider: SLEEP_PROVIDERS.GarminAPI, providerLabel: 'Example source', categoryLabel: '',
       startTimeMs: ANCHOR-(13-i)*DAY-28000000, endTimeMs: ANCHOR-(13-i)*DAY, totalSeconds: 26000+i%3*1200,
       deepSeconds: 5400, lightSeconds: 14000+i%3*1200, remSeconds: 6600, awakeSeconds: 900, unknownSeconds: 0,
-      score: null, averageHeartRateBpm: null, minimumHeartRateBpm: null, averageHrvMs: null, maxSpo2Percent: null,
+      score: null, averageHeartRateBpm: null, minimumHeartRateBpm: null, restingHeartRateBpm: null,
+      averageHrvMs: null, maxSpo2Percent: null, averageRespirationBrpm: null,
       isNap: false, napSeconds: 0, napCount: 0, napAverageHrvMs: null, napAverageHeartRateBpm: null, napStartTimeMs: null, napEndTimeMs: null,
     }));
     (vm as DashboardChartTileViewModel).sleepTrend = { points, latestPoint: points.at(-1)!, hasRealPoints: true };

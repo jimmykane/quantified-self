@@ -405,6 +405,7 @@ describe('Suunto Health webhook ingress', () => {
       rangeStartMs: 1_700_000_000_000,
       rangeEndMs: 1_700_086_400_000,
       healthTrigger: 'webhook',
+      suuntoHealthWebhookFeedMask: 1,
       dispatchImmediately: true,
       suuntoHealthTokenCredentialGeneration: TOKEN_GENERATION,
       suuntoHealthRootOAuthCredentialGeneration: ROOT_GENERATION,
@@ -430,6 +431,63 @@ describe('Suunto Health webhook ingress', () => {
       lastUpdateTime: UPDATE_TIME,
     });
     expect(hoisted.recursiveDelete).not.toHaveBeenCalled();
+  });
+
+  it('marks Recovery notifications for coalesced feed telemetry', async () => {
+    const { snapshot } = ingressSnapshot({
+      ...ingressData(),
+      notificationType: 'SUUNTO_247_RECOVERY_CREATED',
+    });
+    await processSuuntoHealthWebhookIngressDocument(snapshot, activeDependencies() as any);
+
+    expect(hoisted.addQueueItem).toHaveBeenCalledWith(expect.objectContaining({
+      suuntoHealthWebhookFeedMask: 2,
+    }));
+  });
+
+  it('coalesces distinct notifications in one five-minute bucket and separates later buckets', async () => {
+    await processSuuntoHealthWebhookIngressDocument(
+      ingressSnapshot().snapshot,
+      activeDependencies() as any,
+    );
+    await processSuuntoHealthWebhookIngressDocument(
+      ingressSnapshot(ingressData(), 'b'.repeat(64)).snapshot,
+      activeDependencies() as any,
+    );
+
+    const first = hoisted.addQueueItem.mock.calls[0][0];
+    const second = hoisted.addQueueItem.mock.calls[2][0];
+    expect(first.dedupeKey).toBe(second.dedupeKey);
+    expect(first.dispatchAfterMs).toBe(second.dispatchAfterMs);
+    expect(first.dispatchAfterMs - PROCESSED_AT_MS).toBeGreaterThan(0);
+    expect(first.dispatchAfterMs - PROCESSED_AT_MS).toBeLessThanOrEqual(301_000);
+    expect(first.lateArrivalKey).toBe(INGRESS_ID);
+    expect(second.lateArrivalKey).toBe('b'.repeat(64));
+
+    await processSuuntoHealthWebhookIngressDocument(
+      ingressSnapshot(ingressData(), 'c'.repeat(64)).snapshot,
+      activeDependencies({ nowMs: vi.fn(() => PROCESSED_AT_MS + 300_000) }) as any,
+    );
+    expect(hoisted.addQueueItem.mock.calls[4][0].dedupeKey).not.toBe(first.dedupeKey);
+  });
+
+  it('uses admission time when lifecycle validation crosses a bucket boundary', async () => {
+    const beforeBoundaryMs = 1_700_000_099_000;
+    const afterBoundaryMs = beforeBoundaryMs + 120_000;
+    const nowMs = vi.fn()
+      .mockReturnValueOnce(beforeBoundaryMs)
+      .mockReturnValueOnce(afterBoundaryMs);
+
+    await processSuuntoHealthWebhookIngressDocument(
+      ingressSnapshot().snapshot,
+      activeDependencies({ nowMs }) as any,
+    );
+
+    const expectedDispatchAfterMs = (Math.floor(afterBoundaryMs / 300_000) + 1)
+      * 300_000 + 1_000;
+    expect(hoisted.addQueueItem.mock.calls[0][0].dispatchAfterMs)
+      .toBe(expectedDispatchAfterMs);
+    expect(nowMs).toHaveBeenCalledTimes(2);
   });
 
   it('version-deletes malformed, disabled, stale, and deleting ingress', async () => {

@@ -1,10 +1,20 @@
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { Firestore } from 'firebase-admin/firestore';
 import { ActivityTypes } from '@sports-alliance/sports-lib';
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 import type { DeliveryRuntime } from '../training-plans/delivery/contracts';
 import { FakeTrainingTransport } from '../training-plans/delivery/test-support/fake-transport';
+import { SuuntoHttpFixture } from '../training-plans/delivery/test-support/suunto-http-fixture';
+import { SuuntoGuideTransport } from '../training-plans/delivery/suunto/transport';
+import { WahooHttpFixture } from '../training-plans/delivery/test-support/wahoo-http-fixture';
+import { WahooTrainingTransport } from '../training-plans/delivery/wahoo/transport';
+import { reconcileTrainingDeliveryPage } from '../training-plans/delivery/store';
+import { processTrainingDelivery } from '../training-plans/delivery/worker';
 import { parseStrengthWorkoutDetailsV1 } from '../../../shared/strength-workout';
+import { encodeOpaqueValue } from './data.service';
+import { processTrainingBulkShift, reconcileTrainingBulkShifts } from '../training-plans/bulk-shift-worker';
+import { mutateTrainingScheduleForUser } from '../training-plans/persistence';
+import { BULK_SHIFT_LEASE_MS } from '../training-plans/staged-shift';
 import { applyTrainingChanges, previewCreatePlannedWorkout, previewTrainingChanges,
   previewStrengthWorkoutChange, previewPlannedWorkoutV2Change,
   type TrainingWriteDependencies } from './training-plans-write.service';
@@ -56,6 +66,296 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Training MCP write propos
         providers: 'all_connected', action: 'send', timeZone: 'Europe/Helsinki' },
     ] } }, deps);
 
+  it('does not preview a mixed schedule while a full-prescription restore is staged', async () => {
+    await db.collection('users').doc(uid).collection('trainingPlanState').doc('current')
+      .collection('planDeletionLocks').doc('_bulk_restore').set({ phase: 'applying' });
+    await expect(previewTrainingChanges({ uid, connectionId: 'connection', scopes,
+      arguments: { expectedScheduleRevision: 1, changes: [
+        { kind: 'create-workout', localKey: 'deferred', plan: null, localDate: '2026-09-18',
+          title: 'Deferred run', structure },
+      ] } }, deps))
+      .rejects.toMatchObject({ code: 'failed-precondition' });
+  });
+
+  const prepareOversizedShift = async (connectionId = 'connection', grantedScopes = scopes,
+    includeRename = false) => {
+    const user = db.collection('users').doc(uid);
+    await user.collection('trainingPlanState').doc('current').update({ activePlanId: 'bulk-plan',
+      currentWorkoutCount: 400 });
+    const planRef = user.collection('trainingPlans').doc('bulk-plan');
+    await planRef.set({ schemaVersion: 1, id: 'bulk-plan', name: 'Approved bulk shift', lifecycle: 'active',
+      startLocalDate: '2026-10-01', endLocalDate: '2026-10-31', revision: 1, lastCheckpointRevision: 1,
+      workoutCount: 400, createdAtMs: 1, updatedAtMs: 1 });
+    for (let offset = 0; offset < 400; offset += 100) {
+      const batch = db.batch();
+      for (let index = offset; index < offset + 100; index += 1) {
+        const id = `bulk-${`${index}`.padStart(3, '0')}`;
+        const nodes = Array.from({ length: 100 }, (_, step) => ({ kind: 'step', id: `step-${step}`,
+          purpose: 'work', ending: { kind: 'time', seconds: 30 }, targets: [],
+          note: Array.from({ length: 3 }, (_, part) => createHash('sha256')
+            .update(`${index}:${step}:${part}`).digest('hex')).join(''),
+        }));
+        batch.set(user.collection('scheduledWorkouts').doc(id), { schemaVersion: 1, id, planId: 'bulk-plan',
+          localDate: '2026-10-02', lifecycle: 'planned', title: `Bulk workout ${index}`,
+          structure: { version: 1, sport: ActivityTypes.Running, nodes },
+          revision: 1, createdAtMs: 1, updatedAtMs: 1 });
+      }
+      await batch.commit();
+    }
+    const plan = encodeOpaqueValue('training_read', { kind: 'plan', id: 'bulk-plan', createdAtMs: 1 }, uid, connectionId);
+    const preview = await previewTrainingChanges({ uid, connectionId, scopes: grantedScopes,
+      arguments: { expectedScheduleRevision: 1, changes: [
+        { kind: 'shift-plan', plan: { ref: plan }, days: 1 },
+        ...(includeRename ? [{ kind: 'rename-plan', plan: { ref: plan }, name: 'After staged shift' }] : []),
+      ] } }, deps);
+    if (connectionId.startsWith('first-party-assistant-v1:')) {
+      await user.collection('assistantConversations').doc('active').update({ pendingTrainingProposal: preview });
+    }
+    return { user, planRef, preview };
+  };
+
+  const interruptOversizedShift = async (planRef: FirebaseFirestore.DocumentReference, proposalRef: string,
+    connectionId = 'connection', grantedScopes = scopes) => {
+    const revisionRef = planRef.collection('revisions').doc('0000000002');
+    let interrupted = false;
+    const interruptedDb = {
+      collection: (id: string) => db.collection(id),
+      runTransaction: async (handler: (transaction: FirebaseFirestore.Transaction) => Promise<unknown>) => {
+        const result = await db.runTransaction(handler);
+        if (!interrupted && !(await revisionRef.collection('chunks').limit(1).get()).empty
+          && !(await revisionRef.get()).exists) {
+          interrupted = true;
+          throw new Error('synthetic lost MCP shift stage response');
+        }
+        return result;
+      },
+    } as unknown as Firestore;
+    await expect(applyTrainingChanges({ uid, connectionId, scopes: grantedScopes,
+      arguments: { proposalRef, permissionMode: 'schedule' } },
+    { ...deps, db: interruptedDb })).rejects.toThrow('Retry the same approved change');
+    expect(interrupted).toBe(true);
+    return revisionRef;
+  };
+
+  it('applies an approved oversized plan shift without losing the proposal authority boundary', async () => {
+    const { user, planRef, preview } = await prepareOversizedShift();
+    const result = await applyTrainingChanges({ uid, connectionId: 'connection', scopes,
+      arguments: { proposalRef: preview.proposalRef, permissionMode: 'schedule' } }, deps);
+    expect(result.status).toBe('applied');
+    expect((await planRef.get()).data()).toMatchObject({ revision: 2, startLocalDate: '2026-10-02' });
+    expect((await user.collection('scheduledWorkouts').doc('bulk-399').get()).data())
+      .toMatchObject({ revision: 2, localDate: '2026-10-03' });
+  }, 120_000);
+
+  it('starts the recovery lease at approval time, not at the older preview timestamp', async () => {
+    const { user, preview } = await prepareOversizedShift();
+    const lockRef = user.collection('trainingPlanState').doc('current')
+      .collection('planDeletionLocks').doc('_bulk_shift');
+    let acquired: { createdAtMs: number; nextAttemptAtMs: number } | null = null;
+    const interruptedDb = {
+      collection: (id: string) => db.collection(id),
+      runTransaction: async (handler: (transaction: FirebaseFirestore.Transaction) => Promise<unknown>) => {
+        const result = await db.runTransaction(handler);
+        const lock = await lockRef.get();
+        if (!acquired && lock.exists) {
+          acquired = { createdAtMs: lock.get('createdAtMs'), nextAttemptAtMs: lock.get('nextAttemptAtMs') };
+          throw new Error('synthetic lost lock response');
+        }
+        return result;
+      },
+    } as unknown as Firestore;
+    await expect(applyTrainingChanges({ uid, connectionId: 'connection', scopes,
+      arguments: { proposalRef: preview.proposalRef, permissionMode: 'schedule' } },
+    { ...deps, db: interruptedDb })).rejects.toThrow('Retry the same approved change');
+    expect(acquired).not.toBeNull();
+    expect(acquired!.createdAtMs).toBe(deps.now());
+    expect(acquired!.nextAttemptAtMs).toBeGreaterThan(Date.now() + BULK_SHIFT_LEASE_MS - 60_000);
+    expect(await processTrainingBulkShift(db, lockRef, acquired!.nextAttemptAtMs + 1)).toBe(true);
+    expect((await lockRef.get()).exists).toBe(false);
+  }, 120_000);
+
+  it('cancels unpublished MCP shift staging after the connection grant is revoked', async () => {
+    const { user, planRef, preview } = await prepareOversizedShift();
+    const revisionRef = await interruptOversizedShift(planRef, preview.proposalRef);
+    expect((await planRef.get()).get('revision')).toBe(1);
+    const lockRef = user.collection('trainingPlanState').doc('current')
+      .collection('planDeletionLocks').doc('_bulk_shift');
+    const dueAtMs = (await lockRef.get()).get('nextAttemptAtMs') as number;
+    await user.collection('mcpConnections').doc('connection').update({ revokedAtMs: dueAtMs });
+    expect(await reconcileTrainingBulkShifts(db, dueAtMs + 1)).toEqual({ scanned: 1, completed: 0, failed: 0 });
+    expect((await lockRef.get()).exists).toBe(false);
+    expect((await revisionRef.get()).exists).toBe(false);
+    expect((await revisionRef.collection('chunks').limit(1).get()).empty).toBe(true);
+    expect((await planRef.get()).data()).toMatchObject({ revision: 1, startLocalDate: '2026-10-01' });
+    expect((await user.collection('scheduledWorkouts').doc('bulk-399').get()).data())
+      .toMatchObject({ revision: 1, localDate: '2026-10-02' });
+    await user.collection('mcpConnections').doc('connection').update({ revokedAtMs: null });
+    await expect(applyTrainingChanges({ uid, connectionId: 'connection', scopes,
+      arguments: { proposalRef: preview.proposalRef, permissionMode: 'schedule' } }, deps))
+      .rejects.toThrow('cancelled');
+  }, 120_000);
+
+  it('cancels unpublished MCP shift staging when its approved proposal expires', async () => {
+    const { user, planRef, preview } = await prepareOversizedShift();
+    const revisionRef = await interruptOversizedShift(planRef, preview.proposalRef);
+    const lockRef = user.collection('trainingPlanState').doc('current')
+      .collection('planDeletionLocks').doc('_bulk_shift');
+    const dueAtMs = (await lockRef.get()).get('nextAttemptAtMs') as number;
+    const proposals = await user.collection('trainingMcpProposals').get();
+    expect(proposals.size).toBe(1);
+    await proposals.docs[0].ref.update({ expiresAtMs: dueAtMs });
+    expect(await reconcileTrainingBulkShifts(db, dueAtMs + 1)).toEqual({ scanned: 1, completed: 0, failed: 0 });
+    expect((await lockRef.get()).exists).toBe(false);
+    expect((await revisionRef.collection('chunks').limit(1).get()).empty).toBe(true);
+    expect((await planRef.get()).get('revision')).toBe(1);
+  }, 120_000);
+
+  it('does not revive an expired staged approval on a late direct retry', async () => {
+    const { user, planRef, preview } = await prepareOversizedShift();
+    const revisionRef = await interruptOversizedShift(planRef, preview.proposalRef);
+    const proposal = (await user.collection('trainingMcpProposals').get()).docs[0];
+    const approvedAtMs = deps.now();
+    await proposal.ref.update({ status: 'applying', leaseUntilMs: approvedAtMs + 30_000,
+      expiresAtMs: approvedAtMs + 60_000 });
+    deps = { ...deps, now: () => approvedAtMs + 120_000 };
+    const lockRef = user.collection('trainingPlanState').doc('current')
+      .collection('planDeletionLocks').doc('_bulk_shift');
+
+    await expect(applyTrainingChanges({ uid, connectionId: 'connection', scopes,
+      arguments: { proposalRef: preview.proposalRef, permissionMode: 'schedule' } }, deps))
+      .rejects.toThrow('lost its permission or expired');
+    expect((await lockRef.get()).exists).toBe(false);
+    expect((await revisionRef.collection('chunks').limit(1).get()).empty).toBe(true);
+    expect((await planRef.get()).get('revision')).toBe(1);
+    expect((await proposal.ref.get()).get('cancelledAtMs')).toBeTypeOf('number');
+  }, 120_000);
+
+  it('cancels unpublished MCP shift staging when its stored proposal is malformed', async () => {
+    const { user, planRef, preview } = await prepareOversizedShift();
+    const revisionRef = await interruptOversizedShift(planRef, preview.proposalRef);
+    const lockRef = user.collection('trainingPlanState').doc('current')
+      .collection('planDeletionLocks').doc('_bulk_shift');
+    const dueAtMs = (await lockRef.get()).get('nextAttemptAtMs') as number;
+    const proposals = await user.collection('trainingMcpProposals').get();
+    expect(proposals.size).toBe(1);
+    await proposals.docs[0].ref.update({ scheduleRequests: [{ index: 0, request: null }] });
+    expect(await reconcileTrainingBulkShifts(db, dueAtMs + 1)).toEqual({ scanned: 1, completed: 0, failed: 0 });
+    expect((await lockRef.get()).exists).toBe(false);
+    expect((await revisionRef.collection('chunks').limit(1).get()).empty).toBe(true);
+    expect((await planRef.get()).get('revision')).toBe(1);
+  }, 120_000);
+
+  it('cancels an unpublished Assistant shift when its in-app confirmation changes', async () => {
+    const user = db.collection('users').doc(uid);
+    await user.collection('assistantConversations').doc('active').set({ conversationId: 'chat-1',
+      trainingPlansEnabled: true, trainingPlanChangesEnabled: true, trainingDeliveryEnabled: false });
+    const assistantScopes = [TRAINING_PLANS_SCOPE, TRAINING_PLANS_WRITE_SCOPE];
+    const connectionId = 'first-party-assistant-v1:chat-1';
+    const { planRef, preview } = await prepareOversizedShift(connectionId, assistantScopes);
+    const revisionRef = await interruptOversizedShift(planRef, preview.proposalRef, connectionId, assistantScopes);
+    const lockRef = user.collection('trainingPlanState').doc('current')
+      .collection('planDeletionLocks').doc('_bulk_shift');
+    const dueAtMs = (await lockRef.get()).get('nextAttemptAtMs') as number;
+    await user.collection('assistantConversations').doc('active')
+      .update({ pendingTrainingProposal: { proposalRef: 'newer-proposal' } });
+    expect(await reconcileTrainingBulkShifts(db, dueAtMs + 1)).toEqual({ scanned: 1, completed: 0, failed: 0 });
+    expect((await lockRef.get()).exists).toBe(false);
+    expect((await revisionRef.collection('chunks').limit(1).get()).empty).toBe(true);
+    expect((await planRef.get()).get('revision')).toBe(1);
+    await user.collection('assistantConversations').doc('active')
+      .update({ pendingTrainingProposal: preview });
+    await expect(applyTrainingChanges({ uid, connectionId, scopes: assistantScopes,
+      arguments: { proposalRef: preview.proposalRef, permissionMode: 'schedule' } }, deps))
+      .rejects.toThrow('cancelled');
+  }, 120_000);
+
+  it('resumes an interrupted approved MCP shift once and replays its result', async () => {
+    const { user, planRef, preview } = await prepareOversizedShift();
+    const revisionRef = await interruptOversizedShift(planRef, preview.proposalRef);
+    const lockRef = user.collection('trainingPlanState').doc('current')
+      .collection('planDeletionLocks').doc('_bulk_shift');
+    const dueAtMs = (await lockRef.get()).get('nextAttemptAtMs') as number;
+    expect(await reconcileTrainingBulkShifts(db, dueAtMs + 1)).toEqual({ scanned: 1, completed: 1, failed: 0 });
+    expect((await lockRef.get()).exists).toBe(false);
+    expect((await revisionRef.get()).exists).toBe(true);
+    const result = await applyTrainingChanges({ uid, connectionId: 'connection', scopes,
+      arguments: { proposalRef: preview.proposalRef, permissionMode: 'schedule' } }, deps);
+    expect(result.status).toBe('applied');
+    expect((await planRef.get()).data()).toMatchObject({ revision: 2, startLocalDate: '2026-10-02' });
+    expect((await user.collection('scheduledWorkouts').doc('bulk-399').get()).data())
+      .toMatchObject({ revision: 2, localDate: '2026-10-03' });
+    expect((await revisionRef.collection('chunks').get()).empty).toBe(false);
+    expect((await planRef.collection('revisions').get()).size).toBe(1);
+  }, 120_000);
+
+  it('resumes its own staged lock on a direct approved retry before the worker runs', async () => {
+    const { user, planRef, preview } = await prepareOversizedShift('connection', scopes, true);
+    const otherPreview = await previewTrainingChanges({ uid, connectionId: 'connection', scopes,
+      arguments: { expectedScheduleRevision: 1, changes: [{ kind: 'rename-plan',
+        plan: { ref: encodeOpaqueValue('training_read', { kind: 'plan', id: 'bulk-plan', createdAtMs: 1 },
+          uid, 'connection') }, name: 'Unrelated proposal' }] } }, deps);
+    const revisionRef = await interruptOversizedShift(planRef, preview.proposalRef);
+    const lockRef = user.collection('trainingPlanState').doc('current')
+      .collection('planDeletionLocks').doc('_bulk_shift');
+    await expect(applyTrainingChanges({ uid, connectionId: 'connection', scopes,
+      arguments: { proposalRef: otherPreview.proposalRef, permissionMode: 'schedule' } }, deps))
+      .rejects.toThrow('in progress');
+    expect((await planRef.get()).get('name')).toBe('Approved bulk shift');
+    const result = await applyTrainingChanges({ uid, connectionId: 'connection', scopes,
+      arguments: { proposalRef: preview.proposalRef, permissionMode: 'schedule' } }, deps);
+    expect(result.status).toBe('applied');
+    expect(result.changes.map(change => change.kind)).toEqual(['shift-plan', 'rename-plan']);
+    expect((await lockRef.get()).exists).toBe(false);
+    expect((await revisionRef.get()).exists).toBe(true);
+    expect((await planRef.get()).data()).toMatchObject({ revision: 3,
+      name: 'After staged shift', startLocalDate: '2026-10-02' });
+    expect((await planRef.collection('revisions').get()).size).toBe(2);
+  }, 120_000);
+
+  it('continues later approved proposal changes after the worker finishes a staged shift', async () => {
+    const { user, planRef, preview } = await prepareOversizedShift('connection', scopes, true);
+    await interruptOversizedShift(planRef, preview.proposalRef);
+    const lockRef = user.collection('trainingPlanState').doc('current')
+      .collection('planDeletionLocks').doc('_bulk_shift');
+    const dueAtMs = (await lockRef.get()).get('nextAttemptAtMs') as number;
+    expect(await reconcileTrainingBulkShifts(db, dueAtMs + 1)).toEqual({ scanned: 1, completed: 1, failed: 0 });
+    expect((await planRef.get()).data()).toMatchObject({ revision: 2,
+      name: 'Approved bulk shift', startLocalDate: '2026-10-02' });
+    const result = await applyTrainingChanges({ uid, connectionId: 'connection', scopes,
+      arguments: { proposalRef: preview.proposalRef, permissionMode: 'schedule' } }, deps);
+    expect(result.status).toBe('applied');
+    expect(result.changes).toEqual([
+      expect.objectContaining({ kind: 'shift-plan', status: 'applied' }),
+      expect.objectContaining({ kind: 'rename-plan', status: 'applied' }),
+    ]);
+    expect((await planRef.get()).data()).toMatchObject({ revision: 3,
+      name: 'After staged shift', startLocalDate: '2026-10-02' });
+    expect((await planRef.collection('revisions').get()).size).toBe(2);
+  }, 120_000);
+
+  it('fences a conflicting edit and lets only one worker publish an approved MCP shift', async () => {
+    const { user, planRef, preview } = await prepareOversizedShift();
+    await interruptOversizedShift(planRef, preview.proposalRef);
+    await expect(mutateTrainingScheduleForUser(uid, {
+      mutationId: 'conflicting-mcp-shift-rename',
+      expectedRevisions: [{ scope: 'state', id: 'current', revision: 1 },
+        { scope: 'plan', id: 'bulk-plan', revision: 1 }],
+      operation: { kind: 'rename-plan', planId: 'bulk-plan', name: 'Must wait for shift' },
+    }, { db, nowMs: deps.now() })).rejects.toMatchObject({ code: 'failed-precondition' });
+    const lockRef = user.collection('trainingPlanState').doc('current')
+      .collection('planDeletionLocks').doc('_bulk_shift');
+    const dueAtMs = (await lockRef.get()).get('nextAttemptAtMs') as number;
+    const outcomes = await Promise.all([
+      processTrainingBulkShift(db, lockRef, dueAtMs + 1),
+      processTrainingBulkShift(db, lockRef, dueAtMs + 1),
+    ]);
+    expect(outcomes.sort()).toEqual([false, true]);
+    expect((await planRef.get()).data()).toMatchObject({ revision: 2,
+      name: 'Approved bulk shift', startLocalDate: '2026-10-02' });
+    expect((await planRef.collection('revisions').get()).size).toBe(1);
+    expect((await lockRef.get()).exists).toBe(false);
+  }, 120_000);
+
   it('creates a focused standalone-workout proposal without a client operation kind or local key', async () => {
     const preview = await previewCreatePlannedWorkout({ uid, connectionId: 'connection', scopes,
       arguments: { expectedScheduleRevision: 1, localDate: '2026-09-18', title: 'Focused easy run', structure } }, deps);
@@ -106,6 +406,7 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Training MCP write propos
     const createdPreview = await previewPlannedWorkoutV2Change({ uid, connectionId: 'connection', scopes,
       arguments: { expectedScheduleRevision: 1, change: { kind: 'create-workout', localKey: 'swim', plan: null,
         localDate: '2026-09-18', title: '25 m pool', structure: swim } } }, deps);
+    expect(createdPreview.changes[0].summary).toContain('Selected pool length: 25 m (meters presentation).');
     const created = await applyTrainingChanges({ uid, connectionId: 'connection', scopes,
       arguments: { proposalRef: createdPreview.proposalRef, permissionMode: 'schedule' } }, deps);
     const workout = (await db.collection('users').doc(uid).collection('scheduledWorkouts').get()).docs[0];
@@ -122,11 +423,20 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Training MCP write propos
         workout: { ref: workoutRef }, plan: null, localDate: '2026-09-19', title: '25 yd pool',
         structure: { ...swim, poolLength: { meters: 22.86, presentation: 'yards' } } } } };
     const updatedPreview = await previewPlannedWorkoutV2Change(updateInput, deps);
+    expect(updatedPreview.changes[0].summary).toContain('Selected pool length: 22.86 m (yards presentation).');
     const updated = await applyTrainingChanges({ uid, connectionId: 'connection', scopes,
       arguments: { proposalRef: updatedPreview.proposalRef, permissionMode: 'schedule' } }, deps);
     expect((await workout.ref.get()).get('structure.poolLength')).toEqual({ meters: 22.86, presentation: 'yards' });
     await expect(applyTrainingChanges({ uid, connectionId: 'connection', scopes,
       arguments: { proposalRef: updatedPreview.proposalRef, permissionMode: 'schedule' } }, deps)).resolves.toEqual(updated);
+    const removalPreview = await previewPlannedWorkoutV2Change({ uid, connectionId: 'connection', scopes,
+      arguments: { expectedScheduleRevision: updated.scheduleRevision, change: { kind: 'update-workout',
+        workout: { ref: workoutRef }, plan: null, localDate: '2026-09-19', title: 'Unspecified pool',
+        structure: legacySwim } } }, deps);
+    expect(removalPreview.changes[0].summary).toContain('The selected pool length will be removed.');
+    await applyTrainingChanges({ uid, connectionId: 'connection', scopes,
+      arguments: { proposalRef: removalPreview.proposalRef, permissionMode: 'schedule' } }, deps);
+    expect((await workout.ref.get()).get('structure.poolLength')).toBeUndefined();
     await expect(previewPlannedWorkoutV2Change(updateInput, deps)).rejects.toThrow('schedule changed');
     await expect(previewPlannedWorkoutV2Change({ ...updateInput,
       scopes: [TRAINING_PLANS_SCOPE] }, deps)).rejects.toThrow('permission');
@@ -165,6 +475,7 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Training MCP write propos
     const created = await applyTrainingChanges({ uid, connectionId: 'connection', scopes,
       arguments: { proposalRef: createPreview.proposalRef, permissionMode: 'schedule' } }, deps);
     const planRef = created.createdReferences.find(reference => reference.kind === 'plan')!.reference;
+    const planId = (await db.collection('users').doc(uid).collection('trainingPlans').get()).docs[0].id;
 
     await expect(previewTrainingChanges({ uid, connectionId: 'connection', scopes,
       arguments: { expectedScheduleRevision: created.scheduleRevision, changes: [
@@ -180,6 +491,7 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Training MCP write propos
     expect(deletionPreview.changes[0]).toMatchObject({ kind: 'delete-plan' });
     expect(deletionPreview.changes[0].summary).toContain('revision history');
     expect(deletionPreview.changes[0].summary).toContain('will become standalone');
+    expect(deletionPreview.changes[0].summary).toContain('past provider copies remain');
 
     const deleted = await applyTrainingChanges({ uid, connectionId: 'connection', scopes,
       arguments: { proposalRef: deletionPreview.proposalRef, permissionMode: 'schedule' } }, deps);
@@ -187,6 +499,32 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Training MCP write propos
     expect((await db.collection('users').doc(uid).collection('trainingPlans').get()).empty).toBe(true);
     expect((await db.collection('users').doc(uid).collection('scheduledWorkouts').get()).docs[0].data())
       .toMatchObject({ title: 'Keep this run', planId: null });
+    expect((await db.collection('users').doc(uid).collection('trainingDeliveryState').doc('current')
+      .collection('pastCleanup').doc(`plan_${planId}`).get()).exists).toBe(false);
+  });
+
+  it('keeps MCP workout deletion recoverable without opting into past provider cleanup', async () => {
+    const user = db.collection('users').doc(uid);
+    const create = await previewCreatePlannedWorkout({ uid, connectionId: 'connection', scopes,
+      arguments: { expectedScheduleRevision: 1, localDate: '2026-09-18', title: 'MCP deletion check', structure } }, deps);
+    const created = await applyTrainingChanges({ uid, connectionId: 'connection', scopes,
+      arguments: { proposalRef: create.proposalRef, permissionMode: 'schedule' } }, deps);
+    const workoutRef = created.createdReferences[0].reference;
+    const workoutId = (await user.collection('scheduledWorkouts').get()).docs[0].id;
+    const deletion = await previewTrainingChanges({ uid, connectionId: 'connection', scopes,
+      arguments: { expectedScheduleRevision: created.scheduleRevision,
+        changes: [{ kind: 'delete-workout', workout: { ref: workoutRef } }] } }, deps);
+    expect(deletion.changes[0].summary).toContain('recoverable history');
+    expect(deletion.changes[0].summary).toContain('past provider copies remain');
+    const input = { uid, connectionId: 'connection', scopes,
+      arguments: { proposalRef: deletion.proposalRef, permissionMode: 'schedule' as const } };
+    const applied = await applyTrainingChanges(input, deps);
+    expect(applied.changes).toEqual([expect.objectContaining({ kind: 'delete-workout', status: 'applied' })]);
+    expect((await user.collection('scheduledWorkouts').doc(workoutId).get()).data()?.lifecycle).toBe('deleted');
+    expect((await user.collection('trainingDeliveryState').doc('current').collection('pastCleanup')
+      .doc(`workout_${workoutId}`).get()).data()).toMatchObject({ enabled: false, scope: 'workout', scopeId: workoutId });
+    expect(transport?.calls).toHaveLength(0);
+    await expect(applyTrainingChanges(input, deps)).resolves.toEqual(applied);
   });
 
   it('permanently deletes plan workouts and replays the approved deletion idempotently', async () => {
@@ -214,6 +552,7 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Training MCP write propos
         { kind: 'delete-plan', plan: { ref: planRef }, workoutDisposition: 'delete-workouts' },
       ] } }, deps);
     expect(deletionPreview.changes[0].summary).toContain('permanently deleted');
+    expect(deletionPreview.changes[0].summary).toContain('past provider copies remain');
     const deletionInput = { uid, connectionId: 'connection', scopes,
       arguments: { proposalRef: deletionPreview.proposalRef, permissionMode: 'schedule' as const } };
     const deleted = await applyTrainingChanges(deletionInput, deps);
@@ -261,36 +600,232 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Training MCP write propos
     ]);
   });
 
-  it('creates a degraded standalone workout without treating Send as mapping approval', async () => {
+  it('discloses a degraded mapping and approves it with the original Send confirmation', async () => {
     transport!.level = 'degraded';
     const preview = await previewCreatePlannedWorkout({ uid, connectionId: 'connection', scopes,
       arguments: { expectedScheduleRevision: 1, localDate: '2026-09-18', title: 'Mountain ride',
         structure: { ...structure, sport: ActivityTypes.MountainBiking },
         delivery: { providers: ['garmin'], timeZone: 'Europe/Helsinki' } } }, deps);
     expect(preview.providerPreviews).toEqual([expect.objectContaining({ provider: 'garmin',
-      warningCount: 1, summary: expect.stringContaining('separate approval') })]);
+      warningCount: 1, summary: expect.stringContaining('Test target mapping warning') })]);
+    expect(preview.providerPreviews[0].summary).toContain('Confirming this proposal approves');
 
     const applied = await applyTrainingChanges({ uid, connectionId: 'connection', scopes,
       arguments: { proposalRef: preview.proposalRef, permissionMode: 'combined' } }, deps);
     expect(applied.status).toBe('applied');
     expect(applied.providers).toEqual([expect.objectContaining({ provider: 'garmin', status: 'applied',
-      message: expect.stringContaining('separate mapping approval') })]);
+      message: expect.stringContaining('previewed mapping adjustment were approved') })]);
     const user = db.collection('users').doc(uid);
     const workouts = await user.collection('scheduledWorkouts').get();
     expect(workouts.size).toBe(1);
     const setting = user.collection('trainingDeliverySettings').doc(`workout_${workouts.docs[0].id}_garmin`);
-    expect((await setting.get()).data()).toMatchObject({ enabled: true, approvedDigest: null });
-
-    const approvalPreview = await previewTrainingChanges({ uid, connectionId: 'connection', scopes,
-      arguments: { expectedScheduleRevision: applied.scheduleRevision, changes: [
-        { kind: 'provider-delivery', targetType: 'workout',
-          target: { ref: applied.createdReferences[0].reference }, providers: ['garmin'], action: 'approve' },
-      ] } }, deps);
-    const approved = await applyTrainingChanges({ uid, connectionId: 'connection', scopes,
-      arguments: { proposalRef: approvalPreview.proposalRef, permissionMode: 'delivery' } }, deps);
-    expect(approved.status).toBe('applied');
+    expect((await setting.get()).data()).toMatchObject({ enabled: true });
     expect((await setting.get()).get('approvedDigest')).toMatch(/^[a-f0-9]{64}$/);
     expect((await user.collection('scheduledWorkouts').get()).size).toBe(1);
+  });
+
+  it('previews the actual Suunto text loss once, then delivers through the synthetic Guide transport', async () => {
+    const suunto = new SuuntoHttpFixture();
+    const guideTransport = new SuuntoGuideTransport(suunto.request, 'Quantified Self', deps.now);
+    deps.runtime.transport = provider => provider === 'suunto' ? guideTransport : null;
+    const longNote = 'Ride at conversational effort and keep pedaling smoothly across varied terrain.';
+    const preview = await previewCreatePlannedWorkout({ uid, connectionId: 'connection', scopes,
+      arguments: { expectedScheduleRevision: 1, localDate: '2026-09-18', title: 'Endurance ride',
+        structure: { ...structure, sport: ActivityTypes.MountainBiking,
+          nodes: [{ ...structure.nodes[0], note: longNote }] },
+        delivery: { providers: ['suunto'], timeZone: 'Europe/Helsinki' } } }, deps);
+    expect(preview.providerPreviews).toEqual([expect.objectContaining({ provider: 'suunto', warningCount: 1,
+      summary: expect.stringContaining('Suunto will shorten long step instructions') })]);
+    expect(preview.providerPreviews[0].summary).toContain('shortened to 40 characters on the watch');
+
+    const applied = await applyTrainingChanges({ uid, connectionId: 'connection', scopes,
+      arguments: { proposalRef: preview.proposalRef, permissionMode: 'combined' } }, deps);
+    expect(applied.providers).toEqual([expect.objectContaining({ provider: 'suunto', status: 'applied',
+      message: expect.stringContaining('previewed mapping adjustment were approved') })]);
+    const user = db.collection('users').doc(uid);
+    const workout = (await user.collection('scheduledWorkouts').get()).docs[0];
+    expect(workout.get('structure.nodes')[0].note).toBe(longNote);
+    expect((await user.collection('trainingDeliverySettings').doc(`workout_${workout.id}_suunto`).get())
+      .get('approvedDigest')).toMatch(/^[a-f0-9]{64}$/);
+
+    for (let page = 0; page < 20 && await reconcileTrainingDeliveryPage(deps.runtime, uid); page += 1) { /* drain */ }
+    const ledger = (await user.collection('trainingDeliveryLedger').get()).docs[0];
+    expect(ledger).toBeDefined();
+    await processTrainingDelivery(deps.runtime, uid, ledger.id);
+    const status = await user.collection('trainingDeliveryStatuses').doc(ledger.id).get();
+    expect(status.data()).toMatchObject({ provider: 'suunto', status: 'delivered', hasRemoteCopy: true });
+    expect(suunto.guides.size).toBe(1);
+    expect([...suunto.guides.values()][0].guide.steps[0]).toMatchObject({ fields: expect.arrayContaining([
+      expect.objectContaining({ type: 'text', value: longNote.slice(0, 40) }),
+    ]) });
+    expect(suunto.calls.filter(call => call.method === 'POST')).toHaveLength(1);
+  });
+
+  it('keeps a concise Suunto step exact and sends it without a mapping approval', async () => {
+    const suunto = new SuuntoHttpFixture();
+    const guideTransport = new SuuntoGuideTransport(suunto.request, 'Quantified Self', deps.now);
+    deps.runtime.transport = provider => provider === 'suunto' ? guideTransport : null;
+    const preview = await previewCreatePlannedWorkout({ uid, connectionId: 'connection', scopes,
+      arguments: { expectedScheduleRevision: 1, localDate: '2026-09-18', title: 'Easy ride',
+        structure: { ...structure, sport: ActivityTypes.MountainBiking,
+          nodes: [{ ...structure.nodes[0], note: 'Ride easy' }] },
+        delivery: { providers: ['suunto'], timeZone: 'Europe/Helsinki' } } }, deps);
+    expect(preview.providerPreviews).toEqual([expect.objectContaining({ provider: 'suunto', warningCount: 0 })]);
+    const applied = await applyTrainingChanges({ uid, connectionId: 'connection', scopes,
+      arguments: { proposalRef: preview.proposalRef, permissionMode: 'combined' } }, deps);
+    const user = db.collection('users').doc(uid);
+    const workout = (await user.collection('scheduledWorkouts').get()).docs[0];
+    expect((await user.collection('trainingDeliverySettings').doc(`workout_${workout.id}_suunto`).get())
+      .get('approvedDigest')).toBeNull();
+    for (let page = 0; page < 20 && await reconcileTrainingDeliveryPage(deps.runtime, uid); page += 1) { /* drain */ }
+    const ledger = (await user.collection('trainingDeliveryLedger').get()).docs[0];
+    await processTrainingDelivery(deps.runtime, uid, ledger.id);
+    expect((await user.collection('trainingDeliveryStatuses').doc(ledger.id).get()).get('status')).toBe('delivered');
+    expect(applied.providers).toEqual([expect.objectContaining({ provider: 'suunto', status: 'applied' })]);
+    expect(suunto.calls.filter(call => call.method === 'POST')).toHaveLength(1);
+  });
+
+  it('discloses Wahoo target limitations in the first proposal and delivers after one approval', async () => {
+    const wahoo = new WahooHttpFixture();
+    const wahooTransport = new WahooTrainingTransport(wahoo.request, deps.now);
+    deps.runtime.transport = provider => provider === 'wahoo' ? wahooTransport : null;
+    const preview = await previewCreatePlannedWorkout({ uid, connectionId: 'connection', scopes,
+      arguments: { expectedScheduleRevision: 1, localDate: '2026-09-18', title: 'Threshold ride',
+        structure: { ...structure, sport: ActivityTypes.Cycling, nodes: [{ ...structure.nodes[0], targets: [{
+          kind: 'heart-rate', mode: 'relative', minimumPercent: 90, maximumPercent: 100,
+          reference: { kind: 'threshold-heart-rate', bpm: 170 },
+        }] }] },
+        delivery: { providers: ['wahoo'], timeZone: 'Europe/Helsinki' } } }, deps);
+    expect(preview.providerPreviews).toEqual([expect.objectContaining({ provider: 'wahoo', warningCount: 1,
+      summary: expect.stringContaining('not ELEMNT computers or RIVAL') })]);
+    expect(preview.providerPreviews[0].summary).toContain('Confirming this proposal approves');
+
+    const applied = await applyTrainingChanges({ uid, connectionId: 'connection', scopes,
+      arguments: { proposalRef: preview.proposalRef, permissionMode: 'combined' } }, deps);
+    expect(applied.providers).toEqual([expect.objectContaining({ provider: 'wahoo', status: 'applied',
+      message: expect.stringContaining('previewed mapping adjustment were approved') })]);
+    const user = db.collection('users').doc(uid);
+    const workout = (await user.collection('scheduledWorkouts').get()).docs[0];
+    expect((await user.collection('trainingDeliverySettings').doc(`workout_${workout.id}_wahoo`).get())
+      .get('approvedDigest')).toMatch(/^[a-f0-9]{64}$/);
+
+    for (let page = 0; page < 20 && await reconcileTrainingDeliveryPage(deps.runtime, uid); page += 1) { /* drain */ }
+    const ledger = (await user.collection('trainingDeliveryLedger').get()).docs[0];
+    await processTrainingDelivery(deps.runtime, uid, ledger.id);
+    expect((await user.collection('trainingDeliveryStatuses').doc(ledger.id).get()).get('status')).toBe('delivered');
+    expect(wahoo.plans.size).toBe(1);
+    expect(wahoo.workouts.size).toBe(1);
+    expect(wahoo.calls.filter(call => call.method === 'POST')).toHaveLength(2);
+  });
+
+  it('shows an unsupported Wahoo sport before confirmation and never records Wahoo consent', async () => {
+    const wahoo = new WahooHttpFixture();
+    deps.runtime.transport = provider => provider === 'wahoo' ? new WahooTrainingTransport(wahoo.request, deps.now) : null;
+    const preview = await previewCreatePlannedWorkout({ uid, connectionId: 'connection', scopes,
+      arguments: { expectedScheduleRevision: 1, localDate: '2026-09-18', title: 'Mountain bike ride',
+        structure: { ...structure, sport: ActivityTypes.MountainBiking },
+        delivery: { providers: ['wahoo'], timeZone: 'Europe/Helsinki' } } }, deps);
+    expect(preview.providerPreviews).toEqual([expect.objectContaining({ provider: 'wahoo', availability: 'unavailable',
+      summary: expect.stringContaining('cannot receive this workout') })]);
+    expect(preview.providerPreviews[0].summary).toContain('No new Wahoo delivery will start');
+    expect(preview.summary).toContain('No update will be sent there; an earlier copy may remain unchanged');
+    const applied = await applyTrainingChanges({ uid, connectionId: 'connection', scopes,
+      arguments: { proposalRef: preview.proposalRef, permissionMode: 'combined' } }, deps);
+    expect(applied.status).toBe('partially_applied');
+    expect(applied.providers).toEqual([expect.objectContaining({ provider: 'wahoo', status: 'blocked',
+      message: expect.stringContaining('cannot be sent') })]);
+    const user = db.collection('users').doc(uid);
+    expect((await user.collection('scheduledWorkouts').get()).size).toBe(1);
+    expect((await user.collection('trainingDeliverySettings').get()).empty).toBe(true);
+    for (let page = 0; page < 20 && await reconcileTrainingDeliveryPage(deps.runtime, uid); page += 1) { /* drain */ }
+    expect((await user.collection('trainingDeliveryLedger').get()).empty).toBe(true);
+    expect(wahoo.calls).toHaveLength(0);
+  });
+
+  it('rejects a Wahoo-only all-connected request with distance steps before authoring', async () => {
+    const wahoo = new WahooHttpFixture();
+    deps.runtime.transport = provider => provider === 'wahoo' ? new WahooTrainingTransport(wahoo.request, deps.now) : null;
+    await expect(previewCreatePlannedWorkout({ uid, connectionId: 'connection', scopes,
+      arguments: { expectedScheduleRevision: 1, localDate: '2026-09-18', title: 'Distance ride',
+        structure: { ...structure, sport: ActivityTypes.Cycling, nodes: [{ ...structure.nodes[0],
+          ending: { kind: 'distance', meters: 1000 } }] },
+        delivery: { providers: 'all_connected', timeZone: 'Europe/Helsinki' } } }, deps))
+      .rejects.toThrow('Wahoo cannot receive this workout');
+    expect((await db.collection('users').doc(uid).collection('scheduledWorkouts').get()).empty).toBe(true);
+    expect(wahoo.calls).toHaveLength(0);
+  });
+
+  it('delivers an all-connected mountain bike workout only to compatible Suunto', async () => {
+    const wahoo = new WahooHttpFixture();
+    const suunto = new SuuntoHttpFixture();
+    deps.runtime.transport = provider => provider === 'wahoo' ? new WahooTrainingTransport(wahoo.request, deps.now)
+      : provider === 'suunto' ? new SuuntoGuideTransport(suunto.request, 'Quantified Self', deps.now) : null;
+    const preview = await previewCreatePlannedWorkout({ uid, connectionId: 'connection', scopes,
+      arguments: { expectedScheduleRevision: 1, localDate: '2026-09-18', title: 'Mountain bike ride',
+        structure: { ...structure, sport: ActivityTypes.MountainBiking },
+        delivery: { providers: 'all_connected', timeZone: 'Europe/Helsinki' } } }, deps);
+    expect(preview.providerPreviews).toEqual(expect.arrayContaining([
+      expect.objectContaining({ provider: 'wahoo', availability: 'unavailable' }),
+      expect.objectContaining({ provider: 'suunto', availability: 'ready' }),
+    ]));
+    expect(preview.summary).toContain('No update will be sent there; an earlier copy may remain unchanged');
+    const applied = await applyTrainingChanges({ uid, connectionId: 'connection', scopes,
+      arguments: { proposalRef: preview.proposalRef, permissionMode: preview.permissionMode } }, deps);
+    expect(applied.providers).toEqual([expect.objectContaining({ provider: 'suunto', status: 'applied' })]);
+    const user = db.collection('users').doc(uid);
+    for (let page = 0; page < 20 && await reconcileTrainingDeliveryPage(deps.runtime, uid); page += 1) { /* drain */ }
+    const ledgers = (await user.collection('trainingDeliveryLedger').get()).docs;
+    expect(ledgers).toHaveLength(1);
+    expect(ledgers[0].get('provider')).toBe('suunto');
+    await processTrainingDelivery(deps.runtime, uid, ledgers[0].id);
+    expect((await user.collection('trainingDeliveryStatuses').doc(ledgers[0].id).get()).get('status')).toBe('delivered');
+    expect(suunto.calls.filter(call => call.method === 'POST')).toHaveLength(1);
+    expect(wahoo.calls).toHaveLength(0);
+  });
+
+  it('rejects an existing unsupported workout Send at the same server boundary', async () => {
+    const wahoo = new WahooHttpFixture();
+    deps.runtime.transport = provider => provider === 'wahoo' ? new WahooTrainingTransport(wahoo.request, deps.now) : null;
+    const authored = await previewCreatePlannedWorkout({ uid, connectionId: 'connection', scopes,
+      arguments: { expectedScheduleRevision: 1, localDate: '2026-09-18', title: 'Mountain bike ride',
+        structure: { ...structure, sport: ActivityTypes.MountainBiking } } }, deps);
+    const created = await applyTrainingChanges({ uid, connectionId: 'connection', scopes,
+      arguments: { proposalRef: authored.proposalRef, permissionMode: 'schedule' } }, deps);
+    const preview = await previewTrainingChanges({ uid, connectionId: 'connection', scopes,
+      arguments: { expectedScheduleRevision: created.scheduleRevision, changes: [{ kind: 'provider-delivery',
+        targetType: 'workout', target: { ref: created.createdReferences[0].reference },
+        providers: ['wahoo'], action: 'send', timeZone: 'Europe/Helsinki' }] } }, deps);
+    expect(preview.providerPreviews[0]).toMatchObject({ provider: 'wahoo', availability: 'unavailable',
+      summary: expect.stringContaining('cannot receive this workout') });
+    const applied = await applyTrainingChanges({ uid, connectionId: 'connection', scopes,
+      arguments: { proposalRef: preview.proposalRef, permissionMode: preview.permissionMode } }, deps);
+    expect(applied.providers).toEqual([expect.objectContaining({ provider: 'wahoo', status: 'blocked' })]);
+    expect((await db.collection('users').doc(uid).collection('trainingDeliverySettings').get()).empty).toBe(true);
+    expect(wahoo.calls).toHaveLength(0);
+  });
+
+  it('blocks a degraded Send when the mapping changes after its preview', async () => {
+    transport!.level = 'degraded';
+    const preview = await previewCreateAndSend();
+    transport!.mappingVersion = 'changed-after-preview';
+    const applied = await applyTrainingChanges({ uid, connectionId: 'connection', scopes,
+      arguments: { proposalRef: preview.proposalRef, permissionMode: 'combined' } }, deps);
+    expect(applied.status).toBe('partially_applied');
+    expect(applied.providers).toEqual([expect.objectContaining({ provider: 'garmin', status: 'blocked',
+      message: expect.stringContaining('compatibility preview changed') })]);
+    expect((await db.collection('users').doc(uid).collection('trainingDeliverySettings').get()).empty).toBe(true);
+  });
+
+  it('does not approve mapping loss that cannot fit in the bounded public preview', async () => {
+    transport!.level = 'degraded';
+    transport!.assess = () => ({ level: 'degraded',
+      mappingVersion: 'test-v1', digest: 'a'.repeat(64),
+      issues: Array.from({ length: 20 }, (_, index) => `Distinct provider mapping change ${index + 1}`) });
+    await expect(previewCreatePlannedWorkout({ uid, connectionId: 'connection', scopes,
+      arguments: { expectedScheduleRevision: 1, localDate: '2026-09-18', title: 'Complex ride',
+        structure, delivery: { providers: ['garmin'], timeZone: 'Europe/Helsinki' } } }, deps))
+      .rejects.toThrow('too extensive for one safe preview');
+    expect((await db.collection('users').doc(uid).collection('scheduledWorkouts').get()).empty).toBe(true);
   });
 
   it('creates a standalone workout, fans out only to ready providers and applies idempotently', async () => {

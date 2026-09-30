@@ -3,7 +3,7 @@ import {
   MAT_BOTTOM_SHEET_DATA,
   MatBottomSheetRef,
 } from '@angular/material/bottom-sheet';
-import { ASSISTANT_PROMPT_EXAMPLES } from '@shared/assistant.prompts';
+import { ASSISTANT_PROMPT_CARDS } from '@shared/assistant.prompts';
 import type { AssistantLocationAccess } from '@shared/assistant.types';
 import { SharedModule } from '../../modules/shared.module';
 import { CompactRowComponent } from '../shared/compact-row/compact-row.component';
@@ -45,7 +45,7 @@ export class AssistantExploreBottomSheetComponent {
   );
   readonly data = inject<AssistantExploreBottomSheetData>(MAT_BOTTOM_SHEET_DATA);
 
-  readonly prompts = ASSISTANT_PROMPT_EXAMPLES;
+  readonly prompts = ASSISTANT_PROMPT_CARDS;
 
   selectPrompt(prompt: string): void {
     this.bottomSheetRef.dismiss({ kind: 'prompt', prompt });

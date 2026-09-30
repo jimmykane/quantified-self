@@ -398,6 +398,7 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
   public trainingRecoveryHistoryExpanded = false;
   public readonly isDarkTheme = computed(() => this.themeService.appTheme() === AppThemes.Dark);
   public readonly useTrainingStateDetailsDialog: Signal<boolean>;
+  public trainingImpactRecapNowMs = Date.now();
 
   private readonly subscriptions = new Subscription();
   private dataSubscriptions = new Subscription();
@@ -1842,6 +1843,7 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
         this.changeDetector.markForCheck();
       },
       error: () => {
+        this.readinessSleepSessions = [];
         this.readinessSleepLoading = false;
         this.readinessSleepFailed = true;
         this.updateTrainingReadinessSleepRefreshTimer();
@@ -1853,12 +1855,16 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
 
   private refreshTrainingReadiness(): void {
     const nowMs = Date.now();
-    const formNowFromSeries = resolveDashboardFormNowContextFromPoints(this.derivedState.formPoints, nowMs);
-    const rampRateFromSeries = resolveDashboardRampRateContextFromPoints(this.derivedState.formPoints, nowMs);
+    const formNowFromSeries = this.derivedState.formStatus === 'ready'
+      ? resolveDashboardFormNowContextFromPoints(this.derivedState.formPoints, nowMs)
+      : null;
+    const rampRateFromSeries = this.derivedState.formStatus === 'ready'
+      ? resolveDashboardRampRateContextFromPoints(this.derivedState.formPoints, nowMs)
+      : null;
     const formNow = formNowFromSeries
-      || this.derivedState.formNow;
+      || (this.derivedState.formNowStatus === 'ready' ? this.derivedState.formNow : null);
     const rampRate = rampRateFromSeries
-      || this.derivedState.rampRate;
+      || (this.derivedState.rampRateStatus === 'ready' ? this.derivedState.rampRate : null);
     const loadStatuses = [
       formNowFromSeries ? this.derivedState.formStatus : this.derivedState.formNowStatus,
       rampRateFromSeries ? this.derivedState.formStatus : this.derivedState.rampRateStatus,
@@ -1923,6 +1929,7 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
     const handleRollover = (): void => {
       this.readinessDayRolloverTimeoutHandle = null;
       const refresh = (): void => {
+        this.trainingImpactRecapNowMs = Date.now();
         this.refreshTrainingReadiness();
         const uid = this.currentUserUID;
         if (uid) {

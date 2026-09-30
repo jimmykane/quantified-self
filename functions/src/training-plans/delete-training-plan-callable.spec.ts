@@ -4,6 +4,7 @@ const hoisted = vi.hoisted(() => ({
     enforceAppCheck: vi.fn(),
     deletePlan: vi.fn(),
     loggerError: vi.fn(),
+    loggerWarn: vi.fn(),
 }));
 
 vi.mock('firebase-functions/v2/https', () => ({
@@ -12,14 +13,20 @@ vi.mock('firebase-functions/v2/https', () => ({
     },
     onCall: (_options: unknown, handler: unknown) => handler,
 }));
-vi.mock('firebase-functions/logger', () => ({ error: hoisted.loggerError }));
+vi.mock('firebase-functions/logger', () => ({ error: hoisted.loggerError, warn: hoisted.loggerWarn }));
 vi.mock('../../../shared/functions-manifest', () => ({
     FUNCTIONS_MANIFEST: { deleteTrainingPlan: { region: 'europe-west2' } },
 }));
 vi.mock('../utils', () => ({ enforceAppCheck: hoisted.enforceAppCheck }));
-vi.mock('./delete-training-plan', () => ({ deleteTrainingPlanForUser: hoisted.deletePlan }));
+vi.mock('./delete-training-plan', () => ({
+    deleteTrainingPlanForUser: hoisted.deletePlan,
+    TrainingPlanDeletionResumeRequiredError: class extends Error {
+        constructor(public readonly originalError: unknown) { super('Plan deletion interrupted.'); }
+    },
+}));
 
 import { TrainingScheduleMutationError } from './mutation';
+import { TrainingPlanDeletionResumeRequiredError } from './delete-training-plan';
 import { deleteTrainingPlan } from './delete-training-plan-callable';
 
 const DATA = {
@@ -69,6 +76,22 @@ describe('deleteTrainingPlan callable', () => {
         await expect((deleteTrainingPlan as never as (request: unknown) => Promise<unknown>)({
             auth: { uid: 'owner' }, app: {}, data: DATA,
         })).rejects.toMatchObject({ code: 'aborted', message: 'Changed.' });
+    });
+
+    it('preserves actionable errors and safe-retry guidance from an interrupted plan deletion', async () => {
+        hoisted.deletePlan.mockRejectedValueOnce(new TrainingPlanDeletionResumeRequiredError(
+            new TrainingScheduleMutationError('limit-exceeded', 'A snapshot is too large.'),
+        ));
+        await expect((deleteTrainingPlan as never as (request: unknown) => Promise<unknown>)({
+            auth: { uid: 'owner' }, app: {}, data: DATA,
+        })).rejects.toMatchObject({ code: 'resource-exhausted', message: 'A snapshot is too large.' });
+
+        hoisted.deletePlan.mockRejectedValueOnce(new TrainingPlanDeletionResumeRequiredError(new Error('private path')));
+        await expect((deleteTrainingPlan as never as (request: unknown) => Promise<unknown>)({
+            auth: { uid: 'owner' }, app: {}, data: DATA,
+        })).rejects.toMatchObject({ code: 'unavailable', message: expect.stringContaining('Retry with the same choice') });
+        expect(hoisted.loggerWarn).toHaveBeenCalledWith('[TrainingPlans] Plan deletion needs a resumable retry.',
+            { errorName: 'Error' });
     });
 
     it('redacts unexpected failures while telling the client to retry identically', async () => {

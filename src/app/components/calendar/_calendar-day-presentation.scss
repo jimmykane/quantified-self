@@ -1,0 +1,52 @@
+// Shared by the full day, Dashboard/Calendar day previews, and day sheet.
+// Keep surface-specific layout and density in their components.
+@mixin supporting-text {
+  display: block;
+  color: var(--mat-sys-on-surface-variant);
+  font: var(--mat-sys-body-small);
+}
+
+@mixin navigation-link($color: var(--mat-sys-primary)) {
+  display: inline-flex;
+  align-items: center;
+  color: $color;
+  font: var(--mat-sys-body-medium);
+  text-decoration: none;
+
+  &:hover { text-decoration: underline; }
+  &:focus-visible { outline: 2px solid var(--mat-sys-primary); outline-offset: 2px; }
+}
+
+@mixin section-heading {
+  color: var(--mat-sys-on-surface-variant);
+  font: var(--mat-sys-label-medium);
+  letter-spacing: .04em;
+  text-transform: uppercase;
+}
+
+@mixin entry-row {
+  display: grid;
+  grid-template-columns: 24px minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 8px;
+  min-width: 0;
+  white-space: normal;
+  letter-spacing: 0;
+}
+
+@mixin entry-icon {
+  display: flex;
+  width: 24px;
+  height: 20px;
+  align-items: center;
+  justify-content: center;
+  margin: 0;
+  font-size: 20px;
+  line-height: 20px;
+}
+
+@mixin entry-title {
+  @include navigation-link($color: var(--mat-sys-on-surface));
+  display: flex;
+  overflow-wrap: anywhere;
+}

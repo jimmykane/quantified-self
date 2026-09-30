@@ -100,8 +100,9 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Training MCP loopback Fir
     await user.collection('mcpConnections').doc('connection').update({ revokedAtMs: 2 });
     await expect(run('list_training_plans', {})).rejects.toThrow();
     await user.collection('mcpConnections').doc('connection').update({ revokedAtMs: null });
-    await user.collection('trainingPlanState').doc('current').collection('planDeletionLocks').doc('lock').set({ privateCanary:'PRIVATE' });
-    await expect(run('list_training_plans', {})).rejects.toThrow();
+    await user.collection('trainingPlanState').doc('current').collection('planDeletionLocks').doc('_bulk_restore')
+      .set({ privateCanary:'PRIVATE' });
+    await expect(run('list_training_plans', {})).rejects.toMatchObject({ code: 'temporarily_unavailable' });
     // Fixtures live only in this disposable emulator; no production cleanup or user data is touched.
   }, 30_000);
 

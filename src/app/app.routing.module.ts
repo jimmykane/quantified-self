@@ -591,6 +591,19 @@ const topLevelRoutes: Routes = [
     canMatch: [authGuard, onboardingGuard]
   },
   {
+    path: 'calendar/day/:date',
+    loadComponent: () => import('./components/calendar/calendar-page/calendar-page.component')
+      .then(module => module.CalendarPageComponent),
+    data: {
+      title: 'Calendar day',
+      animation: 'Calendar',
+      calendarMode: 'day',
+      description: 'Activities, health, Timeline notes, and planned workouts for a selected day.',
+      robots: 'noindex, follow',
+    },
+    canMatch: [authGuard, onboardingGuard]
+  },
+  {
     path: 'calendar',
     loadComponent: () => import('./components/calendar/calendar-page/calendar-page.component')
       .then(module => module.CalendarPageComponent),

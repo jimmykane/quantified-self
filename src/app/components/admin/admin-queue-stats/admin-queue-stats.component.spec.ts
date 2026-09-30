@@ -1090,6 +1090,10 @@ describe('AdminQueueStatsComponent', () => {
                     succeeded: 11,
                     stuck: 1,
                     dead: 2,
+                    breakdowns: {
+                        historical: { pending: 3, succeeded: 5, stuck: 1, manualReconciliationRequired: 0, dead: 2 },
+                        manualUploads: { pending: 1, succeeded: 2, stuck: 0, manualReconciliationRequired: null, dead: 0 },
+                    },
                     dlqByContext: [{ context: 'NO_TOKEN_FOUND', count: 2 }],
                     advanced: {
                         throughput: 7,
@@ -1110,6 +1114,13 @@ describe('AdminQueueStatsComponent', () => {
             expect(host.textContent).toContain('Dead Letter Queue (Sync)');
             expect(host.textContent).toContain('Throughput (1h)');
             expect(host.textContent).toContain('Retry Distribution (Pending Items)');
+            const breakdown = host.querySelector<HTMLElement>('.activity-sync-breakdown');
+            expect(breakdown?.textContent).toContain('Historical sends');
+            expect(breakdown?.textContent).toContain('Manual uploads');
+            expect(breakdown?.textContent).toContain('Manual uploads are included in historical sends');
+            expect(breakdown?.querySelectorAll('dd')).toHaveLength(10);
+            expect(Array.from(breakdown?.querySelectorAll('dd') || []).map(item => item.textContent?.trim()))
+                .toEqual(['3', '5', '1', '0', '2', '1', '2', '0', 'N/A', '0']);
             expect(host.textContent).not.toContain('Workout Ingestion');
             expect(host.textContent).not.toContain('Sleep Sync');
             expect(host.textContent).not.toContain('Event Reparse');

@@ -79,6 +79,34 @@ describe('Training delivery summaries on the workspace', () => {
     if (scope === 'plan') expect(typeof open.mock.calls[0][1].data.planSummaries).toBe('function');
     else expect(open.mock.calls[0][1].data.planSummaries).toBeUndefined();
   });
+  it('separates a confirmed Garmin cloud copy from an inconclusive later check', async () => {
+    const fixture = await render('workout');
+    const verification = { schemaVersion: 1 as const, id: status.id, workoutId: workout.id, planId: workout.planId,
+      provider: 'garmin' as const, state: 'present' as const, canCheck: true, missing: false,
+      lastCheckedAtMs: 4, nextCheckAtMs: null, updatedAtMs: 4 };
+    view$.next({ settings: [setting], statuses: [status], verifications: [verification] });
+    await vi.waitFor(() => { fixture.detectChanges();
+      expect(fixture.nativeElement.textContent).toContain('Garmin Connect · Cloud copy confirmed');
+    });
+    expect(fixture.nativeElement.querySelector('.delivery-summary').getAttribute('aria-label')).toContain('watch receipt is not verified');
+    view$.next({ settings: [setting], statuses: [status], verifications: [{ ...verification, state: 'unknown', updatedAtMs: 5 }] });
+    await vi.waitFor(() => { fixture.detectChanges();
+      expect(fixture.nativeElement.textContent).toContain('Garmin Connect · Cloud check inconclusive');
+    });
+    expect(fixture.nativeElement.textContent).not.toContain('Garmin Connect · Synced');
+    expect(fixture.nativeElement.querySelector('.delivery-summary').getAttribute('aria-label')).toContain('no automatic workout replacement');
+  });
+  it('does not let old or another destination’s check overrule a new accepted Garmin send', async () => {
+    const fixture = await render('workout');
+    const verification = { schemaVersion: 1 as const, id: status.id, workoutId: workout.id, planId: workout.planId,
+      provider: 'garmin' as const, state: 'unknown' as const, canCheck: true, missing: false,
+      lastCheckedAtMs: 4, nextCheckAtMs: null, updatedAtMs: 4 };
+    view$.next({ settings: [setting], statuses: [{ ...status, lastAcceptedAtMs: 5 }], verifications: [verification] });
+    await vi.waitFor(() => { fixture.detectChanges(); expect(fixture.nativeElement.textContent).toContain('Garmin Connect · Synced'); });
+    view$.next({ settings: [{ ...setting, destinationKey: 'other' }], statuses: [status],
+      verifications: [{ ...verification, lastCheckedAtMs: 6 }] });
+    await vi.waitFor(() => { fixture.detectChanges(); expect(fixture.nativeElement.textContent).not.toContain('Cloud check inconclusive'); });
+  });
   it('updates live failures and authored edits without reopening all Firestore listeners', async () => {
     const fixture = await render();
     fixture.componentRef.setInput('summaryWorkouts', [{ ...workout, updatedAtMs: 10 }]); fixture.detectChanges();

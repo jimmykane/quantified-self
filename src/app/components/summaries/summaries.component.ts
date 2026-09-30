@@ -1,6 +1,6 @@
 import { AppHapticsService } from '../../services/app.haptics.service';
 import { CoalescedFrameTask } from '../../helpers/coalesced-frame-task';
-import { ActivatedRoute, Router } from '@angular/router';
+import { ActivatedRoute, NavigationEnd, Router } from '@angular/router';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { dashboardHealthMetric, dashboardHealthSettings, isPrivateDashboardHealthTile } from '../../helpers/dashboard-health-tile.helper';
 import type { AppDashboardHealthMetricSettings } from '../../models/app-user.interface';
@@ -9,6 +9,7 @@ import { localCalendarDate } from '../../helpers/health-workspace.helper';
 import { DashboardHrvService } from '../../services/dashboard-hrv.service';
 import { dashboardHrvWindows, type DashboardHrvContext } from '../../helpers/dashboard-hrv-context.helper';
 import { DashboardConfigurationService, cloneDashboardSettings } from '../../services/dashboard-configuration.service';
+import { migrateDashboardCalendarDayContextLayout } from '../../helpers/dashboard-calendar-layout.helper';
 import { DashboardChartLibraryComponent } from './dashboard-chart-library/dashboard-chart-library.component';
 import { DashboardChartLibraryState } from './dashboard-chart-library/dashboard-chart-library-state.service';
 import type { DashboardPreviewInput } from '../../helpers/dashboard-chart-preview.helper';
@@ -34,7 +35,7 @@ import {
   SimpleChanges,
   viewChild,
 } from '@angular/core';
-import { firstValueFrom, Subscription, take } from 'rxjs';
+import { filter, firstValueFrom, Subscription, take } from 'rxjs';
 import { EventInterface } from '@sports-alliance/sports-lib';
 import { User } from '@sports-alliance/sports-lib';
 import { CdkDragDrop, moveItemInArray } from '@angular/cdk/drag-drop';
@@ -78,6 +79,7 @@ import {
   type DashboardTodayRangeIndicator,
 } from '../../helpers/dashboard-today-visuals.helper';
 import { AppUserService } from '../../services/app.user.service';
+import { CalendarDayDetailsNavigationService } from '../../services/calendar-day-details-navigation.service';
 import {
   DashboardDerivedMetricsService,
   getDefaultDashboardDerivedMetricKinds,
@@ -271,7 +273,7 @@ function createEmptyDashboardTodayReadinessViewModel(loading = false): Dashboard
     sleepScore: null,
     sleepContextText: loading ? 'Loading sleep…' : 'No eligible night',
     hrvText: '--',
-    hrvStatusText: 'No recent HRV',
+    hrvStatusText: 'No current HRV',
     hrvRangeText: '60-day personal range',
     hrvLatestText: '',
     hrvTone: 'neutral',
@@ -342,13 +344,18 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
   public kpiLaneTiles: DashboardChartTileViewModel[] = [];
   public mainGridTiles: DashboardTileViewModel[] = [];
   public mainGridSections: DashboardTileSectionViewModel[] = [];
+  public calendarGridSection: DashboardTileSectionViewModel | null = null;
+  public otherGridSections: DashboardTileSectionViewModel[] = [];
 
   public tileTypes = TileTypes;
+  public readonly isDashboardActivityCalendarChartType = isDashboardActivityCalendarChartType;
   public desktopTileDragEnabled = false;
   private readonly configuration = inject(DashboardConfigurationService);
   private readonly healthSnack = inject(MatSnackBar);
   private readonly healthRoute = inject(ActivatedRoute);
-  private readonly healthRouter = inject(Router);
+  private readonly router = inject(Router);
+  private readonly dayDetailsNavigation = inject(CalendarDayDetailsNavigationService);
+  private calendarReturnSubscription?: Subscription;
   private healthTileRevealed = false;
   private revealRequestedHealthTile(): void {
     const metric=this.healthRoute.snapshot.queryParamMap.get('healthMetric');
@@ -359,7 +366,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
     requestAnimationFrame(()=>{
       const target=this.documentRef.querySelector<HTMLElement>(`[data-dashboard-tile-order="${tile.order}"]`);
       target?.focus({preventScroll:true});target?.scrollIntoView({block:'center'});
-      void this.healthRouter.navigate([], {relativeTo:this.healthRoute,queryParams:{healthMetric:null},queryParamsHandling:'merge',replaceUrl:true});
+      void this.router.navigate([], {relativeTo:this.healthRoute,queryParams:{healthMetric:null},queryParamsHandling:'merge',replaceUrl:true});
     });
   }
   private readonly healthHaptics = inject(AppHapticsService);
@@ -369,6 +376,11 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
   private readonly notesWorkspace = viewChild(TimelineNotesWorkspaceComponent);
   /** One live, owner-fenced source shared by tiles and calendar sheets. */
   readonly timelineNotes = computed<TimelineNoteChartContext | null>(() => this.notesWorkspace()?.context() ?? null);
+  readonly timelineNotesStatus = computed<'loading' | 'ready' | 'error'>(() => {
+    const workspace = this.notesWorkspace();
+    if (!workspace || workspace.service.uid() !== this.user?.uid || workspace.loading()) return 'loading';
+    return workspace.error() ? 'error' : 'ready';
+  });
   public previewInput: DashboardPreviewInput = { tiles: [] };
   private librarySubscription?: Subscription;
   private libraryRefresh = Promise.resolve();
@@ -385,6 +397,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
   public todayDateSubtitle = '';
   public todayGreeting = '';
   public isOwnerDashboard = false;
+  public calendarSelectedDateKey: string | null = null;
 
   private appThemeSubscription: Subscription | null = null;
   private todayHeaderRefreshTimeoutHandle: ReturnType<typeof setTimeout> | null = null;
@@ -504,6 +517,10 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
   }
 
   ngOnInit() {
+    this.calendarReturnSubscription = this.router.events.pipe(
+      filter((event): event is NavigationEnd => event instanceof NavigationEnd),
+    ).subscribe(() => this.restoreTodayCalendarDay());
+    this.restoreTodayCalendarDay();
     this.librarySubscription = this.library.changed$.subscribe(order => {
       this.libraryFocusOrder = order;
       this.libraryRefresh = this.unsubscribeAndCreateCharts().then(() => this.changeDetector.markForCheck());
@@ -516,9 +533,12 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
   async ngOnChanges(simpleChanges: SimpleChanges) {
     if (['user', 'eventUser'].some(key => simpleChanges[key] && simpleChanges[key].previousValue?.uid !== simpleChanges[key].currentValue?.uid)) {
       this.library.resetContext();
+      this.calendarSelectedDateKey = null;
     }
     if (simpleChanges.user || simpleChanges.eventUser) {
       this.refreshTodayHeader(new Date());
+      this.migrateCalendarLayoutForOwner();
+      this.restoreTodayCalendarDay();
     }
     this.syncTodaySummaryVisibility();
     this.updateDesktopTileDragCapability();
@@ -546,6 +566,29 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
     }
   }
 
+  private migrateCalendarLayoutForOwner(): void {
+    const uid = this.resolveOwnDashboardUID();
+    if (!uid) return;
+    const settings = this.user.settings.dashboardSettings;
+    const migration = migrateDashboardCalendarDayContextLayout(settings);
+    if (!migration) return;
+    const baseline = cloneDashboardSettings(settings);
+    const migrated = { ...settings, ...migration };
+    this.user.settings.dashboardSettings = migrated;
+    void this.configuration.save(uid, baseline, migration).catch(error => {
+      // An edit made while the migration was saving is newer than this draft.
+      const current = this.user.settings.dashboardSettings as AppDashboardSettingsInterface;
+      if (this.resolveOwnDashboardUID() !== uid
+        || current.calendarDayContextLayoutVersion !== migration.calendarDayContextLayoutVersion
+        || !equal(current.tiles, migration.tiles)) return;
+      const restored: AppDashboardSettingsInterface = { ...current, tiles: baseline.tiles,
+        calendarDayContextLayoutVersion: baseline.calendarDayContextLayoutVersion };
+      this.user.settings.dashboardSettings = restored;
+      void this.unsubscribeAndCreateCharts();
+      this.healthSnack.open(error instanceof Error ? error.message : 'Could not update calendar layout.', 'Dismiss', { duration: 6000 });
+    });
+  }
+
   ngDoCheck(): void {
     this.syncTodaySummaryVisibility();
     const nextTileSettingsSnapshot = this.getDashboardTileSettingsSnapshot();
@@ -558,6 +601,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
   }
 
   ngOnDestroy(): void {
+    this.calendarReturnSubscription?.unsubscribe();
     this.tileRebuild.dispose();
     this.librarySubscription?.unsubscribe();
     this.documentRef.removeEventListener('visibilitychange', this.onDocumentVisibilityChange);
@@ -667,14 +711,21 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
     await this.persistLaneOrder();
   }
 
-  public openDashboardCalendar(): void {
+  private restoreTodayCalendarDay(): void {
+    const restoration = this.dayDetailsNavigation.restorationFor(this.router.url);
+    if (restoration?.surface !== 'today-sheet' || !this.user?.uid || !this.showActions || !this.isOwnerDashboard) return;
+    if (!this.dayDetailsNavigation.consumeRestoration(restoration)) return;
+    this.openDashboardCalendar(restoration.dateKey);
+  }
+
+  public openDashboardCalendar(initialDateKey?: string): void {
     if (!this.user?.uid) {
       return;
     }
     this.bottomSheet.open<CalendarMonthPickerBottomSheetComponent, CalendarMonthPickerBottomSheetData>(
       CalendarMonthPickerBottomSheetComponent,
       {
-        data: { user: this.user, timelineNotes: this.timelineNotes },
+        data: { user: this.user, timelineNotes: this.timelineNotes, privateHealthEnabled: this.showActions && this.isOwnerDashboard, initialDateKey },
         panelClass: ['qs-bottom-sheet-container', 'qs-calendar-month-picker-sheet'],
       },
     );
@@ -1123,8 +1174,9 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
         this.tileRebuild.request();
       },
       error: () => {
-        // Keep previously loaded nights subject to the normal age/baseline rules.
-        // A failed first read must also settle loading, even with no sessions.
+        // A failed current read invalidates the in-memory Today evidence. Never
+        // carry a previously loaded night forward as if it were still current.
+        this.readinessSleepSessions = [];
         this.readinessSleepStatus = 'error';
         this.updateReadinessSleepRefreshTimer();
         this.tileRebuild.request();
@@ -1939,15 +1991,19 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
       return createEmptyDashboardTodayReadinessViewModel(true);
     }
     const warningText = this.readinessSleepStatus === 'error'
-      ? (this.readinessSleepSessions.length
-        ? 'Sleep could not be refreshed. Showing available data.'
-        : 'Sleep could not be loaded. Showing available signals.')
+      ? 'Sleep could not be loaded. Showing available current signals.'
       : '';
     const nowMs = Date.now();
-    const formNow = resolveDashboardFormNowContextFromPoints(this.derivedFormPoints, nowMs)
-      || this.derivedFormNowContext;
-    const rampRate = resolveDashboardRampRateContextFromPoints(this.derivedFormPoints, nowMs)
-      || this.derivedRampRateContext;
+    const formNowFromSeries = this.derivedFormStatus === 'ready'
+      ? resolveDashboardFormNowContextFromPoints(this.derivedFormPoints, nowMs)
+      : null;
+    const rampRateFromSeries = this.derivedFormStatus === 'ready'
+      ? resolveDashboardRampRateContextFromPoints(this.derivedFormPoints, nowMs)
+      : null;
+    const formNow = formNowFromSeries
+      || (this.derivedFormNowStatus === 'ready' ? this.derivedFormNowContext : null);
+    const rampRate = rampRateFromSeries
+      || (this.derivedRampRateStatus === 'ready' ? this.derivedRampRateContext : null);
     const sleepTrend = buildDashboardSleepTrendContext(this.readinessSleepSessions);
     const context = buildDashboardReadinessSignalsContext({
       formNow,
@@ -1955,7 +2011,8 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
       sleepTrend,
       nowMs,
     });
-    const recovery = buildDashboardRecoveryPresentation(this.derivedRecoveryNowContext, {
+    const recovery = buildDashboardRecoveryPresentation(
+      this.derivedRecoveryNowStatus === 'ready' ? this.derivedRecoveryNowContext : null, {
       locale: this.locale,
       nowMs,
       unitSettings: this.user?.settings?.unitSettings,
@@ -1965,7 +2022,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
     const recoveryFinishTimeMs = recovery?.finishTimeMs ?? null;
     const recoveryFinishText = recovery?.finishText ?? '';
     const loadBars = buildDashboardTodayLoadBars(
-      this.derivedFormPoints,
+      this.derivedFormStatus === 'ready' ? this.derivedFormPoints : null,
       this.dashboardTodayTrainingState.label,
       nowMs,
     );
@@ -2029,9 +2086,9 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
 
   private buildDashboardTodayTrainingState(): DashboardTodayTrainingStateViewModel {
     const state = buildCurrentTrainingStateContext({
-      formPoints: this.derivedFormPoints,
-      fallbackFormNow: this.derivedFormNowContext,
-      fallbackRampRate: this.derivedRampRateContext,
+      formPoints: this.derivedFormStatus === 'ready' ? this.derivedFormPoints : null,
+      fallbackFormNow: this.derivedFormNowStatus === 'ready' ? this.derivedFormNowContext : null,
+      fallbackRampRate: this.derivedRampRateStatus === 'ready' ? this.derivedRampRateContext : null,
     }).state;
     const label = state.label || 'Awaiting data';
     const scale = resolveDashboardTodayTrainingStateScale(label);
@@ -2284,6 +2341,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
         };
       })
       .filter(section => section.tiles.length > 0);
+    this.splitCalendarSection();
   }
 
   private refreshMainGridSectionLayout(): void {
@@ -2298,6 +2356,12 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
         trailingPlaceholders: this.buildMainGridTrailingPlaceholders(sectionCells, sectionColumns),
       };
     });
+    this.splitCalendarSection();
+  }
+
+  private splitCalendarSection(): void {
+    this.calendarGridSection = this.mainGridSections.find(section => section.id === 'calendar') || null;
+    this.otherGridSections = this.mainGridSections.filter(section => section.id !== 'calendar');
   }
 
   private buildMainGridSectionCells(

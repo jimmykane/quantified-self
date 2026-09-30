@@ -1,0 +1,272 @@
+:host {
+  display: block;
+  grid-column: 1 / -1;
+  min-width: 0;
+}
+
+.training-impact-recap {
+  min-width: 0;
+  padding: 22px;
+}
+
+.training-impact-recap-header,
+.training-impact-recap-result,
+.training-impact-recap-chart-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+}
+
+.training-impact-recap-header h3 {
+  margin: 2px 0 0;
+  color: var(--mat-sys-on-surface);
+  font-size: 20px;
+}
+
+.training-impact-recap-header span,
+.training-impact-recap-eyebrow,
+.training-impact-recap-result span,
+.training-impact-recap-equation span,
+.training-impact-recap-facts dt,
+.training-impact-recap-chart-heading span,
+.training-impact-recap-disclaimer,
+.training-impact-recap-state p {
+  color: var(--mat-sys-on-surface-variant);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.training-impact-recap-eyebrow {
+  margin: 0;
+  font-weight: 650;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+}
+
+.training-impact-recap-period {
+  flex: 0 0 auto;
+  --mat-button-toggle-divider-color: var(--mat-sys-outline-variant);
+}
+
+.training-impact-recap-notice {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 16px;
+  color: var(--mat-sys-on-surface-variant);
+  font-size: 12px;
+}
+
+.training-impact-recap-notice mat-icon {
+  width: 18px;
+  height: 18px;
+  font-size: 18px;
+}
+
+.training-impact-recap-result {
+  align-items: end;
+  margin-top: 22px;
+  padding-bottom: 18px;
+  border-bottom: 1px solid var(--qs-glass-panel-border, var(--mat-sys-outline-variant));
+}
+
+.training-impact-recap-result span,
+.training-impact-recap-result strong {
+  display: block;
+}
+
+.training-impact-recap-result > div > strong {
+  margin-top: 4px;
+  font-size: 24px;
+  line-height: 1.15;
+}
+
+.training-impact-recap-result-value {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 38px;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.training-impact-recap-result-value small {
+  font-size: 16px;
+  font-weight: 650;
+}
+
+.training-impact-recap-equation {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: center;
+  gap: 12px;
+  padding: 18px 0;
+  border-bottom: 1px solid var(--qs-glass-panel-border, var(--mat-sys-outline-variant));
+}
+
+.training-impact-recap-equation div {
+  min-width: 0;
+}
+
+.training-impact-recap-equation strong,
+.training-impact-recap-equation span {
+  display: block;
+}
+
+.training-impact-recap-equation strong {
+  margin-top: 4px;
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 22px;
+  line-height: 1.1;
+}
+
+.training-impact-recap-equation .training-impact-recap-operator {
+  color: var(--mat-sys-outline);
+  font-size: 20px;
+}
+
+.training-impact-recap-facts {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  margin: 0;
+  padding: 16px 0;
+  border-bottom: 1px solid var(--qs-glass-panel-border, var(--mat-sys-outline-variant));
+}
+
+.training-impact-recap-facts > div {
+  min-width: 0;
+  padding: 0 14px;
+}
+
+.training-impact-recap-facts > div:first-child {
+  padding-left: 0;
+}
+
+.training-impact-recap-facts > div:last-child {
+  padding-right: 0;
+}
+
+.training-impact-recap-facts > div + div {
+  border-left: 1px solid var(--qs-glass-panel-border, var(--mat-sys-outline-variant));
+}
+
+.training-impact-recap-facts dt,
+.training-impact-recap-facts dd {
+  margin: 0;
+}
+
+.training-impact-recap-facts dd {
+  margin-top: 4px;
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 24px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.training-impact-recap-chart-heading {
+  align-items: baseline;
+  margin-top: 18px;
+}
+
+.training-impact-recap-chart-heading strong {
+  font-size: 14px;
+}
+
+.training-impact-recap-chart {
+  width: 100%;
+  height: 180px;
+  margin-top: 6px;
+}
+
+.training-impact-recap-disclaimer {
+  margin: 10px 0 0;
+}
+
+.training-impact-recap-state {
+  min-height: 150px;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 14px;
+}
+
+.training-impact-recap-state p {
+  margin: 4px 0 0;
+}
+
+@media (max-width: 760px) {
+  .training-impact-recap-header {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .training-impact-recap-period {
+    align-self: flex-start;
+  }
+
+  .training-impact-recap-equation {
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
+
+  .training-impact-recap-equation .training-impact-recap-operator {
+    display: none;
+  }
+
+  .training-impact-recap-equation div {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 14px;
+  }
+
+  .training-impact-recap-equation strong {
+    margin-top: 0;
+    text-align: right;
+  }
+
+  .training-impact-recap-facts {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .training-impact-recap-facts > div,
+  .training-impact-recap-facts > div:first-child,
+  .training-impact-recap-facts > div:last-child {
+    padding: 12px 10px;
+    border-left: 0;
+    border-top: 1px solid var(--qs-glass-panel-border, var(--mat-sys-outline-variant));
+  }
+
+  .training-impact-recap-facts > div:nth-child(odd) {
+    padding-left: 0;
+  }
+
+  .training-impact-recap-facts > div:nth-child(even) {
+    padding-right: 0;
+    border-left: 1px solid var(--qs-glass-panel-border, var(--mat-sys-outline-variant));
+  }
+}
+
+@media (max-width: 480px) {
+  .training-impact-recap {
+    padding: 18px;
+  }
+
+  .training-impact-recap-result {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .training-impact-recap-chart-heading {
+    display: block;
+  }
+
+  .training-impact-recap-chart-heading span {
+    display: block;
+    margin-top: 3px;
+  }
+
+  .training-impact-recap-chart {
+    height: 200px;
+  }
+}

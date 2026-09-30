@@ -36,7 +36,18 @@ describe('dashboard Health HRV context', () => {
     const sessions = exampleHrvSessions(2);
     sessions.push({ ...sessions[0], id: 'garmin', source: { ...sessions[0].source, provider: SLEEP_PROVIDERS.GarminAPI }, vitals: { averageHrvMs: 100 } });
     sessions.push({ ...sessions[0], id: 'nap', isNap: true, vitals: { averageHrvMs: 200 } });
-    sessions.push({ ...sessions[0], id: 'missing', vitals: {} });
+    const missingEndTimeMs = end - 2 * 86400000;
+    sessions.push({
+      ...sessions[0],
+      id: 'missing',
+      source: { ...sessions[0].source, sourceSessionKey: 'missing-night' },
+      sleepDate: new Date(missingEndTimeMs).toISOString().slice(0, 10),
+      startTimeMs: missingEndTimeMs - 8 * 3600000,
+      endTimeMs: missingEndTimeMs,
+      vitals: {},
+      createdAtMs: missingEndTimeMs,
+      updatedAtMs: missingEndTimeMs,
+    });
     const context = buildDashboardHrvContext(result(windows.visible.startDate, windows.visible.endDate), result(windows.history.startDate, windows.history.endDate), sessions, windows.visible);
     expect(context.charts).toHaveLength(2);
     expect(context.charts.map(c => c.model.series.points.length).sort()).toEqual([1,2]);

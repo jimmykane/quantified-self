@@ -33,6 +33,50 @@ function loadFirestoreIndexes(): FirestoreIndexesConfig {
 }
 
 describe('firestore indexes', () => {
+    it('keeps large Training history payloads unindexed and cleanup retries queryable', () => {
+        const config = loadFirestoreIndexes();
+        for (const [collectionGroup, fieldPath] of [
+            ['scheduledWorkouts', 'structure'],
+            ['revisions', 'snapshot'],
+            ['chunks', 'payloadBase64'],
+            ['trainingCleanupJobs', 'response'],
+            ['planDeletionLocks', 'request'],
+            ['planDeletionLocks', 'mcpAuthority'],
+        ]) {
+            expect(config.fieldOverrides).toContainEqual({ collectionGroup, fieldPath, ttl: false, indexes: [] });
+        }
+        for (const collectionGroup of ['trainingCleanupJobs', 'planDeletionLocks']) {
+            expect(config.fieldOverrides.filter(field => field.collectionGroup === collectionGroup
+                && field.fieldPath === 'nextAttemptAtMs')).toEqual([{
+                collectionGroup,
+                fieldPath: 'nextAttemptAtMs',
+                ttl: false,
+                indexes: [
+                    { order: 'ASCENDING', queryScope: 'COLLECTION' },
+                    { order: 'DESCENDING', queryScope: 'COLLECTION' },
+                    { arrayConfig: 'CONTAINS', queryScope: 'COLLECTION' },
+                    { order: 'ASCENDING', queryScope: 'COLLECTION_GROUP' },
+                ],
+            }]);
+        }
+        expect(config.indexes).toContainEqual({
+            collectionGroup: 'scheduledWorkouts', queryScope: 'COLLECTION', density: 'SPARSE_ALL',
+            fields: [
+                { fieldPath: 'planId', order: 'ASCENDING' },
+                { fieldPath: 'lifecycle', order: 'ASCENDING' },
+                { fieldPath: '__name__', order: 'ASCENDING' },
+            ],
+        });
+    });
+    it('does not declare a composite for a single ascending or descending field with its implicit document path', () => {
+        const config = loadFirestoreIndexes();
+        for (const index of config.indexes) {
+            const [field, documentPath] = index.fields;
+            if (index.fields.length === 2 && documentPath.fieldPath === '__name__') {
+                expect(field.order === documentPath.order && field.order !== undefined).toBe(false);
+            }
+        }
+    });
     it('adds marketing recipient cleanup lookup without disabling default collection indexes', () => {
         const config = loadFirestoreIndexes();
         expect(config.fieldOverrides).toContainEqual({

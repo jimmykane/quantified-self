@@ -110,6 +110,15 @@ class MockChartRangeSelectorComponent {
   @Output() valueChange = new EventEmitter<string>();
 }
 
+@Component({ selector: 'app-activity-calendar-tile', template: '', standalone: false })
+class MockActivityCalendarTileComponent {
+  @Input() user: unknown;
+  @Input() timelineNotes: unknown;
+  @Input() dayContextEnabled = false;
+  @Input() privateHealthEnabled = false;
+  @Output() selectedDateKeyChange = new EventEmitter<string>();
+}
+
 @Component({
   selector: 'app-xy-chart',
   template: '',
@@ -324,6 +333,7 @@ describe('TileChartComponent', () => {
         MockTileChartActionsComponent,
         MockDashboardTileEventFiltersComponent,
         MockChartRangeSelectorComponent,
+        MockActivityCalendarTileComponent,
         MockXYChartComponent,
         MockPieChartComponent,
         MockFormChartComponent,
@@ -1086,6 +1096,25 @@ describe('TileChartComponent', () => {
     expect(fixture.nativeElement.querySelector('app-activity-calendar-tile')).toBeTruthy();
     expect(fixture.nativeElement.querySelector('.calendar-route-action')).toBeTruthy();
     expect(fixture.nativeElement.querySelector('.tile-event-filter-controls')).toBeNull();
+  });
+
+  it('forwards a selected Calendar date to its dashboard section', () => {
+    component.chartType = DASHBOARD_ACTIVITY_CALENDAR_CHART_TYPE;
+    fixture.detectChanges();
+    const selectedDates: string[] = [];
+    component.calendarDateChange.subscribe(dateKey => selectedDates.push(dateKey));
+    const calendar = fixture.debugElement.query(By.directive(MockActivityCalendarTileComponent))
+      .componentInstance as MockActivityCalendarTileComponent;
+    calendar.selectedDateKeyChange.emit('2026-09-09');
+    expect(selectedDates).toEqual(['2026-09-09']);
+  });
+
+  it('keeps the owner calendar header free of a duplicate full-page action', () => {
+    component.chartType = DASHBOARD_ACTIVITY_CALENDAR_CHART_TYPE;
+    component.showActions = true;
+    fixture.detectChanges();
+    expect(component.showCalendarRouteAction).toBe(false);
+    expect(fixture.nativeElement.querySelector('.calendar-route-action')).toBeNull();
   });
 
   it('should size the Calendar route action like other compact tile-header buttons', () => {

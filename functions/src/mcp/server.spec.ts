@@ -342,6 +342,13 @@ describe('MCP HTTP scope enforcement', () => {
     })).toEqual([MCP_OAUTH_SCOPES.MetricsRead]);
     expect(requiredScopesForRequest({
       method: 'tools/call',
+      params: { name: 'get_training_impact' },
+    })).toEqual([
+      MCP_OAUTH_SCOPES.MetricsRead,
+      MCP_OAUTH_SCOPES.ActivityDetailsRead,
+    ]);
+    expect(requiredScopesForRequest({
+      method: 'tools/call',
       params: { name: 'query_measurements' },
     })).toEqual([MCP_OAUTH_SCOPES.MeasurementsRead]);
     expect(requiredScopesForRequest({
@@ -798,6 +805,7 @@ describe('MCP HTTP scope enforcement', () => {
       'get_activity_metrics',
       'get_activity_overview',
       'get_activity_samples',
+      'get_training_impact',
       'get_training_metric',
       'list_activities',
       'list_activity_chart_metrics',
@@ -931,6 +939,8 @@ describe('MCP HTTP scope enforcement', () => {
       MCP_OAUTH_SCOPES.TrainingDeliveryWrite,
     ]);
     expect(combinedWriteInstructions).toContain('optional delivery object');
+    expect(combinedWriteInstructions).toContain('keep necessary concise instructions within 40 characters');
+    expect(combinedWriteInstructions).toContain('One approved Send proposal also approves the previewed digest-bound adjustment');
     expect(combinedWriteInstructions).not.toContain('provider delivery is not available on this connection');
 
     const readInstructionsOnly = await readInstructions([MCP_OAUTH_SCOPES.TrainingPlansRead]);
@@ -1291,6 +1301,8 @@ describe('MCP HTTP scope enforcement', () => {
       const cursorInstruction = 'Follow nextCursor until matched or scanComplete';
       const cursorInstructionIndex = instructions.indexOf(cursorInstruction);
       const tools = (await client.listTools()).tools;
+      const listActivities = tools
+        .find(tool => tool.name === 'list_activities');
       const queryActivities = tools
         .find(tool => tool.name === 'query_activities');
       const queryActivitiesWithTags = tools
@@ -1299,6 +1311,12 @@ describe('MCP HTTP scope enforcement', () => {
         .find(tool => tool.name === 'rank_activities_by_metric');
       const listActivityTypes = tools
         .find(tool => tool.name === 'list_activity_types');
+      const listInputSchema = listActivities?.inputSchema as {
+        properties?: Record<string, unknown>;
+        oneOf?: unknown;
+        anyOf?: unknown;
+        not?: unknown;
+      } | undefined;
       const inputSchema = queryActivities?.inputSchema as {
         properties?: Record<string, Record<string, unknown>>;
         oneOf?: Array<{
@@ -1343,6 +1361,13 @@ describe('MCP HTTP scope enforcement', () => {
       expect(instructions).toContain('then list_activities');
       expect(instructions).toContain('if a connector rejects that schema before the call, use list_activities');
       expect(tools.map(tool => tool.name)).toContain('list_activities');
+      expect(listInputSchema?.oneOf).toBeUndefined();
+      expect(listInputSchema?.anyOf).toBeUndefined();
+      expect(listInputSchema?.not).toBeUndefined();
+      expect(listInputSchema?.properties).toHaveProperty('start');
+      expect(listInputSchema?.properties).toHaveProperty('end');
+      expect(listInputSchema?.properties).toHaveProperty('relativePeriod');
+      expect(listInputSchema?.properties).toHaveProperty('timeZone');
       expect(instructions).toContain(
         'add activityTypes and limit 1 when named',
       );
@@ -1840,6 +1865,8 @@ describe('MCP HTTP scope enforcement', () => {
     expect(classifyMcpDiagnosticClientFamily('codex-mcp-client/0.151.0-alpha.7.2'))
       .toBe('codex');
     expect(classifyMcpDiagnosticClientFamily('Claude-User')).toBe('claude');
+    expect(classifyMcpDiagnosticClientFamily('Grok')).toBe('grok');
+    expect(classifyMcpDiagnosticClientFamily('grok-connectors-manager/0.1.0')).toBe('grok');
     expect(classifyMcpDiagnosticClientFamily('curl/8.7.1')).toBe('automation');
     expect(classifyMcpDiagnosticClientFamily(undefined)).toBe('unknown');
 

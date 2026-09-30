@@ -8,6 +8,8 @@ import { ActivityCalendarTileComponent } from '../activity-calendar-tile/activit
 export interface CalendarMonthPickerBottomSheetData {
   user: User;
   timelineNotes?: Signal<TimelineNoteChartContext | null>;
+  privateHealthEnabled?: boolean;
+  initialDateKey?: string;
 }
 
 @Component({

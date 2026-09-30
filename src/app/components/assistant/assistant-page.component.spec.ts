@@ -287,6 +287,19 @@ describe('AssistantPageComponent', () => {
     expect(component.trainingProposalResult()).toContain('Nothing was changed');
   });
 
+  it('shows the actual Suunto mapping loss before the single in-app Apply action', () => {
+    component.conversation.set(chatResponse.conversation);
+    component.pendingTrainingProposal.set({ ...trainingProposal, providerPreviews: [{
+      ...trainingProposal.providerPreviews[0], provider: 'suunto', warningCount: 1,
+      summary: 'Suunto: step text will be shortened to 40 characters. Confirming this proposal approves the adjustment.',
+    }] });
+    fixture.detectChanges();
+    const review = fixture.nativeElement.querySelector('.training-proposal') as HTMLElement;
+    expect(review.textContent).toContain('step text will be shortened to 40 characters');
+    expect(review.textContent).toContain('Confirming this proposal approves the adjustment');
+    expect(review.querySelectorAll('.training-proposal-actions button')).toHaveLength(2);
+  });
+
   it('reviews and explicitly applies or dismisses one content change', async () => {
     component.conversation.set(chatResponse.conversation);
     component.pendingContentProposal.set(contentProposal);

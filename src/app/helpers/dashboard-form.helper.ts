@@ -1,7 +1,9 @@
 import { TimeIntervals, type EventInterface } from '@sports-alliance/sports-lib';
 import {
   normalizeDerivedFormDailyLoads,
+  normalizeDerivedFormDailyLoadsWithActivityCounts,
   type DerivedFormDailyLoadEntry,
+  type DerivedFormDailyLoadEntryWithActivityCount,
   type LegacyDerivedFormDailyLoadEntry,
 } from '@shared/derived-metrics';
 import {
@@ -20,6 +22,7 @@ export type DashboardFormMode = 'same-day' | 'prior-day';
 export interface DashboardFormPoint {
   time: number;
   trainingStressScore: number;
+  activityCount: number;
   ctl: number;
   atl: number;
   formSameDay: number;
@@ -55,6 +58,7 @@ function resolveDayStartUtcTime(date: Date): number {
 
 function buildDashboardFormPointsFromDailyLoadMap(
   dailyTrainingStressScores: Map<number, number>,
+  dailyActivityCounts: ReadonlyMap<number, number>,
   daySequenceBuilder: (startDay: number, endDay: number) => number[],
 ): DashboardFormPoint[] {
   if (!dailyTrainingStressScores.size) {
@@ -87,6 +91,7 @@ function buildDashboardFormPointsFromDailyLoadMap(
     points.push({
       time: dayTime,
       trainingStressScore,
+      activityCount: dailyActivityCounts.get(dayTime) || 0,
       ctl,
       atl,
       formSameDay: ctl - atl,
@@ -125,6 +130,7 @@ export function buildDashboardFormPoints(events: readonly EventInterface[] | nul
   }
 
   const dailyTrainingStressScores = new Map<number, number>();
+  const dailyActivityCounts = new Map<number, number>();
   normalizedEvents.forEach((event) => {
     const startDate = event?.startDate;
     if (!(startDate instanceof Date) || !Number.isFinite(startDate.getTime())) {
@@ -141,10 +147,12 @@ export function buildDashboardFormPoints(events: readonly EventInterface[] | nul
       dayStart,
       (dailyTrainingStressScores.get(dayStart) || 0) + stressScore,
     );
+    dailyActivityCounts.set(dayStart, (dailyActivityCounts.get(dayStart) || 0) + 1);
   });
 
   return buildDashboardFormPointsFromDailyLoadMap(
     dailyTrainingStressScores,
+    dailyActivityCounts,
     (startDay, endDay) => {
       const daySequence: number[] = [];
       for (
@@ -160,9 +168,17 @@ export function buildDashboardFormPoints(events: readonly EventInterface[] | nul
 }
 
 export function buildDashboardFormPointsFromDailyLoads(
-  dailyLoads: readonly (DerivedFormDailyLoadEntry | LegacyDerivedFormDailyLoadEntry)[] | null | undefined,
+  dailyLoads: readonly (
+    DerivedFormDailyLoadEntry
+    | DerivedFormDailyLoadEntryWithActivityCount
+    | LegacyDerivedFormDailyLoadEntry
+  )[] | null | undefined,
 ): DashboardFormPoint[] {
   const normalizedDailyLoads = normalizeDerivedFormDailyLoads(dailyLoads);
+  const activityCountByDayMs = new Map(
+    normalizeDerivedFormDailyLoadsWithActivityCounts(dailyLoads)
+      .map(entry => [entry.dayMs, entry.activityCount] as const),
+  );
   if (!normalizedDailyLoads.length) {
     return [];
   }
@@ -170,6 +186,7 @@ export function buildDashboardFormPointsFromDailyLoads(
   return buildTrainingLoadPoints(normalizedDailyLoads).map(point => ({
     time: point.dayMs,
     trainingStressScore: point.load,
+    activityCount: activityCountByDayMs.get(point.dayMs) || 0,
     ctl: point.ctl,
     atl: point.atl,
     formSameDay: point.formSameDay,
@@ -211,6 +228,7 @@ export function extendDashboardFormPointsWithZeroLoadUntil(
     extendedPoints.push({
       time: dayMs,
       trainingStressScore,
+      activityCount: 0,
       ctl,
       atl,
       formSameDay: ctl - atl,

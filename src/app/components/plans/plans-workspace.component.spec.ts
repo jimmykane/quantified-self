@@ -12,6 +12,7 @@ import { ActivatedRoute, Router, convertToParamMap, provideRouter, type Data, ty
 import { ActivityTypes, DistanceUnits, PaceUnits, WeightUnits } from '@sports-alliance/sports-lib';
 import { normalizeUserUnitSettings } from '@shared/unit-aware-display';
 import { projectStrengthWorkoutToV1 } from '@shared/strength-workout';
+import type { ScheduledWorkoutV1 } from '@shared/training-plans';
 import dayjs from 'dayjs';
 import { BehaviorSubject, Subject, concat, defer, of, type Observable } from 'rxjs';
 import { AppUserService } from '../../services/app.user.service';
@@ -46,6 +47,7 @@ describe('PlansWorkspaceComponent', () => {
   let watchWorkoutCompletions: ReturnType<typeof vi.fn>;
   let mutate: ReturnType<typeof vi.fn>;
   let getHistory: ReturnType<typeof vi.fn>;
+  let getDeletedWorkoutsPage: ReturnType<typeof vi.fn>;
   let getStrengthDetails: ReturnType<typeof vi.fn>;
   let previewRestore: ReturnType<typeof vi.fn>;
   let restoreSchedule: ReturnType<typeof vi.fn>;
@@ -53,6 +55,8 @@ describe('PlansWorkspaceComponent', () => {
   let dialogOpen: ReturnType<typeof vi.fn>;
   let snackBarOpen: ReturnType<typeof vi.fn>;
   let haptics: { selection: ReturnType<typeof vi.fn>; success: ReturnType<typeof vi.fn>; error: ReturnType<typeof vi.fn> };
+  let userSignal: ReturnType<typeof signal<typeof user | null>>;
+  let userSubject: BehaviorSubject<typeof user | null>;
 
   beforeEach(async () => {
     vi.useFakeTimers({ toFake: ['Date'] });
@@ -71,6 +75,8 @@ describe('PlansWorkspaceComponent', () => {
       data: concat(defer(() => of(route.snapshot.data)), routeDataChanges$),
     };
     schedule = populatedSchedule();
+    userSignal = signal<typeof user | null>(user);
+    userSubject = new BehaviorSubject<typeof user | null>(user);
     watchSchedule = vi.fn().mockImplementation(() => of(schedule));
     watchWorkoutCompletions = vi.fn().mockReturnValue(of([]));
     mutate = vi.fn().mockImplementation(async request => ({
@@ -82,6 +88,7 @@ describe('PlansWorkspaceComponent', () => {
       permanentlyDeletedWorkoutIds: [],
     }));
     getHistory = vi.fn();
+    getDeletedWorkoutsPage = vi.fn().mockResolvedValue({ workouts: [], nextCursor: null });
     getStrengthDetails = vi.fn();
     previewRestore = vi.fn();
     restoreSchedule = vi.fn();
@@ -95,7 +102,7 @@ describe('PlansWorkspaceComponent', () => {
         provideRouter([]),
         { provide: MAT_ICON_DEFAULT_OPTIONS, useValue: { fontSet: 'material-symbols-rounded' } },
         { provide: ActivatedRoute, useValue: route },
-        { provide: AppUserService, useValue: { user: signal(user), user$: of(user) } },
+        { provide: AppUserService, useValue: { user: userSignal, user$: userSubject } },
         { provide: AppHapticsService, useValue: haptics },
         { provide: TrainingDeliveryService, useValue: { anyReady: () => false, watchPresence: () => of(false),
           isSetupAvailable: () => false,
@@ -109,6 +116,7 @@ describe('PlansWorkspaceComponent', () => {
             createMutationId: vi.fn().mockReturnValue('mutation-1'),
             mutate,
             getHistory,
+            getDeletedWorkoutsPage,
             getStrengthDetails,
             previewRestore,
             restore: restoreSchedule,
@@ -163,6 +171,14 @@ describe('PlansWorkspaceComponent', () => {
     expect(fixture.nativeElement.textContent).not.toContain('Add here');
     expect(haptics.selection).not.toHaveBeenCalled();
     expect(haptics.success).not.toHaveBeenCalled();
+  });
+
+  it('pauses the plan workspace while a staged restore hides workout roots', async () => {
+    watchSchedule.mockReturnValue(of({ ...schedule, restoreUnavailable: true }));
+    const fixture = await renderPlans();
+    expect(fixture.nativeElement.textContent).toContain('Restoring your training plan…');
+    expect(fixture.nativeElement.querySelector('.workout-list')).toBeNull();
+    expect(fixture.componentInstance.scheduleState().status).toBe('loading');
   });
 
   it('uses shared compact rows with labelled headings, actions, and dividers between workouts', async () => {
@@ -1292,6 +1308,36 @@ describe('PlansWorkspaceComponent', () => {
     expect(fixture.componentInstance.view()).toBe('standalone');
   });
 
+  it('keeps past-provider cleanup opt-in off by default and sends the selected plan choice', async () => {
+    deleteTrainingPlan.mockResolvedValue({ mutationId: 'mutation-1', state: schedule.state,
+      removedPlanId: 'active-plan', workoutDisposition: 'convert-to-standalone',
+      convertedWorkoutIds: [], permanentlyDeletedWorkoutIds: [] });
+    const fixture = await renderPlans();
+    const componentDialog = (fixture.componentInstance as unknown as { dialog: MatDialog }).dialog;
+    vi.spyOn(componentDialog, 'open').mockReturnValue({ afterClosed: () => of(true) } as never);
+    fixture.componentInstance.beginPlanDeletion(schedule.plans[0]);
+    expect(fixture.componentInstance.removePastProviderCopies()).toBe(false);
+    fixture.componentInstance.removePastProviderCopies.set(true);
+    fixture.detectChanges();
+    expect(fixture.nativeElement.textContent).toContain('COROS cannot remove past workouts');
+    await fixture.componentInstance.deletePlan(schedule.plans[0]);
+    expect(deleteTrainingPlan).toHaveBeenCalledWith(expect.objectContaining({ removePastProviderCopies: true }));
+  });
+
+  it('passes the explicit single-workout cleanup choice and leaves cancellation inert', async () => {
+    const fixture = await renderPlans();
+    const componentDialog = (fixture.componentInstance as unknown as { dialog: MatDialog }).dialog;
+    vi.spyOn(componentDialog, 'open')
+      .mockReturnValueOnce({ afterClosed: () => of({ confirmed: true, removePastProviderCopies: true }) } as never)
+      .mockReturnValueOnce({ afterClosed: () => of(false) } as never);
+    await fixture.componentInstance.deleteWorkout(schedule.workouts[0]);
+    expect(mutate).toHaveBeenCalledWith(expect.objectContaining({
+      operation: { kind: 'delete-workout', workoutId: 'plan-workout', removePastProviderCopies: true },
+    }));
+    await fixture.componentInstance.permanentlyDeleteWorkout(schedule.workouts[0]);
+    expect(mutate).toHaveBeenCalledTimes(1);
+  });
+
   it('keeps plan mutations visibly pending beside the triggering controls', async () => {
     const fixture = await renderPlans();
 
@@ -1403,7 +1449,9 @@ describe('PlansWorkspaceComponent', () => {
     expect(fixture.componentInstance.historyPanel()).toBeNull();
   });
   it('keeps long revision histories bounded and deleted-workout details surface-free', async () => {
-    schedule.workouts.push({ ...schedule.workouts[0], id: 'deleted', lifecycle: 'deleted' });
+    const deleted = { ...schedule.workouts[0], id: 'deleted', title: 'Deleted review run',
+      lifecycle: 'deleted' as const, deletedAtMs: 1_789_000_000_000 };
+    getDeletedWorkoutsPage.mockResolvedValue({ workouts: [deleted], nextCursor: null });
     const fixture = await renderPlans();
     fixture.componentInstance.historyPanel.set({ scope: { kind: 'plan', id: 'active-plan' }, status: 'ready',
       entries: Array.from({ length: 50 }, (_, index) => ({ revision: 50 - index, operationKind: 'update-workout',
@@ -1415,8 +1463,10 @@ describe('PlansWorkspaceComponent', () => {
     const disclosure = fixture.nativeElement.querySelector('button[aria-controls="deleted-workout-list"]');
     const list = fixture.nativeElement.querySelector('#deleted-workout-list');
     expect(list.hidden).toBe(true); expect(disclosure.getAttribute('aria-expanded')).toBe('false');
-    disclosure.click(); fixture.detectChanges();
+    disclosure.click(); await fixture.whenStable(); fixture.detectChanges();
     expect(list.hidden).toBe(false); expect(disclosure.getAttribute('aria-expanded')).toBe('true');
+    expect(getDeletedWorkoutsPage).toHaveBeenCalledWith(user.uid, 'active-plan', null);
+    expect(fixture.nativeElement.textContent).toContain('Deleted review run');
     expect(haptics.selection).toHaveBeenCalledOnce();
     expect(fixture.nativeElement.querySelector('mat-expansion-panel')).toBeNull();
     if (process.env.TRAINING_DELIVERY_QA_DIR) {
@@ -1433,6 +1483,57 @@ describe('PlansWorkspaceComponent', () => {
         + '<style>' + css + '</style></head><body><app-plans-workspace><main class="plans-workspace qs-workspace-page">'
         + fixture.nativeElement.querySelector('.history-panel').outerHTML + '</main></app-plans-workspace></body></html>');
     }
+  });
+
+  it('loads deleted workouts only on demand and advances a stable cursor', async () => {
+    const first = { ...schedule.workouts[0], id: 'deleted-1', title: 'First deleted run',
+      lifecycle: 'deleted' as const, deletedAtMs: 1_789_000_000_000 };
+    const second = { ...first, id: 'deleted-2', title: 'Second deleted run', deletedAtMs: first.deletedAtMs - 1 };
+    getDeletedWorkoutsPage
+      .mockResolvedValueOnce({ workouts: [first], nextCursor: { deletedAtMs: first.deletedAtMs!, id: first.id } })
+      .mockResolvedValueOnce({ workouts: [second], nextCursor: null });
+    const fixture = await renderPlans();
+    expect(getDeletedWorkoutsPage).not.toHaveBeenCalled();
+
+    fixture.nativeElement.querySelector('button[aria-controls="deleted-workout-list"]').click();
+    await fixture.whenStable(); fixture.detectChanges();
+    expect(getDeletedWorkoutsPage).toHaveBeenNthCalledWith(1, user.uid, 'active-plan', null);
+    expect(fixture.nativeElement.textContent).toContain('First deleted run');
+    expect(fixture.nativeElement.textContent).not.toContain('Second deleted run');
+
+    const more = [...fixture.nativeElement.querySelectorAll('button')]
+      .find((button: HTMLButtonElement) => button.textContent?.includes('Show more deleted workouts')) as HTMLButtonElement;
+    more.click(); await fixture.whenStable(); fixture.detectChanges();
+    expect(getDeletedWorkoutsPage).toHaveBeenNthCalledWith(2, user.uid, 'active-plan',
+      { deletedAtMs: first.deletedAtMs, id: first.id });
+    expect(fixture.nativeElement.textContent).toContain('Second deleted run');
+    expect([...fixture.nativeElement.querySelectorAll('#deleted-workout-list mat-list-item')]).toHaveLength(2);
+    expect(fixture.nativeElement.textContent).not.toContain('Show more deleted workouts');
+    const openHistory = vi.spyOn(fixture.componentInstance, 'openHistory').mockResolvedValue();
+    const permanentDelete = vi.spyOn(fixture.componentInstance, 'permanentlyDeleteWorkout').mockResolvedValue();
+    const secondRow = fixture.nativeElement.querySelectorAll('#deleted-workout-list mat-list-item')[1] as HTMLElement;
+    ([...secondRow.querySelectorAll('button')].find(button => button.textContent?.includes('History')) as HTMLButtonElement).click();
+    (secondRow.querySelector('button[aria-label="Delete workout permanently"]') as HTMLButtonElement).click();
+    expect(openHistory).toHaveBeenCalledWith({ kind: 'plan', id: 'active-plan' });
+    expect(permanentDelete).toHaveBeenCalledWith(expect.objectContaining({ id: second.id }));
+  });
+
+  it('shows an empty deleted page and discards an in-flight page after sign-out', async () => {
+    const fixture = await renderPlans();
+    fixture.nativeElement.querySelector('button[aria-controls="deleted-workout-list"]').click();
+    await fixture.whenStable(); fixture.detectChanges();
+    expect(fixture.nativeElement.textContent).toContain('No deleted workouts in this plan');
+
+    let resolvePage!: (value: { workouts: ScheduledWorkoutV1[]; nextCursor: { deletedAtMs: number; id: string } | null }) => void;
+    getDeletedWorkoutsPage.mockImplementationOnce(() => new Promise(resolve => { resolvePage = resolve; }));
+    fixture.componentInstance.deletedWorkoutPanel.update(panel => panel && { ...panel, status: 'idle' });
+    const pending = fixture.componentInstance.loadDeletedWorkouts();
+    userSignal.set(null); userSubject.next(null); fixture.detectChanges();
+    resolvePage({ workouts: [{ ...schedule.workouts[0], id: 'private-deleted', lifecycle: 'deleted',
+      deletedAtMs: 1_789_000_000_000 }], nextCursor: null });
+    await pending; await fixture.whenStable(); fixture.detectChanges();
+    expect(fixture.componentInstance.deletedWorkoutPanel()).toBeNull();
+    expect(fixture.nativeElement.textContent).not.toContain('private-deleted');
   });
 
   it('does not continue a restore after its history panel is closed', async () => {

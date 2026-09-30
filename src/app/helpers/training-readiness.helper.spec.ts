@@ -37,7 +37,7 @@ describe('training-readiness.helper', () => {
       ['Overnight HR vs baseline', '-5%'],
     ]);
     expect(view.metricRows.find(row => row.label === 'HRV · 7-day average')?.detailText)
-      .toBe('No recent HRV · 60-day personal range');
+      .toBe('No current HRV · 60-day personal range');
     expect(view.implicationTitle).toBe('Signals are broadly supportive');
     expect(view.implicationText).toContain('does not choose a workout');
     expect(view.sourceText).toContain('bounded sleep envelope');
@@ -116,31 +116,10 @@ describe('training-readiness.helper', () => {
       trend: [],
     }, { sleepEvidenceFailed: true });
     const unavailable = buildTrainingReadinessViewModel(null, { sleepEvidenceFailed: true });
-    const retained = buildTrainingReadinessViewModel({
-      score: 88,
-      label: 'Ready',
-      confidence: 'low',
-      availableSignalCount: 2,
-      baselineEvidenceCount: 0,
-      totalSignalCount: 4,
-      form: 10,
-      rampRate: 1,
-      latestSleepAtMs: Date.UTC(2026, 6, 16, 6),
-      sleepScore: 85,
-      hrvPersonalRange: null,
-      hrvRatio: null,
-      averageHeartRateRatio: null,
-      minimumHeartRateRatio: null,
-      overnightHeartRateRatio: null,
-      trend: [],
-    }, { sleepEvidenceFailed: true });
-
     expect(loadOnly.state).toBe('ready');
     expect(loadOnly.detailText).toContain('could not be loaded');
     expect(loadOnly.detailText).toContain('load signals only');
     expect(loadOnly.metricRows.find(row => row.label === 'Sleep')?.detailText).toContain('could not be loaded');
-    expect(retained.detailText).toContain('last loaded evidence');
-    expect(retained.metricRows.find(row => row.label === 'Sleep')?.detailText).toContain('Latest eligible night ended');
     expect(unavailable).toMatchObject({ state: 'unavailable', label: 'Unavailable' });
     expect(unavailable.detailText).toContain('Refresh the page to retry');
   });
@@ -216,8 +195,8 @@ describe('training-readiness.helper', () => {
       calculatedAtMs: Date.UTC(2026, 6, 16, 12),
       historyStatus: 'ready',
       history: {
-        formulaVersion: 3,
-        evidenceVersion: 1,
+        formulaVersion: 4,
+        evidenceVersion: 3,
         dayBoundary: 'UTC',
         asOfDayMs,
         generatedAtMs: Date.UTC(2026, 6, 16, 11),
@@ -284,7 +263,7 @@ describe('training-readiness.helper', () => {
       historyStatus: 'ready',
       history: {
         formulaVersion: 3,
-        evidenceVersion: 1,
+        evidenceVersion: 2,
         dayBoundary: 'UTC',
         asOfDayMs,
         generatedAtMs: Date.UTC(2026, 6, 15, 12),
@@ -324,7 +303,7 @@ describe('training-readiness.helper', () => {
       historyStatus: 'failed',
       history: {
         formulaVersion: 3,
-        evidenceVersion: 1,
+        evidenceVersion: 2,
         dayBoundary: 'UTC',
         asOfDayMs,
         generatedAtMs: Date.UTC(2026, 6, 16, 11),

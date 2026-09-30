@@ -8,8 +8,8 @@ summaries, and a preview/native-approval/apply workflow. It does not modify
 `WorkoutStructureV1`. The tools, strict scopes, projection and bounds are documented in
 [MCP server](mcp-server.md#training-plans-and-planned-workouts-690). Source support is not a deployed or
 registered-client promise. Provider certification, deployment, registered-contract promotion and plugin installation
-remain separate. The approval workflow implements the bounded #652 dependency; fallback/manual completion matching
-remains under #651.
+remain separate. The approval workflow implements the bounded #652 dependency. #651 is exact-marker-only; fallback/manual
+matching and audited unlink/relink are out of scope.
 
 Independent `training-plans:read` consent is available without a UID or Pro gate. Manual planning is available to every
 signed-in account; provider delivery remains separately gated by readiness, connection authority, explicit consent and Pro.
@@ -39,6 +39,8 @@ lock is acquired keeps the proposal resumable so the same approved apply can fin
 Permanent single-workout deletion and history restoration remain excluded. The latter allows plan delivery
 enablement and workout send/resume/stop/retry/check/approval. Delivery remains Pro and is gated by provider connection,
 permissions, configuration, compatibility and explicit consent.
+MCP plan and recoverable workout deletion never select the manual UI's optional past-provider-copy cleanup. Their
+previews distinguish eligible future-copy withdrawal from past copies, which remain, and recorded activities are untouched.
 External clients prepare one strict proposal of at most 25 changes, then invoke the separately approval-gated
 `apply_training_changes` write tool. ChatGPT, Claude and other MCP hosts own their native tool-approval UI; QS does not
 use MCP elicitation for a second confirmation round. A host may let its user configure automatic tool approval, which QS
@@ -370,6 +372,9 @@ The readiness, power-system, and durability charts are the same standalone compo
 their tooltip, haptic, theme, resize, and disposal behavior. Training and the explorer both use
 `TrainingMixDetailsComponent` and `TrainingBuildMetricsComponent` under `shared/training-summary/`; keep their
 markup and responsive styles there rather than copying them into a public page.
+On a selected sport, the live Training mix comparison uses the full section width. Its summary, intensity balance, and
+sport-context metrics form a responsive internal grid on wide containers and collapse into the same ordered stack on
+narrow cards and phones. Do not reserve a sibling grid column for the Overview-only intensity chart.
 The explorer supplies deterministic synthetic view models from `training-explorer-preview.data.ts`, visibly labeled
 as example data and wrapped in native `data-nosnippet`. It does not load account data, trigger snapshot refreshes, or
 import the Training workspace/module. Public SSR retains descriptive copy and placeholders; the explorer is deferred
@@ -479,8 +484,10 @@ MCP impact: #734 adds `get_planned_workout_v2` and `preview_planned_workout_v2_c
 schemas. The read uses existing Training plans consent and includes only an authored pool length in canonical metres
 plus its metre/yard presentation; a distance step never implies pool size. The focused create/update preview uses
 the existing Training plans write grant and revision-bound, approval-gated proposal/apply flow without provider
-delivery. A v1 edit of a selected-length swim is rejected rather than silently dropping the pool setting. Existing
-pool swims without an authored length remain valid; open-water recipes cannot carry one. No new scope, consent,
+delivery. A v1 edit of a selected-length swim is rejected rather than silently dropping the pool setting. The
+v2 preview discloses the canonical length and presentation, or explicitly states that the selection will be removed;
+Assistant edits of existing pool swims use v2 even if the request does not repeat the saved length. Existing pool swims
+without an authored length remain valid; open-water recipes cannot carry one. No new scope, consent,
 provider action, storage migration or recorded-event metric is introduced. Deployment and client catalog refresh
 are separate from local code verification.
 The shared contract remains broader so saved v1 data does
@@ -544,20 +551,176 @@ packed Sports Lib package. That gate is tracked by GitHub issue #654 under epic 
   history uses immutable deltas and compressed child-document checkpoint chunks every 20 revisions and after bulk
   operations, keeping revision envelopes below Firestore document limits. A restore creates a new revision and cannot
   reclaim a workout that has moved to a different scope or recreate a permanently deleted workout.
-- Ordinary workout deletion remains recoverable through history. Permanent deletion requires its own confirmation. Plan
+- Ordinary workout deletion remains recoverable through history for 90 days from `deletedAtMs`, not the scheduled date.
+  The boundary is exclusive: at `deletedAtMs + 90 days` restore is refused even if physical cleanup lags. Standalone
+  revision-history listing is also refused after expiry; plan-level immutable revision audit remains separately visible.
+  Preview and apply both enforce the restore cutoff, including a staged restore evaluated at lock acquisition. A restored workout that is deleted
+  again receives a new clock. Legacy deleted roots use their already-required `deletedAtMs` with no grandfathering or
+  migration; scheduled cleanup starts only when the Functions are separately approved and deployed. Permanent deletion requires its
+  own confirmation. Plan
   deletion requires choosing whether its current workouts become standalone or are deleted; either choice removes the
   plan history, while Archive remains the non-destructive choice.
-- Permanent deletion removes the workout root and its standalone revision subtree, then retains a server-internal hash
+- Permanent deletion removes the workout root, its standalone revision subtree, completion-projection subtree, and
+  reverse activity-completion links, then retains a server-internal hash
   tombstone so the retired ID cannot be reused. A plan-bound workout can still occur in that plan's immutable revision
   audit until the plan itself is deleted; it is tombstoned, cannot be restored, and this retention is disclosed in the
   confirmation UI. Plan deletion removes the complete plan revision subtree.
 - Plan deletion uses a user-scoped durable lock while it prepares bounded tombstones and standalone revision snapshots.
   An exact retry remains idempotent, and a same-disposition retry with the locked state/plan revisions may resume the
   original operation after a browser reload even when the caller no longer has the original mutation ID.
-- Resumable processing at the full 400-current-workout boundary, paged recoverable-workout history, and durable retry of
-  post-commit recursive cleanup are tracked explicitly by epic subissue #657. Until that slice lands, unusually large
-  structure payloads may still reach Firestore's atomic request-size limit even when their write count is valid; do not
-  lower the public v1 limits or hide this boundary in an anonymous TODO.
+- Current schedule listeners query only `planned` and `skipped` workout roots. Plans and Standalone fetch recoverably
+  deleted roots only when the deleted section opens, in owner-scoped 25-record pages constrained to `deletedAtMs` newer
+  than the 90-day cutoff, ordered newest-first with a `(deletedAtMs, document ID)` cursor. Expired roots therefore
+  disappear before physical cleanup, and equal deletion timestamps paginate deterministically. A schedule revision or
+  account/scope switch invalidates the page so an older response cannot leak into a new view. The
+  `scheduledWorkouts(planId, lifecycle, deletedAtMs desc, __name__ desc)` collection index supports this query;
+  browser rules allow owner reads but no writes or internal history access.
+- A single plan shift patches only each workout's date and revision fields in its atomic commit, rather than resending
+  up to 400 full structures. Plan-to-standalone deletion stages complete standalone snapshots in idempotent transactions
+  bounded to 100 writes and about 2 MiB of serialized payload; its final transaction patches only plan association,
+  revision, and timestamp. A plan restore likewise patches scalar-only changes and preflights estimated write payload;
+  an oversized full-prescription restore returns a stable `limit-exceeded` error before any write. Schedule mutation
+  batches preflight compressed revision chunks and current-record writes against a conservative 7 MiB budget;
+  an oversized multi-change batch uses the existing sequential fallback. For an oversized single manual or
+  separately approved MCP plan shift,
+  the server instead creates an owner-scoped `_bulk_shift` lock in `planDeletionLocks` with the exact validated request,
+  base revisions, mutation ID, and retry schedule. It writes immutable compressed history chunks below a missing
+  revision envelope in bounded idempotent transactions. Current state, plan, and workout roots remain unchanged and
+  visible during staging. A final transaction checks the same base revisions, patches only dates/revisions on the
+  current workouts, creates the revision envelope and receipts, queues delivery reconciliation, and removes the lock.
+  History readers cannot discover staged child chunks before that envelope exists. An exact retry or a browser reload
+  with a replacement mutation ID for the same intent resumes the locked shift; both IDs receive receipts on commit.
+  The stored original request, rather than a retry's ordering of equivalent revision preconditions, remains the
+  authoritative input for the staged history and final result.
+  The retry lease starts from the actual lock-acquisition time even when an MCP preview supplied an older deterministic
+  mutation timestamp, so the recovery worker cannot claim a shift while its initial apply is still staging.
+  A short-lived, owner-scoped intent receipt also recognizes an exact late retry after the lock has gone, without
+  shifting the plan twice; equivalent expected-revision order is accepted without weakening the exact request hash
+  stored for each mutation ID. It uses the existing mutation-receipt TTL and is not browser-readable.
+  If a competing retry commits first or the final response is lost, an invocation checks its exact receipt under the
+  account-deletion fence and returns that committed result. Receipt retention starts at commit, not lock creation, so
+  a long-stalled shift does not immediately lose its idempotency record.
+  Other schedule mutations, restores, deletions, provider delivery, and MCP Training reads are fenced while the lock
+  exists. An MCP lock also stores a private owner/connection/proposal/grant/index binding, never client-supplied input.
+  Its first apply must pass the existing preview and approval path; lock acquisition, preparation, and final commit
+  recheck that the proposal was approved for the exact shift and that its grant or Assistant confirmation is still
+  current. The final transaction advances the proposal cursor and per-change result alongside the schedule revision,
+  so a lost response cannot replay the shift. For a multi-change proposal, the worker completes the staged shift but
+  the same approved apply must be retried to continue later changes or provider actions. Acquisition extends that
+  approved proposal's retry lifetime to 30 days. If its permission or proposal is lost before publication, the worker
+  fences final commit, recursively removes the unpublished staged history, marks the old proposal cancelled, and
+  releases the lock without changing current dates.
+  Restoring the same grant or Assistant confirmation cannot revive that proposal; a new preview and approval are
+  required. This is not a new MCP mutation kind or permission, and it does not authorize provider delivery.
+  The separate five-minute `reconcileTrainingBulkShift` scheduler leases and resumes one due shift per
+  invocation after a timed-out callable, with bounded backoff and account-deletion fencing. It scans up to 100 due
+  locks, skipping unclaimable deleted-account records so one orphan cannot block another owner's recovery. This worker
+  has its own runtime budget and cannot starve `reconcileTrainingPlanCleanup`'s permanent-deletion jobs. Deploy the
+  ascending collection-group single-field index on `planDeletionLocks.nextAttemptAtMs` and unindexed `request` and
+  `mcpAuthority` fields before enabling this worker. Inspect `[TrainingBulkShift] resume_failed` or `scan_failed` logs and the lock's
+  retry schedule if a shift remains pending; do not manually remove a lock without examining its revision and receipts.
+  The canonical workout JSON and published 400-workout limit do not change.
+- A permanent workout or plan deletion creates a server-internal `trainingCleanupJobs` record in the same transaction
+  as its canonical receipt. The callable attempts recursive cleanup immediately; `reconcileTrainingPlanCleanup`
+  scans due jobs every 15 minutes, leases each job, checks the account-deletion guard and matching deletion
+  tombstone, then retries with bounded backoff. Plan cleanup creates independent workout cleanup jobs before deleting
+  residual workout roots in pages of 100, so unbounded recoverably deleted history cannot exhaust the cleanup worker
+  and a partial recursive delete cannot orphan a history subtree after its root disappears. Before any subtree removal,
+  cleanup checks the matching plan job; if that job disappears while a residual page is being staged, it stops without
+  deleting that page's workout roots. Exact retries after completed cleanup remain no-ops.
+  A malformed due job is deferred for an hour so it cannot repeatedly occupy the front of the bounded scan; its
+  tombstone and payload still require operator inspection rather than a guessed deletion target.
+  Jobs are leaves denied to browser reads/writes; the worker can safely repeat cleanup after a lost response. Deploy
+  the ascending collection-group single-field index on `trainingCleanupJobs.nextAttemptAtMs` and the unindexed
+  `response` field before enabling the worker. Inspect `[TrainingCleanup] cleanup_retry_failed` logs and due jobs when a lock persists; do not
+  delete a lock or job by hand without checking its receipt and tombstone.
+- Deleted-workout expiry uses **no Firestore TTL on workout roots**: TTL would not remove child history and could bypass
+  revision, delivery and completion reconciliation. The separate daily `reconcileTrainingWorkoutExpiry` scheduler
+  runs at 03:00 UTC in batches of up to 10 deletions and 100 inspected roots, permanently deleting at most 100
+  workouts globally per invocation. The daily scan stops after 1,000 inspected roots or four minutes, whichever
+  comes first, nominally reserving a minute below the Function's five-minute timeout; a single slow operation can
+  consume that margin. A batch resumes after its last inspected root even when it stopped partway through a fetched page.
+  Each completed batch persists its last inspected `(deletedAtMs, document path)` index key in the server-only
+  `systemJobs/trainingWorkoutExpiry` leaf. A seven-minute wall-clock lease serializes daily invocations and fences
+  checkpoint updates from an expired worker. Capped or timed-out runs resume from the saved key, including when the
+  referenced workout has disappeared. Reaching the end resets the cursor for the next invocation so earlier deferred,
+  repaired, or newly eligible roots are revisited. A failed partial batch retains the last completed checkpoint;
+  its candidates can safely be inspected again. The checkpoint contains no prescription and is never logged or exposed
+  through browser or MCP reads. It is shared maintenance state, not a user-owned deletion job.
+  Expired roots not processed within these bounds
+  remain eligible for the next daily run. The worker rechecks the exact
+  deletion timestamp inside the transaction, plus expected state, workout and plan revisions, account-deletion guard
+  and plan locks. Concurrent restore, transfer, plan deletion or
+  another worker makes the stale candidate defer rather than deleting a changed root. The normal cleanup job retries
+  interrupted subtree and reverse-link deletion. A committed permanent-delete transaction counts toward the daily
+  deletion cap even if its subsequent recursive cleanup fails; the result also records a failure while the durable job
+  retries. Delivery ledgers and prior explicit past-copy consent remain
+  independent so remote withdrawal/reconciliation can finish. Plan-bound immutable revision audit remains until plan
+  deletion and cannot recreate an expired/tombstoned workout. This is intentional audit retention, not recoverable
+  deleted history. The scan requires the `scheduledWorkouts(lifecycle, deletedAtMs, __name__)` collection-group index.
+  It runs independently of the 15-minute cleanup-job retry scheduler, without an environment switch. Deploy/verify
+  both indexes before deploying the updated Functions. Existing deleted roots at or beyond 90 days, including legacy
+  roots, then become eligible for the same bounded cleanup; no migration or special grandfathering applies. Before
+  production deployment, count expired roots and owner distribution without exporting prescriptions, and inspect the
+  cleanup-job backlog and provider state. Observe the initial rollout closely;
+  monitor daily `[TrainingWorkoutExpiry]` scanned/deleted/deferred/failed/batches, `stopReason`, and `moreDue`
+  (including zero-count runs) and
+  `[TrainingCleanup]` retry failures.
+  MCP Training reads and mutation contracts do not change: logical deletion is immediate, while these jobs only
+  remove internal expired records and retry already-approved permanent-deletion cleanup.
+  `moreDue` is a fresh one-document due query after the sweep, not a full backlog count; it may be `null` if the
+  runtime budget was reached or that check failed. A page-query or commit-verification failure keeps the invocation
+  failed and logs a `sweep-error` summary with redacted, per-candidate progress so already completed deletions remain
+  observable.
+  Persisted continuation lets later users' workouts expire even when more than 1,000 older roots remain malformed or
+  deferred. Sustained failed/deferred counts still require operator inspection of those roots; they never authorize a
+  guessed manual delete. An invalid checkpoint fails closed and logs `sweep_failed`; a stale lease expires without
+  discarding the saved cursor. This is an internal scheduling change with no MCP tool, schema, scope, consent,
+  projection, or approval-contract change. Rollback needs a separately
+  approved, coordinated change to both scheduled Functions: restoring the old
+  combined `reconcileTrainingPlanCleanup` revision while leaving the daily expiry Function active would run both expiry
+  scans. Already committed tombstones and deletions are not reversible. Queue TTL remains a separate
+  assessment in #776, not part of this policy.
+- A plan restore that exceeds either the single-transaction payload or write-count budget (including strength
+  companion writes) uses an owner-scoped `_bulk_restore` lock and a separate owner-readable
+  `trainingPlanState/current/availability/restore` leaf. A lock acquisition freezes other schedule mutations,
+  delivery workers, and MCP Training reads. Browser rules deny workout and strength-companion reads while the lock
+  exists; the availability listener pauses all three app calendar surfaces and the Plans workspace, then reconnects
+  them after the final commit. The server first stages compressed history below missing revision envelopes and stages
+  the exact desired workout roots as private leaves. It then applies at most eight workouts per transaction, consuming
+  each staging leaf and advancing a durable cursor in the same transaction. A final transaction creates the revision
+  envelopes, state/plan revisions, idempotent receipts, and delivery-reconciliation marker while removing both the lock
+  and availability leaf. Thus no mixed current schedule is available to owner reads, even if a callable times out after
+  any chunk. The staged restore's completion receipt has `workoutsDeferred: true` and an empty `workouts` array so a
+  400-workout prescription cannot exceed one Firestore document or callable response; the unchanged v1 workout roots
+  are read through the normal schedule listener after publication. Exact provider completion candidates from Garmin,
+  COROS, Wahoo, and Suunto defer linking during the lock and retry against the final roots; imported activities remain
+  separate records. The existing five-minute `reconcileTrainingBulkShift` scheduler also resumes due restore locks; its name is
+  historical. Exact and equivalent replacement-ID retries converge through a 30-day intent receipt. A stuck lock keeps
+  the schedule unavailable: inspect `[TrainingBulkShift] resume_failed`, the lock phase/cursor and receipt before manual
+  intervention. Never delete an applying lock without a verified rollback plan. The v1 workout JSON and 400-workout
+  limit remain unchanged; old clients with already-open workout listeners may need a reload after a restore.
+- MCP plan/workout reads report temporary unavailability while either bulk lock exists. The restore adds no MCP
+  field, tool, permission, or mutation kind: MCP history restore remains excluded from its registered write contract.
+  An approved oversized MCP shift uses the same staged history path with private authority checks on worker retry;
+  ordinary bounded MCP changes still use the existing transaction or sequential fallback.
+- MCP impact for the paging and cleanup slice: existing Training MCP current reads already exclude deleted workouts;
+  internal cleanup jobs and UI-only deleted-history paging expose no new MCP field, permission, mutation kind, provider
+  action, or approval route. Existing MCP plan deletion continues through the same idempotent server path.
+- MCP impact for 90-day recovery: registered Training reads still expose only current planned/skipped workouts and
+  their existing completion links, not deleted-history pages. Existing MCP mutation kinds do not include single-workout
+  permanent deletion or history restore, so no MCP schema, consent, tool, or approval contract changes. Plan deletion
+  keeps its existing confirmed path. The new expiry scan invokes that same server mutation internally, not an MCP tool.
+- MCP impact for staged shifts: no tool, schema, scope, consent, projection, or provider action changes. Existing
+  Training reads return their established temporary-unavailability result while a bulk lock is held rather than
+  exposing a partly staged plan. The existing MCP proposal/confirmation contract now routes an oversized approved
+  shift to the staged worker without weakening owner, connection, grant, Assistant confirmation, or revision checks;
+  a direct retry may resume only its own staged lock, and approval time is checked separately from the stable mutation
+  timestamp. Approval loss cancels unpublished chunks without extending an expired proposal. The existing batch apply
+  may fall back to sequential transactions when
+  its estimated payload is too large. No MCP read projection, registered schema, or plugin artifact changes.
+- MCP impact for plan-cleanup ownership recheck: no tool or wire change; existing approved plan deletion still uses its
+  saved idempotent receipt, while a cleanup worker cannot remove residual workouts after its owning plan job is gone.
 
 ### UI and calendar contract
 
@@ -600,9 +763,10 @@ Color changes retain the selected date, disable conflicting actions while saving
 The selected plan uses **Plan schedule**, not a second all-activity Calendar. `PlanScheduleCalendarComponent` owns a
 bounded month grid of only that plan's current workouts, including skipped workouts and paused/archived plans. It does
 not fetch events, show completed totals, or include standalone/other-plan workouts. The plan's inclusive start/end are
-marked; outside-range days have a neutral fill and are disabled, and wholly outside-range weeks are omitted. Month
-navigation stops at the plan boundaries. Dates use local calendar arithmetic (including DST/leap years) and the user's
-week-start setting.
+marked; the complete selected month remains visible through its first and last week, even when those weeks contain no
+in-range date. Outside-range days have a neutral fill and are disabled, so selecting a boundary day never removes week
+rows from that month. Month navigation stops at the plan boundaries. Dates use local calendar arithmetic (including
+DST/leap years) and the user's week-start setting.
 The weekday header marks the configured first day, and a visible hint names it. Saturday and Sunday have a subtle
 plan-color tint and stronger weekday labels (with a lighter tint in compact layouts).
 Weekends follow each date's actual weekday, never fixed column positions; they remain ordinary schedulable dates, not
@@ -633,6 +797,9 @@ and selection together. The date-cell button/ripple pattern follows Activity Cal
 contain separate accessible workout-edit actions without overriding its internals. Standalone retains its compact list.
 The **Main Calendar** link identifies the separate all-activity destination. No drag/drop, write API, provider sync,
 completed-activity matching, or new metric is introduced by this presentation change.
+The full-month boundary-grid correction changes only visible disabled date cells. It does not alter authored schedules,
+date selection, provider delivery, MCP Training reads or mutations, consent, schemas, Assistant guidance, or the
+registered MCP contract.
 
 Creating a plan or editing a workout is a focused view: scope navigation, lists, and other editors are hidden until Save
 or Cancel. The title field receives focus on entry; focus returns to the contextual add action (or scope navigation) on
@@ -718,6 +885,16 @@ exist only in `delivery/test-support/`, are excluded from the Functions build, a
 commands. Backend execution is necessary to resolve privileged connection authority and create background work; owner
 Rules/client transactions cannot authorize server-held provider credentials. Commands accept expected schedule, scope,
 and delivery-settings revisions and a mutation ID, never a UID, provider account ID, credential, or remote artifact ID.
+Single-workout previews identify exact, degraded or unsupported compatibility separately from provider connection
+readiness. Direct Send/Resume cannot record consent for an unsupported recipe; the browser explains the mapping reasons
+and disables confirmation without implying an earlier provider copy was removed or updated. MCP's first proposal likewise
+marks an unsupported destination unavailable, excludes it from
+`all_connected`, and keeps an explicitly requested failure independent from authored changes and other providers.
+Degraded mappings still use one reviewed digest-bound approval; plan-level consent can cover a mix of supported and
+unsupported workouts, with each individual delivery retaining its own truthful status. This adds no MCP tool, scope or
+registered output field: the existing provider preview availability and summary carry the result.
+Roll out the Functions guard before the browser change: an older Functions preview omits the optional compatibility
+field and cannot enforce this new Send/Resume rejection. Neither change is deployed by local verification.
 Receipts reject reuse with a different request and carry a 30-day `expireAt`; production TTL configuration is part of #655,
 not an operation performed by tests or this implementation. Manual authoring does not acquire a Pro requirement.
 
@@ -1036,6 +1213,19 @@ ordinary provider integration tests remain #647–#650, with contract questions 
 matching and Sports Lib extraction remain #651–#655; manual bulk-operation hardening remains #657 under epic #583.
 These are explicit tracked slices, not anonymous TODOs.
 
+Deletion policy: authored workout/plan deletion continues to withdraw eligible uncompleted future provider copies.
+The manual delete UI additionally offers an unchecked request to clean up past copies. The deletion transaction stores
+a private, mutation-bound choice; reconciliation and every provider request recheck it alongside the exact account,
+connection generation, retained identity and completion state. Garmin removes the schedule before its workout; Wahoo
+removes the dated Workout before its Plan; Suunto removes the owned Guide. These are best-effort cloud removals, not
+proof of app/watch removal or deletion of any recorded activity. A restored and subsequently deleted workout must opt
+in again; an old authorization cannot be reused. For plan-to-standalone deletion, the ledger keeps only the old plan
+marker pointer across temporary disconnects and rechecks the private marker on retry. A later standalone-workout
+deletion without opt-in overrides that earlier plan choice. COROS deliberately remains in backend reconciliation and tests, but
+its contract allows deleting only unexecuted workouts dated today or later, so past copies are retained and reported
+as unsupported. New-send UI availability remains a separate policy. MCP deletion previews/applies omit the
+opt-in and retain default past-copy preservation; this change adds no MCP tool, schema, scope, or provider action.
+
 #### Garmin workout sport profiles (#647)
 
 Garmin Training API V2 exposes `RUNNING` and `CYCLING` for supported running/cycling planned workouts and no sub-sport
@@ -1051,10 +1241,11 @@ Garmin receives the same broad family at the workout and segment levels. Cycling
 cycling-only secondary-target field subject to its existing device-support warning; running-family folds may not.
 Unsupported sports still fail closed. Existing Running/Cycling payloads and retained remote identities do not change,
 and no authored recipe, schedule history, Sports Lib type or provider ID is rewritten.
-MCP create-and-send keeps the authored subtype and establishes standalone delivery consent, but a degraded Garmin fold
-does not count as approved by that Send action. The workout remains unsent with a mapping-review requirement until a
-separate current-digest approval is confirmed. MCP previews and apply results must make that distinction explicit;
-neither an applied consent result nor a queued reconciliation means Garmin accepted a copy.
+MCP create-and-send keeps the authored subtype and establishes standalone delivery consent. Its preview must name the
+Garmin fold before the MCP host's native write approval; the approved Send carries the server-computed mapping digest
+into the existing delivery command, which rechecks the current payload and account in the write transaction. No second
+approval is needed for the same unchanged fold. Browser Send without that digest and subsequent changed mappings retain
+their normal review requirement. Neither an applied Send nor queued reconciliation means Garmin accepted a copy.
 
 Pool and open-water swimming are manually authorable. The #733 mapper encodes pool swimming as
 `LAP_SWIMMING` with an optional explicit physical pool length and target-free swim steps. It also supports an
@@ -1062,7 +1253,12 @@ unspecified pool as the partner contract allows, although older devices may not.
 device pool by itself. Pool delivery is now admitted for explicitly consenting, eligible Garmin connections. A 25 m
 pool workout was created, edited, rescheduled, checked present, and withdrawn through the owner's Garmin cloud account
 on 23 September 2026 without retries. This proves Garmin cloud CRUD/readback, not app or watch receipt or exercise
-completion. Open-water swimming remains unmapped. Never fold either swim profile to Running or Cycling.
+completion. On 27 September, a separate plan-scoped 25 m pool swim passed owner-account cloud create, edit from 100 m
+to 125 m, reschedule, readback and Stop/withdrawal. A standalone 25 m pool workout then appeared in Garmin Connect,
+with pool size 25 m and Quantified Self as its source; the owner confirmed that it and its work step appeared on the
+watch. Its delivery was subsequently stopped, and QS reported no retained Garmin copy. These observations do not
+prove completed-activity correlation or guarantee watch receipt for other devices. Open-water swimming remains
+unmapped. Never fold either swim profile to Running or Cycling.
 COROS continues to map only target-free pool Swimming to `swim`; the current partner mapping does not justify
 open-water support. Wahoo's documented plan file remains running/cycling-only.
 
@@ -1132,6 +1328,13 @@ description remain unchanged. Explicit subtitle truncation, title/instruction lo
 characters still require review. Identity fields and the configured Guide owner are never normalized. Character
 warnings identify the affected field; the derived subtitle does not repeat the title's warning, and app-only description
 text is not tested against watch fonts. This is a formatting policy, not a claim that Suunto rejects Unicode.
+For MCP-created Suunto workouts, omit unrequested step notes and keep necessary watch instructions within 40 code points
+when duration/targets are present or 54 for manual-only steps. Never silently discard requested authored meaning. If
+truncation remains necessary, the first MCP proposal summarizes the exact warnings; its single native approval also
+approves the current destination- and payload-bound adjustment. The authored QS note remains complete. A changed
+mapping blocks delivery until reviewed again. A warning set too large for the strict preview fails closed instead of
+approving undisclosed loss; the client can create without delivery or simplify the recipe. Browser and later
+plan-workout review semantics are unchanged.
 
 The same mapping keeps the authored canonical sport and translates it to Suunto's documented Guide `activities`
 recommendations: Running `1`, Trail Running `22`, Treadmill `53`, Cycling `2`, Mountain Biking `10`, Indoor Cycling
@@ -1283,9 +1486,18 @@ missing activity, delivery lease, different
 account, or conflicting existing completion cannot claim the link. The transaction writes the existing owner-readable
 completion and private reverse link, protects that remote copy from deletion, and is idempotent on reimport. It does not
 compare titles, durations or target adherence, infer late/early occurrence, or rewrite completed activity metrics.
-The one-link-per-workout v1 projection still cannot attach a second simultaneous Garmin recording when a Suunto recording
-already owns the completion; #651 retains that multi-source decision and any fallback/manual scope revision. This code
-does not retrospectively reparse previously imported FIT files or establish watch receipt across devices.
+The one-link-per-workout v1 projection keeps the first exact link committed when a second provider records the same
+workout; the second activity stays in completed history without replacing the link. Missing/reused markers, reconnect
+generations, stale plan/date occurrences and cross-user identities fail closed in provider emulator coverage. Once the
+matching provider copy catches up to a reschedule or plan transfer, a new exact link may proceed. This code does not
+retrospectively reparse previously imported FIT files or establish watch receipt across devices.
+
+MCP single/bulk completion reads use only the owner-scoped exact persisted link. `unlinked` has null provider, method,
+timing, link time and activity reference; `linked` retains the date and plan at link time. A later workout revision,
+including a plan transfer, keeps the stable workout link readable and sets `workoutChangedSinceCompletion`; an activity
+reference still requires independent `activity-details:read` consent. The current workout ID and revision are checked,
+and private source event IDs, remote markers, account identities and reverse links never enter MCP output. No MCP tool,
+scope, wire schema, consent, provider action or bundled-skill change is required for these edge-case fixes.
 
 Verification combines synthetic HTTP/ZIP/FIT fixtures, real Firestore transactions, Rules, UI/help and MCP read tests.
 MCP continues to read strict local delivery projections: Suunto counts derive from workouts, no watch receipt is inferred,
@@ -1340,6 +1552,15 @@ documented Running/Cycling baseline with time endings throughout. Required Worko
 step seconds times total repeat passes divided by 60, including fractional minutes. Distance endings cannot supply
 that value without an estimate and are unsupported for delivery. The broader fixture serializer's distance/kilojoule
 capabilities do not add editor features or imply delivery eligibility. Existing target/degradation approvals still apply.
+The unsupported verdict is visible at the first Send preview, before any Wahoo consent or HTTP operation. A supported
+relative-target workout remains a degradation, not an unsupported workout: its warning is approved with the same MCP
+proposal, then queued for the normal Plan/Workout reconciliation. A Wahoo-incompatible workout can still be authored
+in QS without Wahoo delivery, and a mixed all-connected request may send it to another compatible service.
+Loopback Firestore tests cover new and existing unsupported Sends, distance-ended all-connected rejection, mixed
+Wahoo/Suunto selection, and the degraded Wahoo create-through-Plan/Workout fixture lifecycle. They do not claim a
+live Wahoo app or device result. The MCP impact review found no new tool, permission, registered output shape,
+Assistant route or plugin instruction requirement; the existing preview availability/summary now reflects the
+backend compatibility verdict.
 
 The saved delivery zone determines today through today + 6, inclusive. Later workouts wait; moving an owned future
 copy outside the window withdraws it and preserves consent for later re-entry. QS represents its date-only schedule
@@ -1373,7 +1594,7 @@ digest and reverse evidence remain private. Repeated imports are idempotent; mis
 accounts, active delivery writes and conflicting existing links fail closed without date/title matching. Deleting the
 source event removes only its matching link/evidence, clears that marker-derived completion protection and queues
 delivery reconciliation; an independently observed provider summary remains protective. Provider-side moves, changed
-associations, past dates or ambiguous ownership block destructive writes. Bounded fallback/manual matching remains #651.
+associations, past dates or ambiguous ownership block destructive writes. Fallback/manual matching is outside #651.
 
 Neither identifier is a POST idempotency guarantee. An uncertain Plan create is recovered through a unique exact
 app-owned external-ID lookup, then a guarded in-place PUT if needed. An uncertain Workout create with a lost ID uses
@@ -1500,7 +1721,19 @@ same retained Workout is adopted under its new Schedule ID; multiple matches rem
 another copy. Changed dates/owners/associations require attention. Evidence-binding changes clear confirmed absence
 before a new observation chain begins. A missing Workout is
 non-authoritative, remains `unknown`, does not reduce the copy to a confirmed missing state and cannot trigger recreation.
-The replacement-workout path remains fixture-gated pending #703/#645 proof. Repairs reuse the operation journal and
+An owner-account #769 probe found both retained Workout and Schedule IDs returning 404, with a separate same-account QS
+Workout returning 200 and no matching date-list association. A Schedule POST against that missing Workout was rejected
+with 404 and created no artifact. This proves the exact retained pair was not readable in that probe; it does not prove
+that Workout 404 always means safely deleted rather than a permission, account, or other provider condition. Positive
+exact Workout and Schedule reads *do* confirm the cloud pair and association, never device receipt. Before permitting
+automatic Workout replacement, require provider-supported, same-owner not-found semantics distinguishable from
+permission/account errors; two unchanged observations at least 15 minutes apart under the same binding; no surviving
+or reappearing association; and bounded recovery for an uncertain root Workout POST that cannot duplicate provider
+records. Account-side create/update/delete proof must establish that full lifecycle. Until then, the check remains
+inconclusive, retains the prior Last sent timestamp, and never starts another Workout POST. The compact workout row
+reads the bounded current verification projection so a later inconclusive check no longer appears simply as Synced;
+plan totals and MCP sync status continue to describe accepted delivery, not a fresh live cloud inventory.
+The replacement-workout path remains fixture-gated pending #769 proof. Repairs reuse the operation journal and
 stable QS identity; unknown replacement-POST acceptance remains blocked, including Retry. Stop, pause, transfers and
 deletion supersede repair. Pro expiry pauses it; past/provider-confirmed completed workouts remain protected. Successful
 repair cycles are limited to two per delivery per rolling day, then deferred until capacity returns. The production
@@ -1565,7 +1798,14 @@ cover a real 4 × 25 m set in a 25 m pool. Garmin permits unspecified pool size,
 support it. The owner-account cloud lifecycle proof on 23 September 2026 enabled pool-swim admission for eligible,
 explicitly consenting Garmin connections: create, repeat-count edit, date move, positive retained-record checks and
 Stop/withdrawal completed without retries. The checked workout and schedule were cloud records, not proof of Garmin
-app/watch download or completed-activity correlation. Running/cycling admission is unchanged. The frozen registered MCP
+app/watch download or completed-activity correlation. A separate demo-Firestore and synthetic-Garmin-HTTP test exercises
+an active plan's explicit opt-in with a pool swim through create, repeat edit, date move and Stop. It retains one remote
+Workout and Schedule identity until withdrawal; that isolated test alone does not prove account or device behavior.
+The separate 27 September owner-account plan test did prove cloud plan-scoped create/edit/reschedule/readback/Stop;
+the owner's standalone test confirmed Garmin Connect and watch visibility for that one 25 m workout and its work step.
+Neither observation proves workout completion, and cloud acceptance alone never establishes device receipt.
+Running/cycling admission is unchanged. This fixture and evidence documentation add no MCP tool, scope, schema,
+consent, proposal, provider action or private delivery field. The frozen registered MCP
 v1 recipe omits the new field in its legacy workout read. #734 adds a separate full-workout read and focused
 create/update preview for authored pool length without changing existing tool schemas; see the MCP boundary above.
 
@@ -1840,7 +2080,7 @@ settings, sleep, swim lengths, or activity documents for unrelated metrics.
 
 | Metric kind | Training use | Primary source |
 | --- | --- | --- |
-| `form` | Form/load chart and CTL/ATL state inputs | Parent event TSS |
+| `form` | Form/load chart, CTL/ATL state inputs, and exact Training impact recap counts | Parent event TSS |
 | `recovery_now` | Imported recovery-remaining card | Bounded parent event recovery stats |
 | `acwr` | Load metrics | Parent event TSS |
 | `ramp_rate` | State and load metrics | Parent event TSS |
@@ -1878,6 +2118,11 @@ kinds are excluded from the default Dashboard subscription and freshness scope. 
 `training_durability` to that scope only while a matching explicitly configured tile exists.
 `training_power_systems` has no Dashboard tile and is never added to normal Dashboard subscriptions. Opening a normal
 Dashboard therefore does not create a hidden Training dependency or freshness probe for those kinds.
+
+Form's internal payload version is independent of `DERIVED_METRIC_SCHEMA_VERSION`. The freshness probe and frontend
+resolver require the current Form payload version and exact daily counts. This lets a payload-only Form transition queue
+and rebuild `form` without invalidating every other derived kind. Compatible version-2 Form seeds preserve both daily
+load and count, while projection-sensitive builders continue to consume only the load series.
 
 `body_weight_trend` is also Training-only. It is calendar-sensitive because its current 7- and 28-day UTC windows
 advance at midnight, but it is not projection-sensitive and does not reuse the Form projection seed. It prefers actual
@@ -1937,6 +2182,9 @@ Training state and Readiness are fixed inside the optional Today summary:
   states. The additive `get_daily_report` reuses that live projection plus the safe latest-night aggregate values and
   compact Training Summary. `get_readiness_history` exposes the current 14-day series. Registered
   `get_today_readiness`, generic readiness snapshots and the frozen daily briefing retain formula 3 for compatibility.
+- **Canonical Sleep-night identity** comes from `shared/sleep.ts`: provider display date, effective onset, and the
+  account/date/adjacency boundary are shared by frontend Health/Dashboard views and backend derived/MCP reads. The
+  resolver works on the already bounded result set and retains every raw SleepId in storage.
 - **Nightly HRV evidence** comes from the shared read-time resolver in `shared/nightly-hrv.ts`. Native normalized Sleep
   HRV wins; otherwise a canonical overnight-average Health summary may fill a missing main night only for the same
   owner, provider/account, provider date, and overlapping sleep interval. A reading contributes once across fragments.
@@ -1949,7 +2197,7 @@ Training state and Readiness are fixed inside the optional Today summary:
   recovery builders use the same resolver over their bounded Sleep windows;
   separate historical benchmark windows have separate Health reads. Existing normalized history needs no reimport.
   HRV Health creates, updates, and deletes invalidate only readiness and build comparison via the existing ingress queue.
-  `training_readiness.payload.evidenceVersion = 1` lets the frontend and backend freshness gate rebuild old readiness
+  `training_readiness.payload.evidenceVersion = 3` lets the frontend and backend freshness gate rebuild old readiness
   inputs independently from the formula version. Readiness formula 4 adds the shared HRV range. Recovery version 4 withholds HRV comparison across incompatible sources.
   MCP projects out the internal readiness evidence version. Registered readiness and recovery tools retain their
   version-3 formulas and wire shapes; additive current-readiness tools expose formula 4. Rebuilds use the ordinary
@@ -2296,10 +2544,15 @@ the other supplies the driver. Lower HR supports the score only relative to the 
 and is not a universal medical claim. Missing drivers are excluded and available weights are renormalized rather than treating
 missing evidence as zero.
 
-HRV uses `shared/personal-metric-range.ts`, exactly as the Health and Dashboard nightly HRV charts do. Multiple
-readings on the same provider calendar date reduce to a median; original fragment observations survive sleep grouping
-so the readiness input cannot become a different mean. Each original HRV observation is filtered at the cutoff before
-selecting its source; a later fragment of the same night cannot hide an already completed reading. The baseline is the mean ± one population standard deviation
+HRV uses `shared/personal-metric-range.ts`, exactly as the Health and Dashboard nightly HRV charts do. Historical
+readings on the same provider calendar date reduce to a median for the baseline. Suunto main-sleep records from the
+same provider account and wake date are first partitioned into canonical nights: overlapping records or records with
+at most a 30-minute gap are one night, while a larger gap remains separate. The raw SleepIds are retained in storage.
+For a reconciled night, duration and stages are summed, interruption time remains awake, the latest score wins, and
+average HRV is weighted by each record's HRV sample count. Conflicting fragment values without complete positive sample
+counts remain unavailable; Readiness never promotes the last fragment. Current readiness then requires one authoritative
+HRV observation from the canonical latest night, completed within 48 hours. Each observation is filtered at the cutoff
+before selecting its source. The baseline is the mean ± one population standard deviation
 over the preceding 60 days, including current observations. At least 14 observed days are required, plus three observed
 days in the last seven days for the current average. Every historical date uses only observations completed by its own
 cutoff. Selecting a year of chart history changes the view, never these calculation windows. Dedicated overnight and
@@ -2310,9 +2563,8 @@ Outside either bound, its component is `max(0, 50 - 100 × distanceOutsideRange 
 earns no automatic bonus. This is the QS scoring policy, not a reproduction of a provider's proprietary algorithm.
 The unchanged weighted score renormalizes around unavailable drivers. The UI shows the weekly average, numeric range,
 range status, recent direction and date-labelled latest HRV reading separately, instead of a percentage against a different short median.
-When a newer sleep exists without HRV, the shared formatter says that the latest night has no HRV and labels the retained
-value as the previous reading rather than presenting it as current. Weekly HRV
-can remain available without a night in the last 48 hours while at least three recent days remain.
+When the latest eligible night has no single authoritative HRV value, the current HRV driver shows **No current HRV**
+and exposes no previous numeric reading as current evidence.
 
 The formula version invalidates only `training_readiness`; the normal ensure lifecycle rebuilds its 14-day series from
 the existing Form seed and bounded Sleep/Health evidence. No event reparse, global derived-schema bump or bulk migration
@@ -2334,8 +2586,10 @@ or evidence leaves the 7/30/60-day windows, even if Firestore emits nothing. Sco
 count, driver values, and driver freshness are shown separately. Combined Form/ramp freshness is the oldest contributing
 timestamp. The training implication is deliberately non-prescriptive: it summarizes whether evidence is supportive,
 mixed, or strained and directs attention to the drivers rather than choosing a workout. Failed Form/ramp reads and a
-failed sleep listener are identified separately from genuinely missing evidence. Sleep already loaded before a listener
-failure remains visible only while it is still eligible; load-only readiness remains available afterward.
+failed sleep listener are identified separately from genuinely missing evidence. Dashboard Today and live Training
+readiness accept a load or recovery snapshot only while its derived status is `ready`; retained stale, building,
+missing, or failed snapshot payloads do not contribute a current value. A sleep listener failure clears its previously
+loaded readiness evidence immediately, while any independently current load-only readiness remains available.
 
 Dashboard Today and Training withhold the readiness score, category, confidence, and signal count until both the initial
 derived snapshot emission and the bounded sleep listener have resolved for the current account. Dashboard shows
@@ -2343,8 +2597,8 @@ derived snapshot emission and the bounded sleep listener have resolved for the c
 An uninitialized sleep list must never render as **No eligible
 night** or produce an interim load-only score. A successful empty sleep result settles loading and permits the normal
 load-only calculation. A failed first sleep read also settles loading, with explicit unavailable copy alongside any
-available load result. A later listener failure retains eligible sleep evidence, shows a refresh warning, and continues
-the normal age/baseline refresh timer. Hiding Today or switching accounts clears its sleep state, and re-entering waits
+available load result. A later listener failure clears the loaded sleep evidence immediately and shows an unavailable
+warning. Hiding Today or switching accounts clears its sleep state, and re-entering waits
 for that account's first reads again. Later live evidence updates still recalculate readiness normally.
 
 Readiness is the recovery-aware companion to the load model, not a replacement for it. It adds recorded sleep, HRV, and
@@ -2396,6 +2650,13 @@ controls; collapsing its details never hides an active countdown. The expandable
 - Reference: the immediately preceding 84-day window.
 - Main overnight sleep only; naps excluded.
 - Metrics: average sleep per night, a typical local sleep window, recorded-night coverage, bedtime variation, and median overnight HRV.
+
+Suunto recovery windows use the same canonical-night partition as Readiness. Same-account records on one wake date
+merge only when their effective sleep-onset windows overlap or are at most 30 minutes apart. Their actual sleep
+durations are summed, and local timing uses the first onset and final wake. Different average-HRV values are combined
+only with complete positive sample-count evidence across fragments; identical readings remain unambiguous without
+weighting. Larger gaps remain separate candidates, and identity-less fragments are never combined or promoted into
+recovery HRV.
 
 Comparative deltas require the same provider and sufficient coverage in both windows. The minimum is at least seven
 nights and at least half of each window (`14/28` and `42/84` for the normal comparison). Bedtime regularity requires a
@@ -2595,6 +2856,87 @@ The forecast is a scenario with zero future load, not a prediction of what the a
 load metrics are intentionally independent of sleep, HRV, overnight heart rate, and imported recovery timers. Those
 signals appear only in Readiness today, which adds recovery context without changing Freshness/Form or the Training
 state.
+
+#### Activity and selected-day Training impact
+
+Owner-only activity details and selected-day Calendar surfaces reuse the current Form snapshot to explain how each
+completed activity's recorded TSS participates in this model. They do not query activity history or create a separate
+derived snapshot. For one activity:
+
+```text
+Fitness load (CTL) contribution = activity TSS / 42
+Fatigue load (ATL) contribution = activity TSS / 7
+Freshness (Form) contribution   = CTL contribution - ATL contribution
+```
+
+The contribution is not the same as the actual day-over-day CTL change. The day outcome applies the full recurrence
+above, including normal decay from the prior UTC Training day, and reports whether CTL rose, held, or declined. Session
+headlines compare the complete UTC day's TSS with prior CTL: a session can push the day above maintenance, add load to
+a day that was already above maintenance, or offset decay while the day remains below maintenance. Valid zero TSS is
+shown as no modeled load contribution; missing TSS stays unavailable rather than becoming zero.
+
+Selected-day totals sum the visible completed activities' contributions. A local calendar date can contain activities
+from two UTC Training days, so the UI keeps one contribution total but shows a separate dated outcome for each UTC day
+instead of combining their net changes. Merge and benchmark records are excluded from Training, and their event detail
+pages do not render the Training-impact card. Planned workouts do not contribute. Stale, building, or refreshing Form
+data is labelled as updating; the UI never substitutes a local guess. The presentation is not included on compact
+calendar grid cells or public activity shares.
+
+This is a TSS-based model of sustained training load, not a measurement of physiological adaptation. The activity and
+selected-day calculation uses pure shared contribution/day-outcome interfaces beside the canonical Training-load model
+and consumes the existing Form snapshot. It adds no derived-metric kind, backend mutation, provider action, or consent
+scope.
+
+The public MCP and built-in Assistant expose the same calculation through one additive, read-only identity-safe
+contract. It requires both `metrics:read` and `activity-details:read`, prepares the existing Form snapshot, and accepts
+either one previously returned opaque activity reference or 1–32 unique references from a complete bounded activity
+read for one local date and IANA timezone. Session output includes the modeled role. Day output has one aggregate
+contribution and one or two dated UTC Training-day outcomes; it never returns per-session rows. Missing TSS,
+benchmark/merge exclusions, incomplete sessions, partial coverage, stale/building Form, failed Form, and dates outside
+the retained snapshot range stay explicit. The response never echoes opaque references or exposes event/activity IDs,
+titles, labels, exact start times, devices, providers, or source provenance. Reads fetch only the exact referenced
+activity/event documents and the existing Form snapshot; they do not scan activity history. This adds no persisted
+field for the public impact contract, derived-metric kind, global derived schema version, mutation, provider action, or
+new OAuth scope. The recap's private Form count extension is described below and is not part of this wire contract.
+
+Assistant example questions make the same read discoverable for the latest completed workout and for yesterday's
+complete local-date activity selection. They remain contextual prompts: the existing Assistant routing discovers the
+request-time references and prepares Form, while the MCP service keeps the identity, date, completion, coverage, and
+benchmark checks authoritative. No MCP schema, grant, registered-app contract, plugin starter, or mutation changes.
+
+#### Training impact recap
+
+Training Overview places an owner-only **Training impact recap** first in Load trajectory, before the full Form chart.
+It summarizes either the trailing 7 completed UTC Training days (the default) or the trailing 28. Both periods end on
+the previous UTC day so a partial current day cannot change the result while it is still accumulating load. The card
+advances its window at UTC midnight through the workspace's existing day-rollover timer, without adding a Form listener.
+It shows the exact period result as:
+
+```text
+Training CTL contribution = period TSS / 42
+Actual CTL change         = CTL(period end) - CTL(day before period start)
+Normal CTL decay          = Actual CTL change - Training CTL contribution
+```
+
+The contribution and decay terms always reconcile to the actual change. The headline says whether CTL rose, held, or
+declined; daily outcome counts reuse the canonical day result after decay. The 7-day view plots one actual CTL-change
+bar per UTC day. The 28-day view plots four consecutive, aligned 7-day blocks whose changes sum to the same period
+result. Missing calendar days are explicit zero-load decay days. If retained history begins inside the selected period,
+earlier days start from zero CTL; a genuinely empty Form history shows an empty state instead of a synthetic result.
+
+The existing sparse Form payload has an internal Form-specific payload version. Version 2 adds an exact
+`activityCount` beside each recorded UTC day's `load`. It counts the same eligible completed parent events as Form:
+current TSS takes precedence over legacy Power TSS, valid zero TSS counts as an activity, missing or invalid TSS does
+not, and merged/benchmark parents stay excluded. Child activities are not counted separately. Daily counts must sum to
+the snapshot `sourceEventCount`. Older count-less Form payloads are invalid for this recap and queue only a Form rebuild;
+the global derived schema remains unchanged and unrelated snapshots are not rebuilt. Once prepared, the workspace
+reuses its existing shared Form stream and never queries activity history from the frontend.
+
+Ready data renders normally. A building or stale snapshot can retain the last complete version-2 recap with an updating
+notice. A failed refresh keeps retained valid data with a warning; without valid retained data it is unavailable. Old or
+malformed count-less payloads show preparing rather than estimating a count. The period choice is local UI state and is
+not persisted. The recap does not appear on sport destinations, Dashboard, Calendar, event details, public shares, or
+planned workouts.
 
 The card starts with a concise interpretation of Form (recent fatigue relative to longer-term fitness) and labels the
 model as TSS-backed workouts only. When the no-workout forecast exists, the only follow-up prompt is to compare that
@@ -3278,6 +3620,11 @@ backend exactly; it does not maintain another formula. The adapter refuses an im
 downsamples the resulting display series within the shared Assistant payload budget, and never exposes raw snapshots or
 provider/device provenance to Gemini as visual configuration.
 
+The internal Form version and per-day `activityCount` used by the Training impact recap are deliberately projected out.
+Public `get_training_metric(form)` retains its frozen `{dayMs, load}` daily entries, and `get_training_impact` continues
+to use its existing request-time coverage contract. No MCP schema, tool, scope, consent meaning, provider action,
+Assistant prompt, registered-app rescan, or plugin build changes for the recap.
+
 There is deliberately no separate MCP metric-discovery registry. A newly registered kind is discoverable, but its payload
 must still pass the MCP privacy boundary in `functions/src/mcp/data.service.ts` and the exhaustive safe-payload schema map
 in `functions/src/mcp/derived-output-schemas.ts`. The server recursively removes event/activity IDs, names, and labels,
@@ -3410,6 +3757,15 @@ Inspect authenticated `/training` at desktop, tablet, and narrow-mobile widths. 
 
 Start with the repository workflows in `.agent/workflows/serve-local.md` and
 `.agent/workflows/start-emulators.md`. Build Functions before starting the emulators.
+
+The Training schedule, provider-delivery, derived-metric, and Assistant proposal endpoints are configured to use direct
+`FUNCTION_TARGET` loaders in `functions/src/function-target-loader.ts`; Firebase discovery still loads the complete
+entrypoint. After changing a handler's module or Function options, run `npm --prefix functions run entrypoint:check`
+and the cold-import benchmark (`npm --prefix functions run entrypoint:benchmark`). The check verifies the complete
+manifest, isolated export identity, and each Training target's trigger, region, memory, timeout, concurrency, applicable retry,
+and secret bindings. This loader routing changes no Training API, MCP tool, schema, scope, consent, projection,
+Assistant approval contract, or provider action. Keep the Assistant and derived-refresh endpoints' existing shared
+MCP imports explicit in the check rather than treating those imports as a new MCP wire surface.
 
 Functions runtime code must import `FieldValue`, `Timestamp`, and `FieldPath` from `firebase-admin/firestore`. Do not
 access those statics through `admin.firestore`: the Functions emulator replaces that namespace with a callable proxy
