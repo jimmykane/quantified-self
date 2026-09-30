@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { performance } from 'node:perf_hooks';
 import { ActivityTypes } from '@sports-alliance/sports-lib';
 import { Firestore } from 'firebase-admin/firestore';
 import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -41,10 +42,26 @@ describe.skipIf(!emulatorHost)('Training cleanup in isolated demo Firestore', { 
     }
 
     afterAll(async () => {
-        for (const uid of uids) await db.recursiveDelete(db.collection('users').doc(uid));
-        await db.recursiveDelete(db.doc(WORKOUT_EXPIRY_CHECKPOINT_PATH));
-        await db.terminate();
-    });
+        // Fixture cleanup can exceed Vitest's default hook budget. Its SDK
+        // limiter also rejects host wall-clock corrections; only teardown uses
+        // a monotonic clock, leaving the real worker/lease tests unchanged.
+        const wallStartedAtMs = Date.now();
+        const monotonicStartedAt = performance.now();
+        const clock = vi.spyOn(Date, 'now').mockImplementation(() =>
+            wallStartedAtMs + Math.floor(performance.now() - monotonicStartedAt));
+        const writer = db.bulkWriter({ throttling: false });
+        try {
+            for (const uid of uids) await db.recursiveDelete(db.collection('users').doc(uid), writer);
+            await db.recursiveDelete(db.doc(WORKOUT_EXPIRY_CHECKPOINT_PATH), writer);
+        } finally {
+            try {
+                await writer.close();
+            } finally {
+                clock.mockRestore();
+                await db.terminate();
+            }
+        }
+    }, 60_000);
 
     it('expires legacy deleted roots at 90 days, removes descendants and reverse links, and is idempotent', async () => {
         const uid = `expiry-${randomUUID()}`; uids.push(uid);
