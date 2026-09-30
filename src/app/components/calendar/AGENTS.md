@@ -12,3 +12,5 @@
   and other day content visible; a linked planned workout alone is not a recorded activity.
 - Keep day-sheet workout rows navigation-only, without duplicate/copy buttons. Duplication remains available in
   the full day, selected-day previews, and Plans; do not remove those actions when simplifying the sheet.
+- The sheet uses the shared compact Training-impact variant and one wrapping scope/status metadata line per workout.
+  Keep step details in the opened workout; preserve impact coverage warnings, statuses, and separate UTC-day outcomes.

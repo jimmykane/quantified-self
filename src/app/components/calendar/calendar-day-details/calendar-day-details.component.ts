@@ -26,7 +26,6 @@ import { ActivityCalendarVolumeListComponent } from '../activity-calendar-volume
 import { CalendarDayContextComponent } from '../calendar-day-context/calendar-day-context.component';
 import { ActivityCalendarVolumeStatsComponent } from '../activity-calendar-volume-list/activity-calendar-volume-stats.component';
 import type { PlannedWorkoutCalendarEntry } from '../../../helpers/planned-workout-calendar.helper';
-import { formatManualWorkoutStructure } from '../../../helpers/planned-workout-editor.helper';
 import { getDateTimeFormatter } from '../../../helpers/date-time-format.helper';
 import { TrainingImpactComponent } from '../../training-impact/training-impact.component';
 import {
@@ -63,7 +62,6 @@ interface CalendarDayPlannedWorkoutRow {
   sport: string;
   scopeLabel: string;
   lifecycleLabel: string;
-  summary: string[];
 }
 
 interface CalendarDayEventRow {
@@ -139,7 +137,6 @@ export class CalendarDayDetailsComponent {
     lifecycleLabel: entry.completed
       ? 'Completed · activity linked'
       : entry.workout.lifecycle === 'skipped' ? 'Skipped' : 'Planned',
-    summary: formatManualWorkoutStructure(entry.workout.structure, this.data.unitSettings, this.data.locale),
   })));
 
   selectNote(noteId: string): void {

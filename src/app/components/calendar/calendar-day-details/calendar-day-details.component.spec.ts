@@ -136,10 +136,48 @@ describe('CalendarDayDetailsComponent', () => {
       trainingImpact: signal({ status: 'ready', formPoints }),
     });
 
-    expect(fixture.nativeElement.querySelector('app-training-impact[title="Day training impact"]')).toBeTruthy();
+    const summary = fixture.nativeElement.querySelector('app-training-impact[title="Day training impact"]');
+    expect(summary?.getAttribute('variant')).toBe('compact');
+    expect(summary?.querySelector('.training-impact-metrics')).toBeNull();
+    expect(summary?.querySelector('.training-impact-compact')?.getAttribute('aria-label'))
+      .toContain('Fitness load (CTL) +1. Fatigue load (ATL) +6. Freshness (Form) −5');
+    expect(summary?.textContent).toContain('Fitness load rose after normal decay');
     expect(fixture.nativeElement.querySelector('.calendar-day-event-item app-training-impact')).toBeTruthy();
-    expect(fixture.nativeElement.textContent).toContain('Fitness load (CTL)');
     expect(fixture.nativeElement.textContent).toContain('+1 CTL · +6 ATL · −5 Form');
+  });
+
+  it.each(['updating', 'error', 'private'] as const)('keeps compact Training-impact state %s explicit', async status => {
+    const fixture = await renderDayDetails(createEvent('Morning run', undefined, 'Running', {
+      'Training Stress Score': 42,
+    }), { trainingImpact: signal({ status, formPoints: null }) });
+    const summary = fixture.nativeElement.querySelector('app-training-impact[title="Day training impact"]');
+    if (status === 'private') {
+      expect(fixture.nativeElement.querySelector('app-training-impact')).toBeNull();
+      return;
+    }
+    const compact = summary.querySelector('.training-impact-compact');
+    expect(compact.getAttribute('role')).toBe(status === 'error' ? 'alert' : 'status');
+    expect(compact.getAttribute('aria-busy')).toBe(status === 'updating' ? 'true' : 'false');
+    expect(compact.textContent).toContain(status === 'error'
+      ? 'Training impact could not be loaded.' : 'Updating Training impact…');
+    expect(summary.textContent).not.toContain('CTL ·');
+  });
+
+  it('retains partial-coverage copy beside the compact total and labels the activity without TSS', async () => {
+    const event = createEvent('Morning run', undefined, 'Running', { 'Training Stress Score': 42 });
+    const dayMs = Date.UTC(2026, 7, 3);
+    const formPoints = buildTrainingLoadPoints([{ dayMs, load: 42 }]).map(point => ({
+      time: point.dayMs, trainingStressScore: point.load, ctl: point.ctl, atl: point.atl,
+      formSameDay: point.formSameDay, formPriorDay: point.formPriorDay,
+    }));
+    const fixture = await renderDayDetails([
+      event, createEvent('Evening run', undefined, 'Running', {}, 'event-2'),
+    ], { trainingImpact: signal({ status: 'ready', formPoints }) });
+    const summary = fixture.nativeElement.querySelector('app-training-impact[title="Day training impact"]');
+    expect(summary.textContent).toContain('+1 CTL · +6 ATL · −5 Form');
+    expect(summary.nextElementSibling?.getAttribute('role')).toBe('status');
+    expect(summary.nextElementSibling?.textContent).toContain('Some completed activities have no available Training impact.');
+    expect(fixture.nativeElement.textContent).toContain('Training impact unavailable — this activity has no TSS.');
   });
 
   it('keeps planned workouts separate and offers active-plan and standalone add paths', async () => {
@@ -154,7 +192,8 @@ describe('CalendarDayDetailsComponent', () => {
       .toBe('/training/plans/workout/workout-1');
     expect(fixture.nativeElement.querySelector('.calendar-day-planned-item')?.textContent)
       .toContain('Autumn build · Planned');
-    expect(fixture.nativeElement.querySelector('.calendar-day-planned-item')?.textContent).toContain('30m 00s');
+    expect(fixture.nativeElement.querySelectorAll('.calendar-day-planned-item .calendar-day-entry-supporting')).toHaveLength(1);
+    expect(fixture.nativeElement.querySelector('.calendar-day-planned-item')?.textContent).not.toContain('30m 00s');
     expect(fixture.nativeElement.querySelector('.calendar-day-planned-accent')).toBeNull();
     expect(fixture.nativeElement.querySelector('.calendar-day-planned-item app-activity-type-icon')).toBeTruthy();
     expect(addButton?.getAttribute('aria-label')).toBe('Add workout for selected day');

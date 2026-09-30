@@ -64,7 +64,6 @@
               <div class="calendar-day-entry-copy">
                 <span class="calendar-day-entry-title">{{ planned.title }}</span>
                 <span class="calendar-day-entry-supporting">{{ planned.scopeLabel }} · {{ planned.lifecycleLabel }}</span>
-                <span class="calendar-day-entry-supporting">{{ planned.summary.join(' · ') }}</span>
               </div>
               <mat-icon class="calendar-day-item-meta" aria-hidden="true">chevron_right</mat-icon>
             </div>
@@ -89,7 +88,10 @@
     </div>
 
     @if (trainingImpactState().status !== 'private') {
-    <app-training-impact [impact]="dayTrainingImpact()" variant="summary" title="Day training impact"></app-training-impact>
+    <app-training-impact [impact]="dayTrainingImpact()" variant="compact" title="Day training impact"></app-training-impact>
+    @if (dayTrainingImpact().availability === 'ready' && dayTrainingImpact().message) {
+    <p class="calendar-day-empty" role="status">{{ dayTrainingImpact().message }}</p>
+    }
     }
 
     @if (familyVolumeRows().length) {

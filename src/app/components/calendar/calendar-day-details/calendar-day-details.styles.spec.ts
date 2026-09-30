@@ -44,6 +44,7 @@ describe('compact day-sheet styles', () => {
     const container = document.querySelector('.calendar-day-details')!;
     expect(declarations(container, 'font')).toEqual(['var(--mat-sys-body-medium)']);
     expect(declarations(container, 'letter-spacing')).toEqual(['0']);
+    expect(declarations(container, '--training-impact-compact-value-color')).toEqual(['var(--mat-sys-on-surface)']);
   });
 
   it('shares compact recovery typography without shrinking the full-day metrics', () => {

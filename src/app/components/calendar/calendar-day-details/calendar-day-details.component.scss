@@ -26,6 +26,8 @@
   // including nested metric and Training-impact components.
   font: var(--mat-sys-body-medium);
   letter-spacing: 0;
+  // Small contribution text needs contrast on the shared overlay in both themes.
+  --training-impact-compact-value-color: var(--mat-sys-on-surface);
 }
 
 .calendar-day-details-content {

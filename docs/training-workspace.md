@@ -748,6 +748,10 @@ Removing the day-sheet duplication shortcut has no MCP wire impact: the existing
 projections, strict preview/apply contract, scopes, consent, Assistant routing, and provider behavior are unchanged.
 No plugin rebuild or registered-client rescan is required.
 
+Day-sheet workout rows show the sport icon, title, and one wrapping scope/lifecycle metadata line. Ordered step
+summaries are intentionally omitted from this quick preview and remain available when opening the workout. This
+presentation change does not alter stored recipes, completion links, mutations, provider delivery, or MCP read coverage.
+
 The workspace presents one scope selector and one contextual **Add workout** action. The selected plan's name, lifecycle,
 and date range appear once; there is no separate overview strip or repeated plan/standalone heading. An account without
 plans sees one actionable empty state, not an empty plan selector and a second disabled workout section. Secondary plan
@@ -2888,6 +2892,13 @@ instead of combining their net changes. Merge and benchmark records are excluded
 pages do not render the Training-impact card. Planned workouts do not contribute. Stale, building, or refreshing Form
 data is labelled as updating; the UI never substitutes a local guess. The presentation is not included on compact
 calendar grid cells or public activity shares.
+
+The day bottom sheet and Calendar/Dashboard previews use the same compact Training-impact variant: the day outcome
+headline plus CTL/ATL/Form contributions, with separate dated outcome lines for two UTC Training days. The sheet keeps
+partial-coverage warnings beside that total and explicit updating, unavailable, and failure states; full metric labels
+and exact day outcomes remain accessible. **Full day** provides the detailed impact breakdown and model disclaimer.
+This density change reuses the existing Form data and does not change MCP/Assistant contracts, scopes, consent,
+calculations, provider behavior, or refresh subscriptions.
 
 This is a TSS-based model of sustained training load, not a measurement of physiological adaptation. The activity and
 selected-day calculation uses pure shared contribution/day-outcome interfaces beside the canonical Training-load model
