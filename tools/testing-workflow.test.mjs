@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { readFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { dirname, resolve } from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
@@ -129,19 +130,25 @@ test('CodeQL keeps branch baselines, fork/feature PR coverage and its scheduled 
   assert.ok(job.steps.some(step => step.uses === 'github/codeql-action/analyze@v3'));
 });
 
-test('CodeQL skips only PR duplicates whose own repository branch is push-scanned', () => {
+test('CodeQL skips only PR duplicates whose own repository branch is push-scanned', t => {
   const codeql = workflow('codeql-analysis.yml');
   const job = codeql.jobs.analyze;
+  // GitHub uses a regular output file. /dev/stdout cannot reopen Node's
+  // spawnSync pipe on Linux, even though the same test succeeds on macOS.
+  const outputDirectory = mkdtempSync(resolve(tmpdir(), 'qs-codeql-routing-'));
+  t.after(() => rmSync(outputDirectory, { recursive: true, force: true }));
+  let outputNumber = 0;
   function decision(event, fork = false, branch) {
     const github = context(event, fork, branch);
     const head = github.event?.pull_request.head;
+    const outputFile = resolve(outputDirectory, `output-${outputNumber++}`);
     const result = spawnSync('bash', ['-e', '-o', 'pipefail', '-c', codeql.jobs.scan_route.steps[0].run], {
       encoding: 'utf8', env: { PATH: process.env.PATH, EVENT_NAME: github.event_name,
         HEAD_REPOSITORY: head?.repo.full_name || '', REPOSITORY: github.repository,
-        HEAD_BRANCH: head?.ref || '', GITHUB_OUTPUT: '/dev/stdout' },
+        HEAD_BRANCH: head?.ref || '', GITHUB_OUTPUT: outputFile },
     });
     assert.equal(result.status, 0, result.stderr);
-    const scan = result.stdout.match(/^scan=(true|false)\n$/)?.[1];
+    const scan = readFileSync(outputFile, 'utf8').match(/^scan=(true|false)\n$/)?.[1];
     assert.ok(scan, 'The actual routing script must emit one valid scan output');
     const extraContext = { needs: { scan_route: { outputs: { scan } } } };
     return { runs: evaluate(job.if, github, extraContext), name: evaluate(job.name, github, extraContext) };

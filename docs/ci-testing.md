@@ -39,6 +39,9 @@ PR-only scans retain checkout's default merge ref. No `pull_request_target`, sec
 CodeQL's existing SARIF upload permissions and analysis configuration remain unchanged. The existing in-flight runs
 are unaffected by this routing change. `npm run test:workflows` covers the actual YAML conditions, source branches,
 forks, scan names, permissions and schedule.
+The routing tests pass a separate temporary regular file as `GITHUB_OUTPUT` for each invocation, read the actual
+script output, and remove the files after the test. Do not replace that file with `/dev/stdout`: reopening a Node
+child-process pipe through that path fails on Linux CI even when it works locally on macOS.
 
 ## Functions emulator matrix
 
