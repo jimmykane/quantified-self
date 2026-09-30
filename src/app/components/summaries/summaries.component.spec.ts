@@ -1486,6 +1486,24 @@ describe('SummariesComponent', () => {
     expect(nativeElement.querySelector('[aria-label="Dashboard options"]')).not.toBeNull();
   });
 
+  it.each([true, false])('offers the saved Calendar visibility in Dashboard options before tile rendering (visible: %s)', visible => {
+    const tile = getDashboardChartCatalog().find(entry => entry.definition.id === 'curated-activity-calendar')!.tile;
+    component.user = { uid: 'owner', settings: { dashboardSettings: { tiles: visible ? [tile] : [], showTodaySummary: false } } } as any;
+    component.showActions = true; component.isOwnerDashboard = true;
+    component.tiles = []; component.mainGridTiles = []; component.calendarGridSection = null;
+    fixture.detectChanges();
+    const bulk = vi.spyOn(component.library, 'bulk').mockResolvedValue(undefined);
+    fixture.nativeElement.querySelector('[aria-label="Dashboard options"]').click();
+    fixture.detectChanges();
+    const menu = document.body.querySelector('[role="menu"]')!;
+    expect(menu.textContent).toContain('Show Today summary');
+    const calendarAction = Array.from(menu.querySelectorAll<HTMLButtonElement>('button'))
+      .find(button => button.textContent?.includes(visible ? 'Hide Calendar' : 'Show Calendar'))!;
+    expect(calendarAction).toBeDefined();
+    calendarAction.click(); fixture.detectChanges();
+    expect(bulk).toHaveBeenCalledWith(component.user, 'calendar');
+  });
+
   it('does not call a saved dashboard empty while its tiles are still being prepared', () => {
     const tile = getDashboardChartCatalog().find(entry => entry.definition.id === 'health:steps')!.tile;
     component.user = { uid: 'owner', settings: { dashboardSettings: { tiles: [tile], showTodaySummary: false } } } as any;

@@ -1,4 +1,5 @@
 import { dashboardHealthSettings } from '../../../helpers/dashboard-health-tile.helper';
+import { isDashboardActivityCalendarTile } from '../../../helpers/dashboard-auto-tile.helper';
 import type { AppDashboardHealthMetricSettings } from '../../../models/app-user.interface';
 import { hasDashboardTileSettings, resolveDashboardTilePresentation } from '../../../helpers/dashboard-tile-presentation.helper';
 import { computed, inject, Injectable, OnDestroy, signal } from '@angular/core';
@@ -133,14 +134,15 @@ export class DashboardChartLibraryState implements OnDestroy {
     finally { this.busy.set(false); }
   }
 
-  async bulk(user: AppUserInterface, action: 'today' | 'reset' | 'all' | 'clear'): Promise<void> {
+  async bulk(user: AppUserInterface, action: 'today' | 'calendar' | 'reset' | 'all' | 'clear'): Promise<void> {
     if (this.busy() || !(await this.canDiscard())) return;
     this.busy.set(true); this.error.set('');
     const mutationVersion = this.mutationVersion;
     const contextVersion = this.contextVersion;
-    const editor = this.makeController(user, false);
+    const editor = this.makeController(user, action === 'calendar');
     try {
       if (action === 'today') await editor.onTodaySummaryVisibilityChange(user.settings.dashboardSettings.showTodaySummary === false);
+      if (action === 'calendar') await editor.onCalendarVisibilityChange(!user.settings.dashboardSettings.tiles.some(isDashboardActivityCalendarTile));
       if (action === 'reset') await editor.resetToDefault();
       if (action === 'all') await editor.addAllTiles();
       if (action === 'clear') await editor.removeAllTiles();
