@@ -205,6 +205,19 @@ function createTimestampLike(dateString: string) {
   };
 }
 
+function createSuuntoGPXRoute(revision: number): string {
+  return `<gpx xmlns="http://www.topografix.com/GPX/1/1" creator="Suunto app" version="1.1">
+    <metadata><name>Morning Route</name><extensions>
+      <route xmlns="http://www.suunto.com/xmlschemas/RouteExtension/v1">
+        <id>provider-route-1</id><modified>${revision}</modified><revision>${revision}</revision>
+        <activityId>1</activityId>
+      </route>
+    </extensions></metadata>
+    <rte><rtept lat="0" lon="0"><ele>10</ele></rtept>
+      <rtept lat="0.01" lon="0.01"><ele>20</ele></rtept></rte>
+  </gpx>`;
+}
+
 describe('processRouteSyncQueueItem', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -379,9 +392,10 @@ describe('processRouteSyncQueueItem', () => {
     expect(suuntoRouteMocks.exportSuuntoRouteAsGPX).not.toHaveBeenCalled();
   });
 
-  it('does not repeat a route write or partner fan-out for a timestamp-only Suunto notification', async () => {
+  it.each([false, true])('keeps the saved content revision for a timestamp-only notification (GPX revision changes: %s)', async changeGPXRevision => {
     const originalPath = 'users/user-1/routes/route-doc-1/uploads/provider-sync/original.gpx';
     const savedModifiedAt = createTimestampLike('2026-02-01T12:00:05.000Z');
+    const incomingModifiedAt = new Date('2026-02-02T12:00:05.000Z').getTime();
     routeDocuments.set('users/user-1/routes/route-doc-1', {
       id: 'route-doc-1',
       userID: 'user-1',
@@ -399,10 +413,14 @@ describe('processRouteSyncQueueItem', () => {
         importedAt: createTimestampLike('2026-02-01T12:00:01.000Z'),
       },
     });
-    storedRouteOriginals.set(originalPath, Buffer.from('<gpx />'));
+    const savedGPX = createSuuntoGPXRoute(savedModifiedAt.toDate().getTime());
+    storedRouteOriginals.set(originalPath, Buffer.from(savedGPX));
+    suuntoRouteMocks.exportSuuntoRouteAsGPX.mockResolvedValueOnce(changeGPXRevision
+      ? createSuuntoGPXRoute(incomingModifiedAt)
+      : savedGPX);
 
     const result = await processRouteSyncQueueItem(createQueueItem({
-      providerRouteModifiedAt: new Date('2026-02-02T12:00:05.000Z').getTime(),
+      providerRouteModifiedAt: incomingModifiedAt,
     }));
 
     expect(result).toBe(QueueResult.Processed);
@@ -420,6 +438,37 @@ describe('processRouteSyncQueueItem', () => {
     expect(routeDeliverySyncMocks.buildRouteDeliverySourceRevisionKeyForRouteSource).toHaveBeenCalledWith(expect.objectContaining({
       sourceSummary: expect.objectContaining({ modifiedAt: savedModifiedAt }),
     }));
+    expect(routeDeliverySyncMocks.enqueueRouteDeliverySyncJobsForImportedRoute).toHaveBeenCalledTimes(1);
+    expect(storedRouteOriginals.get(originalPath)).toEqual(Buffer.from(savedGPX));
+  });
+
+  it('delivers a geometry edit even when Suunto also updates its embedded revision fields', async () => {
+    const originalPath = 'users/user-1/routes/route-doc-1/uploads/provider-sync/original.gpx';
+    const savedModifiedAt = new Date('2026-02-01T12:00:05.000Z').getTime();
+    const incomingModifiedAt = new Date('2026-02-02T12:00:05.000Z').getTime();
+    routeDocuments.set('users/user-1/routes/route-doc-1', {
+      originalFiles: [{ path: originalPath, extension: 'gpx' }],
+      sourceSummary: {
+        sourceType: 'service_sync',
+        sourceServiceName: ServiceNames.SuuntoApp,
+        providerRouteId: 'provider-route-1',
+        providerUserId: 'suunto-user',
+        providerRouteName: 'Morning Route',
+        modifiedAt: createTimestampLike('2026-02-01T12:00:05.000Z'),
+      },
+    });
+    storedRouteOriginals.set(originalPath, Buffer.from(createSuuntoGPXRoute(savedModifiedAt)));
+    suuntoRouteMocks.exportSuuntoRouteAsGPX.mockResolvedValueOnce(
+      createSuuntoGPXRoute(incomingModifiedAt).replace('lat="0.01"', 'lat="0.02"'),
+    );
+
+    const result = await processRouteSyncQueueItem(createQueueItem({ providerRouteModifiedAt: incomingModifiedAt }));
+
+    expect(result).toBe(QueueResult.Processed);
+    expect(upsertSyncedRouteMocks.upsertSyncedRoute).toHaveBeenCalledWith(expect.objectContaining({
+      sourceMetadata: expect.objectContaining({ modifiedAt: new Date(incomingModifiedAt) }),
+    }));
+    expect(queueUtilsMocks.markQueueItemSkipped).not.toHaveBeenCalled();
     expect(routeDeliverySyncMocks.enqueueRouteDeliverySyncJobsForImportedRoute).toHaveBeenCalledTimes(1);
   });
 

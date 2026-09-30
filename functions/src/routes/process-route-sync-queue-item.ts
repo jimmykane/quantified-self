@@ -39,6 +39,7 @@ import {
     upsertSyncedRoute,
 } from './upsert-synced-route';
 import { UserDeletionGuardReadError } from '../shared/user-deletion-guard';
+import { hasSameSuuntoRouteContent } from '../suunto/route-content';
 import {
     enqueueRouteDeliverySyncJobsForImportedRoute,
 } from '../route-delivery-sync/enqueue-imported-route';
@@ -405,7 +406,7 @@ function getExistingOriginalRouteFile(
     };
 }
 
-async function hasByteIdenticalStoredProviderRoute(params: {
+async function hasUnchangedStoredProviderRoute(params: {
     userID: string;
     routeID: string;
     existingRouteDocument: FirestoreRouteJSON | null;
@@ -435,7 +436,7 @@ async function hasByteIdenticalStoredProviderRoute(params: {
             ? admin.storage().bucket(originalFile.bucket)
             : admin.storage().bucket();
         const [storedContent] = await bucket.file(originalFile.path).download();
-        return storedContent.equals(params.incomingContent);
+        return hasSameSuuntoRouteContent(storedContent, params.incomingContent);
     } catch (error) {
         if (getStatusCode(error) === 404) {
             // A missing legacy original cannot prove equality. Continue with
@@ -527,7 +528,7 @@ export async function processRouteSyncQueueItem(
             originalFilename: buildProviderOriginalFilename(queueItem),
         };
 
-        if (await hasByteIdenticalStoredProviderRoute({
+        if (await hasUnchangedStoredProviderRoute({
             userID,
             routeID,
             existingRouteDocument,
