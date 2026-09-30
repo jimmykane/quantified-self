@@ -92,6 +92,37 @@ describe('Garmin workout/schedule lifecycle, synthetic HTTP only', () => {
     expect(server.workouts.size).toBe(1);
     expect(writes()).toHaveLength(1);
   });
+  it.each(['repair', 'recovery', 'accepted-recovery'] as const)(
+    'rejects stale strength load details before %s can read or acknowledge a remote copy', async path => {
+      strengthOperation();
+      const original = (await execute())!;
+      operation = nextOperation(operation);
+      operation.strength!.exercises[0].sets[0].externalLoadKg = 81;
+      if (path === 'repair') operation.repair = { policyVersion: GARMIN_INSPECTION_POLICY.version,
+        binding: 'synthetic-authority', missing: ['schedule'], original };
+      else operation.progress = { version: 1,
+        step: path === 'recovery' ? 'schedule-create' : 'finished', state: path === 'recovery' ? 'started' : 'accepted' };
+      server.calls.length = 0; journal.length = 0;
+      await expect(path === 'repair' ? execute() : recover()).rejects.toMatchObject({ kind: 'terminal' });
+      expect(server.calls).toHaveLength(0);
+      expect(journal).toHaveLength(0);
+      expect(server.workouts.size).toBe(1); expect(server.schedules.size).toBe(1);
+    });
+  it.each(['repair', 'recovery', 'accepted-recovery'] as const)(
+    'retains same-digest strength %s without repeating provider writes', async path => {
+      strengthOperation();
+      const original = (await execute())!;
+      operation = nextOperation(operation);
+      if (path === 'repair') operation.repair = { policyVersion: GARMIN_INSPECTION_POLICY.version,
+        binding: 'synthetic-authority', missing: ['schedule'], original };
+      else operation.progress = { version: 1,
+        step: path === 'recovery' ? 'schedule-create' : 'finished', state: path === 'recovery' ? 'started' : 'accepted' };
+      server.calls.length = 0;
+      if (path === 'repair') expect(await execute()).toEqual(original);
+      else expect(await recover()).toEqual(path === 'recovery' ? { kind: 'resume' } : { kind: 'accepted', artifact: original });
+      expect(writes()).toHaveLength(0);
+      expect(server.workouts.size).toBe(1); expect(server.schedules.size).toBe(1);
+    });
   it('retains one workout identity across synthetic 25 m pool create, edit, reschedule and withdrawal', async () => {
     const pool: ScheduledWorkoutV1 = { ...operation.workout!, title: 'Four 25 m lengths', structure: {
       version: 1, sport: ActivityTypes.Swimming, poolLength: { meters: 25, presentation: 'meters' },

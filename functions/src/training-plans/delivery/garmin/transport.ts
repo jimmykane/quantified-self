@@ -53,9 +53,13 @@ export class GarminTrainingTransport implements TrainingDeliveryTransport {
   }
 
   private validate(operation: DeliveryOperation): void {
-    if (operation.kind === 'upsert' && operation.workout?.structure.sport === ActivityTypes.StrengthTraining
-      && this.assess(operation.workout, operation.destinationKey, operation.timeZone, operation.strength).level === 'unsupported') {
-      throw new TrainingDeliveryTransportError('terminal');
+    if (operation.kind === 'upsert' && operation.workout?.structure.sport === ActivityTypes.StrengthTraining) {
+      // Repair and recovery have early acceptance paths before execute's payload check.
+      // Bind the full prescription there too, including load-only changes absent from v1.
+      const assessment = this.assess(operation.workout, operation.destinationKey, operation.timeZone, operation.strength);
+      if (assessment.level === 'unsupported' || assessment.digest !== operation.digest) {
+        throw new TrainingDeliveryTransportError('terminal');
+      }
     }
     const progress = operation.progress;
     if (progress && (progress.version !== 1 || !STEPS.includes(progress.step as Step)

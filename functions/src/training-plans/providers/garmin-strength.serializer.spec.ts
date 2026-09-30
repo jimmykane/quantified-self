@@ -14,6 +14,27 @@ const details = { version: 1 as const, workoutId: 'lift', revision: 1, exercises
 const options = { name: 'Synthetic strength fixture', allowDegraded: false };
 
 describe('Garmin strength — Training API V2 1.0 and verified Appendix B exercise identifiers', () => {
+  it.each([
+    ['Barbell back squat', 'SQUAT', 'BARBELL_BACK_SQUAT'], ['Barbell front squat', 'SQUAT', 'BARBELL_FRONT_SQUAT'],
+    ['Goblet squat', 'SQUAT', 'GOBLET_SQUAT'], ['Squat', 'SQUAT', 'SQUAT'],
+    ['Barbell bench press', 'BENCH_PRESS', 'BARBELL_BENCH_PRESS'], ['Dumbbell bench press', 'BENCH_PRESS', 'DUMBBELL_BENCH_PRESS'],
+    ['Barbell deadlift', 'DEADLIFT', 'BARBELL_DEADLIFT'], ['Romanian deadlift', 'DEADLIFT', 'ROMANIAN_DEADLIFT'],
+    ['Barbell biceps curl', 'CURL', 'BARBELL_BICEPS_CURL'], ['Dumbbell biceps curl', 'CURL', 'DUMBBELL_BICEPS_CURL'],
+    ['Plank', 'PLANK', 'PLANK'], ['Side plank', 'PLANK', 'SIDE_PLANK'],
+    ['Push up', 'PUSH_UP', 'PUSH_UP'], ['Pull up', 'PULL_UP', 'PULL_UP'], ['Lunge', 'LUNGE', 'LUNGE'],
+    ['Seated cable row', 'ROW', 'SEATED_CABLE_ROW'], ['Barbell row', 'ROW', 'BARBELL_ROW'], ['Dumbbell row', 'ROW', 'DUMBBELL_ROW'],
+    ['Barbell shoulder press', 'SHOULDER_PRESS', 'BARBELL_SHOULDER_PRESS'], ['Dumbbell shoulder press', 'SHOULDER_PRESS', 'DUMBBELL_SHOULDER_PRESS'],
+  ])('preserves the verified Appendix B identity for %s', (name, exerciseCategory, exerciseName) => {
+    const value = { ...details, exercises: [{ id: 'exercise', name,
+      sets: [{ id: 'set', ending: { kind: 'repetitions', repetitions: 5 } }] }] };
+    const result = serializeGarminStrengthWorkoutV1(value, options);
+    expect(result.level).toBe('exact');
+    expect(result.artifact.segments[0].steps).toEqual([expect.objectContaining({ exerciseCategory, exerciseName })]);
+  });
+  it.each(['constructor', '__proto__', 'toString'])('does not inherit a mapping for %s', name => {
+    expect(() => serializeGarminStrengthWorkoutV1({ ...details,
+      exercises: [{ ...details.exercises[0], name }] }, options)).toThrow('cannot be represented');
+  });
   it('preserves ordered exercises, each set, timed holds, exact kilogram loads and final rest', () => {
     const result = serializeGarminStrengthWorkoutV1(details, options);
     expect(result.artifact).toEqual(expectedFixture);

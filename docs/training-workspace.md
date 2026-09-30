@@ -1845,6 +1845,9 @@ retain the full prescription. Load-only edits change the digest and native paylo
 remote identity. Existing non-strength digests and fixtures are unchanged. The same Workout/Schedule journal,
 WORKOUT_IMPORT, Pro/consent, per-request authority, Stop/disconnect, completion protection and explicit past-removal
 policy apply. An uncertain first Workout POST still cannot be repeated blindly.
+Strength's full-prescription digest is checked before repair inspection and every recovery early-return as well as
+normal execution. A stale load-only snapshot cannot be read, checkpointed or acknowledged as accepted under another
+prescription's digest. This is private transport validation; no new MCP approval, field or grant is introduced.
 
 Local serializer, synthetic HTTP and demo-Firestore tests cover standalone and active-plan create, load-only update,
 reschedule, duplicate dispatch and Stop, invalid/missing/foreign/mismatched companions, uncertain creates,
