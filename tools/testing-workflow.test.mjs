@@ -12,19 +12,20 @@ const workflow = file => load(readFileSync(resolve(root, '.github/workflows', fi
 const testing = workflow('testing.yaml');
 const shared = workflow('_run-tests.yml');
 
-// The two job expressions use only equality, boolean operators and literals;
+// The job expressions use only equality, boolean operators and literals;
 // evaluate their actual YAML values rather than a second implementation of them.
-function evaluate(expression, github) {
+function evaluate(expression, github, extraContext = {}) {
   const body = expression.match(/^\$\{\{\s*([\s\S]*?)\s*\}\}$/)?.[1];
   assert.ok(body, 'Explicit GitHub expression required');
-  return runInNewContext(body.replaceAll(' == ', ' === ').replaceAll(' != ', ' !== '), { github }, { timeout: 100 });
+  return runInNewContext(body.replaceAll(' == ', ' === ').replaceAll(' != ', ' !== '),
+    { github, ...extraContext }, { timeout: 100 });
 }
 
-function context(event, fork = false) {
+function context(event, fork = false, branch = 'codex/change') {
   const repository = 'owner/project';
   return { event_name: event, repository,
     ...(event === 'pull_request' ? { event: { pull_request: {
-      head: { repo: { full_name: fork ? 'contributor/project' : repository } },
+      head: { repo: { full_name: fork ? 'contributor/project' : repository }, ref: branch },
     } } } : {}),
   };
 }
@@ -98,4 +99,63 @@ test('beta and main remain push-only and all deployments depend on the reusable 
   assert.deepEqual(workflow('buildAndDeployMain.yml').on.push.branches, ['main']);
   assert.equal(workflow('buildAndDeployBeta.yml').on.pull_request, undefined);
   assert.equal(workflow('buildAndDeployMain.yml').on.pull_request, undefined);
+});
+
+test('CodeQL keeps branch baselines, fork/feature PR coverage and its scheduled scan', () => {
+  const codeql = workflow('codeql-analysis.yml');
+  assert.deepEqual(codeql.on.push.branches, ['main', 'develop', 'feature/**']);
+  assert.deepEqual(codeql.on.pull_request.branches, ['main', 'develop']);
+  assert.deepEqual(codeql.on.pull_request.types, ['opened', 'synchronize', 'reopened', 'ready_for_review']);
+  assert.deepEqual(codeql.on.schedule, [{ cron: '0 23 * * 6' }]);
+  assert.equal(codeql.on.pull_request_target, undefined);
+  assert.deepEqual(Object.keys(codeql.jobs), ['scan_route', 'analyze']);
+  const route = codeql.jobs.scan_route;
+  assert.deepEqual(route.permissions, {});
+  assert.deepEqual(route.outputs, { scan: '${{ steps.route.outputs.scan }}' });
+  assert.equal(route.steps.length, 1);
+  assert.equal(route.steps[0].id, 'route');
+  assert.deepEqual(route.steps[0].env, {
+    EVENT_NAME: '${{ github.event_name }}',
+    HEAD_REPOSITORY: '${{ github.event.pull_request.head.repo.full_name }}',
+    REPOSITORY: '${{ github.repository }}',
+    HEAD_BRANCH: '${{ github.event.pull_request.head.ref }}',
+  });
+  const job = codeql.jobs.analyze;
+  assert.equal(job.needs, 'scan_route');
+  assert.deepEqual(job.permissions, { actions: 'read', contents: 'read', 'security-events': 'write' });
+  assert.deepEqual(job.strategy.matrix.language, ['javascript']);
+  const checkout = job.steps.find(step => step.uses === 'actions/checkout@v4');
+  assert.equal(checkout.with?.ref, undefined); // PR-only scans retain the default merge ref.
+  assert.ok(job.steps.some(step => step.uses === 'github/codeql-action/analyze@v3'));
+});
+
+test('CodeQL skips only PR duplicates whose own repository branch is push-scanned', () => {
+  const codeql = workflow('codeql-analysis.yml');
+  const job = codeql.jobs.analyze;
+  function decision(event, fork = false, branch) {
+    const github = context(event, fork, branch);
+    const head = github.event?.pull_request.head;
+    const result = spawnSync('bash', ['-e', '-o', 'pipefail', '-c', codeql.jobs.scan_route.steps[0].run], {
+      encoding: 'utf8', env: { PATH: process.env.PATH, EVENT_NAME: github.event_name,
+        HEAD_REPOSITORY: head?.repo.full_name || '', REPOSITORY: github.repository,
+        HEAD_BRANCH: head?.ref || '', GITHUB_OUTPUT: '/dev/stdout' },
+    });
+    assert.equal(result.status, 0, result.stderr);
+    const scan = result.stdout.match(/^scan=(true|false)\n$/)?.[1];
+    assert.ok(scan, 'The actual routing script must emit one valid scan output');
+    const extraContext = { needs: { scan_route: { outputs: { scan } } } };
+    return { runs: evaluate(job.if, github, extraContext), name: evaluate(job.name, github, extraContext) };
+  }
+  for (const branch of ['main', 'develop', 'feature/change', 'feature/nested/change']) {
+    assert.deepEqual(decision('push', false, branch), { runs: true, name: 'Analyze' });
+    assert.deepEqual(decision('pull_request', false, branch), { runs: false, name: 'Internal PR - covered by push' });
+    assert.deepEqual(decision('pull_request', true, branch), { runs: true, name: 'Analyze' });
+  }
+  for (const branch of ['codex/change', 'fix/change', 'feature-not-covered/change', 'release/change',
+    'Main', 'Develop', 'Feature/change']) {
+    for (const fork of [false, true]) {
+      assert.deepEqual(decision('pull_request', fork, branch), { runs: true, name: 'Analyze' });
+    }
+  }
+  assert.deepEqual(decision('schedule'), { runs: true, name: 'Analyze' });
 });
