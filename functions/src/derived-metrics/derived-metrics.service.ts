@@ -69,7 +69,9 @@ import {
     DERIVED_TRAINING_RECOVERY_MIN_SLEEP_NIGHTS,
     DERIVED_TRAINING_RECOVERY_MIN_VALID_SLEEP_SECONDS,
     isDerivedTrainingPowerSystemsStatusReasonPair,
+    hasMatchingDerivedFormSourceEventCount,
     normalizeDerivedFormDailyLoadsWithActivityCounts,
+    resolveDerivedFormMetricPayload,
     PROJECTION_SENSITIVE_DERIVED_METRIC_KINDS,
     type DerivedAcwrMetricPayload,
     type DerivedBodyWeightTrendMetricPayload,
@@ -5804,41 +5806,25 @@ export async function fetchTrainingBuildWorkoutSeed(
 export async function fetchDerivedFormSnapshotSeed(uid: string): Promise<DerivedFormSnapshotSeed | null> {
     const snapshot = await getMetricDocRef(uid, DERIVED_METRIC_KINDS.Form).get();
     const data = (snapshot.data() || {}) as Record<string, unknown>;
-    const payload = (data.payload && typeof data.payload === 'object')
-        ? data.payload as Record<string, unknown>
-        : {};
+    const payload = resolveDerivedFormMetricPayload(data.payload);
     const isCount = (value: unknown): value is number => typeof value === 'number'
         && Number.isSafeInteger(value) && value >= 0;
-    const loads = payload.dailyLoads;
     // Normalization is appropriate for display, not for cache admission: dropping
     // missing/malformed entries here would silently replace real load with zero.
     if (data.entryType !== DERIVED_METRICS_ENTRY_TYPES.Snapshot || data.metricKind !== DERIVED_METRIC_KINDS.Form
         || data.status !== 'ready' || data.schemaVersion !== DERIVED_METRIC_SCHEMA_VERSION
         || !isCount(data.builtFromEventMutationVersion) || !isCount(data.sourceEventCount) || !isCount(data.sourceDocCount)
-        || data.sourceDocCount < data.sourceEventCount || payload.payloadVersion !== DERIVED_FORM_PAYLOAD_VERSION
-        || payload.dayBoundary !== 'UTC'
-        || payload.excludesMergedEvents !== true || !Array.isArray(loads)
-        || loads.length > data.sourceEventCount || (loads.length === 0) !== (data.sourceEventCount === 0)) return null;
-    let previousDay = -Infinity;
-    let activityCount = 0;
-    for (const entry of loads) {
-        if (!entry || typeof entry !== 'object' || !Number.isSafeInteger(entry.dayMs)
-            || entry.dayMs % DAY_MS !== 0 || entry.dayMs <= previousDay
-            || typeof entry.load !== 'number' || !Number.isFinite(entry.load) || entry.load < 0
-            || !Number.isSafeInteger(entry.activityCount) || entry.activityCount <= 0) return null;
-        activityCount += entry.activityCount;
-        previousDay = entry.dayMs;
-    }
-    if (activityCount !== data.sourceEventCount) return null;
-    if (payload.rangeStartDayMs !== (loads[0]?.dayMs ?? null)
-        || payload.rangeEndDayMs !== (loads[loads.length - 1]?.dayMs ?? null)) return null;
+        || data.sourceDocCount < data.sourceEventCount || !payload
+        || payload.dailyLoads.length > data.sourceEventCount
+        || (payload.dailyLoads.length === 0) !== (data.sourceEventCount === 0)
+        || !hasMatchingDerivedFormSourceEventCount(payload, data.sourceEventCount)) return null;
     return {
         status: data.status,
         schemaVersion: data.schemaVersion,
         builtFromEventMutationVersion: data.builtFromEventMutationVersion,
         sourceEventCount: data.sourceEventCount,
         sourceDocCount: data.sourceDocCount,
-        dailyLoads: loads.map(entry => ({
+        dailyLoads: payload.dailyLoads.map(entry => ({
             dayMs: entry.dayMs,
             load: entry.load,
             activityCount: entry.activityCount,

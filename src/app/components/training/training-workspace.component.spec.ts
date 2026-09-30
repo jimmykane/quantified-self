@@ -977,7 +977,7 @@ describe('TrainingWorkspaceComponent', () => {
     fixture.destroy();
   });
 
-  it('requests readiness projections and the body-weight trend at the next UTC day', async () => {
+  it('refreshes the recap clock and readiness projections at the next UTC day', async () => {
     const nowMs = Date.UTC(2026, 6, 16, 23, 59, 59, 500);
     vi.useFakeTimers();
     vi.setSystemTime(nowMs);
@@ -1005,9 +1005,12 @@ describe('TrainingWorkspaceComponent', () => {
       }).compileComponents();
       const fixture = TestBed.createComponent(TrainingWorkspaceComponent);
       fixture.detectChanges();
+      expect(fixture.componentInstance.trainingImpactRecapNowMs).toBe(nowMs);
       derivedMetrics.ensureForDashboard.mockClear();
 
       await vi.advanceTimersByTimeAsync(502);
+
+      expect(fixture.componentInstance.trainingImpactRecapNowMs).toBe(nowMs + 501);
 
       expect(derivedMetrics.ensureForDashboard).toHaveBeenCalledWith(
         { uid: 'user-1' },

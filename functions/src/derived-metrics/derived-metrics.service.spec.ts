@@ -319,6 +319,8 @@ describe('fetchDerivedFormSnapshotSeed', () => {
         { payload: { ...valid().payload, dailyLoads: [{ dayMs, load: 50, activityCount: 2 }] } },
         { payload: { ...valid().payload, rangeStartDayMs: dayMs + 1, rangeEndDayMs: dayMs + 1,
             dailyLoads: [{ dayMs: dayMs + 1, load: 50, activityCount: 1 }] } },
+        { payload: { ...valid().payload, rangeStartDayMs: -86_400_000, rangeEndDayMs: -86_400_000,
+            dailyLoads: [{ dayMs: -86_400_000, load: 50, activityCount: 1 }] } },
         { sourceEventCount: 2, payload: { ...valid().payload,
             dailyLoads: [{ dayMs, load: 20, activityCount: 1 }, { dayMs, load: 30, activityCount: 1 }] } },
         { sourceEventCount: 2, payload: { ...valid().payload, rangeStartDayMs: dayMs + 86_400_000,

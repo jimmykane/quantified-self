@@ -64,6 +64,8 @@ describe('TrainingImpactRecapComponent', () => {
     await vi.waitFor(() => expect(loader.setOption).toHaveBeenCalled());
     expect(fixture.nativeElement.querySelector('[role="img"]')?.getAttribute('aria-label'))
       .toContain('7-day Training impact chart');
+    expect(fixture.nativeElement.querySelector('[role="img"]')?.getAttribute('aria-label'))
+      .toMatch(/Sep 29, 2026: [+-]?\d/);
   });
 
   it('switches to four seven-day blocks with one selection haptic', async () => {

@@ -2889,7 +2889,8 @@ benchmark checks authoritative. No MCP schema, grant, registered-app contract, p
 Training Overview places an owner-only **Training impact recap** first in Load trajectory, before the full Form chart.
 It summarizes either the trailing 7 completed UTC Training days (the default) or the trailing 28. Both periods end on
 the previous UTC day so a partial current day cannot change the result while it is still accumulating load. The card
-shows the exact period result as:
+advances its window at UTC midnight through the workspace's existing day-rollover timer, without adding a Form listener.
+It shows the exact period result as:
 
 ```text
 Training CTL contribution = period TSS / 42

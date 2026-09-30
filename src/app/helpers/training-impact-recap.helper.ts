@@ -142,10 +142,11 @@ export function buildTrainingImpactRecap(
   const actualCtlChange = normalizeSignedZero(endingCtl - startingCtl);
   const trainingCtlContribution = normalizeSignedZero(contribution.ctlContribution);
   const normalCtlDecay = normalizeSignedZero(actualCtlChange - trainingCtlContribution);
-  const outcomeCounts = dailyImpacts.reduce<TrainingImpactRecapOutcomeCounts>((counts, impact) => ({
-    ...counts,
-    [impact.outcome]: counts[impact.outcome] + 1,
-  }), { raised: 0, held: 0, declined: 0 });
+  const outcomeCounts = dailyImpacts.reduce<TrainingImpactRecapOutcomeCounts>((counts, impact) => {
+    const outcome = resolveOutcome(impact.ctlChange);
+    counts[outcome] += 1;
+    return counts;
+  }, { raised: 0, held: 0, declined: 0 });
   const bucketDays = periodDays === 7 ? 1 : 7;
   const bars: TrainingImpactRecapBar[] = [];
   for (let index = 0; index < dailyImpacts.length; index += bucketDays) {

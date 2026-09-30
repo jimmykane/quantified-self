@@ -90,4 +90,16 @@ describe('training-impact-recap.helper', () => {
       outcomeCounts: { raised: 0, held: 7, declined: 0 },
     });
   });
+
+  it('keeps day counts aligned with a held headline when only floating-point dust remains', () => {
+    const points = buildDashboardFormPointsFromDailyLoads([
+      { dayMs: Date.UTC(2026, 7, 1), load: 1e-9, activityCount: 1 },
+    ]);
+    const recap = buildTrainingImpactRecap(points, 7, nowMs);
+
+    expect(recap?.outcome).toBe('held');
+    expect(recap?.actualCtlChange).toBe(0);
+    expect(recap?.outcomeCounts).toEqual({ raised: 0, held: 7, declined: 0 });
+    expect(recap?.bars.every(bar => bar.ctlChange === 0)).toBe(true);
+  });
 });

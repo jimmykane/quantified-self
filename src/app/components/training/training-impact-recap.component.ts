@@ -167,7 +167,7 @@ export class TrainingImpactRecapComponent implements AfterViewInit, OnChanges, O
       raisedDays: this.formatInteger(recap.outcomeCounts.raised),
       heldDays: this.formatInteger(recap.outcomeCounts.held),
       declinedDays: this.formatInteger(recap.outcomeCounts.declined),
-      chartAriaLabel: `${recap.periodDays}-day Training impact chart. Actual fitness load changed ${this.formatSigned(recap.actualCtlChange)} CTL across completed UTC Training days.`,
+      chartAriaLabel: `${recap.periodDays}-day Training impact chart. Actual fitness load changed ${this.formatSigned(recap.actualCtlChange)} CTL across completed UTC Training days. ${recap.bars.map(bar => `${this.formatBarLabel(bar, true)}: ${this.formatSigned(bar.ctlChange)} CTL`).join('; ')}.`,
     };
   }
 

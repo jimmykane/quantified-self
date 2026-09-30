@@ -605,6 +605,7 @@
           [points]="derivedState.formPoints"
           [formStatus]="derivedState.formStatus"
           [darkTheme]="isDarkTheme()"
+          [nowMs]="trainingImpactRecapNowMs"
         ></app-training-impact-recap>
         @if (derivedState.formStatus === 'ready' || derivedState.formPoints?.length) {
           <article class="training-chart-panel training-chart-panel-wide qs-glass-card-panel">
