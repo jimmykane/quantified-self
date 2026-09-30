@@ -87,6 +87,7 @@ describe('TrainingImpactComponent', () => {
     };
     const element = render(view, 'summary').nativeElement;
     expect(element.textContent).toContain('Activities span 2 UTC Training days');
+    expect(element.querySelector('.training-impact--summary')).toBeTruthy();
     expect(element.querySelectorAll('.training-impact-outcomes > div')).toHaveLength(2);
   });
 
