@@ -258,20 +258,34 @@ export async function reconcileTrainingCleanupJobs(
     return { scanned, completed, failed };
 }
 
-/** Both maintenance passes run on every scheduled invocation. */
-export async function runTrainingPlanCleanup(db: admin.firestore.Firestore, nowMs = Date.now()): Promise<void> {
+/** Retry interrupted permanent-deletion cleanup independently of expiry scanning. */
+export async function runTrainingCleanupJobs(db: admin.firestore.Firestore, nowMs = Date.now()): Promise<void> {
     const result = await reconcileTrainingCleanupJobs(db, nowMs);
     if (result.scanned > 0) logger.info('[TrainingCleanup]', result);
+}
+
+/** Expire recoverably deleted workouts on a separate daily budget. */
+export async function runTrainingWorkoutExpiry(db: admin.firestore.Firestore, nowMs = Date.now()): Promise<void> {
     const expired = await reconcileExpiredDeletedWorkouts(db, nowMs);
     if (expired.scanned > 0) logger.info('[TrainingWorkoutExpiry]', expired);
 }
 
 export const reconcileTrainingPlanCleanup = onSchedule({
-    schedule: 'every 5 minutes',
+    schedule: 'every 15 minutes',
     timeZone: 'UTC',
     region: FUNCTIONS_MANIFEST.reconcileTrainingPlanCleanup.region,
     memory: '512MiB',
     timeoutSeconds: 300,
 }, async () => {
-    await runTrainingPlanCleanup(admin.firestore());
+    await runTrainingCleanupJobs(admin.firestore());
+});
+
+export const reconcileTrainingWorkoutExpiry = onSchedule({
+    schedule: '0 3 * * *',
+    timeZone: 'UTC',
+    region: FUNCTIONS_MANIFEST.reconcileTrainingWorkoutExpiry.region,
+    memory: '512MiB',
+    timeoutSeconds: 300,
+}, async () => {
+    await runTrainingWorkoutExpiry(admin.firestore());
 });

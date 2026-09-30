@@ -23,6 +23,7 @@ describe('function target loader', () => {
       'marketingUnsubscribe',
       'projectEventTagCatalog',
       'reconcileTrainingPlanCleanup',
+      'reconcileTrainingWorkoutExpiry',
       'reconcileTrainingBulkShift',
       'applyAssistantTrainingProposal',
       'ensureDerivedMetrics',

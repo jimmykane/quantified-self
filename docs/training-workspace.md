@@ -556,7 +556,7 @@ packed Sports Lib package. That gate is tracked by GitHub issue #654 under epic 
   revision-history listing is also refused after expiry; plan-level immutable revision audit remains separately visible.
   Preview and apply both enforce the restore cutoff, including a staged restore evaluated at lock acquisition. A restored workout that is deleted
   again receives a new clock. Legacy deleted roots use their already-required `deletedAtMs` with no grandfathering or
-  migration; production cleanup remains disabled until a separately approved rollout. Permanent deletion requires its
+  migration; scheduled cleanup starts only when the Functions are separately approved and deployed. Permanent deletion requires its
   own confirmation. Plan
   deletion requires choosing whether its current workouts become standalone or are deleted; either choice removes the
   plan history, while Archive remains the non-destructive choice.
@@ -622,7 +622,7 @@ packed Sports Lib package. That gate is tracked by GitHub issue #654 under epic 
   The canonical workout JSON and published 400-workout limit do not change.
 - A permanent workout or plan deletion creates a server-internal `trainingCleanupJobs` record in the same transaction
   as its canonical receipt. The callable attempts recursive cleanup immediately; `reconcileTrainingPlanCleanup`
-  scans due jobs every five minutes, leases each job, checks the account-deletion guard and matching deletion
+  scans due jobs every 15 minutes, leases each job, checks the account-deletion guard and matching deletion
   tombstone, then retries with bounded backoff. Plan cleanup creates independent workout cleanup jobs before deleting
   residual workout roots in pages of 100, so unbounded recoverably deleted history cannot exhaust the cleanup worker
   and a partial recursive delete cannot orphan a history subtree after its root disappears. Before any subtree removal,
@@ -635,21 +635,25 @@ packed Sports Lib package. That gate is tracked by GitHub issue #654 under epic 
   enabling the worker. Inspect `[TrainingCleanup] cleanup_retry_failed` logs and due jobs when a lock persists; do not
   delete a lock or job by hand without checking its receipt and tombstone.
 - Deleted-workout expiry uses **no Firestore TTL on workout roots**: TTL would not remove child history and could bypass
-  revision, delivery and completion reconciliation. The existing `reconcileTrainingPlanCleanup` scheduler can scan up
-  to 100 expired roots per invocation in pages of 30 and permanently delete at most 10 through the normal idempotent
-  mutation and durable cleanup-job path. It rechecks the exact deletion timestamp inside the transaction, plus expected state,
-  workout and plan revisions, account-deletion guard and plan locks. Concurrent restore, transfer, plan deletion or
+  revision, delivery and completion reconciliation. The separate daily `reconcileTrainingWorkoutExpiry` scheduler
+  runs at 03:00 UTC and can scan up to 100 expired roots per invocation in pages of 30 and permanently delete at most
+  10 through the normal idempotent mutation and durable cleanup-job path. This 10-per-day cap is global; inspect the
+  expiry backlog before rollout and revisit the bound if new expirations outpace it. The worker rechecks the exact
+  deletion timestamp inside the transaction, plus expected state, workout and plan revisions, account-deletion guard
+  and plan locks. Concurrent restore, transfer, plan deletion or
   another worker makes the stale candidate defer rather than deleting a changed root. The normal cleanup job retries
   interrupted subtree and reverse-link deletion; delivery ledgers and prior explicit past-copy consent remain
   independent so remote withdrawal/reconciliation can finish. Plan-bound immutable revision audit remains until plan
   deletion and cannot recreate an expired/tombstoned workout. This is intentional audit retention, not recoverable
   deleted history. The scan requires the `scheduledWorkouts(lifecycle, deletedAtMs, __name__)` collection-group index.
-  It runs on every five-minute `reconcileTrainingPlanCleanup` invocation, without an environment switch. Deploy/verify
-  both indexes before deploying the updated Function. Existing deleted roots at or beyond 90 days, including legacy
+  It runs independently of the 15-minute cleanup-job retry scheduler, without an environment switch. Deploy/verify
+  both indexes before deploying the updated Functions. Existing deleted roots at or beyond 90 days, including legacy
   roots, then become eligible for the same bounded cleanup; no migration or special grandfathering applies. Before
   production deployment, count expired roots and owner distribution without exporting prescriptions, and inspect the
   cleanup-job backlog and provider state. Observe the initial rollout closely;
-  monitor `[TrainingWorkoutExpiry]` scanned/deleted/deferred/failed counters and `[TrainingCleanup]` retry failures.
+  monitor daily `[TrainingWorkoutExpiry]` scanned/deleted/deferred/failed counters and `[TrainingCleanup]` retry failures.
+  MCP Training reads and mutation contracts do not change: logical deletion is immediate, while these jobs only
+  remove internal expired records and retry already-approved permanent-deletion cleanup.
   Paging lets a blocked first page yield to later candidates; 100 persistently malformed or deferred older roots can
   still block later roots, so sustained failed/deferred counts require operator inspection rather than a guessed manual
   delete. Roll back by deploying the previous Function revision; already committed tombstones and deletions are not

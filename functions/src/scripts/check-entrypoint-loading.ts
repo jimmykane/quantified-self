@@ -11,7 +11,7 @@ const NO_TARGET = '__NO_TARGET__';
 // Exercise a property inherited from Object.prototype so the fallback check
 // also guards against accidental prototype-based routing.
 const UNKNOWN_TARGET = 'toString';
-const EXPECTED_FULL_EXPORT_COUNT = 166;
+const EXPECTED_FULL_EXPORT_COUNT = 167;
 const MARKETING_TARGETS = new Set([
   'listMarketingCampaigns',
   'saveMarketingCampaign',
@@ -323,7 +323,8 @@ async function check(): Promise<void> {
     if (target === 'projectEventTagCatalog') {
       assert(endpoint.availableMemoryMb === 256, `${target} memory configuration changed.`);
       assert(secretKeys.length === 0, `${target} secret bindings changed.`);
-    } else if (target === 'reconcileTrainingPlanCleanup' || target === 'reconcileTrainingBulkShift') {
+    } else if (target === 'reconcileTrainingPlanCleanup'
+      || target === 'reconcileTrainingWorkoutExpiry' || target === 'reconcileTrainingBulkShift') {
       assert(endpoint.availableMemoryMb === 512, `${target} memory configuration changed.`);
       assert(endpoint.timeoutSeconds === 300, `${target} timeout configuration changed.`);
       assert(JSON.stringify(endpoint.concurrency) === 'null'
@@ -331,7 +332,9 @@ async function check(): Promise<void> {
         && JSON.stringify(endpoint.minInstances) === 'null',
       `${target} instance settings changed.`);
       assert(secretKeys.length === 0, `${target} secret bindings changed.`);
-      assert(endpoint.scheduleTrigger?.schedule === 'every 5 minutes'
+      const expectedSchedule = target === 'reconcileTrainingPlanCleanup' ? 'every 15 minutes'
+        : target === 'reconcileTrainingWorkoutExpiry' ? '0 3 * * *' : 'every 5 minutes';
+      assert(endpoint.scheduleTrigger?.schedule === expectedSchedule
         && endpoint.scheduleTrigger.timeZone === 'UTC'
         && JSON.stringify(endpoint.scheduleTrigger.retryConfig) === '{}',
       `${target} schedule changed.`);

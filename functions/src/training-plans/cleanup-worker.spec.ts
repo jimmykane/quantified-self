@@ -12,9 +12,10 @@ vi.mock('./delete-training-plan', () => ({
     parseStoredDeleteResponse: (value: unknown) => value,
 }));
 
-import { processTrainingCleanupJob } from './cleanup-worker';
-import { trainingCleanupJob, trainingCleanupJobRef } from './cleanup-job-contract';
+import { processTrainingCleanupJob, runTrainingCleanupJobs, runTrainingWorkoutExpiry } from './cleanup-worker';
+import { TRAINING_CLEANUP_JOBS_COLLECTION_ID, trainingCleanupJob, trainingCleanupJobRef } from './cleanup-job-contract';
 import { buildTrainingScheduleDeletionTombstone, trainingScheduleDeletionTombstoneDocumentId } from './persistence';
+import { SCHEDULED_WORKOUTS_COLLECTION_ID } from '../../../shared/training-plans';
 
 type Stored = Record<string, unknown>;
 
@@ -81,6 +82,33 @@ describe('durable Training cleanup worker', () => {
         mocks.guard.mockResolvedValue({ shouldSkip: false });
         mocks.cleanupPlan.mockResolvedValue(undefined);
         db = new FakeDb();
+    });
+
+    it('keeps retry and expiry scans on separate scheduled passes', async () => {
+        const queriedCollections: string[] = [];
+        const emptyQuery = () => {
+            const query = {
+                where: vi.fn(), orderBy: vi.fn(), limit: vi.fn(),
+                get: vi.fn(async () => ({ empty: true, docs: [] })),
+            };
+            query.where.mockReturnValue(query);
+            query.orderBy.mockReturnValue(query);
+            query.limit.mockReturnValue(query);
+            return query;
+        };
+        const scheduleDb = {
+            collectionGroup: vi.fn((name: string) => {
+                queriedCollections.push(name);
+                return emptyQuery();
+            }),
+        };
+
+        await runTrainingCleanupJobs(scheduleDb as never, nowMs);
+        expect(queriedCollections).toEqual([TRAINING_CLEANUP_JOBS_COLLECTION_ID]);
+
+        queriedCollections.length = 0;
+        await runTrainingWorkoutExpiry(scheduleDb as never, nowMs);
+        expect(queriedCollections).toEqual([SCHEDULED_WORKOUTS_COLLECTION_ID]);
     });
 
     function seedWorkout(): FakeRef {

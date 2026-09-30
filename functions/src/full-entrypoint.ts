@@ -181,7 +181,7 @@ export { restoreTrainingScheduleRevision } from './training-plans/restore-callab
 export { deleteTrainingPlan } from './training-plans/delete-training-plan-callable';
 export { previewTrainingProviderDelivery, mutateTrainingProviderDelivery } from './training-plans/delivery/commands';
 export { processTrainingDeliveryTask, onTrainingDeliveryQueued, dispatchTrainingDelivery } from './training-plans/delivery/tasks';
-export { reconcileTrainingPlanCleanup } from './training-plans/cleanup-worker';
+export { reconcileTrainingPlanCleanup, reconcileTrainingWorkoutExpiry } from './training-plans/cleanup-worker';
 export { reconcileTrainingBulkShift } from './training-plans/bulk-shift-worker';
 export { onTrainingDeliveryConnectionChanged, onTrainingDeliveryEntitlementChanged } from './training-plans/delivery/lifecycle';
 export {

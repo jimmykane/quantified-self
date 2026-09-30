@@ -4,7 +4,7 @@ import { Firestore } from 'firebase-admin/firestore';
 import { afterAll, describe, expect, it } from 'vitest';
 import { DELETED_WORKOUT_RECOVERY_MS } from '../../../shared/training-plans';
 import { trainingCleanupJob, trainingCleanupJobRef } from './cleanup-job-contract';
-import { reconcileExpiredDeletedWorkouts, reconcileTrainingCleanupJobs, runTrainingPlanCleanup } from './cleanup-worker';
+import { reconcileExpiredDeletedWorkouts, reconcileTrainingCleanupJobs, runTrainingWorkoutExpiry } from './cleanup-worker';
 import { buildTrainingScheduleDeletionTombstone, trainingScheduleDeletionTombstoneDocumentId } from './persistence';
 import { createEmptyTrainingPlanState } from './mutation';
 
@@ -42,7 +42,7 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Training cleanup in isola
         await expired.collection('strengthDetails').doc('current').set({ privateCompanion: true });
         await eligible.set(deletedWorkout('eligible', nowMs - DELETED_WORKOUT_RECOVERY_MS + 1));
         await user.collection('trainingActivityCompletionLinks').doc('old-link').set({ workoutId: 'expired' });
-        await runTrainingPlanCleanup(db, nowMs);
+        await runTrainingWorkoutExpiry(db, nowMs);
         expect((await expired.get()).exists).toBe(false);
         expect((await expired.collection('revisions').doc('0000000001').get()).exists).toBe(false);
         expect((await expired.collection('strengthDetails').doc('current').get()).exists).toBe(false);
