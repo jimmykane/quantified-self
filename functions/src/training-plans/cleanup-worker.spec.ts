@@ -14,7 +14,7 @@ vi.mock('firebase-functions/v2/scheduler', () => ({
         return handler;
     },
 }));
-vi.mock('firebase-functions/logger', () => ({ warn: vi.fn(), info: vi.fn() }));
+vi.mock('firebase-functions/logger', () => ({ warn: vi.fn(), info: vi.fn(), error: vi.fn() }));
 vi.mock('../shared/user-deletion-guard', () => ({ getUserDeletionGuardStateInTransaction: mocks.guard }));
 vi.mock('./delete-training-plan', () => ({
     cleanupDeletedPlanData: mocks.cleanupPlan,
@@ -145,6 +145,49 @@ describe('durable Training cleanup worker', () => {
         const result = await runTrainingWorkoutExpiry({ collectionGroup } as never, nowMs, clock);
         expect(result).toMatchObject({ scanned: 0, deleted: 0, batches: 0, moreDue: null, stopReason: 'time-budget' });
         expect(collectionGroup).not.toHaveBeenCalled();
+    });
+
+    it('keeps the sweep successful when only the final backlog check fails', async () => {
+        const query = {
+            where: vi.fn(), orderBy: vi.fn(), limit: vi.fn(),
+            get: vi.fn().mockResolvedValueOnce({ empty: true, docs: [] })
+                .mockRejectedValueOnce(new Error('backlog query unavailable')),
+        };
+        query.where.mockReturnValue(query);
+        query.orderBy.mockReturnValue(query);
+        query.limit.mockReturnValue(query);
+        const result = await runTrainingWorkoutExpiry({ collectionGroup: vi.fn(() => query) } as never, nowMs);
+        expect(result).toMatchObject({ scanned: 0, deleted: 0, moreDue: null, stopReason: 'drained' });
+        expect(logger.warn).toHaveBeenCalledWith('[TrainingWorkoutExpiry]', { event: 'backlog_check_failed' });
+    });
+
+    it('reports progress within a failed batch and rethrows a later page failure', async () => {
+        let page = 0;
+        const query = {
+            where: vi.fn(), orderBy: vi.fn(), limit: vi.fn(), startAfter: vi.fn(),
+            get: vi.fn(async () => {
+                if (page === 5) throw new Error('query unavailable');
+                const count = page === 3 ? 10 : 30;
+                const start = page++ * 30;
+                const docs = Array.from({ length: count }, (_, index) => ({
+                    id: `invalid-${start + index}`,
+                    ref: { path: `users/owner-1/scheduledWorkouts/invalid-${start + index}` },
+                    data: () => ({}),
+                }));
+                return { empty: false, size: docs.length, docs };
+            }),
+        };
+        query.where.mockReturnValue(query);
+        query.orderBy.mockReturnValue(query);
+        query.limit.mockReturnValue(query);
+        query.startAfter.mockReturnValue(query);
+        const collectionGroup = vi.fn(() => query);
+        await expect(runTrainingWorkoutExpiry({ collectionGroup } as never, nowMs))
+            .rejects.toThrow('query unavailable');
+        expect(logger.error).toHaveBeenCalledWith('[TrainingWorkoutExpiry]', {
+            event: 'sweep_failed', scanned: 130, deleted: 0, deferred: 0, failed: 130,
+            batches: 2, moreDue: null, stopReason: 'sweep-error',
+        });
     });
 
     function seedWorkout(): FakeRef {

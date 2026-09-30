@@ -638,13 +638,16 @@ packed Sports Lib package. That gate is tracked by GitHub issue #654 under epic 
   revision, delivery and completion reconciliation. The separate daily `reconcileTrainingWorkoutExpiry` scheduler
   runs at 03:00 UTC in batches of up to 10 deletions and 100 inspected roots, permanently deleting at most 100
   workouts globally per invocation. The daily scan stops after 1,000 inspected roots or four minutes, whichever
-  comes first, leaving at least a minute below the Function's five-minute timeout. A batch resumes after its last
-  inspected root even when it stopped partway through a fetched page. Expired roots not processed within these bounds
+  comes first, nominally reserving a minute below the Function's five-minute timeout; a single slow operation can
+  consume that margin. A batch resumes after its last inspected root even when it stopped partway through a fetched page.
+  Expired roots not processed within these bounds
   remain eligible for the next daily run. The worker rechecks the exact
   deletion timestamp inside the transaction, plus expected state, workout and plan revisions, account-deletion guard
   and plan locks. Concurrent restore, transfer, plan deletion or
   another worker makes the stale candidate defer rather than deleting a changed root. The normal cleanup job retries
-  interrupted subtree and reverse-link deletion; delivery ledgers and prior explicit past-copy consent remain
+  interrupted subtree and reverse-link deletion. A committed permanent-delete transaction counts toward the daily
+  deletion cap even if its subsequent recursive cleanup fails; the result also records a failure while the durable job
+  retries. Delivery ledgers and prior explicit past-copy consent remain
   independent so remote withdrawal/reconciliation can finish. Plan-bound immutable revision audit remains until plan
   deletion and cannot recreate an expired/tombstoned workout. This is intentional audit retention, not recoverable
   deleted history. The scan requires the `scheduledWorkouts(lifecycle, deletedAtMs, __name__)` collection-group index.
@@ -659,7 +662,10 @@ packed Sports Lib package. That gate is tracked by GitHub issue #654 under epic 
   MCP Training reads and mutation contracts do not change: logical deletion is immediate, while these jobs only
   remove internal expired records and retry already-approved permanent-deletion cleanup.
   `moreDue` is a fresh one-document due query after the sweep, not a full backlog count; it may be `null` if the
-  runtime budget was reached or that check failed. Paging lets a blocked first page yield to later candidates;
+  runtime budget was reached or that check failed. A page-query or commit-verification failure keeps the invocation
+  failed and logs a `sweep-error` summary with redacted, per-candidate progress so already completed deletions remain
+  observable.
+  Paging lets a blocked first page yield to later candidates;
   1,000 persistently malformed or deferred older roots can still block later roots, so sustained failed/deferred counts
   or `scan-limit` runs require operator inspection rather than a guessed manual delete. Rollback needs a separately
   approved, coordinated change to both scheduled Functions: restoring the old

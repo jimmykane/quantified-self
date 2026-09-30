@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { ActivityTypes } from '@sports-alliance/sports-lib';
 import { Firestore } from 'firebase-admin/firestore';
-import { afterAll, describe, expect, it } from 'vitest';
+import { afterAll, describe, expect, it, vi } from 'vitest';
 import { DELETED_WORKOUT_RECOVERY_MS } from '../../../shared/training-plans';
 import { trainingCleanupJob, trainingCleanupJobRef } from './cleanup-job-contract';
 import { reconcileExpiredDeletedWorkouts, reconcileTrainingCleanupJobs, runTrainingWorkoutExpiry } from './cleanup-worker';
@@ -85,6 +85,38 @@ describe.skipIf(!emulatorHost)('Training cleanup in isolated demo Firestore', { 
         expect((await user.collection('trainingPlans').doc('plan').get()).get('revision')).toBe(2);
         expect((await pastCleanup.get()).get('enabled')).toBe(true);
         expect((await ledger.get()).exists).toBe(true); // Reconciliation, not expiry, owns remote state.
+    });
+
+    it('counts a committed deletion when post-commit subtree cleanup fails, then retries its durable job', async () => {
+        const uid = `expiry-${randomUUID()}`; uids.push(uid);
+        const user = db.collection('users').doc(uid);
+        await user.set({ test: true });
+        await user.collection('trainingPlanState').doc('current').set(createEmptyTrainingPlanState(nowMs));
+        const workout = user.collection('scheduledWorkouts').doc('cleanup-interrupted');
+        await workout.set(deletedWorkout(workout.id, nowMs - DELETED_WORKOUT_RECOVERY_MS));
+        const history = workout.collection('revisions').doc('0000000001');
+        await history.set({ privateHistory: true });
+
+        const recursiveDelete = db.recursiveDelete.bind(db);
+        const interrupted = vi.spyOn(db, 'recursiveDelete').mockImplementation(async ref => {
+            if (ref.path === workout.path) throw new Error('simulated recursive cleanup interruption');
+            return recursiveDelete(ref);
+        });
+        let result;
+        try {
+            result = await runTrainingWorkoutExpiry(db, nowMs);
+        } finally {
+            interrupted.mockRestore();
+        }
+        expect(result).toMatchObject({ scanned: 1, deleted: 1, failed: 1, moreDue: false });
+        expect((await workout.get()).exists).toBe(false);
+        expect((await history.get()).exists).toBe(true);
+        const job = trainingCleanupJobRef(db, uid, 'workout', workout.id);
+        expect((await job.get()).exists).toBe(true);
+
+        expect((await reconcileTrainingCleanupJobs(db, nowMs)).completed).toBe(1);
+        expect((await history.get()).exists).toBe(false);
+        expect((await job.get()).exists).toBe(false);
     });
 
     it('does not expire a workout during account deletion', async () => {
@@ -175,6 +207,44 @@ describe.skipIf(!emulatorHost)('Training cleanup in isolated demo Firestore', { 
         expect((await roots[124].collection('revisions').doc('0000000001').get()).exists).toBe(false);
         expect((await recent.get()).exists).toBe(true);
         expect((await active.get()).exists).toBe(true);
+    });
+
+    it('keeps the 100-delete cap when every committed mutation needs cleanup retry', async () => {
+        const stressNowMs = nowMs - 60 * 24 * 60 * 60 * 1_000;
+        const uid = `expiry-interrupted-stress-${randomUUID()}`; uids.push(uid);
+        const user = db.collection('users').doc(uid);
+        const batch = db.batch();
+        batch.set(user, { test: true });
+        batch.set(user.collection('trainingPlanState').doc('current'), createEmptyTrainingPlanState(stressNowMs));
+        const roots = Array.from({ length: 105 }, (_, index) => {
+            const id = `interrupted-${String(index).padStart(3, '0')}`;
+            const ref = user.collection('scheduledWorkouts').doc(id);
+            batch.set(ref, deletedWorkout(id, stressNowMs - DELETED_WORKOUT_RECOVERY_MS - 1));
+            return ref;
+        });
+        await batch.commit();
+
+        const recursiveDelete = db.recursiveDelete.bind(db);
+        const interrupted = vi.spyOn(db, 'recursiveDelete').mockImplementation(async ref => {
+            if (ref.path.startsWith(`${user.path}/scheduledWorkouts/`)) {
+                throw new Error('simulated recursive cleanup interruption');
+            }
+            return recursiveDelete(ref);
+        });
+        let result;
+        try {
+            result = await runTrainingWorkoutExpiry(db, stressNowMs);
+        } finally {
+            interrupted.mockRestore();
+        }
+        expect(result).toMatchObject({ scanned: 100, deleted: 100, failed: 100,
+            moreDue: true, stopReason: 'deletion-limit' });
+        expect((await roots[99].get()).exists).toBe(false);
+        expect((await roots[100].get()).exists).toBe(true);
+        const lastJob = trainingCleanupJobRef(db, uid, 'workout', roots[99].id);
+        expect((await lastJob.get()).exists).toBe(true);
+        expect((await reconcileTrainingCleanupJobs(db, stressNowMs)).completed).toBe(100);
+        expect((await lastJob.get()).exists).toBe(false);
     });
 
     it('reconciles a committed workout receipt and recursively removes orphaned history', async () => {

@@ -68,6 +68,7 @@ async function scanExpiredDeletedWorkoutsBatch(
     maxScan: number,
     maxDeletes: number,
     shouldStop: () => boolean,
+    onProgress?: (counts: ExpiryCounts) => void,
 ): Promise<ExpiryBatch> {
     const due = expiredWorkoutQuery(db, nowMs);
     let cursor = initialCursor;
@@ -89,8 +90,9 @@ async function scanExpiredDeletedWorkoutsBatch(
             processedInPage += 1;
             scanned += 1;
             const uid = expiredWorkoutOwner(snapshot.ref.path);
-            if (!uid) { deferred += 1; continue; }
+            let mutationId: string | null = null;
             try {
+                if (!uid) { deferred += 1; continue; }
                 const workout = parseScheduledWorkoutV1(snapshot.data());
                 if (workout.id !== snapshot.id || isDeletedWorkoutRecoverable(workout, nowMs)) {
                     deferred += 1; continue;
@@ -111,7 +113,7 @@ async function scanExpiredDeletedWorkoutsBatch(
                 const removePastProviderCopies = marker?.schemaVersion === 1 && marker.scope === 'workout'
                     && marker.scopeId === workout.id && marker.enabled === true
                     && marker.deletedAtMs === workout.deletedAtMs;
-                const mutationId = `expiry_${createHash('sha256')
+                mutationId = `expiry_${createHash('sha256')
                     .update(JSON.stringify([uid, workout.id, workout.deletedAtMs])).digest('hex').slice(0, 48)}`;
                 await mutateTrainingScheduleForUser(uid, {
                     mutationId,
@@ -136,9 +138,37 @@ async function scanExpiredDeletedWorkoutsBatch(
                 });
                 deleted += 1;
             } catch (error) {
+                if (uid && mutationId && !(error instanceof TrainingScheduleMutationError)) {
+                    const tombstoneId = trainingScheduleDeletionTombstoneDocumentId('workout', snapshot.id);
+                    let tombstone: admin.firestore.DocumentSnapshot;
+                    try {
+                        tombstone = await db.collection('users').doc(uid).collection('trainingPlanState').doc('current')
+                            .collection(TRAINING_SCHEDULE_DELETION_TOMBSTONES_COLLECTION_ID).doc(tombstoneId).get();
+                    } catch {
+                        // The transaction may already have committed. Stop the
+                        // sweep rather than undercounting its deletion budget.
+                        failed += 1;
+                        throw error;
+                    }
+                    const value = tombstone.data();
+                    if (value?.schemaVersion === TRAINING_PLAN_SCHEMA_VERSION && value.entityKind === 'workout'
+                        && value.entityIdHash === tombstoneId && value.mutationId === mutationId) {
+                        if (value.createdAtMs === nowMs) {
+                            // The transaction committed; only post-commit
+                            // recursive cleanup failed. Its durable job retries.
+                            deleted += 1;
+                            failed += 1;
+                        } else {
+                            deferred += 1;
+                        }
+                        continue;
+                    }
+                }
                 if (error instanceof TrainingScheduleMutationError
                     && ['revision-conflict', 'not-found', 'failed-precondition'].includes(error.code)) deferred += 1;
                 else failed += 1;
+            } finally {
+                onProgress?.({ scanned, deleted, deferred, failed });
             }
         }
         if (processedInPage === page.size && page.size < pageSize) {
@@ -313,21 +343,35 @@ export async function runTrainingWorkoutExpiry(
     let exhausted = false;
     let batches = 0;
     const overTime = () => clock() - startedAt >= EXPIRY_RUNTIME_BUDGET_MS;
-    while (out.scanned < MAX_DAILY_EXPIRED_SCAN && out.deleted < MAX_DAILY_EXPIRED_DELETIONS && !overTime()) {
-        const batch = await scanExpiredDeletedWorkoutsBatch(
-            db, nowMs, cursor,
-            Math.min(MAX_EXPIRED_SCAN, MAX_DAILY_EXPIRED_SCAN - out.scanned),
-            Math.min(MAX_EXPIRED_DELETIONS, MAX_DAILY_EXPIRED_DELETIONS - out.deleted),
-            overTime,
-        );
-        batches += 1;
-        out.scanned += batch.scanned;
-        out.deleted += batch.deleted;
-        out.deferred += batch.deferred;
-        out.failed += batch.failed;
-        cursor = batch.cursor;
-        exhausted = batch.exhausted;
-        if (exhausted || batch.scanned === 0) break;
+    try {
+        while (out.scanned < MAX_DAILY_EXPIRED_SCAN && out.deleted < MAX_DAILY_EXPIRED_DELETIONS && !overTime()) {
+            const beforeBatch = { ...out };
+            const applyProgress = (counts: ExpiryCounts) => {
+                out.scanned = beforeBatch.scanned + counts.scanned;
+                out.deleted = beforeBatch.deleted + counts.deleted;
+                out.deferred = beforeBatch.deferred + counts.deferred;
+                out.failed = beforeBatch.failed + counts.failed;
+            };
+            batches += 1;
+            const batch = await scanExpiredDeletedWorkoutsBatch(
+                db, nowMs, cursor,
+                Math.min(MAX_EXPIRED_SCAN, MAX_DAILY_EXPIRED_SCAN - out.scanned),
+                Math.min(MAX_EXPIRED_DELETIONS, MAX_DAILY_EXPIRED_DELETIONS - out.deleted),
+                overTime,
+                applyProgress,
+            );
+            applyProgress(batch);
+            cursor = batch.cursor;
+            exhausted = batch.exhausted;
+            if (exhausted || batch.scanned === 0) break;
+        }
+    } catch (error) {
+        // Keep the invocation failed so the scheduler can surface/retry it,
+        // but do not lose the counts from batches that already committed.
+        logger.error('[TrainingWorkoutExpiry]', {
+            event: 'sweep_failed', ...out, batches, moreDue: null, stopReason: 'sweep-error',
+        });
+        throw error;
     }
     const stopReason = overTime() ? 'time-budget'
         : out.deleted >= MAX_DAILY_EXPIRED_DELETIONS ? 'deletion-limit'
