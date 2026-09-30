@@ -532,6 +532,41 @@ packed Sports Lib package. That gate is tracked by GitHub issue #654 under epic 
 
 ### Persistence, mutation, and history
 
+#### Workout library snapshots (#653)
+
+The authenticated `/training/plans/library` route is a free, noindex part of the Plans workspace. A library entry is an
+undated, owner-scoped `WorkoutLibraryItemV1` at `users/{uid}/workoutLibrary/{itemId}`. It stores a validated v1
+`WorkoutStructureV1`, title, optional complete Strength Training exercise draft, active/archived status, revision and
+timestamps. It contains no schedule, completion, provider identity or delivery consent. The canonical structure JSON
+and Sports Lib unit boundary are unchanged. Browser rules permit owner reads only; `mutateWorkoutLibrary` owns
+create, snapshot-from-current-workout, update, status and confirmed deletion. It verifies Auth, App Check, account
+deletion, expected item/source revision, a 200-entry cap and an idempotent mutation receipt. IDs deleted from the
+library are tombstoned against reuse. Each library edit increments private library state for MCP cursor invalidation;
+all receipts, tombstones and state live under `trainingPlanState/current` and are server-only. Account cleanup
+recursively deletes library entries and that private subtree.
+
+`placeWorkoutLibrary` resolves the active, exact-revision saved prescription on the server and atomically instantiates
+1–100 sorted, distinct local dates into one destination plan or Standalone. It revalidates the entry inside the same
+transaction as the schedule write, enforces expected schedule/plan revisions and range-extension confirmation,
+derives stable new workout IDs from the mutation ID, and records both schedule and placement receipts. The resulting
+workouts are ordinary independent `ScheduledWorkoutV1` snapshots with optional `templateOrigin: {itemId,revision}`
+outside `WorkoutStructureV1`. Edits/archives/deletion of the saved recipe never rewrite them; copying or moving a
+scheduled workout preserves its authored snapshot and provenance. A single bulk plan revision/checkpoint covers
+multi-date placement. Preflight write/byte bounds can reject a large prescription; retry in smaller date batches.
+The existing delivery reconciliation marker applies to new active-plan workouts, while Standalone copies receive no
+Send opt-in. No template edit, save, archive or placement changes completed-event totals.
+
+The library UI uses the existing unit-aware manual/strength editor and compact rows. Placement selects a destination,
+inclusive dates and weekdays, previews count/overlaps, and honors the account week-start preference in weekday order.
+It supports empty/loading/error states, keyboard-accessible Material controls, haptics and narrow-screen wrapping.
+Existing plan and workout URLs remain unchanged; library items use path IDs, not query IDs. Help explains the separate
+library and calendar semantics. MCP impact: additive `list_saved_workouts` and `get_saved_workout` use the existing
+Training read grant, bounded pages/response sizes, opaque owner-bound references, full strength drafts on exact reads,
+and a library-revision cursor fence. Existing registered plan/workout read and mutation schemas, Training write grant,
+Assistant approval behavior, and provider permissions are unchanged. Approval-gated library writes/placement through
+MCP and the Assistant remain in focused epic subissue #780 (Project 2); the browser callables do not authorize clients
+to infer or submit provider consent. #653 must not be marked complete while that agreed slice remains open.
+
 - Owner-visible current state is stored at `users/{uid}/trainingPlanState/current`,
   `users/{uid}/trainingPlans/{planId}`, and `users/{uid}/scheduledWorkouts/{workoutId}`. Browser writes are denied.
 - Authenticated, App Check-enforced callables own mutations, history reads, restore previews/restores, and plan deletion.

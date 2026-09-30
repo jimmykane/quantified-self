@@ -443,6 +443,13 @@ const derivedPayloadFixtures = {
 
 
 const trainingReadFixtures = {
+ list_saved_workouts: { libraryRevision: 1, scanComplete: true, recordsScanned: 1, nextCursor: null,
+   workouts: [{ savedWorkoutRef: 'opaque-saved-workout-reference', title: 'Easy run', status: 'active',
+     revision: 1, createdAtMs: 1, updatedAtMs: 1 }] },
+ get_saved_workout: { libraryRevision: 1, savedWorkout: { savedWorkoutRef: 'opaque-saved-workout-reference',
+   title: 'Easy run', status: 'active', revision: 1, createdAtMs: 1, updatedAtMs: 1,
+   structure: { version: 1, sport: ActivityTypes.Running,
+     nodes: [{ kind: 'step', id: 'step', purpose: 'work', ending: { kind: 'time', seconds: 1800 }, targets: [] }] } } },
  list_training_plans: { scheduleRevision: 1, scanComplete: true, recordsScanned: 1, limitsReached: [], nextCursor: null, plans: [{ planRef: 'opaque-plan-reference', name: 'Autumn', lifecycle: 'active', startDate: '2026-07-01', endDate: '2026-07-02', revision: 1, currentWorkoutCount: 1, color: null, createdAtMs: 1, updatedAtMs: 1 }] },
  get_training_plan: { scheduleRevision: 1, plan: { planRef: 'opaque-plan-reference', name: 'Autumn', lifecycle: 'active', startDate: '2026-07-01', endDate: '2026-07-02', revision: 1, currentWorkoutCount: 1, color: null, createdAtMs: 1, updatedAtMs: 1 } },
  query_planned_workouts: { scheduleRevision: 1, scanComplete: true, recordsScanned: 1, limitsReached: [], nextCursor: null, startDate: '2026-07-01', endDate: '2026-07-02', scope: 'calendar', workouts: [{ workoutRef: 'opaque-workout-reference', planRef: null, title: 'Easy run', localDate: '2026-07-01', lifecycle: 'planned', revision: 1, createdAtMs: 1, updatedAtMs: 1 }] },
@@ -1335,6 +1342,8 @@ const successfulToolArguments: Record<
   PublicMcpToolName,
   Record<string, unknown>
 > = {
+  list_saved_workouts: {},
+  get_saved_workout: { savedWorkoutRef: 'opaque-saved-workout-reference' },
   list_training_plans: {},
   get_training_plan: { planRef: 'opaque-plan-reference' },
   query_planned_workouts: { startDate: '2026-07-01', endDate: '2026-07-02' },
@@ -1980,12 +1989,14 @@ describe.each<FixtureTransport>(['in-memory', 'legacy-http', 'modern-http'])('MC
     // Keep the frozen surface's budget; each additive family has its own explicit bound.
     const planTools = tools.filter(tool => (TRAINING_READ_TOOLS as readonly string[]).includes(tool.name));
     const planReadExtensions = planTools.filter(tool => (TRAINING_READ_EXTENSION_TOOLS as readonly string[]).includes(tool.name)
-      && tool.name !== 'get_planned_workout_v2');
+      && tool.name !== 'get_planned_workout_v2' && !['list_saved_workouts', 'get_saved_workout'].includes(tool.name));
     const planReadV2 = planTools.filter(tool => tool.name === 'get_planned_workout_v2');
+    const planLibraryReads = planTools.filter(tool => ['list_saved_workouts', 'get_saved_workout'].includes(tool.name));
     const planReadCore = planTools.filter(tool => !(TRAINING_READ_EXTENSION_TOOLS as readonly string[]).includes(tool.name));
     expect(Buffer.byteLength(JSON.stringify(planReadCore), 'utf8')).toBeLessThan(32 * 1024);
     expect(Buffer.byteLength(JSON.stringify(planReadExtensions), 'utf8')).toBeLessThan(12 * 1024);
     expect(Buffer.byteLength(JSON.stringify(planReadV2), 'utf8')).toBeLessThan(20 * 1024);
+    expect(Buffer.byteLength(JSON.stringify(planLibraryReads), 'utf8')).toBeLessThan(20 * 1024);
     const planWriteTools = tools.filter(tool => (TRAINING_WRITE_TOOLS as readonly string[]).includes(tool.name));
     const planWriteExtensions = planWriteTools.filter(tool => (TRAINING_WRITE_EXTENSION_TOOLS as readonly string[]).includes(tool.name)
       && tool.name !== 'preview_planned_workout_v2_change');

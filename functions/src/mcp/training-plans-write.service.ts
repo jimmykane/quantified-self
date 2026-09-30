@@ -399,7 +399,7 @@ function expectedRevisions(snapshot: TrainingScheduleSnapshotV1, operation: Trai
     case 'create-plan': if (operation.activate) addPlan(snapshot.state.activePlanId); break;
     case 'rename-plan': case 'set-plan-color': case 'shift-plan': addPlan(operation.planId); break;
     case 'set-plan-lifecycle': addPlan(operation.planId); if (operation.lifecycle === 'active') addPlan(snapshot.state.activePlanId); break;
-    case 'create-workout': addPlan(operation.planId); break;
+    case 'create-workout': case 'bulk-create-workouts': addPlan(operation.planId); break;
     case 'update-workout': case 'move-workout': {
       const current = addWorkout(operation.workoutId); addPlan(current?.planId); addPlan(operation.planId); break;
     }
@@ -420,6 +420,7 @@ function describeOperation(operation: TrainingScheduleMutationOperationV1): stri
     case 'set-plan-lifecycle': return `${operation.lifecycle === 'active' ? 'Activate' : operation.lifecycle === 'paused' ? 'Pause' : 'Archive'} the plan.`;
     case 'shift-plan': return `Shift the plan ${Math.abs(operation.days)} day${Math.abs(operation.days) === 1 ? '' : 's'} ${operation.days > 0 ? 'later' : 'earlier'}.`;
     case 'create-workout': return `Create “${operation.title}” on ${operation.localDate}${operation.planId ? ' in the selected plan' : ' as a standalone workout'}.`;
+    case 'bulk-create-workouts': return `Create ${operation.placements.length} independent copies of “${operation.title}”${operation.planId ? ' in the selected plan' : ' as standalone workouts'}.`;
     case 'update-workout': return `Update “${operation.title}” and schedule it for ${operation.localDate}.`;
     case 'move-workout': return `Move the workout to ${operation.localDate}${operation.planId ? ' in the selected plan' : ' as a standalone workout'}.`;
     case 'copy-workout': return `Copy the workout to ${operation.localDate}${operation.planId ? ' in the selected plan' : ' as a standalone workout'}.`;

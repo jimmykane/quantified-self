@@ -93,7 +93,7 @@ const TRAINING_PLANS_ROUTE_DATA: Data = {
 
 function trainingPlansRoute(
   path: string,
-  mode: 'browse' | 'create' | 'edit',
+  mode: 'browse' | 'create' | 'edit' | 'library-browse' | 'library-create' | 'library-edit',
   scope: 'plans' | 'standalone' = 'plans',
   preload = false,
 ): Route {
@@ -617,6 +617,9 @@ const topLevelRoutes: Routes = [
     canMatch: [authGuard, onboardingGuard]
   },
   trainingPlansRoute('training/plans/workout/:workoutId', 'edit'),
+  trainingPlansRoute('training/plans/library/new', 'library-create'),
+  trainingPlansRoute('training/plans/library/:itemId', 'library-edit'),
+  trainingPlansRoute('training/plans/library', 'library-browse'),
   trainingPlansRoute('training/plans/standalone/new', 'create', 'standalone'),
   trainingPlansRoute('training/plans/plan/:planId/new', 'create'),
   trainingPlansRoute('training/plans/new', 'create'),

@@ -39,6 +39,9 @@ export const mutateTrainingSchedule = onCall({
 
     try {
         const parsed = parseMutateTrainingScheduleRequestV1(request.data);
+        if (parsed.operation.kind === 'bulk-create-workouts') {
+            throw new HttpsError('invalid-argument', 'Use the workout library placement action.');
+        }
         return await mutateTrainingScheduleForUser(request.auth.uid, parsed);
     } catch (error) {
         if (error instanceof TrainingPlanContractError || error instanceof WorkoutStructureValidationError) {
