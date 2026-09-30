@@ -524,6 +524,17 @@ unsupported. No live provider acceptance, app/watch receipt or completed-activit
 emulator tests. The additive MCP strength read and preview use existing independent Training permissions; the registered
 v1 recipe tool remains only a compatibility summary. See `docs/mcp-server.md` for the exact wire boundary.
 
+Production delivery wrappers bind the complete provider policy methods instead of forwarding a fixed argument list.
+This preserves the strength companion in compatibility assessment and the existing explicit past-removal opt-in.
+A valid Suunto strength companion is degraded, not unsupported; missing, foreign or mismatched details still fail
+closed. Load-only edits change the mapping approval digest even when the v1 summary is unchanged. Old unsupported
+rows are reassessed by ordinary reconciliation, but plan sync opt-in alone never approves degraded strength delivery:
+without a matching saved digest they become `approval_required`, not automatically sent. Wrapper unit tests and
+synthetic-provider Firestore tests cover this recovery, reviewed create/update, concurrent sends and MCP preview/apply.
+Past-copy removal remains opt-in, completed copies stay protected, and COROS's past-deletion restriction is unchanged.
+This wrapper repair changes no MCP tool, schema, scope, consent or response field; existing strength details and delivery
+status reads remain authoritative. Product Help already describes Suunto's manual transitions and review requirement.
+
 Do not add planned-workout `Data*` types, `DataStore` entries, FIT parser behavior, or MCP fields merely to share this
 recipe. Extract the neutral structure, codec, validator, and reusable analysis to Sports Lib only after Garmin and COROS
 pass separately authorized create/update/reschedule/delete round trips, Wahoo and Suunto mapping fixtures are complete, the provider adapters

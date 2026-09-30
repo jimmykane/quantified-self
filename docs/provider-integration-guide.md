@@ -198,6 +198,13 @@ new COROS Send/sync remains Coming soon until entitlement and account-side push/
 strength delivery are unsupported. Suunto strength has demo-emulator evidence, not live app/watch proof. See #740
 and #741 for remaining account-side delivery proof.
 
+Runtime wrappers must preserve the entire pure policy interface, including the optional strength companion in
+`assess` and the explicit past-removal opt-in in `canRemove`; bind the policy method rather than copying a fixed
+argument list. Keep OAuth/HTTP execution separately bound to the authorized account. A plan's sync opt-in is not
+approval of Suunto's degraded strength mapping; the matching prescription digest still needs explicit confirmation.
+Missing/mismatched strength details remain unsupported, completed copies remain protected, and COROS still rejects
+past deletion even with opt-in. Synthetic wrapper/emulator evidence is not provider app/watch acceptance evidence.
+
 | Provider | Availability | Truthful delivery model and remaining limits |
 | --- | --- | --- |
 | Garmin | `enabled` | Connected Pro users can explicitly deliver compatible running/cycling or pool-swimming workouts through separate Workout and Workout Schedule lifecycle records after granting `WORKOUT_IMPORT`. Running/cycling sub-sports still fold to broad `RUNNING`/`CYCLING`; pool swimming maps to `LAP_SWIMMING` with optional explicit pool length and target-free swim steps. Owner-account cloud create/edit/reschedule/readback/withdrawal passed on 23 and 27 September 2026. For one separate 25 m standalone workout, the owner confirmed Garmin Connect and watch visibility on 27 September. Open-water swimming is unmapped. Cloud acceptance alone never proves app/watch receipt or completed-activity linkage; this one watch observation is not a guarantee for other devices. There is no authoritative missing-copy repair from negative reads; completion correlation is tracked separately in #651. |

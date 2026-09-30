@@ -1,11 +1,12 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { Firestore } from 'firebase-admin/firestore';
 import { ActivityTypes } from '@sports-alliance/sports-lib';
-import { afterAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { DeliveryRuntime } from '../training-plans/delivery/contracts';
 import { FakeTrainingTransport } from '../training-plans/delivery/test-support/fake-transport';
 import { SuuntoHttpFixture } from '../training-plans/delivery/test-support/suunto-http-fixture';
 import { SuuntoGuideTransport } from '../training-plans/delivery/suunto/transport';
+import { productionDeliveryRuntime } from '../training-plans/delivery/runtime';
 import { WahooHttpFixture } from '../training-plans/delivery/test-support/wahoo-http-fixture';
 import { WahooTrainingTransport } from '../training-plans/delivery/wahoo/transport';
 import { reconcileTrainingDeliveryPage } from '../training-plans/delivery/store';
@@ -54,6 +55,7 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Training MCP write propos
       grantId: 'grant-1', createdAtMs: 1, revokedAtMs: null });
   });
 
+  afterEach(() => { vi.unstubAllEnvs(); });
   afterAll(async () => {
     for (const id of users) await db.recursiveDelete(db.collection('users').doc(id));
     await db.terminate();
@@ -658,6 +660,49 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Training MCP write propos
     expect([...suunto.guides.values()][0].guide.steps[0]).toMatchObject({ fields: expect.arrayContaining([
       expect.objectContaining({ type: 'text', value: longNote.slice(0, 40) }),
     ]) });
+    expect(suunto.calls.filter(call => call.method === 'POST')).toHaveLength(1);
+  });
+
+  it('preserves strength details in the production policy for MCP Send preview and approval-gated apply', async () => {
+    vi.stubEnv('SUUNTOAPP_GUIDE_OWNER', 'Quantified Self');
+    const suunto = new SuuntoHttpFixture();
+    const synthetic = new SuuntoGuideTransport(suunto.request, 'Quantified Self', deps.now);
+    const policy = productionDeliveryRuntime(db).transport('suunto', uid)!;
+    const wrapped = { ...policy, inspection: synthetic.inspection,
+      execute: synthetic.execute.bind(synthetic), recover: synthetic.recover.bind(synthetic) };
+    deps.runtime.transport = provider => provider === 'suunto' ? wrapped : null;
+    const strength = { version: 1 as const, exercises: [{ id: 'squat', name: 'Squat', sets: [{
+      id: 'set-one', ending: { kind: 'repetitions' as const, repetitions: 5 }, externalLoadKg: 80, restAfterSeconds: 120,
+    }] }] };
+    const authored = await previewStrengthWorkoutChange({ uid, connectionId: 'connection', scopes,
+      arguments: { expectedScheduleRevision: 1, change: { kind: 'create-workout', localKey: 'lift', plan: null,
+        localDate: '2026-09-18', title: 'Strength day', strength } } }, deps);
+    const created = await applyTrainingChanges({ uid, connectionId: 'connection', scopes,
+      arguments: { proposalRef: authored.proposalRef, permissionMode: 'schedule' } }, deps);
+    const preview = await previewTrainingChanges({ uid, connectionId: 'connection', scopes,
+      arguments: { expectedScheduleRevision: created.scheduleRevision, changes: [{ kind: 'provider-delivery',
+        targetType: 'workout', target: { ref: created.createdReferences[0].reference },
+        providers: ['suunto'], action: 'send', timeZone: 'Europe/Helsinki' }] } }, deps);
+    expect(preview).toMatchObject({ permissionMode: 'delivery', requiresConfirmation: true });
+    expect(preview.providerPreviews[0]).toMatchObject({ provider: 'suunto', availability: 'ready', warningCount: 1,
+      summary: expect.stringContaining('manual transitions for repetitions') });
+    expect(preview.providerPreviews[0].summary).toContain('Confirming this proposal approves');
+    const user = db.collection('users').doc(uid);
+    expect((await user.collection('trainingDeliverySettings').get()).empty).toBe(true);
+    expect(suunto.calls).toHaveLength(0);
+    const input = { uid, connectionId: 'connection', scopes,
+      arguments: { proposalRef: preview.proposalRef, permissionMode: preview.permissionMode } };
+    const applied = await applyTrainingChanges(input, deps);
+    expect(applied.providers).toEqual([expect.objectContaining({ provider: 'suunto', status: 'applied' })]);
+    await expect(applyTrainingChanges(input, deps)).resolves.toEqual(applied);
+    for (let page = 0; page < 20 && await reconcileTrainingDeliveryPage(deps.runtime, uid); page += 1) { /* drain */ }
+    const ledger = (await user.collection('trainingDeliveryLedger').get()).docs[0];
+    await Promise.all([processTrainingDelivery(deps.runtime, uid, ledger.id), processTrainingDelivery(deps.runtime, uid, ledger.id)]);
+    expect((await user.collection('trainingDeliveryStatuses').doc(ledger.id).get()).data())
+      .toMatchObject({ provider: 'suunto', status: 'delivered', hasRemoteCopy: true });
+    expect(suunto.guides.size).toBe(1);
+    expect([...suunto.guides.values()][0].guide.activities).toEqual([23]);
+    expect(JSON.stringify([...suunto.guides.values()][0].guide.steps)).toContain('80 kg');
     expect(suunto.calls.filter(call => call.method === 'POST')).toHaveLength(1);
   });
 
