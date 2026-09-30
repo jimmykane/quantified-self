@@ -10,7 +10,9 @@ import { RouterTestingModule } from '@angular/router/testing';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   ASSISTANT_CREATE_TODAYS_WORKOUT_PROMPT,
+  ASSISTANT_LATEST_TRAINING_IMPACT_PROMPT,
   ASSISTANT_PROMPT_CARDS,
+  ASSISTANT_YESTERDAY_TRAINING_IMPACT_PROMPT,
 } from '@shared/assistant.prompts';
 import { AssistantExploreBottomSheetComponent } from './assistant-explore-bottom-sheet.component';
 import { writeFileSync, readFileSync } from 'node:fs';
@@ -60,6 +62,12 @@ describe('AssistantExploreBottomSheetComponent', () => {
     expect(buttons.at(-1)?.getAttribute('aria-label')).toContain(
       ASSISTANT_CREATE_TODAYS_WORKOUT_PROMPT,
     );
+    expect(buttons.some(button => button.getAttribute('aria-label')?.includes(
+      ASSISTANT_LATEST_TRAINING_IMPACT_PROMPT,
+    ))).toBe(true);
+    expect(buttons.some(button => button.getAttribute('aria-label')?.includes(
+      ASSISTANT_YESTERDAY_TRAINING_IMPACT_PROMPT,
+    ))).toBe(true);
     expect(fixture.nativeElement.textContent).toContain('Your data stays in your control');
     expect(fixture.nativeElement.textContent).toContain('Precise activity locations');
     expect(fixture.nativeElement.textContent).toContain('starts a new chat');

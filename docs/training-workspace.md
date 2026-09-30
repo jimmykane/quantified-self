@@ -2867,6 +2867,11 @@ titles, labels, exact start times, devices, providers, or source provenance. Rea
 activity/event documents and the existing Form snapshot; they do not scan activity history. This adds no persisted
 field, derived-metric kind, internal derived schema version, mutation, provider action, or new OAuth scope.
 
+Assistant example questions make the same read discoverable for the latest completed workout and for yesterday's
+complete local-date activity selection. They remain contextual prompts: the existing Assistant routing discovers the
+request-time references and prepares Form, while the MCP service keeps the identity, date, completion, coverage, and
+benchmark checks authoritative. No MCP schema, grant, registered-app contract, plugin starter, or mutation changes.
+
 The card starts with a concise interpretation of Form (recent fatigue relative to longer-term fitness) and labels the
 model as TSS-backed workouts only. When the no-workout forecast exists, the only follow-up prompt is to compare that
 scenario with today; it does not imply that the athlete should stop training.

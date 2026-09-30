@@ -343,6 +343,13 @@ tool is absent or generation does not invoke the declared tools in order. Tests 
 every declared mocked MCP workflow tool and verify each workflow against the production MCP tool registry. The
 Assistant examples are therefore the only user-facing conversational prompt catalog that needs maintenance.
 
+The latest-workout and yesterday Training-impact cards are contextual examples rather than fixed workflow examples.
+They use the ordinary guarded Training-impact routing because the exact activity reference or complete local-day
+selection exists only at request time: discover the completed activity or bounded day, prepare Form, then call the
+identity-safe Training-impact read. The MCP service still validates opaque-reference ownership, completion, local-date
+membership, UTC Training-day coverage, and benchmark exclusion. These cards add no tool, output field, OAuth scope,
+plugin starter, registered-app contract, provider action, or mutation.
+
 `functions/src/assistant/metric-intent.ts` adds one narrow catalog-driven workflow outside that marketing catalog: an
 unambiguous yearly or all-history request for one Sports Lib summary family with explicit average, minimum, or maximum
 semantics. It derives canonical metric selectors and canonical activity types from Sports Lib, derives the bounded

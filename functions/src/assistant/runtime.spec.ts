@@ -5,7 +5,9 @@ import { ChartDataCategoryTypes, DataDuration, TimeIntervals } from '@sports-all
 import {
   ASSISTANT_ANALYTICAL_PROMPT_WORKFLOWS,
   ASSISTANT_CREATE_TODAYS_WORKOUT_PROMPT,
+  ASSISTANT_LATEST_TRAINING_IMPACT_PROMPT,
   ASSISTANT_PROMPT_EXAMPLES,
+  ASSISTANT_YESTERDAY_TRAINING_IMPACT_PROMPT,
   findAssistantPromptExample,
   findAssistantPromptWorkflow,
 } from '../../../shared/assistant.prompts';
@@ -736,6 +738,20 @@ describe('Assistant runtime', () => {
         && example.toolWorkflow.length > 0
         && example.routingHint.trim().length > 0,
     )).toBe(true);
+  });
+
+  it('keeps Training-impact discovery prompts contextual and on the guarded read path', () => {
+    expect(findAssistantPromptWorkflow(ASSISTANT_LATEST_TRAINING_IMPACT_PROMPT)).toBeNull();
+    expect(findAssistantPromptWorkflow(ASSISTANT_YESTERDAY_TRAINING_IMPACT_PROMPT)).toBeNull();
+    expect(ASSISTANT_SYSTEM_INSTRUCTIONS).toContain(
+      'For Training impact of one completed session, discover the exact activity, prepare the Form metric',
+    );
+    expect(ASSISTANT_SYSTEM_INSTRUCTIONS).toContain(
+      'For a selected local calendar day, first complete the bounded activity read for that date',
+    );
+    expect(ASSISTANT_SYSTEM_INSTRUCTIONS).toContain(
+      'never include planned workouts or activities from another local date',
+    );
   });
 
   it('keeps the MTB record example within the bounded authoritative ranking workflow', () => {

@@ -37,6 +37,12 @@ export interface AssistantPromptExample extends AssistantPromptWorkflow, Assista
 export const ASSISTANT_CREATE_TODAYS_WORKOUT_PROMPT =
   'Create one new standalone workout for today based on my readiness—using my HRV, sleep, overnight heart rate, and recent training load. Consider the workouts already in my plan so the session does not duplicate or conflict with them. Show me the proposed session before adding it.';
 
+export const ASSISTANT_LATEST_TRAINING_IMPACT_PROMPT =
+  'Did my latest completed workout build fitness load or only offset decay?';
+
+export const ASSISTANT_YESTERDAY_TRAINING_IMPACT_PROMPT =
+  "How did yesterday's training affect CTL and Form?";
+
 export const ASSISTANT_PROMPT_EXAMPLES = [
   {
     id: 'daily-report',
@@ -90,12 +96,24 @@ export const ASSISTANT_PROMPT_EXAMPLES = [
 ] as const satisfies readonly AssistantPromptExample[];
 
 /**
- * Starter questions whose reads and proposal shape depend on the current day.
- * They intentionally bypass the fixed deterministic workflows above so the
- * Assistant can collect its server-owned daily workout context before asking
- * the model for one focused proposal.
+ * Starter questions whose reads depend on live relative-day or activity
+ * selection. They intentionally bypass the fixed deterministic workflows
+ * above: Training-impact reads retain their server-validated activity/date
+ * boundaries, while today's workout uses its server-owned daily context.
  */
 export const ASSISTANT_CONTEXTUAL_PROMPT_EXAMPLES = [
+  {
+    id: 'latest-training-impact',
+    prompt: ASSISTANT_LATEST_TRAINING_IMPACT_PROMPT,
+    shortLabel: 'Latest workout impact',
+    icon: 'fitness_center',
+  },
+  {
+    id: 'yesterday-training-impact',
+    prompt: ASSISTANT_YESTERDAY_TRAINING_IMPACT_PROMPT,
+    shortLabel: "Yesterday's impact",
+    icon: 'calendar_today',
+  },
   {
     id: 'create-todays-workout',
     prompt: ASSISTANT_CREATE_TODAYS_WORKOUT_PROMPT,

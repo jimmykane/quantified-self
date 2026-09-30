@@ -359,6 +359,7 @@ describe('help.content', () => {
     expect(assistantSection?.content).toContain('ranks the matching Mountain Biking activities');
     expect(assistantSection?.content).toContain('instead of comparing jump counts');
     expect(assistantSection?.content).toContain('identity-free **Training impact**');
+    expect(assistantSection?.content).toContain("latest completed workout and yesterday's training");
     expect(assistantSection?.content).toContain('A local date can have two UTC outcomes');
     expect(assistantSection?.content).toContain('not measured physiological adaptation');
     expect(assistantSection?.content).toContain('Use [Connections -> MCP](/services?serviceName=mcp)');
