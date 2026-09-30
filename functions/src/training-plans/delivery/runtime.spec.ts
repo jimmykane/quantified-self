@@ -80,7 +80,25 @@ describe('Production Training delivery rollout', () => {
     expect(fetcher).not.toHaveBeenCalled();
   });
 
-  it.each(['garmin', 'coros', 'wahoo'] as const)('does not approve strength delivery to unsupported %s', provider => {
+  it('preserves full COROS strength assessment and load-only digest changes through the production wrapper without I/O', () => {
+    const fetcher = vi.fn();
+    vi.stubGlobal('fetch', fetcher);
+    const transport = runtime.transport('coros', 'owner')!;
+    const assessment = transport.assess(strengthWorkout, inspection.destinationKey, inspection.timeZone, strength);
+    expect(assessment).toMatchObject({ level: 'exact', issues: [] });
+    expect(assessment.requiresApproval).not.toBe(true);
+    const changed = structuredClone(strength);
+    changed.exercises[0].sets[0].externalLoadKg = 55;
+    expect(transport.assess(strengthWorkout, inspection.destinationKey, inspection.timeZone, changed).digest).not.toBe(assessment.digest);
+    for (const invalid of [undefined, null, { ...strength, workoutId: 'foreign' },
+      { ...strength, exercises: [{ ...strength.exercises[0], name: 'Changed name' }] },
+      { ...strength, exercises: [{ ...strength.exercises[0], sets: [{ ...strength.exercises[0].sets[0], externalLoadKg: -1 }] }] }]) {
+      expect(transport.assess(strengthWorkout, inspection.destinationKey, inspection.timeZone, invalid).level).toBe('unsupported');
+    }
+    expect(fetcher).not.toHaveBeenCalled();
+  });
+
+  it.each(['garmin', 'wahoo'] as const)('does not approve strength delivery to unsupported %s', provider => {
     const fetcher = vi.fn();
     vi.stubGlobal('fetch', fetcher);
     expect(runtime.transport(provider, 'owner')!.assess(strengthWorkout, inspection.destinationKey, inspection.timeZone, strength).level)

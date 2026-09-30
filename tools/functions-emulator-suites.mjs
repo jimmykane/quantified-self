@@ -7,6 +7,7 @@ export const EMULATOR_SUITES = {
     'src/training-plans/delivery/delivery.emulator.spec.ts',
     'src/training-plans/delivery/garmin/worker.emulator.spec.ts',
     'src/training-plans/delivery/coros/batch-worker.emulator.spec.ts',
+    'src/training-plans/delivery/coros/strength.emulator.spec.ts',
     'src/training-plans/delivery/wahoo/worker.emulator.spec.ts',
     'src/training-plans/delivery/suunto/suunto.emulator.spec.ts',
   ],

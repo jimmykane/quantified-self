@@ -1,5 +1,6 @@
 import { ActivityTypes, WeightUnits } from '@sports-alliance/sports-lib';
 import { describe, expect, it } from 'vitest';
+import { assessPlannedWorkoutProviderMappingV1 } from '../../../shared/planned-workout-providers';
 import {
   formatStrengthLoadKg,
   parseStrengthWorkoutDetailsV1,
@@ -58,6 +59,14 @@ describe('strength prescription contract', () => {
   it('uses Sports Lib weight formatting with account units', () => {
     expect(formatStrengthLoadKg(80)).toContain('kg');
     expect(formatStrengthLoadKg(80)).toBe('80.0 kg');
+    expect(formatStrengthLoadKg(80, { weightUnits: WeightUnits.Pounds })).toBe('176.4 lb');
+  });
+  it('assesses COROS from the full strict companion without changing canonical kg or kg/lb display', () => {
+    const companion = parseStrengthWorkoutDetailsV1(details);
+    const structure = projectStrengthWorkoutToV1(companion);
+    expect(assessPlannedWorkoutProviderMappingV1('coros', structure, companion)).toEqual({ provider: 'coros', level: 'exact', issues: [] });
+    expect(assessPlannedWorkoutProviderMappingV1('coros', structure).level).toBe('unsupported');
+    expect(companion.exercises[0].sets[0].externalLoadKg).toBe(80);
     expect(formatStrengthLoadKg(80, { weightUnits: WeightUnits.Pounds })).toBe('176.4 lb');
   });
 });

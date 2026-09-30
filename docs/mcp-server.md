@@ -250,6 +250,10 @@ owner/grant/revision/expiry-bound proposal and approval-gated `apply_training_ch
 consent is added. Exercise names are untrusted user text. Suunto Gym Guide compatibility is degraded because reps
 need manual transitions. The existing Send/Enable sync consent covers that standard limitation, disclosed in the
 delivery preview without separate per-workout/per-edit mapping approval; additional mapping loss still needs review.
+COROS compatibility uses the full validated companion and reports exact named/set/reps-or-time/rest/fixed-kg mappings,
+or unsupported missing/mismatched details. Its delivery preview performs no provider I/O and apply keeps independent
+Training/delivery grants, native/app confirmation and idempotency. The browser's Coming soon gate is unchanged;
+local assessment and synthetic delivery tests are not entitlement, cloud, app/watch or completion evidence (#741).
 Normal owner/grant-bound MCP proposal confirmation and apply remain required. No registered schema, scope, permission,
 provider action or response field changes for this policy. COROS new-send remains Coming soon, and Garmin/Wahoo are
 unsupported. New additive tools need

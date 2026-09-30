@@ -1,4 +1,5 @@
 import { createHash } from 'crypto';
+import type { StrengthWorkoutDetailsV1 } from '../../../../shared/strength-workout';
 import {
     assessPlannedWorkoutProviderMappingV1,
     type PlannedWorkoutProviderId,
@@ -102,8 +103,9 @@ export function resolveProviderSerializationIssuesV1(params: {
     structure: unknown;
     additionalIssues?: readonly ProviderSerializationIssueV1[];
     allowDegraded: boolean;
+    strength?: StrengthWorkoutDetailsV1;
 }): Pick<ProviderSerializationResultV1<never>, 'provider' | 'level' | 'issues'> {
-    const assessment = assessPlannedWorkoutProviderMappingV1(params.provider, params.structure);
+    const assessment = assessPlannedWorkoutProviderMappingV1(params.provider, params.structure, params.strength);
     const issues: ProviderSerializationIssueV1[] = [
         ...assessment.issues.map((issue: PlannedWorkoutProviderMappingIssueV1) => ({ ...issue })),
         ...(params.additionalIssues ?? []),

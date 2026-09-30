@@ -519,9 +519,10 @@ change load units. An unchanged rounded pound display preserves its stored kilog
 Suunto maps strength to a dated Gym (`23`) Guide containing exercise/set instructions. Rep sets use manual transitions,
 so mapping remains degraded and is not native strength tracking. This standard limitation is disclosed during normal
 Send/Enable plan sync; it does not require separate per-workout or per-edit mapping approval. Additional losses, such
-as shortened exercise instructions, still require explicit review of the current mapping. COROS has a contract fixture
-for strength Reps/Second, optional Rest and fixed equipment weight in kilograms, but browser new-send remains Coming
-soon until entitlement and account-side push/update/delete proof (#741). Garmin and Wahoo strength delivery are
+as shortened exercise instructions, still require explicit review of the current mapping. COROS's backend maps the full
+companion to strength Reps/Second, optional Rest and fixed equipment weight in kilograms through its existing batch
+delivery path. Its browser new-send remains Coming soon until entitlement and account-side push/update/delete proof
+(#741); local implementation and synthetic tests do not satisfy that proof. Garmin and Wahoo strength delivery are
 unsupported. No live provider acceptance, app/watch receipt or completed-activity link is claimed from isolated
 emulator tests. The additive MCP strength read and preview use existing independent Training permissions; the registered
 v1 recipe tool remains only a compatibility summary. See `docs/mcp-server.md` for the exact wire boundary.
@@ -1328,6 +1329,23 @@ first-target-only mapping keep the existing payload-bound approval rules. Push s
 covering the submitted batch; delete success/failure lists are resolved per workout. Past and completed artifacts remain
 protected.
 
+Strength Training uses the same COROS batch/identity/consent infrastructure. The full strict owner-scoped companion,
+not the v1 summary, supplies ordered named exercises and individual sets. The API Reference V2.0.6 §6.1 contract maps
+each set to `Type: Step`, `Name`, `Length: Reps|Second`, optional `Rest: Second` and optional
+`IntensityTarget: ValueOfEquipmentWeight` in kilograms. Fractional and zero external loads are preserved, and absent
+load/rest stay absent; no body-weight substitution or exercise guessing occurs. Existing canonical limits bound the
+projection to 100 nodes, including rests. QS's kg/lb presentation remains Sports Lib-backed and never changes the wire unit.
+
+Assessment, the production wrapper and batch payload construction all use the companion. Missing, foreign, malformed or
+projection-mismatched details fail closed before HTTP. The full exercises participate in strength mapping/content
+digests: load-only edits cannot be mistaken for already delivered content, and payload construction rejects a stale
+digest before the started request journal. Existing non-strength digests/fixtures are unchanged. Deletion works from
+retained IDs without requiring the companion; only unexecuted today/future copies are eligible, even with explicit
+past-cleanup opt-in. Synthetic production-policy/HTTP/demo-Firestore tests cover standalone/active-plan create, update,
+reschedule, duplicate/concurrent dispatch, uncertain acceptance, reconnect, owner/account isolation and deletion fencing.
+Live COROS entitlement, push/update/delete and app/watch evidence are deliberately omitted from this implementation
+at the owner's request and remain unchecked in #741. The Coming soon browser gate and backend enablement are unchanged.
+
 Inbound COROS `planWorkoutId` is matched only to the exact positive partner workout ID under the same active account and
 credential authority. Webhook and history imports use the same transaction: one unambiguous root workout can write the
 existing safe completion projection/private reverse link and mark its delivery completed. Duplicate imports are
@@ -1350,6 +1368,12 @@ backend readiness, proposal availability and `all_connected` behavior remain unc
 the exact authored Sports Lib activity type, while `get_training_sync_status` exposes only existing sanitized statuses
 and never the COROS payload. The existing Mountain Biking read fixture covers exact recipe preservation. No new scope,
 tool, registered schema, Assistant route or plugin update is needed.
+
+The #741 strength implementation extends existing compatibility reads to the validated full companion and reports
+local exact/unsupported results. Existing delivery preview/apply use that same assessment with independent Training
+and delivery grants, native/app confirmation, revision/expiry checks and idempotency. Preview performs no provider I/O.
+No tool, schema, annotation, scope, permission, provider action or private transport field is added. This is mapping
+implementation, not cloud acceptance, watch receipt or completed-activity proof.
 
 #### SuuntoPlus Guide delivery (#650)
 
