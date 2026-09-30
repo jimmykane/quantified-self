@@ -195,29 +195,54 @@ export async function enrichSleepWithNightlyHrv(
   if (!records.length) return sessions;
   const accountKeys = new Map<string, Promise<string>>();
   const result: NightlyHrvSleepSession[] = [...sessions];
-  for (const group of nightlyHrvSleepCandidateGroups(sessions)) {
-    const indexes = group.map(candidate => candidate.index);
-    if (indexes.some(index => positiveNightlyHrv(sessions[index].vitals?.averageHrvMs)
-      || positiveNightlyHrv(sessions[index].vitals?.overnightHrvMs))) continue;
-    const candidate = [...group].sort((left, right) => right.endTimeMs - left.endTimeMs
+  const groups = [] as Array<{
+    candidates: NightlyHrvSleepCandidate[];
+    latest: NightlyHrvSleepCandidate;
+    session: SleepSession;
+    accountKey: string;
+    identity: string;
+    hasNativeHrv: boolean;
+  }>;
+  for (const candidates of nightlyHrvSleepCandidateGroups(sessions)) {
+    const latest = [...candidates].sort((left, right) => right.endTimeMs - left.endTimeMs
       || right.startTimeMs - left.startTimeMs
       || (sessions[right.index].id || '').localeCompare(sessions[left.index].id || ''))[0];
-    const index = candidate.index;
-    const session = sessions[index];
+    const session = sessions[latest.index];
     const providerAccountId = session.source.providerUserId;
     if (!providerAccountId || providerAccountId.length > 1024 || (session.userID && session.userID !== uid)) continue;
     const identity = sleepEvidenceSourceKey(session);
     if (!accountKeys.has(identity)) accountKeys.set(identity, nightlyHealthAccountKey(uid, session.source.provider, providerAccountId));
     const accountKey = await accountKeys.get(identity)!;
-    const candidates = new Map<string, Set<number>>();
+    groups.push({ candidates, latest, session, accountKey, identity,
+      hasNativeHrv: candidates.some(candidate => positiveNightlyHrv(sessions[candidate.index].vitals?.averageHrvMs)
+        || positiveNightlyHrv(sessions[candidate.index].vitals?.overnightHrvMs)) });
+  }
+
+  // A summary spanning two separate sleeps cannot be assigned to either night.
+  // Include native-HRV groups in the match count so they cannot lend their summary to another group.
+  const matchedGroup = new Map<NightlyHrvRecord, number | null>();
+  groups.forEach(({ candidates, latest, session, accountKey }, groupIndex) => {
     for (const record of records) {
       if (record.userID !== uid || record.schemaVersion !== 1 || record.source?.provider !== session.source.provider
-        || record.source.accountKey !== accountKey || record.calendarDate !== candidate.sleepDate
+        || record.source.accountKey !== accountKey || record.calendarDate !== latest.sleepDate
         || !['interval_summary', 'daily_summary'].includes(record.kind) || !Array.isArray(record.metrics)
         || !Number.isSafeInteger(record.startTimeMs) || !Number.isSafeInteger(record.endTimeMs)
-        || record.endTimeMs <= record.startTimeMs) continue;
-      // An overnight interval must overlap this night's real sleep, not just share its date.
-      if (!group.some(item => record.startTimeMs < item.endTimeMs && record.endTimeMs > item.startTimeMs)) continue;
+        || record.endTimeMs <= record.startTimeMs
+        || !candidates.some(candidate => record.startTimeMs < candidate.endTimeMs && record.endTimeMs > candidate.startTimeMs)) continue;
+      const previousGroup = matchedGroup.get(record);
+      if (previousGroup === undefined) matchedGroup.set(record, groupIndex);
+      else if (previousGroup !== groupIndex) matchedGroup.set(record, null);
+    }
+  });
+  const uniqueRecords = groups.map(() => [] as NightlyHrvRecord[]);
+  for (const [record, groupIndex] of matchedGroup) {
+    if (groupIndex !== null) uniqueRecords[groupIndex].push(record);
+  }
+
+  groups.forEach(({ latest, session, identity, hasNativeHrv }, groupIndex) => {
+    if (hasNativeHrv) return;
+    const candidates = new Map<string, Set<number>>();
+    for (const record of uniqueRecords[groupIndex]) {
       for (const raw of record.metrics) {
         let entry: HealthMetricEntry;
         try { entry = decodeHealthMetricSportsLibData(raw); } catch { continue; }
@@ -232,11 +257,11 @@ export async function enrichSleepWithNightlyHrv(
         candidates.get(key)!.add(entry.canonical.value);
       }
     }
-    if (candidates.size !== 1) continue;
+    if (candidates.size !== 1) return;
     const [sourceKey, values] = [...candidates][0];
-    if (values.size !== 1) continue;
-    result[index] = { ...session, nightlyHrvSourceKey: sourceKey,
+    if (values.size !== 1) return;
+    result[latest.index] = { ...session, nightlyHrvSourceKey: sourceKey,
       vitals: { ...session.vitals, overnightHrvMs: [...values][0] } };
-  }
+  });
   return result;
 }

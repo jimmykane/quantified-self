@@ -1656,7 +1656,8 @@ multi-day physiology questions to `get_sleep_trend` and availability-only questi
 With both `health:read` and `sleep:read`, these Sleep reads, `get_daily_report`, `get_current_readiness`, and `get_today_readiness` can also fill
 missing nightly HRV from a matching canonical Health overnight-average summary. Matching is by owner, provider/account,
 provider date, and overlapping main-sleep interval. Native Sleep HRV is preserved, each night is supplemented once,
-and conflicts, spot/activity/manual HRV, and unidentified legacy accounts are excluded. Health is never read through
+and a summary overlapping separate sleep groups for the same account and date is withheld rather than copied to both.
+Conflicts, spot/activity/manual HRV, and unidentified legacy accounts are excluded. Health is never read through
 Sleep permission alone. The backend scans complete summary pages (32 per read; at most 2,048 records and 16 MiB),
 using the existing metric/calendar-date/document-ID index with owner/deletion guards. Incomplete reads fail with a bounded
 or temporary-unavailability error rather than a partial value. No samples or provider API calls are needed. Existing

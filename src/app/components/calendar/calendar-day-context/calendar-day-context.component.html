@@ -279,7 +279,7 @@
       <mat-nav-list>
         @for (activity of activities(); track activity.id) {
           @if (activity.route) {
-            <a mat-list-item [routerLink]="activity.route" (click)="prepareNavigation()">
+            <a mat-list-item appHapticTap [routerLink]="activity.route" (click)="prepareNavigation()">
               <span matListItemTitle>{{ activity.name }}</span><span matListItemLine>{{ activity.duration }}</span>
               @if (trainingImpactState().status !== 'private') {
                 <app-training-impact matListItemLine [impact]="activity.trainingImpact" variant="compact"></app-training-impact>
@@ -328,7 +328,7 @@
         <mat-nav-list>
           @for (entry of plannedRows(); track entry.workout.id) {
             <div class="calendar-day-context-plan" [style.--planned-workout-color]="entry.color">
-              <a mat-list-item [routerLink]="['/training/plans/workout', entry.workout.id]" (click)="prepareNavigation()">
+              <a mat-list-item appHapticTap [routerLink]="['/training/plans/workout', entry.workout.id]" (click)="prepareNavigation()">
                 <span matListItemTitle>{{ entry.workout.title }}</span>
                 <span matListItemLine>{{ entry.planName || 'Standalone' }} · {{ entry.lifecycle }}</span>
                 <span matListItemLine>{{ entry.summary.join(' · ') }}</span>

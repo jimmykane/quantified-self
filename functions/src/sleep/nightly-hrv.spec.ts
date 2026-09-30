@@ -164,6 +164,31 @@ describe('shared nightly HRV', () => {
     expect(result[0].vitals?.overnightHrvMs).toBe(44);
     expect(result[1].vitals).toBeUndefined();
   });
+  it('withholds a Health summary spanning separate Suunto sleep groups', async () => {
+    const earlier = {
+      ...sleep(SLEEP_PROVIDERS.SuuntoApp), id: 'earlier',
+      endTimeMs: start + 3 * 3600000, durationSeconds: 3 * 3600,
+    };
+    const later = {
+      ...sleep(SLEEP_PROVIDERS.SuuntoApp), id: 'later',
+      startTimeMs: start + 5 * 3600000, durationSeconds: 3 * 3600,
+    };
+    const spanning = await record(SLEEP_PROVIDERS.SuuntoApp);
+    const ambiguous = await enrichSleepWithNightlyHrv(uid, [earlier, later], [spanning]);
+    expect(ambiguous.every(session => session.vitals?.overnightHrvMs === undefined)).toBe(true);
+
+    const earlierOnly = { ...spanning, endTimeMs: earlier.endTimeMs };
+    const laterOnly = { ...spanning, startTimeMs: later.startTimeMs,
+      metrics: spanning.metrics.map(entry => entry.kind === 'value' && entry.canonical
+        ? { ...entry, canonical: { ...entry.canonical, value: 48 } } : entry) };
+    const specific = await enrichSleepWithNightlyHrv(uid, [earlier, later], [spanning, earlierOnly, laterOnly]);
+    expect(specific.map(session => session.vitals?.overnightHrvMs)).toEqual([44, 48]);
+
+    const native = await enrichSleepWithNightlyHrv(uid,
+      [earlier, { ...later, vitals: { averageHrvMs: 50 } }], [spanning]);
+    expect(native[0].vitals).toBeUndefined();
+    expect(native[1].vitals?.averageHrvMs).toBe(50);
+  });
   it.each(['owner', 'account', 'provider', 'date', 'interval', 'spot', 'maximum', 'manual', 'zero', 'nan', 'unknown'])('rejects %s mismatches', async kind => {
     const r = await record();
     const m = r.metrics[0];

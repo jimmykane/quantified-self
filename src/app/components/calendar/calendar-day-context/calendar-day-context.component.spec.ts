@@ -1,11 +1,11 @@
 import { signal } from '@angular/core';
-import { AppThemes, DistanceUnits, type EventInterface } from '@sports-alliance/sports-lib';
+import { ActivityTypes, AppThemes, DistanceUnits, type EventInterface } from '@sports-alliance/sports-lib';
 import { buildTrainingLoadPoints } from '@shared/training-load';
 import { normalizeUserUnitSettings } from '@shared/unit-aware-display';
 import type { TimelineNote } from '@shared/timeline-notes';
 import { TestBed } from '@angular/core/testing';
 import { ViewportScroller } from '@angular/common';
-import { provideRouter } from '@angular/router';
+import { provideRouter, Router } from '@angular/router';
 import { Subject } from 'rxjs';
 import { vi, expect, it, describe } from 'vitest';
 import { buildActivityCalendarViewModel } from '../../../helpers/activity-calendar.helper';
@@ -225,5 +225,25 @@ describe('CalendarDayContextComponent', () => {
     fixture.detectChanges();
     expect(fixture.nativeElement.querySelector('app-training-impact .training-impact')).toBeTruthy();
     expect(fixture.nativeElement.querySelector('.calendar-day-timeline-content app-training-impact')).toBeTruthy();
+
+    fixture.componentRef.setInput('standaloneDayPage', false);
+    fixture.componentRef.setInput('data', {
+      ...data('2026-09-13'), day: trainingDay, plannedWorkouts: [{ workout: {
+        schemaVersion: 1, id: 'workout-1', planId: 'plan-1', localDate: '2026-09-13',
+        lifecycle: 'planned', title: 'Recovery ride',
+        structure: { version: 1, sport: ActivityTypes.Cycling, nodes: [] },
+        revision: 1, createdAtMs: 1, updatedAtMs: 1,
+      } }],
+    });
+    fixture.detectChanges();
+    const activityLink = fixture.nativeElement.querySelector('[aria-label="Activities on selected day"] a[mat-list-item]') as HTMLAnchorElement;
+    const workoutLink = fixture.nativeElement.querySelector('[aria-label="Planned workouts on selected day"] .calendar-day-context-plan a') as HTMLAnchorElement;
+    expect(activityLink?.getAttribute('href')).toContain('/event/training-event');
+    expect(workoutLink?.getAttribute('href')).toBe('/training/plans/workout/workout-1');
+    vi.spyOn(TestBed.inject(Router), 'navigateByUrl').mockResolvedValue(true);
+    haptics.selection.mockClear();
+    activityLink.click();
+    workoutLink.click();
+    expect(haptics.selection).toHaveBeenCalledTimes(2);
   });
 });
