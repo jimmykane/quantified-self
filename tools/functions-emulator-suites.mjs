@@ -13,6 +13,7 @@ export const EMULATOR_SUITES = {
   lifecycle: [
     'src/training-plans/large-schedule.emulator.spec.ts',
     'src/training-plans/strength.lifecycle.emulator.spec.ts',
+    'src/training-plans/workout-library.emulator.spec.ts',
     'src/training-plans/cleanup-worker.emulator.spec.ts',
   ],
   completion: [
