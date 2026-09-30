@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
+    DERIVED_FORM_PAYLOAD_VERSION,
     DERIVED_METRIC_KINDS,
     DERIVED_METRIC_SCHEMA_VERSION,
     DERIVED_TRAINING_BUILD_COMPARISON_RECOVERY_VERSION,
@@ -211,6 +212,41 @@ describe('decideDerivedMetricsFreshness', () => {
         )).toBe(false);
     });
 
+    it('rebuilds only Form when its internal exact-count payload is legacy or malformed', () => {
+        const dayMs = Date.UTC(2026, 3, 14);
+        const validPayload = {
+            payloadVersion: DERIVED_FORM_PAYLOAD_VERSION,
+            dayBoundary: 'UTC',
+            rangeStartDayMs: dayMs,
+            rangeEndDayMs: dayMs,
+            dailyLoads: [{ dayMs, load: 42, activityCount: 1 }],
+            excludesMergedEvents: true,
+        };
+        expect(resolveDerivedMetricSnapshotPayloadValidity(
+            DERIVED_METRIC_KINDS.Form, validPayload, 1,
+        )).toBe(true);
+        expect(resolveDerivedMetricSnapshotPayloadValidity(
+            DERIVED_METRIC_KINDS.Form, validPayload, 2,
+        )).toBe(false);
+        expect(resolveDerivedMetricSnapshotPayloadValidity(
+            DERIVED_METRIC_KINDS.Form,
+            { ...validPayload, payloadVersion: 1, dailyLoads: [{ dayMs, load: 42 }] },
+        )).toBe(false);
+
+        const decision = decideDerivedMetricsFreshness({
+            ...baseInput,
+            metricKinds: [DERIVED_METRIC_KINDS.Form, DERIVED_METRIC_KINDS.Acwr],
+            metricSnapshotsByKind: buildMetricSnapshots({
+                [DERIVED_METRIC_KINDS.Form]: { payloadValid: false },
+            }),
+        });
+        expect(decision).toMatchObject({
+            shouldQueue: true,
+            metricKindsToQueue: [DERIVED_METRIC_KINDS.Form],
+            reason: 'invalid_metric_payload',
+        });
+    });
+
     it('queues hard- and calendar-stale snapshots together in request order', () => {
         const decision = decideDerivedMetricsFreshness({
             ...baseInput,
@@ -389,7 +425,7 @@ describe('decideDerivedMetricsFreshness', () => {
         expect(resolveDerivedMetricSnapshotPayloadValidity(
             DERIVED_METRIC_KINDS.Form,
             legacyPayload,
-        )).toBe(true);
+        )).toBe(false);
     });
 
     it('rebuilds only build comparisons created before the current recovery calculation', () => {

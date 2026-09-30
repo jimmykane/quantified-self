@@ -10,8 +10,10 @@ import {
     DERIVED_METRICS_COORDINATOR_DOC_ID,
     CALENDAR_SENSITIVE_DERIVED_METRIC_KINDS,
     getDerivedMetricDocId,
+    hasMatchingDerivedFormSourceEventCount,
     normalizeDerivedMetricKinds,
     normalizeDerivedMetricKindsStrict,
+    resolveDerivedFormMetricPayload,
     type EnsureDerivedMetricsRequest,
     type EnsureDerivedMetricsResponse,
     type DerivedMetricKind,
@@ -319,7 +321,11 @@ async function readDerivedMetricsProbe(uid: string, metricKinds: DerivedMetricKi
             schemaVersion: toFiniteNumber(snapshotData.schemaVersion),
             builtFromEventMutationVersion: toFiniteNumber(snapshotData.builtFromEventMutationVersion),
             asOfDayMs: toFiniteNumber(payload.asOfDayMs),
-            payloadValid: isDerivedMetricSnapshotReadableByMcp(metricKind, snapshotData.payload),
+            payloadValid: isDerivedMetricSnapshotReadableByMcp(
+                metricKind,
+                snapshotData.payload,
+                snapshotData.sourceEventCount,
+            ),
         };
         return result;
     }, {} as DerivedMetricsFreshnessInput['metricSnapshotsByKind']);
@@ -456,12 +462,18 @@ export const ensureDerivedMetrics = onCall({
 export function resolveDerivedMetricSnapshotPayloadValidity(
     metricKind: DerivedMetricKind,
     payload: unknown,
+    sourceEventCount?: unknown,
 ): boolean {
     if (payload === null || payload === undefined) {
         return false;
     }
     if (metricKind === DERIVED_METRIC_KINDS.TrainingDurability) {
         return hasTrainingDurabilitySupportingEventStartTimes(payload);
+    }
+    if (metricKind === DERIVED_METRIC_KINDS.Form) {
+        return sourceEventCount === undefined
+            ? resolveDerivedFormMetricPayload(payload) !== null
+            : hasMatchingDerivedFormSourceEventCount(payload, sourceEventCount);
     }
     if (metricKind === DERIVED_METRIC_KINDS.TrainingReadiness) {
         return normalizeDerivedTrainingReadinessMetricPayload(payload) !== null;
@@ -475,8 +487,12 @@ export function resolveDerivedMetricSnapshotPayloadValidity(
     return true;
 }
 
-export function isDerivedMetricSnapshotReadableByMcp(metricKind: DerivedMetricKind, payload: unknown): boolean {
-    return resolveDerivedMetricSnapshotPayloadValidity(metricKind, payload)
+export function isDerivedMetricSnapshotReadableByMcp(
+    metricKind: DerivedMetricKind,
+    payload: unknown,
+    sourceEventCount?: unknown,
+): boolean {
+    return resolveDerivedMetricSnapshotPayloadValidity(metricKind, payload, sourceEventCount)
         && isMcpTrainingMetricPayloadReadable(metricKind, payload);
 }
 

@@ -601,6 +601,11 @@
         }
       </div>
       <div class="training-load-grid">
+        <app-training-impact-recap
+          [points]="derivedState.formPoints"
+          [formStatus]="derivedState.formStatus"
+          [darkTheme]="isDarkTheme()"
+        ></app-training-impact-recap>
         @if (derivedState.formStatus === 'ready' || derivedState.formPoints?.length) {
           <article class="training-chart-panel training-chart-panel-wide qs-glass-card-panel">
             <app-form-chart [timelineNotes]="timelineNotes.context()" [data]="derivedState.formPoints" [formStatus]="derivedState.formStatus" [darkTheme]="isDarkTheme()" [infoTooltip]="loadTrajectoryInfoTooltip" timelineWindow="m"></app-form-chart>

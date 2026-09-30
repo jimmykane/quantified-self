@@ -74,7 +74,7 @@ import {
   DERIVED_METRIC_SCHEMA_VERSION,
   DERIVED_TRAINING_BUILD_COMPARISON_RECOVERY_VERSION,
   DERIVED_METRICS_ENTRY_TYPES,
-  DerivedFormMetricPayload,
+  DerivedFormDailyLoadEntry,
   DerivedFormNowMetricPayload,
   DerivedBodyWeightTrendMetricPayload,
   DerivedMetricKind,
@@ -89,6 +89,7 @@ import {
   DerivedTrainingExplanationWindowMetrics,
   DerivedTrainingSummaryMetricPayload,
   isDerivedMetricKind,
+  resolveDerivedFormMetricPayload,
 } from '../../../shared/derived-metrics';
 import {
   HEALTH_METRIC_IDS,
@@ -3565,12 +3566,28 @@ function projectBodyWeightTrendForMcp(payload: unknown): unknown {
   };
 }
 
+function projectFormForMcp(payload: unknown): unknown {
+  const source = resolveDerivedFormMetricPayload(payload);
+  if (!source) {
+    return null;
+  }
+  return {
+    dayBoundary: source.dayBoundary,
+    rangeStartDayMs: source.rangeStartDayMs,
+    rangeEndDayMs: source.rangeEndDayMs,
+    dailyLoads: source.dailyLoads.map(({ dayMs, load }) => ({ dayMs, load })),
+    excludesMergedEvents: source.excludesMergedEvents,
+  };
+}
+
 export function projectDerivedMetricPayloadForMcp(
   metricKind: DerivedMetricKind,
   payload: unknown,
 ): unknown {
   try {
     switch (metricKind) {
+      case DERIVED_METRIC_KINDS.Form:
+        return projectFormForMcp(payload);
       case DERIVED_METRIC_KINDS.TrainingReadiness: {
         const source = payload as DerivedTrainingReadinessMetricPayload;
         const legacy = source.formulaVersion === 4
@@ -3603,6 +3620,7 @@ export function projectDerivedMetricPayloadForMcp(
 }
 
 const MCP_PROJECTED_TRAINING_METRIC_KINDS = new Set<DerivedMetricKind>([
+  DERIVED_METRIC_KINDS.Form,
   DERIVED_METRIC_KINDS.TrainingReadiness,
   DERIVED_METRIC_KINDS.TrainingSummary,
   DERIVED_METRIC_KINDS.TrainingExplanation,
@@ -4398,7 +4416,7 @@ function resolveTodayReadinessLoadContext(
   nowTimeMs: number,
 ): TodayReadinessLoadContext {
   const asOfDayMs = resolveUtcDayStartTimeMs(nowTimeMs);
-  const readyForm = parseReadyDerivedPayload<DerivedFormMetricPayload>(
+  const readyForm = parseReadyDerivedPayload<{ dailyLoads: DerivedFormDailyLoadEntry[] }>(
     formSnapshot,
     DERIVED_METRIC_KINDS.Form,
   );
@@ -4471,7 +4489,10 @@ function parseReadyDerivedPayload<T>(
   ) {
     return null;
   }
-  const parsed = MCP_DERIVED_PAYLOAD_SCHEMAS[metricKind].safeParse(snapshot.payload);
+  const payload = metricKind === DERIVED_METRIC_KINDS.Form
+    ? projectFormForMcp(snapshot.payload)
+    : snapshot.payload;
+  const parsed = MCP_DERIVED_PAYLOAD_SCHEMAS[metricKind].safeParse(payload);
   return parsed.success
     ? {
         payload: parsed.data as T,

@@ -2060,7 +2060,7 @@ settings, sleep, swim lengths, or activity documents for unrelated metrics.
 
 | Metric kind | Training use | Primary source |
 | --- | --- | --- |
-| `form` | Form/load chart and CTL/ATL state inputs | Parent event TSS |
+| `form` | Form/load chart, CTL/ATL state inputs, and exact Training impact recap counts | Parent event TSS |
 | `recovery_now` | Imported recovery-remaining card | Bounded parent event recovery stats |
 | `acwr` | Load metrics | Parent event TSS |
 | `ramp_rate` | State and load metrics | Parent event TSS |
@@ -2098,6 +2098,11 @@ kinds are excluded from the default Dashboard subscription and freshness scope. 
 `training_durability` to that scope only while a matching explicitly configured tile exists.
 `training_power_systems` has no Dashboard tile and is never added to normal Dashboard subscriptions. Opening a normal
 Dashboard therefore does not create a hidden Training dependency or freshness probe for those kinds.
+
+Form's internal payload version is independent of `DERIVED_METRIC_SCHEMA_VERSION`. The freshness probe and frontend
+resolver require the current Form payload version and exact daily counts. This lets a payload-only Form transition queue
+and rebuild `form` without invalidating every other derived kind. Compatible version-2 Form seeds preserve both daily
+load and count, while projection-sensitive builders continue to consume only the load series.
 
 `body_weight_trend` is also Training-only. It is calendar-sensitive because its current 7- and 28-day UTC windows
 advance at midnight, but it is not projection-sensitive and does not reuse the Form projection seed. It prefers actual
@@ -2857,10 +2862,10 @@ pages do not render the Training-impact card. Planned workouts do not contribute
 data is labelled as updating; the UI never substitutes a local guess. The presentation is not included on compact
 calendar grid cells or public activity shares.
 
-This is a TSS-based model of sustained training load, not a measurement of physiological adaptation. The implementation
-adds only pure shared contribution/day-outcome interfaces beside the canonical Training-load model and consumes the
-existing Form snapshot. It adds no persisted field, schema version, derived-metric kind, backend mutation, provider
-action, or consent scope.
+This is a TSS-based model of sustained training load, not a measurement of physiological adaptation. The activity and
+selected-day calculation uses pure shared contribution/day-outcome interfaces beside the canonical Training-load model
+and consumes the existing Form snapshot. It adds no derived-metric kind, backend mutation, provider action, or consent
+scope.
 
 The public MCP and built-in Assistant expose the same calculation through one additive, read-only identity-safe
 contract. It requires both `metrics:read` and `activity-details:read`, prepares the existing Form snapshot, and accepts
@@ -2871,12 +2876,46 @@ benchmark/merge exclusions, incomplete sessions, partial coverage, stale/buildin
 the retained snapshot range stay explicit. The response never echoes opaque references or exposes event/activity IDs,
 titles, labels, exact start times, devices, providers, or source provenance. Reads fetch only the exact referenced
 activity/event documents and the existing Form snapshot; they do not scan activity history. This adds no persisted
-field, derived-metric kind, internal derived schema version, mutation, provider action, or new OAuth scope.
+field for the public impact contract, derived-metric kind, global derived schema version, mutation, provider action, or
+new OAuth scope. The recap's private Form count extension is described below and is not part of this wire contract.
 
 Assistant example questions make the same read discoverable for the latest completed workout and for yesterday's
 complete local-date activity selection. They remain contextual prompts: the existing Assistant routing discovers the
 request-time references and prepares Form, while the MCP service keeps the identity, date, completion, coverage, and
 benchmark checks authoritative. No MCP schema, grant, registered-app contract, plugin starter, or mutation changes.
+
+#### Training impact recap
+
+Training Overview places an owner-only **Training impact recap** first in Load trajectory, before the full Form chart.
+It summarizes either the trailing 7 completed UTC Training days (the default) or the trailing 28. Both periods end on
+the previous UTC day so a partial current day cannot change the result while it is still accumulating load. The card
+shows the exact period result as:
+
+```text
+Training CTL contribution = period TSS / 42
+Actual CTL change         = CTL(period end) - CTL(day before period start)
+Normal CTL decay          = Actual CTL change - Training CTL contribution
+```
+
+The contribution and decay terms always reconcile to the actual change. The headline says whether CTL rose, held, or
+declined; daily outcome counts reuse the canonical day result after decay. The 7-day view plots one actual CTL-change
+bar per UTC day. The 28-day view plots four consecutive, aligned 7-day blocks whose changes sum to the same period
+result. Missing calendar days are explicit zero-load decay days. If retained history begins inside the selected period,
+earlier days start from zero CTL; a genuinely empty Form history shows an empty state instead of a synthetic result.
+
+The existing sparse Form payload has an internal Form-specific payload version. Version 2 adds an exact
+`activityCount` beside each recorded UTC day's `load`. It counts the same eligible completed parent events as Form:
+current TSS takes precedence over legacy Power TSS, valid zero TSS counts as an activity, missing or invalid TSS does
+not, and merged/benchmark parents stay excluded. Child activities are not counted separately. Daily counts must sum to
+the snapshot `sourceEventCount`. Older count-less Form payloads are invalid for this recap and queue only a Form rebuild;
+the global derived schema remains unchanged and unrelated snapshots are not rebuilt. Once prepared, the workspace
+reuses its existing shared Form stream and never queries activity history from the frontend.
+
+Ready data renders normally. A building or stale snapshot can retain the last complete version-2 recap with an updating
+notice. A failed refresh keeps retained valid data with a warning; without valid retained data it is unavailable. Old or
+malformed count-less payloads show preparing rather than estimating a count. The period choice is local UI state and is
+not persisted. The recap does not appear on sport destinations, Dashboard, Calendar, event details, public shares, or
+planned workouts.
 
 The card starts with a concise interpretation of Form (recent fatigue relative to longer-term fitness) and labels the
 model as TSS-backed workouts only. When the no-workout forecast exists, the only follow-up prompt is to compare that
@@ -3559,6 +3598,11 @@ passes the projected daily loads through `shared/training-load.ts` so CTL, ATL, 
 backend exactly; it does not maintain another formula. The adapter refuses an implausible expansion beyond 20 years,
 downsamples the resulting display series within the shared Assistant payload budget, and never exposes raw snapshots or
 provider/device provenance to Gemini as visual configuration.
+
+The internal Form version and per-day `activityCount` used by the Training impact recap are deliberately projected out.
+Public `get_training_metric(form)` retains its frozen `{dayMs, load}` daily entries, and `get_training_impact` continues
+to use its existing request-time coverage contract. No MCP schema, tool, scope, consent meaning, provider action,
+Assistant prompt, registered-app rescan, or plugin build changes for the recap.
 
 There is deliberately no separate MCP metric-discovery registry. A newly registered kind is discoverable, but its payload
 must still pass the MCP privacy boundary in `functions/src/mcp/data.service.ts` and the exhaustive safe-payload schema map

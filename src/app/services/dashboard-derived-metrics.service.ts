@@ -53,6 +53,8 @@ import { MatSnackBar } from '@angular/material/snack-bar';
 import {
   DERIVED_METRIC_KINDS,
   DERIVED_METRIC_SCHEMA_VERSION,
+  hasMatchingDerivedFormSourceEventCount,
+  resolveDerivedFormMetricPayload,
   DERIVED_METRICS_COLLECTION_ID,
   CALENDAR_SENSITIVE_DERIVED_METRIC_KINDS,
   getDerivedMetricDocId,
@@ -566,6 +568,17 @@ export class DashboardDerivedMetricsService {
     // document claims to be healthy.
     if (
       status === 'ready'
+      && metricKind === DERIVED_METRIC_KINDS.Form
+      && !hasMatchingDerivedFormSourceEventCount(
+        this.resolveSnapshotPayload(snapshot),
+        snapshot?.sourceEventCount,
+      )
+    ) {
+      return 'stale';
+    }
+
+    if (
+      status === 'ready'
       && metricKind === DERIVED_METRIC_KINDS.PowerCurve
       && !resolveDashboardPowerCurveMetricPayload(this.resolveSnapshotPayload(snapshot))
     ) {
@@ -697,14 +710,14 @@ export class DashboardDerivedMetricsService {
   }
 
   private resolveFormPoints(snapshot: Record<string, unknown> | undefined): DashboardFormPoint[] | null {
-    const payload = snapshot?.payload as { dailyLoads?: unknown } | undefined;
-    const dailyLoads = Array.isArray(payload?.dailyLoads)
-      ? payload?.dailyLoads
-      : null;
-    if (!dailyLoads) {
+    if (!hasMatchingDerivedFormSourceEventCount(snapshot?.payload, snapshot?.sourceEventCount)) {
       return null;
     }
-    return buildDashboardFormPointsFromDailyLoads(dailyLoads);
+    const payload = resolveDerivedFormMetricPayload(snapshot?.payload);
+    if (!payload) {
+      return null;
+    }
+    return buildDashboardFormPointsFromDailyLoads(payload.dailyLoads);
   }
 
   private resolveRecoveryNowContext(snapshot: Record<string, unknown> | undefined): DashboardRecoveryNowContext | null {

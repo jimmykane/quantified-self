@@ -50,6 +50,7 @@ import {
 } from '../../../shared/power-curve';
 import {
     buildDerivedFormDailyLoads,
+    DERIVED_FORM_PAYLOAD_VERSION,
     DERIVED_METRIC_KINDS,
     DERIVED_METRIC_SCHEMA_VERSION,
     DERIVED_METRICS_COLLECTION_ID,
@@ -68,11 +69,12 @@ import {
     DERIVED_TRAINING_RECOVERY_MIN_SLEEP_NIGHTS,
     DERIVED_TRAINING_RECOVERY_MIN_VALID_SLEEP_SECONDS,
     isDerivedTrainingPowerSystemsStatusReasonPair,
+    normalizeDerivedFormDailyLoadsWithActivityCounts,
     PROJECTION_SENSITIVE_DERIVED_METRIC_KINDS,
     type DerivedAcwrMetricPayload,
     type DerivedBodyWeightTrendMetricPayload,
     type DerivedBodyWeightTrendSeries,
-    type DerivedFormDailyLoadEntry,
+    type DerivedFormDailyLoadEntryWithActivityCount,
     type DerivedEasyPercentMetricPayload,
     type DerivedEfficiencyDelta4wMetricPayload,
     type DerivedEfficiencyTrendMetricPayload,
@@ -143,7 +145,6 @@ import {
     normalizeTrainingBuildPeriodEndDayMs,
     normalizeDerivedMetricKinds,
     normalizeDerivedMetricKindsStrict,
-    normalizeDerivedFormDailyLoads,
     type EnsureDerivedMetricsResponse,
 } from '../../../shared/derived-metrics';
 import {
@@ -698,9 +699,11 @@ function buildDailyLoadContext(
     docs: readonly FirestoreQueryDocumentSnapshot[],
 ): {
     dailyLoadsByUtcDay: Map<number, number>;
+    activityCountsByUtcDay: Map<number, number>;
     sourceEventCount: number;
 } {
     const dailyLoadsByUtcDay = new Map<number, number>();
+    const activityCountsByUtcDay = new Map<number, number>();
     let sourceEventCount = 0;
 
     docs.forEach((doc) => {
@@ -721,28 +724,39 @@ function buildDailyLoadContext(
 
         const dayMs = resolveUtcDayStartMs(startTimeMs);
         dailyLoadsByUtcDay.set(dayMs, (dailyLoadsByUtcDay.get(dayMs) || 0) + stressScore);
+        activityCountsByUtcDay.set(dayMs, (activityCountsByUtcDay.get(dayMs) || 0) + 1);
         sourceEventCount += 1;
     });
 
     return {
         dailyLoadsByUtcDay,
+        activityCountsByUtcDay,
         sourceEventCount,
     };
 }
 
 function buildDailyLoadContextFromDailyLoads(
-    dailyLoads: readonly DerivedFormDailyLoadEntry[],
+    dailyLoads: readonly DerivedFormDailyLoadEntryWithActivityCount[],
     sourceEventCount: number,
 ): {
     dailyLoadsByUtcDay: Map<number, number>;
+    activityCountsByUtcDay: Map<number, number>;
     sourceEventCount: number;
 } {
     const dailyLoadsByUtcDay = dailyLoads.reduce((accumulator, dailyLoad) => {
         accumulator.set(dailyLoad.dayMs, (accumulator.get(dailyLoad.dayMs) || 0) + dailyLoad.load);
         return accumulator;
     }, new Map<number, number>());
+    const activityCountsByUtcDay = dailyLoads.reduce((accumulator, dailyLoad) => {
+        accumulator.set(
+            dailyLoad.dayMs,
+            (accumulator.get(dailyLoad.dayMs) || 0) + dailyLoad.activityCount,
+        );
+        return accumulator;
+    }, new Map<number, number>());
     return {
         dailyLoadsByUtcDay,
+        activityCountsByUtcDay,
         sourceEventCount: Math.max(0, Math.floor(sourceEventCount)),
     };
 }
@@ -829,11 +843,15 @@ function buildFormMetricPayload(
     dailyLoadContext: ReturnType<typeof buildDailyLoadContext>,
 ): DerivedMetricBuildResult<DerivedFormMetricPayload> {
     // Firestore rejects nested arrays, so we persist day/load objects instead of tuple arrays.
-    const sortedDailyLoads = buildDerivedFormDailyLoads(dailyLoadContext.dailyLoadsByUtcDay);
+    const sortedDailyLoads = buildDerivedFormDailyLoads(
+        dailyLoadContext.dailyLoadsByUtcDay,
+        dailyLoadContext.activityCountsByUtcDay,
+    );
 
     return {
         sourceEventCount: dailyLoadContext.sourceEventCount,
         payload: {
+            payloadVersion: DERIVED_FORM_PAYLOAD_VERSION,
             dayBoundary: 'UTC',
             rangeStartDayMs: sortedDailyLoads.length ? sortedDailyLoads[0].dayMs : null,
             rangeEndDayMs: sortedDailyLoads.length ? sortedDailyLoads[sortedDailyLoads.length - 1].dayMs : null,
@@ -5773,7 +5791,7 @@ export interface DerivedFormSnapshotSeed {
     builtFromEventMutationVersion: number | null;
     sourceEventCount: number;
     sourceDocCount: number;
-    dailyLoads: DerivedFormDailyLoadEntry[];
+    dailyLoads: DerivedFormDailyLoadEntryWithActivityCount[];
 }
 
 export async function fetchTrainingBuildWorkoutSeed(
@@ -5797,16 +5815,21 @@ export async function fetchDerivedFormSnapshotSeed(uid: string): Promise<Derived
     if (data.entryType !== DERIVED_METRICS_ENTRY_TYPES.Snapshot || data.metricKind !== DERIVED_METRIC_KINDS.Form
         || data.status !== 'ready' || data.schemaVersion !== DERIVED_METRIC_SCHEMA_VERSION
         || !isCount(data.builtFromEventMutationVersion) || !isCount(data.sourceEventCount) || !isCount(data.sourceDocCount)
-        || data.sourceDocCount < data.sourceEventCount || payload.dayBoundary !== 'UTC'
+        || data.sourceDocCount < data.sourceEventCount || payload.payloadVersion !== DERIVED_FORM_PAYLOAD_VERSION
+        || payload.dayBoundary !== 'UTC'
         || payload.excludesMergedEvents !== true || !Array.isArray(loads)
         || loads.length > data.sourceEventCount || (loads.length === 0) !== (data.sourceEventCount === 0)) return null;
     let previousDay = -Infinity;
+    let activityCount = 0;
     for (const entry of loads) {
         if (!entry || typeof entry !== 'object' || !Number.isSafeInteger(entry.dayMs)
             || entry.dayMs % DAY_MS !== 0 || entry.dayMs <= previousDay
-            || typeof entry.load !== 'number' || !Number.isFinite(entry.load) || entry.load < 0) return null;
+            || typeof entry.load !== 'number' || !Number.isFinite(entry.load) || entry.load < 0
+            || !Number.isSafeInteger(entry.activityCount) || entry.activityCount <= 0) return null;
+        activityCount += entry.activityCount;
         previousDay = entry.dayMs;
     }
+    if (activityCount !== data.sourceEventCount) return null;
     if (payload.rangeStartDayMs !== (loads[0]?.dayMs ?? null)
         || payload.rangeEndDayMs !== (loads[loads.length - 1]?.dayMs ?? null)) return null;
     return {
@@ -5815,7 +5838,11 @@ export async function fetchDerivedFormSnapshotSeed(uid: string): Promise<Derived
         builtFromEventMutationVersion: data.builtFromEventMutationVersion,
         sourceEventCount: data.sourceEventCount,
         sourceDocCount: data.sourceDocCount,
-        dailyLoads: loads.map(entry => ({ dayMs: entry.dayMs, load: entry.load })),
+        dailyLoads: loads.map(entry => ({
+            dayMs: entry.dayMs,
+            load: entry.load,
+            activityCount: entry.activityCount,
+        })),
     };
 }
 
@@ -6496,7 +6523,7 @@ export async function writeDerivedMetricSnapshotsReady(
     options?: {
         buildAtMs?: number | null;
         builtFromEventMutationVersion?: number | null;
-        formDailyLoads?: readonly DerivedFormDailyLoadEntry[] | null;
+        formDailyLoads?: readonly DerivedFormDailyLoadEntryWithActivityCount[] | null;
         formSourceEventCount?: number | null;
         formSourceDocCount?: number | null;
         workoutInputsVersion?: number;
@@ -6511,13 +6538,20 @@ export async function writeDerivedMetricSnapshotsReady(
         ? options?.buildAtMs as number
         : Date.now();
     const writes: { metricKind: DerivedMetricKind; data: Record<string, unknown> }[] = [];
-    const normalizedFormDailyLoads = normalizeDerivedFormDailyLoads(options?.formDailyLoads || []);
+    const normalizedFormDailyLoads = normalizeDerivedFormDailyLoadsWithActivityCounts(options?.formDailyLoads || []);
     const hasDailyLoadContextOverride = normalizedFormDailyLoads.length > 0
         || Number.isFinite(options?.formSourceEventCount)
         || Number.isFinite(options?.formSourceDocCount);
     const overrideFormSourceEventCount = Number.isFinite(options?.formSourceEventCount)
         ? Math.max(0, Math.floor(options?.formSourceEventCount as number))
         : 0;
+    if (
+        hasDailyLoadContextOverride
+        && normalizedFormDailyLoads.reduce((total, entry) => total + entry.activityCount, 0)
+            !== overrideFormSourceEventCount
+    ) {
+        throw new Error('Derived Form daily activity counts must match sourceEventCount.');
+    }
     const dailyLoadContextOverride = hasDailyLoadContextOverride
         ? buildDailyLoadContextFromDailyLoads(normalizedFormDailyLoads, overrideFormSourceEventCount)
         : null;

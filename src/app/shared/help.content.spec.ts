@@ -703,6 +703,10 @@ describe('help.content', () => {
     expect(trainingSection?.content).toContain('TSS divided by 42');
     expect(trainingSection?.content).toContain('their event detail pages do not show the card');
     expect(trainingSection?.content).toContain('Public activity shares and planned workouts do not show Training impact');
+    expect(trainingSection?.content).toContain('**Training impact recap** appears first under **Load trajectory**');
+    expect(trainingSection?.content).toContain('last 7 completed UTC Training days');
+    expect(trainingSection?.content).toContain('exact number of completed parent activities');
+    expect(trainingSection?.content).toContain('four consecutive 7-day blocks');
     expect(trainingSection?.content).toContain('compact line above the **Training** title');
     expect(trainingSection?.content).toContain('content does not shift');
     expect(trainingSection?.content).toContain('failed update adds **Retry**');

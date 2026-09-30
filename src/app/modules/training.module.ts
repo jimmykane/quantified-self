@@ -16,6 +16,7 @@ import { TrainingMetricTextComponent } from '../components/training/training-met
 import { TrainingPowerSystemsTrendChartComponent } from '../components/training/training-power-systems-trend-chart.component';
 import { TrainingReadinessTrendChartComponent } from '../components/training/training-readiness-trend-chart.component';
 import { TrainingBodyWeightTrendChartComponent } from '../components/training/training-body-weight-trend-chart.component';
+import { TrainingImpactRecapComponent } from '../components/training/training-impact-recap.component';
 import { TrainingSummaryCardsComponent } from '../components/shared/training-summary/training-summary-cards.component';
 import { TrainingMetricGridComponent } from '../components/shared/training-summary/training-metric-grid.component';
 import { TrainingRoutingModule } from '../training.routing.module';
@@ -30,6 +31,7 @@ import { AppUserSettingsQueryService } from '../services/app.user-settings-query
     TrainingBuildMetricsComponent,
     TrainingMixDetailsComponent,
     TrainingReadinessTrendChartComponent,
+    TrainingImpactRecapComponent,
     TrainingPowerSystemsTrendChartComponent,
     TrainingDurabilityTrajectoryChartComponent,
     TrainingMetricTextComponent,
