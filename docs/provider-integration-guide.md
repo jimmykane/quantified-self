@@ -192,7 +192,9 @@ Strength Training has a separate exercise-aware prescription with ordered names 
 optional fixed external load stored in kilograms and optional rest after each set. The app editor follows the owner's
 kg/lb preference through Sports Lib 21.3.0; provider payloads still use canonical kilograms. Its v1 steps are only a compatibility
 projection; delivery validates the owner-scoped companion. Suunto maps it to a Gym (`23`) Guide with manual transitions
-for rep sets. This is degraded and requires explicit approval, not native strength tracking. The COROS partner contract
+for rep sets. This remains degraded, not native strength tracking. Normal Send/Enable sync covers this standard
+limitation, disclosed as a warning; no separate approval is required for each workout or edit. Additional mapping loss,
+including shortened exercise instructions, still requires review of the current mapping. The COROS partner contract
 describes strength Reps/Second, Rest and fixed equipment weight in kilograms, and QS has a serializer fixture, but
 new COROS Send/sync remains Coming soon until entitlement and account-side push/update/delete proof. Garmin and Wahoo
 strength delivery are unsupported. Suunto strength has demo-emulator evidence, not live app/watch proof. See #740
@@ -200,8 +202,10 @@ and #741 for remaining account-side delivery proof.
 
 Runtime wrappers must preserve the entire pure policy interface, including the optional strength companion in
 `assess` and the explicit past-removal opt-in in `canRemove`; bind the policy method rather than copying a fixed
-argument list. Keep OAuth/HTTP execution separately bound to the authorized account. A plan's sync opt-in is not
-approval of Suunto's degraded strength mapping; the matching prescription digest still needs explicit confirmation.
+argument list. Keep OAuth/HTTP execution separately bound to the authorized account. Existing valid plan/workout sync
+consent covers Suunto's standard Gym Guide limitation. Keep Pro, active-plan, account-generation and Stop checks;
+additional mapping loss still needs confirmation of its matching prescription digest. Do not convert degraded to exact
+or change artifact identity merely to remove the extra gate. Other degraded mappings default to approval-required.
 Missing/mismatched strength details remain unsupported, completed copies remain protected, and COROS still rejects
 past deletion even with opt-in. Synthetic wrapper/emulator evidence is not provider app/watch acceptance evidence.
 

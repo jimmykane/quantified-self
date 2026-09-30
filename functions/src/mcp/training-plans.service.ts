@@ -326,7 +326,7 @@ export async function readTrainingPlans(input: TrainingReadInput, reads: Trainin
           if (structure.sport === ActivityTypes.StrengthTraining && provider === 'suunto') {
             return { provider, level: 'degraded' as const, issues: [{ severity: 'degraded' as const,
               code: 'strength_guide_degraded' as const, field: '$.strength',
-              message: 'Suunto receives a Gym Guide with exercise and set instructions. Repetitions require manual transitions and this is not native strength tracking.' }] };
+              message: 'Suunto receives a Gym Guide with exercise and set instructions. Repetitions require manual transitions and this is not native strength tracking. This standard limitation needs no separate mapping approval; additional mapping losses still require review.' }] };
           }
           const assessment = assessDeliveryCompatibility(provider, structure);
           return { provider: assessment.provider, level: assessment.level,

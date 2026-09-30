@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import { trainingDeliveryLocalDate } from '../../../../shared/training-provider-delivery';
 import type { PlannedWorkoutProviderId } from '../../../../shared/planned-workout-providers';
 import { hashTrainingScheduleRequestPayload } from '../persistence';
-import type { DeliveryContext, DeliveryIntent, DeliveryLedgerV1 } from './contracts';
+import { requiresDeliveryMappingApproval, type DeliveryContext, type DeliveryIntent, type DeliveryLedgerV1 } from './contracts';
 import type { ScheduledWorkoutV1 } from '../../../../shared/training-plans';
 import type { StrengthWorkoutDetailsV1 } from '../../../../shared/strength-workout';
 
@@ -59,7 +59,7 @@ export function resolveDeliveryIntent(context: DeliveryContext, ledger?: Deliver
   const assessment = transport.assess(workout!, connection.destinationKey, timeZone, context.strength);
   if (assessment.level === 'unsupported') return result('preserve', 'unsupported', assessment.digest, assessment.issues);
   const approval = override?.approvedDigest ?? setting?.approvedDigest;
-  if (assessment.level === 'degraded' && approval !== assessment.digest) {
+  if (requiresDeliveryMappingApproval(assessment) && approval !== assessment.digest) {
     return result('preserve', 'approval_required', assessment.digest, assessment.issues, assessment.digest);
   }
   return result('present', ledger?.acceptedDigest === assessment.digest ? 'delivered' : 'pending', assessment.digest, assessment.issues);

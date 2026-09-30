@@ -20,9 +20,14 @@ export interface DeliveryConnection {
 }
 export interface DeliveryAssessment {
   level: 'exact' | 'degraded' | 'unsupported';
+  /** Internal policy only. Omission keeps degraded mappings approval-gated. */
+  requiresApproval?: boolean;
   issues: string[];
   digest: string;
   mappingVersion: string;
+}
+export function requiresDeliveryMappingApproval(assessment: DeliveryAssessment): boolean {
+  return assessment.level === 'degraded' && assessment.requiresApproval !== false;
 }
 export interface DeliveryArtifact {
   ids: Record<string, string>;

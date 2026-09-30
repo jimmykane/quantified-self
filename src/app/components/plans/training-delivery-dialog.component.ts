@@ -78,6 +78,9 @@ export class TrainingDeliveryDialogComponent {
   private readonly dialogTitleElement = viewChild<ElementRef<HTMLHeadingElement>>('dialogTitleElement');
   private readonly providerManageButtons = viewChildren('providerManage', { read: ElementRef<HTMLButtonElement> });
   readonly preview = signal<{ result: TrainingDeliveryPreviewV1; command: TrainingDeliveryCommandV1 } | null>(null);
+  // Older servers did not distinguish informative limitations from approval-gated losses.
+  readonly mappingApprovalCount = computed(() => this.preview()?.result.approvalRequiredCount
+    ?? this.preview()?.result.warningCount ?? 0);
   private readonly statusLimit = signal(TRAINING_DELIVERY_PAGE_SIZE);
   // Keep the entire loaded prefix live: separate cursor snapshots leave stale rows
   // and gaps when reconciliation inserts, removes, or transfers records between pages.

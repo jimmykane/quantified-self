@@ -16,6 +16,8 @@ export interface ProviderSerializationIssueV1 {
 export interface ProviderSerializationResultV1<T> {
     provider: PlannedWorkoutProviderId;
     level: PlannedWorkoutProviderMappingLevel;
+    /** A documented non-blocking limitation may remain degraded without extra approval. */
+    requiresApproval?: boolean;
     issues: ProviderSerializationIssueV1[];
     artifact: T;
 }

@@ -38,6 +38,15 @@ describe('help.content', () => {
     expect(HELP_SECTIONS.some(section => section.id === 'activity-calendar')).toBe(true);
   });
 
+  it('distinguishes standard Suunto strength guidance from additional mapping-loss approval', () => {
+    const content = HELP_SECTIONS.find(section => section.id === 'training-plans')!.content;
+    expect(content).toContain('rep-based sets require manual transitions');
+    expect(content).toContain('not native rep/load tracking');
+    expect(content).toContain('no separate approval for each workout or edit');
+    expect(content).toContain('Additional mapping losses, such as shortened exercise instructions, still need review');
+    expect(content).toContain('Sent Guide status does not prove app/watch receipt or workout completion');
+  });
+
   it('explains the independent weight preference and canonical weigh-in storage', () => {
     const copy = JSON.stringify(HELP_SECTIONS);
     expect(copy).toContain('Weight input and display use your **Settings → Units → Weight** choice (kg or lb)');

@@ -111,7 +111,7 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Suunto worker with real F
     expect((await send()).status).toBe('delivered');
     expect([...server.guides.values()][0].guide.activities).toEqual([activityId]);
   });
-  it('approves degraded Gym Guide delivery and updates one retained copy after strength load changes', async () => {
+  it('sends a Gym Guide with normal consent and updates load, reps and date without extra approval', async () => {
     useProductionPolicy();
     const details = { version: 1 as const, workoutId: 'w', revision: 1, exercises: [{ id: 'squat', name: 'Back squat', sets: [
       { id: 'set-one', ending: { kind: 'repetitions' as const, repetitions: 5 }, externalLoadKg: 80, restAfterSeconds: 120 },
@@ -119,22 +119,20 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Suunto worker with real F
     await user().collection('scheduledWorkouts').doc('w').update({ title: 'Strength QA',
       structure: projectStrengthWorkoutToV1(details) });
     await user().collection('scheduledWorkouts').doc('w').collection('strengthDetails').doc('current').set(details);
+    const preview = await trainingDeliveryCommand(runtime, uid, { schemaVersion: 1, mutationId: randomUUID(),
+      scope: 'workout', scopeId: 'w', provider: 'suunto', action: 'send', expectedScheduleRevision: 1,
+      expectedScopeRevision: 1, expectedSettingsRevision: 0, timeZone: 'Europe/Helsinki' }, true);
+    expect(preview).toMatchObject({ warningCount: 1, approvalRequiredCount: 0, approvalDigest: null,
+      workoutCompatibility: 'degraded' });
+    expect((await user().collection('trainingDeliverySettings').get()).empty).toBe(true);
+    expect(server.calls).toHaveLength(0);
     await command('send'); await drain();
-    expect((await ledger()).status).toBe('approval_required');
-    expect(server.calls.some(call => call.method === 'POST')).toBe(false);
-    const approve = async (workoutRevision: number) => {
-      const current = await ledger();
-      const setting = await user().collection('trainingDeliverySettings').doc('workout_w_suunto').get();
-      await trainingDeliveryCommand(runtime, uid, { schemaVersion: 1, mutationId: randomUUID(), scope: 'workout', scopeId: 'w',
-        provider: 'suunto', action: 'approve', expectedScheduleRevision: 1,
-        expectedScopeRevision: workoutRevision, expectedSettingsRevision: setting.data()?.revision ?? 0,
-        approvalDigest: current.approvalDigest }, false);
-      await drain();
-    };
-    await approve(1);
+    expect((await ledger()).status).toBe('pending');
+    expect((await ledger()).approvalDigest).toBeNull();
     const row = await ledger();
     await processTrainingDelivery(runtime, uid, row.id); await drain();
     expect((await ledger()).status).toBe('delivered');
+    const originalExternalId = (await ledger()).actual!.ids.externalId;
     expect(server.guides.size).toBe(1);
     expect([...server.guides.values()][0].guide.activities).toEqual([23]);
     expect(JSON.stringify([...server.guides.values()][0].guide.steps)).toContain('80 kg');
@@ -142,18 +140,33 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Suunto worker with real F
       { ...details.exercises[0].sets[0], externalLoadKg: 85 },
     ] }] };
     const batch = db.batch();
-    batch.update(user().collection('scheduledWorkouts').doc('w'), { revision: 2, updatedAtMs: now + 1 });
+    batch.update(user().collection('scheduledWorkouts').doc('w'), { revision: 2, updatedAtMs: now + 1,
+      localDate: '2026-09-18' });
     batch.set(user().collection('scheduledWorkouts').doc('w').collection('strengthDetails').doc('current'), revised);
     await batch.commit(); await mark();
-    expect((await ledger()).status).toBe('approval_required');
+    expect((await ledger()).status).toBe('pending');
     expect(JSON.stringify([...server.guides.values()][0].guide.steps)).toContain('80 kg');
-    await approve(2);
     await processTrainingDelivery(runtime, uid, row.id); await drain();
     expect(server.guides.size).toBe(1);
     expect(JSON.stringify([...server.guides.values()][0].guide.steps)).toContain('85 kg');
+    expect([...server.guides.values()][0].guide.localDate).toBe('2026-09-18');
+    const changedReps = { ...revised, revision: 3, exercises: [{ ...revised.exercises[0], sets: [
+      { ...revised.exercises[0].sets[0], ending: { kind: 'repetitions' as const, repetitions: 6 } },
+    ] }] };
+    const repBatch = db.batch();
+    repBatch.update(user().collection('scheduledWorkouts').doc('w'), { revision: 3,
+      structure: projectStrengthWorkoutToV1(changedReps), updatedAtMs: now + 2 });
+    repBatch.set(user().collection('scheduledWorkouts').doc('w').collection('strengthDetails').doc('current'), changedReps);
+    await repBatch.commit(); await mark();
+    expect((await ledger()).status).toBe('pending');
+    await processTrainingDelivery(runtime, uid, row.id); await drain();
+    expect((await ledger()).status).toBe('delivered');
+    expect((await ledger()).actual!.ids.externalId).toBe(originalExternalId);
+    expect(JSON.stringify([...server.guides.values()][0].guide.steps)).toContain('6 reps');
+    expect((await user().collection('trainingDeliverySettings').doc('workout_w_suunto').get()).get('approvedDigest')).toBeNull();
     expect(server.calls.filter(call => call.method === 'POST')).toHaveLength(1);
   });
-  it('reassesses a strength plan blocked by the old wrapper without treating plan opt-in as mapping approval', async () => {
+  it.each(['unsupported', 'approval_required'])('reassesses a previously %s strength plan using existing sync consent', async status => {
     const transport = useProductionPolicy();
     const details = { version: 1 as const, workoutId: 'w', revision: 1, exercises: [{ id: 'squat', name: 'Back squat', sets: [
       { id: 'set-one', ending: { kind: 'repetitions' as const, repetitions: 5 }, externalLoadKg: 80, restAfterSeconds: 120 },
@@ -164,36 +177,52 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Suunto worker with real F
     await user().collection('trainingPlans').doc('p').set({ id: 'p', lifecycle: 'active', revision: 1 });
     await user().collection('trainingPlanState').doc('current').update({ activePlanId: 'p' });
     const assess = transport.assess.bind(transport);
-    const legacy = vi.spyOn(transport, 'assess').mockImplementation((workout, destination, zone) => assess(workout, destination, zone));
+    const legacy = vi.spyOn(transport, 'assess').mockImplementation((workout, destination, zone, strength) =>
+      status === 'unsupported' ? assess(workout, destination, zone)
+        : { ...assess(workout, destination, zone, strength), requiresApproval: true });
     await trainingDeliveryCommand(runtime, uid, { schemaVersion: 1, mutationId: randomUUID(), scope: 'plan', scopeId: 'p',
       provider: 'suunto', action: 'configure', expectedScheduleRevision: 1, expectedScopeRevision: 1,
       expectedSettingsRevision: 0, timeZone: 'Europe/Helsinki' }, false);
     await drain();
     const blocked = await ledger();
-    expect(blocked).toMatchObject({ status: 'unsupported', actual: null, attempt: null,
-      issues: ['The complete strength prescription is unavailable or mismatched.'] });
+    expect(blocked).toMatchObject({ status, actual: null, attempt: null });
     const planSettings = user().collection('trainingDeliverySettings').doc('plan_p_suunto');
     const consent = (await planSettings.get()).data();
     legacy.mockRestore();
     await mark();
     const reviewed = await ledger();
-    expect(reviewed).toMatchObject({ id: blocked.id, status: 'approval_required', actual: null, attempt: null });
-    expect(reviewed.approvalDigest).toBeTruthy();
+    expect(reviewed).toMatchObject({ id: blocked.id, status: 'pending', actual: null, attempt: null, approvalDigest: null });
     expect((await planSettings.get()).data()).toEqual(consent);
-    await processTrainingDelivery(runtime, uid, reviewed.id);
-    expect(server.calls).toHaveLength(0);
-    await trainingDeliveryCommand(runtime, uid, { schemaVersion: 1, mutationId: randomUUID(), scope: 'workout', scopeId: 'w',
-      provider: 'suunto', action: 'approve', expectedScheduleRevision: 1, expectedScopeRevision: 1,
-      expectedSettingsRevision: 0, approvalDigest: reviewed.approvalDigest }, false);
-    await drain();
     await Promise.all([processTrainingDelivery(runtime, uid, reviewed.id), processTrainingDelivery(runtime, uid, reviewed.id)]);
     await drain();
     expect((await ledger()).status).toBe('delivered');
     expect((await planSettings.get()).data()).toEqual(consent);
+    expect((await user().collection('trainingDeliverySettings').doc('workout_w_suunto').get()).exists).toBe(false);
     expect(server.guides.size).toBe(1);
     expect([...server.guides.values()][0].guide.activities).toEqual([23]);
     expect(JSON.stringify([...server.guides.values()][0].guide.steps)).toContain('80 kg');
     expect(server.calls.filter(call => call.method === 'POST')).toHaveLength(1);
+  });
+  it('still requires current mapping approval when strength instructions lose text', async () => {
+    useProductionPolicy();
+    const details = { version: 1 as const, workoutId: 'w', revision: 1, exercises: [{ id: 'squat',
+      name: 'Long exercise instructions '.repeat(3), sets: [{ id: 'set-one',
+        ending: { kind: 'repetitions' as const, repetitions: 5 }, externalLoadKg: 80, restAfterSeconds: 120 }] }] };
+    await user().collection('scheduledWorkouts').doc('w').update({ structure: projectStrengthWorkoutToV1(details) });
+    await user().collection('scheduledWorkouts').doc('w').collection('strengthDetails').doc('current').set(details);
+    await command('send'); await drain();
+    const row = await ledger();
+    expect(row).toMatchObject({ status: 'approval_required', actual: null });
+    expect(row.approvalDigest).toBeTruthy();
+    await processTrainingDelivery(runtime, uid, row.id);
+    expect(server.calls).toHaveLength(0);
+    const setting = await user().collection('trainingDeliverySettings').doc('workout_w_suunto').get();
+    await trainingDeliveryCommand(runtime, uid, { schemaVersion: 1, mutationId: randomUUID(), scope: 'workout', scopeId: 'w',
+      provider: 'suunto', action: 'approve', expectedScheduleRevision: 1, expectedScopeRevision: 1,
+      expectedSettingsRevision: setting.get('revision'), approvalDigest: row.approvalDigest }, false);
+    await drain(); await processTrainingDelivery(runtime, uid, row.id); await drain();
+    expect((await ledger()).status).toBe('delivered');
+    expect(server.guides.size).toBe(1);
   });
   it('does not select an account by discarding a malformed retained token', async () => {
     await db.collection('suuntoAppAccessTokens').doc(uid).collection('tokens').doc('second').set({ userName: 'second' });

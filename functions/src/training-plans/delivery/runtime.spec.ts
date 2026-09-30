@@ -54,12 +54,14 @@ describe('Production Training delivery rollout', () => {
     const assessment = transport.assess(strengthWorkout, inspection.destinationKey, inspection.timeZone, strength);
     expect(assessment).toEqual(policy.assess(strengthWorkout, inspection.destinationKey, inspection.timeZone, strength));
     expect(assessment.level).toBe('degraded');
+    expect(assessment.requiresApproval).toBe(false);
     expect(assessment.issues).not.toContain('The complete strength prescription is unavailable or mismatched.');
-    // Load is absent from the v1 projection, but must still bind compatibility approval.
+    // Load is absent from the v1 projection, but must still change the delivery digest.
     const changedLoad = structuredClone(strength);
     changedLoad.exercises[0].sets[0].externalLoadKg = 55;
     const changedAssessment = transport.assess(strengthWorkout, inspection.destinationKey, inspection.timeZone, changedLoad);
     expect(changedAssessment.level).toBe('degraded');
+    expect(changedAssessment.requiresApproval).toBe(false);
     expect(changedAssessment.digest).not.toBe(assessment.digest);
     expect(authorizeSuuntoGuideRequest).not.toHaveBeenCalled();
     expect(fetcher).not.toHaveBeenCalled();

@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { ActivityTypes } from '@sports-alliance/sports-lib';
 import { resolveDeliveryIntent, deliveryIdentity } from './intent';
 import type { DeliveryContext, DeliveryLedgerV1 } from './contracts';
@@ -59,6 +59,21 @@ describe('delivery intent', () => {
     expect(resolveDeliveryIntent(context).status).toBe('approval_required');
     transport.level = 'unsupported';
     expect(resolveDeliveryIntent(context).status).toBe('unsupported');
+  });
+  it('allows disclosed non-blocking limitations only with existing sync consent', () => {
+    const transport = new FakeTrainingTransport();
+    transport.level = 'degraded';
+    const assess = transport.assess.bind(transport);
+    vi.spyOn(transport, 'assess').mockImplementation((...args) => ({ ...assess(...args), requiresApproval: false }));
+    const context = { ...base, transport };
+    expect(resolveDeliveryIntent(context)).toMatchObject({ desired: 'present', status: 'pending', approvalDigest: null });
+    expect(resolveDeliveryIntent({ ...context, workout: { ...base.workout!, title: 'Edited' } })).toMatchObject({ desired: 'present' });
+    expect(resolveDeliveryIntent({ ...context, setting: null })).toMatchObject({ desired: 'absent', status: 'stopped' });
+    expect(resolveDeliveryIntent({ ...context, hasPro: false })).toMatchObject({ desired: 'preserve', status: 'paused_pro' });
+    expect(resolveDeliveryIntent({ ...context, connection: { ...base.connection, epoch: 1 } }))
+      .toMatchObject({ desired: 'preserve', status: 'fresh_consent_required' });
+    transport.level = 'unsupported';
+    expect(resolveDeliveryIntent(context)).toMatchObject({ desired: 'preserve', status: 'unsupported' });
   });
   it('keeps an earlier provider copy when the current workout becomes unsupported', () => {
     const transport = new FakeTrainingTransport();

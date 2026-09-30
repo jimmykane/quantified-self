@@ -517,7 +517,9 @@ external-load display and converts edited pounds back to canonical kilograms; ch
 change load units. An unchanged rounded pound display preserves its stored kilogram value.
 
 Suunto maps strength to a dated Gym (`23`) Guide containing exercise/set instructions. Rep sets use manual transitions,
-so mapping is degraded, requires explicit approval, and is not native strength tracking. COROS has a contract fixture
+so mapping remains degraded and is not native strength tracking. This standard limitation is disclosed during normal
+Send/Enable plan sync; it does not require separate per-workout or per-edit mapping approval. Additional losses, such
+as shortened exercise instructions, still require explicit review of the current mapping. COROS has a contract fixture
 for strength Reps/Second, optional Rest and fixed equipment weight in kilograms, but browser new-send remains Coming
 soon until entitlement and account-side push/update/delete proof (#741). Garmin and Wahoo strength delivery are
 unsupported. No live provider acceptance, app/watch receipt or completed-activity link is claimed from isolated
@@ -527,13 +529,19 @@ v1 recipe tool remains only a compatibility summary. See `docs/mcp-server.md` fo
 Production delivery wrappers bind the complete provider policy methods instead of forwarding a fixed argument list.
 This preserves the strength companion in compatibility assessment and the existing explicit past-removal opt-in.
 A valid Suunto strength companion is degraded, not unsupported; missing, foreign or mismatched details still fail
-closed. Load-only edits change the mapping approval digest even when the v1 summary is unchanged. Old unsupported
-rows are reassessed by ordinary reconciliation, but plan sync opt-in alone never approves degraded strength delivery:
-without a matching saved digest they become `approval_required`, not automatically sent. Wrapper unit tests and
-synthetic-provider Firestore tests cover this recovery, reviewed create/update, concurrent sends and MCP preview/apply.
+closed. Load-only edits change the delivery content/mapping digest even when the v1 summary is unchanged. Ordinary
+reconciliation reassesses old `unsupported`/`approval_required` rows. Existing valid sync consent covers the standard
+Gym Guide limitation; Pro, active-plan, account-generation and Stop/suppression checks remain authoritative. Other
+degraded mappings default to requiring a matching approved digest. The internal `requiresApproval` policy flag is not
+persisted into workout recipes or provider artifacts; unchanged prescriptions retain their mapping version and digest.
+The callable preview distinguishes `approvalRequiredCount` from `warningCount`, so informative limitations remain
+visible without being described as blockers. Wrapper unit tests and synthetic-provider Firestore tests cover recovery,
+normal-consent create/update/reschedule, concurrent sends, additional-loss approval and MCP preview/apply.
 Past-copy removal remains opt-in, completed copies stay protected, and COROS's past-deletion restriction is unchanged.
-This wrapper repair changes no MCP tool, schema, scope, consent or response field; existing strength details and delivery
-status reads remain authoritative. Product Help already describes Suunto's manual transitions and review requirement.
+This policy changes no registered MCP tool, schema, scope, permission or response field. Existing strength compatibility
+reads still report degraded, and delivery previews disclose manual transitions without implying extra mapping approval.
+Normal MCP proposal confirmation/apply remains required. Product Help explains both the standard limitation and the
+additional-loss review boundary.
 
 Do not add planned-workout `Data*` types, `DataStore` entries, FIT parser behavior, or MCP fields merely to share this
 recipe. Extract the neutral structure, codec, validator, and reusable analysis to Sports Lib only after Garmin and COROS
@@ -1221,7 +1229,9 @@ including plan sync, plan-workout resume and standalone Send, without changing b
 provider entitlement and post-release/device evidence remain tracked in #647–#650 and #655. The
 ignored local Garmin Training API V2 and COROS API Reference PDFs remain evidence only and are never committed.
 
-Every serializer returns `exact`, `degraded`, or `unsupported`. Degraded output requires explicit approval. Current
+Every serializer returns `exact`, `degraded`, or `unsupported`. Degraded output requires explicit approval except for
+Suunto's standard Gym Guide manual-rep/native-tracking limitation, which is informational under normal delivery consent.
+Additional strength instruction loss still requires approval. Current approval-gated
 examples include Garmin exact-profile folding to its broad Running/Cycling workout categories, Garmin relative targets
 frozen from their stored reference snapshots, Garmin cycling-secondary-target device limits, COROS recovery-to-rest
 and first-target-only behavior, COROS integer rounding, Wahoo's first-target-only
