@@ -40,6 +40,7 @@ export function assessSuuntoGuide(workout: ScheduledWorkoutV1, destination: stri
   try {
     const result = guideMapping(workout, destination, owner, strength);
     return { level: result.level, issues: result.issues.map(issue => issue.message).slice(0, 20),
+      ...(result.requiresApproval === undefined ? {} : { requiresApproval: result.requiresApproval }),
       digest: hashTrainingScheduleRequestPayload({ ...base, payload: result.artifact }), mappingVersion: SUUNTO_MAPPING_VERSION };
   } catch (error) {
     if (!(error instanceof ProviderWorkoutMappingError)) throw error;

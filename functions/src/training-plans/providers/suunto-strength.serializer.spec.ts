@@ -11,11 +11,9 @@ const options = { name: 'Gym day', owner: 'Quantified Self', url: 'https://quant
   localDate: '2026-10-01', sourceWorkoutId: 'lift' };
 
 describe('Suunto Gym Guide strength mapping', () => {
-  it('requires explicit degraded approval and recommends activity 23 with manual reps', () => {
-    expect(() => serializeSuuntoStrengthGuideV1(details, { ...options, allowDegraded: false }))
-      .toThrow('explicit degradation approval');
-    const result = serializeSuuntoStrengthGuideV1(details, { ...options, allowDegraded: true });
-    expect(result.level).toBe('degraded');
+  it('discloses manual reps without extra approval and recommends activity 23', () => {
+    const result = serializeSuuntoStrengthGuideV1(details, { ...options, allowDegraded: false });
+    expect(result).toMatchObject({ level: 'degraded', requiresApproval: false });
     expect(result.issues.some(issue => issue.code === 'manual_strength_repetitions')).toBe(true);
     expect(result.artifact.activities).toEqual([23]);
     expect(result.artifact.steps).toMatchObject([
@@ -25,5 +23,13 @@ describe('Suunto Gym Guide strength mapping', () => {
     ]);
     expect(JSON.stringify(result.artifact)).toContain('5 reps');
     expect(JSON.stringify(result.artifact)).toContain('80 kg');
+  });
+  it('still requires approval for additional loss of long exercise instructions', () => {
+    const long = { ...details, exercises: [{ ...details.exercises[0], name: 'A'.repeat(80) }] };
+    expect(() => serializeSuuntoStrengthGuideV1(long, { ...options, allowDegraded: false }))
+      .toThrow('explicit degradation approval');
+    const result = serializeSuuntoStrengthGuideV1(long, { ...options, allowDegraded: true });
+    expect(result).toMatchObject({ level: 'degraded', requiresApproval: true });
+    expect(result.issues.some(issue => issue.code !== 'manual_strength_repetitions')).toBe(true);
   });
 });

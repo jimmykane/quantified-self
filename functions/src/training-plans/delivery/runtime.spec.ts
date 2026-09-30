@@ -3,7 +3,9 @@ import { afterEach, vi } from 'vitest';
 import { ActivityTypes } from '@sports-alliance/sports-lib';
 import { PLANNED_WORKOUT_PROVIDER_IDS } from '../../../../shared/planned-workout-providers';
 import type { ScheduledWorkoutV1 } from '../../../../shared/training-plans';
+import { projectStrengthWorkoutToV1, type StrengthWorkoutDetailsV1 } from '../../../../shared/strength-workout';
 import { productionDeliveryRuntime } from './runtime';
+import { SuuntoGuideTransport } from './suunto/transport';
 import { authorizeSuuntoGuideRequest } from './suunto/authorization';
 import { readGuideArchive } from './suunto/archive';
 import { guideExternalId } from './suunto/mapping';
@@ -26,6 +28,76 @@ describe('Production Training delivery rollout', () => {
       localDate: '2026-09-17', completed: false },
     timeZone: 'Europe/Helsinki', cursor: null,
   };
+  const strength: StrengthWorkoutDetailsV1 = {
+    version: 1, workoutId: 'fixture-strength-workout', revision: 1, exercises: [
+      { id: 'squat', name: 'Squat', sets: [
+        { id: 'squat-1', ending: { kind: 'repetitions', repetitions: 8 }, externalLoadKg: 50, restAfterSeconds: 60 },
+        { id: 'squat-2', ending: { kind: 'repetitions', repetitions: 8 }, externalLoadKg: 50, restAfterSeconds: 60 },
+      ] },
+      { id: 'plank', name: 'Plank', sets: [
+        { id: 'plank-1', ending: { kind: 'time', seconds: 30 }, restAfterSeconds: 30 },
+      ] },
+    ],
+  };
+  const strengthWorkout: ScheduledWorkoutV1 = {
+    schemaVersion: 1, id: strength.workoutId, planId: null, title: 'Strength session', localDate: '2026-09-17',
+    lifecycle: 'planned', revision: 1, createdAtMs: 1, updatedAtMs: 1,
+    structure: projectStrengthWorkoutToV1(strength),
+  };
+
+  it('preserves the complete strength prescription through the production Suunto assessment without provider I/O', () => {
+    vi.stubEnv('SUUNTOAPP_GUIDE_OWNER', 'Fixture application');
+    const fetcher = vi.fn();
+    vi.stubGlobal('fetch', fetcher);
+    const transport = runtime.transport('suunto', 'owner')!;
+    const policy = new SuuntoGuideTransport(async () => { throw new Error('No provider I/O allowed'); }, 'Fixture application');
+    const assessment = transport.assess(strengthWorkout, inspection.destinationKey, inspection.timeZone, strength);
+    expect(assessment).toEqual(policy.assess(strengthWorkout, inspection.destinationKey, inspection.timeZone, strength));
+    expect(assessment.level).toBe('degraded');
+    expect(assessment.requiresApproval).toBe(false);
+    expect(assessment.issues).not.toContain('The complete strength prescription is unavailable or mismatched.');
+    // Load is absent from the v1 projection, but must still change the delivery digest.
+    const changedLoad = structuredClone(strength);
+    changedLoad.exercises[0].sets[0].externalLoadKg = 55;
+    const changedAssessment = transport.assess(strengthWorkout, inspection.destinationKey, inspection.timeZone, changedLoad);
+    expect(changedAssessment.level).toBe('degraded');
+    expect(changedAssessment.requiresApproval).toBe(false);
+    expect(changedAssessment.digest).not.toBe(assessment.digest);
+    expect(authorizeSuuntoGuideRequest).not.toHaveBeenCalled();
+    expect(fetcher).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['missing', undefined], ['null', null], ['foreign workout', { ...strength, workoutId: 'another-workout' }],
+    ['mismatched projection', { ...strength, exercises: [{ ...strength.exercises[0], name: 'Different exercise' }] }],
+  ] as const)('keeps %s strength details unsupported through the production wrapper', (_name, details) => {
+    vi.stubEnv('SUUNTOAPP_GUIDE_OWNER', 'Fixture application');
+    const fetcher = vi.fn();
+    vi.stubGlobal('fetch', fetcher);
+    expect(runtime.transport('suunto', 'owner')!.assess(strengthWorkout, inspection.destinationKey, inspection.timeZone, details))
+      .toMatchObject({ level: 'unsupported', issues: ['The complete strength prescription is unavailable or mismatched.'] });
+    expect(authorizeSuuntoGuideRequest).not.toHaveBeenCalled();
+    expect(fetcher).not.toHaveBeenCalled();
+  });
+
+  it.each(['garmin', 'coros', 'wahoo'] as const)('does not approve strength delivery to unsupported %s', provider => {
+    const fetcher = vi.fn();
+    vi.stubGlobal('fetch', fetcher);
+    expect(runtime.transport(provider, 'owner')!.assess(strengthWorkout, inspection.destinationKey, inspection.timeZone, strength).level)
+      .toBe('unsupported');
+    expect(fetcher).not.toHaveBeenCalled();
+  });
+
+  it.each(PLANNED_WORKOUT_PROVIDER_IDS)('preserves %s removal opt-in while protecting past and completed copies by default', provider => {
+    vi.stubEnv('SUUNTOAPP_GUIDE_OWNER', 'Fixture application');
+    const transport = runtime.transport(provider, 'owner')!;
+    const artifact = { ...inspection.artifact, localDate: '2026-09-16' };
+    expect(transport.canRemove(artifact, '2026-09-17')).toBe(false);
+    expect(transport.canRemove(artifact, '2026-09-17', false)).toBe(false);
+    expect(transport.canRemove(artifact, '2026-09-17', true)).toBe(provider !== 'coros');
+    expect(transport.canRemove({ ...artifact, completed: true }, '2026-09-17', true)).toBe(false);
+    expect(transport.canRemove({ ...artifact, localDate: '2026-09-18' }, '2026-09-17')).toBe(true);
+  });
 
   it.each([undefined, 'unused-legacy-key'])('uses the existing API key and user OAuth token regardless of legacy Guides configuration: %s', async legacyKey => {
     vi.stubEnv('SUUNTOAPP_GUIDE_OWNER', 'Quantified Self');

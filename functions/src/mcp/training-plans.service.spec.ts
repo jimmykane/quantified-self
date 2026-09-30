@@ -71,6 +71,8 @@ describe('Training plan MCP reads', () => {
     expect(compatibility.assessments.map(item => [item.provider, item.level])).toEqual([
       ['suunto', 'degraded'], ['garmin', 'unsupported'], ['wahoo', 'unsupported'], ['coros', 'unsupported'],
     ]);
+    expect(compatibility.assessments[0].issues[0].message).toContain('standard limitation needs no separate mapping approval');
+    expect(compatibility.assessments[0].issues[0].message).toContain('additional mapping losses still require review');
     f.strengthDocs.w1 = { ...details, exercises: [{ ...details.exercises[0], name: 'Changed' }] };
     await expect(f.run('get_strength_workout_details', { workoutRef })).rejects.toThrow();
   });

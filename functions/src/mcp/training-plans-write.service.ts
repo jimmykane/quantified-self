@@ -40,7 +40,7 @@ import { applyTrainingPlanDeletion, deleteTrainingPlanForUser,
   TrainingPlanDeletionResumeRequiredError } from '../training-plans/delete-training-plan';
 import { trainingDeliveryCommand } from '../training-plans/delivery/commands';
 import { productionDeliveryRuntime } from '../training-plans/delivery/runtime';
-import type { DeliveryRuntime } from '../training-plans/delivery/contracts';
+import { requiresDeliveryMappingApproval, type DeliveryRuntime } from '../training-plans/delivery/contracts';
 import { decodeOpaqueValue, encodeOpaqueValue, McpDataError } from './data.service';
 import {
   TRAINING_CHANGE_SCHEMA,
@@ -592,7 +592,18 @@ function providerSummary(provider: PlannedWorkoutProviderId,
       : action === 'retry' ? 'retry the current delivery state'
         : action === 'approve' ? 'approve the current workout mapping differences'
           : 'enable ongoing workout delivery';
-  return `${provider}: ${effect}; ${preview.eligibleCount} currently eligible, ${preview.warningCount} with mapping warnings.`;
+  const summary = `${provider}: ${effect}; ${preview.eligibleCount} currently eligible, ${preview.warningCount} with mapping warnings.`;
+  if (['enable', 'send', 'resume'].includes(action) && preview.warningCount && preview.approvalRequiredCount === 0) {
+    const notes = [...new Set(preview.issues)].join(' ');
+    const disclosure = `${summary} ${notes} No separate mapping approval is needed for these limitations; unsupported workouts cannot be sent.`;
+    if (preview.issues.length >= 20 || disclosure.length > 500) {
+      // Unlike digest approval, informational notes need not block a bulk plan
+      // when its full warning set exceeds the bounded public summary field.
+      return `${summary} Review each workout's compatibility details. Informational limitations need no separate mapping approval; unsupported workouts cannot be sent.`;
+    }
+    return disclosure;
+  }
+  return summary;
 }
 
 async function previewProviderOperation(
@@ -686,8 +697,9 @@ async function previewSimulatedProviderAvailability(
     settingsRevision: Number(previous.revision ?? 0),
     eligibleCount,
     warningCount,
-    issues: assessments.flatMap(item => item?.issues ?? []).slice(0, 20),
-    approvalDigest: operation.targetType === 'workout' && assessments[0]?.level === 'degraded'
+    approvalRequiredCount: assessments.filter(item => item && requiresDeliveryMappingApproval(item)).length,
+    issues: [...new Set(assessments.flatMap(item => item?.issues ?? []))].slice(0, 20),
+    approvalDigest: operation.targetType === 'workout' && assessments[0] && requiresDeliveryMappingApproval(assessments[0])
       ? assessments[0].digest : null,
     workoutCompatibility: operation.targetType === 'workout' ? assessments[0]?.level ?? null : null,
   };

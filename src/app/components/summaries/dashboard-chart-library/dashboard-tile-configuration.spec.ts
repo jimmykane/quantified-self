@@ -1005,6 +1005,17 @@ describe('DashboardTileConfiguration', () => {
     expect(dialogRefMock.close).toHaveBeenCalledWith({ saved: true });
   });
 
+  it('ignores unchanged Calendar visibility and repeated show requests without feedback or duplicates', async () => {
+    await component.onCalendarVisibilityChange(false);
+    expect(userServiceMock.updateUserProperties).not.toHaveBeenCalled();
+    expect(hapticsMock.selection).not.toHaveBeenCalled();
+    await component.onCalendarVisibilityChange(true);
+    await component.onCalendarVisibilityChange(true);
+    expect(dialogData.user.settings.dashboardSettings.tiles.filter(tile => tile.chartType === DASHBOARD_ACTIVITY_CALENDAR_CHART_TYPE)).toHaveLength(1);
+    expect(userServiceMock.updateUserProperties).toHaveBeenCalledOnce();
+    expect(hapticsMock.selection).toHaveBeenCalledOnce(); expect(hapticsMock.success).toHaveBeenCalledOnce();
+  });
+
   it('restores Today summary visibility when its save fails', async () => {
     dialogData.user.settings.dashboardSettings.showTodaySummary = true;
     dialogData.previewTodaySummaryVisibility = vi.fn();

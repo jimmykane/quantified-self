@@ -12,6 +12,7 @@ import { DashboardConfigurationService, cloneDashboardSettings } from '../../ser
 import { migrateDashboardCalendarDayContextLayout } from '../../helpers/dashboard-calendar-layout.helper';
 import { DashboardChartLibraryComponent } from './dashboard-chart-library/dashboard-chart-library.component';
 import { DashboardChartLibraryState } from './dashboard-chart-library/dashboard-chart-library-state.service';
+import { isDashboardActivityCalendarTile } from '../../helpers/dashboard-auto-tile.helper';
 import type { DashboardPreviewInput } from '../../helpers/dashboard-chart-preview.helper';
 import { TimelineNotesWorkspaceComponent } from '../timeline-notes/timeline-notes-workspace.component';
 import type { TimelineNoteChartContext } from '../../helpers/timeline-notes-chart.helper';
@@ -346,6 +347,10 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
   public mainGridSections: DashboardTileSectionViewModel[] = [];
   public calendarGridSection: DashboardTileSectionViewModel | null = null;
   public otherGridSections: DashboardTileSectionViewModel[] = [];
+
+  get showCalendar(): boolean {
+    return (this.user?.settings?.dashboardSettings?.tiles || []).some(isDashboardActivityCalendarTile);
+  }
 
   public tileTypes = TileTypes;
   public readonly isDashboardActivityCalendarChartType = isDashboardActivityCalendarChartType;

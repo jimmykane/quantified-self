@@ -8,7 +8,7 @@
 </button>
 <mat-menu #tileOptions="matMenu" class="qs-menu-panel qs-menu-panel-form qs-config-menu qs-tile-actions-menu">
   <div class="tile-actions-menu-shell">
-    @if (showLayoutControls) {
+    @if (canResize) {
     <button mat-menu-item type="button" class="tile-action-menu-item" [disabled]="isSaving" [matMenuTriggerFor]="columnsMenu" (menuOpened)="onLayoutMenuOpened()">
       <mat-icon>view_column</mat-icon>
       <span>Columns: {{ size.columns }}</span>

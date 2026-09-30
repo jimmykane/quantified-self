@@ -11,7 +11,8 @@ import { getUserDeletionGuardStateInTransaction } from '../../shared/user-deleti
 import { hashTrainingScheduleRequestPayload } from '../persistence';
 import { assertNoTrainingPlanDeletionInProgress } from '../deletion-lock';
 import { TrainingScheduleMutationError } from '../mutation';
-import { DELIVERY_LEDGER, DELIVERY_RECEIPTS, DELIVERY_SCOPES, DELIVERY_STATE, type DeliveryLedgerV1, type DeliveryRuntime } from './contracts';
+import { DELIVERY_LEDGER, DELIVERY_RECEIPTS, DELIVERY_SCOPES, DELIVERY_STATE, requiresDeliveryMappingApproval,
+  type DeliveryLedgerV1, type DeliveryRuntime } from './contracts';
 import { deliveryIdentity } from './intent';
 import { assessTrainingDeliveryMapping } from './mapping';
 import { stageTrainingDeliveryReconciliation } from './marker';
@@ -118,8 +119,9 @@ export async function trainingDeliveryCommand(runtime: DeliveryRuntime, uid: str
       eligibleCount: workouts.filter(item => item.lifecycle === 'planned' && item.localDate >= today
         && (!transport || (Date.parse(item.localDate) - Date.parse(today)) / 86_400_000 <= transport.horizonDays)).length,
       warningCount: assessments.filter(item => item.level !== 'exact').length,
+      approvalRequiredCount: assessments.filter(requiresDeliveryMappingApproval).length,
       issues: [...new Set([...(connection.issues ?? []), ...assessments.flatMap(item => item.issues)])].slice(0, 20),
-      approvalDigest: workout && assessments[0]?.level === 'degraded' ? assessments[0].digest : null,
+      approvalDigest: workout && requiresDeliveryMappingApproval(assessments[0]) ? assessments[0].digest : null,
       workoutCompatibility: workout ? assessments[0]?.level ?? null : null };
     if (previewOnly) return preview;
     const removal = command.action === 'stop';

@@ -808,7 +808,7 @@ describe('Training provider delivery controls', () => {
     const component = fixture.componentInstance;
     await component.begin('garmin', 'send'); fixture.detectChanges();
     expect(fixture.nativeElement.textContent).toContain('1 workout needs review');
-    expect(fixture.nativeElement.textContent).toContain('degraded workouts require individual approval');
+    expect(fixture.nativeElement.textContent).toContain('review of mapping differences before delivery');
     expect(service.mutate).not.toHaveBeenCalled();
     await component.confirm();
     expect(service.mutate.mock.calls[0][0]).not.toHaveProperty('approvalDigest');
@@ -816,6 +816,24 @@ describe('Training provider delivery controls', () => {
     expect(service.mutate).toHaveBeenCalledOnce(); // approving is a separate, explicit action
     await component.confirm();
     expect(service.mutate.mock.calls[1][0]).toMatchObject({ action: 'approve', approvalDigest: 'latest-digest' });
+  });
+  it('discloses the standard Suunto strength limitation without an extra approval action', async () => {
+    service.isSetupAvailable.mockImplementation(provider => provider === 'suunto');
+    service.preview.mockResolvedValue({ ...(await service.preview()), warningCount: 1, approvalRequiredCount: 0,
+      workoutCompatibility: 'degraded', approvalDigest: null,
+      issues: ['Gym Guides require manual transitions for repetitions; they do not count reps or track load natively.'] });
+    const fixture = TestBed.createComponent(TrainingDeliveryDialogComponent); fixture.detectChanges();
+    const component = fixture.componentInstance;
+    await component.begin('suunto', 'send'); fixture.detectChanges();
+    expect(fixture.nativeElement.textContent).toContain('No separate mapping approval is needed');
+    expect(fixture.nativeElement.textContent).toContain('do not count reps or track load natively');
+    expect(fixture.nativeElement.textContent).not.toContain('workout needs review');
+    expect(component.confirmLabel()).toBe('Send workout');
+    expect(service.mutate).not.toHaveBeenCalled();
+    await component.confirm();
+    expect(service.mutate.mock.calls[0][0]).toMatchObject({ action: 'send', provider: 'suunto' });
+    expect(service.mutate.mock.calls[0][0]).not.toHaveProperty('approvalDigest');
+    expect(haptics.success).toHaveBeenCalledOnce();
   });
   it.each([0, 1, 2])('renders %s preview warnings with matching nouns and verbs', async warningCount => {
     service.isSetupAvailable.mockImplementation(provider => provider === 'garmin');

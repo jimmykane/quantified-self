@@ -215,6 +215,64 @@ describe('inline chart library state', () => {
     expect(user.settings.dashboardSettings.showTodaySummary).toBe(false);
     expect(persistence.save).toHaveBeenCalledTimes(1); expect(watch).not.toHaveBeenCalled();
   });
+  it('shows and hides Calendar independently of Today and other saved tiles, with Undo', async () => {
+    const custom = structuredClone(getDashboardChartCatalog().find(entry => entry.definition.category === 'custom')!.tile);
+    custom.order = 0;
+    const original = { ...structuredClone(calendar.tile), order: 1, name: 'My calendar', size: { columns: 2, rows: 2 } };
+    user.settings.dashboardSettings = {
+      tiles: [custom, original], showTodaySummary: false,
+    };
+    user.settings.appSettings = { ...user.settings.appSettings, dashboardChartLibrarySeen: { 'section:calendar': 4 } };
+    await state.bulk(user, 'calendar');
+    expect(user.settings.dashboardSettings.tiles).toEqual([custom]);
+    expect(user.settings.dashboardSettings.showTodaySummary).toBe(false);
+    expect(user.settings.appSettings.dashboardChartLibrarySeen).toEqual({ 'section:calendar': 4 });
+    expect(user.settings.dashboardSettings.autoTiles?.activityCalendar?.state).toBe('dismissed');
+    expect(state.undoAvailable()).toBe(true);
+    expect(state.activeLane()).toBeNull(); expect(state.editor()).toBeNull();
+    await state.undo(user);
+    expect(user.settings.dashboardSettings.tiles).toEqual([custom, original]);
+    await state.bulk(user, 'calendar');
+    await state.bulk(user, 'calendar');
+    expect(user.settings.dashboardSettings.tiles).toEqual([custom, { ...calendar.tile, order: 1 }]);
+    expect(user.settings.dashboardSettings.autoTiles?.activityCalendar?.state).toBe('added');
+    expect(user.settings.dashboardSettings.showTodaySummary).toBe(false);
+    expect(watch).not.toHaveBeenCalled();
+    expect(haptics.selection).toHaveBeenCalledTimes(4);
+    expect(haptics.success).toHaveBeenCalledTimes(4);
+  });
+  it('restores Calendar on an intentionally empty dashboard without enabling Today', async () => {
+    user.settings.dashboardSettings.showTodaySummary = false;
+    await state.bulk(user, 'calendar');
+    expect(user.settings.dashboardSettings.tiles).toEqual([calendar.tile]);
+    expect(user.settings.dashboardSettings.showTodaySummary).toBe(false);
+    await state.undo(user);
+    expect(user.settings.dashboardSettings.tiles).toEqual([]);
+    expect(user.settings.dashboardSettings.showTodaySummary).toBe(false);
+  });
+  it.each([true, false])('keeps Calendar visibility unchanged when its save fails (visible: %s)', async visible => {
+    const before = visible ? [structuredClone(calendar.tile)] : [];
+    user.settings.dashboardSettings.tiles = before;
+    persistence.save.mockRejectedValueOnce(new DashboardConfigurationConflict());
+    await state.bulk(user, 'calendar');
+    expect(user.settings.dashboardSettings.tiles).toEqual(before);
+    expect(state.error()).toContain('dashboard changed');
+    expect(state.undoAvailable()).toBe(false); expect(state.busy()).toBe(false);
+    expect(haptics.selection).toHaveBeenCalledOnce(); expect(haptics.error).toHaveBeenCalledOnce();
+    expect(haptics.success).not.toHaveBeenCalled();
+  });
+  it('guards repeated Calendar toggles while saving and ignores a completion after switching accounts', async () => {
+    let resolve!: () => void;
+    persistence.save.mockReturnValueOnce(new Promise<void>(done => resolve = done));
+    const saving = state.bulk(user, 'calendar');
+    await Promise.resolve();
+    await state.bulk(user, 'calendar');
+    expect(persistence.save).toHaveBeenCalledOnce(); expect(state.busy()).toBe(true);
+    expect(user.settings.dashboardSettings.tiles).toEqual([]);
+    state.resetContext(); resolve(); await saving;
+    expect(user.settings.dashboardSettings.tiles).toEqual([]);
+    expect(state.undoAvailable()).toBe(false); expect(state.busy()).toBe(false);
+  });
   it('ignores duplicate submissions while a save is pending', async () => {
     let resolve!: () => void; persistence.save.mockReturnValueOnce(new Promise<void>(done => resolve = done));
     await state.select(user, calendar); const saving = state.save(); await state.save();

@@ -24,7 +24,6 @@ describe('ActivityCalendarVolumeListComponent', () => {
       progressLabel: 'Running Duration',
       ariaLabel: 'Running, 1 activity, Duration 1h',
       stats: [
-        { metric: 'duration', icon: 'schedule', valueLabel: '1h', isBarMetric: true, ariaLabel: 'Duration 1h' },
         { metric: 'distance', icon: 'route', valueLabel: '10.00 Km', isBarMetric: false, ariaLabel: 'Distance 10.00 Km' },
       ],
     }]);
@@ -36,9 +35,10 @@ describe('ActivityCalendarVolumeListComponent', () => {
       .toBe('100%');
     expect([...fixture.nativeElement.querySelectorAll('.calendar-family-volume-stat')]
       .map((stat: HTMLElement) => stat.getAttribute('aria-label'))).toEqual([
-      'Duration 1h',
       'Distance 10.00 Km',
     ]);
+    expect(fixture.nativeElement.querySelector('.calendar-family-volume-value')?.textContent?.trim()).toBe('1h');
+    expect(fixture.nativeElement.querySelector('.calendar-family-volume-track')?.getAttribute('aria-valuetext')).toBe('1h');
   });
 
   it('turns a routed family row into an activity link and emits its selection', async () => {

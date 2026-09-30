@@ -257,7 +257,11 @@ missing or mismatched. `preview_strength_workout_change` requires `training-plan
 accepts one complete create/update draft, derives the v1 summary server-side and uses the existing
 owner/grant/revision/expiry-bound proposal and approval-gated `apply_training_changes`. No provider action or wider
 consent is added. Exercise names are untrusted user text. Suunto Gym Guide compatibility is degraded because reps
-need manual transitions; COROS new-send remains Coming soon, and Garmin/Wahoo are unsupported. New additive tools need
+need manual transitions. The existing Send/Enable sync consent covers that standard limitation, disclosed in the
+delivery preview without separate per-workout/per-edit mapping approval; additional mapping loss still needs review.
+Normal owner/grant-bound MCP proposal confirmation and apply remain required. No registered schema, scope, permission,
+provider action or response field changes for this policy. COROS new-send remains Coming soon, and Garmin/Wahoo are
+unsupported. New additive tools need
 a client catalog refresh after release; the registered v1 recipe input/output stays unchanged. The app's strength
 editor may display or accept pounds using Sports Lib 21.3.0, but MCP external-load input and output remain canonical
 kilograms; the owner's display preference does not alter the wire contract.

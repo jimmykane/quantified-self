@@ -38,6 +38,15 @@ describe('help.content', () => {
     expect(HELP_SECTIONS.some(section => section.id === 'activity-calendar')).toBe(true);
   });
 
+  it('distinguishes standard Suunto strength guidance from additional mapping-loss approval', () => {
+    const content = HELP_SECTIONS.find(section => section.id === 'training-plans')!.content;
+    expect(content).toContain('rep-based sets require manual transitions');
+    expect(content).toContain('not native rep/load tracking');
+    expect(content).toContain('no separate approval for each workout or edit');
+    expect(content).toContain('Additional mapping losses, such as shortened exercise instructions, still need review');
+    expect(content).toContain('Sent Guide status does not prove app/watch receipt or workout completion');
+  });
+
   it('explains the independent weight preference and canonical weigh-in storage', () => {
     const copy = JSON.stringify(HELP_SECTIONS);
     expect(copy).toContain('Weight input and display use your **Settings → Units → Weight** choice (kg or lb)');
@@ -184,6 +193,7 @@ describe('help.content', () => {
     expect(calendar).toContain('one plan/status metadata line; tap a workout to read its steps');
     expect(calendar).toContain('same compact **Training impact** summary as Calendar and Dashboard previews');
     expect(calendar).toContain('Separate UTC-day outcomes and missing-data warnings stay explicit');
+    expect(calendar).toContain('Impact text wraps on narrow screens so outcome values and unavailable reasons remain readable');
     expect(calendar).toContain("offers **Dashboard** to return when opened from the dashboard tile or Today's mini-calendar");
     const dashboard = HELP_SECTIONS.find(section => section.id === 'getting-started')?.content;
     expect(dashboard).toContain('HRV, Sleep, Form, and Freshness Forecast show the same note markers');

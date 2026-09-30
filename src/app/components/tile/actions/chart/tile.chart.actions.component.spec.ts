@@ -291,6 +291,26 @@ describe('TileChartActionsComponent', () => {
     expect(hapticsMock.selection).not.toHaveBeenCalled();
   });
 
+  it('omits Calendar resize controls and blocks row and column mutations', async () => {
+    const calendar = { ...getDashboardChartCatalog().find(entry => entry.definition.id === 'curated-activity-calendar')!.tile, order: 0 };
+    userMock.settings.dashboardSettings.tiles = [calendar];
+    fixture.componentRef.setInput('chartType', DASHBOARD_ACTIVITY_CALENDAR_CHART_TYPE);
+    fixture.detectChanges();
+    fixture.nativeElement.querySelector('.tile-actions-trigger').click();
+    fixture.detectChanges(); await fixture.whenStable();
+    const menu = document.body.querySelector('[role="menu"]')!;
+    expect(menu.textContent).not.toContain('Columns:'); expect(menu.textContent).not.toContain('Rows:');
+    expect(menu.textContent).toContain('Calendar details'); expect(menu.textContent).toContain('Remove calendar');
+    hapticsMock.selection.mockClear();
+    await component.changeTileColumnSize({ value: 2 });
+    await component.changeTileRowSize({ value: 3 });
+    expect(calendar.size).toEqual({ columns: 4, rows: 1 });
+    expect(userMock.updateUserProperties).not.toHaveBeenCalled();
+    expect(hapticsMock.selection).not.toHaveBeenCalled(); expect(hapticsMock.success).not.toHaveBeenCalled();
+    fixture.componentRef.setInput('chartType', ChartTypes.ColumnsVertical); fixture.detectChanges();
+    expect(component.canResize).toBe(true);
+  });
+
   it('should expose move boundaries for the first tile', () => {
     expect(component.canMoveTileBackward()).toBe(false);
     expect(component.canMoveTileForward()).toBe(true);

@@ -469,6 +469,11 @@ export function serializeSuuntoStrengthGuideV1(
         message: 'Suunto Gym Guides show exercise/set instructions and require manual transitions for repetitions; they do not count reps or track load natively.',
     };
     const issues = [manualIssue, ...base.issues];
-    if (!options.allowDegraded) throw new ProviderWorkoutMappingError('suunto', 'degradation-confirmation-required', issues);
-    return { ...base, level: 'degraded', issues };
+    // Manual rep transitions are the normal Gym Guide model, disclosed during Send/Enable sync.
+    // Additional losses (for example shortened exercise instructions) still require review.
+    const requiresApproval = base.level === 'degraded';
+    if (requiresApproval && !options.allowDegraded) {
+        throw new ProviderWorkoutMappingError('suunto', 'degradation-confirmation-required', issues);
+    }
+    return { ...base, level: 'degraded', issues, requiresApproval };
 }

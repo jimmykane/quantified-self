@@ -21,6 +21,9 @@ import { createWahooTrainingClient } from './wahoo/http';
 import { authorizeWahooTrainingRequest } from './wahoo/authorization';
 export { DELIVERY_SERVICES } from './connection';
 
+// Bind pure policy methods intact: forwarding a hand-written argument list can
+// silently drop optional strength details or an explicit past-removal opt-in.
+// HTTP methods below still bind the authenticated account lazily per operation.
 function garminTransport(db: admin.firestore.Firestore, uid: string): TrainingDeliveryTransport {
   const bound = (operation: Pick<DeliveryOperation, 'destinationKey' | 'connectionGeneration'>) => new GarminTrainingTransport(
     createGarminTrainingClient(() => authorizeGarminTrainingRequest(db, uid, operation), fetch, Date.now,
@@ -29,8 +32,8 @@ function garminTransport(db: admin.firestore.Firestore, uid: string): TrainingDe
   return {
     mappingVersion: policy.mappingVersion, horizonDays: policy.horizonDays,
     inspection: { policy: policy.inspection.policy, inspect: (request, guard) => bound(request).inspection.inspect(request, guard) },
-    assess: (workout, destination, zone) => policy.assess(workout, destination, zone),
-    canRemove: (artifact, today) => policy.canRemove(artifact, today),
+    assess: policy.assess.bind(policy),
+    canRemove: policy.canRemove.bind(policy),
     execute: (operation, checkpoint, guard) => bound(operation).execute(operation, checkpoint, guard),
     recover: (operation, checkpoint, guard) => bound(operation).recover(operation, checkpoint, guard),
   };
@@ -43,8 +46,8 @@ function suuntoTransport(db: admin.firestore.Firestore, uid: string, owner: stri
   return {
     mappingVersion: policy.mappingVersion, horizonDays: policy.horizonDays, withdrawOutsideHorizon: true,
     inspection: { policy: policy.inspection.policy, inspect: (request, guard) => bound(request).inspection.inspect(request, guard) },
-    assess: (workout, destination, zone) => policy.assess(workout, destination, zone),
-    canRemove: (artifact, today) => policy.canRemove(artifact, today),
+    assess: policy.assess.bind(policy),
+    canRemove: policy.canRemove.bind(policy),
     execute: (operation, checkpoint, guard) => bound(operation).execute(operation, checkpoint, guard),
     recover: (operation, checkpoint, guard) => bound(operation).recover(operation, checkpoint, guard),
   };
@@ -57,8 +60,8 @@ function corosTransport(db: admin.firestore.Firestore, uid: string): TrainingDel
   return {
     mappingVersion: policy.mappingVersion,
     horizonDays: policy.horizonDays,
-    assess: (workout, destination, zone) => policy.assess(workout, destination, zone),
-    canRemove: (artifact, today) => policy.canRemove(artifact, today),
+    assess: policy.assess.bind(policy),
+    canRemove: policy.canRemove.bind(policy),
     execute: (operation, checkpoint, guard) => bound(operation).execute(operation, checkpoint, guard),
     recover: operation => bound(operation).recover(operation),
     batch: {
@@ -76,8 +79,8 @@ function wahooTransport(db: admin.firestore.Firestore, uid: string): TrainingDel
   return {
     mappingVersion: policy.mappingVersion, horizonDays: policy.horizonDays, withdrawOutsideHorizon: true,
     inspection: { policy: policy.inspection.policy, inspect: (request, guard) => bound(request).inspection.inspect(request, guard) },
-    assess: (workout, destination, zone) => policy.assess(workout, destination, zone),
-    canRemove: (artifact, today) => policy.canRemove(artifact, today),
+    assess: policy.assess.bind(policy),
+    canRemove: policy.canRemove.bind(policy),
     execute: (operation, checkpoint, guard) => bound(operation).execute(operation, checkpoint, guard),
     recover: (operation, checkpoint, guard) => bound(operation).recover(operation, checkpoint, guard),
   };

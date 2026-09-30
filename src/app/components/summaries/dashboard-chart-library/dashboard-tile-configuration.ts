@@ -147,6 +147,7 @@ import {
   buildDashboardPowerCurveAutoTile,
   buildDashboardSleepTrendAutoTile,
   getDashboardAutoTileDescriptorForTile,
+  isDashboardActivityCalendarTile,
   isDashboardSleepTrendTile,
   markDashboardAutoTileAdded,
   markDashboardAutoTileDismissed,
@@ -196,7 +197,7 @@ interface DashboardManagerSettingsSnapshot {
   autoTiles?: Partial<Record<string, AppDashboardAutoTileState>>;
 }
 
-type DashboardManagerSavingAction = 'save' | 'todaySummary' | 'resetToDefault' | 'addAll' | 'removeAll' | null;
+type DashboardManagerSavingAction = 'save' | 'todaySummary' | 'calendar' | 'resetToDefault' | 'addAll' | 'removeAll' | null;
 
 export class DashboardTileConfiguration {
   private static readonly excludedChartTypePatterns = [
@@ -601,6 +602,31 @@ export class DashboardTileConfiguration {
 
     try {
       this.setTodaySummaryVisibility(dashboardSettings, showTodaySummary);
+      await this.persistDashboardSettings(dashboardSettings);
+      this.hasSavedChanges = true;
+      this.hapticsService.success();
+    } catch (error) {
+      this.rollbackDashboardSettings(dashboardSettings, previousSettings);
+      this.handleDashboardSettingsSaveError(error);
+    } finally {
+      this.stopSaving();
+    }
+  }
+
+  async onCalendarVisibilityChange(visible: boolean): Promise<void> {
+    const dashboardSettings = this.data.user.settings.dashboardSettings;
+    if (this.isSaving || dashboardSettings.tiles.some(isDashboardActivityCalendarTile) === visible) return;
+
+    this.hapticsService.selection();
+    this.startSaving('calendar');
+    this.saveError = '';
+    const previousSettings = this.snapshotDashboardSettings(dashboardSettings);
+    try {
+      const tiles = this.cloneTiles(dashboardSettings.tiles);
+      dashboardSettings.tiles = visible
+        ? [...tiles, buildDashboardActivityCalendarTile(this.resolveNextTileOrder(tiles))]
+        : tiles.filter(tile => !isDashboardActivityCalendarTile(tile));
+      this.syncAutoTileStateAfterSave(dashboardSettings, previousSettings.tiles, dashboardSettings.tiles);
       await this.persistDashboardSettings(dashboardSettings);
       this.hasSavedChanges = true;
       this.hapticsService.success();

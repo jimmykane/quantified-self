@@ -131,7 +131,7 @@ header strong {
 .training-impact-compact-outcomes > span {
   overflow: hidden;
   text-overflow: ellipsis;
-  white-space: nowrap;
+  white-space: var(--training-impact-compact-white-space, nowrap);
 }
 
 .training-impact-compact strong {
