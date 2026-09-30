@@ -5,7 +5,9 @@
   "shortDescription": "Fixture intervals",
   "owner": "Quantified Self",
   "url": "https://quantified-self.io/training/plans",
-  "activities": [1],
+  "activities": [
+    1
+  ],
   "usage": "workout",
   "localDate": "2026-09-03",
   "externalId": "qs-suunto-9FY_Ylbw0yViEKcPFAx4RKg3Hm9mnnFTRTE37sW_HYg",
@@ -15,13 +17,42 @@
       "type": "fields",
       "title": "Warm up",
       "fields": [
-        { "type": "stepDurationCountdown", "value": 600, "title": "Remaining" },
-        { "type": "targetHeartRate", "min": 130, "max": 145, "title": "Target HR" },
-        { "type": "text", "value": "Easy warm up" }
+        {
+          "type": "heartRate",
+          "title": "HR"
+        },
+        {
+          "type": "stepDurationCountdown",
+          "value": 600,
+          "title": "Remain"
+        },
+        {
+          "type": "targetHeartRate",
+          "min": 130,
+          "max": 145,
+          "title": "Tgt HR"
+        },
+        {
+          "type": "text",
+          "value": "Easy warm up"
+        },
+        {
+          "type": "pace",
+          "title": "Pace"
+        }
       ],
       "transitions": [
-        { "condition": { "type": "stepDuration", "value": 600 } }
-      ]
+        {
+          "condition": {
+            "type": "stepDuration",
+            "value": 600
+          }
+        }
+      ],
+      "notification": {
+        "title": "Warm up",
+        "text": "Easy warm up"
+      }
     },
     {
       "type": "repeat",
@@ -31,25 +62,83 @@
           "type": "fields",
           "title": "Work",
           "fields": [
-            { "type": "stepDistanceCountdown", "value": 400, "title": "Remaining" },
-            { "type": "targetPace", "min": 4.3, "max": 4.55, "title": "Tgt pace" },
-            { "type": "text", "value": "Fast 400" }
+            {
+              "type": "pace",
+              "title": "Pace"
+            },
+            {
+              "type": "stepDistanceCountdown",
+              "value": 400,
+              "title": "Remain"
+            },
+            {
+              "type": "targetPace",
+              "min": 4.3,
+              "max": 4.55,
+              "title": "Tgt pace"
+            },
+            {
+              "type": "text",
+              "value": "Fast 400"
+            },
+            {
+              "type": "heartRate",
+              "title": "HR"
+            }
           ],
           "transitions": [
-            { "condition": { "type": "stepDistance", "value": 400 } }
-          ]
+            {
+              "condition": {
+                "type": "stepDistance",
+                "value": 400
+              }
+            }
+          ],
+          "notification": {
+            "title": "Work",
+            "text": "Fast 400"
+          }
         },
         {
           "type": "fields",
           "title": "Recovery",
           "fields": [
-            { "type": "stepDurationCountdown", "value": 60, "title": "Remaining" },
-            { "type": "targetHeartRate", "min": 110, "max": 130, "title": "Target HR" },
-            { "type": "text", "value": "Jog easy" }
+            {
+              "type": "heartRate",
+              "title": "HR"
+            },
+            {
+              "type": "stepDurationCountdown",
+              "value": 60,
+              "title": "Remain"
+            },
+            {
+              "type": "targetHeartRate",
+              "min": 110,
+              "max": 130,
+              "title": "Tgt HR"
+            },
+            {
+              "type": "text",
+              "value": "Jog easy"
+            },
+            {
+              "type": "pace",
+              "title": "Pace"
+            }
           ],
           "transitions": [
-            { "condition": { "type": "stepDuration", "value": 60 } }
-          ]
+            {
+              "condition": {
+                "type": "stepDuration",
+                "value": 60
+              }
+            }
+          ],
+          "notification": {
+            "title": "Recovery",
+            "text": "Jog easy"
+          }
         }
       ]
     },
@@ -58,13 +147,56 @@
       "type": "fields",
       "title": "Cool down",
       "fields": [
-        { "type": "stepDurationCountdown", "value": 300, "title": "Remaining" },
-        { "type": "targetCadence", "min": 1.3333333333333333, "max": 1.5, "title": "Tgt cadence" },
-        { "type": "text", "value": "Relax" }
+        {
+          "type": "cadence",
+          "title": "Cadence"
+        },
+        {
+          "type": "stepDurationCountdown",
+          "value": 300,
+          "title": "Remain"
+        },
+        {
+          "type": "targetCadence",
+          "min": 1.3333333333333333,
+          "max": 1.5,
+          "title": "Tgt cad"
+        },
+        {
+          "type": "text",
+          "value": "Relax"
+        },
+        {
+          "type": "heartRate",
+          "title": "HR"
+        }
       ],
       "transitions": [
-        { "condition": { "type": "stepDuration", "value": 300 } }
-      ]
+        {
+          "condition": {
+            "type": "stepDuration",
+            "value": 300
+          }
+        }
+      ],
+      "notification": {
+        "title": "Cool down",
+        "text": "Relax"
+      }
+    },
+    {
+      "type": "fields",
+      "title": "Complete",
+      "fields": [
+        {
+          "type": "text",
+          "value": "Guide complete"
+        }
+      ],
+      "notification": {
+        "title": "Complete",
+        "text": "Guide complete"
+      }
     }
   ]
 }

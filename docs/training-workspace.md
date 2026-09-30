@@ -1353,7 +1353,63 @@ tool, registered schema, Assistant route or plugin update is needed.
 
 #### SuuntoPlus Guide delivery (#650)
 
-Mapping `suunto-guides-v2` converts common typographic dashes, curly quotes, ellipses and non-breaking spaces only in
+##### Current readings and boundary notifications (#784)
+
+Mapping v3 independently implements the documented partner [Guide schema](https://apizone.suunto.com/suuntoplus-guide-description),
+without dependencies or undocumented app-wrapper `alerts`, `trigger`, or `extensions`. Investigation compared
+[OpenAthlete](https://github.com/openathleteorg/openathlete/blob/main/apps/api/src/modules/providers-sync/mapping/suunto-guide.mapper.ts)
+and [suunto-mcp](https://github.com/googlarz/suunto-mcp/blob/main/src/guide-zip.ts); neither is imported or copied into QS.
+Additional authored targets and ZoneSense remain separate in #773.
+
+- Running/Trail Running/Treadmill, Walking/Hiking, pool/open-water swimming and Rowing/Indoor Rowing default to
+  current `pace` and `heartRate`; supported cycling variants default to `power`, `heartRate`, `speed`; strength uses HR
+  where exercise/set instructions fit. Suunto renders native units; watch rowing pace is **not** asserted to be /500 m.
+  Sensor availability depends on the watch/sport/sensor. Missing readings are unavailable, never synthetic zeroes;
+  native power smoothing may still apply. No averaging windows or `createManualLap` are emitted.
+- At most five fields: reserve the ending countdown, every authored target and the existing instruction first. Remaining
+  capacity goes to the primary target's documented measured counterpart (power/cadence sensors for running/cycling,
+  never guessed swimming stroke/rowing mappings), HR, then sport defaults, deduplicated
+  by live-field type. The primary live reading goes first, then the countdown and supporting content. A manual instruction
+  longer than 40 code points keeps its existing text-only layout (up to 54), never further shortened to add metrics.
+  Existing timed/targeted text truncation and other meaningful-loss warnings remain approval-gated.
+- Every authored FieldsStep, including rest/recovery and repeat children, gets partner `notification: {title, text}`.
+  Starting the next step requests the prior interval's end alert. A final non-timed `Complete` FieldsStep says
+  `Guide complete` and requests a final notification, including after a terminal repeat. It adds no prescribed duration,
+  does not stop recording, and does not mark the QS workout completed. Existing timed/distance/manual transitions,
+  repeat counts and standalone IDs stay intact; repeats and their children still omit IDs.
+- Sound/vibration follow watch settings, not QS control. No pre-end beeps or out-of-target alerts are promised. The
+  documented popup may occupy the screen for about 20 seconds; short intervals require explicit watch QA.
+
+Deployment is separately approved. After deployment, new sends use v3 and ordinary reconciliation updates eligible,
+already-consented future Guides by PUT, preserving external/remote IDs and pinning. Past/completed copies, consent
+withdrawal, Pro expiry, disconnection and deletion fences retain their existing protection. The delivery digest includes
+v3; no Firestore migration is needed. Presentation-only additions do not require new approval. Where a meaningful loss
+was already approved under v2, the adapter recomputes the exact v2 digest from the **same** workout, strength companion,
+destination, zone and owner and verifies the same warning list. Only that exact approval is compatible; edited
+instructions/targets/date/metadata or changed authority cannot inherit it. An accepted copy or immutable attempt must
+also retain the matching full canonical content digest; old payloads can omit truncated text, so a changed hidden suffix
+must not inherit approval. Missing proof fails closed rather than assuming equivalence. This optional internal approval equivalence
+does not alter other adapters or the public confirmation/proposal contract.
+
+Already-started uncertain v2 attempts reconstruct the original v2 JSON and verify its immutable operation digest before
+comparing full owned remote content. After acceptance recovery, normal reconciliation applies v3 to the same retained
+ID. Unknown digests, mismatched content and non-authoritative absence stay uncertain and never authorize another POST.
+The v2 golden fixture deliberately freezes old field titles/order, text adaptation, strength instructions and absence
+of generated readings/notifications/completion screen. Fresh delivery never uses the recovery-only serializer.
+
+MCP impact: **no wire impact**. Live readings are watch-side fields, not activity metrics or authored recipe targets.
+No tool, registered input/output, scope, consent, Assistant permission, provider action, bundled skill, Sports Lib class,
+endpoint or provider enablement changes. Regression tests exercise unchanged recipes, unlinked/linked completion and
+safe delivery reads and reject private Guide fields in strict projection/recipe shapes. Delivery remains cloud acceptance
+only, not evidence of watch readings, boundary alerts, completion or adherence. Recorded laps/totals are unchanged.
+
+Local fixtures and isolated demo-emulator HTTP cover layout, create/update/reschedule, IDs, retry, digest-verified v2
+recovery, consent withdrawal and past/completed protection. #784 stays open until separately approved account QA and
+watch evidence: running repeats, cycling power, strength rest/manual sets; update/readback and no duplicates; record
+watch model/firmware and check metrics, every boundary/final alert, muted settings and short-interval usability.
+Any failure remains tracked there. Production QA artifact cleanup needs separate approval identifying exact records.
+
+Mapping `suunto-guides-v3` retains v2's conversion of common typographic dashes, curly quotes, ellipses and non-breaking spaces only in
 outgoing watch text. Its default watch subtitle is derived from the title, word-shortened with an ASCII ellipsis to
 fit 23 code points. Those cosmetic adaptations require no per-workout approval; QS titles/recipes and the app-only
 description remain unchanged. Explicit subtitle truncation, title/instruction loss and remaining unsupported watch
@@ -1364,7 +1420,7 @@ For MCP-created Suunto workouts, omit unrequested step notes and keep necessary 
 when duration/targets are present or 54 for manual-only steps. Never silently discard requested authored meaning. If
 truncation remains necessary, the first MCP proposal summarizes the exact warnings; its single native approval also
 approves the current destination- and payload-bound adjustment. The authored QS note remains complete. A changed
-mapping blocks delivery until reviewed again. A warning set too large for the strict preview fails closed instead of
+mapping with new meaningful loss blocks delivery until reviewed again. A warning set too large for the strict preview fails closed instead of
 approving undisclosed loss; the client can create without delivery or simplify the recipe. Browser and later
 plan-workout review semantics are unchanged.
 

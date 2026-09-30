@@ -16,13 +16,14 @@ import { SuuntoHttpFixture } from '../test-support/suunto-http-fixture';
 import { buildSuuntoHealthWebhookAccountBinding, getSuuntoHealthWebhookAccountBindingRef } from '../../../suunto/health-webhook-binding';
 import { readSuuntoGuideCompletions, retainSuuntoGuideCompletions } from '../../../suunto/guide-completion';
 import { suuntoFitFixture, suuntoMultiSessionFitFixture } from '../test-support/suunto-fit-fixture';
-import { guideExternalId } from './mapping';
+import { guideExternalId, assessSuuntoGuideV2ForRecovery, guidePayloadForRecovery } from './mapping';
 import { deliveryIdentity } from '../intent';
 import { retainGarminFITWorkoutReferences } from '../../completion/fit-workout-evidence';
 import { standardWorkoutReferenceFitFixture } from '../test-support/suunto-fit-fixture';
 import type { TrainingDeliveryCommandV1 } from '../../../../../shared/training-provider-delivery';
 import { TRAINING_DELIVERY_VERIFICATIONS } from '../../../../../shared/training-provider-verification';
 import { projectStrengthWorkoutToV1 } from '../../../../../shared/strength-workout';
+import { parseScheduledWorkoutV1 } from '../../../../../shared/training-plans';
 
 describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Suunto worker with real Firestore, synthetic provider only', { timeout: 30_000 }, () => {
   const host = process.env.FIRESTORE_EMULATOR_HOST;
@@ -35,11 +36,26 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Suunto worker with real F
   const mark = async () => { await db.runTransaction(async tx => stageTrainingDeliveryReconciliation(tx, db, uid)); await drain(); };
   const command = async (action: TrainingDeliveryCommandV1['action']) => {
     const setting = await user().collection('trainingDeliverySettings').doc('workout_w_suunto').get();
+    const scope = await user().collection('scheduledWorkouts').doc('w').get();
     return trainingDeliveryCommand(runtime, uid, { schemaVersion: 1, mutationId: randomUUID(), scope: 'workout', scopeId: 'w',
-      provider: 'suunto', action, expectedScheduleRevision: 1, expectedScopeRevision: 1, expectedSettingsRevision: setting.data()?.revision ?? 0,
+      provider: 'suunto', action, expectedScheduleRevision: 1, expectedScopeRevision: scope.get('revision'), expectedSettingsRevision: setting.data()?.revision ?? 0,
       ...(action === 'send' ? { timeZone: 'Europe/Helsinki' } : {}) }, false);
   };
   const send = async () => { await command('send'); await drain(); const row = await ledger(); await processTrainingDelivery(runtime, uid, row.id); await drain(); return ledger(); };
+  // Simulate a journal and provider archive written by the previous deployed
+  // serializer. The fixture, Firestore and all provider HTTP remain local/demo.
+  const startedV2 = async () => {
+    const row = await ledger(); const operation = row.attempt!;
+    operation.digest = assessSuuntoGuideV2ForRecovery(operation.workout!, operation.destinationKey,
+      operation.timeZone, 'Quantified Self', operation.strength).digest;
+    const payload = guidePayloadForRecovery(operation, 'Quantified Self')!;
+    const [id, remote] = [...server.guides.entries()][0];
+    server.guides.set(id, { ...remote, guide: payload });
+    const ref = user().collection(DELIVERY_LEDGER).doc(row.id);
+    await ref.update({ attempt: operation });
+    await ref.collection('attempts').doc(operation.id).update({ operation });
+    return { row, operation, id, payload };
+  };
   // Exercise production policy binding while ensuring all provider I/O stays synthetic.
   const useProductionPolicy = () => {
     vi.stubEnv('SUUNTOAPP_GUIDE_OWNER', 'Quantified Self');
@@ -296,6 +312,149 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Suunto worker with real F
     expect(row.attempt?.progress).toMatchObject({ step: 'create', state: 'started' });
     await command('retry'); await drain(); await processTrainingDelivery(runtime, uid, row.id); await drain();
     expect((await ledger()).status).toBe('delivered'); expect(server.calls.filter(call => call.method === 'POST')).toHaveLength(1);
+  });
+  it('upgrades a known v2 Guide in place, preserving pinning, consent, recipe and IDs; unchanged retries do not write', async () => {
+    const delivered = await send();
+    const workout = parseScheduledWorkoutV1((await user().collection('scheduledWorkouts').doc('w').get()).data());
+    const settings = (await user().collection('trainingDeliverySettings').get()).docs.map(doc => doc.data());
+    const digest = assessSuuntoGuideV2ForRecovery(workout, delivered.destinationKey, delivered.timeZone, 'Quantified Self').digest;
+    const op = { id: 'legacy', kind: 'upsert' as const, deliveryId: delivered.id, generation: delivered.desiredGeneration,
+      connectionGeneration: 'legacy', destinationKey: delivered.destinationKey, timeZone: delivered.timeZone,
+      digest, contentDigest: delivered.contentDigest, workout, artifact: delivered.actual };
+    const payload = guidePayloadForRecovery(op, 'Quantified Self')!;
+    const id = delivered.actual!.ids.guide;
+    server.guides.set(id, { guide: payload, pinned: true });
+    await user().collection(DELIVERY_LEDGER).doc(delivered.id).update({ desiredDigest: digest, acceptedDigest: digest });
+    await mark(); await processTrainingDelivery(runtime, uid, delivered.id); await drain();
+    expect((await ledger()).actual!.ids).toEqual(delivered.actual!.ids);
+    expect(server.guides.get(id)!.pinned).toBe(true);
+    expect(server.guides.get(id)!.guide.steps.at(-1)).toMatchObject({ title: 'Complete', notification: { text: 'Guide complete' } });
+    expect(server.calls.filter(call => call.method === 'POST')).toHaveLength(1);
+    expect(server.calls.filter(call => call.method === 'PUT')).toHaveLength(1);
+    expect((await user().collection('scheduledWorkouts').doc('w').get()).data()).toEqual(workout);
+    expect((await user().collection('trainingDeliverySettings').get()).docs.map(doc => doc.data())).toEqual(settings);
+    expect((await user().collection('trainingWorkoutCompletions').get()).empty).toBe(true);
+    await command('retry'); await drain(); await processTrainingDelivery(runtime, uid, delivered.id); await drain();
+    expect((await ledger()).status).toBe('delivered');
+    expect(server.calls.filter(call => ['POST', 'PUT'].includes(call.method))).toHaveLength(2);
+  });
+  it('honors the exact previously approved v2 loss through v3 delivery, but not a newly edited instruction', async () => {
+    await user().collection('scheduledWorkouts').doc('w').update({ 'structure.nodes': [{
+      kind: 'step', id: 'step', purpose: 'work', ending: { kind: 'time', seconds: 600 }, targets: [], note: 'A'.repeat(45),
+    }] });
+    const transport = runtime.transport('suunto')!;
+    const previous = vi.spyOn(transport, 'assess').mockImplementation((workout, destination, zone, strength) =>
+      assessSuuntoGuideV2ForRecovery(workout, destination, zone, 'Quantified Self', strength));
+    await command('send'); await drain();
+    const blocked = await ledger(); expect(blocked.status).toBe('approval_required');
+    const setting = user().collection('trainingDeliverySettings').doc('workout_w_suunto');
+    await trainingDeliveryCommand(runtime, uid, { schemaVersion: 1, mutationId: randomUUID(), scope: 'workout', scopeId: 'w',
+      provider: 'suunto', action: 'approve', expectedScheduleRevision: 1, expectedScopeRevision: 1,
+      expectedSettingsRevision: (await setting.get()).get('revision'), approvalDigest: blocked.approvalDigest }, false);
+    await drain();
+    const approved = await ledger();
+    const workout = parseScheduledWorkoutV1((await user().collection('scheduledWorkouts').doc('w').get()).data());
+    const oldPayload = guidePayloadForRecovery({ id: 'old', kind: 'upsert', deliveryId: approved.id,
+      generation: approved.desiredGeneration, connectionGeneration: 'connection', destinationKey: approved.destinationKey,
+      timeZone: approved.timeZone, digest: approved.desiredDigest, contentDigest: approved.contentDigest,
+      workout, artifact: null }, 'Quantified Self')!;
+    const actual = { ids: { guide: 'guide-v2', externalId: oldPayload.externalId, owner: 'Quantified Self' },
+      localDate: workout.localDate, completed: false };
+    server.guides.set('guide-v2', { guide: oldPayload, pinned: false });
+    await user().collection(DELIVERY_LEDGER).doc(approved.id).update({ actual, acceptedDigest: approved.desiredDigest,
+      acceptedContentDigest: approved.contentDigest, status: 'delivered' });
+    previous.mockRestore(); await mark();
+    expect((await ledger()).status).toBe('pending');
+    expect((await ledger()).approvalDigest).toBeNull();
+    await processTrainingDelivery(runtime, uid, blocked.id); await drain();
+    expect((await ledger()).status).toBe('delivered');
+    expect((await setting.get()).get('approvedDigest')).toBe(blocked.approvalDigest);
+    await user().collection('scheduledWorkouts').doc('w').update({ 'structure.nodes': [{
+      kind: 'step', id: 'step', purpose: 'work', ending: { kind: 'time', seconds: 600 }, targets: [], note: 'A'.repeat(40) + 'BBBBB',
+    }] });
+    await mark(); await processTrainingDelivery(runtime, uid, blocked.id); await drain();
+    expect((await ledger()).status).toBe('approval_required');
+    expect(server.calls.filter(call => call.method === 'PUT')).toHaveLength(1);
+  });
+  it.each(['running', 'strength'])('recovers a v2 %s create with a lost ACK then upgrades without another POST', async sport => {
+    if (sport === 'strength') {
+      const details = { version: 1 as const, workoutId: 'w', revision: 1, exercises: [{ id: 'squat', name: 'Squat', sets: [
+        { id: 'one', ending: { kind: 'repetitions' as const, repetitions: 5 }, restAfterSeconds: 30 },
+      ] }] };
+      await user().collection('scheduledWorkouts').doc('w').update({ structure: projectStrengthWorkoutToV1(details) });
+      await user().collection('scheduledWorkouts').doc('w').collection('strengthDetails').doc('current').set(details);
+    }
+    server.afterHandle = async request => { if (request.method === 'POST') {
+      server.afterHandle = null; throw new SuuntoGuideHttpError('uncertain', false);
+    } };
+    const original = await send(); expect(original.status).toBe('retrying');
+    const legacy = await startedV2();
+    expect(JSON.stringify(legacy.payload)).not.toContain('notification');
+    await command('retry'); await drain(); await processTrainingDelivery(runtime, uid, original.id); await drain();
+    expect((await ledger()).actual?.ids.guide).toBe(legacy.id);
+    expect((await ledger()).attempt).toBeNull();
+    await processTrainingDelivery(runtime, uid, original.id); await drain();
+    expect((await ledger()).status).toBe('delivered');
+    expect(server.calls.filter(call => call.method === 'POST')).toHaveLength(1);
+    expect(server.calls.filter(call => call.method === 'PUT')).toHaveLength(1);
+    expect(server.guides.get(legacy.id)!.guide.steps.at(-1)).toMatchObject({ title: 'Complete' });
+  });
+  it('recovers a v2 reschedule/update with a lost ACK before applying the new screen layout', async () => {
+    const original = await send();
+    await user().collection('scheduledWorkouts').doc('w').update({ title: 'Rescheduled', localDate: '2026-09-18', revision: 2 });
+    await mark();
+    server.afterHandle = async request => { if (request.method === 'PUT') {
+      server.afterHandle = null; throw new SuuntoGuideHttpError('uncertain', false);
+    } };
+    await processTrainingDelivery(runtime, uid, original.id);
+    const legacy = await startedV2();
+    expect(legacy.operation.progress).toMatchObject({ step: 'update', state: 'started' });
+    await command('retry'); await drain(); await processTrainingDelivery(runtime, uid, original.id); await drain();
+    expect((await ledger()).actual).toMatchObject({ ids: original.actual!.ids, localDate: '2026-09-18' });
+    await processTrainingDelivery(runtime, uid, original.id); await drain();
+    expect((await ledger()).status).toBe('delivered');
+    expect(server.guides.get(legacy.id)!.guide).toMatchObject({ name: 'Rescheduled', localDate: '2026-09-18' });
+    expect(server.calls.filter(call => call.method === 'POST')).toHaveLength(1);
+    expect(server.calls.filter(call => call.method === 'PUT')).toHaveLength(2);
+  });
+  it.each(['digest', 'content', 'missing'])('keeps a legacy uncertain create unresolved on %s mismatch, even on Retry', async change => {
+    server.afterHandle = async request => { if (request.method === 'POST') {
+      server.afterHandle = null; throw new SuuntoGuideHttpError('uncertain', false);
+    } };
+    const original = await send(); const legacy = await startedV2();
+    if (change === 'digest') await user().collection(DELIVERY_LEDGER).doc(original.id).update({ 'attempt.digest': 'unrecognized-version-digest' });
+    if (change === 'content') server.guides.get(legacy.id)!.guide.name = 'Different prescription';
+    if (change === 'missing') server.guides.clear();
+    await command('retry'); await drain(); await processTrainingDelivery(runtime, uid, original.id); await drain();
+    expect((await ledger()).status).toBe('needs_attention');
+    await command('retry'); await drain(); await processTrainingDelivery(runtime, uid, original.id); await drain();
+    expect((await ledger()).status).toBe('needs_attention');
+    expect(server.calls.filter(call => call.method === 'POST')).toHaveLength(1);
+    expect(server.calls.filter(call => call.method === 'PUT')).toHaveLength(0);
+  });
+  it('recovers the v2 identity after consent withdrawal without upgrading or recreating it', async () => {
+    server.afterHandle = async request => { if (request.method === 'POST') {
+      server.afterHandle = null; throw new SuuntoGuideHttpError('uncertain', false);
+    } };
+    const original = await send(); await startedV2();
+    await command('stop'); await drain(); now = original.retryAtMs + 1;
+    await processTrainingDelivery(runtime, uid, original.id); await drain();
+    await processTrainingDelivery(runtime, uid, original.id); await drain();
+    expect((await ledger()).status).toBe('removed');
+    expect(server.guides.size).toBe(0);
+    expect(server.calls.filter(call => call.method === 'POST')).toHaveLength(1);
+    expect(server.calls.filter(call => call.method === 'PUT')).toHaveLength(0);
+  });
+  it.each(['past', 'completed'])('does not upgrade a %s Guide when the mapping version changes', async state => {
+    const delivered = await send();
+    if (state === 'past') now = Date.parse('2026-09-18T10:00:00Z');
+    else await user().collection(DELIVERY_LEDGER).doc(delivered.id).update({ 'actual.completed': true });
+    await user().collection(DELIVERY_LEDGER).doc(delivered.id).update({ desiredDigest: 'old-mapping', acceptedDigest: 'old-mapping' });
+    const before = JSON.stringify([...server.guides.values()]);
+    await mark(); await processTrainingDelivery(runtime, uid, delivered.id); await drain();
+    expect((await ledger()).desired).toBe('preserve');
+    expect(JSON.stringify([...server.guides.values()])).toBe(before);
+    expect(server.calls.filter(call => ['POST', 'PUT', 'DELETE'].includes(call.method))).toHaveLength(1);
   });
   it('retries a corrected Guides application key without reconnecting or replacing consent', async () => {
     let rejectedKey = true;

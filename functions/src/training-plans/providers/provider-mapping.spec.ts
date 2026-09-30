@@ -19,6 +19,7 @@ import expectedCorosFixture from './fixtures/coros-running-v1.json';
 import expectedGarminFixture from './fixtures/garmin-running-v1.json';
 import expectedGarminPoolFixture from './fixtures/garmin-pool-swimming-v1.json';
 import expectedSuuntoFixture from './fixtures/suunto-running-v1.json';
+import legacySuuntoFixture from './fixtures/suunto-running-v2-recovery.json';
 import expectedWahooFixture from './fixtures/wahoo-running-v1.json';
 import { serializeCorosTrainingPlanV1 } from './coros-training-plan.serializer';
 import {
@@ -30,7 +31,7 @@ import {
     createStableProviderExternalId,
     createStableProviderIntegerId,
 } from './provider-mapping';
-import { serializeSuuntoGuideJsonV1 } from './suunto-guide.serializer';
+import { serializeSuuntoGuideJsonV1, serializeSuuntoGuideV2ForRecovery } from './suunto-guide.serializer';
 import { serializeWahooPlanJsonV1 } from './wahoo-plan.serializer';
 import { wahooDurationSeconds } from '../delivery/wahoo/mapping';
 
@@ -213,6 +214,12 @@ describe('planned-workout provider proof fixtures', () => {
         expect(result.level).toBe('exact');
         expect(result.issues).toEqual([]);
         expect(result.artifact).toEqual(expectedSuuntoFixture);
+        expect(serializeSuuntoGuideV2ForRecovery(RUNNING_FIXTURE, {
+            name: 'Fixture intervals', description: 'Redacted provider contract fixture.',
+            owner: 'Quantified Self', url: 'https://quantified-self.io/training/plans',
+            localDate: '2026-09-03', sourceWorkoutId: 'fixture-running-1', allowDegraded: true,
+            externalId: legacySuuntoFixture.externalId,
+        }).artifact).toEqual(legacySuuntoFixture);
     });
 
     it('maps a canonical one-mile step in metres without applying display units again', () => {
@@ -791,7 +798,7 @@ describe('planned-workout provider proof fixtures', () => {
         expect(approved.level).toBe('degraded');
         expect(approved.artifact.steps[0]).toMatchObject({
             type: 'fields',
-            fields: [{ type: 'targetCadence', min: 1.35, max: 1.65 }],
+            fields: expect.arrayContaining([expect.objectContaining({ type: 'targetCadence', min: 1.35, max: 1.65 })]),
             transitions: [{ condition: { type: 'manualLap' } }],
         });
     });

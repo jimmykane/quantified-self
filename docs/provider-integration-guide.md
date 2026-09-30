@@ -282,6 +282,22 @@ owner and identity fields are not normalized. Authored title/instruction or expl
 review and counts Unicode code points. Remaining watch characters outside Suunto's guaranteed minimum set require
 approval because rendering is device-dependent; app-only description text is not subject to that watch-font check.
 See the [Training source of truth](training-workspace.md#suuntoplus-guide-delivery-650) for upgrade and recovery behavior.
+Mapping `suunto-guides-v3` adds current native watch readings: pace/HR for running, walking, hiking, swimming and rowing;
+power/HR/speed for supported cycling variants; HR for strength where instructions fit. A primary target's documented
+measured counterpart (power/cadence sensors for running/cycling only) has priority, with countdown, all targets and
+instructions reserved first and a maximum
+of five fields. Long manual text stays text-only; metrics do not create laps or lap averages. Missing sensors are
+unavailable, not zero. Watch units are native, including rowing pace without an unverified /500 m label.
+Documented partner step-start notifications cover every phase/repeat/rest; a generated non-timed `Guide complete`
+screen requests the final alert without adding prescribed time, stopping recording or proving completion. Watch sound/
+vibration settings control alerts. Pre-end beeps and out-of-target alerts are not promised; approximately 20-second popups
+need short-interval watch testing. No undocumented wrapper fields or new dependency is used.
+New sends use v3 after separately approved deployment. Eligible consented future Guides update in place; past/completed
+copies remain protected. Started v2 attempts recover only against their exact digest-verified old payload and retain IDs
+before any v3 update. Unknown acceptance never permits a speculative create. An exact approval for the same v2
+prescription/losses can carry across this presentation-only upgrade; edits still require review. #784 tracks remaining
+account/watch evidence (model/firmware, sensors, all boundary/final alerts, muted settings, short intervals), separately
+from #773's additional-target/ZoneSense scope. API acceptance/readback is not watch receipt or behavior proof.
 The #650 transport packages that JSON with a valid 300 × 300 PNG and preserves Guide identity
 and pin state through PUT. Incoming workout-reference FIT metadata is now read through Sports Lib 21.2.3's bounded
 metadata-only reader. The public workout-reference classes, return shapes and numeric values remain unchanged, irrelevant

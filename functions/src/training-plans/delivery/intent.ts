@@ -59,7 +59,18 @@ export function resolveDeliveryIntent(context: DeliveryContext, ledger?: Deliver
   const assessment = transport.assess(workout!, connection.destinationKey, timeZone, context.strength);
   if (assessment.level === 'unsupported') return result('preserve', 'unsupported', assessment.digest, assessment.issues);
   const approval = override?.approvedDigest ?? setting?.approvedDigest;
-  if (requiresDeliveryMappingApproval(assessment) && approval !== assessment.digest) {
+  // A legacy payload digest can omit truncated authored text. Carry approval
+  // only with an independently retained full-prescription digest, so edits to
+  // the formerly hidden suffix cannot inherit presentation-upgrade consent.
+  const canCarryApproval = !!assessment.compatibleApprovalDigest && approval === assessment.compatibleApprovalDigest;
+  const contentDigest = canCarryApproval ? deliveryContentDigest(workout, timeZone, context.strength) : null;
+  const compatibleApproval = canCarryApproval
+    && (((ledger?.acceptedDigest === approval || ledger?.acceptedDigest === assessment.digest)
+        && ledger?.acceptedContentDigest === contentDigest)
+      || ((ledger?.attempt?.digest === approval || ledger?.attempt?.digest === assessment.digest)
+        && ledger?.attempt?.contentDigest === contentDigest));
+  if (requiresDeliveryMappingApproval(assessment) && approval !== assessment.digest
+    && !compatibleApproval) {
     return result('preserve', 'approval_required', assessment.digest, assessment.issues, assessment.digest);
   }
   return result('present', ledger?.acceptedDigest === assessment.digest ? 'delivered' : 'pending', assessment.digest, assessment.issues);

@@ -22,6 +22,9 @@ export interface DeliveryAssessment {
   level: 'exact' | 'degraded' | 'unsupported';
   /** Internal policy only. Omission keeps degraded mappings approval-gated. */
   requiresApproval?: boolean;
+  /** Private, adapter-proved equivalent approval for the identical prescription
+   * before a presentation-only mapping upgrade. Never exposed as a wire field. */
+  compatibleApprovalDigest?: string;
   issues: string[];
   digest: string;
   mappingVersion: string;

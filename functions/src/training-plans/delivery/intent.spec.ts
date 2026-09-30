@@ -1,8 +1,10 @@
 import { describe, expect, it, vi } from 'vitest';
 import { ActivityTypes } from '@sports-alliance/sports-lib';
-import { resolveDeliveryIntent, deliveryIdentity } from './intent';
+import { resolveDeliveryIntent, deliveryIdentity, deliveryContentDigest } from './intent';
 import type { DeliveryContext, DeliveryLedgerV1 } from './contracts';
 import { FakeTrainingTransport } from './test-support/fake-transport';
+import { SuuntoGuideTransport } from './suunto/transport';
+import { assessSuuntoGuideV2ForRecovery } from './suunto/mapping';
 
 const base: DeliveryContext = {
   workout: { schemaVersion: 1, id: 'workout', planId: null, revision: 1, localDate: '2026-09-10', lifecycle: 'planned',
@@ -74,6 +76,40 @@ describe('delivery intent', () => {
       .toMatchObject({ desired: 'preserve', status: 'fresh_consent_required' });
     transport.level = 'unsupported';
     expect(resolveDeliveryIntent(context)).toMatchObject({ desired: 'preserve', status: 'unsupported' });
+  });
+  it('keeps exact v2 loss approval across Suunto presentation-only upgrades, never across edits or authority changes', () => {
+    const transport = new SuuntoGuideTransport(async () => { throw Error('No HTTP during assessment'); }, 'Quantified Self');
+    const workout = { ...base.workout!, structure: { ...base.workout!.structure, nodes: [{ ...base.workout!.structure.nodes[0],
+      note: 'A'.repeat(45) }] } };
+    const destination = base.connection.destinationKey;
+    const prior = assessSuuntoGuideV2ForRecovery(workout, destination, 'Europe/Helsinki', 'Quantified Self');
+    const context: DeliveryContext = { ...base, workout, transport,
+      setting: { ...base.setting!, provider: 'suunto', approvedDigest: prior.digest } };
+    const ledger = { connectionEpoch: 0, destinationKey: 'account-a', acceptedDigest: prior.digest,
+      acceptedContentDigest: deliveryContentDigest(workout, 'Europe/Helsinki') } as DeliveryLedgerV1;
+    expect(transport.assess(workout, 'account-a', 'Europe/Helsinki')).toMatchObject({
+      mappingVersion: 'suunto-guides-v3', compatibleApprovalDigest: prior.digest,
+    });
+    expect(resolveDeliveryIntent(context, ledger)).toMatchObject({ desired: 'present', status: 'pending', approvalDigest: null });
+    const currentDigest = transport.assess(workout, 'account-a', 'Europe/Helsinki').digest;
+    expect(resolveDeliveryIntent(context, { ...ledger, acceptedDigest: currentDigest }))
+      .toMatchObject({ desired: 'present', status: 'delivered', approvalDigest: null });
+    for (const edited of [{ ...workout, title: 'Changed' }, { ...workout, localDate: '2026-09-11' },
+      { ...workout, structure: { ...workout.structure, nodes: [{ ...workout.structure.nodes[0], note: 'B'.repeat(45) }] } },
+      { ...workout, structure: { ...workout.structure, nodes: [{ ...workout.structure.nodes[0], note: 'A'.repeat(40) + 'BBBBB' }] } }]) {
+      expect(resolveDeliveryIntent({ ...context, workout: edited }, ledger).status).toBe('approval_required');
+    }
+    expect(resolveDeliveryIntent(context).status).toBe('approval_required');
+    const attempt = { digest: prior.digest, contentDigest: ledger.acceptedContentDigest } as NonNullable<DeliveryLedgerV1['attempt']>;
+    expect(resolveDeliveryIntent(context, { ...ledger, acceptedDigest: null, attempt }).desired).toBe('present');
+    expect(resolveDeliveryIntent(context, { ...ledger, acceptedDigest: null, acceptedContentDigest: null,
+      attempt: { ...attempt, digest: currentDigest, progress: { version: 1, step: 'update', state: 'started' } } }).desired).toBe('present');
+    expect(resolveDeliveryIntent({ ...context, setting: { ...context.setting!, approvedDigest: 'unknown' } }).status).toBe('approval_required');
+    expect(resolveDeliveryIntent({ ...context, setting: null }).desired).toBe('absent');
+    expect(resolveDeliveryIntent({ ...context, hasPro: false }).status).toBe('paused_pro');
+    expect(resolveDeliveryIntent({ ...context, connection: { ...context.connection, epoch: 1 } }).status).toBe('fresh_consent_required');
+    expect(transport.assess(workout, 'other-account', 'Europe/Helsinki').compatibleApprovalDigest).not.toBe(prior.digest);
+    expect(transport.assess(workout, 'account-a', 'UTC').compatibleApprovalDigest).not.toBe(prior.digest);
   });
   it('keeps an earlier provider copy when the current workout becomes unsupported', () => {
     const transport = new FakeTrainingTransport();
