@@ -616,8 +616,8 @@ packed Sports Lib package. That gate is tracked by GitHub issue #654 under epic 
   invocation after a timed-out callable, with bounded backoff and account-deletion fencing. It scans up to 100 due
   locks, skipping unclaimable deleted-account records so one orphan cannot block another owner's recovery. This worker
   has its own runtime budget and cannot starve `reconcileTrainingPlanCleanup`'s permanent-deletion jobs. Deploy the
-  `planDeletionLocks(nextAttemptAtMs, __name__)` collection-group index and unindexed `request` and `mcpAuthority`
-  fields before enabling this worker. Inspect `[TrainingBulkShift] resume_failed` or `scan_failed` logs and the lock's
+  ascending collection-group single-field index on `planDeletionLocks.nextAttemptAtMs` and unindexed `request` and
+  `mcpAuthority` fields before enabling this worker. Inspect `[TrainingBulkShift] resume_failed` or `scan_failed` logs and the lock's
   retry schedule if a shift remains pending; do not manually remove a lock without examining its revision and receipts.
   The canonical workout JSON and published 400-workout limit do not change.
 - A permanent workout or plan deletion creates a server-internal `trainingCleanupJobs` record in the same transaction
@@ -631,8 +631,8 @@ packed Sports Lib package. That gate is tracked by GitHub issue #654 under epic 
   A malformed due job is deferred for an hour so it cannot repeatedly occupy the front of the bounded scan; its
   tombstone and payload still require operator inspection rather than a guessed deletion target.
   Jobs are leaves denied to browser reads/writes; the worker can safely repeat cleanup after a lost response. Deploy
-  the `trainingCleanupJobs(nextAttemptAtMs, __name__)` collection-group index and the unindexed `response` field before
-  enabling the worker. Inspect `[TrainingCleanup] cleanup_retry_failed` logs and due jobs when a lock persists; do not
+  the ascending collection-group single-field index on `trainingCleanupJobs.nextAttemptAtMs` and the unindexed
+  `response` field before enabling the worker. Inspect `[TrainingCleanup] cleanup_retry_failed` logs and due jobs when a lock persists; do not
   delete a lock or job by hand without checking its receipt and tombstone.
 - Deleted-workout expiry uses **no Firestore TTL on workout roots**: TTL would not remove child history and could bypass
   revision, delivery and completion reconciliation. The separate daily `reconcileTrainingWorkoutExpiry` scheduler

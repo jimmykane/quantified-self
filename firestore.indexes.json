@@ -60,14 +60,6 @@
       "fields": [{ "fieldPath": "provider", "order": "ASCENDING" }, { "fieldPath": "status", "order": "ASCENDING" }, { "fieldPath": "hasRemoteCopy", "order": "ASCENDING" }]
     },
     {
-      "collectionGroup": "trainingCleanupJobs", "queryScope": "COLLECTION_GROUP",
-      "fields": [{ "fieldPath": "nextAttemptAtMs", "order": "ASCENDING" }, { "fieldPath": "__name__", "order": "ASCENDING" }]
-    },
-    {
-      "collectionGroup": "planDeletionLocks", "queryScope": "COLLECTION_GROUP",
-      "fields": [{ "fieldPath": "nextAttemptAtMs", "order": "ASCENDING" }, { "fieldPath": "__name__", "order": "ASCENDING" }]
-    },
-    {
       "collectionGroup": "trainingDeliverySettings",
       "queryScope": "COLLECTION",
       "fields": [
@@ -1709,6 +1701,24 @@
     }
   ],
   "fieldOverrides": [
+    {
+      "collectionGroup": "trainingCleanupJobs", "fieldPath": "nextAttemptAtMs", "ttl": false,
+      "indexes": [
+        { "order": "ASCENDING", "queryScope": "COLLECTION" },
+        { "order": "DESCENDING", "queryScope": "COLLECTION" },
+        { "arrayConfig": "CONTAINS", "queryScope": "COLLECTION" },
+        { "order": "ASCENDING", "queryScope": "COLLECTION_GROUP" }
+      ]
+    },
+    {
+      "collectionGroup": "planDeletionLocks", "fieldPath": "nextAttemptAtMs", "ttl": false,
+      "indexes": [
+        { "order": "ASCENDING", "queryScope": "COLLECTION" },
+        { "order": "DESCENDING", "queryScope": "COLLECTION" },
+        { "arrayConfig": "CONTAINS", "queryScope": "COLLECTION" },
+        { "order": "ASCENDING", "queryScope": "COLLECTION_GROUP" }
+      ]
+    },
     {
       "collectionGroup": "trainingDeliveryStatuses", "fieldPath": "status", "ttl": false,
       "indexes": [
