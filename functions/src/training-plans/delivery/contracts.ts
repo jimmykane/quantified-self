@@ -183,6 +183,10 @@ export interface DeliveryRuntime {
   transport(provider: PlannedWorkoutProviderId, uid: string): TrainingDeliveryTransport | null;
 }
 export interface DeliveryLedgerV1 {
+  /** Private proof of exact approval equivalence across a presentation-only
+   * mapping upgrade. Independent of remote acceptance and retained when an
+   * obsolete attempt is retired. Does not grant consent or expose a wire field. */
+  mappingApprovalProof?: MappingApprovalProof;
   /** Definite application-access rejection; distinct from temporarily paused transport/inspection readiness. */
   providerAccessBlocked?: boolean;
   verification?: VerificationEvidence;
@@ -222,6 +226,11 @@ export interface DeliveryLedgerV1 {
   lastAcceptedAtMs: number | null;
   updatedAtMs: number;
 }
+export interface MappingApprovalProof {
+  approvedDigest: string;
+  mappingDigest: string;
+  contentDigest: string;
+}
 export interface PastCleanupAuthorization {
   scope: 'plan' | 'workout';
   scopeId: string;
@@ -230,6 +239,7 @@ export interface PastCleanupAuthorization {
   deletedAtMs?: number;
 }
 export interface DeliveryIntent {
+  mappingApprovalProof?: MappingApprovalProof;
   desired: DeliveryLedgerV1['desired'];
   status: TrainingDeliveryStatus;
   timeZone: string;

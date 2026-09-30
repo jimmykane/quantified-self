@@ -295,7 +295,10 @@ need short-interval watch testing. No undocumented wrapper fields or new depende
 New sends use v3 after separately approved deployment. Eligible consented future Guides update in place; past/completed
 copies remain protected. Started v2 attempts recover only against their exact digest-verified old payload and retain IDs
 before any v3 update. Unknown acceptance never permits a speculative create. An exact approval for the same v2
-prescription/losses can carry across this presentation-only upgrade; edits still require review. #784 tracks remaining
+prescription/losses can carry across this presentation-only upgrade; edits still require review. Verified equivalence is
+retained privately on the ledger so retiring a never-started/unaccepted v2 attempt does not lose it. That proof is bound
+to the saved approval, current mapping and full canonical content, and never asserts remote acceptance or grants consent.
+#784 tracks remaining
 account/watch evidence (model/firmware, sensors, all boundary/final alerts, muted settings, short intervals), separately
 from #773's additional-target/ZoneSense scope. API acceptance/readback is not watch receipt or behavior proof.
 The #650 transport packages that JSON with a valid 300 × 300 PNG and preserves Guide identity
@@ -310,8 +313,9 @@ it must never directly repeat an ambiguous create.
 Four observed repeat-containing Guides received terminal HTTP 400 while non-repeat Guides succeeded. A disposable
 synthetic real-account test isolated the rule: Suunto rejected the repeat ID and then a child FieldsStep ID, both as
 `Step id not allowed inside repeat`. With all IDs inside the repeat omitted, Suunto accepted the terminal repeat,
-returned its expected identity and one repeat step on readback, and confirmed deletion afterward. No extra final
-screen is required. The serializer keeps standalone step IDs and the stable Guide external ID. This synthetic proof
+returned its expected identity and one repeat step on readback, and confirmed deletion afterward. A final screen is
+not required for API acceptance; mapping v3 adds one separately to request the finish alert (#784). The serializer
+keeps standalone step IDs and the stable Guide external ID. This synthetic proof
 does not establish that the four failed user workouts will all be accepted; inspect their exact ledgers and current
 consent before any replay. Deploying the changed mapping digest can itself queue definitively failed records, so
 deployment requires separate operational approval and monitoring.

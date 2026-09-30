@@ -68,10 +68,16 @@ export function resolveDeliveryIntent(context: DeliveryContext, ledger?: Deliver
     && (((ledger?.acceptedDigest === approval || ledger?.acceptedDigest === assessment.digest)
         && ledger?.acceptedContentDigest === contentDigest)
       || ((ledger?.attempt?.digest === approval || ledger?.attempt?.digest === assessment.digest)
-        && ledger?.attempt?.contentDigest === contentDigest));
+        && ledger?.attempt?.contentDigest === contentDigest)
+      || (ledger?.mappingApprovalProof?.approvedDigest === approval
+        && ledger.mappingApprovalProof.mappingDigest === assessment.digest
+        && ledger.mappingApprovalProof.contentDigest === contentDigest));
   if (requiresDeliveryMappingApproval(assessment) && approval !== assessment.digest
     && !compatibleApproval) {
     return result('preserve', 'approval_required', assessment.digest, assessment.issues, assessment.digest);
   }
-  return result('present', ledger?.acceptedDigest === assessment.digest ? 'delivered' : 'pending', assessment.digest, assessment.issues);
+  return { ...result('present', ledger?.acceptedDigest === assessment.digest ? 'delivered' : 'pending', assessment.digest, assessment.issues),
+    ...(compatibleApproval && contentDigest ? { mappingApprovalProof: {
+      approvedDigest: approval!, mappingDigest: assessment.digest, contentDigest,
+    } } : {}) };
 }

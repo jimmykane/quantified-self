@@ -99,7 +99,9 @@ function reconcileRecord(runtime: DeliveryRuntime, context: DeliveryContext, uid
   const settingRevision = Math.max(setting?.revision ?? 0, context.override?.revision ?? 0);
   const changed = !previous || previous.desiredDigest !== intent.digest || previous.desired !== intent.desired;
   const retried = settingRevision !== previous?.settingsRevision;
+  const mappingApprovalProof = intent.mappingApprovalProof ?? previous?.mappingApprovalProof;
   const record: DeliveryLedgerV1 = { ...(previous?.verification ? { verification: previous.verification } : {}),
+    ...(mappingApprovalProof ? { mappingApprovalProof } : {}),
     ...(context.pastCleanup ? { pastCleanup: context.pastCleanup } : {}),
     ...(previous?.providerAccessBlocked && !changed && !retried ? { providerAccessBlocked: true } : {}),
     ...(previous?.repair ? { repair: previous.repair } : {}),

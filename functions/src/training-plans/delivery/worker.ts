@@ -76,6 +76,9 @@ export async function processTrainingDelivery(runtime: DeliveryRuntime, uid: str
     ledger.approvalDigest = intent.approvalDigest;
     ledger.timeZone = intent.timeZone;
     ledger.contentDigest = deliveryContentDigest(workout, intent.timeZone, context.strength);
+    // Keep authorization evidence separate from acceptance: retiring an old
+    // unaccepted attempt must not erase a verified presentation-only upgrade.
+    if (intent.mappingApprovalProof) ledger.mappingApprovalProof = intent.mappingApprovalProof;
     const recover = !!ledger.attempt;
     if (!ledger.attempt) {
       const kind = intent.desired === 'present' && ledger.acceptedDigest !== intent.digest ? 'upsert'

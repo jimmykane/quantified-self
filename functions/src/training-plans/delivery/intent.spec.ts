@@ -94,10 +94,20 @@ describe('delivery intent', () => {
     const currentDigest = transport.assess(workout, 'account-a', 'Europe/Helsinki').digest;
     expect(resolveDeliveryIntent(context, { ...ledger, acceptedDigest: currentDigest }))
       .toMatchObject({ desired: 'present', status: 'delivered', approvalDigest: null });
+    const proof = resolveDeliveryIntent(context, ledger).mappingApprovalProof!;
+    const retired = { ...ledger, acceptedDigest: null, acceptedContentDigest: null, attempt: null, mappingApprovalProof: proof };
+    expect(resolveDeliveryIntent(context, retired)).toMatchObject({ desired: 'present', status: 'pending', mappingApprovalProof: proof });
+    // Approval evidence never asserts provider acceptance, even with a retained copy.
+    expect(resolveDeliveryIntent(context, retired).status).not.toBe('delivered');
+    for (const key of ['approvedDigest', 'mappingDigest', 'contentDigest'] as const) {
+      expect(resolveDeliveryIntent(context, { ...retired, mappingApprovalProof: { ...proof, [key]: 'mismatch' } }).status)
+        .toBe('approval_required');
+    }
     for (const edited of [{ ...workout, title: 'Changed' }, { ...workout, localDate: '2026-09-11' },
       { ...workout, structure: { ...workout.structure, nodes: [{ ...workout.structure.nodes[0], note: 'B'.repeat(45) }] } },
       { ...workout, structure: { ...workout.structure, nodes: [{ ...workout.structure.nodes[0], note: 'A'.repeat(40) + 'BBBBB' }] } }]) {
       expect(resolveDeliveryIntent({ ...context, workout: edited }, ledger).status).toBe('approval_required');
+      expect(resolveDeliveryIntent({ ...context, workout: edited }, retired).status).toBe('approval_required');
     }
     expect(resolveDeliveryIntent(context).status).toBe('approval_required');
     const attempt = { digest: prior.digest, contentDigest: ledger.acceptedContentDigest } as NonNullable<DeliveryLedgerV1['attempt']>;
@@ -108,6 +118,10 @@ describe('delivery intent', () => {
     expect(resolveDeliveryIntent({ ...context, setting: null }).desired).toBe('absent');
     expect(resolveDeliveryIntent({ ...context, hasPro: false }).status).toBe('paused_pro');
     expect(resolveDeliveryIntent({ ...context, connection: { ...context.connection, epoch: 1 } }).status).toBe('fresh_consent_required');
+    expect(resolveDeliveryIntent({ ...context, hasPro: false }, retired).status).toBe('paused_pro');
+    expect(resolveDeliveryIntent({ ...context, setting: null }, retired).desired).toBe('absent');
+    expect(resolveDeliveryIntent({ ...context, connection: { ...context.connection, epoch: 1 } }, retired).status)
+      .toBe('fresh_consent_required');
     expect(transport.assess(workout, 'other-account', 'Europe/Helsinki').compatibleApprovalDigest).not.toBe(prior.digest);
     expect(transport.assess(workout, 'account-a', 'UTC').compatibleApprovalDigest).not.toBe(prior.digest);
   });

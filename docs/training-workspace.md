@@ -1388,8 +1388,13 @@ was already approved under v2, the adapter recomputes the exact v2 digest from t
 destination, zone and owner and verifies the same warning list. Only that exact approval is compatible; edited
 instructions/targets/date/metadata or changed authority cannot inherit it. An accepted copy or immutable attempt must
 also retain the matching full canonical content digest; old payloads can omit truncated text, so a changed hidden suffix
-must not inherit approval. Missing proof fails closed rather than assuming equivalence. This optional internal approval equivalence
-does not alter other adapters or the public confirmation/proposal contract.
+must not inherit approval. Once verified, the private ledger retains the exact approved digest, current mapping digest
+and full content digest as `mappingApprovalProof`, independently of provider acceptance. Retiring an obsolete,
+never-started or unaccepted v2 attempt must not erase that proof and require a redundant approval. The tuple is rechecked
+against the adapter's current equivalence result and current saved approval on every use; it neither grants consent nor
+claims delivery. Missing or mismatched proof fails closed. This optional private ledger field requires no migration,
+remains under the user subtree and is excluded from owner-visible status and MCP reads. Other adapters and the public
+confirmation/proposal contract are unchanged.
 
 Already-started uncertain v2 attempts reconstruct the original v2 JSON and verify its immutable operation digest before
 comparing full owned remote content. After acceptance recovery, normal reconciliation applies v3 to the same retained

@@ -9,7 +9,7 @@ import { processTrainingVerification } from '../verification-worker';
 import { stageTrainingDeliveryReconciliation } from '../marker';
 import { readTrainingDeliveryAuthority } from '../connection';
 import { productionDeliveryRuntime } from '../runtime';
-import { DELIVERY_LEDGER, DELIVERY_QUEUE, type DeliveryLedgerV1, type DeliveryRuntime } from '../contracts';
+import { DELIVERY_LEDGER, DELIVERY_QUEUE, type DeliveryLedgerV1, type DeliveryRuntime, type DeliveryOperation } from '../contracts';
 import { SuuntoGuideTransport } from './transport';
 import { createSuuntoGuideClient, SuuntoGuideHttpError } from './http';
 import { SuuntoHttpFixture } from '../test-support/suunto-http-fixture';
@@ -398,6 +398,73 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Suunto worker with real F
     expect(server.calls.filter(call => call.method === 'POST')).toHaveLength(1);
     expect(server.calls.filter(call => call.method === 'PUT')).toHaveLength(1);
     expect(server.guides.get(legacy.id)!.guide.steps.at(-1)).toMatchObject({ title: 'Complete' });
+  });
+  it.each(['not-started', 'ready-create', 'rejected-create', 'unaccepted-update'])(
+    'retains exact v2 loss approval when retiring a %s attempt during upgrade', async state => {
+    await user().collection('scheduledWorkouts').doc('w').update({ 'structure.nodes': [{
+      kind: 'step', id: 'step', purpose: 'work', ending: { kind: 'time', seconds: 600 }, targets: [], note: 'A'.repeat(45),
+    }] });
+    const transport = runtime.transport('suunto')!;
+    const previous = vi.spyOn(transport, 'assess').mockImplementation((workout, destination, zone, strength) =>
+      assessSuuntoGuideV2ForRecovery(workout, destination, zone, 'Quantified Self', strength));
+    await command('send'); await drain();
+    const blocked = await ledger();
+    const setting = user().collection('trainingDeliverySettings').doc('workout_w_suunto');
+    await trainingDeliveryCommand(runtime, uid, { schemaVersion: 1, mutationId: randomUUID(), scope: 'workout', scopeId: 'w',
+      provider: 'suunto', action: 'approve', expectedScheduleRevision: 1, expectedScopeRevision: 1,
+      expectedSettingsRevision: (await setting.get()).get('revision'), approvalDigest: blocked.approvalDigest }, false);
+    await drain();
+    const approved = await ledger();
+    const operation: DeliveryOperation = { id: 'old-unaccepted', kind: 'upsert', deliveryId: approved.id,
+      generation: approved.desiredGeneration, connectionGeneration: 'connection', destinationKey: approved.destinationKey,
+      timeZone: approved.timeZone, digest: approved.desiredDigest, contentDigest: approved.contentDigest,
+      workout: parseScheduledWorkoutV1((await user().collection('scheduledWorkouts').doc('w').get()).data()),
+      artifact: null, progress: null };
+    if (state !== 'not-started') operation.progress = { version: 1,
+      step: state === 'unaccepted-update' ? 'update' : 'create',
+      state: state === 'rejected-create' ? 'rejected' : state === 'unaccepted-update' ? 'started' : 'ready' };
+    if (state === 'unaccepted-update') {
+      const payload = guidePayloadForRecovery(operation, 'Quantified Self')!;
+      // The previous owned copy survives a lost/nonaccepted PUT. Do not mark
+      // this newer prescription accepted, but preserve the identity for v3 PUT.
+      const prior = structuredClone(payload);
+      if (prior.steps[0].type !== 'fields') throw new Error('Expected fields');
+      prior.steps[0].fields = prior.steps[0].fields.filter(field => field.type !== 'text');
+      server.guides.set('old-copy', { guide: prior, pinned: true });
+      operation.artifact = { ids: { guide: 'old-copy', externalId: prior.externalId, owner: 'Quantified Self' },
+        localDate: prior.localDate, completed: false };
+    }
+    const ref = user().collection(DELIVERY_LEDGER).doc(approved.id);
+    await ref.update({ attempt: operation, actual: operation.artifact });
+    await ref.collection('attempts').doc(operation.id).set({ schemaVersion: 1, operation, state: 'started', startedAtMs: now });
+    previous.mockRestore(); await mark();
+    expect((await ledger()).status).toBe('pending');
+    await processTrainingDelivery(runtime, uid, approved.id); await drain();
+    expect((await ledger()).attempt).toBeNull();
+    expect((await ledger()).status).toBe('pending');
+    expect((await ledger()).acceptedDigest).toBeNull();
+    expect((await ledger()).acceptedContentDigest).toBeNull();
+    expect(server.calls.every(call => call.method === 'GET')).toBe(true);
+    // Temporary Pro expiry must neither send nor erase the exact approval proof.
+    const calls = server.calls.length;
+    pro = false; await mark(); await processTrainingDelivery(runtime, uid, approved.id);
+    expect((await ledger()).status).toBe('paused_pro');
+    expect(server.calls).toHaveLength(calls);
+    pro = true; await mark();
+    await processTrainingDelivery(runtime, uid, approved.id); await drain();
+    expect((await ledger()).status).toBe('delivered');
+    expect((await setting.get()).get('approvedDigest')).toBe(blocked.approvalDigest);
+    expect(server.guides.size).toBe(1);
+    expect(server.calls.filter(call => call.method === 'POST')).toHaveLength(state === 'unaccepted-update' ? 0 : 1);
+    expect(server.calls.filter(call => call.method === 'PUT')).toHaveLength(state === 'unaccepted-update' ? 1 : 0);
+    if (state === 'unaccepted-update') expect(server.guides.get('old-copy')!.pinned).toBe(true);
+    const writes = server.calls.filter(call => ['POST', 'PUT'].includes(call.method)).length;
+    await user().collection('scheduledWorkouts').doc('w').update({ 'structure.nodes': [{
+      kind: 'step', id: 'step', purpose: 'work', ending: { kind: 'time', seconds: 600 }, targets: [], note: 'A'.repeat(40) + 'BBBBB',
+    }] });
+    await mark(); await processTrainingDelivery(runtime, uid, approved.id); await drain();
+    expect((await ledger()).status).toBe('approval_required');
+    expect(server.calls.filter(call => ['POST', 'PUT'].includes(call.method))).toHaveLength(writes);
   });
   it('recovers a v2 reschedule/update with a lost ACK before applying the new screen layout', async () => {
     const original = await send();
