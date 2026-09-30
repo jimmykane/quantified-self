@@ -66,6 +66,10 @@ app-calendar-day-context {
   gap: 16px;
 }
 
+.calendar-day-total + app-training-impact {
+  margin-top: 16px;
+}
+
 .calendar-day-total span {
   color: var(--mat-sys-on-surface-variant);
   font: var(--mat-sys-body-medium);

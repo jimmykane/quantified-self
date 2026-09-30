@@ -100,6 +100,9 @@ describe('TrainingImpactComponent', () => {
     const summaryRowsRule = styles.match(/\.training-impact--summary \.training-impact-metrics > div,[\s\S]*?\{([^}]+)\}/)?.[1];
 
     expect(summaryRule).toContain('border: 0;');
+    expect(summaryRule).not.toContain('border-top:');
+    expect(summaryRule).toContain('margin-top: 0;');
+    expect(summaryRule).toContain('padding: 0;');
     expect(summaryRule).toContain('background: transparent;');
     expect(summaryRowsRule).toContain('background: transparent;');
   });
