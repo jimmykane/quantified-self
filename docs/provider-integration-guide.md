@@ -875,7 +875,9 @@ Use structured logs with safe identifiers and error categories. Do not put token
 Outbound semantic FIT fingerprint failures and unexpected manual activity-parser failures use the shared
 `activity-parser-diagnostics` allowlist. It records a diagnostic ID (alongside the platform request trace), Sports Lib
 version, format and payload byte length, known error names/codes/literal messages, a bounded-message hash, and package
-line/column without raw stack paths. FIT signature and declared data-length facts are structural only. Unknown messages
+line/column plus an allowlisted package-relative importer module, without raw stack paths. For JSON payloads up to
+64 KiB, it records only root type, `DeviceLog` presence, and whether `Samples` is an array; larger payloads are not
+inspected again. FIT signature and declared data-length facts are structural only. Unknown messages
 are withheld rather than relying on credential-only redaction to remove file content. Fingerprint failures remain
 WARNING and explicitly report `exact_only` fallback; exact-byte receipts remain available. Do not lower this warning
 until the new diagnostics explain the affected files. Manual route/course rejections retain HTTP 400 with the stable
