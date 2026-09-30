@@ -2,7 +2,10 @@ import { randomUUID } from 'node:crypto';
 import { ActivityTypes } from '@sports-alliance/sports-lib';
 import { Firestore } from 'firebase-admin/firestore';
 import { afterAll, describe, expect, it, vi } from 'vitest';
-import { DELETED_WORKOUT_RECOVERY_MS } from '../../../shared/training-plans';
+import {
+    DELETED_WORKOUT_RECOVERY_MS,
+    TRAINING_SCHEDULE_DELETION_TOMBSTONES_COLLECTION_ID,
+} from '../../../shared/training-plans';
 import { trainingCleanupJob, trainingCleanupJobRef } from './cleanup-job-contract';
 import { reconcileExpiredDeletedWorkouts, reconcileTrainingCleanupJobs, runTrainingWorkoutExpiry } from './cleanup-worker';
 import { buildTrainingScheduleDeletionTombstone, trainingScheduleDeletionTombstoneDocumentId } from './persistence';
@@ -117,6 +120,45 @@ describe.skipIf(!emulatorHost)('Training cleanup in isolated demo Firestore', { 
         expect((await reconcileTrainingCleanupJobs(db, nowMs)).completed).toBe(1);
         expect((await history.get()).exists).toBe(false);
         expect((await job.get()).exists).toBe(false);
+    });
+
+    it('stops before another deletion when a committed outcome cannot be verified', async () => {
+        const uid = `expiry-${randomUUID()}`; uids.push(uid);
+        const user = db.collection('users').doc(uid);
+        await user.set({ test: true });
+        await user.collection('trainingPlanState').doc('current').set(createEmptyTrainingPlanState(nowMs));
+        const first = user.collection('scheduledWorkouts').doc('first');
+        const second = user.collection('scheduledWorkouts').doc('second');
+        await first.set(deletedWorkout(first.id, nowMs - DELETED_WORKOUT_RECOVERY_MS - 1));
+        await second.set(deletedWorkout(second.id, nowMs - DELETED_WORKOUT_RECOVERY_MS));
+
+        const tombstonePath = user.collection('trainingPlanState').doc('current')
+            .collection(TRAINING_SCHEDULE_DELETION_TOMBSTONES_COLLECTION_ID)
+            .doc(trainingScheduleDeletionTombstoneDocumentId('workout', first.id)).path;
+        const tombstonePrototype = Object.getPrototypeOf(user);
+        const getDocument = user.get;
+        const getSpy = vi.spyOn(tombstonePrototype, 'get').mockImplementation(function (this: typeof user) {
+            if (this.path === tombstonePath) throw new Error('simulated tombstone read interruption');
+            return getDocument.call(this);
+        });
+        const recursiveDelete = db.recursiveDelete.bind(db);
+        const deleteSpy = vi.spyOn(db, 'recursiveDelete').mockImplementation(async ref => {
+            if (ref.path === first.path) throw new Error('simulated recursive cleanup interruption');
+            return recursiveDelete(ref);
+        });
+        try {
+            await expect(runTrainingWorkoutExpiry(db, nowMs))
+                .rejects.toThrow('simulated recursive cleanup interruption');
+        } finally {
+            deleteSpy.mockRestore();
+            getSpy.mockRestore();
+        }
+        expect((await first.get()).exists).toBe(false);
+        expect((await second.get()).exists).toBe(true);
+        expect((await trainingCleanupJobRef(db, uid, 'workout', first.id).get()).exists).toBe(true);
+        expect((await reconcileTrainingCleanupJobs(db, nowMs)).completed).toBe(1);
+        expect((await runTrainingWorkoutExpiry(db, nowMs)).deleted).toBe(1);
+        expect((await second.get()).exists).toBe(false);
     });
 
     it('does not expire a workout during account deletion', async () => {
