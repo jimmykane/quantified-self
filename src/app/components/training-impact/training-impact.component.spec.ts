@@ -1,4 +1,6 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { buildTrainingLoadPoints, resolveTrainingLoadDayImpact } from '@shared/training-load';
 import type { TrainingDayImpactView, TrainingSessionImpactView } from '../../helpers/training-impact.helper';
@@ -89,6 +91,17 @@ describe('TrainingImpactComponent', () => {
     expect(element.textContent).toContain('Activities span 2 UTC Training days');
     expect(element.querySelector('.training-impact--summary')).toBeTruthy();
     expect(element.querySelectorAll('.training-impact-outcomes > div')).toHaveLength(2);
+  });
+
+  it('keeps the day summary on its parent surface instead of adding a nested card', () => {
+    const styles = readFileSync(resolve(process.cwd(),
+      'src/app/components/training-impact/training-impact.component.scss'), 'utf8');
+    const summaryRule = styles.match(/\.training-impact--summary\s*\{([^}]+)\}/)?.[1];
+    const summaryRowsRule = styles.match(/\.training-impact--summary \.training-impact-metrics > div,[\s\S]*?\{([^}]+)\}/)?.[1];
+
+    expect(summaryRule).toContain('border: 0;');
+    expect(summaryRule).toContain('background: transparent;');
+    expect(summaryRowsRule).toContain('background: transparent;');
   });
 
   it('renders separate UTC outcome lines for a compact multi-day total', () => {
