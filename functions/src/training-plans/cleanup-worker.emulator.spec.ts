@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { ActivityTypes } from '@sports-alliance/sports-lib';
 import { Firestore } from 'firebase-admin/firestore';
-import { afterAll, describe, expect, it, vi } from 'vitest';
+import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
     DELETED_WORKOUT_RECOVERY_MS,
     TRAINING_SCHEDULE_DELETION_TOMBSTONES_COLLECTION_ID,
@@ -10,6 +10,9 @@ import { trainingCleanupJob, trainingCleanupJobRef } from './cleanup-job-contrac
 import { reconcileExpiredDeletedWorkouts, reconcileTrainingCleanupJobs, runTrainingWorkoutExpiry } from './cleanup-worker';
 import { buildTrainingScheduleDeletionTombstone, trainingScheduleDeletionTombstoneDocumentId } from './persistence';
 import { createEmptyTrainingPlanState } from './mutation';
+import {
+    claimWorkoutExpiryCheckpoint, saveWorkoutExpiryCheckpoint, WORKOUT_EXPIRY_CHECKPOINT_PATH,
+} from './workout-expiry-checkpoint';
 
 const emulatorHost = process.env.FIRESTORE_EMULATOR_HOST;
 const demoProjectId = 'demo-training-657';
@@ -22,6 +25,12 @@ describe.skipIf(!emulatorHost)('Training cleanup in isolated demo Firestore', { 
     const uids: string[] = [];
     const nowMs = Date.parse('2026-09-28T10:00:00Z');
 
+    beforeEach(async () => {
+        await db.doc(WORKOUT_EXPIRY_CHECKPOINT_PATH).set({
+            schemaVersion: 1, cursor: null, leaseId: null, leaseUntilMs: 0,
+        });
+    });
+
     function deletedWorkout(id: string, deletedAtMs: number) {
         return {
             schemaVersion: 1, id, planId: null, localDate: '2026-09-27', lifecycle: 'deleted',
@@ -33,6 +42,7 @@ describe.skipIf(!emulatorHost)('Training cleanup in isolated demo Firestore', { 
 
     afterAll(async () => {
         for (const uid of uids) await db.recursiveDelete(db.collection('users').doc(uid));
+        await db.recursiveDelete(db.doc(WORKOUT_EXPIRY_CHECKPOINT_PATH));
         await db.terminate();
     });
 
@@ -356,5 +366,60 @@ describe.skipIf(!emulatorHost)('Training cleanup in isolated demo Firestore', { 
         expect((await valid.get()).exists).toBe(false);
         expect((await user.collection('scheduledWorkouts').doc('valid').collection('revisions')
             .doc('0000000001').get()).exists).toBe(false);
+    });
+
+    it('resumes beyond 1,000 blocked roots across runs, survives a deleted cursor, then revisits earlier roots', async () => {
+        const sweepNowMs = nowMs - 90 * 24 * 60 * 60 * 1_000;
+        const deletedAtMs = sweepNowMs - DELETED_WORKOUT_RECOVERY_MS - 1;
+        const owners = Array.from({ length: 2 }, () => `expiry-cursor-${randomUUID()}`).sort();
+        uids.push(...owners);
+        for (const uid of owners) {
+            const user = db.collection('users').doc(uid);
+            await user.set({ test: true });
+            await user.collection('trainingPlanState').doc('current').set(createEmptyTrainingPlanState(sweepNowMs));
+        }
+        const roots = Array.from({ length: 1_005 }, (_, index) => db.collection('users')
+            .doc(owners[index < 600 ? 0 : 1]).collection('scheduledWorkouts').doc(`blocked-${index}`));
+        for (let offset = 0; offset < roots.length; offset += 400) {
+            const writes = db.batch();
+            for (const root of roots.slice(offset, offset + 400)) {
+                writes.set(root, root.parent.parent!.id === owners[0]
+                    ? { ...deletedWorkout(root.id, deletedAtMs), title: '' }
+                    : { ...deletedWorkout(root.id, deletedAtMs), planId: 'missing-plan' });
+            }
+            await writes.commit();
+        }
+        const valid = db.collection('users').doc(owners[1]).collection('scheduledWorkouts').doc('valid-after-prefix');
+        await valid.set(deletedWorkout(valid.id, deletedAtMs + 1));
+        const checkpoint = db.doc(WORKOUT_EXPIRY_CHECKPOINT_PATH);
+
+        expect(await runTrainingWorkoutExpiry(db, sweepNowMs)).toMatchObject({
+            scanned: 1_000, deleted: 0, failed: 600, deferred: 400, stopReason: 'scan-limit', moreDue: true,
+        });
+        const cursor = (await checkpoint.get()).get('cursor');
+        expect(cursor.deletedAtMs).toBe(deletedAtMs);
+        expect((await valid.get()).exists).toBe(true);
+        await db.recursiveDelete(db.doc(cursor.documentPath));
+        expect(await runTrainingWorkoutExpiry(db, sweepNowMs)).toMatchObject({
+            scanned: 6, deleted: 1, failed: 0, deferred: 5, stopReason: 'drained', moreDue: true,
+        });
+        expect((await valid.get()).exists).toBe(false);
+        expect((await checkpoint.get()).get('cursor')).toBeNull();
+        const earliest = [...roots].sort((a, b) => a.path.localeCompare(b.path))[0];
+        await earliest.set(deletedWorkout(earliest.id, deletedAtMs));
+        expect((await runTrainingWorkoutExpiry(db, sweepNowMs)).deleted).toBe(1);
+        expect((await earliest.get()).exists).toBe(false);
+    });
+
+    it('allows one concurrent checkpoint claim and rejects a replaced lease', async () => {
+        const claims = await Promise.all([claimWorkoutExpiryCheckpoint(db), claimWorkoutExpiryCheckpoint(db)]);
+        expect(claims.filter(Boolean)).toHaveLength(1);
+        const oldLease = claims.find(Boolean)!;
+        const checkpoint = db.doc(WORKOUT_EXPIRY_CHECKPOINT_PATH);
+        await checkpoint.update({ leaseUntilMs: 0 });
+        const newLease = (await claimWorkoutExpiryCheckpoint(db))!;
+        await expect(saveWorkoutExpiryCheckpoint(db, oldLease.leaseId, null, true)).rejects.toThrow('lease lost');
+        expect((await checkpoint.get()).get('leaseId')).toBe(newLease.leaseId);
+        await saveWorkoutExpiryCheckpoint(db, newLease.leaseId, null, true);
     });
 });

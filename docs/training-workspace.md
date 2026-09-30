@@ -640,6 +640,13 @@ packed Sports Lib package. That gate is tracked by GitHub issue #654 under epic 
   workouts globally per invocation. The daily scan stops after 1,000 inspected roots or four minutes, whichever
   comes first, nominally reserving a minute below the Function's five-minute timeout; a single slow operation can
   consume that margin. A batch resumes after its last inspected root even when it stopped partway through a fetched page.
+  Each completed batch persists its last inspected `(deletedAtMs, document path)` index key in the server-only
+  `systemJobs/trainingWorkoutExpiry` leaf. A seven-minute wall-clock lease serializes daily invocations and fences
+  checkpoint updates from an expired worker. Capped or timed-out runs resume from the saved key, including when the
+  referenced workout has disappeared. Reaching the end resets the cursor for the next invocation so earlier deferred,
+  repaired, or newly eligible roots are revisited. A failed partial batch retains the last completed checkpoint;
+  its candidates can safely be inspected again. The checkpoint contains no prescription and is never logged or exposed
+  through browser or MCP reads. It is shared maintenance state, not a user-owned deletion job.
   Expired roots not processed within these bounds
   remain eligible for the next daily run. The worker rechecks the exact
   deletion timestamp inside the transaction, plus expected state, workout and plan revisions, account-deletion guard
@@ -665,9 +672,11 @@ packed Sports Lib package. That gate is tracked by GitHub issue #654 under epic 
   runtime budget was reached or that check failed. A page-query or commit-verification failure keeps the invocation
   failed and logs a `sweep-error` summary with redacted, per-candidate progress so already completed deletions remain
   observable.
-  Paging lets a blocked first page yield to later candidates;
-  1,000 persistently malformed or deferred older roots can still block later roots, so sustained failed/deferred counts
-  or `scan-limit` runs require operator inspection rather than a guessed manual delete. Rollback needs a separately
+  Persisted continuation lets later users' workouts expire even when more than 1,000 older roots remain malformed or
+  deferred. Sustained failed/deferred counts still require operator inspection of those roots; they never authorize a
+  guessed manual delete. An invalid checkpoint fails closed and logs `sweep_failed`; a stale lease expires without
+  discarding the saved cursor. This is an internal scheduling change with no MCP tool, schema, scope, consent,
+  projection, or approval-contract change. Rollback needs a separately
   approved, coordinated change to both scheduled Functions: restoring the old
   combined `reconcileTrainingPlanCleanup` revision while leaving the daily expiry Function active would run both expiry
   scans. Already committed tombstones and deletions are not reversible. Queue TTL remains a separate

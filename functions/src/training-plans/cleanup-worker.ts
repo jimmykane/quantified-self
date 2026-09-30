@@ -1,4 +1,5 @@
 import * as admin from 'firebase-admin';
+import { FieldPath } from 'firebase-admin/firestore';
 import { createHash } from 'node:crypto';
 import { performance } from 'node:perf_hooks';
 import * as logger from 'firebase-functions/logger';
@@ -26,6 +27,11 @@ import { trainingScheduleDeletionTombstoneDocumentId } from './persistence';
 import { mutateTrainingScheduleForUser } from './persistence';
 import { TrainingScheduleMutationError } from './mutation';
 import { cleanupPermanentlyDeletedWorkoutData } from './cleanup-workout';
+import {
+    claimWorkoutExpiryCheckpoint,
+    saveWorkoutExpiryCheckpoint,
+    type WorkoutExpiryCursor,
+} from './workout-expiry-checkpoint';
 
 const SCAN_PAGE_SIZE = 25;
 const MAX_SCAN = 100;
@@ -43,7 +49,7 @@ const EXPIRY_RUNTIME_BUDGET_MS = 4 * 60 * 1_000;
 
 type ExpiryCounts = { scanned: number; deleted: number; deferred: number; failed: number };
 type ExpiryBatch = ExpiryCounts & {
-    cursor: admin.firestore.QueryDocumentSnapshot | null;
+    cursor: WorkoutExpiryCursor | null;
     exhausted: boolean;
 };
 
@@ -51,7 +57,7 @@ function expiredWorkoutQuery(db: admin.firestore.Firestore, nowMs: number) {
     return db.collectionGroup(SCHEDULED_WORKOUTS_COLLECTION_ID)
         .where('lifecycle', '==', 'deleted')
         .where('deletedAtMs', '<=', nowMs - DELETED_WORKOUT_RECOVERY_MS)
-        .orderBy('deletedAtMs');
+        .orderBy('deletedAtMs').orderBy(FieldPath.documentId());
 }
 
 function expiredWorkoutOwner(path: string): string | null {
@@ -64,7 +70,7 @@ function expiredWorkoutOwner(path: string): string | null {
 async function scanExpiredDeletedWorkoutsBatch(
     db: admin.firestore.Firestore,
     nowMs: number,
-    initialCursor: admin.firestore.QueryDocumentSnapshot | null,
+    initialCursor: WorkoutExpiryCursor | null,
     maxScan: number,
     maxDeletes: number,
     shouldStop: () => boolean,
@@ -79,14 +85,15 @@ async function scanExpiredDeletedWorkoutsBatch(
     let exhausted = false;
     while (scanned < maxScan && deleted < maxDeletes && !shouldStop()) {
         const pageSize = Math.min(EXPIRED_SCAN_SIZE, maxScan - scanned);
-        const page = await (cursor ? due.startAfter(cursor) : due).limit(pageSize).get();
+        const page = await (cursor ? due.startAfter(cursor.deletedAtMs, db.doc(cursor.documentPath)) : due)
+            .limit(pageSize).get();
         if (page.empty) { exhausted = true; break; }
         let processedInPage = 0;
         for (const snapshot of page.docs) {
             if (deleted >= maxDeletes || shouldStop()) break;
             // A batch may end partway through a fetched page. Resume after the
             // last inspected root, not the last fetched root, or candidates skip.
-            cursor = snapshot;
+            cursor = { deletedAtMs: snapshot.get('deletedAtMs') as number, documentPath: snapshot.ref.path };
             processedInPage += 1;
             scanned += 1;
             const uid = expiredWorkoutOwner(snapshot.ref.path);
@@ -339,12 +346,23 @@ export async function runTrainingWorkoutExpiry(
 ): Promise<ExpiryCounts & { batches: number; moreDue: boolean | null; stopReason: string }> {
     const startedAt = clock();
     const out: ExpiryCounts = { scanned: 0, deleted: 0, deferred: 0, failed: 0 };
-    let cursor: admin.firestore.QueryDocumentSnapshot | null = null;
+    let cursor: WorkoutExpiryCursor | null = null;
+    let lease: Awaited<ReturnType<typeof claimWorkoutExpiryCheckpoint>> = null;
+    let savedCursor: WorkoutExpiryCursor | null = null;
     let exhausted = false;
     let batches = 0;
     const overTime = () => clock() - startedAt >= EXPIRY_RUNTIME_BUDGET_MS;
     try {
-        while (out.scanned < MAX_DAILY_EXPIRED_SCAN && out.deleted < MAX_DAILY_EXPIRED_DELETIONS && !overTime()) {
+        if (!overTime()) {
+            lease = await claimWorkoutExpiryCheckpoint(db);
+            if (!lease) {
+                const result = { ...out, batches, moreDue: null, stopReason: 'lease-held' };
+                logger.info('[TrainingWorkoutExpiry]', result);
+                return result;
+            }
+            cursor = savedCursor = lease.cursor;
+        }
+        while (lease && out.scanned < MAX_DAILY_EXPIRED_SCAN && out.deleted < MAX_DAILY_EXPIRED_DELETIONS && !overTime()) {
             const beforeBatch = { ...out };
             const applyProgress = (counts: ExpiryCounts) => {
                 out.scanned = beforeBatch.scanned + counts.scanned;
@@ -363,9 +381,19 @@ export async function runTrainingWorkoutExpiry(
             applyProgress(batch);
             cursor = batch.cursor;
             exhausted = batch.exhausted;
+            savedCursor = exhausted ? null : cursor;
+            await saveWorkoutExpiryCheckpoint(db, lease.leaseId, savedCursor);
             if (exhausted || batch.scanned === 0) break;
         }
+        if (lease) await saveWorkoutExpiryCheckpoint(db, lease.leaseId, savedCursor, true);
     } catch (error) {
+        if (lease) {
+            try {
+                await saveWorkoutExpiryCheckpoint(db, lease.leaseId, savedCursor, true);
+            } catch {
+                logger.warn('[TrainingWorkoutExpiry]', { event: 'checkpoint_release_failed' });
+            }
+        }
         // Keep the invocation failed so the scheduler can surface/retry it,
         // but do not lose the counts from batches that already committed.
         logger.error('[TrainingWorkoutExpiry]', {

@@ -27,6 +27,9 @@ import {
 import { TRAINING_CLEANUP_JOBS_COLLECTION_ID, trainingCleanupJob, trainingCleanupJobRef } from './cleanup-job-contract';
 import { buildTrainingScheduleDeletionTombstone, trainingScheduleDeletionTombstoneDocumentId } from './persistence';
 import { SCHEDULED_WORKOUTS_COLLECTION_ID } from '../../../shared/training-plans';
+import {
+    claimWorkoutExpiryCheckpoint, saveWorkoutExpiryCheckpoint, WORKOUT_EXPIRY_CHECKPOINT_PATH,
+} from './workout-expiry-checkpoint';
 
 type Stored = Record<string, unknown>;
 
@@ -63,9 +66,11 @@ class FakeDb {
         }
     });
     collection(id: string): FakeCollection { return new FakeCollection(this, id); }
+    doc(path: string): FakeRef { return new FakeRef(this, path); }
     async runTransaction<T>(handler: (transaction: {
         get: (ref: FakeRef) => Promise<{ exists: boolean; data: () => Stored | undefined }>;
         update: (ref: FakeRef, value: Stored) => void;
+        set: (ref: FakeRef, value: Stored) => void;
         delete: (ref: FakeRef) => void;
     }) => Promise<T>): Promise<T> {
         return handler({
@@ -75,6 +80,7 @@ class FakeDb {
                 if (!current) throw new Error('Missing document.');
                 this.docs.set(ref.path, { ...current, ...value });
             },
+            set: (ref, value) => { this.docs.set(ref.path, value); },
             delete: ref => { this.docs.delete(ref.path); },
         });
     }
@@ -107,12 +113,12 @@ describe('durable Training cleanup worker', () => {
             query.limit.mockReturnValue(query);
             return query;
         };
-        const scheduleDb = {
+        const scheduleDb = Object.assign(new FakeDb(), {
             collectionGroup: vi.fn((name: string) => {
                 queriedCollections.push(name);
                 return emptyQuery();
             }),
-        };
+        });
 
         mocks.firestore.mockReturnValue(scheduleDb);
         expect(mocks.schedules).toEqual([
@@ -156,7 +162,8 @@ describe('durable Training cleanup worker', () => {
         query.where.mockReturnValue(query);
         query.orderBy.mockReturnValue(query);
         query.limit.mockReturnValue(query);
-        const result = await runTrainingWorkoutExpiry({ collectionGroup: vi.fn(() => query) } as never, nowMs);
+        const expiryDb = Object.assign(new FakeDb(), { collectionGroup: vi.fn(() => query) });
+        const result = await runTrainingWorkoutExpiry(expiryDb as never, nowMs);
         expect(result).toMatchObject({ scanned: 0, deleted: 0, moreDue: null, stopReason: 'drained' });
         expect(logger.warn).toHaveBeenCalledWith('[TrainingWorkoutExpiry]', { event: 'backlog_check_failed' });
     });
@@ -172,6 +179,7 @@ describe('durable Training cleanup worker', () => {
                 const docs = Array.from({ length: count }, (_, index) => ({
                     id: `invalid-${start + index}`,
                     ref: { path: `users/owner-1/scheduledWorkouts/invalid-${start + index}` },
+                    get: () => nowMs - 100_000_000_000,
                     data: () => ({}),
                 }));
                 return { empty: false, size: docs.length, docs };
@@ -182,12 +190,73 @@ describe('durable Training cleanup worker', () => {
         query.limit.mockReturnValue(query);
         query.startAfter.mockReturnValue(query);
         const collectionGroup = vi.fn(() => query);
-        await expect(runTrainingWorkoutExpiry({ collectionGroup } as never, nowMs))
+        const expiryDb = Object.assign(new FakeDb(), { collectionGroup });
+        await expect(runTrainingWorkoutExpiry(expiryDb as never, nowMs))
             .rejects.toThrow('query unavailable');
         expect(logger.error).toHaveBeenCalledWith('[TrainingWorkoutExpiry]', {
             event: 'sweep_failed', scanned: 130, deleted: 0, deferred: 0, failed: 130,
             batches: 2, moreDue: null, stopReason: 'sweep-error',
         });
+        expect(expiryDb.docs.get(WORKOUT_EXPIRY_CHECKPOINT_PATH)).toMatchObject({
+            cursor: { deletedAtMs: nowMs - 100_000_000_000,
+                documentPath: 'users/owner-1/scheduledWorkouts/invalid-99' },
+            leaseId: null, leaseUntilMs: 0,
+        });
+    });
+
+    it('retains the last inspected key on a time limit and clears it after exhausting the next run', async () => {
+        let timeSpent = false;
+        const path = 'users/owner-1/scheduledWorkouts/invalid';
+        const deletedAtMs = nowMs - 100_000_000_000;
+        const query = {
+            where: vi.fn(), orderBy: vi.fn(), limit: vi.fn(), startAfter: vi.fn(),
+            get: vi.fn().mockResolvedValueOnce({ empty: false, size: 2, docs: [{
+                id: 'invalid', ref: { path }, get: () => deletedAtMs,
+                data: () => { timeSpent = true; return {}; },
+            }, {
+                id: 'uninspected', ref: { path: 'users/owner-1/scheduledWorkouts/uninspected' },
+                get: () => deletedAtMs, data: () => ({}),
+            }] }).mockResolvedValue({ empty: true, size: 0, docs: [] }),
+        };
+        for (const method of ['where', 'orderBy', 'limit', 'startAfter'] as const) query[method].mockReturnValue(query);
+        const expiryDb = Object.assign(new FakeDb(), { collectionGroup: vi.fn(() => query) });
+        expect(await runTrainingWorkoutExpiry(expiryDb as never, nowMs, () => timeSpent ? 240_000 : 0))
+            .toMatchObject({ scanned: 1, failed: 1, stopReason: 'time-budget' });
+        expect(expiryDb.docs.get(WORKOUT_EXPIRY_CHECKPOINT_PATH)).toMatchObject({
+            cursor: { deletedAtMs, documentPath: path }, leaseId: null,
+        });
+        await runTrainingWorkoutExpiry(expiryDb as never, nowMs);
+        expect(query.startAfter).toHaveBeenCalledWith(deletedAtMs, expect.objectContaining({ path }));
+        expect(expiryDb.docs.get(WORKOUT_EXPIRY_CHECKPOINT_PATH)?.cursor).toBeNull();
+    });
+
+    it('skips an overlapping sweep and fences a stale worker after lease recovery', async () => {
+        const first = (await claimWorkoutExpiryCheckpoint(db as never))!;
+        const collectionGroup = vi.fn();
+        expect(await runTrainingWorkoutExpiry(Object.assign(db, { collectionGroup }) as never, nowMs))
+            .toMatchObject({ scanned: 0, batches: 0, stopReason: 'lease-held' });
+        expect(collectionGroup).not.toHaveBeenCalled();
+        const cursor = { deletedAtMs: nowMs, documentPath: 'users/owner-1/scheduledWorkouts/deleted' };
+        db.docs.set(WORKOUT_EXPIRY_CHECKPOINT_PATH, {
+            ...db.docs.get(WORKOUT_EXPIRY_CHECKPOINT_PATH), cursor, leaseUntilMs: 0,
+        });
+        const recovered = (await claimWorkoutExpiryCheckpoint(db as never))!;
+        expect(recovered.cursor).toEqual(cursor);
+        expect(recovered.leaseId).not.toBe(first.leaseId);
+        await expect(saveWorkoutExpiryCheckpoint(db as never, first.leaseId, null, true))
+            .rejects.toThrow('lease lost');
+        expect(db.docs.get(WORKOUT_EXPIRY_CHECKPOINT_PATH)?.cursor).toEqual(cursor);
+    });
+
+    it('fails closed on an invalid persisted cursor without querying workouts', async () => {
+        db.docs.set(WORKOUT_EXPIRY_CHECKPOINT_PATH, {
+            schemaVersion: 1, cursor: { deletedAtMs: nowMs, documentPath: 'users/owner-1' },
+            leaseId: null, leaseUntilMs: 0,
+        });
+        const collectionGroup = vi.fn();
+        await expect(runTrainingWorkoutExpiry(Object.assign(db, { collectionGroup }) as never, nowMs))
+            .rejects.toThrow('Invalid workout expiry cursor');
+        expect(collectionGroup).not.toHaveBeenCalled();
     });
 
     function seedWorkout(): FakeRef {
