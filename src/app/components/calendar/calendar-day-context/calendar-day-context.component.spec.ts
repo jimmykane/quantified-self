@@ -1,4 +1,6 @@
 import { signal } from '@angular/core';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { ActivityTypes, AppThemes, DistanceUnits, type EventInterface } from '@sports-alliance/sports-lib';
 import { buildTrainingLoadPoints } from '@shared/training-load';
 import { normalizeUserUnitSettings } from '@shared/unit-aware-display';
@@ -29,6 +31,20 @@ function data(dateKey: string): CalendarDayDetailsData {
 const emptyEvidence = { sessions: [], hrvSeries: [], derived: null, sleepError: false, hrvError: false, readinessError: false, recoveryError: false };
 
 describe('CalendarDayContextComponent', () => {
+  it('centers timeline time, mixed icons, and titles in a shared 44px row', () => {
+    const styles = readFileSync(resolve(process.cwd(),
+      'src/app/components/calendar/calendar-day-context/calendar-day-context.component.scss'), 'utf8');
+    const rule = (selector: string) => styles.match(new RegExp(`\\.${selector}\\s*\\{([^}]+)\\}`))?.[1] ?? '';
+
+    expect(rule('calendar-day-timeline-time')).toContain('min-height: 44px; align-items: center;');
+    expect(rule('calendar-day-timeline-icon')).toContain('height: 44px; align-items: center;');
+    expect(rule('calendar-day-timeline-icon')).toContain('margin: 0;');
+    expect(rule('calendar-day-timeline-content > a, .calendar-day-timeline-content > button')).toContain('box-sizing: border-box;');
+    expect(rule('calendar-day-timeline-content > a, .calendar-day-timeline-content > button')).toContain('min-height: 44px;');
+    expect(rule('calendar-day-timeline-content > a')).toContain('align-items: flex-start; padding: 12px 0 0;');
+    expect(rule('calendar-day-timeline-content > strong')).toContain('min-height: 44px; align-items: center;');
+  });
+
   it('keeps the calendar mounted, cancels an older day read, and fences private health on account change', async () => {
     const viewer = signal<{ uid: string } | null>({ uid: 'owner' });
     const pending: Array<Subject<typeof emptyEvidence>> = [];
