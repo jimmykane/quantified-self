@@ -267,7 +267,7 @@ export async function runTrainingCleanupJobs(db: admin.firestore.Firestore, nowM
 /** Expire recoverably deleted workouts on a separate daily budget. */
 export async function runTrainingWorkoutExpiry(db: admin.firestore.Firestore, nowMs = Date.now()): Promise<void> {
     const expired = await reconcileExpiredDeletedWorkouts(db, nowMs);
-    if (expired.scanned > 0) logger.info('[TrainingWorkoutExpiry]', expired);
+    logger.info('[TrainingWorkoutExpiry]', expired);
 }
 
 export const reconcileTrainingPlanCleanup = onSchedule({

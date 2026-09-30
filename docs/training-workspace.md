@@ -651,13 +651,15 @@ packed Sports Lib package. That gate is tracked by GitHub issue #654 under epic 
   roots, then become eligible for the same bounded cleanup; no migration or special grandfathering applies. Before
   production deployment, count expired roots and owner distribution without exporting prescriptions, and inspect the
   cleanup-job backlog and provider state. Observe the initial rollout closely;
-  monitor daily `[TrainingWorkoutExpiry]` scanned/deleted/deferred/failed counters and `[TrainingCleanup]` retry failures.
+  monitor daily `[TrainingWorkoutExpiry]` scanned/deleted/deferred/failed counters (including zero-count runs) and
+  `[TrainingCleanup]` retry failures.
   MCP Training reads and mutation contracts do not change: logical deletion is immediate, while these jobs only
   remove internal expired records and retry already-approved permanent-deletion cleanup.
   Paging lets a blocked first page yield to later candidates; 100 persistently malformed or deferred older roots can
   still block later roots, so sustained failed/deferred counts require operator inspection rather than a guessed manual
-  delete. Roll back by deploying the previous Function revision; already committed tombstones and deletions are not
-  reversible. Queue TTL remains a separate
+  delete. Rollback needs a separately approved, coordinated change to both scheduled Functions: restoring the old
+  combined `reconcileTrainingPlanCleanup` revision while leaving the daily expiry Function active would run both expiry
+  scans. Already committed tombstones and deletions are not reversible. Queue TTL remains a separate
   assessment in #776, not part of this policy.
 - A plan restore that exceeds either the single-transaction payload or write-count budget (including strength
   companion writes) uses an owner-scoped `_bulk_restore` lock and a separate owner-readable

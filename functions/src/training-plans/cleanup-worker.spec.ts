@@ -1,10 +1,19 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import * as logger from 'firebase-functions/logger';
 
 const mocks = vi.hoisted(() => ({
     guard: vi.fn(),
     cleanupPlan: vi.fn(),
+    firestore: vi.fn(),
+    schedules: [] as Array<{ schedule: string; timeZone: string }>,
 }));
-vi.mock('firebase-functions/v2/scheduler', () => ({ onSchedule: (_options: unknown, handler: unknown) => handler }));
+vi.mock('firebase-admin', () => ({ firestore: mocks.firestore }));
+vi.mock('firebase-functions/v2/scheduler', () => ({
+    onSchedule: (options: { schedule: string; timeZone: string }, handler: unknown) => {
+        mocks.schedules.push(options);
+        return handler;
+    },
+}));
 vi.mock('firebase-functions/logger', () => ({ warn: vi.fn(), info: vi.fn() }));
 vi.mock('../shared/user-deletion-guard', () => ({ getUserDeletionGuardStateInTransaction: mocks.guard }));
 vi.mock('./delete-training-plan', () => ({
@@ -12,7 +21,7 @@ vi.mock('./delete-training-plan', () => ({
     parseStoredDeleteResponse: (value: unknown) => value,
 }));
 
-import { processTrainingCleanupJob, runTrainingCleanupJobs, runTrainingWorkoutExpiry } from './cleanup-worker';
+import { processTrainingCleanupJob, reconcileTrainingPlanCleanup, reconcileTrainingWorkoutExpiry } from './cleanup-worker';
 import { TRAINING_CLEANUP_JOBS_COLLECTION_ID, trainingCleanupJob, trainingCleanupJobRef } from './cleanup-job-contract';
 import { buildTrainingScheduleDeletionTombstone, trainingScheduleDeletionTombstoneDocumentId } from './persistence';
 import { SCHEDULED_WORKOUTS_COLLECTION_ID } from '../../../shared/training-plans';
@@ -84,7 +93,7 @@ describe('durable Training cleanup worker', () => {
         db = new FakeDb();
     });
 
-    it('keeps retry and expiry scans on separate scheduled passes', async () => {
+    it('keeps retry and expiry scans on separate scheduled handlers', async () => {
         const queriedCollections: string[] = [];
         const emptyQuery = () => {
             const query = {
@@ -103,12 +112,21 @@ describe('durable Training cleanup worker', () => {
             }),
         };
 
-        await runTrainingCleanupJobs(scheduleDb as never, nowMs);
+        mocks.firestore.mockReturnValue(scheduleDb);
+        expect(mocks.schedules).toEqual([
+            expect.objectContaining({ schedule: 'every 15 minutes', timeZone: 'UTC' }),
+            expect.objectContaining({ schedule: '0 3 * * *', timeZone: 'UTC' }),
+        ]);
+
+        await (reconcileTrainingPlanCleanup as unknown as () => Promise<void>)();
         expect(queriedCollections).toEqual([TRAINING_CLEANUP_JOBS_COLLECTION_ID]);
 
         queriedCollections.length = 0;
-        await runTrainingWorkoutExpiry(scheduleDb as never, nowMs);
+        await (reconcileTrainingWorkoutExpiry as unknown as () => Promise<void>)();
         expect(queriedCollections).toEqual([SCHEDULED_WORKOUTS_COLLECTION_ID]);
+        expect(logger.info).toHaveBeenCalledWith('[TrainingWorkoutExpiry]', {
+            scanned: 0, deleted: 0, deferred: 0, failed: 0,
+        });
     });
 
     function seedWorkout(): FakeRef {
