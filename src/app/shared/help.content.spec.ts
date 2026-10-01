@@ -67,7 +67,10 @@ describe('help.content', () => {
     expect(copy).toContain('Barbell back squat');
     expect(copy).toContain('QS never guesses equipment or substitutes another exercise');
     expect(copy).toContain('Garmin receives loads in kilograms');
-    expect(copy).toContain('Wahoo strength delivery is unsupported');
+    expect(copy).toContain('Wahoo supports timed strength sets and rests as Gym workouts');
+    expect(copy).toContain('Repetition sets are unsupported; QS never estimates their duration');
+    expect(copy).toContain('not native rep/load tracking');
+    expect(copy).toContain('rounded load instructions need mapping approval');
   });
 
   it('documents regional formatting scope, precedence, and stable export dates', () => {
@@ -670,7 +673,7 @@ describe('help.content', () => {
       .toContain('Standalone workouts stay neutral');
     expect(planningSection?.content).toContain('Workout delivery to Garmin, Suunto, and Wahoo is available to connected Pro members');
     expect(planningSection?.content).toContain('New COROS plan sync and standalone Send actions are coming soon in the app');
-    expect(planningSection?.content).toContain('Wahoo supports time-based running and cycling workouts');
+    expect(planningSection?.content).toContain('Wahoo supports time-based running/cycling and timed-strength Gym workouts');
     expect(planningSection?.content).toContain('Scheduled for later');
     expect(planningSection?.content).toContain('**Sent to Suunto** means Suunto accepted the Guide for your account');
     expect(planningSection?.content).toContain('does not prove that the Guide is visible in the Suunto app');

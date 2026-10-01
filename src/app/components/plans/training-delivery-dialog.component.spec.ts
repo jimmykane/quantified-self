@@ -271,6 +271,10 @@ describe('Training provider delivery controls', () => {
     const fixture = TestBed.createComponent(TrainingDeliveryDialogComponent); fixture.detectChanges();
     fixture.componentInstance.showProvider('wahoo'); fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
     expect(fixture.nativeElement.textContent).toContain('Distance-based steps are not sent');
+    expect(fixture.nativeElement.textContent).toContain('timed-strength Gym workouts');
+    expect(fixture.nativeElement.textContent).toContain('Strength repetition sets are unsupported');
+    expect(fixture.nativeElement.textContent).toContain('not native rep/load tracking');
+    expect(fixture.nativeElement.textContent).toContain('Rounded load instructions need mapping approval');
     expect(fixture.nativeElement.textContent).toContain('Automatic restoration is unavailable');
     await fixture.componentInstance.begin('wahoo', 'send'); fixture.detectChanges();
     expect(fixture.componentInstance.canConfirm()).toBe(false);

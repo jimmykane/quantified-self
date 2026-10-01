@@ -1,6 +1,7 @@
 import { ActivityTypes } from '@sports-alliance/sports-lib';
 import { assessCorosStrengthWorkoutV1 } from './coros-strength-workout';
 import { assessGarminStrengthWorkoutV1 } from './garmin-strength-workout';
+import { assessWahooStrengthWorkoutV1 } from './wahoo-strength-workout';
 import type { StrengthWorkoutDetailsV1 } from './strength-workout';
 import {
   parseWorkoutStructureV1,
@@ -246,7 +247,7 @@ export const PLANNED_WORKOUT_PROVIDER_CAPABILITIES_V1: Readonly<
     deliveryModel: 'plan-library-plus-dated-workout',
     requiredScopes: ['plans_read', 'plans_write', 'workouts_read', 'workouts_write'],
     profile: {
-      sports: [ActivityTypes.Running, ActivityTypes.Cycling],
+      sports: [ActivityTypes.Running, ActivityTypes.Cycling, ActivityTypes.StrengthTraining],
       endingKinds: ['time', 'distance', 'kilojoules'],
       targetKinds: ['heart-rate', 'power', 'speed', 'cadence'],
       supportsRepeats: true,
@@ -256,6 +257,7 @@ export const PLANNED_WORKOUT_PROVIDER_CAPABILITIES_V1: Readonly<
     scheduling: 'Create an app-owned Plan record, then attach it to a dated Workout record.',
     limits: [
       'The public plan.json schema is version 1.0.0 and supports running and cycling, not swimming.',
+      'Timed strength uses the owner-tested Gym family 6 / indoor Workout type 42. Repetition sets are unsupported; exercise/load instructions are not native tracking.',
       'Bike computers use only the first target in an interval.',
       'Relative heart-rate and threshold-speed targets are documented for treadmill workouts in the Wahoo app, not ELEMNT computers or RIVAL.',
       'Device-visible scheduling is documented as the current day plus six days.',
@@ -357,6 +359,9 @@ export function assessPlannedWorkoutProviderMappingV1(
   }
   if (provider === 'garmin' && structure.sport === ActivityTypes.StrengthTraining) {
     return assessGarminStrengthWorkoutV1(structure, strength);
+  }
+  if (provider === 'wahoo' && structure.sport === ActivityTypes.StrengthTraining) {
+    return assessWahooStrengthWorkoutV1(structure, strength);
   }
   const issues: PlannedWorkoutProviderMappingIssueV1[] = [];
   const profile = PLANNED_WORKOUT_PROVIDER_CAPABILITIES_V1[provider].profile;

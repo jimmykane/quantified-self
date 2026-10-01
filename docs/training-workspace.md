@@ -523,8 +523,10 @@ as shortened exercise instructions, still require explicit review of the current
 companion to strength Reps/Second, optional Rest and fixed equipment weight in kilograms through its existing batch
 delivery path. Its browser new-send remains Coming soon until entitlement and account-side push/update/delete proof
 (#741); local implementation and synthetic tests do not satisfy that proof. Garmin's #782 companion-aware strength
-mapping is implemented for verified exercise names; live cloud/device proof remains pending. Wahoo strength delivery is
-unsupported. No live provider acceptance, app/watch receipt or completed-activity link is claimed from isolated
+mapping is implemented for verified exercise names; live cloud/device proof remains pending. Wahoo's #783 mapping
+supports timed sets/rests through Gym family `6` and indoor Workout type `42`, with exercise/load instructions only.
+Repetition sets remain unsupported and are never converted to estimated time.
+No live provider acceptance, app/watch receipt or completed-activity link is claimed from isolated
 emulator tests. The additive MCP strength read and preview use existing independent Training permissions; the registered
 v1 recipe tool remains only a compatibility summary. See `docs/mcp-server.md` for the exact wire boundary.
 
@@ -1667,6 +1669,43 @@ Wahoo/Suunto selection, and the degraded Wahoo create-through-Plan/Workout fixtu
 live Wahoo app or device result. The MCP impact review found no new tool, permission, registered output shape,
 Assistant route or plugin instruction requirement; the existing preview availability/summary now reflects the
 backend compatibility verdict.
+
+#### Timed Strength/Gym integration (#783)
+
+The full validated owner-scoped strength companion is required for assessment, upload and uncertain-operation recovery.
+Missing, malformed, foreign-workout or projection-mismatched details fail before HTTP; the old v1 summary is not a
+prescription. Ordered timed sets and every optional timed rest (including final-set rest) become separate intervals.
+Plan family `6` / indoor location `0` and dated Workout type `42` preserve the Gym identity, never a running/cycling
+substitution. `header.duration_s` and Workout `minutes` use the exact sum of hold/rest seconds. Untargeted intervals
+retain the full-domain RPE 1–10 production envelope. Repetition sets are unsupported, including mixed prescriptions;
+they are never guessed into time.
+
+Names and optional loads are interval instructions, not native exercise/load fields. Provider instruction loads use
+Sports Lib's canonical kilogram display because Wahoo has no documented native load/unit preference field. The QS
+editor and MCP full-detail read still use the owner's kg/lb setting and preserve canonical kilograms. Standard
+instruction-only degradation is disclosed during normal Send/plan-sync consent with no separate mapping approval.
+If Sports Lib rounds a load for the instruction, current-mapping approval is required; QS never rewrites that saved
+load. The complete exercise content participates in mapping/content digests, so load-only edits invalidate an old
+approval and update the retained Plan even when the v1 summary is identical. Existing Running/Cycling mapping version,
+digests and payloads are unchanged. Existing scopes, Pro/account/revision/deletion guards, horizon, journal, retry,
+disconnect and completed-copy protections remain authoritative; no new Function or runtime configuration is added.
+
+Evidence on 1 October 2026: a separately approved five-minute QA recipe (five 30-second plank holds, each followed by
+30-second rest, no reps/load) was accepted by Wahoo as Gym family `6` / type `42`. Independent Plan, Workout,
+association and full uploaded JSON readback matched. The owner confirmed its Wahoo app visibility and Strength/Gym
+player/interval behavior. This proves that bounded unloaded timed path, not native reps/load tracking, ELEMNT/watch
+receipt, completion, or the integrated adapter's production lifecycle. Local serializer, runtime, transport and demo
+Firestore/MCP tests cover full companion validation, load instructions/rounding, stable IDs through edits/reschedules,
+duplicate/uncertain-create recovery, mid-flight load edits, concurrent workers and Stop. Deployment and live integrated
+update/reschedule/retry/reconnect/eligible deletion remain separately authorized evidence in #783.
+
+MCP impact: existing complete-strength reads and compatibility assessment now return the bounded degraded/unsupported
+decision. Existing Send preview/apply uses the full companion, discloses actual loss and preserves native/app confirmation
+and independent grants; preview does no provider I/O. No registered tool, schema, issue-code enum, scope, response field,
+consent, Assistant route or bundled-plugin instruction changes. Focused read and demo-MCP preview/apply fixtures cover
+timed, rounded-load and unsupported-rep cases with no private identity leakage.
+
+#### Shared scheduling and delivery lifecycle
 
 The saved delivery zone determines today through today + 6, inclusive. Later workouts wait; moving an owned future
 copy outside the window withdraws it and preserves consent for later re-entry. QS represents its date-only schedule
