@@ -994,6 +994,22 @@ describe('AssistantPageComponent', () => {
     )).toBeNull();
   });
 
+  it('clears a remembered request with a malformed measurement permission instead of retaining it for retries', () => {
+    sessionStorage.setItem('quantified-self.assistant.pending-request-id', JSON.stringify({
+      storageVersion: 2,
+      uid: 'assistant-user',
+      requestId: 'assistant-invalid-measurement-permission',
+      message: 'Log my weight as 80 kg.',
+      timeZone: 'Europe/Helsinki',
+      submittedAtMs: Date.now(),
+      measurementChangesEnabled: 'true',
+    }));
+
+    expect((component as unknown as { readRememberedPendingRequest(): unknown }).readRememberedPendingRequest()).toBeNull();
+    expect(assistantService.sendMessage).not.toHaveBeenCalled();
+    expect(sessionStorage.getItem('quantified-self.assistant.pending-request-id')).toBeNull();
+  });
+
   it('survives a refresh that reaches the server before the pending turn is registered', async () => {
     vi.useFakeTimers();
     try {

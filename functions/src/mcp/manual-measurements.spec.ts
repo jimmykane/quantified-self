@@ -55,4 +55,26 @@ describe('manual measurement MCP contracts', () => {
       expect(MCP_MANUAL_MEASUREMENT_OUTPUTS.get_manual_measurement.safeParse({ measurement: { ...output.measurement, [key]: 'private' } }).success).toBe(false);
     }
   });
+
+  it.each([
+    { canonicalUnit: 'percent' },
+    { metricId: 'body_fat', canonicalUnit: 'percent', canonicalValue: 101 },
+    { metricId: 'vo2_max', canonicalUnit: 'ml_per_kg_per_min', canonicalValue: 151,
+      vo2Context: 'running', vo2Method: 'lab_test' },
+    { pulse: { canonicalValue: 60, canonicalUnit: 'bpm', displayValue: '60', displayUnit: 'bpm' } },
+    { vo2Context: 'running', vo2Method: 'lab_test' },
+    { metricId: 'blood_pressure_systolic', canonicalUnit: 'mmHg', canonicalValue: 120 },
+    { metricId: 'blood_pressure_systolic', canonicalUnit: 'mmHg', canonicalValue: 120,
+      diastolic: { canonicalValue: 80, canonicalUnit: 'bpm', displayValue: '80', displayUnit: 'bpm' } },
+    { metricId: 'blood_pressure_systolic', canonicalUnit: 'mmHg', canonicalValue: 120,
+      diastolic: { canonicalValue: 80, canonicalUnit: 'mmHg', displayValue: '80', displayUnit: 'mmHg' },
+      pulse: { canonicalValue: 60, canonicalUnit: 'mmHg', displayValue: '60', displayUnit: 'mmHg' } },
+    { metricId: 'vo2_max', canonicalUnit: 'ml_per_kg_per_min', canonicalValue: 50 },
+  ])('rejects inconsistent public measurement semantics %j', changes => {
+    const measurement = { measurementRef: 'ref', revision: 1, metricId: 'body_weight',
+      canonicalValue: 80, canonicalUnit: 'kg', displayValue: '80', displayUnit: 'kg', observedAt: base.observedAt,
+      timezoneOffsetSeconds: 10800, diastolic: null, pulse: null, vo2Context: null, vo2Method: null,
+      ...changes };
+    expect(MCP_MANUAL_MEASUREMENT_OUTPUTS.get_manual_measurement.safeParse({ measurement }).success).toBe(false);
+  });
 });

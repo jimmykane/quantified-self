@@ -1,5 +1,6 @@
 import { z } from 'zod';
-import { MANUAL_HEALTH_METRIC_IDS, MANUAL_VO2_CONTEXTS, MANUAL_VO2_METHODS,
+import { HEALTH_METRIC_CATALOG } from '../../../shared/health';
+import { MANUAL_HEALTH_METRIC_IDS, MANUAL_HEALTH_VALUE_MAXIMUMS, MANUAL_VO2_CONTEXTS, MANUAL_VO2_METHODS,
   type ManualHealthMetricId } from '../../../shared/manual-health';
 
 export const MCP_MANUAL_MEASUREMENTS_SCOPE = 'measurements:write';
@@ -63,7 +64,19 @@ export const MCP_MANUAL_MEASUREMENT_SCHEMA = z.strictObject({
   observedAt: instant, timezoneOffsetSeconds: z.number().int().min(-86_399).max(86_399),
   diastolic: scalar.nullable(), pulse: scalar.nullable(),
   vo2Context: z.enum(MANUAL_VO2_CONTEXTS).nullable(), vo2Method: z.enum(MANUAL_VO2_METHODS).nullable(),
-});
+}).refine(measurement => {
+  const pressure = measurement.metricId === 'blood_pressure_systolic';
+  const vo2 = measurement.metricId === 'vo2_max';
+  // Keep the compact flat wire shape; reject inconsistent domain projections at
+  // runtime without duplicating an eight-way union in every tool's catalog entry.
+  return measurement.canonicalUnit === HEALTH_METRIC_CATALOG[measurement.metricId].canonicalUnit
+    && measurement.canonicalValue <= MANUAL_HEALTH_VALUE_MAXIMUMS[measurement.metricId]
+    && (pressure ? measurement.diastolic?.canonicalUnit === 'mmHg'
+      && (measurement.pulse === null || measurement.pulse.canonicalUnit === 'bpm')
+      : measurement.diastolic === null && measurement.pulse === null)
+    && (vo2 ? measurement.vo2Context !== null && measurement.vo2Method !== null
+      : measurement.vo2Context === null && measurement.vo2Method === null);
+}, 'The manual measurement projection has inconsistent units or paired metadata.');
 const mutation = z.strictObject({ measurement: MCP_MANUAL_MEASUREMENT_SCHEMA });
 export const MCP_MANUAL_MEASUREMENT_OUTPUTS = {
   list_manual_measurement_types: z.strictObject({

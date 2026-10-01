@@ -1232,6 +1232,8 @@ method), body fat, body water and SpO2 (percentage), muscle/bone mass (kg), and 
 optional same-observation bpm pulse). Canonical validation/ceilings reuse the UI Health domain; they are not medical
 reference ranges. Sports Lib converts/prints owner units. Resolve “now” once using catalog server time and the user's
 timezone; retain that exact instant and UUID on retries. Do not guess required metadata or choose ambiguous entries.
+Public output validation also checks metric-specific canonical units/ceilings, required pressure pairing and VO2-only
+metadata, without widening the compact wire shape.
 
 All six tools require the independent write grant at HTTP, registration and data boundaries. Management reads select
 only manual point records through explicit field masks; imported readings, provider credentials, raw IDs, source keys,

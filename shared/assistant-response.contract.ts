@@ -252,7 +252,9 @@ function isManualMeasurementReviewFields(value: unknown): boolean {
     || !isManualHealthMetricId(value.metricId) || !isFiniteNumber(value.canonicalValue)
     || value.canonicalValue <= 0 || value.canonicalValue > MANUAL_HEALTH_VALUE_MAXIMUMS[value.metricId]
     || !Number.isSafeInteger(value.observedAtMs) || Number(value.observedAtMs) < Date.UTC(2000, 0, 1)
-    || !Number.isSafeInteger(value.timezoneOffsetSeconds) || Math.abs(Number(value.timezoneOffsetSeconds)) >= 86400) return false;
+    || !Number.isFinite(new Date(Number(value.observedAtMs)).getTime())
+    || !Number.isSafeInteger(value.timezoneOffsetSeconds) || Math.abs(Number(value.timezoneOffsetSeconds)) >= 86400
+    || !Number.isFinite(new Date(Number(value.observedAtMs) + Number(value.timezoneOffsetSeconds) * 1000).getTime())) return false;
   const pressure = value.metricId === 'blood_pressure_systolic';
   const vo2 = value.metricId === 'vo2_max';
   return (pressure ? isFiniteNumber(value.diastolicValue) && value.diastolicValue > 0 && value.diastolicValue <= 400

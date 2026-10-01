@@ -1189,7 +1189,10 @@ export class AssistantPageComponent implements OnInit, OnDestroy {
         this.clearRememberedPendingRequest();
         return null;
       }
-      if (data.measurementChangesEnabled !== undefined && typeof data.measurementChangesEnabled !== 'boolean') return null;
+      if (data.measurementChangesEnabled !== undefined && typeof data.measurementChangesEnabled !== 'boolean') {
+        this.clearRememberedPendingRequest();
+        return null;
+      }
       if (data.timelineNoteChangesEnabled === true && data.timelineNotesEnabled !== true) {
         this.clearRememberedPendingRequest();
         return null;
