@@ -11,6 +11,7 @@ import { WahooHttpFixture } from '../training-plans/delivery/test-support/wahoo-
 import { WahooTrainingTransport } from '../training-plans/delivery/wahoo/transport';
 import { WAHOO_SPORT_FIXTURES } from '../training-plans/delivery/test-support/wahoo-sport-fixtures';
 import { CorosTrainingTransport } from '../training-plans/delivery/coros/transport';
+import { reserveCorosIntegerIdentities } from '../training-plans/delivery/coros/identities';
 import { GarminTrainingTransport } from '../training-plans/delivery/garmin/transport';
 import { GarminHttpFixture } from '../training-plans/delivery/test-support/garmin-http-fixture';
 import { reconcileTrainingDeliveryPage } from '../training-plans/delivery/store';
@@ -667,15 +668,14 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Training MCP write propos
     expect(suunto.calls.filter(call => call.method === 'POST')).toHaveLength(1);
   });
 
-  it('previews COROS full-strength Send without I/O and applies once through the production batch policy', async () => {
+  it('proves COROS full-strength Send through an isolated batch transport while public admission stays disabled', async () => {
     const client = vi.fn(async (request: { data?: string }, beforeSend: () => Promise<void>) => {
       await beforeSend(); const payload = JSON.parse(request.data!);
       return { status: 200, body: { result: '0000', data: { StartDate: payload.StartDate, EndDate: payload.EndDate } } };
     });
-    const synthetic = new CorosTrainingTransport(client, deps.now);
-    const policy = productionDeliveryRuntime(db).transport('coros', uid)!;
-    deps.runtime.transport = provider => provider !== 'coros' ? null : { ...policy,
-      batch: { ...policy.batch!, execute: synthetic.batch.execute } };
+    expect(productionDeliveryRuntime(db).transport('coros', uid)).toBeNull();
+    const synthetic = new CorosTrainingTransport(client, deps.now, reserveCorosIntegerIdentities);
+    deps.runtime.transport = provider => provider === 'coros' ? synthetic : null;
     const strength = { version: 1 as const, exercises: [{ id: 'squat', name: 'Squat', sets: [{
       id: 'one', ending: { kind: 'repetitions' as const, repetitions: 5 }, externalLoadKg: 82.5, restAfterSeconds: 60,
     }] }] };
@@ -1002,7 +1002,7 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Training MCP write propos
     expect(wahoo.calls).toHaveLength(0);
   });
 
-  it('delivers an all-connected mountain bike workout only to compatible Suunto', async () => {
+  it('delivers an all-connected mountain bike workout to compatible Wahoo and Suunto transports', async () => {
     const wahoo = new WahooHttpFixture();
     const suunto = new SuuntoHttpFixture();
     deps.runtime.transport = provider => provider === 'wahoo' ? new WahooTrainingTransport(wahoo.request, deps.now)
@@ -1012,30 +1012,32 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Training MCP write propos
         structure: { ...structure, sport: ActivityTypes.MountainBiking },
         delivery: { providers: 'all_connected', timeZone: 'Europe/Helsinki' } } }, deps);
     expect(preview.providerPreviews).toEqual(expect.arrayContaining([
-      expect.objectContaining({ provider: 'wahoo', availability: 'unavailable' }),
+      expect.objectContaining({ provider: 'wahoo', availability: 'ready' }),
       expect.objectContaining({ provider: 'suunto', availability: 'ready' }),
     ]));
-    expect(preview.summary).toContain('No update will be sent there; an earlier copy may remain unchanged');
     const applied = await applyTrainingChanges({ uid, connectionId: 'connection', scopes,
       arguments: { proposalRef: preview.proposalRef, permissionMode: preview.permissionMode } }, deps);
-    expect(applied.providers).toEqual([expect.objectContaining({ provider: 'suunto', status: 'applied' })]);
+    expect(applied.providers).toEqual(expect.arrayContaining([
+      expect.objectContaining({ provider: 'wahoo', status: 'applied' }),
+      expect.objectContaining({ provider: 'suunto', status: 'applied' }),
+    ]));
     const user = db.collection('users').doc(uid);
     for (let page = 0; page < 20 && await reconcileTrainingDeliveryPage(deps.runtime, uid); page += 1) { /* drain */ }
     const ledgers = (await user.collection('trainingDeliveryLedger').get()).docs;
-    expect(ledgers).toHaveLength(1);
-    expect(ledgers[0].get('provider')).toBe('suunto');
-    await processTrainingDelivery(deps.runtime, uid, ledgers[0].id);
-    expect((await user.collection('trainingDeliveryStatuses').doc(ledgers[0].id).get()).get('status')).toBe('delivered');
+    expect(ledgers.map(ledger => ledger.get('provider')).sort()).toEqual(['suunto', 'wahoo']);
+    for (const ledger of ledgers) await processTrainingDelivery(deps.runtime, uid, ledger.id);
+    const statuses = await Promise.all(ledgers.map(ledger => user.collection('trainingDeliveryStatuses').doc(ledger.id).get()));
+    expect(statuses.map(status => status.get('status'))).toEqual(['delivered', 'delivered']);
     expect(suunto.calls.filter(call => call.method === 'POST')).toHaveLength(1);
-    expect(wahoo.calls).toHaveLength(0);
+    expect(wahoo.calls.filter(call => call.method === 'POST')).toHaveLength(2);
   });
 
   it('rejects an existing unsupported workout Send at the same server boundary', async () => {
     const wahoo = new WahooHttpFixture();
     deps.runtime.transport = provider => provider === 'wahoo' ? new WahooTrainingTransport(wahoo.request, deps.now) : null;
     const authored = await previewCreatePlannedWorkout({ uid, connectionId: 'connection', scopes,
-      arguments: { expectedScheduleRevision: 1, localDate: '2026-09-18', title: 'Mountain bike ride',
-        structure: { ...structure, sport: ActivityTypes.MountainBiking } } }, deps);
+      arguments: { expectedScheduleRevision: 1, localDate: '2026-09-18', title: 'Yoga session',
+        structure: { ...structure, sport: ActivityTypes.Yoga } } }, deps);
     const created = await applyTrainingChanges({ uid, connectionId: 'connection', scopes,
       arguments: { proposalRef: authored.proposalRef, permissionMode: 'schedule' } }, deps);
     const preview = await previewTrainingChanges({ uid, connectionId: 'connection', scopes,
