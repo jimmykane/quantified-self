@@ -1,4 +1,7 @@
 import { ActivityTypes } from '@sports-alliance/sports-lib';
+import { assessCorosStrengthWorkoutV1 } from './coros-strength-workout';
+import { assessGarminStrengthWorkoutV1 } from './garmin-strength-workout';
+import type { StrengthWorkoutDetailsV1 } from './strength-workout';
 import {
   parseWorkoutStructureV1,
   type WorkoutCompatibilityProfileV1,
@@ -87,6 +90,7 @@ export const GARMIN_PLANNED_WORKOUT_SPORTS_V1 = [
   ...GARMIN_RUNNING_WORKOUT_SPORTS_V1,
   ...GARMIN_CYCLING_WORKOUT_SPORTS_V1,
   ActivityTypes.Swimming,
+  ActivityTypes.StrengthTraining,
 ] as const;
 
 export const COROS_NATIVE_RUNNING_WORKOUT_SPORTS_V1 = [
@@ -111,6 +115,7 @@ export const COROS_PLANNED_WORKOUT_SPORTS_V1 = [
   ...COROS_NATIVE_CYCLING_WORKOUT_SPORTS_V1,
   ...COROS_FOLDED_CYCLING_WORKOUT_SPORTS_V1,
   ActivityTypes.Swimming,
+  ActivityTypes.StrengthTraining,
 ] as const;
 
 export type CorosWorkoutSportFamilyV1 = 'RUNNING' | 'CYCLING';
@@ -123,12 +128,13 @@ export function corosWorkoutSportFamilyV1(sport: ActivityTypes): CorosWorkoutSpo
   return null;
 }
 
-export type GarminWorkoutSportFamilyV1 = 'RUNNING' | 'CYCLING' | 'LAP_SWIMMING';
+export type GarminWorkoutSportFamilyV1 = 'RUNNING' | 'CYCLING' | 'LAP_SWIMMING' | 'STRENGTH_TRAINING';
 
 export function garminWorkoutSportFamilyV1(sport: ActivityTypes): GarminWorkoutSportFamilyV1 | null {
   if ((GARMIN_RUNNING_WORKOUT_SPORTS_V1 as readonly ActivityTypes[]).includes(sport)) return 'RUNNING';
   if ((GARMIN_CYCLING_WORKOUT_SPORTS_V1 as readonly ActivityTypes[]).includes(sport)) return 'CYCLING';
   if (sport === ActivityTypes.Swimming) return 'LAP_SWIMMING';
+  if (sport === ActivityTypes.StrengthTraining) return 'STRENGTH_TRAINING';
   return null;
 }
 
@@ -173,7 +179,7 @@ export const PLANNED_WORKOUT_PROVIDER_CAPABILITIES_V1: Readonly<
     requiredScopes: ['WORKOUT_IMPORT'],
     profile: {
       sports: GARMIN_PLANNED_WORKOUT_SPORTS_V1,
-      endingKinds: ['time', 'distance', 'manual'],
+      endingKinds: ['time', 'distance', 'manual', 'repetitions'],
       targetKinds: ['heart-rate', 'power', 'speed', 'cadence'],
       supportsRepeats: true,
       supportsRelativeTargets: false,
@@ -187,6 +193,8 @@ export const PLANNED_WORKOUT_PROVIDER_CAPABILITIES_V1: Readonly<
       'Descriptions allow 1024 characters per workout and 512 characters per step.',
       'Running and cycling sub-sports fold to broad families; pool swimming maps to LAP_SWIMMING. Open-water swimming is not mapped.',
       'Unspecified pool length is permitted by the API but may not work on older devices. Swim intensity targets are not mapped.',
+      'Strength requires the complete exercise prescription and a verified Garmin exercise name. Reps, timed holds, kilogram load and rest are preserved; arbitrary names are unsupported.',
+      'Strength mapping has local fixture/emulator evidence only; live cloud and device proof remains in #782.',
       'A secondary target is documented only for cycling and depends on device support.',
       'Production limits: 3000 application requests per rolling minute including OAuth; 1000 per account per rolling day excluding OAuth.',
       'Cloud acceptance does not prove that Garmin Connect or a device received the workout.',
@@ -209,7 +217,7 @@ export const PLANNED_WORKOUT_PROVIDER_CAPABILITIES_V1: Readonly<
     requiredScopes: ['training-plan partner entitlement'],
     profile: {
       sports: COROS_PLANNED_WORKOUT_SPORTS_V1,
-      endingKinds: ['time', 'distance', 'manual'],
+      endingKinds: ['time', 'distance', 'manual', 'repetitions'],
       targetKinds: ['heart-rate', 'power', 'speed', 'cadence'],
       supportsRepeats: true,
       supportsRelativeTargets: true,
@@ -220,6 +228,8 @@ export const PLANNED_WORKOUT_PROVIDER_CAPABILITIES_V1: Readonly<
       'At most 30 workouts per push.',
       'Dates from today through one year ahead.',
       'Pool-swim time, distance, and manual steps must have no intensity target; the documented swimming target is stroke, which v1 does not encode.',
+      'Strength requires the complete matching prescription: named ordered sets, Reps/Second, optional Rest and fixed equipment weight in kilograms.',
+      'Strength delivery has local fixture/emulator evidence only; browser new-send stays Coming soon and live proof remains in #741.',
       'The connected COROS application must have Training Plan entitlement; provider code 30009 is reported as unavailable.',
       'COROS exposes no planned-workout read/list operation, so remote checking and automatic missing-copy restoration are unavailable.',
       'Provider acceptance does not prove that the COROS app or a watch received the workout.',
@@ -339,8 +349,15 @@ function structureSteps(structure: WorkoutStructureV1): Array<{
 export function assessPlannedWorkoutProviderMappingV1(
   provider: PlannedWorkoutProviderId,
   value: unknown,
+  strength?: StrengthWorkoutDetailsV1 | null,
 ): PlannedWorkoutProviderMappingAssessmentV1 {
   const structure = parseWorkoutStructureV1(value);
+  if (provider === 'coros' && structure.sport === ActivityTypes.StrengthTraining) {
+    return assessCorosStrengthWorkoutV1(structure, strength);
+  }
+  if (provider === 'garmin' && structure.sport === ActivityTypes.StrengthTraining) {
+    return assessGarminStrengthWorkoutV1(structure, strength);
+  }
   const issues: PlannedWorkoutProviderMappingIssueV1[] = [];
   const profile = PLANNED_WORKOUT_PROVIDER_CAPABILITIES_V1[provider].profile;
 

@@ -111,7 +111,7 @@ export async function trainingDeliveryCommand(runtime: DeliveryRuntime, uid: str
     const today = trainingDeliveryLocalDate(runtime.now(), timeZone);
     const strengths = await Promise.all(workouts.map(item => readStrengthDetailsForDelivery(tx, user, item)));
     const assessments = workouts.map((item, index) => transport?.assess(item, connection.destinationKey, timeZone, strengths[index])
-      ?? assessTrainingDeliveryMapping(command.provider, item, connection.destinationKey, timeZone));
+      ?? assessTrainingDeliveryMapping(command.provider, item, connection.destinationKey, timeZone, strengths[index]));
     const preview: TrainingDeliveryPreviewV1 = { schemaVersion: 1, available: !!transport,
       connection: connection.state, hasPro: pro, timeZone,
       effect: command.action === 'stop' ? 'remove-future-copies' : command.action === 'retry' ? 'retry' : command.action === 'approve' ? 'approve' : 'enable',

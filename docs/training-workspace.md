@@ -519,9 +519,11 @@ change load units. An unchanged rounded pound display preserves its stored kilog
 Suunto maps strength to a dated Gym (`23`) Guide containing exercise/set instructions. Rep sets use manual transitions,
 so mapping remains degraded and is not native strength tracking. This standard limitation is disclosed during normal
 Send/Enable plan sync; it does not require separate per-workout or per-edit mapping approval. Additional losses, such
-as shortened exercise instructions, still require explicit review of the current mapping. COROS has a contract fixture
-for strength Reps/Second, optional Rest and fixed equipment weight in kilograms, but browser new-send remains Coming
-soon until entitlement and account-side push/update/delete proof (#741). Garmin and Wahoo strength delivery are
+as shortened exercise instructions, still require explicit review of the current mapping. COROS's backend maps the full
+companion to strength Reps/Second, optional Rest and fixed equipment weight in kilograms through its existing batch
+delivery path. Its browser new-send remains Coming soon until entitlement and account-side push/update/delete proof
+(#741); local implementation and synthetic tests do not satisfy that proof. Garmin's #782 companion-aware strength
+mapping is implemented for verified exercise names; live cloud/device proof remains pending. Wahoo strength delivery is
 unsupported. No live provider acceptance, app/watch receipt or completed-activity link is claimed from isolated
 emulator tests. The additive MCP strength read and preview use existing independent Training permissions; the registered
 v1 recipe tool remains only a compatibility summary. See `docs/mcp-server.md` for the exact wire boundary.
@@ -550,6 +552,51 @@ have not contaminated the neutral model, and persisted Quantified Self fixtures 
 packed Sports Lib package. That gate is tracked by GitHub issue #654 under epic #583.
 
 ### Persistence, mutation, and history
+
+#### Workout library snapshots (#653)
+
+The authenticated `/training/plans/library` route is a free, noindex part of the Plans workspace. A library entry is an
+undated, owner-scoped `WorkoutLibraryItemV1` at `users/{uid}/workoutLibrary/{itemId}`. It stores a validated v1
+`WorkoutStructureV1`, title, optional complete Strength Training exercise draft, active/archived status, revision and
+timestamps. It contains no schedule, completion, provider identity or delivery consent. The canonical structure JSON
+and Sports Lib unit boundary are unchanged. Browser rules permit owner reads only; `mutateWorkoutLibrary` owns
+create, snapshot-from-current-workout, update, status and confirmed deletion. It verifies Auth, App Check, account
+deletion, expected item/source revision, a 200-entry cap and an idempotent mutation receipt. IDs deleted from the
+library are tombstoned against reuse. Each library edit increments private library state for MCP cursor invalidation;
+mutation and placement receipts carry the existing 30-day Training retention field and their collection groups have
+Firestore TTL policies; ID tombstones remain durable.
+All receipts, tombstones and state live under `trainingPlanState/current` and are server-only. Account cleanup
+recursively deletes library entries and that private subtree.
+
+`placeWorkoutLibrary` resolves the active, exact-revision saved prescription on the server and atomically instantiates
+1–100 sorted, distinct local dates into one destination plan or Standalone. It revalidates the entry inside the same
+transaction as the schedule write, enforces expected schedule/plan revisions and range-extension confirmation,
+derives stable new workout IDs from the mutation ID, and records both schedule and placement receipts. The resulting
+workouts are ordinary independent `ScheduledWorkoutV1` snapshots with optional `templateOrigin: {itemId,revision}`
+outside `WorkoutStructureV1`. Edits/archives/deletion of the saved recipe never rewrite them; copying or moving a
+scheduled workout preserves its authored snapshot and provenance. A single bulk plan revision/checkpoint covers
+multi-date placement. Preflight write/byte bounds can reject a large prescription; retry in smaller date batches.
+The existing delivery reconciliation marker applies to new active-plan workouts, while Standalone copies receive no
+Send opt-in. No template edit, save, archive or placement changes completed-event totals.
+
+The library UI uses the existing unit-aware manual/strength editor and compact rows. Its owner-visible collection
+listener runs only on library routes, and editor Cancel returns through a recorded same-owner library browse entry
+or replaces a direct link with the safe browse route. Placement selects a destination,
+inclusive dates and weekdays, previews count/overlaps, and honors the account week-start preference in weekday order.
+It supports empty/loading/error states, keyboard-accessible Material controls, haptics and narrow-screen wrapping.
+At mobile widths, each saved recipe's actions move below its full-width title and summary. Standalone is explicitly
+named in the destination selector; a bulk placement that needs a longer plan range shows the resulting plan range, and
+cancelling that confirmation keeps the placement open without reporting an error.
+After the user chooses weekdays, editing the start date retains that repeat pattern; before any custom choice, the
+default weekday follows the selected start date. While placement is pending, the destination and date controls are
+locked. Library actions recheck the signed-in owner after confirmations and before showing async feedback.
+Existing plan and workout URLs remain unchanged; library items use path IDs, not query IDs. Help explains the separate
+library and calendar semantics. MCP impact: additive `list_saved_workouts` and `get_saved_workout` use the existing
+Training read grant, bounded pages/response sizes, opaque owner-bound references, full strength drafts on exact reads,
+and a library-revision cursor fence. Existing registered plan/workout read and mutation schemas, Training write grant,
+Assistant approval behavior, and provider permissions are unchanged. Approval-gated library writes/placement through
+MCP and the Assistant remain in focused epic subissue #780 (Project 2); the browser callables do not authorize clients
+to infer or submit provider consent. #653 must not be marked complete while that agreed slice remains open.
 
 - Owner-visible current state is stored at `users/{uid}/trainingPlanState/current`,
   `users/{uid}/trainingPlans/{planId}`, and `users/{uid}/scheduledWorkouts/{workoutId}`. Browser writes are denied.
@@ -1328,6 +1375,27 @@ first-target-only mapping keep the existing payload-bound approval rules. Push s
 covering the submitted batch; delete success/failure lists are resolved per workout. Past and completed artifacts remain
 protected.
 
+Strength Training uses the same COROS batch/identity/consent infrastructure. The full strict owner-scoped companion,
+not the v1 summary, supplies ordered named exercises and individual sets. The API Reference V2.0.6 §6.1 contract maps
+each set to `Type: Step`, `Name`, `Length: Reps|Second`, optional `Rest: Second` and optional
+`IntensityTarget: ValueOfEquipmentWeight` in kilograms. Fractional and zero external loads are preserved, and absent
+load/rest stay absent; no body-weight substitution or exercise guessing occurs. Existing canonical limits bound the
+projection to 100 nodes, including rests. QS's kg/lb presentation remains Sports Lib-backed and never changes the wire unit.
+
+Assessment, the production wrapper and batch payload construction all use the companion. Missing, foreign, malformed or
+projection-mismatched details fail closed before HTTP. The full exercises participate in strength mapping/content
+digests: load-only edits cannot be mistaken for already delivered content, and payload construction rejects a stale
+digest before the started request journal. The no-transport preview fallback also receives the complete companion:
+local compatibility can remain exact while delivery is unavailable, without granting consent or permitting a send.
+Load-only edits or Stop committed before HTTP supersede the stale attempt; edits/Stop during acceptance retain the
+accepted identity and reconcile the latest intent rather than replaying stale strength. Existing non-strength
+digests/fixtures are unchanged. After permanent source deletion, transport withdrawal uses retained IDs without
+recreating or requiring a companion; existing source records still require valid matching details. Only unexecuted
+today/future copies are eligible, even with explicit past-cleanup opt-in. Synthetic production-policy/HTTP/demo-Firestore tests cover standalone/active-plan create, update,
+reschedule, duplicate/concurrent dispatch, uncertain acceptance, reconnect, owner/account isolation and deletion fencing.
+Live COROS entitlement, push/update/delete and app/watch evidence are deliberately omitted from this implementation
+at the owner's request and remain unchecked in #741. The Coming soon browser gate and backend enablement are unchanged.
+
 Inbound COROS `planWorkoutId` is matched only to the exact positive partner workout ID under the same active account and
 credential authority. Webhook and history imports use the same transaction: one unambiguous root workout can write the
 existing safe completion projection/private reverse link and mark its delivery completed. Duplicate imports are
@@ -1350,6 +1418,12 @@ backend readiness, proposal availability and `all_connected` behavior remain unc
 the exact authored Sports Lib activity type, while `get_training_sync_status` exposes only existing sanitized statuses
 and never the COROS payload. The existing Mountain Biking read fixture covers exact recipe preservation. No new scope,
 tool, registered schema, Assistant route or plugin update is needed.
+
+The #741 strength implementation extends existing compatibility reads to the validated full companion and reports
+local exact/unsupported results. Existing delivery preview/apply use that same assessment with independent Training
+and delivery grants, native/app confirmation, revision/expiry checks and idempotency. Preview performs no provider I/O.
+No tool, schema, annotation, scope, permission, provider action or private transport field is added. This is mapping
+implementation, not cloud acceptance, watch receipt or completed-activity proof.
 
 #### SuuntoPlus Guide delivery (#650)
 
@@ -1896,6 +1970,44 @@ before the frontend. It neither authorizes a deployment nor changes any public p
 remains in the relevant adapter issues #647–#650, completion matching #651, Sports Lib extraction #654 and deployment/post-release operations #655.
 
 ### Garmin workout/calendar adapter (#647)
+
+#### Exercise-aware strength mapping (#782)
+
+The local confidential Training API V2 version 1.0 (26 May 2025), section 3.2.1, explicitly includes
+`STRENGTH_TRAINING`, `REPS`, `TIME`, `FIXED_REST`, `exerciseCategory`, `exerciseName`, kilogram `weightValue`, and
+`KILOGRAM`/`POUND` display units. Its separate Appendix A and B workbook supplies exercise identifiers; keep both source
+files ignored and out of Git. The adapter has a deliberately small, verified 20-name transport allowlist, not a new
+user-facing exercise catalogue. Help lists those exact names. Matching accepts case, whitespace, hyphens and underscores
+only; unknown or ambiguous shorthand is unsupported, never a guessed equipment variant or a free-text fallback.
+
+Each companion exercise/set becomes an ordered native strength step, with optional timed rest after every set,
+including the last. Explicit zero and fractional loads remain exact kilograms. Omitted load stays null rather than
+being invented as zero; Garmin's current display field is `KILOGRAM`, independent of the QS editor's kg/lb preference.
+No repeat compaction, truncation, rep estimation, automatic rep counting or exercise substitution occurs. All sets plus
+rests stay within the existing 100-node single-sport limit. Authored names remain in descriptions and in QS; provider
+category/name identifiers appear only in serialized artifacts. The derived v1 summary alone cannot authorize delivery.
+
+The shared assessment validates the complete strict companion and its projection; the runtime additionally binds its
+workout ID to the current owner-scoped root before provider I/O. Garmin assessments/digests and transport execution
+retain the full prescription. Load-only edits change the digest and native payload without rewriting the recipe or
+remote identity. Existing non-strength digests and fixtures are unchanged. The same Workout/Schedule journal,
+WORKOUT_IMPORT, Pro/consent, per-request authority, Stop/disconnect, completion protection and explicit past-removal
+policy apply. An uncertain first Workout POST still cannot be repeated blindly.
+Strength's full-prescription digest is checked before repair inspection and every recovery early-return as well as
+normal execution. A stale load-only snapshot cannot be read, checkpointed or acknowledged as accepted under another
+prescription's digest. This is private transport validation; no new MCP approval, field or grant is introduced.
+
+Local serializer, synthetic HTTP and demo-Firestore tests cover standalone and active-plan create, load-only update,
+reschedule, duplicate dispatch and Stop, invalid/missing/foreign/mismatched companions, uncertain creates,
+same/different-account reconnect and deletion fences. These tests are not live Garmin acceptance or device evidence.
+#782 remains open for separately approved Functions deployment, named account QA create/readback/update/reschedule and
+eligible deletion (with separate exact-target approval), then Garmin Connect/watch confirmation. No deployment,
+provider enablement, production calls or recorded-activity completion evidence is included in this change.
+
+MCP impact: compatibility reads now assess the validated Garmin companion using existing strict issue codes. Strength
+details reads and recipe previews remain unchanged; provider previews/apply retain the existing independent grants and
+normal native/app approval. No registered schema, tool, scope, mutation kind, recipe field, raw provider identifier or
+bundled skill changes. No MCP catalog refresh, plugin rebuild, Sports Lib upgrade, Firestore migration or new Function.
 
 The #733 pool-swim extension maps exact canonical Swimming to `LAP_SWIMMING`, with a root workout pool length (or
 explicit null for unspecified), null segment pool fields, target-free swim steps, `FIXED_REST` rest steps, and

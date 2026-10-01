@@ -3,6 +3,7 @@ import { projectStrengthWorkoutToV1, type StrengthWorkoutDraftV1 } from '../../.
 import { beforeEach, describe, expect, it } from 'vitest';
 import {
     TRAINING_PLAN_MAX_CURRENT_WORKOUTS,
+    addDaysToTrainingLocalDate,
     type MutateTrainingScheduleRequestV1,
     type ScheduledWorkoutV1,
     type TrainingPlanV1,
@@ -191,6 +192,42 @@ describe('applyTrainingScheduleMutation', () => {
         });
         expect(result.after.state.currentWorkoutCount).toBe(1);
         expect(result.affectedPlanIds).toEqual([]);
+    });
+
+    it('places a long weekly pattern as independent snapshots in one plan revision', () => {
+        const selectedPlan = plan({ endLocalDate: '2027-03-31' });
+        const placements = Array.from({ length: 78 }, (_, index) => ({
+            workoutId: `placed-${index}`,
+            localDate: addDaysToTrainingLocalDate('2026-09-02', index * 2),
+        }));
+        const result = applyTrainingScheduleMutation(snapshot([selectedPlan]), request({
+            kind: 'bulk-create-workouts', planId: selectedPlan.id, placements,
+            title: 'Library run', structure: STRUCTURE, templateOrigin: { itemId: 'library-1', revision: 2 },
+            confirmPlanRangeExtension: false,
+        }, [{ scope: 'plan', id: selectedPlan.id, revision: selectedPlan.revision }]), NOW_MS);
+        expect(result.after.state.currentWorkoutCount).toBe(78);
+        expect(result.after.plans.get(selectedPlan.id)).toMatchObject({ revision: 4, workoutCount: 78,
+            lastCheckpointRevision: 4 });
+        expect(result.after.workouts.get('placed-0')).toMatchObject({ revision: 1, lifecycle: 'planned',
+            planId: selectedPlan.id, localDate: '2026-09-02', templateOrigin: { itemId: 'library-1', revision: 2 } });
+        expect(result.response.workouts).toEqual([]);
+        expect(result.changedWorkoutIds).toHaveLength(78);
+        expect(snapshot([selectedPlan]).workouts.size).toBe(0);
+    });
+
+    it('does not place anything when plan extension was not confirmed', () => {
+        const selectedPlan = plan();
+        const operation = { kind: 'bulk-create-workouts' as const, planId: selectedPlan.id,
+            placements: [{ workoutId: 'inside', localDate: '2026-09-10' },
+                { workoutId: 'outside', localDate: '2026-10-10' }],
+            title: 'Library run', structure: STRUCTURE, templateOrigin: { itemId: 'library-1', revision: 2 },
+            confirmPlanRangeExtension: false };
+        const source = snapshot([selectedPlan]);
+        expect(() => applyTrainingScheduleMutation(source, request(operation, [
+            { scope: 'plan', id: selectedPlan.id, revision: selectedPlan.revision },
+        ]), NOW_MS)).toThrow(/requires extending/);
+        expect(source.workouts.size).toBe(0);
+        expect(source.plans.get(selectedPlan.id)?.endLocalDate).toBe('2026-09-30');
     });
 
     it('keeps the selected physical pool length through create and plan association', () => {

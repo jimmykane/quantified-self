@@ -173,6 +173,7 @@ export {
 } from './health/manual-callable';
 export { setTrainingBuildBenchmark } from './derived-metrics/set-training-build-benchmark';
 export { mutateTrainingSchedule } from './training-plans/mutate-training-schedule';
+export { mutateWorkoutLibrary, placeWorkoutLibrary } from './training-plans/workout-library-callables';
 export {
   getTrainingScheduleHistory,
   previewTrainingScheduleRestore,

@@ -58,12 +58,28 @@ describe('help.content', () => {
     expect(content).toContain('Additional mapping losses, such as shortened exercise instructions, still need review');
     expect(content).toContain('Sent Guide status does not prove app/watch receipt or workout completion');
   });
+  it('keeps COROS strength implementation distinct from public Send or delivery proof', () => {
+    const content = HELP_SECTIONS.find(section => section.id === 'training-plans')!.content;
+    expect(content).toContain('COROS backend maps the complete strength prescription');
+    expect(content).toContain('New COROS Send and plan sync remain **Coming soon** pending account-side proof');
+    expect(content).toContain('Local compatibility does not mean COROS received the workout or that it reached your watch');
+  });
 
   it('explains the independent weight preference and canonical weigh-in storage', () => {
     const copy = JSON.stringify(HELP_SECTIONS);
     expect(copy).toContain('Weight input and display use your **Settings → Units → Weight** choice (kg or lb)');
     expect(copy).toContain('saved measurements remain in canonical kg');
     expect(copy).toContain('changing a distance preset does not reset that choice');
+  });
+
+  it('documents supported Garmin strength names without claiming live/device proof', () => {
+    const copy = HELP_SECTIONS.find(section => section.id === 'training-plans')!.content;
+    expect(copy).toContain('Garmin strength mapping preserves individual reps or timed sets, load and rest');
+    expect(copy).toContain('live cloud/device verification is pending');
+    expect(copy).toContain('Barbell back squat');
+    expect(copy).toContain('QS never guesses equipment or substitutes another exercise');
+    expect(copy).toContain('Garmin receives loads in kilograms');
+    expect(copy).toContain('Wahoo strength delivery is unsupported');
   });
 
   it('documents regional formatting scope, precedence, and stable export dates', () => {

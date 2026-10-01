@@ -15,7 +15,7 @@ import {
   viewChild,
 } from '@angular/core';
 import { Location } from '@angular/common';
-import { toSignal } from '@angular/core/rxjs-interop';
+import { toObservable, toSignal } from '@angular/core/rxjs-interop';
 import { MatDialog } from '@angular/material/dialog';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { ActivatedRoute, Router, type NavigationExtras } from '@angular/router';
@@ -41,6 +41,7 @@ import {
   type CurrentTrainingScheduleV1,
 } from '../../services/training-plans.service';
 import { TrainingWorkoutDuplicateService } from '../../services/training-workout-duplicate.service';
+import { WorkoutLibraryService } from '../../services/workout-library.service';
 import { ConfirmationDialogComponent, type ConfirmationWithPastProviderCleanup } from '../confirmation-dialog/confirmation-dialog.component';
 import { CompactRowComponent } from '../shared/compact-row/compact-row.component';
 import { PlanScheduleCalendarComponent } from './plan-schedule-calendar.component';
@@ -72,6 +73,7 @@ import {
 } from '../../helpers/planned-workout-editor.helper';
 import {
   DELETED_WORKOUT_RECOVERY_DAYS,
+  addDaysToTrainingLocalDate,
   normalizeTrainingLocalDate,
   type DeleteTrainingPlanRequestV1,
   type DeleteTrainingPlanResponseV1,
@@ -93,12 +95,19 @@ import {
   type StrengthSetV1,
   type StrengthWorkoutDraftV1,
 } from '@shared/strength-workout';
+import { WORKOUT_LIBRARY_MAX_PLACEMENTS, type WorkoutLibraryItemV1 } from '@shared/workout-library';
 
 type PlansView = 'plans' | 'standalone';
 
 interface ScheduleLoadState {
   status: 'loading' | 'ready' | 'error';
   schedule: CurrentTrainingScheduleV1;
+  message: string | null;
+}
+
+interface LibraryLoadState {
+  status: 'loading' | 'ready' | 'error';
+  items: WorkoutLibraryItemV1[];
   message: string | null;
 }
 
@@ -165,6 +174,7 @@ export class PlansWorkspaceComponent {
   private readonly userService = inject(AppUserService);
   private readonly plansService = inject(TrainingPlansService);
   private readonly duplicateService = inject(TrainingWorkoutDuplicateService);
+  private readonly libraryService = inject(WorkoutLibraryService);
   private readonly host = inject<ElementRef<HTMLElement>>(ElementRef);
   private readonly dialog = inject(MatDialog);
   private readonly snackBar = inject(MatSnackBar);
@@ -254,6 +264,68 @@ export class PlansWorkspaceComponent {
     : this.editorIsRowing() ? 'min/500m'
       : this.editor()?.unitSettings.paceUnits[0] === PaceUnits.MinutesPerMile ? 'min/mi' : 'min/km');
   readonly hasTrainingPlanningUIAccess = computed(() => !!this.currentUser()?.uid);
+  readonly libraryView = computed(() => this.routeState().mode.startsWith('library-'));
+  readonly libraryState = toSignal(combineLatest([this.userService.user$, toObservable(this.libraryView)]).pipe(
+    switchMap(([user, enabled]) => user?.uid && enabled ? this.libraryService.watch(user.uid).pipe(
+      map(items => ({ status: 'ready', items, message: null } as LibraryLoadState)),
+      startWith({ status: 'loading', items: [], message: null } as LibraryLoadState),
+      catchError(error => of({ status: 'error', items: [], message: errorMessage(error) } as LibraryLoadState)),
+    ) : of({ status: 'ready', items: [], message: null } as LibraryLoadState)),
+  ), { initialValue: { status: 'loading', items: [], message: null } as LibraryLoadState });
+  readonly libraryItems = computed(() => this.libraryState().items);
+  readonly libraryRows = computed(() => this.libraryItems().map(item => ({ item,
+    summary: formatManualWorkoutStructure(item.structure,
+      this.currentUser()?.settings?.unitSettings ?? null, this.locale) })));
+  readonly libraryEditorItem = signal<WorkoutLibraryItemV1 | null>(null);
+  readonly placementItem = signal<WorkoutLibraryItemV1 | null>(null);
+  readonly placementPlanId = signal<string | null>(null);
+  readonly placementStartDate = signal(todayLocalDate());
+  readonly placementEndDate = signal(todayLocalDate());
+  readonly placementWeekdays = signal<number[]>([]);
+  private readonly placementWeekdaysCustomized = signal(false);
+  readonly placementError = computed(() => {
+    const start = this.placementStartDate();
+    const end = this.placementEndDate();
+    try {
+      normalizeTrainingLocalDate(start); normalizeTrainingLocalDate(end);
+      if (end < start) return 'The end date must be on or after the start date.';
+      if (end > addDaysToTrainingLocalDate(start, 365)) return 'Choose at most 366 days at once.';
+    } catch { return 'Choose valid calendar dates.'; }
+    if (this.placementWeekdays().length === 0) return 'Choose at least one weekday.';
+    if (this.placementDates().length > WORKOUT_LIBRARY_MAX_PLACEMENTS) return 'Add at most 100 dates at once.';
+    return null;
+  });
+  readonly placementDates = computed(() => {
+    const start = this.placementStartDate();
+    const end = this.placementEndDate();
+    const weekdays = this.placementWeekdays();
+    try {
+      normalizeTrainingLocalDate(start); normalizeTrainingLocalDate(end);
+      if (start > end) return [] as string[];
+      const dates: string[] = [];
+      for (let offset = 0; offset <= 366; offset += 1) {
+        const date = addDaysToTrainingLocalDate(start, offset);
+        if (date > end) return dates;
+        if (weekdays.includes(new Date(`${date}T12:00:00Z`).getUTCDay())) dates.push(date);
+        if (dates.length > WORKOUT_LIBRARY_MAX_PLACEMENTS) return dates;
+      }
+      return [] as string[];
+    } catch { return [] as string[]; }
+  });
+  readonly placementOverlaps = computed(() => {
+    const dates = new Set(this.placementDates());
+    return this.schedule().workouts.filter(workout => workout.lifecycle !== 'deleted'
+      && workout.planId === this.placementPlanId() && dates.has(workout.localDate)).length;
+  });
+  readonly placementWeekdayOptions = computed(() => {
+    const start = this.currentUser()?.settings?.unitSettings?.startOfTheWeek;
+    const first = typeof start === 'number' && start >= 0 && start <= 6 ? start : 1;
+    const labels = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+    return Array.from({ length: 7 }, (_, index) => {
+      const day = (first + index) % 7;
+      return { day, label: labels[day] };
+    });
+  });
   readonly scheduleState = toSignal(this.userService.user$.pipe(
     switchMap(user => user?.uid
       ? this.plansService.watchSchedule(user.uid).pipe(
@@ -362,7 +434,7 @@ export class PlansWorkspaceComponent {
           this.currentUser()?.settings?.unitSettings ?? null,
           this.locale,
         ),
-        actionBusy: ['copy', 'skip', 'delete', 'permanent'].some(action => this.busyAction() === `${action}-${workout.id}`),
+        actionBusy: ['copy', 'skip', 'delete', 'permanent', 'library'].some(action => this.busyAction() === `${action}-${workout.id}`),
         historyScope: workout.planId
           ? { kind: 'plan', id: workout.planId }
           : { kind: 'workout', id: workout.id },
@@ -403,6 +475,8 @@ export class PlansWorkspaceComponent {
       key: `${uid}:${planId === null ? 'standalone' : `plan:${planId}`}:${this.schedule().state.revision}` };
   });
   readonly pageStatus = computed(() => {
+    if (this.libraryView() && this.libraryState().status === 'error') return 'warning' as const;
+    if (this.libraryView() && this.libraryState().status === 'loading') return 'pending' as const;
     if (this.scheduleState().status === 'loading') return 'pending' as const;
     if (this.scheduleState().status === 'error') return 'warning' as const;
     return null;
@@ -474,6 +548,8 @@ export class PlansWorkspaceComponent {
       this.appliedRouteKey = null;
       this.editorGeneration += 1;
       this.editor.set(null);
+      this.libraryEditorItem.set(null);
+      this.placementItem.set(null);
       this.showPlanForm.set(false);
       this.scheduleDateSelection.set(null);
       this.closeHistory();
@@ -502,10 +578,39 @@ export class PlansWorkspaceComponent {
     this.appliedRouteKey = trainingPlansRouteKey(this.currentUser()?.uid, requested);
     this.editorGeneration += 1;
     this.editor.set(null);
+    this.libraryEditorItem.set(null);
+    this.placementItem.set(null);
     this.showPlanForm.set(false);
     this.closeHistory();
     this.clearPlanActions();
     if (!this.currentUser()?.uid) return;
+    if (requested.mode === 'library-browse') return;
+    if (requested.mode === 'library-create') {
+      this.startNewWorkoutEditor(null, todayLocalDate());
+      return;
+    }
+    if (requested.mode === 'library-edit' && requested.libraryItemId) {
+      const generation = this.editorGeneration;
+      const uid = this.currentUser()!.uid;
+      void this.libraryService.get(uid, requested.libraryItemId).then(item => {
+        if (this.destroyRef.destroyed || generation !== this.editorGeneration || uid !== this.currentUser()?.uid) return;
+        if (!item) throw new Error('This saved workout is no longer available.');
+        this.libraryEditorItem.set(item);
+        this.editor.set({ mode: 'edit', original: null, originalWorkoutRevision: null,
+          destinationPlanId: null, unitSettings: normalizeUserUnitSettings(this.currentUser()?.settings?.unitSettings),
+          value: item.structure.sport === ActivityTypes.StrengthTraining
+            ? { ...createManualWorkoutEditorValue(todayLocalDate()), title: item.title,
+              sport: ActivityTypes.StrengthTraining, nodes: [] }
+            : workoutStructureToManualEditor(item.title, todayLocalDate(), item.structure,
+              normalizeUserUnitSettings(this.currentUser()?.settings?.unitSettings)),
+          strength: item.strength ?? null, strengthLoading: false });
+      }).catch(error => {
+        if (generation !== this.editorGeneration || this.destroyRef.destroyed) return;
+        this.showError(error);
+        void this.router.navigate(['/training/plans/library'], { replaceUrl: true });
+      });
+      return;
+    }
     if (requested.mode === 'edit' && requested.workoutId) {
       const workout = this.schedule().workouts.find(candidate => (
         candidate.id === requested.workoutId && candidate.lifecycle !== 'deleted'
@@ -888,6 +993,15 @@ export class PlansWorkspaceComponent {
     this.editor.set(null);
     const state = this.location.getState() as { trainingPlansEditorReturn?: { uid?: string; url?: string } } | null;
     const previous = state?.trainingPlansEditorReturn;
+    if (this.libraryView()) {
+      this.libraryEditorItem.set(null);
+      if (previous?.uid === this.currentUser()?.uid && previous.url === '/training/plans/library') {
+        this.location.back();
+      } else {
+        void this.router.navigate(['/training/plans/library'], { replaceUrl: true });
+      }
+      return;
+    }
     // Only go Back for an entry we pushed from this owner's Plans screen; direct links get a safe local fallback.
     if (previous?.uid === this.currentUser()?.uid && isTrainingPlansBrowseUrl(previous?.url)) {
       this.location.back();
@@ -1143,7 +1257,7 @@ export class PlansWorkspaceComponent {
   async saveWorkout(): Promise<void> {
     const session = this.editor();
     if (!session) return;
-    if (this.workoutDateInputInvalid()) {
+    if (!this.libraryView() && this.workoutDateInputInvalid()) {
       this.showError(new Error('Choose a valid workout date.'));
       return;
     }
@@ -1160,9 +1274,30 @@ export class PlansWorkspaceComponent {
         ? projectStrengthWorkoutToV1({ ...parseStrengthWorkoutDraftV1(session.strength),
           workoutId: session.original?.id ?? 'draft', revision: 1 })
         : manualWorkoutEditorToStructure(session.value, session.unitSettings);
-      normalizeTrainingLocalDate(session.value.localDate);
+      if (!this.libraryView()) normalizeTrainingLocalDate(session.value.localDate);
     } catch (error) {
       this.showError(error);
+      return;
+    }
+    if (this.libraryView()) {
+      this.busyAction.set('save-library');
+      try {
+        const item = this.libraryEditorItem();
+        await this.libraryService.mutate({
+          mutationId: this.plansService.createMutationId('library-save'),
+          operation: item ? { kind: 'update', itemId: item.id, expectedRevision: item.revision,
+            title, structure, ...(session.strength ? { strength: session.strength } : {}) }
+            : { kind: 'create', itemId: this.plansService.createEntityId('library'), title, structure,
+              ...(session.strength ? { strength: session.strength } : {}) },
+        });
+        if (this.destroyRef.destroyed || generation !== this.editorGeneration || uid !== this.currentUser()?.uid) return;
+        this.haptics.success();
+        this.editor.set(null);
+        this.libraryEditorItem.set(null);
+        this.snackBar.open(item ? 'Saved workout updated.' : 'Workout saved to your library.', 'Dismiss', { duration: 4000 });
+        void this.router.navigate(['/training/plans/library'], { replaceUrl: true });
+      } catch (error) { if (uid === this.currentUser()?.uid) this.showError(error); }
+      finally { this.busyAction.set(null); }
       return;
     }
     if (session.mode === 'create') {
@@ -1219,6 +1354,140 @@ export class PlansWorkspaceComponent {
     const route = this.browseRouteState();
     this.navigateWorkspace(trainingPlansBrowseRoute(route.planId, route.standalone), route, { replaceUrl: true });
     this.snackBar.open('Workout updated.', 'Dismiss', { duration: 3000 });
+  }
+
+  openLibrary(): void {
+    if (this.busyAction()) return;
+    void this.router.navigate(['/training/plans/library']);
+  }
+
+  async saveExistingWorkoutToLibrary(workout: ScheduledWorkoutV1): Promise<void> {
+    const uid = this.currentUser()?.uid;
+    if (!uid || this.busyAction()) return;
+    this.busyAction.set(`library-${workout.id}`);
+    try {
+      await this.libraryService.mutate({ mutationId: this.plansService.createMutationId('library-from-workout'),
+        operation: { kind: 'save-workout', itemId: this.plansService.createEntityId('library'),
+          sourceWorkoutId: workout.id, expectedSourceRevision: workout.revision } });
+      if (uid !== this.currentUser()?.uid) return;
+      this.haptics.success();
+      this.snackBar.open('Saved to your workout library.', 'Dismiss', { duration: 4000 });
+    } catch (error) { if (uid === this.currentUser()?.uid) this.showError(error); }
+    finally { this.busyAction.set(null); }
+  }
+
+  async setLibraryStatus(item: WorkoutLibraryItemV1, status: 'active' | 'archived'): Promise<void> {
+    const uid = this.currentUser()?.uid;
+    if (!uid || this.busyAction()) return;
+    this.busyAction.set(`library-${item.id}`);
+    try {
+      await this.libraryService.mutate({ mutationId: this.plansService.createMutationId('library-status'),
+        operation: { kind: 'set-status', itemId: item.id, expectedRevision: item.revision, status } });
+      if (uid !== this.currentUser()?.uid) return;
+      this.haptics.success();
+    } catch (error) { if (uid === this.currentUser()?.uid) this.showError(error); }
+    finally { this.busyAction.set(null); }
+  }
+
+  async copyLibraryItem(item: WorkoutLibraryItemV1): Promise<void> {
+    const uid = this.currentUser()?.uid;
+    if (!uid || this.busyAction()) return;
+    this.busyAction.set(`library-${item.id}`);
+    try {
+      await this.libraryService.mutate({ mutationId: this.plansService.createMutationId('library-copy'),
+        operation: { kind: 'copy', itemId: this.plansService.createEntityId('library'),
+          sourceItemId: item.id, expectedSourceRevision: item.revision } });
+      if (uid !== this.currentUser()?.uid) return;
+      this.haptics.success();
+      this.snackBar.open('Saved workout copied.', 'Dismiss', { duration: 4000 });
+    } catch (error) { if (uid === this.currentUser()?.uid) this.showError(error); }
+    finally { this.busyAction.set(null); }
+  }
+
+  async deleteLibraryItem(item: WorkoutLibraryItemV1): Promise<void> {
+    const uid = this.currentUser()?.uid;
+    if (!uid || this.busyAction()) return;
+    const confirmed = await this.confirm('Delete saved workout?',
+      `Remove “${item.title}” from your library? Workouts already on your calendar will stay as they are.`,
+      'Delete saved workout', 'warn');
+    if (!confirmed || uid !== this.currentUser()?.uid || this.busyAction()) return;
+    this.busyAction.set(`library-${item.id}`);
+    try {
+      await this.libraryService.mutate({ mutationId: this.plansService.createMutationId('library-delete'),
+        operation: { kind: 'delete', itemId: item.id, expectedRevision: item.revision, confirmDeletion: true } });
+      if (uid !== this.currentUser()?.uid) return;
+      this.haptics.success();
+      if (this.placementItem()?.id === item.id) this.placementItem.set(null);
+      this.snackBar.open('Saved workout deleted. Calendar workouts are unchanged.', 'Dismiss', { duration: 4000 });
+    } catch (error) { if (uid === this.currentUser()?.uid) this.showError(error); }
+    finally { this.busyAction.set(null); }
+  }
+
+  beginLibraryPlacement(item: WorkoutLibraryItemV1): void {
+    if (this.busyAction() || item.status !== 'active') return;
+    const plan = this.activePlan();
+    const today = todayLocalDate();
+    const date = plan && today < plan.startLocalDate ? plan.startLocalDate : today;
+    this.placementItem.set(item);
+    this.placementPlanId.set(plan?.id ?? null);
+    this.placementStartDate.set(date);
+    this.placementEndDate.set(date);
+    this.placementWeekdays.set([new Date(`${date}T12:00:00Z`).getUTCDay()]);
+    this.placementWeekdaysCustomized.set(false);
+  }
+
+  togglePlacementWeekday(day: number): void {
+    this.haptics.selection();
+    this.placementWeekdaysCustomized.set(true);
+    this.placementWeekdays.update(days => days.includes(day) ? days.filter(value => value !== day)
+      : [...days, day].sort((a, b) => a - b));
+  }
+
+  setPlacementStartDate(value: string): void {
+    const old = this.placementStartDate();
+    this.placementStartDate.set(value);
+    if (this.placementEndDate() === old) this.placementEndDate.set(value);
+    if (this.placementWeekdaysCustomized()) return;
+    try {
+      normalizeTrainingLocalDate(value);
+      this.placementWeekdays.set([new Date(`${value}T12:00:00Z`).getUTCDay()]);
+    } catch { this.placementWeekdays.set([]); }
+  }
+
+  async placeLibraryItem(): Promise<void> {
+    const item = this.placementItem();
+    const uid = this.currentUser()?.uid;
+    const dates = this.placementDates();
+    if (!uid || !item || this.busyAction() || this.placementError() || dates.length < 1
+      || dates.length > WORKOUT_LIBRARY_MAX_PLACEMENTS) return;
+    const plan = this.placementPlanId() ? this.planOptions().find(value => value.id === this.placementPlanId()) : null;
+    if (this.placementPlanId() && !plan) return;
+    const request = { mutationId: this.plansService.createMutationId('library-place'), itemId: item.id,
+      expectedTemplateRevision: item.revision, expectedStateRevision: this.schedule().state.revision,
+      planId: plan?.id ?? null, expectedPlanRevision: plan?.revision ?? null,
+      dates, confirmPlanRangeExtension: false };
+    this.busyAction.set(`place-${item.id}`);
+    try {
+      let response;
+      try { response = await this.libraryService.place(request); }
+      catch (error) {
+        const message = errorMessage(error);
+        if (!plan || !/requires extending/i.test(message)) throw error;
+        const extendedStart = dates[0] < plan.startLocalDate ? dates[0] : plan.startLocalDate;
+        const finalDate = dates[dates.length - 1];
+        const extendedEnd = finalDate > plan.endLocalDate ? finalDate : plan.endLocalDate;
+        const placementMessage = `Adding ${dates.length} ${dates.length === 1 ? 'workout' : 'workouts'} `
+          + `will extend ${plan.name} to ${extendedStart}–${extendedEnd}.`;
+        if (!await this.confirm('Extend plan dates?', placementMessage, 'Extend and add workouts')) return;
+        response = await this.libraryService.place({ ...request, confirmPlanRangeExtension: true });
+      }
+      if (uid !== this.currentUser()?.uid) return;
+      this.haptics.success();
+      this.placementItem.set(null);
+      this.snackBar.open(`${response.workoutIds.length} ${response.workoutIds.length === 1 ? 'workout' : 'workouts'} added to your calendar.`,
+        'Dismiss', { duration: 5000 });
+    } catch (error) { if (uid === this.currentUser()?.uid) this.showError(error); }
+    finally { this.busyAction.set(null); }
   }
 
   async duplicateWorkout(workout: ScheduledWorkoutV1): Promise<void> {

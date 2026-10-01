@@ -368,6 +368,8 @@ function getOperationWorkoutIds(request: MutateTrainingScheduleRequestV1): strin
         case 'set-plan-lifecycle':
         case 'shift-plan':
             return [];
+        case 'bulk-create-workouts':
+            return request.operation.placements.map(placement => placement.workoutId);
         case 'copy-workout':
             return [request.operation.sourceWorkoutId, request.operation.workoutId];
         default:
@@ -383,6 +385,8 @@ function getOperationCreatedEntityIds(
             return [{ kind: 'plan', id: request.operation.planId }];
         case 'create-workout':
             return [{ kind: 'workout', id: request.operation.workoutId }];
+        case 'bulk-create-workouts':
+            return request.operation.placements.map(placement => ({ kind: 'workout', id: placement.workoutId }));
         case 'copy-workout':
             return [{ kind: 'workout', id: request.operation.workoutId }];
         default:

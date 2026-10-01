@@ -108,6 +108,12 @@ For a pool swim, use the advertised full-workout read to check whether a physica
 canonical metres and the metre/yard presentation distinct from any distance step; never infer a pool length from
 the step or an older read that omits the field. An absent length remains unspecified.
 
+For a reusable workout recipe, discover the advertised saved-workout list and detail reads with
+`training-plans:read`. A library item is an undated authored snapshot, not a scheduled workout, completed activity,
+template revision history or provider copy. Read its complete recipe only when needed; never count library items in
+calendar totals or infer a scheduled workout or provider consent from saving one. The MCP library surface is read-only:
+do not invent a placement or library-edit mutation. Direct the user to the Training workspace for those changes.
+
 When the user clearly asks for a change, first read the affected current records and schedule revision. Schedule changes
 require the separate plan/workout-change grant; delivery changes require the separate provider-delivery grant, and both
 depend on planning read access. Prepare one complete proposal of at most 25 changes. Use local keys only to refer to

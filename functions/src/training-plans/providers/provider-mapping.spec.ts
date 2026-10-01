@@ -79,6 +79,7 @@ describe('planned-workout provider proof fixtures', () => {
             ActivityTypes['Enduro MTB'],
             ActivityTypes.DownhillCycling,
             ActivityTypes.Swimming,
+            ActivityTypes.StrengthTraining,
         ]);
         expect(GARMIN_PLANNED_WORKOUT_SPORTS_V1).toEqual(expect.arrayContaining(
             MANUAL_WORKOUT_EDITOR_SPORTS_V1.filter(sport =>

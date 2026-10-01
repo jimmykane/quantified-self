@@ -13,12 +13,14 @@ import { ActivityTypes, DistanceUnits, PaceUnits, WeightUnits } from '@sports-al
 import { normalizeUserUnitSettings } from '@shared/unit-aware-display';
 import { projectStrengthWorkoutToV1 } from '@shared/strength-workout';
 import type { ScheduledWorkoutV1 } from '@shared/training-plans';
+import type { WorkoutLibraryItemV1 } from '@shared/workout-library';
 import dayjs from 'dayjs';
 import { BehaviorSubject, Subject, concat, defer, of, type Observable } from 'rxjs';
 import { AppUserService } from '../../services/app.user.service';
 import { AppHapticsService } from '../../services/app.haptics.service';
 import { TrainingDeliveryService } from '../../services/training-delivery.service';
 import { TrainingWorkoutDuplicateService } from '../../services/training-workout-duplicate.service';
+import { WorkoutLibraryService } from '../../services/workout-library.service';
 import { AppEventColorService } from '../../services/color/app.event.color.service';
 import {
   TrainingPlansService,
@@ -49,6 +51,11 @@ describe('PlansWorkspaceComponent', () => {
   let getHistory: ReturnType<typeof vi.fn>;
   let getDeletedWorkoutsPage: ReturnType<typeof vi.fn>;
   let getStrengthDetails: ReturnType<typeof vi.fn>;
+  let libraryItems: BehaviorSubject<WorkoutLibraryItemV1[]>;
+  let libraryWatch: ReturnType<typeof vi.fn>;
+  let libraryMutate: ReturnType<typeof vi.fn>;
+  let libraryPlace: ReturnType<typeof vi.fn>;
+  let libraryGet: ReturnType<typeof vi.fn>;
   let previewRestore: ReturnType<typeof vi.fn>;
   let restoreSchedule: ReturnType<typeof vi.fn>;
   let deleteTrainingPlan: ReturnType<typeof vi.fn>;
@@ -90,6 +97,11 @@ describe('PlansWorkspaceComponent', () => {
     getHistory = vi.fn();
     getDeletedWorkoutsPage = vi.fn().mockResolvedValue({ workouts: [], nextCursor: null });
     getStrengthDetails = vi.fn();
+    libraryItems = new BehaviorSubject<WorkoutLibraryItemV1[]>([]);
+    libraryWatch = vi.fn().mockImplementation(() => libraryItems);
+    libraryMutate = vi.fn();
+    libraryPlace = vi.fn();
+    libraryGet = vi.fn();
     previewRestore = vi.fn();
     restoreSchedule = vi.fn();
     deleteTrainingPlan = vi.fn();
@@ -104,6 +116,8 @@ describe('PlansWorkspaceComponent', () => {
         { provide: ActivatedRoute, useValue: route },
         { provide: AppUserService, useValue: { user: userSignal, user$: userSubject } },
         { provide: AppHapticsService, useValue: haptics },
+        { provide: WorkoutLibraryService, useValue: { watch: libraryWatch,
+          get: libraryGet, mutate: libraryMutate, place: libraryPlace } },
         { provide: TrainingDeliveryService, useValue: { anyReady: () => false, watchPresence: () => of(false),
           isSetupAvailable: () => false,
           watchSummaryScope: () => of({ settings: [], statuses: [] }) } },
@@ -139,14 +153,16 @@ describe('PlansWorkspaceComponent', () => {
   afterEach(() => vi.useRealTimers());
 
   function setRouteState(options: {
-    mode?: 'browse' | 'create' | 'edit';
+    mode?: 'browse' | 'create' | 'edit' | 'library-browse' | 'library-create' | 'library-edit';
     scope?: 'plans' | 'standalone';
     workoutId?: string;
+    itemId?: string;
     planId?: string;
     date?: string;
   }, emit = false): void {
     route.snapshot.paramMap = convertToParamMap({
       ...(options.workoutId ? { workoutId: options.workoutId } : {}),
+      ...(options.itemId ? { itemId: options.itemId } : {}),
       ...(options.planId ? { planId: options.planId } : {}),
     });
     route.snapshot.queryParamMap = convertToParamMap(options.date ? { date: options.date } : {});
@@ -171,6 +187,251 @@ describe('PlansWorkspaceComponent', () => {
     expect(fixture.nativeElement.textContent).not.toContain('Add here');
     expect(haptics.selection).not.toHaveBeenCalled();
     expect(haptics.success).not.toHaveBeenCalled();
+  });
+
+  it('shows compact saved workouts and schedules weekly copies without implicit service consent', async () => {
+    const item: WorkoutLibraryItemV1 = { schemaVersion: 1, id: 'library-1', title: 'Weekly easy run',
+      structure: schedule.workouts[0].structure, status: 'active', revision: 2,
+      createdAtMs: 1, updatedAtMs: 2 };
+    libraryItems.next([item]);
+    libraryPlace.mockResolvedValue({ mutationId: 'mutation-1', workoutIds: ['copy-1', 'copy-2'],
+      dates: ['2026-09-09', '2026-09-16'], stateRevision: 3, planRevision: 2 });
+    setRouteState({ mode: 'library-browse' });
+    const fixture = await renderPlans();
+    expect(fixture.nativeElement.querySelectorAll('.workout-library app-compact-row')).toHaveLength(1);
+    expect(fixture.nativeElement.querySelector('.plan-scope')).toBeNull();
+    expect(fixture.nativeElement.textContent).toContain('Weekly easy run');
+    const component = fixture.componentInstance;
+    component.busyAction.set(`library-${item.id}`);
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('.workout-library .workout-row-actions mat-spinner')).not.toBeNull();
+    component.busyAction.set(null);
+    component.beginLibraryPlacement(item);
+    component.placementStartDate.set('2026-09-09');
+    component.placementEndDate.set('2026-09-16');
+    component.placementWeekdays.set([3]);
+    expect(component.placementDates()).toEqual(['2026-09-09', '2026-09-16']);
+    await component.placeLibraryItem();
+    expect(libraryPlace).toHaveBeenCalledWith(expect.objectContaining({
+      itemId: item.id, expectedTemplateRevision: 2, planId: schedule.state.activePlanId,
+      dates: ['2026-09-09', '2026-09-16'], confirmPlanRangeExtension: false,
+    }));
+    expect(mutate).not.toHaveBeenCalled();
+    expect(component.placementItem()).toBeNull();
+  });
+
+  it('labels the standalone placement destination and gives saved rows full-width mobile actions', async () => {
+    const item: WorkoutLibraryItemV1 = { schemaVersion: 1, id: 'library-1', title: 'Long saved workout title',
+      structure: schedule.workouts[0].structure, status: 'active', revision: 1,
+      createdAtMs: 1, updatedAtMs: 1 };
+    libraryItems.next([item]);
+    setRouteState({ mode: 'library-browse' });
+    const fixture = await renderPlans();
+    const row = fixture.nativeElement.querySelector('.workout-library app-compact-row') as HTMLElement;
+    expect(row.classList.contains('compact-row-host--mobile-action-full')).toBe(true);
+
+    fixture.componentInstance.beginLibraryPlacement(item);
+    fixture.componentInstance.placementPlanId.set(null);
+    fixture.detectChanges();
+    const destination = fixture.debugElement.query(By.directive(MatSelect)).componentInstance as MatSelect;
+    expect(destination.value).toBe('standalone');
+  });
+
+  it('keeps chosen repeat weekdays when the placement range start changes', async () => {
+    const item: WorkoutLibraryItemV1 = { schemaVersion: 1, id: 'library-1', title: 'Base run',
+      structure: schedule.workouts[0].structure, status: 'active', revision: 1,
+      createdAtMs: 1, updatedAtMs: 1 };
+    setRouteState({ mode: 'library-browse' });
+    const fixture = await renderPlans();
+    const component = fixture.componentInstance;
+    component.beginLibraryPlacement(item);
+    component.setPlacementStartDate('2026-09-16');
+    expect(component.placementWeekdays()).toEqual([3]);
+    component.togglePlacementWeekday(2);
+    component.togglePlacementWeekday(4);
+    expect(component.placementWeekdays()).toEqual([2, 3, 4]);
+
+    component.setPlacementStartDate('2026-09-14');
+
+    expect(component.placementWeekdays()).toEqual([2, 3, 4]);
+    expect(component.placementStartDate()).toBe('2026-09-14');
+    expect(component.placementEndDate()).toBe('2026-09-14');
+
+    component.beginLibraryPlacement(item);
+    component.setPlacementStartDate('2026-09-15');
+    expect(component.placementWeekdays()).toEqual([2]);
+  });
+
+  it('does not apply a saved-workout deletion confirmed after sign-out', async () => {
+    const item: WorkoutLibraryItemV1 = { schemaVersion: 1, id: 'library-1', title: 'Base run',
+      structure: schedule.workouts[0].structure, status: 'active', revision: 1,
+      createdAtMs: 1, updatedAtMs: 1 };
+    setRouteState({ mode: 'library-browse' });
+    const fixture = await renderPlans();
+    const confirmation = new Subject<boolean>();
+    const componentDialog = (fixture.componentInstance as unknown as { dialog: MatDialog }).dialog;
+    vi.spyOn(componentDialog, 'open').mockReturnValue({ afterClosed: () => confirmation } as never);
+
+    const deletion = fixture.componentInstance.deleteLibraryItem(item);
+    userSignal.set(null);
+    userSubject.next(null);
+    confirmation.next(true);
+    confirmation.complete();
+    await deletion;
+
+    expect(libraryMutate).not.toHaveBeenCalled();
+    expect(snackBarOpen).not.toHaveBeenCalled();
+  });
+
+  it('does not show stale library-action success after sign-out', async () => {
+    const item: WorkoutLibraryItemV1 = { schemaVersion: 1, id: 'library-1', title: 'Base run',
+      structure: schedule.workouts[0].structure, status: 'active', revision: 1,
+      createdAtMs: 1, updatedAtMs: 1 };
+    setRouteState({ mode: 'library-browse' });
+    const fixture = await renderPlans();
+    let resolveMutation!: (value: unknown) => void;
+    libraryMutate.mockReturnValue(new Promise(resolve => { resolveMutation = resolve; }));
+
+    const copy = fixture.componentInstance.copyLibraryItem(item);
+    userSignal.set(null);
+    userSubject.next(null);
+    resolveMutation({ mutationId: 'mutation-1', item });
+    await copy;
+
+    expect(haptics.success).not.toHaveBeenCalled();
+    expect(snackBarOpen).not.toHaveBeenCalled();
+  });
+
+  it('locks the placement destination while a bulk add is pending', async () => {
+    const item: WorkoutLibraryItemV1 = { schemaVersion: 1, id: 'library-1', title: 'Base run',
+      structure: schedule.workouts[0].structure, status: 'active', revision: 1,
+      createdAtMs: 1, updatedAtMs: 1 };
+    setRouteState({ mode: 'library-browse' });
+    const fixture = await renderPlans();
+    let resolvePlacement!: (value: unknown) => void;
+    libraryPlace.mockReturnValue(new Promise(resolve => { resolvePlacement = resolve; }));
+    fixture.componentInstance.beginLibraryPlacement(item);
+
+    const placement = fixture.componentInstance.placeLibraryItem();
+    fixture.detectChanges();
+    const destination = fixture.debugElement.query(By.directive(MatSelect)).componentInstance as MatSelect;
+    expect(destination.disabled).toBe(true);
+    resolvePlacement({ mutationId: 'mutation-1', workoutIds: ['copy-1'], dates: ['2026-09-09'],
+      stateRevision: 5, planRevision: 3 });
+    await placement;
+    expect(fixture.componentInstance.busyAction()).toBeNull();
+  });
+
+  it.each([false, true])('explains library range extension and %s confirmation without an error toast', async confirmed => {
+    const item: WorkoutLibraryItemV1 = { schemaVersion: 1, id: 'library-1', title: 'Base run',
+      structure: schedule.workouts[0].structure, status: 'active', revision: 1,
+      createdAtMs: 1, updatedAtMs: 1 };
+    libraryItems.next([item]);
+    libraryPlace.mockRejectedValueOnce(new Error('Moving this workout requires extending Autumn build to include 2026-10-10.'));
+    if (confirmed) libraryPlace.mockResolvedValueOnce({ mutationId: 'mutation-1', workoutIds: ['copy-1', 'copy-2'],
+      dates: ['2026-10-03', '2026-10-10'], stateRevision: 5, planRevision: 3 });
+    setRouteState({ mode: 'library-browse' });
+    const fixture = await renderPlans();
+    const component = fixture.componentInstance;
+    const componentDialog = (component as unknown as { dialog: MatDialog }).dialog;
+    const confirmDialog = vi.spyOn(componentDialog, 'open')
+      .mockReturnValue({ afterClosed: () => of(confirmed) } as never);
+    component.beginLibraryPlacement(item);
+    component.placementStartDate.set('2026-10-03');
+    component.placementEndDate.set('2026-10-10');
+    component.placementWeekdays.set([6]);
+    expect(component.placementError()).toBeNull();
+    expect(component.placementDates()).toEqual(['2026-10-03', '2026-10-10']);
+    expect(component.placementPlanId()).toBe('active-plan');
+
+    await component.placeLibraryItem();
+
+    expect(libraryPlace).toHaveBeenCalledTimes(confirmed ? 2 : 1);
+    expect(confirmDialog).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
+      data: expect.objectContaining({ message: 'Adding 2 workouts will extend Autumn build to 2026-09-01–2026-10-10.' }),
+    }));
+    expect(snackBarOpen).not.toHaveBeenCalledWith(
+      expect.stringContaining('requires extending'), expect.anything(), expect.anything(),
+    );
+    if (!confirmed) expect(snackBarOpen).not.toHaveBeenCalled();
+    expect(component.placementItem()).toBe(confirmed ? null : item);
+  });
+
+  it('reads saved recipes only while a library route is open', async () => {
+    const fixture = await renderPlans();
+    expect(libraryWatch).not.toHaveBeenCalled();
+
+    setRouteState({ mode: 'library-browse' }, true);
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    expect(libraryWatch).toHaveBeenCalledWith(user.uid);
+  });
+
+  it('starts placement inside a future active plan instead of suggesting an unwanted extension', async () => {
+    const futureYear = new Date().getFullYear() + 1;
+    const planStart = `${futureYear}-10-01`;
+    schedule = { ...schedule, plans: schedule.plans.map(plan => ({ ...plan,
+      startLocalDate: planStart, endLocalDate: `${futureYear + 1}-03-31` })) };
+    watchSchedule.mockReturnValue(of(schedule));
+    const item: WorkoutLibraryItemV1 = { schemaVersion: 1, id: 'library-1', title: 'Base run',
+      structure: schedule.workouts[0].structure, status: 'active', revision: 1,
+      createdAtMs: 1, updatedAtMs: 1 };
+    setRouteState({ mode: 'library-browse' });
+    const fixture = await renderPlans();
+
+    fixture.componentInstance.beginLibraryPlacement(item);
+
+    expect(fixture.componentInstance.placementPlanId()).toBe('active-plan');
+    expect(fixture.componentInstance.placementStartDate()).toBe(planStart);
+    expect(fixture.componentInstance.placementEndDate()).toBe(planStart);
+  });
+
+  it('creates a saved recipe through the existing editor without a date or schedule mutation', async () => {
+    libraryMutate.mockResolvedValue({ mutationId: 'mutation-1', item: null });
+    setRouteState({ mode: 'library-create' });
+    const fixture = await renderPlans();
+    const component = fixture.componentInstance;
+    expect(fixture.nativeElement.querySelector('.workout-destination')).toBeNull();
+    expect(fixture.nativeElement.querySelector('input[type="date"]')).toBeNull();
+    component.updateEditorField('title', 'Saved aerobic run');
+    await component.saveWorkout();
+    expect(libraryMutate).toHaveBeenCalledWith(expect.objectContaining({
+      operation: expect.objectContaining({ kind: 'create', title: 'Saved aerobic run' }),
+    }));
+    expect(mutate).not.toHaveBeenCalled();
+    expect(TestBed.inject(Router).navigate).toHaveBeenCalledWith(
+      ['/training/plans/library'], { replaceUrl: true });
+  });
+
+  it('returns from a library editor through its recorded browse entry', async () => {
+    setRouteState({ mode: 'library-create' });
+    const fixture = await renderPlans();
+    const location = TestBed.inject(Location);
+    const back = vi.spyOn(location, 'back').mockImplementation(() => undefined);
+    vi.spyOn(location, 'getState').mockReturnValue({
+      trainingPlansEditorReturn: { uid: user.uid, url: '/training/plans/library' },
+    });
+
+    fixture.componentInstance.cancelEditor();
+
+    expect(back).toHaveBeenCalledOnce();
+    expect(TestBed.inject(Router).navigate).not.toHaveBeenCalledWith(
+      ['/training/plans/library'], expect.anything());
+  });
+
+  it('replaces a direct library editor link on Cancel instead of reopening it on Back', async () => {
+    setRouteState({ mode: 'library-create' });
+    const fixture = await renderPlans();
+    const location = TestBed.inject(Location);
+    const back = vi.spyOn(location, 'back').mockImplementation(() => undefined);
+    vi.spyOn(location, 'getState').mockReturnValue({});
+
+    fixture.componentInstance.cancelEditor();
+
+    expect(back).not.toHaveBeenCalled();
+    expect(TestBed.inject(Router).navigate).toHaveBeenCalledWith(
+      ['/training/plans/library'], { replaceUrl: true });
   });
 
   it('pauses the plan workspace while a staged restore hides workout roots', async () => {

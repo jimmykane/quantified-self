@@ -7,12 +7,14 @@ export const EMULATOR_SUITES = {
     'src/training-plans/delivery/delivery.emulator.spec.ts',
     'src/training-plans/delivery/garmin/worker.emulator.spec.ts',
     'src/training-plans/delivery/coros/batch-worker.emulator.spec.ts',
+    'src/training-plans/delivery/coros/strength.emulator.spec.ts',
     'src/training-plans/delivery/wahoo/worker.emulator.spec.ts',
     'src/training-plans/delivery/suunto/suunto.emulator.spec.ts',
   ],
   lifecycle: [
     'src/training-plans/large-schedule.emulator.spec.ts',
     'src/training-plans/strength.lifecycle.emulator.spec.ts',
+    'src/training-plans/workout-library.emulator.spec.ts',
     'src/training-plans/cleanup-worker.emulator.spec.ts',
   ],
   completion: [
