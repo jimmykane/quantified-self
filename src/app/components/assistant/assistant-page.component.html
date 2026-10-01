@@ -222,7 +222,7 @@
           <div class="training-proposal-heading">
             <mat-icon aria-hidden="true">edit_calendar</mat-icon>
             <div>
-              <h2 id="training-proposal-title">{{ isSavedWorkoutProposal(proposal) ? 'Review saved workout change' : 'Review Training changes' }}</h2>
+              <h2 id="training-proposal-title">{{ pendingSavedWorkoutProposal() ? 'Review saved workout change' : 'Review Training changes' }}</h2>
               <p>{{ proposal.summary }}</p>
             </div>
           </div>
@@ -241,7 +241,7 @@
             }
           </div>
           <p class="training-proposal-disclosure">
-            @if (isSavedWorkoutProposal(proposal)) {
+            @if (pendingSavedWorkoutProposal()) {
               Nothing changes until you apply. A saved recipe has no sync setting; planned copies follow the plan's existing setting, while Standalone copies need their own Send action.
             } @else {
               Nothing changes until you apply this proposal. Provider results are independent, so a delivery problem never removes an authored workout.

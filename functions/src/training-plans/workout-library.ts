@@ -215,7 +215,9 @@ export async function placeWorkoutLibraryForUser(
     let response;
     try {
         response = await mutateTrainingScheduleForUser(uid, scheduleRequest, {
-            db, nowMs, additionalWriteBudget: 1,
+            // Reserve one write for the placement receipt and one for an optional
+            // caller-owned atomic proposal/result checkpoint.
+            db, nowMs, additionalWriteBudget: options.transactionPostcondition ? 2 : 1,
             transactionPrecondition: async transaction => {
                 await options.transactionPrecondition?.(transaction);
                 const [receipt, current] = await Promise.all([transaction.get(receiptRef), transaction.get(itemRef)]);

@@ -316,9 +316,15 @@ function buildAssistantModelInputSchema(
 }
 
 export function selectAssistantTrainingPreviewTool(prompt: string): typeof TRAINING_PREVIEW_TOOLS[number] {
+  // A negative library qualifier describes where the user does not want the
+  // workout saved; it must not turn an ordinary schedule edit into a library edit.
+  const withoutNegatedLibrary = prompt.toLowerCase().replace(
+    /\b(?:don't|do not|never|without|not)\b(?:(?!\bbut\b)[^,.!?;\n]){0,80}\b(?:library|saved\s+workouts?|workout\s+templates?|saved\s+recipes?)\b/gu,
+    '',
+  );
   // A safety qualifier such as "do not update anything else" is not another
   // requested mutation and should not force a one-workout create into batch.
-  const question = prompt.toLowerCase().replace(
+  const question = withoutNegatedLibrary.replace(
     /\b(?:don't|do not|does not|never|without)\s+(?:(?:also|any|other|existing)\s+){0,3}(?:edit|update|move|copy|duplicate|delete|skip|archive|rename|change|modify)\b/gu,
     '',
   );

@@ -152,6 +152,12 @@ describe('Training preview model-tool selection', () => {
       .toBe('preview_saved_workout_change');
     expect(selectAssistantTrainingPreviewTool('Save this workout to my library.'))
       .toBe('preview_saved_workout_change');
+    expect(selectAssistantTrainingPreviewTool('Create a workout tomorrow, but do not save it in my library.'))
+      .toBe('preview_create_planned_workout');
+    expect(selectAssistantTrainingPreviewTool('Create a plan without using the saved workout library.'))
+      .toBe('preview_training_changes');
+    expect(selectAssistantTrainingPreviewTool("Don't change the current plan, but save this workout to my library."))
+      .toBe('preview_saved_workout_change');
     expect(selectAssistantTrainingPreviewTool('Place my saved workout on October 4 and 11 in this plan.'))
       .toBe('preview_saved_workout_change');
     expect(selectAssistantTrainingPreviewTool('Archive the saved recipe, but do not change scheduled workouts.'))

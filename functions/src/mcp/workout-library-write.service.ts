@@ -94,7 +94,9 @@ export function isWorkoutLibraryProposalRef(input: TrainingWriteInput, value: st
 export async function previewSavedWorkoutChange(input: TrainingWriteInput,
   provided?: LibraryWriteDependencies): Promise<Preview> {
   const deps = provided ?? defaultDependencies();
-  if (Buffer.byteLength(JSON.stringify(input.arguments), 'utf8') > 256 * 1024) invalid('The library proposal is too large.');
+  const encodedArguments = JSON.stringify(input.arguments);
+  if (typeof encodedArguments !== 'string') invalid('Provide one valid saved-workout change.');
+  if (Buffer.byteLength(encodedArguments, 'utf8') > 256 * 1024) invalid('The library proposal is too large.');
   const parsed = TRAINING_WRITE_INPUTS.preview_saved_workout_change.safeParse(input.arguments);
   if (!parsed.success) invalid('Provide one valid saved-workout change, exact revisions, and explicit dates when placing it.');
   if (REQUIRED_SCOPES.some(scope => !input.scopes.includes(scope))) invalid('Training plan read and write permission is required.');

@@ -86,6 +86,13 @@ function contentProposalTitle(kind: AssistantContentProposalKind): string {
   return 'Review Timeline note changes';
 }
 
+const SAVED_WORKOUT_CHANGE_KINDS = new Set(['create', 'save-workout', 'copy', 'update', 'set-status', 'delete', 'place']);
+
+function isSavedWorkoutProposal(proposal: AssistantTrainingProposalPreview): boolean {
+  return proposal.changes.length > 0
+    && proposal.changes.every(change => SAVED_WORKOUT_CHANGE_KINDS.has(change.kind));
+}
+
 function contentProposalDetails(proposal: AssistantContentProposalPreview): string[] {
   const args = proposal.arguments as Record<string, unknown>;
   if (proposal.kind === 'update_event_tags') {
@@ -177,6 +184,10 @@ export class AssistantPageComponent implements OnInit, OnDestroy {
   readonly trainingPlanChangesEnabled = signal(false);
   readonly trainingDeliveryEnabled = signal(false);
   readonly pendingTrainingProposal = signal<AssistantTrainingProposalPreview | null>(null);
+  readonly pendingSavedWorkoutProposal = computed(() => {
+    const proposal = this.pendingTrainingProposal();
+    return proposal !== null && isSavedWorkoutProposal(proposal);
+  });
   readonly pendingContentProposal = signal<AssistantContentProposalPreview | null>(null);
   readonly applyingTrainingProposal = signal(false);
   readonly trainingProposalResult = signal<string | null>(null);
@@ -654,11 +665,6 @@ export class AssistantPageComponent implements OnInit, OnDestroy {
     await this.replaceConversation('coordinate_free', false);
   }
 
-  isSavedWorkoutProposal(proposal: AssistantTrainingProposalPreview): boolean {
-    const libraryKinds = new Set(['create', 'save-workout', 'copy', 'update', 'set-status', 'delete', 'place']);
-    return proposal.changes.length > 0 && proposal.changes.every(change => libraryKinds.has(change.kind));
-  }
-
   async applyPendingTrainingProposal(): Promise<void> {
     const proposal = this.pendingTrainingProposal();
     const conversationId = this.conversation()?.conversationId;
@@ -674,7 +680,7 @@ export class AssistantPageComponent implements OnInit, OnDestroy {
       });
       this.pendingTrainingProposal.set(null);
       if (result.status === 'applied') {
-        this.trainingProposalResult.set(this.isSavedWorkoutProposal(proposal)
+        this.trainingProposalResult.set(isSavedWorkoutProposal(proposal)
           ? (result.changes[0]?.message ?? 'Saved workout change applied.')
           : 'Training changes applied. Provider updates or checks are queued where applicable.');
       } else {

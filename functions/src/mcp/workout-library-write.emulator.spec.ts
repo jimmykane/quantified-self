@@ -42,6 +42,7 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('MCP workout library propo
 
   it('previews, applies and replays a create without schedule or provider consent', async () => {
     const { uid, user, deps, input } = await setup();
+    await expect(previewSavedWorkoutChange(input(undefined), deps)).rejects.toThrow('valid saved-workout change');
     const preview = await previewSavedWorkoutChange(input({ expectedScheduleRevision: 0,
       expectedLibraryRevision: 0, change: { kind: 'create', title: 'Easy run', structure } }), deps);
     expect(preview.providerPreviews).toEqual([]);
