@@ -193,7 +193,7 @@ describe('help.content', () => {
     expect(content).toContain('**Training planning (optional):**');
     expect(content).toContain('Gemini can prepare one bounded proposal but cannot apply it');
     expect(content).toContain('disable Training write tools while using Research');
-    expect(content).toContain('resets all optional permissions');
+    expect(content).toContain('resets Training permissions off');
     expect(content).toContain('the workout exists in the connected app, not that it reached a watch');
   });
   it('explains private notes in both workspaces and makes their context searchable', () => {

@@ -150,7 +150,7 @@ function parseArguments<T extends z.ZodType>(schema: T, value: unknown): z.infer
   return result.data;
 }
 
-function assertInputScopes(input: McpContentWriteInput, requiredScopes: readonly string[]): void {
+export function assertInputScopes(input: McpContentWriteInput, requiredScopes: readonly string[]): void {
   const missing = requiredScopes.filter(scope => !input.scopes.includes(scope));
   if (missing.length > 0) {
     invalid(`Missing required permission: ${missing.join(', ')}. Reauthorize this connection.`);
@@ -170,6 +170,7 @@ function assistantAccessGeneration(data: admin.firestore.DocumentData, conversat
     data.activityTagChangesEnabled === true,
     data.timelineNotesEnabled === true,
     data.timelineNoteChangesEnabled === true,
+    data.measurementChangesEnabled === true,
   ]);
 }
 
@@ -189,11 +190,13 @@ function assertAssistantConversationData(
     : 0;
   const requiresTags = requiredScopes.includes(EVENTS_WRITE_SCOPE);
   const requiresNotes = requiredScopes.includes(TIMELINE_NOTES_WRITE_SCOPE);
+  const requiresMeasurements = requiredScopes.includes('measurements:write');
   if (!conversationId || conversationId.length > 120
     || input.connectionId !== expectedConnectionId
     || !data || data.conversationId !== conversationId || expiresAtMs <= nowMs
     || (requiresTags && data.activityTagChangesEnabled !== true)
     || (requiresNotes && (data.timelineNotesEnabled !== true || data.timelineNoteChangesEnabled !== true))
+    || (requiresMeasurements && data.measurementChangesEnabled !== true)
     || (input.assistantProposalRef !== undefined
       && (data.pendingContentProposal?.proposalRef !== input.assistantProposalRef
         || !Number.isSafeInteger(data.pendingContentProposal?.expiresAtMs)
@@ -228,8 +231,8 @@ function assertConnectionData(
   return accessGeneration(data);
 }
 
-async function assertConnectionAuthorityInTransaction(
-  deps: McpContentWriteDependencies,
+export async function assertConnectionAuthorityInTransaction(
+  deps: Pick<McpContentWriteDependencies, 'db' | 'now'>,
   transaction: admin.firestore.Transaction,
   input: McpContentWriteInput,
   requiredScopes: readonly string[],
@@ -239,7 +242,7 @@ async function assertConnectionAuthorityInTransaction(
     const [conversation] = await transaction.getAll(
       deps.db.collection('users').doc(input.uid).collection('assistantConversations').doc('active'),
       { fieldMask: ['conversationId', 'expireAt', 'activityTagChangesEnabled', 'timelineNotesEnabled',
-        'timelineNoteChangesEnabled', 'pendingContentProposal'] },
+        'timelineNoteChangesEnabled', 'measurementChangesEnabled', 'pendingContentProposal'] },
     );
     assertAssistantConversationData(input, conversation.exists ? conversation.data() : undefined,
       requiredScopes, deps.now(), expectedProposalKind);
@@ -253,8 +256,8 @@ async function assertConnectionAuthorityInTransaction(
   assertConnectionData(connection.exists ? connection.data() : undefined, requiredScopes, input.grantId);
 }
 
-async function readAccessGeneration(
-  deps: McpContentWriteDependencies,
+export async function readAccessGeneration(
+  deps: Pick<McpContentWriteDependencies, 'db' | 'now'>,
   input: McpContentWriteInput,
   requiredScopes: readonly string[],
 ): Promise<string> {
@@ -265,7 +268,7 @@ async function readAccessGeneration(
     const [conversation] = await deps.db.getAll(
       deps.db.collection('users').doc(input.uid).collection('assistantConversations').doc('active'),
       { fieldMask: ['conversationId', 'expireAt', 'activityTagChangesEnabled', 'timelineNotesEnabled',
-        'timelineNoteChangesEnabled', 'pendingContentProposal'] },
+        'timelineNoteChangesEnabled', 'measurementChangesEnabled', 'pendingContentProposal'] },
     );
     return assertAssistantConversationData(input, conversation.exists ? conversation.data() : undefined,
       requiredScopes, deps.now());

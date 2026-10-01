@@ -89,6 +89,24 @@ describe('McpAuthorizationComponent', () => {
     });
   });
 
+  it('preselects requested manual management independently and supports withholding its write grant', async () => {
+    functions.call.mockResolvedValueOnce({ data: { requestId: 'manual-request', scopes: ['measurements:write', 'measurements:read'],
+      clientName: 'Measurement client', redirectUri: 'https://client.example/callback' } });
+    const fixture = TestBed.createComponent(McpAuthorizationComponent);
+    fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+    const component = fixture.componentInstance;
+    expect(component.selectedScopes()).toEqual(['measurements:write', 'measurements:read']);
+    expect(component.scopeOptions()[0]).toMatchObject({ title: 'Manage manual Health measurements', selected: true, disabled: false });
+    expect(fixture.nativeElement.textContent).toContain('Provider imports cannot be changed');
+    expect(fixture.nativeElement.textContent).toContain('Deletion cannot be undone');
+    expect(fixture.nativeElement.textContent).toContain('Existing connections must reauthorize');
+    component.toggleScope('measurements:write', { checked: false } as never);
+    await component.approve();
+    expect(functions.call).toHaveBeenLastCalledWith('decideMcpAuthorization', {
+      requestId: 'manual-request', approved: true, grantedScopes: ['measurements:read'],
+    });
+  });
+
   it('shows the requesting client, redirect, and only the requested scopes', async () => {
     const fixture = TestBed.createComponent(McpAuthorizationComponent);
     fixture.detectChanges();

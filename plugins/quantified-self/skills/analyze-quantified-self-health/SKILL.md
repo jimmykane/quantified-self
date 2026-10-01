@@ -42,7 +42,8 @@ Use recorded Health metrics, not workout aggregates, as the source of all-day hi
   measurements workflow. Weight history keeps its existing permission and tool.
 - Normalized Sleep and sleep-owned HRV remain under `sleep:read`. If the user means overnight HRV, route to Sleep;
   do not follow excluded Sleep references through the Health permission. Clarify ambiguous HRV questions when needed.
-- The tools cannot add, edit, delete, import, backfill or refresh provider data. Do not imply otherwise.
+- The Health history tools cannot change provider data. Explicit requests to log, edit or delete a manual Health
+  reading use the measurements workflow and its separate `measurements:write` grant; imports remain immutable.
 - No device identities, account keys, native payloads, source files or credentials are available. Do not infer them.
 - Describe recorded trends, not diagnoses, readiness scores or personal reference bands that these tools do not return.
 

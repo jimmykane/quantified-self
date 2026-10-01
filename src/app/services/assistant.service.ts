@@ -82,7 +82,8 @@ export class AssistantService {
         throw new AssistantError('CONVERSATION_CHANGED', 'The Assistant data-access setting changed.');
       }
       if ((validation.data.activityTagChangesEnabled === true) !== (request.activityTagChangesEnabled === true)
-        || (validation.data.timelineNoteChangesEnabled === true) !== (request.timelineNoteChangesEnabled === true)) {
+        || (validation.data.timelineNoteChangesEnabled === true) !== (request.timelineNoteChangesEnabled === true)
+        || (validation.data.measurementChangesEnabled === true) !== (request.measurementChangesEnabled === true)) {
         throw new AssistantError('CONVERSATION_CHANGED', 'The Assistant content-change access setting changed.');
       }
       if ((validation.data.trainingPlanChangesEnabled === true) !== (request.trainingPlanChangesEnabled === true)
@@ -120,6 +121,7 @@ export class AssistantService {
       const timelineNotesEnabled = response.data.timelineNotesEnabled ?? false;
       const activityTagChangesEnabled = response.data.activityTagChangesEnabled ?? false;
       const timelineNoteChangesEnabled = response.data.timelineNoteChangesEnabled ?? false;
+      const measurementChangesEnabled = response.data.measurementChangesEnabled ?? false;
       const trainingPlansEnabled = response.data.trainingPlansEnabled ?? false;
       const trainingPlanChangesEnabled = response.data.trainingPlanChangesEnabled ?? false;
       const trainingDeliveryEnabled = response.data.trainingDeliveryEnabled ?? false;
@@ -133,7 +135,7 @@ export class AssistantService {
       if (typeof timelineNotesEnabled !== 'boolean') {
         throw new AssistantError('INTERNAL', 'The saved Assistant data-access setting is invalid.');
       }
-      if (typeof activityTagChangesEnabled !== 'boolean' || typeof timelineNoteChangesEnabled !== 'boolean'
+      if (typeof activityTagChangesEnabled !== 'boolean' || typeof timelineNoteChangesEnabled !== 'boolean' || typeof measurementChangesEnabled !== 'boolean'
         || (timelineNoteChangesEnabled && !timelineNotesEnabled)) {
         throw new AssistantError('INTERNAL', 'The saved Assistant content-change access is invalid.');
       }
@@ -163,6 +165,7 @@ export class AssistantService {
           ...(timelineNotesEnabled ? { timelineNotesEnabled: true } : {}),
           ...(activityTagChangesEnabled ? { activityTagChangesEnabled: true } : {}),
           ...(timelineNoteChangesEnabled ? { timelineNoteChangesEnabled: true } : {}),
+          ...(measurementChangesEnabled ? { measurementChangesEnabled: true } : {}),
           ...(trainingPlansEnabled ? { trainingPlansEnabled: true } : {}),
           ...(trainingPlanChangesEnabled ? { trainingPlanChangesEnabled: true } : {}),
           ...(trainingDeliveryEnabled ? { trainingDeliveryEnabled: true } : {}),
@@ -184,6 +187,7 @@ export class AssistantService {
         ...(timelineNotesEnabled ? { timelineNotesEnabled: true } : {}),
         ...(activityTagChangesEnabled ? { activityTagChangesEnabled: true } : {}),
         ...(timelineNoteChangesEnabled ? { timelineNoteChangesEnabled: true } : {}),
+        ...(measurementChangesEnabled ? { measurementChangesEnabled: true } : {}),
         ...(trainingPlansEnabled ? { trainingPlansEnabled: true } : {}),
         ...(trainingPlanChangesEnabled ? { trainingPlanChangesEnabled: true } : {}),
         ...(trainingDeliveryEnabled ? { trainingDeliveryEnabled: true } : {}),
@@ -207,6 +211,7 @@ export class AssistantService {
     trainingDeliveryEnabled = false,
     activityTagChangesEnabled = false,
     timelineNoteChangesEnabled = false,
+    measurementChangesEnabled = false,
   ): Promise<AssistantConversation> {
     try {
       const response = await this.callWithAuthenticationRetry<
@@ -217,6 +222,7 @@ export class AssistantService {
         { locationAccess, conversationId, ...(timelineNotesEnabled ? { timelineNotesEnabled: true } : {}),
           ...(activityTagChangesEnabled ? { activityTagChangesEnabled: true } : {}),
           ...(timelineNoteChangesEnabled ? { timelineNoteChangesEnabled: true } : {}),
+          ...(measurementChangesEnabled ? { measurementChangesEnabled: true } : {}),
           ...(trainingPlansEnabled ? { trainingPlansEnabled: true } : {}),
           ...(trainingPlanChangesEnabled ? { trainingPlanChangesEnabled: true } : {}),
           ...(trainingDeliveryEnabled ? { trainingDeliveryEnabled: true } : {}) },
@@ -228,7 +234,8 @@ export class AssistantService {
         throw new AssistantError('CONVERSATION_CHANGED', 'The Assistant data-access setting was not confirmed.');
       }
       if ((response.data.activityTagChangesEnabled ?? false) !== activityTagChangesEnabled
-        || (response.data.timelineNoteChangesEnabled ?? false) !== timelineNoteChangesEnabled) {
+        || (response.data.timelineNoteChangesEnabled ?? false) !== timelineNoteChangesEnabled
+        || (response.data.measurementChangesEnabled ?? false) !== measurementChangesEnabled) {
         throw new AssistantError('CONVERSATION_CHANGED', 'The Assistant content-change access was not confirmed.');
       }
       if ((response.data.trainingPlanChangesEnabled ?? false) !== trainingPlanChangesEnabled

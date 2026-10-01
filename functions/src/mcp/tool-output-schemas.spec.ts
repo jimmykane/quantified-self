@@ -32,6 +32,7 @@ import { MCP_OAUTH_SCOPES } from './oauth.service';
 import { createMcpServer } from './server';
 import { createMcpTransportHandler } from './transport';
 import { MCP_CONTENT_WRITE_TOOLS } from './content-write.schemas';
+import { MCP_MANUAL_MEASUREMENT_TOOLS, type McpManualMeasurementTool } from './manual-measurements.schemas';
 import {
   createMcpOutputSchemaRegistry,
   PUBLIC_MCP_TOOL_NAMES,
@@ -542,7 +543,20 @@ function createFixtureDataService(
 ): InjectedDataService {
   const activityLocation = options.activityLocation !== false;
   const routeLocation = options.routeLocation !== false;
-  const service = {
+const service = {
+    manualMeasurement: vi.fn(async (tool: McpManualMeasurementTool) => {
+      const measurement = { measurementRef: 'opaque-measurement-reference', revision: 1, metricId: 'body_weight',
+        canonicalValue: 80, canonicalUnit: 'kg', displayValue: '80', displayUnit: 'kg', observedAt: '2026-07-01T08:00:00Z',
+        timezoneOffsetSeconds: 10800, diastolic: null, pulse: null, vo2Context: null, vo2Method: null };
+      if (tool === 'list_manual_measurement_types') return { serverTime: '2026-07-01T08:00:00Z', types: [{
+        metricId: 'body_weight', label: 'Body weight', canonicalUnit: 'kg', inputUnits: ['kg', 'lb'],
+        defaultInputUnit: 'kg', requiresDiastolic: false, vo2Contexts: [], vo2Methods: [],
+      }] };
+      if (tool === 'query_manual_measurements') return { measurements: [measurement], nextCursor: null,
+        scanComplete: true, scannedCount: 1, skippedCount: 0 };
+      if (tool === 'delete_manual_measurement') return { deleted: true };
+      return { measurement };
+    }),
     getHrvPersonalRange: vi.fn().mockResolvedValue({ startTimeMs: 0, endTimeMs: DAY_MS,
       baselineWindowDays: 60, baselineMinimumObservationDays: 14, currentWindowDays: 7, currentMinimumObservationDays: 3,
       recordsRead: 1, excludedValues: 0, series: [{ source: 'sleep', provider: 'SuuntoApp', accountNumber: 1,
@@ -1393,6 +1407,13 @@ const successfulToolArguments: Record<
   update_event_title: { activityRef: ACTIVITY_REF, expectedTitle: 'Morning run', title: 'Evening run' },
   update_event_description: { activityRef: ACTIVITY_REF, expectedDescription: 'Easy run.', description: 'Felt good.' },
   query_editable_timeline_notes: { startDate: '2026-07-01', endDate: '2026-07-02' },
+  list_manual_measurement_types: {},
+  query_manual_measurements: {},
+  get_manual_measurement: { measurementRef: 'opaque-measurement-reference' },
+  create_manual_measurement: { mutationId: '123e4567-e89b-42d3-a456-426614174000', metricId: 'body_weight',
+    value: 80, unit: 'kg', observedAt: '2026-07-01T08:00:00+03:00' },
+  update_manual_measurement: { measurementRef: 'opaque-measurement-reference', expectedRevision: 1, value: 81, unit: 'kg' },
+  delete_manual_measurement: { measurementRef: 'opaque-measurement-reference', expectedRevision: 1 },
   create_timeline_note: { mutationId: '123e4567-e89b-42d3-a456-426614174000', category: 'travel',
     title: 'Trip', startDate: '2026-07-01', endDate: '2026-07-02', timeZone: 'Europe/Helsinki',
     showOnCharts: true, color: 'blue' },
@@ -2030,10 +2051,12 @@ describe.each<FixtureTransport>(['in-memory', 'legacy-http', 'modern-http'])('MC
     expect(Buffer.byteLength(JSON.stringify(sampleTools), 'utf8')).toBeLessThan(12 * 1024);
     expect(Buffer.byteLength(JSON.stringify(trainingImpactTools), 'utf8')).toBeLessThan(16 * 1024);
     expect(Buffer.byteLength(JSON.stringify(healthTools), 'utf8')).toBeLessThan(24 * 1024);
+    const manualTools = tools.filter(tool => (MCP_MANUAL_MEASUREMENT_TOOLS as readonly string[]).includes(tool.name));
+    expect(Buffer.byteLength(JSON.stringify(manualTools), 'utf8')).toBeLessThan(24 * 1024);
     expect(Buffer.byteLength(JSON.stringify(tools.filter(tool => !planTools.includes(tool) && !planWriteTools.includes(tool)
       && !healthTools.includes(tool) && !noteTools.includes(tool) && !sampleTools.includes(tool)
       && !contentWriteTools.includes(tool) && !readinessTools.includes(tool)
-      && !trainingImpactTools.includes(tool))), 'utf8'))
+      && !trainingImpactTools.includes(tool) && !manualTools.includes(tool))), 'utf8'))
       .toBeLessThan(256 * 1024);
     collectObjectSchemas(tools.map(tool => tool.outputSchema))
       .forEach(schema => expect(schema.additionalProperties).toBe(false));

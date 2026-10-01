@@ -53,6 +53,8 @@ export interface HealthLifecycleDocumentFieldGuard {
 
 export interface HealthWriterDependencies {
     db?: admin.firestore.Firestore;
+    /** Server-owned access/proposal fence, checked before any transaction writes. */
+    transactionPrecondition?: (transaction: admin.firestore.Transaction) => Promise<void>;
     generateId?: HealthIdGenerator;
     /** Skip replacement when a durable deletion/idempotency marker exists. */
     requiredMissingDocumentRef?: admin.firestore.DocumentReference;
@@ -595,6 +597,7 @@ async function replacePreparedHealthSourceRecordBatch(
                 'skipped_deleted_user',
             ));
         }
+        await dependencies.transactionPrecondition?.(transaction);
         const readLifecycleSnapshot = createHealthLifecycleSnapshotReader(transaction);
         if (dependencies.requiredExistingDocumentRef) {
             const requiredExistingSnapshot = await readLifecycleSnapshot(

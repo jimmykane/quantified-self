@@ -1,9 +1,33 @@
 import { describe, expect, it } from 'vitest';
 import type { AssistantChatResponse } from '@shared/assistant.types';
 import {
+  isAssistantContentProposal,
   validateAssistantChatResponse,
   validateAssistantConversation,
 } from '@shared/assistant-response.contract';
+
+describe('manual measurement review boundary', () => {
+  const fields = { metricId: 'body_weight', canonicalValue: 80,
+    observedAtMs: Date.parse('2026-10-01T08:30:00Z'), timezoneOffsetSeconds: 10800 };
+  const proposal = { proposalRef: 'proposal', kind: 'create_manual_measurement',
+    expiresAtMs: Date.parse('2026-10-01T09:00:00Z'), summary: 'Log weight', requiresConfirmation: true,
+    arguments: { mutationId: '00000000-0000-4000-8000-000000000000', metricId: 'body_weight',
+      observedAt: '2026-10-01T11:30:00+03:00', value: 80, unit: 'kg' },
+    measurementReview: { before: null, after: fields } };
+
+  it('accepts an exact server-owned measurement review', () => {
+    expect(isAssistantContentProposal(proposal)).toBe(true);
+  });
+
+  it.each([
+    { observedAtMs: Number.MAX_SAFE_INTEGER, timezoneOffsetSeconds: 10800 },
+    { observedAtMs: 8_640_000_000_000_000, timezoneOffsetSeconds: 10800 },
+    { observedAtMs: 8_640_000_000_000_001, timezoneOffsetSeconds: -10800 },
+  ])('rejects a review date that cannot be displayed safely: %j', date => {
+    expect(isAssistantContentProposal({ ...proposal,
+      measurementReview: { before: null, after: { ...fields, ...date } } })).toBe(false);
+  });
+});
 
 function buildResponse(): AssistantChatResponse {
   return {

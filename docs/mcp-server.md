@@ -546,12 +546,12 @@ The bundled skills divide ownership deliberately:
 | `analyze-quantified-self-training` | Current plans/planned workouts and sync summaries; recorded load, volume, Training-derived metrics, and identity-safe completed-activity impact | `training-plans:read` for planning; `metrics:read` for recorded metrics; impact also needs `activity-details:read` |
 | `analyze-quantified-self-sleep` | Sleep sessions, stages, duration, safe aggregate vitals, naps, and sleep-oriented trends | `sleep:read` |
 | `analyze-quantified-self-health` | Recorded all-day Health metrics and bounded representative sample trends | `health:read`; body composition also requires `measurements:read` |
-| `analyze-quantified-self-measurements` | Recorded body-measurement history and trends | `measurements:read` |
+| `analyze-quantified-self-measurements` | Recorded measurement trends; explicit manual Health entry management | `measurements:read` for history; independent `measurements:write` for manual lookup/changes |
 | `analyze-quantified-self-activity` | Individual activities, identity-safe Training impact, subrecords, metrics, charts, optional descriptions/locations, and explicit shared-tag changes | `activity-details:read`; impact and selected metrics also need `metrics:read`; optional description/location/tag-write grants |
 | `explore-quantified-self-routes` | Saved-route summaries, geometry, waypoints, and nearby searches | `routes:read`; optional `route-location:read` |
 
 All seven skills allow implicit or explicit invocation and declare the same hosted permission-scoped MCP dependency. Most
-domain tools are read-only; the Activity and cross-domain skills can use separately authorized focused event/note writes,
+domain tools are read-only; measurement management needs its own write grant, and Activity/cross-domain skills can use separately authorized focused event/note writes,
 and the Training skill can use separately authorized preview and approval-gated apply tools. Their trigger
 descriptions keep single-domain work out of the cross-domain skill. Each `agents/openai.yaml` owns one matching
 skill-level starter prompt; the plugin manifest retains only three representative interface prompts because that field
@@ -660,6 +660,8 @@ The server implements OAuth authorization code with PKCE S256 and refresh-token 
 - `metrics:read` for event metrics, ready Training-derived snapshots, and selected per-activity metrics when
   `activity-details:read` is also granted;
 - `measurements:read` for bounded identity-free first-class body-measurement history;
+- `measurements:write` independently permits exact-time manual Health entry lookup and native-approval-gated
+  create, edit and permanent delete. It grants neither imported Health history nor identity-free measurement history;
 - `health:read` for source-separated recorded Health summaries and bounded normalized sample trends; body composition
   additionally requires `measurements:read`, while Weight and normalized Sleep keep their existing contracts;
 - `sleep:read` for redacted sleep sessions and sleep summaries;
@@ -1232,6 +1234,54 @@ For a recent or latest jump detail request, use newest-first `list_activities`, 
 `jumpCount > 0`, then pass that opaque reference to `list_activity_jumps`. Continue the same query cursor only when the
 page contains no activity with jumps. With `activity-location:read`, only a jump-record coordinate may represent a jump
 on a map or in prose: an activity's start and end positions are distinct summary locations and must never be substituted.
+
+## Manual Health measurement management
+
+Implementation adds independent **Manage manual Health measurements** (`measurements:write`). Requested consent is
+prechecked like other current scopes, but approval is still required. Existing grants and token refresh cannot acquire
+it; legacy omitted consent selections exclude it. No UID gate, extra Pro requirement or provider permission applies.
+This source change is not a deployment or registered-client promotion. Clients need the released server, catalog
+refresh and reauthorization before using it; disconnect/reinstall is not the normal permission-recovery path.
+
+| Tool | Contract |
+| --- | --- |
+| `list_manual_measurement_types` | Eight deliberately supported UI types, explicit input units, owner-unit default, required metadata and server time. |
+| `query_manual_measurements` | Current manual entries newest-first; opaque references/revisions, exact instants and saved offsets. Defaults to 25, maximum 100; optional paired start/end instants within 366 days. |
+| `get_manual_measurement` | One complete validated manual entry, including paired blood pressure or VO2 metadata. |
+| `create_manual_measurement` | Explicit metric, value/unit, offset-bearing observation instant and stable UUID mutation ID. |
+| `update_manual_measurement` | Current reference/revision, value/unit; omitted time/metadata preserved. Explicit null clears optional paired pulse. Type cannot change. |
+| `delete_manual_measurement` | Current reference/revision; permanent whole-entry deletion, including paired values. |
+
+Types are Weight (kg/lb input, canonical kg), VO2 max (ml/kg/min with general/running/cycling context and lab/field/other
+method), body fat, body water and SpO2 (percentage), muscle/bone mass (kg), and systolic/diastolic blood pressure (mmHg,
+optional same-observation bpm pulse). Canonical validation/ceilings reuse the UI Health domain; they are not medical
+reference ranges. Sports Lib converts/prints owner units. Resolve “now” once using catalog server time and the user's
+timezone; retain that exact instant and UUID on retries. Do not guess required metadata or choose ambiguous entries.
+Public output validation also checks metric-specific canonical units/ceilings, required pressure pairing and VO2-only
+metadata, without widening the compact wire shape.
+
+All six tools require the independent write grant at HTTP, registration and data boundaries. Management reads select
+only manual point records through explicit field masks; imported readings, provider credentials, raw IDs, source keys,
+private metadata and terminal receipts never leave the projection. References bind owner, connection and grant;
+cursors also bind filters/limit and expire after 30 minutes. Sealed references bind the reviewed revision and omitted-field
+defaults so concurrent metadata/time changes cannot be mistaken for identical retries. Pagination reads current records, not a frozen historical
+snapshot: concurrent insertions or edits can change pages. Query scans use pages of 25 with lookahead, at most 500
+selected records/2 MiB per call; individual selected records are bounded to 32 KiB and complete structured-plus-text
+output to 256 KiB, including a full 100-entry page with paired readings. Invalid records are skipped with counts and completeness, never silently treated as full coverage.
+
+Connection authority and account-deletion fences are rechecked before releasing reads and inside every persistence
+transaction, including idempotent no-ops. Creates share deterministic IDs with the UI; a repeated UUID with different
+content conflicts. Exact immediate update retries are accepted; later changes conflict. Deletion retains only the
+existing content-free terminal marker and delayed creates cannot resurrect it. A retry after later edits returns
+current persisted data, not an obsolete creation receipt. No new callable, storage model, provider I/O or repair write
+is added. External writes use accurate destructive/idempotency annotations and host-native approval; the server cannot
+detect or override a host's auto-approval configuration.
+
+The built-in Assistant has an independent **Manual Health measurements** choice, on for fresh/New chats; legacy
+missing flags remain off. Gemini receives lookup and prepare-only tools, never public write tools. Exact edit/delete
+references and revisions must have been read in the current turn. One short-lived app review contains canonical
+before/after fields rendered in the owner's units, saved observation offset and permanent-delete wording. Only the
+existing Apply endpoint writes, with server-owned conversation/proposal checks in the shared Health transaction.
 
 ## First-class body measurements
 

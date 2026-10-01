@@ -1,4 +1,7 @@
 import { TRAINING_PREVIEW_TOOLS, TRAINING_READ_TOOLS } from '../mcp/training-plans.schemas';
+import { MCP_MANUAL_MEASUREMENT_READ_TOOLS, MCP_MANUAL_MEASUREMENT_SCHEMA, MCP_MANUAL_MEASUREMENT_INPUTS } from '../mcp/manual-measurements.schemas';
+import { resolveManualMeasurementFields } from '../mcp/manual-measurements.service';
+import type { ManualHealthMeasurementFields } from '../../../shared/manual-health';
 import { DataDuration } from '@sports-alliance/sports-lib';
 import { z } from 'genkit';
 import { retry } from 'genkit/model/middleware';
@@ -177,6 +180,7 @@ export interface AssistantRuntimeDependencies {
     conversationId?: string,
     activityTagChangesEnabled?: boolean,
     timelineNoteChangesEnabled?: boolean,
+    measurementChangesEnabled?: boolean,
   ) => Promise<AssistantMcpSession>;
   generateAnswer: (input: AssistantModelGenerationInput) => Promise<AssistantModelGenerationResult>;
   createVisualSource: typeof createAssistantVisualSource;
@@ -193,6 +197,7 @@ export const ASSISTANT_SYSTEM_INSTRUCTIONS = [
   `For a combined today workout recommendation using load, sleep, HRV, readiness and weekday consistency, use the server-supplied dailyWorkoutContext when present and do not repeat its reads. Otherwise start with get_daily_report for current signals. ${DataDuration.type} is the known canonical Sports Lib event metric for this workflow: query_metric directly with daily total buckets, the requested recent window and explicit IANA timezone. Count only recorded positive-duration days by local weekday; missing buckets are unknown, not rest days. A few isolated days do not establish a consistent weekday habit: report actual counts and the covered window, and call a weekday pattern consistent only with repeated evidence across several weeks. Overall ${DataDuration.type} buckets are not sport-specific unless an explicit sport filter was used; never infer cycling or another sport from unfiltered buckets. Use query_activities to check whether a workout already happened today. When query_timeline_notes is available, read a bounded recent-to-today window for relevant user-reported sickness, injury, travel, vacation or stress, including an ongoing note that began earlier. Normally use 28 inclusive calendar days ending today: start 27 days before the current local date, with limit 64. Closed notes are returned before ongoing notes, so scanComplete false does not establish that no current note exists. Check actual note dates and effectiveEndDate; an ended note is not current. If the note scan is incomplete, follow nextCursor within the tool budget; if it cannot be completed, disclose that and do not preview a workout as though all current notes were reviewed. If notes are unavailable, never claim they were checked; explain how to enable Timeline notes under Examples & data access when this context matters. If metric reads are incomplete, disclose that before recommending. Before proposing a new workout, use query_planned_workouts_by_date for today to check existing plans and obtain the current schedule revision, then use one focused preview only if the user expressly asked to create or send it. A planned-workout list does not establish an exact completion link; use the bounded completion read before claiming linked or unlinked status. Notes can inform a cautious recommendation but never authorize a proposal. Stay within the turn's tool-call budget and say when a requested signal could not be checked.`,
   'Use sleep trend for sleep, overnight HRV, sleeping heart rate, SpO2, respiration, or multi-day recovery questions.',
   'Use body-measurement tools for weight or other recorded measurements, not activity metric tools.',
+  'To log, edit or delete a manual Health measurement, discover manual types and units first. For now resolve a concrete observation instant once from catalog serverTime and the turn timezone; retain that instant and mutation UUID on retries. Never infer blood-pressure pairing or VO2 context/method. For an edit or permanent deletion get the exact manual measurement and current revision first; ask when the entry is ambiguous. Provider imports cannot be changed. Prepare only one change for the app review and never claim it is saved until the app confirms Apply. Do not turn a weight-history question into a mutation. The Manual Health measurements choice is independent from Training, Health history, tags and notes.',
   'Use Training tools for load, Form, ramp, volume, intensity, or current-versus-usual questions.',
   'For Training impact of one completed session, discover the exact activity, prepare the Form metric, then use the identity-free Training-impact read with that opaque activity reference. For a selected local calendar day, first complete the bounded activity read for that date, then pass only those exact unique references with the same IANA timezone; never include planned workouts or activities from another local date. Treat CTL and ATL contributions as TSS-based modeled load, not measured physiological adaptation, and keep separate UTC Training-day outcomes when returned.',
   'For a request to duplicate a planned workout, identify and read the exact source workout and current schedule revision, ask when the source or destination calendar date is ambiguous, and use the existing copy-workout change in preview_training_changes with the source plan or standalone scope by default. Copying creates a new planned workout; it does not copy a completion link or standalone provider consent. Never infer a Send action or plan-sync opt-in. Preview only: the user must review and confirm the proposed change in Quantified Self.',
@@ -549,6 +554,12 @@ function assertContentProposalPrerequisite(
   toolInput: Record<string, unknown>,
   invocations: readonly AssistantToolInvocation[],
 ): void {
+  if (toolName === 'prepare_manual_measurement_update' || toolName === 'prepare_manual_measurement_delete') {
+    const measurement = currentManualMeasurement(invocations, toolInput.measurementRef);
+    if (!measurement || measurement.revision !== toolInput.expectedRevision) {
+      throw new Error('Get the exact manual measurement and current revision before preparing this change.');
+    }
+  }
   if (toolName === 'prepare_activity_tag_change') {
     const activity = invocations
       .filter(invocation => invocation.name === 'query_activities_with_tags')
@@ -569,12 +580,39 @@ function assertContentProposalPrerequisite(
   }
 }
 
+function currentManualMeasurement(invocations: readonly AssistantToolInvocation[], ref: unknown) {
+  for (const invocation of [...invocations].reverse()) {
+    if (invocation.name !== 'get_manual_measurement') continue;
+    const parsed = MCP_MANUAL_MEASUREMENT_SCHEMA.safeParse(invocation.structuredContent.measurement);
+    if (parsed.success && parsed.data.measurementRef === ref) return parsed.data;
+  }
+  return null;
+}
+
 function withContentProposalTargetSummary(
   toolName: AssistantMcpToolName,
   proposal: AssistantContentProposalPreview,
   invocations: readonly AssistantToolInvocation[],
   timeZone: string,
+  now: Date,
 ): AssistantContentProposalPreview {
+  if (toolName.startsWith('prepare_manual_measurement_')) {
+    const args = proposal.arguments as Record<string, unknown>;
+    const current = currentManualMeasurement(invocations, args.measurementRef);
+    const before: ManualHealthMeasurementFields | null = current ? {
+      metricId: current.metricId, canonicalValue: current.canonicalValue, observedAtMs: Date.parse(current.observedAt),
+      timezoneOffsetSeconds: current.timezoneOffsetSeconds,
+      ...(current.diastolic ? { diastolicValue: current.diastolic.canonicalValue } : {}),
+      ...(current.pulse ? { pulseValue: current.pulse.canonicalValue } : {}),
+      ...(current.vo2Context ? { vo2Context: current.vo2Context } : {}),
+      ...(current.vo2Method ? { vo2Method: current.vo2Method } : {}),
+    } : null;
+    const after = proposal.kind === 'delete_manual_measurement' ? null : resolveManualMeasurementFields(
+      proposal.kind === 'create_manual_measurement'
+        ? MCP_MANUAL_MEASUREMENT_INPUTS.create_manual_measurement.parse(args)
+        : MCP_MANUAL_MEASUREMENT_INPUTS.update_manual_measurement.parse(args), now.getTime(), before ?? undefined);
+    return { ...proposal, measurementReview: { before, after } };
+  }
   if (toolName === 'prepare_activity_tag_change') {
     const activity = invocations
       .filter(invocation => invocation.name === 'query_activities_with_tags')
@@ -621,6 +659,7 @@ function isEnabledContentChangeTool(
   toolName: AssistantMcpToolName,
   activityTagChangesEnabled: boolean,
   timelineNoteChangesEnabled: boolean,
+  measurementChangesEnabled: boolean,
 ): boolean {
   return (activityTagChangesEnabled
       && (toolName === 'query_activities_with_tags' || toolName === 'prepare_activity_tag_change'))
@@ -628,7 +667,9 @@ function isEnabledContentChangeTool(
       && (toolName === 'query_editable_timeline_notes'
         || toolName === 'prepare_timeline_note_create'
         || toolName === 'prepare_timeline_note_update'
-        || toolName === 'prepare_timeline_note_delete'));
+        || toolName === 'prepare_timeline_note_delete'))
+    || (measurementChangesEnabled && ((MCP_MANUAL_MEASUREMENT_READ_TOOLS as readonly string[]).includes(toolName)
+      || toolName.startsWith('prepare_manual_measurement_')));
 }
 
 function activityRef(value: unknown): string | null {
@@ -1023,7 +1064,7 @@ export const generateAssistantModelAnswer: AssistantRuntimeDependencies['generat
 const defaultDependencies: AssistantRuntimeDependencies = {
   createMcpSession: (uid, appBaseUrl, locationAccess, timelineNotesEnabled, trainingPlansEnabled,
     trainingPlanChangesEnabled, trainingDeliveryEnabled, conversationId, activityTagChangesEnabled,
-    timelineNoteChangesEnabled) => createAssistantMcpSession(
+    timelineNoteChangesEnabled, measurementChangesEnabled) => createAssistantMcpSession(
     uid,
     appBaseUrl,
     undefined,
@@ -1035,6 +1076,7 @@ const defaultDependencies: AssistantRuntimeDependencies = {
     conversationId,
     activityTagChangesEnabled,
     timelineNoteChangesEnabled,
+    measurementChangesEnabled,
   ),
   generateAnswer: generateAssistantModelAnswer,
   createVisualSource: createAssistantVisualSource,
@@ -1060,6 +1102,7 @@ export function createAssistantRuntime(
       timelineNotesEnabled?: boolean;
       activityTagChangesEnabled?: boolean;
       timelineNoteChangesEnabled?: boolean;
+      measurementChangesEnabled?: boolean;
       trainingPlansEnabled?: boolean;
       trainingPlanChangesEnabled?: boolean;
       trainingDeliveryEnabled?: boolean;
@@ -1067,7 +1110,7 @@ export function createAssistantRuntime(
       assertTrainingPlansAccess?: () => Promise<void>;
       assertTrainingWriteAccess?: () => Promise<void>;
       assertTimelineNotesAccess?: () => Promise<void>;
-      assertContentWriteAccess?: (kind: 'activity_tags' | 'timeline_notes') => Promise<void>;
+      assertContentWriteAccess?: (kind: 'activity_tags' | 'timeline_notes' | 'measurements') => Promise<void>;
       history: AssistantMessage[];
       onBillableAttempt?: () => Promise<void>;
     }): Promise<AssistantRuntimeResult> => {
@@ -1083,6 +1126,7 @@ export function createAssistantRuntime(
         input.conversationId,
         input.activityTagChangesEnabled === true,
         input.timelineNoteChangesEnabled === true,
+        input.measurementChangesEnabled === true,
       );
       const invocations: AssistantToolInvocation[] = [];
       const visualSources: AssistantVisualSource[] = [];
@@ -1129,6 +1173,7 @@ export function createAssistantRuntime(
               tool.name,
               input.activityTagChangesEnabled === true,
               input.timelineNoteChangesEnabled === true,
+              input.measurementChangesEnabled === true,
             ))
           : metricTrendIntent
             ? session.tools.filter(tool => tool.name === 'query_metrics'
@@ -1140,6 +1185,7 @@ export function createAssistantRuntime(
               tool.name,
               input.activityTagChangesEnabled === true,
               input.timelineNoteChangesEnabled === true,
+              input.measurementChangesEnabled === true,
             ))
             : session.tools;
         // Gemini rejects the combined deeply nested Training preview catalogue
@@ -1199,6 +1245,10 @@ export function createAssistantRuntime(
             await input.onBillableAttempt?.();
             let result;
             try {
+              if ((MCP_MANUAL_MEASUREMENT_READ_TOOLS as readonly string[]).includes(tool.name)) {
+                if (!input.measurementChangesEnabled || !input.assertContentWriteAccess) throw new Error('Manual measurement access is unavailable.');
+                await input.assertContentWriteAccess('measurements');
+              }
               if (tool.name === 'query_timeline_notes') {
                 if (!input.timelineNotesEnabled || !input.assertTimelineNotesAccess) throw new Error('Timeline notes access is unavailable.');
                 await input.assertTimelineNotesAccess();
@@ -1214,7 +1264,8 @@ export function createAssistantRuntime(
                 await input.assertContentWriteAccess('activity_tags');
               }
               if (isAssistantContentProposalTool(tool.name)) {
-                const contentKind = tool.name === 'prepare_activity_tag_change' ? 'activity_tags' : 'timeline_notes';
+                const contentKind = tool.name === 'prepare_activity_tag_change' ? 'activity_tags'
+                  : tool.name.startsWith('prepare_manual_measurement_') ? 'measurements' : 'timeline_notes';
                 if (!input.assertContentWriteAccess) throw new Error('Content change access is unavailable.');
                 await input.assertContentWriteAccess(contentKind);
               }
@@ -1228,6 +1279,7 @@ export function createAssistantRuntime(
                 await input.assertTrainingWriteAccess();
               }
               result = await session.callTool(tool.name, resolvedToolInput);
+              if ((MCP_MANUAL_MEASUREMENT_READ_TOOLS as readonly string[]).includes(tool.name)) await input.assertContentWriteAccess!('measurements');
               if ((TRAINING_READ_TOOLS as readonly string[]).includes(tool.name)) await input.assertTrainingPlansAccess!();
               if (tool.name === 'query_timeline_notes') await input.assertTimelineNotesAccess!();
               if (tool.name === 'query_editable_timeline_notes') await input.assertContentWriteAccess!('timeline_notes');
@@ -1235,9 +1287,10 @@ export function createAssistantRuntime(
                 await input.assertContentWriteAccess!('activity_tags');
               }
               if (isAssistantContentProposalTool(tool.name)) {
-                const contentKind = tool.name === 'prepare_activity_tag_change' ? 'activity_tags' : 'timeline_notes';
+                const contentKind = tool.name === 'prepare_activity_tag_change' ? 'activity_tags'
+                  : tool.name.startsWith('prepare_manual_measurement_') ? 'measurements' : 'timeline_notes';
                 await input.assertContentWriteAccess!(contentKind);
-                if (!isAssistantContentProposal(result.structuredContent)) {
+                if (!isAssistantContentProposal(result.structuredContent, false)) {
                   throw new Error('The Assistant content proposal was invalid.');
                 }
                 pendingContentProposal = withContentProposalTargetSummary(
@@ -1245,6 +1298,7 @@ export function createAssistantRuntime(
                   result.structuredContent,
                   invocations,
                   input.timeZone,
+                  currentTime,
                 );
               }
               if ((TRAINING_PREVIEW_TOOLS as readonly string[]).includes(tool.name)) {

@@ -439,10 +439,27 @@ UUIDs have no retry expiry; they are removed by the existing recursive user-acco
 queries remain unchanged, and the real source-record deletion continues to invalidate the Training view.
 
 While a manual mutation is pending, the workspace disables the add action and replaces its icon with a same-sized
-Material spinner, with a live accessible status. Weight input, its suffix, and persistence are kilograms in the pinned
-Sports Lib version: its unit settings do not include a pounds/weight preference. Imperial speed, pace, or distance
-settings must not relabel or reinterpret a Weight input. A future selectable Weight unit will require conversion into
-the displayed unit on edit and back into the canonical unit on save, together with matching input bounds.
+Material spinner, with a live accessible status. Weight persistence stays canonical kilograms. The current Sports Lib weight preference selects kg or lb display;
+inputs and edits convert through `DataWeight`, including matching displayed bounds. Distance/pace preferences never
+reinterpret Weight. Manual muscle and bone mass retain their explicit kilogram units.
+
+### MCP and Assistant manual entry management
+
+Independent `measurements:write` now deliberately exposes management of the same eight manual UI types, not imports.
+The dedicated MCP projection supplies exact observation instants/offsets, canonical values plus owner-unit Sports Lib
+display, opaque owner/connection/grant-bound references and current revisions. Existing aggregate body-measurement
+reads remain identity-free and separately consented. No migration or duplicate persistence model is introduced.
+New newest-first manual queries require the `source.sourceRecordType` / `startTimeMs` / document-ID composite, with
+the optional `metricIds` array filter variant in `firestore.indexes.json`.
+
+MCP and app Apply reuse `saveManualHealthMeasurement` / `deleteManualHealthMeasurement` domain functions with an
+optional transaction precondition that validates the connection or exact Assistant consent/proposal before any write,
+including idempotent retries. Update accepts only identical immediate retry content at expected revision + 1; any later
+edit still conflicts. Non-VO2 native metadata omits absent qualifiers rather than relying on Firestore's ignore-undefined
+setting. Creates/deletes retain the existing terminal-marker and account-deletion behavior. New capabilities must
+extend the deliberate MCP type/unit map, strict projection, canonical review and fixtures; shared stored fields are
+never public by default. See [MCP](mcp-server.md#manual-health-measurement-management) and
+[Assistant](assistant.md#manual-health-measurements) for permission and lifecycle details.
 
 The source sheet presents the existing owner-scoped Health and Sleep sync-state reads without adding provider requests. It does not offer history-import actions; connection and import management remain in Connectivity under their existing access and cooldown rules. Failed or denied sync-state reads are shown explicitly rather than interpreted as an absent connection or import. Provider statuses, recency thresholds, and ingestion/backfill behavior are unchanged.
 

@@ -72,7 +72,7 @@ function createTestServer(options: {
 describe('Assistant MCP session', () => {
   it('projects every enabled MCP input into a Gemini-compatible typed schema without weakening MCP validation', async () => {
     const session = await createAssistantMcpSession('schema-owner', 'https://quantified-self.io',
-      undefined, 'precise_activity', true, true, true, true, 'schema-conversation', true, true);
+      undefined, 'precise_activity', true, true, true, true, 'schema-conversation', true, true, true);
     try {
       const visit = (value: unknown, path: string): void => {
         expect(value, path).toMatchObject({ type: expect.any(String) });
@@ -125,6 +125,17 @@ describe('Assistant MCP session', () => {
     } finally {
       await session.close();
     }
+  });
+  it('exposes independent manual lookup and preparation but never public writes to the model', async () => {
+    const session = await createAssistantMcpSession('owner', 'https://quantified-self.io', undefined,
+      'coordinate_free', false, false, false, false, 'manual-conversation', false, false, true);
+    try {
+      const names = session.tools.map(tool => tool.name);
+      expect(names).toEqual(expect.arrayContaining(['list_manual_measurement_types', 'query_manual_measurements', 'get_manual_measurement',
+        'prepare_manual_measurement_create', 'prepare_manual_measurement_update', 'prepare_manual_measurement_delete']));
+      expect(names).not.toEqual(expect.arrayContaining(['create_manual_measurement', 'update_manual_measurement', 'delete_manual_measurement']));
+      expect(names).not.toContain('query_timeline_notes');
+    } finally { await session.close(); }
   });
   it('adds only Training plan reads after independent consent, without notes, Health or location grants', async () => {
     let capturedAuth: AuthenticatedMcpRequest | null = null;
@@ -331,6 +342,7 @@ describe('Assistant MCP session', () => {
       expect(session.tools.map(tool => tool.name)).toEqual(ASSISTANT_MCP_TOOL_NAMES.filter(name => name !== 'query_timeline_notes'
         && name !== 'query_activities_with_tags'
         && name !== 'query_editable_timeline_notes'
+        && !['list_manual_measurement_types', 'query_manual_measurements', 'get_manual_measurement'].includes(name)
         && (!name.startsWith('prepare_') || name === 'prepare_training_metrics')
         && !(TRAINING_PREVIEW_TOOLS as readonly string[]).includes(name)
         && !(TRAINING_READ_TOOLS as readonly string[]).includes(name)));

@@ -46,6 +46,8 @@ import {
 } from './tool-output-schemas';
 import { FUNCTION_SECRET_BINDINGS } from '../secrets';
 import { registerMcpTool } from './register-tool';
+import { MCP_MANUAL_MEASUREMENT_TOOLS, MCP_MANUAL_MEASUREMENT_WRITE_TOOLS,
+  MCP_MANUAL_MEASUREMENT_INPUTS, type McpManualMeasurementWriteTool } from './manual-measurements.schemas';
 import { isMcpHealthBodyMetric, MCP_HEALTH_METRIC_IDS } from './health.service';
 import { MCP_ACTIVITY_DESCRIPTION_MAX_RESULT_BYTES } from './activity-description.service';
 import { MCP_TIMELINE_NOTES_LIMITS } from './timeline-notes.service';
@@ -710,7 +712,8 @@ function buildMcpServerInstructions(auth: AuthenticatedMcpRequest): string {
   const trainingChangesAvailable = auth.scopes.includes(MCP_OAUTH_SCOPES.TrainingPlansWrite)
     || auth.scopes.includes(MCP_OAUTH_SCOPES.TrainingDeliveryWrite);
   const contentChangesAvailable = auth.scopes.includes(MCP_OAUTH_SCOPES.EventsWrite)
-    || auth.scopes.includes(MCP_OAUTH_SCOPES.TimelineNotesWrite);
+    || auth.scopes.includes(MCP_OAUTH_SCOPES.TimelineNotesWrite)
+    || auth.scopes.includes(MCP_OAUTH_SCOPES.MeasurementsWrite);
   const instructions = [trainingChangesAvailable || contentChangesAvailable
     ? 'Use only the tools exposed for the permissions this connection was granted. Write tools use the MCP client\'s native approval UI. Training mutations additionally require a preview followed by the separately approval-gated apply tool.'
     : 'Use only the read-only tools exposed for the permissions this connection was granted.'];
@@ -763,11 +766,15 @@ function buildMcpServerInstructions(auth: AuthenticatedMcpRequest): string {
   }
   if (auth.scopes.includes(MCP_OAUTH_SCOPES.HealthRead)) {
     instructions.push(
-      'Use list_health_metrics then query_health_metric for recorded all-day Health metrics, stress, resources/Body Battery, movement, energy, blood pressure and fitness metrics. This is not the activity metric catalog. Summary mode returns stored scalars; sample mode returns bounded representative trends for up to 31 provider calendar days, with explicit UTC sample instants. If summaries are empty, check sample mode before concluding that an all-day metric is missing. Keep provider/account/semantic/unit series separate. Garmin Body Battery uses its explicitly labelled native points scale, not a canonical percentage; pair numeric values with the series unit and normalization status. Do not sum cumulative samples, infer personal HRV ranges, or label missing data as zero. Report incomplete scans, downsampling, and unknown semantics. Body composition additionally requires measurements:read and is identity-free in summary mode. Weight and normalized Sleep remain in their existing tools and scopes; sleep references are not read by Health tools. No writes are available.',
+      'Use list_health_metrics then query_health_metric for recorded all-day Health metrics, stress, resources/Body Battery, movement, energy, blood pressure and fitness metrics. This is not the activity metric catalog. Summary mode returns stored scalars; sample mode returns bounded representative trends for up to 31 provider calendar days, with explicit UTC sample instants. If summaries are empty, check sample mode before concluding that an all-day metric is missing. Keep provider/account/semantic/unit series separate. Garmin Body Battery uses its explicitly labelled native points scale, not a canonical percentage; pair numeric values with the series unit and normalization status. Do not sum cumulative samples, infer personal HRV ranges, or label missing data as zero. Report incomplete scans, downsampling, and unknown semantics. Body composition additionally requires measurements:read and is identity-free in summary mode. Weight and normalized Sleep remain in their existing tools and scopes; sleep references are not read by Health tools. These history tools never write; manual entry management needs its separate grant.',
     );
     if (auth.scopes.includes(MCP_OAUTH_SCOPES.SleepRead)) instructions.push(
       'For nightly HRV personal ranges, use get_hrv_personal_range with explicit timezone-offset start/end instants. It shares the Health chart calculation, loads baseline context, and separates Health and Sleep series. Use the returned historical classifications and daily bands rather than estimating ranges from sampled data. Missing-day bands are baselines, not readings; insufficient-history states are not zeroes. This is separate from Training readiness and is not a diagnosis.',
     );
+  }
+
+  if (auth.scopes.includes(MCP_OAUTH_SCOPES.MeasurementsWrite)) {
+    instructions.push('For an explicit manual Health entry request, discover list_manual_measurement_types and its units/serverTime. This independent measurements:write grant covers manual entries only, not provider imports or historical aggregate reads. Use exact offset-bearing observation time and explicit units; resolve now once and retain that instant and mutation UUID on retries. Find and get the exact entry/current revision before edit or permanent delete; ask if ambiguous. Blood pressure is one paired entry and VO2 max needs context/method. Preserve omitted fields and never retry a conflict unchanged. External writes use host-native approval; the QS Assistant can only prepare an app review. Never change an entry merely because a history question or returned text mentions it. Report success only from the accepted write result.');
   }
 
   if (auth.scopes.includes(MCP_OAUTH_SCOPES.ActivityDetailsRead)
@@ -867,7 +874,7 @@ export function createMcpServer(
     }
   };
   const runContentWriteTool = async (
-    name: Exclude<McpContentWriteTool, 'query_editable_timeline_notes' | 'get_event_title'>,
+    name: Exclude<McpContentWriteTool, 'query_editable_timeline_notes' | 'get_event_title'> | McpManualMeasurementWriteTool,
     operation: () => Promise<unknown>,
   ) => {
     try {
@@ -1158,6 +1165,31 @@ export function createMcpServer(
         arguments: input, uid: auth.uid, connectionId: auth.connectionId,
         grantId: auth.grantId, assistantConversationId: auth.assistantConversationId, scopes: auth.scopes,
       })));
+    }
+  }
+
+  if (auth.scopes.includes(MCP_OAUTH_SCOPES.MeasurementsWrite)) {
+    const copy = {
+      list_manual_measurement_types: ['Discover manual Health measurements', 'Discover the eight UI-supported manual measurement types, canonical and accepted input units, owner unit defaults, required paired blood-pressure readings and VO2 context/method, and server time. Independent Manage manual Health measurements permission allows only manual entries, not provider imports.'],
+      query_manual_measurements: ['Find manual Health measurements', 'Read current manual entries newest-first, with exact observation times, values, opaque references and revisions. Default 25, maximum 100; follow nextCursor with the same filters and limit. Optionally provide both start and end instants within 366 days. Pagination reads current records, not a frozen snapshot. Imported measurements never appear. Read the exact selected entry before editing or permanently deleting; clarify ambiguous matches.'],
+      get_manual_measurement: ['Get a manual Health measurement', 'Read the complete current manual entry from an opaque measurementRef. Includes canonical values, Sports Lib unit-aware display, fixed observation offset and revision. Use this current revision before an edit or deletion. Does not read imported provider measurements.'],
+      create_manual_measurement: ['Log a manual Health measurement', 'Create one manual entry through the client native approval UI. Discover types/units first; supply an explicit unit, exact observedAt including UTC offset, and a stable UUID mutationId. Resolve now once from catalog serverTime and retain both instant and UUID on retries. Blood pressure needs systolic value and diastolicValue; optional pulseValue is bpm. VO2 needs context and method. Never guess missing metadata. No provider writes.'],
+      update_manual_measurement: ['Edit a manual Health measurement', 'Edit one exact manual entry through native approval. First get_manual_measurement; supply its reference and expectedRevision, new value and explicit unit. Omitted time and metadata stay unchanged; null pulseValue removes that optional reading. Metric type cannot change. An identical immediate retry is safe; later edits conflict. No imported provider record can be edited.'],
+      delete_manual_measurement: ['Delete a manual Health measurement', 'Permanently delete one exact manual entry through native approval. First get_manual_measurement and supply its reference and expectedRevision. This cannot be restored; a content-free deletion marker prevents creation retries from resurrecting it. Does not delete provider imports.'],
+    } as const;
+    for (const name of MCP_MANUAL_MEASUREMENT_TOOLS) {
+      const write = (MCP_MANUAL_MEASUREMENT_WRITE_TOOLS as readonly string[]).includes(name);
+      registerMcpTool(server, name, {
+        title: copy[name][0], description: copy[name][1], inputSchema: MCP_MANUAL_MEASUREMENT_INPUTS[name] as z.ZodType,
+        outputSchema: outputSchemas[name], annotations: write
+          ? name === 'create_manual_measurement' ? CONTENT_CREATE_TOOL_ANNOTATIONS : CONTENT_UPDATE_TOOL_ANNOTATIONS
+          : READ_ONLY_TOOL_ANNOTATIONS,
+      }, input => {
+        const operation = () => dataService.manualMeasurement(name, { arguments: input, uid: auth.uid,
+          connectionId: auth.connectionId, grantId: auth.grantId,
+          assistantConversationId: auth.assistantConversationId, scopes: auth.scopes });
+        return write ? runContentWriteTool(name as McpManualMeasurementWriteTool, operation) : runReadOnlyTool(name, operation);
+      });
     }
   }
 
@@ -2160,6 +2192,7 @@ export function requiredScopesForRequest(body: unknown): McpOAuthScope[] {
     ? (params as Record<string, unknown>).arguments as Record<string, unknown>
     : {};
   if (toolName === 'get_hrv_personal_range') return [MCP_OAUTH_SCOPES.HealthRead, MCP_OAUTH_SCOPES.SleepRead];
+  if ((MCP_MANUAL_MEASUREMENT_TOOLS as readonly string[]).includes(toolName)) return [MCP_OAUTH_SCOPES.MeasurementsWrite];
   if (toolName === 'list_health_metrics' || toolName === 'query_health_metric') {
     return toolName === 'query_health_metric' && isMcpHealthBodyMetric(toolArguments.metricId)
       ? [MCP_OAUTH_SCOPES.HealthRead, MCP_OAUTH_SCOPES.MeasurementsRead]
