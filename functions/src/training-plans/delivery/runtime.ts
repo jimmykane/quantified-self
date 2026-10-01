@@ -47,6 +47,7 @@ function suuntoTransport(db: admin.firestore.Firestore, uid: string, owner: stri
     mappingVersion: policy.mappingVersion, horizonDays: policy.horizonDays, withdrawOutsideHorizon: true,
     inspection: { policy: policy.inspection.policy, inspect: (request, guard) => bound(request).inspection.inspect(request, guard) },
     assess: policy.assess.bind(policy),
+    diagnosticMappingVersion: policy.diagnosticMappingVersion.bind(policy),
     canRemove: policy.canRemove.bind(policy),
     execute: (operation, checkpoint, guard) => bound(operation).execute(operation, checkpoint, guard),
     recover: (operation, checkpoint, guard) => bound(operation).recover(operation, checkpoint, guard),

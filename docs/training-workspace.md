@@ -1402,10 +1402,24 @@ ID. Unknown digests, mismatched content and non-authoritative absence stay uncer
 The v2 golden fixture deliberately freezes old field titles/order, text adaptation, strength instructions and absence
 of generated readings/notifications/completion screen. Fresh delivery never uses the recovery-only serializer.
 
+Existing `[TrainingDelivery]` Suunto acceptance, recovered-acceptance, stale-suppression, failure and checkpoint-failure
+events include two transient allowlisted labels: `guideMappingVersion` (`suunto-guides-v3`, `suunto-guides-v2`, `unknown`,
+or `not_applicable` for removal) and `deliveryPhase` (`execute` or `recover`). The version is proved by recomputing the
+immutable upsert operation's exact payload digest, including strength details, rather than copying the current adapter's
+version onto a legacy attempt. An unrecognized digest or classification failure yields `unknown` and cannot alter
+delivery/recovery. Classification runs once per claimed operation without credentials or HTTP; the phase switches to
+`execute` if recovery resumes a safe request. Other providers' existing events are unchanged.
+For rollout triage, combine `jsonPayload.message="[TrainingDelivery]"`, `jsonPayload.provider="suunto"` and
+`jsonPayload.event="failure"` with `jsonPayload.guideMappingVersion="suunto-guides-v3"` for v3 failures, or
+`jsonPayload.guideMappingVersion="suunto-guides-v2"` and `jsonPayload.deliveryPhase="recover"` for legacy recovery.
+Checkpoint failures use `jsonPayload.event="checkpoint_failed"`. These labels are not stored in Firestore or exposed
+to the browser/MCP, and contain no UID, account/Guide/workout identity, digest, recipe, instruction, sensor reading,
+credential, provider body or raw error. They report serializer/recovery provenance, not app/watch receipt or completion.
+
 MCP impact: **no wire impact**. Live readings are watch-side fields, not activity metrics or authored recipe targets.
 No tool, registered input/output, scope, consent, Assistant permission, provider action, bundled skill, Sports Lib class,
 endpoint or provider enablement changes. Regression tests exercise unchanged recipes, unlinked/linked completion and
-safe delivery reads and reject private Guide fields in strict projection/recipe shapes. Delivery remains cloud acceptance
+safe delivery reads and reject private Guide fields and diagnostic labels in strict projection/recipe shapes. Delivery remains cloud acceptance
 only, not evidence of watch readings, boundary alerts, completion or adherence. Recorded laps/totals are unchanged.
 
 Local fixtures and isolated demo-emulator HTTP cover layout, create/update/reschedule, IDs, retry, digest-verified v2

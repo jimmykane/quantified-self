@@ -8,7 +8,7 @@ import { productionDeliveryRuntime } from './runtime';
 import { SuuntoGuideTransport } from './suunto/transport';
 import { authorizeSuuntoGuideRequest } from './suunto/authorization';
 import { readGuideArchive } from './suunto/archive';
-import { guideExternalId } from './suunto/mapping';
+import { assessSuuntoGuideV2ForRecovery, guideExternalId } from './suunto/mapping';
 import type { DeliveryOperation } from './contracts';
 import type { InspectionRequest } from './verification-contracts';
 
@@ -65,6 +65,25 @@ describe('Production Training delivery rollout', () => {
     expect(changedAssessment.digest).not.toBe(assessment.digest);
     expect(authorizeSuuntoGuideRequest).not.toHaveBeenCalled();
     expect(fetcher).not.toHaveBeenCalled();
+  });
+
+  it('binds exact current/legacy Suunto diagnostic classification without credentials or provider I/O', () => {
+    const owner = 'Fixture application';
+    vi.stubEnv('SUUNTOAPP_GUIDE_OWNER', owner);
+    for (const key of ['SUUNTOAPP_CLIENT_ID', 'SUUNTOAPP_CLIENT_SECRET', 'SUUNTOAPP_SUBSCRIPTION_KEY']) vi.stubEnv(key, undefined);
+    const fetcher = vi.fn(); vi.stubGlobal('fetch', fetcher);
+    const transport = runtime.transport('suunto', 'owner')!;
+    const operation: DeliveryOperation = { id: 'fixture-attempt', kind: 'upsert', deliveryId: 'fixture-delivery', generation: 1,
+      destinationKey: inspection.destinationKey, connectionGeneration: inspection.connectionGeneration, timeZone: inspection.timeZone,
+      workout: strengthWorkout, strength, artifact: null, progress: null, contentDigest: 'fixture-content',
+      digest: transport.assess(strengthWorkout, inspection.destinationKey, inspection.timeZone, strength).digest };
+    expect(transport.diagnosticMappingVersion?.(operation)).toBe('suunto-guides-v3');
+    operation.digest = assessSuuntoGuideV2ForRecovery(strengthWorkout, inspection.destinationKey, inspection.timeZone, owner, strength).digest;
+    expect(transport.diagnosticMappingVersion?.(operation)).toBe('suunto-guides-v2');
+    expect(transport.diagnosticMappingVersion?.({ ...operation, digest: 'unrecognized' })).toBeNull();
+    const changed = structuredClone(strength); changed.exercises[0].sets[0].externalLoadKg = 55;
+    expect(transport.diagnosticMappingVersion?.({ ...operation, strength: changed })).toBeNull();
+    expect(authorizeSuuntoGuideRequest).not.toHaveBeenCalled(); expect(fetcher).not.toHaveBeenCalled();
   });
 
   it.each([

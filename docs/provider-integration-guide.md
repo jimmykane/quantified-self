@@ -301,6 +301,12 @@ to the saved approval, current mapping and full canonical content, and never ass
 #784 tracks remaining
 account/watch evidence (model/firmware, sensors, all boundary/final alerts, muted settings, short intervals), separately
 from #773's additional-target/ZoneSense scope. API acceptance/readback is not watch receipt or behavior proof.
+Existing private delivery events add allowlisted `guideMappingVersion` and `deliveryPhase` labels to distinguish
+digest-verified v2 recovery from v3 execution/failure. Unknown digests/classification failures stay labelled `unknown`;
+removal has no recipe version (`not_applicable`). Classification is local, non-authorizing and never changes delivery.
+The labels are log-only, not Firestore/browser/MCP fields, and contain no identities, prescriptions, credentials or raw
+errors. See the Training source of truth above for exact values and Cloud Logging filters. Product Help needs no new
+copy for these internal diagnostics; its existing screen/alert and delivery-versus-watch guidance remains unchanged.
 The #650 transport packages that JSON with a valid 300 × 300 PNG and preserves Guide identity
 and pin state through PUT. Incoming workout-reference FIT metadata is now read through Sports Lib 21.2.3's bounded
 metadata-only reader. The public workout-reference classes, return shapes and numeric values remain unchanged, irrelevant

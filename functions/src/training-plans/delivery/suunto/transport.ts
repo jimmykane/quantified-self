@@ -8,7 +8,7 @@ import { TrainingDeliveryTransportError, type TrainingDeliveryTransport, type De
 import type { InspectionPolicy, RemoteInspection } from '../verification-contracts';
 import { type SuuntoGuideClient, type SuuntoGuideRequest, guideId, object, SuuntoGuideHttpError } from './http';
 import { packageGuide, readGuideArchive } from './archive';
-import { assessSuuntoGuide, guideExternalId, guideMapping, guidePayloadForRecovery, SUUNTO_MAPPING_VERSION, validateGuideOwner } from './mapping';
+import { assessSuuntoGuide, guideExternalId, guideMapping, guideMappingForRecovery, guidePayloadForRecovery, SUUNTO_MAPPING_VERSION, validateGuideOwner } from './mapping';
 
 export const SUUNTO_INSPECTION_POLICY: InspectionPolicy = {
   version: 'suunto-owned-guide-v2', mode: 'unavailable', required: ['guide'], confirmationDelayMs: 15 * 60_000,
@@ -43,6 +43,9 @@ export class SuuntoGuideTransport implements TrainingDeliveryTransport {
   }
   assess(workout: ScheduledWorkoutV1, destination: string, zone: string, strength?: StrengthWorkoutDetailsV1 | null) {
     return assessSuuntoGuide(workout, destination, zone, this.owner, strength);
+  }
+  diagnosticMappingVersion(operation: DeliveryOperation): string | null {
+    return guideMappingForRecovery(operation, this.owner)?.mappingVersion ?? null;
   }
   canRemove(artifact: DeliveryArtifact, today: string, allowPastRemoval = false): boolean {
     return !artifact.completed && (artifact.localDate >= today || allowPastRemoval);

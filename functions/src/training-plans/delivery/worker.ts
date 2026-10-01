@@ -11,7 +11,7 @@ import { stageTrainingDeliveryReconciliation } from './marker';
 import { inspectionBinding } from './verification-evidence';
 import { canRepairMissingArtifacts, VERIFICATION_DAY_MS } from './verification-contracts';
 import { emptyVerification } from './verification-queue';
-import { observeDeliveryCheckpoint } from './diagnostics';
+import { deliveryDiagnosticLabels, deliveryDiagnosticMapping, observeDeliveryCheckpoint, type DeliveryDiagnosticPhase } from './diagnostics';
 import { processTrainingDeliveryBatch } from './batch-worker';
 
 function validateArtifact(value: DeliveryArtifact | null): void {
@@ -132,6 +132,9 @@ export async function processTrainingDelivery(runtime: DeliveryRuntime, uid: str
   });
   if (!claim) return;
   const { operation, transport } = claim;
+  const diagnosticMapping = deliveryDiagnosticMapping(claim.provider, transport, operation);
+  let diagnosticPhase: DeliveryDiagnosticPhase = claim.recover ? 'recover' : 'execute';
+  const diagnosticLabels = () => deliveryDiagnosticLabels(diagnosticMapping, diagnosticPhase);
   let recoveredAcceptance = false;
 
   const checkpoint = async (artifact: DeliveryArtifact | null, complete = false,
@@ -222,7 +225,7 @@ export async function processTrainingDelivery(runtime: DeliveryRuntime, uid: str
         stageTrainingDeliveryReconciliation(tx, db, uid);
       }
       return true;
-    }));
+    }), { mapping: diagnosticMapping, phase: diagnosticPhase });
     if (!recorded) throw new TrainingDeliveryTransportError('retryable');
     operation.artifact = artifact;
     if (progress !== undefined) operation.progress = progress;
@@ -293,7 +296,7 @@ export async function processTrainingDelivery(runtime: DeliveryRuntime, uid: str
       if (recovery.kind === 'accepted') {
         recoveredAcceptance = true;
         await checkpoint(recovery.artifact, true);
-        logger.info('[TrainingDelivery]', { event: 'recovered_acceptance', provider: claim.provider, repair: !!operation.repair });
+        logger.info('[TrainingDelivery]', { event: 'recovered_acceptance', provider: claim.provider, repair: !!operation.repair, ...diagnosticLabels() });
         return;
       }
       if (recovery.kind === 'uncertain') { inspectionUncertain = true; throw new TrainingDeliveryTransportError('uncertain'); }
@@ -303,13 +306,14 @@ export async function processTrainingDelivery(runtime: DeliveryRuntime, uid: str
     }
     if (admission === 'recover-only') {
       await retireSupersededOperation(partial);
-      logger.info('[TrainingDelivery]', { event: 'stale_suppressed', provider: claim.provider });
+      logger.info('[TrainingDelivery]', { event: 'stale_suppressed', provider: claim.provider, ...diagnosticLabels() });
       return;
     }
+    diagnosticPhase = 'execute';
     const artifact = await transport.execute(operation, transportCheckpoint, requestGuard);
     await checkpoint(artifact, true);
     logger.info('[TrainingDelivery]', { event: operation.repair ? 'repair_accepted' : 'accepted', provider: claim.provider, operation: operation.kind,
-      latencyMs: runtime.now() - startedAt });
+      latencyMs: runtime.now() - startedAt, ...diagnosticLabels() });
   } catch (error) {
     const failure = error instanceof TrainingDeliveryTransportError ? error : new TrainingDeliveryTransportError('uncertain');
     let retryCount = 0;
@@ -342,6 +346,6 @@ export async function processTrainingDelivery(runtime: DeliveryRuntime, uid: str
       else tx.delete(jobRef);
     });
     logger.warn('[TrainingDelivery]', { event: 'failure', provider: claim.provider, category: failure.kind, ...failure.diagnostics,
-      retryCount, latencyMs: runtime.now() - startedAt });
+      retryCount, latencyMs: runtime.now() - startedAt, ...diagnosticLabels() });
   }
 }

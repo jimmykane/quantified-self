@@ -78,7 +78,8 @@ describe('Training plan MCP reads', () => {
     expect(JSON.stringify(linked)).not.toMatch(/private-event|private-activity|notification|Guide complete/);
     for (const fields of [{ guide }, { notification: { title: 'Complete', text: 'Guide complete' } },
       { fields: [{ type: 'heartRate' }] }, { mappingVersion: 'suunto-guides-v3' }, { compatibleApprovalDigest: 'private' },
-      { mappingApprovalProof: { approvedDigest: 'private', mappingDigest: 'private', contentDigest: 'private' } }]) {
+      { mappingApprovalProof: { approvedDigest: 'private', mappingDigest: 'private', contentDigest: 'private' } },
+      { guideMappingVersion: 'suunto-guides-v3' }, { deliveryPhase: 'recover' }]) {
       expect(TRAINING_RECIPE_SCHEMA.safeParse({ ...before.workout.structure, ...fields }).success).toBe(false);
     }
     f.collections.trainingDeliverySettings.suunto = { scope: 'plan', scopeId: 'p1', provider: 'suunto', enabled: true,
@@ -90,12 +91,18 @@ describe('Training plan MCP reads', () => {
     const args = { scope: 'plan', reference: plans.plans[0].planRef };
     const result = TRAINING_READ_OUTPUTS.get_training_sync_status.parse(await f.run('get_training_sync_status', args));
     expect(result.services[0].outcomes).toEqual([{ status: 'completed', count: 1 }]);
-    expect(JSON.stringify(result)).not.toMatch(/notification|Guide complete|mappingVersion|compatibleApprovalDigest|mappingApprovalProof|private-account/);
+    expect(JSON.stringify(result)).not.toMatch(/notification|Guide complete|mappingVersion|compatibleApprovalDigest|mappingApprovalProof|guideMappingVersion|deliveryPhase|private-account/);
     f.collections.trainingDeliveryStatuses[id].guide = guide;
     await expect(f.run('get_training_sync_status', args)).rejects.toThrow();
     delete f.collections.trainingDeliveryStatuses[id].guide;
     f.collections.trainingDeliveryStatuses[id].mappingApprovalProof = { approvedDigest: 'private', mappingDigest: 'private', contentDigest: 'private' };
     await expect(f.run('get_training_sync_status', args)).rejects.toThrow();
+    delete f.collections.trainingDeliveryStatuses[id].mappingApprovalProof;
+    for (const [key, value] of [['guideMappingVersion', 'suunto-guides-v3'], ['deliveryPhase', 'recover']]) {
+      f.collections.trainingDeliveryStatuses[id][key] = value;
+      await expect(f.run('get_training_sync_status', args)).rejects.toThrow();
+      delete f.collections.trainingDeliveryStatuses[id][key];
+    }
   });
   it('reads the complete strength companion under Training consent and fails closed on a mismatch', async () => {
     const f = fixture();

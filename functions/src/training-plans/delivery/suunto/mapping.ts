@@ -81,6 +81,12 @@ function assessGuide(workout: ScheduledWorkoutV1, destination: string, zone: str
 /** Select the exact historical payload by its journaled digest, never by remote
  * resemblance alone. Unknown versions/content remain uncertain; no speculative POST. */
 export function guidePayloadForRecovery(operation: DeliveryOperation, owner: string) {
+  return guideMappingForRecovery(operation, owner)?.payload ?? null;
+}
+
+/** Transient classification shared by recovery and private diagnostics. Never
+ * infer a version from the current adapter when the operation predates it. */
+export function guideMappingForRecovery(operation: DeliveryOperation, owner: string) {
   if (!operation.workout || operation.kind !== 'upsert') return null;
   for (const version of [SUUNTO_MAPPING_VERSION, LEGACY_MAPPING_VERSION]) {
     try {
@@ -88,7 +94,7 @@ export function guidePayloadForRecovery(operation: DeliveryOperation, owner: str
       const digest = hashTrainingScheduleRequestPayload({
         ...digestBase(operation.destinationKey, operation.timeZone, owner, operation.strength, version), payload,
       });
-      if (digest === operation.digest) return payload;
+      if (digest === operation.digest) return { mappingVersion: version, payload };
     } catch (error) {
       if (!(error instanceof ProviderWorkoutMappingError)) throw error;
       return null;

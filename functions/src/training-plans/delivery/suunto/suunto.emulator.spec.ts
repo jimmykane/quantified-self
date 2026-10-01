@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import * as logger from 'firebase-functions/logger';
 import { Firestore } from 'firebase-admin/firestore';
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ActivityTypes, ServiceNames } from '@sports-alliance/sports-lib';
@@ -67,6 +68,7 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Suunto worker with real F
     return transport;
   };
   beforeEach(async () => {
+    vi.mocked(logger.info).mockClear(); vi.mocked(logger.warn).mockClear();
     uid = `suunto-test-${randomUUID()}`; users.push(uid); now = Date.parse('2026-09-16T10:00:00Z'); pro = true;
     server = new SuuntoHttpFixture(); const transport = new SuuntoGuideTransport(server.request, 'Quantified Self', () => now);
     runtime = { db, now: () => now, hasPro: async () => pro, transport: provider => provider === 'suunto' ? transport : null,
@@ -98,6 +100,9 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Suunto worker with real F
     await command('send'); await drain(); const row = await ledger();
     await Promise.all([processTrainingDelivery(runtime, uid, row.id), processTrainingDelivery(runtime, uid, row.id)]);
     await drain(); expect(server.guides.size).toBe(1);
+    expect(logger.info).toHaveBeenCalledWith('[TrainingDelivery]', expect.objectContaining({
+      event: 'accepted', provider: 'suunto', guideMappingVersion: 'suunto-guides-v3', deliveryPhase: 'execute',
+    }));
     expect(await ledger()).toMatchObject({ status: 'delivered', verification: { state: 'unsupported', missing: false } });
     expect((await user().collection(TRAINING_DELIVERY_VERIFICATIONS).doc(row.id).get()).data())
       .toMatchObject({ state: 'unsupported', canCheck: false, missing: false });
@@ -107,6 +112,18 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Suunto worker with real F
     await processTrainingVerification(runtime, uid, row.id);
     expect((await db.collection(DELIVERY_QUEUE).doc(row.id).get()).exists).toBe(false);
     expect(server.calls.filter(call => call.method === 'GET')).toHaveLength(guideReads);
+  });
+  it('does not fail delivery when diagnostic classification fails', async () => {
+    const transport = runtime.transport('suunto')!;
+    const classify = vi.spyOn(transport, 'diagnosticMappingVersion').mockImplementation(() => { throw new Error('private-diagnostic-error'); });
+    const row = await send();
+    expect(row.status).toBe('delivered'); expect(server.guides.size).toBe(1);
+    expect(classify).toHaveBeenCalledTimes(1);
+    expect(logger.info).toHaveBeenCalledWith('[TrainingDelivery]', expect.objectContaining({
+      event: 'accepted', guideMappingVersion: 'unknown', deliveryPhase: 'execute',
+    }));
+    expect(JSON.stringify(vi.mocked(logger.info).mock.calls)).not.toContain('private');
+    expect(logger.warn).not.toHaveBeenCalled();
   });
   it.each([
     [ActivityTypes.Swimming, 21],
@@ -388,16 +405,29 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Suunto worker with real F
       server.afterHandle = null; throw new SuuntoGuideHttpError('uncertain', false);
     } };
     const original = await send(); expect(original.status).toBe('retrying');
+    expect(logger.warn).toHaveBeenCalledWith('[TrainingDelivery]', expect.objectContaining({
+      event: 'failure', guideMappingVersion: 'suunto-guides-v3', deliveryPhase: 'execute',
+    }));
     const legacy = await startedV2();
     expect(JSON.stringify(legacy.payload)).not.toContain('notification');
     await command('retry'); await drain(); await processTrainingDelivery(runtime, uid, original.id); await drain();
     expect((await ledger()).actual?.ids.guide).toBe(legacy.id);
     expect((await ledger()).attempt).toBeNull();
+    expect(logger.info).toHaveBeenCalledWith('[TrainingDelivery]', expect.objectContaining({
+      event: 'recovered_acceptance', guideMappingVersion: 'suunto-guides-v2', deliveryPhase: 'recover',
+    }));
     await processTrainingDelivery(runtime, uid, original.id); await drain();
     expect((await ledger()).status).toBe('delivered');
     expect(server.calls.filter(call => call.method === 'POST')).toHaveLength(1);
     expect(server.calls.filter(call => call.method === 'PUT')).toHaveLength(1);
     expect(server.guides.get(legacy.id)!.guide.steps.at(-1)).toMatchObject({ title: 'Complete' });
+    expect(logger.info).toHaveBeenCalledWith('[TrainingDelivery]', expect.objectContaining({
+      event: 'accepted', guideMappingVersion: 'suunto-guides-v3', deliveryPhase: 'execute',
+    }));
+    const logs = JSON.stringify([...vi.mocked(logger.info).mock.calls, ...vi.mocked(logger.warn).mock.calls]);
+    for (const value of [uid, legacy.id, legacy.operation.digest, legacy.operation.destinationKey, 'notification', 'Squat']) {
+      expect(logs).not.toContain(value);
+    }
   });
   it.each(['not-started', 'ready-create', 'rejected-create', 'unaccepted-update'])(
     'retains exact v2 loss approval when retiring a %s attempt during upgrade', async state => {
@@ -494,6 +524,9 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Suunto worker with real F
     if (change === 'missing') server.guides.clear();
     await command('retry'); await drain(); await processTrainingDelivery(runtime, uid, original.id); await drain();
     expect((await ledger()).status).toBe('needs_attention');
+    expect(logger.warn).toHaveBeenCalledWith('[TrainingDelivery]', expect.objectContaining({
+      event: 'failure', guideMappingVersion: change === 'digest' ? 'unknown' : 'suunto-guides-v2', deliveryPhase: 'recover',
+    }));
     await command('retry'); await drain(); await processTrainingDelivery(runtime, uid, original.id); await drain();
     expect((await ledger()).status).toBe('needs_attention');
     expect(server.calls.filter(call => call.method === 'POST')).toHaveLength(1);
@@ -538,6 +571,9 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Suunto worker with real F
     rejectedKey = false;
     await command('retry'); await drain(); await processTrainingDelivery(runtime, uid, row.id); await drain();
     expect((await ledger()).status).toBe('delivered'); expect(server.guides.size).toBe(1);
+    expect(logger.info).toHaveBeenCalledWith('[TrainingDelivery]', expect.objectContaining({
+      event: 'accepted', guideMappingVersion: 'suunto-guides-v3', deliveryPhase: 'execute',
+    }));
     expect((await user().collection('trainingDeliverySettings').doc('workout_w_suunto').get()).data()?.enabled).toBe(true);
   });
   it('blocks an unresolved create even after explicit Retry', async () => {

@@ -121,6 +121,9 @@ export interface TrainingDeliveryTransport {
   batch?: TrainingDeliveryBatchTransport;
   inspection?: RemoteInspection;
   mappingVersion: string;
+  /** Optional pure diagnostic classification of the immutable operation, not the
+   * current adapter. No provider I/O or authority; callers allowlist the result. */
+  diagnosticMappingVersion?(operation: DeliveryOperation): string | null;
   horizonDays: number;
   /** Provider/product policy: withdraw an existing upcoming copy when moved beyond its window. */
   withdrawOutsideHorizon?: boolean;
