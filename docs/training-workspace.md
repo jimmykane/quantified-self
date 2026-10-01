@@ -593,10 +593,21 @@ locked. Library actions recheck the signed-in owner after confirmations and befo
 Existing plan and workout URLs remain unchanged; library items use path IDs, not query IDs. Help explains the separate
 library and calendar semantics. MCP impact: additive `list_saved_workouts` and `get_saved_workout` use the existing
 Training read grant, bounded pages/response sizes, opaque owner-bound references, full strength drafts on exact reads,
-and a library-revision cursor fence. Existing registered plan/workout read and mutation schemas, Training write grant,
-Assistant approval behavior, and provider permissions are unchanged. Approval-gated library writes/placement through
-MCP and the Assistant remain in focused epic subissue #780 (Project 2); the browser callables do not authorize clients
-to infer or submit provider consent. #653 must not be marked complete while that agreed slice remains open.
+and a library-revision cursor fence. The additive #780 `preview_saved_workout_change` and
+`apply_saved_workout_change` tools use both the Training read and plan/workout-change grants. They preserve every
+registered plan/workout schema and add no delivery grant or provider action. One preview can create a recipe, save an
+exact scheduled workout snapshot, duplicate/edit/archive/restore/delete an exact recipe, or place it on 1–100 sorted
+distinct dates in one plan or Standalone. Preview binds the owner, connection/grant generation, schedule and library
+revisions, exact source/item/plan references, and a 15-minute expiry. It checks the 200-entry library and 400-current-
+workout caps and explicitly names permanent recipe deletion and plan-range extension. Apply uses the existing
+sanitized mutation/placement services; grant, deletion lock, revisions and proposal identity are rechecked in the
+same Firestore transaction as the authored write. A result is committed with its mutation receipt for safe replay.
+Provider consent is never inferred: active-plan placement follows only that plan's existing opt-in, and Standalone
+placement needs a separate Send. Private proposal documents have browser-deny rules, TTL and recursive account
+cleanup. The built-in Assistant can prepare this proposal only with its default-off Training change choice and can
+apply it only after app-owned confirmation of the active conversation generation. External clients retain native
+per-call approval. Source support is local until the Functions release and MCP catalog refresh; no deployment or
+provider enablement follows from #780. #653's browser callables remain independent of MCP authority.
 
 - Owner-visible current state is stored at `users/{uid}/trainingPlanState/current`,
   `users/{uid}/trainingPlans/{planId}`, and `users/{uid}/scheduledWorkouts/{workoutId}`. Browser writes are denied.

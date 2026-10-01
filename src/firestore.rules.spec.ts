@@ -1683,6 +1683,12 @@ describe('Firestore Security Rules', () => {
                     await assertFails(owner.doc(path).get());
                     await assertFails(owner.doc(path).set({ forged: true }));
                 }
+                for (const path of [`users/${userId}/trainingMcpLibraryProposals/proposal`,
+                    `users/${userId}/trainingMcpLibraryProposals/proposal/internal/value`]) {
+                    await assertFails(owner.doc(path).get());
+                    await assertFails(owner.doc(path).set({ forged: true }));
+                    await assertFails(other.doc(path).get());
+                }
                 const evidence = `users/${userId}/events/event/trainingCompletionEvidence/fit`;
                 await testEnv.withSecurityRulesDisabled(context => context.firestore().doc(evidence).set({ schemaVersion: 1 }));
                 for (const client of [owner, other, testEnv.unauthenticatedContext().firestore()]) {

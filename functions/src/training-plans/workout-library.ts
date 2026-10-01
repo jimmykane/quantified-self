@@ -56,7 +56,10 @@ function sameRequest(snapshot: admin.firestore.DocumentSnapshot, requestHash: st
 export async function mutateWorkoutLibraryForUser(
     uid: string,
     request: MutateWorkoutLibraryRequestV1,
-    options: { db?: admin.firestore.Firestore; nowMs?: number } = {},
+    options: { db?: admin.firestore.Firestore; nowMs?: number;
+        transactionPrecondition?: (transaction: FirebaseFirestore.Transaction) => Promise<void>;
+        transactionPostcondition?: (transaction: FirebaseFirestore.Transaction,
+            response: MutateWorkoutLibraryResponseV1) => void } = {},
 ): Promise<MutateWorkoutLibraryResponseV1> {
     const db = options.db ?? admin.firestore();
     const nowMs = options.nowMs ?? Date.now();
@@ -69,6 +72,7 @@ export async function mutateWorkoutLibraryForUser(
     const tombstoneRef = state.collection(LIBRARY_TOMBSTONES).doc(request.operation.itemId);
     const requestHash = hash(request);
     return db.runTransaction(async transaction => {
+        await options.transactionPrecondition?.(transaction);
         const guard = await getUserDeletionGuardStateInTransaction(db, transaction, uid, nowMs);
         if (guard.shouldSkip) throw new TrainingScheduleMutationError('failed-precondition', 'This account is unavailable.');
         const receipt = await transaction.get(receiptRef);
@@ -160,6 +164,7 @@ export async function mutateWorkoutLibraryForUser(
         transaction.set(libraryStateRef, { revision: priorRevision + 1, updatedAtMs: nowMs });
         transaction.create(receiptRef, { requestHash, response, createdAtMs: nowMs,
             expireAt: Timestamp.fromMillis(nowMs + RECEIPT_RETENTION_MS) });
+        options.transactionPostcondition?.(transaction, response);
         return response;
     });
 }
@@ -167,7 +172,10 @@ export async function mutateWorkoutLibraryForUser(
 export async function placeWorkoutLibraryForUser(
     uid: string,
     request: PlaceWorkoutLibraryRequestV1,
-    options: { db?: admin.firestore.Firestore; nowMs?: number } = {},
+    options: { db?: admin.firestore.Firestore; nowMs?: number;
+        transactionPrecondition?: (transaction: FirebaseFirestore.Transaction) => Promise<void>;
+        transactionPostcondition?: (transaction: FirebaseFirestore.Transaction,
+            response: PlaceWorkoutLibraryResponseV1) => void } = {},
 ): Promise<PlaceWorkoutLibraryResponseV1> {
     const db = options.db ?? admin.firestore();
     const nowMs = options.nowMs ?? Date.now();
@@ -209,6 +217,7 @@ export async function placeWorkoutLibraryForUser(
         response = await mutateTrainingScheduleForUser(uid, scheduleRequest, {
             db, nowMs, additionalWriteBudget: 1,
             transactionPrecondition: async transaction => {
+                await options.transactionPrecondition?.(transaction);
                 const [receipt, current] = await Promise.all([transaction.get(receiptRef), transaction.get(itemRef)]);
                 placementReceiptExists = receipt.exists;
                 if (receipt.exists) {
@@ -232,6 +241,7 @@ export async function placeWorkoutLibraryForUser(
                         : (result.plans.find(plan => plan.id === request.planId)?.revision ?? null) };
                 transaction.create(receiptRef, { requestHash, response: placed, createdAtMs: nowMs,
                     expireAt: Timestamp.fromMillis(nowMs + RECEIPT_RETENTION_MS) });
+                options.transactionPostcondition?.(transaction, placed);
             },
         });
     } catch (error) {

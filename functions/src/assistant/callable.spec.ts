@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { HttpsError } from 'firebase-functions/v2/https';
+import { encodeOpaqueValue } from '../mcp/data.service';
 import {
   AssistantConversationStoreError,
   createAssistantRequestFingerprint,
@@ -286,6 +287,35 @@ describe('Assistant callable', () => {
       arguments: { proposalRef: proposal.proposalRef, permissionMode: 'combined' },
     }));
     expect(store.clearTrainingProposal).toHaveBeenCalledWith('user-1', 'conversation-1', proposal.proposalRef);
+  });
+
+  it('routes a confirmed saved-workout proposal only to the library apply path', async () => {
+    const { store } = createDependencies();
+    const proposalRef = encodeOpaqueValue('training_proposal', { kind: 'library-proposal',
+      id: 'library-proposal-1', createdAtMs: 1 }, 'user-1', 'first-party-assistant-v1:conversation-1');
+    const proposal = { proposalRef, permissionMode: 'schedule' as const,
+      expiresAtMs: Date.now() + 60_000, scheduleRevision: 7,
+      summary: 'Place a saved workout.', requiresConfirmation: true as const,
+      changes: [{ index: 0, kind: 'place', summary: 'Add two copies.' }], providerPreviews: [] };
+    vi.mocked(store.getActiveConversationState).mockResolvedValue({
+      conversation: { version: 1, conversationId: 'conversation-1', messages: [],
+        expiresAt: '2026-10-10T12:00:00.000Z' }, pendingRequestId: null, locationAccess: 'coordinate_free',
+      trainingPlansEnabled: true, trainingPlanChangesEnabled: true, trainingDeliveryEnabled: false,
+      pendingTrainingProposal: proposal,
+    });
+    const applySchedule = vi.fn();
+    const applyLibrary = vi.fn().mockResolvedValue({ proposalRef, status: 'applied', kind: 'place',
+      libraryRevision: 1, scheduleRevision: 8, savedWorkoutRef: 'saved', workoutRefs: ['one', 'two'] });
+    await expect(runApplyAssistantTrainingProposal({ proposalRef, permissionMode: 'schedule',
+      conversationId: 'conversation-1', confirm: true }, context, store, applySchedule, applyLibrary))
+      .resolves.toMatchObject({ status: 'applied', scheduleRevision: 8,
+        changes: [{ kind: 'place', message: '2 workouts added to the schedule.' }], providers: [] });
+    expect(applySchedule).not.toHaveBeenCalled();
+    expect(applyLibrary).toHaveBeenCalledWith(expect.objectContaining({
+      connectionId: 'first-party-assistant-v1:conversation-1',
+      scopes: ['training-plans:read', 'training-plans:write'],
+    }));
+    expect(store.clearTrainingProposal).toHaveBeenCalledWith('user-1', 'conversation-1', proposalRef);
   });
 
   it('does not expose unexpected apply failures through the Assistant callable', async () => {

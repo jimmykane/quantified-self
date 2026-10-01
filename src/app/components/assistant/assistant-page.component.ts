@@ -28,6 +28,7 @@ import {
   type AssistantConversation,
   type AssistantLocationAccess,
   type AssistantMessage,
+  type AssistantTrainingProposalPreview,
   type AssistantVisual,
 } from '@shared/assistant.types';
 import type { AssistantQuotaStatus } from '@shared/assistant.types';
@@ -175,7 +176,7 @@ export class AssistantPageComponent implements OnInit, OnDestroy {
   readonly trainingPlansEnabled = signal(false);
   readonly trainingPlanChangesEnabled = signal(false);
   readonly trainingDeliveryEnabled = signal(false);
-  readonly pendingTrainingProposal = signal<import('@shared/assistant.types').AssistantTrainingProposalPreview | null>(null);
+  readonly pendingTrainingProposal = signal<AssistantTrainingProposalPreview | null>(null);
   readonly pendingContentProposal = signal<AssistantContentProposalPreview | null>(null);
   readonly applyingTrainingProposal = signal(false);
   readonly trainingProposalResult = signal<string | null>(null);
@@ -653,6 +654,11 @@ export class AssistantPageComponent implements OnInit, OnDestroy {
     await this.replaceConversation('coordinate_free', false);
   }
 
+  isSavedWorkoutProposal(proposal: AssistantTrainingProposalPreview): boolean {
+    const libraryKinds = new Set(['create', 'save-workout', 'copy', 'update', 'set-status', 'delete', 'place']);
+    return proposal.changes.length > 0 && proposal.changes.every(change => libraryKinds.has(change.kind));
+  }
+
   async applyPendingTrainingProposal(): Promise<void> {
     const proposal = this.pendingTrainingProposal();
     const conversationId = this.conversation()?.conversationId;
@@ -668,7 +674,9 @@ export class AssistantPageComponent implements OnInit, OnDestroy {
       });
       this.pendingTrainingProposal.set(null);
       if (result.status === 'applied') {
-        this.trainingProposalResult.set('Training changes applied. Provider updates or checks are queued where applicable.');
+        this.trainingProposalResult.set(this.isSavedWorkoutProposal(proposal)
+          ? (result.changes[0]?.message ?? 'Saved workout change applied.')
+          : 'Training changes applied. Provider updates or checks are queued where applicable.');
       } else {
         const affectedProviders = [...new Set(result.providers
           .filter(item => item.status === 'blocked' || item.status === 'failed')

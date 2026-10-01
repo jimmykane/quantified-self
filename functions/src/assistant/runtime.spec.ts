@@ -148,6 +148,14 @@ describe('Training preview model-tool selection', () => {
       .toBe('preview_strength_workout_change');
     expect(selectAssistantTrainingPreviewTool('Edit my strength workout sets.'))
       .toBe('preview_strength_workout_change');
+    expect(selectAssistantTrainingPreviewTool('Save this planned workout to my workout library.'))
+      .toBe('preview_saved_workout_change');
+    expect(selectAssistantTrainingPreviewTool('Save this workout to my library.'))
+      .toBe('preview_saved_workout_change');
+    expect(selectAssistantTrainingPreviewTool('Place my saved workout on October 4 and 11 in this plan.'))
+      .toBe('preview_saved_workout_change');
+    expect(selectAssistantTrainingPreviewTool('Archive the saved recipe, but do not change scheduled workouts.'))
+      .toBe('preview_saved_workout_change');
   });
 
   it('advertises only the selected preview to Gemini while retaining authorized MCP tools', async () => {

@@ -6513,9 +6513,19 @@ export function createMcpDataService(
       return previewCreatePlannedWorkout(input);
     },
 
+    async previewSavedWorkoutChange(input: import('./training-plans-write.service').TrainingWriteInput) {
+      const { previewSavedWorkoutChange } = await import('./workout-library-write.service');
+      return previewSavedWorkoutChange(input);
+    },
+
     async applyTrainingChanges(input: import('./training-plans-write.service').TrainingWriteInput) {
       const { applyTrainingChanges } = await import('./training-plans-write.service');
       return applyTrainingChanges(input);
+    },
+
+    async applySavedWorkoutChange(input: import('./training-plans-write.service').TrainingWriteInput) {
+      const { applySavedWorkoutChange } = await import('./workout-library-write.service');
+      return applySavedWorkoutChange(input);
     },
 
     async queryTimelineNotes(input: McpTimelineNotesInput) {

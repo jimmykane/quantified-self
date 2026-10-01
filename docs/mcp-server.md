@@ -60,8 +60,17 @@ Saved-workout reads are additive under the existing `training-plans:read` grant.
 references, scan at most 200 library entries and return at most 25 per page; the cursor binds filters, limit and
 private library revision. An edit invalidates an older cursor. Exact reads validate the full recipe and strength draft;
 private receipts, tombstones, IDs and delivery records stay excluded. Library recipes carry no date, completion link
-or sync consent. Existing Training write proposals cannot create, edit or place saved recipes. Approval-gated MCP and
-built-in Assistant library changes are tracked separately in #780; browser callables do not widen MCP authority.
+or sync consent. Additive #780 `preview_saved_workout_change` and `apply_saved_workout_change` provide one strict
+library or placement operation per approval. They require both `training-plans:read` and `training-plans:write`, with
+no delivery grant. The preview takes exact schedule/library revisions and opaque source/item/plan references, checks
+capacity and plan range, and binds owner, connection, grant generation and a 15-minute expiry. The separate apply is
+idempotent and rechecks those conditions inside the existing sanitized mutation transaction. Copying a saved recipe
+creates a new library identity; placing one creates independent scheduled identities on 1–100 sorted distinct dates.
+Permanent library deletion removes only the saved recipe, never existing scheduled snapshots. Active-plan placements
+follow only that plan's pre-existing sync choice; Standalone placements do not acquire Send consent. The proposal,
+receipt and underlying mutation remain server-private; browser callables do not widen MCP authority. The built-in
+Assistant exposes only preview to the model and retains its app-owned confirmation gate. These additive tools require
+a separately approved Functions release and client catalog refresh before they are available to connected clients.
 Fresh schedule/account-deletion/plan-deletion fences run before and after results, as do external connection consent and
 grant-generation checks. Settings fingerprints are read only to correlate current delivery evidence and never returned.
 An oversized manual or separately approved MCP plan shift may temporarily hold the same internal bulk-operation fence
@@ -109,6 +118,14 @@ proposal preview and approval remain required, including an out-of-range plan ex
 planned identity without a completion link or standalone delivery opt-in; an existing active-plan setting may later send
 it. This UI/Assistant guidance update adds no MCP tool, schema, scope, consent or provider action and preserves the
 registered wire contract.
+For the undated Workout Library, read the exact saved recipe or source workout and both current revisions first.
+`preview_saved_workout_change` accepts one strict action: create, save from schedule, duplicate, edit, archive/restore,
+confirmed permanent recipe deletion, or placement on 1–100 explicit sorted dates. Placement requires an exact
+destination plan reference and revision, or `null` for Standalone. A plan-range extension must be explicitly confirmed
+in the preview; ambiguous source, plan or dates require a question rather than a guessed reference. The proposal
+changes nothing. Only `apply_saved_workout_change`, separately subject to the MCP host's native approval, commits the
+same owner/connection/grant/revision-bound operation. Its replay returns the committed result; it cannot add provider
+consent or rewrite an already scheduled copy when a library recipe changes.
 The host may let a user configure automatic tool approval, which the server cannot detect, so users who want to inspect
 every proposal must keep per-call approval enabled in their client. ChatGPT's destructive annotation triggers its
 native approval request. Claude users must not choose **Allow always**, and should disable Training write tools while
@@ -875,7 +892,9 @@ The analytics and map entries follow the
 | `assess_planned_workout_compatibility` | `training-plans:read` | Local mapping fidelity for one current workout; no connection/provider call or delivery guarantee |
 | `preview_create_planned_workout` | `training-plans:read` + `training-plans:write`; optional delivery also requires `training-delivery:write` | Focused one-workout proposal with optional atomic initial send; server-owned local key |
 | `preview_training_changes` | `training-plans:read` plus the relevant Training write scope(s) | Strict bounded proposal with authored and per-provider effects; no authored mutation |
+| `preview_saved_workout_change` | `training-plans:read` + `training-plans:write` | One revision-bound library edit or 1–100-date placement preview; no provider consent or authored mutation |
 | `apply_training_changes` | Same scopes bound into the proposal; native client approval gate | Idempotently applies a preview-created proposal and returns independent authored/provider outcomes |
+| `apply_saved_workout_change` | `training-plans:read` + `training-plans:write`; native client approval gate | Idempotently applies an exact library proposal through the existing sanitized mutation service |
 | `list_health_metrics` | `health:read` | Static allowlisted Health capabilities, Sports Lib types/units, range limits and additional body-composition permission requirements |
 | `query_health_metric` | `health:read`; also `measurements:read` for body composition | Source-separated stored scalars or bounded representative sample trends; identity-free calendar-day body composition |
 | `get_hrv_personal_range` | `health:read` + `sleep:read` | Shared rolling nightly HRV baseline, historical classifications and missing-day ranges, separated by source |

@@ -485,6 +485,9 @@ const trainingPreviewFixture = { proposalRef: 'opaque-proposal-reference', expir
 const trainingApplyFixture = { proposalRef: 'opaque-proposal-reference', status: 'applied' as const,
   scheduleRevision: 2, changes: [{ index: 0, kind: 'rename-plan', status: 'applied' as const,
     message: 'Renamed the plan.' }], providers: [], createdReferences: [] };
+const savedWorkoutApplyFixture = { proposalRef: 'opaque-proposal-reference', status: 'applied' as const,
+  kind: 'create' as const, libraryRevision: 2, scheduleRevision: 1,
+  savedWorkoutRef: 'opaque-saved-workout-reference', workoutRefs: [] };
 const trainingImpactFixture = {
   schemaVersion: 1 as const,
   mode: 'session' as const,
@@ -554,7 +557,9 @@ function createFixtureDataService(
     previewTrainingChanges: vi.fn().mockResolvedValue(trainingPreviewFixture),
     previewStrengthWorkoutChange: vi.fn().mockResolvedValue(trainingPreviewFixture),
     previewPlannedWorkoutV2Change: vi.fn().mockResolvedValue(trainingPreviewFixture),
+    previewSavedWorkoutChange: vi.fn().mockResolvedValue(trainingPreviewFixture),
     applyTrainingChanges: vi.fn().mockResolvedValue(trainingApplyFixture),
+    applySavedWorkoutChange: vi.fn().mockResolvedValue(savedWorkoutApplyFixture),
     getActivityDescription: vi.fn().mockResolvedValue({ activityRef: 'opaque-activity-ref', description: 'Easy run. Felt tired.\nKeep this as reported context.' }),
     queryTimelineNotes: vi.fn().mockResolvedValue({
       startDate: '2026-07-01', endDate: '2026-07-02',
@@ -1377,7 +1382,10 @@ const successfulToolArguments: Record<
     structure: { version: 1, sport: 'Swimming', poolLength: { meters: 25, presentation: 'meters' },
       nodes: [{ kind: 'step', id: 'swim', purpose: 'work', ending: { kind: 'distance', meters: 1000 }, targets: [] }] },
   } },
+  preview_saved_workout_change: { expectedScheduleRevision: 1, expectedLibraryRevision: 1,
+    change: { kind: 'copy', savedWorkoutRef: 'opaque-saved-workout-reference', expectedRevision: 1 } },
   apply_training_changes: { proposalRef: 'opaque-proposal-reference', permissionMode: 'schedule' },
+  apply_saved_workout_change: { proposalRef: 'opaque-proposal-reference', permissionMode: 'schedule' },
   get_activity_description: { activityRef: 'opaque-activity-ref' },
   query_timeline_notes: { startDate: '2026-07-01', endDate: '2026-07-02' },
   update_event_tags: { activityRef: ACTIVITY_REF, expectedTags: ['Race'], tags: ['Race', 'Reviewed'] },
@@ -1999,12 +2007,14 @@ describe.each<FixtureTransport>(['in-memory', 'legacy-http', 'modern-http'])('MC
     expect(Buffer.byteLength(JSON.stringify(planLibraryReads), 'utf8')).toBeLessThan(20 * 1024);
     const planWriteTools = tools.filter(tool => (TRAINING_WRITE_TOOLS as readonly string[]).includes(tool.name));
     const planWriteExtensions = planWriteTools.filter(tool => (TRAINING_WRITE_EXTENSION_TOOLS as readonly string[]).includes(tool.name)
-      && tool.name !== 'preview_planned_workout_v2_change');
+      && tool.name !== 'preview_planned_workout_v2_change' && tool.name !== 'preview_saved_workout_change');
     const planWriteV2 = planWriteTools.filter(tool => tool.name === 'preview_planned_workout_v2_change');
+    const planWriteLibrary = planWriteTools.filter(tool => tool.name === 'preview_saved_workout_change');
     const planWriteCore = planWriteTools.filter(tool => !(TRAINING_WRITE_EXTENSION_TOOLS as readonly string[]).includes(tool.name));
     expect(Buffer.byteLength(JSON.stringify(planWriteCore), 'utf8')).toBeLessThan(48 * 1024);
     expect(Buffer.byteLength(JSON.stringify(planWriteExtensions), 'utf8')).toBeLessThan(12 * 1024);
     expect(Buffer.byteLength(JSON.stringify(planWriteV2), 'utf8')).toBeLessThan(20 * 1024);
+    expect(Buffer.byteLength(JSON.stringify(planWriteLibrary), 'utf8')).toBeLessThan(24 * 1024);
     const applyTrainingChangesTool = tools.find(tool => tool.name === 'apply_training_changes');
     expect(applyTrainingChangesTool?.title).toBe('Apply previewed Training changes');
     expect(applyTrainingChangesTool?.annotations).toEqual({
@@ -2395,6 +2405,42 @@ describe.each<FixtureTransport>(['in-memory', 'legacy-http', 'modern-http'])('MC
         expect(result.isError).toBe(true); expect(result).not.toHaveProperty('structuredContent');
         expect(JSON.stringify(result)).not.toContain('PRIVATE-TRAINING-CANARY');
       }
+    }
+  });
+
+  it('keeps saved-workout writes behind both grants and rejects private proposal fields on every transport', async () => {
+    const service = createFixtureDataService();
+    const readOnly = await connectFixtureServer(service, [MCP_OAUTH_SCOPES.TrainingPlansRead]);
+    connections.push(readOnly);
+    const readNames = (await readOnly.client.listTools()).tools.map(tool => tool.name);
+    expect(readNames).toContain('get_saved_workout');
+    expect(readNames).not.toContain('preview_saved_workout_change');
+    expect(readNames).not.toContain('apply_saved_workout_change');
+    const connection = await connectFixtureServer(service,
+      [MCP_OAUTH_SCOPES.TrainingPlansRead, MCP_OAUTH_SCOPES.TrainingPlansWrite]);
+    connections.push(connection);
+    const tools = (await connection.client.listTools()).tools;
+    expect(tools.find(tool => tool.name === 'apply_saved_workout_change')?.annotations)
+      .toMatchObject({ readOnlyHint: false, destructiveHint: true, idempotentHint: true });
+    const args = successfulToolArguments.preview_saved_workout_change;
+    const injected = await connection.client.callTool({ name: 'preview_saved_workout_change',
+      arguments: { ...args, uid: 'attacker' } });
+    expect(injected.isError).toBe(true);
+    expect(service.previewSavedWorkoutChange).not.toHaveBeenCalled();
+    for (const field of ['uid', 'remoteWorkoutId', 'mutationId', 'receipt']) {
+      service.previewSavedWorkoutChange = vi.fn().mockResolvedValue({ ...trainingPreviewFixture,
+        [field]: 'PRIVATE-LIBRARY-CANARY' });
+      const preview = await connection.client.callTool({ name: 'preview_saved_workout_change', arguments: args });
+      expect(preview.isError, field).toBe(true);
+      expect(preview).not.toHaveProperty('structuredContent');
+      expect(JSON.stringify(preview)).not.toContain('PRIVATE-LIBRARY-CANARY');
+      service.applySavedWorkoutChange = vi.fn().mockResolvedValue({ ...savedWorkoutApplyFixture,
+        [field]: 'PRIVATE-LIBRARY-CANARY' });
+      const applied = await connection.client.callTool({ name: 'apply_saved_workout_change',
+        arguments: successfulToolArguments.apply_saved_workout_change });
+      expect(applied.isError, field).toBe(true);
+      expect(applied).not.toHaveProperty('structuredContent');
+      expect(JSON.stringify(applied)).not.toContain('PRIVATE-LIBRARY-CANARY');
     }
   });
 

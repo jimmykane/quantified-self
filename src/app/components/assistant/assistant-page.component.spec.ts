@@ -300,6 +300,24 @@ describe('AssistantPageComponent', () => {
     expect(review.querySelectorAll('.training-proposal-actions button')).toHaveLength(2);
   });
 
+  it('reviews every saved-workout placement date without irrelevant provider-failure copy', async () => {
+    component.conversation.set(chatResponse.conversation);
+    component.pendingTrainingProposal.set({ ...trainingProposal, permissionMode: 'schedule',
+      summary: 'Place one saved workout on two dates in Standalone.', providerPreviews: [],
+      changes: [{ index: 0, kind: 'place', summary: 'Dates 1–2: 2026-10-02, 2026-10-09' }] });
+    assistantService.applyTrainingProposal.mockResolvedValueOnce({ status: 'applied', scheduleRevision: 2,
+      changes: [{ index: 0, kind: 'place', status: 'applied', message: '2 workouts added to the schedule.' }],
+      providers: [] });
+    fixture.detectChanges();
+    const review = fixture.nativeElement.querySelector('.training-proposal') as HTMLElement;
+    expect(review.textContent).toContain('Review saved workout change');
+    expect(review.textContent).toContain('2026-10-02, 2026-10-09');
+    expect(review.textContent).toContain('Standalone copies need their own Send action');
+    expect(review.textContent).not.toContain('Provider results are independent');
+    await component.applyPendingTrainingProposal();
+    expect(component.trainingProposalResult()).toBe('2 workouts added to the schedule.');
+  });
+
   it('reviews and explicitly applies or dismisses one content change', async () => {
     component.conversation.set(chatResponse.conversation);
     component.pendingContentProposal.set(contentProposal);

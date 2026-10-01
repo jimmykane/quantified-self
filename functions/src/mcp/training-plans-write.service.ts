@@ -196,7 +196,7 @@ function accessGeneration(data: FirebaseFirestore.DocumentData): string {
   return JSON.stringify([data.grantId ?? null, data.createdAtMs ?? null, [...(Array.isArray(data.scopes) ? data.scopes : [])].sort()]);
 }
 
-async function assertAuthorityInTransaction(
+export async function assertAuthorityInTransaction(
   deps: Pick<TrainingWriteDependencies, 'db' | 'now'>,
   tx: FirebaseFirestore.Transaction,
   uid: string,

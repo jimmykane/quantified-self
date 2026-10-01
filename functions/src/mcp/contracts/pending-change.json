@@ -1,7 +1,7 @@
 {
   "formatVersion": 1,
-  "candidateSha256": "3c3b66368f9eadf760943ff6ca954b40df2295c9b35ceb2385ac32827b83ed72",
+  "candidateSha256": "92094913f1d1d2fb25cd53abad9a3c19d2dbdcb6695e20a58b234ae4d11f488a",
   "lifecycleAction": "developer-refresh",
-  "summary": "Retain prior Training, Health, Timeline, activity, OAuth and PKCE changes, including event edits, Strength/pool reads, Training snapshots and identity-safe TSS impact. Add read-only saved-workout list/detail tools under training-plans:read; library writes remain separately tracked. Preserve strict outputs, scope dependencies, native approval and provider boundaries. Refresh and rescan after deployment.",
+  "summary": "Retain prior Training, Health, Timeline, activity, OAuth and PKCE changes, including event edits, Strength/pool reads, Training snapshots and identity-safe TSS impact. Add saved-workout reads and focused approval-gated library preview/apply tools under the existing Training read and plan/write grants. Preserve strict outputs, scope dependencies, native approval and provider boundaries. Refresh and rescan after separately approved deployment.",
   "rescanRequired": true
 }

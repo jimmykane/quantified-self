@@ -18,7 +18,7 @@ const DOCUMENT_LIFETIME_MS = 15 * 60 * 1000;
 export type GuardedTrainingPreviewTool = Extract<
   TrainingWriteTool,
   'preview_create_planned_workout' | 'preview_training_changes' | 'preview_strength_workout_change'
-    | 'preview_planned_workout_v2_change'
+    | 'preview_planned_workout_v2_change' | 'preview_saved_workout_change'
 >;
 
 export interface InvalidTrainingPreviewCall {
@@ -117,6 +117,11 @@ export function invalidTrainingPreviewTool(body: unknown): InvalidTrainingPrevie
   }
   if (toolName === 'preview_planned_workout_v2_change') {
     const parsed = TRAINING_WRITE_INPUTS.preview_planned_workout_v2_change.safeParse(args);
+    return parsed.success ? null : { toolName,
+      validationIssues: summarizeMcpValidationIssues(parsed.error) ?? [] };
+  }
+  if (toolName === 'preview_saved_workout_change') {
+    const parsed = TRAINING_WRITE_INPUTS.preview_saved_workout_change.safeParse(args);
     return parsed.success ? null : { toolName,
       validationIssues: summarizeMcpValidationIssues(parsed.error) ?? [] };
   }

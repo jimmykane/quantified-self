@@ -338,6 +338,7 @@ async function cleanupUserScopedGeneratedState(uid: string): Promise<void> {
             TRAINING_DELIVERY_VERIFICATIONS, TRAINING_PROVIDER_CAPACITY]
             .map(id => ({ label: id, ref: userRef.collection(id) })),
         { label: 'training MCP proposals', ref: userRef.collection('trainingMcpProposals') },
+        { label: 'training MCP library proposals', ref: userRef.collection('trainingMcpLibraryProposals') },
     ];
 
     for (const target of cleanupTargets) {

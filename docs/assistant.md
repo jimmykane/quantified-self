@@ -136,8 +136,11 @@ Two additional default-off toggles enable **Plan and workout changes** and **Pla
 the read toggle but remain independent of each other. The first grants `training-plans:write`; the second grants
 `training-delivery:write`. A write-enabled in-process session exposes the focused single-workout preview plus the bounded
 batch preview to Gemini. The focused preview can include an atomic initial provider send only when the delivery toggle is
-also enabled. The model can prepare one strict proposal after reading current records; it cannot call
-`apply_training_changes` or provider
+also enabled. The model can prepare one strict proposal after reading current records. For Workout Library changes it
+must also read the library revision and exact saved recipe or source workout, then use the additive library preview.
+That preview supports one create, save, duplicate, edit, archive/restore, confirmed permanent recipe delete, or
+explicit-date placement. Saved recipes have no date or provider consent. The model cannot call
+`apply_training_changes`, `apply_saved_workout_change` or provider
 transport. Quantified Self stores the safe preview with the conversation and shows an **Apply changes** / **Dismiss**
 surface. Applying uses a dedicated Auth + App Check callable that rechecks the same conversation generation and toggles,
 then invokes the common proposal service. Dismissal clears the server-owned proposal without changes. New chat, a toggle

@@ -111,8 +111,16 @@ the step or an older read that omits the field. An absent length remains unspeci
 For a reusable workout recipe, discover the advertised saved-workout list and detail reads with
 `training-plans:read`. A library item is an undated authored snapshot, not a scheduled workout, completed activity,
 template revision history or provider copy. Read its complete recipe only when needed; never count library items in
-calendar totals or infer a scheduled workout or provider consent from saving one. The MCP library surface is read-only:
-do not invent a placement or library-edit mutation. Direct the user to the Training workspace for those changes.
+calendar totals or infer a scheduled workout or provider consent from saving one. When a write tool is advertised and
+the separate `training-plans:write` grant is present, read the exact source or recipe, its revision, and current
+schedule and library revisions. Use the focused library preview for one create, save-from-schedule, duplicate, edit,
+archive/restore, confirmed permanent recipe deletion, or placement. For placement supply 1–100 explicit unique sorted
+dates and an exact destination plan or Standalone; ask rather than guess when the recipe, plan or date is ambiguous.
+Confirm a plan-range extension in the preview only after the user accepts the new range. A preview changes nothing;
+the separate apply uses the MCP host's native approval or the built-in Assistant's in-app confirmation. Recipe deletion
+does not remove scheduled copies. Placement creates independent planned snapshots and never grants service sync consent;
+an active plan's existing setting may send its copies, while Standalone needs a separate Send action. If the focused
+write tool is absent, explain that the permission or client catalog may need an update and use the Training workspace.
 
 When the user clearly asks for a change, first read the affected current records and schedule revision. Schedule changes
 require the separate plan/workout-change grant; delivery changes require the separate provider-delivery grant, and both

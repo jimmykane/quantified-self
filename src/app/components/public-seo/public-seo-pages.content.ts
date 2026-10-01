@@ -760,7 +760,7 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
       },
       {
         question: 'Can an MCP client read my Training plans and planned workouts?',
-        answer: 'With separate Training permission, clients can read plans, workouts, instructions, an authored pool-swim length when selected, notes, exact completion links and sanitized sync status. Pool length is not step distance. Separate change grants permit bounded proposals, including a pool-length preview; apply uses the client\'s approval controls. Provider delivery remains Pro and connection-gated; sync confirms cloud delivery, not watch receipt.',
+        answer: 'With separate Training permission, clients can read plans, workouts, saved workout recipes, instructions, an authored pool-swim length when selected, notes, exact completion links and sanitized sync status. Pool length is not step distance. The separate plan-and-workout change grant permits a bounded preview to save, edit or place a library recipe on explicit dates; a distinct apply uses the client\'s approval controls. Saving a recipe never grants provider sync. Provider delivery remains Pro and connection-gated; sync confirms cloud delivery, not watch receipt.',
       },
       {
         question: 'Why are my Training plan tools missing?',

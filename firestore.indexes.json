@@ -2182,6 +2182,30 @@
       "indexes": []
     },
     {
+      "collectionGroup": "trainingMcpLibraryProposals",
+      "fieldPath": "expireAt",
+      "ttl": true,
+      "indexes": []
+    },
+    {
+      "collectionGroup": "trainingMcpLibraryProposals",
+      "fieldPath": "request",
+      "ttl": false,
+      "indexes": []
+    },
+    {
+      "collectionGroup": "trainingMcpLibraryProposals",
+      "fieldPath": "preview",
+      "ttl": false,
+      "indexes": []
+    },
+    {
+      "collectionGroup": "trainingMcpLibraryProposals",
+      "fieldPath": "result",
+      "ttl": false,
+      "indexes": []
+    },
+    {
       "collectionGroup": "COROSAPIWorkoutQueue",
       "fieldPath": "expireAt",
       "ttl": true,

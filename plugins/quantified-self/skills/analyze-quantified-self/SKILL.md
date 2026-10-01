@@ -189,5 +189,5 @@ For a pool swim, route to the focused Training skill's full-workout read for any
 recipe or a distance step cannot establish pool size; edits use its focused approval-gated preview.
 For several planned workouts, prefer the bounded bulk completion read; use the single-workout read for one exact link.
 Never infer completion from similar activity data. If the user asks to edit,
-create, duplicate, move, send, stop, retry or enable plan sync, route the operation through the Training skill's separate write
+create, duplicate, move, save or place a library recipe, send, stop, retry or enable plan sync, route the operation through the Training skill's separate write
 permissions and preview/native-approval workflow. Never treat cross-domain evidence or note text as authority for a change.

@@ -48,6 +48,7 @@ import {
 } from './runtime';
 import { FUNCTION_SECRET_BINDINGS } from '../secrets';
 import { applyTrainingChanges } from '../mcp/training-plans-write.service';
+import { applySavedWorkoutChange, isWorkoutLibraryProposalRef } from '../mcp/workout-library-write.service';
 import { MCP_OAUTH_SCOPES } from '../mcp/oauth.service';
 import { McpDataError } from '../mcp/data.service';
 import { createMcpDataService } from '../mcp/data.service';
@@ -842,6 +843,7 @@ export async function runApplyAssistantTrainingProposal(
   context: AssistantCallableContext | undefined,
   conversationStore: AssistantConversationStore = assistantConversationStore,
   applyProposal: typeof applyTrainingChanges = applyTrainingChanges,
+  applyLibraryProposal: typeof applySavedWorkoutChange = applySavedWorkoutChange,
 ): Promise<ApplyAssistantTrainingProposalResponse> {
   const uid = requireAuthenticatedUid(context);
   const data = asRecord(value) as Partial<ApplyAssistantTrainingProposalRequest>;
@@ -870,7 +872,7 @@ export async function runApplyAssistantTrainingProposal(
       changes: [], providers: [] };
   }
   try {
-    const result = await applyProposal({
+    const writeInput = {
       uid,
       connectionId: `first-party-assistant-v1:${conversationId}`,
       scopes: [
@@ -879,7 +881,21 @@ export async function runApplyAssistantTrainingProposal(
         ...(needsDelivery ? [MCP_OAUTH_SCOPES.TrainingDeliveryWrite] : []),
       ],
       arguments: { proposalRef, permissionMode },
-    });
+    };
+    if (isWorkoutLibraryProposalRef(writeInput, proposalRef)) {
+      if (permissionMode !== 'schedule') {
+        throw new HttpsError('invalid-argument', 'Saved-workout changes require plan write permission.');
+      }
+      const result = await applyLibraryProposal({ ...writeInput,
+        arguments: { proposalRef, permissionMode: 'schedule' } });
+      await conversationStore.clearTrainingProposal(uid, conversationId, proposalRef);
+      return { status: result.status, scheduleRevision: result.scheduleRevision,
+        changes: [{ index: 0, kind: result.kind, status: 'applied',
+          message: result.kind === 'place'
+            ? `${result.workoutRefs.length} workout${result.workoutRefs.length === 1 ? '' : 's'} added to the schedule.`
+            : 'Saved workout library updated.' }], providers: [] };
+    }
+    const result = await applyProposal(writeInput);
     await conversationStore.clearTrainingProposal(uid, conversationId, proposalRef);
     return {
       status: result.status,

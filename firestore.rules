@@ -402,6 +402,7 @@ service cloud.firestore {
         match /trainingDeliveryState/{document=**} { allow read, write: if false; }
         match /trainingDeliveryScopes/{document=**} { allow read, write: if false; }
         match /trainingMcpProposals/{document=**} { allow read, write: if false; }
+        match /trainingMcpLibraryProposals/{document=**} { allow read, write: if false; }
 
         match /sleepSessions/{sleepSessionID} {
           allow read: if request.auth.uid == userID;

@@ -878,6 +878,7 @@ describe('MCP HTTP scope enforcement', () => {
       MCP_OAUTH_SCOPES.TrainingPlansWrite,
       MCP_OAUTH_SCOPES.TrainingDeliveryWrite,
     ])).resolves.toEqual([
+      'apply_saved_workout_change',
       'apply_training_changes',
       'assess_planned_workout_compatibility',
       'get_planned_workout',
@@ -893,6 +894,7 @@ describe('MCP HTTP scope enforcement', () => {
       'list_training_plans',
       'preview_create_planned_workout',
       'preview_planned_workout_v2_change',
+      'preview_saved_workout_change',
       'preview_strength_workout_change',
       'preview_training_changes',
       'query_planned_workouts',
