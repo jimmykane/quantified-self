@@ -110,6 +110,7 @@ describe('SummariesComponent', () => {
       getAppTheme: vi.fn().mockReturnValue(of('light')),
     };
     mockUserService = {
+      user: signal(null),
       updateUserProperties: vi.fn().mockResolvedValue(true),
     };
     mockDashboardDerivedMetricsService = {
@@ -370,7 +371,8 @@ describe('SummariesComponent', () => {
   });
 
   it('reopens the selected Today-sheet day after returning from its full-day page', () => {
-    const restoration = { sourceUrl: '/', dateKey: '2026-08-03', surface: 'today-sheet' as const };
+    const restoration = { sourceUrl: '/', dateKey: '2026-08-03', surface: 'today-sheet' as const,
+      calendarReturn: { view: 'month' as const, anchor: '2026-08-01' } };
     const navigation = TestBed.inject(CalendarDayDetailsNavigationService);
     const restorationFor = vi.spyOn(navigation, 'restorationFor').mockReturnValue(restoration);
     const consume = vi.spyOn(navigation, 'consumeRestoration').mockImplementation(() => {
@@ -384,7 +386,8 @@ describe('SummariesComponent', () => {
 
     expect(consume).toHaveBeenCalledWith(restoration);
     expect(mockBottomSheet.open).toHaveBeenCalledWith(expect.any(Function), expect.objectContaining({
-      data: expect.objectContaining({ initialDateKey: '2026-08-03', privateHealthEnabled: true }),
+      data: expect.objectContaining({ initialDateKey: '2026-08-03', privateHealthEnabled: true,
+        initialPeriodContext: restoration.calendarReturn }),
     }));
     expect(mockBottomSheet.open).toHaveBeenCalledOnce();
   });
@@ -609,6 +612,12 @@ describe('SummariesComponent', () => {
     fixture.detectChanges();
     expect(calendarSection?.querySelector('a[routerLink="/calendar"]')?.getAttribute('href'))
       .toBe('/calendar?view=month&date=2026-09-09');
+
+    fixture.debugElement.query(By.css('.dashboard-calendar-section app-tile-chart'))
+      .triggerEventHandler('calendarStateChange', { view: '30d', date: '2026-09-09', anchor: '2026-10-01' });
+    fixture.detectChanges();
+    expect(calendarSection?.querySelector('a[routerLink="/calendar"]')?.getAttribute('href'))
+      .toBe('/calendar?view=30d&date=2026-09-09&anchor=2026-10-01');
 
     component.user.settings.dashboardSettings.tiles = [kpi, activity];
     component.tiles = [kpi, activity];
@@ -2552,6 +2561,62 @@ describe('SummariesComponent', () => {
       range: 'all',
       activityTypes: getDashboardPowerCurveActivityTypes('running'),
     });
+  });
+
+  it.each([false, true])('saves only the Calendar mode, restoring the previous setting on failure (%s)', fails => {
+    component.user = { uid: 'user-1', settings: { dashboardSettings: { tiles: [{ type: TileTypes.Chart,
+      order: 0, chartType: DASHBOARD_ACTIVITY_CALENDAR_CHART_TYPE, size: { columns: 4, rows: 2 },
+      displaySettings: { calendarView: 'month' } }] } } } as any;
+    component.showActions = true;
+    component.tiles = [{ ...component.user.settings.dashboardSettings.tiles[0], kind: 'chart' }] as any;
+    let settle!: () => void;
+    const save = vi.spyOn(TestBed.inject(DashboardConfigurationService), 'save').mockImplementation(() => new Promise((resolve, reject) => {
+      settle = () => fails ? reject(new Error('Conflict')) : resolve();
+    }));
+    const changing = component.onCalendarViewChange(0, '30d');
+    expect(component.tiles[0].displaySettings.calendarView).toBe('30d');
+    expect(component.calendarSavingOrders.has(0)).toBe(true);
+    void component.onCalendarViewChange(0, 'month');
+    expect(save).toHaveBeenCalledOnce();
+    expect(save.mock.calls[0][2]).toEqual({ tiles: [{ ...component.user.settings.dashboardSettings.tiles[0], displaySettings: { calendarView: '30d' } }] });
+    if (fails) component.tiles[0] = { ...component.tiles[0], name: 'Updated while saving' };
+    settle();
+    return changing.then(() => {
+      expect(component.tiles[0].displaySettings.calendarView).toBe(fails ? 'month' : '30d');
+      if (fails) expect(component.tiles[0].name).toBe('Updated while saving');
+      expect(component.user.settings.dashboardSettings.tiles[0].displaySettings.calendarView).toBe(fails ? 'month' : '30d');
+      expect(component.calendarSavingOrders.size).toBe(0);
+    });
+  });
+
+  it('fences pending Calendar saves across account changes without unlocking the new owner save', async () => {
+    const owner = (uid: string) => ({ uid, settings: { dashboardSettings: { calendarDayContextLayoutVersion: 1,
+      tiles: [{ type: TileTypes.Chart, order: 0, chartType: DASHBOARD_ACTIVITY_CALENDAR_CHART_TYPE,
+        size: { columns: 4, rows: 1 }, displaySettings: { calendarView: 'month' } }] } } }) as any;
+    component.user = owner('user-1');
+    component.showActions = true;
+    component.tiles = [{ ...component.user.settings.dashboardSettings.tiles[0], kind: 'chart' }] as any;
+    const completions: (() => void)[] = [];
+    vi.spyOn(TestBed.inject(DashboardConfigurationService), 'save')
+      .mockImplementation(() => new Promise(resolve => completions.push(resolve)));
+    vi.spyOn(component, 'unsubscribeAndCreateCharts').mockResolvedValue(undefined);
+    const first = component.onCalendarViewChange(0, '30d');
+    const previous = component.user;
+    component.user = owner('user-2');
+    await component.ngOnChanges({ user: { previousValue: previous, currentValue: component.user,
+      firstChange: false, isFirstChange: () => false } as any });
+    component.tiles = [{ ...component.user.settings.dashboardSettings.tiles[0], kind: 'chart' }] as any;
+    const second = component.onCalendarViewChange(0, '30d');
+    completions[0]();
+    await first;
+    expect(component.calendarSavingOrders.has(0)).toBe(true);
+    expect(component.user.settings.dashboardSettings.tiles[0].displaySettings.calendarView).toBe('month');
+    expect(TestBed.inject(AppHapticsService).success).not.toHaveBeenCalled();
+    completions[1]();
+    await second;
+    expect(component.calendarSavingOrders.size).toBe(0);
+    expect(component.user.settings.dashboardSettings.tiles[0].displaySettings.calendarView).toBe('30d');
+    expect(TestBed.inject(AppHapticsService).success).toHaveBeenCalledOnce();
   });
 
   it('should persist derived chart range changes on the owning tile', async () => {

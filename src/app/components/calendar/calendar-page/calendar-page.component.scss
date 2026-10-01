@@ -43,6 +43,10 @@
   line-height: 18px;
 }
 
+.calendar-view-label--compact {
+  display: none;
+}
+
 .calendar-period-navigation {
   display: grid;
   grid-template-columns: 48px minmax(0, 1fr) auto 48px;
@@ -243,7 +247,8 @@
 @media (max-width: 720px) {
   .calendar-view-toggle {
     display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    width: 100%;
   }
 
   .calendar-period-navigation {
@@ -312,6 +317,14 @@
   .calendar-view-option mat-icon {
     display: none;
   }
+
+  .calendar-view-label--full {
+    display: none;
+  }
+
+  .calendar-view-label--compact {
+    display: inline;
+  }
 }
 
 
@@ -356,5 +369,9 @@
 }
 
 @media (max-width: 360px) {
-  .calendar-page--calm-month .calendar-period-navigation h2 { font-size: 14px; }
+  .calendar-page--calm-month .calendar-period-navigation h2 {
+    font-size: 14px;
+    line-height: 1.2;
+    white-space: normal;
+  }
 }

@@ -9,17 +9,25 @@ export interface CalendarDayDetailsRestoration {
   dateKey: string;
   surface?: 'today-sheet';
   deletedEventId?: string;
+  calendarReturn?: import('../helpers/activity-calendar.helper').ActivityCalendarPeriodContext;
 }
 
 @Injectable({ providedIn: 'root' })
 export class CalendarDayDetailsNavigationService {
   private readonly users = inject(AppUserService);
+  private returnOwnerUid: string | null = null;
   private pendingReturn: CalendarDayDetailsRestoration | null = null;
   private readonly restoration = signal<CalendarDayDetailsRestoration | null>(null);
   private readonly destination = signal<{ ownerUid: string; dateKey: string; expiresAtMs: number } | null>(null);
 
   constructor(router: Router) {
     effect(() => {
+      const uid = this.users.user()?.uid ?? null;
+      if (this.returnOwnerUid && uid !== this.returnOwnerUid) {
+        this.pendingReturn = null;
+        this.restoration.set(null);
+        this.returnOwnerUid = null;
+      }
       const destination = this.destination();
       if (destination && this.users.user()?.uid !== destination.ownerUid) this.destination.set(null);
     });
@@ -28,17 +36,19 @@ export class CalendarDayDetailsNavigationService {
     ).subscribe(event => this.handleNavigationStart(event));
   }
 
-  prepareReturn(sourceUrl: string, dateKey: string, surface?: 'today-sheet'): boolean {
+  prepareReturn(sourceUrl: string, dateKey: string, surface?: 'today-sheet', calendarReturn?: CalendarDayDetailsRestoration['calendarReturn']): boolean {
     const normalizedSourceUrl = normalizeLocalUrl(sourceUrl);
     const normalizedDateKey = normalizeDateKey(dateKey);
     if (!normalizedSourceUrl || !normalizedDateKey) {
       return false;
     }
 
+    this.returnOwnerUid = this.users.user()?.uid ?? null;
     this.pendingReturn = {
       sourceUrl: normalizedSourceUrl,
       dateKey: normalizedDateKey,
       ...(surface ? { surface } : {}),
+      ...(calendarReturn ? { calendarReturn } : {}),
     };
     this.restoration.set(null);
     return true;
@@ -114,7 +124,7 @@ export class CalendarDayDetailsNavigationService {
     }
 
     const targetUrl = normalizeLocalUrl(event.url);
-    if (event.navigationTrigger === 'popstate' && targetUrl === pendingReturn.sourceUrl) {
+    if (targetUrl === pendingReturn.sourceUrl) {
       this.pendingReturn = null;
       this.restoration.set(pendingReturn);
       return;

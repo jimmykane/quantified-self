@@ -9,6 +9,7 @@ import {
   normalizeDashboardDerivedChartRange,
 } from './dashboard-derived-chart-range.helper';
 import {
+  isDashboardActivityCalendarChartType,
   isDashboardEfficiencyTrendChartType,
   isDashboardFormChartType,
   isDashboardIntensityDistributionChartType,
@@ -24,6 +25,7 @@ export const DASHBOARD_FORM_TIMELINE_DEFAULT_WINDOW: AppDashboardFormTimelineWin
 const DASHBOARD_FORM_TIMELINE_WINDOWS = new Set<AppDashboardFormTimelineWindow>(['w', 'm', 'y']);
 
 interface NormalizeDashboardChartTileDisplaySettingsOptions {
+  includeCalendarView?: boolean;
   includeDerivedChartRange?: boolean;
   includeFormTimelineWindow?: boolean;
   includePowerCurveCompareMode?: boolean;
@@ -49,6 +51,9 @@ export function normalizeDashboardChartTileDisplaySettings(
     ? value as Partial<AppDashboardChartTileDisplaySettingsInterface>
     : {};
   const normalized: AppDashboardChartTileDisplaySettingsInterface = {};
+  if (options.includeCalendarView === true && (hasOwn(source, 'calendarView') || options.includeDefaults === true)) {
+    normalized.calendarView = source.calendarView === '30d' ? '30d' : 'month';
+  }
   const shouldNormalizeDerivedRange = options.includeDerivedChartRange !== false
     && (hasOwn(source, 'derivedChartRange') || options.includeDefaults === true);
   const shouldNormalizeFormWindow = options.includeFormTimelineWindow !== false
@@ -83,6 +88,7 @@ export function normalizeDashboardChartTileDisplaySettingsForChartType(
   includeDefaults = true,
 ): AppDashboardChartTileDisplaySettingsInterface | undefined {
   return normalizeDashboardChartTileDisplaySettings(value, {
+    includeCalendarView: isDashboardActivityCalendarChartType(chartType),
     includeDerivedChartRange: isDashboardIntensityDistributionChartType(chartType)
       || isDashboardEfficiencyTrendChartType(chartType),
     includeFormTimelineWindow: isDashboardFormChartType(chartType),

@@ -616,7 +616,7 @@ describe('help.content', () => {
     const gettingStartedSection = HELP_SECTIONS.find(section => section.id === 'getting-started');
     const calendarSection = HELP_SECTIONS.find(section => section.id === 'activity-calendar');
 
-    expect(calendarSection?.content).toContain('**Week**, **Month**, and **Year** views');
+    expect(calendarSection?.content).toContain('**Week**, **Month**, **30 days**, and **Year** views');
     expect(calendarSection?.content).toContain('same sleep-stage breakdown used in Health');
     expect(calendarSection?.content).toContain('full-width **Calendar** section');
     expect(calendarSection?.content).toContain('**Today** card opens a compact month calendar in a bottom sheet');
@@ -628,7 +628,7 @@ describe('help.content', () => {
     expect(calendarSection?.content).toContain('Period totals and activity-group bars remain available below the month');
     expect(calendarSection?.content).toContain('Select an activity row to open its details');
     expect(calendarSection?.content).toContain('Browser **Back** returns to the selected calendar day');
-    expect(calendarSection?.content).toContain('The selected view and date are kept in the URL');
+    expect(calendarSection?.content).toContain('The selected view, displayed period, and selected date are kept in the URL');
     expect(calendarSection?.content).toContain('intentionally have no hover or touch tooltip');
     expect(calendarSection?.content).toContain('recorded **Distance**, **Duration**, and **Ascent**');
     expect(calendarSection?.content).toContain('Month totals exclude adjacent dates');

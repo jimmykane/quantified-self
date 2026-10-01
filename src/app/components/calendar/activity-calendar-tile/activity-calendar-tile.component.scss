@@ -137,3 +137,12 @@ app-activity-calendar-grid {
     app-calendar-day-context { position: static; grid-column: 1; grid-row: 2; height: auto; padding: 13px 0 0; border-top: 1px solid var(--mat-sys-outline-variant); border-left: 0; }
   }
 }
+
+.activity-calendar-view-controls {
+  display: flex;
+  min-height: 40px;
+  align-items: center;
+  gap: 8px;
+  padding-right: 36px;
+  margin-bottom: 4px;
+}

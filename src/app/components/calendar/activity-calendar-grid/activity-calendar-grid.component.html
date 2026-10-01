@@ -5,14 +5,14 @@
   [class.activity-calendar--compact]="compact"
   [class.activity-calendar--fill-height]="compact && fillHeight"
   [class.activity-calendar--dashboard-context]="dashboardDayContext"
-  [class.activity-calendar--calm-month]="calmMonth && model.view === 'month'"
+  [class.activity-calendar--calm-month]="isCalmGrid"
   [class.activity-calendar--dense-dashboard-month]="isDenseDashboardMonth"
   [class.activity-calendar--picker]="isMonthPicker">
   <div class="activity-calendar-months">
     @for (month of visibleMonths; track month.id) {
     <section class="activity-calendar-month"
       [class.activity-calendar-month--surface]="!compact"
-      [class.qs-glass-card-panel]="!compact && !(calmMonth && model.view === 'month')"
+      [class.qs-glass-card-panel]="!compact && !(isCalmGrid)"
       [attr.aria-label]="month.label">
       @if (model.view === 'year') {
       <h2>{{ month.label }}</h2>
@@ -39,8 +39,8 @@
             [attr.aria-label]="(day.isToday ? 'Today. ' : '') + (dayNotes?.ariaLabel ?? day.ariaLabel) + (plannedDay ? ' ' + plannedDay.ariaLabel + (calmMonth && plannedDay.visibleEntries[0] ? '. First: ' + plannedDay.visibleEntries[0].workout.title : '') + '.' : plannedWorkoutsByDate ? ' No planned workouts.' : '')"
             matRipple
             (click)="selectDay(day)">
-            <span class="activity-calendar-day-number"><span class="activity-calendar-day-number-value">{{ day.dayNumber }}</span></span>
-            @if (calmMonth && model.view === 'month' && day.isToday) {
+            <span class="activity-calendar-day-number" [class.activity-calendar-day-number--month-label]="isCalmGrid && ($first || day.dayNumber === 1)"><span class="activity-calendar-day-number-value">{{ day.dayNumber }}</span>@if (isCalmGrid && ($first || day.dayNumber === 1)) { <span class="activity-calendar-day-month">{{ day.monthLabel }}</span> }</span>
+            @if (isCalmGrid && day.isToday) {
               <span class="activity-calendar-today-corner" aria-hidden="true">
                 <span class="activity-calendar-today-label">Today</span>
                 <span class="activity-calendar-today-dot"></span>
@@ -63,7 +63,7 @@
               </span>
               }
               @if (dayNotes) {
-              @if (calmMonth && model.view === 'month') {
+              @if (isCalmGrid) {
               <span class="activity-calendar-calm-note" [style.background-color]="dayNotes.color" aria-hidden="true"></span>
               } @else {
               <span class="activity-calendar-day-notes">
@@ -89,7 +89,7 @@
                   <span>+{{ plannedDay.overflowCount }}</span>
                 }
               </span>
-              @if (calmMonth && model.view === 'month' && plannedDay.visibleEntries[0]; as firstWorkout) {
+              @if (isCalmGrid && plannedDay.visibleEntries[0]; as firstWorkout) {
                 <span class="activity-calendar-workout-preview" aria-hidden="true"
                   [style.color]="firstWorkout.color"
                   [class.activity-calendar-workout-preview--skipped]="!firstWorkout.completed && firstWorkout.workout.lifecycle === 'skipped'"
@@ -112,13 +112,13 @@
     </section>
     }
   </div>
-  @if (calmMonth && model.view === 'month' && (legendFamilies.length || hasVisibleNotes || hasVisiblePlans)) {
+  @if (isCalmGrid && (legendFamilies.length || hasVisibleNotes || hasVisiblePlans)) {
     <div class="activity-calendar-calm-legend" aria-label="Calendar markers">
       @for (family of legendFamilies; track family.id) {
         <span><i [style.background-color]="family.color" aria-hidden="true"></i>{{ family.label }}</span>
       }
-      @if (model.summary.families.length > legendFamilies.length) {
-        <span>+{{ model.summary.families.length - legendFamilies.length }} groups</span>
+      @if (legendFamilyCount > legendFamilies.length) {
+        <span>+{{ legendFamilyCount - legendFamilies.length }} groups</span>
       }
       @if (hasVisibleNotes) { <span><i class="activity-calendar-calm-legend-note" aria-hidden="true"></i>Timeline note</span> }
       @if (hasVisiblePlans) { <span><i class="activity-calendar-calm-legend-plan" aria-hidden="true"></i>Planned workout</span> }

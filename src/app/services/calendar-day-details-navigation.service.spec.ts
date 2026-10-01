@@ -45,7 +45,7 @@ describe('CalendarDayDetailsNavigationService', () => {
     expect(service.workoutDestinationFor('owner')).toBeNull();
   });
 
-  it('makes a calendar day restorable only after browser-back navigation', () => {
+  it('makes a calendar day restorable after returning to its origin', () => {
     expect(service.prepareReturn('/dashboard', '2026-08-20')).toBe(true);
 
     routerEvents.next(new NavigationStart(1, '/user/user-1/event/event-1', 'imperative'));
@@ -155,6 +155,16 @@ describe('CalendarDayDetailsNavigationService', () => {
 
     routerEvents.next(new NavigationStart(3, '/training', 'imperative'));
 
+    expect(service.restorationFor('/dashboard')).toBeNull();
+  });
+
+  it('restores mode and anchor through an explicit Dashboard return and clears them on account changes', () => {
+    const period = { view: '30d' as const, anchor: '2026-08-15' };
+    service.prepareReturn('/dashboard', '2026-08-03', undefined, period);
+    routerEvents.next(new NavigationStart(1, '/calendar/day/2026-08-03?from=dashboard', 'imperative'));
+    routerEvents.next(new NavigationStart(2, '/dashboard', 'imperative'));
+    expect(service.restorationFor('/dashboard')?.calendarReturn).toEqual(period);
+    TestBed.tick(); currentUser.set({ uid: 'other' }); TestBed.tick();
     expect(service.restorationFor('/dashboard')).toBeNull();
   });
 

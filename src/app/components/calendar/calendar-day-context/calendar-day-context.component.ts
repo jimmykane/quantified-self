@@ -169,7 +169,10 @@ export class CalendarDayContextComponent {
     this.data().unitSettings, this.data().locale,
   ));
   readonly fullDayRoute = computed(() => ['/calendar/day', this.data().day.dateKey]);
-  readonly fullDayQueryParams = computed(() => this.dashboardTile() ? { from: 'dashboard' } : null);
+  readonly fullDayQueryParams = computed(() => ({
+    ...(this.dashboardTile() ? { from: 'dashboard' } : {}),
+    ...(this.data().calendarReturn ? { calendarView: this.data().calendarReturn.view, calendarAnchor: this.data().calendarReturn.anchor } : {}),
+  }));
   readonly dayStory = computed(() => buildCalendarDayStory({
     dateKey: this.data().day.dateKey,
     locale: this.data().locale,
@@ -243,7 +246,7 @@ export class CalendarDayContextComponent {
   }
 
   prepareNavigation(): void {
-    this.navigation.prepareReturn(this.router.url, this.data().day.dateKey);
+    this.navigation.prepareReturn(this.router.url, this.data().day.dateKey, undefined, this.data().calendarReturn);
   }
 
   async duplicateWorkout(workoutId: string): Promise<void> {

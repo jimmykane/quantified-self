@@ -5,6 +5,7 @@ import {
   normalizeDashboardChartTileDisplaySettingsForChartType,
 } from './dashboard-chart-display-settings.helper';
 import {
+  DASHBOARD_ACTIVITY_CALENDAR_CHART_TYPE,
   DASHBOARD_FORM_CHART_TYPE,
   DASHBOARD_INTENSITY_DISTRIBUTION_CHART_TYPE,
   DASHBOARD_POWER_CURVE_CHART_TYPE,
@@ -12,6 +13,13 @@ import {
 } from './dashboard-special-chart-types';
 
 describe('dashboard-chart-display-settings.helper', () => {
+  it('keeps Month as the legacy default and saves only supported calendar modes', () => {
+    expect(normalizeDashboardChartTileDisplaySettingsForChartType(DASHBOARD_ACTIVITY_CALENDAR_CHART_TYPE, undefined)).toEqual({ calendarView: 'month' });
+    expect(cloneDashboardChartTileDisplaySettingsForChartType(DASHBOARD_ACTIVITY_CALENDAR_CHART_TYPE, { calendarView: '30d' })).toEqual({ calendarView: '30d' });
+    expect(normalizeDashboardChartTileDisplaySettingsForChartType(DASHBOARD_ACTIVITY_CALENDAR_CHART_TYPE, { calendarView: 'invalid' })).toEqual({ calendarView: 'month' });
+    expect(cloneDashboardChartTileDisplaySettingsForChartType(DASHBOARD_FORM_CHART_TYPE, { calendarView: '30d' })).toBeUndefined();
+  });
+
   it('defaults only display settings supported by each chart type', () => {
     expect(getDefaultDashboardChartTileDisplaySettingsForChartType(DASHBOARD_FORM_CHART_TYPE)).toEqual({
       formTimelineWindow: 'w',

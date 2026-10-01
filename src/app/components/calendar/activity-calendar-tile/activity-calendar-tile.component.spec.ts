@@ -78,6 +78,68 @@ describe('ActivityCalendarTileComponent', () => {
     }).compileComponents();
   });
 
+  it('hydrates the saved mode silently, pages exactly 30 local days, and resets on Today', async () => {
+    const fixture = TestBed.createComponent(ActivityCalendarTileComponent);
+    fixture.componentRef.setInput('user', user);
+    fixture.componentRef.setInput('view', '30d');
+    fixture.componentRef.setInput('dayContextEnabled', true);
+    fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+    expect(fixture.componentInstance.selectedView()).toBe('30d');
+    expect(haptics.selection).not.toHaveBeenCalled();
+    const latest = fixture.componentInstance.calendarModel().months[0].days.filter(day => day.inPrimaryPeriod);
+    expect(latest).toHaveLength(30);
+    const selected = fixture.componentInstance.selectedDay()!.date;
+    fixture.componentInstance.navigateMonth(-1);
+    fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+    const previous = new Date(selected); previous.setDate(previous.getDate() - 30);
+    expect(fixture.componentInstance.selectedDay()!.date.getTime()).toBe(previous.getTime());
+    fixture.componentInstance.goToToday();
+    fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+    expect(fixture.componentInstance.selectedDay()!.isToday).toBe(true);
+    expect(fixture.componentInstance.calendarModel().months[0].days.filter(day => day.inPrimaryPeriod).map(day => day.dateKey))
+      .toEqual(latest.map(day => day.dateKey));
+    expect(watchEvents.mock.calls.every(([, range]) => Math.round((range.endExclusiveMs - range.startMs) / 86400000) <= 42)).toBe(true);
+  });
+
+  it('selects an adjoining date without changing the month or restarting the activity read', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] }); vi.setSystemTime(new Date(2026, 9, 1));
+    const fixture = TestBed.createComponent(ActivityCalendarTileComponent);
+    fixture.componentRef.setInput('user', user);
+    fixture.componentRef.setInput('dayContextEnabled', true);
+    fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+    const before = fixture.componentInstance.calendarModel();
+    const adjoining = before.months[0].days.find(day => !day.inPrimaryPeriod)!;
+    fixture.componentInstance.openDay(adjoining, false);
+    fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+    expect(fixture.componentInstance.selectedDay()?.dateKey).toBe(adjoining.dateKey);
+    expect(fixture.componentInstance.calendarModel().periodLabel).toBe(before.periodLabel);
+    expect(watchEvents).toHaveBeenCalledOnce();
+    fixture.componentInstance.selectView('30d');
+    fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+    expect(fixture.componentInstance.selectedView()).toBe('30d');
+    expect(fixture.componentInstance.selectedDay()?.dateKey).toBe(adjoining.dateKey);
+    expect(haptics.selection).toHaveBeenCalledOnce();
+    fixture.componentRef.setInput('view', '30d'); fixture.detectChanges();
+    fixture.componentRef.setInput('view', 'month'); fixture.detectChanges(); await fixture.whenStable();
+    expect(fixture.componentInstance.selectedView()).toBe('month');
+    vi.useRealTimers();
+  });
+
+  it('restores a browsed 30-day period and selection without persisting its anchor', async () => {
+    dayDetailsNavigation.restorationFor.mockReturnValue({ sourceUrl: '/', dateKey: '2026-08-03',
+      calendarReturn: { view: '30d', anchor: '2026-08-15' } });
+    dayDetailsNavigation.consumeRestoration.mockImplementation(() => { dayDetailsNavigation.restorationFor.mockReturnValue(null); return true; });
+    const fixture = TestBed.createComponent(ActivityCalendarTileComponent);
+    fixture.componentRef.setInput('user', user);
+    fixture.componentRef.setInput('view', '30d');
+    fixture.componentRef.setInput('dayContextEnabled', true);
+    fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+    expect(fixture.componentInstance.selectedDay()?.dateKey).toBe('2026-08-03');
+    expect(fixture.componentInstance.calendarModel().months[0].days.filter(day => day.inPrimaryPeriod).at(-1)?.dateKey).toBe('2026-08-15');
+    expect(fixture.componentInstance.selectedDayData()?.calendarReturn).toEqual({ view: '30d', anchor: '2026-08-15' });
+    expect(haptics.selection).not.toHaveBeenCalled();
+  });
+
   it('loads the current month with its own query and renders compact concentric markers', async () => {
     const fixture = TestBed.createComponent(ActivityCalendarTileComponent);
     fixture.componentRef.setInput('user', user);
@@ -114,7 +176,7 @@ describe('ActivityCalendarTileComponent', () => {
       .toBe(fixture.componentInstance.calendarModel().periodLabel);
     expect(fixture.nativeElement.querySelector('.activity-calendar-tile > .activity-calendar-tile-navigation')).toBeTruthy();
     const fullDayLink = fixture.nativeElement.querySelector('a[aria-label="Open selected day page"]');
-    expect(fullDayLink?.getAttribute('href')).toBe(`/calendar/day/${day.dateKey}?from=dashboard`);
+    expect(fullDayLink?.getAttribute('href')).toBe(`/calendar/day/${day.dateKey}?from=dashboard&calendarView=month&calendarAnchor=${fixture.componentInstance.selectedDayData()!.calendarReturn!.anchor}`);
     expect(openBottomSheet).not.toHaveBeenCalled();
     fixture.componentRef.setInput('privateHealthEnabled', false); fixture.detectChanges();
     expect(fixture.nativeElement.querySelector('a[aria-label="Open selected day page"]')).toBeNull();
@@ -210,7 +272,7 @@ describe('ActivityCalendarTileComponent', () => {
     expect(fixture.nativeElement.querySelectorAll('.calendar-day-context-preview-plan')).toHaveLength(4);
     expect(fixture.nativeElement.textContent).not.toContain('more on the full day');
     expect(fixture.nativeElement.querySelector('a[aria-label="Open selected day page"]')?.getAttribute('href'))
-      .toBe(`/calendar/day/${dateKey}?from=dashboard`);
+      .toBe(`/calendar/day/${dateKey}?from=dashboard&calendarView=month&calendarAnchor=${fixture.componentInstance.selectedDayData()!.calendarReturn!.anchor}`);
   });
 
   it('restores the inline selected date while its month activities are still loading', async () => {
@@ -249,6 +311,21 @@ describe('ActivityCalendarTileComponent', () => {
       data: expect.objectContaining({ day: expect.objectContaining({ dateKey }) }),
     }));
     expect(openBottomSheet).toHaveBeenCalledOnce();
+  });
+
+  it('restores the mini-calendar period when the selected day adjoins its month', async () => {
+    const fixture = TestBed.createComponent(ActivityCalendarTileComponent);
+    vi.spyOn((fixture.componentInstance as unknown as { bottomSheet: MatBottomSheet }).bottomSheet, 'open')
+      .mockImplementation(openBottomSheet);
+    fixture.componentRef.setInput('user', user);
+    fixture.componentRef.setInput('initialDateKey', '2026-09-28');
+    fixture.componentRef.setInput('initialPeriodContext', { view: 'month', anchor: '2026-10-01' });
+    fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+    expect(fixture.componentInstance.calendarModel().periodLabel).toContain('October');
+    expect(openBottomSheet).toHaveBeenCalledWith(expect.any(Function), expect.objectContaining({
+      data: expect.objectContaining({ day: expect.objectContaining({ dateKey: '2026-09-28' }),
+        calendarReturn: { view: 'month', anchor: '2026-10-01' } }),
+    }));
   });
 
   it('leaves Today-sheet restoration for the dashboard owner to reopen', async () => {
