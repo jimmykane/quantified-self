@@ -280,10 +280,10 @@ delivery preview without separate per-workout/per-edit mapping approval; additio
 COROS compatibility reads use the full validated companion and report exact named/set/reps-or-time/rest/fixed-kg mappings.
 Missing, malformed, foreign or mismatched companions fail the read; they never return a partial prescription.
 Its delivery preview performs no provider I/O and apply keeps independent
-Training/delivery grants, native/app confirmation and idempotency. The browser's Coming soon gate is unchanged;
-local assessment and synthetic delivery tests are not entitlement, cloud, app/watch or completion evidence (#741).
-Normal owner/grant-bound MCP proposal confirmation and apply remain required. No registered schema, scope, permission,
-provider action or response field changes for this policy. COROS new-send remains Coming soon. Wahoo #783 uses the
+Training/delivery grants, native/app confirmation and idempotency. COROS delivery is disabled at the shared runtime
+boundary used by the app and MCP; local assessment and synthetic delivery tests are not entitlement, cloud, app/watch
+or completion evidence (#741). Normal owner/grant-bound MCP proposal confirmation and apply remain required for admitted
+providers. No registered schema, scope, permission, provider action or response field changes for this policy. Wahoo #783 uses the
 validated companion for timed Gym sets/rests, reporting degraded exercise/load instructions rather than native tracking.
 Repetition sets remain unsupported. Kilogram load instructions use Sports Lib display; actual rounding requires review.
 Send previews disclose the limitation and perform no provider I/O. Apply retains the existing independent delivery grant,
@@ -334,10 +334,10 @@ provider check or repair and gains no tool, field, scope, consent or write autho
 delivery outcome records the last accepted send, not a fresh Garmin cloud read; an inconclusive later Workout check
 cannot be promoted to `confirmed_missing` and the frozen v1 tool exposes no verification-state field.
 
-COROS Training delivery (#648) uses the public provider-readiness boundary with no wire-contract change. Explicit COROS
-proposals and `all_connected` use the same existing eligibility, proposal and approval checks as the other providers.
-The browser currently labels new COROS plan sync and standalone Send actions **Coming soon**, but that presentation gate
-is not consulted by MCP and does not change its existing approval-gated delivery contract.
+COROS Training delivery (#648) uses the shared provider-readiness boundary with no wire-contract change. COROS is
+currently disabled there for the app, Functions runtime and MCP; explicit COROS proposals report unavailable and
+`all_connected` excludes it. Training plan, workout and sync-history UI also omits retained COROS settings/statuses.
+Compatibility assessment remains local and available because it neither grants consent nor contacts COROS.
 The existing sync-status enum can report delivered, approval, retry, attention
 and completed states for COROS. Partner athlete/workout IDs, destination
 identity, batch journals, request outcomes, token authority and exact `planWorkoutId` evidence remain private and are
@@ -354,9 +354,10 @@ link remain private and are rejected from MCP projections. The existing sanitize
 current link; #651 retains bounded fallback candidate discovery and approval-gated manual link/unlink/relink behavior.
 No private Wahoo identity or live check is introduced.
 
-Public Garmin, COROS, Wahoo and Suunto Training delivery changes runtime availability, not the MCP wire contract. An
-already authorized client with `training-plans:read` and `training-delivery:write` may preview an explicit delivery change
-for any eligible connected Pro owner; there is no per-UID provider allowlist. The same bounded proposal, native client
+Public Garmin, Wahoo and Suunto Training delivery changes runtime availability, not the MCP wire contract. An already
+authorized client with `training-plans:read` and `training-delivery:write` may preview an explicit delivery change for
+any eligible connected Pro owner; there is no per-UID provider allowlist. COROS remains a valid compatibility/status
+enum member but is not an eligible delivery destination while its shared flag is disabled. The same bounded proposal, native client
 approval, short expiry, owner/connection/grant/revision binding, compatibility review and separate apply call remain
 mandatory. `all_connected` includes only providers for which the connection, permissions, configuration and workout are
 currently eligible. No new tool, action, field, scope, consent default, provider identifier, plugin artifact or

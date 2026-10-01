@@ -38,7 +38,7 @@ describe('Training provider delivery controls', () => {
   beforeEach(async () => {
     user.set({ uid: 'owner' }); user$.next(user()); close = vi.fn();
     haptics = { selection: vi.fn(), success: vi.fn(), error: vi.fn() };
-    service = { anyReady: () => false, isReady: vi.fn(() => false),
+    service = { anyReady: () => false, isReady: vi.fn(() => false), isVisible: vi.fn(provider => provider !== 'coros'),
       isSetupAvailable: vi.fn((provider, _planDelivery) => service.isReady(provider)), watchPresence: vi.fn(() => of(true)),
       watchScope: vi.fn(() => of({ settings: [], statuses: [status] })), createMutationId: vi.fn(() => 'mutation'),
       preview: vi.fn(async () => ({ schemaVersion: 1, available: true, connection: 'connected', hasPro: true,
@@ -71,17 +71,17 @@ describe('Training provider delivery controls', () => {
     const providers = ['garmin', 'coros', 'wahoo', 'suunto'];
     service.watchScope.mockReturnValue(of({ settings: [], statuses: providers.map(provider => ({ ...status, provider, id: provider })) }));
     const fixture = TestBed.createComponent(TrainingDeliveryDialogComponent); fixture.detectChanges();
-    expect(fixture.nativeElement.querySelectorAll('.delivery-provider-overview app-compact-row')).toHaveLength(4);
+    expect(fixture.nativeElement.querySelectorAll('.delivery-provider-overview app-compact-row')).toHaveLength(3);
     fixture.nativeElement.querySelectorAll('.delivery-provider-overview app-compact-row').forEach((row: HTMLElement) => {
       expect(row.classList).toContain('compact-row-host--mobile-action-full');
     });
     expect(fixture.nativeElement.querySelector('[role="tab"]')).toBeNull();
     const icons = fixture.debugElement.queryAll(By.directive(ServiceSourceIconComponent));
-    expect(icons).toHaveLength(4);
+    expect(icons).toHaveLength(3);
     icons.forEach((icon, index) => {
       const component = icon.componentInstance as ServiceSourceIconComponent;
       expect(component.presentation?.mode).toBe('destination');
-      expect(component.serviceLogo).toBe(providers[index]);
+      expect(component.serviceLogo).toBe(providers.filter(provider => provider !== 'coros')[index]);
       expect(icon.nativeElement.closest('app-compact-row')?.textContent.trim()).toContain(fixture.componentInstance.rows()[index].displayLabel);
       expect(icon.nativeElement.getAttribute('aria-hidden')).toBe('true');
       expect(icon.nativeElement.querySelector('svg')).not.toBeNull();
@@ -95,22 +95,20 @@ describe('Training provider delivery controls', () => {
     expect(service.preview).not.toHaveBeenCalled(); expect(service.mutate).not.toHaveBeenCalled();
     expect(haptics.selection).not.toHaveBeenCalled();
   });
-  it('labels all new COROS workout delivery coming soon in the provider overview without starting delivery', () => {
+  it('omits COROS from the provider overview even when retained records exist', () => {
     TestBed.overrideProvider(MAT_DIALOG_DATA, { useValue: { scope: 'plan', id: 'p', title: 'Autumn build' } });
     TestBed.overrideProvider(TrainingPlansService, { useValue: { watchSchedule: () => of({ state: { revision: 3 },
       plans: [{ id: 'p', name: 'Autumn build', revision: 2, lifecycle: 'active' }], workouts: [],
     }), watchWorkoutCompletions: () => of([]) } });
     service.isReady.mockReturnValue(true);
-    service.isSetupAvailable.mockImplementation(provider => provider !== 'coros');
-    service.watchScope.mockReturnValue(of({ settings: [], statuses: [] }));
+    service.watchScope.mockReturnValue(of({
+      settings: [{ provider: 'coros', enabled: true, timeZone: 'Europe/Helsinki' }],
+      statuses: [{ ...status, provider: 'coros', id: 'coros' }],
+    }));
     const fixture = TestBed.createComponent(TrainingDeliveryDialogComponent); fixture.detectChanges();
-    const manage = fixture.nativeElement.querySelector('button[aria-label="Manage COROS sync"]') as HTMLButtonElement;
-    const row = manage.closest('app-compact-row')!;
-    expect(row.textContent).toContain('Workout delivery coming soon');
-    expect(row.textContent).toContain('New plan sync and standalone Send actions are unavailable');
-    manage.click(); fixture.detectChanges();
-    expect(fixture.nativeElement.textContent).toContain('COROS workout delivery is coming soon');
-    expect(fixture.nativeElement.textContent).not.toContain('Sync plan with COROS');
+    expect(fixture.nativeElement.querySelector('button[aria-label="Manage COROS sync"]')).toBeNull();
+    expect(fixture.nativeElement.textContent).not.toContain('COROS');
+    expect(fixture.componentInstance.rows().some(row => row.provider === 'coros')).toBe(false);
     expect(service.preview).not.toHaveBeenCalled(); expect(service.mutate).not.toHaveBeenCalled();
   });
   it('shows provider sync state separately from workout status before Manage', () => {
@@ -371,7 +369,7 @@ describe('Training provider delivery controls', () => {
     expect(service.preview).not.toHaveBeenCalled(); expect(service.mutate).not.toHaveBeenCalled();
     expect(fixture.nativeElement.textContent).toContain('Check queued');
   });
-  it('keeps existing COROS plan sync and copy help visible while new plan setup is coming soon', async () => {
+  it('hides existing COROS plan sync, copy state and controls', async () => {
     TestBed.overrideProvider(MAT_DIALOG_DATA, { useValue: { scope: 'plan', id: 'p', title: 'Autumn build' } });
     TestBed.overrideProvider(TrainingPlansService, { useValue: { watchSchedule: () => of({ state: { revision: 3 },
       plans: [{ id: 'p', name: 'Autumn build', revision: 2, lifecycle: 'active' }],
@@ -386,27 +384,18 @@ describe('Training provider delivery controls', () => {
       verifications: [{ id: status.id, canCheck: false, state: 'unsupported', lastCheckedAtMs: null, missing: false }],
     }));
     const fixture = TestBed.createComponent(TrainingDeliveryDialogComponent); fixture.detectChanges();
-    expect(fixture.nativeElement.textContent).toContain('COROS workout delivery is coming soon');
-    expect(fixture.nativeElement.textContent).toContain('Sync could not be confirmed');
-    expect([...fixture.nativeElement.querySelectorAll('button')].some((button: HTMLButtonElement) =>
-      button.textContent?.trim() === 'Check COROS')).toBe(false);
-    const guidance: HTMLElement = fixture.nativeElement.querySelector('#delivery-guidance-details');
-    expect(guidance.textContent).toContain('New plan sync, plan-workout resume, and standalone Send actions are unavailable');
-    expect(guidance.textContent).toContain('Existing saved COROS delivery state continues to follow its consent');
-    expect(guidance.textContent).toContain('asks the connected app to remove upcoming synced workouts');
-    expect(guidance.textContent).toContain('two-week watch window');
-    expect(guidance.textContent).toContain('one training plan synced to a watch at a time');
+    expect(fixture.nativeElement.textContent).not.toContain('COROS');
+    expect(fixture.nativeElement.textContent).not.toContain('Sync could not be confirmed');
     expect(service.check).not.toHaveBeenCalled();
-    expect(fixture.nativeElement.textContent).not.toContain('Sync plan with COROS');
-    expect(fixture.nativeElement.textContent).toContain('Retry plan sync');
-    expect(fixture.nativeElement.textContent).toContain('Stop plan sync');
-    expect(fixture.nativeElement.textContent).not.toContain('Plan sync settings');
+    expect(fixture.nativeElement.textContent).not.toContain('Retry plan sync');
+    expect(fixture.nativeElement.textContent).not.toContain('Stop plan sync');
     const component = fixture.componentInstance;
     await component.begin('coros', 'configure');
     expect(component.draft()).toBeNull();
     expect(service.preview).not.toHaveBeenCalled();
     await component.begin('coros', 'retry');
-    expect(service.preview).toHaveBeenCalledWith(expect.objectContaining({ provider: 'coros', action: 'retry' }), expect.any(Function));
+    expect(component.draft()).toBeNull();
+    expect(service.preview).not.toHaveBeenCalled();
   });
   it.each(['configure', 'send'] as const)('blocks direct COROS plan %s setup', async action => {
     TestBed.overrideProvider(MAT_DIALOG_DATA, { useValue: { scope: 'plan', id: 'p', title: 'Autumn build' } });
@@ -445,20 +434,18 @@ describe('Training provider delivery controls', () => {
     service.watchScope.mockReturnValue(of({ settings: [], statuses: [] }));
     const fixture = TestBed.createComponent(TrainingDeliveryDialogComponent); fixture.detectChanges();
     await fixture.whenStable(); fixture.detectChanges();
-    expect(fixture.nativeElement.textContent).toContain('COROS workout delivery is coming soon');
-    expect(service.isSetupAvailable).toHaveBeenCalledWith('coros', true);
+    expect(fixture.nativeElement.textContent).not.toContain('COROS');
     expect(fixture.componentInstance.draft()).toBeNull();
     expect(service.preview).not.toHaveBeenCalled();
   });
-  it('blocks standalone Send to COROS and labels workout delivery coming soon', async () => {
+  it('blocks standalone Send to COROS and omits it from workout sync', async () => {
     TestBed.overrideProvider(MAT_DIALOG_DATA, { useValue: { scope: 'workout', id: 'w', title: 'Morning run', initialProvider: 'coros' } });
     service.isReady.mockImplementation(provider => provider === 'coros');
     service.isSetupAvailable.mockReturnValue(false);
     service.watchScope.mockReturnValue(of({ settings: [], statuses: [] }));
     const fixture = TestBed.createComponent(TrainingDeliveryDialogComponent); fixture.detectChanges();
     await fixture.whenStable(); fixture.detectChanges();
-    expect(fixture.nativeElement.textContent).toContain('COROS workout delivery is coming soon');
-    expect(service.isSetupAvailable).toHaveBeenCalledWith('coros', false);
+    expect(fixture.nativeElement.textContent).not.toContain('COROS');
     expect(fixture.componentInstance.draft()).toBeNull();
     expect(service.preview).not.toHaveBeenCalled();
     await fixture.componentInstance.begin('coros', 'send');

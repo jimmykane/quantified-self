@@ -53,14 +53,19 @@ function oneStepStructure(overrides: Partial<WorkoutStructureV1['nodes'][number]
 }
 
 describe('planned-workout provider proof fixtures', () => {
-    it('enables public delivery for every implemented provider', () => {
+    it('keeps mapping fixtures independent from the COROS rollout gate', () => {
         expect(Object.values(PLANNED_WORKOUT_PROVIDER_CAPABILITIES_V1)).toHaveLength(4);
-        for (const provider of PLANNED_WORKOUT_PROVIDER_IDS) {
+        for (const provider of PLANNED_WORKOUT_PROVIDER_IDS.filter(provider => provider !== 'coros')) {
             expect(isPlannedWorkoutProviderDeliveryEnabled(provider)).toBe(true);
             expect(PLANNED_WORKOUT_PROVIDER_CAPABILITIES_V1[provider]).toMatchObject({
                 implementationState: 'enabled', deliveryEnabled: true, unresolvedGates: [],
             });
         }
+        expect(isPlannedWorkoutProviderDeliveryEnabled('coros')).toBe(false);
+        expect(PLANNED_WORKOUT_PROVIDER_CAPABILITIES_V1.coros).toMatchObject({
+            implementationState: 'blocked-contract', deliveryEnabled: false,
+        });
+        expect(PLANNED_WORKOUT_PROVIDER_CAPABILITIES_V1.coros.unresolvedGates).not.toHaveLength(0);
         expect(PLANNED_WORKOUT_PROVIDER_CAPABILITIES_V1.suunto.profile?.sports)
             .toEqual([...MANUAL_WORKOUT_EDITOR_SPORTS_V1, ActivityTypes.StrengthTraining]);
         expect(GARMIN_PLANNED_WORKOUT_SPORTS_V1).toEqual([

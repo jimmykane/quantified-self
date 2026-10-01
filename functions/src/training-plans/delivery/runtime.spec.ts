@@ -99,21 +99,11 @@ describe('Production Training delivery rollout', () => {
     expect(fetcher).not.toHaveBeenCalled();
   });
 
-  it('preserves full COROS strength assessment and load-only digest changes through the production wrapper without I/O', () => {
+  it('does not bind the COROS production transport while provider admission is disabled', () => {
     const fetcher = vi.fn();
     vi.stubGlobal('fetch', fetcher);
-    const transport = runtime.transport('coros', 'owner')!;
-    const assessment = transport.assess(strengthWorkout, inspection.destinationKey, inspection.timeZone, strength);
-    expect(assessment).toMatchObject({ level: 'exact', issues: [] });
-    expect(assessment.requiresApproval).not.toBe(true);
-    const changed = structuredClone(strength);
-    changed.exercises[0].sets[0].externalLoadKg = 55;
-    expect(transport.assess(strengthWorkout, inspection.destinationKey, inspection.timeZone, changed).digest).not.toBe(assessment.digest);
-    for (const invalid of [undefined, null, { ...strength, workoutId: 'foreign' },
-      { ...strength, exercises: [{ ...strength.exercises[0], name: 'Changed name' }] },
-      { ...strength, exercises: [{ ...strength.exercises[0], sets: [{ ...strength.exercises[0].sets[0], externalLoadKg: -1 }] }] }]) {
-      expect(transport.assess(strengthWorkout, inspection.destinationKey, inspection.timeZone, invalid).level).toBe('unsupported');
-    }
+    expect(runtime.transport('coros', 'owner')).toBeNull();
+    expect(runtime.transport('coros', 'another-owner')).toBeNull();
     expect(fetcher).not.toHaveBeenCalled();
   });
 
@@ -155,13 +145,13 @@ describe('Production Training delivery rollout', () => {
     expect(fetcher).not.toHaveBeenCalled();
   });
 
-  it.each(PLANNED_WORKOUT_PROVIDER_IDS)('preserves %s removal opt-in while protecting past and completed copies by default', provider => {
+  it.each(PLANNED_WORKOUT_PROVIDER_IDS.filter(provider => provider !== 'coros'))('preserves %s removal opt-in while protecting past and completed copies by default', provider => {
     vi.stubEnv('SUUNTOAPP_GUIDE_OWNER', 'Fixture application');
     const transport = runtime.transport(provider, 'owner')!;
     const artifact = { ...inspection.artifact, localDate: '2026-09-16' };
     expect(transport.canRemove(artifact, '2026-09-17')).toBe(false);
     expect(transport.canRemove(artifact, '2026-09-17', false)).toBe(false);
-    expect(transport.canRemove(artifact, '2026-09-17', true)).toBe(provider !== 'coros');
+    expect(transport.canRemove(artifact, '2026-09-17', true)).toBe(true);
     expect(transport.canRemove({ ...artifact, completed: true }, '2026-09-17', true)).toBe(false);
     expect(transport.canRemove({ ...artifact, localDate: '2026-09-18' }, '2026-09-17')).toBe(true);
   });
@@ -267,19 +257,18 @@ describe('Production Training delivery rollout', () => {
     expect(checkpoint).toHaveBeenLastCalledWith(artifact, { version: 1, step: 'finished', state: 'accepted' });
   });
 
-  it('constructs every implemented adapter for an authenticated owner', () => {
+  it('constructs every admitted adapter for an authenticated owner', () => {
     vi.stubEnv('SUUNTOAPP_GUIDE_OWNER', 'Fixture application');
-    for (const provider of PLANNED_WORKOUT_PROVIDER_IDS) {
+    for (const provider of PLANNED_WORKOUT_PROVIDER_IDS.filter(provider => provider !== 'coros')) {
       const transport = runtime.transport(provider, 'owner');
       expect(transport?.mappingVersion).toBeTruthy();
     }
+    expect(runtime.transport('coros', 'owner')).toBeNull();
   });
 
-  it('binds COROS only to the batch path and keeps remote checking unavailable', () => {
-    const transport = runtime.transport('coros', 'owner');
-    expect(transport).toMatchObject({ horizonDays: 365, batch: { maxSize: 30 } });
-    expect(transport?.inspection).toBeUndefined();
-    expect(runtime.transport('coros', 'other')).toMatchObject({ horizonDays: 365, batch: { maxSize: 30 } });
+  it('keeps COROS unavailable for every owner at the production admission boundary', () => {
+    expect(runtime.transport('coros', 'owner')).toBeNull();
+    expect(runtime.transport('coros', 'other')).toBeNull();
   });
   it('binds Wahoo publicly with the seven-day horizon and independent positive-only inspection', () => {
     const transport = runtime.transport('wahoo', 'owner');
@@ -294,8 +283,11 @@ describe('Production Training delivery rollout', () => {
   });
 
   it.each(['another-user', ' owner', 'owner '])(
-    'binds every public provider transport for another authenticated identity %s', uid => {
+    'binds every admitted provider transport for another authenticated identity %s', uid => {
       vi.stubEnv('SUUNTOAPP_GUIDE_OWNER', 'Fixture application');
-      for (const provider of PLANNED_WORKOUT_PROVIDER_IDS) expect(runtime.transport(provider, uid)).not.toBeNull();
+      for (const provider of PLANNED_WORKOUT_PROVIDER_IDS.filter(provider => provider !== 'coros')) {
+        expect(runtime.transport(provider, uid)).not.toBeNull();
+      }
+      expect(runtime.transport('coros', uid)).toBeNull();
     });
 });

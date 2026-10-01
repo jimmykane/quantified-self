@@ -158,11 +158,13 @@ HTTP 408, 429, 5xx, and transient transport failures are retryable. Authenticati
 
 The ignored local COROS API Reference V2.0.6 (February 2026) is available for development but is never committed. The
 versioned capability matrix, serializer and transport live under `functions/src/training-plans/`. COROS Training delivery
-has no per-UID backend allowlist. The browser labels all new COROS Training delivery setup **Coming soon** under #648:
-plan sync, plan-workout resume and standalone Send are unavailable. Existing saved delivery state continues to follow its
-consent; retained delivery records, Retry, copy status and Stop remain available. This does not change COROS activity/history, Sleep, Health, FIT activity
-upload, activity sync, route delivery, backend reconciliation or MCP delivery behavior. Connecting COROS alone never opts
-in, and implementation does not authorize a provider call or deployment.
+has no per-UID backend allowlist. It is disabled for every account at the shared frontend/backend admission boundary:
+the production runtime binds no COROS Training transport, MCP delivery previews report it unavailable, and the browser
+omits COROS from plan, workout and sync-history controls/summaries. Existing preferences, ledgers and status projections
+remain stored but inactive; reconciliation cannot send, update, retry or remove a COROS planned workout until a deliberate
+rollout re-enables the shared boundary. This does not change COROS activity/history, Sleep, Health, FIT activity upload,
+activity sync or route delivery. Connecting COROS alone never opts in, and implementation does not authorize a provider
+call or deployment.
 
 The adapter sends form-encoded requests only to `POST /coros/tp/list/push` and
 `POST /coros/tp/workout/deleteById`, using the existing COROS OAuth client ID/secret and canonical pinned account.

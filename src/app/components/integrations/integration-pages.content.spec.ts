@@ -58,7 +58,7 @@ describe('integration-pages.content', () => {
   it.each([
     ['garmin', 'Planned workouts to Garmin', 'Can I send planned Training workouts to Garmin?', 'Connected Pro members'],
     ['suunto', 'Planned workouts as SuuntoPlus Guides', 'Can I send planned Training workouts to Suunto?', 'Connected Pro members'],
-    ['coros', 'Planned workouts to COROS', 'Can I send planned Training workouts to COROS?', 'Not yet from the app'],
+    ['coros', 'Planned workouts to COROS', 'Can I send planned Training workouts to COROS?', 'disabled and hidden from Training'],
   ] as const)('documents public %s planned-workout delivery without claiming device receipt', (provider, flow, question, availability) => {
     const page = PROVIDER_INTEGRATION_PAGES[provider];
     expect(page.syncFlows.some(item => item.title === flow)).toBe(true);
@@ -88,7 +88,7 @@ describe('integration-pages.content', () => {
     expect(PROVIDER_INTEGRATION_ROUTE_DATA.coros.description).toContain('planned-workout delivery is coming soon');
     expect(PROVIDER_INTEGRATION_PAGES.coros.summary).toContain('Planned-workout delivery is coming soon in the app');
     expect(PROVIDER_INTEGRATION_PAGES.coros.syncFlows.find(flow => flow.title === 'Planned workouts to COROS')?.copy)
-      .toContain('New COROS plan sync and standalone Send actions are coming soon');
+      .toContain('COROS plan sync and standalone Send are coming soon');
     expect(PROVIDER_INTEGRATION_PAGES.coros.highlights).toContain('Direct and saved route delivery to COROS');
     expect(PROVIDER_INTEGRATION_PAGES.coros.syncFlows.some(flow => flow.title === 'Send activities to COROS')).toBe(true);
     expect(PROVIDER_INTEGRATION_PAGES.coros.syncFlows.some(flow => flow.title === 'Send routes to COROS')).toBe(true);

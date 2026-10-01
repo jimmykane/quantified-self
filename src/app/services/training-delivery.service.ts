@@ -29,13 +29,13 @@ export const TRAINING_DELIVERY_SAVE_TIMEOUT_MS = 70_000;
 // identities can exceed it; summaries must then explicitly withhold complete totals.
 export const TRAINING_DELIVERY_SUMMARY_LIMIT = TRAINING_PLAN_MAX_CURRENT_WORKOUTS * PLANNED_WORKOUT_PROVIDER_IDS.length + 1;
 
-/** Browser setup control only. COROS Training delivery setup is temporarily withheld for every scope. */
+/** Browser setup follows the shared provider-admission boundary. */
 export function isTrainingDeliverySetupAvailableInApp(
   provider: PlannedWorkoutProviderId,
   uid: string | null | undefined,
   _planDelivery: boolean,
 ): boolean {
-  return isTrainingProviderDeliveryEnabled(provider, uid) && provider !== 'coros';
+  return isTrainingProviderDeliveryEnabled(provider, uid);
 }
 
 @Injectable({ providedIn: 'root' })
@@ -45,6 +45,7 @@ export class TrainingDeliveryService {
   private readonly browser = inject(BrowserCompatibilityService);
   private readonly users = inject(AppUserService);
   readonly isReady = (provider: PlannedWorkoutProviderId) => isTrainingProviderDeliveryEnabled(provider, this.users.user()?.uid);
+  readonly isVisible = (provider: PlannedWorkoutProviderId) => this.isReady(provider);
   readonly isSetupAvailable = (provider: PlannedWorkoutProviderId, planDelivery: boolean) =>
     isTrainingDeliverySetupAvailableInApp(provider, this.users.user()?.uid, planDelivery);
   readonly anyReady = computed(() => PLANNED_WORKOUT_PROVIDER_IDS.some(provider => this.isReady(provider)));
@@ -54,14 +55,17 @@ export class TrainingDeliveryService {
   }
   watchPresence(uid: string, scope: TrainingDeliveryViewScope, id: string): Observable<boolean> {
     if (!uid) return of(false);
-    if (scope === 'history') return collectionData(query(collection(this.firestore, 'users', uid, TRAINING_DELIVERY_STATUSES),
-      limit(1))).pipe(map(rows => rows.length > 0));
+    const visibleProviders = PLANNED_WORKOUT_PROVIDER_IDS.filter(provider => this.isVisible(provider));
+    if (!visibleProviders.length) return of(false);
+    if (scope === 'history') return combineLatest(visibleProviders.map(provider => collectionData(query(
+      collection(this.firestore, 'users', uid, TRAINING_DELIVERY_STATUSES), where('provider', '==', provider), limit(1)),
+    ))).pipe(map(results => results.some(rows => rows.length > 0)));
     return combineLatest([
       collectionData(query(collection(this.firestore, 'users', uid, TRAINING_DELIVERY_STATUSES),
-        where(scope === 'plan' ? 'planId' : 'workoutId', '==', id), limit(1))),
+        where(scope === 'plan' ? 'planId' : 'workoutId', '==', id), limit(TRAINING_DELIVERY_SUMMARY_LIMIT))),
       collectionData(query(collection(this.firestore, 'users', uid, TRAINING_DELIVERY_SETTINGS),
-        where('scope', '==', scope), where('scopeId', '==', id), limit(1))),
-    ]).pipe(map(values => values.some(rows => rows.length > 0)));
+        where('scope', '==', scope), where('scopeId', '==', id), limit(PLANNED_WORKOUT_PROVIDER_IDS.length))),
+    ]).pipe(map(values => values.some(rows => rows.some(row => visibleProviders.includes(row['provider'] as PlannedWorkoutProviderId)))));
   }
   watchScope(uid: string, scope: TrainingDeliveryViewScope, id: string,
     statusLimit = TRAINING_DELIVERY_PAGE_SIZE, includeVerification = true): Observable<TrainingDeliveryView> {

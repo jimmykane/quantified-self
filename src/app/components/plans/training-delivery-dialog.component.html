@@ -139,12 +139,7 @@
             @if (!planBound() && row.setting) { <p class="delivery-caption">Time zone: {{ row.setting.timeZone }}</p> }
           }
           @if (!row.setupAvailable) {
-            @if (row.provider === 'coros' && row.ready) {
-              <p><strong>COROS workout delivery is coming soon.</strong></p>
-              <p class="delivery-caption">New plan sync and standalone Send actions are unavailable. Existing saved delivery state, records, retry, copy status, and Stop sync remain available here.</p>
-            } @else {
-              <p>Workout sync unavailable. Existing copies and problems remain visible.</p>
-            }
+            <p>Workout sync unavailable. Existing copies and problems remain visible.</p>
           }
           @if (row.provider === 'suunto' && data.scope !== 'workout') {
             <p class="delivery-caption">Workouts for today and the next six days are sent as SuuntoPlus Guides. Later workouts are sent automatically as their dates approach.</p>
@@ -280,12 +275,7 @@
         <p>Could not check workout means the latest check did not confirm both records. Last sent still records Garmin's earlier acceptance; a missing Workout response alone does not prove safe deletion, so QS will not create a replacement Workout automatically. A confirmed missing calendar entry can be restored using the original Workout.</p>
       }
       @if (showsCorosGuidance()) {
-        @if (activeRow()?.setupAvailable) {
-          <p>QS sends each upcoming workout to your COROS training calendar. The COROS app manages watch synchronization; Sent does not confirm that your watch received it.</p>
-        } @else {
-          <p>COROS workout delivery is coming soon in the app. New plan sync, plan-workout resume, and standalone Send actions are unavailable.</p>
-          <p>Existing saved COROS delivery state continues to follow its consent. Delivery records, retry, copy status, and Stop sync remain available here.</p>
-        }
+        <p>QS sends each upcoming workout to your COROS training calendar. The COROS app manages watch synchronization; Sent does not confirm that your watch received it.</p>
         <p>COROS documents a two-week watch window and one training plan synced to a watch at a time. QS does not claim or replace a native plan object, and automatic checking is unavailable.</p>
       }
       @if (showsWahooGuidance()) {

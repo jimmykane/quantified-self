@@ -212,8 +212,8 @@ export const PLANNED_WORKOUT_PROVIDER_CAPABILITIES_V1: Readonly<
   coros: {
     id: 'coros',
     label: 'COROS',
-    implementationState: 'enabled',
-    deliveryEnabled: true,
+    implementationState: 'blocked-contract',
+    deliveryEnabled: false,
     deliveryModel: 'native-plan-workout-batches',
     requiredScopes: ['training-plan partner entitlement'],
     profile: {
@@ -236,7 +236,9 @@ export const PLANNED_WORKOUT_PROVIDER_CAPABILITIES_V1: Readonly<
       'Provider acceptance does not prove that the COROS app or a watch received the workout.',
     ],
     completionCorrelation: 'Completed workout payloads may carry planWorkoutId.',
-    unresolvedGates: [],
+    unresolvedGates: [
+      'Enable Training Plan access for the Quantified Self COROS application and prove account-side push, update and deletion before rollout.',
+    ],
     evidence: ['COROS API Reference V2.0.6 (partner document, February 2026)'],
   },
   wahoo: {

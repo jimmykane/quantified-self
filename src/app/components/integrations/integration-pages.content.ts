@@ -410,12 +410,12 @@ export const PROVIDER_INTEGRATION_PAGES: Record<IntegrationProviderKey, Provider
     ],
     syncEyebrow: 'COROS Workflows',
     syncTitle: 'COROS planned workouts, activity delivery, and route sync',
-    syncCopy: 'Connect one active COROS account for its available data, activity, and route workflows. New COROS plan sync and standalone Send actions are coming soon in the app.',
+    syncCopy: 'Connect one active COROS account for its available data, activity, and route workflows. COROS planned-workout delivery is currently disabled and hidden from Training.',
     syncFlows: [
       {
         icon: 'event_note',
         title: 'Planned workouts to COROS',
-        copy: 'New COROS plan sync and standalone Send actions are coming soon in the app. Existing saved COROS delivery state can continue to follow its consent, with delivery records and recovery controls still available. Quantified Self does not claim a native QS-owned COROS plan or treat provider acceptance as watch receipt.',
+        copy: 'COROS plan sync and standalone Send are coming soon. They are currently disabled and hidden from Training; retained preferences and status records stay inactive until a deliberate rollout. Quantified Self does not claim a native QS-owned COROS plan or treat provider acceptance as watch receipt.',
       },
       {
         icon: 'sync_alt',
@@ -501,7 +501,7 @@ export const PROVIDER_INTEGRATION_PAGES: Record<IntegrationProviderKey, Provider
     faqItems: [
       {
         question: 'Can I send planned Training workouts to COROS?',
-        answer: 'Not yet from the app. New COROS plan sync and standalone Send actions are marked Coming soon, while existing saved delivery state can continue to follow its consent. Provider acceptance does not confirm app or watch receipt, and the COROS API does not provide planned-workout reads for automatic missing-copy checks.',
+        answer: 'Not yet. COROS plan sync and standalone Send are disabled and hidden from Training. Retained preferences and status records stay inactive until a deliberate rollout. Provider acceptance does not confirm app or watch receipt, and the COROS API does not provide planned-workout reads for automatic missing-copy checks.',
       },
       {
         question: 'How do I sync COROS data to Suunto automatically?',

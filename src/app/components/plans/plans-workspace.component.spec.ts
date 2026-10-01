@@ -1650,7 +1650,7 @@ describe('PlansWorkspaceComponent', () => {
     expect(fixture.componentInstance.removePastProviderCopies()).toBe(false);
     fixture.componentInstance.removePastProviderCopies.set(true);
     fixture.detectChanges();
-    expect(fixture.nativeElement.textContent).toContain('COROS cannot remove past workouts');
+    expect(fixture.nativeElement.textContent).toContain('Some providers cannot remove past workouts');
     await fixture.componentInstance.deletePlan(schedule.plans[0]);
     expect(deleteTrainingPlan).toHaveBeenCalledWith(expect.objectContaining({ removePastProviderCopies: true }));
   });

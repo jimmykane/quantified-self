@@ -5,12 +5,13 @@ import { projectStrengthWorkoutToV1, type StrengthWorkoutDraftV1 } from '../../.
 import type { TrainingDeliveryCommandV1 } from '../../../../../shared/training-provider-delivery';
 import { mutateTrainingScheduleForUser } from '../../persistence';
 import { trainingDeliveryCommand } from '../commands';
-import { DELIVERY_LEDGER, DELIVERY_QUEUE, type DeliveryLedgerV1, type DeliveryOperation, type DeliveryRuntime } from '../contracts';
+import { DELIVERY_LEDGER, DELIVERY_QUEUE, type DeliveryLedgerV1, type DeliveryOperation, type DeliveryRuntime,
+  type TrainingDeliveryTransport } from '../contracts';
 import { DELIVERY_SERVICES, productionDeliveryRuntime } from '../runtime';
 import { stageTrainingDeliveryReconciliation } from '../marker';
 import { reconcileTrainingDeliveryPage } from '../store';
 import { processTrainingDelivery } from '../worker';
-import { COROS_INTEGER_CLAIMS } from './identities';
+import { COROS_INTEGER_CLAIMS, reserveCorosIntegerIdentities } from './identities';
 import { authorizeCorosTrainingRequest } from './authorization';
 import { createCorosTrainingClient } from './http';
 import { CorosTrainingTransport } from './transport';
@@ -90,16 +91,30 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('COROS strength / producti
       const callback = afterAcceptance; afterAcceptance = null; if (callback) await callback();
       return new Response(JSON.stringify({ result: '0000', data }), { status: 200 });
     });
-    const policy = productionDeliveryRuntime(db).transport('coros', uid)!;
+    // Production admission is intentionally disabled. Keep exercising the real
+    // adapter through an explicitly injected synthetic transport in this suite.
+    const policy = new CorosTrainingTransport(async () => { throw new Error('Unbound synthetic transport'); }, () => now);
     const bind = (operation: Pick<DeliveryOperation, 'destinationKey' | 'connectionGeneration'>) => new CorosTrainingTransport(
       createCorosTrainingClient(async () => {
         const authority = await authorizeCorosTrainingRequest(db, uid, operation);
         const callback = beforeRequest; beforeRequest = null; if (callback) await callback();
         return authority;
       }, fetcher, () => now), () => now);
+    const syntheticTransport: TrainingDeliveryTransport = {
+      mappingVersion: policy.mappingVersion,
+      horizonDays: policy.horizonDays,
+      assess: policy.assess.bind(policy),
+      canRemove: policy.canRemove.bind(policy),
+      execute: (operation, checkpoint, guard) => bind(operation).execute(operation, checkpoint, guard),
+      recover: operation => bind(operation).recover(operation),
+      batch: {
+        maxSize: policy.batch.maxSize,
+        reserveIdentities: reserveCorosIntegerIdentities,
+        execute: (operations, beforeSend, guard) => bind(operations[0]).batch.execute(operations, beforeSend, guard),
+      },
+    };
     runtime = { ...productionDeliveryRuntime(db), now: () => now, hasPro: async () => pro,
-      transport: provider => provider !== 'coros' ? null : { ...policy,
-        batch: { ...policy.batch!, execute: (operations, beforeSend, guard) => bind(operations[0]).batch.execute(operations, beforeSend, guard) } } };
+      transport: provider => provider === 'coros' ? syntheticTransport : null };
     await user().set({ fixture: true });
     await user().collection('trainingPlanState').doc('current').set({ schemaVersion: 1, revision: 1, activePlanId: null,
       currentWorkoutCount: 0, updatedAtMs: now });
