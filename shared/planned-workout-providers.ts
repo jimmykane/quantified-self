@@ -88,11 +88,21 @@ export const GARMIN_CYCLING_WORKOUT_SPORTS_V1 = [
   ActivityTypes.DownhillCycling,
 ] as const;
 
+/** Explicitly approved fallback sports, not a catch-all for the activity catalog. */
+export const GARMIN_GENERIC_WORKOUT_SPORTS_V1 = [
+  ActivityTypes.Walking,
+  ActivityTypes.Hiking,
+  ActivityTypes.Rowing,
+  ActivityTypes.IndoorRowing,
+  ActivityTypes.OpenWaterSwimming,
+] as const;
+
 export const GARMIN_PLANNED_WORKOUT_SPORTS_V1 = [
   ...GARMIN_RUNNING_WORKOUT_SPORTS_V1,
   ...GARMIN_CYCLING_WORKOUT_SPORTS_V1,
   ActivityTypes.Swimming,
   ActivityTypes.StrengthTraining,
+  ...GARMIN_GENERIC_WORKOUT_SPORTS_V1,
 ] as const;
 
 export const COROS_NATIVE_RUNNING_WORKOUT_SPORTS_V1 = [
@@ -130,13 +140,14 @@ export function corosWorkoutSportFamilyV1(sport: ActivityTypes): CorosWorkoutSpo
   return null;
 }
 
-export type GarminWorkoutSportFamilyV1 = 'RUNNING' | 'CYCLING' | 'LAP_SWIMMING' | 'STRENGTH_TRAINING';
+export type GarminWorkoutSportFamilyV1 = 'RUNNING' | 'CYCLING' | 'LAP_SWIMMING' | 'STRENGTH_TRAINING' | 'GENERIC';
 
 export function garminWorkoutSportFamilyV1(sport: ActivityTypes): GarminWorkoutSportFamilyV1 | null {
   if ((GARMIN_RUNNING_WORKOUT_SPORTS_V1 as readonly ActivityTypes[]).includes(sport)) return 'RUNNING';
   if ((GARMIN_CYCLING_WORKOUT_SPORTS_V1 as readonly ActivityTypes[]).includes(sport)) return 'CYCLING';
   if (sport === ActivityTypes.Swimming) return 'LAP_SWIMMING';
   if (sport === ActivityTypes.StrengthTraining) return 'STRENGTH_TRAINING';
+  if ((GARMIN_GENERIC_WORKOUT_SPORTS_V1 as readonly ActivityTypes[]).includes(sport)) return 'GENERIC';
   return null;
 }
 
@@ -193,7 +204,8 @@ export const PLANNED_WORKOUT_PROVIDER_CAPABILITIES_V1: Readonly<
     limits: [
       'Single-sport workouts allow at most 100 total steps.',
       'Descriptions allow 1024 characters per workout and 512 characters per step.',
-      'Running and cycling sub-sports fold to broad families; pool swimming maps to LAP_SWIMMING. Open-water swimming is not mapped.',
+      'Running and cycling sub-sports fold to broad families; pool swimming maps to LAP_SWIMMING.',
+      'Walking, Hiking, Rowing, Indoor Rowing and Open Water Swimming map to Generic with approval. Generic workouts work only on some devices and do not guarantee native sport tracking or display; QS keeps the authored sport.',
       'Unspecified pool length is permitted by the API but may not work on older devices. Swim intensity targets are not mapped.',
       'Strength requires the complete exercise prescription and a verified Garmin exercise name. Reps, timed holds, kilogram load and rest are preserved; arbitrary names are unsupported.',
       'Strength mapping has local fixture/emulator evidence only; live cloud and device proof remains in #782.',
@@ -398,7 +410,9 @@ export function assessPlannedWorkoutProviderMappingV1(
         severity: 'degraded',
         code: 'sport_profile_degraded',
         path: '$.sport',
-        message: `${PLANNED_WORKOUT_PROVIDER_CAPABILITIES_V1[provider].label} receives ${structure.sport} as a ${familyLabel} workout because its Training API has no exact ${structure.sport} profile.`,
+        message: family === 'GENERIC'
+          ? `Garmin receives ${structure.sport} as a Generic workout, not its native sport profile. Generic workouts are supported only on some devices; native sport tracking and display are not guaranteed. QS keeps the authored sport.`
+          : `${PLANNED_WORKOUT_PROVIDER_CAPABILITIES_V1[provider].label} receives ${structure.sport} as a ${familyLabel} workout because its Training API has no exact ${structure.sport} profile.`,
       });
     }
   }

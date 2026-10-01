@@ -500,7 +500,9 @@ and stored speed remains m/s. Rowing distance and split display use Sports Lib d
 fixed 500 m sport-specific denominator, including when the owner's general distance preference is miles. No new
 planned-workout `Data*` type or event metric is introduced. Suunto Guide activity recommendations are Walking `0`,
 Hiking `11`, Rowing `15`, and Indoor Rowing `57`. The zero ID is retained as a real value in JSON and transport;
-Garmin and COROS are unsupported for structured-workout delivery of these four sports under current contracts.
+Garmin delivers these four sports through an explicit `GENERIC` fallback, not a native sport profile, after mapping
+approval. Generic workouts work only on some Garmin devices; native sport tracking and display are not guaranteed.
+COROS remains unsupported for these four sports under its current workout contract.
 Wahoo maps outdoor Walking/Hiking to the account-tested family `9` and exact Workout types `6`/`9`, with timed,
 untargeted steps only. Rowing/Indoor Rowing now have timed, untargeted Wahoo validation candidates, requiring review;
 an activity-type enum never proves Plan acceptance or structured playback. The sport-profile proof remains #789.
@@ -1340,6 +1342,23 @@ to `CYCLING`. These are explicit QS Training profiles, not a broad guess over ev
 Garmin receiving the exact subtype, and the canonical workout remains unchanged. Generic Cycling is still not changed
 into Mountain Biking in QS.
 
+Walking, Hiking, Rowing, Indoor Rowing and Open Water Swimming have an explicit `GENERIC` fallback allowlist.
+Owner-account native enum probes rejected these five profiles; the partner contract documents Generic as supported
+only on some devices. Every fallback is `degraded`, discloses the original sport and Generic/device limitations,
+and uses the existing destination- and payload-bound approval. QS keeps the exact authored sport, units, history and
+calendar presentation. The provider-facing description starts with the authored QS sport and the Generic limitation;
+this prefix counts toward the 1024-character limit, with truncation disclosed as usual. It is not native swimming,
+walking or rowing tracking and does not promise swim/500 m split display. Generic preserves time, distance, manual
+endings, fixed repeats and one primary target; repetitions, kJ endings and secondary targets fail closed. Generic
+open water does not receive pool fields or pool-specific final-rest skipping. Unknown sports still fail closed rather
+than using a catch-all. Existing Running/Cycling, pool and strength payloads remain unchanged.
+Local serializer, strict MCP read/proposal and demo-Firestore/synthetic-HTTP lifecycle tests cover these mappings;
+they do not establish deployment or live Generic app/watch acceptance. Rollout evidence remains in #655.
+MCP impact: the existing sport strings and `sport_profile_degraded` issue express this fallback without changing a
+registered schema, tool, scope, consent, mutation kind, provider action, recorded metric or bundled skill. Compatibility
+reads and Send proposals disclose Generic; the existing native/app confirmation still binds the current payload and
+destination. Provider identities and approval digests stay private. No MCP catalog refresh or plugin rebuild is needed.
+
 Garmin receives the same broad family at the workout and segment levels. Cycling-family folds may use the API's
 cycling-only secondary-target field subject to its existing device-support warning; running-family folds may not.
 Unsupported sports still fail closed. Existing Running/Cycling payloads and retained remote identities do not change,
@@ -1360,8 +1379,8 @@ completion. On 27 September, a separate plan-scoped 25 m pool swim passed owner-
 to 125 m, reschedule, readback and Stop/withdrawal. A standalone 25 m pool workout then appeared in Garmin Connect,
 with pool size 25 m and Quantified Self as its source; the owner confirmed that it and its work step appeared on the
 watch. Its delivery was subsequently stopped, and QS reported no retained Garmin copy. These observations do not
-prove completed-activity correlation or guarantee watch receipt for other devices. Open-water swimming remains
-unmapped. Never fold either swim profile to Running or Cycling.
+prove completed-activity correlation or guarantee watch receipt for other devices. Open-water swimming uses the
+disclosed Generic fallback above, never `LAP_SWIMMING`. Never fold either swim profile to Running or Cycling.
 COROS continues to map only target-free pool Swimming to `swim`; the current partner mapping does not justify
 open-water support. Wahoo's documented plan file remains running/cycling-only.
 
@@ -2160,7 +2179,8 @@ bundled skill changes. No MCP catalog refresh, plugin rebuild, Sports Lib upgrad
 The #733 pool-swim extension maps exact canonical Swimming to `LAP_SWIMMING`, with a root workout pool length (or
 explicit null for unspecified), null segment pool fields, target-free swim steps, `FIXED_REST` rest steps, and
 `skipLastRestStep: true` for repeats. Swim time steps outside 1–59 minutes and all current HR/power/pace/cadence swim
-targets are rejected. Open-water swimming remains unmapped. Redacted fixtures and a synthetic lifecycle round trip
+targets are rejected. Open-water swimming uses the separate approval-bound Generic fallback, not this pool mapper.
+Redacted fixtures and a synthetic lifecycle round trip
 cover a real 4 × 25 m set in a 25 m pool. Garmin permits unspecified pool size, although some older devices do not
 support it. The owner-account cloud lifecycle proof on 23 September 2026 enabled pool-swim admission for eligible,
 explicitly consenting Garmin connections: create, repeat-count edit, date move, positive retained-record checks and

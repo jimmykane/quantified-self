@@ -1,6 +1,7 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { Firestore } from 'firebase-admin/firestore';
 import { ActivityTypes } from '@sports-alliance/sports-lib';
+import { GARMIN_GENERIC_WORKOUT_SPORTS_V1 } from '../../../shared/planned-workout-providers';
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { DeliveryRuntime } from '../training-plans/delivery/contracts';
 import { FakeTrainingTransport } from '../training-plans/delivery/test-support/fake-transport';
@@ -707,6 +708,44 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Training MCP write propos
       Name: 'Squat', Length: { Unit: 'Reps', Value: 5 }, Rest: { Unit: 'Second', Value: 60 },
       IntensityTarget: { Unit: 'ValueOfEquipmentWeight', Value: 82.5 },
     }] });
+  });
+
+  it.each(GARMIN_GENERIC_WORKOUT_SPORTS_V1)('previews %s Generic loss and approves Send once through the unchanged MCP proposal contract', async sport => {
+    const garmin = new GarminHttpFixture();
+    const synthetic = new GarminTrainingTransport(garmin.request, deps.now);
+    const policy = productionDeliveryRuntime(db).transport('garmin', uid)!;
+    deps.runtime.transport = provider => provider !== 'garmin' ? null : { ...policy,
+      inspection: synthetic.inspection, execute: synthetic.execute.bind(synthetic), recover: synthetic.recover.bind(synthetic) };
+    const input = { uid, connectionId: 'connection', scopes, arguments: {
+      expectedScheduleRevision: 1, localDate: '2026-09-18', title: `Synthetic ${sport}`, structure: { ...structure, sport },
+      delivery: { providers: ['garmin'], timeZone: 'Europe/Helsinki' },
+    } };
+    await expect(previewCreatePlannedWorkout({ ...input, scopes: [TRAINING_PLANS_SCOPE, TRAINING_PLANS_WRITE_SCOPE] }, deps)).rejects.toThrow();
+    const preview = await previewCreatePlannedWorkout(input, deps);
+    expect(preview).toMatchObject({ requiresConfirmation: true, permissionMode: 'combined',
+      providerPreviews: [{ provider: 'garmin', warningCount: 1, summary: expect.stringContaining('Generic workout') }] });
+    expect(preview.providerPreviews[0].summary).toContain('only on some devices');
+    expect(preview.providerPreviews[0].summary).toContain('Confirming this proposal approves');
+    const user = db.collection('users').doc(uid);
+    expect((await user.collection('scheduledWorkouts').get()).empty).toBe(true);
+    expect((await user.collection('trainingDeliverySettings').get()).empty).toBe(true);
+    expect(garmin.calls).toHaveLength(0);
+    const confirmation = { uid, connectionId: 'connection', scopes,
+      arguments: { proposalRef: preview.proposalRef, permissionMode: preview.permissionMode } };
+    const applied = await applyTrainingChanges(confirmation, deps);
+    await expect(applyTrainingChanges(confirmation, deps)).resolves.toEqual(applied);
+    expect(applied.providers).toEqual([expect.objectContaining({ provider: 'garmin', status: 'applied' })]);
+    expect((await user.collection('scheduledWorkouts').get()).docs[0].get('structure.sport')).toBe(sport);
+    expect((await user.collection('trainingDeliverySettings').get()).docs[0].get('approvedDigest')).toMatch(/^[a-f0-9]{64}$/);
+    for (let page = 0; page < 20 && await reconcileTrainingDeliveryPage(deps.runtime, uid); page++) { /* drain */ }
+    const ledger = (await user.collection('trainingDeliveryLedger').get()).docs[0];
+    await Promise.all([processTrainingDelivery(deps.runtime, uid, ledger.id), processTrainingDelivery(deps.runtime, uid, ledger.id)]);
+    expect((await user.collection('trainingDeliveryStatuses').doc(ledger.id).get()).data())
+      .toMatchObject({ provider: 'garmin', status: 'delivered', hasRemoteCopy: true });
+    expect(garmin.workouts.size).toBe(1); expect(garmin.schedules.size).toBe(1);
+    expect([...garmin.workouts.values()][0]).toMatchObject({ sport: 'GENERIC',
+      description: expect.stringContaining(`Quantified Self sport: ${sport}.`) });
+    expect(garmin.calls.filter(call => call.method === 'POST')).toHaveLength(2);
   });
 
   it('previews Garmin strength without I/O and applies Send idempotently through its full production policy', async () => {

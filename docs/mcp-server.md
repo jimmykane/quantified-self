@@ -263,8 +263,15 @@ Walking, Hiking, Rowing, and Indoor Rowing keep their exact canonical Sports Lib
 planned-workout reads and approval-gated proposals. Rowing speed remains m/s and owner-facing pace is a 500 m split;
 row distance is displayed in metres. The strict registered v1 recipe already permits these sport strings, so no
 tool, schema, scope, consent or mutation kind changes. Focused read fixtures cover exact sport retention and unit
-formatting; compatibility remains provider-local, with Suunto Guide activity recommendations and explicit unsupported
-Garmin/COROS results. Wahoo now assesses timed, untargeted outdoor Walking/Hiking as exact using the shared local
+formatting; compatibility remains provider-local, with Suunto Guide activity recommendations, a degraded Garmin
+Generic fallback and explicit unsupported COROS results. Garmin also maps Open Water Swimming to Generic, never pool
+swimming. The existing `sport_profile_degraded` issue names the original sport, some-device-only Generic support and
+absence of guaranteed native sport tracking/display. Strict reads keep the authored recipe; existing Send proposals
+disclose the loss before native/app confirmation and bind approval to the current prescription and provider account.
+Generic supports time/distance/manual endings, fixed repeats and one primary target; unsupported endings or secondary
+targets fail closed, and unrelated catalog sports do not receive a Generic catch-all. Serializer and demo-emulator
+tests prove only local behavior, not live cloud or device acceptance. No registered wire contract or bundled skill changes.
+Wahoo now assesses timed, untargeted outdoor Walking/Hiking as exact using the shared local
 profile; distance/manual endings and intensity targets fail compatibility. Rowing/Indoor Rowing and swim profiles
 are timed, untargeted validation candidates reported as degraded, with explicit unproved-playback warnings.
 Running/cycling subprofiles use their native indoor/outdoor type where available. Indoor Running uses Treadmill, Velomobile uses Cycling, and Enduro MTB/Downhill Cycling use Mountain Biking, with a review warning; the saved QS sport is unchanged.

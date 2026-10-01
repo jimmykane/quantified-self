@@ -1,10 +1,11 @@
 import { randomUUID } from 'node:crypto';
 import { Firestore } from 'firebase-admin/firestore';
 import { ActivityTypes } from '@sports-alliance/sports-lib';
+import { GARMIN_GENERIC_WORKOUT_SPORTS_V1 } from '../../../../../shared/planned-workout-providers';
 import { projectStrengthWorkoutToV1, type StrengthWorkoutDraftV1 } from '../../../../../shared/strength-workout';
 import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ScheduledWorkoutV1 } from '../../../../../shared/training-plans';
-import type { TrainingDeliveryCommandV1 } from '../../../../../shared/training-provider-delivery';
+import type { TrainingDeliveryCommandV1, TrainingDeliveryPreviewV1 } from '../../../../../shared/training-provider-delivery';
 import { DELIVERY_LEDGER, DELIVERY_QUEUE, type DeliveryLedgerV1, type DeliveryOperation, type DeliveryRuntime } from '../contracts';
 import { trainingDeliveryCommand } from '../commands';
 import { stageTrainingDeliveryDisconnect, stageTrainingDeliveryReconciliation } from '../marker';
@@ -44,14 +45,15 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Garmin delivery / real Fi
     for (let page = 0; page < 20; page++) if (!await reconcileTrainingDeliveryPage(runtime, uid)) return;
     throw new Error('Unbounded fixture scan');
   };
-  const command = async (action: TrainingDeliveryCommandV1['action'] = 'send') => {
+  const command = async (action: TrainingDeliveryCommandV1['action'] = 'send', approvalDigest?: string, previewOnly = false) => {
     const [state, workout, settings] = await Promise.all([
       user().collection('trainingPlanState').doc('current').get(), user().collection('scheduledWorkouts').doc('w').get(),
       user().collection('trainingDeliverySettings').doc('workout_w_garmin').get(),
     ]);
     return trainingDeliveryCommand(runtime, uid, { schemaVersion: 1, mutationId: randomUUID(), scope: 'workout', scopeId: 'w',
       provider: 'garmin', action, timeZone: 'Europe/Helsinki', expectedScheduleRevision: state.data()!.revision,
-      expectedScopeRevision: workout.data()!.revision, expectedSettingsRevision: settings.data()?.revision ?? 0 }, false);
+      expectedScopeRevision: workout.data()!.revision, expectedSettingsRevision: settings.data()?.revision ?? 0,
+      ...(approvalDigest ? { approvalDigest } : {}) }, previewOnly);
   };
   const send = async () => { await command(); await drain(); return (await ledger()).id; };
   const retry = async (id: string) => { now = Math.max(now, (await ledger()).retryAtMs + 1); await processTrainingDelivery(runtime, uid, id); };
@@ -130,6 +132,60 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Garmin delivery / real Fi
     }
     await db.terminate();
   }, 120_000);
+
+  it.each(GARMIN_GENERIC_WORKOUT_SPORTS_V1.flatMap(sport => ['standalone', 'plan'].map(scope => ({ sport, scope }))))(
+    'requires current approval for $sport Generic in $scope and retains one Workout/Schedule through edits and Stop', async ({ sport, scope }) => {
+    const planId = scope === 'plan' ? 'p' : null;
+    if (planId) await mutate({ kind: 'create-plan', planId, name: 'Synthetic Generic plan', startLocalDate: '2026-09-20',
+      endLocalDate: '2026-09-27', activate: true });
+    const structure = { version: 1 as const, sport, nodes: [{ kind: 'step' as const, id: 'work', purpose: 'work' as const,
+      ending: { kind: 'time' as const, seconds: 300 }, targets: [] }] };
+    await mutate({ kind: 'update-workout', workoutId: 'w', planId, localDate: '2026-09-20',
+      title: `Synthetic ${sport}`, structure, confirmPlanRangeExtension: false });
+    const planCommand = async (action: 'configure' | 'stop') => {
+      const [state, plan, settings] = await Promise.all([user().collection('trainingPlanState').doc('current').get(),
+        user().collection('trainingPlans').doc('p').get(), user().collection('trainingDeliverySettings').doc('plan_p_garmin').get()]);
+      return trainingDeliveryCommand(runtime, uid, { schemaVersion: 1, mutationId: randomUUID(), scope: 'plan', scopeId: 'p',
+        provider: 'garmin', action, timeZone: 'Europe/Helsinki', expectedScheduleRevision: state.get('revision'),
+        expectedScopeRevision: plan.get('revision'), expectedSettingsRevision: settings.get('revision') ?? 0 }, false);
+    };
+    if (planId) await planCommand('configure');
+    const preview = await command('send', undefined, true) as TrainingDeliveryPreviewV1;
+    expect(preview).toMatchObject({ workoutCompatibility: 'degraded', approvalRequiredCount: 1 });
+    expect(preview.issues.join(' ')).toContain('Generic workout');
+    expect(server.calls).toHaveLength(0);
+    if (!planId) await command();
+    await drain();
+    const id = (await ledger()).id;
+    await processTrainingDelivery(runtime, uid, id); await drain();
+    expect((await ledger()).status).toBe('approval_required');
+    expect(server.calls).toHaveLength(0);
+    await command('approve', preview.approvalDigest!); await drain();
+    await Promise.all([processTrainingDelivery(runtime, uid, id), processTrainingDelivery(runtime, uid, id)]); await drain();
+    const original = (await ledger()).actual!;
+    expect((await ledger()).status).toBe('delivered');
+    expect(server.workouts.get(original.ids.workout)).toMatchObject({ sport: 'GENERIC',
+      description: expect.stringContaining(`Quantified Self sport: ${sport}.`),
+      segments: [{ sport: 'GENERIC', steps: [{ durationValue: 300 }] }] });
+    expect((await user().collection('scheduledWorkouts').doc('w').get()).get('structure.sport')).toBe(sport);
+
+    await mutate({ kind: 'update-workout', workoutId: 'w', planId, localDate: '2026-09-21',
+      title: `Synthetic ${sport} revised`, structure: { ...structure, nodes: [{ ...structure.nodes[0],
+        ending: { kind: 'time', seconds: 360 } }] }, confirmPlanRangeExtension: false });
+    await drain(); await processTrainingDelivery(runtime, uid, id); await drain();
+    expect((await ledger()).status).toBe('approval_required');
+    await expect(command('approve', preview.approvalDigest!)).rejects.toMatchObject({ code: 'aborted' });
+    const revised = await command('send', undefined, true) as TrainingDeliveryPreviewV1;
+    await command('approve', revised.approvalDigest!); await drain();
+    await processTrainingDelivery(runtime, uid, id); await drain();
+    expect((await ledger()).actual!.ids).toEqual(original.ids);
+    expect(server.workouts.get(original.ids.workout)).toMatchObject({ sport: 'GENERIC', segments: [{ steps: [{ durationValue: 360 }] }] });
+    expect(server.schedules.get(original.ids.schedule)).toMatchObject({ date: '2026-09-21' });
+    expect(server.calls.filter(call => call.method === 'POST')).toHaveLength(2);
+    if (planId) await planCommand('stop'); else await command('stop');
+    await drain(); await processTrainingDelivery(runtime, uid, id); await drain();
+    expect(server.workouts.size + server.schedules.size).toBe(0);
+  });
 
   it.each(['standalone', 'plan'] as const)('delivers %s strength through real mutations, duplicate dispatch, load edit, reschedule and Stop', async scope => {
     await seedStrength();

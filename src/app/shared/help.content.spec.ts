@@ -713,6 +713,13 @@ describe('help.content', () => {
     expect(planningSection?.content).toContain('Open-water swimming');
     expect(planningSection?.content).toContain('pool length');
     expect(planningSection?.content).toContain('Garmin receives broad Running/Cycling families');
+    expect(planningSection?.content).toContain('Garmin can deliver open-water workouts as **Generic**, not a native swim profile');
+    expect(planningSection?.content).toContain('Garmin delivers these four profiles as **Generic**, after mapping review');
+    expect(planningSection?.content).toContain('Generic works only on some devices');
+    expect(planningSection?.content).toContain('QS keeps your authored sport');
+    expect(planningSection?.content).toContain('repetition/kJ endings and secondary targets are unsupported');
+    expect(planningSection?.content).not.toContain('Garmin open-water delivery remains unsupported');
+    expect(planningSection?.content).not.toContain('Garmin and COROS delivery for these four profiles remain unsupported');
     expect(planningSection?.content).toContain('with a review warning');
     expect(planningSection?.content).toContain('only one can be active');
     expect(planningSection?.content).toContain('Move a workout between plans or between a plan and **Standalone**');

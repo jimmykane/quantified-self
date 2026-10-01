@@ -20,6 +20,7 @@ import { ServiceSourceIconComponent } from '../event-summary/service-source-icon
 import { AppEventService } from '../../services/app.event.service';
 import { TrainingDeliveryButtonComponent } from './training-delivery-button.component';
 import { isTrainingProviderDeliveryEnabled } from '@shared/training-delivery-rollout';
+import { GARMIN_GENERIC_WORKOUT_SPORTS_V1, assessPlannedWorkoutProviderMappingV1 } from '@shared/planned-workout-providers';
 import { WAHOO_TRAINING_PERMISSION_ISSUE } from '@shared/wahoo-training';
 import { WahooRouteAccessReconnectDialogComponent } from '../wahoo-route-access-reconnect-dialog/wahoo-route-access-reconnect-dialog.component';
 import type { TrainingDeliverySummary } from '../../helpers/training-delivery-summary.helper';
@@ -793,6 +794,27 @@ describe('Training provider delivery controls', () => {
     const fixture = TestBed.createComponent(TrainingDeliveryDialogComponent); fixture.detectChanges(); await fixture.whenStable();
     fixture.componentInstance.cancelReview(); expect(close).toHaveBeenCalledOnce();
     expect(service.mutate).not.toHaveBeenCalled();
+  });
+  it.each(GARMIN_GENERIC_WORKOUT_SPORTS_V1)('shows %s Generic and device limits before explicit mapping approval', async sport => {
+    service.isSetupAvailable.mockImplementation(provider => provider === 'garmin');
+    const assessment = assessPlannedWorkoutProviderMappingV1('garmin', { version: 1, sport, nodes: [
+      { kind: 'step', id: 'work', purpose: 'work', ending: { kind: 'time', seconds: 300 }, targets: [] },
+    ] });
+    service.preview.mockResolvedValue({ ...(await service.preview()), warningCount: 1, approvalRequiredCount: 1,
+      workoutCompatibility: assessment.level, issues: assessment.issues.map(issue => issue.message), approvalDigest: 'current-generic-digest' });
+    const fixture = TestBed.createComponent(TrainingDeliveryDialogComponent); fixture.detectChanges();
+    const component = fixture.componentInstance;
+    await component.begin('garmin', 'send'); fixture.detectChanges();
+    expect(fixture.nativeElement.textContent).toContain(`Garmin receives ${sport} as a Generic workout`);
+    expect(fixture.nativeElement.textContent).toContain('only on some devices');
+    expect(fixture.nativeElement.textContent).toContain('native sport tracking and display are not guaranteed');
+    expect(fixture.nativeElement.textContent).toContain('1 workout needs review');
+    expect(service.mutate).not.toHaveBeenCalled();
+    await component.confirm();
+    expect(service.mutate.mock.calls[0][0]).not.toHaveProperty('approvalDigest');
+    await component.begin('garmin', 'approve', 'old-generic-digest'); fixture.detectChanges();
+    await component.confirm();
+    expect(service.mutate.mock.calls[1][0]).toMatchObject({ action: 'approve', provider: 'garmin', approvalDigest: 'current-generic-digest' });
   });
   it('does not turn mapping warnings into automatic degradation approval', async () => {
     service.isSetupAvailable.mockImplementation(provider => provider === 'garmin');

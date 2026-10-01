@@ -56,6 +56,19 @@ describe('public-seo-pages.content', () => {
     expect(TRAINING_PLANS_HOME_CONTENT.mcpExample.prompt).toContain('training load');
     expect(TRAINING_PLANS_HOME_CONTENT.mcpExample.prompt).toContain('already in my plan');
   });
+  it('discloses Garmin Generic limitations on the homepage and public Training Plans page', () => {
+    const home = JSON.stringify(TRAINING_PLANS_HOME_CONTENT);
+    const page = JSON.stringify(TRAINING_PLANS_PAGE_SECTIONS);
+    for (const copy of [home, page]) {
+      expect(copy).toContain('Generic');
+      expect(copy).toContain('only on some devices');
+      expect(copy).toContain('QS keeps your authored sport');
+      expect(copy).not.toContain('Garmin open-water delivery remains unavailable');
+      expect(copy).not.toContain('Garmin and COROS delivery for these sports remain unsupported');
+    }
+    expect(page).toContain('not a native swim profile');
+    expect(page).toContain('COROS delivery for these sports remains unsupported');
+  });
   it('defines distinct public feature and guide paths', () => {
     expect(PUBLIC_FEATURE_PATHS).toEqual({
       hub: 'features',

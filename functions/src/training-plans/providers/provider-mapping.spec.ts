@@ -2,6 +2,7 @@ import { ActivityTypes } from '@sports-alliance/sports-lib';
 import { describe, expect, it } from 'vitest';
 import {
     GARMIN_CYCLING_WORKOUT_SPORTS_V1,
+    GARMIN_GENERIC_WORKOUT_SPORTS_V1,
     GARMIN_PLANNED_WORKOUT_SPORTS_V1,
     GARMIN_RUNNING_WORKOUT_SPORTS_V1,
     COROS_PLANNED_WORKOUT_SPORTS_V1,
@@ -85,14 +86,14 @@ describe('planned-workout provider proof fixtures', () => {
             ActivityTypes.DownhillCycling,
             ActivityTypes.Swimming,
             ActivityTypes.StrengthTraining,
+            ActivityTypes.Walking,
+            ActivityTypes.Hiking,
+            ActivityTypes.Rowing,
+            ActivityTypes.IndoorRowing,
+            ActivityTypes.OpenWaterSwimming,
         ]);
         expect(GARMIN_PLANNED_WORKOUT_SPORTS_V1).toEqual(expect.arrayContaining(
-            MANUAL_WORKOUT_EDITOR_SPORTS_V1.filter(sport =>
-                sport !== ActivityTypes.OpenWaterSwimming
-                && sport !== ActivityTypes.Walking
-                && sport !== ActivityTypes.Hiking
-                && sport !== ActivityTypes.Rowing
-                && sport !== ActivityTypes.IndoorRowing),
+            MANUAL_WORKOUT_EDITOR_SPORTS_V1,
         ));
         expect(PLANNED_WORKOUT_PROVIDER_CAPABILITIES_V1.garmin.profile?.sports)
             .toBe(GARMIN_PLANNED_WORKOUT_SPORTS_V1);
@@ -307,13 +308,11 @@ describe('planned-workout provider proof fixtures', () => {
         expect(JSON.parse(JSON.stringify(result.artifact)).activities).toEqual(activities);
     });
 
-    it.each([ActivityTypes.Walking, ActivityTypes.Hiking, ActivityTypes.Rowing, ActivityTypes.IndoorRowing])('%s remains unsupported for Garmin and COROS delivery', sport => {
+    it.each(GARMIN_GENERIC_WORKOUT_SPORTS_V1)('%s remains unsupported for COROS delivery', sport => {
         const structure = { ...oneStepStructure(), sport };
-        for (const provider of ['garmin', 'coros'] as const) {
-            expect(assessPlannedWorkoutProviderMappingV1(provider, structure)).toMatchObject({
-                level: 'unsupported', issues: [expect.objectContaining({ code: 'unsupported_sport' })],
-            });
-        }
+        expect(assessPlannedWorkoutProviderMappingV1('coros', structure)).toMatchObject({
+            level: 'unsupported', issues: [expect.objectContaining({ code: 'unsupported_sport' })],
+        });
     });
 
     it.each([ActivityTypes.Walking, ActivityTypes.Hiking])('maps timed %s to the tested outdoor Wahoo walking family without rewriting the sport', sport => {
@@ -479,7 +478,7 @@ describe('planned-workout provider proof fixtures', () => {
         });
     });
 
-    it('maps open-water swimming only to the documented Suunto Guide profile', () => {
+    it('maps open-water swimming to native Suunto guidance or disclosed Garmin Generic, never COROS pool swimming', () => {
         const structure: WorkoutStructureV1 = {
             ...oneStepStructure({ ending: { kind: 'distance', meters: 500 } }),
             sport: ActivityTypes.OpenWaterSwimming,
@@ -494,11 +493,12 @@ describe('planned-workout provider proof fixtures', () => {
         expect(result.artifact.steps[0]).toMatchObject({
             type: 'fields', transitions: [{ condition: { type: 'stepDistance', value: 500 } }],
         });
-        for (const provider of ['garmin', 'coros'] as const) {
-            expect(assessPlannedWorkoutProviderMappingV1(provider, structure)).toMatchObject({
-                level: 'unsupported', issues: [expect.objectContaining({ code: 'unsupported_sport' })],
-            });
-        }
+        expect(assessPlannedWorkoutProviderMappingV1('garmin', structure)).toMatchObject({
+            level: 'degraded', issues: [expect.objectContaining({ code: 'sport_profile_degraded', path: '$.sport' })],
+        });
+        expect(assessPlannedWorkoutProviderMappingV1('coros', structure)).toMatchObject({
+            level: 'unsupported', issues: [expect.objectContaining({ code: 'unsupported_sport' })],
+        });
         expect(assessPlannedWorkoutProviderMappingV1('wahoo', structure)).toMatchObject({
             level: 'unsupported', issues: expect.arrayContaining([expect.objectContaining({ code: 'unsupported_ending' })]),
         });

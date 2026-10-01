@@ -327,7 +327,13 @@ function serializeWorkout(structureValue: unknown, options: SerializeGarminWorko
     strength?: StrengthWorkoutDetailsV1): ProviderSerializationResultV1<GarminWorkoutPayloadV1> {
     const structure = parseWorkoutStructureV1(structureValue);
     const workoutName = requiredText(options.name, 'Garmin workout name');
-    const rawDescription = options.description?.trim() ?? '';
+    const authoredDescription = options.description?.trim() ?? '';
+    // Keep the authored sport visible even though Garmin cannot receive its native profile.
+    // Include this prefix in the provider's description limit and degradation review.
+    const rawDescription = garminWorkoutSportFamilyV1(structure.sport) === 'GENERIC'
+        ? [`Quantified Self sport: ${structure.sport}. Delivered as Garmin Generic; device support varies.`, authoredDescription]
+            .filter(Boolean).join('\n\n')
+        : authoredDescription;
     const ownerId = optionalPositiveSafeInteger(options.ownerId, 'Garmin owner ID');
     const additionalIssues: ProviderSerializationIssueV1[] = [];
     if (codePointLength(rawDescription) > 1024) {
