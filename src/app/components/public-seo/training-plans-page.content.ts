@@ -59,12 +59,12 @@ export const TRAINING_PLANS_PAGE_SECTIONS = [
       {
         icon: 'pool',
         title: 'Pool and open-water swimming',
-        copy: 'Create either Swimming or Open Water Swimming workouts with metre-based distance steps or timed steps. Suunto uses the matching Guide activity. Garmin supports compatible target-free pool swims with an optional pool length, but not open water; Wahoo swim delivery and COROS open-water delivery are unavailable. A Garmin cloud check is not proof of watch receipt.',
+        copy: 'Create either Swimming or Open Water Swimming workouts with metre-based distance steps or timed steps. Suunto uses the matching Guide activity. Garmin supports compatible target-free pool swims with an optional pool length, but not open water; COROS open-water delivery is unavailable. Wahoo timed, untargeted swim delivery is a validation candidate, not proven structured playback; it requires mapping review and does not send the selected pool length. A Garmin cloud check is not proof of watch receipt.',
       },
       {
         icon: 'hiking',
         title: 'Walking, hiking, and rowing',
-        copy: 'Create Walking, Hiking, Rowing, or Indoor Rowing workouts. Suunto Guides recommend the matching exercise profile. Wahoo supports outdoor Walking/Hiking with timed steps and no intensity targets; distance and intensity targets are unsupported for these Wahoo profiles. Garmin and COROS delivery for these sports, and Wahoo rowing delivery, remain unsupported. Cloud acceptance does not prove app or watch visibility.',
+        copy: 'Create Walking, Hiking, Rowing, or Indoor Rowing workouts. Suunto Guides recommend the matching exercise profile. Wahoo supports outdoor Walking/Hiking with timed steps and no intensity targets; distance and intensity targets are unsupported for these Wahoo profiles. Garmin and COROS delivery for these sports remain unsupported. Wahoo timed, untargeted rowing delivery is a validation candidate, not proven structured playback; review the warning and check its native profile and intervals. Cloud acceptance does not prove app or watch visibility.',
       },
       {
         icon: 'fitness_center',

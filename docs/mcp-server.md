@@ -254,7 +254,7 @@ so approval does not hide a pool-setting change. The built-in Assistant routes a
 even when the user's prompt does not repeat the saved length; it must read and preserve that selection. These additive
 tools are the local implementation of #734 under #583; they need deployment and client catalog refresh before use.
 No existing schema, mutation kind, scope, consent, provider action or private delivery evidence changes. Existing
-provider compatibility assessment still governs writes; Garmin accepts compatible, explicitly consented pool-swim delivery after owner-account cloud CRUD/readback proof (not watch receipt), Wahoo rejects swimming delivery, COROS accepts only target-free pool recipes at its backend
+provider compatibility assessment still governs writes; Garmin accepts compatible, explicitly consented pool-swim delivery after owner-account cloud CRUD/readback proof (not watch receipt), Wahoo exposes timed, untargeted swim validation candidates with explicit mapping warnings (not proven playback), COROS accepts only target-free pool recipes at its backend
 while new browser Send/sync actions remain unavailable, and Suunto maps pool and open-water profiles to distinct Guide
 activity recommendations. Owner read fixtures cover both swim sport strings and metre-based steps; no widened consent or
 provider action is implied by this read-only presentation change.
@@ -265,8 +265,11 @@ row distance is displayed in metres. The strict registered v1 recipe already per
 tool, schema, scope, consent or mutation kind changes. Focused read fixtures cover exact sport retention and unit
 formatting; compatibility remains provider-local, with Suunto Guide activity recommendations and explicit unsupported
 Garmin/COROS results. Wahoo now assesses timed, untargeted outdoor Walking/Hiking as exact using the shared local
-profile; distance/manual endings and intensity targets fail compatibility. Rowing/Indoor Rowing remain unsupported
-for Wahoo. Focused strict-output tests cover these results without adding fields, issue codes, tools, scopes,
+profile; distance/manual endings and intensity targets fail compatibility. Rowing/Indoor Rowing and swim profiles
+are timed, untargeted validation candidates reported as degraded, with explicit unproved-playback warnings.
+Running/cycling subprofiles use their native indoor/outdoor type where available. Indoor Running uses Treadmill, Velomobile uses Cycling, and Enduro MTB/Downhill Cycling use Mountain Biking, with a review warning; the saved QS sport is unchanged.
+Selected pool length remains canonical but is not sent to Wahoo. Strict compatibility and recipe reads cover all 21
+explicit planning profiles; unknown catalog sports still fail closed. Focused strict-output tests cover these results without adding fields, issue codes, tools, scopes,
 consent, mutations, provider actions, Assistant routes or bundled-skill instructions. Existing guidance still requires
 assessment before delivery; a local exact mapping never promises app/device receipt. Provider IDs and transport
 evidence remain private. This is a no-wire-impact extension;

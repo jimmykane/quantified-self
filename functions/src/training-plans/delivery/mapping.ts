@@ -1,4 +1,5 @@
 import { ActivityTypes } from '@sports-alliance/sports-lib';
+import { wahooWorkoutSportProfileV1 } from '../../../../shared/wahoo-workout-sports';
 import type { ScheduledWorkoutV1 } from '../../../../shared/training-plans';
 import type { PlannedWorkoutProviderId } from '../../../../shared/planned-workout-providers';
 import { hashTrainingScheduleRequestPayload } from '../persistence';
@@ -42,7 +43,8 @@ export function garminWorkoutMapping(workout: ScheduledWorkoutV1, strength?: Str
 }
 export function wahooWorkoutMapping(workout: ScheduledWorkoutV1, strength?: StrengthWorkoutDetailsV1 | null) {
   if (workout.structure.sport !== ActivityTypes.StrengthTraining) return serializeWahooPlanJsonV1(workout.structure,
-    { name: workout.title, description: workout.title, location: 'outdoor', allowDegraded: true });
+    { name: workout.title, description: workout.title,
+      location: wahooWorkoutSportProfileV1(workout.structure.sport)?.location === 0 ? 'indoor' : 'outdoor', allowDegraded: true });
   let details: StrengthWorkoutDetailsV1;
   try {
     details = parseStrengthWorkoutDetailsV1(strength);

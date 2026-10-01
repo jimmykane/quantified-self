@@ -191,7 +191,7 @@ export class WahooTrainingTransport implements TrainingDeliveryTransport {
     // Production readback truncates the submitted ISO timestamp to whole seconds.
     // Compare at the provider's precision while still rejecting another revision.
     if (value.name !== workout.title || numeric(value.workout_type_family_id) !== profile.family
-      || numeric(value.workout_type_location_id) !== (profile.family === 6 ? 0 : 1) || typeof value.provider_updated_at !== 'string'
+      || numeric(value.workout_type_location_id) !== profile.location || typeof value.provider_updated_at !== 'string'
       || Math.trunc(providerUpdatedAt / 1000) !== Math.trunc(workout.updatedAtMs / 1000)) uncertain();
   }
   private matchesWorkout(value: Value, operation: DeliveryOperation): boolean {

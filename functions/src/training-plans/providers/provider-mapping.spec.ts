@@ -341,9 +341,23 @@ describe('planned-workout provider proof fixtures', () => {
         }
     });
 
-    it.each([ActivityTypes.Rowing, ActivityTypes.IndoorRowing, ActivityTypes.Swimming, ActivityTypes.OpenWaterSwimming])('does not infer Wahoo %s delivery from its recorded-activity catalog', sport => {
-        expect(() => serializeWahooPlanJsonV1({ ...oneStepStructure(), sport }, {
-            name: 'Unsupported sport', location: 'outdoor', allowDegraded: true,
+    it.each([
+        [ActivityTypes.Rowing, 3, 'outdoor'], [ActivityTypes.IndoorRowing, 6, 'indoor'],
+        [ActivityTypes.Swimming, 2, 'indoor'], [ActivityTypes.OpenWaterSwimming, 2, 'outdoor'],
+    ] as const)('discloses Wahoo %s as an unproven timed validation candidate', (sport, family, location) => {
+        const structure = { ...oneStepStructure(), sport };
+        expect(() => serializeWahooPlanJsonV1(structure, {
+            name: 'Validation candidate', location, allowDegraded: false,
+        })).toThrow(expect.objectContaining({ code: 'degradation-confirmation-required' }));
+        const result = serializeWahooPlanJsonV1(structure, { name: 'Validation candidate', location, allowDegraded: true });
+        expect(result.level).toBe('degraded');
+        expect(result.issues).toContainEqual(expect.objectContaining({
+            code: 'sport_profile_degraded', message: expect.stringContaining('do not establish'),
+        }));
+        expect(result.artifact.header).toMatchObject({ workout_type_family: family,
+            workout_type_location: location === 'indoor' ? 0 : 1, duration_s: 600 });
+        expect(() => serializeWahooPlanJsonV1(structure, {
+            name: 'Wrong location', location: location === 'indoor' ? 'outdoor' : 'indoor', allowDegraded: true,
         })).toThrow(ProviderWorkoutMappingError);
     });
 
@@ -395,7 +409,7 @@ describe('planned-workout provider proof fixtures', () => {
         }));
     });
 
-    it('requires approval for a Garmin family fold while keeping other unproved mappings unsupported', () => {
+    it('requires approval for a Garmin family fold and discloses the Wahoo swim candidate', () => {
         const mountainBike = { ...oneStepStructure(), sport: ActivityTypes.MountainBiking };
         const swimming = { ...oneStepStructure(), sport: ActivityTypes.Swimming };
         expect(assessPlannedWorkoutProviderMappingV1('suunto', mountainBike).level).toBe('exact');
@@ -408,8 +422,8 @@ describe('planned-workout provider proof fixtures', () => {
             issues: [expect.objectContaining({ path: '$.poolLength' })],
         });
         expect(assessPlannedWorkoutProviderMappingV1('wahoo', swimming)).toMatchObject({
-            level: 'unsupported',
-            issues: [expect.objectContaining({ code: 'unsupported_sport' })],
+            level: 'degraded',
+            issues: [expect.objectContaining({ code: 'sport_profile_degraded' })],
         });
         expect(() => serializeGarminWorkoutV1(mountainBike, {
             name: 'MTB workout',
@@ -420,8 +434,7 @@ describe('planned-workout provider proof fixtures', () => {
             issues: [expect.objectContaining({ code: 'sport_profile_degraded' })],
         });
         expect(assessPlannedWorkoutProviderMappingV1('wahoo', mountainBike)).toMatchObject({
-            level: 'unsupported',
-            issues: [expect.objectContaining({ code: 'unsupported_sport' })],
+            level: 'exact', issues: [],
         });
     });
 
@@ -481,11 +494,14 @@ describe('planned-workout provider proof fixtures', () => {
         expect(result.artifact.steps[0]).toMatchObject({
             type: 'fields', transitions: [{ condition: { type: 'stepDistance', value: 500 } }],
         });
-        for (const provider of ['garmin', 'coros', 'wahoo'] as const) {
+        for (const provider of ['garmin', 'coros'] as const) {
             expect(assessPlannedWorkoutProviderMappingV1(provider, structure)).toMatchObject({
                 level: 'unsupported', issues: [expect.objectContaining({ code: 'unsupported_sport' })],
             });
         }
+        expect(assessPlannedWorkoutProviderMappingV1('wahoo', structure)).toMatchObject({
+            level: 'unsupported', issues: expect.arrayContaining([expect.objectContaining({ code: 'unsupported_ending' })]),
+        });
     });
 
     it.each([

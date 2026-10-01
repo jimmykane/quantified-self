@@ -170,7 +170,8 @@ describe('public-seo-pages.content', () => {
     expect(trainingPlans.faqItems.some(item => item.question === 'Can I use an MCP client with Training Plans?')).toBe(true);
     expect(JSON.stringify(trainingPlans)).toContain('Wahoo supports timed strength sets and rests as Gym workouts');
     expect(JSON.stringify(trainingPlans)).toContain('Wahoo supports outdoor Walking/Hiking with timed steps and no intensity targets');
-    expect(JSON.stringify(trainingPlans)).toContain('Wahoo rowing delivery, remain unsupported');
+    expect(JSON.stringify(trainingPlans)).toContain('Wahoo timed, untargeted rowing delivery is a validation candidate, not proven structured playback');
+    expect(JSON.stringify(trainingPlans)).toContain('does not send the selected pool length');
     expect(JSON.stringify(trainingPlans)).toContain('repetition sets remain unsupported');
     expect(JSON.stringify(trainingPlans)).toContain('exercise/load instructions are not native tracking');
     expect(trainingPlans.socialImage).toBe('https://quantified-self.io/assets/images/training-plans-social.png');

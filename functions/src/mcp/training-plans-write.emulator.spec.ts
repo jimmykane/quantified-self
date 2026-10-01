@@ -9,6 +9,7 @@ import { SuuntoGuideTransport } from '../training-plans/delivery/suunto/transpor
 import { productionDeliveryRuntime } from '../training-plans/delivery/runtime';
 import { WahooHttpFixture } from '../training-plans/delivery/test-support/wahoo-http-fixture';
 import { WahooTrainingTransport } from '../training-plans/delivery/wahoo/transport';
+import { WAHOO_SPORT_FIXTURES } from '../training-plans/delivery/test-support/wahoo-sport-fixtures';
 import { CorosTrainingTransport } from '../training-plans/delivery/coros/transport';
 import { GarminTrainingTransport } from '../training-plans/delivery/garmin/transport';
 import { GarminHttpFixture } from '../training-plans/delivery/test-support/garmin-http-fixture';
@@ -933,12 +934,43 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Training MCP write propos
     expect(wahoo.calls.filter(call => call.method === 'POST')).toHaveLength(2);
   });
 
+  it.each(WAHOO_SPORT_FIXTURES.filter(row => [ActivityTypes.Swimming, ActivityTypes.OpenWaterSwimming,
+    ActivityTypes.Rowing, ActivityTypes.IndoorRowing, ActivityTypes.IndoorRunning, ActivityTypes.IndoorCycling].includes(row.sport)))('previews Wahoo $sport safely and binds any mapping warning to the existing native confirmation', async ({ sport, family, type, location, level }) => {
+    const wahoo = new WahooHttpFixture();
+    const synthetic = new WahooTrainingTransport(wahoo.request, deps.now);
+    const policy = productionDeliveryRuntime(db).transport('wahoo', uid)!;
+    deps.runtime.transport = provider => provider !== 'wahoo' ? null : { ...policy,
+      inspection: synthetic.inspection, execute: synthetic.execute.bind(synthetic), recover: synthetic.recover.bind(synthetic) };
+    const preview = await previewCreatePlannedWorkout({ uid, connectionId: 'connection', scopes,
+      arguments: { expectedScheduleRevision: 1, localDate: '2026-09-18', title: 'Synthetic native profile',
+        structure: { ...structure, sport }, delivery: { providers: ['wahoo'], timeZone: 'Europe/Helsinki' } } }, deps);
+    expect(preview).toMatchObject({ permissionMode: 'combined', requiresConfirmation: true });
+    expect(preview.providerPreviews[0]).toMatchObject({ provider: 'wahoo', availability: 'ready', warningCount: level === 'degraded' ? 1 : 0 });
+    if (level === 'degraded') expect(preview.providerPreviews[0].summary).toContain('Confirming this proposal approves');
+    expect(JSON.stringify(preview)).not.toMatch(/workout_type|workout_token|external_id|destinationKey/);
+    expect(wahoo.calls).toHaveLength(0);
+    const input = { uid, connectionId: 'connection', scopes,
+      arguments: { proposalRef: preview.proposalRef, permissionMode: 'combined' } };
+    const applied = await applyTrainingChanges(input, deps);
+    await expect(applyTrainingChanges(input, deps)).resolves.toEqual(applied);
+    expect(applied.providers).toEqual([expect.objectContaining({ provider: 'wahoo', status: 'applied' })]);
+    const user = db.collection('users').doc(uid);
+    expect((await user.collection('scheduledWorkouts').get()).docs[0].get('structure.sport')).toBe(sport);
+    for (let page = 0; page < 20 && await reconcileTrainingDeliveryPage(deps.runtime, uid); page++) { /* drain */ }
+    const ledger = (await user.collection('trainingDeliveryLedger').get()).docs[0];
+    await Promise.all([processTrainingDelivery(deps.runtime, uid, ledger.id), processTrainingDelivery(deps.runtime, uid, ledger.id)]);
+    expect((await user.collection('trainingDeliveryStatuses').doc(ledger.id).get()).get('status')).toBe('delivered');
+    expect([...wahoo.plans.values()][0]).toMatchObject({ workout_type_family_id: family, workout_type_location_id: location });
+    expect([...wahoo.workouts.values()][0]).toMatchObject({ workout_type_id: type });
+    expect(wahoo.calls.filter(call => call.method === 'POST')).toHaveLength(2);
+  });
+
   it('shows an unsupported Wahoo sport before confirmation and never records Wahoo consent', async () => {
     const wahoo = new WahooHttpFixture();
     deps.runtime.transport = provider => provider === 'wahoo' ? new WahooTrainingTransport(wahoo.request, deps.now) : null;
     const preview = await previewCreatePlannedWorkout({ uid, connectionId: 'connection', scopes,
-      arguments: { expectedScheduleRevision: 1, localDate: '2026-09-18', title: 'Mountain bike ride',
-        structure: { ...structure, sport: ActivityTypes.MountainBiking },
+      arguments: { expectedScheduleRevision: 1, localDate: '2026-09-18', title: 'Yoga session',
+        structure: { ...structure, sport: ActivityTypes.Yoga },
         delivery: { providers: ['wahoo'], timeZone: 'Europe/Helsinki' } } }, deps);
     expect(preview.providerPreviews).toEqual([expect.objectContaining({ provider: 'wahoo', availability: 'unavailable',
       summary: expect.stringContaining('cannot receive this workout') })]);

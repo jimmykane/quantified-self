@@ -46,7 +46,10 @@ describe('integration-pages.content', () => {
     expect(training?.answer).toContain('time-based running and cycling');
     expect(training?.answer).toContain('outdoor Walking/Hiking without intensity targets');
     expect(training?.answer).toContain('timed Strength/Gym');
-    expect(training?.answer).toContain('swimming and rowing are unsupported');
+    expect(training?.answer).toContain('timed, untargeted validation candidates, not proven structured playback');
+    expect(training?.answer).toContain('Selected pool length is not sent to Wahoo');
+    expect(training?.answer).toContain('Indoor Running uses Treadmill');
+    expect(training?.answer).toContain('Repetition-based strength is unsupported');
     expect(training?.answer).toContain('not receipt by an ELEMNT computer');
     expect(PROVIDER_INTEGRATION_PAGES.wahoo.faqItems.find(item => item.question === 'Can I send a route to Wahoo?')?.answer)
       .toContain('saved Suunto routes to Wahoo automatically');

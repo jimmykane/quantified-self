@@ -1,4 +1,5 @@
-import { isWahooWalkingWorkoutSportV1, wahooDurationSeconds, wahooWorkoutSportProfileV1, type WahooWorkoutSportProfileV1 } from '../../../../shared/wahoo-workout-sports';
+import { ActivityTypes } from '@sports-alliance/sports-lib';
+import { isWahooUntargetedWorkoutSportV1, wahooDurationSeconds, wahooWorkoutSportProfileV1, type WahooWorkoutSportProfileV1 } from '../../../../shared/wahoo-workout-sports';
 import { formatStrengthLoadKg, parseStrengthWorkoutDetailsV1, projectStrengthWorkoutToV1 } from '../../../../shared/strength-workout';
 import {
     parseWorkoutStructureV1,
@@ -265,9 +266,13 @@ export function serializeWahooPlanJsonV1(
     const name = assertNonEmpty(options.name, 'Wahoo plan name');
     const normalizedDescription = options.description?.trim();
     const additionalIssues: ProviderSerializationIssueV1[] = [];
-    if (isWahooWalkingWorkoutSportV1(structure.sport) && options.location !== 'outdoor') {
+    const sportProfile = wahooWorkoutSportProfileV1(structure.sport);
+    // Preserve the old broad Running/Cycling serializer's explicit location option.
+    // Exact subprofiles and validation candidates must match their native location.
+    if (sportProfile && structure.sport !== ActivityTypes.Running && structure.sport !== ActivityTypes.Cycling
+        && (options.location === 'indoor' ? 0 : 1) !== sportProfile.location) {
         additionalIssues.push({ severity: 'unsupported', code: 'unsupported_sport',
-            path: '$.header.workout_type_location', message: 'Only outdoor Wahoo Walking/Hiking delivery is verified.' });
+            path: '$.header.workout_type_location', message: `Wahoo ${structure.sport} requires its ${sportProfile.location === 0 ? 'indoor' : 'outdoor'} profile location.` });
     }
     if (normalizedDescription && codePointLength(normalizedDescription) > 5000) {
         additionalIssues.push({
@@ -287,7 +292,6 @@ export function serializeWahooPlanJsonV1(
     });
     const context: WahooMappingContext = { headerReferences: {}, rawHeaderReferences: {} };
     const intervals = structureToIntervals(structure, context);
-    const sportProfile = wahooWorkoutSportProfileV1(structure.sport);
     if (!sportProfile) throw new Error('Unsupported Wahoo sport reached after compatibility validation.');
     const workoutTypeLocation: 0 | 1 = options.location === 'indoor' ? 0 : 1;
     const artifact: WahooPlanJsonV1 = {
@@ -299,7 +303,7 @@ export function serializeWahooPlanJsonV1(
                 : {}),
             workout_type_family: sportProfile.family,
             workout_type_location: workoutTypeLocation,
-            ...(isWahooWalkingWorkoutSportV1(structure.sport) ? { duration_s: wahooDurationSeconds(structure)! } : {}),
+            ...(isWahooUntargetedWorkoutSportV1(structure.sport) ? { duration_s: wahooDurationSeconds(structure)! } : {}),
             ...context.headerReferences,
         },
         intervals,

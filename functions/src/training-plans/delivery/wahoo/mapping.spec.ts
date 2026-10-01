@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { ActivityTypes } from '@sports-alliance/sports-lib';
+import { MANUAL_WORKOUT_EDITOR_SPORTS_V1, parseWorkoutStructureV1 } from '../../../../../shared/planned-workout';
+import { WAHOO_PLANNED_WORKOUT_SPORTS_V1, wahooWorkoutSportProfileV1 } from '../../../../../shared/wahoo-workout-sports';
+import { WAHOO_SPORT_FIXTURES } from '../test-support/wahoo-sport-fixtures';
+import { serializeWahooPlanJsonV1 } from '../../providers/wahoo-plan.serializer';
 import type { ScheduledWorkoutV1 } from '../../../../../shared/training-plans';
 import { hasWahooTrainingScopes } from '../../../../../shared/wahoo-training';
 import { WAHOO_API_SCOPES } from '../../../wahoo/constants';
@@ -42,12 +46,59 @@ describe('Wahoo delivery mapping (no editor changes)', () => {
     expect(JSON.parse(Buffer.from(encoded.split(',')[1], 'base64').toString()).header.workout_type_family)
       .toBe(sport === ActivityTypes.Cycling ? 0 : 1);
   });
-  it.each([ActivityTypes.Rowing, ActivityTypes.IndoorRowing, ActivityTypes.Swimming, ActivityTypes.OpenWaterSwimming])('blocks an unproven %s Workout type rather than defaulting to running/cycling', sport => {
+  it('covers every editor sport and only the explicit additional running/cycling profiles', () => {
+    expect(new Set(WAHOO_PLANNED_WORKOUT_SPORTS_V1)).toEqual(new Set([
+      ...WAHOO_SPORT_FIXTURES.map(row => row.sport), ActivityTypes.StrengthTraining,
+    ]));
+    for (const sport of MANUAL_WORKOUT_EDITOR_SPORTS_V1) expect(WAHOO_PLANNED_WORKOUT_SPORTS_V1).toContain(sport);
+  });
+  it.each([ActivityTypes.Walking, ActivityTypes.Hiking, ActivityTypes.Swimming, ActivityTypes.OpenWaterSwimming,
+    ActivityTypes.Rowing, ActivityTypes.IndoorRowing])('keeps %s prescription limits separate from profile-validation state', sport => {
+    expect(wahooWorkoutSportProfileV1(sport)?.untargetedTimeOnly).toBe(true);
+    expect(wahooWorkoutSportProfileV1(sport)?.validationPending).toBe(
+      sport === ActivityTypes.Walking || sport === ActivityTypes.Hiking ? undefined : true);
+  });
+  it.each(WAHOO_SPORT_FIXTURES)('maps $sport to its expected family/type/location without rewriting canonical sport', ({ sport, family, type, location, level }) => {
+    const workout = { ...wahooFixtureWorkout(), structure: { ...wahooFixtureWorkout().structure, sport } };
+    const before = structuredClone(workout);
+    expect(parseWorkoutStructureV1(JSON.parse(JSON.stringify(workout.structure)))).toEqual(workout.structure);
+    expect(assessWahooDelivery(workout, 'destination', 'UTC').level).toBe(level);
+    const encoded = new URLSearchParams(wahooPlanBody(workout, 'destination', true)).get('plan[file]')!;
+    const recipe = JSON.parse(Buffer.from(encoded.split(',')[1], 'base64').toString());
+    expect(recipe.header).toMatchObject({ workout_type_family: family, workout_type_location: location });
+    expect(recipe.intervals[1]).toMatchObject({ exit_trigger_type: 'repeat', exit_trigger_value: 2 });
+    const fields = new URLSearchParams(wahooWorkoutBody(workout, 'destination', 'UTC', '123'));
+    expect(fields.get('workout[workout_type_id]')).toBe(String(type));
+    expect(fields.get('workout[minutes]')).toBe('3.05');
+    expect(workout).toEqual(before);
+    if (level === 'degraded') {
+      expect(assessWahooDelivery(workout, 'destination', 'UTC').requiresApproval).not.toBe(false);
+      expect(() => serializeWahooPlanJsonV1(workout.structure, { name: workout.title,
+        location: location === 0 ? 'indoor' : 'outdoor', allowDegraded: false })).toThrow();
+    }
+  });
+  it.each([ActivityTypes.Yoga, ActivityTypes.Other])('never admits arbitrary recorded activity %s or defaults it to running', sport => {
     const workout = { ...wahooFixtureWorkout(), structure: { ...wahooFixtureWorkout().structure, sport } };
     expect(assessWahooDelivery(workout, 'destination', 'UTC').level).toBe('unsupported');
     expect(() => wahooWorkoutBody(workout, 'destination', 'UTC', '123')).toThrow();
   });
-  it.each([ActivityTypes.Walking, ActivityTypes.Hiking])('blocks an intensity target hidden inside a %s repeat even with mapping approval', sport => {
+  it.each(WAHOO_SPORT_FIXTURES.filter(row => row.family === 0 || row.family === 1))('preserves the authored absolute HR target for $sport', ({ sport }) => {
+    const workout = wahooFixtureWorkout(); workout.structure.sport = sport;
+    const step = workout.structure.nodes[0]; if (step.kind !== 'step') throw new Error('Expected step');
+    step.targets = [{ kind: 'heart-rate', mode: 'absolute', minimumBpm: 100, maximumBpm: 130 }];
+    const encoded = new URLSearchParams(wahooPlanBody(workout, 'destination', true)).get('plan[file]')!;
+    const recipe = JSON.parse(Buffer.from(encoded.split(',')[1], 'base64').toString());
+    expect(recipe.intervals[0].targets).toEqual([{ type: 'hr', low: 100, high: 130 }]);
+  });
+  it('preserves selected pool length in QS and discloses that the candidate cannot send it', () => {
+    const workout = wahooFixtureWorkout(); workout.structure.sport = ActivityTypes.Swimming;
+    workout.structure.poolLength = { meters: 25, presentation: 'meters' };
+    expect(assessWahooDelivery(workout, 'destination', 'UTC').issues.join(' ')).toContain('does not receive the selected pool length');
+    const encoded = new URLSearchParams(wahooPlanBody(workout, 'destination', true)).get('plan[file]')!;
+    expect(Buffer.from(encoded.split(',')[1], 'base64').toString()).not.toMatch(/poolLength|pool_length/);
+    expect(workout.structure.poolLength).toEqual({ meters: 25, presentation: 'meters' });
+  });
+  it.each([ActivityTypes.Walking, ActivityTypes.Hiking, ActivityTypes.Swimming, ActivityTypes.OpenWaterSwimming, ActivityTypes.Rowing, ActivityTypes.IndoorRowing])('blocks an intensity target hidden inside a %s repeat even with mapping approval', sport => {
     const workout = { ...wahooFixtureWorkout(), structure: { ...wahooFixtureWorkout().structure, sport } };
     const repeat = workout.structure.nodes[1];
     if (repeat.kind !== 'repeat') throw new Error('Expected fixture repeat');

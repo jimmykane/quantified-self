@@ -502,7 +502,8 @@ planned-workout `Data*` type or event metric is introduced. Suunto Guide activit
 Hiking `11`, Rowing `15`, and Indoor Rowing `57`. The zero ID is retained as a real value in JSON and transport;
 Garmin and COROS are unsupported for structured-workout delivery of these four sports under current contracts.
 Wahoo maps outdoor Walking/Hiking to the account-tested family `9` and exact Workout types `6`/`9`, with timed,
-untargeted steps only. Rowing/Indoor Rowing stay unsupported; an activity-type enum never proves Plan acceptance.
+untargeted steps only. Rowing/Indoor Rowing now have timed, untargeted Wahoo validation candidates, requiring review;
+an activity-type enum never proves Plan acceptance or structured playback. The sport-profile proof remains #789.
 The current browser, provider and MCP paths retain the authored sport; a provider's recorded-activity support never
 implies workout delivery support. Synthetic serializer and demo-emulator acceptance does not prove Suunto cloud, app,
 watch or completed-activity behavior. Account-side proof remains in #738 and #739 under #583 and needs separately
@@ -1777,7 +1778,56 @@ live Wahoo app or device result. The MCP impact review found no new tool, permis
 Assistant route or plugin instruction requirement; the existing preview availability/summary now reflects the
 backend compatibility verdict.
 
-#### Walking/Hiking delivery (#789)
+#### Wahoo sport-profile mappings and validation (#789)
+
+The explicit Wahoo planning whitelist covers all 15 manual-editor sports and the six already-authorized MCP
+running/cycling subprofiles. It does not widen the editor, recipe contract or MCP consent to the recorded-activity
+catalog. The [Cloud Workout types](https://cloud-api.wahooligan.com/#workout-types) and
+[families](https://cloud-api.wahooligan.com/#workout-type-families) define separate identifiers; the public
+[plan.json format](https://cloud-api.wahooligan.com/docs/plan-json-format.pdf) documents only Biking/Running families.
+
+| QS authored sport | Wahoo Workout type | Plan family | Location | Mapping boundary |
+| --- | ---: | ---: | --- | --- |
+| Running / Trail Running | 1 / 4 | 1 | Outdoor | Exact type; subtype playback needs owner validation |
+| Treadmill / Virtual Running | 5 / 71 | 1 | Indoor | Exact type; playback needs owner validation |
+| Indoor Running | 5 | 1 | Indoor | Disclosed Treadmill substitution |
+| Cycling / Mountain Biking | 0 / 13 | 0 | Outdoor | Exact type; subtype playback needs owner validation |
+| Indoor / Virtual Cycling | 12 / 68 | 0 | Indoor | Exact type; playback needs owner validation |
+| E-Biking / Hand Cycle | 64 / 70 | 0 | Outdoor | Exact type; playback needs owner validation |
+| Velomobile | 0 | 0 | Outdoor | Disclosed Cycling substitution |
+| Enduro MTB / Downhill Cycling | 13 | 0 | Outdoor | Disclosed Mountain Biking substitution |
+| Walking / Hiking | 6 / 9 | 9 | Outdoor | Account-tested timed/untargeted envelope; Hiking playback pending |
+| Swimming / Open Water Swimming | 25 / 26 | 2 | Indoor / Outdoor | Timed/untargeted validation candidate; not proven playback |
+| Rowing | 39 | 3 | Outdoor | Timed/untargeted validation candidate; not proven playback |
+| Indoor Rowing | 22 | 6 | Indoor | Timed/untargeted validation candidate; not proven playback |
+| Strength Training | 42 | 6 | Indoor | Existing full-companion timed sets/rests; instruction-only load |
+
+Authored sports, units and prescriptions remain unchanged in QS. Substitutions and swim/rowing candidate warnings
+use existing degraded compatibility and digest-bound mapping approval; changing an approved prescription requires
+fresh review. Walking/Hiking and swim/rowing candidates reject non-time endings or intensity targets, including
+inside repeats. Selected pool length remains in QS but has no documented Wahoo field and must be set locally.
+The time-only/no-target envelope is independent of profile-validation status: confirming playback does not establish
+support for distance steps or intensity targets, and must not automatically remove those restrictions.
+Strength repetition sets remain unsupported. No inferred duration, reps, pool length or narrower RPE target is added.
+Exact local mapping means no known sport transformation, never cloud/app/device proof.
+
+Demo-Firestore tests cover every profile, approval-before-I/O, stale approvals, concurrent sends, edit/reschedule,
+retained identifiers and Stop. Synthetic transport tests independently read back family, location and Workout type,
+and reject mismatches or recover lost POST responses without replacements. No live providers are called by tests.
+Existing Running/Cycling/Strength/Walking/Hiking v4 payloads and digests are unchanged; no mass requeue is needed.
+MCP strict compatibility and full-recipe reads cover the new profiles without new wire fields, tools, permissions,
+provider actions, Assistant instructions or plugin changes. Provider identifiers and transport evidence stay private.
+
+Before separately approved deployment, inspect existing opted-in plans and due work: newly admitted native run/bike subprofiles
+can become eligible under retained consent. Swim/rowing candidates and substitutions still require mapping review.
+After separately approved deployment/account sends, owner QA must verify the native Wahoo profile before Start,
+absence of Yoga/equipment substitution, correct indoor/outdoor sport, full interval/repeat timing and target playback.
+Start with Indoor Cycling/Treadmill, then Walking/Hiking, pool/open-water swimming and outdoor/indoor rowing; include
+the remaining run/bike subprofiles available on the owner's device. Check pool length locally and Strength's timed
+set/rest instructions. Cloud acceptance is not playback or watch receipt. Record actual device evidence and any
+failed profile in #789; #783 retains integrated timed-strength proof. No live send or deployment is implied here.
+
+#### Walking/Hiking delivery envelope (#789)
 
 Walking and Hiking retain their exact authored sport through the editor, provider assessment and MCP. The shared
 Wahoo sport profile keeps Plan family `9` / outdoor location `1` aligned with Workout type `6` (Walking) or `9` (Hiking).

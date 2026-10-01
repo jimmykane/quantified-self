@@ -4,6 +4,17 @@ Wahoo is a Pro-only integration. Quantified Self receives completed workout summ
 
 This is the Wahoo-specific architecture and release record. For the reusable implementation process, lifecycle requirements, operational checklist, and provider-wide pitfalls, see the [provider integration implementation guide](provider-integration-guide.md).
 
+## Planned sport profiles
+
+Training maps all 15 editor sports plus the six existing MCP running/cycling subprofiles through an explicit shared
+profile table, never the entire recorded-activity catalog. The exact Cloud Workout type, Plan family and indoor/outdoor
+location are separate fields and all are read back. See the complete table and evidence checklist in
+[Training workspace](training-workspace.md#wahoo-sport-profile-mappings-and-validation-789).
+Pool/open-water swimming and outdoor/indoor rowing are timed, untargeted validation candidates, not proven structured playback; review the mapping warning and check the native profile and intervals. Selected pool length is not sent to Wahoo.
+Existing timed Strength remains Gym/indoor with type 42, instruction-only loads and no rep tracking. The public
+interval format documents only Biking/Running; Cloud catalog IDs do not establish interval-player support.
+Adding these mappings authorizes neither deployment nor account-side sends.
+
 ## Supported scope
 
 - OAuth 2.0 authorization with `user_read`, `workouts_read`, `workouts_write`, `routes_read`, `routes_write`, `plans_read`, `plans_write`, and `offline_data`. Existing users need explicit reconnect for the new Training grants; ordinary imports/routes do not require them.
@@ -27,7 +38,8 @@ For one-time historical sends, a deleted event or changed/missing original befor
 
 Training delivery uses the shared queue, not the activity uploader or a new queue. Its
 single detailed implementation and operational contract is [Wahoo Training delivery](training-workspace.md#wahoo-plan-and-dated-workout-delivery-649):
-time-based Running/Cycling, untargeted outdoor Walking/Hiking and companion-aware timed Strength/Gym, saved-zone seven-day window, separate Plan/Workout/association receipts, duplicate-safe
+time-based Running/Cycling subprofiles, untargeted outdoor Walking/Hiking, reviewed timed/untargeted swim/rowing
+validation candidates and companion-aware timed Strength/Gym, saved-zone seven-day window, separate Plan/Workout/association receipts, duplicate-safe
 recovery, positive-only cloud checks, scope migration and lifecycle fences. Device receipt remains provider-managed and
 is never inferred from cloud acceptance.
 The production Plan validator requires `header.description` and a `targets` array on every non-repeat interval despite

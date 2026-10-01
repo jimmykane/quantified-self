@@ -16,6 +16,7 @@ import { WAHOO_API_SCOPES } from '../../../wahoo/constants';
 import type { TrainingDeliveryCommandV1 } from '../../../../../shared/training-provider-delivery';
 import { projectStrengthWorkoutToV1 } from '../../../../../shared/strength-workout';
 import { wahooFixtureStrengthDetails } from '../test-support/wahoo-http-fixture';
+import { WAHOO_SPORT_FIXTURES } from '../test-support/wahoo-sport-fixtures';
 
 describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Wahoo worker with real Firestore and synthetic provider only', { timeout: 30_000 }, () => {
   const host = process.env.FIRESTORE_EMULATOR_HOST;
@@ -27,11 +28,11 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Wahoo worker with real Fi
   const ledger = async () => (await user().collection(DELIVERY_LEDGER).get()).docs[0].data() as DeliveryLedgerV1;
   const drain = async () => { for (let i = 0; i < 100; i++) if (!await reconcileTrainingDeliveryPage(runtime, uid)) return; throw new Error('scan'); };
   const mark = async () => { await db.runTransaction(async tx => stageTrainingDeliveryReconciliation(tx, db, uid)); await drain(); };
-  const command = async (action: TrainingDeliveryCommandV1['action'], timeZone = 'Europe/Helsinki') => {
+  const command = async (action: TrainingDeliveryCommandV1['action'], timeZone = 'Europe/Helsinki', approvalDigest?: string) => {
     const setting = await user().collection('trainingDeliverySettings').doc('workout_w_wahoo').get();
     return trainingDeliveryCommand(runtime, uid, { schemaVersion: 1, mutationId: randomUUID(), scope: 'workout', scopeId: 'w', provider: 'wahoo',
       action, expectedScheduleRevision: 1, expectedScopeRevision: 1, expectedSettingsRevision: setting.data()?.revision ?? 0,
-      ...(action === 'send' ? { timeZone } : {}) }, false);
+      ...(action === 'send' ? { timeZone } : {}), ...(approvalDigest ? { approvalDigest } : {}) }, false);
   };
   const send = async () => { await command('send'); await drain(); const row = await ledger(); await processTrainingDelivery(runtime, uid, row.id); await drain(); return ledger(); };
   beforeEach(async () => {
@@ -83,19 +84,31 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Wahoo worker with real Fi
     await command('stop'); await drain(); await processTrainingDelivery(runtime, uid, row.id); await drain();
     expect(server.workouts.size).toBe(0); expect(server.plans.size).toBe(0);
   });
-  it.each([[ActivityTypes.Walking, 6], [ActivityTypes.Hiking, 9]] as const)('delivers %s, updates and reschedules retained identities, and withdraws on Stop', async (sport, type) => {
+  it.each(WAHOO_SPORT_FIXTURES)('delivers $sport, updates/reschedules retained identities, and withdraws on Stop after any required mapping review', async ({ sport, family, type, location, level }) => {
     const ref = user().collection('scheduledWorkouts').doc('w');
     const workout = wahooFixtureWorkout(); workout.structure.sport = sport;
     await ref.set(workout);
     await command('send'); await drain(); const row = await ledger();
+    if (level === 'degraded') {
+      expect(row.status).toBe('approval_required');
+      await processTrainingDelivery(runtime, uid, row.id);
+      expect(server.calls.filter(call => call.method === 'POST')).toHaveLength(0);
+      await command('approve', 'Europe/Helsinki', row.approvalDigest!); await drain();
+    }
     await Promise.all([processTrainingDelivery(runtime, uid, row.id), processTrainingDelivery(runtime, uid, row.id)]); await drain();
     const ids = (await ledger()).actual!.ids;
     expect((await ledger()).status).toBe('delivered');
-    expect(server.plans.get(ids.plan)).toMatchObject({ workout_type_family_id: 9, workout_type_location_id: 1 });
+    expect(server.plans.get(ids.plan)).toMatchObject({ workout_type_family_id: family, workout_type_location_id: location });
     expect(server.workouts.get(ids.workout)).toMatchObject({ workout_type_id: type, minutes: 1.5 });
     workout.title = 'Edited synthetic walk'; workout.localDate = '2026-10-31'; workout.updatedAtMs = now;
     workout.structure.nodes = [{ kind: 'step', id: 'longer', purpose: 'work', ending: { kind: 'time', seconds: 300 }, targets: [] }];
-    await ref.set(workout); await mark(); await processTrainingDelivery(runtime, uid, row.id); await drain();
+    await ref.set(workout); await mark();
+    if (level === 'degraded') {
+      const pending = await ledger(); expect(pending.status).toBe('approval_required');
+      await expect(command('approve', 'Europe/Helsinki', row.approvalDigest!)).rejects.toThrow();
+      await command('approve', 'Europe/Helsinki', pending.approvalDigest!); await drain();
+    }
+    await processTrainingDelivery(runtime, uid, row.id); await drain();
     expect(await ledger()).toMatchObject({ status: 'delivered', actual: { ids, localDate: '2026-10-31' } });
     expect(server.workouts.get(ids.workout)).toMatchObject({ workout_type_id: type, minutes: 5, starts: '2026-10-31T10:00:00.000Z' });
     await processTrainingDelivery(runtime, uid, row.id);
