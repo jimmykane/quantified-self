@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { Firestore } from 'firebase-admin/firestore';
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
-import { ActivityTypes, ServiceNames } from '@sports-alliance/sports-lib';
+import { ServiceNames } from '@sports-alliance/sports-lib';
 import { trainingDeliveryCommand } from '../commands';
 import { reconcileTrainingDeliveryPage } from '../store';
 import { processTrainingDelivery } from '../worker';

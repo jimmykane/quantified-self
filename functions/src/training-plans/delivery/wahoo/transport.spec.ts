@@ -1,5 +1,4 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { ActivityTypes } from '@sports-alliance/sports-lib';
 import type { ScheduledWorkoutV1 } from '../../../../../shared/training-plans';
 import type { DeliveryCheckpoint, DeliveryOperation } from '../contracts';
 import { projectStrengthWorkoutToV1 } from '../../../../../shared/strength-workout';
