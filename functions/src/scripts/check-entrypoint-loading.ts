@@ -11,7 +11,7 @@ const NO_TARGET = '__NO_TARGET__';
 // Exercise a property inherited from Object.prototype so the fallback check
 // also guards against accidental prototype-based routing.
 const UNKNOWN_TARGET = 'toString';
-const EXPECTED_FULL_EXPORT_COUNT = 167;
+const EXPECTED_FULL_EXPORT_COUNT = 169;
 const MARKETING_TARGETS = new Set([
   'listMarketingCampaigns',
   'saveMarketingCampaign',
@@ -46,6 +46,8 @@ const TRAINING_TARGET_METADATA: Readonly<Record<string, {
   ensureDerivedMetrics: { memoryMb: 512, timeoutSeconds: 120, trigger: 'callable', maxInstances: 100 },
   setTrainingBuildBenchmark: { memoryMb: 512, timeoutSeconds: null, trigger: 'callable' },
   mutateTrainingSchedule: { memoryMb: 512, timeoutSeconds: 300, trigger: 'callable' },
+  mutateWorkoutLibrary: { memoryMb: 512, timeoutSeconds: 120, trigger: 'callable' },
+  placeWorkoutLibrary: { memoryMb: 512, timeoutSeconds: 300, trigger: 'callable' },
   getTrainingScheduleHistory: { memoryMb: 512, timeoutSeconds: null, trigger: 'callable' },
   previewTrainingScheduleRestore: { memoryMb: 512, timeoutSeconds: null, trigger: 'callable' },
   restoreTrainingScheduleRevision: { memoryMb: 512, timeoutSeconds: null, trigger: 'callable' },

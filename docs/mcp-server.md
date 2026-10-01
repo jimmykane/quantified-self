@@ -13,6 +13,8 @@ grant. HTTP prechecks, tool registration and data reads enforce it. Revocation c
 | Tool | Current-record read |
 | --- | --- |
 | `list_training_plans` | Optional name/lifecycle filters; active, paused and archived metadata |
+| `list_saved_workouts` | Up to 25 undated owner-owned workout recipes per page, with optional title/status filters |
+| `get_saved_workout` | One full saved recipe, including complete Strength Training exercises when present |
 | `get_training_plan` | Metadata, range, revision and current workout count, without loading workouts |
 | `query_planned_workouts` | Legacy document-ordered inclusive-date query retained for registered-client compatibility |
 | `query_planned_workouts_by_date` | Inclusive dates in ascending local-date and stable reference order; calendar-visible (default standalone + active plan), standalone, selected plan or all |
@@ -53,6 +55,13 @@ ledger; it does not contact providers, approve degradation, or promise provider-
 delivery preview/apply remains authoritative.
 
 `training-plans.service.ts` owns explicit field masks and read-only Firestore snapshot transactions, not new persistence.
+
+Saved-workout reads are additive under the existing `training-plans:read` grant. Lists use opaque owner/connection-bound
+references, scan at most 200 library entries and return at most 25 per page; the cursor binds filters, limit and
+private library revision. An edit invalidates an older cursor. Exact reads validate the full recipe and strength draft;
+private receipts, tombstones, IDs and delivery records stay excluded. Library recipes carry no date, completion link
+or sync consent. Existing Training write proposals cannot create, edit or place saved recipes. Approval-gated MCP and
+built-in Assistant library changes are tracked separately in #780; browser callables do not widen MCP authority.
 Fresh schedule/account-deletion/plan-deletion fences run before and after results, as do external connection consent and
 grant-generation checks. Settings fingerprints are read only to correlate current delivery evidence and never returned.
 An oversized manual or separately approved MCP plan shift may temporarily hold the same internal bulk-operation fence
@@ -849,6 +858,8 @@ The analytics and map entries follow the
 | Tool | Scope | Result |
 | --- | --- | --- |
 | `list_training_plans` | `training-plans:read` | Paginated current plan summaries across active, paused and archived lifecycles |
+| `list_saved_workouts` | `training-plans:read` | Bounded, revision-fenced list of saved recipes without dates or sync consent |
+| `get_saved_workout` | `training-plans:read` | Exact validated saved recipe and optional full strength draft |
 | `get_training_plan` | `training-plans:read` | Current plan metadata and workout count without loading all workouts |
 | `query_planned_workouts` | `training-plans:read` | Legacy document-ordered calendar-date summaries retained for compatible clients |
 | `query_planned_workouts_by_date` | `training-plans:read` | Chronological bounded calendar-date summaries; standalone plus active plan by default |

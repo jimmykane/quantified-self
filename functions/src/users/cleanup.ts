@@ -330,6 +330,7 @@ async function cleanupUserScopedGeneratedState(uid: string): Promise<void> {
         { label: 'derived metrics', ref: userRef.collection(DERIVED_METRICS_COLLECTION_ID) },
         { label: 'training plan state', ref: userRef.collection(TRAINING_PLAN_STATE_COLLECTION_ID) },
         { label: 'training plans', ref: userRef.collection(TRAINING_PLANS_COLLECTION_ID) },
+        { label: 'workout library', ref: userRef.collection('workoutLibrary') },
         { label: 'scheduled workouts', ref: userRef.collection(SCHEDULED_WORKOUTS_COLLECTION_ID) },
         { label: 'training workout completions', ref: userRef.collection(TRAINING_WORKOUT_COMPLETIONS_COLLECTION_ID) },
         { label: 'training activity completion links', ref: userRef.collection(TRAINING_ACTIVITY_COMPLETION_LINKS_COLLECTION_ID) },
