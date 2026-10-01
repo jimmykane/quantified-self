@@ -1,24 +1,32 @@
 @if (hasTrainingPlanningUIAccess()) {
 <main class="plans-workspace qs-workspace-page" aria-labelledby="plans-title">
   <app-page-header
-    [title]="editor() ? (editor()!.mode === 'create' ? 'Add workout' : 'Edit workout') : showPlanForm() ? 'New plan' : 'Plans'"
+    [title]="libraryView() ? (editor() ? (libraryEditorItem() ? 'Edit saved workout' : 'Save a workout') : 'Workout library') : editor() ? (editor()!.mode === 'create' ? 'Add workout' : 'Edit workout') : showPlanForm() ? 'New plan' : 'Plans'"
     titleId="plans-title"
     leadingIcon="event_note"
-    [subtitle]="editor() ? 'Date, sport, and workout steps.' : showPlanForm() ? 'Workouts across a date range.' : 'Workouts, with or without a plan.'"
+    [subtitle]="libraryView() ? (editor() ? 'Build a reusable workout. Add dates later.' : 'Keep your common workouts ready for any plan.') : editor() ? 'Date, sport, and workout steps.' : showPlanForm() ? 'Workouts across a date range.' : 'Workouts, with or without a plan.'"
     [status]="pageStatus()">
     @if (browsing()) {
     <div pageHeaderActions class="plans-header-actions">
+      @if (!libraryView()) {
       <app-training-delivery-button scope="history" entityId="current" title="Plans and standalone workouts"
         [disabled]="busyAction() !== null || scheduleState().status !== 'ready'"></app-training-delivery-button>
       <a mat-button routerLink="/calendar" appHapticTap>
         <mat-icon aria-hidden="true">calendar_month</mat-icon>
         <span>Main Calendar</span>
       </a>
+      } @else {
+        <a mat-button routerLink="/training/plans" appHapticTap><mat-icon aria-hidden="true">arrow_back</mat-icon>Plans</a>
+        <a mat-flat-button routerLink="/training/plans/library/new" appHapticTap
+          [state]="{ trainingPlansEditorReturn: { uid: currentUser()?.uid, url: '/training/plans/library' } }">
+          <mat-icon aria-hidden="true">add</mat-icon>New saved workout
+        </a>
+      }
     </div>
     }
   </app-page-header>
 
-  @if (browsing() && scheduleState().status === 'ready') {
+  @if (browsing() && !libraryView() && scheduleState().status === 'ready') {
   <nav #scopeNavigation class="plans-view-navigation" aria-label="Workout scope" tabindex="-1">
     <mat-button-toggle-group
       [value]="view()"
@@ -35,6 +43,9 @@
         <span>Standalone</span>
       </mat-button-toggle>
     </mat-button-toggle-group>
+    <button mat-button type="button" appHapticTap (click)="openLibrary()" [disabled]="busyAction() !== null">
+      <mat-icon aria-hidden="true">library_books</mat-icon><span>Workout library</span>
+    </button>
     @if (view() === 'plans' && planOptions().length) {
     <button mat-button type="button" appHapticTap (click)="beginPlanCreation()" [disabled]="busyAction() !== null">
       <mat-icon aria-hidden="true">playlist_add</mat-icon>
@@ -116,7 +127,7 @@
       </section>
     }
 
-    @if (browsing() && view() === 'plans') {
+    @if (browsing() && !libraryView() && view() === 'plans') {
       <section class="plan-scope" aria-label="Selected plan">
         @if (selectedPlan(); as plan) {
         <div class="plan-selector-row">
@@ -302,6 +313,114 @@
       </section>
     }
 
+    @if (browsing() && libraryView()) {
+      <section class="workout-library" aria-labelledby="library-heading">
+        <div class="workout-list-heading">
+          <div>
+            <h2 id="library-heading">Saved workouts <span class="workout-count">({{ libraryRows().length }})</span></h2>
+            <p>Reusable recipes, without dates or service sync. Adding one makes independent calendar workouts.</p>
+          </div>
+        </div>
+        @if (libraryState().status === 'loading') {
+          <div class="workout-empty-state" role="status"><mat-spinner diameter="24"></mat-spinner>Loading saved workouts…</div>
+        } @else if (libraryState().status === 'error') {
+          <div class="workout-empty-state" role="alert">Could not load saved workouts. {{ libraryState().message }} Reload to try again.</div>
+        } @else if (libraryRows().length === 0) {
+          <div class="workout-empty-state" role="status">
+            <mat-icon aria-hidden="true">library_books</mat-icon>
+            <span>No saved workouts yet. Save one from a plan or create a new recipe here.</span>
+          </div>
+        }
+        @for (row of libraryRows(); track row.item.id; let last = $last) {
+          <app-compact-row class="workout-row" layout="stacked" density="compact" [mobileActionFullWidth]="true" [title]="row.item.title"
+            [titleId]="'saved-workout-' + row.item.id" [headingLevel]="3" [showDivider]="!last">
+            <div class="workout-row-meta">
+              <app-activity-type-icon [activityType]="row.item.structure.sport" size="18px" aria-hidden="true"></app-activity-type-icon>
+              <span>{{ row.item.structure.sport }}</span>
+              @if (row.item.status === 'archived') { <span> · Archived</span> }
+            </div>
+            <ol class="workout-summary">
+              @for (summary of row.summary; track $index) { <li>{{ summary }}</li> }
+            </ol>
+            <div compactRowAction class="workout-row-actions">
+              @if (row.item.status === 'active') {
+                <button mat-flat-button type="button" appHapticTap (click)="beginLibraryPlacement(row.item)"
+                  [disabled]="busyAction() !== null"><mat-icon aria-hidden="true">event_available</mat-icon> Add to dates</button>
+              }
+              <a mat-button [routerLink]="['/training/plans/library', row.item.id]" appHapticTap
+                [state]="{ trainingPlansEditorReturn: { uid: currentUser()?.uid, url: '/training/plans/library' } }"
+                [attr.aria-label]="'Edit saved workout ' + row.item.title"><mat-icon aria-hidden="true">edit</mat-icon> Edit</a>
+              <button mat-icon-button type="button" appHapticTap [matMenuTriggerFor]="libraryActions"
+                [attr.aria-label]="busyAction() === 'library-' + row.item.id ? 'Updating ' + row.item.title : 'More actions for ' + row.item.title"
+                [disabled]="busyAction() !== null">
+                @if (busyAction() === 'library-' + row.item.id) {
+                  <mat-spinner diameter="18" aria-hidden="true"></mat-spinner>
+                } @else {
+                  <mat-icon aria-hidden="true">more_vert</mat-icon>
+                }
+              </button>
+              <mat-menu #libraryActions="matMenu" class="qs-menu-panel">
+                <button mat-menu-item type="button" appHapticTap (click)="copyLibraryItem(row.item)">
+                  <mat-icon aria-hidden="true">content_copy</mat-icon>Copy saved workout
+                </button>
+                <button mat-menu-item type="button" appHapticTap
+                  (click)="setLibraryStatus(row.item, row.item.status === 'active' ? 'archived' : 'active')">
+                  <mat-icon aria-hidden="true">{{ row.item.status === 'active' ? 'archive' : 'unarchive' }}</mat-icon>
+                  {{ row.item.status === 'active' ? 'Archive' : 'Restore' }}
+                </button>
+                <button mat-menu-item type="button" appHapticTap (click)="deleteLibraryItem(row.item)">
+                  <mat-icon aria-hidden="true">delete</mat-icon>Delete saved workout
+                </button>
+              </mat-menu>
+            </div>
+          </app-compact-row>
+        }
+        @if (placementItem(); as item) {
+          <section class="library-placement" aria-labelledby="library-placement-heading">
+            <h3 id="library-placement-heading">Add {{ item.title }} to your calendar</h3>
+            <p>Choose a date range and weekdays. Each date gets its own editable workout.</p>
+            <fieldset [disabled]="busyAction() !== null">
+              <div class="library-placement-fields">
+                <mat-form-field><mat-label>Save to</mat-label>
+                  <mat-select [value]="placementPlanId() ?? 'standalone'"
+                    (selectionChange)="placementPlanId.set($event.value === 'standalone' ? null : $event.value); haptics.selection()">
+                    <mat-option value="standalone">Standalone</mat-option>
+                    @for (plan of planOptions(); track plan.id) {
+                      @if (plan.lifecycle !== 'archived') { <mat-option [value]="plan.id">{{ plan.name }}</mat-option> }
+                    }
+                  </mat-select>
+                </mat-form-field>
+                <mat-form-field><mat-label>From</mat-label>
+                  <input matInput type="date" [ngModel]="placementStartDate()" (ngModelChange)="setPlacementStartDate($event)">
+                </mat-form-field>
+                <mat-form-field><mat-label>Through</mat-label>
+                  <input matInput type="date" [ngModel]="placementEndDate()" (ngModelChange)="placementEndDate.set($event)">
+                </mat-form-field>
+              </div>
+              <div class="library-weekdays" role="group" aria-label="Repeat on weekdays">
+                @for (option of placementWeekdayOptions(); track option.day) {
+                  <mat-checkbox [checked]="placementWeekdays().includes(option.day)"
+                    (change)="togglePlacementWeekday(option.day)">{{ option.label }}</mat-checkbox>
+                }
+              </div>
+            </fieldset>
+            <p aria-live="polite">{{ placementDates().length }} {{ placementDates().length === 1 ? 'date' : 'dates' }} selected
+              @if (placementOverlaps()) { · {{ placementOverlaps() }} existing {{ placementOverlaps() === 1 ? 'workout' : 'workouts' }} on those dates }
+              @if (placementDates().length > 100) { · Maximum 100 dates at once }
+            </p>
+            @if (placementError()) { <p class="library-placement-error" role="alert">{{ placementError() }}</p> }
+            <div class="form-actions">
+              <button mat-button type="button" appHapticTap (click)="placementItem.set(null)" [disabled]="busyAction() !== null">Cancel</button>
+              <button mat-flat-button type="button" appHapticTap (click)="placeLibraryItem()"
+                [disabled]="busyAction() !== null || placementError() !== null || placementDates().length === 0">
+                Add {{ placementDates().length }} {{ placementDates().length === 1 ? 'workout' : 'workouts' }}
+              </button>
+            </div>
+          </section>
+        }
+      </section>
+    }
+
     @if (editor(); as session) {
       <section class="workout-editor" aria-labelledby="plans-title">
           <fieldset class="editor-fields" [disabled]="busyAction() !== null" aria-label="Workout details">
@@ -311,6 +430,7 @@
               <input #workoutTitleInput matInput maxlength="120" [ngModel]="session.value.title"
                 (ngModelChange)="updateEditorField('title', $event)">
             </mat-form-field>
+            @if (!libraryView()) {
             <mat-form-field>
               <mat-label>Date</mat-label>
               <input matInput required [matDatepicker]="workoutDatePicker" [ngModel]="workoutDatePickerValue()"
@@ -320,6 +440,7 @@
               <mat-datepicker #workoutDatePicker (opened)="haptics.selection()"></mat-datepicker>
               <mat-error>Choose a valid date.</mat-error>
             </mat-form-field>
+            }
             <mat-form-field>
               <mat-label>Sport</mat-label>
               <mat-select [value]="session.value.sport" [disabled]="busyAction() !== null"
@@ -353,6 +474,7 @@
             }
           </div>
 
+          @if (!libraryView()) {
           <fieldset class="workout-destination">
             <legend>Save to</legend>
             <mat-button-toggle-group
@@ -380,6 +502,7 @@
               <p class="workout-destination-note">This workout will stay visible in your calendar without a plan.</p>
             }
           </fieldset>
+          }
 
           @if (editorIsStrength()) {
             <section class="workout-nodes" aria-labelledby="strength-exercises-title">
@@ -525,14 +648,14 @@
         <div class="form-actions editor-save-actions">
           <button appHapticTap mat-button type="button" (click)="cancelEditor()" [disabled]="busyAction() !== null">Cancel</button>
           <button appHapticTap mat-flat-button type="button" (click)="saveWorkout()"
-            [disabled]="busyAction() !== null || !session.value.title.trim() || !workoutDatePickerValue() || workoutDateInputInvalid() || (editorIsStrength() ? session.strengthLoading || !session.strength : session.value.nodes.length === 0)">
+            [disabled]="busyAction() !== null || !session.value.title.trim() || (!libraryView() && (!workoutDatePickerValue() || workoutDateInputInvalid())) || (editorIsStrength() ? session.strengthLoading || !session.strength : session.value.nodes.length === 0)">
             <span class="button-content">
-              @if (busyAction() === 'save-workout') {
+              @if (busyAction() === 'save-workout' || busyAction() === 'save-library') {
                 <mat-spinner diameter="18"></mat-spinner>
               } @else {
                 <mat-icon aria-hidden="true">save</mat-icon>
               }
-              <span>{{ session.mode === 'create' ? 'Add workout' : 'Save workout' }}</span>
+              <span>{{ libraryView() ? (libraryEditorItem() ? 'Save changes' : 'Save to library') : session.mode === 'create' ? 'Add workout' : 'Save workout' }}</span>
             </span>
           </button>
         </div>
@@ -588,7 +711,7 @@
       </div>
     </ng-template>
 
-    @if (browsing() && (view() === 'standalone' || selectedPlan())) {
+    @if (browsing() && !libraryView() && (view() === 'standalone' || selectedPlan())) {
     <section class="workout-list" aria-labelledby="workouts-title">
       @if (view() === 'plans') {
         <div class="plan-schedule-heading">
@@ -676,6 +799,9 @@
                   }
                 </button>
                 <mat-menu #workoutActionsMenu="matMenu" class="qs-menu-panel">
+                  <button appHapticTap mat-menu-item type="button" (click)="saveExistingWorkoutToLibrary(row.workout)">
+                    <mat-icon aria-hidden="true">library_add</mat-icon><span>Save to workout library</span>
+                  </button>
                   <button appHapticTap mat-menu-item type="button" (click)="duplicateWorkout(row.workout)">
                     <mat-icon aria-hidden="true">content_copy</mat-icon><span>Duplicate to…</span>
                   </button>
@@ -700,7 +826,7 @@
     </section>
     }
 
-    @if (browsing() && deletedWorkoutScope()) {
+    @if (browsing() && !libraryView() && deletedWorkoutScope()) {
       <section class="deleted-workouts-panel" aria-label="Deleted workouts">
         <button mat-button type="button" appHapticTap (click)="toggleDeletedWorkouts()"
           [attr.aria-expanded]="deletedWorkoutsExpanded()" aria-controls="deleted-workout-list">

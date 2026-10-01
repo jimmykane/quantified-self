@@ -1,7 +1,7 @@
 import type { Data, ParamMap } from '@angular/router';
 import { normalizeTrainingLocalDate } from '@shared/training-plans';
 
-export type TrainingPlansRouteMode = 'browse' | 'create' | 'edit';
+export type TrainingPlansRouteMode = 'browse' | 'create' | 'edit' | 'library-browse' | 'library-create' | 'library-edit';
 export type TrainingPlansRouteScope = 'plans' | 'standalone';
 
 export interface TrainingPlansRouteState {
@@ -10,6 +10,7 @@ export interface TrainingPlansRouteState {
   planId: string | null;
   standalone: boolean;
   localDate: string | null;
+  libraryItemId?: string | null;
 }
 
 export function parseTrainingPlansRoute(
@@ -29,6 +30,7 @@ export function parseTrainingPlansRoute(
     planId: pathParams.get('planId')?.trim() || null,
     standalone: data['trainingPlansScope'] === 'standalone',
     localDate,
+    ...(mode === 'library-edit' ? { libraryItemId: pathParams.get('itemId')?.trim() || null } : {}),
   };
 }
 
@@ -49,13 +51,13 @@ export function trainingPlansWorkoutRoute(workoutId: string): string[] {
 export function isTrainingPlansUrl(value: unknown): boolean {
   const url = `${value ?? ''}`;
   if (hasLegacyTrainingPlansQuery(url)) return false;
-  return /^\/training\/plans(?:[?#]|$|\/(?:new|standalone(?:\/new)?|workout\/[^/?#]+|plan\/[^/?#]+(?:\/new)?)(?:[?#]|$))/.test(url);
+  return /^\/training\/plans(?:[?#]|$|\/(?:new|standalone(?:\/new)?|workout\/[^/?#]+|plan\/[^/?#]+(?:\/new)?|library(?:\/new|\/[^/?#]+)?)(?:[?#]|$))/.test(url);
 }
 
 export function isTrainingPlansBrowseUrl(value: unknown): boolean {
   const url = `${value ?? ''}`;
   if (hasLegacyTrainingPlansQuery(url)) return false;
-  return /^\/training\/plans(?:[?#]|$|\/standalone(?:[?#]|$)|\/plan\/[^/?#]+(?:[?#]|$))/.test(url);
+  return /^\/training\/plans(?:[?#]|$|\/standalone(?:[?#]|$)|\/plan\/[^/?#]+(?:[?#]|$)|\/library(?:[?#]|$))/.test(url);
 }
 
 export function trainingPlansRouteKey(uid: string | undefined, state: TrainingPlansRouteState): string {
@@ -63,7 +65,8 @@ export function trainingPlansRouteKey(uid: string | undefined, state: TrainingPl
 }
 
 function isMode(value: unknown): value is TrainingPlansRouteMode {
-  return value === 'browse' || value === 'create' || value === 'edit';
+  return value === 'browse' || value === 'create' || value === 'edit'
+    || value === 'library-browse' || value === 'library-create' || value === 'library-edit';
 }
 
 function hasLegacyTrainingPlansQuery(url: string): boolean {

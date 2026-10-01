@@ -27,7 +27,7 @@ export const TRAINING_PLANS_WRITE_SCOPE = 'training-plans:write';
 export const TRAINING_DELIVERY_WRITE_SCOPE = 'training-delivery:write';
 export const TRAINING_READ_EXTENSION_TOOLS = ['query_planned_workouts_by_date',
   'get_planned_workout_completions', 'assess_planned_workout_compatibility', 'get_strength_workout_details',
-  'get_planned_workout_v2'] as const;
+  'get_planned_workout_v2', 'list_saved_workouts', 'get_saved_workout'] as const;
 export const TRAINING_READ_TOOLS = ['list_training_plans', 'get_training_plan', 'query_planned_workouts',
   'get_planned_workout', 'get_training_sync_status', 'get_planned_workout_completion',
   ...TRAINING_READ_EXTENSION_TOOLS] as const;
@@ -64,6 +64,10 @@ export const TRAINING_READ_INPUTS = {
   get_planned_workout_completion: z.strictObject({ workoutRef: ref }),
   get_planned_workout_completions: z.strictObject({ workoutRefs }),
   assess_planned_workout_compatibility: z.strictObject({ workoutRef: ref, providers: selectedProviders.optional() }),
+  list_saved_workouts: z.strictObject({ search: z.string().max(120).optional(),
+    status: z.enum(['active', 'archived']).optional(), limit: z.number().int().min(1).max(25).default(25),
+    cursor: z.string().min(1).max(8192).optional() }),
+  get_saved_workout: z.strictObject({ savedWorkoutRef: ref }),
 };
 
 type WorkoutTargetVariantKey<T extends WorkoutTargetV1 = WorkoutTargetV1> = T extends WorkoutTargetV1
@@ -210,6 +214,16 @@ export const TRAINING_STRENGTH_DRAFT_SCHEMA = TRAINING_STRENGTH_DETAILS_SCHEMA.o
   .refine(value => { try { parseStrengthWorkoutDraftV1(value); return true; } catch { return false; } });
 export const TRAINING_READ_OUTPUTS = {
   list_training_plans: z.strictObject({ ...envelope, plans: z.array(plan).max(100) }),
+  list_saved_workouts: z.strictObject({ libraryRevision: count, scanComplete: z.boolean(),
+    recordsScanned: count.max(200), nextCursor: ref.nullable(),
+    workouts: z.array(z.strictObject({ savedWorkoutRef: ref, title: z.string().min(1).max(120),
+      status: z.enum(['active', 'archived']), revision: count.positive(), createdAtMs: count,
+      updatedAtMs: count })).max(25) }),
+  get_saved_workout: z.strictObject({ libraryRevision: count, savedWorkout: z.strictObject({
+    savedWorkoutRef: ref, title: z.string().min(1).max(120), status: z.enum(['active', 'archived']),
+    revision: count.positive(), createdAtMs: count, updatedAtMs: count,
+    structure: TRAINING_RECIPE_WITH_POOL_SCHEMA, strength: TRAINING_STRENGTH_DRAFT_SCHEMA.optional(),
+  }) }),
   get_training_plan: z.strictObject({ scheduleRevision: count, plan }),
   query_planned_workouts: z.strictObject({ ...envelope, startDate: trainingDate, endDate: trainingDate,
     scope: z.enum(['calendar', 'standalone', 'plan', 'all']), workouts: z.array(workout).max(100) }),
