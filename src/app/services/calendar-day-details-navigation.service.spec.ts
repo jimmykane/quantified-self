@@ -1,6 +1,6 @@
 import { signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
-import { NavigationStart, Router } from '@angular/router';
+import { NavigationCancel, NavigationEnd, NavigationStart, Router } from '@angular/router';
 import { Subject } from 'rxjs';
 import { AppUserService } from './app.user.service';
 import { CalendarDayDetailsNavigationService } from './calendar-day-details-navigation.service';
@@ -49,9 +49,11 @@ describe('CalendarDayDetailsNavigationService', () => {
     expect(service.prepareReturn('/dashboard', '2026-08-20')).toBe(true);
 
     routerEvents.next(new NavigationStart(1, '/user/user-1/event/event-1', 'imperative'));
+    routerEvents.next(new NavigationEnd(1, '/user/user-1/event/event-1', '/user/user-1/event/event-1'));
     expect(service.restorationFor('/dashboard')).toBeNull();
 
     routerEvents.next(new NavigationStart(2, '/dashboard', 'popstate'));
+    routerEvents.next(new NavigationEnd(2, '/dashboard', '/dashboard'));
     const restoration = service.restorationFor('/dashboard');
 
     expect(restoration).toEqual({ sourceUrl: '/dashboard', dateKey: '2026-08-20' });
@@ -59,19 +61,51 @@ describe('CalendarDayDetailsNavigationService', () => {
     expect(service.restorationFor('/dashboard')).toBeNull();
   });
 
+  it('publishes the return only after the destination URL and its components are active', () => {
+    service.prepareReturn('/dashboard', '2026-09-17', undefined, { view: 'month', anchor: '2026-09-01' });
+    routerEvents.next(new NavigationStart(1, '/dashboard', 'imperative'));
+    TestBed.tick();
+    expect(service.restorationFor('/dashboard')).toBeNull();
+
+    routerEvents.next(new NavigationEnd(1, '/dashboard', '/dashboard'));
+    expect(service.restorationFor('/dashboard')?.dateKey).toBe('2026-09-17');
+  });
+
+  it('keeps a cancelled return pending until a retry completes', () => {
+    service.prepareReturn('/dashboard', '2026-09-17');
+    routerEvents.next(new NavigationStart(1, '/dashboard', 'imperative'));
+    routerEvents.next(new NavigationCancel(1, '/dashboard', 'cancelled'));
+    expect(service.restorationFor('/dashboard')).toBeNull();
+    routerEvents.next(new NavigationStart(2, '/dashboard', 'imperative'));
+    routerEvents.next(new NavigationEnd(2, '/dashboard', '/dashboard'));
+    expect(service.restorationFor('/dashboard')?.dateKey).toBe('2026-09-17');
+  });
+
+  it('withholds a completed return if the owner changed before effects run', () => {
+    service.prepareReturn('/dashboard', '2026-09-17');
+    routerEvents.next(new NavigationStart(1, '/dashboard', 'imperative'));
+    currentUser.set({ uid: 'other' });
+    routerEvents.next(new NavigationEnd(1, '/dashboard', '/dashboard'));
+    expect(service.restorationFor('/dashboard')).toBeNull();
+  });
+
   it('restores the dashboard selection after visiting a full day and using browser Back', () => {
     expect(service.prepareReturn('/dashboard', '2026-08-20')).toBe(true);
     routerEvents.next(new NavigationStart(1, '/calendar/day/2026-08-20', 'imperative'));
+    routerEvents.next(new NavigationEnd(1, '/calendar/day/2026-08-20', '/calendar/day/2026-08-20'));
     expect(service.restorationFor('/dashboard')).toBeNull();
 
     routerEvents.next(new NavigationStart(2, '/dashboard', 'popstate'));
+    routerEvents.next(new NavigationEnd(2, '/dashboard', '/dashboard'));
     expect(service.restorationFor('/dashboard')).toEqual({ sourceUrl: '/dashboard', dateKey: '2026-08-20' });
   });
 
   it('retains the Today sheet origin when returning from a full day', () => {
     expect(service.prepareReturn('/dashboard', '2026-08-20', 'today-sheet')).toBe(true);
     routerEvents.next(new NavigationStart(1, '/calendar/day/2026-08-20', 'imperative'));
+    routerEvents.next(new NavigationEnd(1, '/calendar/day/2026-08-20', '/calendar/day/2026-08-20'));
     routerEvents.next(new NavigationStart(2, '/dashboard', 'popstate'));
+    routerEvents.next(new NavigationEnd(2, '/dashboard', '/dashboard'));
 
     const restoration = service.restorationFor('/dashboard');
     expect(restoration).toEqual({ sourceUrl: '/dashboard', dateKey: '2026-08-20', surface: 'today-sheet' });
@@ -83,7 +117,9 @@ describe('CalendarDayDetailsNavigationService', () => {
     service.prepareReturn(sourceUrl, '2026-08-03');
 
     routerEvents.next(new NavigationStart(1, '/user/user-1/event/event-1', 'imperative'));
+    routerEvents.next(new NavigationEnd(1, '/user/user-1/event/event-1', '/user/user-1/event/event-1'));
     routerEvents.next(new NavigationStart(2, sourceUrl, 'popstate'));
+    routerEvents.next(new NavigationEnd(2, sourceUrl, sourceUrl));
 
     expect(service.restorationFor(sourceUrl)?.dateKey).toBe('2026-08-03');
     expect(service.restorationFor('/calendar')).toBeNull();
@@ -98,7 +134,9 @@ describe('CalendarDayDetailsNavigationService', () => {
     service.prepareReturn('/calendar?view=month&date=2026-08-03', '2026-08-03');
 
     routerEvents.next(new NavigationStart(1, targetUrl, 'imperative'));
+    routerEvents.next(new NavigationEnd(1, targetUrl, targetUrl));
     routerEvents.next(new NavigationStart(2, '/calendar?view=month&date=2026-08-03', 'popstate'));
+    routerEvents.next(new NavigationEnd(2, '/calendar?view=month&date=2026-08-03', '/calendar?view=month&date=2026-08-03'));
 
     expect(service.restorationFor('/calendar?view=month&date=2026-08-03')?.dateKey).toBe('2026-08-03');
   });
@@ -108,8 +146,11 @@ describe('CalendarDayDetailsNavigationService', () => {
     service.prepareReturn(sourceUrl, '2026-08-03');
 
     routerEvents.next(new NavigationStart(1, '/training/plans/workout/workout-1', 'imperative'));
+    routerEvents.next(new NavigationEnd(1, '/training/plans/workout/workout-1', '/training/plans/workout/workout-1'));
     routerEvents.next(new NavigationStart(2, '/training/plans/plan/plan-1?date=2026-08-03', 'imperative'));
+    routerEvents.next(new NavigationEnd(2, '/training/plans/plan/plan-1?date=2026-08-03', '/training/plans/plan/plan-1?date=2026-08-03'));
     routerEvents.next(new NavigationStart(3, sourceUrl, 'popstate'));
+    routerEvents.next(new NavigationEnd(3, sourceUrl, sourceUrl));
 
     expect(service.restorationFor(sourceUrl)?.dateKey).toBe('2026-08-03');
   });
@@ -118,7 +159,9 @@ describe('CalendarDayDetailsNavigationService', () => {
     service.prepareReturn('/calendar', '2026-08-03');
 
     routerEvents.next(new NavigationStart(1, '/training/plans?workout=workout-1', 'imperative'));
+    routerEvents.next(new NavigationEnd(1, '/training/plans?workout=workout-1', '/training/plans?workout=workout-1'));
     routerEvents.next(new NavigationStart(2, '/calendar', 'popstate'));
+    routerEvents.next(new NavigationEnd(2, '/calendar', '/calendar'));
 
     expect(service.restorationFor('/calendar')).toBeNull();
   });
@@ -126,9 +169,11 @@ describe('CalendarDayDetailsNavigationService', () => {
   it('carries a deleted event ID into the returning calendar restoration', () => {
     service.prepareReturn('/dashboard', '2026-08-20');
     routerEvents.next(new NavigationStart(1, '/user/user-1/event/event-1', 'imperative'));
+    routerEvents.next(new NavigationEnd(1, '/user/user-1/event/event-1', '/user/user-1/event/event-1'));
 
     service.markEventDeleted('event-1');
     routerEvents.next(new NavigationStart(2, '/dashboard', 'popstate'));
+    routerEvents.next(new NavigationEnd(2, '/dashboard', '/dashboard'));
 
     expect(service.restorationFor('/dashboard')).toEqual({
       sourceUrl: '/dashboard',
@@ -141,8 +186,11 @@ describe('CalendarDayDetailsNavigationService', () => {
     service.prepareReturn('/dashboard', '2026-08-20');
 
     routerEvents.next(new NavigationStart(1, '/user/user-1/event/event-1', 'imperative'));
+    routerEvents.next(new NavigationEnd(1, '/user/user-1/event/event-1', '/user/user-1/event/event-1'));
     routerEvents.next(new NavigationStart(2, '/training', 'imperative'));
+    routerEvents.next(new NavigationEnd(2, '/training', '/training'));
     routerEvents.next(new NavigationStart(3, '/dashboard', 'popstate'));
+    routerEvents.next(new NavigationEnd(3, '/dashboard', '/dashboard'));
 
     expect(service.restorationFor('/dashboard')).toBeNull();
   });
@@ -150,10 +198,13 @@ describe('CalendarDayDetailsNavigationService', () => {
   it('clears an unconsumed restoration when leaving its source page', () => {
     service.prepareReturn('/dashboard', '2026-08-20');
     routerEvents.next(new NavigationStart(1, '/user/user-1/event/event-1', 'imperative'));
+    routerEvents.next(new NavigationEnd(1, '/user/user-1/event/event-1', '/user/user-1/event/event-1'));
     routerEvents.next(new NavigationStart(2, '/dashboard', 'popstate'));
+    routerEvents.next(new NavigationEnd(2, '/dashboard', '/dashboard'));
     expect(service.restorationFor('/dashboard')).not.toBeNull();
 
     routerEvents.next(new NavigationStart(3, '/training', 'imperative'));
+    routerEvents.next(new NavigationEnd(3, '/training', '/training'));
 
     expect(service.restorationFor('/dashboard')).toBeNull();
   });
@@ -162,7 +213,9 @@ describe('CalendarDayDetailsNavigationService', () => {
     const period = { view: '30d' as const, anchor: '2026-08-15' };
     service.prepareReturn('/dashboard', '2026-08-03', undefined, period);
     routerEvents.next(new NavigationStart(1, '/calendar/day/2026-08-03?from=dashboard', 'imperative'));
+    routerEvents.next(new NavigationEnd(1, '/calendar/day/2026-08-03?from=dashboard', '/calendar/day/2026-08-03?from=dashboard'));
     routerEvents.next(new NavigationStart(2, '/dashboard', 'imperative'));
+    routerEvents.next(new NavigationEnd(2, '/dashboard', '/dashboard'));
     expect(service.restorationFor('/dashboard')?.calendarReturn).toEqual(period);
     TestBed.tick(); currentUser.set({ uid: 'other' }); TestBed.tick();
     expect(service.restorationFor('/dashboard')).toBeNull();

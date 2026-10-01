@@ -1,5 +1,5 @@
 import { Injectable, effect, inject, signal } from '@angular/core';
-import { NavigationStart, Router } from '@angular/router';
+import { NavigationEnd, NavigationStart, Router } from '@angular/router';
 import { filter } from 'rxjs';
 import { isTrainingPlansUrl } from '../helpers/training-plans-navigation.helper';
 import { AppUserService } from './app.user.service';
@@ -32,8 +32,11 @@ export class CalendarDayDetailsNavigationService {
       if (destination && this.users.user()?.uid !== destination.ownerUid) this.destination.set(null);
     });
     router.events.pipe(
-      filter((event): event is NavigationStart => event instanceof NavigationStart),
-    ).subscribe(event => this.handleNavigationStart(event));
+      filter((event): event is NavigationStart | NavigationEnd => event instanceof NavigationStart || event instanceof NavigationEnd),
+    ).subscribe(event => {
+      if (event instanceof NavigationStart) this.handleNavigationStart(event);
+      else this.handleNavigationEnd(event);
+    });
   }
 
   prepareReturn(sourceUrl: string, dateKey: string, surface?: 'today-sheet', calendarReturn?: CalendarDayDetailsRestoration['calendarReturn']): boolean {
@@ -113,6 +116,19 @@ export class CalendarDayDetailsNavigationService {
     return true;
   }
 
+  private handleNavigationEnd(event: NavigationEnd): void {
+    const pendingReturn = this.pendingReturn;
+    if (!pendingReturn || normalizeLocalUrl(event.urlAfterRedirects) !== pendingReturn.sourceUrl) return;
+    this.pendingReturn = null;
+    if (this.returnOwnerUid && this.users.user()?.uid !== this.returnOwnerUid) {
+      this.restoration.set(null);
+      return;
+    }
+    // Calendar effects read router.url. Publish only after the destination URL and
+    // its components are active, so a newly mounted tile cannot miss its return.
+    this.restoration.set(pendingReturn);
+  }
+
   private handleNavigationStart(event: NavigationStart): void {
     const pendingReturn = this.pendingReturn;
     if (!pendingReturn) {
@@ -125,8 +141,6 @@ export class CalendarDayDetailsNavigationService {
 
     const targetUrl = normalizeLocalUrl(event.url);
     if (targetUrl === pendingReturn.sourceUrl) {
-      this.pendingReturn = null;
-      this.restoration.set(pendingReturn);
       return;
     }
 
