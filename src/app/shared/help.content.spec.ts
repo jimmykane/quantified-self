@@ -54,6 +54,16 @@ describe('help.content', () => {
     expect(copy).toContain('changing a distance preset does not reset that choice');
   });
 
+  it('documents supported Garmin strength names without claiming live/device proof', () => {
+    const copy = HELP_SECTIONS.find(section => section.id === 'training-plans')!.content;
+    expect(copy).toContain('Garmin strength mapping preserves individual reps or timed sets, load and rest');
+    expect(copy).toContain('live cloud/device verification is pending');
+    expect(copy).toContain('Barbell back squat');
+    expect(copy).toContain('QS never guesses equipment or substitutes another exercise');
+    expect(copy).toContain('Garmin receives loads in kilograms');
+    expect(copy).toContain('Wahoo strength delivery is unsupported');
+  });
+
   it('documents regional formatting scope, precedence, and stable export dates', () => {
     const content = HELP_SECTIONS.find(section => section.id === 'data-and-privacy')!.content.replace(/\s+/g, ' ');
 

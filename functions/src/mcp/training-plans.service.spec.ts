@@ -69,10 +69,19 @@ describe('Training plan MCP reads', () => {
     const compatibility = TRAINING_READ_OUTPUTS.assess_planned_workout_compatibility.parse(
       await f.run('assess_planned_workout_compatibility', { workoutRef, providers: ['suunto', 'garmin', 'wahoo', 'coros'] }));
     expect(compatibility.assessments.map(item => [item.provider, item.level])).toEqual([
-      ['suunto', 'degraded'], ['garmin', 'unsupported'], ['wahoo', 'unsupported'], ['coros', 'unsupported'],
+      ['suunto', 'degraded'], ['garmin', 'exact'], ['wahoo', 'unsupported'], ['coros', 'unsupported'],
     ]);
     expect(compatibility.assessments[0].issues[0].message).toContain('standard limitation needs no separate mapping approval');
     expect(compatibility.assessments[0].issues[0].message).toContain('additional mapping losses still require review');
+    const custom = { ...details, exercises: [{ ...details.exercises[0], name: 'My custom lift' }] };
+    f.strengthDocs.w1 = custom;
+    f.structures.w1 = projectStrengthWorkoutToV1(custom);
+    const unsupported = TRAINING_READ_OUTPUTS.assess_planned_workout_compatibility.parse(
+      await f.run('assess_planned_workout_compatibility', { workoutRef, providers: ['garmin'] }));
+    expect(unsupported.assessments[0]).toMatchObject({ provider: 'garmin', level: 'unsupported',
+      issues: [{ code: 'provider_contract_unavailable', field: '$.strength.exercises[0].name' }] });
+    expect(JSON.stringify(unsupported)).not.toContain('exerciseName');
+    f.structures.w1 = projectStrengthWorkoutToV1(details);
     f.strengthDocs.w1 = { ...details, exercises: [{ ...details.exercises[0], name: 'Changed' }] };
     await expect(f.run('get_strength_workout_details', { workoutRef })).rejects.toThrow();
   });

@@ -8,7 +8,7 @@ import { buildTrainingDeliverySummaries } from '../../../shared/training-deliver
 import { assessPlannedWorkoutProviderMappingV1, PLANNED_WORKOUT_PROVIDER_IDS,
   type PlannedWorkoutProviderId } from '../../../shared/planned-workout-providers';
 import { parseTrainingWorkoutCompletionV1 } from '../../../shared/training-workout-completion';
-import { parseStrengthWorkoutDetailsV1, strengthProjectionMatchesDetails } from '../../../shared/strength-workout';
+import { parseStrengthWorkoutDetailsV1, strengthProjectionMatchesDetails, type StrengthWorkoutDetailsV1 } from '../../../shared/strength-workout';
 import { parseWorkoutLibraryItemV1 } from '../../../shared/workout-library';
 import { isUserDeletionTombstoneActive } from '../shared/user-deletion-guard';
 import { TRAINING_PLANS_SCOPE, TRAINING_READ_INPUTS, TRAINING_READ_OUTPUTS, TRAINING_RECIPE_SCHEMA,
@@ -155,8 +155,9 @@ const WAHOO_SCHEDULING_DURATION_ISSUE = {
   message: 'Wahoo delivery requires time-based steps throughout because its dated Workout record needs a total duration. Quantified Self does not estimate one from distance, work, repetitions, or manual transitions.',
 };
 
-function assessDeliveryCompatibility(provider: PlannedWorkoutProviderId, structure: ReturnType<typeof parseWorkoutStructureV1>) {
-  const assessment = assessPlannedWorkoutProviderMappingV1(provider, structure);
+function assessDeliveryCompatibility(provider: PlannedWorkoutProviderId, structure: ReturnType<typeof parseWorkoutStructureV1>,
+  strength?: StrengthWorkoutDetailsV1) {
+  const assessment = assessPlannedWorkoutProviderMappingV1(provider, structure, strength);
   const needsWahooDuration = provider === 'wahoo' && structure.nodes.some(node =>
     (node.kind === 'step' ? [node] : node.steps).some(step => step.ending.kind !== 'time'));
   const issues = [...(needsWahooDuration ? [WAHOO_SCHEDULING_DURATION_ISSUE] : []), ...assessment.issues].slice(0, 20);
@@ -376,11 +377,13 @@ export async function readTrainingPlans(input: TrainingReadInput, reads: Trainin
       const a = TRAINING_READ_INPUTS.assess_planned_workout_compatibility.parse(args.data);
       const doc = await resolve(a.workoutRef, 'workout', true);
       const structure = parseWorkoutStructureV1(doc.data.structure);
+      let strength: StrengthWorkoutDetailsV1 | undefined;
       if (structure.sport === ActivityTypes.StrengthTraining) {
         const companion = await view.getStrengthDetails?.(doc.id);
         if (!companion) throw unavailable();
         const details = parseStrengthWorkoutDetailsV1(companion.data);
         if (details.workoutId !== doc.id || !strengthProjectionMatchesDetails(structure, details)) throw unavailable();
+        strength = details;
       }
       const providers = a.providers ?? PLANNED_WORKOUT_PROVIDER_IDS;
       return { scheduleRevision: state.revision, workoutRef: a.workoutRef,
@@ -390,7 +393,7 @@ export async function readTrainingPlans(input: TrainingReadInput, reads: Trainin
               code: 'strength_guide_degraded' as const, field: '$.strength',
               message: 'Suunto receives a Gym Guide with exercise and set instructions. Repetitions require manual transitions and this is not native strength tracking. This standard limitation needs no separate mapping approval; additional mapping losses still require review.' }] };
           }
-          const assessment = assessDeliveryCompatibility(provider, structure);
+          const assessment = assessDeliveryCompatibility(provider, structure, strength);
           return { provider: assessment.provider, level: assessment.level,
             issues: assessment.issues.map(issue => ({ severity: issue.severity, code: issue.code,
               field: issue.path, message: issue.message })) };

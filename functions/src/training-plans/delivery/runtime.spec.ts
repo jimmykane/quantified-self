@@ -80,7 +80,22 @@ describe('Production Training delivery rollout', () => {
     expect(fetcher).not.toHaveBeenCalled();
   });
 
-  it.each(['garmin', 'coros', 'wahoo'] as const)('does not approve strength delivery to unsupported %s', provider => {
+  it('preserves full Garmin strength assessment and load-only changes through the production wrapper without I/O', () => {
+    const fetcher = vi.fn();
+    vi.stubGlobal('fetch', fetcher);
+    const transport = runtime.transport('garmin', 'owner')!;
+    const assessment = transport.assess(strengthWorkout, inspection.destinationKey, inspection.timeZone, strength);
+    expect(assessment).toMatchObject({ level: 'exact', issues: [] });
+    expect(assessment.requiresApproval).not.toBe(true);
+    const changedLoad = structuredClone(strength);
+    changedLoad.exercises[0].sets[0].externalLoadKg = 55;
+    expect(transport.assess(strengthWorkout, inspection.destinationKey, inspection.timeZone, changedLoad).digest)
+      .not.toBe(assessment.digest);
+    expect(transport.assess(strengthWorkout, inspection.destinationKey, inspection.timeZone).level).toBe('unsupported');
+    expect(fetcher).not.toHaveBeenCalled();
+  });
+
+  it.each(['coros', 'wahoo'] as const)('does not approve strength delivery to unsupported %s', provider => {
     const fetcher = vi.fn();
     vi.stubGlobal('fetch', fetcher);
     expect(runtime.transport(provider, 'owner')!.assess(strengthWorkout, inspection.destinationKey, inspection.timeZone, strength).level)

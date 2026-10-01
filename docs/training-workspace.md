@@ -521,7 +521,8 @@ so mapping remains degraded and is not native strength tracking. This standard l
 Send/Enable plan sync; it does not require separate per-workout or per-edit mapping approval. Additional losses, such
 as shortened exercise instructions, still require explicit review of the current mapping. COROS has a contract fixture
 for strength Reps/Second, optional Rest and fixed equipment weight in kilograms, but browser new-send remains Coming
-soon until entitlement and account-side push/update/delete proof (#741). Garmin and Wahoo strength delivery are
+soon until entitlement and account-side push/update/delete proof (#741). Garmin's #782 companion-aware strength
+mapping is implemented for verified exercise names; live cloud/device proof remains pending. Wahoo strength delivery is
 unsupported. No live provider acceptance, app/watch receipt or completed-activity link is claimed from isolated
 emulator tests. The additive MCP strength read and preview use existing independent Training permissions; the registered
 v1 recipe tool remains only a compatibility summary. See `docs/mcp-server.md` for the exact wire boundary.
@@ -1863,6 +1864,44 @@ before the frontend. It neither authorizes a deployment nor changes any public p
 remains in the relevant adapter issues #647–#650, completion matching #651, Sports Lib extraction #654 and deployment/post-release operations #655.
 
 ### Garmin workout/calendar adapter (#647)
+
+#### Exercise-aware strength mapping (#782)
+
+The local confidential Training API V2 version 1.0 (26 May 2025), section 3.2.1, explicitly includes
+`STRENGTH_TRAINING`, `REPS`, `TIME`, `FIXED_REST`, `exerciseCategory`, `exerciseName`, kilogram `weightValue`, and
+`KILOGRAM`/`POUND` display units. Its separate Appendix A and B workbook supplies exercise identifiers; keep both source
+files ignored and out of Git. The adapter has a deliberately small, verified 20-name transport allowlist, not a new
+user-facing exercise catalogue. Help lists those exact names. Matching accepts case, whitespace, hyphens and underscores
+only; unknown or ambiguous shorthand is unsupported, never a guessed equipment variant or a free-text fallback.
+
+Each companion exercise/set becomes an ordered native strength step, with optional timed rest after every set,
+including the last. Explicit zero and fractional loads remain exact kilograms. Omitted load stays null rather than
+being invented as zero; Garmin's current display field is `KILOGRAM`, independent of the QS editor's kg/lb preference.
+No repeat compaction, truncation, rep estimation, automatic rep counting or exercise substitution occurs. All sets plus
+rests stay within the existing 100-node single-sport limit. Authored names remain in descriptions and in QS; provider
+category/name identifiers appear only in serialized artifacts. The derived v1 summary alone cannot authorize delivery.
+
+The shared assessment validates the complete strict companion and its projection; the runtime additionally binds its
+workout ID to the current owner-scoped root before provider I/O. Garmin assessments/digests and transport execution
+retain the full prescription. Load-only edits change the digest and native payload without rewriting the recipe or
+remote identity. Existing non-strength digests and fixtures are unchanged. The same Workout/Schedule journal,
+WORKOUT_IMPORT, Pro/consent, per-request authority, Stop/disconnect, completion protection and explicit past-removal
+policy apply. An uncertain first Workout POST still cannot be repeated blindly.
+Strength's full-prescription digest is checked before repair inspection and every recovery early-return as well as
+normal execution. A stale load-only snapshot cannot be read, checkpointed or acknowledged as accepted under another
+prescription's digest. This is private transport validation; no new MCP approval, field or grant is introduced.
+
+Local serializer, synthetic HTTP and demo-Firestore tests cover standalone and active-plan create, load-only update,
+reschedule, duplicate dispatch and Stop, invalid/missing/foreign/mismatched companions, uncertain creates,
+same/different-account reconnect and deletion fences. These tests are not live Garmin acceptance or device evidence.
+#782 remains open for separately approved Functions deployment, named account QA create/readback/update/reschedule and
+eligible deletion (with separate exact-target approval), then Garmin Connect/watch confirmation. No deployment,
+provider enablement, production calls or recorded-activity completion evidence is included in this change.
+
+MCP impact: compatibility reads now assess the validated Garmin companion using existing strict issue codes. Strength
+details reads and recipe previews remain unchanged; provider previews/apply retain the existing independent grants and
+normal native/app approval. No registered schema, tool, scope, mutation kind, recipe field, raw provider identifier or
+bundled skill changes. No MCP catalog refresh, plugin rebuild, Sports Lib upgrade, Firestore migration or new Function.
 
 The #733 pool-swim extension maps exact canonical Swimming to `LAP_SWIMMING`, with a root workout pool length (or
 explicit null for unspecified), null segment pool fields, target-free swim steps, `FIXED_REST` rest steps, and
