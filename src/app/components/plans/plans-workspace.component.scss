@@ -503,6 +503,9 @@ mat-card-actions button,
 }
 
 @media (max-width: 600px) {
+  .workout-row-actions,
+  .editor-save-actions { flex-wrap: wrap; }
+  .editor-library-copy-action { flex: 1 1 100%; }
   .strength-set-fields { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
   .strength-set-fields > mat-form-field { grid-column: 1 / -1; }
   .strength-set-fields > button { justify-self: end; }

@@ -394,6 +394,7 @@ describe('PlansWorkspaceComponent', () => {
     const component = fixture.componentInstance;
     expect(fixture.nativeElement.querySelector('.workout-destination')).toBeNull();
     expect(fixture.nativeElement.querySelector('input[type="date"]')).toBeNull();
+    expect(fixture.nativeElement.querySelector('.editor-library-copy-action')).toBeNull();
     component.updateEditorField('title', 'Saved aerobic run');
     await component.saveWorkout();
     expect(libraryMutate).toHaveBeenCalledWith(expect.objectContaining({
@@ -402,6 +403,75 @@ describe('PlansWorkspaceComponent', () => {
     expect(mutate).not.toHaveBeenCalled();
     expect(TestBed.inject(Router).navigate).toHaveBeenCalledWith(
       ['/training/plans/library'], { replaceUrl: true });
+  });
+
+  it('offers a visible save-to-library action on a scheduled workout row', async () => {
+    libraryMutate.mockResolvedValue({ mutationId: 'mutation-1', item: null });
+    const fixture = await renderPlans();
+    const row = fixture.nativeElement.querySelector('[data-workout-id="plan-workout"]') as HTMLElement;
+    expect(row.classList.contains('compact-row-host--mobile-action-full')).toBe(true);
+    const saveButton = [...row.querySelectorAll('.workout-row-actions button')]
+      .find(button => button.textContent?.includes('Save to library')) as HTMLButtonElement;
+    expect(saveButton).toBeTruthy();
+
+    saveButton.click();
+    await fixture.whenStable();
+
+    expect(libraryMutate).toHaveBeenCalledWith(expect.objectContaining({
+      operation: expect.objectContaining({ kind: 'save-workout', sourceWorkoutId: 'plan-workout',
+        expectedSourceRevision: schedule.workouts[0].revision }),
+    }));
+    expect(mutate).not.toHaveBeenCalled();
+    expect(haptics.success).toHaveBeenCalledOnce();
+  });
+
+  it('copies the unsaved editor version to the library without updating the scheduled workout', async () => {
+    libraryMutate.mockResolvedValue({ mutationId: 'mutation-1', item: null });
+    setRouteState({ mode: 'edit', workoutId: 'plan-workout' });
+    const fixture = await renderPlans();
+    const component = fixture.componentInstance;
+    const notice = vi.spyOn((component as unknown as { snackBar: MatSnackBar }).snackBar, 'open');
+    component.updateEditorField('title', 'Edited library version');
+    component.updateStep(0, null, 'endingValue', 45);
+    fixture.detectChanges();
+
+    const saveButton = fixture.nativeElement.querySelector('.editor-library-copy-action') as HTMLButtonElement;
+    expect(saveButton).toBeTruthy();
+    saveButton.click();
+    await fixture.whenStable();
+
+    expect(libraryMutate).toHaveBeenCalledWith(expect.objectContaining({
+      operation: expect.objectContaining({ kind: 'create', title: 'Edited library version',
+        structure: expect.objectContaining({ nodes: [expect.objectContaining({
+          ending: { kind: 'time', seconds: 45 * 60 },
+        })] }),
+      }),
+    }));
+    expect(mutate).not.toHaveBeenCalled();
+    expect(component.editor()?.value.title).toBe('Edited library version');
+    expect(component.busyAction()).toBeNull();
+    expect(haptics.success).toHaveBeenCalledOnce();
+    expect(notice).toHaveBeenCalledWith(
+      'Copy saved to Workout library. Your calendar workout is unchanged.', 'Dismiss', { duration: 5000 });
+  });
+
+  it('does not show editor-copy success after sign-out', async () => {
+    let resolveMutation!: (value: unknown) => void;
+    libraryMutate.mockReturnValue(new Promise(resolve => { resolveMutation = resolve; }));
+    setRouteState({ mode: 'edit', workoutId: 'plan-workout' });
+    const fixture = await renderPlans();
+    const component = fixture.componentInstance;
+    const notice = vi.spyOn((component as unknown as { snackBar: MatSnackBar }).snackBar, 'open');
+
+    const copy = component.saveEditorCopyToLibrary();
+    userSignal.set(null);
+    userSubject.next(null);
+    resolveMutation({ mutationId: 'mutation-1', item: null });
+    await copy;
+
+    expect(haptics.success).not.toHaveBeenCalled();
+    expect(notice).not.toHaveBeenCalled();
+    expect(mutate).not.toHaveBeenCalled();
   });
 
   it('returns from a library editor through its recorded browse entry', async () => {

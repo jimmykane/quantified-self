@@ -646,6 +646,21 @@
               [standalone]="workout.planId === null" [disabled]="busyAction() !== null"></app-training-delivery-button>
           }
         <div class="form-actions editor-save-actions">
+          @if (!libraryView() && session.mode === 'edit' && savedEditorWorkout()) {
+            <button appHapticTap mat-stroked-button class="editor-library-copy-action" type="button"
+              (click)="saveEditorCopyToLibrary()"
+              [disabled]="busyAction() !== null || !session.value.title.trim() || (editorIsStrength() ? session.strengthLoading || !session.strength : session.value.nodes.length === 0)"
+              matTooltip="Save the editor's current version as a separate reusable workout; calendar changes still need Save workout">
+              <span class="button-content">
+                @if (busyAction() === 'save-library-from-editor') {
+                  <mat-spinner diameter="18"></mat-spinner>
+                } @else {
+                  <mat-icon aria-hidden="true">library_add</mat-icon>
+                }
+                <span>Save copy to library</span>
+              </span>
+            </button>
+          }
           <button appHapticTap mat-button type="button" (click)="cancelEditor()" [disabled]="busyAction() !== null">Cancel</button>
           <button appHapticTap mat-flat-button type="button" (click)="saveWorkout()"
             [disabled]="busyAction() !== null || !session.value.title.trim() || (!libraryView() && (!workoutDatePickerValue() || workoutDateInputInvalid())) || (editorIsStrength() ? session.strengthLoading || !session.strength : session.value.nodes.length === 0)">
@@ -753,7 +768,7 @@
       } @else {
         <div class="workout-rows">
           @for (row of displayedWorkoutRows(); track row.workout.id; let lastWorkout = $last) {
-            <app-compact-row class="workout-row" layout="stacked" density="compact" tabindex="-1"
+            <app-compact-row class="workout-row compact-row-host--mobile-action-full" layout="stacked" density="compact" tabindex="-1"
               [attr.data-workout-id]="row.workout.id"
               [attr.aria-label]="'Workout ' + row.workout.title"
               [title]="row.workout.title" [titleId]="'scheduled-workout-' + row.workout.id"
@@ -789,19 +804,26 @@
                 <button appHapticTap mat-button type="button" aria-label="Edit workout" (click)="editWorkout(row.workout)" [disabled]="busyAction() !== null">
                   <mat-icon aria-hidden="true">edit</mat-icon><span>Edit</span>
                 </button>
+                <button appHapticTap mat-button type="button" (click)="saveExistingWorkoutToLibrary(row.workout)"
+                  [attr.aria-label]="'Save ' + row.workout.title + ' to Workout library'"
+                  [disabled]="busyAction() !== null">
+                  @if (busyAction() === 'library-' + row.workout.id) {
+                    <mat-spinner diameter="18"></mat-spinner>
+                  } @else {
+                    <mat-icon aria-hidden="true">library_add</mat-icon>
+                  }
+                  <span>Save to library</span>
+                </button>
                 <button appHapticTap mat-icon-button type="button" [matMenuTriggerFor]="workoutActionsMenu"
                   [attr.aria-label]="'Actions for ' + row.workout.title" matTooltip="Workout actions"
                   [disabled]="busyAction() !== null">
-                  @if (row.actionBusy) {
+                  @if (row.actionBusy && busyAction() !== 'library-' + row.workout.id) {
                     <mat-spinner diameter="18"></mat-spinner>
                   } @else {
                     <mat-icon>more_vert</mat-icon>
                   }
                 </button>
                 <mat-menu #workoutActionsMenu="matMenu" class="qs-menu-panel">
-                  <button appHapticTap mat-menu-item type="button" (click)="saveExistingWorkoutToLibrary(row.workout)">
-                    <mat-icon aria-hidden="true">library_add</mat-icon><span>Save to workout library</span>
-                  </button>
                   <button appHapticTap mat-menu-item type="button" (click)="duplicateWorkout(row.workout)">
                     <mat-icon aria-hidden="true">content_copy</mat-icon><span>Duplicate to…</span>
                   </button>

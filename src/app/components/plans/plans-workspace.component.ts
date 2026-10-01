@@ -1254,6 +1254,40 @@ export class PlansWorkspaceComponent {
     });
   }
 
+  private editorStructure(session: WorkoutEditorSession) {
+    return session.value.sport === ActivityTypes.StrengthTraining
+      ? projectStrengthWorkoutToV1({ ...parseStrengthWorkoutDraftV1(session.strength),
+        workoutId: session.original?.id ?? 'draft', revision: 1 })
+      : manualWorkoutEditorToStructure(session.value, session.unitSettings);
+  }
+
+  async saveEditorCopyToLibrary(): Promise<void> {
+    const session = this.editor();
+    const uid = this.currentUser()?.uid;
+    if (!session || session.mode !== 'edit' || this.libraryView() || !uid || this.busyAction()) return;
+    const generation = this.editorGeneration;
+    const title = session.value.title.trim();
+    if (!title) {
+      this.snackBar.open('Enter a workout title.', 'Dismiss', { duration: 4000 });
+      return;
+    }
+    let structure;
+    try { structure = this.editorStructure(session); }
+    catch (error) { this.showError(error); return; }
+    this.busyAction.set('save-library-from-editor');
+    try {
+      await this.libraryService.mutate({
+        mutationId: this.plansService.createMutationId('library-from-editor'),
+        operation: { kind: 'create', itemId: this.plansService.createEntityId('library'), title, structure,
+          ...(session.strength ? { strength: session.strength } : {}) },
+      });
+      if (this.destroyRef.destroyed || generation !== this.editorGeneration || uid !== this.currentUser()?.uid) return;
+      this.haptics.success();
+      this.snackBar.open('Copy saved to Workout library. Your calendar workout is unchanged.', 'Dismiss', { duration: 5000 });
+    } catch (error) { if (uid === this.currentUser()?.uid) this.showError(error); }
+    finally { this.busyAction.set(null); }
+  }
+
   async saveWorkout(): Promise<void> {
     const session = this.editor();
     if (!session) return;
@@ -1270,10 +1304,7 @@ export class PlansWorkspaceComponent {
     }
     let structure;
     try {
-      structure = session.value.sport === ActivityTypes.StrengthTraining
-        ? projectStrengthWorkoutToV1({ ...parseStrengthWorkoutDraftV1(session.strength),
-          workoutId: session.original?.id ?? 'draft', revision: 1 })
-        : manualWorkoutEditorToStructure(session.value, session.unitSettings);
+      structure = this.editorStructure(session);
       if (!this.libraryView()) normalizeTrainingLocalDate(session.value.localDate);
     } catch (error) {
       this.showError(error);

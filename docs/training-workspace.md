@@ -585,6 +585,12 @@ The library UI uses the existing unit-aware manual/strength editor and compact r
 listener runs only on library routes, and editor Cancel returns through a recorded same-owner library browse entry
 or replaces a direct link with the safe browse route. Placement selects a destination,
 inclusive dates and weekdays, previews count/overlaps, and honors the account week-start preference in weekday order.
+Scheduled workout rows expose **Save to library** directly; this uses the server's exact-revision `save-workout`
+snapshot operation. The workout editor also exposes **Save copy to library**: it creates an independent recipe from
+the currently displayed draft, including unsaved edits, without mutating the scheduled workout or its sync consent.
+The editor stays open so **Save workout** remains a separate, explicit action. Both actions use existing library
+mutation contracts; no MCP schema, scope or consent change is needed. MCP clients already have the corresponding
+`save-workout` and `create` proposals through `preview_saved_workout_change`.
 It supports empty/loading/error states, keyboard-accessible Material controls, haptics and narrow-screen wrapping.
 At mobile widths, each saved recipe's actions move below its full-width title and summary. Standalone is explicitly
 named in the destination selector; a bulk placement that needs a longer plan range shows the resulting plan range, and
