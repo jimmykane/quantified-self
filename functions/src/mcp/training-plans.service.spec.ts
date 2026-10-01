@@ -53,6 +53,30 @@ function fixture() {
 }
 
 describe('Training plan MCP reads', () => {
+  it('keeps generated Suunto duration notification text out of the unchanged no-note recipe/completion reads', async () => {
+    const f = fixture(); f.collections.scheduledWorkouts = { w1: workout('p1') };
+    const recipe = { version: 1, sport: ActivityTypes.Cycling, nodes: [{ kind: 'step', id: 'step1', purpose: 'work',
+      ending: { kind: 'time', seconds: 90 }, targets: [] }] };
+    f.structures.w1 = recipe;
+    const list = TRAINING_READ_OUTPUTS.query_planned_workouts.parse(await f.run('query_planned_workouts', {
+      startDate: '2026-09-01', endDate: '2026-09-30',
+    }));
+    const args = { workoutRef: list.workouts[0].workoutRef };
+    const before = TRAINING_READ_OUTPUTS.get_planned_workout.parse(await f.run('get_planned_workout', args));
+    const guide = serializeSuuntoGuideJsonV1(before.workout.structure, {
+      name: 'Synthetic duration notification', owner: 'Quantified Self', url: 'https://quantified-self.io/training/plans',
+      sourceWorkoutId: 'synthetic', localDate: '2026-09-15', allowDegraded: false,
+    }).artifact;
+    expect(guide.steps[0]).toMatchObject({ notification: { title: 'Work', text: 'For 01m 30s' } });
+    expect(before.workout.structure).toEqual(recipe);
+    // Opaque references can be refreshed between responses; recipe and public
+    // content must not change when the private Guide presentation is generated.
+    const after = TRAINING_READ_OUTPUTS.get_planned_workout.parse(await f.run('get_planned_workout', args));
+    expect(after).toEqual({ ...before, workout: { ...before.workout,
+      workoutRef: expect.any(String), planRef: expect.any(String) } });
+    expect(await f.run('get_planned_workout_completion', args)).toMatchObject({ state: 'unlinked' });
+    expect(JSON.stringify(before)).not.toMatch(/notification|For 01m 30s/);
+  });
   it('keeps Suunto v3 screens private and leaves recipes, completion and safe delivery contracts unchanged', async () => {
     const f = fixture(); f.collections.scheduledWorkouts = { w1: workout('p1') };
     const list = TRAINING_READ_OUTPUTS.query_planned_workouts.parse(await f.run('query_planned_workouts', {

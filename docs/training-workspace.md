@@ -1447,6 +1447,13 @@ Additional authored targets and ZoneSense remain separate in #773.
   longer than 40 code points keeps its existing text-only layout (up to 54), never further shortened to add metrics.
   Existing timed/targeted text truncation and other meaningful-loss warnings remain approval-gated.
 - Every authored FieldsStep, including rest/recovery and repeat children, gets partner `notification: {title, text}`.
+  The title remains the phase. Authored notes/exercise instructions take priority in the body and retain the existing
+  54-code-point bound/loss review. Without notes, timed bodies use the shared Sports Lib duration display (including
+  seconds): `For 01m 30s`, `Recover for 30s`, or `Rest for 02m 00s`. Time formatting is metric/imperial-independent.
+  Distance steps say `Follow distance countdown`, leaving unit presentation to Suunto's native numeric field; manual
+  steps say `Press lap when ready`. Text does not inherit watch unit settings. Fractional/day-length/unrepresentable or
+  overlong generated durations use `Follow time countdown` instead of displaying zero or truncating a number. This wording is
+  part of the not-yet-deployed v3 mapping; the frozen v2 recovery payload is unchanged.
   Starting the next step requests the prior interval's end alert. A final non-timed `Complete` FieldsStep says
   `Guide complete` and requests a final notification, including after a terminal repeat. It adds no prescribed duration,
   does not stop recording, and does not mark the QS workout completed. Existing timed/distance/manual transitions,

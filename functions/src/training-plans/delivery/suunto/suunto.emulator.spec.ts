@@ -100,6 +100,7 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Suunto worker with real F
     await command('send'); await drain(); const row = await ledger();
     await Promise.all([processTrainingDelivery(runtime, uid, row.id), processTrainingDelivery(runtime, uid, row.id)]);
     await drain(); expect(server.guides.size).toBe(1);
+    expect([...server.guides.values()][0].guide.steps[0]).toMatchObject({ notification: { title: 'Work', text: 'For 10m 00s' } });
     expect(logger.info).toHaveBeenCalledWith('[TrainingDelivery]', expect.objectContaining({
       event: 'accepted', provider: 'suunto', guideMappingVersion: 'suunto-guides-v3', deliveryPhase: 'execute',
     }));
@@ -169,6 +170,7 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Suunto worker with real F
     expect(server.guides.size).toBe(1);
     expect([...server.guides.values()][0].guide.activities).toEqual([23]);
     expect(JSON.stringify([...server.guides.values()][0].guide.steps)).toContain('80 kg');
+    expect([...server.guides.values()][0].guide.steps[1]).toMatchObject({ notification: { title: 'Rest', text: 'Rest for 02m 00s' } });
     const revised = { ...details, revision: 2, exercises: [{ ...details.exercises[0], sets: [
       { ...details.exercises[0].sets[0], externalLoadKg: 85 },
     ] }] };
@@ -346,6 +348,7 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Suunto worker with real F
     expect((await ledger()).actual!.ids).toEqual(delivered.actual!.ids);
     expect(server.guides.get(id)!.pinned).toBe(true);
     expect(server.guides.get(id)!.guide.steps.at(-1)).toMatchObject({ title: 'Complete', notification: { text: 'Guide complete' } });
+    expect(server.guides.get(id)!.guide.steps[0]).toMatchObject({ notification: { title: 'Work', text: 'For 10m 00s' } });
     expect(server.calls.filter(call => call.method === 'POST')).toHaveLength(1);
     expect(server.calls.filter(call => call.method === 'PUT')).toHaveLength(1);
     expect((await user().collection('scheduledWorkouts').doc('w').get()).data()).toEqual(workout);
@@ -421,6 +424,11 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Suunto worker with real F
     expect(server.calls.filter(call => call.method === 'POST')).toHaveLength(1);
     expect(server.calls.filter(call => call.method === 'PUT')).toHaveLength(1);
     expect(server.guides.get(legacy.id)!.guide.steps.at(-1)).toMatchObject({ title: 'Complete' });
+    if (sport === 'running') {
+      expect(server.guides.get(legacy.id)!.guide.steps[0]).toMatchObject({ notification: { title: 'Work', text: 'For 10m 00s' } });
+    } else {
+      expect(server.guides.get(legacy.id)!.guide.steps[1]).toMatchObject({ notification: { title: 'Rest', text: 'Rest for 30s' } });
+    }
     expect(logger.info).toHaveBeenCalledWith('[TrainingDelivery]', expect.objectContaining({
       event: 'accepted', guideMappingVersion: 'suunto-guides-v3', deliveryPhase: 'execute',
     }));
@@ -511,6 +519,7 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Suunto worker with real F
     await processTrainingDelivery(runtime, uid, original.id); await drain();
     expect((await ledger()).status).toBe('delivered');
     expect(server.guides.get(legacy.id)!.guide).toMatchObject({ name: 'Rescheduled', localDate: '2026-09-18' });
+    expect(server.guides.get(legacy.id)!.guide.steps[0]).toMatchObject({ notification: { title: 'Work', text: 'For 10m 00s' } });
     expect(server.calls.filter(call => call.method === 'POST')).toHaveLength(1);
     expect(server.calls.filter(call => call.method === 'PUT')).toHaveLength(2);
   });

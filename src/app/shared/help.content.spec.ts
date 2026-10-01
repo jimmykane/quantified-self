@@ -22,6 +22,9 @@ describe('help.content', () => {
       'do not create recorded laps or lap averages', 'including rest/recovery and every repeat', '**Guide complete**',
       'without adding workout time or stopping activity recording', '**your watch settings**',
       'no promised pre-end countdown beeps or out-of-target alerts', 'approximately 20 seconds',
+      'prioritize your notes or exercise/set instructions', '**For 01m 30s**', '**Recover for 30s**', '**Rest for 02m 00s**',
+      '**Follow distance countdown**', '**Press lap when ready**', "does not follow your watch's unit settings automatically",
+      '**Follow time countdown** rather than rounding or omitting seconds',
       'past and completed copies stay unchanged', 'not proof of watch receipt, sensor readings, alerts or workout completion']) {
       expect(content).toContain(phrase);
     }

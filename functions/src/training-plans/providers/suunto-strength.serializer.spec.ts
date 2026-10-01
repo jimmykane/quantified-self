@@ -19,7 +19,7 @@ describe('Suunto Gym Guide strength mapping', () => {
     expect(current.artifact.steps.slice(0, 3).map(node => 'id' in node ? node.id : null))
       .toEqual(legacyFixture.steps.map(node => node.id));
     expect(current.artifact.externalId).toBe(legacyFixture.externalId);
-    expect(current.artifact.steps[1]).toMatchObject({ notification: { title: 'Rest' }, fields: [
+    expect(current.artifact.steps[1]).toMatchObject({ notification: { title: 'Rest', text: 'Rest for 02m 00s' }, fields: [
       { type: 'heartRate' }, { type: 'stepDurationCountdown', value: 120 },
     ] });
   });

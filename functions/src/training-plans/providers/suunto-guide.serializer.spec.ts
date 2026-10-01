@@ -1,8 +1,9 @@
-import { ActivityTypes } from '@sports-alliance/sports-lib';
+import { ActivityTypes, DataDuration, DistanceUnits, WeightUnits } from '@sports-alliance/sports-lib';
 import { describe, expect, it } from 'vitest';
 import type { WorkoutStructureV1, WorkoutStepV1 } from '../../../../shared/planned-workout';
 import { packageGuide, readGuideArchive } from '../delivery/suunto/archive';
 import { serializeSuuntoGuideJsonV1, serializeSuuntoGuideV2ForRecovery, type SuuntoGuideFieldsStepV1 } from './suunto-guide.serializer';
+import { getDefaultUserUnitSettings, resolveUnitAwareDisplayStat } from '../../../../shared/unit-aware-display';
 
 const options = { name: 'Synthetic intervals', owner: 'Quantified Self', url: 'https://quantified-self.io/training/plans',
     localDate: '2026-09-24', sourceWorkoutId: 'synthetic-repeat', allowDegraded: false };
@@ -12,6 +13,44 @@ function mappedStep(sport: ActivityTypes, changes: Partial<WorkoutStepV1> = {}):
 }
 
 describe('Suunto current readings and documented notifications', () => {
+    it.each([
+        ['work', 90, 'Work', 'For 01m 30s'], ['warmup', 5, 'Warm up', 'For 05s'],
+        ['cooldown', 65, 'Cool down', 'For 01m 05s'], ['recovery', 30, 'Recovery', 'Recover for 30s'],
+        ['rest', 120, 'Rest', 'Rest for 02m 00s'], ['other', 3600, 'Next', 'For 01h 00m 00s'],
+    ] as const)('uses phase-aware %s notifications for %s seconds', (purpose, seconds, title, text) => {
+        const mapped = mappedStep(ActivityTypes.Running, { purpose, ending: { kind: 'time', seconds } });
+        expect(mapped.notification).toEqual({ title, text });
+        expect(mapped.fields).toContainEqual({ type: 'stepDurationCountdown', value: seconds, title: 'Remain' });
+        expect(mapped.transitions).toEqual([{ condition: { type: 'stepDuration', value: seconds } }]);
+    });
+    it('uses the same Sports Lib duration in metric and imperial settings without dropping seconds', () => {
+        const metric = getDefaultUserUnitSettings();
+        const imperial = { ...metric, distanceUnits: DistanceUnits.Miles, weightUnits: WeightUnits.Pounds };
+        for (const settings of [metric, imperial]) {
+            const duration = resolveUnitAwareDisplayStat(new DataDuration(90), settings)!.text;
+            expect(mappedStep(ActivityTypes.Cycling, { ending: { kind: 'time', seconds: 90 } }).notification!.text).toBe(`For ${duration}`);
+        }
+    });
+    it.each([ActivityTypes.Running, ActivityTypes.Cycling, ActivityTypes.Swimming, ActivityTypes.Rowing])(
+        'keeps %s distance notification unit-neutral and manual guidance actionable', sport => {
+            expect(mappedStep(sport, { ending: { kind: 'distance', meters: 100 } }).notification)
+                .toEqual({ title: 'Work', text: 'Follow distance countdown' });
+            expect(mappedStep(sport, { ending: { kind: 'manual' } }).notification)
+                .toEqual({ title: 'Work', text: 'Press lap when ready' });
+        });
+    it('does not round fractional intervals or omit day-length seconds in generated durations', () => {
+        for (const seconds of [0.5, 1.5, 86400, 86401, Number.MAX_VALUE]) {
+            const mapped = mappedStep(ActivityTypes.Running, { ending: { kind: 'time', seconds } });
+            expect(mapped.notification!.text).toBe('Follow time countdown');
+            expect(mapped.fields).toContainEqual({ type: 'stepDurationCountdown', value: seconds, title: 'Remain' });
+            expect(mapped.transitions).toEqual([{ condition: { type: 'stepDuration', value: seconds } }]);
+        }
+    });
+    it.each([{ kind: 'time', seconds: 90 }, { kind: 'distance', meters: 100 }, { kind: 'manual' }] as const)(
+        'preserves authored instructions instead of generated text for %s', ending => {
+            expect(mappedStep(ActivityTypes.Running, { ending, note: 'Stay relaxed - easy breathing' }).notification!.text)
+                .toBe('Stay relaxed - easy breathing');
+        });
     it.each([
         ActivityTypes.Running, ActivityTypes.TrailRunning, ActivityTypes.Treadmill, ActivityTypes.Walking, ActivityTypes.Hiking,
         ActivityTypes.Swimming, ActivityTypes.OpenWaterSwimming, ActivityTypes.Rowing, ActivityTypes.IndoorRowing,
@@ -33,6 +72,7 @@ describe('Suunto current readings and documented notifications', () => {
         expect(Array.from(long).length).toBeGreaterThan(40);
         expect(mappedStep(ActivityTypes.StrengthTraining, { ending: { kind: 'manual' }, note: long }).fields)
             .toEqual([{ type: 'text', value: long }]);
+        expect(short.notification!.text).toBe('Squat - set 1 - 5 reps - 80 kg');
     });
     it('reserves all authored content before optional readings and places the primary counterpart first', () => {
         const targets: WorkoutStepV1['targets'] = [
@@ -93,6 +133,10 @@ describe('Suunto current readings and documented notifications', () => {
         const before = JSON.stringify(recipe);
         const guide = serializeSuuntoGuideJsonV1(recipe, options).artifact;
         const flattened = guide.steps.flatMap(node => node.type === 'repeat' ? node.steps : [node]);
+        expect(flattened.slice(0, 3).map(node => node.notification)).toEqual([
+            { title: 'Warm up', text: 'For 10s' }, { title: 'Work', text: 'For 05s' },
+            { title: 'Recovery', text: 'Recover for 05s' },
+        ]);
         flattened.forEach(node => {
             expect(node.notification).toBeDefined();
             expect(Array.from(node.notification!.title).length).toBeLessThanOrEqual(13);

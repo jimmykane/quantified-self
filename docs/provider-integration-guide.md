@@ -301,6 +301,13 @@ Documented partner step-start notifications cover every phase/repeat/rest; a gen
 screen requests the final alert without adding prescribed time, stopping recording or proving completion. Watch sound/
 vibration settings control alerts. Pre-end beeps and out-of-target alerts are not promised; approximately 20-second popups
 need short-interval watch testing. No undocumented wrapper fields or new dependency is used.
+Notification titles keep the phase and authored notes/strength instructions take priority over generated body text.
+Note-free timed steps use shared Sports Lib duration formatting with seconds (`For 01m 30s`, `Recover for 30s`,
+`Rest for 02m 00s`); distance/manual steps use `Follow distance countdown`/`Press lap when ready` without guessed units.
+Fractional/day-length durations use `Follow time countdown` rather than omitting fractions or seconds. Generated text
+is bounded to 54 code points without truncating a duration into another number. Text is static and does
+not inherit watch-unit preferences; native countdown/live fields do. This refinement remains in pre-deployment v3;
+the exact v2 recovery JSON and public/MCP contracts are unchanged.
 New sends use v3 after separately approved deployment. Eligible consented future Guides update in place; past/completed
 copies remain protected. Started v2 attempts recover only against their exact digest-verified old payload and retain IDs
 before any v3 update. Unknown acceptance never permits a speculative create. An exact approval for the same v2

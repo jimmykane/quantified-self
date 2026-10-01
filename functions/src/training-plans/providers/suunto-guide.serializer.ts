@@ -1,4 +1,5 @@
-import { ActivityTypes } from '@sports-alliance/sports-lib';
+import { ActivityTypes, DataDuration } from '@sports-alliance/sports-lib';
+import { resolveUnitAwareDisplayStat } from '../../../../shared/unit-aware-display';
 import {
     parseWorkoutStructureV1,
     type WorkoutEndingV1,
@@ -369,6 +370,34 @@ function measuredTarget(target: WorkoutTargetV1, sport: ActivityTypes): SuuntoGu
     }
 }
 
+function notificationText(step: WorkoutStepV1): string {
+    // Authored instructions take priority; keep their existing font adaptation
+    // and loss review. Generated text is not translated or unit-converted by the watch.
+    if (step.note) return truncateCodePoints(watchText(step.note), 54);
+    if (step.ending.kind === 'manual') return 'Press lap when ready';
+    if (step.ending.kind === 'distance') return 'Follow distance countdown';
+    if (step.ending.kind === 'time') {
+        // Time has no metric/imperial preference. Use the shared Sports Lib
+        // display (with seconds), not compactDuration, which omits partial minutes.
+        // The shared display omits fractions and, for day-length durations,
+        // seconds. Leave those prescriptions to the unchanged numeric countdown.
+        if (!Number.isSafeInteger(step.ending.seconds) || step.ending.seconds >= 24 * 60 * 60) {
+            return 'Follow time countdown';
+        }
+        try {
+            const duration = resolveUnitAwareDisplayStat(new DataDuration(step.ending.seconds))?.text;
+            const prefix = step.purpose === 'recovery' ? 'Recover for' : step.purpose === 'rest' ? 'Rest for' : 'For';
+            const text = duration ? watchText(`${prefix} ${duration}`) : '';
+            // Do not truncate a generated number into a different duration.
+            if (text && codePointLength(text) <= 54) return text;
+        } catch { /* Optional notification wording must not block a valid countdown. */ }
+        return 'Follow time countdown';
+    }
+    // Unsupported endings are rejected by endingFields/endingCondition before
+    // notification generation; this does not add a provider capability.
+    return 'Follow step instructions';
+}
+
 function stepToSuunto(step: WorkoutStepV1, sport: ActivityTypes, presentation: GuidePresentation): SuuntoGuideFieldsStepV1 {
     const fields = [
         ...endingFields(step.ending, presentation),
@@ -403,7 +432,7 @@ function stepToSuunto(step: WorkoutStepV1, sport: ActivityTypes, presentation: G
         transitions: [{ condition: endingCondition(step.ending) }],
         ...(presentation === 'live-v3' ? { notification: {
             title: purposeTitle(step.purpose),
-            text: step.note ? truncateCodePoints(watchText(step.note), 54) : 'Start this step',
+            text: notificationText(step),
         } } : {}),
     };
 }
