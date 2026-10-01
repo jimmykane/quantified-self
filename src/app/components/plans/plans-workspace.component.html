@@ -382,7 +382,7 @@
             <fieldset [disabled]="busyAction() !== null">
               <div class="library-placement-fields">
                 <mat-form-field><mat-label>Save to</mat-label>
-                  <mat-select [value]="placementPlanId() ?? 'standalone'"
+                  <mat-select [value]="placementPlanId() ?? 'standalone'" [disabled]="busyAction() !== null"
                     (selectionChange)="placementPlanId.set($event.value === 'standalone' ? null : $event.value); haptics.selection()">
                     <mat-option value="standalone">Standalone</mat-option>
                     @for (plan of planOptions(); track plan.id) {
