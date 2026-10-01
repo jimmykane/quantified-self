@@ -5,6 +5,8 @@ import { MatIconModule } from '@angular/material/icon';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { DataDistanceMiles, DataDuration } from '@sports-alliance/sports-lib';
+import { formatUnitAwareDataValue } from '@shared/unit-aware-display';
 import { ChartsIntensityDistributionComponent } from './charts.intensity-distribution.component';
 import { EChartsLoaderService } from '../../../services/echarts-loader.service';
 import { LoggerService } from '../../../services/logger.service';
@@ -90,13 +92,13 @@ describe('ChartsIntensityDistributionComponent', () => {
     await fixture.whenStable();
     dateNowSpy.mockRestore();
 
-    expect(component.easyText).toBe('2h 00m');
-    expect(component.moderateText).toBe('1h 00m');
+    expect(component.easyText).toBe('02h 00m');
+    expect(component.moderateText).toBe('01h 00m');
     expect(component.hardText).toBe('30m');
     expect(component.easyPercentText).toBe('57%');
     expect(component.moderatePercentText).toBe('29%');
     expect(component.hardPercentText).toBe('14%');
-    expect(component.weekZoneTimeText).toBe('3h 30m');
+    expect(component.weekZoneTimeText).toBe('03h 30m');
     expect(component.weekContextText.startsWith('Current week')).toBe(true);
   });
 
@@ -158,6 +160,23 @@ describe('ChartsIntensityDistributionComponent', () => {
     expect(component.noDataErrorMessage).toBe('Intensity distribution is updating');
   });
 
+  it.each([null, { distance: [DataDistanceMiles.type] }])('shows mixed-source coverage with canonical durations for units %j', unitSettings => {
+    component.unitSettings = unitSettings as typeof component.unitSettings;
+    const weekStartMs = Date.UTC(2026, 5, 29);
+    component.distribution = {
+      weeks: [{ weekStartMs, easySeconds: 3600, moderateSeconds: 1800, hardSeconds: 900, source: 'power' }],
+      latestWeekStartMs: weekStartMs, latestEasyPercent: 57.14, latestModeratePercent: 28.57, latestHardPercent: 14.29,
+      coverageWeeks: [{ weekStartMs, powerActivityCount: 2, heartRateActivityCount: 1, excludedActivityCount: 3,
+        powerZoneSeconds: 3600, heartRateZoneSeconds: 2700 }],
+    };
+    const formatter = (component as any).buildOption(component.distribution.weeks).tooltip.formatter;
+    const html = formatter([{ axisValue: weekStartMs, seriesName: 'Easy', value: 3600 }]);
+    expect(html).toContain('Zone sources: Power and heart rate');
+    expect(html).toContain('Power: 2 activities · ' + formatUnitAwareDataValue(DataDuration.type, 3600, component.unitSettings, { compactDuration: true }));
+    expect(html).toContain('Heart rate: 1 activity · ' + formatUnitAwareDataValue(DataDuration.type, 2700, component.unitSettings, { compactDuration: true }));
+    expect(html).toContain('Without usable zones: 3 activities');
+  });
+
   it('formats tooltip values as zone time with whole percentages', async () => {
     const weeks = [
       {
@@ -193,8 +212,8 @@ describe('ChartsIntensityDistributionComponent', () => {
     expect(tooltipHtml).toContain('Week 1,');
     expect(tooltipHtml).toContain('2025 -');
     expect(tooltipHtml).toContain('2026');
-    expect(tooltipHtml).toContain('Easy: 2h 00m · 57%');
-    expect(tooltipHtml).toContain('Moderate: 1h 00m · 29%');
+    expect(tooltipHtml).toContain('Easy: 02h 00m · 57%');
+    expect(tooltipHtml).toContain('Moderate: 01h 00m · 29%');
     expect(tooltipHtml).toContain('Hard: 30m · 14%');
     expect(tooltipHtml).not.toContain('57.1');
   });
@@ -221,15 +240,15 @@ describe('ChartsIntensityDistributionComponent', () => {
     const option = (component as any).buildOption(weeks) as Record<string, any>;
     const formatter = option?.tooltip?.formatter as ((params: Array<{ axisValue?: string | number; seriesName?: string; value?: number }>) => string);
 
-    expect(component.hardText).toBe('2m');
+    expect(component.hardText).toBe('02m');
     expect(component.hardPercentText).toBe('100%');
-    expect(component.weekZoneTimeText).toBe('2m');
+    expect(component.weekZoneTimeText).toBe('02m');
     expect(option?.yAxis?.max).toBeUndefined();
     expect(option?.series?.[0]?.data).toEqual([0]);
     expect(option?.series?.[1]?.data).toEqual([0]);
     expect(option?.series?.[2]?.data).toEqual([120]);
     expect(formatter([{ axisValue: Date.UTC(2026, 0, 5), seriesName: 'Hard', value: 120 }]))
-      .toContain('Hard: 2m · 100%');
+      .toContain('Hard: 02m · 100%');
   });
 
   it('keeps tooltip week headings specific when x-axis labels collapse to month-year', () => {
@@ -318,6 +337,8 @@ describe('ChartsIntensityDistributionComponent', () => {
       const option = (component as any).buildOption(weeks) as Record<string, any>;
 
       expect(option?.tooltip?.triggerOn).toBe('click');
+      expect(option?.tooltip?.confine).toBe(false);
+      expect(typeof option?.tooltip?.appendTo).toBe('function');
       expect(option?.xAxis?.axisPointer?.triggerTooltip).toBe(true);
       expect(option?.xAxis?.axisPointer?.handle?.show).toBe(true);
       expect(option?.xAxis?.axisPointer?.handle?.size).toBe(20);

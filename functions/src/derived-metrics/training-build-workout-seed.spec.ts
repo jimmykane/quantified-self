@@ -6,7 +6,7 @@ import { createTrainingBuildWorkoutSeedMetadata, resolveTrainingBuildWorkoutSeed
 const nowMs = Date.parse('2026-09-14T10:00:00Z');
 const context = { nowMs, sourceVersion: 3, eventMutationVersion: 7, settingsKey: trainingBuildSettingsKey({}) };
 function fixture(futureStart?: number) {
-    const payload = { dayBoundary: 'UTC', asOfDayMs: Date.parse('2026-09-14'), excludesMergedEvents: true,
+    const payload = { intensityPolicyVersion: 1, dayBoundary: 'UTC', asOfDayMs: Date.parse('2026-09-14'), excludesMergedEvents: true,
         recoveryVersion: 4, recovery: {}, disciplines: TRAINING_DISCIPLINES.map(discipline => ({
             discipline, status: 'not-configured', selection: null, current: null, benchmark: null, recovery: null,
             durabilityComparisons: [], suggestedEvents: [], suggestedRaces: [],
@@ -29,6 +29,11 @@ describe('workout snapshot reuse', () => {
         expect(resolveTrainingBuildWorkoutSeed({ ...fixture(), schemaVersion: DERIVED_METRIC_SCHEMA_VERSION - 1 }, context)).toBeNull();
         expect(resolveTrainingBuildWorkoutSeed({ ...fixture(), workoutInputsReuse: null }, context)).toBeNull();
         const snapshot = fixture(); snapshot.payload.disciplines[0].suggestedEvents = [{ eventId: 'corrupt' }] as any;
+        expect(resolveTrainingBuildWorkoutSeed(snapshot, context)).toBeNull();
+    });
+    it('rejects a previously cached intensity policy', () => {
+        const snapshot = fixture();
+        delete snapshot.payload.intensityPolicyVersion;
         expect(resolveTrainingBuildWorkoutSeed(snapshot, context)).toBeNull();
     });
     it('expires on source invalidation, benchmark changes, midnight and clock rollback', () => {

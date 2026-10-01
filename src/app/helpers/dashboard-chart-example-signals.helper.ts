@@ -116,6 +116,14 @@ function buildIntensityDistribution(previewWeekMs: number): DashboardIntensityDi
 
   return {
     weeks,
+    coverageWeeks: weeks.map(week => ({
+      weekStartMs: week.weekStartMs,
+      powerActivityCount: 3,
+      heartRateActivityCount: 2,
+      excludedActivityCount: 1,
+      powerZoneSeconds: 36_000,
+      heartRateZoneSeconds: 24_000,
+    })),
     latestWeekStartMs: weeks.at(-1)?.weekStartMs ?? null,
     latestEasyPercent: easyPercent.at(-1) ?? null,
     latestModeratePercent: moderatePercent.at(-1) ?? null,

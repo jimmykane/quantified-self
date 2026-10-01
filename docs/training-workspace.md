@@ -2454,7 +2454,7 @@ settings, sleep, swim lengths, or activity documents for unrelated metrics.
 | `monotony_strain` | Load metrics | Parent event TSS |
 | `form_now`, `form_plus_7d` | Current/projected freshness values | Parent event TSS |
 | `freshness_forecast` | Zero-future-load scenario chart | Parent event TSS |
-| `intensity_distribution` | Global intensity chart | Parent event power/HR zones |
+| `intensity_distribution` | Global intensity chart | Joined child activity power/HR zones |
 | `training_summary` | Overall comparison, ten-group Training Mix, and context/profile summaries | Joined normalized activities |
 | `training_capacity` | Imported FTP/VO2 observations plus separately labelled manual VO2 references | Joined activities and qualifying manual Health VO2 point measurements |
 | `training_power_systems` | Exact-type current CP/W′/Pmax capacity and 12-week sparse history | Persisted activity power curves plus parent event eligibility |
@@ -2836,10 +2836,11 @@ For every discipline:
 - Baseline: the immediately preceding 84 UTC days, multiplied by `28 / 84` to produce a normalized 28-day value.
 - Workouts: child activity count.
 - Time: sum of activity `Duration` stats.
-- Intensity: power zones when present, otherwise heart-rate zones.
-- Easy: zones 1-2.
-- Moderate: zones 3-4.
-- Hard: zones 5-7.
+- Intensity: existing Auto selection per joined child activity; power when its valid recorded zone time is positive, otherwise heart rate.
+- Approximate heart-rate grouping: Easy Z1–Z2, Moderate Z3, Hard Z4–Z5.
+- Approximate power grouping: Easy Z1–Z2, Moderate Z3–Z4, Hard Z5–Z7.
+- Missing zones contribute zero; nonnumeric, nonfinite, and negative durations are ignored. Zero-only or unusable sources fall back to HR; activities without either usable source contribute no intensity time.
+- The shared `shared/intensity-zones.ts` helper also drives weekly Intensity Distribution and Best Build. It consumes stored zone durations without detecting zone models or recalculating thresholds.
 
 The summary and Best Build payloads also preserve each observed registered context. Contexts emit only the metrics
 declared by the shared registry: distance, moving/elapsed time, ascent/descent, descent time, jumps, longest jump,
@@ -3334,13 +3335,30 @@ summary's normalized 84-day count/duration baseline. TSS stays unavailable (`--`
 sport-specific recorded load (including intentionally volume-only contexts), or while the two snapshots do not share
 the same cutoff; it is never treated as zero.
 
-Power zones take priority over heart-rate zones per activity. If neither exists, that activity contributes to count and
-duration but not to the zone denominator.
+Power zones take priority over heart-rate zones per activity when their valid recorded time is positive. HR falls back
+using the separate mappings above. If neither source is usable, that activity contributes to count and duration but not
+to the zone denominator. Existing sport/context eligibility rules remain in force for Training Mix and Best Build.
 
 The global Intensity Distribution keeps that denominator visible: each weekly stacked bar's height is the total recorded
 zone time, and its Easy/Moderate/Hard color segments show the composition. The header and tooltip show both zone time
 and percentage for the selected week. It must not normalize every week to an equally tall 100% bar, because a short
 hard-only workout would otherwise look equivalent to a high-volume hard week.
+
+Weekly aggregation uses the existing parent/activity join and each segment's selected source, so power on one multisport
+segment cannot discard another segment's HR time. Benchmark exclusions, eligible multi merges, UTC weeks, all-history
+storage, and time-weighted percentages retain their existing behavior. Snapshot `sourceEventCount` counts distinct parent
+events with classified time. Private `coverageWeeks` records HR/power activity counts and zone seconds plus activity counts
+excluded for missing zones; the chart tooltip labels weeks with both sources explicitly. Excluded-only weeks remain in
+coverage metadata but produce no intensity bar, preserving the no-data state. The legacy public weekly `source` enum
+reports the dominant activity source (power on ties); it does not represent exclusive source use in a mixed week.
+
+Intensity Distribution, Easy %, Hard %, Training Summary, and Best Build Comparison carry internal
+`intensityPolicyVersion` 1 independently of the global derived schema. Missing or older policy versions become stale and
+rebuild through the existing ensure/queue lifecycle; unrelated kinds retain their versions. Best Build rejects old
+workout-cache seeds before recovery-only refresh so prior grouping cannot be reused. Stored activity zones, original
+files, and Sports Lib dependencies are unchanged; no reparsing or deployment is part of this migration. MCP requires
+the current private policy before reading, then explicitly projects the five affected payloads onto the frozen public
+contract, omitting policy and coverage metadata. Runtime catalog descriptions explain the corrected approximate groups.
 
 On Overview, each recorded registered family is a compact workout-count, duration, and available TSS card. Workout
 and duration use normalized usual values; TSS carries the separate preceding-block median described above. The

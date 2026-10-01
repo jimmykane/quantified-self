@@ -148,6 +148,7 @@
   }
   @if (chartType === intensityDistributionChartType) {
   <app-intensity-distribution-chart [isLoading]="isLoading || isTileActionSaving" [darkTheme]="darkTheme"
+    [unitSettings]="user?.settings?.unitSettings"
     [distribution]="intensityDistribution" [status]="intensityDistributionStatus" [infoTooltip]="chartInfoTooltip"
     [range]="derivedChartRange" [reserveTitleActionSpace]="showHeaderControls"
     [mobileTapFeedbackOptions]="dashboardMobileTapFeedbackOptions">

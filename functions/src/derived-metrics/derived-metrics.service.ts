@@ -1,3 +1,4 @@
+import { groupRecordedIntensityZones, INTENSITY_POLICY_VERSION } from '../../../shared/intensity-zones';
 import { readinessHrvObservations } from '../../../shared/readiness';
 import { buildReadinessSignals as buildLegacyReadinessSignals } from '../../../shared/readiness-legacy';
 import { supplementNightlyHrvSleepDocuments } from '../sleep/nightly-hrv';
@@ -1164,6 +1165,13 @@ function buildFreshnessForecastMetricPayload(
             points: forecastPoints,
         },
     };
+}
+
+function resolveRecordedIntensity(eventData: Record<string, unknown>) {
+    return groupRecordedIntensityZones(
+        resolveZoneDurations(eventData, POWER_ZONE_STAT_TYPES),
+        resolveZoneDurations(eventData, HEART_RATE_ZONE_STAT_TYPES),
+    );
 }
 
 function resolveZoneDurations(
@@ -2372,16 +2380,12 @@ export function buildTrainingSummaryMetricPayload(
         const accumulator = accumulators[discipline];
         const window = eventDayMs >= currentStartDayMs ? accumulator.current : accumulator.baseline;
         const context = resolveTrainingSportContextFromActivityType(eventData.type);
-        const powerZones = resolveZoneDurations(eventData, POWER_ZONE_STAT_TYPES);
-        const heartRateZones = resolveZoneDurations(eventData, HEART_RATE_ZONE_STAT_TYPES);
-        const zones = context?.intensityPolicy === 'zones'
-            ? (powerZones.reduce((sum, value) => sum + value, 0) > 0 ? powerZones : heartRateZones)
-            : [];
+        const intensity = context?.intensityPolicy === 'zones' ? resolveRecordedIntensity(eventData) : null;
         window.activityCount += 1;
         window.durationSeconds += toFinitePositiveNumber(resolveRawStatNumericValue(eventData, DataDuration.type)) || 0;
-        window.easySeconds += (zones[0] || 0) + (zones[1] || 0);
-        window.moderateSeconds += (zones[2] || 0) + (zones[3] || 0);
-        window.hardSeconds += (zones[4] || 0) + (zones[5] || 0) + (zones[6] || 0);
+        window.easySeconds += intensity?.easySeconds || 0;
+        window.moderateSeconds += intensity?.moderateSeconds || 0;
+        window.hardSeconds += intensity?.hardSeconds || 0;
         if (context) {
             addTrainingContextMetrics(window.contexts, eventData, context);
         }
@@ -2406,6 +2410,7 @@ export function buildTrainingSummaryMetricPayload(
     return {
         sourceEventCount,
         payload: {
+            intensityPolicyVersion: INTENSITY_POLICY_VERSION,
             dayBoundary: 'UTC',
             asOfDayMs,
             currentWindowDays: TRAINING_SUMMARY_CURRENT_WINDOW_DAYS,
@@ -3304,17 +3309,11 @@ function addTrainingBuildEventToWindow(
         accumulator.trainingStressScoreEventCount += 1;
     }
 
-    const powerZones = resolveZoneDurations(eventData, POWER_ZONE_STAT_TYPES);
-    const powerZoneTotal = powerZones.reduce((sum, value) => sum + value, 0);
-    const heartRateZones = resolveZoneDurations(eventData, HEART_RATE_ZONE_STAT_TYPES);
-    const heartRateZoneTotal = heartRateZones.reduce((sum, value) => sum + value, 0);
-    const zones = sportContext?.intensityPolicy === 'zones'
-        ? (powerZoneTotal > 0 ? powerZones : (heartRateZoneTotal > 0 ? heartRateZones : null))
-        : null;
-    if (zones) {
-        accumulator.easySeconds += (zones[0] || 0) + (zones[1] || 0);
-        accumulator.moderateSeconds += (zones[2] || 0) + (zones[3] || 0);
-        accumulator.hardSeconds += (zones[4] || 0) + (zones[5] || 0) + (zones[6] || 0);
+    const intensity = sportContext?.intensityPolicy === 'zones' ? resolveRecordedIntensity(eventData) : null;
+    if (intensity) {
+        accumulator.easySeconds += intensity.easySeconds;
+        accumulator.moderateSeconds += intensity.moderateSeconds;
+        accumulator.hardSeconds += intensity.hardSeconds;
         accumulator.intensitySourceEventCount += 1;
     }
 
@@ -4499,6 +4498,7 @@ export function buildTrainingBuildComparisonMetricPayload(
     return {
         sourceEventCount: activities.filter(isClassifiedTrainingActivitySource).length,
         payload: refreshTrainingBuildComparisonRecovery({
+            intensityPolicyVersion: INTENSITY_POLICY_VERSION,
             dayBoundary: 'UTC',
             asOfDayMs,
             excludesMergedEvents: true,
@@ -4697,76 +4697,66 @@ export function buildTrainingSwimPerformanceMetricPayload(
     };
 }
 
-function buildIntensityDistributionMetricPayload(
-    docs: readonly FirestoreQueryDocumentSnapshot[],
+export function buildIntensityDistributionMetricPayload(
+    activities: readonly DerivedTrainingActivitySource[],
 ): DerivedMetricBuildResult<DerivedIntensityDistributionMetricPayload> {
     const weeklyBuckets = new Map<number, {
-        easySeconds: number;
-        moderateSeconds: number;
-        hardSeconds: number;
-        powerEvents: number;
-        heartRateEvents: number;
+        easySeconds: number; moderateSeconds: number; hardSeconds: number;
+        powerActivityCount: number; heartRateActivityCount: number; excludedActivityCount: number;
+        powerZoneSeconds: number; heartRateZoneSeconds: number;
     }>();
-    let sourceEventCount = 0;
-
-    docs.forEach((doc) => {
-        const eventData = (doc.data() || {}) as Record<string, unknown>;
-        if (isMergedEvent(eventData)) {
-            return;
-        }
-        const startTimeMs = toMillis(eventData.startDate);
-        if (startTimeMs === null) {
-            return;
-        }
-
-        const powerZones = resolveZoneDurations(eventData, POWER_ZONE_STAT_TYPES);
-        const powerTotal = powerZones.reduce((sum, value) => sum + value, 0);
-        const heartRateZones = resolveZoneDurations(eventData, HEART_RATE_ZONE_STAT_TYPES);
-        const heartRateTotal = heartRateZones.reduce((sum, value) => sum + value, 0);
-        const sourceZones = powerTotal > 0 ? powerZones : (heartRateTotal > 0 ? heartRateZones : null);
-        if (!sourceZones) {
-            return;
-        }
-
-        const weekStartMs = resolveUtcWeekStartMs(startTimeMs);
+    const sourceEventIds = new Set<string>();
+    activities.forEach(activity => {
+        const weekStartMs = resolveUtcWeekStartMs(activity.startMs);
         const week = weeklyBuckets.get(weekStartMs) || {
-            easySeconds: 0,
-            moderateSeconds: 0,
-            hardSeconds: 0,
-            powerEvents: 0,
-            heartRateEvents: 0,
+            easySeconds: 0, moderateSeconds: 0, hardSeconds: 0,
+            powerActivityCount: 0, heartRateActivityCount: 0, excludedActivityCount: 0,
+            powerZoneSeconds: 0, heartRateZoneSeconds: 0,
         };
-        week.easySeconds += (sourceZones[0] || 0) + (sourceZones[1] || 0);
-        week.moderateSeconds += (sourceZones[2] || 0) + (sourceZones[3] || 0);
-        week.hardSeconds += (sourceZones[4] || 0) + (sourceZones[5] || 0) + (sourceZones[6] || 0);
-        if (powerTotal > 0) {
-            week.powerEvents += 1;
+        const intensity = resolveRecordedIntensity(activity.activityData);
+        if (intensity) {
+            week.easySeconds += intensity.easySeconds;
+            week.moderateSeconds += intensity.moderateSeconds;
+            week.hardSeconds += intensity.hardSeconds;
+            if (intensity.source === 'power') {
+                week.powerActivityCount += 1;
+                week.powerZoneSeconds += intensity.totalSeconds;
+            } else {
+                week.heartRateActivityCount += 1;
+                week.heartRateZoneSeconds += intensity.totalSeconds;
+            }
+            sourceEventIds.add(activity.eventId);
         } else {
-            week.heartRateEvents += 1;
+            week.excludedActivityCount += 1;
         }
         weeklyBuckets.set(weekStartMs, week);
-        sourceEventCount += 1;
     });
-
-    const weeks: DerivedIntensityDistributionMetricPayload['weeks'] = [...weeklyBuckets.entries()]
-        .sort((left, right) => left[0] - right[0])
+    const buckets = [...weeklyBuckets.entries()].sort((left, right) => left[0] - right[0]);
+    const weeks: DerivedIntensityDistributionMetricPayload['weeks'] = buckets
+        .filter(([, bucket]) => bucket.powerActivityCount + bucket.heartRateActivityCount > 0)
         .map(([weekStartMs, bucket]) => ({
             weekStartMs,
             easySeconds: toRoundedNumber(bucket.easySeconds, 2),
             moderateSeconds: toRoundedNumber(bucket.moderateSeconds, 2),
             hardSeconds: toRoundedNumber(bucket.hardSeconds, 2),
-            source: bucket.powerEvents >= bucket.heartRateEvents ? 'power' : 'heart-rate',
+            // Legacy MCP enum denotes the dominant selected source by activity count.
+            source: bucket.powerActivityCount >= bucket.heartRateActivityCount ? 'power' : 'heart-rate',
         }));
     const latestWeek = weeks[weeks.length - 1];
-    const latestTotal = latestWeek
-        ? latestWeek.easySeconds + latestWeek.moderateSeconds + latestWeek.hardSeconds
-        : 0;
-
+    const latestTotal = latestWeek ? latestWeek.easySeconds + latestWeek.moderateSeconds + latestWeek.hardSeconds : 0;
     return {
-        sourceEventCount,
+        sourceEventCount: sourceEventIds.size,
         payload: {
-            dayBoundary: 'UTC',
-            weeks,
+            intensityPolicyVersion: INTENSITY_POLICY_VERSION,
+            dayBoundary: 'UTC', weeks,
+            coverageWeeks: buckets.map(([weekStartMs, bucket]) => ({
+                weekStartMs,
+                powerActivityCount: bucket.powerActivityCount,
+                heartRateActivityCount: bucket.heartRateActivityCount,
+                excludedActivityCount: bucket.excludedActivityCount,
+                powerZoneSeconds: toRoundedNumber(bucket.powerZoneSeconds, 2),
+                heartRateZoneSeconds: toRoundedNumber(bucket.heartRateZoneSeconds, 2),
+            })),
             latestWeekStartMs: latestWeek?.weekStartMs ?? null,
             latestEasyPercent: latestTotal > 0 ? toRoundedNumber((latestWeek!.easySeconds / latestTotal) * 100, 2) : null,
             latestModeratePercent: latestTotal > 0 ? toRoundedNumber((latestWeek!.moderateSeconds / latestTotal) * 100, 2) : null,
@@ -4794,6 +4784,7 @@ function buildEasyPercentMetricPayload(
     return {
         sourceEventCount,
         payload: {
+            intensityPolicyVersion: INTENSITY_POLICY_VERSION,
             dayBoundary: 'UTC',
             latestWeekStartMs: intensityPayload.latestWeekStartMs,
             value: intensityPayload.latestEasyPercent === null
@@ -4823,6 +4814,7 @@ function buildHardPercentMetricPayload(
     return {
         sourceEventCount,
         payload: {
+            intensityPolicyVersion: INTENSITY_POLICY_VERSION,
             dayBoundary: 'UTC',
             latestWeekStartMs: intensityPayload.latestWeekStartMs,
             value: intensityPayload.latestHardPercent === null
@@ -5076,14 +5068,14 @@ const DERIVED_METRIC_BUILD_REGISTRY: Record<DerivedMetricKind, DerivedMetricBuil
         },
     },
     [DERIVED_METRIC_KINDS.EasyPercent]: {
-        sourceDependencies: ['formDocs'],
+        sourceDependencies: ['formDocs', 'trainingActivityDocs'],
         build: (context) => {
             const distributionBuildResult = context.getIntensityDistributionBuildResult();
             return buildEasyPercentMetricPayload(distributionBuildResult.payload, distributionBuildResult.sourceEventCount);
         },
     },
     [DERIVED_METRIC_KINDS.HardPercent]: {
-        sourceDependencies: ['formDocs'],
+        sourceDependencies: ['formDocs', 'trainingActivityDocs'],
         build: (context) => {
             const distributionBuildResult = context.getIntensityDistributionBuildResult();
             return buildHardPercentMetricPayload(distributionBuildResult.payload, distributionBuildResult.sourceEventCount);
@@ -5113,7 +5105,7 @@ const DERIVED_METRIC_BUILD_REGISTRY: Record<DerivedMetricKind, DerivedMetricBuil
         },
     },
     [DERIVED_METRIC_KINDS.IntensityDistribution]: {
-        sourceDependencies: ['formDocs'],
+        sourceDependencies: ['formDocs', 'trainingActivityDocs'],
         build: (context) => context.getIntensityDistributionBuildResult(),
     },
     [DERIVED_METRIC_KINDS.EfficiencyTrend]: {
@@ -5235,7 +5227,7 @@ function createDerivedMetricBuildExecutionContext(
         if (intensityDistributionBuildResultCache) {
             return intensityDistributionBuildResultCache;
         }
-        intensityDistributionBuildResultCache = buildIntensityDistributionMetricPayload(formDocs);
+        intensityDistributionBuildResultCache = buildIntensityDistributionMetricPayload(trainingActivities);
         return intensityDistributionBuildResultCache;
     };
 

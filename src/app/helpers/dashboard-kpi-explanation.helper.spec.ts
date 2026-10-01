@@ -96,6 +96,18 @@ describe('dashboard-kpi-explanation.helper', () => {
     expect(explanation.rows.find(row => row.label === 'As of')?.value).toContain('Week');
   });
 
+  it('describes both sources for a mixed intensity week', () => {
+    const weekStartMs = Date.UTC(2026, 5, 29);
+    const explanation = buildDashboardKpiExplanation({
+      chartType: DASHBOARD_TRAINING_BALANCE_KPI_CHART_TYPE, status: 'ready',
+      intensityDistribution: { weeks: [{ weekStartMs, easySeconds: 1, moderateSeconds: 1, hardSeconds: 1, source: 'power' }],
+        latestWeekStartMs: weekStartMs, latestEasyPercent: 33, latestModeratePercent: 33, latestHardPercent: 34,
+        coverageWeeks: [{ weekStartMs, powerActivityCount: 1, heartRateActivityCount: 1, excludedActivityCount: 0,
+          powerZoneSeconds: 1, heartRateZoneSeconds: 2 }] },
+    });
+    expect(explanation.rows).toContainEqual({ label: 'Zone source', value: 'Power and heart-rate zones' });
+  });
+
   it('uses KPI-specific missing guidance for efficiency', () => {
     const explanation = buildDashboardKpiExplanation({
       chartType: DASHBOARD_EFFICIENCY_DELTA_4W_KPI_CHART_TYPE,
