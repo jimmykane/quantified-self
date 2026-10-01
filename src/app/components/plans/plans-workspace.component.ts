@@ -282,6 +282,7 @@ export class PlansWorkspaceComponent {
   readonly placementStartDate = signal(todayLocalDate());
   readonly placementEndDate = signal(todayLocalDate());
   readonly placementWeekdays = signal<number[]>([]);
+  private readonly placementWeekdaysCustomized = signal(false);
   readonly placementError = computed(() => {
     const start = this.placementStartDate();
     const end = this.placementEndDate();
@@ -1295,7 +1296,7 @@ export class PlansWorkspaceComponent {
         this.libraryEditorItem.set(null);
         this.snackBar.open(item ? 'Saved workout updated.' : 'Workout saved to your library.', 'Dismiss', { duration: 4000 });
         void this.router.navigate(['/training/plans/library'], { replaceUrl: true });
-      } catch (error) { this.showError(error); }
+      } catch (error) { if (uid === this.currentUser()?.uid) this.showError(error); }
       finally { this.busyAction.set(null); }
       return;
     }
@@ -1371,46 +1372,54 @@ export class PlansWorkspaceComponent {
       if (uid !== this.currentUser()?.uid) return;
       this.haptics.success();
       this.snackBar.open('Saved to your workout library.', 'Dismiss', { duration: 4000 });
-    } catch (error) { this.showError(error); }
+    } catch (error) { if (uid === this.currentUser()?.uid) this.showError(error); }
     finally { this.busyAction.set(null); }
   }
 
   async setLibraryStatus(item: WorkoutLibraryItemV1, status: 'active' | 'archived'): Promise<void> {
-    if (this.busyAction()) return;
+    const uid = this.currentUser()?.uid;
+    if (!uid || this.busyAction()) return;
     this.busyAction.set(`library-${item.id}`);
     try {
       await this.libraryService.mutate({ mutationId: this.plansService.createMutationId('library-status'),
         operation: { kind: 'set-status', itemId: item.id, expectedRevision: item.revision, status } });
+      if (uid !== this.currentUser()?.uid) return;
       this.haptics.success();
-    } catch (error) { this.showError(error); }
+    } catch (error) { if (uid === this.currentUser()?.uid) this.showError(error); }
     finally { this.busyAction.set(null); }
   }
 
   async copyLibraryItem(item: WorkoutLibraryItemV1): Promise<void> {
-    if (this.busyAction()) return;
+    const uid = this.currentUser()?.uid;
+    if (!uid || this.busyAction()) return;
     this.busyAction.set(`library-${item.id}`);
     try {
       await this.libraryService.mutate({ mutationId: this.plansService.createMutationId('library-copy'),
         operation: { kind: 'copy', itemId: this.plansService.createEntityId('library'),
           sourceItemId: item.id, expectedSourceRevision: item.revision } });
+      if (uid !== this.currentUser()?.uid) return;
       this.haptics.success();
       this.snackBar.open('Saved workout copied.', 'Dismiss', { duration: 4000 });
-    } catch (error) { this.showError(error); }
+    } catch (error) { if (uid === this.currentUser()?.uid) this.showError(error); }
     finally { this.busyAction.set(null); }
   }
 
   async deleteLibraryItem(item: WorkoutLibraryItemV1): Promise<void> {
-    if (this.busyAction() || !await this.confirm('Delete saved workout?',
+    const uid = this.currentUser()?.uid;
+    if (!uid || this.busyAction()) return;
+    const confirmed = await this.confirm('Delete saved workout?',
       `Remove “${item.title}” from your library? Workouts already on your calendar will stay as they are.`,
-      'Delete saved workout', 'warn')) return;
+      'Delete saved workout', 'warn');
+    if (!confirmed || uid !== this.currentUser()?.uid || this.busyAction()) return;
     this.busyAction.set(`library-${item.id}`);
     try {
       await this.libraryService.mutate({ mutationId: this.plansService.createMutationId('library-delete'),
         operation: { kind: 'delete', itemId: item.id, expectedRevision: item.revision, confirmDeletion: true } });
+      if (uid !== this.currentUser()?.uid) return;
       this.haptics.success();
       if (this.placementItem()?.id === item.id) this.placementItem.set(null);
       this.snackBar.open('Saved workout deleted. Calendar workouts are unchanged.', 'Dismiss', { duration: 4000 });
-    } catch (error) { this.showError(error); }
+    } catch (error) { if (uid === this.currentUser()?.uid) this.showError(error); }
     finally { this.busyAction.set(null); }
   }
 
@@ -1424,10 +1433,12 @@ export class PlansWorkspaceComponent {
     this.placementStartDate.set(date);
     this.placementEndDate.set(date);
     this.placementWeekdays.set([new Date(`${date}T12:00:00Z`).getUTCDay()]);
+    this.placementWeekdaysCustomized.set(false);
   }
 
   togglePlacementWeekday(day: number): void {
     this.haptics.selection();
+    this.placementWeekdaysCustomized.set(true);
     this.placementWeekdays.update(days => days.includes(day) ? days.filter(value => value !== day)
       : [...days, day].sort((a, b) => a - b));
   }
@@ -1436,6 +1447,7 @@ export class PlansWorkspaceComponent {
     const old = this.placementStartDate();
     this.placementStartDate.set(value);
     if (this.placementEndDate() === old) this.placementEndDate.set(value);
+    if (this.placementWeekdaysCustomized()) return;
     try {
       normalizeTrainingLocalDate(value);
       this.placementWeekdays.set([new Date(`${value}T12:00:00Z`).getUTCDay()]);
@@ -1474,7 +1486,7 @@ export class PlansWorkspaceComponent {
       this.placementItem.set(null);
       this.snackBar.open(`${response.workoutIds.length} ${response.workoutIds.length === 1 ? 'workout' : 'workouts'} added to your calendar.`,
         'Dismiss', { duration: 5000 });
-    } catch (error) { this.showError(error); }
+    } catch (error) { if (uid === this.currentUser()?.uid) this.showError(error); }
     finally { this.busyAction.set(null); }
   }
 

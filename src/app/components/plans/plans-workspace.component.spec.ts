@@ -237,6 +237,91 @@ describe('PlansWorkspaceComponent', () => {
     expect(destination.value).toBe('standalone');
   });
 
+  it('keeps chosen repeat weekdays when the placement range start changes', async () => {
+    const item: WorkoutLibraryItemV1 = { schemaVersion: 1, id: 'library-1', title: 'Base run',
+      structure: schedule.workouts[0].structure, status: 'active', revision: 1,
+      createdAtMs: 1, updatedAtMs: 1 };
+    setRouteState({ mode: 'library-browse' });
+    const fixture = await renderPlans();
+    const component = fixture.componentInstance;
+    component.beginLibraryPlacement(item);
+    component.setPlacementStartDate('2026-09-16');
+    expect(component.placementWeekdays()).toEqual([3]);
+    component.togglePlacementWeekday(2);
+    component.togglePlacementWeekday(4);
+    expect(component.placementWeekdays()).toEqual([2, 3, 4]);
+
+    component.setPlacementStartDate('2026-09-14');
+
+    expect(component.placementWeekdays()).toEqual([2, 3, 4]);
+    expect(component.placementStartDate()).toBe('2026-09-14');
+    expect(component.placementEndDate()).toBe('2026-09-14');
+
+    component.beginLibraryPlacement(item);
+    component.setPlacementStartDate('2026-09-15');
+    expect(component.placementWeekdays()).toEqual([2]);
+  });
+
+  it('does not apply a saved-workout deletion confirmed after sign-out', async () => {
+    const item: WorkoutLibraryItemV1 = { schemaVersion: 1, id: 'library-1', title: 'Base run',
+      structure: schedule.workouts[0].structure, status: 'active', revision: 1,
+      createdAtMs: 1, updatedAtMs: 1 };
+    setRouteState({ mode: 'library-browse' });
+    const fixture = await renderPlans();
+    const confirmation = new Subject<boolean>();
+    const componentDialog = (fixture.componentInstance as unknown as { dialog: MatDialog }).dialog;
+    vi.spyOn(componentDialog, 'open').mockReturnValue({ afterClosed: () => confirmation } as never);
+
+    const deletion = fixture.componentInstance.deleteLibraryItem(item);
+    userSignal.set(null);
+    userSubject.next(null);
+    confirmation.next(true);
+    confirmation.complete();
+    await deletion;
+
+    expect(libraryMutate).not.toHaveBeenCalled();
+    expect(snackBarOpen).not.toHaveBeenCalled();
+  });
+
+  it('does not show stale library-action success after sign-out', async () => {
+    const item: WorkoutLibraryItemV1 = { schemaVersion: 1, id: 'library-1', title: 'Base run',
+      structure: schedule.workouts[0].structure, status: 'active', revision: 1,
+      createdAtMs: 1, updatedAtMs: 1 };
+    setRouteState({ mode: 'library-browse' });
+    const fixture = await renderPlans();
+    let resolveMutation!: (value: unknown) => void;
+    libraryMutate.mockReturnValue(new Promise(resolve => { resolveMutation = resolve; }));
+
+    const copy = fixture.componentInstance.copyLibraryItem(item);
+    userSignal.set(null);
+    userSubject.next(null);
+    resolveMutation({ mutationId: 'mutation-1', item });
+    await copy;
+
+    expect(haptics.success).not.toHaveBeenCalled();
+    expect(snackBarOpen).not.toHaveBeenCalled();
+  });
+
+  it('locks the placement destination while a bulk add is pending', async () => {
+    const item: WorkoutLibraryItemV1 = { schemaVersion: 1, id: 'library-1', title: 'Base run',
+      structure: schedule.workouts[0].structure, status: 'active', revision: 1,
+      createdAtMs: 1, updatedAtMs: 1 };
+    setRouteState({ mode: 'library-browse' });
+    const fixture = await renderPlans();
+    let resolvePlacement!: (value: unknown) => void;
+    libraryPlace.mockReturnValue(new Promise(resolve => { resolvePlacement = resolve; }));
+    fixture.componentInstance.beginLibraryPlacement(item);
+
+    const placement = fixture.componentInstance.placeLibraryItem();
+    fixture.detectChanges();
+    const destination = fixture.debugElement.query(By.directive(MatSelect)).componentInstance as MatSelect;
+    expect(destination.disabled).toBe(true);
+    resolvePlacement({ mutationId: 'mutation-1', workoutIds: ['copy-1'], dates: ['2026-09-09'],
+      stateRevision: 5, planRevision: 3 });
+    await placement;
+    expect(fixture.componentInstance.busyAction()).toBeNull();
+  });
+
   it.each([false, true])('explains library range extension and %s confirmation without an error toast', async confirmed => {
     const item: WorkoutLibraryItemV1 = { schemaVersion: 1, id: 'library-1', title: 'Base run',
       structure: schedule.workouts[0].structure, status: 'active', revision: 1,

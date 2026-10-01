@@ -587,6 +587,9 @@ It supports empty/loading/error states, keyboard-accessible Material controls, h
 At mobile widths, each saved recipe's actions move below its full-width title and summary. Standalone is explicitly
 named in the destination selector; a bulk placement that needs a longer plan range shows the resulting plan range, and
 cancelling that confirmation keeps the placement open without reporting an error.
+After the user chooses weekdays, editing the start date retains that repeat pattern; before any custom choice, the
+default weekday follows the selected start date. While placement is pending, the destination and date controls are
+locked. Library actions recheck the signed-in owner after confirmations and before showing async feedback.
 Existing plan and workout URLs remain unchanged; library items use path IDs, not query IDs. Help explains the separate
 library and calendar semantics. MCP impact: additive `list_saved_workouts` and `get_saved_workout` use the existing
 Training read grant, bounded pages/response sizes, opaque owner-bound references, full strength drafts on exact reads,
