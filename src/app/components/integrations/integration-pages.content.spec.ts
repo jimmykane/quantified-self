@@ -61,7 +61,7 @@ describe('integration-pages.content', () => {
   it.each([
     ['garmin', 'Planned workouts to Garmin', 'Can I send planned Training workouts to Garmin?', 'Connected Pro members'],
     ['suunto', 'Planned workouts as SuuntoPlus Guides', 'Can I send planned Training workouts to Suunto?', 'Connected Pro members'],
-    ['coros', 'Planned workouts to COROS', 'Can I send planned Training workouts to COROS?', 'disabled and hidden from Training'],
+    ['coros', 'Planned workouts to COROS', 'Can I send planned Training workouts to COROS?', 'coming soon'],
   ] as const)('documents public %s planned-workout delivery without claiming device receipt', (provider, flow, question, availability) => {
     const page = PROVIDER_INTEGRATION_PAGES[provider];
     expect(page.syncFlows.some(item => item.title === flow)).toBe(true);

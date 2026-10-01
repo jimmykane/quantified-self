@@ -115,14 +115,13 @@ describe('help.content', () => {
     expect(section.links.some(link => link.label === 'MCP Connections')).toBe(true);
     expect(section.links.some(link => link.label === 'Connected services')).toBe(true);
     expect(content).toContain('Workout delivery to Garmin, Suunto, and Wahoo is available to connected Pro members');
-    expect(content).toContain('COROS plan sync and standalone Send are disabled and hidden from Training');
+    expect(content).toContain('COROS plan sync and standalone Send are coming soon');
     expect(content).toContain('Distance-based steps are not sent because Wahoo needs a total duration');
     expect(content).toContain('Running/cycling distance follows your km or mile preference');
     expect(content).toContain('Older Wahoo connections may need **Reconnect Wahoo**');
     expect(content).toContain('Checks confirm the app-owned Plan, Workout and association; automatic missing-copy restoration is unavailable');
     expect(content).toContain('COROS workout delivery is coming soon');
-    expect(content).toContain('disabled in the delivery runtime and hidden from Training plan, workout, and sync-history controls');
-    expect(content).toContain('Existing COROS preferences and status records are retained but inactive');
+    expect(content).toContain('Plan sync, plan-workout resume, and standalone Send are not available yet');
     expect(content).toContain('COROS training calendar');
     expect(content).toContain('two-week watch window');
     expect(content).toContain('remote checking and automatic missing-copy restoration are unavailable');
@@ -687,7 +686,7 @@ describe('help.content', () => {
     expect(HELP_SECTIONS.find(section => section.id === 'activity-calendar')?.content)
       .toContain('Standalone workouts stay neutral');
     expect(planningSection?.content).toContain('Workout delivery to Garmin, Suunto, and Wahoo is available to connected Pro members');
-    expect(planningSection?.content).toContain('COROS plan sync and standalone Send are disabled and hidden from Training');
+    expect(planningSection?.content).toContain('COROS plan sync and standalone Send are coming soon');
     expect(planningSection?.content).toContain('Wahoo supports time-based running/cycling, outdoor Walking/Hiking without intensity targets, and timed-strength Gym workouts');
     expect(planningSection?.content).toContain('Wahoo Rowing/Indoor Rowing delivery, remain unsupported');
     expect(planningSection?.content).toContain('select **Strength Training**, not Yoga or Indoor Fitness Equipment');
