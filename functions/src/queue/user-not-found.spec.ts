@@ -216,13 +216,12 @@ describe('User Not Found Scenarios', () => {
             await expect(getUserRoleAndGracePeriod('missing-uid')).rejects.toThrow(UserNotFoundError);
         });
 
-        it('should return "free" (safe default) for other errors', async () => {
+        it('should return unavailable rather than a free role for other errors', async () => {
             (admin.auth as any).mockReturnValue({
                 getUser: vi.fn().mockRejectedValue({ code: 'auth/internal-error' })
             });
 
-            const { role } = await getUserRoleAndGracePeriod('error-uid');
-            expect(role).toBe('free');
+            await expect(getUserRoleAndGracePeriod('error-uid')).rejects.toMatchObject({ code: 'unavailable' });
         });
     });
 
@@ -272,7 +271,7 @@ describe('User Not Found Scenarios', () => {
             expect(bulkWriter.update).not.toHaveBeenCalled();
         });
 
-        it('should Retry (not DLQ) for generic errors', async () => {
+        it.each(['download', 'subscription'])('should retry rather than DLQ for a %s lookup failure', async (failureStage) => {
             const queueItem: any = {
                 id: 'q-item-retry',
                 retryCount: 0,
@@ -285,9 +284,14 @@ describe('User Not Found Scenarios', () => {
                 }
             };
 
-            // Mock network error during download (request-helper) to trigger generic error catch
-            const requestHelper = await import('../request-helper');
-            requestHelper.getBinaryResponse.mockRejectedValueOnce(new Error('Network Error'));
+            if (failureStage === 'subscription') {
+                vi.mocked(admin.auth).mockReturnValue({
+                    getUser: vi.fn().mockRejectedValue({ code: 'app/network-error' }),
+                } as unknown as ReturnType<typeof admin.auth>);
+            } else {
+                const requestHelper = await import('../request-helper');
+                requestHelper.getBinaryResponse.mockRejectedValueOnce(new Error('Network Error'));
+            }
 
             const bulkWriter = (admin.firestore() as any).bulkWriter();
 
@@ -298,10 +302,8 @@ describe('User Not Found Scenarios', () => {
             );
 
             // DLQ should NOT be called
-            expect(bulkWriter.set).not.toHaveBeenCalledWith(
-                expect.anything(),
-                expect.objectContaining({ context: 'USER_NOT_FOUND' })
-            );
+            expect(bulkWriter.set).not.toHaveBeenCalled();
+            expect(bulkWriter.delete).not.toHaveBeenCalled();
 
             // Should increment retry count (which uses ref.update in non-bulk or bulkWriter logic)
             // queue-utils increaseRetryCountForQueueItem calls ref.update if bulkWriter not provided? 
@@ -310,7 +312,7 @@ describe('User Not Found Scenarios', () => {
             // But wait, queue-utils implementation for bulkWriter uses sets/deletes?
             // "increaseRetryCountForQueueItem" -> calls ref.update({ retryCount: ... })
             // Since we passed bulkWriter, it should use bulkWriter.update
-            expect(bulkWriter.update).toHaveBeenCalled();
+            expect(bulkWriter.update).toHaveBeenCalledWith(queueItem.ref, expect.objectContaining({ retryCount: 1 }));
         });
 
         it('should abort immediately if user not found for FIRST token (Multi-Token scenario)', async () => {
