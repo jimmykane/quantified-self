@@ -206,7 +206,7 @@
             <button mat-flat-button type="button" [disabled]="proposalActionInProgress()"
               (click)="applyPendingContentProposal()">
               @if (applyingContentProposal()) { <mat-spinner diameter="18"></mat-spinner> } @else {
-                {{ review.proposal.kind === 'delete_timeline_note' ? 'Delete note' : 'Apply change' }}
+                {{ review.proposal.kind === 'delete_timeline_note' ? 'Delete note' : review.proposal.kind === 'delete_manual_measurement' ? 'Delete measurement' : 'Apply change' }}
               }
             </button>
             <button mat-button type="button" [disabled]="proposalActionInProgress()"

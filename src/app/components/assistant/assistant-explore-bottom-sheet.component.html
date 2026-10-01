@@ -52,9 +52,17 @@
     </section>
 
     <section class="assistant-notes-access" aria-labelledby="assistant-content-access">
-      <h3 id="assistant-content-access">Tags and Timeline notes</h3>
-      <p class="assistant-training-intro">Choose what the Assistant can do in this chat. Every change starts a new chat; New chat turns all optional access off.</p>
+      <h3 id="assistant-content-access">Measurements, tags and notes</h3>
+      <p class="assistant-training-intro">Changes start a fresh chat. New chat resets these choices: manual measurement changes start on; other optional access starts off. You review every change.</p>
       <div class="assistant-training-options">
+        <app-compact-row title="Manual Health measurements" titleId="assistant-measurements-title"
+          icon="monitor_weight" density="compact">
+          <p id="assistant-measurements-summary" class="assistant-training-summary">Find, add, edit or permanently delete manual entries such as weight and blood pressure. Provider imports stay read-only. On for new chats; nothing changes until you approve it.</p>
+          <mat-slide-toggle compactRowAction [checked]="data.measurementChangesEnabled === true"
+            aria-label="Manual Health measurements — changing this starts a new chat"
+            aria-describedby="assistant-measurements-summary"
+            (change)="setMeasurementChanges($event.checked)"></mat-slide-toggle>
+        </app-compact-row>
         <app-compact-row title="Activity tag changes" titleId="assistant-activity-tags-title"
           icon="sell" density="compact">
           <p id="assistant-activity-tags-summary" class="assistant-training-summary">Read current workout tags and prepare a complete replacement. Tags are shared by workouts in the same event. Nothing changes until you approve it.</p>
@@ -91,7 +99,7 @@
 
     <section class="assistant-training-access" aria-labelledby="assistant-training-access">
       <h3 id="assistant-training-access">Training access</h3>
-      <p class="assistant-training-intro">Choose what the Assistant can do in this chat. Every change starts a new chat; New chat turns all optional access off.</p>
+      <p class="assistant-training-intro">Choose what the Assistant can do in this chat. Every change starts a fresh chat. New chat turns Training access off.</p>
       <div class="assistant-training-options">
         <app-compact-row title="Training plans" titleId="assistant-training-plans-title"
           icon="event_note" density="compact">

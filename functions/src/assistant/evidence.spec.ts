@@ -21,6 +21,14 @@ const evidenceTools = [
 ] satisfies AssistantMcpToolDefinition[];
 
 describe('Assistant evidence', () => {
+  it('pairs manual measurement display values and units without references or revision internals', () => {
+    const evidence = buildAssistantEvidence({ name: 'get_manual_measurement', title: 'Manual measurement' }, {
+      measurement: { measurementRef: 'private-ref', revision: 1, metricId: 'body_weight', canonicalValue: 80,
+        canonicalUnit: 'kg', displayValue: '176.4', displayUnit: 'lb', observedAt: '2026-10-01T08:00:00Z',
+        timezoneOffsetSeconds: 10800, diastolic: null, pulse: null, vo2Context: null, vo2Method: null } });
+    expect(evidence.facts).toEqual([{ label: 'Body weight', value: '176.4 lb' }, { label: 'Observed', value: '2026-10-01T08:00:00Z' }]);
+    expect(JSON.stringify(evidence)).not.toMatch(/private-ref|revision|80|kg/);
+  });
   it('keeps note evidence compact with actual dates and no raw details, identities or overlays', () => {
     const evidence = buildAssistantEvidence({ name: 'query_timeline_notes', title: 'Timeline notes' }, {
       notes: [{ title: 'Travel', category: 'travel', details: 'private-full-text', startDate: '2026-09-01', endDate: null,
