@@ -1,5 +1,8 @@
 import { afterEach, describe, it, expect, vi, beforeEach } from 'vitest';
 import { ServiceNames } from '@sports-alliance/sports-lib';
+import * as logger from 'firebase-functions/logger';
+import type { BulkWriter } from 'firebase-admin/firestore';
+import type { GarminAPIActivityQueueItemInterface, SleepSyncQueueItemInterface } from './queue/queue-item.interface';
 import { deferQueueItemForPendingDisconnect, deferQueueItemForPendingDisconnectIfCurrentUserActive, deferQueueItemForReconnectRequiredIfCurrentUserActive, moveToDeadLetterQueue, moveToDeadLetterQueueIfCurrentUserActive, increaseRetryCountForQueueItem, increaseRetryCountIfCurrentUserActive, isCurrentSleepQueueTransition, isProviderOperationInFlightLeaseActive, markQueueItemSkipped, PENDING_DISCONNECT_QUEUE_DISPATCH_MARKER, PROVIDER_OPERATION_IN_FLIGHT_LEASE_MS, PROVIDER_OPERATION_IN_FLIGHT_QUEUE_DISPATCH_MARKER, QUEUE_DEFERRED_REASONS, QUEUE_SKIPPED_REASONS, updateToProcessed, QueueResult } from './queue-utils';
 import { TTL_CONFIG } from './shared/ttl-config';
 
@@ -179,6 +182,52 @@ describe('queue-utils', () => {
     });
 
     describe('moveToDeadLetterQueue', () => {
+        it.each(['batch', 'bulkWriter'])('retains a Garmin workout callback and the failed-job TTL with %s', async writer => {
+            const queueItem = {
+                id: 'garmin-workout',
+                ref: { parent: { id: 'garminAPIActivityQueue' }, id: 'garmin-workout' },
+                callbackURL: 'https://apis.garmin.com/wellness-api/rest/activityFile?id=123&token=test-only',
+            } as unknown as GarminAPIActivityQueueItemInterface;
+            const nowMs = Date.now();
+            vi.spyOn(Date, 'now').mockReturnValue(nowMs);
+
+            const result = await moveToDeadLetterQueue(queueItem, new Error('failed import'),
+                writer === 'bulkWriter' ? hoisted.bulkWriter as unknown as BulkWriter : undefined);
+
+            expect(result).toBe(QueueResult.MovedToDLQ);
+            const failedPayload = (writer === 'bulkWriter' ? hoisted.bulkWriter.set : hoisted.batch.set).mock.calls[0][1];
+            expect(failedPayload).toMatchObject({
+                originalCollection: 'garminAPIActivityQueue',
+                callbackURL: queueItem.callbackURL,
+                expireAt: new Date(nowMs + TTL_CONFIG.FAILED_JOBS_IN_DAYS * 24 * 60 * 60 * 1000),
+            });
+            expect(JSON.stringify(vi.mocked(logger.info).mock.calls)).not.toContain(queueItem.callbackURL);
+        });
+
+        it.each(['garmin_ping', 'garmin_ping_batch'])('retains callbacks when the guarded %s revision fails', async type => {
+            const queueItem = {
+                id: 'garmin-health',
+                ref: { parent: { id: 'sleepSyncQueue' }, id: 'garmin-health' },
+                userID: 'user-1',
+                queueRevision: 'revision-1',
+                type,
+                ...(type === 'garmin_ping'
+                    ? { callbackURL: 'https://apis.garmin.com/wellness-api/rest/dailies?token=test-only' }
+                    : { garminCallbackURLs: ['https://apis.garmin.com/wellness-api/rest/dailies?token=test-only'] }),
+            } as unknown as SleepSyncQueueItemInterface;
+            hoisted.transaction.get.mockResolvedValue({ exists: true, data: () => queueItem });
+
+            await expect(moveToDeadLetterQueue(queueItem, new Error('invalid summary'))).resolves.toBe(QueueResult.MovedToDLQ);
+
+            expect(hoisted.transaction.set.mock.calls[0][1]).toMatchObject({
+                originalCollection: 'sleepSyncQueue',
+                ...(type === 'garmin_ping'
+                    ? { callbackURL: queueItem.callbackURL }
+                    : { garminCallbackURLs: queueItem.garminCallbackURLs }),
+            });
+            expect(hoisted.transaction.delete).toHaveBeenCalledWith(queueItem.ref);
+        });
+
         it('uses bulkWriter when provided', async () => {
             const queueItem: any = {
                 id: 'q1',
@@ -256,8 +305,8 @@ describe('queue-utils', () => {
                 sourceServiceName: 'manualUpload',
             });
             expect(failedPayload).not.toHaveProperty('destinationUploadContinuation');
-            expect(failedPayload).not.toHaveProperty('callbackURL');
-            expect(failedPayload).not.toHaveProperty('garminCallbackURLs');
+            expect(failedPayload.callbackURL).toBe(queueItem.callbackURL);
+            expect(failedPayload.garminCallbackURLs).toEqual(queueItem.garminCallbackURLs);
             expect(hoisted.transaction.delete).toHaveBeenCalledWith(queueItem.ref);
             expect(hoisted.batch.commit).not.toHaveBeenCalled();
         });
@@ -533,6 +582,31 @@ describe('queue-utils', () => {
     });
 
     describe('increaseRetryCountForQueueItem', () => {
+        it('retains the current Garmin callback batch when retries are exhausted', async () => {
+            const queueItem = {
+                id: 'garmin-health-exhausted',
+                ref: { parent: { id: 'sleepSyncQueue' }, id: 'garmin-health-exhausted' },
+                userID: 'user-1',
+                queueRevision: 'revision-1',
+                retryCount: 9,
+            } as unknown as SleepSyncQueueItemInterface;
+            const callbacks = ['https://apis.garmin.com/wellness-api/rest/dailies?token=test-only'];
+            hoisted.transaction.get.mockResolvedValue({
+                exists: true,
+                data: () => ({ ...queueItem, garminCallbackURLs: callbacks }),
+            });
+
+            await expect(increaseRetryCountForQueueItem(queueItem, new Error('provider unavailable')))
+                .resolves.toBe(QueueResult.MovedToDLQ);
+
+            expect(hoisted.transaction.set.mock.calls[0][1]).toMatchObject({
+                originalCollection: 'sleepSyncQueue',
+                retryCount: 10,
+                garminCallbackURLs: callbacks,
+            });
+            expect(hoisted.transaction.delete).toHaveBeenCalledWith(queueItem.ref);
+        });
+
         it('does not let an older Sleep queue revision reset retry state on its replacement', async () => {
             const queueItem: any = {
                 id: 'sleep-retry',
