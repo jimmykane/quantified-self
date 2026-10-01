@@ -348,6 +348,15 @@ service cloud.firestore {
           }
         }
 
+        match /workoutLibrary/{itemID} {
+          allow read: if isOwner();
+          allow write: if false;
+
+          match /{document=**} {
+            allow read, write: if false;
+          }
+        }
+
         match /scheduledWorkouts/{workoutID} {
           allow read: if isOwner() && !exists(/databases/$(database)/documents/users/$(userID)/trainingPlanState/current/planDeletionLocks/_bulk_restore);
           allow write: if false;

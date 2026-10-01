@@ -69,7 +69,7 @@ export const TRAINING_PLANS_PAGE_SECTIONS = [
       {
         icon: 'fitness_center',
         title: 'Strength training',
-        copy: 'Build ordered exercises and sets with reps or timed holds, optional external load in your selected kg or lb unit, and rest. Suunto sends a degraded Gym Guide with manual rep transitions, never native strength tracking; Garmin and Wahoo delivery is unsupported. COROS strength remains Coming soon pending account proof.',
+        copy: 'Build ordered exercises and sets with reps or timed holds, optional external load in your selected kg or lb unit, and rest. Suunto sends a degraded Gym Guide with manual rep transitions, never native strength tracking. Garmin strength mapping is implemented for supported exercise names, with live delivery verification pending; Wahoo strength delivery is unsupported. COROS strength remains Coming soon pending account proof.',
       },
       {
         icon: 'repeat',

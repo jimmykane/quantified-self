@@ -1,4 +1,6 @@
 import { ActivityTypes } from '@sports-alliance/sports-lib';
+import { parseStrengthWorkoutDetailsV1, projectStrengthWorkoutToV1, type StrengthWorkoutDetailsV1 } from '../../../../shared/strength-workout';
+import { garminStrengthExercise } from '../../../../shared/garmin-strength-workout';
 import {
     parseWorkoutStructureV1,
     type WorkoutEndingV1,
@@ -20,7 +22,7 @@ import {
 
 export type GarminWorkoutSportV1 = GarminWorkoutSportFamilyV1;
 export type GarminWorkoutIntensityV1 = 'REST' | 'WARMUP' | 'COOLDOWN' | 'RECOVERY' | 'ACTIVE';
-export type GarminWorkoutDurationTypeV1 = 'TIME' | 'DISTANCE' | 'OPEN' | 'FIXED_REST';
+export type GarminWorkoutDurationTypeV1 = 'TIME' | 'DISTANCE' | 'OPEN' | 'FIXED_REST' | 'REPS';
 export type GarminWorkoutTargetTypeV1 = 'SPEED' | 'PACE' | 'HEART_RATE' | 'CADENCE' | 'POWER' | 'OPEN';
 
 interface GarminTargetFieldsV1 {
@@ -47,6 +49,10 @@ export interface GarminWorkoutStepV1 extends GarminTargetFieldsV1, GarminSeconda
     durationType: GarminWorkoutDurationTypeV1;
     durationValue: number | null;
     durationValueType: 'METER' | null;
+    exerciseCategory?: string | null;
+    exerciseName?: string | null;
+    weightValue?: number | null;
+    weightDisplayUnit?: 'KILOGRAM' | null;
 }
 
 export interface GarminWorkoutRepeatStepV1 {
@@ -285,6 +291,40 @@ export function serializeGarminWorkoutV1(
     structureValue: unknown,
     options: SerializeGarminWorkoutOptionsV1,
 ): ProviderSerializationResultV1<GarminWorkoutPayloadV1> {
+    return serializeWorkout(structureValue, options);
+}
+
+export function serializeGarminStrengthWorkoutV1(
+    detailsValue: unknown,
+    options: SerializeGarminWorkoutOptionsV1,
+): ProviderSerializationResultV1<GarminWorkoutPayloadV1> {
+    const details = parseStrengthWorkoutDetailsV1(detailsValue);
+    return serializeWorkout(projectStrengthWorkoutToV1(details), options, details);
+}
+
+function strengthNodes(details: StrengthWorkoutDetailsV1): GarminWorkoutStepV1[] {
+    const nodes: GarminWorkoutStepV1[] = [];
+    details.exercises.forEach(exercise => exercise.sets.forEach((set, index) => {
+        const ending = set.ending;
+        nodes.push({ type: 'WorkoutStep', stepOrder: nodes.length + 1, intensity: 'ACTIVE',
+            description: `${exercise.name} · set ${index + 1}`,
+            durationType: ending.kind === 'repetitions' ? 'REPS' : 'TIME',
+            durationValue: ending.kind === 'repetitions' ? ending.repetitions : ending.seconds,
+            durationValueType: null, ...primaryTargetFields(undefined, false), ...secondaryTargetFields(undefined),
+            ...garminStrengthExercise(exercise.name)!,
+            weightValue: set.externalLoadKg ?? null,
+            weightDisplayUnit: set.externalLoadKg === undefined ? null : 'KILOGRAM' });
+        if (set.restAfterSeconds !== undefined) nodes.push({ type: 'WorkoutStep', stepOrder: nodes.length + 1,
+            intensity: 'REST', description: `Rest after ${exercise.name}`, durationType: 'FIXED_REST',
+            durationValue: set.restAfterSeconds, durationValueType: null,
+            ...primaryTargetFields(undefined, false), ...secondaryTargetFields(undefined),
+            exerciseCategory: null, exerciseName: null, weightValue: null, weightDisplayUnit: null });
+    }));
+    return nodes;
+}
+
+function serializeWorkout(structureValue: unknown, options: SerializeGarminWorkoutOptionsV1,
+    strength?: StrengthWorkoutDetailsV1): ProviderSerializationResultV1<GarminWorkoutPayloadV1> {
     const structure = parseWorkoutStructureV1(structureValue);
     const workoutName = requiredText(options.name, 'Garmin workout name');
     const rawDescription = options.description?.trim() ?? '';
@@ -304,6 +344,7 @@ export function serializeGarminWorkoutV1(
         structure,
         additionalIssues,
         allowDegraded: options.allowDegraded,
+        strength,
     });
     const sport = sportToGarmin(structure.sport);
     const swimming = sport === 'LAP_SWIMMING';
@@ -329,7 +370,7 @@ export function serializeGarminWorkoutV1(
             sport,
             poolLength: null,
             poolLengthUnit: null,
-            steps: structureToGarminNodes(structure),
+            steps: strength ? strengthNodes(strength) : structureToGarminNodes(structure),
         }],
     };
     return { ...resolved, artifact };

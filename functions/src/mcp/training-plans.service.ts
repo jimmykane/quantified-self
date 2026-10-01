@@ -9,6 +9,7 @@ import { assessPlannedWorkoutProviderMappingV1, PLANNED_WORKOUT_PROVIDER_IDS,
   type PlannedWorkoutProviderId } from '../../../shared/planned-workout-providers';
 import { parseTrainingWorkoutCompletionV1 } from '../../../shared/training-workout-completion';
 import { parseStrengthWorkoutDetailsV1, strengthProjectionMatchesDetails, type StrengthWorkoutDetailsV1 } from '../../../shared/strength-workout';
+import { parseWorkoutLibraryItemV1 } from '../../../shared/workout-library';
 import { isUserDeletionTombstoneActive } from '../shared/user-deletion-guard';
 import { TRAINING_PLANS_SCOPE, TRAINING_READ_INPUTS, TRAINING_READ_OUTPUTS, TRAINING_RECIPE_SCHEMA,
   TRAINING_RECIPE_WITH_POOL_SCHEMA,
@@ -42,15 +43,16 @@ const completionSchema = z.strictObject({ schemaVersion: z.literal(1), workoutId
   sourceSessionIndex: count.nullable(), activityStartAtMs: count.nullable(), scheduledLocalDate: trainingDate,
   workoutRevisionAtLink: count.positive(), timing: z.enum(['on_date', 'early', 'late', 'unknown']),
   linkedAtMs: count, updatedAtMs: count });
-type Collection = 'trainingPlans' | 'scheduledWorkouts' | 'trainingDeliverySettings' | 'trainingDeliveryStatuses'
+type Collection = 'trainingPlans' | 'scheduledWorkouts' | 'workoutLibrary' | 'trainingDeliverySettings' | 'trainingDeliveryStatuses'
   | 'trainingWorkoutCompletions';
 const MASKS: Record<Collection, string[]> = { trainingPlans: Object.keys(planSchema.shape),
-  scheduledWorkouts: Object.keys(workoutSchema.shape), trainingDeliverySettings: Object.keys(settingSchema.shape),
+  scheduledWorkouts: Object.keys(workoutSchema.shape), workoutLibrary: ['schemaVersion', 'title', 'status',
+    'revision', 'createdAtMs', 'updatedAtMs'], trainingDeliverySettings: Object.keys(settingSchema.shape),
   trainingDeliveryStatuses: Object.keys(statusSchema.shape), trainingWorkoutCompletions: Object.keys(completionSchema.shape) };
 interface Document { id: string; data: Record<string, unknown> }
 type Filter = { field: 'planId' | 'workoutId' | 'scopeId' | 'associationPlanId'; value: string | null };
 interface WorkoutDateCursor { localDate: string; id: string }
-interface State { revision: number; activePlanId: string | null; accessGeneration?: string }
+interface State { revision: number; activePlanId: string | null; libraryRevision?: number; accessGeneration?: string }
 export interface TrainingReadView {
   get(collection: Collection, id: string, structure?: boolean): Promise<Document | null>;
   getStrengthDetails?(workoutId: string): Promise<Document | null>;
@@ -79,7 +81,10 @@ export function createFirestoreTrainingReads(database: () => FirebaseFirestore.F
     const user = db.collection('users').doc(uid);
     const [owner, tombstone, state] = await db.getAll(user, db.collection('userDeletionTombstones').doc(uid),
       user.collection('trainingPlanState').doc('current'), { fieldMask: ['expireAt', 'revision', 'activePlanId'] });
-    const lock = await user.collection('trainingPlanState').doc('current').collection('planDeletionLocks').select().limit(1).get();
+    const [lock, libraryState] = await Promise.all([
+      user.collection('trainingPlanState').doc('current').collection('planDeletionLocks').select().limit(1).get(),
+      user.collection('trainingPlanState').doc('current').collection('workoutLibraryState').doc('current').get(),
+    ]);
     if (!owner.exists || (tombstone.exists && isUserDeletionTombstoneActive(tombstone.data())) || !lock.empty) throw unavailable();
     // Only the internal Assistant session uses this reserved identity. Its live generation consent is checked
     // by the callable/runtime on both sides of every tool read; public connection IDs are server-generated hashes.
@@ -93,14 +98,16 @@ export function createFirestoreTrainingReads(database: () => FirebaseFirestore.F
       accessGeneration = JSON.stringify([connection.get('grantId') ?? null, connection.get('createdAtMs') ?? null]);
     }
     return { ...(state.exists ? z.strictObject({ revision: count, activePlanId: id.nullable() }).parse(state.data())
-      : { revision: 0, activePlanId: null }), accessGeneration };
+      : { revision: 0, activePlanId: null }), libraryRevision: libraryState.exists
+      ? count.parse(libraryState.get('revision')) : 0, accessGeneration };
   },
   async snapshot(uid, read) {
     const db = database();
     const user = db.collection('users').doc(uid);
     return db.runTransaction(async transaction => read({
       async get(collection, documentId, structure = false) {
-        const fields = [...MASKS[collection], ...(structure ? ['structure'] : [])];
+        const fields = [...MASKS[collection], ...(structure ? collection === 'workoutLibrary'
+          ? ['structure', 'strength'] : ['structure'] : [])];
         const [doc] = await transaction.getAll(user.collection(collection).doc(documentId), { fieldMask: fields });
         return doc.exists ? { id: doc.id, data: doc.data()! } : null;
       },
@@ -134,10 +141,12 @@ export function createFirestoreTrainingReads(database: () => FirebaseFirestore.F
 export const firestoreTrainingReads = createFirestoreTrainingReads();
 
 export interface TrainingReadInput { tool: TrainingReadTool; arguments: unknown; uid: string; connectionId: string; scopes: readonly string[] }
-const refSchema = z.strictObject({ kind: z.enum(['plan', 'workout']), id, createdAtMs: count });
+const refSchema = z.strictObject({ kind: z.enum(['plan', 'workout', 'saved-workout']), id, createdAtMs: count });
 const cursorSchema = z.strictObject({ kind: z.literal('cursor'), query: z.string().max(4096), revision: count, after: id.nullable() });
 const dateCursorSchema = z.strictObject({ kind: z.literal('date-cursor'), query: z.string().max(4096), revision: count,
   after: z.strictObject({ localDate: trainingDate, id }).nullable() });
+const libraryCursorSchema = z.strictObject({ kind: z.literal('library-cursor'), query: z.string().max(4096),
+  revision: count, after: id.nullable() });
 
 const WAHOO_SCHEDULING_DURATION_ISSUE = {
   severity: 'unsupported',
@@ -215,6 +224,59 @@ export async function readTrainingPlans(input: TrainingReadInput, reads: Trainin
       },
     };
     const plans = new Map<string, Document>();
+    if (input.tool === 'get_saved_workout') {
+      const a = TRAINING_READ_INPUTS.get_saved_workout.parse(args.data);
+      const decoded = refSchema.safeParse(decode(a.savedWorkoutRef));
+      if (!decoded.success || decoded.data.kind !== 'saved-workout') {
+        throw new TrainingReadError('invalid_request', 'Invalid saved-workout reference.');
+      }
+      const document = await view.get('workoutLibrary', decoded.data.id, true);
+      if (!document) throw new TrainingReadError('invalid_request', 'This saved workout is no longer available.');
+      const item = parseWorkoutLibraryItemV1({ ...document.data, id: document.id });
+      if (item.createdAtMs !== decoded.data.createdAtMs) throw unavailable();
+      return { libraryRevision: state.libraryRevision ?? 0, savedWorkout: {
+        savedWorkoutRef: a.savedWorkoutRef, title: item.title, status: item.status,
+        revision: item.revision, createdAtMs: item.createdAtMs, updatedAtMs: item.updatedAtMs,
+        structure: TRAINING_RECIPE_WITH_POOL_SCHEMA.parse(item.structure),
+        ...(item.strength ? { strength: item.strength } : {}),
+      } };
+    }
+    if (input.tool === 'list_saved_workouts') {
+      const a = TRAINING_READ_INPUTS.list_saved_workouts.parse(args.data);
+      const query = JSON.stringify({ search: a.search ?? null, status: a.status ?? null, limit: a.limit });
+      let after: string | null = null;
+      if (a.cursor) {
+        const cursor = libraryCursorSchema.safeParse(decode(a.cursor));
+        if (!cursor.success || cursor.data.query !== query || cursor.data.revision !== (state.libraryRevision ?? 0))
+          throw new TrainingReadError('invalid_request', 'The library changed. Restart the query without a cursor.');
+        after = cursor.data.after;
+      }
+      const workouts: Array<{ savedWorkoutRef: string; title: string; status: 'active' | 'archived';
+        revision: number; createdAtMs: number; updatedAtMs: number }> = [];
+      let scanned = 0;
+      let done = false;
+      outer: while (scanned < 200) {
+        const page = await view.page('workoutLibrary', after, 25);
+        for (const document of page) {
+          const item = z.strictObject({ schemaVersion: z.literal(1), title: z.string().min(1).max(120),
+            status: z.enum(['active', 'archived']), revision: count.positive(), createdAtMs: count,
+            updatedAtMs: count }).parse(document.data);
+          scanned += 1;
+          if ((!a.search || item.title.toLocaleLowerCase('en').includes(a.search.toLocaleLowerCase('en')))
+            && (!a.status || item.status === a.status)) {
+            if (workouts.length === a.limit) break outer;
+            workouts.push({ savedWorkoutRef: encode({ kind: 'saved-workout', id: id.parse(document.id),
+              createdAtMs: item.createdAtMs }), title: item.title, status: item.status,
+              revision: item.revision, createdAtMs: item.createdAtMs, updatedAtMs: item.updatedAtMs });
+          }
+          after = id.parse(document.id);
+        }
+        if (page.length < 25) { done = true; break; }
+      }
+      return { libraryRevision: state.libraryRevision ?? 0, scanComplete: done, recordsScanned: scanned,
+        nextCursor: done ? null : encode({ kind: 'library-cursor', query,
+          revision: state.libraryRevision ?? 0, after }), workouts };
+    }
     const getPlan = async (planId: string) => {
       let doc = plans.get(planId);
       if (!doc) { doc = await view.get('trainingPlans', planId) ?? undefined; if (!doc) throw unavailable(); projectPlan(doc); plans.set(planId, doc); }
@@ -450,7 +512,7 @@ export async function readTrainingPlans(input: TrainingReadInput, reads: Trainin
   if (Buffer.byteLength(JSON.stringify({ structuredContent: checked, content: [{ type: 'text', text: JSON.stringify(checked) }] })) > TRAINING_READ_LIMITS.responseBytes)
     throw new TrainingReadError('query_too_large', 'Training results exceed the safe response size. Use a smaller limit. No instructions were truncated.');
   const current = await reads.state(input.uid, input.connectionId);
-  if (current.revision !== state.revision) throw stale();
+  if (current.revision !== state.revision || (current.libraryRevision ?? 0) !== (state.libraryRevision ?? 0)) throw stale();
   if (current.accessGeneration !== state.accessGeneration) throw unavailable();
   return checked;
 }

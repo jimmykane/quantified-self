@@ -29,6 +29,8 @@ describe('function target loader', () => {
       'ensureDerivedMetrics',
       'setTrainingBuildBenchmark',
       'mutateTrainingSchedule',
+      'mutateWorkoutLibrary',
+      'placeWorkoutLibrary',
       'getTrainingScheduleHistory',
       'previewTrainingScheduleRestore',
       'restoreTrainingScheduleRevision',

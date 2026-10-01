@@ -10,6 +10,8 @@ import { productionDeliveryRuntime } from '../training-plans/delivery/runtime';
 import { WahooHttpFixture } from '../training-plans/delivery/test-support/wahoo-http-fixture';
 import { WahooTrainingTransport } from '../training-plans/delivery/wahoo/transport';
 import { CorosTrainingTransport } from '../training-plans/delivery/coros/transport';
+import { GarminTrainingTransport } from '../training-plans/delivery/garmin/transport';
+import { GarminHttpFixture } from '../training-plans/delivery/test-support/garmin-http-fixture';
 import { reconcileTrainingDeliveryPage } from '../training-plans/delivery/store';
 import { processTrainingDelivery } from '../training-plans/delivery/worker';
 import { parseStrengthWorkoutDetailsV1, projectStrengthWorkoutToV1 } from '../../../shared/strength-workout';
@@ -704,6 +706,48 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Training MCP write propos
       Name: 'Squat', Length: { Unit: 'Reps', Value: 5 }, Rest: { Unit: 'Second', Value: 60 },
       IntensityTarget: { Unit: 'ValueOfEquipmentWeight', Value: 82.5 },
     }] });
+  });
+
+  it('previews Garmin strength without I/O and applies Send idempotently through its full production policy', async () => {
+    const garmin = new GarminHttpFixture();
+    const synthetic = new GarminTrainingTransport(garmin.request, deps.now);
+    const policy = productionDeliveryRuntime(db).transport('garmin', uid)!;
+    deps.runtime.transport = provider => provider !== 'garmin' ? null : { ...policy,
+      inspection: synthetic.inspection, execute: synthetic.execute.bind(synthetic), recover: synthetic.recover.bind(synthetic) };
+    const strength = { version: 1 as const, exercises: [{ id: 'squat', name: 'Barbell back squat', sets: [{
+      id: 'set-one', ending: { kind: 'repetitions' as const, repetitions: 5 }, externalLoadKg: 82.5, restAfterSeconds: 120,
+    }] }] };
+    const authored = await previewStrengthWorkoutChange({ uid, connectionId: 'connection', scopes,
+      arguments: { expectedScheduleRevision: 1, change: { kind: 'create-workout', localKey: 'lift', plan: null,
+        localDate: '2026-09-18', title: 'Synthetic Garmin strength', strength } } }, deps);
+    const created = await applyTrainingChanges({ uid, connectionId: 'connection', scopes,
+      arguments: { proposalRef: authored.proposalRef, permissionMode: 'schedule' } }, deps);
+    const argumentsValue = { expectedScheduleRevision: created.scheduleRevision, changes: [{ kind: 'provider-delivery',
+      targetType: 'workout', target: { ref: created.createdReferences[0].reference },
+      providers: ['garmin'], action: 'send', timeZone: 'Europe/Helsinki' }] };
+    await expect(previewTrainingChanges({ uid, connectionId: 'connection', scopes: [TRAINING_PLANS_SCOPE, TRAINING_PLANS_WRITE_SCOPE],
+      arguments: argumentsValue }, deps)).rejects.toThrow();
+    const preview = await previewTrainingChanges({ uid, connectionId: 'connection', scopes, arguments: argumentsValue }, deps);
+    expect(preview).toMatchObject({ permissionMode: 'delivery', requiresConfirmation: true,
+      providerPreviews: [{ provider: 'garmin', availability: 'ready', warningCount: 0 }] });
+    const user = db.collection('users').doc(uid);
+    expect((await user.collection('trainingDeliverySettings').get()).empty).toBe(true);
+    expect(garmin.calls).toHaveLength(0);
+    const input = { uid, connectionId: 'connection', scopes,
+      arguments: { proposalRef: preview.proposalRef, permissionMode: preview.permissionMode } };
+    const applied = await applyTrainingChanges(input, deps);
+    await expect(applyTrainingChanges(input, deps)).resolves.toEqual(applied);
+    expect(applied.providers).toEqual([expect.objectContaining({ provider: 'garmin', status: 'applied' })]);
+    for (let page = 0; page < 20 && await reconcileTrainingDeliveryPage(deps.runtime, uid); page++) { /* drain */ }
+    const ledger = (await user.collection('trainingDeliveryLedger').get()).docs[0];
+    await Promise.all([processTrainingDelivery(deps.runtime, uid, ledger.id), processTrainingDelivery(deps.runtime, uid, ledger.id)]);
+    expect((await user.collection('trainingDeliveryStatuses').doc(ledger.id).get()).data())
+      .toMatchObject({ provider: 'garmin', status: 'delivered', hasRemoteCopy: true });
+    expect(garmin.workouts.size).toBe(1); expect(garmin.schedules.size).toBe(1);
+    expect([...garmin.workouts.values()][0]).toMatchObject({ sport: 'STRENGTH_TRAINING',
+      segments: [{ steps: [{ exerciseName: 'BARBELL_BACK_SQUAT', durationType: 'REPS', durationValue: 5, weightValue: 82.5 },
+        { intensity: 'REST', durationValue: 120 }] }] });
+    expect(garmin.calls.filter(call => call.method === 'POST')).toHaveLength(2);
   });
 
   it('preserves strength details in the production policy for MCP Send preview and approval-gated apply', async () => {

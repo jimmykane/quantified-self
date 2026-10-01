@@ -2568,6 +2568,18 @@
       "indexes": []
     },
     {
+      "collectionGroup": "workoutLibraryMutationReceipts",
+      "fieldPath": "expireAt",
+      "ttl": true,
+      "indexes": []
+    },
+    {
+      "collectionGroup": "workoutLibraryPlacementReceipts",
+      "fieldPath": "expireAt",
+      "ttl": true,
+      "indexes": []
+    },
+    {
       "collectionGroup": "scheduledWorkouts",
       "fieldPath": "structure",
       "ttl": false,

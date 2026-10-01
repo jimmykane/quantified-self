@@ -364,6 +364,18 @@
           "destination": "/index.csr.html"
         },
         {
+          "source": "/training/plans/library/new",
+          "destination": "/index.csr.html"
+        },
+        {
+          "source": "/training/plans/library/*",
+          "destination": "/index.csr.html"
+        },
+        {
+          "source": "/training/plans/library",
+          "destination": "/index.csr.html"
+        },
+        {
           "source": "/training/plans/standalone/new",
           "destination": "/index.csr.html"
         },
@@ -685,6 +697,18 @@
         },
         {
           "source": "/training/plans/workout/*",
+          "destination": "/index.csr.html"
+        },
+        {
+          "source": "/training/plans/library/new",
+          "destination": "/index.csr.html"
+        },
+        {
+          "source": "/training/plans/library/*",
+          "destination": "/index.csr.html"
+        },
+        {
+          "source": "/training/plans/library",
           "destination": "/index.csr.html"
         },
         {
