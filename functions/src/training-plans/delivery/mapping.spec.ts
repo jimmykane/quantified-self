@@ -9,6 +9,23 @@ const workout: ScheduledWorkoutV1 = { schemaVersion: 1, id: 'w', planId: null, l
   title: 'Easy run', lifecycle: 'planned', createdAtMs: 1, updatedAtMs: 1, structure: { version: 1, sport: ActivityTypes.Running,
     nodes: [{ kind: 'step', id: 'a', purpose: 'work', ending: { kind: 'time', seconds: 600 }, targets: [] }] } };
 describe('Training delivery mapping and production boundary', () => {
+  it.each([
+    [ActivityTypes.IndoorRunning, ActivityTypes.Running], [ActivityTypes.VirtualRunning, ActivityTypes.Running],
+    [ActivityTypes.VirtualCycling, ActivityTypes.Cycling], [ActivityTypes.Velomobile, ActivityTypes.Cycling],
+    [ActivityTypes['Enduro MTB'], ActivityTypes.Cycling], [ActivityTypes.DownhillCycling, ActivityTypes.Cycling],
+  ] as const)('binds the COROS %s fold approval to its authored sport, account and date without enabling production delivery', (sport, family) => {
+    const authored = { ...workout, structure: { ...workout.structure, sport } };
+    const result = assessTrainingDeliveryMapping('coros', authored, 'destination', 'UTC');
+    expect(result.level).toBe('degraded');
+    expect(result.issues.join(' ')).toContain(`${sport} as a ${family} workout`);
+    expect(assessTrainingDeliveryMapping('coros', { ...authored, structure: { ...authored.structure, sport: family } },
+      'destination', 'UTC').digest).not.toBe(result.digest);
+    expect(assessTrainingDeliveryMapping('coros', authored, 'other-account', 'UTC').digest).not.toBe(result.digest);
+    expect(assessTrainingDeliveryMapping('coros', { ...authored, localDate: '2026-09-11' }, 'destination', 'UTC').digest)
+      .not.toBe(result.digest);
+    expect(productionDeliveryRuntime({} as never).transport('coros', 'owner')).toBeNull();
+    expect(authored.structure.sport).toBe(sport);
+  });
   it.each(GARMIN_GENERIC_WORKOUT_SPORTS_V1)('discloses %s Generic fallback and binds approval to the authored sport and account', sport => {
     const authored = { ...workout, structure: { ...workout.structure, sport } };
     const before = JSON.stringify(authored);

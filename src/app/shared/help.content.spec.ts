@@ -67,6 +67,16 @@ describe('help.content', () => {
     expect(content).toContain('New COROS Send and plan sync remain **Coming soon** pending account-side proof');
     expect(content).toContain('Local compatibility does not mean COROS received the workout or that it reached your watch');
   });
+  it('discloses the COROS broad-family folds without advertising additional native or enabled delivery types', () => {
+    const content = HELP_SECTIONS.find(section => section.id === 'training-plans')!.content;
+    expect(content).toContain('Treadmill, Indoor Running and Virtual Running use the broad Run mapping');
+    expect(content).toContain('Mountain Biking, Indoor Cycling, Virtual Cycling, E-Biking, Hand Cycle, Velomobile, Enduro MTB and Downhill Cycling use Bike');
+    expect(content).toContain('subtype substitutions need mapping review and keep your authored QS sport');
+    expect(content).toContain('Walking, Hiking, Rowing, Indoor Rowing and Open-water swimming have no supported COROS workout-delivery mapping');
+    expect(content).toContain('does not make them available through its partner API');
+    expect(content).toContain('Local compatibility is not delivery or watch-receipt evidence');
+    expect(content).toContain('COROS workout delivery is coming soon');
+  });
 
   it('explains the independent weight preference and canonical weigh-in storage', () => {
     const copy = JSON.stringify(HELP_SECTIONS);

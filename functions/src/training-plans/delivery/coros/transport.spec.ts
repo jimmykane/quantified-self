@@ -29,6 +29,34 @@ function operations(count: number, kind: 'upsert' | 'remove', transport: CorosTr
 }
 
 describe('COROS Training batch transport', () => {
+  it('builds one broad-family batch for the additional running/cycling profiles without changing authored sports or IDs', async () => {
+    const profiles = [
+      [ActivityTypes.IndoorRunning, 'run'], [ActivityTypes.VirtualRunning, 'run'],
+      [ActivityTypes.VirtualCycling, 'bike'], [ActivityTypes.Velomobile, 'bike'],
+      [ActivityTypes['Enduro MTB'], 'bike'], [ActivityTypes.DownhillCycling, 'bike'],
+    ] as const;
+    const client = vi.fn(async (request: { data?: string }, beforeSend: () => Promise<void>) => {
+      await beforeSend(); const payload = JSON.parse(request.data!);
+      return { status: 200, body: { result: '0000', data: { StartDate: payload.StartDate, EndDate: payload.EndDate } } };
+    });
+    const transport = new CorosTrainingTransport(client, () => NOW);
+    const batch = operations(profiles.length, 'upsert', transport);
+    for (const [index, [sport]] of profiles.entries()) {
+      batch[index].workout!.structure.sport = sport;
+      const assessment = transport.assess(batch[index].workout!, 'destination', 'Europe/Helsinki');
+      expect(assessment.level).toBe('degraded');
+      batch[index].digest = assessment.digest;
+    }
+    const original = JSON.stringify(batch);
+    const outcomes = await transport.batch.execute(batch, async () => {}, async () => {});
+    expect(outcomes).toHaveLength(profiles.length);
+    expect(outcomes.every(outcome => outcome.state === 'accepted')).toBe(true);
+    const payload = JSON.parse(client.mock.calls[0][0].data!);
+    expect(payload.Workouts.map((entry: { WorkoutType: string }) => entry.WorkoutType)).toEqual(profiles.map(([, type]) => type));
+    expect(payload.Workouts.map((entry: { Id: number }) => entry.Id)).toEqual(profiles.map((_, index) => 1000 + index));
+    expect(JSON.stringify(batch)).toBe(original);
+  });
+
   const strengthOperation = (operation: DeliveryOperation, transport: CorosTrainingTransport) => {
     const strength = { version: 1 as const, workoutId: operation.workout!.id, revision: 1, exercises: [{ id: 'squat', name: 'Squat',
       sets: [{ id: 'set', ending: { kind: 'repetitions' as const, repetitions: 5 }, externalLoadKg: 80.25, restAfterSeconds: 60 }] }] };

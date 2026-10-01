@@ -353,6 +353,13 @@ COROS Training delivery (#648) uses the shared provider-readiness boundary with 
 currently disabled there for the app, Functions runtime and MCP; explicit COROS proposals report unavailable and
 `all_connected` excludes it. Training plan, workout and sync-history UI also omits retained COROS settings/statuses.
 Compatibility assessment remains local and available because it neither grants consent nor contacts COROS.
+Indoor/Virtual Running, Virtual Cycling, Velomobile, Enduro MTB and Downhill Cycling reuse the existing broad
+`run`/`bike` mapping alongside earlier subtypes. Strict recipe reads preserve their exact canonical sport strings;
+compatibility reads disclose the fold through the existing `sport_profile_degraded` issue. They are not native COROS
+sport profiles or newly eligible Send destinations. Walking, Hiking, Rowing, Indoor Rowing and Open Water Swimming
+remain unsupported under the partner contract. Regression tests cover all six folds, owner/connection isolation and
+transport-field exclusion. No tool, schema, scope, consent, Assistant instruction or bundled plugin changes; no
+registered-app refresh or plugin sync is needed for this mapping-only extension.
 The existing sync-status enum can report delivered, approval, retry, attention
 and completed states for COROS. Partner athlete/workout IDs, destination
 identity, batch journals, request outcomes, token authority and exact `planWorkoutId` evidence remain private and are

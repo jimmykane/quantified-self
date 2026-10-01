@@ -272,8 +272,10 @@ Mountain Biking `10`, Indoor Cycling `52`, E-Biking `105` and E-MTB `106`, Hand 
 Openwater swimming `85`. Generic Cycling does
 not automatically include Mountain Biking. Garmin folds those profiles—and the additional Indoor/Virtual Running,
 Virtual Cycling, Velomobile, Enduro MTB and Downhill Cycling profiles—to its broad `RUNNING`/`CYCLING` API values with an
-explicit degradation warning. COROS accepts native Running, Trail Running and Cycling; Treadmill and the remaining
-cycling profiles fold to COROS `run`/`bike` only with explicit approval. Swimming maps to native `swim` only when its
+explicit degradation warning. COROS maps Running, Trail Running and Cycling to `run`, `trailRun` and `bike`.
+Treadmill, Indoor Running and Virtual Running fold to `run`; Mountain Biking, Indoor Cycling, Virtual Cycling,
+E-Biking, Hand Cycle, Velomobile, Enduro MTB and Downhill Cycling fold to `bike` only with explicit mapping approval.
+QS keeps the authored sport. Swimming maps to native `swim` only when its
 steps have no intensity target; the partner's stroke target has no canonical v1 equivalent. COROS Training delivery is
 disabled at the shared frontend/backend boundary. Open-water swimming is not a COROS `swim` profile in the current mapping. Wahoo remains
 mapped to time-based Running/Cycling subprofiles, untargeted outdoor Walking/Hiking and the #783 owner-tested timed Gym path.
@@ -295,6 +297,14 @@ percentage targets preserve their canonical reference snapshots. Maximum-HR, cri
 targets freeze to absolute ranges only after approval. COROS accepts one intensity target per step, exposes no distinct
 recovery intensity, documents cadence targets for running but not cycling, and requires integer lengths and percentages;
 each lossy case is surfaced before serialization.
+
+The partner Training Plan contract (§6.1.3, pp. 45–49) has only `run`, `trailRun`, `bike`, `swim` and `strength`.
+Walking, Hiking, Rowing, Indoor Rowing and Open Water Swimming therefore remain unsupported, with no Generic fallback.
+COROS's [native custom-workout help](https://support.coros.com/hc/en-us/articles/47285577958932-Create-Custom-Workouts-in-Your-COROS-App)
+lists additional app-created modes; it does not establish additional partner `WorkoutType` values. Recorded-activity
+`mode`/`subMode` values likewise cannot authorize outbound workout mappings. The new subtype folds reuse the existing
+payload approval, identity, batching and lifecycle paths; no OAuth, admission, transport binding or production enablement
+changes. Serializer, mixed-batch and strict MCP read regressions cover the six additions; live evidence remains #648/#741.
 
 Wahoo mapping follows the official [Cloud API](https://cloud-api.wahooligan.com/) and
 [plan.json 1.0.0 format](https://cloud-api.wahooligan.com/docs/plan-json-format.pdf). Canonical repeat count is total

@@ -178,9 +178,19 @@ One collision-checked positive partner AthleteId is bound to the QS user and nev
 destination/workout receives a separate stable positive ID that survives edits, reschedules and plan transfers. The
 mapping remains available after workout deletion for withdrawal/completion correlation and is recursively deleted with
 the account. Today-through-365-day scheduling uses the saved delivery time zone and deterministic LastModifiedDate.
-Running, Trail Running and Cycling use the native wire values `run`, `trailRun` and `bike`; Treadmill and cycling subtypes fold to broad `run`/`bike` only after
-explicit approval. A second target, recovery-to-rest mapping, fractional values and frozen relative references retain
+Running, Trail Running and Cycling use the native wire values `run`, `trailRun` and `bike`. Treadmill, Indoor Running
+and Virtual Running fold to broad `run`; Mountain Biking, Indoor Cycling, Virtual Cycling, E-Biking, Hand Cycle,
+Velomobile, Enduro MTB and Downhill Cycling fold to broad `bike` only after explicit mapping approval. The authored QS
+sport is unchanged. A second target, recovery-to-rest mapping, fractional values and frozen relative references retain
 the normal degradation approval, while cycling cadence is unsupported.
+
+The partner Training Plan contract (§6.1.3, pp. 45–49) supports only `run`, `trailRun`, `bike`, `swim` (pool) and
+`strength`. Walking, Hiking, Rowing, Indoor Rowing and Open Water Swimming remain unsupported, with no Generic fallback.
+The broader inbound activity `mode`/`subMode` catalog is not an outbound workout contract. COROS's
+[custom-workout help](https://support.coros.com/hc/en-us/articles/47285577958932-Create-Custom-Workouts-in-Your-COROS-App)
+also lists newer native app modes, but does not supply partner `WorkoutType` mappings for them. Serializer approval,
+mixed-batch payload and strict MCP read tests cover the six new running/cycling subtype folds. They do not prove
+account-side acceptance, app/watch receipt or completion, and leave the disabled delivery boundary unchanged.
 
 Push acceptance requires a returned date range covering the submitted batch. Delete success/failure lists are applied
 per workout. Result `30009` reports unavailable COROS Training access without asking for reconnect; `5006` requires

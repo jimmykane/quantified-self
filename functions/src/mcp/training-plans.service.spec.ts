@@ -188,6 +188,29 @@ describe('Training plan MCP reads', () => {
       expect(TRAINING_READ_OUTPUTS.assess_planned_workout_compatibility.parse(await assess()).assessments[0].level).toBe('unsupported');
     }
   });
+  it.each([
+    [ActivityTypes.IndoorRunning, 'Running'], [ActivityTypes.VirtualRunning, 'Running'],
+    [ActivityTypes.VirtualCycling, 'Cycling'], [ActivityTypes.Velomobile, 'Cycling'],
+    [ActivityTypes['Enduro MTB'], 'Cycling'], [ActivityTypes.DownhillCycling, 'Cycling'],
+  ] as const)('reads authored %s and discloses its COROS %s fold without widening the strict MCP contract', async (sport, family) => {
+    const f = fixture();
+    const authored = { version: 1, sport, nodes: [{ kind: 'step', id: 'work', purpose: 'work',
+      ending: { kind: 'time', seconds: 300 }, targets: [] }] };
+    f.structures.w1 = authored;
+    const workoutRef = f.codec.encode({ kind: 'workout', id: 'w1', createdAtMs: 1 }, 'owner', 'connection');
+    const result = TRAINING_READ_OUTPUTS.assess_planned_workout_compatibility.parse(
+      await f.run('assess_planned_workout_compatibility', { workoutRef, providers: ['coros'] }));
+    expect(result.assessments).toEqual([expect.objectContaining({ provider: 'coros', level: 'degraded',
+      issues: [expect.objectContaining({ code: 'sport_profile_degraded', field: '$.sport',
+        message: expect.stringContaining(`${sport} as a ${family} workout`) })] })]);
+    const read = TRAINING_READ_OUTPUTS.get_planned_workout.parse(await f.run('get_planned_workout', { workoutRef }));
+    expect(read.workout.structure).toEqual(authored);
+    expect(JSON.stringify(result)).not.toMatch(/WorkoutType|athleteId|destination|digest|planWorkoutId|mappingVersion/);
+    await expect(f.run('assess_planned_workout_compatibility', { workoutRef, providers: ['coros'] },
+      [TRAINING_PLANS_SCOPE], 'foreign-connection')).rejects.toThrow();
+    await expect(f.run('get_planned_workout', { workoutRef },
+      [TRAINING_PLANS_SCOPE], 'connection', 'foreign-owner')).rejects.toThrow();
+  });
   it('reads the complete strength companion under Training consent and fails closed on a mismatch', async () => {
     const f = fixture();
     const details = { version: 1 as const, workoutId: 'w1', revision: 1,

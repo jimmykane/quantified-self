@@ -1413,11 +1413,22 @@ Swimming supports time, distance or manual-transition steps without intensity ta
 target is stroke, which the current recipe does not encode. HR, power, pace and cadence targets on Swimming therefore
 fail compatibility instead of being silently dropped. COROS delivery actions and status summaries remain hidden while
 the shared provider flag is disabled.
-Treadmill and cycling subtypes fold to `run`/`bike` only
-after explicit approval. Cycling cadence remains unsupported. Rounding, recovery-to-rest, frozen relative references and
+Treadmill, Indoor Running and Virtual Running fold to `run`. Mountain Biking, Indoor Cycling, Virtual Cycling,
+E-Biking, Hand Cycle, Velomobile, Enduro MTB and Downhill Cycling fold to `bike`. Each subtype fold requires explicit
+mapping approval and preserves the authored QS sport; these are broad-family substitutions, not native subtype support.
+The partner contract (§6.1.3, pp. 45–49) documents only `run`, `trailRun`, `bike`, `swim` and `strength`; Walking,
+Hiking, Rowing, Indoor Rowing and Open Water Swimming have no supported outbound type or Generic fallback. The recorded
+activity `mode`/`subMode` catalog and COROS app-created workout modes must not be substituted for this delivery contract.
+Cycling cadence remains unsupported for every native or folded bike profile. Rounding, recovery-to-rest, frozen relative references and
 first-target-only mapping keep the existing payload-bound approval rules. Push success requires an accepted date range
 covering the submitted batch; delete success/failure lists are resolved per workout. Past and completed artifacts remain
 protected.
+
+The six additional running/cycling folds are covered by serializer approval/non-mutation, mixed-batch transport,
+approved/unapproved demo-Firestore worker and strict MCP recipe/compatibility read tests. MCP retains the canonical authored sport and reports the existing
+`sport_profile_degraded` issue; it gains no tool, schema, scope, provider action or permission. The shared delivery flag,
+production transport binding and Coming soon UI remain unchanged. No registered-app refresh, plugin sync, data migration
+or production proof is implied; live Training access/lifecycle evidence remains in #648/#741.
 
 Strength Training uses the same COROS batch/identity/consent infrastructure. The full strict owner-scoped companion,
 not the v1 summary, supplies ordered named exercises and individual sets. The API Reference V2.0.6 §6.1 contract maps

@@ -110,15 +110,24 @@ export const COROS_NATIVE_RUNNING_WORKOUT_SPORTS_V1 = [
   ActivityTypes.TrailRunning,
 ] as const;
 
-export const COROS_FOLDED_RUNNING_WORKOUT_SPORTS_V1 = [ActivityTypes.Treadmill] as const;
+/** The partner API has broad run/bike types, not these exact authored profiles. */
+export const COROS_FOLDED_RUNNING_WORKOUT_SPORTS_V1 = [
+  ActivityTypes.Treadmill,
+  ActivityTypes.IndoorRunning,
+  ActivityTypes.VirtualRunning,
+] as const;
 
 export const COROS_NATIVE_CYCLING_WORKOUT_SPORTS_V1 = [ActivityTypes.Cycling] as const;
 
 export const COROS_FOLDED_CYCLING_WORKOUT_SPORTS_V1 = [
   ActivityTypes.MountainBiking,
   ActivityTypes.IndoorCycling,
+  ActivityTypes.VirtualCycling,
   ActivityTypes.EBiking,
   ActivityTypes.Handcycle,
+  ActivityTypes.Velomobile,
+  ActivityTypes['Enduro MTB'],
+  ActivityTypes.DownhillCycling,
 ] as const;
 
 export const COROS_PLANNED_WORKOUT_SPORTS_V1 = [
@@ -241,6 +250,7 @@ export const PLANNED_WORKOUT_PROVIDER_CAPABILITIES_V1: Readonly<
     limits: [
       'At most 30 workouts per push.',
       'Dates from today through one year ahead.',
+      'The partner API documents run, trailRun, bike, swim (pool), and strength only. Running/cycling subtype folds require mapping approval; other recorded-activity modes are not workout-delivery types.',
       'Pool-swim time, distance, and manual steps must have no intensity target; the documented swimming target is stroke, which v1 does not encode.',
       'Strength requires the complete matching prescription: named ordered sets, Reps/Second, optional Rest and fixed equipment weight in kilograms.',
       'Strength delivery has local fixture/emulator evidence only; browser new-send stays Coming soon and live proof remains in #741.',
