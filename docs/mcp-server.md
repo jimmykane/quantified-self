@@ -1266,8 +1266,10 @@ private metadata and terminal receipts never leave the projection. References bi
 cursors also bind filters/limit and expire after 30 minutes. Sealed references bind the reviewed revision and omitted-field
 defaults so concurrent metadata/time changes cannot be mistaken for identical retries. Pagination reads current records, not a frozen historical
 snapshot: concurrent insertions or edits can change pages. Query scans use pages of 25 with lookahead, at most 500
-selected records/2 MiB per call; individual selected records are bounded to 32 KiB and complete structured-plus-text
+consumed records and 2 MiB selected input per call; individual selected records are bounded to 32 KiB and complete structured-plus-text
 output to 256 KiB, including a full 100-entry page with paired readings. Invalid records are skipped with counts and completeness, never silently treated as full coverage.
+Selected-input bytes include every fetched lookahead and repeated page read; scan counts describe consumed records.
+Bounded private cursors can continue past skipped malformed record IDs, which never become public measurement references.
 
 Connection authority and account-deletion fences are rechecked before releasing reads and inside every persistence
 transaction, including idempotent no-ops. Creates share deterministic IDs with the UI; a repeated UUID with different

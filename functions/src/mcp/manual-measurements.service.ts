@@ -39,8 +39,12 @@ const reference = identity.extend({ revision: z.number().int().positive().safe()
     z.number().positive().nullable(), z.number().positive().nullable(),
     z.enum(MANUAL_VO2_CONTEXTS).nullable(), z.enum(MANUAL_VO2_METHODS).nullable()]),
 });
-const cursorSchema = identity.extend({ query: z.string().length(64), time: z.number().int().safe(),
-  expires: z.number().int().safe() });
+// Scan positions can belong to malformed records that were deliberately skipped.
+// Do not require their IDs to be valid measurement identities. Keep the private
+// cursor bounded so the encrypted value still fits its public 512-character cap.
+const cursorSchema = z.strictObject({ id: z.string().min(1).max(128)
+  .refine(id => Buffer.byteLength(JSON.stringify(id), 'utf8') <= 130), generation: z.string().length(64),
+  query: z.string().length(64), time: z.number().int().safe(), expires: z.number().int().safe() });
 const hash = (value: string) => createHash('sha256').update(value).digest('hex');
 function invalid(message: string): never { throw new McpContentWriteError('invalid_request', message); }
 function unavailable(): never { throw new McpContentWriteError('detail_not_available', 'This manual measurement is unavailable. Find a current manual entry before editing. Imported entries cannot be managed here.'); }
@@ -186,14 +190,20 @@ export async function runMcpManualMeasurement(
           if (args.start && args.end) query = query.where('startTimeMs', '>=', Date.parse(args.start)).where('startTimeMs', '<=', Date.parse(args.end));
           if (position) query = query.startAfter(position.time, position.id);
           const page = (await query.limit(pageSize + 1).get()).docs;
-          more = page.length > pageSize;
-          for (const doc of page.slice(0, pageSize)) {
+          // Charge every fetched record, including lookahead and repeated reads,
+          // before deciding which records are consumed or returned.
+          const records = page.map(doc => {
             const data = doc.data();
-            selectedBytes += Buffer.byteLength(JSON.stringify(data), 'utf8');
+            const bytes = Buffer.byteLength(JSON.stringify(data), 'utf8');
+            selectedBytes += bytes;
             if (selectedBytes > 2 * 1024 * 1024) invalid('This page exceeds the measurement read bound. Narrow the range or reduce limit.');
+            return { doc, data, bytes };
+          });
+          more = page.length > pageSize;
+          for (const { doc, data, bytes } of records.slice(0, pageSize)) {
             scannedCount++;
             position = { id: doc.id, time: data.startTimeMs, generation, query: queryDigest, expires: deps.now() + 30 * 60_000 };
-            const fields = Buffer.byteLength(JSON.stringify(data), 'utf8') <= 32 * 1024
+            const fields = bytes <= 32 * 1024
               ? decodeManualHealthMeasurementFields(data, input.uid, doc.id, deps.now()) : null;
             if (!fields) { skippedCount++; continue; }
             measurements.push(project(fields, data.source.revision.order, refFor(doc.id, fields, data.source.revision.order), units));

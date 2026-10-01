@@ -128,6 +128,27 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('manual measurement MCP re
     const next = MCP_MANUAL_MEASUREMENT_OUTPUTS.query_manual_measurements.parse(await call('query_manual_measurements', { cursor: page.nextCursor }));
     expect(next.measurements).toHaveLength(1); expect(next.scanComplete).toBe(true);
   });
+  it('continues past malformed record identities without exposing them or losing valid entries', async () => {
+    await create();
+    const batch = db.batch();
+    for (let i = 0; i < 500; i++) batch.set(db.doc(`users/${uid}/healthSourceRecords/${`invalid-${i}`.padEnd(128, 'x')}`), {
+      startTimeMs: now(), source: { sourceRecordType: 'manual_measurement' }, metrics: [] });
+    await batch.commit();
+    const page = MCP_MANUAL_MEASUREMENT_OUTPUTS.query_manual_measurements.parse(await call('query_manual_measurements', {}));
+    expect(page).toMatchObject({ measurements: [], scannedCount: 500, skippedCount: 500, scanComplete: false });
+    expect(JSON.stringify(page)).not.toContain('invalid-');
+    const next = MCP_MANUAL_MEASUREMENT_OUTPUTS.query_manual_measurements.parse(await call('query_manual_measurements', { cursor: page.nextCursor }));
+    expect(next.measurements).toHaveLength(1); expect(next.scanComplete).toBe(true);
+  });
+  it('charges all fetched lookahead data against the selected-input byte bound', async () => {
+    await create();
+    const batch = db.batch();
+    for (let i = 0; i < 2; i++) batch.set(db.doc(`users/${uid}/healthSourceRecords/${i.toString(16).padStart(64, '0')}`), {
+      startTimeMs: now() - i, source: { sourceRecordType: 'manual_measurement' },
+      metrics: [{ malformed: 'x'.repeat(700 * 1024) }] });
+    await batch.commit();
+    await expect(call('query_manual_measurements', { limit: 1 })).rejects.toThrow('read bound');
+  });
   it('rechecks revocation before identical update and deletion retries', async () => {
     const entry = measurement(await create());
     const update = { measurementRef: entry.measurementRef, expectedRevision: 1, value: 81, unit: 'kg' };
