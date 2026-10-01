@@ -1,6 +1,8 @@
 import { ServiceNames } from '@sports-alliance/sports-lib';
 import { getProviderDisplayName } from '@shared/provider-presentation';
 
+const WAHOO_PLANNED_WORKOUT_COPY = 'Connected Pro members can send compatible time-based running and cycling, outdoor Walking/Hiking without intensity targets, and timed Strength/Gym workouts for today and the next six days. Repetition-based strength, swimming and rowing are unsupported. Plan sync and standalone Send actions are off by default. Cloud delivery confirms the app-owned Wahoo Plan, Workout, and association, not receipt by an ELEMNT computer, watch, or app.';
+
 export type IntegrationProviderKey = 'garmin' | 'suunto' | 'coros' | 'wahoo';
 
 export interface IntegrationFlow {
@@ -554,7 +556,7 @@ export const PROVIDER_INTEGRATION_PAGES: Record<IntegrationProviderKey, Provider
       {
         icon: 'event_note',
         title: 'Planned workouts to Wahoo',
-        copy: 'Connected Pro members can send compatible time-based running and cycling workouts for today through the next six days. Plan sync and each standalone Send action are off until you explicitly enable them.',
+        copy: WAHOO_PLANNED_WORKOUT_COPY,
       },
       {
         icon: 'sync',
@@ -664,7 +666,7 @@ export const PROVIDER_INTEGRATION_PAGES: Record<IntegrationProviderKey, Provider
       },
       {
         question: 'Can I send planned Training workouts to Wahoo?',
-        answer: 'Yes. Connected Pro members can explicitly send compatible time-based running and cycling workouts for today and the next six days. Plan sync and standalone Send actions are off by default. Cloud delivery confirms the app-owned Wahoo Plan, Workout, and association, not receipt by an ELEMNT computer, watch, or app.',
+        answer: `Yes. ${WAHOO_PLANNED_WORKOUT_COPY}`,
       },
       {
         question: 'Does disconnecting Wahoo delete imported activities?',

@@ -1,5 +1,5 @@
 import type { ScheduledWorkoutV1 } from '../../../../../shared/training-plans';
-import { ActivityTypes } from '@sports-alliance/sports-lib';
+import { wahooWorkoutSportProfileV1 } from '../../../../../shared/wahoo-workout-sports';
 import type { StrengthWorkoutDetailsV1 } from '../../../../../shared/strength-workout';
 import { normalizeDeliveryTimeZone, trainingDeliveryLocalDate } from '../../../../../shared/training-provider-delivery';
 import { TrainingDeliveryTransportError, type DeliveryArtifact, type DeliveryCheckpoint, type DeliveryOperation,
@@ -185,13 +185,13 @@ export class WahooTrainingTransport implements TrainingDeliveryTransport {
   private confirmPlan(raw: unknown, operation: DeliveryOperation): void {
     const value = ownedPlan(raw, operation.artifact!);
     const workout = operation.workout!;
-    const expected = wahooWorkoutFields(workout, operation.destinationKey, operation.timeZone, operation.artifact!.ids.plan);
-    const gym = workout.structure.sport === ActivityTypes.StrengthTraining;
+    const profile = wahooWorkoutSportProfileV1(workout.structure.sport);
+    if (!profile) uncertain();
     const providerUpdatedAt = typeof value.provider_updated_at === 'string' ? Date.parse(value.provider_updated_at) : NaN;
     // Production readback truncates the submitted ISO timestamp to whole seconds.
     // Compare at the provider's precision while still rejecting another revision.
-    if (value.name !== workout.title || numeric(value.workout_type_family_id) !== (gym ? 6 : expected.workout_type_id)
-      || numeric(value.workout_type_location_id) !== (gym ? 0 : 1) || typeof value.provider_updated_at !== 'string'
+    if (value.name !== workout.title || numeric(value.workout_type_family_id) !== profile.family
+      || numeric(value.workout_type_location_id) !== (profile.family === 6 ? 0 : 1) || typeof value.provider_updated_at !== 'string'
       || Math.trunc(providerUpdatedAt / 1000) !== Math.trunc(workout.updatedAtMs / 1000)) uncertain();
   }
   private matchesWorkout(value: Value, operation: DeliveryOperation): boolean {

@@ -1,4 +1,4 @@
-import { ActivityTypes } from '@sports-alliance/sports-lib';
+import { isWahooWalkingWorkoutSportV1, wahooDurationSeconds, wahooWorkoutSportProfileV1, type WahooWorkoutSportProfileV1 } from '../../../../shared/wahoo-workout-sports';
 import { formatStrengthLoadKg, parseStrengthWorkoutDetailsV1, projectStrengthWorkoutToV1 } from '../../../../shared/strength-workout';
 import {
     parseWorkoutStructureV1,
@@ -47,7 +47,7 @@ export interface WahooPlanJsonV1 {
         name: string;
         version: '1.0.0';
         description?: string;
-        workout_type_family: 0 | 1 | 6;
+        workout_type_family: WahooWorkoutSportProfileV1['family'];
         workout_type_location: 0 | 1;
         duration_s?: number;
         ftp?: number;
@@ -265,6 +265,10 @@ export function serializeWahooPlanJsonV1(
     const name = assertNonEmpty(options.name, 'Wahoo plan name');
     const normalizedDescription = options.description?.trim();
     const additionalIssues: ProviderSerializationIssueV1[] = [];
+    if (isWahooWalkingWorkoutSportV1(structure.sport) && options.location !== 'outdoor') {
+        additionalIssues.push({ severity: 'unsupported', code: 'unsupported_sport',
+            path: '$.header.workout_type_location', message: 'Only outdoor Wahoo Walking/Hiking delivery is verified.' });
+    }
     if (normalizedDescription && codePointLength(normalizedDescription) > 5000) {
         additionalIssues.push({
             severity: 'degraded',
@@ -283,7 +287,8 @@ export function serializeWahooPlanJsonV1(
     });
     const context: WahooMappingContext = { headerReferences: {}, rawHeaderReferences: {} };
     const intervals = structureToIntervals(structure, context);
-    const workoutTypeFamily: 0 | 1 = structure.sport === ActivityTypes.Cycling ? 0 : 1;
+    const sportProfile = wahooWorkoutSportProfileV1(structure.sport);
+    if (!sportProfile) throw new Error('Unsupported Wahoo sport reached after compatibility validation.');
     const workoutTypeLocation: 0 | 1 = options.location === 'indoor' ? 0 : 1;
     const artifact: WahooPlanJsonV1 = {
         header: {
@@ -292,8 +297,9 @@ export function serializeWahooPlanJsonV1(
             ...(normalizedDescription
                 ? { description: truncateCodePoints(normalizedDescription, 5000) }
                 : {}),
-            workout_type_family: workoutTypeFamily,
+            workout_type_family: sportProfile.family,
             workout_type_location: workoutTypeLocation,
+            ...(isWahooWalkingWorkoutSportV1(structure.sport) ? { duration_s: wahooDurationSeconds(structure)! } : {}),
             ...context.headerReferences,
         },
         intervals,

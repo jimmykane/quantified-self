@@ -500,7 +500,9 @@ and stored speed remains m/s. Rowing distance and split display use Sports Lib d
 fixed 500 m sport-specific denominator, including when the owner's general distance preference is miles. No new
 planned-workout `Data*` type or event metric is introduced. Suunto Guide activity recommendations are Walking `0`,
 Hiking `11`, Rowing `15`, and Indoor Rowing `57`. The zero ID is retained as a real value in JSON and transport;
-Garmin, COROS, and Wahoo are unsupported for structured-workout delivery of these four sports under current contracts.
+Garmin and COROS are unsupported for structured-workout delivery of these four sports under current contracts.
+Wahoo maps outdoor Walking/Hiking to the account-tested family `9` and exact Workout types `6`/`9`, with timed,
+untargeted steps only. Rowing/Indoor Rowing stay unsupported; an activity-type enum never proves Plan acceptance.
 The current browser, provider and MCP paths retain the authored sport; a provider's recorded-activity support never
 implies workout delivery support. Synthetic serializer and demo-emulator acceptance does not prove Suunto cloud, app,
 watch or completed-activity behavior. Account-side proof remains in #738 and #739 under #583 and needs separately
@@ -1775,6 +1777,27 @@ live Wahoo app or device result. The MCP impact review found no new tool, permis
 Assistant route or plugin instruction requirement; the existing preview availability/summary now reflects the
 backend compatibility verdict.
 
+#### Walking/Hiking delivery (#789)
+
+Walking and Hiking retain their exact authored sport through the editor, provider assessment and MCP. The shared
+Wahoo sport profile keeps Plan family `9` / outdoor location `1` aligned with Workout type `6` (Walking) or `9` (Hiking).
+Only timed steps without intensity targets are admitted. Plan `duration_s` and dated Workout `minutes` share the exact
+finite sum of timed steps/repeat passes, matching the accepted probe envelope without estimating distance or reps.
+The required full-domain RPE 1–10 envelope adds no narrower
+effort target. Distance/manual endings, intensity targets and indoor Walking/Hiking fail closed, including inside repeats;
+they cannot be approved away, guessed into a duration or rewritten to Running. Fixed repeats retain total passes.
+
+The existing owned Plan/Workout ledger, scopes, Pro and explicit consent, seven-day horizon, account/revision/deletion
+guards, retained IDs, uncertain-operation recovery, Stop and exact completion markers apply unchanged. Existing v4
+Running/Cycling/Strength payloads and digests are unchanged, so this extension does not requeue unrelated copies.
+Synthetic serializer and demo-Firestore lifecycle tests cover edits, rescheduling, concurrent/duplicate dispatch,
+withdrawal and exact marker linking. These tests make no provider requests.
+
+Earlier separately approved direct account probes established positive Plan/Workout/association/full-JSON readback for
+both sports; the owner confirmed Walking device visibility. Hiking app/device playback, integrated production lifecycle,
+and target support remain in #789 under #583. Direct probes had no QS scheduled-workout/delivery ledger and therefore
+cannot demonstrate a QS completion badge. No deployment or new live sends are included in this implementation.
+
 #### Timed Strength/Gym integration (#783)
 
 The full validated owner-scoped strength companion is required for assessment, upload and uncertain-operation recovery.
@@ -1798,8 +1821,14 @@ disconnect and completed-copy protections remain authoritative; no new Function 
 Evidence on 1 October 2026: a separately approved five-minute QA recipe (five 30-second plank holds, each followed by
 30-second rest, no reps/load) was accepted by Wahoo as Gym family `6` / type `42`. Independent Plan, Workout,
 association and full uploaded JSON readback matched. The owner confirmed its Wahoo app visibility and Strength/Gym
-player/interval behavior. This proves that bounded unloaded timed path, not native reps/load tracking, ELEMNT/watch
-receipt, completion, or the integrated adapter's production lifecycle. Local serializer, runtime, transport and demo
+player/interval behavior. A subsequent recheck automatically selected the native Strength profile without requesting
+Indoor Fitness Equipment. The saved recording retained the exact uploaded Workout, Plan and token, with Cloud type `42`
+and FIT `training/strength_training`; QS imported it successfully with zero retries. The initial Yoga/equipment prompt's
+root cause is not established. Help advises checking the native Strength profile before Start, not changing type `42`
+to Yoga or claiming that QS controls local profile/equipment settings. These direct probes had no QS planned-workout
+ledger, so the import correctly created no local planned-workout completion link. This proves that bounded unloaded
+timed path and its recorded identifiers, not native reps/load tracking, ELEMNT/watch receipt, a QS completion badge,
+or the integrated adapter's production lifecycle. Local serializer, runtime, transport and demo
 Firestore/MCP tests cover full companion validation, load instructions/rounding, stable IDs through edits/reschedules,
 duplicate/uncertain-create recovery, mid-flight load edits, concurrent workers and Stop. Deployment and live integrated
 update/reschedule/retry/reconnect/eligible deletion remain separately authorized evidence in #783.

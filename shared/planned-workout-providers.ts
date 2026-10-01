@@ -2,6 +2,7 @@ import { ActivityTypes } from '@sports-alliance/sports-lib';
 import { assessCorosStrengthWorkoutV1 } from './coros-strength-workout';
 import { assessGarminStrengthWorkoutV1 } from './garmin-strength-workout';
 import { assessWahooStrengthWorkoutV1 } from './wahoo-strength-workout';
+import { isWahooWalkingWorkoutSportV1, wahooDurationSeconds, WAHOO_PLANNED_WORKOUT_SPORTS_V1 } from './wahoo-workout-sports';
 import type { StrengthWorkoutDetailsV1 } from './strength-workout';
 import {
   parseWorkoutStructureV1,
@@ -249,7 +250,7 @@ export const PLANNED_WORKOUT_PROVIDER_CAPABILITIES_V1: Readonly<
     deliveryModel: 'plan-library-plus-dated-workout',
     requiredScopes: ['plans_read', 'plans_write', 'workouts_read', 'workouts_write'],
     profile: {
-      sports: [ActivityTypes.Running, ActivityTypes.Cycling, ActivityTypes.StrengthTraining],
+      sports: WAHOO_PLANNED_WORKOUT_SPORTS_V1,
       endingKinds: ['time', 'distance', 'kilojoules'],
       targetKinds: ['heart-rate', 'power', 'speed', 'cadence'],
       supportsRepeats: true,
@@ -259,6 +260,7 @@ export const PLANNED_WORKOUT_PROVIDER_CAPABILITIES_V1: Readonly<
     scheduling: 'Create an app-owned Plan record, then attach it to a dated Workout record.',
     limits: [
       'The public plan.json schema is version 1.0.0 and supports running and cycling, not swimming.',
+      'Walking/Hiking use account-tested outdoor family 9 and exact Workout types 6/9. Only time-based steps without intensity targets are currently supported; Hiking device playback remains unverified.',
       'Timed strength uses the owner-tested Gym family 6 / indoor Workout type 42. Repetition sets are unsupported; exercise/load instructions are not native tracking.',
       'Bike computers use only the first target in an interval.',
       'Relative heart-rate and threshold-speed targets are documented for treadmill workouts in the Wahoo app, not ELEMNT computers or RIVAL.',
@@ -416,7 +418,21 @@ export function assessPlannedWorkoutProviderMappingV1(
   }
 
   const referenceSnapshots = new Map<string, number>();
+  if (provider === 'wahoo' && isWahooWalkingWorkoutSportV1(structure.sport) && wahooDurationSeconds(structure) === null) {
+    issues.push({ severity: 'unsupported', code: 'unsupported_ending', path: '$.nodes',
+      message: 'Wahoo Walking/Hiking requires a finite positive timed duration; QS never estimates other endings.' });
+  }
   for (const { path, step } of structureSteps(structure)) {
+    if (provider === 'wahoo' && isWahooWalkingWorkoutSportV1(structure.sport)) {
+      if (step.ending.kind !== 'time') issues.push({
+        severity: 'unsupported', code: 'unsupported_ending', path: `${path}.ending`,
+        message: 'Wahoo Walking/Hiking delivery supports timed steps only; distance or manual steps cannot be estimated.',
+      });
+      if (step.targets.length > 0) issues.push({
+        severity: 'unsupported', code: 'unsupported_target', path: `${path}.targets`,
+        message: 'Wahoo Walking/Hiking intensity-target delivery is not verified. Keep this prescription in QS or use another compatible provider.',
+      });
+    }
     const supportedEndings = provider === 'wahoo'
       ? ['time', 'distance', 'kilojoules']
       : ['time', 'distance', 'manual'];

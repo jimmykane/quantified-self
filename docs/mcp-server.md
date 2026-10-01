@@ -176,7 +176,7 @@ skips it, and explicit Send/Resume remains a blocked provider result without sav
 The authored workout may still be created if the user confirms the clearly labelled partial proposal. The browser's
 direct Send confirmation is disabled for an unsupported workout. An earlier provider copy may remain unchanged when a
 new version is unsupported; neither preview nor a blocked result implies removal. Wahoo requires time endings throughout
-for Running/Cycling or a complete matching timed-strength companion for Gym. Repetition-based strength, unsupported
+for Running/Cycling, untargeted outdoor Walking/Hiking or a complete matching timed-strength companion for Gym. Repetition-based strength, unsupported
 sports and distance-ending steps cannot be approved into compatibility.
 
 The built-in Assistant exposes only the applicable focused/batch previews to Gemini. It prefers the focused tool for one
@@ -264,7 +264,12 @@ planned-workout reads and approval-gated proposals. Rowing speed remains m/s and
 row distance is displayed in metres. The strict registered v1 recipe already permits these sport strings, so no
 tool, schema, scope, consent or mutation kind changes. Focused read fixtures cover exact sport retention and unit
 formatting; compatibility remains provider-local, with Suunto Guide activity recommendations and explicit unsupported
-Garmin/COROS/Wahoo results. Provider IDs and transport evidence remain private. This is a no-wire-impact extension;
+Garmin/COROS results. Wahoo now assesses timed, untargeted outdoor Walking/Hiking as exact using the shared local
+profile; distance/manual endings and intensity targets fail compatibility. Rowing/Indoor Rowing remain unsupported
+for Wahoo. Focused strict-output tests cover these results without adding fields, issue codes, tools, scopes,
+consent, mutations, provider actions, Assistant routes or bundled-skill instructions. Existing guidance still requires
+assessment before delivery; a local exact mapping never promises app/device receipt. Provider IDs and transport
+evidence remain private. This is a no-wire-impact extension;
 it does not authorize a new provider action or count a planned workout as completed training.
 
 Strength Training uses an owner-scoped versioned companion with ordered exercises and sets, optional external load in

@@ -307,13 +307,44 @@ describe('planned-workout provider proof fixtures', () => {
         expect(JSON.parse(JSON.stringify(result.artifact)).activities).toEqual(activities);
     });
 
-    it.each([ActivityTypes.Walking, ActivityTypes.Hiking, ActivityTypes.Rowing, ActivityTypes.IndoorRowing])('%s remains unsupported for Garmin, COROS, and Wahoo delivery', sport => {
+    it.each([ActivityTypes.Walking, ActivityTypes.Hiking, ActivityTypes.Rowing, ActivityTypes.IndoorRowing])('%s remains unsupported for Garmin and COROS delivery', sport => {
         const structure = { ...oneStepStructure(), sport };
-        for (const provider of ['garmin', 'coros', 'wahoo'] as const) {
+        for (const provider of ['garmin', 'coros'] as const) {
             expect(assessPlannedWorkoutProviderMappingV1(provider, structure)).toMatchObject({
                 level: 'unsupported', issues: [expect.objectContaining({ code: 'unsupported_sport' })],
             });
         }
+    });
+
+    it.each([ActivityTypes.Walking, ActivityTypes.Hiking])('maps timed %s to the tested outdoor Wahoo walking family without rewriting the sport', sport => {
+        const structure = { ...oneStepStructure(), sport };
+        const before = JSON.stringify(structure);
+        const result = serializeWahooPlanJsonV1(JSON.parse(before), {
+            name: 'Synthetic walking-family workout', description: 'Synthetic contract fixture',
+            location: 'outdoor', allowDegraded: false,
+        });
+        expect(result.level).toBe('exact');
+        expect(result.artifact.header).toMatchObject({ workout_type_family: 9, workout_type_location: 1, duration_s: 600 });
+        expect(result.artifact.intervals).toEqual([{ exit_trigger_type: 'time', exit_trigger_value: 600,
+            intensity_type: 'active', targets: [{ type: 'rpe', low: 1, high: 10 }] }]);
+        expect(JSON.stringify(structure)).toBe(before);
+        expect(() => serializeWahooPlanJsonV1(structure, {
+            name: 'Indoor', location: 'indoor', allowDegraded: true,
+        })).toThrow(ProviderWorkoutMappingError);
+        for (const step of [
+            { ...structure.nodes[0], ending: { kind: 'distance', meters: 1000 } },
+            { ...structure.nodes[0], targets: [{ kind: 'heart-rate', mode: 'absolute', minimumBpm: 100, maximumBpm: 120 }] },
+        ]) {
+            expect(() => serializeWahooPlanJsonV1({ ...structure, nodes: [step] }, {
+                name: 'Unsupported prescription', location: 'outdoor', allowDegraded: true,
+            })).toThrow(ProviderWorkoutMappingError);
+        }
+    });
+
+    it.each([ActivityTypes.Rowing, ActivityTypes.IndoorRowing, ActivityTypes.Swimming, ActivityTypes.OpenWaterSwimming])('does not infer Wahoo %s delivery from its recorded-activity catalog', sport => {
+        expect(() => serializeWahooPlanJsonV1({ ...oneStepStructure(), sport }, {
+            name: 'Unsupported sport', location: 'outdoor', allowDegraded: true,
+        })).toThrow(ProviderWorkoutMappingError);
     });
 
     it.each([

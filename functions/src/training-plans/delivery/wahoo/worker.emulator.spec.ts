@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { Firestore } from 'firebase-admin/firestore';
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
-import { ServiceNames } from '@sports-alliance/sports-lib';
+import { ActivityTypes, ServiceNames } from '@sports-alliance/sports-lib';
 import { trainingDeliveryCommand } from '../commands';
 import { reconcileTrainingDeliveryPage } from '../store';
 import { processTrainingDelivery } from '../worker';
@@ -82,6 +82,27 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Wahoo worker with real Fi
     expect(server.calls.filter(call => call.method === 'POST')).toHaveLength(2);
     await command('stop'); await drain(); await processTrainingDelivery(runtime, uid, row.id); await drain();
     expect(server.workouts.size).toBe(0); expect(server.plans.size).toBe(0);
+  });
+  it.each([[ActivityTypes.Walking, 6], [ActivityTypes.Hiking, 9]] as const)('delivers %s, updates and reschedules retained identities, and withdraws on Stop', async (sport, type) => {
+    const ref = user().collection('scheduledWorkouts').doc('w');
+    const workout = wahooFixtureWorkout(); workout.structure.sport = sport;
+    await ref.set(workout);
+    await command('send'); await drain(); const row = await ledger();
+    await Promise.all([processTrainingDelivery(runtime, uid, row.id), processTrainingDelivery(runtime, uid, row.id)]); await drain();
+    const ids = (await ledger()).actual!.ids;
+    expect((await ledger()).status).toBe('delivered');
+    expect(server.plans.get(ids.plan)).toMatchObject({ workout_type_family_id: 9, workout_type_location_id: 1 });
+    expect(server.workouts.get(ids.workout)).toMatchObject({ workout_type_id: type, minutes: 1.5 });
+    workout.title = 'Edited synthetic walk'; workout.localDate = '2026-10-31'; workout.updatedAtMs = now;
+    workout.structure.nodes = [{ kind: 'step', id: 'longer', purpose: 'work', ending: { kind: 'time', seconds: 300 }, targets: [] }];
+    await ref.set(workout); await mark(); await processTrainingDelivery(runtime, uid, row.id); await drain();
+    expect(await ledger()).toMatchObject({ status: 'delivered', actual: { ids, localDate: '2026-10-31' } });
+    expect(server.workouts.get(ids.workout)).toMatchObject({ workout_type_id: type, minutes: 5, starts: '2026-10-31T10:00:00.000Z' });
+    await processTrainingDelivery(runtime, uid, row.id);
+    expect(server.calls.filter(call => call.method === 'POST')).toHaveLength(2);
+    await command('stop'); await drain(); await processTrainingDelivery(runtime, uid, row.id); await drain();
+    expect(server.workouts.size).toBe(0); expect(server.plans.size).toBe(0);
+    expect((await ref.get()).data()?.structure.sport).toBe(sport);
   });
   it('fences a strength load-only edit after Plan acceptance before creating the dated Workout', async () => {
     const details = wahooFixtureStrengthDetails(); const ref = user().collection('scheduledWorkouts').doc('w');

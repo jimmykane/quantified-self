@@ -149,6 +149,21 @@ describe('Training plan MCP reads', () => {
       await expect(f.run('assess_planned_workout_compatibility', { workoutRef, providers: ['wahoo'] })).rejects.toThrow();
     }
   });
+  it.each([ActivityTypes.Walking, ActivityTypes.Hiking])('assesses %s through the existing strict MCP compatibility read without transport identities', async sport => {
+    const f = fixture();
+    f.structures.w1 = { version: 1, sport, nodes: [{ kind: 'step', id: 'walk', purpose: 'work',
+      ending: { kind: 'time', seconds: 300 }, targets: [] }] };
+    const workoutRef = f.codec.encode({ kind: 'workout', id: 'w1', createdAtMs: 1 }, 'owner', 'connection');
+    const assess = () => f.run('assess_planned_workout_compatibility', { workoutRef, providers: ['wahoo', 'garmin', 'coros'] });
+    const result = TRAINING_READ_OUTPUTS.assess_planned_workout_compatibility.parse(await assess());
+    expect(result.assessments.map(item => [item.provider, item.level])).toEqual([
+      ['wahoo', 'exact'], ['garmin', 'unsupported'], ['coros', 'unsupported'],
+    ]);
+    expect(result.assessments[0].issues).toEqual([]);
+    expect(JSON.stringify(result)).not.toMatch(/workout_type|destination|digest|external_id|workout_token/);
+    f.structures.w1.nodes = [{ kind: 'step', id: 'walk', purpose: 'work', ending: { kind: 'distance', meters: 500 }, targets: [] }];
+    expect(TRAINING_READ_OUTPUTS.assess_planned_workout_compatibility.parse(await assess()).assessments[0].level).toBe('unsupported');
+  });
   it('reads the complete strength companion under Training consent and fails closed on a mismatch', async () => {
     const f = fixture();
     const details = { version: 1 as const, workoutId: 'w1', revision: 1,

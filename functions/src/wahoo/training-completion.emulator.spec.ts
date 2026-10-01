@@ -6,6 +6,8 @@ import { deliveryIdentity } from '../training-plans/delivery/intent';
 import { DELIVERY_LEDGER, type DeliveryLedgerV1 } from '../training-plans/delivery/contracts';
 import { WAHOO_API_SCOPES } from './constants';
 import { retainWahooTrainingCompletion } from './training-completion';
+import { projectStrengthWorkoutToV1 } from '../../../shared/strength-workout';
+import { wahooFixtureStrengthDetails } from '../training-plans/delivery/test-support/wahoo-http-fixture';
 
 describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)(
   'Wahoo exact Training completion correlation with real Firestore',
@@ -167,6 +169,24 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)(
       expect(await retain()).toEqual({ retained: true, linkedWorkoutIds: ['workout'] });
       expect((await user().collection('trainingWorkoutCompletions').doc('workout').get()).data())
         .toMatchObject({ scheduledLocalDate: '2026-09-17', workoutRevisionAtLink: 2 });
+    });
+
+    it.each([ActivityTypes.Walking, ActivityTypes.Hiking, ActivityTypes.StrengthTraining])('links %s by exact owned Plan/Workout/token, never sport/title inference', async sport => {
+      const ref = user().collection('scheduledWorkouts').doc('workout');
+      if (sport === ActivityTypes.StrengthTraining) {
+        const details = wahooFixtureStrengthDetails('workout');
+        await ref.update({ structure: projectStrengthWorkoutToV1(details), title: 'Synthetic timed strength' });
+        await ref.collection('strengthDetails').doc('current').set(details);
+      } else {
+        await ref.update({ 'structure.sport': sport });
+      }
+      expect((await retain({ workoutToken: `qs-workout-${'b'.repeat(43)}` })).linkedWorkoutIds).toEqual([]);
+      expect((await user().collection('trainingWorkoutCompletions').doc('workout').get()).exists).toBe(false);
+      expect((await retain()).linkedWorkoutIds).toEqual(['workout']);
+      expect((await retain()).linkedWorkoutIds).toEqual(['workout']);
+      expect((await user().collection('trainingWorkoutCompletions').doc('workout').get()).data())
+        .toMatchObject({ provider: 'wahoo', eventId: 'event', activityId: 'activity', matchMethod: 'provider_marker' });
+      expect((await ref.get()).data()?.structure.sport).toBe(sport);
     });
 
     it('defers a candidate link while a plan restore is staged, then links after publication', async () => {

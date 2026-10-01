@@ -44,6 +44,9 @@ describe('integration-pages.content', () => {
     const training = PROVIDER_INTEGRATION_PAGES.wahoo.faqItems.find(item => item.question === 'Can I send planned Training workouts to Wahoo?');
     expect(training?.answer).toContain('Connected Pro members');
     expect(training?.answer).toContain('time-based running and cycling');
+    expect(training?.answer).toContain('outdoor Walking/Hiking without intensity targets');
+    expect(training?.answer).toContain('timed Strength/Gym');
+    expect(training?.answer).toContain('swimming and rowing are unsupported');
     expect(training?.answer).toContain('not receipt by an ELEMNT computer');
     expect(PROVIDER_INTEGRATION_PAGES.wahoo.faqItems.find(item => item.question === 'Can I send a route to Wahoo?')?.answer)
       .toContain('saved Suunto routes to Wahoo automatically');

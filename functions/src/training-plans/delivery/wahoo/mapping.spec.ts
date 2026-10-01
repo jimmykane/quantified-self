@@ -18,6 +18,52 @@ export function wahooFixtureWorkout(): ScheduledWorkoutV1 {
     ] } };
 }
 describe('Wahoo delivery mapping (no editor changes)', () => {
+  it.each([[ActivityTypes.Walking, 6], [ActivityTypes.Hiking, 9]] as const)('keeps %s Plan family and exact Workout type aligned, including repeats', (sport, type) => {
+    const workout = { ...wahooFixtureWorkout(), structure: { ...wahooFixtureWorkout().structure, sport } };
+    expect(assessWahooDelivery(workout, 'destination', 'UTC').level).toBe('exact');
+    const encoded = new URLSearchParams(wahooPlanBody(workout, 'destination', true)).get('plan[file]')!;
+    const recipe = JSON.parse(Buffer.from(encoded.split(',')[1], 'base64').toString());
+    expect(recipe.header).toMatchObject({ workout_type_family: 9, workout_type_location: 1, duration_s: 183 });
+    expect(recipe.intervals[1]).toMatchObject({ exit_trigger_type: 'repeat', exit_trigger_value: 2 });
+    const fields = new URLSearchParams(wahooWorkoutBody(workout, 'destination', 'UTC', '123'));
+    expect(fields.get('workout[workout_type_id]')).toBe(String(type));
+    expect(fields.get('workout[minutes]')).toBe('3.05');
+    expect(workout.structure.sport).toBe(sport);
+    const changed = structuredClone(workout);
+    changed.structure.nodes = [{ kind: 'step', id: 'work', purpose: 'work', ending: { kind: 'time', seconds: 300 },
+      targets: [{ kind: 'speed', mode: 'absolute', presentation: 'pace', minimumMetersPerSecond: 1, maximumMetersPerSecond: 2 }] }];
+    expect(assessWahooDelivery(changed, 'destination', 'UTC').level).toBe('unsupported');
+    expect(() => wahooPlanBody(changed, 'destination', true)).toThrow();
+  });
+  it.each([ActivityTypes.Cycling, ActivityTypes.Running])('preserves the %s v4 mapping and existing content', sport => {
+    const workout = { ...wahooFixtureWorkout(), structure: { ...wahooFixtureWorkout().structure, sport } };
+    expect(assessWahooDelivery(workout, 'destination', 'UTC').mappingVersion).toBe('wahoo-plans-v4');
+    const encoded = new URLSearchParams(wahooPlanBody(workout, 'destination', true)).get('plan[file]')!;
+    expect(JSON.parse(Buffer.from(encoded.split(',')[1], 'base64').toString()).header.workout_type_family)
+      .toBe(sport === ActivityTypes.Cycling ? 0 : 1);
+  });
+  it.each([ActivityTypes.Rowing, ActivityTypes.IndoorRowing, ActivityTypes.Swimming, ActivityTypes.OpenWaterSwimming])('blocks an unproven %s Workout type rather than defaulting to running/cycling', sport => {
+    const workout = { ...wahooFixtureWorkout(), structure: { ...wahooFixtureWorkout().structure, sport } };
+    expect(assessWahooDelivery(workout, 'destination', 'UTC').level).toBe('unsupported');
+    expect(() => wahooWorkoutBody(workout, 'destination', 'UTC', '123')).toThrow();
+  });
+  it.each([ActivityTypes.Walking, ActivityTypes.Hiking])('blocks an intensity target hidden inside a %s repeat even with mapping approval', sport => {
+    const workout = { ...wahooFixtureWorkout(), structure: { ...wahooFixtureWorkout().structure, sport } };
+    const repeat = workout.structure.nodes[1];
+    if (repeat.kind !== 'repeat') throw new Error('Expected fixture repeat');
+    repeat.steps[0].targets = [{ kind: 'heart-rate', mode: 'absolute', minimumBpm: 100, maximumBpm: 130 }];
+    expect(assessWahooDelivery(workout, 'destination', 'UTC').level).toBe('unsupported');
+    expect(() => wahooPlanBody(workout, 'destination', true)).toThrow();
+  });
+  it('rejects a timed total that overflows rather than writing null header duration', () => {
+    const workout = wahooFixtureWorkout(); workout.structure.sport = ActivityTypes.Walking;
+    workout.structure.nodes = [{ kind: 'repeat', id: 'repeat', count: 100, steps: [
+      { kind: 'step', id: 'overflow', purpose: 'work', ending: { kind: 'time', seconds: Number.MAX_VALUE }, targets: [] },
+    ] }];
+    expect(wahooDurationSeconds(workout.structure)).toBeNull();
+    expect(assessWahooDelivery(workout, 'destination', 'UTC').level).toBe('unsupported');
+    expect(() => wahooPlanBody(workout, 'destination', true)).toThrow();
+  });
   it('requires the complete owned companion and includes load-only changes in the digest without changing provider identities', () => {
     const details = wahooFixtureStrengthDetails('workout');
     const workout = { ...wahooFixtureWorkout(), structure: projectStrengthWorkoutToV1(details) };

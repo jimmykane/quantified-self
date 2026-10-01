@@ -688,7 +688,9 @@ describe('help.content', () => {
       .toContain('Standalone workouts stay neutral');
     expect(planningSection?.content).toContain('Workout delivery to Garmin, Suunto, and Wahoo is available to connected Pro members');
     expect(planningSection?.content).toContain('COROS plan sync and standalone Send are disabled and hidden from Training');
-    expect(planningSection?.content).toContain('Wahoo supports time-based running/cycling and timed-strength Gym workouts');
+    expect(planningSection?.content).toContain('Wahoo supports time-based running/cycling, outdoor Walking/Hiking without intensity targets, and timed-strength Gym workouts');
+    expect(planningSection?.content).toContain('Wahoo Rowing/Indoor Rowing delivery, remain unsupported');
+    expect(planningSection?.content).toContain('select **Strength Training**, not Yoga or Indoor Fitness Equipment');
     expect(planningSection?.content).toContain('Scheduled for later');
     expect(planningSection?.content).toContain('**Sent to Suunto** means Suunto accepted the Guide for your account');
     expect(planningSection?.content).toContain('does not prove that the Guide is visible in the Suunto app');

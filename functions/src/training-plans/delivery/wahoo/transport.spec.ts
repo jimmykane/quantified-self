@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { ActivityTypes } from '@sports-alliance/sports-lib';
 import type { ScheduledWorkoutV1 } from '../../../../../shared/training-plans';
 import type { DeliveryCheckpoint, DeliveryOperation } from '../contracts';
 import { projectStrengthWorkoutToV1 } from '../../../../../shared/strength-workout';
@@ -27,6 +28,38 @@ describe('Wahoo Plan + dated Workout lifecycle', () => {
     op.strength = wahooFixtureStrengthDetails();
     next({ title: 'Timed strength', structure: projectStrengthWorkoutToV1(op.strength) });
   };
+  it.each([[ActivityTypes.Walking, 6], [ActivityTypes.Hiking, 9]] as const)('confirms %s family 9 independently of its Workout type, preserving IDs through edit/reschedule', async (sport, type) => {
+    next({ structure: { ...op.workout!.structure, sport } });
+    const first = (await execute())!;
+    expect(server.plans.get(first.ids.plan)).toMatchObject({ workout_type_family_id: 9, workout_type_location_id: 1 });
+    expect(server.workouts.get(first.ids.workout)?.workout_type_id).toBe(type);
+    next({ title: 'Edited walk', localDate: '2026-10-31', updatedAtMs: now });
+    expect((await execute())!.ids).toEqual(first.ids);
+    expect(server.calls.filter(call => call.method === 'POST')).toHaveLength(2);
+  });
+  it.each([ActivityTypes.Walking, ActivityTypes.Hiking])('rejects %s Plan readback with the wrong family before Workout creation', async sport => {
+    next({ structure: { ...op.workout!.structure, sport } });
+    server.afterHandle = async request => { if (request.method === 'POST' && request.path === '/v1/plans') {
+      server.afterHandle = null; [...server.plans.values()][0].workout_type_family_id = 6;
+    } };
+    await expect(execute()).rejects.toMatchObject({ kind: 'uncertain' });
+    expect(op.artifact?.ids.plan).toBeTruthy();
+    expect(server.workouts.size).toBe(0);
+  });
+  it.each([
+    [ActivityTypes.Walking, '/v1/plans'], [ActivityTypes.Walking, '/v1/workouts'],
+    [ActivityTypes.Hiking, '/v1/plans'], [ActivityTypes.Hiking, '/v1/workouts'],
+  ] as const)('recovers %s after lost %s acceptance without a replacement POST', async (sport, path) => {
+    next({ structure: { ...op.workout!.structure, sport } });
+    server.afterHandle = async request => { if (request.method === 'POST' && request.path === path) {
+      server.afterHandle = null; throw new WahooTrainingHttpError('uncertain', false);
+    } };
+    await expect(execute()).rejects.toThrow();
+    if ((await recover()).kind === 'resume') await execute();
+    expect(server.plans.size).toBe(1); expect(server.workouts.size).toBe(1);
+    expect(server.plans.values().next().value).toMatchObject({ workout_type_family_id: 9, workout_type_location_id: 1 });
+    expect(server.calls.filter(call => call.method === 'POST')).toHaveLength(2);
+  });
   it('delivers Gym strength, updates load instructions and reschedules without changing identities, then stops both resources', async () => {
     timedStrength();
     const first = (await execute())!;

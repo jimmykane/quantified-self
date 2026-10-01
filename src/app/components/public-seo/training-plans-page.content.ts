@@ -64,7 +64,7 @@ export const TRAINING_PLANS_PAGE_SECTIONS = [
       {
         icon: 'hiking',
         title: 'Walking, hiking, and rowing',
-        copy: 'Create Walking, Hiking, Rowing, or Indoor Rowing workouts. Suunto Guides recommend the matching exercise profile. Garmin, COROS, and Wahoo structured-workout delivery for these sports is unsupported under their current contracts. Guide acceptance does not prove app or watch visibility.',
+        copy: 'Create Walking, Hiking, Rowing, or Indoor Rowing workouts. Suunto Guides recommend the matching exercise profile. Wahoo supports outdoor Walking/Hiking with timed steps and no intensity targets; distance and intensity targets are unsupported for these Wahoo profiles. Garmin and COROS delivery for these sports, and Wahoo rowing delivery, remain unsupported. Cloud acceptance does not prove app or watch visibility.',
       },
       {
         icon: 'fitness_center',
