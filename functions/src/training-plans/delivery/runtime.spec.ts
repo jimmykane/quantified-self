@@ -3,10 +3,12 @@ import { afterEach, vi } from 'vitest';
 import { ActivityTypes } from '@sports-alliance/sports-lib';
 import { PLANNED_WORKOUT_PROVIDER_IDS } from '../../../../shared/planned-workout-providers';
 import type { ScheduledWorkoutV1 } from '../../../../shared/training-plans';
+import { projectStrengthWorkoutToV1, type StrengthWorkoutDetailsV1 } from '../../../../shared/strength-workout';
 import { productionDeliveryRuntime } from './runtime';
+import { SuuntoGuideTransport } from './suunto/transport';
 import { authorizeSuuntoGuideRequest } from './suunto/authorization';
 import { readGuideArchive } from './suunto/archive';
-import { guideExternalId } from './suunto/mapping';
+import { assessSuuntoGuideV2ForRecovery, guideExternalId } from './suunto/mapping';
 import type { DeliveryOperation } from './contracts';
 import type { InspectionRequest } from './verification-contracts';
 
@@ -26,6 +28,133 @@ describe('Production Training delivery rollout', () => {
       localDate: '2026-09-17', completed: false },
     timeZone: 'Europe/Helsinki', cursor: null,
   };
+  const strength: StrengthWorkoutDetailsV1 = {
+    version: 1, workoutId: 'fixture-strength-workout', revision: 1, exercises: [
+      { id: 'squat', name: 'Squat', sets: [
+        { id: 'squat-1', ending: { kind: 'repetitions', repetitions: 8 }, externalLoadKg: 50, restAfterSeconds: 60 },
+        { id: 'squat-2', ending: { kind: 'repetitions', repetitions: 8 }, externalLoadKg: 50, restAfterSeconds: 60 },
+      ] },
+      { id: 'plank', name: 'Plank', sets: [
+        { id: 'plank-1', ending: { kind: 'time', seconds: 30 }, restAfterSeconds: 30 },
+      ] },
+    ],
+  };
+  const strengthWorkout: ScheduledWorkoutV1 = {
+    schemaVersion: 1, id: strength.workoutId, planId: null, title: 'Strength session', localDate: '2026-09-17',
+    lifecycle: 'planned', revision: 1, createdAtMs: 1, updatedAtMs: 1,
+    structure: projectStrengthWorkoutToV1(strength),
+  };
+
+  it('preserves the complete strength prescription through the production Suunto assessment without provider I/O', () => {
+    vi.stubEnv('SUUNTOAPP_GUIDE_OWNER', 'Fixture application');
+    const fetcher = vi.fn();
+    vi.stubGlobal('fetch', fetcher);
+    const transport = runtime.transport('suunto', 'owner')!;
+    const policy = new SuuntoGuideTransport(async () => { throw new Error('No provider I/O allowed'); }, 'Fixture application');
+    const assessment = transport.assess(strengthWorkout, inspection.destinationKey, inspection.timeZone, strength);
+    expect(assessment).toEqual(policy.assess(strengthWorkout, inspection.destinationKey, inspection.timeZone, strength));
+    expect(assessment.level).toBe('degraded');
+    expect(assessment.requiresApproval).toBe(false);
+    expect(assessment.issues).not.toContain('The complete strength prescription is unavailable or mismatched.');
+    // Load is absent from the v1 projection, but must still change the delivery digest.
+    const changedLoad = structuredClone(strength);
+    changedLoad.exercises[0].sets[0].externalLoadKg = 55;
+    const changedAssessment = transport.assess(strengthWorkout, inspection.destinationKey, inspection.timeZone, changedLoad);
+    expect(changedAssessment.level).toBe('degraded');
+    expect(changedAssessment.requiresApproval).toBe(false);
+    expect(changedAssessment.digest).not.toBe(assessment.digest);
+    expect(authorizeSuuntoGuideRequest).not.toHaveBeenCalled();
+    expect(fetcher).not.toHaveBeenCalled();
+  });
+
+  it('binds exact current/legacy Suunto diagnostic classification without credentials or provider I/O', () => {
+    const owner = 'Fixture application';
+    vi.stubEnv('SUUNTOAPP_GUIDE_OWNER', owner);
+    for (const key of ['SUUNTOAPP_CLIENT_ID', 'SUUNTOAPP_CLIENT_SECRET', 'SUUNTOAPP_SUBSCRIPTION_KEY']) vi.stubEnv(key, undefined);
+    const fetcher = vi.fn(); vi.stubGlobal('fetch', fetcher);
+    const transport = runtime.transport('suunto', 'owner')!;
+    const operation: DeliveryOperation = { id: 'fixture-attempt', kind: 'upsert', deliveryId: 'fixture-delivery', generation: 1,
+      destinationKey: inspection.destinationKey, connectionGeneration: inspection.connectionGeneration, timeZone: inspection.timeZone,
+      workout: strengthWorkout, strength, artifact: null, progress: null, contentDigest: 'fixture-content',
+      digest: transport.assess(strengthWorkout, inspection.destinationKey, inspection.timeZone, strength).digest };
+    expect(transport.diagnosticMappingVersion?.(operation)).toBe('suunto-guides-v3');
+    operation.digest = assessSuuntoGuideV2ForRecovery(strengthWorkout, inspection.destinationKey, inspection.timeZone, owner, strength).digest;
+    expect(transport.diagnosticMappingVersion?.(operation)).toBe('suunto-guides-v2');
+    expect(transport.diagnosticMappingVersion?.({ ...operation, digest: 'unrecognized' })).toBeNull();
+    const changed = structuredClone(strength); changed.exercises[0].sets[0].externalLoadKg = 55;
+    expect(transport.diagnosticMappingVersion?.({ ...operation, strength: changed })).toBeNull();
+    expect(authorizeSuuntoGuideRequest).not.toHaveBeenCalled(); expect(fetcher).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['missing', undefined], ['null', null], ['foreign workout', { ...strength, workoutId: 'another-workout' }],
+    ['mismatched projection', { ...strength, exercises: [{ ...strength.exercises[0], name: 'Different exercise' }] }],
+  ] as const)('keeps %s strength details unsupported through the production wrapper', (_name, details) => {
+    vi.stubEnv('SUUNTOAPP_GUIDE_OWNER', 'Fixture application');
+    const fetcher = vi.fn();
+    vi.stubGlobal('fetch', fetcher);
+    expect(runtime.transport('suunto', 'owner')!.assess(strengthWorkout, inspection.destinationKey, inspection.timeZone, details))
+      .toMatchObject({ level: 'unsupported', issues: ['The complete strength prescription is unavailable or mismatched.'] });
+    expect(authorizeSuuntoGuideRequest).not.toHaveBeenCalled();
+    expect(fetcher).not.toHaveBeenCalled();
+  });
+
+  it('does not bind the COROS production transport while provider admission is disabled', () => {
+    const fetcher = vi.fn();
+    vi.stubGlobal('fetch', fetcher);
+    expect(runtime.transport('coros', 'owner')).toBeNull();
+    expect(runtime.transport('coros', 'another-owner')).toBeNull();
+    expect(fetcher).not.toHaveBeenCalled();
+  });
+
+  it('preserves full Garmin strength assessment and load-only changes through the production wrapper without I/O', () => {
+    const fetcher = vi.fn();
+    vi.stubGlobal('fetch', fetcher);
+    const transport = runtime.transport('garmin', 'owner')!;
+    const assessment = transport.assess(strengthWorkout, inspection.destinationKey, inspection.timeZone, strength);
+    expect(assessment).toMatchObject({ level: 'exact', issues: [] });
+    expect(assessment.requiresApproval).not.toBe(true);
+    const changedLoad = structuredClone(strength);
+    changedLoad.exercises[0].sets[0].externalLoadKg = 55;
+    expect(transport.assess(strengthWorkout, inspection.destinationKey, inspection.timeZone, changedLoad).digest)
+      .not.toBe(assessment.digest);
+    expect(transport.assess(strengthWorkout, inspection.destinationKey, inspection.timeZone).level).toBe('unsupported');
+    expect(fetcher).not.toHaveBeenCalled();
+  });
+
+  it.each(['wahoo'] as const)('does not approve strength delivery to unsupported %s', provider => {
+    const fetcher = vi.fn();
+    vi.stubGlobal('fetch', fetcher);
+    expect(runtime.transport(provider, 'owner')!.assess(strengthWorkout, inspection.destinationKey, inspection.timeZone, strength).level)
+      .toBe('unsupported');
+    expect(fetcher).not.toHaveBeenCalled();
+  });
+  it('preserves the full timed Wahoo companion and instruction-only load changes through the production wrapper without I/O', () => {
+    const fetcher = vi.fn(); vi.stubGlobal('fetch', fetcher);
+    const timed = { ...strength, exercises: [strength.exercises[1]] };
+    const workout = { ...strengthWorkout, structure: projectStrengthWorkoutToV1(timed) };
+    const transport = runtime.transport('wahoo', 'owner')!;
+    const assessment = transport.assess(workout, inspection.destinationKey, inspection.timeZone, timed);
+    expect(assessment).toMatchObject({ level: 'degraded', requiresApproval: false });
+    const changed = structuredClone(timed); changed.exercises[0].sets[0].externalLoadKg = 2.5;
+    expect(transport.assess(workout, inspection.destinationKey, inspection.timeZone, changed).digest).not.toBe(assessment.digest);
+    for (const invalid of [undefined, null, { ...timed, workoutId: 'foreign' },
+      { ...timed, exercises: [{ ...timed.exercises[0], name: 'Changed' }] }]) {
+      expect(transport.assess(workout, inspection.destinationKey, inspection.timeZone, invalid).level).toBe('unsupported');
+    }
+    expect(fetcher).not.toHaveBeenCalled();
+  });
+
+  it.each(PLANNED_WORKOUT_PROVIDER_IDS.filter(provider => provider !== 'coros'))('preserves %s removal opt-in while protecting past and completed copies by default', provider => {
+    vi.stubEnv('SUUNTOAPP_GUIDE_OWNER', 'Fixture application');
+    const transport = runtime.transport(provider, 'owner')!;
+    const artifact = { ...inspection.artifact, localDate: '2026-09-16' };
+    expect(transport.canRemove(artifact, '2026-09-17')).toBe(false);
+    expect(transport.canRemove(artifact, '2026-09-17', false)).toBe(false);
+    expect(transport.canRemove(artifact, '2026-09-17', true)).toBe(true);
+    expect(transport.canRemove({ ...artifact, completed: true }, '2026-09-17', true)).toBe(false);
+    expect(transport.canRemove({ ...artifact, localDate: '2026-09-18' }, '2026-09-17')).toBe(true);
+  });
 
   it.each([undefined, 'unused-legacy-key'])('uses the existing API key and user OAuth token regardless of legacy Guides configuration: %s', async legacyKey => {
     vi.stubEnv('SUUNTOAPP_GUIDE_OWNER', 'Quantified Self');
@@ -128,19 +257,18 @@ describe('Production Training delivery rollout', () => {
     expect(checkpoint).toHaveBeenLastCalledWith(artifact, { version: 1, step: 'finished', state: 'accepted' });
   });
 
-  it('constructs every implemented adapter for an authenticated owner', () => {
+  it('constructs every admitted adapter for an authenticated owner', () => {
     vi.stubEnv('SUUNTOAPP_GUIDE_OWNER', 'Fixture application');
-    for (const provider of PLANNED_WORKOUT_PROVIDER_IDS) {
+    for (const provider of PLANNED_WORKOUT_PROVIDER_IDS.filter(provider => provider !== 'coros')) {
       const transport = runtime.transport(provider, 'owner');
       expect(transport?.mappingVersion).toBeTruthy();
     }
+    expect(runtime.transport('coros', 'owner')).toBeNull();
   });
 
-  it('binds COROS only to the batch path and keeps remote checking unavailable', () => {
-    const transport = runtime.transport('coros', 'owner');
-    expect(transport).toMatchObject({ horizonDays: 365, batch: { maxSize: 30 } });
-    expect(transport?.inspection).toBeUndefined();
-    expect(runtime.transport('coros', 'other')).toMatchObject({ horizonDays: 365, batch: { maxSize: 30 } });
+  it('keeps COROS unavailable for every owner at the production admission boundary', () => {
+    expect(runtime.transport('coros', 'owner')).toBeNull();
+    expect(runtime.transport('coros', 'other')).toBeNull();
   });
   it('binds Wahoo publicly with the seven-day horizon and independent positive-only inspection', () => {
     const transport = runtime.transport('wahoo', 'owner');
@@ -155,8 +283,11 @@ describe('Production Training delivery rollout', () => {
   });
 
   it.each(['another-user', ' owner', 'owner '])(
-    'binds every public provider transport for another authenticated identity %s', uid => {
+    'binds every admitted provider transport for another authenticated identity %s', uid => {
       vi.stubEnv('SUUNTOAPP_GUIDE_OWNER', 'Fixture application');
-      for (const provider of PLANNED_WORKOUT_PROVIDER_IDS) expect(runtime.transport(provider, uid)).not.toBeNull();
+      for (const provider of PLANNED_WORKOUT_PROVIDER_IDS.filter(provider => provider !== 'coros')) {
+        expect(runtime.transport(provider, uid)).not.toBeNull();
+      }
+      expect(runtime.transport('coros', uid)).toBeNull();
     });
 });

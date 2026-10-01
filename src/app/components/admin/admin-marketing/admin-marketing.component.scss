@@ -5,9 +5,11 @@
 mat-card-content { padding-top: 20px; }
 mat-form-field { width: 100%; }
 .field-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
-.campaign-row { display: grid; width: 100%; gap: 4px; padding: 12px; text-align: left; border: 0; border-bottom: 1px solid var(--mat-sys-outline-variant); background: transparent; cursor: pointer; color: inherit; }
+.sidebar nav { display: grid; gap: 4px; margin-top: 12px; }
+.campaign-row { display: flex; width: 100%; height: auto; min-height: 48px; padding: 10px 12px; align-items: center; justify-content: flex-start; white-space: normal; text-align: left; color: inherit; border-radius: 12px; }
 .campaign-row.active { background: var(--mat-sys-secondary-container); }
-.campaign-row-content { display: grid; gap: 4px; text-align: left; }
+.campaign-row-content { display: grid; width: 100%; min-width: 0; gap: 4px; text-align: left; }
+.campaign-row-content strong { overflow-wrap: anywhere; }
 .campaign-row-content small { font-size: 13px; color: var(--mat-sys-on-surface-variant); }
 .compose-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(340px, 1fr); gap: 20px; margin: 8px 0 28px; align-items: start; }
 .writing-column, .preview-column { min-width: 0; }

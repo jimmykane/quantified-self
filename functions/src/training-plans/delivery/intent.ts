@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import { trainingDeliveryLocalDate } from '../../../../shared/training-provider-delivery';
 import type { PlannedWorkoutProviderId } from '../../../../shared/planned-workout-providers';
 import { hashTrainingScheduleRequestPayload } from '../persistence';
-import type { DeliveryContext, DeliveryIntent, DeliveryLedgerV1 } from './contracts';
+import { requiresDeliveryMappingApproval, type DeliveryContext, type DeliveryIntent, type DeliveryLedgerV1 } from './contracts';
 import type { ScheduledWorkoutV1 } from '../../../../shared/training-plans';
 import type { StrengthWorkoutDetailsV1 } from '../../../../shared/strength-workout';
 
@@ -59,8 +59,25 @@ export function resolveDeliveryIntent(context: DeliveryContext, ledger?: Deliver
   const assessment = transport.assess(workout!, connection.destinationKey, timeZone, context.strength);
   if (assessment.level === 'unsupported') return result('preserve', 'unsupported', assessment.digest, assessment.issues);
   const approval = override?.approvedDigest ?? setting?.approvedDigest;
-  if (assessment.level === 'degraded' && approval !== assessment.digest) {
+  // A legacy payload digest can omit truncated authored text. Carry approval
+  // only with an independently retained full-prescription digest, so edits to
+  // the formerly hidden suffix cannot inherit presentation-upgrade consent.
+  const canCarryApproval = !!assessment.compatibleApprovalDigest && approval === assessment.compatibleApprovalDigest;
+  const contentDigest = canCarryApproval ? deliveryContentDigest(workout, timeZone, context.strength) : null;
+  const compatibleApproval = canCarryApproval
+    && (((ledger?.acceptedDigest === approval || ledger?.acceptedDigest === assessment.digest)
+        && ledger?.acceptedContentDigest === contentDigest)
+      || ((ledger?.attempt?.digest === approval || ledger?.attempt?.digest === assessment.digest)
+        && ledger?.attempt?.contentDigest === contentDigest)
+      || (ledger?.mappingApprovalProof?.approvedDigest === approval
+        && ledger.mappingApprovalProof.mappingDigest === assessment.digest
+        && ledger.mappingApprovalProof.contentDigest === contentDigest));
+  if (requiresDeliveryMappingApproval(assessment) && approval !== assessment.digest
+    && !compatibleApproval) {
     return result('preserve', 'approval_required', assessment.digest, assessment.issues, assessment.digest);
   }
-  return result('present', ledger?.acceptedDigest === assessment.digest ? 'delivered' : 'pending', assessment.digest, assessment.issues);
+  return { ...result('present', ledger?.acceptedDigest === assessment.digest ? 'delivered' : 'pending', assessment.digest, assessment.issues),
+    ...(compatibleApproval && contentDigest ? { mappingApprovalProof: {
+      approvedDigest: approval!, mappingDigest: assessment.digest, contentDigest,
+    } } : {}) };
 }

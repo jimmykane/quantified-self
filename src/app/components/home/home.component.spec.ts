@@ -392,7 +392,13 @@ describe('HomeComponent', () => {
         expect(text).toContain('Optional Provider Delivery');
         expect(text).toContain('Workout delivery to Garmin, Suunto, and Wahoo is available to connected Pro members');
         expect(text).toContain('Garmin supports compatible target-free pool swims');
-        expect(text).toContain('Garmin open-water and Wahoo swim delivery are unavailable');
+        expect(text).toContain('Walking, Hiking, Rowing, Indoor Rowing and open-water workouts use Garmin Generic after mapping review');
+        expect(text).toContain('Generic works only on some devices');
+        expect(text).toContain('QS keeps your authored sport');
+        expect(text).toContain('supports timed, untargeted Walking/Hiking, pool/open-water swimming and outdoor/indoor rowing');
+        expect(text).toContain('distance endings and intensity targets remain unsupported for walking, hiking, swimming and rowing');
+        expect(text).not.toContain('validation candidate');
+        expect(text).toContain('Selected pool length is not sent to Wahoo');
         expect(text).toContain('New COROS plan sync and standalone Send actions are coming soon in the app');
         expect(text).toContain('never sends workouts by itself');
         expect(text).toContain('without adding them to recorded totals or Training analysis');

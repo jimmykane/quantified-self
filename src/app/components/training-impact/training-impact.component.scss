@@ -131,11 +131,11 @@ header strong {
 .training-impact-compact-outcomes > span {
   overflow: hidden;
   text-overflow: ellipsis;
-  white-space: nowrap;
+  white-space: var(--training-impact-compact-white-space, nowrap);
 }
 
 .training-impact-compact strong {
-  color: var(--mat-sys-primary);
+  color: var(--training-impact-compact-value-color, var(--mat-sys-primary));
   font-family: 'Barlow Condensed', sans-serif;
   font-size: .9rem;
   font-variant-numeric: tabular-nums;

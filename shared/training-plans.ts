@@ -70,6 +70,15 @@ export interface ScheduledWorkoutV1 {
   createdAtMs: number;
   updatedAtMs: number;
   deletedAtMs?: number;
+  /** Snapshot provenance only. The saved recipe never mutates this workout. */
+  templateOrigin?: { itemId: string; revision: number };
+}
+
+function parseTemplateOrigin(value: unknown): NonNullable<ScheduledWorkoutV1['templateOrigin']> {
+  const origin = asRecord(value, '$.templateOrigin');
+  rejectUnknownFields(origin, ['itemId', 'revision'], '$.templateOrigin');
+  return { itemId: readEntityId(origin.itemId, '$.templateOrigin.itemId'),
+    revision: readInteger(origin.revision, '$.templateOrigin.revision', 1) };
 }
 
 /** The deletion instant, not the scheduled date, starts the recovery window. */
@@ -138,6 +147,18 @@ export interface CreateScheduledWorkoutMutationV1 {
   confirmPlanRangeExtension: boolean;
 }
 
+/** One atomic placement of independent snapshots. The template itself is resolved by the caller. */
+export interface BulkCreateScheduledWorkoutsMutationV1 {
+  kind: 'bulk-create-workouts';
+  planId: string | null;
+  placements: Array<{ workoutId: string; localDate: string }>;
+  title: string;
+  structure: WorkoutStructureV1;
+  strength?: StrengthWorkoutDraftV1;
+  templateOrigin: { itemId: string; revision: number };
+  confirmPlanRangeExtension: boolean;
+}
+
 export interface UpdateScheduledWorkoutMutationV1 {
   kind: 'update-workout';
   workoutId: string;
@@ -193,6 +214,7 @@ export type TrainingScheduleMutationOperationV1 =
   | SetTrainingPlanLifecycleMutationV1
   | ShiftTrainingPlanMutationV1
   | CreateScheduledWorkoutMutationV1
+  | BulkCreateScheduledWorkoutsMutationV1
   | UpdateScheduledWorkoutMutationV1
   | MoveScheduledWorkoutMutationV1
   | CopyScheduledWorkoutMutationV1
@@ -475,7 +497,7 @@ export function parseScheduledWorkoutV1(value: unknown): ScheduledWorkoutV1 {
   const record = asRecord(value, '$');
   rejectUnknownFields(record, [
     'schemaVersion', 'id', 'planId', 'localDate', 'lifecycle', 'title', 'structure',
-    'revision', 'createdAtMs', 'updatedAtMs', 'deletedAtMs',
+    'revision', 'createdAtMs', 'updatedAtMs', 'deletedAtMs', 'templateOrigin',
   ], '$');
   if (record.schemaVersion !== TRAINING_PLAN_SCHEMA_VERSION) {
     throw new TrainingPlanContractError('$.schemaVersion', 'Unsupported scheduled-workout version.');
@@ -498,6 +520,7 @@ export function parseScheduledWorkoutV1(value: unknown): ScheduledWorkoutV1 {
     revision: readInteger(record.revision, '$.revision', 1),
     createdAtMs: readTimestampMs(record.createdAtMs, '$.createdAtMs'),
     updatedAtMs: readTimestampMs(record.updatedAtMs, '$.updatedAtMs'),
+    ...(record.templateOrigin === undefined ? {} : { templateOrigin: parseTemplateOrigin(record.templateOrigin) }),
   };
   return deletedAtMs === undefined ? parsed : { ...parsed, deletedAtMs };
 }
@@ -560,7 +583,7 @@ export function parseMutateTrainingScheduleRequestV1(value: unknown): MutateTrai
   const operationRecord = asRecord(record.operation, '$.operation');
   const kind = readLifecycle(operationRecord.kind, [
     'create-plan', 'rename-plan', 'set-plan-color', 'set-plan-lifecycle', 'shift-plan', 'create-workout',
-    'update-workout', 'move-workout', 'copy-workout', 'set-workout-lifecycle',
+    'bulk-create-workouts', 'update-workout', 'move-workout', 'copy-workout', 'set-workout-lifecycle',
     'delete-workout', 'permanently-delete-workout',
   ] as const, '$.operation.kind');
 
@@ -626,6 +649,47 @@ export function parseMutateTrainingScheduleRequestV1(value: unknown): MutateTrai
         title: readString(operationRecord.title, '$.operation.title', 120),
         structure: parseWorkoutStructureV1(operationRecord.structure),
         ...(operationRecord.strength === undefined ? {} : { strength: parseStrengthWorkoutDraftV1(operationRecord.strength) }),
+      };
+      break;
+    }
+    case 'bulk-create-workouts': {
+      rejectUnknownFields(operationRecord,
+        ['kind', 'planId', 'placements', 'title', 'structure', 'strength', 'templateOrigin', 'confirmPlanRangeExtension'],
+        '$.operation');
+      if (typeof operationRecord.confirmPlanRangeExtension !== 'boolean') {
+        throw new TrainingPlanContractError('$.operation.confirmPlanRangeExtension', 'Expected a boolean.');
+      }
+      if (!Array.isArray(operationRecord.placements) || operationRecord.placements.length < 1
+        || operationRecord.placements.length > 100) {
+        throw new TrainingPlanContractError('$.operation.placements', 'Expected 1 to 100 workout dates.');
+      }
+      const ids = new Set<string>();
+      const dates = new Set<string>();
+      const placements = operationRecord.placements.map((value, index) => {
+        const path = `$.operation.placements[${index}]`;
+        const placement = asRecord(value, path);
+        rejectUnknownFields(placement, ['workoutId', 'localDate'], path);
+        const workoutId = readEntityId(placement.workoutId, `${path}.workoutId`);
+        const localDate = normalizeTrainingLocalDate(placement.localDate, `${path}.localDate`);
+        if (ids.has(workoutId) || dates.has(localDate)) {
+          throw new TrainingPlanContractError(path, 'Workout IDs and dates must be unique.');
+        }
+        ids.add(workoutId);
+        dates.add(localDate);
+        return { workoutId, localDate };
+      });
+      if (placements.some((placement, index) => index > 0 && placement.localDate < placements[index - 1].localDate)) {
+        throw new TrainingPlanContractError('$.operation.placements', 'Dates must be ordered from earliest to latest.');
+      }
+      operation = {
+        kind,
+        planId: readNullableEntityId(operationRecord.planId, '$.operation.planId'),
+        placements,
+        title: readString(operationRecord.title, '$.operation.title', 120),
+        structure: parseWorkoutStructureV1(operationRecord.structure),
+        ...(operationRecord.strength === undefined ? {} : { strength: parseStrengthWorkoutDraftV1(operationRecord.strength) }),
+        templateOrigin: parseTemplateOrigin(operationRecord.templateOrigin),
+        confirmPlanRangeExtension: operationRecord.confirmPlanRangeExtension,
       };
       break;
     }

@@ -1,4 +1,5 @@
 import { TRAINING_PREVIEW_TOOLS, TRAINING_READ_TOOLS } from '../mcp/training-plans.schemas';
+import { MCP_MANUAL_MEASUREMENT_READ_TOOLS } from '../mcp/manual-measurements.schemas';
 import { InMemoryTransport } from '@modelcontextprotocol/server';
 import type { McpServer } from '@modelcontextprotocol/server';
 import { Client } from '@modelcontextprotocol/client';
@@ -64,6 +65,7 @@ export const ASSISTANT_MCP_TOOL_NAMES = [
   'query_activities_with_tags',
   'query_editable_timeline_notes',
   ...ASSISTANT_CONTENT_PROPOSAL_TOOLS,
+  ...MCP_MANUAL_MEASUREMENT_READ_TOOLS,
   ...TRAINING_READ_TOOLS,
   ...TRAINING_PREVIEW_TOOLS,
 ] as const;
@@ -178,6 +180,9 @@ const ASSISTANT_CONNECTION_ID = 'first-party-assistant-v1';
 const ASSISTANT_CLIENT_ID = 'https://quantified-self.io/internal/assistant';
 
 const ASSISTANT_CONTENT_TOOL_COPY: Record<AssistantContentProposalTool, { title: string; description: string }> = {
+  prepare_manual_measurement_create: { title: 'Prepare a manual Health measurement', description: 'Prepare a manual entry for QS review only. Discover units and metadata first. Resolve now from catalog serverTime once; preserve that instant and a UUID on retries. Never guess VO2 metadata or blood-pressure readings.' },
+  prepare_manual_measurement_update: { title: 'Prepare a manual measurement edit', description: 'Prepare a manual entry edit for QS review only. First get the exact manual entry and current revision. Omitted time/metadata stay unchanged. Provider imports cannot be edited.' },
+  prepare_manual_measurement_delete: { title: 'Prepare manual measurement deletion', description: 'Prepare permanent deletion for QS review only. First get the exact manual entry and current revision; never infer which entry to delete from an ambiguous query.' },
   prepare_activity_tag_change: {
     title: 'Prepare an activity tag change',
     description: 'Prepare a complete activity tag replacement for review in Quantified Self. First read the selected activity and pass its exact current tags as expectedTags. This never writes data.',
@@ -376,8 +381,9 @@ export async function createAssistantMcpSession(
   conversationId?: string,
   activityTagChangesEnabled = false,
   timelineNoteChangesEnabled = false,
+  measurementChangesEnabled = false,
 ): Promise<AssistantMcpSession> {
-  if ((activityTagChangesEnabled || timelineNoteChangesEnabled) && !conversationId) {
+  if ((activityTagChangesEnabled || timelineNoteChangesEnabled || measurementChangesEnabled) && !conversationId) {
     throw new Error('Assistant content changes require a current conversation.');
   }
   if (timelineNoteChangesEnabled && !timelineNotesEnabled) {
@@ -386,6 +392,9 @@ export async function createAssistantMcpSession(
   const activityLocationEnabled = locationAccess === 'precise_activity';
   const expectedToolNames: readonly AssistantMcpToolName[] = [
     ...ASSISTANT_BASE_MCP_TOOL_NAMES,
+    ...(measurementChangesEnabled ? [...MCP_MANUAL_MEASUREMENT_READ_TOOLS,
+      'prepare_manual_measurement_create' as const, 'prepare_manual_measurement_update' as const,
+      'prepare_manual_measurement_delete' as const] : []),
     ...(activityLocationEnabled ? ASSISTANT_ACTIVITY_LOCATION_MCP_TOOL_NAMES : []),
     ...(timelineNotesEnabled ? ['query_timeline_notes' as const] : []),
     ...(activityTagChangesEnabled
@@ -409,6 +418,7 @@ export async function createAssistantMcpSession(
     scopes: [
       MCP_OAUTH_SCOPES.MetricsRead,
       MCP_OAUTH_SCOPES.MeasurementsRead,
+      ...(measurementChangesEnabled ? [MCP_OAUTH_SCOPES.MeasurementsWrite] : []),
       MCP_OAUTH_SCOPES.SleepRead,
       MCP_OAUTH_SCOPES.ActivityDetailsRead,
       ...(activityLocationEnabled

@@ -183,7 +183,7 @@ export interface SleepSyncQueueItemInterface extends QueueItemInterface {
   providerUserId: string;
   payload?: unknown;
   callbackURL?: string;
-  /** Bounded live-only callback credentials on a compact Garmin ingress batch. */
+  /** Bounded Garmin ingress callbacks, retained in admin-only failed jobs for recovery. */
   garminCallbackURLs?: string[];
   /** Garmin Ping/Pull family; absent legacy rows are Sleep. */
   garminSummaryType?: GarminSupportedSummaryType;

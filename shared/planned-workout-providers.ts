@@ -1,4 +1,9 @@
 import { ActivityTypes } from '@sports-alliance/sports-lib';
+import { assessCorosStrengthWorkoutV1 } from './coros-strength-workout';
+import { assessGarminStrengthWorkoutV1 } from './garmin-strength-workout';
+import { assessWahooStrengthWorkoutV1 } from './wahoo-strength-workout';
+import { isWahooUntargetedWorkoutSportV1, wahooDurationSeconds, wahooWorkoutSportProfileV1, WAHOO_PLANNED_WORKOUT_SPORTS_V1 } from './wahoo-workout-sports';
+import type { StrengthWorkoutDetailsV1 } from './strength-workout';
 import {
   parseWorkoutStructureV1,
   type WorkoutCompatibilityProfileV1,
@@ -83,10 +88,21 @@ export const GARMIN_CYCLING_WORKOUT_SPORTS_V1 = [
   ActivityTypes.DownhillCycling,
 ] as const;
 
+/** Explicitly approved fallback sports, not a catch-all for the activity catalog. */
+export const GARMIN_GENERIC_WORKOUT_SPORTS_V1 = [
+  ActivityTypes.Walking,
+  ActivityTypes.Hiking,
+  ActivityTypes.Rowing,
+  ActivityTypes.IndoorRowing,
+  ActivityTypes.OpenWaterSwimming,
+] as const;
+
 export const GARMIN_PLANNED_WORKOUT_SPORTS_V1 = [
   ...GARMIN_RUNNING_WORKOUT_SPORTS_V1,
   ...GARMIN_CYCLING_WORKOUT_SPORTS_V1,
   ActivityTypes.Swimming,
+  ActivityTypes.StrengthTraining,
+  ...GARMIN_GENERIC_WORKOUT_SPORTS_V1,
 ] as const;
 
 export const COROS_NATIVE_RUNNING_WORKOUT_SPORTS_V1 = [
@@ -94,15 +110,24 @@ export const COROS_NATIVE_RUNNING_WORKOUT_SPORTS_V1 = [
   ActivityTypes.TrailRunning,
 ] as const;
 
-export const COROS_FOLDED_RUNNING_WORKOUT_SPORTS_V1 = [ActivityTypes.Treadmill] as const;
+/** The partner API has broad run/bike types, not these exact authored profiles. */
+export const COROS_FOLDED_RUNNING_WORKOUT_SPORTS_V1 = [
+  ActivityTypes.Treadmill,
+  ActivityTypes.IndoorRunning,
+  ActivityTypes.VirtualRunning,
+] as const;
 
 export const COROS_NATIVE_CYCLING_WORKOUT_SPORTS_V1 = [ActivityTypes.Cycling] as const;
 
 export const COROS_FOLDED_CYCLING_WORKOUT_SPORTS_V1 = [
   ActivityTypes.MountainBiking,
   ActivityTypes.IndoorCycling,
+  ActivityTypes.VirtualCycling,
   ActivityTypes.EBiking,
   ActivityTypes.Handcycle,
+  ActivityTypes.Velomobile,
+  ActivityTypes['Enduro MTB'],
+  ActivityTypes.DownhillCycling,
 ] as const;
 
 export const COROS_PLANNED_WORKOUT_SPORTS_V1 = [
@@ -111,6 +136,7 @@ export const COROS_PLANNED_WORKOUT_SPORTS_V1 = [
   ...COROS_NATIVE_CYCLING_WORKOUT_SPORTS_V1,
   ...COROS_FOLDED_CYCLING_WORKOUT_SPORTS_V1,
   ActivityTypes.Swimming,
+  ActivityTypes.StrengthTraining,
 ] as const;
 
 export type CorosWorkoutSportFamilyV1 = 'RUNNING' | 'CYCLING';
@@ -123,12 +149,14 @@ export function corosWorkoutSportFamilyV1(sport: ActivityTypes): CorosWorkoutSpo
   return null;
 }
 
-export type GarminWorkoutSportFamilyV1 = 'RUNNING' | 'CYCLING' | 'LAP_SWIMMING';
+export type GarminWorkoutSportFamilyV1 = 'RUNNING' | 'CYCLING' | 'LAP_SWIMMING' | 'STRENGTH_TRAINING' | 'GENERIC';
 
 export function garminWorkoutSportFamilyV1(sport: ActivityTypes): GarminWorkoutSportFamilyV1 | null {
   if ((GARMIN_RUNNING_WORKOUT_SPORTS_V1 as readonly ActivityTypes[]).includes(sport)) return 'RUNNING';
   if ((GARMIN_CYCLING_WORKOUT_SPORTS_V1 as readonly ActivityTypes[]).includes(sport)) return 'CYCLING';
   if (sport === ActivityTypes.Swimming) return 'LAP_SWIMMING';
+  if (sport === ActivityTypes.StrengthTraining) return 'STRENGTH_TRAINING';
+  if ((GARMIN_GENERIC_WORKOUT_SPORTS_V1 as readonly ActivityTypes[]).includes(sport)) return 'GENERIC';
   return null;
 }
 
@@ -173,7 +201,7 @@ export const PLANNED_WORKOUT_PROVIDER_CAPABILITIES_V1: Readonly<
     requiredScopes: ['WORKOUT_IMPORT'],
     profile: {
       sports: GARMIN_PLANNED_WORKOUT_SPORTS_V1,
-      endingKinds: ['time', 'distance', 'manual'],
+      endingKinds: ['time', 'distance', 'manual', 'repetitions'],
       targetKinds: ['heart-rate', 'power', 'speed', 'cadence'],
       supportsRepeats: true,
       supportsRelativeTargets: false,
@@ -185,8 +213,11 @@ export const PLANNED_WORKOUT_PROVIDER_CAPABILITIES_V1: Readonly<
     limits: [
       'Single-sport workouts allow at most 100 total steps.',
       'Descriptions allow 1024 characters per workout and 512 characters per step.',
-      'Running and cycling sub-sports fold to broad families; pool swimming maps to LAP_SWIMMING. Open-water swimming is not mapped.',
+      'Running and cycling sub-sports fold to broad families; pool swimming maps to LAP_SWIMMING.',
+      'Walking, Hiking, Rowing, Indoor Rowing and Open Water Swimming map to Generic with approval. Generic workouts work only on some devices and do not guarantee native sport tracking or display; QS keeps the authored sport.',
       'Unspecified pool length is permitted by the API but may not work on older devices. Swim intensity targets are not mapped.',
+      'Strength requires the complete exercise prescription and a verified Garmin exercise name. Reps, timed holds, kilogram load and rest are preserved; arbitrary names are unsupported.',
+      'Strength mapping has local fixture/emulator evidence only; live cloud and device proof remains in #782.',
       'A secondary target is documented only for cycling and depends on device support.',
       'Production limits: 3000 application requests per rolling minute including OAuth; 1000 per account per rolling day excluding OAuth.',
       'Cloud acceptance does not prove that Garmin Connect or a device received the workout.',
@@ -203,13 +234,13 @@ export const PLANNED_WORKOUT_PROVIDER_CAPABILITIES_V1: Readonly<
   coros: {
     id: 'coros',
     label: 'COROS',
-    implementationState: 'enabled',
-    deliveryEnabled: true,
+    implementationState: 'blocked-contract',
+    deliveryEnabled: false,
     deliveryModel: 'native-plan-workout-batches',
     requiredScopes: ['training-plan partner entitlement'],
     profile: {
       sports: COROS_PLANNED_WORKOUT_SPORTS_V1,
-      endingKinds: ['time', 'distance', 'manual'],
+      endingKinds: ['time', 'distance', 'manual', 'repetitions'],
       targetKinds: ['heart-rate', 'power', 'speed', 'cadence'],
       supportsRepeats: true,
       supportsRelativeTargets: true,
@@ -219,13 +250,18 @@ export const PLANNED_WORKOUT_PROVIDER_CAPABILITIES_V1: Readonly<
     limits: [
       'At most 30 workouts per push.',
       'Dates from today through one year ahead.',
+      'The partner API documents run, trailRun, bike, swim (pool), and strength only. Running/cycling subtype folds require mapping approval; other recorded-activity modes are not workout-delivery types.',
       'Pool-swim time, distance, and manual steps must have no intensity target; the documented swimming target is stroke, which v1 does not encode.',
+      'Strength requires the complete matching prescription: named ordered sets, Reps/Second, optional Rest and fixed equipment weight in kilograms.',
+      'Strength delivery has local fixture/emulator evidence only; browser new-send stays Coming soon and live proof remains in #741.',
       'The connected COROS application must have Training Plan entitlement; provider code 30009 is reported as unavailable.',
       'COROS exposes no planned-workout read/list operation, so remote checking and automatic missing-copy restoration are unavailable.',
       'Provider acceptance does not prove that the COROS app or a watch received the workout.',
     ],
     completionCorrelation: 'Completed workout payloads may carry planWorkoutId.',
-    unresolvedGates: [],
+    unresolvedGates: [
+      'Enable Training Plan access for the Quantified Self COROS application and prove account-side push, update and deletion before rollout.',
+    ],
     evidence: ['COROS API Reference V2.0.6 (partner document, February 2026)'],
   },
   wahoo: {
@@ -236,7 +272,7 @@ export const PLANNED_WORKOUT_PROVIDER_CAPABILITIES_V1: Readonly<
     deliveryModel: 'plan-library-plus-dated-workout',
     requiredScopes: ['plans_read', 'plans_write', 'workouts_read', 'workouts_write'],
     profile: {
-      sports: [ActivityTypes.Running, ActivityTypes.Cycling],
+      sports: WAHOO_PLANNED_WORKOUT_SPORTS_V1,
       endingKinds: ['time', 'distance', 'kilojoules'],
       targetKinds: ['heart-rate', 'power', 'speed', 'cadence'],
       supportsRepeats: true,
@@ -245,7 +281,9 @@ export const PLANNED_WORKOUT_PROVIDER_CAPABILITIES_V1: Readonly<
     },
     scheduling: 'Create an app-owned Plan record, then attach it to a dated Workout record.',
     limits: [
-      'The public plan.json schema is version 1.0.0 and supports running and cycling, not swimming.',
+      'The public plan.json schema is version 1.0.0 and documents running/cycling. All 21 mapped sport profiles have account-tested acceptance and owner-confirmed native profile/timed playback; other devices and intensity/distance support are not established by those tests.',
+      'Walking/Hiking and pool/open-water swimming and outdoor/indoor rowing support only time-based steps without intensity targets. Selected pool length is not sent to Wahoo; set it locally where needed.',
+      'Timed strength uses the owner-tested Gym family 6 / indoor Workout type 42. Repetition sets are unsupported; exercise/load instructions are not native tracking.',
       'Bike computers use only the first target in an interval.',
       'Relative heart-rate and threshold-speed targets are documented for treadmill workouts in the Wahoo app, not ELEMNT computers or RIVAL.',
       'Device-visible scheduling is documented as the current day plus six days.',
@@ -339,8 +377,18 @@ function structureSteps(structure: WorkoutStructureV1): Array<{
 export function assessPlannedWorkoutProviderMappingV1(
   provider: PlannedWorkoutProviderId,
   value: unknown,
+  strength?: StrengthWorkoutDetailsV1 | null,
 ): PlannedWorkoutProviderMappingAssessmentV1 {
   const structure = parseWorkoutStructureV1(value);
+  if (provider === 'coros' && structure.sport === ActivityTypes.StrengthTraining) {
+    return assessCorosStrengthWorkoutV1(structure, strength);
+  }
+  if (provider === 'garmin' && structure.sport === ActivityTypes.StrengthTraining) {
+    return assessGarminStrengthWorkoutV1(structure, strength);
+  }
+  if (provider === 'wahoo' && structure.sport === ActivityTypes.StrengthTraining) {
+    return assessWahooStrengthWorkoutV1(structure, strength);
+  }
   const issues: PlannedWorkoutProviderMappingIssueV1[] = [];
   const profile = PLANNED_WORKOUT_PROVIDER_CAPABILITIES_V1[provider].profile;
 
@@ -372,9 +420,17 @@ export function assessPlannedWorkoutProviderMappingV1(
         severity: 'degraded',
         code: 'sport_profile_degraded',
         path: '$.sport',
-        message: `${PLANNED_WORKOUT_PROVIDER_CAPABILITIES_V1[provider].label} receives ${structure.sport} as a ${familyLabel} workout because its Training API has no exact ${structure.sport} profile.`,
+        message: family === 'GENERIC'
+          ? `Garmin receives ${structure.sport} as a Generic workout, not its native sport profile. Generic workouts are supported only on some devices; native sport tracking and display are not guaranteed. QS keeps the authored sport.`
+          : `${PLANNED_WORKOUT_PROVIDER_CAPABILITIES_V1[provider].label} receives ${structure.sport} as a ${familyLabel} workout because its Training API has no exact ${structure.sport} profile.`,
       });
     }
+  }
+
+  if (provider === 'wahoo') {
+    const wahooProfile = wahooWorkoutSportProfileV1(structure.sport);
+    if (wahooProfile?.foldedTo) issues.push({ severity: 'degraded', code: 'sport_profile_degraded', path: '$.sport',
+      message: `Wahoo receives ${structure.sport} using its ${wahooProfile.foldedTo} profile; QS keeps the authored sport.` });
   }
 
   if (structure.sport === ActivityTypes.Swimming) {
@@ -392,7 +448,21 @@ export function assessPlannedWorkoutProviderMappingV1(
   }
 
   const referenceSnapshots = new Map<string, number>();
+  if (provider === 'wahoo' && isWahooUntargetedWorkoutSportV1(structure.sport) && wahooDurationSeconds(structure) === null) {
+    issues.push({ severity: 'unsupported', code: 'unsupported_ending', path: '$.nodes',
+      message: 'Wahoo Walking/Hiking and swim/rowing delivery require a finite positive timed duration; QS never estimates other endings.' });
+  }
   for (const { path, step } of structureSteps(structure)) {
+    if (provider === 'wahoo' && isWahooUntargetedWorkoutSportV1(structure.sport)) {
+      if (step.ending.kind !== 'time') issues.push({
+        severity: 'unsupported', code: 'unsupported_ending', path: `${path}.ending`,
+        message: 'Wahoo Walking/Hiking and swim/rowing validation support timed steps only; distance or manual steps cannot be estimated.',
+      });
+      if (step.targets.length > 0) issues.push({
+        severity: 'unsupported', code: 'unsupported_target', path: `${path}.targets`,
+        message: 'Wahoo Walking/Hiking and swim/rowing intensity-target delivery is not verified. Keep this prescription in QS or use another compatible provider.',
+      });
+    }
     const supportedEndings = provider === 'wahoo'
       ? ['time', 'distance', 'kilojoules']
       : ['time', 'distance', 'manual'];

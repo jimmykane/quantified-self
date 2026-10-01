@@ -410,12 +410,6 @@ export class ActivityCalendarTileComponent {
         },
       });
       sheet.afterDismissed().pipe(take(1), finalize(release)).subscribe(result => {
-        if (result && typeof result !== 'string') {
-          if (this.users.user()?.uid !== userId
-            || !this.dayDetailsNavigation.prepareWorkoutDestination(userId, result.localDate)) return;
-          void this.router.navigate(['/calendar'], { queryParams: { view: 'month', date: result.localDate } });
-          return;
-        }
         const note = timelineNotes().find(note => note.id === result);
         if (note) source?.()?.select([note]);
       });

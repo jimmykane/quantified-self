@@ -14,6 +14,21 @@ import {
 } from './policies.content';
 
 describe('help.content', () => {
+  it('explains bounded Suunto live screens, native sensors/units and watch-controlled boundary alerts', () => {
+    const content = HELP_SECTIONS.find(section => section.id === 'training-plans')!.content;
+    for (const phrase of ['## Suunto Guide screens and interval alerts', '**pace and HR**', '**power, HR and speed**',
+      'at most five fields', 'Long manual instructions stay text-only', 'Suunto renders native watch units',
+      'not guaranteed to match the 500 m split', 'missing readings are unavailable, not zero',
+      'do not create recorded laps or lap averages', 'including rest/recovery and every repeat', '**Guide complete**',
+      'without adding workout time or stopping activity recording', '**your watch settings**',
+      'no promised pre-end countdown beeps or out-of-target alerts', 'approximately 20 seconds',
+      'prioritize your notes or exercise/set instructions', '**For 01m 30s**', '**Recover for 30s**', '**Rest for 02m 00s**',
+      '**Follow distance countdown**', '**Press lap when ready**', "does not follow your watch's unit settings automatically",
+      '**Follow time countdown** rather than rounding or omitting seconds',
+      'past and completed copies stay unchanged', 'not proof of watch receipt, sensor readings, alerts or workout completion']) {
+      expect(content).toContain(phrase);
+    }
+  });
   it('explains shared horizontal pinch zoom on Event details charts', () => {
     const content = HELP_SECTIONS.find(section => section.id === 'getting-started')!.content;
     expect(content).toContain('In **Zoom** chart mode, pinch with two fingers');
@@ -38,11 +53,49 @@ describe('help.content', () => {
     expect(HELP_SECTIONS.some(section => section.id === 'activity-calendar')).toBe(true);
   });
 
+  it('distinguishes standard Suunto strength guidance from additional mapping-loss approval', () => {
+    const content = HELP_SECTIONS.find(section => section.id === 'training-plans')!.content;
+    expect(content).toContain('rep-based sets require manual transitions');
+    expect(content).toContain('not native rep/load tracking');
+    expect(content).toContain('no separate approval for each workout or edit');
+    expect(content).toContain('Additional mapping losses, such as shortened exercise instructions, still need review');
+    expect(content).toContain('Sent Guide status does not prove app/watch receipt or workout completion');
+  });
+  it('keeps COROS strength implementation distinct from public Send or delivery proof', () => {
+    const content = HELP_SECTIONS.find(section => section.id === 'training-plans')!.content;
+    expect(content).toContain('COROS backend maps the complete strength prescription');
+    expect(content).toContain('New COROS Send and plan sync remain **Coming soon** pending account-side proof');
+    expect(content).toContain('Local compatibility does not mean COROS received the workout or that it reached your watch');
+  });
+  it('discloses the COROS broad-family folds without advertising additional native or enabled delivery types', () => {
+    const content = HELP_SECTIONS.find(section => section.id === 'training-plans')!.content;
+    expect(content).toContain('Treadmill, Indoor Running and Virtual Running use the broad Run mapping');
+    expect(content).toContain('Mountain Biking, Indoor Cycling, Virtual Cycling, E-Biking, Hand Cycle, Velomobile, Enduro MTB and Downhill Cycling use Bike');
+    expect(content).toContain('subtype substitutions need mapping review and keep your authored QS sport');
+    expect(content).toContain('Walking, Hiking, Rowing, Indoor Rowing and Open-water swimming have no supported COROS workout-delivery mapping');
+    expect(content).toContain('does not make them available through its partner API');
+    expect(content).toContain('Local compatibility is not delivery or watch-receipt evidence');
+    expect(content).toContain('COROS workout delivery is coming soon');
+  });
+
   it('explains the independent weight preference and canonical weigh-in storage', () => {
     const copy = JSON.stringify(HELP_SECTIONS);
     expect(copy).toContain('Weight input and display use your **Settings → Units → Weight** choice (kg or lb)');
     expect(copy).toContain('saved measurements remain in canonical kg');
     expect(copy).toContain('changing a distance preset does not reset that choice');
+  });
+
+  it('documents supported Garmin strength names without claiming live/device proof', () => {
+    const copy = HELP_SECTIONS.find(section => section.id === 'training-plans')!.content;
+    expect(copy).toContain('Garmin strength mapping preserves individual reps or timed sets, load and rest');
+    expect(copy).toContain('live cloud/device verification is pending');
+    expect(copy).toContain('Barbell back squat');
+    expect(copy).toContain('QS never guesses equipment or substitutes another exercise');
+    expect(copy).toContain('Garmin receives loads in kilograms');
+    expect(copy).toContain('Wahoo supports timed strength sets and rests as Gym workouts');
+    expect(copy).toContain('Repetition sets are unsupported; QS never estimates their duration');
+    expect(copy).toContain('not native rep/load tracking');
+    expect(copy).toContain('rounded load instructions need mapping approval');
   });
 
   it('documents regional formatting scope, precedence, and stable export dates', () => {
@@ -72,14 +125,13 @@ describe('help.content', () => {
     expect(section.links.some(link => link.label === 'MCP Connections')).toBe(true);
     expect(section.links.some(link => link.label === 'Connected services')).toBe(true);
     expect(content).toContain('Workout delivery to Garmin, Suunto, and Wahoo is available to connected Pro members');
-    expect(content).toContain('New COROS plan sync and standalone Send actions are coming soon in the app');
+    expect(content).toContain('COROS plan sync and standalone Send are coming soon');
     expect(content).toContain('Distance-based steps are not sent because Wahoo needs a total duration');
     expect(content).toContain('Running/cycling distance follows your km or mile preference');
     expect(content).toContain('Older Wahoo connections may need **Reconnect Wahoo**');
     expect(content).toContain('Checks confirm the app-owned Plan, Workout and association; automatic missing-copy restoration is unavailable');
-    expect(content).toContain('COROS workout delivery is coming soon in the app');
-    expect(content).toContain('Existing saved COROS delivery state continues to follow its consent');
-    expect(content).toContain('New plan sync, plan-workout resume, and standalone Send actions are unavailable');
+    expect(content).toContain('COROS workout delivery is coming soon');
+    expect(content).toContain('Plan sync, plan-workout resume, and standalone Send are not available yet');
     expect(content).toContain('COROS training calendar');
     expect(content).toContain('two-week watch window');
     expect(content).toContain('remote checking and automatic missing-copy restoration are unavailable');
@@ -150,7 +202,7 @@ describe('help.content', () => {
     expect(content).toContain('**Training planning (optional):**');
     expect(content).toContain('Gemini can prepare one bounded proposal but cannot apply it');
     expect(content).toContain('disable Training write tools while using Research');
-    expect(content).toContain('resets all optional permissions');
+    expect(content).toContain('resets Training permissions off');
     expect(content).toContain('the workout exists in the connected app, not that it reached a watch');
   });
   it('explains private notes in both workspaces and makes their context searchable', () => {
@@ -179,6 +231,12 @@ describe('help.content', () => {
     expect(calendar).toContain('use sport icons for planned workouts and completed activities');
     expect(calendar).toContain('the sheet hides completed-activity totals and sections');
     expect(calendar).toContain('Activity loading and errors are still labeled');
+    expect(calendar).toContain('workout rows navigation-only, without copy buttons');
+    expect(calendar).toContain('Duplication remains available in **Plans**, the full day page, and selected-day previews');
+    expect(calendar).toContain('one plan/status metadata line; tap a workout to read its steps');
+    expect(calendar).toContain('same compact **Training impact** summary as Calendar and Dashboard previews');
+    expect(calendar).toContain('Separate UTC-day outcomes and missing-data warnings stay explicit');
+    expect(calendar).toContain('Impact text wraps on narrow screens so outcome values and unavailable reasons remain readable');
     expect(calendar).toContain("offers **Dashboard** to return when opened from the dashboard tile or Today's mini-calendar");
     const dashboard = HELP_SECTIONS.find(section => section.id === 'getting-started')?.content;
     expect(dashboard).toContain('HRV, Sleep, Form, and Freshness Forecast show the same note markers');
@@ -638,8 +696,14 @@ describe('help.content', () => {
     expect(HELP_SECTIONS.find(section => section.id === 'activity-calendar')?.content)
       .toContain('Standalone workouts stay neutral');
     expect(planningSection?.content).toContain('Workout delivery to Garmin, Suunto, and Wahoo is available to connected Pro members');
-    expect(planningSection?.content).toContain('New COROS plan sync and standalone Send actions are coming soon in the app');
-    expect(planningSection?.content).toContain('Wahoo supports time-based running and cycling workouts');
+    expect(planningSection?.content).toContain('COROS plan sync and standalone Send are coming soon');
+    expect(planningSection?.content).toContain('Wahoo supports time-based running/cycling, outdoor Walking/Hiking without intensity targets, and timed-strength Gym workouts');
+    expect(planningSection?.content).toContain('Wahoo supports timed, untargeted pool/open-water swimming and outdoor/indoor rowing');
+    expect(planningSection?.content).toContain('distance endings and intensity targets remain unsupported');
+    expect(planningSection?.content).not.toMatch(/validation candidate|Hiking device playback remains unverified/);
+    expect(planningSection?.content).toContain('Selected pool length is not sent to Wahoo');
+    expect(planningSection?.content).toContain('the saved QS sport is unchanged');
+    expect(planningSection?.content).toContain('select **Strength Training**, not Yoga or Indoor Fitness Equipment');
     expect(planningSection?.content).toContain('Scheduled for later');
     expect(planningSection?.content).toContain('**Sent to Suunto** means Suunto accepted the Guide for your account');
     expect(planningSection?.content).toContain('does not prove that the Guide is visible in the Suunto app');
@@ -661,6 +725,13 @@ describe('help.content', () => {
     expect(planningSection?.content).toContain('Open-water swimming');
     expect(planningSection?.content).toContain('pool length');
     expect(planningSection?.content).toContain('Garmin receives broad Running/Cycling families');
+    expect(planningSection?.content).toContain('Garmin can deliver open-water workouts as **Generic**, not a native swim profile');
+    expect(planningSection?.content).toContain('Garmin delivers these four profiles as **Generic**, after mapping review');
+    expect(planningSection?.content).toContain('Generic works only on some devices');
+    expect(planningSection?.content).toContain('QS keeps your authored sport');
+    expect(planningSection?.content).toContain('repetition/kJ endings and secondary targets are unsupported');
+    expect(planningSection?.content).not.toContain('Garmin open-water delivery remains unsupported');
+    expect(planningSection?.content).not.toContain('Garmin and COROS delivery for these four profiles remain unsupported');
     expect(planningSection?.content).toContain('with a review warning');
     expect(planningSection?.content).toContain('only one can be active');
     expect(planningSection?.content).toContain('Move a workout between plans or between a plan and **Standalone**');

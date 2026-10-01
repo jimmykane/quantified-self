@@ -62,6 +62,16 @@ describe('Training preview loop guard', () => {
       } },
     } })).toBeNull();
     expect(invalidTrainingPreviewTool({ method: 'tools/call', params: {
+      name: 'preview_saved_workout_change',
+      arguments: { expectedScheduleRevision: 1, expectedLibraryRevision: 0,
+        change: { kind: 'create', title: 'Easy run', structure: validStructure, uid: 'attacker' } },
+    } })).toMatchObject({ toolName: 'preview_saved_workout_change', validationIssues: expect.any(Array) });
+    expect(invalidTrainingPreviewTool({ method: 'tools/call', params: {
+      name: 'preview_saved_workout_change',
+      arguments: { expectedScheduleRevision: 1, expectedLibraryRevision: 0,
+        change: { kind: 'create', title: 'Easy run', structure: validStructure } },
+    } })).toBeNull();
+    expect(invalidTrainingPreviewTool({ method: 'tools/call', params: {
       name: 'query_planned_workouts', arguments: {},
     } })).toBeNull();
   });

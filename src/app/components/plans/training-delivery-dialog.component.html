@@ -79,7 +79,11 @@
           @if (preview.result.workoutCompatibility === 'unsupported' && (draft.action === 'send' || draft.action === 'resume')) {
             <p role="alert">{{ draftLabel() }} cannot receive this workout. Review the reasons below, then edit the workout before trying again. This action will not send an update; an earlier copy may remain unchanged.</p>
           } @else if (preview.result.warningCount) {
-            <p>{{ preview.result.warningCount }} {{ preview.result.warningCount === 1 ? 'workout needs' : 'workouts need' }} review. Unsupported workouts cannot be sent; degraded workouts require individual approval.</p>
+            @if (mappingApprovalCount()) {
+              <p>{{ mappingApprovalCount() }} {{ mappingApprovalCount() === 1 ? 'workout needs' : 'workouts need' }} review of mapping differences before delivery. Unsupported workouts cannot be sent.</p>
+            } @else {
+              <p>Provider limitations are explained below. No separate mapping approval is needed for these limitations. Unsupported workouts cannot be sent.</p>
+            }
           }
         }
         @if (preview.result.issues.length) {
@@ -135,12 +139,7 @@
             @if (!planBound() && row.setting) { <p class="delivery-caption">Time zone: {{ row.setting.timeZone }}</p> }
           }
           @if (!row.setupAvailable) {
-            @if (row.provider === 'coros' && row.ready) {
-              <p><strong>COROS workout delivery is coming soon.</strong></p>
-              <p class="delivery-caption">New plan sync and standalone Send actions are unavailable. Existing saved delivery state, records, retry, copy status, and Stop sync remain available here.</p>
-            } @else {
-              <p>Workout sync unavailable. Existing copies and problems remain visible.</p>
-            }
+            <p>Workout sync unavailable. Existing copies and problems remain visible.</p>
           }
           @if (row.provider === 'suunto' && data.scope !== 'workout') {
             <p class="delivery-caption">Workouts for today and the next six days are sent as SuuntoPlus Guides. Later workouts are sent automatically as their dates approach.</p>
@@ -276,16 +275,12 @@
         <p>Could not check workout means the latest check did not confirm both records. Last sent still records Garmin's earlier acceptance; a missing Workout response alone does not prove safe deletion, so QS will not create a replacement Workout automatically. A confirmed missing calendar entry can be restored using the original Workout.</p>
       }
       @if (showsCorosGuidance()) {
-        @if (activeRow()?.setupAvailable) {
-          <p>QS sends each upcoming workout to your COROS training calendar. The COROS app manages watch synchronization; Sent does not confirm that your watch received it.</p>
-        } @else {
-          <p>COROS workout delivery is coming soon in the app. New plan sync, plan-workout resume, and standalone Send actions are unavailable.</p>
-          <p>Existing saved COROS delivery state continues to follow its consent. Delivery records, retry, copy status, and Stop sync remain available here.</p>
-        }
+        <p>QS sends each upcoming workout to your COROS training calendar. The COROS app manages watch synchronization; Sent does not confirm that your watch received it.</p>
         <p>COROS documents a two-week watch window and one training plan synced to a watch at a time. QS does not claim or replace a native plan object, and automatic checking is unavailable.</p>
       }
       @if (showsWahooGuidance()) {
-        <p>Wahoo sync currently supports time-based running and cycling workouts for today and the next six days in the saved time zone. Distance-based steps are not sent because Wahoo requires a total duration.</p>
+        <p>Wahoo sync maps time-based running/cycling subprofiles, timed Walking/Hiking without intensity targets, and timed-strength Gym workouts for today and the next six days in the saved time zone. Distance-based steps are not sent because Wahoo requires a total duration. Strength repetition sets are unsupported; exercise names and kilogram loads are instructions, not native rep/load tracking. Rounded load instructions need mapping approval.</p>
+        <p>Wahoo supports timed, untargeted pool/open-water swimming and outdoor/indoor rowing. Native profiles and timed intervals have been account/device-tested; distance endings and intensity targets remain unsupported. Selected pool length is not sent to Wahoo; set it there where needed. Running/cycling profile substitutions are disclosed and never change your saved QS sport.</p>
         <p>QS sends a Plan and a dated Workout together. Found in connected app means both records and their association were checked, not that your ELEMNT or watch received them. Automatic restoration is unavailable.</p>
         <p>Bike computers use only the first target in an interval. Review any target limitations before approving a changed workout.</p>
       }

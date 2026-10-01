@@ -1,4 +1,5 @@
 import { createHash } from 'crypto';
+import type { StrengthWorkoutDetailsV1 } from '../../../../shared/strength-workout';
 import {
     assessPlannedWorkoutProviderMappingV1,
     type PlannedWorkoutProviderId,
@@ -16,6 +17,8 @@ export interface ProviderSerializationIssueV1 {
 export interface ProviderSerializationResultV1<T> {
     provider: PlannedWorkoutProviderId;
     level: PlannedWorkoutProviderMappingLevel;
+    /** A documented non-blocking limitation may remain degraded without extra approval. */
+    requiresApproval?: boolean;
     issues: ProviderSerializationIssueV1[];
     artifact: T;
 }
@@ -100,8 +103,9 @@ export function resolveProviderSerializationIssuesV1(params: {
     structure: unknown;
     additionalIssues?: readonly ProviderSerializationIssueV1[];
     allowDegraded: boolean;
+    strength?: StrengthWorkoutDetailsV1;
 }): Pick<ProviderSerializationResultV1<never>, 'provider' | 'level' | 'issues'> {
-    const assessment = assessPlannedWorkoutProviderMappingV1(params.provider, params.structure);
+    const assessment = assessPlannedWorkoutProviderMappingV1(params.provider, params.structure, params.strength);
     const issues: ProviderSerializationIssueV1[] = [
         ...assessment.issues.map((issue: PlannedWorkoutProviderMappingIssueV1) => ({ ...issue })),
         ...(params.additionalIssues ?? []),

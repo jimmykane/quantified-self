@@ -119,6 +119,17 @@ describe('AssistantService', () => {
     await expect(service.getConversationState()).rejects.toMatchObject({ code: 'INTERNAL' });
     await expect(service.sendMessage(request)).rejects.toMatchObject({ code: 'INTERNAL' });
   });
+  it('binds manual measurement choice to requests, replies and current conversation state', async () => {
+    const request = { requestId, message: 'Log my weight', timeZone: 'UTC', measurementChangesEnabled: true };
+    functionsService.call.mockResolvedValue({ data: response });
+    await expect(service.sendMessage(request)).rejects.toMatchObject({ code: 'CONVERSATION_CHANGED' });
+    functionsService.call.mockResolvedValue({ data: { ...response, measurementChangesEnabled: true } });
+    await expect(service.sendMessage(request)).resolves.toMatchObject({ measurementChangesEnabled: true });
+    await expect(service.sendMessage({ ...request, measurementChangesEnabled: false })).rejects.toMatchObject({ code: 'CONVERSATION_CHANGED' });
+    await expect(service.getConversationState()).resolves.toMatchObject({ measurementChangesEnabled: true });
+    functionsService.call.mockResolvedValue({ data: { ...response, measurementChangesEnabled: 'true' } });
+    await expect(service.getConversationState()).rejects.toMatchObject({ code: 'INTERNAL' });
+  });
 
   it('does not return an old account response or retry its request as a newly signed-in account', async () => {
     functionsService.call.mockImplementationOnce(async () => {
@@ -134,6 +145,36 @@ describe('AssistantService', () => {
     await expect(service.getConversationState()).rejects.toMatchObject({ code: 'UNAUTHENTICATED' });
     expect(functionsService.call).toHaveBeenCalledTimes(1);
     expect(auth.currentUser.getIdToken).not.toHaveBeenCalled();
+  });
+
+  it('rejects a manual measurement proposal without its server-owned value review', async () => {
+    const pendingContentProposal = { proposalRef: 'manual-review', kind: 'create_manual_measurement',
+      expiresAtMs: 1_800_000_000_000, summary: 'Log weight', requiresConfirmation: true,
+      arguments: { mutationId: '00000000-0000-4000-8000-000000000000', metricId: 'body_weight',
+        observedAt: '2026-10-01T09:00:00Z', value: 80, unit: 'kg' } };
+    functionsService.call.mockResolvedValue({ data: { ...response, pendingContentProposal } });
+    await expect(service.getConversationState()).rejects.toMatchObject({ code: 'INTERNAL' });
+    functionsService.call.mockResolvedValue({ data: { ...response, pendingContentProposal: {
+      ...pendingContentProposal, measurementReview: { before: null, after: { metricId: 'body_weight',
+        canonicalValue: 80, observedAtMs: Date.parse('2026-10-01T09:00:00Z'), timezoneOffsetSeconds: 0 } },
+    } } });
+    await expect(service.getConversationState()).resolves.toMatchObject({ pendingContentProposal: { kind: 'create_manual_measurement' } });
+  });
+
+  it.each(['2026-10-01T09:00:00.123Z', '2026-10-01T12:00:00.123+03:00',
+    '2026-10-01T03:30:00-05:30', '2026-10-01T09:00Z'])('accepts exact manual observation instants (%s)', async observedAt => {
+    const pendingContentProposal = { proposalRef: 'manual-review', kind: 'create_manual_measurement',
+      expiresAtMs: 1_800_000_000_000, summary: 'Log weight', requiresConfirmation: true,
+      arguments: { mutationId: '00000000-0000-4000-8000-000000000000', metricId: 'body_weight', observedAt, value: 80, unit: 'kg' },
+      measurementReview: { before: null, after: { metricId: 'body_weight', canonicalValue: 80,
+        observedAtMs: Date.parse(observedAt), timezoneOffsetSeconds: 0 } } };
+    functionsService.call.mockResolvedValue({ data: { ...response, pendingContentProposal } });
+    await expect(service.getConversationState()).resolves.toMatchObject({ pendingContentProposal: { arguments: { observedAt } } });
+    for (const invalidAt of ['2026-10-01T12:00:00', '2026-02-30T09:00:00Z', '2026-10-01T24:00:00Z', '2026-10-01T09:00:00+24:00']) {
+      functionsService.call.mockResolvedValue({ data: { ...response, pendingContentProposal: { ...pendingContentProposal,
+        arguments: { ...pendingContentProposal.arguments, observedAt: invalidAt } } } });
+      await expect(service.getConversationState()).rejects.toMatchObject({ code: 'INTERNAL' });
+    }
   });
 
   it('rejects malformed conversation payloads', async () => {

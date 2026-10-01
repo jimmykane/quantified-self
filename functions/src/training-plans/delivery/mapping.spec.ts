@@ -2,11 +2,75 @@ import { describe, expect, it, vi } from 'vitest';
 import { ActivityTypes } from '@sports-alliance/sports-lib';
 import { assessTrainingDeliveryMapping } from './mapping';
 import type { ScheduledWorkoutV1 } from '../../../../shared/training-plans';
+import { projectStrengthWorkoutToV1 } from '../../../../shared/strength-workout';
 import { productionDeliveryRuntime } from './runtime';
+import { GARMIN_GENERIC_WORKOUT_SPORTS_V1 } from '../../../../shared/planned-workout-providers';
 const workout: ScheduledWorkoutV1 = { schemaVersion: 1, id: 'w', planId: null, localDate: '2026-09-10', revision: 1,
   title: 'Easy run', lifecycle: 'planned', createdAtMs: 1, updatedAtMs: 1, structure: { version: 1, sport: ActivityTypes.Running,
     nodes: [{ kind: 'step', id: 'a', purpose: 'work', ending: { kind: 'time', seconds: 600 }, targets: [] }] } };
 describe('Training delivery mapping and production boundary', () => {
+  it.each([
+    [ActivityTypes.IndoorRunning, ActivityTypes.Running], [ActivityTypes.VirtualRunning, ActivityTypes.Running],
+    [ActivityTypes.VirtualCycling, ActivityTypes.Cycling], [ActivityTypes.Velomobile, ActivityTypes.Cycling],
+    [ActivityTypes['Enduro MTB'], ActivityTypes.Cycling], [ActivityTypes.DownhillCycling, ActivityTypes.Cycling],
+  ] as const)('binds the COROS %s fold approval to its authored sport, account and date without enabling production delivery', (sport, family) => {
+    const authored = { ...workout, structure: { ...workout.structure, sport } };
+    const result = assessTrainingDeliveryMapping('coros', authored, 'destination', 'UTC');
+    expect(result.level).toBe('degraded');
+    expect(result.issues.join(' ')).toContain(`${sport} as a ${family} workout`);
+    expect(assessTrainingDeliveryMapping('coros', { ...authored, structure: { ...authored.structure, sport: family } },
+      'destination', 'UTC').digest).not.toBe(result.digest);
+    expect(assessTrainingDeliveryMapping('coros', authored, 'other-account', 'UTC').digest).not.toBe(result.digest);
+    expect(assessTrainingDeliveryMapping('coros', { ...authored, localDate: '2026-09-11' }, 'destination', 'UTC').digest)
+      .not.toBe(result.digest);
+    expect(productionDeliveryRuntime({} as never).transport('coros', 'owner')).toBeNull();
+    expect(authored.structure.sport).toBe(sport);
+  });
+  it.each(GARMIN_GENERIC_WORKOUT_SPORTS_V1)('discloses %s Generic fallback and binds approval to the authored sport and account', sport => {
+    const authored = { ...workout, structure: { ...workout.structure, sport } };
+    const before = JSON.stringify(authored);
+    const transport = productionDeliveryRuntime({} as never).transport('garmin', 'owner')!;
+    const result = transport.assess(authored, 'destination', 'UTC');
+    expect(result.level).toBe('degraded');
+    expect(result.issues.join(' ')).toContain('Generic workout');
+    expect(result.issues.join(' ')).toContain('only on some devices');
+    expect(transport.assess({ ...authored, structure: { ...authored.structure, sport: ActivityTypes.Running } }, 'destination', 'UTC').digest)
+      .not.toBe(result.digest);
+    expect(transport.assess(authored, 'other-account', 'UTC').digest).not.toBe(result.digest);
+    expect(transport.assess({ ...authored, localDate: '2026-09-11' }, 'destination', 'UTC').digest).not.toBe(result.digest);
+    expect(JSON.stringify(authored)).toBe(before);
+  });
+  it('binds each authored sport separately even when the provider receives Generic for all five', () => {
+    const digests = GARMIN_GENERIC_WORKOUT_SPORTS_V1.map(sport => assessTrainingDeliveryMapping('garmin',
+      { ...workout, structure: { ...workout.structure, sport } }, 'destination', 'UTC').digest);
+    expect(new Set(digests).size).toBe(GARMIN_GENERIC_WORKOUT_SPORTS_V1.length);
+  });
+  it('binds full COROS strength content without changing existing non-strength digests', () => {
+    const strength = { version: 1 as const, workoutId: 'w', revision: 1, exercises: [{ id: 'squat', name: 'Squat',
+      sets: [{ id: 'one', ending: { kind: 'repetitions' as const, repetitions: 10 }, externalLoadKg: 10 }] }] };
+    const lift = { ...workout, structure: projectStrengthWorkoutToV1(strength) };
+    const result = assessTrainingDeliveryMapping('coros', lift, 'destination', 'UTC', strength);
+    expect(result.level).toBe('exact');
+    const changed = { ...strength, exercises: [{ ...strength.exercises[0], sets: [{ ...strength.exercises[0].sets[0], externalLoadKg: 11 }] }] };
+    expect(assessTrainingDeliveryMapping('coros', lift, 'destination', 'UTC', changed).digest).not.toBe(result.digest);
+    expect(assessTrainingDeliveryMapping('coros', workout, 'destination', 'UTC', strength))
+      .toEqual(assessTrainingDeliveryMapping('coros', workout, 'destination', 'UTC'));
+  });
+  it('preserves complete Garmin strength through the production wrapper and digest without affecting recipe-only delivery', () => {
+    const strength = { version: 1 as const, workoutId: 'w', revision: 1, exercises: [{ id: 'squat', name: 'Squat',
+      sets: [{ id: 'one', ending: { kind: 'repetitions' as const, repetitions: 10 }, externalLoadKg: 10 }] }] };
+    const lift = { ...workout, structure: projectStrengthWorkoutToV1(strength) };
+    const transport = productionDeliveryRuntime({} as never).transport('garmin', 'owner')!;
+    const result = transport.assess(lift, 'destination', 'UTC', strength);
+    expect(result.level).toBe('exact');
+    expect(transport.assess(lift, 'destination', 'UTC').level).toBe('unsupported');
+    expect(transport.assess(lift, 'destination', 'UTC', { ...strength, workoutId: 'foreign' }).level).toBe('unsupported');
+    const changed = { ...strength, exercises: [{ ...strength.exercises[0], sets: [{ ...strength.exercises[0].sets[0], externalLoadKg: 11 }] }] };
+    expect(transport.assess(lift, 'destination', 'UTC', changed).digest).not.toBe(result.digest);
+    const malformed = { ...strength, exercises: [{ ...strength.exercises[0], sets: [{ ...strength.exercises[0].sets[0], externalLoadKg: -1 }] }] };
+    expect(transport.assess(lift, 'destination', 'UTC', malformed).level).toBe('unsupported');
+    expect(transport.assess(workout, 'destination', 'UTC', strength)).toEqual(transport.assess(workout, 'destination', 'UTC'));
+  });
   it.each(['garmin', 'coros', 'wahoo', 'suunto'] as const)('%s uses serializer-level assessment independently of rollout', provider => {
     const assessment = assessTrainingDeliveryMapping(provider, workout, 'destination', 'UTC');
     expect(assessment.level).toBe('exact');
@@ -14,11 +78,13 @@ describe('Training delivery mapping and production boundary', () => {
   });
   it('enables every public provider transport for an ordinary authenticated owner', () => {
     vi.stubEnv('SUUNTOAPP_GUIDE_OWNER', 'Fixture application');
-    const runtime = productionDeliveryRuntime({} as never);
-    for (const provider of ['garmin', 'coros', 'wahoo', 'suunto'] as const) {
-      expect(runtime.transport(provider, 'owner')).not.toBeNull();
-    }
-    vi.unstubAllEnvs();
+    try {
+      const runtime = productionDeliveryRuntime({} as never);
+      for (const provider of ['garmin', 'wahoo', 'suunto'] as const) {
+        expect(runtime.transport(provider, 'owner')).not.toBeNull();
+      }
+      expect(runtime.transport('coros', 'owner')).toBeNull();
+    } finally { vi.unstubAllEnvs(); }
   });
   it('captures serializer-specific losses, not only structure capability warnings', () => {
     const result = assessTrainingDeliveryMapping('suunto', { ...workout, title: 'Run 🏃🏽' }, 'destination', 'UTC');

@@ -30,12 +30,13 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('COROS Training batch Fire
       { kind: 'step', id: 'run', purpose: 'work', ending: { kind: 'time', seconds: 600 }, targets: [] },
     ] } });
 
-  const seed = async (count: number): Promise<string[]> => {
+  const seed = async (count: number, sports: readonly ActivityTypes[] = []): Promise<string[]> => {
     const user = db.collection('users').doc(uid);
     const ids: string[] = [];
     const batch = db.batch();
     for (let index = 0; index < count; index++) {
       const current = workout(index);
+      current.structure.sport = sports[index] ?? current.structure.sport;
       const id = deliveryIdentity(uid, 'coros', 'destination', current.id);
       const assessment = transport.assess(current, 'destination', 'Europe/Helsinki');
       const setting: TrainingDeliverySettingsV1 = { schemaVersion: 1, scope: 'workout', scopeId: current.id,
@@ -114,6 +115,33 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('COROS Training batch Fire
     await Promise.all([processTrainingDelivery(runtime, uid, ids[0]), processTrainingDelivery(runtime, uid, ids[1])]);
     expect(client).toHaveBeenCalledTimes(1);
     expect(JSON.parse(client.mock.calls[0][0].data).Workouts).toHaveLength(2);
+  });
+
+  it.each([false, true])('keeps the six additional subtype folds behind approval (%s) in the Firestore worker', async approved => {
+    const sports = [ActivityTypes.IndoorRunning, ActivityTypes.VirtualRunning, ActivityTypes.VirtualCycling,
+      ActivityTypes.Velomobile, ActivityTypes['Enduro MTB'], ActivityTypes.DownhillCycling];
+    const ids = await seed(sports.length, sports);
+    const user = db.collection('users').doc(uid);
+    if (!approved) {
+      const batch = db.batch();
+      for (const [index, id] of ids.entries()) {
+        batch.update(user.collection('trainingDeliverySettings').doc(`workout_w${index}_coros`), { approvedDigest: null });
+        batch.update(user.collection(DELIVERY_LEDGER).doc(id), { approvalDigest: null });
+      }
+      await batch.commit();
+    }
+    await Promise.all(ids.map(id => processTrainingDelivery(runtime, uid, id)));
+    const ledgers = await Promise.all(ids.map(id => user.collection(DELIVERY_LEDGER).doc(id).get()));
+    expect(ledgers.every(row => row.data()?.status === (approved ? 'delivered' : 'approval_required'))).toBe(true);
+    if (approved) {
+      // Concurrent dispatch may split the batch; every stable workout is still sent once.
+      const sent = client.mock.calls.flatMap(([request]) => JSON.parse(request.data).Workouts)
+        .sort((a, b) => a.WorkoutDay.localeCompare(b.WorkoutDay));
+      expect(sent.map(entry => entry.WorkoutType)).toEqual(['run', 'run', 'bike', 'bike', 'bike', 'bike']);
+      expect(new Set(sent.map(entry => entry.Id)).size).toBe(sports.length);
+    } else expect(client).not.toHaveBeenCalled();
+    const authored = await Promise.all(sports.map((_, index) => user.collection('scheduledWorkouts').doc(`w${index}`).get()));
+    expect(authored.map(row => row.data()?.structure.sport)).toEqual(sports);
   });
 
   it('keeps different saved time zones in separate provider batches', async () => {

@@ -1,4 +1,6 @@
 import { ActivityTypes } from '@sports-alliance/sports-lib';
+import { isWahooUntargetedWorkoutSportV1, wahooDurationSeconds, wahooWorkoutSportProfileV1, type WahooWorkoutSportProfileV1 } from '../../../../shared/wahoo-workout-sports';
+import { formatStrengthLoadKg, parseStrengthWorkoutDetailsV1, projectStrengthWorkoutToV1 } from '../../../../shared/strength-workout';
 import {
     parseWorkoutStructureV1,
     type WorkoutEndingV1,
@@ -9,6 +11,7 @@ import {
 } from '../../../../shared/planned-workout';
 import {
     resolveProviderSerializationIssuesV1,
+    ProviderWorkoutMappingError,
     type ProviderSerializationIssueV1,
     type ProviderSerializationResultV1,
 } from './provider-mapping';
@@ -45,8 +48,9 @@ export interface WahooPlanJsonV1 {
         name: string;
         version: '1.0.0';
         description?: string;
-        workout_type_family: 0 | 1;
+        workout_type_family: WahooWorkoutSportProfileV1['family'];
         workout_type_location: 0 | 1;
+        duration_s?: number;
         ftp?: number;
         threshold_hr?: number;
         max_hr?: number;
@@ -262,6 +266,14 @@ export function serializeWahooPlanJsonV1(
     const name = assertNonEmpty(options.name, 'Wahoo plan name');
     const normalizedDescription = options.description?.trim();
     const additionalIssues: ProviderSerializationIssueV1[] = [];
+    const sportProfile = wahooWorkoutSportProfileV1(structure.sport);
+    // Preserve the old broad Running/Cycling serializer's explicit location option.
+    // Exact subprofiles must match their native location.
+    if (sportProfile && structure.sport !== ActivityTypes.Running && structure.sport !== ActivityTypes.Cycling
+        && (options.location === 'indoor' ? 0 : 1) !== sportProfile.location) {
+        additionalIssues.push({ severity: 'unsupported', code: 'unsupported_sport',
+            path: '$.header.workout_type_location', message: `Wahoo ${structure.sport} requires its ${sportProfile.location === 0 ? 'indoor' : 'outdoor'} profile location.` });
+    }
     if (normalizedDescription && codePointLength(normalizedDescription) > 5000) {
         additionalIssues.push({
             severity: 'degraded',
@@ -280,7 +292,7 @@ export function serializeWahooPlanJsonV1(
     });
     const context: WahooMappingContext = { headerReferences: {}, rawHeaderReferences: {} };
     const intervals = structureToIntervals(structure, context);
-    const workoutTypeFamily: 0 | 1 = structure.sport === ActivityTypes.Cycling ? 0 : 1;
+    if (!sportProfile) throw new Error('Unsupported Wahoo sport reached after compatibility validation.');
     const workoutTypeLocation: 0 | 1 = options.location === 'indoor' ? 0 : 1;
     const artifact: WahooPlanJsonV1 = {
         header: {
@@ -289,12 +301,40 @@ export function serializeWahooPlanJsonV1(
             ...(normalizedDescription
                 ? { description: truncateCodePoints(normalizedDescription, 5000) }
                 : {}),
-            workout_type_family: workoutTypeFamily,
+            workout_type_family: sportProfile.family,
             workout_type_location: workoutTypeLocation,
+            ...(isWahooUntargetedWorkoutSportV1(structure.sport) ? { duration_s: wahooDurationSeconds(structure)! } : {}),
             ...context.headerReferences,
         },
         intervals,
     };
 
     return { ...resolved, artifact };
+}
+
+/** Full companion only. Never infer repetitions or load from the v1 summary. */
+export function serializeWahooStrengthPlanV1(detailsValue: unknown,
+    options: Pick<SerializeWahooPlanOptionsV1, 'name' | 'allowDegraded'>): ProviderSerializationResultV1<WahooPlanJsonV1> {
+    const details = parseStrengthWorkoutDetailsV1(detailsValue);
+    const resolved = resolveProviderSerializationIssuesV1({ provider: 'wahoo',
+        structure: projectStrengthWorkoutToV1(details), strength: details, allowDegraded: true });
+    const requiresApproval = resolved.issues.some(issue => issue.path.endsWith('.externalLoadKg'));
+    if (requiresApproval && !options.allowDegraded) {
+        throw new ProviderWorkoutMappingError('wahoo', 'degradation-confirmation-required', resolved.issues);
+    }
+    const intervals: WahooPlanIntervalV1[] = [];
+    details.exercises.forEach(exercise => exercise.sets.forEach((set, index) => {
+        if (set.ending.kind !== 'time') throw new Error('Unsupported Wahoo strength ending after validation.');
+        intervals.push({ name: `${exercise.name} — set ${index + 1}/${exercise.sets.length}${set.externalLoadKg === undefined
+            ? '' : ` — load guidance: ${formatStrengthLoadKg(set.externalLoadKg)}`}`,
+        exit_trigger_type: 'time', exit_trigger_value: set.ending.seconds, intensity_type: 'active',
+        targets: [{ type: 'rpe', low: 1, high: 10 }] });
+        if (set.restAfterSeconds !== undefined) intervals.push({ name: `Rest after ${exercise.name} — set ${index + 1}/${exercise.sets.length}`,
+            exit_trigger_type: 'time', exit_trigger_value: set.restAfterSeconds, intensity_type: 'rest',
+            targets: [{ type: 'rpe', low: 1, high: 10 }] });
+    }));
+    return { ...resolved, requiresApproval, artifact: { header: { name: assertNonEmpty(options.name, 'Wahoo plan name'),
+        version: '1.0.0', description: 'Timed strength sets and rests. Exercise names and kilogram loads are instructions only; no native rep or load tracking.',
+        workout_type_family: 6, workout_type_location: 0,
+        duration_s: intervals.reduce((total, interval) => total + interval.exit_trigger_value, 0) }, intervals } };
 }

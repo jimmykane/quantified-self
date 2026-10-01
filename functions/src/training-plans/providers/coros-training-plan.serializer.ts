@@ -8,7 +8,7 @@ import {
     type WorkoutTargetV1,
 } from '../../../../shared/planned-workout';
 import { normalizeTrainingLocalDate } from '../../../../shared/training-plans';
-import { parseStrengthWorkoutDetailsV1, type StrengthWorkoutDetailsV1 } from '../../../../shared/strength-workout';
+import { parseStrengthWorkoutDetailsV1, projectStrengthWorkoutToV1, type StrengthWorkoutDetailsV1 } from '../../../../shared/strength-workout';
 import {
     COROS_FOLDED_CYCLING_WORKOUT_SPORTS_V1,
     COROS_FOLDED_RUNNING_WORKOUT_SPORTS_V1,
@@ -408,12 +408,14 @@ export function serializeCorosTrainingPlanV1(
     };
 }
 
-/** Contract fixture mapper only until COROS strength push/update/delete is account-proved. */
+/** Complete companion mapper. Local serialization is not cloud/app/watch acceptance evidence. */
 export function serializeCorosStrengthPlanV1(
     detailsValue: unknown,
     options: SerializeCorosTrainingPlanOptionsV1,
 ): ProviderSerializationResultV1<CorosTrainingPlanPushDataV1> {
     const details: StrengthWorkoutDetailsV1 = parseStrengthWorkoutDetailsV1(detailsValue);
+    const resolved = resolveProviderSerializationIssuesV1({ provider: 'coros',
+        structure: projectStrengthWorkoutToV1(details), strength: details, allowDegraded: options.allowDegraded });
     const athleteId = positiveCorosInteger(options.athleteId, 'COROS athlete ID');
     const workoutId = options.workoutId !== undefined
         ? positiveCorosInteger(options.workoutId, 'COROS workout ID')
@@ -436,7 +438,7 @@ export function serializeCorosStrengthPlanV1(
             : { Unit: 'ValueOfEquipmentWeight' as const, Value: set.externalLoadKg },
     })));
     return {
-        provider: 'coros', level: 'exact', issues: [],
+        ...resolved,
         artifact: { AthleteId: athleteId, StartDate: localDate, EndDate: localDate,
             Workouts: [{ LastModifiedDate: normalizeCorosLocalDateTime(options.lastModifiedDate),
                 Title: requiredText(options.title, 'COROS workout title'), Id: workoutId, WorkoutDay: localDate,

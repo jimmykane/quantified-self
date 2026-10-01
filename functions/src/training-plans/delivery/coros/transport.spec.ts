@@ -2,6 +2,7 @@ import { ActivityTypes } from '@sports-alliance/sports-lib';
 import { describe, expect, it, vi } from 'vitest';
 import type { ScheduledWorkoutV1 } from '../../../../../shared/training-plans';
 import type { DeliveryOperation } from '../contracts';
+import { projectStrengthWorkoutToV1 } from '../../../../../shared/strength-workout';
 import { CorosTrainingTransport } from './transport';
 
 const NOW = Date.parse('2026-09-17T10:00:00Z');
@@ -28,6 +29,71 @@ function operations(count: number, kind: 'upsert' | 'remove', transport: CorosTr
 }
 
 describe('COROS Training batch transport', () => {
+  it('builds one broad-family batch for the additional running/cycling profiles without changing authored sports or IDs', async () => {
+    const profiles = [
+      [ActivityTypes.IndoorRunning, 'run'], [ActivityTypes.VirtualRunning, 'run'],
+      [ActivityTypes.VirtualCycling, 'bike'], [ActivityTypes.Velomobile, 'bike'],
+      [ActivityTypes['Enduro MTB'], 'bike'], [ActivityTypes.DownhillCycling, 'bike'],
+    ] as const;
+    const client = vi.fn(async (request: { data?: string }, beforeSend: () => Promise<void>) => {
+      await beforeSend(); const payload = JSON.parse(request.data!);
+      return { status: 200, body: { result: '0000', data: { StartDate: payload.StartDate, EndDate: payload.EndDate } } };
+    });
+    const transport = new CorosTrainingTransport(client, () => NOW);
+    const batch = operations(profiles.length, 'upsert', transport);
+    for (const [index, [sport]] of profiles.entries()) {
+      batch[index].workout!.structure.sport = sport;
+      const assessment = transport.assess(batch[index].workout!, 'destination', 'Europe/Helsinki');
+      expect(assessment.level).toBe('degraded');
+      batch[index].digest = assessment.digest;
+    }
+    const original = JSON.stringify(batch);
+    const outcomes = await transport.batch.execute(batch, async () => {}, async () => {});
+    expect(outcomes).toHaveLength(profiles.length);
+    expect(outcomes.every(outcome => outcome.state === 'accepted')).toBe(true);
+    const payload = JSON.parse(client.mock.calls[0][0].data!);
+    expect(payload.Workouts.map((entry: { WorkoutType: string }) => entry.WorkoutType)).toEqual(profiles.map(([, type]) => type));
+    expect(payload.Workouts.map((entry: { Id: number }) => entry.Id)).toEqual(profiles.map((_, index) => 1000 + index));
+    expect(JSON.stringify(batch)).toBe(original);
+  });
+
+  const strengthOperation = (operation: DeliveryOperation, transport: CorosTrainingTransport) => {
+    const strength = { version: 1 as const, workoutId: operation.workout!.id, revision: 1, exercises: [{ id: 'squat', name: 'Squat',
+      sets: [{ id: 'set', ending: { kind: 'repetitions' as const, repetitions: 5 }, externalLoadKg: 80.25, restAfterSeconds: 60 }] }] };
+    operation.strength = strength;
+    operation.workout = { ...operation.workout!, structure: projectStrengthWorkoutToV1(strength) };
+    operation.digest = transport.assess(operation.workout, operation.destinationKey, operation.timeZone, strength).digest;
+  };
+
+  it('sends mixed running and full-strength workouts in the same 30-item batch', async () => {
+    const client = vi.fn(async (request: { data?: string }, beforeSend: () => Promise<void>) => {
+      await beforeSend(); const payload = JSON.parse(request.data!);
+      return { status: 200, body: { result: '0000', data: { StartDate: payload.StartDate, EndDate: payload.EndDate } } };
+    });
+    const transport = new CorosTrainingTransport(client, () => NOW);
+    const batch = operations(30, 'upsert', transport);
+    for (let i = 0; i < batch.length; i += 2) strengthOperation(batch[i], transport);
+    await expect(transport.batch.execute(batch, async () => {}, async () => {})).resolves.toHaveLength(30);
+    const payload = JSON.parse(client.mock.calls[0][0].data!);
+    expect(payload.Workouts.filter((value: { WorkoutType: string }) => value.WorkoutType === 'strength')).toHaveLength(15);
+    expect(payload.Workouts[0]).toMatchObject({ Id: 1000, Structure: [{ Length: { Unit: 'Reps', Value: 5 },
+      Rest: { Unit: 'Second', Value: 60 }, IntensityTarget: { Unit: 'ValueOfEquipmentWeight', Value: 80.25 } }] });
+  });
+
+  it.each(['missing', 'foreign', 'mismatch', 'invalid', 'stale-load'] as const)(
+    'rejects %s strength before HTTP or the started journal', async failure => {
+      const client = vi.fn(); const beforeSend = vi.fn();
+      const transport = new CorosTrainingTransport(client, () => NOW);
+      const batch = operations(1, 'upsert', transport);
+      strengthOperation(batch[0], transport);
+      if (failure === 'missing') batch[0].strength = undefined;
+      if (failure === 'foreign') batch[0].strength!.workoutId = 'foreign';
+      if (failure === 'mismatch') batch[0].strength!.exercises[0].name = 'Different';
+      if (failure === 'invalid') batch[0].strength!.exercises[0].sets[0].externalLoadKg = -1;
+      if (failure === 'stale-load') batch[0].strength!.exercises[0].sets[0].externalLoadKg = 81;
+      await expect(transport.batch.execute(batch, beforeSend, async () => {})).rejects.toMatchObject({ kind: 'terminal', rejected: true });
+      expect(client).not.toHaveBeenCalled(); expect(beforeSend).not.toHaveBeenCalled();
+    });
   it.each([1, 30])('pushes %s workouts with one stable athlete and accepted range coverage', async count => {
     const client = vi.fn(async (request: { data?: string }, beforeSend: () => Promise<void>) => {
       await beforeSend();

@@ -51,7 +51,8 @@ export class TrainingDeliveryButtonComponent {
     if (!uid) return of(EMPTY_READ);
     const source = context.summaries && context.scope !== 'history'
       ? this.delivery.watchSummaryScope(uid, context.scope, context.id, context.parentPlanId).pipe(
-        map(view => ({ uid, hasRecords: !!(view.settings.length || view.statuses.length), view, loaded: true, error: false })))
+        map(view => ({ uid, hasRecords: [...view.settings, ...view.statuses].some(item => this.delivery.isVisible(item.provider)),
+          view, loaded: true, error: false })))
       : this.delivery.watchPresence(uid, context.scope, context.id).pipe(
         map(hasRecords => ({ uid, hasRecords, view: null, loaded: true, error: false })));
     return source.pipe(startWith({ ...EMPTY_READ, uid }), catchError(() => of({ ...EMPTY_READ, uid, loaded: true, hasRecords: true, error: true })));
@@ -83,7 +84,8 @@ export class TrainingDeliveryButtonComponent {
         ? Promise.all(rows.map(row => withGarminWorkoutCheck(row, read.uid, currentWorkout, view))) : rows)).pipe(
       map(rows => ({ ...empty, rows })), startWith(empty), catchError(() => of({ ...empty, error: true })));
   })), { initialValue: { uid: '', rows: [] as TrainingDeliverySummary[], error: false } });
-  readonly summaries = computed(() => this.summaryState().uid === this.users.user()?.uid ? this.summaryState().rows : []);
+  readonly summaries = computed(() => this.summaryState().uid === this.users.user()?.uid
+    ? this.summaryState().rows.filter(summary => this.delivery.isVisible(summary.provider)) : []);
   readonly compactPlanSummaries = computed(() => this.summaries().map(summary => ({
     ...summary, compactLabel: compactPlanLabel(summary),
   })));

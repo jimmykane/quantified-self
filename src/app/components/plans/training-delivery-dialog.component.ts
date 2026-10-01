@@ -78,6 +78,9 @@ export class TrainingDeliveryDialogComponent {
   private readonly dialogTitleElement = viewChild<ElementRef<HTMLHeadingElement>>('dialogTitleElement');
   private readonly providerManageButtons = viewChildren('providerManage', { read: ElementRef<HTMLButtonElement> });
   readonly preview = signal<{ result: TrainingDeliveryPreviewV1; command: TrainingDeliveryCommandV1 } | null>(null);
+  // Older servers did not distinguish informative limitations from approval-gated losses.
+  readonly mappingApprovalCount = computed(() => this.preview()?.result.approvalRequiredCount
+    ?? this.preview()?.result.warningCount ?? 0);
   private readonly statusLimit = signal(TRAINING_DELIVERY_PAGE_SIZE);
   // Keep the entire loaded prefix live: separate cursor snapshots leave stale rows
   // and gaps when reconciliation inserts, removes, or transfers records between pages.
@@ -168,7 +171,7 @@ export class TrainingDeliveryDialogComponent {
       default: return 'Send workout';
     }
   });
-  readonly rows = computed(() => PLANNED_WORKOUT_PROVIDER_IDS.map(provider => {
+  readonly rows = computed(() => PLANNED_WORKOUT_PROVIDER_IDS.filter(provider => this.delivery.isVisible(provider)).map(provider => {
     const setting = this.view().settings.find(item => item.provider === provider);
     const currentPlanId = this.schedule()?.workouts.find(item => item.id === this.data.id)?.planId;
     const inheritedSetting = this.planBound() && setting?.associationPlanId === currentPlanId ? setting : undefined;
@@ -199,19 +202,15 @@ export class TrainingDeliveryDialogComponent {
     const planInactive = !!scopePlan && scopePlan.lifecycle !== 'active';
     const planFocus = this.data.scope === 'plan'
       ? this.data.planSummaries?.().find(summary => summary.provider === provider)?.planFocus ?? null : null;
-    const setupComingSoon = provider === 'coros' && ready && !setupAvailable && !setting && !statuses.length;
     const overviewState = !this.view().loaded ? 'Loading sync status…'
-      : setupComingSoon ? 'Workout delivery coming soon'
       : this.data.scope === 'history' ? 'Sync history'
       : this.planBound() ? suppressed ? 'Excluded from plan sync' : 'Follows plan sync settings'
         : setting?.enabled ? planInactive ? 'Sync saved · plan inactive' : 'Sync enabled' : 'Sync off';
     const overviewIcon = !this.view().loaded ? 'sync'
-      : setupComingSoon ? 'schedule'
       : this.data.scope === 'history' ? 'history'
       : this.planBound() ? suppressed ? 'sync_disabled' : 'link'
         : setting?.enabled ? planInactive ? 'pause_circle' : 'check_circle' : 'sync_disabled';
-    const overviewDetail = setupComingSoon ? 'New plan sync and standalone Send actions are unavailable.'
-      : planFocus ? [planFocus.label, planFocus.detail].filter(Boolean).join(' · ')
+    const overviewDetail = planFocus ? [planFocus.label, planFocus.detail].filter(Boolean).join(' · ')
       : !statuses.length ? 'No workout sync status yet.'
       : statuses.length === 1 ? statuses[0].label
         : attentionWorkoutCount ? `${statusWorkoutCount} ${statusWorkoutCount === 1 ? 'workout' : 'workouts'} · ${attentionWorkoutCount} ${attentionWorkoutCount === 1 ? 'needs' : 'need'} attention`
@@ -310,7 +309,7 @@ export class TrainingDeliveryDialogComponent {
   }
   async begin(provider: PlannedWorkoutProviderId, action: TrainingDeliveryAction, approvalDigest?: string, renewConsent = false): Promise<void> {
     if (this.busy() || !this.sameAccount() || !this.canReview() || this.data.scope === 'history'
-      || (!this.canSend() && !['stop', 'retry'].includes(action))) return;
+      || !this.delivery.isVisible(provider) || (!this.canSend() && !['stop', 'retry'].includes(action))) return;
     const setting = this.view().settings.find(item => item.provider === provider);
     const setupAction = ['configure', 'send', 'resume'].includes(action);
     if (setupAction && !this.delivery.isSetupAvailable(provider, this.planDelivery())) return;
@@ -328,7 +327,8 @@ export class TrainingDeliveryDialogComponent {
   }
   async checkProvider(provider: PlannedWorkoutProviderId): Promise<void> {
     const schedule = this.schedule();
-    if (this.busy() || !this.sameAccount() || !this.canReview() || !schedule || this.data.scope === 'history') return;
+    if (this.busy() || !this.sameAccount() || !this.canReview() || !this.delivery.isVisible(provider)
+      || !schedule || this.data.scope === 'history') return;
     const version = ++this.requestVersion;
     const current = () => !this.destroyRef.destroyed && this.sameAccount() && this.requestVersion === version;
     this.phase.set('checking'); this.checkingProvider.set(provider); this.error.set(null); this.notice.set(null);
@@ -369,7 +369,8 @@ export class TrainingDeliveryDialogComponent {
   async review(): Promise<void> {
     this.clearTimeZoneReview();
     const draft = this.draft(); const scope = this.scopeRecord(); const schedule = this.schedule(); const uid = this.uid();
-    if (!draft || !schedule || !this.sameAccount() || this.busy() || !this.canReview() || this.data.scope === 'history') return;
+    if (!draft || !schedule || !this.sameAccount() || this.busy() || !this.canReview()
+      || !this.delivery.isVisible(draft.provider) || this.data.scope === 'history') return;
     // Enter in the time-zone form must not replace an uncertain save's receipt.
     if (this.confirmationAttempted() && this.preview()) return;
     if (draft.editingSettings && (!this.hasSettingsChanges() || this.settingsChangedElsewhere())) return;
@@ -393,7 +394,8 @@ export class TrainingDeliveryDialogComponent {
   }
   async confirm(): Promise<void> {
     const preview = this.preview(); const uid = this.uid();
-    if (!preview || !this.sameAccount() || !this.canConfirm() || this.busy()) return;
+    if (!preview || !this.sameAccount() || !this.canConfirm() || this.busy()
+      || !this.delivery.isVisible(preview.command.provider)) return;
     const version = ++this.requestVersion;
     const current = () => !this.destroyRef.destroyed && this.sameAccount() && this.uid() === uid && this.requestVersion === version;
     this.phase.set('saving'); this.error.set(null);

@@ -206,7 +206,7 @@
             <button mat-flat-button type="button" [disabled]="proposalActionInProgress()"
               (click)="applyPendingContentProposal()">
               @if (applyingContentProposal()) { <mat-spinner diameter="18"></mat-spinner> } @else {
-                {{ review.proposal.kind === 'delete_timeline_note' ? 'Delete note' : 'Apply change' }}
+                {{ review.proposal.kind === 'delete_timeline_note' ? 'Delete note' : review.proposal.kind === 'delete_manual_measurement' ? 'Delete measurement' : 'Apply change' }}
               }
             </button>
             <button mat-button type="button" [disabled]="proposalActionInProgress()"
@@ -222,7 +222,7 @@
           <div class="training-proposal-heading">
             <mat-icon aria-hidden="true">edit_calendar</mat-icon>
             <div>
-              <h2 id="training-proposal-title">Review Training changes</h2>
+              <h2 id="training-proposal-title">{{ pendingSavedWorkoutProposal() ? 'Review saved workout change' : 'Review Training changes' }}</h2>
               <p>{{ proposal.summary }}</p>
             </div>
           </div>
@@ -240,7 +240,13 @@
               </div>
             }
           </div>
-          <p class="training-proposal-disclosure">Nothing changes until you apply this proposal. Provider results are independent, so a delivery problem never removes an authored workout.</p>
+          <p class="training-proposal-disclosure">
+            @if (pendingSavedWorkoutProposal()) {
+              Nothing changes until you apply. A saved recipe has no sync setting; planned copies follow the plan's existing setting, while Standalone copies need their own Send action.
+            } @else {
+              Nothing changes until you apply this proposal. Provider results are independent, so a delivery problem never removes an authored workout.
+            }
+          </p>
           <div class="training-proposal-actions">
             <button mat-flat-button type="button" [disabled]="proposalActionInProgress()"
               (click)="applyPendingTrainingProposal()">

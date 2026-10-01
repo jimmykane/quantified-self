@@ -122,7 +122,8 @@ are included in summaries and can themselves contain user- or provider-assigned 
 **Examples & data access** also contains default-off **Training plans**, available to any Assistant user independently of
 the authenticated manual-planning workspace. It discloses names, dates, complete instructions, authored notes and existing service sync status,
 including potentially sensitive personal text. Changing any optional permission starts a fresh server-owned generation
-while preserving the other choices. **New chat** resets all optional choices. Missing `trainingPlansEnabled` means false.
+while preserving the other choices. **New chat** resets optional choices to their defaults (manual measurements on;
+Training, notes, tags and precise locations off). Missing `trainingPlansEnabled` means false.
 The reset expects the current conversation ID; requests, retries and replay fingerprints bind this boolean. Stale tabs,
 sign-out/account switches and old generations cannot grant access. Runtime rechecks consent before and after each read.
 
@@ -136,8 +137,11 @@ Two additional default-off toggles enable **Plan and workout changes** and **Pla
 the read toggle but remain independent of each other. The first grants `training-plans:write`; the second grants
 `training-delivery:write`. A write-enabled in-process session exposes the focused single-workout preview plus the bounded
 batch preview to Gemini. The focused preview can include an atomic initial provider send only when the delivery toggle is
-also enabled. The model can prepare one strict proposal after reading current records; it cannot call
-`apply_training_changes` or provider
+also enabled. The model can prepare one strict proposal after reading current records. For Workout Library changes it
+must also read the library revision and exact saved recipe or source workout, then use the additive library preview.
+That preview supports one create, save, duplicate, edit, archive/restore, confirmed permanent recipe delete, or
+explicit-date placement. Saved recipes have no date or provider consent. The model cannot call
+`apply_training_changes`, `apply_saved_workout_change` or provider
 transport. Quantified Self stores the safe preview with the conversation and shows an **Apply changes** / **Dismiss**
 surface. Applying uses a dedicated Auth + App Check callable that rechecks the same conversation generation and toggles,
 then invokes the common proposal service. Dismissal clears the server-owned proposal without changes. New chat, a toggle
@@ -161,7 +165,7 @@ access choices remain unchanged.
 **Examples & data access** includes independent, default-off compact-row choices for **Activity tag changes** and
 **Timeline notes**. Timeline notes discloses full private titles/details, including notes hidden from charts and
 potentially sensitive health or personal text. Changing any optional access replaces the active chat generation while
-preserving the other choices. **New chat** resets all optional access. Missing `timelineNotesEnabled`,
+preserving the other choices. **New chat** resets these choices off, independently of manual measurements. Missing `timelineNotesEnabled`,
 `activityTagChangesEnabled`, or `timelineNoteChangesEnabled` in older clients, stored chats, responses, or pending
 requests means disabled. No contract version or generic permission framework is added.
 
@@ -213,6 +217,30 @@ MCP responses, evidence, stored values, or the public contract.
 Deployment remains a separate approved release step. The hosted MCP contract, registered-app digest, consent scopes,
 and external plugin are unchanged by this first-party Assistant addition. Training planning permissions remain
 independent of these content permissions and use their own conversation-bound proposal flow described above.
+
+## Manual Health measurements
+
+**Examples & data access** includes independent **Manual Health measurements**, on for a fresh/New chat. Existing
+stored conversations and old clients/remembered requests with no `measurementChangesEnabled` flag stay off. A choice
+change replaces the server-owned generation and preserves other choices; requests, retries and responses bind the
+flag. No quota, location, Training, tags, notes or Health-history grant is expanded.
+
+The internal MCP scope is only `measurements:write` for exact manual-entry management. Gemini can discover all eight
+UI-supported types/units, query/find current entries and prepare one create, update or permanent deletion; public write
+tools are never model-selectable. Before edit/delete, runtime requires an exact current-turn `get_manual_measurement`
+read and matching revision. Required BP pairing/VO2 context/method must not be invented. History-only questions never
+authorize a mutation. Relative observation time is resolved once using server time and the turn timezone; retries keep
+the same instant and UUID. Imported measurements remain read-only.
+
+The pending content proposal includes server-validated canonical before/after review fields. The app prints values
+with Sports Lib owner preferences, preserves the observation's fixed offset without claiming an IANA zone, and labels
+permanent deletion of the whole entry. **Apply change** / **Delete measurement** uses the existing Assistant apply
+endpoint and Health domain service, never a new callable. Apply refuses missing review data. Shared transaction checks
+bind active generation, permission, exact proposal kind/ref/arguments/expiry and account deletion. Sign-out, a stale tab,
+changed access or revision cannot restore authority. Dismissal does not write; uncertain outcomes retain idempotency.
+
+External MCP uses native host approval separately. The additive hosted contract/scope needs its own approved server
+release, client rescan and explicit reauthorization; source implementation alone does not make it available there.
 
 ## Deterministic visual answers
 

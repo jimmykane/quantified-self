@@ -18,10 +18,10 @@ describe('compact day-sheet styles', () => {
     return values;
   });
   const document = new DOMParser().parseFromString(`<section>
+    <div class="calendar-day-details"></div>
     <div class="calendar-day-details-content">
       <div class="calendar-day-total"><span><span class="calendar-day-number">2</span> completed activities</span></div>
-      <a class="calendar-day-entry-item"><span class="calendar-day-entry-title">Long workout title</span></a>
-      <div class="calendar-day-planned-row"><button><span class="calendar-day-duplicate-icon"></span></button></div>
+      <a class="calendar-day-entry-item calendar-day-planned-item"><span class="calendar-day-entry-title">Long workout title</span></a>
       <p class="calendar-day-empty" role="status">Loading activities…</p>
     </div>
   </section>`, 'text/html');
@@ -38,6 +38,62 @@ describe('compact day-sheet styles', () => {
       }
     });
     expect(linkColors).toEqual(['var(--mat-sys-primary)']);
+  });
+
+  it('resets inherited overlay typography for all app-owned sheet content', () => {
+    const container = document.querySelector('.calendar-day-details')!;
+    expect(declarations(container, 'font')).toEqual(['var(--mat-sys-body-medium)']);
+    expect(declarations(container, 'letter-spacing')).toEqual(['0']);
+    expect(declarations(container, '--training-impact-compact-value-color')).toEqual(['var(--mat-sys-on-surface)']);
+  });
+
+  it('wraps compact impact text in the sheet without changing other preview layouts', () => {
+    const container = document.querySelector('.calendar-day-details')!;
+    expect(declarations(container, '--training-impact-compact-white-space')).toEqual(['normal']);
+    const impact = compile('src/app/components/training-impact/training-impact.component.scss');
+    const textRules: Rule[] = [];
+    impact.walkRules(rule => {
+      if (rule.selector.includes('.training-impact-compact > span')) textRules.push(rule);
+    });
+    expect(textRules).toHaveLength(1);
+    expect(textRules[0].selector).toContain('.training-impact-compact > strong');
+    expect(textRules[0].selector).toContain('.training-impact-compact-outcomes > span');
+    const wrapping: string[] = [];
+    textRules[0].walkDecls('white-space', declaration => { wrapping.push(declaration.value); });
+    expect(wrapping).toEqual(['var(--training-impact-compact-white-space, nowrap)']);
+    const context = compile('src/app/components/calendar/calendar-day-context/calendar-day-context.component.scss');
+    const previewOverrides: string[] = [];
+    context.walkDecls('--training-impact-compact-white-space', declaration => { previewOverrides.push(declaration.value); });
+    expect(previewOverrides).toEqual([]);
+  });
+
+  it('shares compact recovery typography without shrinking the full-day metrics', () => {
+    const context = compile('src/app/components/calendar/calendar-day-context/calendar-day-context.component.scss');
+    const compactRules: Rule[] = [];
+    context.walkRules(rule => {
+      if (/calendar-day-context--(compact|calm-month)/.test(rule.selector)
+        && /calendar-day-context-metric (span|small|strong)/.test(rule.selector)) compactRules.push(rule);
+    });
+    expect(compactRules).toHaveLength(2);
+    for (const rule of compactRules) {
+      expect(rule.selector).toContain(':host(.calendar-day-context--compact)');
+      expect(rule.selector).toContain(':host(.calendar-day-context--calm-month)');
+    }
+    const labels: string[] = [];
+    const values: string[] = [];
+    compactRules.forEach(rule => {
+      rule.walkDecls('font', declaration => { labels.push(declaration.value); });
+      rule.walkDecls('font-size', declaration => { values.push(declaration.value); });
+    });
+    expect(labels).toEqual(['var(--mat-sys-label-small)']);
+    expect(values).toEqual(['19px']);
+    const fullDayValues: string[] = [];
+    context.walkRules(rule => {
+      if (rule.selector === '.calendar-day-context-metric strong') {
+        rule.walkDecls('font-size', declaration => { fullDayValues.push(declaration.value); });
+      }
+    });
+    expect(fullDayValues).toEqual(['22px']);
   });
 
   it('does not reset the numeric count font through supporting-text descendants', () => {
@@ -60,13 +116,12 @@ describe('compact day-sheet styles', () => {
     expect(heightTokens).toEqual(['auto']);
   });
 
-  it('centers both duplicate states in one box and sizes the Material button through public tokens', () => {
-    const button = document.querySelector('.calendar-day-planned-row > button')!;
-    expect(declarations(button, '--mat-icon-button-state-layer-size')).toEqual(['48px']);
-    const iconBox = button.querySelector('.calendar-day-duplicate-icon')!;
-    for (const [property, expected] of [['display', 'flex'], ['align-items', 'center'],
-      ['justify-content', 'center'], ['width', '24px'], ['height', '24px']]) {
-      expect(declarations(iconBox, property)).toEqual([expected]);
+  it('keeps planned rows aligned without decorative rails or compensating indentation', () => {
+    expect(rules.some(rule => rule.selector.includes('calendar-day-planned-accent'))).toBe(false);
+    expect(rules.some(rule => /calendar-day-(planned-row|duplicate-icon)/.test(rule.selector))).toBe(false);
+    const row = document.querySelector('.calendar-day-planned-item')!;
+    for (const property of ['margin-inline-start', 'padding-inline-start', 'border-left', 'border-inline-start']) {
+      expect(declarations(row, property)).toEqual([]);
     }
   });
 

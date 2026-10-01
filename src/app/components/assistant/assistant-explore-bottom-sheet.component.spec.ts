@@ -15,7 +15,8 @@ import {
   ASSISTANT_YESTERDAY_TRAINING_IMPACT_PROMPT,
 } from '@shared/assistant.prompts';
 import { AssistantExploreBottomSheetComponent } from './assistant-explore-bottom-sheet.component';
-import { writeFileSync, readFileSync } from 'node:fs';
+import { writeFileSync, readFileSync, readdirSync } from 'node:fs';
+import { compile } from 'sass';
 
 describe('AssistantExploreBottomSheetComponent', () => {
   let fixture: ComponentFixture<AssistantExploreBottomSheetComponent>;
@@ -97,16 +98,20 @@ describe('AssistantExploreBottomSheetComponent', () => {
     component.setTrainingPlans(true); expect(bottomSheetRef.dismiss).toHaveBeenCalledWith({ kind: 'training_plans', enabled: true });
     // Optional rendered-component artifact for phone/desktop light/dark layout QA. No account/API data.
     if (process.env.QS_TRAINING_CONSENT_QA_HTML) {
-      const styles = readFileSync('dist/browser/styles.css', 'utf8');
+      const styleFile = readdirSync('dist/browser').find(name => /^styles(?:-[A-Z0-9]+)?\.css$/i.test(name));
+      if (!styleFile) throw new Error('Build the frontend before rendered consent QA.');
+      const styles = readFileSync(`dist/browser/${styleFile}`, 'utf8');
       const sheet = TestBed.inject(MatBottomSheet);
       sheet.open(AssistantExploreBottomSheetComponent, {
-        data: { locationAccess: 'coordinate_free', trainingPlansEnabled: true },
+        data: { locationAccess: 'coordinate_free', trainingPlansEnabled: true, measurementChangesEnabled: true },
       });
       await fixture.whenStable();
       // This component stylesheet is plain CSS. TestBed omits styleUrl processing; include it for visual QA.
       const componentStyles = readFileSync('src/app/components/assistant/assistant-explore-bottom-sheet.component.scss', 'utf8')
         .replace(':host', 'app-assistant-explore-bottom-sheet');
-      writeFileSync(process.env.QS_TRAINING_CONSENT_QA_HTML, `<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"><style>${styles}\n${componentStyles}</style>${document.head.innerHTML}</head><body>${document.querySelector('.cdk-overlay-container')!.outerHTML}</body></html>`);
+      const rowStyles = compile('src/app/components/shared/compact-row/compact-row.component.scss').css
+        .replace(/:host\(([^)]+)\)/g, 'app-compact-row$1').replaceAll(':host', 'app-compact-row');
+      writeFileSync(process.env.QS_TRAINING_CONSENT_QA_HTML, `<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"><style>${styles}\n${componentStyles}\n${rowStyles}</style>${document.head.innerHTML}</head><body>${document.querySelector('.cdk-overlay-container')!.outerHTML}<script>if(location.hash==='#dark'){document.body.classList.add('dark-theme');document.querySelector('.cdk-overlay-container').classList.add('dark-theme')}</script></body></html>`);
       sheet.dismiss();
     }
   });
@@ -135,7 +140,7 @@ describe('AssistantExploreBottomSheetComponent', () => {
     expect(component.data.timelineNotesEnabled ?? false).toBe(false);
     expect(fixture.nativeElement.textContent).toContain('full private note titles and details');
     expect(fixture.nativeElement.textContent).toContain('hidden from charts');
-    expect(fixture.nativeElement.textContent).toContain('New chat turns all optional access off');
+    expect(fixture.nativeElement.textContent).toContain('manual measurement changes start on');
     component.setTimelineNotes(false);
     expect(bottomSheetRef.dismiss).not.toHaveBeenCalled();
     component.setTimelineNotes(true);

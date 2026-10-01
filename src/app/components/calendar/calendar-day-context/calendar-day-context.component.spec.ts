@@ -70,6 +70,14 @@ describe('CalendarDayContextComponent', () => {
     fixture.componentRef.setInput('data', data('2026-09-10'));
     fixture.componentRef.setInput('showFullDayLink', true);
     fixture.detectChanges();
+    expect(fixture.nativeElement.classList.contains('calendar-day-context--compact')).toBe(false);
+    fixture.componentRef.setInput('compact', true);
+    fixture.detectChanges();
+    expect(fixture.nativeElement.classList.contains('calendar-day-context--compact')).toBe(true);
+    expect(fixture.nativeElement.querySelector('.calendar-day-context-header')).toBeNull();
+    fixture.componentRef.setInput('compact', false);
+    fixture.detectChanges();
+    expect(fixture.nativeElement.classList.contains('calendar-day-context--compact')).toBe(false);
     expect(fixture.nativeElement.querySelector('.calendar-day-context-header a')?.getAttribute('href'))
       .toBe('/calendar/day/2026-09-10');
     const prepareReturn = vi.spyOn(TestBed.inject(CalendarDayDetailsNavigationService), 'prepareReturn');

@@ -1,9 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ScheduledWorkoutV1 } from '../../../../../shared/training-plans';
 import type { DeliveryCheckpoint, DeliveryOperation } from '../contracts';
-import { WahooHttpFixture, wahooFixtureWorkout } from '../test-support/wahoo-http-fixture';
+import { projectStrengthWorkoutToV1 } from '../../../../../shared/strength-workout';
+import { WahooHttpFixture, wahooFixtureWorkout, wahooFixtureStrengthDetails } from '../test-support/wahoo-http-fixture';
 import { WahooTrainingTransport } from './transport';
 import { WahooTrainingHttpError } from './http';
+import { WAHOO_SPORT_FIXTURES } from '../test-support/wahoo-sport-fixtures';
 
 describe('Wahoo Plan + dated Workout lifecycle', () => {
   const now = Date.parse('2026-10-24T22:30:00Z'); // October 25 in saved zone; DST ends that day.
@@ -13,7 +15,7 @@ describe('Wahoo Plan + dated Workout lifecycle', () => {
   const recover = () => transport.recover(op, checkpoint, guard);
   const next = (patch: Partial<ScheduledWorkoutV1> = {}) => {
     op = { ...op, id: `${op.id}-next`, progress: null, generation: op.generation + 1, workout: { ...op.workout!, ...patch } };
-    op.digest = transport.assess(op.workout!, op.destinationKey, op.timeZone).digest;
+    op.digest = transport.assess(op.workout!, op.destinationKey, op.timeZone, op.strength).digest;
   };
   beforeEach(() => {
     guard.mockReset(); guard.mockResolvedValue(undefined); checkpoint = vi.fn(async () => {});
@@ -21,6 +23,94 @@ describe('Wahoo Plan + dated Workout lifecycle', () => {
     const workout = wahooFixtureWorkout();
     op = { id: 'attempt', deliveryId: 'delivery', generation: 1, kind: 'upsert', destinationKey: 'destination', connectionGeneration: 'generation',
       timeZone: 'Europe/Helsinki', workout, artifact: null, progress: null, contentDigest: 'content', digest: transport.assess(workout, 'destination', 'Europe/Helsinki').digest };
+  });
+  const timedStrength = () => {
+    op.strength = wahooFixtureStrengthDetails();
+    next({ title: 'Timed strength', structure: projectStrengthWorkoutToV1(op.strength) });
+  };
+  it.each(WAHOO_SPORT_FIXTURES)('confirms $sport family/location independently of Workout type, preserving IDs through edit/reschedule', async ({ sport, family, type, location }) => {
+    next({ structure: { ...op.workout!.structure, sport } });
+    const first = (await execute())!;
+    expect(server.plans.get(first.ids.plan)).toMatchObject({ workout_type_family_id: family, workout_type_location_id: location });
+    expect(server.workouts.get(first.ids.workout)?.workout_type_id).toBe(type);
+    next({ title: 'Edited walk', localDate: '2026-10-31', updatedAtMs: now });
+    expect((await execute())!.ids).toEqual(first.ids);
+    expect(server.calls.filter(call => call.method === 'POST')).toHaveLength(2);
+  });
+  it.each(WAHOO_SPORT_FIXTURES)('rejects $sport Plan readback with the wrong family before Workout creation', async ({ sport, family }) => {
+    next({ structure: { ...op.workout!.structure, sport } });
+    server.afterHandle = async request => { if (request.method === 'POST' && request.path === '/v1/plans') {
+      server.afterHandle = null; [...server.plans.values()][0].workout_type_family_id = family === 6 ? 1 : 6;
+    } };
+    await expect(execute()).rejects.toMatchObject({ kind: 'uncertain' });
+    expect(op.artifact?.ids.plan).toBeTruthy();
+    expect(server.workouts.size).toBe(0);
+  });
+  it.each(WAHOO_SPORT_FIXTURES)('rejects $sport Plan readback with the wrong location before Workout creation', async ({ sport, location }) => {
+    next({ structure: { ...op.workout!.structure, sport } });
+    server.afterHandle = async request => { if (request.method === 'POST' && request.path === '/v1/plans') {
+      server.afterHandle = null; [...server.plans.values()][0].workout_type_location_id = location === 0 ? 1 : 0;
+    } };
+    await expect(execute()).rejects.toMatchObject({ kind: 'uncertain' });
+    expect(server.workouts.size).toBe(0);
+  });
+  it.each(WAHOO_SPORT_FIXTURES.flatMap(row => ['/v1/plans', '/v1/workouts'].map(path => ({ ...row, path }))))('recovers $sport after lost $path acceptance without a replacement POST', async ({ sport, family, location, path }) => {
+    next({ structure: { ...op.workout!.structure, sport } });
+    server.afterHandle = async request => { if (request.method === 'POST' && request.path === path) {
+      server.afterHandle = null; throw new WahooTrainingHttpError('uncertain', false);
+    } };
+    await expect(execute()).rejects.toThrow();
+    if ((await recover()).kind === 'resume') await execute();
+    expect(server.plans.size).toBe(1); expect(server.workouts.size).toBe(1);
+    expect(server.plans.values().next().value).toMatchObject({ workout_type_family_id: family, workout_type_location_id: location });
+    expect(server.calls.filter(call => call.method === 'POST')).toHaveLength(2);
+  });
+  it('delivers Gym strength, updates load instructions and reschedules without changing identities, then stops both resources', async () => {
+    timedStrength();
+    const first = (await execute())!;
+    expect(server.plans.get(first.ids.plan)).toMatchObject({ workout_type_family_id: 6, workout_type_location_id: 0 });
+    expect(server.workouts.get(first.ids.workout)).toMatchObject({ workout_type_id: 42, minutes: 5 });
+    op.strength!.exercises[0].sets[0].externalLoadKg = 2.5;
+    next({ localDate: '2026-10-31', updatedAtMs: now });
+    expect((await execute())!.ids).toEqual(first.ids);
+    expect(JSON.stringify(server.plans.get(first.ids.plan)?.fixtureRecipe)).toContain('load guidance: 2.5 kg');
+    expect(server.calls.filter(call => call.method === 'POST')).toHaveLength(2);
+    op = { ...op, kind: 'remove', workout: null, strength: null, progress: null };
+    expect(await execute()).toBeNull();
+    expect(server.plans.size).toBe(0); expect(server.workouts.size).toBe(0);
+  });
+  it.each(['/v1/plans', '/v1/workouts'])('recovers timed strength after a lost %s POST response without duplicates', async path => {
+    timedStrength();
+    server.afterHandle = async request => { if (request.method === 'POST' && request.path === path) {
+      server.afterHandle = null; throw new WahooTrainingHttpError('uncertain', false);
+    } };
+    await expect(execute()).rejects.toThrow();
+    if ((await recover()).kind === 'resume') await execute();
+    expect(server.plans.size).toBe(1); expect(server.workouts.size).toBe(1);
+    expect(server.calls.filter(call => call.method === 'POST')).toHaveLength(2);
+    expect([...server.workouts.values()][0].workout_type_id).toBe(42);
+  });
+  it('rejects a load-only stale digest, missing companion and repetition sets before execute or recovery I/O', async () => {
+    timedStrength();
+    op.strength!.exercises[0].sets[0].externalLoadKg = 2.5;
+    await expect(execute()).rejects.toMatchObject({ kind: 'terminal' });
+    await expect(recover()).rejects.toMatchObject({ kind: 'terminal' });
+    next(); op.strength = null;
+    await expect(execute()).rejects.toMatchObject({ kind: 'terminal' });
+    await expect(recover()).rejects.toMatchObject({ kind: 'terminal' });
+    timedStrength(); op.strength!.exercises[0].sets[0].ending = { kind: 'repetitions', repetitions: 5 };
+    next({ structure: projectStrengthWorkoutToV1(op.strength) });
+    await expect(execute()).rejects.toMatchObject({ kind: 'terminal' });
+    expect(server.calls).toHaveLength(0);
+  });
+  it('does not accept a Gym Plan rewritten as running, even with the correct retained identity', async () => {
+    timedStrength();
+    server.afterHandle = async request => { if (request.method === 'POST' && request.path === '/v1/plans') {
+      server.afterHandle = null; [...server.plans.values()][0].workout_type_family_id = 1;
+    } };
+    await expect(execute()).rejects.toMatchObject({ kind: 'uncertain' });
+    expect(server.workouts.size).toBe(0);
+    expect(op.artifact?.ids.plan).toBeTruthy();
   });
   it('creates two resources, checkpoints partial acceptance, verifies the association, edits and reschedules in place', async () => {
     const first = (await execute())!;

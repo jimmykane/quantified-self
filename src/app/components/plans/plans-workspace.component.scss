@@ -2,6 +2,46 @@
   display: block;
 }
 
+.workout-library,
+.library-placement {
+  display: grid;
+  gap: 16px;
+  min-width: 0;
+}
+
+.workout-library { padding-block: 16px; }
+.library-placement {
+  border-top: 1px solid var(--mat-sys-outline-variant);
+  padding-block: 20px;
+}
+.library-placement h3,
+.library-placement p { margin: 0; }
+.library-placement-error { color: var(--mat-sys-error); }
+.library-placement-fields {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+.library-weekdays { display: flex; flex-wrap: wrap; gap: 4px 12px; }
+.library-placement .form-actions { display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; }
+
+@media (max-width: 680px) {
+  .library-placement-fields { grid-template-columns: minmax(0, 1fr); gap: 0; }
+  .workout-library .workout-row-actions { flex-wrap: wrap; }
+  .library-placement .form-actions { justify-content: stretch; }
+  .library-placement .form-actions > button { flex: 1 1 auto; }
+}
+
+@media (max-width: 360px) {
+  .workout-library .workout-row-actions {
+    display: grid;
+    grid-template-columns: auto auto;
+    justify-content: start;
+  }
+
+  .workout-library .workout-row-actions > button[mat-flat-button] { grid-column: 1 / -1; }
+}
+
 .deleted-workouts-panel [hidden] { display: none; }
 
 .plan-color-label {
@@ -463,6 +503,9 @@ mat-card-actions button,
 }
 
 @media (max-width: 600px) {
+  .workout-row-actions,
+  .editor-save-actions { flex-wrap: wrap; }
+  .editor-library-copy-action { flex: 1 1 100%; }
   .strength-set-fields { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
   .strength-set-fields > mat-form-field { grid-column: 1 / -1; }
   .strength-set-fields > button { justify-self: end; }

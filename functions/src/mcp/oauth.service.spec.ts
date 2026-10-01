@@ -1666,7 +1666,7 @@ describe('MCP OAuth service', () => {
     const service = createMcpOAuthService({ store, fetchClientMetadata: async () => metadata(),
       now: () => 1_000, randomToken: () => `legacy-content-write-${++sequence}` });
     const start = await service.startAuthorization({ ...authorizationParams('c'.repeat(43)),
-      scope: 'metrics:read timeline-notes:read timeline-notes:write activity-details:read events:write' },
+      scope: 'metrics:read timeline-notes:read timeline-notes:write activity-details:read events:write measurements:write' },
     'https://quantified-self.io');
     const approval = await service.decideAuthorization({
       uid: 'user-1', requestId: start.requestId, approved: true,
@@ -2504,7 +2504,7 @@ describe('MCP OAuth service', () => {
     expect(store.refreshTokens.size).toBe(0);
   });
 
-  it.each([MCP_OAUTH_SCOPES.HealthRead, MCP_OAUTH_SCOPES.TimelineNotesRead, MCP_OAUTH_SCOPES.TrainingPlansRead])('does not add %s to existing grants through token refresh', async scope => {
+  it.each([MCP_OAUTH_SCOPES.HealthRead, MCP_OAUTH_SCOPES.TimelineNotesRead, MCP_OAUTH_SCOPES.TrainingPlansRead, MCP_OAUTH_SCOPES.MeasurementsWrite])('does not add %s to existing grants through token refresh', async scope => {
     const store = createMemoryStore();
     const clientId = metadata().client_id;
     const service = createMcpOAuthService({

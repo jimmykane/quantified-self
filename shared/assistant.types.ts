@@ -1,4 +1,5 @@
 import type { TimelineNoteCategory, TimelineNoteColor } from './timeline-notes';
+import type { ManualHealthMetricId, ManualVo2Context, ManualVo2Method, ManualHealthMeasurementFields } from './manual-health';
 
 export const ASSISTANT_CONVERSATION_VERSION = 1 as const;
 export const ASSISTANT_MAX_MESSAGE_CHARS = 1_000;
@@ -162,6 +163,7 @@ export interface AssistantChatRequest {
   timelineNotesEnabled?: boolean;
   activityTagChangesEnabled?: boolean;
   timelineNoteChangesEnabled?: boolean;
+  measurementChangesEnabled?: boolean;
   trainingPlansEnabled?: boolean;
   trainingPlanChangesEnabled?: boolean;
   trainingDeliveryEnabled?: boolean;
@@ -173,6 +175,9 @@ export interface AssistantChatRequest {
 }
 
 export type AssistantContentProposalKind =
+  | 'create_manual_measurement'
+  | 'update_manual_measurement'
+  | 'delete_manual_measurement'
   | 'update_event_tags'
   | 'create_timeline_note'
   | 'update_timeline_note'
@@ -190,6 +195,9 @@ export interface AssistantTimelineNoteFields {
 }
 
 export type AssistantContentProposalArguments =
+  | ({ mutationId: string; metricId: ManualHealthMetricId; observedAt: string } & AssistantManualMeasurementInput)
+  | ({ measurementRef: string; expectedRevision: number; observedAt?: string } & AssistantManualMeasurementInput)
+  | { measurementRef: string; expectedRevision: number }
   | {
       activityRef: string;
       expectedTags: string[];
@@ -199,7 +207,17 @@ export type AssistantContentProposalArguments =
   | ({ noteRef: string; expectedRevision: number } & AssistantTimelineNoteFields)
   | { noteRef: string; expectedRevision: number };
 
+export interface AssistantManualMeasurementInput {
+  value: number;
+  unit: 'kg' | 'lb' | 'percent' | 'mmHg' | 'ml_per_kg_per_min';
+  diastolicValue?: number;
+  pulseValue?: number | null;
+  vo2Context?: ManualVo2Context;
+  vo2Method?: ManualVo2Method;
+}
+
 export interface AssistantContentProposalPreview {
+  measurementReview?: { before: ManualHealthMeasurementFields | null; after: ManualHealthMeasurementFields | null };
   proposalRef: string;
   kind: AssistantContentProposalKind;
   expiresAtMs: number;
@@ -233,6 +251,7 @@ export interface AssistantChatResponse {
   timelineNotesEnabled?: boolean;
   activityTagChangesEnabled?: boolean;
   timelineNoteChangesEnabled?: boolean;
+  measurementChangesEnabled?: boolean;
   trainingPlansEnabled?: boolean;
   trainingPlanChangesEnabled?: boolean;
   trainingDeliveryEnabled?: boolean;
@@ -249,6 +268,7 @@ export interface GetAssistantConversationResponse {
   timelineNotesEnabled?: boolean;
   activityTagChangesEnabled?: boolean;
   timelineNoteChangesEnabled?: boolean;
+  measurementChangesEnabled?: boolean;
   trainingPlansEnabled?: boolean;
   trainingPlanChangesEnabled?: boolean;
   trainingDeliveryEnabled?: boolean;
@@ -265,6 +285,7 @@ export interface ResetAssistantConversationRequest {
   timelineNotesEnabled?: boolean;
   activityTagChangesEnabled?: boolean;
   timelineNoteChangesEnabled?: boolean;
+  measurementChangesEnabled?: boolean;
   trainingPlansEnabled?: boolean;
   trainingPlanChangesEnabled?: boolean;
   trainingDeliveryEnabled?: boolean;
@@ -275,6 +296,7 @@ export interface ResetAssistantConversationResponse {
   timelineNotesEnabled?: boolean;
   activityTagChangesEnabled?: boolean;
   timelineNoteChangesEnabled?: boolean;
+  measurementChangesEnabled?: boolean;
   trainingPlansEnabled?: boolean;
   trainingPlanChangesEnabled?: boolean;
   trainingDeliveryEnabled?: boolean;

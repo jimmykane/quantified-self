@@ -43,6 +43,30 @@ import {
 import { createMcpTransportHandler } from './transport';
 
 describe('MCP HTTP scope enforcement', () => {
+  it.each([
+    [MCP_OAUTH_SCOPES.MeasurementsRead, MCP_OAUTH_SCOPES.HealthRead],
+    [MCP_OAUTH_SCOPES.MeasurementsWrite],
+  ])('registers manual-entry tools only under their independent grant (%j)', async (...scopes) => {
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+    const server = createMcpServer({ uid: 'user-1', clientId: 'https://client.example/mcp.json',
+      connectionId: 'connection-1', scopes }, 'https://quantified-self.io');
+    const client = new Client({ name: 'manual-scope-client', version: '1.0.0' });
+    try {
+      await server.connect(serverTransport);
+      await client.connect(clientTransport);
+      const manualTools = (await client.listTools()).tools.filter(tool => tool.name.includes('manual_measurement'));
+      expect(manualTools).toHaveLength(scopes.includes(MCP_OAUTH_SCOPES.MeasurementsWrite) ? 6 : 0);
+      for (const tool of manualTools) expect(tool.annotations?.readOnlyHint).toBe(
+        !['create_manual_measurement', 'update_manual_measurement', 'delete_manual_measurement'].includes(tool.name));
+    } finally {
+      await client.close();
+      await server.close();
+    }
+  });
+  it.each(['list_manual_measurement_types', 'query_manual_measurements', 'get_manual_measurement',
+    'create_manual_measurement', 'update_manual_measurement', 'delete_manual_measurement'])('requires independent manual management scope for %s', name => {
+    expect(requiredScopesForRequest({ method: 'tools/call', params: { name } })).toEqual([MCP_OAUTH_SCOPES.MeasurementsWrite]);
+  });
   it('prepares only caller-owned selected Training kinds with non-destructive idempotent metadata', async () => {
     const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
     const calls: Array<{ uid: string; kinds: string[] }> = [];
@@ -878,19 +902,23 @@ describe('MCP HTTP scope enforcement', () => {
       MCP_OAUTH_SCOPES.TrainingPlansWrite,
       MCP_OAUTH_SCOPES.TrainingDeliveryWrite,
     ])).resolves.toEqual([
+      'apply_saved_workout_change',
       'apply_training_changes',
       'assess_planned_workout_compatibility',
       'get_planned_workout',
       'get_planned_workout_completion',
       'get_planned_workout_completions',
       'get_planned_workout_v2',
+      'get_saved_workout',
       'get_strength_workout_details',
       'get_training_plan',
       'get_training_sync_status',
       'list_activity_types',
+      'list_saved_workouts',
       'list_training_plans',
       'preview_create_planned_workout',
       'preview_planned_workout_v2_change',
+      'preview_saved_workout_change',
       'preview_strength_workout_change',
       'preview_training_changes',
       'query_planned_workouts',

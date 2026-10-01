@@ -32,6 +32,7 @@ import { MCP_OAUTH_SCOPES } from './oauth.service';
 import { createMcpServer } from './server';
 import { createMcpTransportHandler } from './transport';
 import { MCP_CONTENT_WRITE_TOOLS } from './content-write.schemas';
+import { MCP_MANUAL_MEASUREMENT_TOOLS, type McpManualMeasurementTool } from './manual-measurements.schemas';
 import {
   createMcpOutputSchemaRegistry,
   PUBLIC_MCP_TOOL_NAMES,
@@ -443,6 +444,13 @@ const derivedPayloadFixtures = {
 
 
 const trainingReadFixtures = {
+ list_saved_workouts: { libraryRevision: 1, scanComplete: true, recordsScanned: 1, nextCursor: null,
+   workouts: [{ savedWorkoutRef: 'opaque-saved-workout-reference', title: 'Easy run', status: 'active',
+     revision: 1, createdAtMs: 1, updatedAtMs: 1 }] },
+ get_saved_workout: { libraryRevision: 1, savedWorkout: { savedWorkoutRef: 'opaque-saved-workout-reference',
+   title: 'Easy run', status: 'active', revision: 1, createdAtMs: 1, updatedAtMs: 1,
+   structure: { version: 1, sport: ActivityTypes.Running,
+     nodes: [{ kind: 'step', id: 'step', purpose: 'work', ending: { kind: 'time', seconds: 1800 }, targets: [] }] } } },
  list_training_plans: { scheduleRevision: 1, scanComplete: true, recordsScanned: 1, limitsReached: [], nextCursor: null, plans: [{ planRef: 'opaque-plan-reference', name: 'Autumn', lifecycle: 'active', startDate: '2026-07-01', endDate: '2026-07-02', revision: 1, currentWorkoutCount: 1, color: null, createdAtMs: 1, updatedAtMs: 1 }] },
  get_training_plan: { scheduleRevision: 1, plan: { planRef: 'opaque-plan-reference', name: 'Autumn', lifecycle: 'active', startDate: '2026-07-01', endDate: '2026-07-02', revision: 1, currentWorkoutCount: 1, color: null, createdAtMs: 1, updatedAtMs: 1 } },
  query_planned_workouts: { scheduleRevision: 1, scanComplete: true, recordsScanned: 1, limitsReached: [], nextCursor: null, startDate: '2026-07-01', endDate: '2026-07-02', scope: 'calendar', workouts: [{ workoutRef: 'opaque-workout-reference', planRef: null, title: 'Easy run', localDate: '2026-07-01', lifecycle: 'planned', revision: 1, createdAtMs: 1, updatedAtMs: 1 }] },
@@ -478,6 +486,9 @@ const trainingPreviewFixture = { proposalRef: 'opaque-proposal-reference', expir
 const trainingApplyFixture = { proposalRef: 'opaque-proposal-reference', status: 'applied' as const,
   scheduleRevision: 2, changes: [{ index: 0, kind: 'rename-plan', status: 'applied' as const,
     message: 'Renamed the plan.' }], providers: [], createdReferences: [] };
+const savedWorkoutApplyFixture = { proposalRef: 'opaque-proposal-reference', status: 'applied' as const,
+  kind: 'create' as const, libraryRevision: 2, scheduleRevision: 1,
+  savedWorkoutRef: 'opaque-saved-workout-reference', workoutRefs: [] };
 const trainingImpactFixture = {
   schemaVersion: 1 as const,
   mode: 'session' as const,
@@ -532,7 +543,20 @@ function createFixtureDataService(
 ): InjectedDataService {
   const activityLocation = options.activityLocation !== false;
   const routeLocation = options.routeLocation !== false;
-  const service = {
+const service = {
+    manualMeasurement: vi.fn(async (tool: McpManualMeasurementTool) => {
+      const measurement = { measurementRef: 'opaque-measurement-reference', revision: 1, metricId: 'body_weight',
+        canonicalValue: 80, canonicalUnit: 'kg', displayValue: '80', displayUnit: 'kg', observedAt: '2026-07-01T08:00:00Z',
+        timezoneOffsetSeconds: 10800, diastolic: null, pulse: null, vo2Context: null, vo2Method: null };
+      if (tool === 'list_manual_measurement_types') return { serverTime: '2026-07-01T08:00:00Z', types: [{
+        metricId: 'body_weight', label: 'Body weight', canonicalUnit: 'kg', inputUnits: ['kg', 'lb'],
+        defaultInputUnit: 'kg', requiresDiastolic: false, vo2Contexts: [], vo2Methods: [],
+      }] };
+      if (tool === 'query_manual_measurements') return { measurements: [measurement], nextCursor: null,
+        scanComplete: true, scannedCount: 1, skippedCount: 0 };
+      if (tool === 'delete_manual_measurement') return { deleted: true };
+      return { measurement };
+    }),
     getHrvPersonalRange: vi.fn().mockResolvedValue({ startTimeMs: 0, endTimeMs: DAY_MS,
       baselineWindowDays: 60, baselineMinimumObservationDays: 14, currentWindowDays: 7, currentMinimumObservationDays: 3,
       recordsRead: 1, excludedValues: 0, series: [{ source: 'sleep', provider: 'SuuntoApp', accountNumber: 1,
@@ -547,7 +571,9 @@ function createFixtureDataService(
     previewTrainingChanges: vi.fn().mockResolvedValue(trainingPreviewFixture),
     previewStrengthWorkoutChange: vi.fn().mockResolvedValue(trainingPreviewFixture),
     previewPlannedWorkoutV2Change: vi.fn().mockResolvedValue(trainingPreviewFixture),
+    previewSavedWorkoutChange: vi.fn().mockResolvedValue(trainingPreviewFixture),
     applyTrainingChanges: vi.fn().mockResolvedValue(trainingApplyFixture),
+    applySavedWorkoutChange: vi.fn().mockResolvedValue(savedWorkoutApplyFixture),
     getActivityDescription: vi.fn().mockResolvedValue({ activityRef: 'opaque-activity-ref', description: 'Easy run. Felt tired.\nKeep this as reported context.' }),
     queryTimelineNotes: vi.fn().mockResolvedValue({
       startDate: '2026-07-01', endDate: '2026-07-02',
@@ -1335,6 +1361,8 @@ const successfulToolArguments: Record<
   PublicMcpToolName,
   Record<string, unknown>
 > = {
+  list_saved_workouts: {},
+  get_saved_workout: { savedWorkoutRef: 'opaque-saved-workout-reference' },
   list_training_plans: {},
   get_training_plan: { planRef: 'opaque-plan-reference' },
   query_planned_workouts: { startDate: '2026-07-01', endDate: '2026-07-02' },
@@ -1368,7 +1396,10 @@ const successfulToolArguments: Record<
     structure: { version: 1, sport: 'Swimming', poolLength: { meters: 25, presentation: 'meters' },
       nodes: [{ kind: 'step', id: 'swim', purpose: 'work', ending: { kind: 'distance', meters: 1000 }, targets: [] }] },
   } },
+  preview_saved_workout_change: { expectedScheduleRevision: 1, expectedLibraryRevision: 1,
+    change: { kind: 'copy', savedWorkoutRef: 'opaque-saved-workout-reference', expectedRevision: 1 } },
   apply_training_changes: { proposalRef: 'opaque-proposal-reference', permissionMode: 'schedule' },
+  apply_saved_workout_change: { proposalRef: 'opaque-proposal-reference', permissionMode: 'schedule' },
   get_activity_description: { activityRef: 'opaque-activity-ref' },
   query_timeline_notes: { startDate: '2026-07-01', endDate: '2026-07-02' },
   update_event_tags: { activityRef: ACTIVITY_REF, expectedTags: ['Race'], tags: ['Race', 'Reviewed'] },
@@ -1376,6 +1407,13 @@ const successfulToolArguments: Record<
   update_event_title: { activityRef: ACTIVITY_REF, expectedTitle: 'Morning run', title: 'Evening run' },
   update_event_description: { activityRef: ACTIVITY_REF, expectedDescription: 'Easy run.', description: 'Felt good.' },
   query_editable_timeline_notes: { startDate: '2026-07-01', endDate: '2026-07-02' },
+  list_manual_measurement_types: {},
+  query_manual_measurements: {},
+  get_manual_measurement: { measurementRef: 'opaque-measurement-reference' },
+  create_manual_measurement: { mutationId: '123e4567-e89b-42d3-a456-426614174000', metricId: 'body_weight',
+    value: 80, unit: 'kg', observedAt: '2026-07-01T08:00:00+03:00' },
+  update_manual_measurement: { measurementRef: 'opaque-measurement-reference', expectedRevision: 1, value: 81, unit: 'kg' },
+  delete_manual_measurement: { measurementRef: 'opaque-measurement-reference', expectedRevision: 1 },
   create_timeline_note: { mutationId: '123e4567-e89b-42d3-a456-426614174000', category: 'travel',
     title: 'Trip', startDate: '2026-07-01', endDate: '2026-07-02', timeZone: 'Europe/Helsinki',
     showOnCharts: true, color: 'blue' },
@@ -1980,20 +2018,24 @@ describe.each<FixtureTransport>(['in-memory', 'legacy-http', 'modern-http'])('MC
     // Keep the frozen surface's budget; each additive family has its own explicit bound.
     const planTools = tools.filter(tool => (TRAINING_READ_TOOLS as readonly string[]).includes(tool.name));
     const planReadExtensions = planTools.filter(tool => (TRAINING_READ_EXTENSION_TOOLS as readonly string[]).includes(tool.name)
-      && tool.name !== 'get_planned_workout_v2');
+      && tool.name !== 'get_planned_workout_v2' && !['list_saved_workouts', 'get_saved_workout'].includes(tool.name));
     const planReadV2 = planTools.filter(tool => tool.name === 'get_planned_workout_v2');
+    const planLibraryReads = planTools.filter(tool => ['list_saved_workouts', 'get_saved_workout'].includes(tool.name));
     const planReadCore = planTools.filter(tool => !(TRAINING_READ_EXTENSION_TOOLS as readonly string[]).includes(tool.name));
     expect(Buffer.byteLength(JSON.stringify(planReadCore), 'utf8')).toBeLessThan(32 * 1024);
     expect(Buffer.byteLength(JSON.stringify(planReadExtensions), 'utf8')).toBeLessThan(12 * 1024);
     expect(Buffer.byteLength(JSON.stringify(planReadV2), 'utf8')).toBeLessThan(20 * 1024);
+    expect(Buffer.byteLength(JSON.stringify(planLibraryReads), 'utf8')).toBeLessThan(20 * 1024);
     const planWriteTools = tools.filter(tool => (TRAINING_WRITE_TOOLS as readonly string[]).includes(tool.name));
     const planWriteExtensions = planWriteTools.filter(tool => (TRAINING_WRITE_EXTENSION_TOOLS as readonly string[]).includes(tool.name)
-      && tool.name !== 'preview_planned_workout_v2_change');
+      && tool.name !== 'preview_planned_workout_v2_change' && tool.name !== 'preview_saved_workout_change');
     const planWriteV2 = planWriteTools.filter(tool => tool.name === 'preview_planned_workout_v2_change');
+    const planWriteLibrary = planWriteTools.filter(tool => tool.name === 'preview_saved_workout_change');
     const planWriteCore = planWriteTools.filter(tool => !(TRAINING_WRITE_EXTENSION_TOOLS as readonly string[]).includes(tool.name));
     expect(Buffer.byteLength(JSON.stringify(planWriteCore), 'utf8')).toBeLessThan(48 * 1024);
     expect(Buffer.byteLength(JSON.stringify(planWriteExtensions), 'utf8')).toBeLessThan(12 * 1024);
     expect(Buffer.byteLength(JSON.stringify(planWriteV2), 'utf8')).toBeLessThan(20 * 1024);
+    expect(Buffer.byteLength(JSON.stringify(planWriteLibrary), 'utf8')).toBeLessThan(24 * 1024);
     const applyTrainingChangesTool = tools.find(tool => tool.name === 'apply_training_changes');
     expect(applyTrainingChangesTool?.title).toBe('Apply previewed Training changes');
     expect(applyTrainingChangesTool?.annotations).toEqual({
@@ -2009,10 +2051,12 @@ describe.each<FixtureTransport>(['in-memory', 'legacy-http', 'modern-http'])('MC
     expect(Buffer.byteLength(JSON.stringify(sampleTools), 'utf8')).toBeLessThan(12 * 1024);
     expect(Buffer.byteLength(JSON.stringify(trainingImpactTools), 'utf8')).toBeLessThan(16 * 1024);
     expect(Buffer.byteLength(JSON.stringify(healthTools), 'utf8')).toBeLessThan(24 * 1024);
+    const manualTools = tools.filter(tool => (MCP_MANUAL_MEASUREMENT_TOOLS as readonly string[]).includes(tool.name));
+    expect(Buffer.byteLength(JSON.stringify(manualTools), 'utf8')).toBeLessThan(24 * 1024);
     expect(Buffer.byteLength(JSON.stringify(tools.filter(tool => !planTools.includes(tool) && !planWriteTools.includes(tool)
       && !healthTools.includes(tool) && !noteTools.includes(tool) && !sampleTools.includes(tool)
       && !contentWriteTools.includes(tool) && !readinessTools.includes(tool)
-      && !trainingImpactTools.includes(tool))), 'utf8'))
+      && !trainingImpactTools.includes(tool) && !manualTools.includes(tool))), 'utf8'))
       .toBeLessThan(256 * 1024);
     collectObjectSchemas(tools.map(tool => tool.outputSchema))
       .forEach(schema => expect(schema.additionalProperties).toBe(false));
@@ -2384,6 +2428,42 @@ describe.each<FixtureTransport>(['in-memory', 'legacy-http', 'modern-http'])('MC
         expect(result.isError).toBe(true); expect(result).not.toHaveProperty('structuredContent');
         expect(JSON.stringify(result)).not.toContain('PRIVATE-TRAINING-CANARY');
       }
+    }
+  });
+
+  it('keeps saved-workout writes behind both grants and rejects private proposal fields on every transport', async () => {
+    const service = createFixtureDataService();
+    const readOnly = await connectFixtureServer(service, [MCP_OAUTH_SCOPES.TrainingPlansRead]);
+    connections.push(readOnly);
+    const readNames = (await readOnly.client.listTools()).tools.map(tool => tool.name);
+    expect(readNames).toContain('get_saved_workout');
+    expect(readNames).not.toContain('preview_saved_workout_change');
+    expect(readNames).not.toContain('apply_saved_workout_change');
+    const connection = await connectFixtureServer(service,
+      [MCP_OAUTH_SCOPES.TrainingPlansRead, MCP_OAUTH_SCOPES.TrainingPlansWrite]);
+    connections.push(connection);
+    const tools = (await connection.client.listTools()).tools;
+    expect(tools.find(tool => tool.name === 'apply_saved_workout_change')?.annotations)
+      .toMatchObject({ readOnlyHint: false, destructiveHint: true, idempotentHint: true });
+    const args = successfulToolArguments.preview_saved_workout_change;
+    const injected = await connection.client.callTool({ name: 'preview_saved_workout_change',
+      arguments: { ...args, uid: 'attacker' } });
+    expect(injected.isError).toBe(true);
+    expect(service.previewSavedWorkoutChange).not.toHaveBeenCalled();
+    for (const field of ['uid', 'remoteWorkoutId', 'mutationId', 'receipt']) {
+      service.previewSavedWorkoutChange = vi.fn().mockResolvedValue({ ...trainingPreviewFixture,
+        [field]: 'PRIVATE-LIBRARY-CANARY' });
+      const preview = await connection.client.callTool({ name: 'preview_saved_workout_change', arguments: args });
+      expect(preview.isError, field).toBe(true);
+      expect(preview).not.toHaveProperty('structuredContent');
+      expect(JSON.stringify(preview)).not.toContain('PRIVATE-LIBRARY-CANARY');
+      service.applySavedWorkoutChange = vi.fn().mockResolvedValue({ ...savedWorkoutApplyFixture,
+        [field]: 'PRIVATE-LIBRARY-CANARY' });
+      const applied = await connection.client.callTool({ name: 'apply_saved_workout_change',
+        arguments: successfulToolArguments.apply_saved_workout_change });
+      expect(applied.isError, field).toBe(true);
+      expect(applied).not.toHaveProperty('structuredContent');
+      expect(JSON.stringify(applied)).not.toContain('PRIVATE-LIBRARY-CANARY');
     }
   });
 

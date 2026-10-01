@@ -336,6 +336,38 @@ export function applyTrainingScheduleMutation(
             changeWorkout(operation.workoutId);
             break;
         }
+        case 'bulk-create-workouts': {
+            if (currentWorkoutCount(after.workouts) + operation.placements.length > TRAINING_PLAN_MAX_CURRENT_WORKOUTS) {
+                throw new TrainingScheduleMutationError('limit-exceeded',
+                    `An account may contain at most ${TRAINING_PLAN_MAX_CURRENT_WORKOUTS} current workouts.`);
+            }
+            const plan = operation.planId ? expectPlan(operation.planId) : null;
+            for (const placement of operation.placements) {
+                if (after.workouts.has(placement.workoutId)) {
+                    throw new TrainingScheduleMutationError('already-exists', `Scheduled workout ${placement.workoutId} already exists.`);
+                }
+                if (plan) enforceDestinationRange(plan, placement.localDate, operation.confirmPlanRangeExtension);
+                const strength = validateStrengthInput(placement.workoutId, 1, operation.structure, operation.strength);
+                after.workouts.set(placement.workoutId, {
+                    schemaVersion: TRAINING_PLAN_SCHEMA_VERSION,
+                    id: placement.workoutId,
+                    planId: operation.planId,
+                    localDate: placement.localDate,
+                    lifecycle: 'planned',
+                    title: operation.title,
+                    structure: strength ? projectStrengthWorkoutToV1(strength) : cloneValue(operation.structure),
+                    revision: 1,
+                    createdAtMs: nowMs,
+                    updatedAtMs: nowMs,
+                    templateOrigin: cloneValue(operation.templateOrigin),
+                });
+                if (strength) after.strengthDetails!.set(placement.workoutId, strength);
+                changeWorkout(placement.workoutId);
+            }
+            if (plan) affectedPlanIds.add(plan.id);
+            bulkOperation = true;
+            break;
+        }
         case 'update-workout': {
             const workout = expectWorkout(operation.workoutId);
             const previousStrength = after.strengthDetails!.get(workout.id);

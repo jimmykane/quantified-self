@@ -8,7 +8,7 @@ import { TrainingDeliveryTransportError, type TrainingDeliveryTransport, type De
 import type { InspectionPolicy, RemoteInspection } from '../verification-contracts';
 import { type SuuntoGuideClient, type SuuntoGuideRequest, guideId, object, SuuntoGuideHttpError } from './http';
 import { packageGuide, readGuideArchive } from './archive';
-import { assessSuuntoGuide, guideExternalId, guideMapping, SUUNTO_MAPPING_VERSION, validateGuideOwner } from './mapping';
+import { assessSuuntoGuide, guideExternalId, guideMapping, guideMappingForRecovery, guidePayloadForRecovery, SUUNTO_MAPPING_VERSION, validateGuideOwner } from './mapping';
 
 export const SUUNTO_INSPECTION_POLICY: InspectionPolicy = {
   version: 'suunto-owned-guide-v2', mode: 'unavailable', required: ['guide'], confirmationDelayMs: 15 * 60_000,
@@ -43,6 +43,9 @@ export class SuuntoGuideTransport implements TrainingDeliveryTransport {
   }
   assess(workout: ScheduledWorkoutV1, destination: string, zone: string, strength?: StrengthWorkoutDetailsV1 | null) {
     return assessSuuntoGuide(workout, destination, zone, this.owner, strength);
+  }
+  diagnosticMappingVersion(operation: DeliveryOperation): string | null {
+    return guideMappingForRecovery(operation, this.owner)?.mappingVersion ?? null;
   }
   canRemove(artifact: DeliveryArtifact, today: string, allowPastRemoval = false): boolean {
     return !artifact.completed && (artifact.localDate >= today || allowPastRemoval);
@@ -157,7 +160,8 @@ export class SuuntoGuideTransport implements TrainingDeliveryTransport {
   }
   private async discover(operation: DeliveryOperation, checkpoint: DeliveryCheckpoint, guard: DeliveryRequestGuard, offset: number): Promise<DeliveryRecovery> {
     if (!operation.workout) return { kind: 'uncertain' };
-    const expected = guideMapping(operation.workout, operation.destinationKey, this.owner, operation.strength).artifact;
+    const expected = guidePayloadForRecovery(operation, this.owner);
+    if (!expected) return { kind: 'uncertain' };
     // Resume after three pages, retaining an uncertain-create journal. Empty/unstable
     // coverage NEVER changes it to not-accepted and never authorizes another POST.
     for (let page = 0; page < 3; page++, offset += 50) {
@@ -188,9 +192,11 @@ export class SuuntoGuideTransport implements TrainingDeliveryTransport {
     if (progress.step === 'create' || progress.step.startsWith('discover-')) return this.discover(operation, checkpoint, guard,
       progress.step === 'create' ? 0 : this.offset(progress.step.slice('discover-'.length)));
     if (!operation.artifact) return { kind: 'uncertain' };
+    const expected = progress.step === 'update' ? guidePayloadForRecovery(operation, this.owner) : null;
+    if (progress.step === 'update' && !expected) return { kind: 'uncertain' };
     const raw = await this.read(operation.artifact, guard);
     if (!raw) return { kind: 'uncertain' }; // Even DELETE 404 does not prove owned absence.
-    if (progress.step === 'update' && operation.workout && equal(raw, guideMapping(operation.workout, operation.destinationKey, this.owner, operation.strength).artifact)) {
+    if (progress.step === 'update' && operation.workout && equal(raw, expected)) {
       const artifact = { ...operation.artifact, localDate: operation.workout.localDate };
       await this.save(operation, checkpoint, artifact, 'finished', 'accepted'); return { kind: 'accepted', artifact };
     }

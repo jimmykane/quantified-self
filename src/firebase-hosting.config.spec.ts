@@ -271,6 +271,9 @@ describe('Firebase Hosting configuration', () => {
     expect(matchesAnyHostingSource(sources, '/dashboard')).toBe(true);
     expect(matchesAnyHostingSource(sources, '/calendar')).toBe(true);
     expect(matchesAnyHostingSource(sources, '/calendar/day/2026-09-25')).toBe(true);
+    expect(matchesAnyHostingSource(sources, '/training/plans/library')).toBe(true);
+    expect(matchesAnyHostingSource(sources, '/training/plans/library/new')).toBe(true);
+    expect(matchesAnyHostingSource(sources, '/training/plans/library/saved-workout-1')).toBe(true);
     expect(matchesAnyHostingSource(sources, '/routes')).toBe(true);
     expect(matchesAnyHostingSource(sources, '/admin/queues/workout')).toBe(true);
     expect(matchesAnyHostingSource(sources, '/admin/queues/route-reparse')).toBe(true);
@@ -341,7 +344,7 @@ describe('Firebase Hosting configuration', () => {
     expect(sitemapLastmodForUrl(`${siteOrigin}/features`)).toBe('2026-09-02');
     expect(sitemapLastmodForUrl(`${siteOrigin}/features/activity-calendar`)).toBe('2026-08-04');
     expect(sitemapLastmodForUrl(`${siteOrigin}/features/ai-insights`)).toBe('2026-09-02');
-    expect(sitemapLastmodForUrl(`${siteOrigin}/features/mcp-server`)).toBe('2026-09-24');
+    expect(sitemapLastmodForUrl(`${siteOrigin}/features/mcp-server`)).toBe('2026-10-01');
     expect(sitemapLastmodForUrl(`${siteOrigin}/integrations`)).toBe('2026-09-02');
     expect(sitemapLastmodForUrl(`${siteOrigin}/integrations/garmin`)).toBe('2026-08-03');
     expect(sitemapLastmodForUrl(`${siteOrigin}/integrations/suunto`)).toBe('2026-08-03');
@@ -361,8 +364,8 @@ describe('Firebase Hosting configuration', () => {
     expect(sitemapLastmodForUrl(`${siteOrigin}/features/fit-gpx-tcx-file-analyzer`)).toBe('2026-09-02');
     expect(sitemapXml).not.toContain(`${siteOrigin}/features/workout-file-comparison`);
     expect(sitemapXml).not.toContain(`${siteOrigin}/features/sports-watch-benchmark`);
-    expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-09-24');
-    expect(sitemapLastmodForUrl(`${siteOrigin}/policies`)).toBe('2026-09-24');
+    expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-10-01');
+    expect(sitemapLastmodForUrl(`${siteOrigin}/policies`)).toBe('2026-10-01');
     expect(sitemapLastmodForUrl(`${siteOrigin}/privacy`)).toBe('2026-09-10');
     expect(sitemapLastmodForUrl(`${siteOrigin}/terms`)).toBe('2026-08-05');
   });

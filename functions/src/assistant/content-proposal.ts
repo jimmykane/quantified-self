@@ -6,10 +6,12 @@ import type {
 } from '../../../shared/assistant.types';
 import { normalizeEventTags } from '../../../shared/event-tags';
 import { MCP_CONTENT_WRITE_INPUTS } from '../mcp/content-write.schemas';
+import { MCP_MANUAL_MEASUREMENT_INPUTS } from '../mcp/manual-measurements.schemas';
 
 export const ASSISTANT_CONTENT_PROPOSAL_TTL_MS = 10 * 60 * 1_000;
 
 export const ASSISTANT_CONTENT_PROPOSAL_TOOLS = [
+  'prepare_manual_measurement_create', 'prepare_manual_measurement_update', 'prepare_manual_measurement_delete',
   'prepare_activity_tag_change',
   'prepare_timeline_note_create',
   'prepare_timeline_note_update',
@@ -19,6 +21,9 @@ export const ASSISTANT_CONTENT_PROPOSAL_TOOLS = [
 export type AssistantContentProposalTool = typeof ASSISTANT_CONTENT_PROPOSAL_TOOLS[number];
 
 const TOOL_TO_KIND = {
+  prepare_manual_measurement_create: 'create_manual_measurement',
+  prepare_manual_measurement_update: 'update_manual_measurement',
+  prepare_manual_measurement_delete: 'delete_manual_measurement',
   prepare_activity_tag_change: 'update_event_tags',
   prepare_timeline_note_create: 'create_timeline_note',
   prepare_timeline_note_update: 'update_timeline_note',
@@ -26,6 +31,9 @@ const TOOL_TO_KIND = {
 } as const satisfies Record<AssistantContentProposalTool, AssistantContentProposalKind>;
 
 export const ASSISTANT_CONTENT_PROPOSAL_INPUTS = {
+  prepare_manual_measurement_create: MCP_MANUAL_MEASUREMENT_INPUTS.create_manual_measurement,
+  prepare_manual_measurement_update: MCP_MANUAL_MEASUREMENT_INPUTS.update_manual_measurement,
+  prepare_manual_measurement_delete: MCP_MANUAL_MEASUREMENT_INPUTS.delete_manual_measurement,
   prepare_activity_tag_change: MCP_CONTENT_WRITE_INPUTS.update_event_tags,
   prepare_timeline_note_create: MCP_CONTENT_WRITE_INPUTS.create_timeline_note,
   prepare_timeline_note_update: MCP_CONTENT_WRITE_INPUTS.update_timeline_note,
@@ -44,6 +52,9 @@ const defaultDependencies: AssistantContentProposalDependencies = {
 
 function summaryFor(kind: AssistantContentProposalKind, args: Record<string, unknown>): string {
   switch (kind) {
+    case 'create_manual_measurement': return 'Create the reviewed manual Health measurement.';
+    case 'update_manual_measurement': return 'Update the selected manual Health measurement.';
+    case 'delete_manual_measurement': return 'Permanently delete the selected manual Health measurement.';
     case 'update_event_tags':
       return `Replace ${Array.isArray(args.expectedTags) ? args.expectedTags.length : 0} current event tag${Array.isArray(args.expectedTags) && args.expectedTags.length === 1 ? '' : 's'} with ${Array.isArray(args.tags) ? args.tags.length : 0}.`;
     case 'create_timeline_note':

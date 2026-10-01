@@ -1,5 +1,6 @@
 import { ActivityTypes } from '@sports-alliance/sports-lib';
 import type { ScheduledWorkoutV1 } from '../../../../../shared/training-plans';
+import type { StrengthWorkoutDetailsV1 } from '../../../../../shared/strength-workout';
 import type { WahooTrainingClient, WahooTrainingRequest, WahooTrainingResponse } from '../wahoo/http';
 
 export function wahooFixtureWorkout(): ScheduledWorkoutV1 {
@@ -8,6 +9,10 @@ export function wahooFixtureWorkout(): ScheduledWorkoutV1 {
     structure: { version: 1, sport: ActivityTypes.Running, nodes: [
       { kind: 'step', id: 'run', purpose: 'work', ending: { kind: 'time', seconds: 90 }, targets: [] },
     ] } };
+}
+export function wahooFixtureStrengthDetails(workoutId = 'w'): StrengthWorkoutDetailsV1 {
+  return { version: 1, workoutId, revision: 1, exercises: [{ id: 'plank', name: 'Plank hold',
+    sets: Array.from({ length: 5 }, (_, i) => ({ id: `hold-${i}`, ending: { kind: 'time', seconds: 30 }, restAfterSeconds: 30 })) }] };
 }
 /** Synthetic, deliberately NON-idempotent POSTs. No real-provider credentials or data. */
 export class WahooHttpFixture {

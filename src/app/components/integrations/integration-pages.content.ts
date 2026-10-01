@@ -1,6 +1,8 @@
 import { ServiceNames } from '@sports-alliance/sports-lib';
 import { getProviderDisplayName } from '@shared/provider-presentation';
 
+const WAHOO_PLANNED_WORKOUT_COPY = 'Connected Pro members can send compatible time-based running and cycling, outdoor Walking/Hiking without intensity targets, and timed Strength/Gym workouts for today and the next six days. Running/cycling subprofiles use their native indoor/outdoor type where available. Indoor Running uses Treadmill, Velomobile uses Cycling, and Enduro MTB/Downhill Cycling use Mountain Biking, with a review warning; the saved QS sport is unchanged. Wahoo supports timed, untargeted pool/open-water swimming and outdoor/indoor rowing. Native profiles and timed intervals have been account/device-tested; distance endings and intensity targets remain unsupported. Selected pool length is not sent to Wahoo. Repetition-based strength is unsupported. Plan sync and standalone Send actions are off by default. Cloud delivery confirms the app-owned Wahoo Plan, Workout, and association, not receipt by an ELEMNT computer, watch, or app.';
+
 export type IntegrationProviderKey = 'garmin' | 'suunto' | 'coros' | 'wahoo';
 
 export interface IntegrationFlow {
@@ -410,12 +412,12 @@ export const PROVIDER_INTEGRATION_PAGES: Record<IntegrationProviderKey, Provider
     ],
     syncEyebrow: 'COROS Workflows',
     syncTitle: 'COROS planned workouts, activity delivery, and route sync',
-    syncCopy: 'Connect one active COROS account for its available data, activity, and route workflows. New COROS plan sync and standalone Send actions are coming soon in the app.',
+    syncCopy: 'Connect one active COROS account for its available data, activity, and route workflows. COROS planned-workout delivery is coming soon.',
     syncFlows: [
       {
         icon: 'event_note',
         title: 'Planned workouts to COROS',
-        copy: 'New COROS plan sync and standalone Send actions are coming soon in the app. Existing saved COROS delivery state can continue to follow its consent, with delivery records and recovery controls still available. Quantified Self does not claim a native QS-owned COROS plan or treat provider acceptance as watch receipt.',
+        copy: 'COROS plan sync and standalone Send are coming soon and are not available yet. Quantified Self will use individual workouts in the COROS training calendar rather than claim a native QS-owned COROS plan, and provider acceptance will not be treated as watch receipt.',
       },
       {
         icon: 'sync_alt',
@@ -501,7 +503,7 @@ export const PROVIDER_INTEGRATION_PAGES: Record<IntegrationProviderKey, Provider
     faqItems: [
       {
         question: 'Can I send planned Training workouts to COROS?',
-        answer: 'Not yet from the app. New COROS plan sync and standalone Send actions are marked Coming soon, while existing saved delivery state can continue to follow its consent. Provider acceptance does not confirm app or watch receipt, and the COROS API does not provide planned-workout reads for automatic missing-copy checks.',
+        answer: 'Not yet. COROS plan sync and standalone Send are coming soon. Provider acceptance does not confirm app or watch receipt, and the COROS API does not provide planned-workout reads for automatic missing-copy checks.',
       },
       {
         question: 'How do I sync COROS data to Suunto automatically?',
@@ -554,7 +556,7 @@ export const PROVIDER_INTEGRATION_PAGES: Record<IntegrationProviderKey, Provider
       {
         icon: 'event_note',
         title: 'Planned workouts to Wahoo',
-        copy: 'Connected Pro members can send compatible time-based running and cycling workouts for today through the next six days. Plan sync and each standalone Send action are off until you explicitly enable them.',
+        copy: WAHOO_PLANNED_WORKOUT_COPY,
       },
       {
         icon: 'sync',
@@ -664,7 +666,7 @@ export const PROVIDER_INTEGRATION_PAGES: Record<IntegrationProviderKey, Provider
       },
       {
         question: 'Can I send planned Training workouts to Wahoo?',
-        answer: 'Yes. Connected Pro members can explicitly send compatible time-based running and cycling workouts for today and the next six days. Plan sync and standalone Send actions are off by default. Cloud delivery confirms the app-owned Wahoo Plan, Workout, and association, not receipt by an ELEMNT computer, watch, or app.',
+        answer: `Yes. ${WAHOO_PLANNED_WORKOUT_COPY}`,
       },
       {
         question: 'Does disconnecting Wahoo delete imported activities?',

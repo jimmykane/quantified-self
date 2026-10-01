@@ -7,6 +7,7 @@ export type McpScope =
   | 'health:read'
   | 'metrics:read'
   | 'measurements:read'
+  | 'measurements:write'
   | 'sleep:read'
   | 'activity-details:read'
   | 'events:write'
@@ -31,11 +32,11 @@ export const MCP_SCOPE_CONTENT: Record<McpScope, {
 }> = {
   'training-plans:read': {
     title: 'Training plans and planned workouts',
-    description: 'Read your current plans and standalone planned workouts, including names, dates, complete workout instructions, step notes, exact recorded completion links and existing service sync summaries. Authored text may contain sensitive health or personal information. Existing connections must reauthorize. This does not grant activity or Timeline notes access. Revoking access cannot erase copies already received.',
+    description: 'Read your current plans, standalone planned workouts and undated saved workout recipes, including names, dates where scheduled, complete workout instructions, step notes, exact recorded completion links and existing service sync summaries. Authored text may contain sensitive health or personal information. Existing connections must reauthorize. This does not grant activity or Timeline notes access. Revoking access cannot erase copies already received.',
   },
   'training-plans:write': {
     title: 'Change Training plans and workouts',
-    description: 'Create and edit plans and planned workouts, move or copy workouts, change plan dates and lifecycle, mark workouts skipped, move workouts to recoverable history, and explicitly delete a plan. Plan deletion is reviewed alone and requires choosing whether its workouts become standalone or are permanently deleted; the plan and its history are permanently removed. Every proposal is previewed before a separate apply tool governed by your client\'s approval controls. Permanent single-workout deletion and history restore are not allowed.',
+    description: 'Create and edit plans and planned workouts, move or copy workouts, change plan dates and lifecycle, mark workouts skipped, move workouts to recoverable history, and explicitly delete a plan. You can also create, save, copy, edit, archive, restore or permanently delete an undated saved workout recipe, and place independent copies on explicit dates. Deleting a recipe does not remove scheduled copies or grant provider sync. Plan deletion is reviewed alone and requires choosing whether its workouts become standalone or are permanently deleted; the plan and its history are permanently removed. Every proposal is previewed before a separate apply tool governed by your client\'s approval controls. Permanent single-workout deletion and history restore are not allowed.',
   },
   'training-delivery:write': {
     title: 'Change planned-workout sync',
@@ -64,6 +65,10 @@ export const MCP_SCOPE_CONTENT: Record<McpScope, {
   'measurements:read': {
     title: 'Body measurements',
     description: 'Read bounded identity-free body-measurement history such as weight. Values are grouped by day, week, or month; exact source timestamps, event or activity identity, provider, device, and source details are excluded.',
+  },
+  'measurements:write': {
+    title: 'Manage manual Health measurements',
+    description: 'Find exact manual entries, including sensitive values and observation times, and add, edit or permanently delete weight, VO2 max, body fat, blood pressure, muscle mass, body water, bone mass and blood oxygen measurements. Provider imports cannot be changed. Selected by default when requested; uncheck it before approval to keep this client read-only. Your MCP client controls per-change approval. Existing connections must reauthorize; token refresh cannot add this permission. Deletion cannot be undone. This does not grant provider Health history or body-measurement history access.',
   },
   'sleep:read': {
     title: 'Sleep summaries',

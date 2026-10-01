@@ -3,7 +3,7 @@ import { DistanceUnits } from '@sports-alliance/sports-lib';
 import { HEALTH_METRIC_IDS, HEALTH_UNITS } from '@shared/health';
 import { normalizeUserUnitSettings } from '@shared/unit-aware-display';
 import { createDashboardDerivedMetricsMissingState } from '../services/dashboard-derived-metrics.service';
-import { buildCalendarDayHealthSummary, buildCalendarDaySleepFacts, resolveCalendarDaySleepPoint, selectCalendarDaySleepPoint, type CalendarDayHealthEvidence } from './calendar-day-health.helper';
+import { buildCalendarDayHealthSummary, buildCalendarDaySleepFacts, isCalendarDayInReadinessHistory, resolveCalendarDaySleepPoint, selectCalendarDaySleepPoint, type CalendarDayHealthEvidence } from './calendar-day-health.helper';
 import type { HealthWorkspaceSeries } from './health-workspace.helper';
 
 const nowMs = new Date(2026, 8, 25, 12).getTime();
@@ -75,6 +75,37 @@ describe('calendar day health summary', () => {
     expect(summary.hrv.status).toBe('error');
     expect(summary.readiness.status).toBe('error');
     expect(summary.recovery?.status).toBe('error');
+  });
+
+  it('retains only a validated exact-date readiness point during refresh or read failure', () => {
+    const derived = createDashboardDerivedMetricsMissingState();
+    derived.trainingReadiness = { points: [{ dayMs: Date.UTC(2026, 8, 24), score: 67, label: 'Mixed' }] } as typeof derived.trainingReadiness;
+    for (const status of ['stale', 'queued', 'building', 'failed'] as const) {
+      derived.trainingReadinessStatus = status;
+      const summary = buildCalendarDayHealthSummary('2026-09-24', {
+        ...noEvidence(), derived, readinessError: status === 'failed',
+      }, { nowMs });
+      expect(summary.readiness).toMatchObject({ status: 'ready', value: 'Mixed 67/100' });
+      expect(summary.readiness.detail).toContain('Recorded for this day');
+      expect(summary.readiness.detail).toContain(status === 'failed' ? 'could not refresh' : status === 'stale' ? 'refresh needed' : 'updating');
+      expect(buildCalendarDayHealthSummary('2026-09-23', { ...noEvidence(), derived }, { nowMs }).readiness.value).toBe('—');
+    }
+    derived.trainingReadiness = null;
+    derived.trainingReadinessStatus = 'stale';
+    const invalid = buildCalendarDayHealthSummary('2026-09-24', { ...noEvidence(), derived }, { nowMs });
+    expect(invalid.readiness).toMatchObject({ value: '—', detail: 'Readiness needs a refresh' });
+  });
+
+  it('does not promise readiness updates for future days or dates outside the stored history', () => {
+    const derived = createDashboardDerivedMetricsMissingState();
+    derived.trainingReadinessStatus = 'building';
+    for (const dateKey of ['2026-08-01', '2026-09-26']) {
+      expect(buildCalendarDayHealthSummary(dateKey, { ...noEvidence(), derived }, { nowMs }).readiness)
+        .toMatchObject({ status: 'empty', detail: 'No readiness score for this day' });
+    }
+    expect(isCalendarDayInReadinessHistory('2026-09-12', nowMs)).toBe(true);
+    expect(isCalendarDayInReadinessHistory('2026-09-11', nowMs)).toBe(false);
+    expect(isCalendarDayInReadinessHistory('2026-09-26', nowMs)).toBe(false);
   });
 
   it('keeps a failed recovery source from hiding otherwise available readiness', () => {

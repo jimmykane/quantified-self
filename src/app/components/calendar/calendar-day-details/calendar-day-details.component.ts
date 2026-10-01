@@ -1,12 +1,10 @@
-import { ChangeDetectionStrategy, Component, computed, inject, signal, type Signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, inject, type Signal } from '@angular/core';
 import { TIMELINE_NOTE_LABELS, timelineNoteDates, type TimelineNote } from '@shared/timeline-notes';
 import { TIMELINE_NOTE_ICONS, timelineNoteColor } from '../../../helpers/timeline-note-appearance.helper';
 import { MAT_BOTTOM_SHEET_DATA, MatBottomSheetRef } from '@angular/material/bottom-sheet';
 import { Router } from '@angular/router';
 import { AppUserService } from '../../../services/app.user.service';
-import { TrainingWorkoutDuplicateService, type DuplicatedWorkoutResult } from '../../../services/training-workout-duplicate.service';
 import type { CurrentTrainingScheduleV1 } from '../../../services/training-plans.service';
-import type { ScheduledWorkoutV1 } from '@shared/training-plans';
 import type { EventInterface, UserUnitSettingsInterface } from '@sports-alliance/sports-lib';
 import {
   type ActivityCalendarDayViewModel,
@@ -28,7 +26,6 @@ import { ActivityCalendarVolumeListComponent } from '../activity-calendar-volume
 import { CalendarDayContextComponent } from '../calendar-day-context/calendar-day-context.component';
 import { ActivityCalendarVolumeStatsComponent } from '../activity-calendar-volume-list/activity-calendar-volume-stats.component';
 import type { PlannedWorkoutCalendarEntry } from '../../../helpers/planned-workout-calendar.helper';
-import { formatManualWorkoutStructure } from '../../../helpers/planned-workout-editor.helper';
 import { getDateTimeFormatter } from '../../../helpers/date-time-format.helper';
 import { TrainingImpactComponent } from '../../training-impact/training-impact.component';
 import {
@@ -57,17 +54,14 @@ export interface CalendarDayDetailsData {
   trainingImpact?: Signal<TrainingImpactSnapshotState>;
 }
 
-export type CalendarDayDetailsResult = string | DuplicatedWorkoutResult;
+export type CalendarDayDetailsResult = string;
 
 interface CalendarDayPlannedWorkoutRow {
   id: string;
-  workout: ScheduledWorkoutV1;
   title: string;
   sport: string;
   scopeLabel: string;
   lifecycleLabel: string;
-  summary: string[];
-  color?: string;
 }
 
 interface CalendarDayEventRow {
@@ -99,7 +93,6 @@ export class CalendarDayDetailsComponent {
   private readonly bottomSheetRef = inject(MatBottomSheetRef<CalendarDayDetailsComponent, CalendarDayDetailsResult>);
   private readonly router = inject(Router);
   private readonly navigation = inject(CalendarDayDetailsNavigationService);
-  private readonly duplicateService = inject(TrainingWorkoutDuplicateService);
   readonly data = inject<CalendarDayDetailsData>(MAT_BOTTOM_SHEET_DATA);
   private readonly users = inject(AppUserService);
   readonly hasTrainingPlanningUIAccess = computed(() => {
@@ -134,33 +127,17 @@ export class CalendarDayDetailsComponent {
     icon: TIMELINE_NOTE_ICONS[note.category], color: timelineNoteColor(note),
   })));
   readonly plannedWorkoutsStatus = computed(() => this.data.plannedWorkoutsStatusSource?.() ?? 'ready');
-  readonly duplicatingId = signal<string | null>(null);
   readonly plannedWorkoutRows = computed(() => (
     this.data.plannedWorkoutsSource?.() ?? this.data.plannedWorkouts ?? []
   ).map<CalendarDayPlannedWorkoutRow>(entry => ({
     id: entry.workout.id,
-    workout: entry.workout,
     title: entry.workout.title,
     sport: entry.workout.structure.sport,
     scopeLabel: entry.planName ?? 'Standalone',
-    color: entry.color,
     lifecycleLabel: entry.completed
       ? 'Completed · activity linked'
       : entry.workout.lifecycle === 'skipped' ? 'Skipped' : 'Planned',
-    summary: formatManualWorkoutStructure(entry.workout.structure, this.data.unitSettings, this.data.locale),
   })));
-
-  async duplicateWorkout(workout: ScheduledWorkoutV1): Promise<void> {
-    if (!this.hasTrainingPlanningUIAccess() || this.plannedWorkoutsStatus() !== 'ready'
-      || !this.data.scheduleSource || this.duplicatingId()) return;
-    this.duplicatingId.set(workout.id);
-    try {
-      const result = await this.duplicateService.duplicate(this.data.userId, workout, this.data.scheduleSource);
-      if (result && this.hasTrainingPlanningUIAccess()) this.bottomSheetRef.dismiss(result);
-    } finally {
-      this.duplicatingId.set(null);
-    }
-  }
 
   selectNote(noteId: string): void {
     if (this.noteRows().some(row => row.note.id === noteId)) this.bottomSheetRef.dismiss(noteId);

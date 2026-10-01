@@ -1,12 +1,12 @@
 import { inject, Injectable } from '@angular/core';
-import { catchError, combineLatest, defer, from, fromEvent, map, of, startWith, takeUntil, throwError, type Observable } from 'rxjs';
+import { catchError, combineLatest, defer, from, fromEvent, map, of, startWith, takeUntil, tap, throwError, type Observable } from 'rxjs';
 import { HEALTH_METRIC_IDS } from '@shared/health';
 import { DERIVED_METRIC_KINDS } from '@shared/derived-metrics';
 import { projectLoadedHealthRange } from '@shared/health-query';
 import { HealthMetricQueryService } from './health-metric-query.service';
 import { DashboardDerivedMetricsService } from './dashboard-derived-metrics.service';
 import { buildHealthMetricWorkspaceView, type HealthWorkspaceSeries, type HealthWorkspaceSleepSession } from '../helpers/health-workspace.helper';
-import { selectCalendarDaySleepPoint, type CalendarDayHealthEvidence } from '../helpers/calendar-day-health.helper';
+import { isCalendarDayInReadinessHistory, selectCalendarDaySleepPoint, type CalendarDayHealthEvidence } from '../helpers/calendar-day-health.helper';
 import { buildDashboardReadinessSleepQueryWindow } from '../helpers/dashboard-training-insights.helper';
 
 @Injectable({ providedIn: 'root' })
@@ -15,6 +15,7 @@ export class CalendarDayHealthService {
   private readonly derived = inject(DashboardDerivedMetricsService);
 
   watch(uid: string, dateKey: string, nowMs: number, signal: AbortSignal): Observable<CalendarDayHealthEvidence> {
+    if (signal.aborted) return throwError(() => new Error('Calendar health read cancelled.'));
     if (!this.queries.isOwner(uid)) return throwError(() => new Error('Calendar health data is owner-only.'));
     const date = new Date(`${dateKey}T00:00:00`);
     if (!Number.isFinite(date.getTime()) || date.getFullYear() !== Number(dateKey.slice(0, 4))
@@ -54,12 +55,30 @@ export class CalendarDayHealthService {
         hrvError: hrvResult.status === 'rejected',
       };
     }));
-    const derived$ = defer(() => this.derived.watch({ uid }, { metricKinds: derivedKinds, reportReadErrors: true })).pipe(
+    const derived$ = defer(() => {
+      let refreshRequested = false;
+      return this.derived.watch({ uid }, { metricKinds: derivedKinds, reportReadErrors: true }).pipe(tap(state => {
+        if (refreshRequested || signal.aborted || !this.queries.isOwner(uid)
+          || (!isToday && !isCalendarDayInReadinessHistory(dateKey, nowMs))) return;
+        const statuses = isToday
+          ? [state.formStatus, state.formNowStatus, state.rampRateStatus, state.recoveryNowStatus]
+          : [state.trainingReadinessStatus];
+        if (!statuses.some(status => status === 'missing' || status === 'stale')) return;
+        // One owner-scoped freshness request per selection. The shared service coalesces
+        // requests across surfaces; queued/building emissions never start a retry loop.
+        refreshRequested = true;
+        this.derived.ensureForDashboard({ uid }, state, { metricKinds: derivedKinds });
+      }));
+    }).pipe(
       map(derived => ({ derived, readFailed: false, derivedPending: false })),
       catchError(() => of({ derived: null, readFailed: true, derivedPending: false })),
       startWith({ derived: null, readFailed: false, derivedPending: true }),
     );
-    return combineLatest([health$, derived$]).pipe(
+    return defer(() => {
+      // A caller can lose ownership or cancel between creating and subscribing to this stream.
+      if (signal.aborted || !this.queries.isOwner(uid)) return throwError(() => new Error('Calendar health read cancelled.'));
+      return combineLatest([health$, derived$]);
+    }).pipe(
       takeUntil(fromEvent(signal, 'abort')),
       map(([health, { derived, readFailed, derivedPending }]) => {
         if (signal.aborted || !this.queries.isOwner(uid)) throw new Error('Calendar health read cancelled.');

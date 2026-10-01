@@ -328,13 +328,11 @@ describe('CalendarPageComponent', () => {
     const recordedTotals = [...fixture.nativeElement.querySelectorAll('.calendar-family-volume > app-activity-calendar-volume-list .calendar-family-volume-stat')]
       .map((stat: HTMLElement) => stat.getAttribute('aria-label'));
     expect(recordedTotals).toEqual([
-      'Duration 1h',
       'Distance 10.00 Km',
       'Ascent 450 m',
       'Descent 420 m',
     ]);
-    expect(fixture.nativeElement.querySelector('.calendar-family-volume-stat--bar-metric')
-      ?.getAttribute('aria-label')).toBe('Duration 1h');
+    expect(fixture.nativeElement.querySelector('.calendar-family-volume-stat--bar-metric')).toBeNull();
     expect(fixture.nativeElement.querySelector('.calendar-family-volume-track')?.getAttribute('role'))
       .toBe('progressbar');
   });
@@ -369,7 +367,6 @@ describe('CalendarPageComponent', () => {
     const recordedTotals = [...fixture.nativeElement.querySelectorAll('.calendar-family-volume > app-activity-calendar-volume-list .calendar-family-volume-stat')]
       .map((stat: HTMLElement) => stat.getAttribute('aria-label'));
     expect(recordedTotals).toEqual([
-      'Duration 1h',
       'Distance 10.00 Km',
       'Descent 420 m',
     ]);
@@ -385,7 +382,6 @@ describe('CalendarPageComponent', () => {
     const recordedTotals = [...fixture.nativeElement.querySelectorAll('.calendar-family-volume > app-activity-calendar-volume-list .calendar-family-volume-stat')]
       .map((stat: HTMLElement) => stat.getAttribute('aria-label'));
     expect(recordedTotals).toEqual([
-      'Duration 1h',
       'Distance 10.00 Km',
     ]);
   });

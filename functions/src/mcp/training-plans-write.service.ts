@@ -40,7 +40,7 @@ import { applyTrainingPlanDeletion, deleteTrainingPlanForUser,
   TrainingPlanDeletionResumeRequiredError } from '../training-plans/delete-training-plan';
 import { trainingDeliveryCommand } from '../training-plans/delivery/commands';
 import { productionDeliveryRuntime } from '../training-plans/delivery/runtime';
-import type { DeliveryRuntime } from '../training-plans/delivery/contracts';
+import { requiresDeliveryMappingApproval, type DeliveryRuntime } from '../training-plans/delivery/contracts';
 import { decodeOpaqueValue, encodeOpaqueValue, McpDataError } from './data.service';
 import {
   TRAINING_CHANGE_SCHEMA,
@@ -196,7 +196,7 @@ function accessGeneration(data: FirebaseFirestore.DocumentData): string {
   return JSON.stringify([data.grantId ?? null, data.createdAtMs ?? null, [...(Array.isArray(data.scopes) ? data.scopes : [])].sort()]);
 }
 
-async function assertAuthorityInTransaction(
+export async function assertAuthorityInTransaction(
   deps: Pick<TrainingWriteDependencies, 'db' | 'now'>,
   tx: FirebaseFirestore.Transaction,
   uid: string,
@@ -399,7 +399,7 @@ function expectedRevisions(snapshot: TrainingScheduleSnapshotV1, operation: Trai
     case 'create-plan': if (operation.activate) addPlan(snapshot.state.activePlanId); break;
     case 'rename-plan': case 'set-plan-color': case 'shift-plan': addPlan(operation.planId); break;
     case 'set-plan-lifecycle': addPlan(operation.planId); if (operation.lifecycle === 'active') addPlan(snapshot.state.activePlanId); break;
-    case 'create-workout': addPlan(operation.planId); break;
+    case 'create-workout': case 'bulk-create-workouts': addPlan(operation.planId); break;
     case 'update-workout': case 'move-workout': {
       const current = addWorkout(operation.workoutId); addPlan(current?.planId); addPlan(operation.planId); break;
     }
@@ -420,6 +420,7 @@ function describeOperation(operation: TrainingScheduleMutationOperationV1): stri
     case 'set-plan-lifecycle': return `${operation.lifecycle === 'active' ? 'Activate' : operation.lifecycle === 'paused' ? 'Pause' : 'Archive'} the plan.`;
     case 'shift-plan': return `Shift the plan ${Math.abs(operation.days)} day${Math.abs(operation.days) === 1 ? '' : 's'} ${operation.days > 0 ? 'later' : 'earlier'}.`;
     case 'create-workout': return `Create “${operation.title}” on ${operation.localDate}${operation.planId ? ' in the selected plan' : ' as a standalone workout'}.`;
+    case 'bulk-create-workouts': return `Create ${operation.placements.length} independent copies of “${operation.title}”${operation.planId ? ' in the selected plan' : ' as standalone workouts'}.`;
     case 'update-workout': return `Update “${operation.title}” and schedule it for ${operation.localDate}.`;
     case 'move-workout': return `Move the workout to ${operation.localDate}${operation.planId ? ' in the selected plan' : ' as a standalone workout'}.`;
     case 'copy-workout': return `Copy the workout to ${operation.localDate}${operation.planId ? ' in the selected plan' : ' as a standalone workout'}.`;
@@ -591,7 +592,18 @@ function providerSummary(provider: PlannedWorkoutProviderId,
       : action === 'retry' ? 'retry the current delivery state'
         : action === 'approve' ? 'approve the current workout mapping differences'
           : 'enable ongoing workout delivery';
-  return `${provider}: ${effect}; ${preview.eligibleCount} currently eligible, ${preview.warningCount} with mapping warnings.`;
+  const summary = `${provider}: ${effect}; ${preview.eligibleCount} currently eligible, ${preview.warningCount} with mapping warnings.`;
+  if (['enable', 'send', 'resume'].includes(action) && preview.warningCount && preview.approvalRequiredCount === 0) {
+    const notes = [...new Set(preview.issues)].join(' ');
+    const disclosure = `${summary} ${notes} No separate mapping approval is needed for these limitations; unsupported workouts cannot be sent.`;
+    if (preview.issues.length >= 20 || disclosure.length > 500) {
+      // Unlike digest approval, informational notes need not block a bulk plan
+      // when its full warning set exceeds the bounded public summary field.
+      return `${summary} Review each workout's compatibility details. Informational limitations need no separate mapping approval; unsupported workouts cannot be sent.`;
+    }
+    return disclosure;
+  }
+  return summary;
 }
 
 async function previewProviderOperation(
@@ -685,8 +697,9 @@ async function previewSimulatedProviderAvailability(
     settingsRevision: Number(previous.revision ?? 0),
     eligibleCount,
     warningCount,
-    issues: assessments.flatMap(item => item?.issues ?? []).slice(0, 20),
-    approvalDigest: operation.targetType === 'workout' && assessments[0]?.level === 'degraded'
+    approvalRequiredCount: assessments.filter(item => item && requiresDeliveryMappingApproval(item)).length,
+    issues: [...new Set(assessments.flatMap(item => item?.issues ?? []))].slice(0, 20),
+    approvalDigest: operation.targetType === 'workout' && assessments[0] && requiresDeliveryMappingApproval(assessments[0])
       ? assessments[0].digest : null,
     workoutCompatibility: operation.targetType === 'workout' ? assessments[0]?.level ?? null : null,
   };

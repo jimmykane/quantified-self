@@ -543,7 +543,9 @@ export async function getUserRoleAndGracePeriod(userID: string): Promise<{ role:
       errorName: e instanceof Error ? e.name : 'unknown',
       errorCode: typeof e?.code === 'string' ? e.code : 'unknown',
     });
-    return { role: 'free' }; // Safe default for other errors
+    // An unreadable role is not a free account: let workers retry instead of
+    // turning an Auth outage into a terminal usage-limit rejection.
+    throw new HttpsError('unavailable', 'Could not verify subscription access. Please try again.');
   }
 }
 

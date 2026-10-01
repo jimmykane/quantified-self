@@ -6,6 +6,16 @@
   font: var(--mat-sys-body-small);
 }
 
+// Compact recovery metrics in the sheet and selected-day previews. The full
+// day keeps its larger values; row metadata remains body-small everywhere.
+@mixin compact-metric-label {
+  font: var(--mat-sys-label-small);
+}
+
+@mixin compact-metric-value {
+  font-size: 19px;
+}
+
 @mixin navigation-link($color: var(--mat-sys-primary)) {
   display: inline-flex;
   align-items: center;

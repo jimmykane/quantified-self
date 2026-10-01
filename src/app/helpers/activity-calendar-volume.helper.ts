@@ -79,11 +79,8 @@ export function buildActivityCalendarFamilyVolumeRows(
     const metricStatus = hasData
       ? `${barMetric.label} ${valueLabel}`
       : `${barMetric.label} unavailable`;
-    const stats = buildActivityCalendarVolumeStats(family.metrics, unitSettings, locale);
-    const visibleStats = family.eventCount === 1 && stats.length === 1
-      && stats[0].metric === 'duration' && stats[0].valueLabel === valueLabel
-      ? []
-      : stats;
+    // Duration already labels the bar; the supporting strip contains only other metrics.
+    const stats = buildActivityCalendarVolumeStats(family.metrics, unitSettings, locale, { includeDuration: false });
 
     return {
       id: family.id,
@@ -101,7 +98,7 @@ export function buildActivityCalendarFamilyVolumeRows(
       hasData,
       progressLabel: `${family.label} ${barMetric.label}`,
       ariaLabel: `${family.label}, ${family.eventCount} ${family.eventCount === 1 ? 'activity' : 'activities'}, ${metricStatus}`,
-      stats: visibleStats,
+      stats,
     };
   }).sort((left, right) => (
     Number(right.hasData) - Number(left.hasData)

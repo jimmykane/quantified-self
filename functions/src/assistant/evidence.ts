@@ -13,6 +13,8 @@ import type {
 } from './mcp-session';
 import { isFunctionsEmulator } from '../utils';
 import { TRAINING_READ_TOOLS } from '../mcp/training-plans.schemas';
+import { MCP_MANUAL_MEASUREMENT_SCHEMA } from '../mcp/manual-measurements.schemas';
+import { HEALTH_METRIC_CATALOG } from '../../../shared/health';
 
 const MAX_FACTS = 6;
 const MAX_LINKS = 3;
@@ -400,6 +402,20 @@ export function buildAssistantEvidence(
   tool: Pick<AssistantMcpToolDefinition, 'name' | 'title'>,
   structuredContent: Record<string, unknown>,
 ): AssistantEvidence {
+  if (tool.name === 'get_manual_measurement' || tool.name === 'query_manual_measurements') {
+    const raw = tool.name === 'get_manual_measurement' ? [structuredContent.measurement] : structuredContent.measurements;
+    const rows = Array.isArray(raw) ? raw.flatMap(item => {
+      const parsed = MCP_MANUAL_MEASUREMENT_SCHEMA.safeParse(item);
+      return parsed.success ? [parsed.data] : [];
+    }) : [];
+    return { toolName: tool.name, title: truncate(tool.title, 160),
+      summary: `${rows.length} current manual entr${rows.length === 1 ? 'y' : 'ies'}.${structuredContent.scanComplete === false ? ' More entries may remain.' : ''}`,
+      facts: rows.slice(0, 3).flatMap(row => [
+        { label: HEALTH_METRIC_CATALOG[row.metricId].label,
+          value: `${row.displayValue}${row.diastolic ? ` / ${row.diastolic.displayValue}` : ''} ${row.displayUnit}`.trim() },
+        { label: 'Observed', value: row.observedAt },
+      ]), links: [] };
+  }
   if (tool.name === 'get_training_impact') {
     return buildTrainingImpactEvidence(tool, structuredContent);
   }

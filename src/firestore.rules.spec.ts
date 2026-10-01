@@ -1683,6 +1683,12 @@ describe('Firestore Security Rules', () => {
                     await assertFails(owner.doc(path).get());
                     await assertFails(owner.doc(path).set({ forged: true }));
                 }
+                for (const path of [`users/${userId}/trainingMcpLibraryProposals/proposal`,
+                    `users/${userId}/trainingMcpLibraryProposals/proposal/internal/value`]) {
+                    await assertFails(owner.doc(path).get());
+                    await assertFails(owner.doc(path).set({ forged: true }));
+                    await assertFails(other.doc(path).get());
+                }
                 const evidence = `users/${userId}/events/event/trainingCompletionEvidence/fit`;
                 await testEnv.withSecurityRulesDisabled(context => context.firestore().doc(evidence).set({ schemaVersion: 1 }));
                 for (const client of [owner, other, testEnv.unauthenticatedContext().firestore()]) {
@@ -1706,6 +1712,7 @@ describe('Firestore Security Rules', () => {
                         privateState: true,
                     });
                     await userRef.collection('trainingPlans').doc('plan-1').set({ id: 'plan-1' });
+                    await userRef.collection('workoutLibrary').doc('saved-1').set({ id: 'saved-1', title: 'Easy run' });
                     await userRef.collection('scheduledWorkouts').doc('workout-1').set({
                         id: 'workout-1', planId: 'plan-1', localDate: '2026-09-02', lifecycle: 'planned',
                     });
@@ -1726,6 +1733,12 @@ describe('Firestore Security Rules', () => {
                     await userRef.collection('trainingPlanState').doc('current')
                         .collection('mutationReceipts').doc('mutation-1').set({ requestHash: 'private' });
                     await userRef.collection('trainingPlanState').doc('current')
+                        .collection('workoutLibraryMutationReceipts').doc('mutation-1').set({ requestHash: 'private' });
+                    await userRef.collection('trainingPlanState').doc('current')
+                        .collection('workoutLibraryPlacementReceipts').doc('mutation-1').set({ requestHash: 'private' });
+                    await userRef.collection('trainingPlanState').doc('current')
+                        .collection('workoutLibraryState').doc('current').set({ revision: 1 });
+                    await userRef.collection('trainingPlanState').doc('current')
                         .collection('planDeletionLocks').doc('plan-1').set({ requestHash: 'private' });
                     await userRef.collection('trainingPlanState').doc('current')
                         .collection('planDeletionLocks').doc('_bulk_shift').set({ requestHash: 'private' });
@@ -1743,6 +1756,8 @@ describe('Firestore Security Rules', () => {
                 await assertSucceeds(userRef.collection('trainingPlanState').doc('current').get());
                 await assertSucceeds(userRef.collection('trainingPlans').doc('plan-1').get());
                 await assertSucceeds(userRef.collection('trainingPlans').get());
+                await assertSucceeds(userRef.collection('workoutLibrary').doc('saved-1').get());
+                await assertSucceeds(userRef.collection('workoutLibrary').get());
                 await assertSucceeds(userRef.collection('scheduledWorkouts').doc('workout-1').get());
                 await assertSucceeds(userRef.collection('scheduledWorkouts').get());
                 await assertFails(userRef.collection('trainingPlanState').doc('internal').get());
@@ -1781,6 +1796,9 @@ describe('Firestore Security Rules', () => {
                 const ownerPath = `users/${userId}/scheduledWorkouts/workout-1`;
                 await assertFails(testEnv.authenticatedContext(otherId).firestore().doc(ownerPath).get());
                 await assertFails(testEnv.unauthenticatedContext().firestore().doc(ownerPath).get());
+                const saved = `users/${userId}/workoutLibrary/saved-1`;
+                await assertFails(testEnv.authenticatedContext(otherId).firestore().doc(saved).get());
+                await assertFails(testEnv.unauthenticatedContext().firestore().doc(saved).get());
             });
 
             it('allows only the owner to page deleted workouts while cleanup jobs remain internal', async () => {
@@ -1836,6 +1854,10 @@ describe('Firestore Security Rules', () => {
                 await assertFails(workoutRef.update({ lifecycle: 'skipped' }));
                 await assertFails(workoutRef.delete());
                 await assertFails(stateRef.update({ revision: 99 }));
+                const saved = db.doc(`users/${userId}/workoutLibrary/saved-1`);
+                await assertFails(db.doc(`users/${userId}/workoutLibrary/saved-2`).set({ title: 'Forged' }));
+                await assertFails(saved.update({ title: 'Forged' }));
+                await assertFails(saved.delete());
             });
 
             it('keeps revisions, receipts, deletion locks, and tombstones inaccessible to owners', async () => {
@@ -1846,6 +1868,9 @@ describe('Firestore Security Rules', () => {
                     `users/${userId}/trainingPlans/plan-1/revisions/0000000001/chunks/checkpoint-workouts-0000`,
                     `users/${userId}/scheduledWorkouts/workout-1/revisions/0000000001`,
                     `users/${userId}/trainingPlanState/current/mutationReceipts/mutation-1`,
+                    `users/${userId}/trainingPlanState/current/workoutLibraryMutationReceipts/mutation-1`,
+                    `users/${userId}/trainingPlanState/current/workoutLibraryPlacementReceipts/mutation-1`,
+                    `users/${userId}/trainingPlanState/current/workoutLibraryState/current`,
                     `users/${userId}/trainingPlanState/current/planDeletionLocks/plan-1`,
                     `users/${userId}/trainingPlanState/current/planDeletionLocks/_bulk_shift`,
                     `users/${userId}/trainingPlanState/current/deletionTombstones/hashed-entity-id`,

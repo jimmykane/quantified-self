@@ -9,6 +9,8 @@ import { getUserDeletionGuardState } from '../shared/user-deletion-guard';
 import { supplementNightlyHrvSleepDocuments } from '../sleep/nightly-hrv';
 import { aggregateNightlyHrvEvidence, sleepEvidenceSourceKey } from '../../../shared/nightly-hrv';
 import * as admin from 'firebase-admin';
+import { runMcpManualMeasurement, defaultManualMeasurementDependencies } from './manual-measurements.service';
+import type { McpManualMeasurementTool } from './manual-measurements.schemas';
 import {
   firestoreHrvRangeReads,
   HrvRangeInput,
@@ -405,6 +407,8 @@ interface ResolvedRouteListQuery {
 type ActivityDetailKind = 'laps' | 'jumps' | 'swim_lengths';
 type RouteDocumentKind = 'geometry' | 'source';
 type OpaqueValueKind =
+  | 'manual_measurement_ref'
+  | 'manual_measurement_cursor'
   | 'training_read'
   | 'training_proposal'
   | 'timeline_notes_cursor'
@@ -527,6 +531,7 @@ interface ActivityChartContextDocuments {
 }
 
 export interface McpDataServiceDependencies {
+  manualMeasurementDependencies?: import('./manual-measurements.service').ManualMeasurementDependencies;
   activitySamplesReads?: Pick<ActivitySamplesDependencies, 'activeOwner' | 'sourceVersions' | 'cache' | 'parseSource'>;
   activityDescriptionReads?: McpActivityDescriptionReads;
   timelineNotesReads?: McpTimelineNotesReads;
@@ -6513,9 +6518,19 @@ export function createMcpDataService(
       return previewCreatePlannedWorkout(input);
     },
 
+    async previewSavedWorkoutChange(input: import('./training-plans-write.service').TrainingWriteInput) {
+      const { previewSavedWorkoutChange } = await import('./workout-library-write.service');
+      return previewSavedWorkoutChange(input);
+    },
+
     async applyTrainingChanges(input: import('./training-plans-write.service').TrainingWriteInput) {
       const { applyTrainingChanges } = await import('./training-plans-write.service');
       return applyTrainingChanges(input);
+    },
+
+    async applySavedWorkoutChange(input: import('./training-plans-write.service').TrainingWriteInput) {
+      const { applySavedWorkoutChange } = await import('./workout-library-write.service');
+      return applySavedWorkoutChange(input);
     },
 
     async queryTimelineNotes(input: McpTimelineNotesInput) {
@@ -6566,6 +6581,23 @@ export function createMcpDataService(
 
     async createTimelineNote(input: McpContentWriteInput) {
       return runMcpContentWrite(input, createMcpTimelineNote, 'Timeline note could not be created safely. Try again later.');
+    },
+
+    async manualMeasurement(tool: McpManualMeasurementTool, input: McpContentWriteInput) {
+      const deps = dependencies.manualMeasurementDependencies
+        ?? (dependencies === defaultDependencies ? defaultManualMeasurementDependencies() : null);
+      if (!deps) throw new McpDataError('temporarily_unavailable', 'Manual measurement management is unavailable.');
+      try {
+        return await runMcpManualMeasurement(tool, input, {
+          encode: (kind, value, uid, connectionId) => encodeOpaqueValue(
+            kind === 'ref' ? 'manual_measurement_ref' : 'manual_measurement_cursor', value, uid, connectionId),
+          decode: (kind, value, uid, connectionId) => decodeOpaqueValue(
+            kind === 'ref' ? 'manual_measurement_ref' : 'manual_measurement_cursor', value, uid, connectionId, 'manual measurement reference or cursor'),
+        }, deps);
+      } catch (error) {
+        if (error instanceof McpContentWriteError) throw new McpDataError(error.code, error.message);
+        throw new McpDataError('temporarily_unavailable', 'Manual measurements could not be managed safely.');
+      }
     },
 
     async updateTimelineNote(input: McpContentWriteInput) {

@@ -20,9 +20,17 @@ export interface DeliveryConnection {
 }
 export interface DeliveryAssessment {
   level: 'exact' | 'degraded' | 'unsupported';
+  /** Internal policy only. Omission keeps degraded mappings approval-gated. */
+  requiresApproval?: boolean;
+  /** Private, adapter-proved equivalent approval for the identical prescription
+   * before a presentation-only mapping upgrade. Never exposed as a wire field. */
+  compatibleApprovalDigest?: string;
   issues: string[];
   digest: string;
   mappingVersion: string;
+}
+export function requiresDeliveryMappingApproval(assessment: DeliveryAssessment): boolean {
+  return assessment.level === 'degraded' && assessment.requiresApproval !== false;
 }
 export interface DeliveryArtifact {
   ids: Record<string, string>;
@@ -113,6 +121,9 @@ export interface TrainingDeliveryTransport {
   batch?: TrainingDeliveryBatchTransport;
   inspection?: RemoteInspection;
   mappingVersion: string;
+  /** Optional pure diagnostic classification of the immutable operation, not the
+   * current adapter. No provider I/O or authority; callers allowlist the result. */
+  diagnosticMappingVersion?(operation: DeliveryOperation): string | null;
   horizonDays: number;
   /** Provider/product policy: withdraw an existing upcoming copy when moved beyond its window. */
   withdrawOutsideHorizon?: boolean;
@@ -175,6 +186,10 @@ export interface DeliveryRuntime {
   transport(provider: PlannedWorkoutProviderId, uid: string): TrainingDeliveryTransport | null;
 }
 export interface DeliveryLedgerV1 {
+  /** Private proof of exact approval equivalence across a presentation-only
+   * mapping upgrade. Independent of remote acceptance and retained when an
+   * obsolete attempt is retired. Does not grant consent or expose a wire field. */
+  mappingApprovalProof?: MappingApprovalProof;
   /** Definite application-access rejection; distinct from temporarily paused transport/inspection readiness. */
   providerAccessBlocked?: boolean;
   verification?: VerificationEvidence;
@@ -214,6 +229,11 @@ export interface DeliveryLedgerV1 {
   lastAcceptedAtMs: number | null;
   updatedAtMs: number;
 }
+export interface MappingApprovalProof {
+  approvedDigest: string;
+  mappingDigest: string;
+  contentDigest: string;
+}
 export interface PastCleanupAuthorization {
   scope: 'plan' | 'workout';
   scopeId: string;
@@ -222,6 +242,7 @@ export interface PastCleanupAuthorization {
   deletedAtMs?: number;
 }
 export interface DeliveryIntent {
+  mappingApprovalProof?: MappingApprovalProof;
   desired: DeliveryLedgerV1['desired'];
   status: TrainingDeliveryStatus;
   timeZone: string;

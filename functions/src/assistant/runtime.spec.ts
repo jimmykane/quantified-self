@@ -31,6 +31,7 @@ import type {
   AssistantMcpToolName,
 } from './mcp-session';
 import { AssistantMcpToolFailure, AssistantRecoverableMcpToolError } from './mcp-session';
+import { createAssistantContentProposal } from './content-proposal';
 
 function createSession() {
   const close = vi.fn().mockResolvedValue(undefined);
@@ -148,6 +149,20 @@ describe('Training preview model-tool selection', () => {
       .toBe('preview_strength_workout_change');
     expect(selectAssistantTrainingPreviewTool('Edit my strength workout sets.'))
       .toBe('preview_strength_workout_change');
+    expect(selectAssistantTrainingPreviewTool('Save this planned workout to my workout library.'))
+      .toBe('preview_saved_workout_change');
+    expect(selectAssistantTrainingPreviewTool('Save this workout to my library.'))
+      .toBe('preview_saved_workout_change');
+    expect(selectAssistantTrainingPreviewTool('Create a workout tomorrow, but do not save it in my library.'))
+      .toBe('preview_create_planned_workout');
+    expect(selectAssistantTrainingPreviewTool('Create a plan without using the saved workout library.'))
+      .toBe('preview_training_changes');
+    expect(selectAssistantTrainingPreviewTool("Don't change the current plan, but save this workout to my library."))
+      .toBe('preview_saved_workout_change');
+    expect(selectAssistantTrainingPreviewTool('Place my saved workout on October 4 and 11 in this plan.'))
+      .toBe('preview_saved_workout_change');
+    expect(selectAssistantTrainingPreviewTool('Archive the saved recipe, but do not change scheduled workouts.'))
+      .toBe('preview_saved_workout_change');
   });
 
   it('advertises only the selected preview to Gemini while retaining authorized MCP tools', async () => {
@@ -578,6 +593,50 @@ describe('Assistant runtime', () => {
     checkAccess.mockReset().mockResolvedValueOnce(undefined).mockRejectedValue(new Error('Conversation changed'));
     await expect(runtime.answer(request)).rejects.toThrow();
     expect(callTool).toHaveBeenCalledTimes(1);
+  });
+
+  it.each(['create', 'update', 'delete'] as const)('prepares a manual measurement %s with canonical review, never a write', async operation => {
+    const { session, callTool } = createSession();
+    const now = new Date('2026-10-01T12:00:00Z');
+    const prepareName = `prepare_manual_measurement_${operation}` as const;
+    session.tools = ['list_manual_measurement_types', 'get_manual_measurement', prepareName].map(name => ({
+      name: name as AssistantMcpToolName, title: name, description: name,
+      inputSchema: { type: 'object', properties: {} },
+    }));
+    const entry = { measurementRef: 'manual-ref', revision: 2, metricId: 'body_weight', canonicalValue: 80,
+      canonicalUnit: 'kg', displayValue: '80.0', displayUnit: 'kg', observedAt: '2026-10-01T08:00:00Z',
+      timezoneOffsetSeconds: 10800, diastolic: null, pulse: null, vo2Context: null, vo2Method: null };
+    callTool.mockImplementation(async (name, args) => ({ structuredContent: name === 'get_manual_measurement'
+      ? { measurement: entry } : name === 'list_manual_measurement_types' ? { types: [], serverTime: now.toISOString() }
+        : createAssistantContentProposal(prepareName, args, { now: () => now.getTime() }) }));
+    const access = vi.fn().mockResolvedValue(undefined);
+    const runtime = createAssistantRuntime({ now: () => now, createMcpSession: vi.fn().mockResolvedValue(session),
+      generateAnswer: async model => {
+        const prepare = model.tools.find(tool => tool.name === prepareName)!;
+        const args = operation === 'create' ? { mutationId: '00000000-0000-4000-8000-000000000000',
+          metricId: 'body_weight', value: 176.36980975, unit: 'lb', observedAt: '2026-10-01T15:00:00+03:00' }
+          : { measurementRef: 'manual-ref', expectedRevision: 2,
+            ...(operation === 'update' ? { value: 81, unit: 'kg' } : {}) };
+        if (operation !== 'create') {
+          await expect(prepare.execute(args)).rejects.toThrow('Get the exact manual measurement');
+          expect(callTool).not.toHaveBeenCalled();
+          await model.tools.find(tool => tool.name === 'get_manual_measurement')!.execute({ measurementRef: 'manual-ref' });
+          await expect(prepare.execute({ ...args, expectedRevision: 1 })).rejects.toThrow('current revision');
+        } else await model.tools.find(tool => tool.name === 'list_manual_measurement_types')!.execute({});
+        await prepare.execute(args);
+        return { answer: 'Review the manual measurement; nothing has been saved yet.', visualRequest: { chart: null, map: null } };
+      } });
+    const result = await runtime.answer({ uid: 'owner', appBaseUrl: 'https://quantified-self.io', prompt: 'Manage my manual weight entry',
+      timeZone: 'Europe/Helsinki', history: [], measurementChangesEnabled: true, assertContentWriteAccess: access });
+    const review = result.pendingContentProposal?.measurementReview;
+    expect(review?.before?.canonicalValue ?? null).toBe(operation === 'create' ? null : 80);
+    if (operation === 'delete') expect(review?.after).toBeNull();
+    else {
+      expect(review?.after?.canonicalValue).toBeCloseTo(operation === 'create' ? 80 : 81, 5);
+      expect(review?.after?.timezoneOffsetSeconds).toBe(10800);
+    }
+    expect(access).toHaveBeenCalledTimes(4);
+    expect(callTool.mock.calls.map(([name]) => name)).not.toEqual(expect.arrayContaining(['create_manual_measurement', 'update_manual_measurement', 'delete_manual_measurement']));
   });
 
   it('requires a current activity-tag read before preparing a clearly identified change', async () => {
@@ -1986,7 +2045,7 @@ describe('Assistant runtime', () => {
       'user-1',
       'https://beta.quantified-self.io',
       'coordinate_free',
-      false, false, false, false, undefined, false, false);
+      false, false, false, false, undefined, false, false, false);
     expect(result.answer).toBe('Your readiness is 72 today.');
     expect(result.evidence).toEqual([expect.objectContaining({
       toolName: 'get_daily_report',
@@ -2376,7 +2435,7 @@ describe('Assistant runtime', () => {
       'user-1',
       'https://quantified-self.io',
       'precise_activity',
-      false, false, false, false, undefined, false, false);
+      false, false, false, false, undefined, false, false, false);
   });
 
   it('preserves an explicit model-selected timezone', async () => {

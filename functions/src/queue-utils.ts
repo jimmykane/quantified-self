@@ -204,10 +204,9 @@ function buildFailedQueueItem(
     // Signed provider continuation URLs are short-lived credentials. They are
     // needed only while the live queue item can retry the exact same request.
     delete failedItem.destinationUploadContinuation;
-    // Garmin Ping/Pull callback URLs contain a short-lived pull token. Keep
-    // them only on a retryable live queue row, never in the longer-lived DLQ.
-    delete failedItem.callbackURL;
-    delete failedItem.garminCallbackURLs;
+    // Retain Garmin callback URLs for operator recovery within the existing
+    // admin-only failed-job TTL. A failed job does not prove the URL expired;
+    // successful/skipped live rows still clear them below. Never log them.
     delete failedItem.processingOwner;
     delete failedItem.processingRevision;
     delete failedItem.processingLeaseExpiresAt;

@@ -56,6 +56,19 @@ describe('public-seo-pages.content', () => {
     expect(TRAINING_PLANS_HOME_CONTENT.mcpExample.prompt).toContain('training load');
     expect(TRAINING_PLANS_HOME_CONTENT.mcpExample.prompt).toContain('already in my plan');
   });
+  it('discloses Garmin Generic limitations on the homepage and public Training Plans page', () => {
+    const home = JSON.stringify(TRAINING_PLANS_HOME_CONTENT);
+    const page = JSON.stringify(TRAINING_PLANS_PAGE_SECTIONS);
+    for (const copy of [home, page]) {
+      expect(copy).toContain('Generic');
+      expect(copy).toContain('only on some devices');
+      expect(copy).toContain('QS keeps your authored sport');
+      expect(copy).not.toContain('Garmin open-water delivery remains unavailable');
+      expect(copy).not.toContain('Garmin and COROS delivery for these sports remain unsupported');
+    }
+    expect(page).toContain('not a native swim profile');
+    expect(page).toContain('COROS delivery for these sports remains unsupported');
+  });
   it('defines distinct public feature and guide paths', () => {
     expect(PUBLIC_FEATURE_PATHS).toEqual({
       hub: 'features',
@@ -168,6 +181,14 @@ describe('public-seo-pages.content', () => {
     expect(trainingPlans.sections.some(section => section.items.some(item => item.copy.includes('compatible MCP client')))).toBe(true);
     expect(trainingPlans.faqItems.some(item => item.question === 'Can I add a workout without creating a plan?')).toBe(true);
     expect(trainingPlans.faqItems.some(item => item.question === 'Can I use an MCP client with Training Plans?')).toBe(true);
+    expect(JSON.stringify(trainingPlans)).toContain('Wahoo supports timed strength sets and rests as Gym workouts');
+    expect(JSON.stringify(trainingPlans)).toContain('Wahoo supports outdoor Walking/Hiking with timed steps and no intensity targets');
+    expect(JSON.stringify(trainingPlans)).toContain('Wahoo supports timed, untargeted outdoor and indoor rowing');
+    expect(JSON.stringify(trainingPlans)).toContain('Distance endings and intensity targets remain unsupported');
+    expect(JSON.stringify(trainingPlans)).not.toContain('validation candidate');
+    expect(JSON.stringify(trainingPlans)).toContain('does not send the selected pool length');
+    expect(JSON.stringify(trainingPlans)).toContain('repetition sets remain unsupported');
+    expect(JSON.stringify(trainingPlans)).toContain('exercise/load instructions are not native tracking');
     expect(trainingPlans.socialImage).toBe('https://quantified-self.io/assets/images/training-plans-social.png');
     expect(trainingPlans.freeOfferDescription).toBe('Training plans and standalone structured workouts created in Quantified Self');
     const trainingPlanEntities = PUBLIC_SEO_ROUTE_DATA.trainingPlans.jsonLd['mainEntity'] as Record<string, unknown>[];

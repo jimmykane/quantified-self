@@ -56,8 +56,6 @@
       } @else if (plannedWorkoutRows().length) {
       <mat-nav-list>
         @for (planned of plannedWorkoutRows(); track planned.id) {
-        <div class="calendar-day-planned-row" role="presentation" [style.--planned-workout-color]="planned.color">
-          <span class="calendar-day-planned-accent" aria-hidden="true"></span>
           <a mat-list-item appHapticTap class="calendar-day-entry-item calendar-day-planned-item" [routerLink]="['/training/plans/workout', planned.id]"
             (click)="prepareWorkoutNavigation()">
             <div class="calendar-day-entry">
@@ -66,20 +64,10 @@
               <div class="calendar-day-entry-copy">
                 <span class="calendar-day-entry-title">{{ planned.title }}</span>
                 <span class="calendar-day-entry-supporting">{{ planned.scopeLabel }} · {{ planned.lifecycleLabel }}</span>
-                <span class="calendar-day-entry-supporting">{{ planned.summary.join(' · ') }}</span>
               </div>
               <mat-icon class="calendar-day-item-meta" aria-hidden="true">chevron_right</mat-icon>
             </div>
           </a>
-          <button mat-icon-button appHapticTap type="button" matTooltip="Duplicate to…"
-            [attr.aria-label]="'Duplicate ' + planned.title + ' to a chosen date'"
-            [disabled]="duplicatingId() !== null || !data.scheduleSource" (click)="duplicateWorkout(planned.workout)">
-            <span class="calendar-day-duplicate-icon" aria-hidden="true">
-              @if (duplicatingId() === planned.id) { <mat-spinner diameter="18" aria-hidden="true"></mat-spinner> }
-              @else { <mat-icon aria-hidden="true">content_copy</mat-icon> }
-            </span>
-          </button>
-        </div>
         }
       </mat-nav-list>
       } @else {
@@ -100,7 +88,10 @@
     </div>
 
     @if (trainingImpactState().status !== 'private') {
-    <app-training-impact [impact]="dayTrainingImpact()" variant="summary" title="Day training impact"></app-training-impact>
+    <app-training-impact [impact]="dayTrainingImpact()" variant="compact" title="Day training impact"></app-training-impact>
+    @if (dayTrainingImpact().availability === 'ready' && dayTrainingImpact().message) {
+    <p class="calendar-day-empty" role="status">{{ dayTrainingImpact().message }}</p>
+    }
     }
 
     @if (familyVolumeRows().length) {

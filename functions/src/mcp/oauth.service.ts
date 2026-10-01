@@ -25,6 +25,7 @@ export const MCP_OAUTH_SCOPES = {
   TrainingPlansWrite: 'training-plans:write',
   TrainingDeliveryWrite: 'training-delivery:write',
   MeasurementsRead: 'measurements:read',
+  MeasurementsWrite: 'measurements:write',
   SleepRead: 'sleep:read',
   ActivityDetailsRead: 'activity-details:read',
   EventsWrite: 'events:write',
@@ -2129,6 +2130,7 @@ export function createMcpOAuthService(
       const grantedScopes = normalizeOAuthScopes(input.grantedScopes
         ?? request.scopes.filter(scope => scope !== MCP_OAUTH_SCOPES.TimelineNotesRead
           && scope !== MCP_OAUTH_SCOPES.TimelineNotesWrite
+          && scope !== MCP_OAUTH_SCOPES.MeasurementsWrite
           && scope !== MCP_OAUTH_SCOPES.TrainingPlansRead
           && scope !== MCP_OAUTH_SCOPES.TrainingPlansWrite
           && scope !== MCP_OAUTH_SCOPES.TrainingDeliveryWrite

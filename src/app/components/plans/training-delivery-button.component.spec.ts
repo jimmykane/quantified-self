@@ -34,14 +34,15 @@ describe('Training delivery summaries on the workspace', () => {
     timeZone: 'Europe/Helsinki', approvalDigest: null, issues: [], lastAcceptedAtMs: 2, lastAttemptAtMs: 2, retryCount: 0, nextRetryAtMs: null, updatedAtMs: 3 };
   let view$: BehaviorSubject<TrainingDeliveryView>;
   let service: { watchSummaryScope: ReturnType<typeof vi.fn>; watchPresence: ReturnType<typeof vi.fn>; anyReady: ReturnType<typeof vi.fn>;
-    isReady: ReturnType<typeof vi.fn>; isSetupAvailable: ReturnType<typeof vi.fn> };
+    isReady: ReturnType<typeof vi.fn>; isVisible: ReturnType<typeof vi.fn>; isSetupAvailable: ReturnType<typeof vi.fn> };
   let open: ReturnType<typeof vi.fn>;
   let selection: ReturnType<typeof vi.fn>;
   beforeEach(async () => {
     vi.stubGlobal('crypto', webcrypto); user.set({ uid: 'owner' }); user$.next(user());
     view$ = new BehaviorSubject<TrainingDeliveryView>({ settings: [setting], statuses: [status] });
     service = { watchSummaryScope: vi.fn(() => view$), watchPresence: vi.fn(() => of(true)), anyReady: vi.fn(() => false),
-      isReady: vi.fn(() => false), isSetupAvailable: vi.fn((provider, _planDelivery) => service.isReady(provider)) };
+      isReady: vi.fn(() => false), isVisible: vi.fn(provider => provider !== 'coros'),
+      isSetupAvailable: vi.fn((provider, _planDelivery) => service.isReady(provider)) };
     open = vi.fn(); selection = vi.fn();
     TestBed.overrideComponent(ServiceSourceIconComponent, { set: { template: '' } });
     TestBed.overrideComponent(TrainingDeliveryButtonComponent, { add: { providers: [{ provide: MatDialog, useValue: { open } }] } });
@@ -78,6 +79,19 @@ describe('Training delivery summaries on the workspace', () => {
     expect(open.mock.calls[0][1].data).toMatchObject({ scope, id: scope === 'plan' ? 'p' : 'w', title: scope === 'plan' ? plan.name : workout.title });
     if (scope === 'plan') expect(typeof open.mock.calls[0][1].data.planSummaries).toBe('function');
     else expect(open.mock.calls[0][1].data.planSummaries).toBeUndefined();
+  });
+  it('does not let retained COROS-only state create a plan summary or sync entry', async () => {
+    service.anyReady.mockReturnValue(false);
+    view$.next({ settings: [{ ...setting, provider: 'coros' }], statuses: [{ ...status, provider: 'coros' }] });
+    const fixture = TestBed.createComponent(TrainingDeliveryButtonComponent);
+    fixture.componentRef.setInput('scope', 'plan'); fixture.componentRef.setInput('entityId', 'p');
+    fixture.componentRef.setInput('title', plan.name); fixture.componentRef.setInput('summaryWorkouts', [workout]);
+    fixture.componentRef.setInput('summaryPlan', plan); fixture.detectChanges();
+    await vi.waitFor(() => { fixture.detectChanges(); expect(fixture.componentInstance.readState().loaded).toBe(true); });
+    expect(fixture.componentInstance.hasRecords()).toBe(false);
+    expect(fixture.componentInstance.summaries()).toEqual([]);
+    expect(fixture.nativeElement.textContent).not.toContain('COROS');
+    expect(fixture.nativeElement.querySelector('button')).toBeNull();
   });
   it('separates a confirmed Garmin cloud copy from an inconclusive later check', async () => {
     const fixture = await render('workout');
@@ -134,7 +148,7 @@ describe('Training delivery summaries on the workspace', () => {
     expect(fixture.nativeElement.querySelectorAll('.delivery-plan-provider-count')).toHaveLength(0);
     expect(service.watchSummaryScope).toHaveBeenCalledTimes(1);
   });
-  it('replaces four meaningless dashes with one clear plan message while keeping service details', async () => {
+  it('replaces meaningless dashes with one clear plan message while keeping visible service details', async () => {
     const fixture = await render();
     const providers = ['garmin', 'coros', 'wahoo', 'suunto'] as const;
     view$.next({ settings: providers.map(provider => ({ ...setting, provider })), statuses: providers.map(provider => ({
@@ -142,7 +156,7 @@ describe('Training delivery summaries on the workspace', () => {
     })) });
     fixture.componentRef.setInput('summaryNowMs', Date.parse('2027-01-02T12:00:00Z'));
     await vi.waitFor(() => { fixture.detectChanges();
-      expect(fixture.nativeElement.querySelectorAll('.delivery-plan-provider')).toHaveLength(4);
+      expect(fixture.nativeElement.querySelectorAll('.delivery-plan-provider')).toHaveLength(3);
       expect(fixture.nativeElement.textContent).toContain('No workouts due for sync');
     });
     expect(fixture.nativeElement.querySelectorAll('.delivery-plan-provider-count')).toHaveLength(0);
@@ -220,22 +234,22 @@ describe('Training delivery summaries on the workspace', () => {
       id: createHash('sha256').update(JSON.stringify(['owner', provider, 'safe', workout.id])).digest('hex'),
       status: index ? 'approval_required' : 'delivered', differsFromQS: index > 0,
     }))) });
-    await vi.waitFor(() => { fixture.detectChanges(); expect(fixture.componentInstance.summaries()).toHaveLength(4); });
+    await vi.waitFor(() => { fixture.detectChanges(); expect(fixture.componentInstance.summaries()).toHaveLength(3); });
     const summary = fixture.nativeElement.querySelector('.delivery-plan-summary');
     const buttons = summary.querySelectorAll('button');
     expect(buttons).toHaveLength(1);
     expect(summary.matches('button')).toBe(false);
     expect(summary.textContent).toContain('Plan sync');
     expect(buttons[0].textContent).toContain('View');
-    expect(fixture.nativeElement.querySelectorAll('.delivery-plan-provider')).toHaveLength(4);
+    expect(fixture.nativeElement.querySelectorAll('.delivery-plan-provider')).toHaveLength(3);
     const providerRows: HTMLElement[] = Array.from(fixture.nativeElement.querySelectorAll('.delivery-plan-provider'));
-    for (const provider of ['Garmin Connect', 'COROS', 'Wahoo', 'Suunto App']) {
+    for (const provider of ['Garmin Connect', 'Wahoo', 'Suunto App']) {
       const state = provider === 'Suunto App' ? 'sent' : 'synced';
       expect(providerRows.some(row => row.getAttribute('aria-label')?.includes(`${provider}: 1 of 2 upcoming workouts ${state}`))).toBe(true);
     }
     expect(buttons[0].getAttribute('aria-label')).toBe('View plan sync details');
     const visibleCounts: HTMLElement[] = Array.from(fixture.nativeElement.querySelectorAll('.delivery-plan-provider-count'));
-    expect(visibleCounts.map(node => node.textContent?.trim())).toEqual(['1/2', '1/2', '1/2', '1/2']);
+    expect(visibleCounts.map(node => node.textContent?.trim())).toEqual(['1/2', '1/2', '1/2']);
     buttons[0].click();
     expect(open).toHaveBeenCalledTimes(1);
     expect(fixture.nativeElement.querySelector('mat-expansion-panel')).toBeNull();

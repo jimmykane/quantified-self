@@ -9,15 +9,44 @@ on:
   push:
     branches: [main, develop, 'feature/**']
   pull_request:
-    # The branches below must be a subset of the branches above
+    # Targets, not source branches. Forks and other source branches still need PR scans.
     branches: [main, develop]
     types: [opened, synchronize, reopened, ready_for_review]
   schedule:
     - cron: '0 23 * * 6'
 
 jobs:
+  scan_route:
+    name: Select scan route
+    runs-on: ubuntu-latest
+    permissions: {}
+    outputs:
+      scan: ${{ steps.route.outputs.scan }}
+    steps:
+      - name: Reuse push scans for covered internal PRs
+        id: route
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          HEAD_REPOSITORY: ${{ github.event.pull_request.head.repo.full_name }}
+          REPOSITORY: ${{ github.repository }}
+          HEAD_BRANCH: ${{ github.event.pull_request.head.ref }}
+        run: |
+          scan=true
+          if [[ "$EVENT_NAME" == 'pull_request' && "$HEAD_REPOSITORY" == "$REPOSITORY" ]]; then
+            # Case-sensitive matching, just like the push branch filters.
+            case "$HEAD_BRANCH" in
+              main|develop|feature/*) scan=false ;;
+            esac
+          fi
+          echo "scan=$scan" >> "$GITHUB_OUTPUT"
+
   analyze:
+    # Covered internal branches reuse push findings (which GitHub maps to open PRs).
+    # Keep PR merge scans for forks and branches with no CodeQL push trigger.
+    # GitHub can display name expressions literally when a job is skipped.
+    needs: scan_route
     name: Analyze
+    if: ${{ needs.scan_route.outputs.scan == 'true' }}
     runs-on: ubuntu-latest
     permissions:
       actions: read

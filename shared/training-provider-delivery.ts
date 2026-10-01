@@ -72,6 +72,8 @@ export interface TrainingDeliveryPreviewV1 {
   settingsRevision: number;
   eligibleCount: number;
   warningCount: number;
+  /** Optional for older callable clients; warnings can describe non-blocking provider limitations. */
+  approvalRequiredCount?: number;
   issues: string[];
   approvalDigest: string | null;
   /** Present for one workout; a plan preview may contain mixed mappings. */

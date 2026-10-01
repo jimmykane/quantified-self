@@ -161,6 +161,9 @@ Never commit environment files, service-account JSON, API tokens, private keys, 
 | Functions tests | `npm --prefix functions test` | One-shot Vitest suite |
 | Functions coverage | `npm --prefix functions run test:coverage` | Writes the Functions coverage report |
 | Functions build | `npm --prefix functions run build` | Compiles TypeScript to `functions/lib` |
+| Functions emulator tests | `npm run test:functions-emulators -- lifecycle` | Builds first; use no argument for all four isolated demo groups |
+| Emulator CI coverage guard | `npm run test:emulator-coverage` | Rejects missing/duplicate suites, unsafe environments and skipped coverage |
+| CI workflow regression tests | `npm run test:workflows` | Fork/internal trigger routing and the required aggregate test result |
 | Functions lint | `npm --prefix functions run lint` | Runs ESLint with `--fix` and may edit files |
 | Install Git hooks | `npm run hooks:install` | Reinstalls the repository Lefthook hooks; `npm ci` normally installs them automatically |
 | Test the local credential guard | `npm run credentials:test` | Checks the staged-file rejection policy without reading credential values |
@@ -171,7 +174,9 @@ Never commit environment files, service-account JSON, API tokens, private keys, 
 | Local plugin refresh | `npm run plugin:sync` | Explicitly rebuilds and reinstalls; normal app builds never do this |
 
 The repository-local Quantified Self plugin bundles the registered permission-scoped MCP app with seven discoverable workflows
-for cross-domain analysis, all-day Health, training, sleep, body measurements, activities, and saved routes. Configure its
+for cross-domain analysis, all-day Health, training, sleep, body measurements, activities, and saved routes. Manual Health
+entry lookup/logging/editing/permanent deletion needs independent `measurements:write` authorization and client approval;
+historical read permissions never grant writes and imports remain immutable. Configure its
 account-specific ChatGPT technical app ID once by setting `QS_CHATGPT_APP_ID` and running
 `npm run plugin:configure`, then run `npm run plugin:setup`. Generated app mappings and cache-busted manifests are
 ignored. Restart the ChatGPT desktop app after setup or sync, then test in a new conversation. See the
@@ -223,6 +228,7 @@ Unified health history under `users/{uid}/healthSourceRecords` and `healthSample
 
 ## Architecture documentation
 
+- [CI test coverage and emulator isolation](docs/ci-testing.md)
 - [Reusable event tag catalog and backfill](docs/event-tag-catalog.md)
 - [Firebase Functions target-aware entrypoint loading](docs/functions-entrypoint-loading.md)
 - [Admin dashboard aggregate user history](docs/admin-dashboard-history.md)

@@ -136,10 +136,48 @@ describe('CalendarDayDetailsComponent', () => {
       trainingImpact: signal({ status: 'ready', formPoints }),
     });
 
-    expect(fixture.nativeElement.querySelector('app-training-impact[title="Day training impact"]')).toBeTruthy();
+    const summary = fixture.nativeElement.querySelector('app-training-impact[title="Day training impact"]');
+    expect(summary?.getAttribute('variant')).toBe('compact');
+    expect(summary?.querySelector('.training-impact-metrics')).toBeNull();
+    expect(summary?.querySelector('.training-impact-compact')?.getAttribute('aria-label'))
+      .toContain('Fitness load (CTL) +1. Fatigue load (ATL) +6. Freshness (Form) −5');
+    expect(summary?.textContent).toContain('Fitness load rose after normal decay');
     expect(fixture.nativeElement.querySelector('.calendar-day-event-item app-training-impact')).toBeTruthy();
-    expect(fixture.nativeElement.textContent).toContain('Fitness load (CTL)');
     expect(fixture.nativeElement.textContent).toContain('+1 CTL · +6 ATL · −5 Form');
+  });
+
+  it.each(['updating', 'error', 'private'] as const)('keeps compact Training-impact state %s explicit', async status => {
+    const fixture = await renderDayDetails(createEvent('Morning run', undefined, 'Running', {
+      'Training Stress Score': 42,
+    }), { trainingImpact: signal({ status, formPoints: null }) });
+    const summary = fixture.nativeElement.querySelector('app-training-impact[title="Day training impact"]');
+    if (status === 'private') {
+      expect(fixture.nativeElement.querySelector('app-training-impact')).toBeNull();
+      return;
+    }
+    const compact = summary.querySelector('.training-impact-compact');
+    expect(compact.getAttribute('role')).toBe(status === 'error' ? 'alert' : 'status');
+    expect(compact.getAttribute('aria-busy')).toBe(status === 'updating' ? 'true' : 'false');
+    expect(compact.textContent).toContain(status === 'error'
+      ? 'Training impact could not be loaded.' : 'Updating Training impact…');
+    expect(summary.textContent).not.toContain('CTL ·');
+  });
+
+  it('retains partial-coverage copy beside the compact total and labels the activity without TSS', async () => {
+    const event = createEvent('Morning run', undefined, 'Running', { 'Training Stress Score': 42 });
+    const dayMs = Date.UTC(2026, 7, 3);
+    const formPoints = buildTrainingLoadPoints([{ dayMs, load: 42 }]).map(point => ({
+      time: point.dayMs, trainingStressScore: point.load, ctl: point.ctl, atl: point.atl,
+      formSameDay: point.formSameDay, formPriorDay: point.formPriorDay,
+    }));
+    const fixture = await renderDayDetails([
+      event, createEvent('Evening run', undefined, 'Running', {}, 'event-2'),
+    ], { trainingImpact: signal({ status: 'ready', formPoints }) });
+    const summary = fixture.nativeElement.querySelector('app-training-impact[title="Day training impact"]');
+    expect(summary.textContent).toContain('+1 CTL · +6 ATL · −5 Form');
+    expect(summary.nextElementSibling?.getAttribute('role')).toBe('status');
+    expect(summary.nextElementSibling?.textContent).toContain('Some completed activities have no available Training impact.');
+    expect(fixture.nativeElement.textContent).toContain('Training impact unavailable — this activity has no TSS.');
   });
 
   it('keeps planned workouts separate and offers active-plan and standalone add paths', async () => {
@@ -154,9 +192,10 @@ describe('CalendarDayDetailsComponent', () => {
       .toBe('/training/plans/workout/workout-1');
     expect(fixture.nativeElement.querySelector('.calendar-day-planned-item')?.textContent)
       .toContain('Autumn build · Planned');
-    expect(fixture.nativeElement.querySelector('.calendar-day-planned-item')?.textContent).toContain('30m 00s');
-    expect((fixture.nativeElement.querySelector('.calendar-day-planned-row') as HTMLElement).style.getPropertyValue('--planned-workout-color')).toBe('purple');
-    expect(fixture.nativeElement.querySelector('.calendar-day-planned-accent')?.getAttribute('aria-hidden')).toBe('true');
+    expect(fixture.nativeElement.querySelectorAll('.calendar-day-planned-item .calendar-day-entry-supporting')).toHaveLength(1);
+    expect(fixture.nativeElement.querySelector('.calendar-day-planned-item')?.textContent).not.toContain('30m 00s');
+    expect(fixture.nativeElement.querySelector('.calendar-day-planned-accent')).toBeNull();
+    expect(fixture.nativeElement.querySelector('.calendar-day-planned-item app-activity-type-icon')).toBeTruthy();
     expect(addButton?.getAttribute('aria-label')).toBe('Add workout for selected day');
     addButton.click();
     fixture.detectChanges();
@@ -176,22 +215,26 @@ describe('CalendarDayDetailsComponent', () => {
     expect(fixture.nativeElement.querySelector('[aria-labelledby="calendar-day-family-title"]')).toBeNull();
   });
 
-  it('offers a separate duplicate action for planned workouts and returns the destination day', async () => {
-    const duplicate = vi.fn().mockResolvedValue({ kind: 'duplicated-workout', workoutId: 'copy',
-      planId: 'plan-1', localDate: '2026-08-10' });
+  it('keeps planned workout rows navigation-only, without duplicate buttons or calls', async () => {
     const fixture = await renderDayDetails([], {
       plannedWorkouts: [{ workout: createPlannedWorkout(), planName: 'Autumn build' }],
       scheduleSource: () => null,
     });
-    TestBed.inject(TrainingWorkoutDuplicateService).duplicate = duplicate;
-    const button = fixture.nativeElement.querySelector('[aria-label="Duplicate Tempo intervals to a chosen date"]') as HTMLButtonElement;
-    expect(button).toBeTruthy();
-    expect(button.disabled).toBe(false);
-    button.click();
+    const list = fixture.nativeElement.querySelector('.calendar-day-planned mat-nav-list');
+    const link = list.querySelector('a') as HTMLAnchorElement;
+    expect(list.querySelector('button')).toBeNull();
+    expect(list.textContent).not.toContain('content_copy');
+    expect(link.parentElement?.tagName).toBe('MAT-NAV-LIST');
+    expect(link.getAttribute('href')).toBe('/training/plans/workout/workout-1');
+    expect(TestBed.inject(AppHapticsService).selection).not.toHaveBeenCalled();
+    const prepareReturn = vi.spyOn(TestBed.inject(CalendarDayDetailsNavigationService), 'prepareReturn');
+    vi.spyOn(TestBed.inject(Router), 'navigateByUrl').mockResolvedValue(true);
+    link.click();
     await fixture.whenStable();
-    expect(duplicate).toHaveBeenCalledWith(planningUserUid, expect.objectContaining({ id: 'workout-1' }), expect.any(Function));
-    expect(TestBed.inject(MatBottomSheetRef).dismiss).toHaveBeenCalledWith({ kind: 'duplicated-workout',
-      workoutId: 'copy', planId: 'plan-1', localDate: '2026-08-10' });
+    expect(prepareReturn).toHaveBeenCalledWith('/', '2026-08-03');
+    expect(TestBed.inject(MatBottomSheetRef).dismiss).toHaveBeenCalledExactlyOnceWith();
+    expect(TestBed.inject(AppHapticsService).selection).toHaveBeenCalledOnce();
+    expect(TestBed.inject(TrainingWorkoutDuplicateService).duplicate).not.toHaveBeenCalled();
   });
 
   it('shows exact completion links as completed without adding them to recorded activity totals', async () => {
@@ -208,38 +251,7 @@ describe('CalendarDayDetailsComponent', () => {
     expect(fixture.componentInstance.day().eventCount).toBe(0);
   });
 
-  it('keeps the duplicate icon box stable while pending and silent for a disabled repeat click', async () => {
-    let finish: (result: null) => void;
-    const pending = new Promise<null>(resolve => { finish = resolve; });
-    const fixture = await renderDayDetails([], {
-      plannedWorkouts: [{ workout: createPlannedWorkout() }],
-      scheduleSource: () => null,
-    });
-    const duplicate = vi.fn(() => pending);
-    TestBed.inject(TrainingWorkoutDuplicateService).duplicate = duplicate;
-    const button = fixture.nativeElement.querySelector('.calendar-day-planned-row > button') as HTMLButtonElement;
-    const iconBox = button.querySelector('.calendar-day-duplicate-icon');
-    expect(iconBox?.getAttribute('aria-hidden')).toBe('true');
-    expect(iconBox?.querySelector('mat-icon')?.textContent?.trim()).toBe('content_copy');
-
-    button.click(); fixture.detectChanges();
-    expect(button.disabled).toBe(true);
-    expect(button.querySelector('.calendar-day-duplicate-icon')).toBe(iconBox);
-    expect(iconBox?.querySelector('mat-spinner')?.getAttribute('diameter')).toBe('18');
-    expect(iconBox?.querySelector('mat-icon')).toBeNull();
-    button.click();
-    expect(duplicate).toHaveBeenCalledOnce();
-    expect(TestBed.inject(AppHapticsService).selection).toHaveBeenCalledOnce();
-
-    finish(null); await fixture.whenStable(); fixture.detectChanges();
-    expect(button.disabled).toBe(false);
-    expect(button.querySelector('.calendar-day-duplicate-icon')).toBe(iconBox);
-    expect(iconBox?.querySelector('mat-icon')?.textContent?.trim()).toBe('content_copy');
-    expect(iconBox?.querySelector('mat-spinner')).toBeNull();
-    expect(TestBed.inject(MatBottomSheetRef).dismiss).not.toHaveBeenCalled();
-  });
-
-  it('keeps navigation icons decorative and duplicate actions separate from workout links', async () => {
+  it('keeps navigation icons decorative and workout links free of secondary actions', async () => {
     const fixture = await renderDayDetails(createEvent(), {
       plannedWorkouts: [{ workout: createPlannedWorkout(), planName: 'Autumn build' }],
     });
@@ -251,10 +263,9 @@ describe('CalendarDayDetailsComponent', () => {
     const sportIcons = [...fixture.nativeElement.querySelectorAll('.calendar-day-entry app-activity-type-icon')];
     expect(sportIcons).toHaveLength(2);
     expect(sportIcons.every(icon => icon.getAttribute('size') === '20px' && icon.getAttribute('aria-hidden') === 'true')).toBe(true);
-    const plannedRow = fixture.nativeElement.querySelector('.calendar-day-planned-row');
-    expect(plannedRow.querySelector('a button')).toBeNull();
-    expect(plannedRow.querySelector('button')?.getAttribute('aria-label')).toContain('Duplicate');
-    expect(plannedRow.querySelector('.calendar-day-planned-accent')?.getAttribute('aria-hidden')).toBe('true');
+    const plannedRow = fixture.nativeElement.querySelector('.calendar-day-planned-item');
+    expect(plannedRow.querySelector('button')).toBeNull();
+    expect(plannedRow.querySelector('.calendar-day-planned-accent')).toBeNull();
   });
 
   it('updates an already-open day when the planned-workout listener finishes', async () => {
@@ -370,7 +381,6 @@ describe('CalendarDayDetailsComponent', () => {
     )]
       .map((stat: HTMLElement) => stat.getAttribute('aria-label'));
     expect(groupStats).toEqual([
-      'Duration 1h',
       'Distance 20.00 Km',
       'Descent 1,200 m',
     ]);
@@ -470,6 +480,7 @@ async function renderDayDetails(eventOrEvents: EventInterface | EventInterface[]
       { provide: MatBottomSheetRef, useValue: { dismiss: vi.fn() } },
       { provide: AppHapticsService, useValue: { selection: vi.fn() } },
       { provide: AppThemeService, useValue: { appTheme: signal('normal') } },
+      // The embedded context also serves previews, where duplication is retained.
       { provide: TrainingWorkoutDuplicateService, useValue: { duplicate: vi.fn() } },
       { provide: CalendarDayHealthService, useValue: { watch: vi.fn(() => of({ sessions: [], hrvSeries: [], derived: null, sleepError: false, hrvError: false, readinessError: false, recoveryError: false })) } },
       {

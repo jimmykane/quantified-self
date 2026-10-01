@@ -109,6 +109,8 @@ describe('McpConnectionsComponent', () => {
       parentTitle: 'Training plans and planned workouts',
       summary: 'Requires Training plans and planned workouts.',
     });
+    expect(MCP_SCOPE_CONTENT['training-plans:read'].description).toContain('undated saved workout recipes');
+    expect(MCP_SCOPE_CONTENT['training-plans:write'].description).toContain('permanently delete an undated saved workout recipe');
     expect(rows.find(permission => permission.scope === 'training-delivery:write')).toMatchObject({
       title: 'Change planned-workout sync', granted: true,
       parentTitle: 'Training plans and planned workouts',

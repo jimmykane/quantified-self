@@ -10,6 +10,46 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Training MCP loopback Fir
   if (process.env.FIRESTORE_EMULATOR_HOST && !/^(127\.0\.0\.1|localhost):\d+$/.test(process.env.FIRESTORE_EMULATOR_HOST)) throw Error('Loopback emulator required');
   const db = new Firestore({ projectId: 'demo-mcp-training-reads' });
   afterAll(async () => { vi.restoreAllMocks(); await db.terminate(); });
+  it('reads saved recipes in bounded owner-only pages and invalidates cursors after edits', async () => {
+    const uid = `training-library-read-${randomUUID()}`;
+    const user = db.collection('users').doc(uid);
+    const reads = createFirestoreTrainingReads(() => db);
+    const codec: TrainingReadCodec = { encode: value => JSON.stringify(value), decode: value => JSON.parse(value) };
+    const run = (tool: TrainingReadTool, args: unknown) => readTrainingPlans({ tool, arguments: args, uid,
+      connectionId: 'connection', scopes: ['training-plans:read'] }, reads, codec);
+    await user.set({});
+    await user.collection('mcpConnections').doc('connection').set({ status: 'active', scopes: ['training-plans:read'] });
+    await user.collection('trainingPlanState').doc('current').set({ revision: 1, activePlanId: null });
+    await user.collection('trainingPlanState').doc('current').collection('workoutLibraryState').doc('current')
+      .set({ revision: 1 });
+    const batch = db.batch();
+    for (let index = 0; index < 26; index++) batch.set(user.collection('workoutLibrary').doc(`saved-${index}`), {
+      schemaVersion: 1, id: `saved-${index}`, title: `Easy ${index}`, status: 'active', revision: 1,
+      createdAtMs: 1, updatedAtMs: 1, privateCanary: 'PRIVATE',
+      structure: { version: 1, sport: ActivityTypes.Running, nodes: [{ id: 'step', kind: 'step', purpose: 'work',
+        ending: { kind: 'time', seconds: 1800 }, targets: [] }] },
+    });
+    await batch.commit();
+    const first = TRAINING_READ_OUTPUTS.list_saved_workouts.parse(await run('list_saved_workouts', { limit: 25 }));
+    expect(first.workouts).toHaveLength(25);
+    expect(first.scanComplete).toBe(false);
+    expect(JSON.stringify(first)).not.toContain('PRIVATE');
+    const second = TRAINING_READ_OUTPUTS.list_saved_workouts.parse(await run('list_saved_workouts', {
+      limit: 25, cursor: first.nextCursor,
+    }));
+    expect(second.workouts).toHaveLength(1);
+    const detail = TRAINING_READ_OUTPUTS.get_saved_workout.parse(await run('get_saved_workout', {
+      savedWorkoutRef: first.workouts[0].savedWorkoutRef,
+    }));
+    expect(detail.savedWorkout.structure.sport).toBe(ActivityTypes.Running);
+    expect(JSON.stringify(detail)).not.toContain('PRIVATE');
+    await user.collection('trainingPlanState').doc('current').collection('workoutLibraryState').doc('current')
+      .update({ revision: 2 });
+    await expect(run('list_saved_workouts', { limit: 25, cursor: first.nextCursor }))
+      .rejects.toThrow('library changed');
+    await user.collection('mcpConnections').doc('connection').update({ revokedAtMs: 2 });
+    await expect(run('list_saved_workouts', {})).rejects.toThrow();
+  }, 30_000);
   it('reads a full 400-workout, four-service plan in bounded Firestore pages and detects retained-record overflow', async () => {
     const uid = `training-scale-${randomUUID()}`, user = db.collection('users').doc(uid);
     const reads = createFirestoreTrainingReads(() => db);

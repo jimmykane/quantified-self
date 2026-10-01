@@ -1,6 +1,14 @@
 {
   "indexes": [
     {
+      "collectionGroup": "healthSourceRecords", "queryScope": "COLLECTION",
+      "fields": [{ "fieldPath": "source.sourceRecordType", "order": "ASCENDING" }, { "fieldPath": "startTimeMs", "order": "DESCENDING" }, { "fieldPath": "__name__", "order": "DESCENDING" }]
+    },
+    {
+      "collectionGroup": "healthSourceRecords", "queryScope": "COLLECTION",
+      "fields": [{ "fieldPath": "source.sourceRecordType", "order": "ASCENDING" }, { "fieldPath": "metricIds", "arrayConfig": "CONTAINS" }, { "fieldPath": "startTimeMs", "order": "DESCENDING" }, { "fieldPath": "__name__", "order": "DESCENDING" }]
+    },
+    {
       "collectionGroup": "activitySyncQueue", "queryScope": "COLLECTION",
       "fields": [{ "fieldPath": "deliveryMode", "order": "ASCENDING" }, { "fieldPath": "processed", "order": "ASCENDING" }, { "fieldPath": "retryCount", "order": "ASCENDING" }]
     },
@@ -2182,6 +2190,30 @@
       "indexes": []
     },
     {
+      "collectionGroup": "trainingMcpLibraryProposals",
+      "fieldPath": "expireAt",
+      "ttl": true,
+      "indexes": []
+    },
+    {
+      "collectionGroup": "trainingMcpLibraryProposals",
+      "fieldPath": "request",
+      "ttl": false,
+      "indexes": []
+    },
+    {
+      "collectionGroup": "trainingMcpLibraryProposals",
+      "fieldPath": "preview",
+      "ttl": false,
+      "indexes": []
+    },
+    {
+      "collectionGroup": "trainingMcpLibraryProposals",
+      "fieldPath": "result",
+      "ttl": false,
+      "indexes": []
+    },
+    {
       "collectionGroup": "COROSAPIWorkoutQueue",
       "fieldPath": "expireAt",
       "ttl": true,
@@ -2563,6 +2595,18 @@
     },
     {
       "collectionGroup": "mutationReceipts",
+      "fieldPath": "expireAt",
+      "ttl": true,
+      "indexes": []
+    },
+    {
+      "collectionGroup": "workoutLibraryMutationReceipts",
+      "fieldPath": "expireAt",
+      "ttl": true,
+      "indexes": []
+    },
+    {
+      "collectionGroup": "workoutLibraryPlacementReceipts",
       "fieldPath": "expireAt",
       "ttl": true,
       "indexes": []

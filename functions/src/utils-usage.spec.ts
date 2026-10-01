@@ -208,6 +208,24 @@ describe('utils higher-level helpers', () => {
             await expect(checkEventUsageLimit('u1', undefined, pending)).rejects.toBeInstanceOf(UsageLimitExceededError);
         });
 
+        it('retries role verification without caching a free-tier limit or reserving writes after an Auth outage', async () => {
+            hoisted.getUser.mockRejectedValueOnce(Object.assign(new Error('Auth network failure'), {
+                code: 'app/network-error',
+            })).mockResolvedValueOnce({ customClaims: { stripeRole: 'pro' } });
+            hoisted.setCount(1167);
+            const cache = new Map();
+            const pending = new Map<string, number>([['u1', 2]]);
+
+            await expect(checkEventUsageLimit('u1', cache, pending)).rejects.toMatchObject({ code: 'unavailable' });
+            expect(cache.size).toBe(0);
+            expect(pending.get('u1')).toBe(2);
+
+            await expect(checkEventUsageLimit('u1', cache, pending)).resolves.toBeUndefined();
+            expect(hoisted.getUser).toHaveBeenCalledTimes(2);
+            expect(cache.size).toBe(0);
+            expect(pending.get('u1')).toBe(2);
+        });
+
         it('uses cache to avoid duplicate Firestore count calls', async () => {
             hoisted.getUser.mockResolvedValue({ customClaims: { stripeRole: 'free' } });
             hoisted.setCount(1);
@@ -257,6 +275,18 @@ describe('utils higher-level helpers', () => {
     });
 
     describe('getUserRoleAndGracePeriod', () => {
+        it('uses free only when a successful Auth lookup has no subscription claim', async () => {
+            hoisted.getUser.mockResolvedValue({});
+
+            await expect(getUserRoleAndGracePeriod('u1')).resolves.toEqual({ role: 'free' });
+        });
+
+        it('preserves the verified subscription role and grace period', async () => {
+            hoisted.getUser.mockResolvedValue({ customClaims: { stripeRole: 'pro', gracePeriodUntil: 12345 } });
+
+            await expect(getUserRoleAndGracePeriod('u1')).resolves.toEqual({ role: 'pro', gracePeriodUntil: 12345 });
+        });
+
         it('throws UserNotFoundError for missing user', async () => {
             const err: any = new Error('not found');
             err.code = 'auth/user-not-found';
@@ -265,19 +295,28 @@ describe('utils higher-level helpers', () => {
             await expect(getUserRoleAndGracePeriod('missing')).rejects.toThrow('User missing not found in Auth');
         });
 
-        it('does not put the user identifier into role lookup failure logs', async () => {
-            const err: any = new Error('internal auth failure');
-            err.code = 'auth/internal-error';
+        it.each(['app/network-error', 'auth/internal-error'])('returns unavailable without exposing identifiers or raw errors for %s', async (code) => {
+            const err = Object.assign(new Error('private-user-id internal auth failure'), { code });
             hoisted.getUser.mockRejectedValue(err);
 
-            await expect(getUserRoleAndGracePeriod('private-user-id')).resolves.toEqual({ role: 'free' });
+            await expect(getUserRoleAndGracePeriod('private-user-id')).rejects.toMatchObject({
+                code: 'unavailable',
+                message: 'Could not verify subscription access. Please try again.',
+            });
 
             expect(logger.error).toHaveBeenCalledWith(
                 '[getUserRoleAndGracePeriod] Could not resolve role context.',
-                { errorName: 'Error', errorCode: 'auth/internal-error' },
+                { errorName: 'Error', errorCode: code },
             );
             expect(JSON.stringify(vi.mocked(logger.error).mock.calls)).not.toContain('private-user-id');
         });
+    });
+
+    it.each([hasBasicAccess, hasProAccess])('does not classify unreadable subscription access as denied', async (checkAccess) => {
+        hoisted.getUser.mockRejectedValue(Object.assign(new Error('Auth network failure'), { code: 'app/network-error' }));
+
+        await expect(checkAccess('u1')).rejects.toMatchObject({ code: 'unavailable' });
+        expect(logger.warn).not.toHaveBeenCalled();
     });
 
     describe('setEventDocumentIfUserActive', () => {
@@ -361,6 +400,22 @@ describe('utils higher-level helpers', () => {
     });
 
     describe('setEvent', () => {
+        it('does not write event data or original files when subscription verification is unavailable', async () => {
+            hoisted.getUser.mockRejectedValue(Object.assign(new Error('Auth network failure'), { code: 'app/network-error' }));
+            const event = { setID: vi.fn(), getActivities: () => [] };
+            const metaData = { serviceName: 'GARMINAPI', toJSON: () => ({}) };
+            const originalFile = { data: Buffer.from('file'), extension: 'fit', startDate: new Date() };
+
+            await expect(setEvent('user-1', 'event-1', event as unknown as SetEventParameters[2], metaData, originalFile))
+                .rejects.toMatchObject({ code: 'unavailable' });
+
+            expect(event.setID).not.toHaveBeenCalled();
+            expect(eventWriterConstructorMock).not.toHaveBeenCalled();
+            expect(writeAllEventDataMock).not.toHaveBeenCalled();
+            expect(hoisted.transactionSet).not.toHaveBeenCalled();
+            expect(hoisted.bucketSave).not.toHaveBeenCalled();
+        });
+
         it('writes activities and metadata through deletion-guarded transactions even when bulkWriter is provided', async () => {
             hoisted.getUser.mockResolvedValue({ customClaims: { stripeRole: 'pro' } });
             const bulkWriter = { set: vi.fn() };

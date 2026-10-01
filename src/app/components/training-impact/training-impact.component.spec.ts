@@ -107,6 +107,13 @@ describe('TrainingImpactComponent', () => {
     expect(summaryRowsRule).toContain('background: transparent;');
   });
 
+  it('allows compact values to use an overlay-safe foreground without changing other previews', () => {
+    const styles = readFileSync(resolve(process.cwd(),
+      'src/app/components/training-impact/training-impact.component.scss'), 'utf8');
+    const compactRule = styles.match(/\.training-impact-compact strong\s*\{([^}]+)\}/)?.[1];
+    expect(compactRule).toContain('color: var(--training-impact-compact-value-color, var(--mat-sys-primary));');
+  });
+
   it('renders separate UTC outcome lines for a compact multi-day total', () => {
     const first = session();
     const secondPoints = buildTrainingLoadPoints([

@@ -1,6 +1,7 @@
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { UsageLimitExceededError } from '../utils';
+import { HttpsError } from 'firebase-functions/v2/https';
 import { ServiceNames } from '@sports-alliance/sports-lib';
 import type * as admin from 'firebase-admin';
 
@@ -928,6 +929,23 @@ describe('Garmin Queue', () => { // Grouping for cleaner output
                 1,
                 undefined
             );
+        });
+
+        it('retries an unavailable subscription lookup without terminal rejection and can complete on redelivery', async () => {
+            const error = new HttpsError('unavailable', 'Could not verify subscription access. Please try again.');
+            mockSetEvent.mockRejectedValueOnce(error);
+
+            await expect(processGarminAPIActivityQueueItem(queueItem)).resolves.toBe('RETRY_INCREMENTED');
+
+            expect(mockIncreaseRetryCountForQueueItem).toHaveBeenCalledExactlyOnceWith(queueItem, error, 1, undefined);
+            expect(mockMoveToDeadLetterQueue).not.toHaveBeenCalled();
+            expect(mockUpdateToProcessed).not.toHaveBeenCalled();
+            expect(mockEnqueueActivitySyncJobsForImportedEvent).not.toHaveBeenCalled();
+
+            await expect(processGarminAPIActivityQueueItem({ ...queueItem, retryCount: 1 })).resolves.toBe('PROCESSED');
+            expect(mockIncreaseRetryCountForQueueItem).toHaveBeenCalledTimes(1);
+            expect(mockMoveToDeadLetterQueue).not.toHaveBeenCalled();
+            expect(mockUpdateToProcessed).toHaveBeenCalledTimes(1);
         });
 
         it('should increment retry count by 1 for generic download errors', async () => {

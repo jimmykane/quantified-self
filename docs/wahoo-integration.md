@@ -4,6 +4,17 @@ Wahoo is a Pro-only integration. Quantified Self receives completed workout summ
 
 This is the Wahoo-specific architecture and release record. For the reusable implementation process, lifecycle requirements, operational checklist, and provider-wide pitfalls, see the [provider integration implementation guide](provider-integration-guide.md).
 
+## Planned sport profiles
+
+Training maps all 15 editor sports plus the six existing MCP running/cycling subprofiles through an explicit shared
+profile table, never the entire recorded-activity catalog. The exact Cloud Workout type, Plan family and indoor/outdoor
+location are separate fields and all are read back. See the complete table and evidence checklist in
+[Training workspace](training-workspace.md#wahoo-sport-profile-mappings-and-validation-789).
+Wahoo supports timed, untargeted pool/open-water swimming and outdoor/indoor rowing. All 21 profiles have account acceptance and owner-confirmed native profile/timed playback (#789, 1 October 2026). Distance endings and intensity targets remain unsupported for walking, hiking, swimming and rowing. Selected pool length is not sent to Wahoo; set it locally where needed.
+Existing timed Strength remains Gym/indoor with type 42, instruction-only loads and no rep tracking. The public
+interval format documents only Biking/Running; Cloud catalog IDs do not establish interval-player support.
+Adding these mappings authorizes neither deployment nor account-side sends.
+
 ## Supported scope
 
 - OAuth 2.0 authorization with `user_read`, `workouts_read`, `workouts_write`, `routes_read`, `routes_write`, `plans_read`, `plans_write`, and `offline_data`. Existing users need explicit reconnect for the new Training grants; ordinary imports/routes do not require them.
@@ -27,13 +38,35 @@ For one-time historical sends, a deleted event or changed/missing original befor
 
 Training delivery uses the shared queue, not the activity uploader or a new queue. Its
 single detailed implementation and operational contract is [Wahoo Training delivery](training-workspace.md#wahoo-plan-and-dated-workout-delivery-649):
-time-based Running/Cycling, saved-zone seven-day window, separate Plan/Workout/association receipts, duplicate-safe
+time-based Running/Cycling subprofiles, untargeted outdoor Walking/Hiking, account/device-tested timed/untargeted swim/rowing
+and companion-aware timed Strength/Gym, saved-zone seven-day window, separate Plan/Workout/association receipts, duplicate-safe
 recovery, positive-only cloud checks, scope migration and lifecycle fences. Device receipt remains provider-managed and
 is never inferred from cloud acceptance.
 The production Plan validator requires `header.description` and a `targets` array on every non-repeat interval despite
 the published plan.json schema marking both optional. It also rejects an empty target array. QS supplies the bounded
-workout title and the documented full-domain RPE range 1–10 for an untargeted interval; it does not add another editor
+workout title for interval sports and an explicit instruction-only description for timed Gym. Every untargeted interval
+uses the documented full-domain RPE range 1–10; this does not add another editor
 field or narrow intended effort. Production Plan create/delete returns HTTP 200; create also remains compatible with 201.
+
+Timed Strength/Gym (#783) uses family `6`, indoor location `0`, and Workout type `42`. The full owner-scoped companion,
+not its old-client summary, supplies ordered timed sets/rests and exercise/load instructions. Repetition sets are
+unsupported and never estimated. Loads are kilogram instructions through Sports Lib display, not native tracking;
+actual rounding needs current-mapping approval. The QS editor and MCP details preserve exact kg storage and kg/lb display.
+A separately approved unloaded five-minute Gym recipe had complete cloud JSON readback and owner-confirmed Wahoo app
+player/interval behavior on 1 October 2026. A subsequent saved recording retained its exact uploaded Workout/Plan/token,
+Cloud type `42` and FIT `training/strength_training`, and imported successfully into QS with zero retries. These direct
+probes had no QS scheduled-workout ledger, so no QS completion badge was expected. The original Yoga/equipment prompt's
+root cause is unproven; Help advises checking/selecting the native Strength profile before starting, not sending Yoga.
+This is not integrated production lifecycle, native reps/load, ELEMNT or watch evidence. Live integrated
+update/reschedule/retry/reconnect/eligible removal remains pending in #783;
+neither implementation nor the earlier test authorizes deployment or deletion.
+
+Walking/Hiking (#789) use outdoor Plan family `9`, with Workout types `6`/`9`. These are account-tested Plan mappings,
+not inferred from recorded-activity enums. Only timed steps without intensity targets are admitted; full-domain RPE
+1–10 is the production envelope for untargeted intervals. Other endings, intensity targets and indoor variants are
+unsupported. Positive full cloud readback exists for both; Walking has owner-confirmed device visibility, while Hiking
+playback and integrated live lifecycle remain pending. Shared scopes, consent, owned identity, completion correlation,
+queue/horizon/recovery and deletion policy are unchanged. Existing v4 sport payloads/digests remain unchanged.
 The existing production app/account supplied the app-owned Plan/Workout cloud proof. Do not interpret the historical
 activity launch checklist below as a requirement to create a sandbox or apply for Wahoo-owned Plan-library entitlement.
 

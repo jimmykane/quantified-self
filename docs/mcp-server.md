@@ -13,6 +13,8 @@ grant. HTTP prechecks, tool registration and data reads enforce it. Revocation c
 | Tool | Current-record read |
 | --- | --- |
 | `list_training_plans` | Optional name/lifecycle filters; active, paused and archived metadata |
+| `list_saved_workouts` | Up to 25 undated owner-owned workout recipes per page, with optional title/status filters |
+| `get_saved_workout` | One full saved recipe, including complete Strength Training exercises when present |
 | `get_training_plan` | Metadata, range, revision and current workout count, without loading workouts |
 | `query_planned_workouts` | Legacy document-ordered inclusive-date query retained for registered-client compatibility |
 | `query_planned_workouts_by_date` | Inclusive dates in ascending local-date and stable reference order; calendar-visible (default standalone + active plan), standalone, selected plan or all |
@@ -53,6 +55,22 @@ ledger; it does not contact providers, approve degradation, or promise provider-
 delivery preview/apply remains authoritative.
 
 `training-plans.service.ts` owns explicit field masks and read-only Firestore snapshot transactions, not new persistence.
+
+Saved-workout reads are additive under the existing `training-plans:read` grant. Lists use opaque owner/connection-bound
+references, scan at most 200 library entries and return at most 25 per page; the cursor binds filters, limit and
+private library revision. An edit invalidates an older cursor. Exact reads validate the full recipe and strength draft;
+private receipts, tombstones, IDs and delivery records stay excluded. Library recipes carry no date, completion link
+or sync consent. Additive #780 `preview_saved_workout_change` and `apply_saved_workout_change` provide one strict
+library or placement operation per approval. They require both `training-plans:read` and `training-plans:write`, with
+no delivery grant. The preview takes exact schedule/library revisions and opaque source/item/plan references, checks
+capacity and plan range, and binds owner, connection, grant generation and a 15-minute expiry. The separate apply is
+idempotent and rechecks those conditions inside the existing sanitized mutation transaction. Copying a saved recipe
+creates a new library identity; placing one creates independent scheduled identities on 1–100 sorted distinct dates.
+Permanent library deletion removes only the saved recipe, never existing scheduled snapshots. Active-plan placements
+follow only that plan's pre-existing sync choice; Standalone placements do not acquire Send consent. The proposal,
+receipt and underlying mutation remain server-private; browser callables do not widen MCP authority. The built-in
+Assistant exposes only preview to the model and retains its app-owned confirmation gate. These additive tools require
+a separately approved Functions release and client catalog refresh before they are available to connected clients.
 Fresh schedule/account-deletion/plan-deletion fences run before and after results, as do external connection consent and
 grant-generation checks. Settings fingerprints are read only to correlate current delivery evidence and never returned.
 An oversized manual or separately approved MCP plan shift may temporarily hold the same internal bulk-operation fence
@@ -100,6 +118,14 @@ proposal preview and approval remain required, including an out-of-range plan ex
 planned identity without a completion link or standalone delivery opt-in; an existing active-plan setting may later send
 it. This UI/Assistant guidance update adds no MCP tool, schema, scope, consent or provider action and preserves the
 registered wire contract.
+For the undated Workout Library, read the exact saved recipe or source workout and both current revisions first.
+`preview_saved_workout_change` accepts one strict action: create, save from schedule, duplicate, edit, archive/restore,
+confirmed permanent recipe deletion, or placement on 1–100 explicit sorted dates. Placement requires an exact
+destination plan reference and revision, or `null` for Standalone. A plan-range extension must be explicitly confirmed
+in the preview; ambiguous source, plan or dates require a question rather than a guessed reference. The proposal
+changes nothing. Only `apply_saved_workout_change`, separately subject to the MCP host's native approval, commits the
+same owner/connection/grant/revision-bound operation. Its replay returns the committed result; it cannot add provider
+consent or rewrite an already scheduled copy when a library recipe changes.
 The host may let a user configure automatic tool approval, which the server cannot detect, so users who want to inspect
 every proposal must keep per-call approval enabled in their client. ChatGPT's destructive annotation triggers its
 native approval request. Claude users must not choose **Allow always**, and should disable Training write tools while
@@ -149,8 +175,9 @@ An unsupported workout is not an approvable degradation. Its provider preview sa
 skips it, and explicit Send/Resume remains a blocked provider result without saving consent or calling that provider.
 The authored workout may still be created if the user confirms the clearly labelled partial proposal. The browser's
 direct Send confirmation is disabled for an unsupported workout. An earlier provider copy may remain unchanged when a
-new version is unsupported; neither preview nor a blocked result implies removal. Wahoo currently requires a Running/Cycling recipe
-with time endings throughout; neither a different sport nor distance-ending steps can be approved into compatibility.
+new version is unsupported; neither preview nor a blocked result implies removal. Wahoo requires time endings throughout
+for Running/Cycling, untargeted outdoor Walking/Hiking and swim/rowing, or a complete matching timed-strength companion for Gym. Repetition-based strength, unsupported
+sports and distance-ending steps cannot be approved into compatibility.
 
 The built-in Assistant exposes only the applicable focused/batch previews to Gemini. It prefers the focused tool for one
 new workout, including a one-workout create-and-send request, and the batch tool for other or genuinely multi-change
@@ -227,7 +254,7 @@ so approval does not hide a pool-setting change. The built-in Assistant routes a
 even when the user's prompt does not repeat the saved length; it must read and preserve that selection. These additive
 tools are the local implementation of #734 under #583; they need deployment and client catalog refresh before use.
 No existing schema, mutation kind, scope, consent, provider action or private delivery evidence changes. Existing
-provider compatibility assessment still governs writes; Garmin accepts compatible, explicitly consented pool-swim delivery after owner-account cloud CRUD/readback proof (not watch receipt), Wahoo rejects swimming delivery, COROS accepts only target-free pool recipes at its backend
+provider compatibility assessment still governs writes; Garmin accepts compatible, explicitly consented pool-swim delivery after owner-account cloud CRUD/readback proof (not watch receipt), Wahoo supports account/device-tested timed, untargeted swims (selected pool length is not transmitted), COROS accepts only target-free pool recipes at its backend
 while new browser Send/sync actions remain unavailable, and Suunto maps pool and open-water profiles to distinct Guide
 activity recommendations. Owner read fixtures cover both swim sport strings and metre-based steps; no widened consent or
 provider action is implied by this read-only presentation change.
@@ -236,8 +263,25 @@ Walking, Hiking, Rowing, and Indoor Rowing keep their exact canonical Sports Lib
 planned-workout reads and approval-gated proposals. Rowing speed remains m/s and owner-facing pace is a 500 m split;
 row distance is displayed in metres. The strict registered v1 recipe already permits these sport strings, so no
 tool, schema, scope, consent or mutation kind changes. Focused read fixtures cover exact sport retention and unit
-formatting; compatibility remains provider-local, with Suunto Guide activity recommendations and explicit unsupported
-Garmin/COROS/Wahoo results. Provider IDs and transport evidence remain private. This is a no-wire-impact extension;
+formatting; compatibility remains provider-local, with Suunto Guide activity recommendations, a degraded Garmin
+Generic fallback and explicit unsupported COROS results. Garmin also maps Open Water Swimming to Generic, never pool
+swimming. The existing `sport_profile_degraded` issue names the original sport, some-device-only Generic support and
+absence of guaranteed native sport tracking/display. Strict reads keep the authored recipe; existing Send proposals
+disclose the loss before native/app confirmation and bind approval to the current prescription and provider account.
+Generic supports time/distance/manual endings, fixed repeats and one primary target; unsupported endings or secondary
+targets fail closed, and unrelated catalog sports do not receive a Generic catch-all. Serializer and demo-emulator
+tests prove only local behavior, not live cloud or device acceptance. No registered wire contract or bundled skill changes.
+Wahoo assesses timed, untargeted outdoor Walking/Hiking, Rowing/Indoor Rowing and pool/open-water swimming as exact
+when no authored pool length is dropped. All 21 profiles have owner-confirmed native profile/timed playback (#789);
+obsolete validation warnings are removed. Distance/manual endings and intensity targets remain unsupported for these
+sports. An authored pool length still produces a degraded mapping requiring review because Wahoo cannot receive it.
+Existing substitutions and Strength losses remain disclosed.
+Running/cycling subprofiles use their native indoor/outdoor type where available. Indoor Running uses Treadmill, Velomobile uses Cycling, and Enduro MTB/Downhill Cycling use Mountain Biking, with a review warning; the saved QS sport is unchanged.
+Selected pool length remains canonical but is not sent to Wahoo. Strict compatibility and recipe reads cover all 21
+explicit planning profiles; unknown catalog sports still fail closed. Focused strict-output tests cover these results without adding fields, issue codes, tools, scopes,
+consent, mutations, provider actions, Assistant routes or bundled-skill instructions. Existing guidance still requires
+assessment before delivery; a local exact mapping never promises app/device receipt. Provider IDs and transport
+evidence remain private. This is a no-wire-impact extension;
 it does not authorize a new provider action or count a planned workout as completed training.
 
 Strength Training uses an owner-scoped versioned companion with ordered exercises and sets, optional external load in
@@ -248,7 +292,28 @@ missing or mismatched. `preview_strength_workout_change` requires `training-plan
 accepts one complete create/update draft, derives the v1 summary server-side and uses the existing
 owner/grant/revision/expiry-bound proposal and approval-gated `apply_training_changes`. No provider action or wider
 consent is added. Exercise names are untrusted user text. Suunto Gym Guide compatibility is degraded because reps
-need manual transitions; COROS new-send remains Coming soon, and Garmin/Wahoo are unsupported. New additive tools need
+need manual transitions. The existing Send/Enable sync consent covers that standard limitation, disclosed in the
+delivery preview without separate per-workout/per-edit mapping approval; additional mapping loss still needs review.
+COROS compatibility reads use the full validated companion and report exact named/set/reps-or-time/rest/fixed-kg mappings.
+Missing, malformed, foreign or mismatched companions fail the read; they never return a partial prescription.
+Its delivery preview performs no provider I/O and apply keeps independent
+Training/delivery grants, native/app confirmation and idempotency. COROS delivery is disabled at the shared runtime
+boundary used by the app and MCP; local assessment and synthetic delivery tests are not entitlement, cloud, app/watch
+or completion evidence (#741). Normal owner/grant-bound MCP proposal confirmation and apply remain required for admitted
+providers. No registered schema, scope, permission, provider action or response field changes for this policy. Wahoo #783 uses the
+validated companion for timed Gym sets/rests, reporting degraded exercise/load instructions rather than native tracking.
+Repetition sets remain unsupported. Kilogram load instructions use Sports Lib display; actual rounding requires review.
+Send previews disclose the limitation and perform no provider I/O. Apply retains the existing independent delivery grant,
+owner/revision/expiry binding, native/app confirmation and idempotency. Existing strict mapping issue codes are reused;
+there is no new registered tool, schema, response field, scope, consent or provider action.
+#782 adds local Garmin strength compatibility using the validated owner-scoped companion and a small
+verified Appendix B exercise-name allowlist. Reps/time, exact kilogram load and rest map to native Training API fields;
+unknown names remain unsupported without substitution. Missing, foreign or projection-mismatched companions fail
+closed. Compatibility is local contract evidence, never provider/cloud/device acceptance. Existing provider Send and
+plan-sync previews use the full companion, including load-only changes, and retain their independent delivery grant
+and normal proposal confirmation. No registered tool, schema, issue-code enum, response field or permission changes;
+no client catalog refresh or plugin rebuild is required for this mapping-only change. Live proof remains in #782.
+New additive tools need
 a client catalog refresh after release; the registered v1 recipe input/output stays unchanged. The app's strength
 editor may display or accept pounds using Sports Lib 21.3.0, but MCP external-load input and output remain canonical
 kilograms; the owner's display preference does not alter the wire contract.
@@ -286,10 +351,17 @@ provider check or repair and gains no tool, field, scope, consent or write autho
 delivery outcome records the last accepted send, not a fresh Garmin cloud read; an inconclusive later Workout check
 cannot be promoted to `confirmed_missing` and the frozen v1 tool exposes no verification-state field.
 
-COROS Training delivery (#648) uses the public provider-readiness boundary with no wire-contract change. Explicit COROS
-proposals and `all_connected` use the same existing eligibility, proposal and approval checks as the other providers.
-The browser currently labels new COROS plan sync and standalone Send actions **Coming soon**, but that presentation gate
-is not consulted by MCP and does not change its existing approval-gated delivery contract.
+COROS Training delivery (#648) uses the shared provider-readiness boundary with no wire-contract change. COROS is
+currently disabled there for the app, Functions runtime and MCP; explicit COROS proposals report unavailable and
+`all_connected` excludes it. Training plan, workout and sync-history UI also omits retained COROS settings/statuses.
+Compatibility assessment remains local and available because it neither grants consent nor contacts COROS.
+Indoor/Virtual Running, Virtual Cycling, Velomobile, Enduro MTB and Downhill Cycling reuse the existing broad
+`run`/`bike` mapping alongside earlier subtypes. Strict recipe reads preserve their exact canonical sport strings;
+compatibility reads disclose the fold through the existing `sport_profile_degraded` issue. They are not native COROS
+sport profiles or newly eligible Send destinations. Walking, Hiking, Rowing, Indoor Rowing and Open Water Swimming
+remain unsupported under the partner contract. Regression tests cover all six folds, owner/connection isolation and
+transport-field exclusion. No tool, schema, scope, consent, Assistant instruction or bundled plugin changes; no
+registered-app refresh or plugin sync is needed for this mapping-only extension.
 The existing sync-status enum can report delivered, approval, retry, attention
 and completed states for COROS. Partner athlete/workout IDs, destination
 identity, batch journals, request outcomes, token authority and exact `planWorkoutId` evidence remain private and are
@@ -306,9 +378,10 @@ link remain private and are rejected from MCP projections. The existing sanitize
 current link; #651 retains bounded fallback candidate discovery and approval-gated manual link/unlink/relink behavior.
 No private Wahoo identity or live check is introduced.
 
-Public Garmin, COROS, Wahoo and Suunto Training delivery changes runtime availability, not the MCP wire contract. An
-already authorized client with `training-plans:read` and `training-delivery:write` may preview an explicit delivery change
-for any eligible connected Pro owner; there is no per-UID provider allowlist. The same bounded proposal, native client
+Public Garmin, Wahoo and Suunto Training delivery changes runtime availability, not the MCP wire contract. An already
+authorized client with `training-plans:read` and `training-delivery:write` may preview an explicit delivery change for
+any eligible connected Pro owner; there is no per-UID provider allowlist. COROS remains a valid compatibility/status
+enum member but is not an eligible delivery destination while its shared flag is disabled. The same bounded proposal, native client
 approval, short expiry, owner/connection/grant/revision binding, compatibility review and separate apply call remain
 mandatory. `all_connected` includes only providers for which the connection, permissions, configuration and workout are
 currently eligible. No new tool, action, field, scope, consent default, provider identifier, plugin artifact or
@@ -498,12 +571,12 @@ The bundled skills divide ownership deliberately:
 | `analyze-quantified-self-training` | Current plans/planned workouts and sync summaries; recorded load, volume, Training-derived metrics, and identity-safe completed-activity impact | `training-plans:read` for planning; `metrics:read` for recorded metrics; impact also needs `activity-details:read` |
 | `analyze-quantified-self-sleep` | Sleep sessions, stages, duration, safe aggregate vitals, naps, and sleep-oriented trends | `sleep:read` |
 | `analyze-quantified-self-health` | Recorded all-day Health metrics and bounded representative sample trends | `health:read`; body composition also requires `measurements:read` |
-| `analyze-quantified-self-measurements` | Recorded body-measurement history and trends | `measurements:read` |
+| `analyze-quantified-self-measurements` | Recorded measurement trends; explicit manual Health entry management | `measurements:read` for history; independent `measurements:write` for manual lookup/changes |
 | `analyze-quantified-self-activity` | Individual activities, identity-safe Training impact, subrecords, metrics, charts, optional descriptions/locations, and explicit shared-tag changes | `activity-details:read`; impact and selected metrics also need `metrics:read`; optional description/location/tag-write grants |
 | `explore-quantified-self-routes` | Saved-route summaries, geometry, waypoints, and nearby searches | `routes:read`; optional `route-location:read` |
 
 All seven skills allow implicit or explicit invocation and declare the same hosted permission-scoped MCP dependency. Most
-domain tools are read-only; the Activity and cross-domain skills can use separately authorized focused event/note writes,
+domain tools are read-only; measurement management needs its own write grant, and Activity/cross-domain skills can use separately authorized focused event/note writes,
 and the Training skill can use separately authorized preview and approval-gated apply tools. Their trigger
 descriptions keep single-domain work out of the cross-domain skill. Each `agents/openai.yaml` owns one matching
 skill-level starter prompt; the plugin manifest retains only three representative interface prompts because that field
@@ -612,6 +685,8 @@ The server implements OAuth authorization code with PKCE S256 and refresh-token 
 - `metrics:read` for event metrics, ready Training-derived snapshots, and selected per-activity metrics when
   `activity-details:read` is also granted;
 - `measurements:read` for bounded identity-free first-class body-measurement history;
+- `measurements:write` independently permits exact-time manual Health entry lookup and native-approval-gated
+  create, edit and permanent delete. It grants neither imported Health history nor identity-free measurement history;
 - `health:read` for source-separated recorded Health summaries and bounded normalized sample trends; body composition
   additionally requires `measurements:read`, while Weight and normalized Sleep keep their existing contracts;
 - `sleep:read` for redacted sleep sessions and sleep summaries;
@@ -838,6 +913,8 @@ The analytics and map entries follow the
 | Tool | Scope | Result |
 | --- | --- | --- |
 | `list_training_plans` | `training-plans:read` | Paginated current plan summaries across active, paused and archived lifecycles |
+| `list_saved_workouts` | `training-plans:read` | Bounded, revision-fenced list of saved recipes without dates or sync consent |
+| `get_saved_workout` | `training-plans:read` | Exact validated saved recipe and optional full strength draft |
 | `get_training_plan` | `training-plans:read` | Current plan metadata and workout count without loading all workouts |
 | `query_planned_workouts` | `training-plans:read` | Legacy document-ordered calendar-date summaries retained for compatible clients |
 | `query_planned_workouts_by_date` | `training-plans:read` | Chronological bounded calendar-date summaries; standalone plus active plan by default |
@@ -848,7 +925,9 @@ The analytics and map entries follow the
 | `assess_planned_workout_compatibility` | `training-plans:read` | Local mapping fidelity for one current workout; no connection/provider call or delivery guarantee |
 | `preview_create_planned_workout` | `training-plans:read` + `training-plans:write`; optional delivery also requires `training-delivery:write` | Focused one-workout proposal with optional atomic initial send; server-owned local key |
 | `preview_training_changes` | `training-plans:read` plus the relevant Training write scope(s) | Strict bounded proposal with authored and per-provider effects; no authored mutation |
+| `preview_saved_workout_change` | `training-plans:read` + `training-plans:write` | One revision-bound library edit or 1–100-date placement preview; no provider consent or authored mutation |
 | `apply_training_changes` | Same scopes bound into the proposal; native client approval gate | Idempotently applies a preview-created proposal and returns independent authored/provider outcomes |
+| `apply_saved_workout_change` | `training-plans:read` + `training-plans:write`; native client approval gate | Idempotently applies an exact library proposal through the existing sanitized mutation service |
 | `list_health_metrics` | `health:read` | Static allowlisted Health capabilities, Sports Lib types/units, range limits and additional body-composition permission requirements |
 | `query_health_metric` | `health:read`; also `measurements:read` for body composition | Source-separated stored scalars or bounded representative sample trends; identity-free calendar-day body composition |
 | `get_hrv_personal_range` | `health:read` + `sleep:read` | Shared rolling nightly HRV baseline, historical classifications and missing-day ranges, separated by source |
@@ -1180,6 +1259,56 @@ For a recent or latest jump detail request, use newest-first `list_activities`, 
 `jumpCount > 0`, then pass that opaque reference to `list_activity_jumps`. Continue the same query cursor only when the
 page contains no activity with jumps. With `activity-location:read`, only a jump-record coordinate may represent a jump
 on a map or in prose: an activity's start and end positions are distinct summary locations and must never be substituted.
+
+## Manual Health measurement management
+
+Implementation adds independent **Manage manual Health measurements** (`measurements:write`). Requested consent is
+prechecked like other current scopes, but approval is still required. Existing grants and token refresh cannot acquire
+it; legacy omitted consent selections exclude it. No UID gate, extra Pro requirement or provider permission applies.
+This source change is not a deployment or registered-client promotion. Clients need the released server, catalog
+refresh and reauthorization before using it; disconnect/reinstall is not the normal permission-recovery path.
+
+| Tool | Contract |
+| --- | --- |
+| `list_manual_measurement_types` | Eight deliberately supported UI types, explicit input units, owner-unit default, required metadata and server time. |
+| `query_manual_measurements` | Current manual entries newest-first; opaque references/revisions, exact instants and saved offsets. Defaults to 25, maximum 100; optional paired start/end instants within 366 days. |
+| `get_manual_measurement` | One complete validated manual entry, including paired blood pressure or VO2 metadata. |
+| `create_manual_measurement` | Explicit metric, value/unit, offset-bearing observation instant and stable UUID mutation ID. |
+| `update_manual_measurement` | Current reference/revision, value/unit; omitted time/metadata preserved. Explicit null clears optional paired pulse. Type cannot change. |
+| `delete_manual_measurement` | Current reference/revision; permanent whole-entry deletion, including paired values. |
+
+Types are Weight (kg/lb input, canonical kg), VO2 max (ml/kg/min with general/running/cycling context and lab/field/other
+method), body fat, body water and SpO2 (percentage), muscle/bone mass (kg), and systolic/diastolic blood pressure (mmHg,
+optional same-observation bpm pulse). Canonical validation/ceilings reuse the UI Health domain; they are not medical
+reference ranges. Sports Lib converts/prints owner units. Resolve “now” once using catalog server time and the user's
+timezone; retain that exact instant and UUID on retries. Do not guess required metadata or choose ambiguous entries.
+Public output validation also checks metric-specific canonical units/ceilings, required pressure pairing and VO2-only
+metadata, without widening the compact wire shape.
+
+All six tools require the independent write grant at HTTP, registration and data boundaries. Management reads select
+only manual point records through explicit field masks; imported readings, provider credentials, raw IDs, source keys,
+private metadata and terminal receipts never leave the projection. References bind owner, connection and grant;
+cursors also bind filters/limit and expire after 30 minutes. Sealed references bind the reviewed revision and omitted-field
+defaults so concurrent metadata/time changes cannot be mistaken for identical retries. Pagination reads current records, not a frozen historical
+snapshot: concurrent insertions or edits can change pages. Query scans use pages of 25 with lookahead, at most 500
+consumed records and 2 MiB selected input per call; individual selected records are bounded to 32 KiB and complete structured-plus-text
+output to 256 KiB, including a full 100-entry page with paired readings. Invalid records are skipped with counts and completeness, never silently treated as full coverage.
+Selected-input bytes include every fetched lookahead and repeated page read; scan counts describe consumed records.
+Bounded private cursors can continue past skipped malformed record IDs, which never become public measurement references.
+
+Connection authority and account-deletion fences are rechecked before releasing reads and inside every persistence
+transaction, including idempotent no-ops. Creates share deterministic IDs with the UI; a repeated UUID with different
+content conflicts. Exact immediate update retries are accepted; later changes conflict. Deletion retains only the
+existing content-free terminal marker and delayed creates cannot resurrect it. A retry after later edits returns
+current persisted data, not an obsolete creation receipt. No new callable, storage model, provider I/O or repair write
+is added. External writes use accurate destructive/idempotency annotations and host-native approval; the server cannot
+detect or override a host's auto-approval configuration.
+
+The built-in Assistant has an independent **Manual Health measurements** choice, on for fresh/New chats; legacy
+missing flags remain off. Gemini receives lookup and prepare-only tools, never public write tools. Exact edit/delete
+references and revisions must have been read in the current turn. One short-lived app review contains canonical
+before/after fields rendered in the owner's units, saved observation offset and permanent-delete wording. Only the
+existing Apply endpoint writes, with server-owned conversation/proposal checks in the shared Health transaction.
 
 ## First-class body measurements
 

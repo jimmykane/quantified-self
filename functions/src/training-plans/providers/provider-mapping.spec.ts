@@ -2,9 +2,12 @@ import { ActivityTypes } from '@sports-alliance/sports-lib';
 import { describe, expect, it } from 'vitest';
 import {
     GARMIN_CYCLING_WORKOUT_SPORTS_V1,
+    GARMIN_GENERIC_WORKOUT_SPORTS_V1,
     GARMIN_PLANNED_WORKOUT_SPORTS_V1,
     GARMIN_RUNNING_WORKOUT_SPORTS_V1,
     COROS_PLANNED_WORKOUT_SPORTS_V1,
+    COROS_NATIVE_CYCLING_WORKOUT_SPORTS_V1,
+    COROS_FOLDED_CYCLING_WORKOUT_SPORTS_V1,
     PLANNED_WORKOUT_PROVIDER_IDS,
     PLANNED_WORKOUT_PROVIDER_CAPABILITIES_V1,
     assessPlannedWorkoutProviderMappingV1,
@@ -19,6 +22,7 @@ import expectedCorosFixture from './fixtures/coros-running-v1.json';
 import expectedGarminFixture from './fixtures/garmin-running-v1.json';
 import expectedGarminPoolFixture from './fixtures/garmin-pool-swimming-v1.json';
 import expectedSuuntoFixture from './fixtures/suunto-running-v1.json';
+import legacySuuntoFixture from './fixtures/suunto-running-v2-recovery.json';
 import expectedWahooFixture from './fixtures/wahoo-running-v1.json';
 import { serializeCorosTrainingPlanV1 } from './coros-training-plan.serializer';
 import {
@@ -30,7 +34,7 @@ import {
     createStableProviderExternalId,
     createStableProviderIntegerId,
 } from './provider-mapping';
-import { serializeSuuntoGuideJsonV1 } from './suunto-guide.serializer';
+import { serializeSuuntoGuideJsonV1, serializeSuuntoGuideV2ForRecovery } from './suunto-guide.serializer';
 import { serializeWahooPlanJsonV1 } from './wahoo-plan.serializer';
 import { wahooDurationSeconds } from '../delivery/wahoo/mapping';
 
@@ -52,14 +56,19 @@ function oneStepStructure(overrides: Partial<WorkoutStructureV1['nodes'][number]
 }
 
 describe('planned-workout provider proof fixtures', () => {
-    it('enables public delivery for every implemented provider', () => {
+    it('keeps mapping fixtures independent from the COROS rollout gate', () => {
         expect(Object.values(PLANNED_WORKOUT_PROVIDER_CAPABILITIES_V1)).toHaveLength(4);
-        for (const provider of PLANNED_WORKOUT_PROVIDER_IDS) {
+        for (const provider of PLANNED_WORKOUT_PROVIDER_IDS.filter(provider => provider !== 'coros')) {
             expect(isPlannedWorkoutProviderDeliveryEnabled(provider)).toBe(true);
             expect(PLANNED_WORKOUT_PROVIDER_CAPABILITIES_V1[provider]).toMatchObject({
                 implementationState: 'enabled', deliveryEnabled: true, unresolvedGates: [],
             });
         }
+        expect(isPlannedWorkoutProviderDeliveryEnabled('coros')).toBe(false);
+        expect(PLANNED_WORKOUT_PROVIDER_CAPABILITIES_V1.coros).toMatchObject({
+            implementationState: 'blocked-contract', deliveryEnabled: false,
+        });
+        expect(PLANNED_WORKOUT_PROVIDER_CAPABILITIES_V1.coros.unresolvedGates).not.toHaveLength(0);
         expect(PLANNED_WORKOUT_PROVIDER_CAPABILITIES_V1.suunto.profile?.sports)
             .toEqual([...MANUAL_WORKOUT_EDITOR_SPORTS_V1, ActivityTypes.StrengthTraining]);
         expect(GARMIN_PLANNED_WORKOUT_SPORTS_V1).toEqual([
@@ -78,14 +87,15 @@ describe('planned-workout provider proof fixtures', () => {
             ActivityTypes['Enduro MTB'],
             ActivityTypes.DownhillCycling,
             ActivityTypes.Swimming,
+            ActivityTypes.StrengthTraining,
+            ActivityTypes.Walking,
+            ActivityTypes.Hiking,
+            ActivityTypes.Rowing,
+            ActivityTypes.IndoorRowing,
+            ActivityTypes.OpenWaterSwimming,
         ]);
         expect(GARMIN_PLANNED_WORKOUT_SPORTS_V1).toEqual(expect.arrayContaining(
-            MANUAL_WORKOUT_EDITOR_SPORTS_V1.filter(sport =>
-                sport !== ActivityTypes.OpenWaterSwimming
-                && sport !== ActivityTypes.Walking
-                && sport !== ActivityTypes.Hiking
-                && sport !== ActivityTypes.Rowing
-                && sport !== ActivityTypes.IndoorRowing),
+            MANUAL_WORKOUT_EDITOR_SPORTS_V1,
         ));
         expect(PLANNED_WORKOUT_PROVIDER_CAPABILITIES_V1.garmin.profile?.sports)
             .toBe(GARMIN_PLANNED_WORKOUT_SPORTS_V1);
@@ -213,6 +223,12 @@ describe('planned-workout provider proof fixtures', () => {
         expect(result.level).toBe('exact');
         expect(result.issues).toEqual([]);
         expect(result.artifact).toEqual(expectedSuuntoFixture);
+        expect(serializeSuuntoGuideV2ForRecovery(RUNNING_FIXTURE, {
+            name: 'Fixture intervals', description: 'Redacted provider contract fixture.',
+            owner: 'Quantified Self', url: 'https://quantified-self.io/training/plans',
+            localDate: '2026-09-03', sourceWorkoutId: 'fixture-running-1', allowDegraded: true,
+            externalId: legacySuuntoFixture.externalId,
+        }).artifact).toEqual(legacySuuntoFixture);
     });
 
     it('maps a canonical one-mile step in metres without applying display units again', () => {
@@ -294,13 +310,55 @@ describe('planned-workout provider proof fixtures', () => {
         expect(JSON.parse(JSON.stringify(result.artifact)).activities).toEqual(activities);
     });
 
-    it.each([ActivityTypes.Walking, ActivityTypes.Hiking, ActivityTypes.Rowing, ActivityTypes.IndoorRowing])('%s remains unsupported for Garmin, COROS, and Wahoo delivery', sport => {
+    it.each(GARMIN_GENERIC_WORKOUT_SPORTS_V1)('%s remains unsupported for COROS delivery', sport => {
         const structure = { ...oneStepStructure(), sport };
-        for (const provider of ['garmin', 'coros', 'wahoo'] as const) {
-            expect(assessPlannedWorkoutProviderMappingV1(provider, structure)).toMatchObject({
-                level: 'unsupported', issues: [expect.objectContaining({ code: 'unsupported_sport' })],
-            });
+        expect(assessPlannedWorkoutProviderMappingV1('coros', structure)).toMatchObject({
+            level: 'unsupported', issues: [expect.objectContaining({ code: 'unsupported_sport' })],
+        });
+        expect(() => serializeCorosTrainingPlanV1(structure, {
+            athleteId: 24680, workoutId: 13579, title: 'Unsupported sport', localDate: '2026-09-03',
+            lastModifiedDate: '2026-09-02T12:00:00', allowDegraded: true,
+        })).toThrow(expect.objectContaining({ code: 'unsupported' }));
+    });
+
+    it.each([ActivityTypes.Walking, ActivityTypes.Hiking])('maps timed %s to the tested outdoor Wahoo walking family without rewriting the sport', sport => {
+        const structure = { ...oneStepStructure(), sport };
+        const before = JSON.stringify(structure);
+        const result = serializeWahooPlanJsonV1(JSON.parse(before), {
+            name: 'Synthetic walking-family workout', description: 'Synthetic contract fixture',
+            location: 'outdoor', allowDegraded: false,
+        });
+        expect(result.level).toBe('exact');
+        expect(result.artifact.header).toMatchObject({ workout_type_family: 9, workout_type_location: 1, duration_s: 600 });
+        expect(result.artifact.intervals).toEqual([{ exit_trigger_type: 'time', exit_trigger_value: 600,
+            intensity_type: 'active', targets: [{ type: 'rpe', low: 1, high: 10 }] }]);
+        expect(JSON.stringify(structure)).toBe(before);
+        expect(() => serializeWahooPlanJsonV1(structure, {
+            name: 'Indoor', location: 'indoor', allowDegraded: true,
+        })).toThrow(ProviderWorkoutMappingError);
+        for (const step of [
+            { ...structure.nodes[0], ending: { kind: 'distance', meters: 1000 } },
+            { ...structure.nodes[0], targets: [{ kind: 'heart-rate', mode: 'absolute', minimumBpm: 100, maximumBpm: 120 }] },
+        ]) {
+            expect(() => serializeWahooPlanJsonV1({ ...structure, nodes: [step] }, {
+                name: 'Unsupported prescription', location: 'outdoor', allowDegraded: true,
+            })).toThrow(ProviderWorkoutMappingError);
         }
+    });
+
+    it.each([
+        [ActivityTypes.Rowing, 3, 'outdoor'], [ActivityTypes.IndoorRowing, 6, 'indoor'],
+        [ActivityTypes.Swimming, 2, 'indoor'], [ActivityTypes.OpenWaterSwimming, 2, 'outdoor'],
+    ] as const)('maps owner-confirmed Wahoo %s without a stale playback warning', (sport, family, location) => {
+        const structure = { ...oneStepStructure(), sport };
+        const result = serializeWahooPlanJsonV1(structure, { name: 'Timed profile', location, allowDegraded: false });
+        expect(result.level).toBe('exact');
+        expect(result.issues).toEqual([]);
+        expect(result.artifact.header).toMatchObject({ workout_type_family: family,
+            workout_type_location: location === 'indoor' ? 0 : 1, duration_s: 600 });
+        expect(() => serializeWahooPlanJsonV1(structure, {
+            name: 'Wrong location', location: location === 'indoor' ? 'outdoor' : 'indoor', allowDegraded: true,
+        })).toThrow(ProviderWorkoutMappingError);
     });
 
     it.each([
@@ -351,7 +409,7 @@ describe('planned-workout provider proof fixtures', () => {
         }));
     });
 
-    it('requires approval for a Garmin family fold while keeping other unproved mappings unsupported', () => {
+    it('requires approval for a Garmin family fold but not an unchanged native Wahoo swim', () => {
         const mountainBike = { ...oneStepStructure(), sport: ActivityTypes.MountainBiking };
         const swimming = { ...oneStepStructure(), sport: ActivityTypes.Swimming };
         expect(assessPlannedWorkoutProviderMappingV1('suunto', mountainBike).level).toBe('exact');
@@ -364,8 +422,8 @@ describe('planned-workout provider proof fixtures', () => {
             issues: [expect.objectContaining({ path: '$.poolLength' })],
         });
         expect(assessPlannedWorkoutProviderMappingV1('wahoo', swimming)).toMatchObject({
-            level: 'unsupported',
-            issues: [expect.objectContaining({ code: 'unsupported_sport' })],
+            level: 'exact',
+            issues: [],
         });
         expect(() => serializeGarminWorkoutV1(mountainBike, {
             name: 'MTB workout',
@@ -376,8 +434,7 @@ describe('planned-workout provider proof fixtures', () => {
             issues: [expect.objectContaining({ code: 'sport_profile_degraded' })],
         });
         expect(assessPlannedWorkoutProviderMappingV1('wahoo', mountainBike)).toMatchObject({
-            level: 'unsupported',
-            issues: [expect.objectContaining({ code: 'unsupported_sport' })],
+            level: 'exact', issues: [],
         });
     });
 
@@ -422,7 +479,7 @@ describe('planned-workout provider proof fixtures', () => {
         });
     });
 
-    it('maps open-water swimming only to the documented Suunto Guide profile', () => {
+    it('maps open-water swimming to native Suunto guidance or disclosed Garmin Generic, never COROS pool swimming', () => {
         const structure: WorkoutStructureV1 = {
             ...oneStepStructure({ ending: { kind: 'distance', meters: 500 } }),
             sport: ActivityTypes.OpenWaterSwimming,
@@ -437,40 +494,62 @@ describe('planned-workout provider proof fixtures', () => {
         expect(result.artifact.steps[0]).toMatchObject({
             type: 'fields', transitions: [{ condition: { type: 'stepDistance', value: 500 } }],
         });
-        for (const provider of ['garmin', 'coros', 'wahoo'] as const) {
-            expect(assessPlannedWorkoutProviderMappingV1(provider, structure)).toMatchObject({
-                level: 'unsupported', issues: [expect.objectContaining({ code: 'unsupported_sport' })],
-            });
-        }
+        expect(assessPlannedWorkoutProviderMappingV1('garmin', structure)).toMatchObject({
+            level: 'degraded', issues: [expect.objectContaining({ code: 'sport_profile_degraded', path: '$.sport' })],
+        });
+        expect(assessPlannedWorkoutProviderMappingV1('coros', structure)).toMatchObject({
+            level: 'unsupported', issues: [expect.objectContaining({ code: 'unsupported_sport' })],
+        });
+        expect(assessPlannedWorkoutProviderMappingV1('wahoo', structure)).toMatchObject({
+            level: 'unsupported', issues: expect.arrayContaining([expect.objectContaining({ code: 'unsupported_ending' })]),
+        });
     });
 
     it.each([
         [ActivityTypes.Running, 'run', 'exact'],
         [ActivityTypes.TrailRunning, 'trailRun', 'exact'],
         [ActivityTypes.Treadmill, 'run', 'degraded'],
+        [ActivityTypes.IndoorRunning, 'run', 'degraded'],
+        [ActivityTypes.VirtualRunning, 'run', 'degraded'],
         [ActivityTypes.Cycling, 'bike', 'exact'],
         [ActivityTypes.MountainBiking, 'bike', 'degraded'],
         [ActivityTypes.IndoorCycling, 'bike', 'degraded'],
+        [ActivityTypes.VirtualCycling, 'bike', 'degraded'],
         [ActivityTypes.EBiking, 'bike', 'degraded'],
         [ActivityTypes.Handcycle, 'bike', 'degraded'],
+        [ActivityTypes.Velomobile, 'bike', 'degraded'],
+        [ActivityTypes['Enduro MTB'], 'bike', 'degraded'],
+        [ActivityTypes.DownhillCycling, 'bike', 'degraded'],
     ] as const)('maps canonical %s to COROS %s with truthful fidelity', (sport, workoutType, level) => {
-        const result = serializeCorosTrainingPlanV1({ ...oneStepStructure(), sport }, {
+        const structure = { ...oneStepStructure(), sport };
+        const original = JSON.stringify(structure);
+        const options = {
             athleteId: 24680,
             workoutId: 13579,
             title: `${sport} workout`,
             localDate: '2026-09-03',
             lastModifiedDate: '2026-09-02T12:00:00',
             allowDegraded: true,
-        });
+        };
+        if (level === 'degraded') {
+            expect(() => serializeCorosTrainingPlanV1(structure, { ...options, allowDegraded: false }))
+                .toThrow(expect.objectContaining({ code: 'degradation-confirmation-required' }));
+        }
+        const result = serializeCorosTrainingPlanV1(structure, options);
         expect(result.level).toBe(level);
         expect(result.artifact.Workouts[0].WorkoutType).toBe(workoutType);
         expect(result.artifact.Workouts[0].Id).toBe(13579);
         expect(result.issues.some(issue => issue.code === 'sport_profile_degraded')).toBe(level === 'degraded');
+        if (level === 'degraded') {
+            expect(result.issues).toContainEqual(expect.objectContaining({
+                code: 'sport_profile_degraded', path: '$.sport', message: expect.stringContaining(sport),
+            }));
+        }
+        expect(JSON.stringify(structure)).toBe(original);
     });
 
     it('rejects cadence targets for every COROS cycling-family profile', () => {
-        for (const sport of [ActivityTypes.Cycling, ActivityTypes.MountainBiking, ActivityTypes.IndoorCycling,
-            ActivityTypes.EBiking, ActivityTypes.Handcycle]) {
+        for (const sport of [...COROS_NATIVE_CYCLING_WORKOUT_SPORTS_V1, ...COROS_FOLDED_CYCLING_WORKOUT_SPORTS_V1]) {
             const assessment = assessPlannedWorkoutProviderMappingV1('coros', {
                 ...oneStepStructure({
                     targets: [{ kind: 'cadence', mode: 'absolute', minimumRpm: 80, maximumRpm: 90 }],
@@ -481,6 +560,12 @@ describe('planned-workout provider proof fixtures', () => {
                 level: 'unsupported',
                 issues: expect.arrayContaining([expect.objectContaining({ code: 'unsupported_target' })]),
             });
+            const relative = assessPlannedWorkoutProviderMappingV1('coros', {
+                ...oneStepStructure({ targets: [{ kind: 'cadence', mode: 'relative', minimumPercent: 90,
+                    maximumPercent: 100, reference: { kind: 'preferred-cadence', rpm: 90 } }] }), sport,
+            });
+            expect(relative).toMatchObject({ level: 'unsupported',
+                issues: expect.arrayContaining([expect.objectContaining({ code: 'unsupported_target' })]) });
         }
     });
 
@@ -791,7 +876,7 @@ describe('planned-workout provider proof fixtures', () => {
         expect(approved.level).toBe('degraded');
         expect(approved.artifact.steps[0]).toMatchObject({
             type: 'fields',
-            fields: [{ type: 'targetCadence', min: 1.35, max: 1.65 }],
+            fields: expect.arrayContaining([expect.objectContaining({ type: 'targetCadence', min: 1.35, max: 1.65 })]),
             transitions: [{ condition: { type: 'manualLap' } }],
         });
     });

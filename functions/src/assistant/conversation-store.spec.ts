@@ -119,6 +119,21 @@ function requireStartedTurn(turn: AssistantTurnStart): BegunAssistantTurn {
 }
 
 describe('Assistant conversation store', () => {
+  it('keeps manual-entry permission default-off for legacy chats and fences stale choices', async () => {
+    const harness = createFirestoreHarness();
+    let sequence = 0;
+    const store = createAssistantConversationStore({ db: () => harness.db as never,
+      now: () => new Date('2026-10-01T12:00:00Z'), createId: () => `measurement-${++sequence}`,
+      getDeletionGuard: async () => ({ userExists: true, deletionInProgress: false, shouldSkip: false }) });
+    const legacy = await store.resetConversation('owner');
+    expect((await store.getActiveConversationState('owner')).measurementChangesEnabled).not.toBe(true);
+    const enabled = await store.resetConversation('owner', 'coordinate_free', false, legacy.conversationId, false, false, false, false, false, true);
+    expect((await store.getActiveConversationState('owner')).measurementChangesEnabled).toBe(true);
+    await expect(store.resetConversation('owner', 'coordinate_free', false, legacy.conversationId, false, false, false, false, false, false))
+      .rejects.toMatchObject({ code: 'conversation_changed' });
+    await expect(store.beginTurn('owner', enabled.conversationId, 'request-123456789', 'fingerprint',
+      'coordinate_free', false, false, false, false, false, false, false)).rejects.toMatchObject({ code: 'conversation_changed' });
+  });
   it('cannot restore notes consent from a stale tab or delayed reset retry', async () => {
     const harness = createFirestoreHarness();
     let sequence = 0;

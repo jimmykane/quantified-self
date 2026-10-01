@@ -78,6 +78,15 @@ const empty = (detail: string): CalendarDayMetric => ({ status: 'empty', value: 
 const updating = (detail: string): CalendarDayMetric => ({ status: 'updating', value: '—', detail });
 const error = (detail: string): CalendarDayMetric => ({ status: 'error', value: '—', detail });
 
+/** The stored readiness series covers fourteen UTC dates; future local dates are not recorded days. */
+export function isCalendarDayInReadinessHistory(dateKey: string, nowMs: number): boolean {
+  const dayMs = Date.parse(`${dateKey}T00:00:00Z`);
+  const now = new Date(nowMs);
+  const todayUtcMs = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
+  return Number.isFinite(dayMs) && dateKey <= localDateKey(nowMs)
+    && dayMs <= todayUtcMs && dayMs >= todayUtcMs - 13 * 24 * 60 * 60 * 1000;
+}
+
 /** Pick the same latest, date-matched overnight session for the summary and stage chart. */
 export function selectCalendarDaySleepPoint(
   dateKey: string, sessions: readonly HealthWorkspaceSleepSession[],
@@ -143,22 +152,32 @@ export function buildCalendarDayHealthSummary(
     });
     if (current) readiness = { status: 'ready', value: `${current.label} ${current.score}/100`,
       detail: evidence.readinessError ? "Today's score · some signals could not be refreshed" : "Today's score" };
-  } else if (!evidence.readinessError && evidence.derived?.trainingReadinessStatus === 'ready') {
+  } else if (!isToday && evidence.derived?.trainingReadiness) {
+    // The persistence boundary has already validated this payload. Today's freshness
+    // must not hide an exact recorded day while its replacement is being prepared.
     const point = evidence.derived.trainingReadiness?.points.find(item =>
       new Date(item.dayMs).toISOString().slice(0, 10) === dateKey);
     if (point?.score != null && point.label) {
-      readiness = { status: 'ready', value: `${point.label} ${point.score}/100`, detail: 'Recorded for this day' };
+      const status = evidence.derived.trainingReadinessStatus;
+      const refreshDetail = evidence.readinessError ? ' · could not refresh'
+        : status === 'stale' ? ' · refresh needed'
+        : isDerivedMetricPendingStatus(status) ? ' · updating' : '';
+      readiness = { status: 'ready', value: `${point.label} ${point.score}/100`, detail: `Recorded for this day${refreshDetail}` };
     }
   }
-  if (readiness.status === 'empty' && evidence.derivedPending) {
+  const canRefreshReadiness = isToday || isCalendarDayInReadinessHistory(dateKey, options.nowMs);
+  if (readiness.status === 'empty' && evidence.derivedPending && canRefreshReadiness) {
     readiness = updating('Loading readiness for this day');
   } else if (readiness.status === 'empty' && evidence.readinessError) {
     readiness = error('Readiness could not be loaded');
-  } else if (readiness.status === 'empty' && evidence.derived && (isToday
+  } else if (readiness.status === 'empty' && canRefreshReadiness && evidence.derived && (isToday
     ? [evidence.derived.formStatus, evidence.derived.formNowStatus, evidence.derived.rampRateStatus]
       .some(isDerivedMetricPendingStatus)
     : isDerivedMetricPendingStatus(evidence.derived.trainingReadinessStatus))) {
-    readiness = updating('Readiness is being updated');
+    const stale = isToday
+      ? [evidence.derived.formStatus, evidence.derived.formNowStatus, evidence.derived.rampRateStatus].includes('stale')
+      : evidence.derived.trainingReadinessStatus === 'stale';
+    readiness = updating(stale ? 'Readiness needs a refresh' : 'Readiness is being updated');
   }
 
   let recovery: CalendarDayMetric | null = null;

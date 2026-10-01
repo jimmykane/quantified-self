@@ -158,11 +158,13 @@ HTTP 408, 429, 5xx, and transient transport failures are retryable. Authenticati
 
 The ignored local COROS API Reference V2.0.6 (February 2026) is available for development but is never committed. The
 versioned capability matrix, serializer and transport live under `functions/src/training-plans/`. COROS Training delivery
-has no per-UID backend allowlist. The browser labels all new COROS Training delivery setup **Coming soon** under #648:
-plan sync, plan-workout resume and standalone Send are unavailable. Existing saved delivery state continues to follow its
-consent; retained delivery records, Retry, copy status and Stop remain available. This does not change COROS activity/history, Sleep, Health, FIT activity
-upload, activity sync, route delivery, backend reconciliation or MCP delivery behavior. Connecting COROS alone never opts
-in, and implementation does not authorize a provider call or deployment.
+has no per-UID backend allowlist. It is disabled for every account at the shared frontend/backend admission boundary:
+the production runtime binds no COROS Training transport, MCP delivery previews report it unavailable, and the browser
+omits COROS from plan, workout and sync-history controls/summaries. Existing preferences, ledgers and status projections
+remain stored but inactive; reconciliation cannot send, update, retry or remove a COROS planned workout until a deliberate
+rollout re-enables the shared boundary. This does not change COROS activity/history, Sleep, Health, FIT activity upload,
+activity sync or route delivery. Connecting COROS alone never opts in, and implementation does not authorize a provider
+call or deployment.
 
 The adapter sends form-encoded requests only to `POST /coros/tp/list/push` and
 `POST /coros/tp/workout/deleteById`, using the existing COROS OAuth client ID/secret and canonical pinned account.
@@ -176,9 +178,19 @@ One collision-checked positive partner AthleteId is bound to the QS user and nev
 destination/workout receives a separate stable positive ID that survives edits, reschedules and plan transfers. The
 mapping remains available after workout deletion for withdrawal/completion correlation and is recursively deleted with
 the account. Today-through-365-day scheduling uses the saved delivery time zone and deterministic LastModifiedDate.
-Running, Trail Running and Cycling use the native wire values `run`, `trailRun` and `bike`; Treadmill and cycling subtypes fold to broad `run`/`bike` only after
-explicit approval. A second target, recovery-to-rest mapping, fractional values and frozen relative references retain
+Running, Trail Running and Cycling use the native wire values `run`, `trailRun` and `bike`. Treadmill, Indoor Running
+and Virtual Running fold to broad `run`; Mountain Biking, Indoor Cycling, Virtual Cycling, E-Biking, Hand Cycle,
+Velomobile, Enduro MTB and Downhill Cycling fold to broad `bike` only after explicit mapping approval. The authored QS
+sport is unchanged. A second target, recovery-to-rest mapping, fractional values and frozen relative references retain
 the normal degradation approval, while cycling cadence is unsupported.
+
+The partner Training Plan contract (§6.1.3, pp. 45–49) supports only `run`, `trailRun`, `bike`, `swim` (pool) and
+`strength`. Walking, Hiking, Rowing, Indoor Rowing and Open Water Swimming remain unsupported, with no Generic fallback.
+The broader inbound activity `mode`/`subMode` catalog is not an outbound workout contract. COROS's
+[custom-workout help](https://support.coros.com/hc/en-us/articles/47285577958932-Create-Custom-Workouts-in-Your-COROS-App)
+also lists newer native app modes, but does not supply partner `WorkoutType` mappings for them. Serializer approval,
+mixed-batch payload and strict MCP read tests cover the six new running/cycling subtype folds. They do not prove
+account-side acceptance, app/watch receipt or completion, and leave the disabled delivery boundary unchanged.
 
 Push acceptance requires a returned date range covering the submitted batch. Delete success/failure lists are applied
 per workout. Result `30009` reports unavailable COROS Training access without asking for reconnect; `5006` requires

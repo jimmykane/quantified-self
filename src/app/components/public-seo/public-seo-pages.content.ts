@@ -660,7 +660,7 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
     title: 'MCP Server for Training Data',
     description: 'Connect ChatGPT, Claude, or another MCP client to approved training, Health, sleep, measurements, routes, Timeline notes, activity tags and descriptions.',
     h1: 'Connect ChatGPT or Claude to your training data',
-    intro: 'Use the Quantified Self MCP server to let ChatGPT, Claude, or another compatible client analyze approved data and help plan your next workout. You may separately grant Timeline note, activity-tag, and bounded Training changes; every write uses the client’s approval controls.',
+    intro: 'Use the Quantified Self MCP server to let ChatGPT, Claude, or another compatible client analyze approved data and help plan your next workout. You may separately grant manual Health measurement, Timeline note, activity-tag, and bounded Training changes; every write uses the client’s approval controls.',
     chips: ['MCP server', 'ChatGPT', 'Claude', 'Explicit consent', 'Training', 'Sleep', 'Activities', 'Routes'],
     actions: [
       routeAction('Start Free', '/login', 'flat', 'arrow_forward'),
@@ -676,7 +676,7 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
           {
             icon: 'monitoring',
             title: 'Training and measurement trends',
-            copy: 'Review load, readiness, intensity, durability, sport-specific evidence, body-weight history, and identity-safe TSS-based Training impact for an exact completed activity or local date.',
+            copy: 'Review load, readiness, intensity, durability, body-weight history and identity-safe TSS-based Training impact. Separately authorize manual Health entry lookup, logging, correction and permanent deletion; imported readings cannot be changed.',
           },
           {
             icon: 'monitor_heart',
@@ -704,7 +704,7 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
       {
         eyebrow: 'Access Boundaries',
         title: 'Separate permissions and approval-gated changes',
-        copy: 'Choose which data categories an external client can read and which note, tag, or Training changes it may make, then review or disconnect it from Connections at any time.',
+        copy: 'Choose which data categories an external client can read and which manual measurement, note, tag, or Training changes it may make, then review or disconnect it from Connections at any time.',
         items: [
           {
             icon: 'fact_check',
@@ -760,7 +760,7 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
       },
       {
         question: 'Can an MCP client read my Training plans and planned workouts?',
-        answer: 'With separate Training permission, clients can read plans, workouts, instructions, an authored pool-swim length when selected, notes, exact completion links and sanitized sync status. Pool length is not step distance. Separate change grants permit bounded proposals, including a pool-length preview; apply uses the client\'s approval controls. Provider delivery remains Pro and connection-gated; sync confirms cloud delivery, not watch receipt.',
+        answer: 'With separate Training permission, clients can read plans, workouts, saved workout recipes, instructions, an authored pool-swim length when selected, notes, exact completion links and sanitized sync status. Pool length is not step distance. The separate plan-and-workout change grant permits a bounded preview to save, edit or place a library recipe on explicit dates; a distinct apply uses the client\'s approval controls. Saving a recipe never grants provider sync. Provider delivery remains Pro and connection-gated; sync confirms cloud delivery, not watch receipt.',
       },
       {
         question: 'Why are my Training plan tools missing?',

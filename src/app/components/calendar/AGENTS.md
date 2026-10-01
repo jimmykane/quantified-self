@@ -5,6 +5,13 @@
 - Preserve each surface's existing layout unless it is explicitly in scope. Day-sheet rows must remain compact,
   content-sized, and on the shared overlay surface, with wrapping at 320px and accessible Material actions.
 - Selected-day previews and the sheet use shared body-medium titles, body-small metadata, and 20px sport icons;
-  do not replace row icons with compact grid markers or shrink preview text independently.
+  do not replace row icons with compact grid markers, add vertical accent rails beside them, or shrink preview text independently.
+- Keep compact recovery metric typography shared between the sheet and previews (label-small, 19px values).
+  Reset overlay tracking on the day-sheet content; do not let Material's body-large typography leak into nested content.
 - Hide completed-activity totals and sections on ready days without recorded activities. Keep loading/error states
   and other day content visible; a linked planned workout alone is not a recorded activity.
+- Keep day-sheet workout rows navigation-only, without duplicate/copy buttons. Duplication remains available in
+  the full day, selected-day previews, and Plans; do not remove those actions when simplifying the sheet.
+- The sheet uses the shared compact Training-impact variant and one wrapping scope/status metadata line per workout.
+  Keep step details in the opened workout; preserve impact coverage warnings, statuses, and separate UTC-day outcomes.
+  Compact impact text in the sheet must wrap rather than truncate outcome values or unavailable reasons on a narrow screen.

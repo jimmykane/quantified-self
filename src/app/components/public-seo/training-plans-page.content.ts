@@ -59,17 +59,17 @@ export const TRAINING_PLANS_PAGE_SECTIONS = [
       {
         icon: 'pool',
         title: 'Pool and open-water swimming',
-        copy: 'Create either Swimming or Open Water Swimming workouts with metre-based distance steps or timed steps. Suunto uses the matching Guide activity. Garmin supports compatible target-free pool swims with an optional pool length, but not open water; Wahoo swim delivery and COROS open-water delivery are unavailable. A Garmin cloud check is not proof of watch receipt.',
+        copy: 'Create either Swimming or Open Water Swimming workouts with metre-based distance steps or timed steps. Suunto uses the matching Guide activity. Garmin supports compatible target-free pool swims with an optional pool length, while open water uses Garmin Generic after mapping review, not a native swim profile. Generic works only on some devices; native sport tracking and display are not guaranteed, and QS keeps your authored sport. COROS open-water delivery is unavailable. Wahoo supports timed, untargeted pool and open-water swimming with account/device-tested native profiles and interval playback. Distance endings and intensity targets remain unsupported; Wahoo does not send the selected pool length. A Garmin cloud check is not proof of watch receipt.',
       },
       {
         icon: 'hiking',
         title: 'Walking, hiking, and rowing',
-        copy: 'Create Walking, Hiking, Rowing, or Indoor Rowing workouts. Suunto Guides recommend the matching exercise profile. Garmin, COROS, and Wahoo structured-workout delivery for these sports is unsupported under their current contracts. Guide acceptance does not prove app or watch visibility.',
+        copy: 'Create Walking, Hiking, Rowing, or Indoor Rowing workouts. Suunto Guides recommend the matching exercise profile. Wahoo supports outdoor Walking/Hiking with timed steps and no intensity targets; distance and intensity targets are unsupported for these Wahoo profiles. Garmin delivers these sports as Generic after mapping review, not their native sport profiles. Generic works only on some devices; native sport tracking and display are not guaranteed, and QS keeps your authored sport. COROS delivery for these sports remains unsupported. Wahoo supports timed, untargeted outdoor and indoor rowing with account/device-tested native profiles and interval playback. Distance endings and intensity targets remain unsupported. Cloud acceptance does not prove app or watch visibility.',
       },
       {
         icon: 'fitness_center',
         title: 'Strength training',
-        copy: 'Build ordered exercises and sets with reps or timed holds, optional external load in your selected kg or lb unit, and rest. Suunto sends a degraded Gym Guide with manual rep transitions, never native strength tracking; Garmin and Wahoo delivery is unsupported. COROS strength remains Coming soon pending account proof.',
+        copy: 'Build ordered exercises and sets with reps or timed holds, optional external load in your selected kg or lb unit, and rest. Suunto sends a degraded Gym Guide with manual rep transitions, never native strength tracking. Garmin strength mapping is implemented for supported exercise names, with live delivery verification pending; Wahoo supports timed strength sets and rests as Gym workouts; repetition sets remain unsupported, and exercise/load instructions are not native tracking. COROS strength remains Coming soon pending account proof.',
       },
       {
         icon: 'repeat',
