@@ -69,10 +69,12 @@ describe('Training plan MCP reads', () => {
     const compatibility = TRAINING_READ_OUTPUTS.assess_planned_workout_compatibility.parse(
       await f.run('assess_planned_workout_compatibility', { workoutRef, providers: ['suunto', 'garmin', 'wahoo', 'coros'] }));
     expect(compatibility.assessments.map(item => [item.provider, item.level])).toEqual([
-      ['suunto', 'degraded'], ['garmin', 'exact'], ['wahoo', 'unsupported'], ['coros', 'unsupported'],
+      ['suunto', 'degraded'], ['garmin', 'exact'], ['wahoo', 'unsupported'], ['coros', 'exact'],
     ]);
     expect(compatibility.assessments[0].issues[0].message).toContain('standard limitation needs no separate mapping approval');
     expect(compatibility.assessments[0].issues[0].message).toContain('additional mapping losses still require review');
+    expect(compatibility.assessments[3].issues).toEqual([]);
+    await expect(f.run('assess_planned_workout_compatibility', { workoutRef, providers: ['coros'] }, [TRAINING_PLANS_SCOPE], 'foreign-connection')).rejects.toThrow();
     const custom = { ...details, exercises: [{ ...details.exercises[0], name: 'My custom lift' }] };
     f.strengthDocs.w1 = custom;
     f.structures.w1 = projectStrengthWorkoutToV1(custom);
@@ -84,6 +86,14 @@ describe('Training plan MCP reads', () => {
     f.structures.w1 = projectStrengthWorkoutToV1(details);
     f.strengthDocs.w1 = { ...details, exercises: [{ ...details.exercises[0], name: 'Changed' }] };
     await expect(f.run('get_strength_workout_details', { workoutRef })).rejects.toThrow();
+    await expect(f.run('assess_planned_workout_compatibility', { workoutRef, providers: ['coros'] })).rejects.toThrow();
+    f.strengthDocs.w1 = { ...details, workoutId: 'foreign-workout' };
+    await expect(f.run('assess_planned_workout_compatibility', { workoutRef, providers: ['coros'] })).rejects.toThrow();
+    f.strengthDocs.w1 = { ...details, exercises: [{ ...details.exercises[0],
+      sets: [{ ...details.exercises[0].sets[0], externalLoadKg: -1 }] }] };
+    await expect(f.run('assess_planned_workout_compatibility', { workoutRef, providers: ['coros'] })).rejects.toThrow();
+    delete f.strengthDocs.w1;
+    await expect(f.run('assess_planned_workout_compatibility', { workoutRef, providers: ['coros'] })).rejects.toThrow();
   });
   it('keeps plan reads available to any consenting owner without a frontend rollout identity', async () => {
     const f = fixture();

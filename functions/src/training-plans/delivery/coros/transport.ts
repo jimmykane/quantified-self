@@ -1,8 +1,9 @@
 import { trainingDeliveryLocalDate } from '../../../../../shared/training-provider-delivery';
 import type { ScheduledWorkoutV1 } from '../../../../../shared/training-plans';
-import { serializeCorosTrainingPlanV1, type CorosTrainingPlanPushDataV1,
+import type { StrengthWorkoutDetailsV1 } from '../../../../../shared/strength-workout';
+import { type CorosTrainingPlanPushDataV1,
   type CorosTrainingWorkoutV1 } from '../../providers/coros-training-plan.serializer';
-import { assessTrainingDeliveryMapping } from '../mapping';
+import { assessTrainingDeliveryMapping, corosWorkoutMapping } from '../mapping';
 import { TrainingDeliveryBatchAdmissionChangedError, TrainingDeliveryTransportError,
   type DeliveryArtifact, type DeliveryBatchOutcome,
   type DeliveryCheckpoint, type DeliveryOperation, type DeliveryRecovery, type DeliveryRequestGuard,
@@ -93,8 +94,8 @@ export class CorosTrainingTransport implements TrainingDeliveryTransport {
     this.batch = { maxSize: 30, reserveIdentities, execute: this.executeBatch.bind(this) };
   }
 
-  assess(workout: ScheduledWorkoutV1, destinationKey: string, timeZone: string) {
-    return assessTrainingDeliveryMapping('coros', workout, destinationKey, timeZone);
+  assess(workout: ScheduledWorkoutV1, destinationKey: string, timeZone: string, strength?: StrengthWorkoutDetailsV1 | null) {
+    return assessTrainingDeliveryMapping('coros', workout, destinationKey, timeZone, strength);
   }
 
   canRemove(remote: DeliveryArtifact, today: string, _allowPastRemoval = false): boolean {
@@ -139,9 +140,9 @@ export class CorosTrainingTransport implements TrainingDeliveryTransport {
 
   private pushPayload(operations: readonly DeliveryOperation[]): CorosTrainingPlanPushDataV1 {
     const workouts: CorosTrainingWorkoutV1[] = operations.map(operation => {
-      const assessment = this.assess(operation.workout!, operation.destinationKey, operation.timeZone);
+      const assessment = this.assess(operation.workout!, operation.destinationKey, operation.timeZone, operation.strength);
       if (assessment.level === 'unsupported' || assessment.digest !== operation.digest) throw new TrainingDeliveryTransportError('terminal');
-      return serializeCorosTrainingPlanV1(operation.workout!.structure, {
+      return corosWorkoutMapping(operation.workout!, operation.strength, {
         athleteId: corosIdentity(operation).athleteId,
         workoutId: corosIdentity(operation).workoutId,
         title: operation.workout!.title,

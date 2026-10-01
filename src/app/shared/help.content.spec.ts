@@ -46,6 +46,12 @@ describe('help.content', () => {
     expect(content).toContain('Additional mapping losses, such as shortened exercise instructions, still need review');
     expect(content).toContain('Sent Guide status does not prove app/watch receipt or workout completion');
   });
+  it('keeps COROS strength implementation distinct from public Send or delivery proof', () => {
+    const content = HELP_SECTIONS.find(section => section.id === 'training-plans')!.content;
+    expect(content).toContain('COROS backend maps the complete strength prescription');
+    expect(content).toContain('New COROS Send and plan sync remain **Coming soon** pending account-side proof');
+    expect(content).toContain('Local compatibility does not mean COROS received the workout or that it reached your watch');
+  });
 
   it('explains the independent weight preference and canonical weigh-in storage', () => {
     const copy = JSON.stringify(HELP_SECTIONS);

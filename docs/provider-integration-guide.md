@@ -195,8 +195,12 @@ projection; delivery validates the owner-scoped companion. Suunto maps it to a G
 for rep sets. This remains degraded, not native strength tracking. Normal Send/Enable sync covers this standard
 limitation, disclosed as a warning; no separate approval is required for each workout or edit. Additional mapping loss,
 including shortened exercise instructions, still requires review of the current mapping. The COROS partner contract
-describes strength Reps/Second, Rest and fixed equipment weight in kilograms, and QS has a serializer fixture, but
-new COROS Send/sync remains Coming soon until entitlement and account-side push/update/delete proof. Garmin's #782
+describes strength Reps/Second, Rest and fixed equipment weight in kilograms. QS now forwards the complete matching
+companion through COROS assessment and production batch delivery, with local fixture/demo-emulator evidence only.
+Ordered names/sets, fractional/zero loads and final-set rest are preserved. Load-only edits change the digest while
+partner IDs stay stable; missing, foreign, invalid or projection-mismatched details fail closed before provider I/O.
+New COROS Send/sync remains Coming soon until entitlement and account-side push/update/delete proof; that live proof
+is explicitly omitted from this implementation and stays pending in #741. Garmin's #782
 mapping preserves native reps/time, exact kilogram load and rest for a verified 20-name Appendix B allowlist using the
 complete companion, never the v1 summary alone. Unknown names are unsupported rather than substituted; Help lists
 supported names and the current Garmin kilogram display. Its Workout/Schedule lifecycle, consent, account/revision,

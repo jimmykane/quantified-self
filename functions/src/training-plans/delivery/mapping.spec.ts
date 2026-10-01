@@ -8,6 +8,17 @@ const workout: ScheduledWorkoutV1 = { schemaVersion: 1, id: 'w', planId: null, l
   title: 'Easy run', lifecycle: 'planned', createdAtMs: 1, updatedAtMs: 1, structure: { version: 1, sport: ActivityTypes.Running,
     nodes: [{ kind: 'step', id: 'a', purpose: 'work', ending: { kind: 'time', seconds: 600 }, targets: [] }] } };
 describe('Training delivery mapping and production boundary', () => {
+  it('binds full COROS strength content without changing existing non-strength digests', () => {
+    const strength = { version: 1 as const, workoutId: 'w', revision: 1, exercises: [{ id: 'squat', name: 'Squat',
+      sets: [{ id: 'one', ending: { kind: 'repetitions' as const, repetitions: 10 }, externalLoadKg: 10 }] }] };
+    const lift = { ...workout, structure: projectStrengthWorkoutToV1(strength) };
+    const result = assessTrainingDeliveryMapping('coros', lift, 'destination', 'UTC', strength);
+    expect(result.level).toBe('exact');
+    const changed = { ...strength, exercises: [{ ...strength.exercises[0], sets: [{ ...strength.exercises[0].sets[0], externalLoadKg: 11 }] }] };
+    expect(assessTrainingDeliveryMapping('coros', lift, 'destination', 'UTC', changed).digest).not.toBe(result.digest);
+    expect(assessTrainingDeliveryMapping('coros', workout, 'destination', 'UTC', strength))
+      .toEqual(assessTrainingDeliveryMapping('coros', workout, 'destination', 'UTC'));
+  });
   it('preserves complete Garmin strength through the production wrapper and digest without affecting recipe-only delivery', () => {
     const strength = { version: 1 as const, workoutId: 'w', revision: 1, exercises: [{ id: 'squat', name: 'Squat',
       sets: [{ id: 'one', ending: { kind: 'repetitions' as const, repetitions: 10 }, externalLoadKg: 10 }] }] };
