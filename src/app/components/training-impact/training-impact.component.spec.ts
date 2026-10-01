@@ -93,18 +93,19 @@ describe('TrainingImpactComponent', () => {
     expect(element.querySelectorAll('.training-impact-outcomes > div')).toHaveLength(2);
   });
 
-  it('keeps the day summary on its parent surface instead of adding a nested card', () => {
+  it('keeps detailed impact on its parent surface instead of adding nested cards', () => {
     const styles = readFileSync(resolve(process.cwd(),
       'src/app/components/training-impact/training-impact.component.scss'), 'utf8');
+    const detailRule = styles.match(/\.training-impact\s*\{([^}]+)\}/)?.[1];
     const summaryRule = styles.match(/\.training-impact--summary\s*\{([^}]+)\}/)?.[1];
-    const summaryRowsRule = styles.match(/\.training-impact--summary \.training-impact-metrics > div,[\s\S]*?\{([^}]+)\}/)?.[1];
 
-    expect(summaryRule).toContain('border: 0;');
-    expect(summaryRule).not.toContain('border-top:');
+    expect(detailRule).toContain('border: 0;');
+    expect(detailRule).toContain('margin: 0;');
+    expect(detailRule).toContain('padding: 0;');
+    expect(detailRule).toContain('background: transparent;');
+    expect(styles).not.toContain('border-radius:');
+    expect(styles).not.toContain('background: color-mix');
     expect(summaryRule).toContain('margin-top: 0;');
-    expect(summaryRule).toContain('padding: 0;');
-    expect(summaryRule).toContain('background: transparent;');
-    expect(summaryRowsRule).toContain('background: transparent;');
   });
 
   it('allows compact values to use an overlay-safe foreground without changing other previews', () => {

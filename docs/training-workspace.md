@@ -3292,7 +3292,7 @@ shown as no modeled load contribution; missing TSS stays unavailable rather than
 Selected-day totals sum the visible completed activities' contributions. A local calendar date can contain activities
 from two UTC Training days, so the UI keeps one contribution total but shows a separate dated outcome for each UTC day
 instead of combining their net changes. Merge and benchmark records are excluded from Training, and their event detail
-pages do not render the Training-impact card. Planned workouts do not contribute. Stale, building, or refreshing Form
+pages do not render Training impact. Planned workouts do not contribute. Stale, building, or refreshing Form
 data is labelled as updating; the UI never substitutes a local guess. The presentation is not included on compact
 calendar grid cells or public activity shares.
 
@@ -3304,6 +3304,12 @@ retain their existing layout. Full metric labels
 and exact day outcomes remain accessible. **Full day** provides the detailed impact breakdown and model disclaimer.
 This density change reuses the existing Form data and does not change MCP/Assistant contracts, scopes, consent,
 calculations, provider behavior, or refresh subscriptions.
+
+Activity details and the full-day breakdown present detailed Training impact directly on their parent surface, with
+no enclosing card, tinted icon tile, or nested metric backgrounds. Four labeled contribution columns become two on
+phones, retaining full labels, exact values, dated outcomes, and the model disclaimer. Spacing follows the surrounding
+activity statistics without adding a second inset. This presentation change has no calculation, data-read, planning,
+MCP/Assistant, consent, or provider impact.
 
 This is a TSS-based model of sustained training load, not a measurement of physiological adaptation. The activity and
 selected-day calculation uses pure shared contribution/day-outcome interfaces beside the canonical Training-load model

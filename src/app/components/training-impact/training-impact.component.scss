@@ -5,48 +5,40 @@
 
 .training-impact {
   display: grid;
-  gap: 14px;
-  margin-top: 16px;
-  padding: 16px;
-  border: 1px solid var(--mat-sys-outline-variant);
-  border-radius: 16px;
-  background: color-mix(in srgb, var(--mat-sys-primary-container) 24%, transparent);
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
   color: var(--mat-sys-on-surface);
 }
 
 .training-impact--summary {
   margin-top: 0;
   margin-bottom: 16px;
-  padding: 0;
-  border: 0;
-  border-radius: 0;
-  background: transparent;
-}
-
-.training-impact--summary .training-impact-metrics > div,
-.training-impact--summary .training-impact-outcomes > div {
-  padding: 8px 0 0;
-  border-top: 1px solid var(--mat-sys-outline-variant);
-  border-radius: 0;
-  background: transparent;
 }
 
 header {
   display: flex;
-  align-items: center;
-  gap: 12px;
+  align-items: flex-start;
+  gap: 8px;
   min-width: 0;
 }
 
 .training-impact-icon {
   display: grid;
-  width: 40px;
-  height: 40px;
+  width: 20px;
+  height: 20px;
   flex: 0 0 auto;
   place-items: center;
-  border-radius: 12px;
-  background: var(--mat-sys-primary-container);
-  color: var(--mat-sys-on-primary-container);
+  color: var(--mat-sys-primary);
+}
+
+.training-impact-icon mat-icon {
+  width: 20px;
+  height: 20px;
+  font-size: 20px;
+  line-height: 20px;
 }
 
 h3,
@@ -58,19 +50,18 @@ p {
 h3 {
   color: var(--mat-sys-on-surface-variant);
   font: var(--mat-sys-label-large);
-  letter-spacing: .02em;
 }
 
 header strong {
   display: block;
   margin-top: 2px;
-  font: var(--mat-sys-title-medium);
+  font: var(--mat-sys-title-small);
 }
 
 .training-impact-metrics {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 8px;
+  gap: 8px 16px;
 }
 
 .training-impact-metrics > div,
@@ -78,20 +69,20 @@ header strong {
   display: grid;
   gap: 3px;
   min-width: 0;
-  padding: 10px 12px;
-  border-radius: 12px;
-  background: color-mix(in srgb, var(--mat-sys-surface-container-high) 82%, transparent);
+  padding: 6px 0 0;
+  border-top: 1px solid var(--mat-sys-outline-variant);
 }
 
 .training-impact-metrics span,
 .training-impact-outcomes span {
   color: var(--mat-sys-on-surface-variant);
-  font: var(--mat-sys-label-small);
+  font: var(--mat-sys-body-small);
 }
 
 .training-impact-metrics strong {
   font-family: 'Barlow Condensed', sans-serif;
-  font-size: 1.45rem;
+  font-size: 1.35rem;
+  line-height: 1.2;
   font-variant-numeric: tabular-nums;
   font-weight: 600;
 }
@@ -110,11 +101,6 @@ header strong {
 .training-impact-disclaimer {
   color: var(--mat-sys-on-surface-variant);
   font: var(--mat-sys-body-small);
-}
-
-.training-impact-disclaimer {
-  padding-top: 10px;
-  border-top: 1px solid var(--mat-sys-outline-variant);
 }
 
 .training-impact-compact {
@@ -157,15 +143,5 @@ header strong {
 @media (max-width: 767px) {
   .training-impact-metrics {
     grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-}
-
-@media (max-width: 420px) {
-  .training-impact:not(.training-impact--summary) {
-    padding: 14px;
-  }
-
-  .training-impact-metrics {
-    grid-template-columns: 1fr;
   }
 }

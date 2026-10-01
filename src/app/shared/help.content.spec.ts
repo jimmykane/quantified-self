@@ -775,7 +775,7 @@ describe('help.content', () => {
     expect(trainingSection?.content).toContain('What drove this');
     expect(trainingSection?.content).toContain('**Training impact** appears for completed activities');
     expect(trainingSection?.content).toContain('TSS divided by 42');
-    expect(trainingSection?.content).toContain('their event detail pages do not show the card');
+    expect(trainingSection?.content).toContain('their event detail pages do not show Training impact');
     expect(trainingSection?.content).toContain('Public activity shares and planned workouts do not show Training impact');
     expect(trainingSection?.content).toContain('**Training impact recap** appears first under **Load trajectory**');
     expect(trainingSection?.content).toContain('last 7 completed UTC Training days');
