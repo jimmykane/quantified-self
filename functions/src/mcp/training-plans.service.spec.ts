@@ -128,6 +128,27 @@ describe('Training plan MCP reads', () => {
       delete f.collections.trainingDeliveryStatuses[id][key];
     }
   });
+  it('assesses timed Wahoo strength from the complete companion without changing the strict wire schema or leaking provider identities', async () => {
+    const f = fixture();
+    const details = { version: 1 as const, workoutId: 'w1', revision: 1,
+      exercises: [{ id: 'plank', name: 'Plank', sets: [{ id: 'hold', ending: { kind: 'time' as const, seconds: 30 },
+        externalLoadKg: 2.5, restAfterSeconds: 30 }] }] };
+    f.structures.w1 = projectStrengthWorkoutToV1(details); f.strengthDocs.w1 = details;
+    const workoutRef = f.codec.encode({ kind: 'workout', id: 'w1', createdAtMs: 1 }, 'owner', 'connection');
+    const result = TRAINING_READ_OUTPUTS.assess_planned_workout_compatibility.parse(
+      await f.run('assess_planned_workout_compatibility', { workoutRef, providers: ['wahoo'] }));
+    expect(result.assessments[0]).toMatchObject({ provider: 'wahoo', level: 'degraded',
+      issues: [{ code: 'sport_profile_degraded', field: '$.strength' }] });
+    expect(result.assessments[0].issues[0].message).toContain('not native rep/load tracking');
+    const read = TRAINING_READ_OUTPUTS.get_strength_workout_details.parse(await f.run('get_strength_workout_details', { workoutRef }));
+    expect(read.details.exercises[0].sets[0]).toMatchObject({ externalLoadKg: 2.5, restAfterSeconds: 30 });
+    expect(JSON.stringify(result)).not.toMatch(/workout_type|destination|digest|external_id|workout_token/);
+    for (const invalid of [undefined, { ...details, workoutId: 'foreign' },
+      { ...details, exercises: [{ ...details.exercises[0], name: 'Changed' }] }]) {
+      if (invalid) f.strengthDocs.w1 = invalid; else delete f.strengthDocs.w1;
+      await expect(f.run('assess_planned_workout_compatibility', { workoutRef, providers: ['wahoo'] })).rejects.toThrow();
+    }
+  });
   it('reads the complete strength companion under Training consent and fails closed on a mismatch', async () => {
     const f = fixture();
     const details = { version: 1 as const, workoutId: 'w1', revision: 1,

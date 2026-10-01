@@ -139,6 +139,21 @@ describe('Production Training delivery rollout', () => {
       .toBe('unsupported');
     expect(fetcher).not.toHaveBeenCalled();
   });
+  it('preserves the full timed Wahoo companion and instruction-only load changes through the production wrapper without I/O', () => {
+    const fetcher = vi.fn(); vi.stubGlobal('fetch', fetcher);
+    const timed = { ...strength, exercises: [strength.exercises[1]] };
+    const workout = { ...strengthWorkout, structure: projectStrengthWorkoutToV1(timed) };
+    const transport = runtime.transport('wahoo', 'owner')!;
+    const assessment = transport.assess(workout, inspection.destinationKey, inspection.timeZone, timed);
+    expect(assessment).toMatchObject({ level: 'degraded', requiresApproval: false });
+    const changed = structuredClone(timed); changed.exercises[0].sets[0].externalLoadKg = 2.5;
+    expect(transport.assess(workout, inspection.destinationKey, inspection.timeZone, changed).digest).not.toBe(assessment.digest);
+    for (const invalid of [undefined, null, { ...timed, workoutId: 'foreign' },
+      { ...timed, exercises: [{ ...timed.exercises[0], name: 'Changed' }] }]) {
+      expect(transport.assess(workout, inspection.destinationKey, inspection.timeZone, invalid).level).toBe('unsupported');
+    }
+    expect(fetcher).not.toHaveBeenCalled();
+  });
 
   it.each(PLANNED_WORKOUT_PROVIDER_IDS)('preserves %s removal opt-in while protecting past and completed copies by default', provider => {
     vi.stubEnv('SUUNTOAPP_GUIDE_OWNER', 'Fixture application');

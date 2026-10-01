@@ -3,6 +3,8 @@ import { ActivityTypes } from '@sports-alliance/sports-lib';
 import type { ScheduledWorkoutV1 } from '../../../../../shared/training-plans';
 import { hasWahooTrainingScopes } from '../../../../../shared/wahoo-training';
 import { WAHOO_API_SCOPES } from '../../../wahoo/constants';
+import { projectStrengthWorkoutToV1 } from '../../../../../shared/strength-workout';
+import { wahooFixtureStrengthDetails } from '../test-support/wahoo-http-fixture';
 import { assessWahooDelivery, wahooDurationSeconds, wahooIdentities, wahooPlanBody, wahooStarts, wahooWorkoutBody, wahooWorkoutDate } from './mapping';
 
 export function wahooFixtureWorkout(): ScheduledWorkoutV1 {
@@ -16,6 +18,28 @@ export function wahooFixtureWorkout(): ScheduledWorkoutV1 {
     ] } };
 }
 describe('Wahoo delivery mapping (no editor changes)', () => {
+  it('requires the complete owned companion and includes load-only changes in the digest without changing provider identities', () => {
+    const details = wahooFixtureStrengthDetails('workout');
+    const workout = { ...wahooFixtureWorkout(), structure: projectStrengthWorkoutToV1(details) };
+    const result = assessWahooDelivery(workout, 'destination', 'UTC', details);
+    expect(result).toMatchObject({ level: 'degraded', requiresApproval: false });
+    const body = new URLSearchParams(wahooWorkoutBody(workout, 'destination', 'UTC', '123'));
+    expect(body.get('workout[workout_type_id]')).toBe('42');
+    expect(body.get('workout[minutes]')).toBe('5');
+    const changed = structuredClone(details);
+    changed.exercises[0].sets[0].externalLoadKg = 2.5;
+    expect(projectStrengthWorkoutToV1(changed)).toEqual(workout.structure);
+    expect(assessWahooDelivery(workout, 'destination', 'UTC', changed).digest).not.toBe(result.digest);
+    for (const invalid of [undefined, null, { ...details, workoutId: 'foreign' },
+      { ...details, exercises: [{ ...details.exercises[0], name: 'Changed' }] },
+      { ...details, exercises: [{ ...details.exercises[0], sets: [{ ...details.exercises[0].sets[0], externalLoadKg: NaN }] }] }]) {
+      expect(assessWahooDelivery(workout, 'destination', 'UTC', invalid).level).toBe('unsupported');
+      expect(() => wahooPlanBody(workout, 'destination', true, invalid)).toThrow();
+    }
+    const encoded = new URLSearchParams(wahooPlanBody(workout, 'destination', true, changed)).get('plan[file]')!;
+    expect(JSON.parse(Buffer.from(encoded.split(',')[1], 'base64').toString()).header)
+      .toMatchObject({ workout_type_family: 6, workout_type_location: 0 });
+  });
   it('derives exact fractional minutes and encodes the existing recipe', () => {
     const workout = wahooFixtureWorkout();
     expect(wahooDurationSeconds(workout.structure)).toBe(183);

@@ -750,6 +750,51 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Training MCP write propos
     expect(garmin.calls.filter(call => call.method === 'POST')).toHaveLength(2);
   });
 
+  it.each(['time', 'rounded-load', 'repetitions'] as const)('keeps Wahoo strength %s Send companion-aware and behind the existing native confirmation contract', async ending => {
+    const wahoo = new WahooHttpFixture();
+    const synthetic = new WahooTrainingTransport(wahoo.request, deps.now);
+    const policy = productionDeliveryRuntime(db).transport('wahoo', uid)!;
+    deps.runtime.transport = provider => provider !== 'wahoo' ? null : { ...policy,
+      inspection: synthetic.inspection, execute: synthetic.execute.bind(synthetic), recover: synthetic.recover.bind(synthetic) };
+    const strength = { version: 1 as const, exercises: [{ id: 'hold', name: 'Plank', sets: [{ id: 'set-one',
+      ending: ending !== 'repetitions' ? { kind: 'time' as const, seconds: 30 } : { kind: 'repetitions' as const, repetitions: 8 },
+      externalLoadKg: ending === 'rounded-load' ? 2.25 : 2.5, restAfterSeconds: 30 }] }] };
+    const authored = await previewStrengthWorkoutChange({ uid, connectionId: 'connection', scopes,
+      arguments: { expectedScheduleRevision: 1, change: { kind: 'create-workout', localKey: 'gym', plan: null,
+        localDate: '2026-09-18', title: 'Synthetic Wahoo strength', strength } } }, deps);
+    const created = await applyTrainingChanges({ uid, connectionId: 'connection', scopes,
+      arguments: { proposalRef: authored.proposalRef, permissionMode: 'schedule' } }, deps);
+    const args = { expectedScheduleRevision: created.scheduleRevision, changes: [{ kind: 'provider-delivery',
+      targetType: 'workout', target: { ref: created.createdReferences[0].reference },
+      providers: ['wahoo'], action: 'send', timeZone: 'Europe/Helsinki' }] };
+    await expect(previewTrainingChanges({ uid, connectionId: 'connection', scopes: [TRAINING_PLANS_SCOPE, TRAINING_PLANS_WRITE_SCOPE],
+      arguments: args }, deps)).rejects.toThrow();
+    const preview = await previewTrainingChanges({ uid, connectionId: 'connection', scopes, arguments: args }, deps);
+    expect(preview).toMatchObject({ permissionMode: 'delivery', requiresConfirmation: true,
+      providerPreviews: [{ provider: 'wahoo', availability: ending !== 'repetitions' ? 'ready' : 'unavailable', warningCount: 1 }] });
+    if (ending !== 'repetitions') expect(preview.providerPreviews[0].summary).toContain('not native rep/load tracking');
+    if (ending === 'rounded-load') expect(preview.providerPreviews[0].summary).toContain('Review the rounded load');
+    expect(wahoo.calls).toHaveLength(0);
+    const user = db.collection('users').doc(uid);
+    expect((await user.collection('trainingDeliverySettings').get()).empty).toBe(true);
+    const input = { uid, connectionId: 'connection', scopes,
+      arguments: { proposalRef: preview.proposalRef, permissionMode: preview.permissionMode } };
+    const applied = await applyTrainingChanges(input, deps);
+    await expect(applyTrainingChanges(input, deps)).resolves.toEqual(applied);
+    expect(applied.providers).toEqual([expect.objectContaining({ provider: 'wahoo', status: ending !== 'repetitions' ? 'applied' : 'blocked' })]);
+    if (ending === 'repetitions') { expect(wahoo.calls).toHaveLength(0); return; }
+    for (let page = 0; page < 20 && await reconcileTrainingDeliveryPage(deps.runtime, uid); page++) { /* drain */ }
+    const ledger = (await user.collection('trainingDeliveryLedger').get()).docs[0];
+    await Promise.all([processTrainingDelivery(deps.runtime, uid, ledger.id), processTrainingDelivery(deps.runtime, uid, ledger.id)]);
+    expect((await user.collection('trainingDeliveryStatuses').doc(ledger.id).get()).data())
+      .toMatchObject({ status: 'delivered', provider: 'wahoo', hasRemoteCopy: true });
+    expect(wahoo.plans.size).toBe(1); expect(wahoo.workouts.size).toBe(1);
+    expect([...wahoo.plans.values()][0]).toMatchObject({ workout_type_family_id: 6, workout_type_location_id: 0 });
+    expect([...wahoo.workouts.values()][0]).toMatchObject({ workout_type_id: 42, minutes: 1 });
+    if (ending === 'rounded-load') expect(JSON.stringify([...wahoo.plans.values()][0].fixtureRecipe)).toContain('load guidance: 2.3 kg');
+    expect(wahoo.calls.filter(call => call.method === 'POST')).toHaveLength(2);
+  });
+
   it('preserves strength details in the production policy for MCP Send preview and approval-gated apply', async () => {
     vi.stubEnv('SUUNTOAPP_GUIDE_OWNER', 'Quantified Self');
     const suunto = new SuuntoHttpFixture();

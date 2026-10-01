@@ -175,8 +175,9 @@ An unsupported workout is not an approvable degradation. Its provider preview sa
 skips it, and explicit Send/Resume remains a blocked provider result without saving consent or calling that provider.
 The authored workout may still be created if the user confirms the clearly labelled partial proposal. The browser's
 direct Send confirmation is disabled for an unsupported workout. An earlier provider copy may remain unchanged when a
-new version is unsupported; neither preview nor a blocked result implies removal. Wahoo currently requires a Running/Cycling recipe
-with time endings throughout; neither a different sport nor distance-ending steps can be approved into compatibility.
+new version is unsupported; neither preview nor a blocked result implies removal. Wahoo requires time endings throughout
+for Running/Cycling or a complete matching timed-strength companion for Gym. Repetition-based strength, unsupported
+sports and distance-ending steps cannot be approved into compatibility.
 
 The built-in Assistant exposes only the applicable focused/batch previews to Gemini. It prefers the focused tool for one
 new workout, including a one-workout create-and-send request, and the batch tool for other or genuinely multi-change
@@ -282,8 +283,13 @@ Its delivery preview performs no provider I/O and apply keeps independent
 Training/delivery grants, native/app confirmation and idempotency. The browser's Coming soon gate is unchanged;
 local assessment and synthetic delivery tests are not entitlement, cloud, app/watch or completion evidence (#741).
 Normal owner/grant-bound MCP proposal confirmation and apply remain required. No registered schema, scope, permission,
-provider action or response field changes for this policy. COROS new-send remains Coming soon and Wahoo strength is
-unsupported. #782 adds local Garmin strength compatibility using the validated owner-scoped companion and a small
+provider action or response field changes for this policy. COROS new-send remains Coming soon. Wahoo #783 uses the
+validated companion for timed Gym sets/rests, reporting degraded exercise/load instructions rather than native tracking.
+Repetition sets remain unsupported. Kilogram load instructions use Sports Lib display; actual rounding requires review.
+Send previews disclose the limitation and perform no provider I/O. Apply retains the existing independent delivery grant,
+owner/revision/expiry binding, native/app confirmation and idempotency. Existing strict mapping issue codes are reused;
+there is no new registered tool, schema, response field, scope, consent or provider action.
+#782 adds local Garmin strength compatibility using the validated owner-scoped companion and a small
 verified Appendix B exercise-name allowlist. Reps/time, exact kilogram load and rest map to native Training API fields;
 unknown names remain unsupported without substitution. Missing, foreign or projection-mismatched companions fail
 closed. Compatibility is local contract evidence, never provider/cloud/device acceptance. Existing provider Send and

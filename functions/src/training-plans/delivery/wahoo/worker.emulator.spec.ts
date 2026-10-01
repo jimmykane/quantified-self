@@ -14,6 +14,8 @@ import { WahooTrainingHttpError } from './http';
 import { WahooHttpFixture, wahooFixtureWorkout } from '../test-support/wahoo-http-fixture';
 import { WAHOO_API_SCOPES } from '../../../wahoo/constants';
 import type { TrainingDeliveryCommandV1 } from '../../../../../shared/training-provider-delivery';
+import { projectStrengthWorkoutToV1 } from '../../../../../shared/strength-workout';
+import { wahooFixtureStrengthDetails } from '../test-support/wahoo-http-fixture';
 
 describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Wahoo worker with real Firestore and synthetic provider only', { timeout: 30_000 }, () => {
   const host = process.env.FIRESTORE_EMULATOR_HOST;
@@ -52,6 +54,44 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Wahoo worker with real Fi
       for (const doc of (await db.collection(DELIVERY_QUEUE).where('uid', '==', id).get()).docs) await db.recursiveDelete(doc.ref);
     }
     await db.terminate();
+  });
+  it('sends full timed strength with normal consent, serializes concurrent workers and updates load/rest/date in place before Stop', async () => {
+    const details = wahooFixtureStrengthDetails();
+    const ref = user().collection('scheduledWorkouts').doc('w');
+    await ref.update({ structure: projectStrengthWorkoutToV1(details), title: 'Synthetic timed strength' });
+    await ref.collection('strengthDetails').doc('current').set(details);
+    await command('send'); await drain(); const row = await ledger();
+    await Promise.all([processTrainingDelivery(runtime, uid, row.id), processTrainingDelivery(runtime, uid, row.id)]); await drain();
+    const first = await ledger();
+    expect(first.status).toBe('delivered'); expect(first.approvalDigest).toBeNull();
+    expect(first.issues.join(' ')).toContain('not native rep/load tracking');
+    const ids = first.actual!.ids;
+    expect(server.plans.get(ids.plan)).toMatchObject({ workout_type_family_id: 6, workout_type_location_id: 0 });
+    expect(server.workouts.get(ids.workout)).toMatchObject({ workout_type_id: 42, minutes: 5 });
+    details.exercises[0].sets[0].externalLoadKg = 2.5;
+    await ref.collection('strengthDetails').doc('current').set(details); await mark();
+    await processTrainingDelivery(runtime, uid, row.id); await drain();
+    expect((await ledger()).acceptedDigest).not.toBe(first.acceptedDigest);
+    expect(JSON.stringify(server.plans.get(ids.plan)?.fixtureRecipe)).toContain('load guidance: 2.5 kg');
+    details.exercises[0].sets[0].restAfterSeconds = 45;
+    const batch = db.batch(); batch.update(ref, { structure: projectStrengthWorkoutToV1(details), localDate: '2026-10-31', updatedAtMs: now });
+    batch.set(ref.collection('strengthDetails').doc('current'), details); await batch.commit(); await mark();
+    await processTrainingDelivery(runtime, uid, row.id); await drain();
+    expect(await ledger()).toMatchObject({ status: 'delivered', actual: { ids, localDate: '2026-10-31' } });
+    expect(server.workouts.get(ids.workout)).toMatchObject({ minutes: 5.25, starts: '2026-10-31T10:00:00.000Z' });
+    expect(server.calls.filter(call => call.method === 'POST')).toHaveLength(2);
+    await command('stop'); await drain(); await processTrainingDelivery(runtime, uid, row.id); await drain();
+    expect(server.workouts.size).toBe(0); expect(server.plans.size).toBe(0);
+  });
+  it('fences a strength load-only edit after Plan acceptance before creating the dated Workout', async () => {
+    const details = wahooFixtureStrengthDetails(); const ref = user().collection('scheduledWorkouts').doc('w');
+    await ref.update({ structure: projectStrengthWorkoutToV1(details) });
+    await ref.collection('strengthDetails').doc('current').set(details);
+    server.afterHandle = async request => { if (request.method === 'POST' && request.path === '/v1/plans') {
+      server.afterHandle = null; details.exercises[0].sets[0].externalLoadKg = 2.5;
+      await ref.collection('strengthDetails').doc('current').set(details);
+    } };
+    await send(); expect(server.plans.size).toBe(1); expect(server.workouts.size).toBe(0);
   });
   it('admits one worker, checkpoints both resources, and verifies all three cloud keys', async () => {
     await command('send'); await drain(); const row = await ledger();

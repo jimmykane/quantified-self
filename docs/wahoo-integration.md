@@ -27,13 +27,23 @@ For one-time historical sends, a deleted event or changed/missing original befor
 
 Training delivery uses the shared queue, not the activity uploader or a new queue. Its
 single detailed implementation and operational contract is [Wahoo Training delivery](training-workspace.md#wahoo-plan-and-dated-workout-delivery-649):
-time-based Running/Cycling, saved-zone seven-day window, separate Plan/Workout/association receipts, duplicate-safe
+time-based Running/Cycling and companion-aware timed Strength/Gym, saved-zone seven-day window, separate Plan/Workout/association receipts, duplicate-safe
 recovery, positive-only cloud checks, scope migration and lifecycle fences. Device receipt remains provider-managed and
 is never inferred from cloud acceptance.
 The production Plan validator requires `header.description` and a `targets` array on every non-repeat interval despite
 the published plan.json schema marking both optional. It also rejects an empty target array. QS supplies the bounded
-workout title and the documented full-domain RPE range 1–10 for an untargeted interval; it does not add another editor
+workout title for Running/Cycling and an explicit instruction-only description for timed Gym. Every untargeted interval
+uses the documented full-domain RPE range 1–10; this does not add another editor
 field or narrow intended effort. Production Plan create/delete returns HTTP 200; create also remains compatible with 201.
+
+Timed Strength/Gym (#783) uses family `6`, indoor location `0`, and Workout type `42`. The full owner-scoped companion,
+not its old-client summary, supplies ordered timed sets/rests and exercise/load instructions. Repetition sets are
+unsupported and never estimated. Loads are kilogram instructions through Sports Lib display, not native tracking;
+actual rounding needs current-mapping approval. The QS editor and MCP details preserve exact kg storage and kg/lb display.
+A separately approved unloaded five-minute Gym recipe had complete cloud JSON readback and owner-confirmed Wahoo app
+player/interval behavior on 1 October 2026. This is not integrated production lifecycle, native reps/load, completion,
+ELEMNT or watch evidence. Live integrated update/reschedule/retry/reconnect/eligible removal remains pending in #783;
+neither implementation nor the earlier test authorizes deployment or deletion.
 The existing production app/account supplied the app-owned Plan/Workout cloud proof. Do not interpret the historical
 activity launch checklist below as a requirement to create a sandbox or apply for Wahoo-owned Plan-library entitlement.
 

@@ -1,4 +1,6 @@
 import type { ScheduledWorkoutV1 } from '../../../../../shared/training-plans';
+import { ActivityTypes } from '@sports-alliance/sports-lib';
+import type { StrengthWorkoutDetailsV1 } from '../../../../../shared/strength-workout';
 import { normalizeDeliveryTimeZone, trainingDeliveryLocalDate } from '../../../../../shared/training-provider-delivery';
 import { TrainingDeliveryTransportError, type DeliveryArtifact, type DeliveryCheckpoint, type DeliveryOperation,
   type DeliveryRecovery, type DeliveryRequestGuard, type DeliveryTransportProgress, type TrainingDeliveryTransport } from '../contracts';
@@ -81,7 +83,15 @@ export class WahooTrainingTransport implements TrainingDeliveryTransport {
       ] };
     } };
   }
-  assess(workout: ScheduledWorkoutV1, destination: string, zone: string) { return assessWahooDelivery(workout, destination, zone); }
+  assess(workout: ScheduledWorkoutV1, destination: string, zone: string, strength?: StrengthWorkoutDetailsV1 | null) {
+    return assessWahooDelivery(workout, destination, zone, strength);
+  }
+  private validatePrescription(operation: DeliveryOperation): void {
+    if (operation.kind !== 'upsert') return;
+    if (!operation.workout) throw new TrainingDeliveryTransportError('terminal');
+    const assessment = this.assess(operation.workout, operation.destinationKey, operation.timeZone, operation.strength);
+    if (assessment.level === 'unsupported' || assessment.digest !== operation.digest) throw new TrainingDeliveryTransportError('terminal');
+  }
   canRemove(artifact: DeliveryArtifact, today: string, allowPastRemoval = false): boolean {
     return !artifact.completed && (artifact.localDate >= (artifact.timeZone ? trainingDeliveryLocalDate(this.now(), artifact.timeZone) : today)
       || allowPastRemoval);
@@ -176,11 +186,12 @@ export class WahooTrainingTransport implements TrainingDeliveryTransport {
     const value = ownedPlan(raw, operation.artifact!);
     const workout = operation.workout!;
     const expected = wahooWorkoutFields(workout, operation.destinationKey, operation.timeZone, operation.artifact!.ids.plan);
+    const gym = workout.structure.sport === ActivityTypes.StrengthTraining;
     const providerUpdatedAt = typeof value.provider_updated_at === 'string' ? Date.parse(value.provider_updated_at) : NaN;
     // Production readback truncates the submitted ISO timestamp to whole seconds.
     // Compare at the provider's precision while still rejecting another revision.
-    if (value.name !== workout.title || numeric(value.workout_type_family_id) !== expected.workout_type_id
-      || numeric(value.workout_type_location_id) !== 1 || typeof value.provider_updated_at !== 'string'
+    if (value.name !== workout.title || numeric(value.workout_type_family_id) !== (gym ? 6 : expected.workout_type_id)
+      || numeric(value.workout_type_location_id) !== (gym ? 0 : 1) || typeof value.provider_updated_at !== 'string'
       || Math.trunc(providerUpdatedAt / 1000) !== Math.trunc(workout.updatedAtMs / 1000)) uncertain();
   }
   private matchesWorkout(value: Value, operation: DeliveryOperation): boolean {
@@ -205,8 +216,7 @@ export class WahooTrainingTransport implements TrainingDeliveryTransport {
     if (operation.progress === undefined || operation.progress?.state === 'started') uncertain();
     if (operation.kind === 'remove') return this.remove(operation, checkpoint, guard);
     const workout = operation.workout!;
-    const assessment = this.assess(workout, operation.destinationKey, operation.timeZone);
-    if (assessment.level === 'unsupported' || assessment.digest !== operation.digest) throw new TrainingDeliveryTransportError('terminal');
+    this.validatePrescription(operation);
     if (operation.artifact?.ids.workout) {
       await this.inspectWorkout(operation, checkpoint, guard);
       if (!await this.association(operation.artifact, guard)) uncertain();
@@ -222,7 +232,7 @@ export class WahooTrainingTransport implements TrainingDeliveryTransport {
     }
     if (!operation.artifact) {
       const response = await this.write(operation, 'plan-create', { method: 'POST', path: '/v1/plans',
-        body: wahooPlanBody(workout, operation.destinationKey, true) }, checkpoint, guard);
+        body: wahooPlanBody(workout, operation.destinationKey, true, operation.strength) }, checkpoint, guard);
       const value = wahooObject(response.body);
       const artifact: DeliveryArtifact = { ids: { ...wahooIdentities(operation.destinationKey, workout.id), plan: wahooId(value.id) },
         localDate: workout.localDate, completed: false, timeZone: operation.timeZone };
@@ -236,7 +246,7 @@ export class WahooTrainingTransport implements TrainingDeliveryTransport {
       if (!existing) uncertain();
       ownedPlan(existing, operation.artifact);
       await this.write(operation, 'plan-update', { method: 'PUT', path: `/v1/plans/${operation.artifact.ids.plan}`,
-        body: wahooPlanBody(workout, operation.destinationKey, false) }, checkpoint, guard);
+        body: wahooPlanBody(workout, operation.destinationKey, false, operation.strength) }, checkpoint, guard);
       // An acknowledged PUT is safe to repeat. Metadata alone is not proof of recipe
       // content after an uncertain PUT; recovery resumes a guarded in-place write.
       await this.save(operation, checkpoint, operation.artifact, 'plan-update', 'accepted');
@@ -306,6 +316,7 @@ export class WahooTrainingTransport implements TrainingDeliveryTransport {
   }
   async recover(operation: DeliveryOperation, checkpoint: DeliveryCheckpoint, guard: DeliveryRequestGuard): Promise<DeliveryRecovery> {
     this.validate(operation);
+    this.validatePrescription(operation);
     const progress = operation.progress;
     if (progress === undefined) return { kind: 'uncertain' };
     if (progress === null) return { kind: operation.artifact ? 'resume' : 'not-accepted' };
