@@ -835,6 +835,7 @@ const defaultDependencies: McpDataServiceDependencies = {
         'schemaVersion',
         'updatedAtMs',
         'sourceEventCount',
+        'payload.intensityPolicyVersion',
       )
       .get();
     return snapshot.docs.map(doc => ({
@@ -6417,6 +6418,8 @@ export function createMcpDataService(
           || snapshotMetricKind !== descriptor.metricKind
         ) {
           status = 'schema_mismatch';
+        } else if (rawStatus === 'ready' && !hasCurrentIntensityPolicy(descriptor.metricKind, snapshot.payload)) {
+          status = 'stale';
         } else if (
           rawStatus === 'ready'
           || rawStatus === 'building'

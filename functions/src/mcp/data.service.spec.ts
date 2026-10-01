@@ -4866,7 +4866,33 @@ describe('MCP data service', () => {
     expect(dependencies.importEvent).toHaveBeenCalledTimes(26);
   });
 
-  it('describes Training metrics and reports availability without reading payloads', async () => {
+  it.each([
+    DERIVED_METRIC_KINDS.IntensityDistribution,
+    DERIVED_METRIC_KINDS.EasyPercent,
+    DERIVED_METRIC_KINDS.HardPercent,
+    DERIVED_METRIC_KINDS.TrainingSummary,
+    DERIVED_METRIC_KINDS.TrainingBuildComparison,
+  ])('reports old intensity policies as stale in the %s catalog entry', async metricKind => {
+    const service = createMcpDataService(dependencies);
+    for (const intensityPolicyVersion of [undefined, 0, 1, 2]) {
+      vi.mocked(dependencies.fetchDerivedSnapshotMetadataDocuments).mockResolvedValueOnce([{
+        id: metricKind,
+        data: {
+          entryType: DERIVED_METRICS_ENTRY_TYPES.Snapshot, metricKind, status: 'ready',
+          schemaVersion: DERIVED_METRIC_SCHEMA_VERSION, updatedAtMs: 123, sourceEventCount: 9,
+          payload: { intensityPolicyVersion, coverageWeeks: [{ privateActivityId: 'hidden' }] },
+        },
+      }]);
+      const result = await service.listTrainingMetrics({ uid: 'user-1' });
+      expect(result.metrics.find(metric => metric.metricKind === metricKind)?.status)
+        .toBe(intensityPolicyVersion === 1 ? 'ready' : 'stale');
+      expect(JSON.stringify(result)).not.toContain('intensityPolicyVersion');
+      expect(JSON.stringify(result)).not.toContain('hidden');
+    }
+    expect(dependencies.fetchDerivedSnapshot).not.toHaveBeenCalled();
+  });
+
+  it('describes Training metrics and reports availability without reading full payloads', async () => {
     vi.mocked(dependencies.fetchDerivedSnapshotMetadataDocuments)
       .mockImplementation(async (_uid, metricKinds) => metricKinds.flatMap(
         (metricKind) => {

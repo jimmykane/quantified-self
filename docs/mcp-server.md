@@ -1674,6 +1674,8 @@ mixed weeks can include both sources. No source selector, thresholds, or zone-mo
 The five affected snapshots require private `intensityPolicyVersion` 1 through the existing ensure/queue lifecycle.
 Old snapshots and Best Build workout-cache seeds rebuild; unrelated kinds keep their versions. Public tool names,
 scopes, payload schemas, and wire version remain unchanged. Runtime metric descriptions explain the new grouping.
+Catalog availability checks project only the private policy field alongside ordinary snapshot metadata; old ready
+policies report `stale`, and no internal field is returned.
 The bundled Training and cross-domain workflows already discover these descriptions and require ready snapshots;
 their advertised guidance needs no change or plugin rebuild for this correction.
 

@@ -3345,7 +3345,8 @@ and percentage for the selected week. It must not normalize every week to an equ
 hard-only workout would otherwise look equivalent to a high-volume hard week.
 
 Weekly aggregation uses the existing parent/activity join and each segment's selected source, so power on one multisport
-segment cannot discard another segment's HR time. Benchmark exclusions, eligible multi merges, UTC weeks, all-history
+segment cannot discard another segment's HR time. Intensity-only and Easy/Hard refreshes retain unclassified activities
+with usable zones; Training Mix and Best Build keep their sport-specific eligibility. Benchmark exclusions, eligible multi merges, UTC weeks, all-history
 storage, and time-weighted percentages retain their existing behavior. Snapshot `sourceEventCount` counts distinct parent
 events with classified time. Private `coverageWeeks` records HR/power activity counts and zone seconds plus activity counts
 excluded for missing zones; the chart tooltip labels weeks with both sources explicitly. Excluded-only weeks remain in
@@ -3359,6 +3360,8 @@ workout-cache seeds before recovery-only refresh so prior grouping cannot be reu
 files, and Sports Lib dependencies are unchanged; no reparsing or deployment is part of this migration. MCP requires
 the current private policy before reading, then explicitly projects the five affected payloads onto the frozen public
 contract, omitting policy and coverage metadata. Runtime catalog descriptions explain the corrected approximate groups.
+MCP catalog discovery reads only the private policy field alongside snapshot metadata and reports old ready policies as
+stale without exposing that field or loading full payloads.
 
 On Overview, each recorded registered family is a compact workout-count, duration, and available TSS card. Workout
 and duration use normalized usual values; TSS carries the separate preceding-block median described above. The
