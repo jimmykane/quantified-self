@@ -103,7 +103,7 @@ export class CalendarDayDetailsComponent {
   readonly canOpenFullDay = computed(() => this.data.privateHealthEnabled !== false
     && this.users.user()?.uid === this.data.userId);
   readonly fullDayQueryParams = {
-    ...(this.data.returnToDashboard ? { from: 'dashboard' } : {}),
+    ...(this.data.returnToDashboard ? { from: 'dashboard', calendarSurface: 'today-sheet' } : {}),
     ...(this.data.calendarReturn ? { calendarView: this.data.calendarReturn.view, calendarAnchor: this.data.calendarReturn.anchor } : {}),
   };
   private readonly titleFormatter = getDateTimeFormatter(this.data.locale, {
@@ -155,12 +155,14 @@ export class CalendarDayDetailsComponent {
     if (!route) {
       return;
     }
-    this.navigation.prepareReturn(this.router.url, this.data.day.dateKey, undefined, this.data.calendarReturn);
+    this.navigation.prepareReturn(this.router.url, this.data.day.dateKey,
+      this.data.returnToDashboard ? 'today-sheet' : undefined, this.data.calendarReturn);
     this.dismiss();
   }
 
   prepareWorkoutNavigation(): void {
-    this.navigation.prepareReturn(this.router.url, this.data.day.dateKey, undefined, this.data.calendarReturn);
+    this.navigation.prepareReturn(this.router.url, this.data.day.dateKey,
+      this.data.returnToDashboard ? 'today-sheet' : undefined, this.data.calendarReturn);
     this.dismiss();
   }
 

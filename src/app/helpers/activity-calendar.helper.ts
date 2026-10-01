@@ -198,10 +198,18 @@ export function resolveActivityCalendarViewAnchor(view: ActivityCalendarView, se
 
 export function resolveActivityCalendarRouteState(
   params: { view?: unknown; date?: unknown; anchor?: unknown }, now = new Date(),
+  startOfWeek?: DaysOfTheWeek | number | null,
 ): ActivityCalendarRouteState {
   const selectedDate = parseActivityCalendarDate(params.date, now);
-  return { view: normalizeActivityCalendarView(params.view), selectedDate,
-    anchorDate: parseActivityCalendarDate(params.anchor, selectedDate) };
+  const view = normalizeActivityCalendarView(params.view);
+  let anchorDate = parseActivityCalendarDate(params.anchor, selectedDate);
+  const window = resolveActivityCalendarQueryWindow(view, anchorDate, startOfWeek);
+  // A mismatched deep link must not extend note reads across unrelated months/years
+  // or show an empty activity projection for a day outside the bounded reader.
+  if (selectedDate.getTime() < window.startMs || selectedDate.getTime() >= window.endExclusiveMs) {
+    anchorDate = resolveActivityCalendarViewAnchor(view, selectedDate, now);
+  }
+  return { view, selectedDate, anchorDate };
 }
 
 export function parseActivityCalendarDate(value: unknown, fallback = new Date()): Date {
@@ -283,7 +291,7 @@ export function resolveActivityCalendarQueryWindow(
     endExclusiveMs: addLocalDays(new Date(primary.endExclusiveMs), 6).getTime() };
 }
 
-function resolveActivityCalendarVisibleWindow(
+export function resolveActivityCalendarVisibleWindow(
   view: ActivityCalendarView,
   anchorDate: Date,
   startOfWeek?: DaysOfTheWeek | number | null,

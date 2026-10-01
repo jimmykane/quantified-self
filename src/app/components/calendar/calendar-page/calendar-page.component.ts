@@ -31,6 +31,7 @@ import {
   parseActivityCalendarDate,
   resolveActivityCalendarPrimaryRange,
   resolveActivityCalendarQueryWindow,
+  resolveActivityCalendarVisibleWindow,
   resolveActivityCalendarDayRange,
   resolveActivityCalendarRouteState,
   resolveActivityCalendarViewAnchor,
@@ -105,10 +106,14 @@ export class CalendarPageComponent {
   private readonly initialRouteState = resolveRouteState(
     this.route.snapshot.queryParamMap,
     this.isDayRoute ? this.route.snapshot.paramMap.get('date') : null,
+    this.userService.user()?.settings?.unitSettings?.startOfTheWeek,
   );
-  private readonly routeState$ = combineLatest([this.route.queryParamMap, this.route.paramMap]).pipe(
-    map(([queryParams, routeParams]) => resolveRouteState(
+  private readonly routeState$ = combineLatest([this.route.queryParamMap, this.route.paramMap,
+    this.userService.user$.pipe(map(user => user?.settings?.unitSettings?.startOfTheWeek), distinctUntilChanged()),
+  ]).pipe(
+    map(([queryParams, routeParams, weekStart]) => resolveRouteState(
       queryParams, this.isDayRoute ? routeParams.get('date') : null,
+      weekStart,
     )),
     distinctUntilChanged((previous, current) => (
       previous.view === current.view
@@ -254,15 +259,16 @@ export class CalendarPageComponent {
     day: 'numeric', month: 'short', year: '2-digit',
   }).format(this.routeState().anchorDate));
   private readonly calendarReturnParams = toSignal(this.route.queryParamMap.pipe(map(params => ({
-    view: params.get('calendarView'), anchor: params.get('calendarAnchor'),
-  }))), { initialValue: { view: this.route.snapshot.queryParamMap.get('calendarView'), anchor: this.route.snapshot.queryParamMap.get('calendarAnchor') } });
+    view: params.get('calendarView'), anchor: params.get('calendarAnchor'), surface: params.get('calendarSurface'),
+  }))), { initialValue: { view: this.route.snapshot.queryParamMap.get('calendarView'), anchor: this.route.snapshot.queryParamMap.get('calendarAnchor'),
+    surface: this.route.snapshot.queryParamMap.get('calendarSurface') } });
   readonly calendarBackQuery = computed(() => {
     const view = normalizeActivityCalendarView(this.calendarReturnParams().view);
     const date = this.routeState().selectedDate;
     const savedAnchor = this.calendarReturnParams().anchor;
     if (!savedAnchor) return { view, date: formatActivityCalendarDateParam(date) };
     const anchor = parseActivityCalendarDate(savedAnchor, date);
-    const window = resolveActivityCalendarQueryWindow(view, anchor, this.currentUser()?.settings?.unitSettings?.startOfTheWeek);
+    const window = resolveActivityCalendarVisibleWindow(view, anchor, this.currentUser()?.settings?.unitSettings?.startOfTheWeek);
     // Adjacent-day navigation may leave the original grid; keep the returned day visible.
     const visibleAnchor = date.getTime() >= window.startMs && date.getTime() < window.endExclusiveMs
       ? anchor : resolveActivityCalendarViewAnchor(view, date, this.today());
@@ -395,6 +401,16 @@ export class CalendarPageComponent {
     }
   }
 
+  prepareDayBackNavigation(): void {
+    if (!this.isDayRoute || !this.openedFromDashboard() || !this.currentUser()?.uid) return;
+    const context = this.calendarBackQuery();
+    // The activity/workout visit may have replaced the transient return record;
+    // reconstruct it from the full-day URL, including after a page reload.
+    this.dayDetailsNavigation.prepareReturn('/dashboard', context.date,
+      this.calendarReturnParams().surface === 'today-sheet' ? 'today-sheet' : undefined,
+      { view: context.view === '30d' ? '30d' : 'month', anchor: context.anchor ?? context.date });
+  }
+
   private navigateToState(state: ActivityCalendarRouteState, revealDay = false): void {
     if (this.isDayRoute) {
       this.navigateToDay(formatActivityCalendarDateParam(state.anchorDate));
@@ -455,6 +471,7 @@ export class CalendarPageComponent {
     const returnParams = this.calendarReturnParams();
     const origin = this.openedFromDashboard() || returnParams.view || returnParams.anchor ? {
       ...(this.openedFromDashboard() ? { from: 'dashboard' } : {}),
+      ...(this.openedFromDashboard() && returnParams.surface === 'today-sheet' ? { calendarSurface: 'today-sheet' } : {}),
       ...(returnParams.view ? { calendarView: normalizeActivityCalendarView(returnParams.view) } : {}),
       ...(returnParams.anchor ? { calendarAnchor: formatActivityCalendarDateParam(parseActivityCalendarDate(returnParams.anchor)) } : {}),
     } : null;
@@ -469,10 +486,10 @@ export class CalendarPageComponent {
   }
 }
 
-function resolveRouteState(params: ParamMap, pathDate: string | null = null): ActivityCalendarRouteState {
+function resolveRouteState(params: ParamMap, pathDate: string | null = null, startOfWeek?: number | null): ActivityCalendarRouteState {
   return resolveActivityCalendarRouteState({
     view: pathDate === null ? params.get('view') : 'month',
     date: pathDate ?? params.get('date'),
     anchor: pathDate ?? params.get('anchor'),
-  });
+  }, new Date(), startOfWeek);
 }

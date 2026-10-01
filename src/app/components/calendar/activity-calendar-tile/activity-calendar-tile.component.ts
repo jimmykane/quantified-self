@@ -340,6 +340,7 @@ export class ActivityCalendarTileComponent {
     if (currentMonth.getTime() !== this.anchorDate().getTime()) {
       this.anchorDate.set(currentMonth);
     }
+    this.selectDate(localDateKey(now));
   }
 
   @HostListener('document:visibilitychange')
@@ -385,6 +386,7 @@ export class ActivityCalendarTileComponent {
 
   openDay(day: ActivityCalendarDayViewModel, revealDay = true): void {
     if (this.dayContextEnabled()) {
+      if (day.dateKey !== localDateKey(this.today())) this.followsCurrentMonth.set(false);
       this.selectDate(day.dateKey);
       if (revealDay) requestAnimationFrame(() => revealCalendarDayContext(this.elementRef.nativeElement));
       return;

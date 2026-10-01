@@ -3,7 +3,7 @@
   @if (isDayRoute) {
     <header class="calendar-day-toolbar">
       <a class="calendar-day-back" mat-button appHapticTap [routerLink]="dayBackNavigation().route"
-        [queryParams]="dayBackNavigation().query" [attr.aria-label]="dayBackNavigation().ariaLabel">
+        [queryParams]="dayBackNavigation().query" [attr.aria-label]="dayBackNavigation().ariaLabel" (click)="prepareDayBackNavigation()">
         <mat-icon aria-hidden="true">arrow_back</mat-icon>{{ dayBackNavigation().label }}
       </a>
       <app-timeline-notes-workspace [visibleRange]="timelineNoteRange()"></app-timeline-notes-workspace>
@@ -118,7 +118,7 @@
       (daySelected)="openDay($event)">
     </app-activity-calendar-grid>
     @if (selectedDayData(); as dayData) {
-      <app-calendar-day-context class="calendar-selected-day" [class.qs-glass-card-panel]="calendarModel().view !== 'month'"
+      <app-calendar-day-context class="calendar-selected-day" [class.qs-glass-card-panel]="!isGridView()"
         [data]="dayData" [showFullDayLink]="true"
         [showActivityTotals]="true"
         [calmMonth]="isGridView()"

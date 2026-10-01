@@ -80,6 +80,7 @@ describe('CalendarPageComponent', () => {
     workoutDestinationFor: ReturnType<typeof vi.fn>;
     consumeWorkoutDestination: ReturnType<typeof vi.fn>;
     prepareWorkoutDestination: ReturnType<typeof vi.fn>;
+    prepareReturn: ReturnType<typeof vi.fn>;
   };
   let pendingDestination: ReturnType<typeof signal<string | null>>;
 
@@ -107,6 +108,7 @@ describe('CalendarPageComponent', () => {
       workoutDestinationFor: vi.fn().mockImplementation(() => pendingDestination()),
       consumeWorkoutDestination: vi.fn().mockImplementation(() => { pendingDestination.set(null); return true; }),
       prepareWorkoutDestination: vi.fn().mockImplementation((_uid, date) => { pendingDestination.set(date); return true; }),
+      prepareReturn: vi.fn().mockReturnValue(true),
     };
     await TestBed.configureTestingModule({
       imports: [CalendarPageComponent],
@@ -155,6 +157,7 @@ describe('CalendarPageComponent', () => {
     const fixture = TestBed.createComponent(CalendarPageComponent);
     fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
     expect(fixture.componentInstance.calendarModel().months[0].days.filter(day => day.inPrimaryPeriod)).toHaveLength(30);
+    expect(fixture.nativeElement.querySelector('.calendar-selected-day.qs-glass-card-panel')).toBeNull();
     expect(fixture.componentInstance.primaryActivityRange()).toEqual({
       startMs: new Date(2026, 8, 2).getTime(), endExclusiveMs: new Date(2026, 9, 2).getTime(),
     });
@@ -262,6 +265,35 @@ describe('CalendarPageComponent', () => {
     routeParams.next(convertToParamMap({ date: '2026-09-15' })); fixture.detectChanges();
     expect(fixture.componentInstance.calendarBackQuery().anchor).toBe('2026-09-15');
     vi.useRealTimers();
+  });
+
+  it('returns to a grid that visibly includes a day beyond the padded 30-day activity window', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] }); vi.setSystemTime(new Date(2026, 9, 1));
+    activatedRoute.snapshot.data = { calendarMode: 'day' };
+    activatedRoute.snapshot.paramMap = convertToParamMap({ date: '2026-10-05' });
+    activatedRoute.snapshot.queryParamMap = convertToParamMap({ calendarView: '30d', calendarAnchor: '2026-10-01' });
+    routeParams.next(activatedRoute.snapshot.paramMap); queryParams.next(activatedRoute.snapshot.queryParamMap);
+    const fixture = TestBed.createComponent(CalendarPageComponent);
+    fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+    expect(fixture.componentInstance.calendarBackQuery()).toEqual({ view: '30d', date: '2026-10-05', anchor: '2026-10-05' });
+    vi.useRealTimers();
+  });
+
+  it.each([undefined, 'today-sheet'])('restores the dashboard period after a fresh full-day load with surface %s', async surface => {
+    const params = { from: 'dashboard', calendarView: '30d', calendarAnchor: '2026-08-15', ...(surface ? { calendarSurface: surface } : {}) };
+    activatedRoute.snapshot.data = { calendarMode: 'day' };
+    activatedRoute.snapshot.paramMap = convertToParamMap({ date: '2026-08-04' });
+    activatedRoute.snapshot.queryParamMap = convertToParamMap(params);
+    routeParams.next(activatedRoute.snapshot.paramMap); queryParams.next(activatedRoute.snapshot.queryParamMap);
+    const router = TestBed.inject(Router); router.resetConfig([{ path: 'dashboard', children: [] }]);
+    const fixture = TestBed.createComponent(CalendarPageComponent);
+    fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+    (fixture.nativeElement.querySelector('.calendar-day-back') as HTMLAnchorElement).click();
+    expect(dayDetailsNavigation.prepareReturn).toHaveBeenCalledWith('/dashboard', '2026-08-04', surface,
+      { view: '30d', anchor: '2026-08-15' });
+    await fixture.whenStable();
+    fixture.componentInstance.navigatePeriod(1);
+    expect(navigate).toHaveBeenCalledWith(['/calendar/day', '2026-08-05'], { queryParams: params });
   });
 
   it('navigates adjacent day routes and follows the path parameter on Back', async () => {

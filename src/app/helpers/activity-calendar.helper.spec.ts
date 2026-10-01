@@ -168,6 +168,20 @@ describe('activity-calendar helper', () => {
     expect(resolveActivityCalendarViewAnchor('30d', new Date(2026, 7, 1), new Date(2026, 9, 1))).toEqual(new Date(2026, 7, 1));
   });
 
+  it.each(['week', 'month', '30d', 'year'] as const)('keeps inconsistent %s links within a bounded period containing their selection', view => {
+    const state = resolveActivityCalendarRouteState({ view, date: '2020-01-05', anchor: '2026-10-01' }, new Date(2026, 9, 1));
+    const window = resolveActivityCalendarQueryWindow(state.view, state.anchorDate);
+    expect(state.selectedDate.getTime()).toBeGreaterThanOrEqual(window.startMs);
+    expect(state.selectedDate.getTime()).toBeLessThan(window.endExclusiveMs);
+    expect(formatActivityCalendarDateParam(state.selectedDate)).toBe('2020-01-05');
+  });
+
+  it('uses the configured week start to retain valid adjoining-date links', () => {
+    const state = resolveActivityCalendarRouteState({ view: 'month', date: '2026-09-27', anchor: '2026-10-01' },
+      new Date(2026, 9, 1), DaysOfTheWeek.Sunday);
+    expect(formatActivityCalendarDateParam(state.anchorDate)).toBe('2026-10-01');
+  });
+
   it('normalizes route views and strict local date parameters', () => {
     const fallback = new Date(2026, 7, 3, 18, 30);
 

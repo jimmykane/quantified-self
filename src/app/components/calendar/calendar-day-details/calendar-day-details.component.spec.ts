@@ -48,7 +48,7 @@ describe('CalendarDayDetailsComponent', () => {
   it('marks a full day opened from the dashboard Today calendar for a dashboard return', async () => {
     const fixture = await renderDayDetails([], { returnToDashboard: true });
     const link = fixture.nativeElement.querySelector('.calendar-day-details-full-day') as HTMLAnchorElement;
-    expect(link?.getAttribute('href')).toBe('/calendar/day/2026-08-03?from=dashboard');
+    expect(link?.getAttribute('href')).toBe('/calendar/day/2026-08-03?from=dashboard&calendarSurface=today-sheet');
   });
 
   it('carries the mini-calendar displayed period into Full day', async () => {
@@ -350,6 +350,21 @@ describe('CalendarDayDetailsComponent', () => {
 
     expect(prepareReturn).toHaveBeenCalledWith('/', '2026-08-03', undefined, undefined);
     expect(bottomSheetRef.dismiss).toHaveBeenCalledOnce();
+  });
+
+  it.each(['activity', 'workout'])('restores the Dashboard Today sheet after an %s visit', async destination => {
+    const calendarReturn = { view: 'month' as const, anchor: '2026-08-01' };
+    const fixture = await renderDayDetails(createEvent(), { returnToDashboard: true, calendarReturn });
+    const prepareReturn = vi.spyOn(TestBed.inject(CalendarDayDetailsNavigationService), 'prepareReturn');
+
+    if (destination === 'activity') {
+      fixture.componentInstance.prepareEventNavigation(['/user', planningUserUid, 'event', 'event-1']);
+    } else {
+      fixture.componentInstance.prepareWorkoutNavigation();
+    }
+
+    expect(prepareReturn).toHaveBeenCalledWith('/', '2026-08-03', 'today-sheet', calendarReturn);
+    expect(TestBed.inject(MatBottomSheetRef).dismiss).toHaveBeenCalledOnce();
   });
 
   it('replaces generic timestamp names without repeating the activity type', async () => {

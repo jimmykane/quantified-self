@@ -101,6 +101,40 @@ describe('ActivityCalendarTileComponent', () => {
     expect(watchEvents.mock.calls.every(([, range]) => Math.round((range.endExclusiveMs - range.startMs) / 86400000) <= 42)).toBe(true);
   });
 
+  it.each(['month', '30d'] as const)('keeps the untouched %s calendar on today when resuming after midnight', async view => {
+    vi.useFakeTimers({ toFake: ['Date'] }); vi.setSystemTime(new Date(2026, 8, 30, 23, 59));
+    const fixture = TestBed.createComponent(ActivityCalendarTileComponent);
+    fixture.componentRef.setInput('user', user);
+    fixture.componentRef.setInput('view', view);
+    fixture.componentRef.setInput('dayContextEnabled', true);
+    fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+    vi.setSystemTime(new Date(2026, 9, 1, 8));
+    fixture.componentInstance.refreshCalendarDate();
+    fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+    expect(fixture.componentInstance.selectedDay()?.dateKey).toBe('2026-10-01');
+    expect(fixture.componentInstance.selectedDay()?.isToday).toBe(true);
+    expect(haptics.selection).not.toHaveBeenCalled();
+    vi.useRealTimers();
+  });
+
+  it('keeps a deliberately selected historical day and its month on resume', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] }); vi.setSystemTime(new Date(2026, 8, 30, 23, 59));
+    const fixture = TestBed.createComponent(ActivityCalendarTileComponent);
+    fixture.componentRef.setInput('user', user);
+    fixture.componentRef.setInput('dayContextEnabled', true);
+    fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+    fixture.componentInstance.openDay(fixture.componentInstance.calendarModel().months[0].days.find(day => day.dateKey === '2026-09-16')!, false);
+    fixture.detectChanges();
+    const calls = watchEvents.mock.calls.length;
+    vi.setSystemTime(new Date(2026, 9, 1, 8));
+    fixture.componentInstance.refreshCalendarDate();
+    fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+    expect(fixture.componentInstance.calendarModel().periodLabel).toContain('September');
+    expect(fixture.componentInstance.selectedDay()?.dateKey).toBe('2026-09-16');
+    expect(watchEvents).toHaveBeenCalledTimes(calls);
+    vi.useRealTimers();
+  });
+
   it('selects an adjoining date without changing the month or restarting the activity read', async () => {
     vi.useFakeTimers({ toFake: ['Date'] }); vi.setSystemTime(new Date(2026, 9, 1));
     const fixture = TestBed.createComponent(ActivityCalendarTileComponent);
