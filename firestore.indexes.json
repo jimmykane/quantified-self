@@ -1,6 +1,14 @@
 {
   "indexes": [
     {
+      "collectionGroup": "healthSourceRecords", "queryScope": "COLLECTION",
+      "fields": [{ "fieldPath": "source.sourceRecordType", "order": "ASCENDING" }, { "fieldPath": "startTimeMs", "order": "DESCENDING" }, { "fieldPath": "__name__", "order": "DESCENDING" }]
+    },
+    {
+      "collectionGroup": "healthSourceRecords", "queryScope": "COLLECTION",
+      "fields": [{ "fieldPath": "source.sourceRecordType", "order": "ASCENDING" }, { "fieldPath": "metricIds", "arrayConfig": "CONTAINS" }, { "fieldPath": "startTimeMs", "order": "DESCENDING" }, { "fieldPath": "__name__", "order": "DESCENDING" }]
+    },
+    {
       "collectionGroup": "activitySyncQueue", "queryScope": "COLLECTION",
       "fields": [{ "fieldPath": "deliveryMode", "order": "ASCENDING" }, { "fieldPath": "processed", "order": "ASCENDING" }, { "fieldPath": "retryCount", "order": "ASCENDING" }]
     },

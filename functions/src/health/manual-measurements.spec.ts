@@ -199,7 +199,8 @@ describe('manual Health measurement mutations', () => {
             canonicalValue: value + 0.1 };
         await saveManualHealthMeasurement(UID, update, dependencies);
         expect(record().metrics[0]).toMatchObject({ sportsLibData: { metrics: { value: { [dataClass.type]: value + 0.1 } } } });
-        await expect(saveManualHealthMeasurement(UID, update, dependencies)).rejects.toBeInstanceOf(ManualHealthRevisionConflictError);
+        await expect(saveManualHealthMeasurement(UID, update, dependencies)).resolves.toMatchObject({ revisionOrder: 2 });
+        await expect(saveManualHealthMeasurement(UID, { ...update, canonicalValue: value + 0.2 }, dependencies)).rejects.toBeInstanceOf(ManualHealthRevisionConflictError);
         await deleteManualHealthMeasurement(UID, { sourceRecordId: created.sourceRecordId, expectedRevisionOrder: 2 }, dependencies);
         expect(record()).toBeUndefined();
         await expect(saveManualHealthMeasurement(UID, request, dependencies)).rejects.toBeInstanceOf(ManualHealthMeasurementNotFoundError);
@@ -238,7 +239,7 @@ describe('manual Health measurement mutations', () => {
         await saveManualHealthMeasurement(UID, update, dependencies);
         expect(record().metricIds).toEqual(['blood_pressure_diastolic', 'blood_pressure_systolic']);
         expect(record().metrics).toHaveLength(2);
-        await expect(saveManualHealthMeasurement(UID, update, dependencies)).rejects.toBeInstanceOf(ManualHealthRevisionConflictError);
+        await expect(saveManualHealthMeasurement(UID, update, dependencies)).resolves.toMatchObject({ revisionOrder: 2 });
         await expect(saveManualHealthMeasurement(UID, { ...update, expectedRevisionOrder: 2,
             metricId: HEALTH_METRIC_IDS.BodyFat, diastolicValue: undefined }, dependencies)).rejects.toBeInstanceOf(ManualHealthValidationError);
         await deleteManualHealthMeasurement(UID, { sourceRecordId: first.sourceRecordId, expectedRevisionOrder: 2 }, dependencies);

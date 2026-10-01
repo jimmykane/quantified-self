@@ -36,7 +36,7 @@ import {
     isManualHealthMetricId,
     manualVo2SemanticVariant,
 } from '../../../shared/manual-health';
-import { encodeHealthMetricSportsLibData } from '../../../shared/sports-lib-health-data';
+import { decodeHealthSourceRecordSportsLibData, encodeHealthMetricSportsLibData } from '../../../shared/sports-lib-health-data';
 import { generateIDFromParts } from '../shared/id-generator';
 import {
     getUserDeletionGuardStateInTransaction,
@@ -275,7 +275,7 @@ function buildManualMetric(
             metric: nativeMetric,
             value,
             unit,
-            qualifiers,
+            ...(qualifiers ? { qualifiers } : {}),
         },
         canonical: { value, unit },
     };
@@ -346,6 +346,36 @@ function manualRecordEntryMetric(record: HealthSourceRecord): ManualHealthMetric
     return null;
 }
 
+/** Explicit manual-only decoder shared by management reads and mutation validation. */
+export function decodeManualHealthMeasurementFields(
+    value: unknown, uid: string, sourceRecordId: string, nowMs = Date.now(),
+): ManualHealthMeasurementFields | null {
+    try {
+        if (!isEditableManualRecord(value, uid, sourceRecordId)) return null;
+        const record = decodeHealthSourceRecordSportsLibData(value);
+        const metricId = manualRecordEntryMetric(record)!;
+        const primary = record.metrics.find(metric => metric.metricId === metricId);
+        if (primary?.kind !== 'value' || record.startTimeMs !== record.endTimeMs) return null;
+        const scalar = (id: string) => {
+            const metric = record.metrics.find(item => item.metricId === id);
+            return metric?.kind === 'value' ? metric.canonical?.value : undefined;
+        };
+        return validateMeasurementFields({
+            metricId, canonicalValue: scalar(metricId), observedAtMs: record.startTimeMs,
+            timezoneOffsetSeconds: record.timezoneOffsetSeconds,
+            ...(metricId === HEALTH_METRIC_IDS.BloodPressureSystolic ? {
+                diastolicValue: scalar(HEALTH_METRIC_IDS.BloodPressureDiastolic),
+                ...(record.metricIds.includes(HEALTH_METRIC_IDS.PulseRate)
+                    ? { pulseValue: scalar(HEALTH_METRIC_IDS.PulseRate) } : {}),
+            } : {}),
+            ...(metricId === HEALTH_METRIC_IDS.Vo2Max ? {
+                vo2Context: primary.native?.qualifiers?.context,
+                vo2Method: primary.native?.qualifiers?.method,
+            } : {}),
+        }, nowMs);
+    } catch { return null; }
+}
+
 async function updateManualMeasurement(
     uid: string,
     request: Extract<SaveManualHealthMeasurementRequest, { mode: 'update' }>,
@@ -363,14 +393,12 @@ async function updateManualMeasurement(
             throw new UserDeletionGuardReadError(uid, 'manual_health_update', error);
         }
         if (deletionGuard.shouldSkip) throw new ManualHealthWriteBlockedError();
+        await dependencies.transactionPrecondition?.(transaction);
         const snapshot = await transaction.get(ref);
         if (!snapshot.exists) throw new ManualHealthMeasurementNotFoundError();
         const existing = snapshot.data();
         if (!isEditableManualRecord(existing, uid, request.sourceRecordId)) {
             throw new ManualHealthMeasurementNotFoundError();
-        }
-        if (existing.source.revision.order !== request.expectedRevisionOrder) {
-            throw new ManualHealthRevisionConflictError();
         }
         if (manualRecordEntryMetric(existing) !== request.metricId) {
             throw new ManualHealthValidationError('A manual measurement cannot change metric type.');
@@ -382,6 +410,14 @@ async function updateManualMeasurement(
             String(nextRevisionOrder),
             JSON.stringify(request),
         ]);
+        // Only an identical retry of the immediately accepted revision is safe.
+        if (existing.source.revision.order === nextRevisionOrder
+            && existing.source.revision.digest === revisionDigest) {
+            return { sourceRecordId: request.sourceRecordId, revisionOrder: nextRevisionOrder };
+        }
+        if (existing.source.revision.order !== request.expectedRevisionOrder) {
+            throw new ManualHealthRevisionConflictError();
+        }
         const revisionToken = await generateIDFromParts([
             'manual-health-revision-v1',
             request.sourceRecordId,
@@ -486,6 +522,7 @@ export async function deleteManualHealthMeasurement(
             throw new UserDeletionGuardReadError(uid, 'manual_health_delete', error);
         }
         if (deletionGuard.shouldSkip) throw new ManualHealthWriteBlockedError();
+        await dependencies.transactionPrecondition?.(transaction);
         const snapshot = await transaction.get(ref);
         if (!snapshot.exists) return { deleted: false };
         const existing = snapshot.data();

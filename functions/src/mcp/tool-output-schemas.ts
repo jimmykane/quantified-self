@@ -8,6 +8,7 @@ import {
   TimeIntervals,
 } from '@sports-alliance/sports-lib';
 import { z } from 'zod';
+import { MCP_MANUAL_MEASUREMENT_TOOLS, MCP_MANUAL_MEASUREMENT_OUTPUTS } from './manual-measurements.schemas';
 import {
   DERIVED_METRIC_KINDS,
   DerivedMetricKind,
@@ -54,6 +55,7 @@ import {
 } from './content-write.schemas';
 
 export const PUBLIC_MCP_TOOL_NAMES = [
+  ...MCP_MANUAL_MEASUREMENT_TOOLS,
   ...TRAINING_READ_TOOLS,
   ...TRAINING_WRITE_TOOLS,
   ...MCP_CONTENT_WRITE_TOOLS,
@@ -1574,6 +1576,7 @@ export function createMcpOutputSchemaRegistry(scope: McpOutputSchemaScope) {
     }),
     query_timeline_notes: MCP_TIMELINE_NOTES_SCHEMA,
     ...MCP_CONTENT_WRITE_OUTPUTS,
+    ...MCP_MANUAL_MEASUREMENT_OUTPUTS,
     ...TRAINING_READ_OUTPUTS,
     ...TRAINING_WRITE_OUTPUTS,
     list_measurement_types: z.strictObject({

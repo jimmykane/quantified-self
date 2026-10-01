@@ -23,6 +23,15 @@ Lib version or parser change, also use `.agent/skills/sports-lib-upgrade-and-rep
   Preserve identity-free date buckets; never expose exact source timestamps, event/activity identity, names, labels,
   provider/device metadata, or source provenance. Update consent, Help, Policies, the public MCP page, and focused
   catalog/query tests in the same change.
+- **Manual Health measurement management:** independent `measurements:write`, not historical `measurements:read` or
+  `health:read`. Deliberately cover the UI's manual types with exhaustive type/unit maps, exact observation instants,
+  owner/connection/grant-bound references, paired blood-pressure values and VO2 metadata. Reuse the existing Health
+  mutation service with transaction-scoped connection/conversation and deletion fences; never edit imports or expose
+  provenance, internal record IDs or deletion receipts. Preserve stable-create UUIDs, revision conflicts, permanent-delete
+  disclosure and native external-host approval. The Assistant uses prepare-only tools and the existing app Apply path;
+  its independent manual-measurement choice defaults on for fresh/New chat, while legacy missing flags stay false.
+  Changes require coordinated schemas, projections, Assistant review/evidence, consent, bounds, bundled guidance,
+  tests, documentation and digest review. New shared fields never become public automatically.
 - **Recorded Health metric:** extend only the explicit public allowlist in `functions/src/mcp/health.service.ts`.
   Preserve `health:read`, the additional Body measurements grant and identity-free date buckets for body composition,
   and the separate Weight/Sleep contracts. Keep sample parent-revision checks, source-separated semantics, Sports Lib
@@ -141,7 +150,8 @@ Lib version or parser change, also use `.agent/skills/sports-lib-upgrade-and-rep
    refresh, bearer validation, HTTP prechecks, tool registration, and data reads. First-class measurement types must also be excluded from generic and
    per-activity metric paths so those tools cannot bypass `measurements:read`. Keep queries bounded, references/cursors
    UID-and-connection-bound, and ordinary data tools read-only. The only focused non-Training mutations are explicitly
-   consented parent-event tag, title, and description replacement and Timeline-note create/edit/delete, which must
+   consented parent-event tag, title, and description replacement, Timeline-note create/edit/delete, and manual Health
+   measurement create/edit/delete under independent `measurements:write`, which must
    preserve the boundaries above. The event grant does not automatically expose additional event fields: each field
    requires a dedicated tool, approval contract, projection review, tests, and documentation. Description edits also
    require the independent `activity-descriptions:read` grant.
@@ -203,7 +213,10 @@ Add or update focused tests for:
 - scope denial and query limits;
 - content-write parent/scope isolation, stored-grant and deletion fencing, owner/connection reference replay denial,
   event-tag sibling semantics, stale-tag conflicts, note create/update/delete idempotency and revision conflicts,
-  permanent-delete receipts, strict text/timezone validation, response bounds, and absence from the built-in Assistant;
+  permanent-delete receipts, strict text/timezone validation, response bounds, and prepare-only Assistant review;
+- all UI-supported manual measurement types and explicit units, canonical conversion, exact-time/offset preservation,
+  pairing/context integrity, bounded pagination, imported-record denial, stale revisions and uncertain retries,
+  transaction-scoped revocation/deletion, and fresh-on/legacy-off Assistant generation fences;
 - consent initialization with every requested scope checked, independent-scope unchecking, parent/child removal, and
   approval as the only grant boundary.
 

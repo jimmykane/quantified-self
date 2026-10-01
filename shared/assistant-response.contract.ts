@@ -21,6 +21,7 @@ import {
   type AssistantVisual,
 } from './assistant.types';
 import { EVENT_TAG_LIMIT, EVENT_TAG_MAX_LENGTH } from './event-tags';
+import { isManualHealthMetricId, MANUAL_HEALTH_VALUE_MAXIMUMS, MANUAL_VO2_CONTEXTS, MANUAL_VO2_METHODS } from './manual-health';
 import {
   TIMELINE_NOTE_CATEGORIES,
   TIMELINE_NOTE_COLORS,
@@ -180,17 +181,47 @@ function hasTimelineNoteFields(value: Record<string, unknown>): boolean {
     && TIMELINE_NOTE_COLORS.includes(value.color as never);
 }
 
-export function isAssistantContentProposal(value: unknown): value is AssistantContentProposalPreview {
+export function isAssistantContentProposal(value: unknown, requireMeasurementReview = true): value is AssistantContentProposalPreview {
   if (!isRecord(value)
-    || !hasOnlyKeys(value, ['proposalRef', 'kind', 'expiresAtMs', 'summary', 'requiresConfirmation', 'arguments'])
+    || !hasOnlyKeys(value, ['proposalRef', 'kind', 'expiresAtMs', 'summary', 'requiresConfirmation', 'arguments', 'measurementReview'])
     || !isBoundedString(value.proposalRef, 1, 120)
-    || !['update_event_tags', 'create_timeline_note', 'update_timeline_note', 'delete_timeline_note']
+    || !['update_event_tags', 'create_timeline_note', 'update_timeline_note', 'delete_timeline_note',
+      'create_manual_measurement', 'update_manual_measurement', 'delete_manual_measurement']
       .includes(`${value.kind}`)
     || !Number.isSafeInteger(value.expiresAtMs) || Number(value.expiresAtMs) < 0
     || !isBoundedString(value.summary, 1, 500)
     || value.requiresConfirmation !== true
     || !isRecord(value.arguments)) return false;
   const args = value.arguments;
+  if (String(value.kind).endsWith('_manual_measurement')) {
+    if (requireMeasurementReview && value.measurementReview === undefined) return false;
+    const create = value.kind === 'create_manual_measurement';
+    const remove = value.kind === 'delete_manual_measurement';
+    const referenceValid = create ? isUuid(args.mutationId)
+      : isBoundedString(args.measurementRef, 1, 512) && Number.isSafeInteger(args.expectedRevision)
+        && Number(args.expectedRevision) > 0 && Number(args.expectedRevision) < Number.MAX_SAFE_INTEGER;
+    const keys = create ? ['mutationId', 'metricId', 'observedAt'] : ['measurementRef', 'expectedRevision'];
+    if (!referenceValid || !hasOnlyKeys(args, remove ? keys : [...keys, 'observedAt', 'value', 'unit',
+      'diastolicValue', 'pulseValue', 'vo2Context', 'vo2Method'])) return false;
+    if (!remove && (!isFiniteNumber(args.value) || args.value <= 0 || args.value > 3000
+      || !['kg', 'lb', 'percent', 'mmHg', 'ml_per_kg_per_min'].includes(String(args.unit))
+      || (create && !isManualHealthMetricId(args.metricId))
+      || ((create || args.observedAt !== undefined) && !isManualMeasurementObservationInstant(args.observedAt))
+      || (args.diastolicValue !== undefined && (!isFiniteNumber(args.diastolicValue) || args.diastolicValue <= 0 || args.diastolicValue > 400))
+      || (args.pulseValue != null && (!isFiniteNumber(args.pulseValue) || args.pulseValue <= 0 || args.pulseValue > 400))
+      || (args.vo2Context !== undefined && !MANUAL_VO2_CONTEXTS.includes(args.vo2Context as never))
+      || (args.vo2Method !== undefined && !MANUAL_VO2_METHODS.includes(args.vo2Method as never)))) return false;
+    if (value.measurementReview !== undefined) {
+      const review = value.measurementReview;
+      if (!isRecord(review) || !hasOnlyKeys(review, ['before', 'after'])
+        || (review.before !== null && !isManualMeasurementReviewFields(review.before))
+        || (review.after !== null && !isManualMeasurementReviewFields(review.after))
+        || (create ? review.before !== null || review.after === null
+          : remove ? review.before === null || review.after !== null : review.before === null || review.after === null)) return false;
+    }
+    return getUtf8ByteLength(value) <= 8 * 1024;
+  }
+  if (value.measurementReview !== undefined) return false;
   if (value.kind === 'update_event_tags') {
     return hasOnlyKeys(args, ['activityRef', 'expectedTags', 'tags'])
       && isBoundedString(args.activityRef, 1, 512)
@@ -213,6 +244,34 @@ export function isAssistantContentProposal(value: unknown): value is AssistantCo
       && Number.isSafeInteger(args.expectedRevision) && Number(args.expectedRevision) > 0;
   return hasOnlyKeys(args, allowedKeys) && referenceValid && hasTimelineNoteFields(args)
     && getUtf8ByteLength(value) <= 80 * 1024;
+}
+
+function isManualMeasurementReviewFields(value: unknown): boolean {
+  if (!isRecord(value) || !hasOnlyKeys(value, ['metricId', 'canonicalValue', 'observedAtMs',
+    'timezoneOffsetSeconds', 'diastolicValue', 'pulseValue', 'vo2Context', 'vo2Method'])
+    || !isManualHealthMetricId(value.metricId) || !isFiniteNumber(value.canonicalValue)
+    || value.canonicalValue <= 0 || value.canonicalValue > MANUAL_HEALTH_VALUE_MAXIMUMS[value.metricId]
+    || !Number.isSafeInteger(value.observedAtMs) || Number(value.observedAtMs) < Date.UTC(2000, 0, 1)
+    || !Number.isFinite(new Date(Number(value.observedAtMs)).getTime())
+    || !Number.isSafeInteger(value.timezoneOffsetSeconds) || Math.abs(Number(value.timezoneOffsetSeconds)) >= 86400
+    || !Number.isFinite(new Date(Number(value.observedAtMs) + Number(value.timezoneOffsetSeconds) * 1000).getTime())) return false;
+  const pressure = value.metricId === 'blood_pressure_systolic';
+  const vo2 = value.metricId === 'vo2_max';
+  return (pressure ? isFiniteNumber(value.diastolicValue) && value.diastolicValue > 0 && value.diastolicValue <= 400
+    && (value.pulseValue === undefined || (isFiniteNumber(value.pulseValue) && value.pulseValue > 0 && value.pulseValue <= 400))
+    : value.diastolicValue === undefined && value.pulseValue === undefined)
+    && (vo2 ? MANUAL_VO2_CONTEXTS.includes(value.vo2Context as never) && MANUAL_VO2_METHODS.includes(value.vo2Method as never)
+      : value.vo2Context === undefined && value.vo2Method === undefined);
+}
+
+/** Match the manual tool's offset-bearing ISO contract without changing legacy chat timestamps. */
+function isManualMeasurementObservationInstant(value: unknown): boolean {
+  if (!isBoundedString(value, 1, 64)) return false;
+  const parts = value.match(/^(\d{4}-\d{2}-\d{2})T(\d{2}):(\d{2})(?::(\d{2})(?:\.\d+)?)?(?:Z|[+-](\d{2}):(\d{2}))$/);
+  return parts !== null && isDateOnly(parts[1])
+    && Number(parts[2]) < 24 && Number(parts[3]) < 60 && Number(parts[4] ?? 0) < 60
+    && Number(parts[5] ?? 0) < 24 && Number(parts[6] ?? 0) < 60
+    && Number.isFinite(Date.parse(value));
 }
 
 function isIanaTimeZone(value: unknown): value is string {
@@ -422,7 +481,7 @@ export function validateAssistantChatResponse(
     return { ok: false, reason: 'response_not_object' };
   }
   if (!hasOnlyKeys(value, ['conversation', 'quota', 'pendingRequestId', 'timelineNotesEnabled',
-    'activityTagChangesEnabled', 'timelineNoteChangesEnabled', 'trainingPlansEnabled',
+    'activityTagChangesEnabled', 'timelineNoteChangesEnabled', 'measurementChangesEnabled', 'trainingPlansEnabled',
     'trainingPlanChangesEnabled', 'trainingDeliveryEnabled', 'pendingTrainingProposal', 'pendingContentProposal'])) {
     return { ok: false, reason: 'unexpected_response_fields' };
   }
@@ -444,6 +503,9 @@ export function validateAssistantChatResponse(
   }
   if (value.timelineNoteChangesEnabled !== undefined && typeof value.timelineNoteChangesEnabled !== 'boolean') {
     return { ok: false, reason: 'invalid_timeline_note_changes_access' };
+  }
+  if (value.measurementChangesEnabled !== undefined && typeof value.measurementChangesEnabled !== 'boolean') {
+    return { ok: false, reason: 'invalid_measurement_changes_setting' };
   }
   if (value.timelineNoteChangesEnabled === true && value.timelineNotesEnabled !== true) {
     return { ok: false, reason: 'invalid_timeline_note_changes_dependency' };

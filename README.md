@@ -174,7 +174,9 @@ Never commit environment files, service-account JSON, API tokens, private keys, 
 | Local plugin refresh | `npm run plugin:sync` | Explicitly rebuilds and reinstalls; normal app builds never do this |
 
 The repository-local Quantified Self plugin bundles the registered permission-scoped MCP app with seven discoverable workflows
-for cross-domain analysis, all-day Health, training, sleep, body measurements, activities, and saved routes. Configure its
+for cross-domain analysis, all-day Health, training, sleep, body measurements, activities, and saved routes. Manual Health
+entry lookup/logging/editing/permanent deletion needs independent `measurements:write` authorization and client approval;
+historical read permissions never grant writes and imports remain immutable. Configure its
 account-specific ChatGPT technical app ID once by setting `QS_CHATGPT_APP_ID` and running
 `npm run plugin:configure`, then run `npm run plugin:setup`. Generated app mappings and cache-busted manifests are
 ignored. Restart the ChatGPT desktop app after setup or sync, then test in a new conversation. See the
