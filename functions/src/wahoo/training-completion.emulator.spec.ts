@@ -8,6 +8,7 @@ import { WAHOO_API_SCOPES } from './constants';
 import { retainWahooTrainingCompletion } from './training-completion';
 import { projectStrengthWorkoutToV1 } from '../../../shared/strength-workout';
 import { wahooFixtureStrengthDetails } from '../training-plans/delivery/test-support/wahoo-http-fixture';
+import { WAHOO_SPORT_FIXTURES } from '../training-plans/delivery/test-support/wahoo-sport-fixtures';
 
 describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)(
   'Wahoo exact Training completion correlation with real Firestore',
@@ -171,7 +172,7 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)(
         .toMatchObject({ scheduledLocalDate: '2026-09-17', workoutRevisionAtLink: 2 });
     });
 
-    it.each([ActivityTypes.Walking, ActivityTypes.Hiking, ActivityTypes.StrengthTraining])('links %s by exact owned Plan/Workout/token, never sport/title inference', async sport => {
+    it.each([...WAHOO_SPORT_FIXTURES.map(row => row.sport), ActivityTypes.StrengthTraining])('links %s by exact owned Plan/Workout/token, never sport/title inference', async sport => {
       const ref = user().collection('scheduledWorkouts').doc('workout');
       if (sport === ActivityTypes.StrengthTraining) {
         const details = wahooFixtureStrengthDetails('workout');

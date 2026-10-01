@@ -178,6 +178,7 @@ describe('Training plan MCP reads', () => {
     expect(result.assessments.map(item => [item.provider, item.level])).toEqual([
       ['wahoo', level],
     ]);
+    expect(JSON.stringify(result)).not.toMatch(/validation candidate|unproven|unverified|do not establish/);
     if (level === 'exact') expect(result.assessments[0].issues).toEqual([]);
     else expect(result.assessments[0].issues).toContainEqual(expect.objectContaining({ code: 'sport_profile_degraded', field: '$.sport' }));
     const read = TRAINING_READ_OUTPUTS.get_planned_workout.parse(await f.run('get_planned_workout', { workoutRef }));
@@ -188,6 +189,33 @@ describe('Training plan MCP reads', () => {
       expect(TRAINING_READ_OUTPUTS.assess_planned_workout_compatibility.parse(await assess()).assessments[0].level).toBe('unsupported');
     }
   });
+  it.each([ActivityTypes.Swimming, ActivityTypes.OpenWaterSwimming, ActivityTypes.Rowing, ActivityTypes.IndoorRowing,
+    ActivityTypes.Walking, ActivityTypes.Hiking, ActivityTypes.StrengthTraining])(
+    'reads linked and unlinked Wahoo %s completions without inferring completion from delivery', async sport => {
+      const f = fixture(); f.collections.scheduledWorkouts = { w1: workout('p1') };
+      f.structures.w1 = { version: 1, sport, nodes: [{ kind: 'step', id: 'timed', purpose: 'work',
+        ending: { kind: 'time', seconds: 300 }, targets: [] }] };
+      const workoutRef = f.codec.encode({ kind: 'workout', id: 'w1', createdAtMs: 1 }, 'owner', 'connection');
+      const args = { workoutRef };
+      f.collections.trainingDeliverySettings.wahoo = { scope: 'plan', scopeId: 'p1', provider: 'wahoo', enabled: true,
+        suppressed: false, timeZone: 'Europe/Helsinki', destinationKey: 'private-wahoo', associationPlanId: null, updatedAtMs: 1 };
+      const id = await trainingDeliverySummaryIdentity('owner', 'wahoo', 'private-wahoo', 'w1');
+      f.collections.trainingDeliveryStatuses[id] = { workoutId: 'w1', planId: 'p1', provider: 'wahoo', status: 'completed',
+        differsFromQS: false, hasRemoteCopy: true, timeZone: 'Europe/Helsinki', lastAttemptAtMs: 1,
+        lastAcceptedAtMs: 1, updatedAtMs: 1 };
+      expect(TRAINING_READ_OUTPUTS.get_planned_workout_completion.parse(await f.run('get_planned_workout_completion', args)))
+        .toMatchObject({ state: 'unlinked' });
+      f.collections.trainingWorkoutCompletions.w1 = { schemaVersion: 1, workoutId: 'w1', planId: 'p1', provider: 'wahoo',
+        matchMethod: 'provider_marker', eventId: 'private-event', activityId: 'private-activity', sourceSessionIndex: null,
+        activityStartAtMs: 1_789_404_000_000, scheduledLocalDate: '2026-09-15', workoutRevisionAtLink: 1,
+        timing: 'on_date', linkedAtMs: 1_789_404_100_000, updatedAtMs: 1_789_404_100_000 };
+      const linked = TRAINING_READ_OUTPUTS.get_planned_workout_completion.parse(await f.run('get_planned_workout_completion', args));
+      expect(linked).toMatchObject({ state: 'linked', provider: 'wahoo', workoutChangedSinceCompletion: false });
+      expect(JSON.stringify(linked)).not.toMatch(/private-event|private-activity|private-wahoo|workout_token|plan_id/);
+      await expect(f.run('get_planned_workout_completion', args, [TRAINING_PLANS_SCOPE], 'connection', 'foreign-owner')).rejects.toThrow();
+      await expect(f.run('get_planned_workout_completion', args, [TRAINING_PLANS_SCOPE], 'foreign-connection')).rejects.toThrow();
+      await expect(f.run('get_planned_workout_completion', args, [], 'connection')).rejects.toThrow();
+    });
   it.each([
     [ActivityTypes.IndoorRunning, 'Running'], [ActivityTypes.VirtualRunning, 'Running'],
     [ActivityTypes.VirtualCycling, 'Cycling'], [ActivityTypes.Velomobile, 'Cycling'],

@@ -281,8 +281,8 @@ export const PLANNED_WORKOUT_PROVIDER_CAPABILITIES_V1: Readonly<
     },
     scheduling: 'Create an app-owned Plan record, then attach it to a dated Workout record.',
     limits: [
-      'The public plan.json schema is version 1.0.0 and documents running/cycling. Swim/rowing profiles are validation candidates using Cloud type/family/location identifiers, not proven interval-player support.',
-      'Walking/Hiking use account-tested outdoor family 9 and exact Workout types 6/9. Only time-based steps without intensity targets are currently supported; Hiking device playback remains unverified.',
+      'The public plan.json schema is version 1.0.0 and documents running/cycling. All 21 mapped sport profiles have account-tested acceptance and owner-confirmed native profile/timed playback; other devices and intensity/distance support are not established by those tests.',
+      'Walking/Hiking and pool/open-water swimming and outdoor/indoor rowing support only time-based steps without intensity targets. Selected pool length is not sent to Wahoo; set it locally where needed.',
       'Timed strength uses the owner-tested Gym family 6 / indoor Workout type 42. Repetition sets are unsupported; exercise/load instructions are not native tracking.',
       'Bike computers use only the first target in an interval.',
       'Relative heart-rate and threshold-speed targets are documented for treadmill workouts in the Wahoo app, not ELEMNT computers or RIVAL.',
@@ -431,8 +431,6 @@ export function assessPlannedWorkoutProviderMappingV1(
     const wahooProfile = wahooWorkoutSportProfileV1(structure.sport);
     if (wahooProfile?.foldedTo) issues.push({ severity: 'degraded', code: 'sport_profile_degraded', path: '$.sport',
       message: `Wahoo receives ${structure.sport} using its ${wahooProfile.foldedTo} profile; QS keeps the authored sport.` });
-    if (wahooProfile?.validationPending) issues.push({ severity: 'degraded', code: 'sport_profile_degraded', path: '$.sport',
-      message: `Wahoo ${structure.sport} is a validation candidate. Cloud sport identifiers do not establish Plan acceptance or interval playback. Check the native profile and timed intervals before relying on this workout.` });
   }
 
   if (structure.sport === ActivityTypes.Swimming) {
@@ -452,7 +450,7 @@ export function assessPlannedWorkoutProviderMappingV1(
   const referenceSnapshots = new Map<string, number>();
   if (provider === 'wahoo' && isWahooUntargetedWorkoutSportV1(structure.sport) && wahooDurationSeconds(structure) === null) {
     issues.push({ severity: 'unsupported', code: 'unsupported_ending', path: '$.nodes',
-      message: 'Wahoo Walking/Hiking and swim/rowing validation require a finite positive timed duration; QS never estimates other endings.' });
+      message: 'Wahoo Walking/Hiking and swim/rowing delivery require a finite positive timed duration; QS never estimates other endings.' });
   }
   for (const { path, step } of structureSteps(structure)) {
     if (provider === 'wahoo' && isWahooUntargetedWorkoutSportV1(structure.sport)) {

@@ -2,7 +2,8 @@ import { ActivityTypes } from '@sports-alliance/sports-lib';
 import type { WorkoutStructureV1 } from './planned-workout';
 
 /** Explicit planning profiles, never a blanket admission of the activity catalog.
- * Swim/rowing Plan playback is a validation candidate, not proven device support.
+ * All 21 profiles have owner-confirmed timed playback (#789). This is not a
+ * guarantee for other devices or proof of distance/intensity support.
  * https://cloud-api.wahooligan.com/#workout-types */
 export const WAHOO_PLANNED_WORKOUT_SPORTS_V1 = [
   ActivityTypes.Running,
@@ -34,7 +35,6 @@ export interface WahooWorkoutSportProfileV1 {
   location: 0 | 1;
   foldedTo?: string;
   untargetedTimeOnly?: true;
-  validationPending?: true;
 }
 
 export function wahooWorkoutSportProfileV1(sport: ActivityTypes): WahooWorkoutSportProfileV1 | null {
@@ -55,12 +55,11 @@ export function wahooWorkoutSportProfileV1(sport: ActivityTypes): WahooWorkoutSp
     case ActivityTypes.VirtualRunning: return { family: 1, workoutType: 71, location: 0 };
     case ActivityTypes.Walking: return { family: 9, workoutType: 6, location: 1, untargetedTimeOnly: true };
     case ActivityTypes.Hiking: return { family: 9, workoutType: 9, location: 1, untargetedTimeOnly: true };
-    // The Cloud catalog supplies these identifiers, not structured-player proof.
-    // Compatibility warns before any separately authorized candidate send.
-    case ActivityTypes.Swimming: return { family: 2, workoutType: 25, location: 0, untargetedTimeOnly: true, validationPending: true };
-    case ActivityTypes.OpenWaterSwimming: return { family: 2, workoutType: 26, location: 1, untargetedTimeOnly: true, validationPending: true };
-    case ActivityTypes.Rowing: return { family: 3, workoutType: 39, location: 1, untargetedTimeOnly: true, validationPending: true };
-    case ActivityTypes.IndoorRowing: return { family: 6, workoutType: 22, location: 0, untargetedTimeOnly: true, validationPending: true };
+    // Profile/timed-playback proof does not widen the untargeted prescription.
+    case ActivityTypes.Swimming: return { family: 2, workoutType: 25, location: 0, untargetedTimeOnly: true };
+    case ActivityTypes.OpenWaterSwimming: return { family: 2, workoutType: 26, location: 1, untargetedTimeOnly: true };
+    case ActivityTypes.Rowing: return { family: 3, workoutType: 39, location: 1, untargetedTimeOnly: true };
+    case ActivityTypes.IndoorRowing: return { family: 6, workoutType: 22, location: 0, untargetedTimeOnly: true };
     case ActivityTypes.StrengthTraining: return { family: 6, workoutType: 42, location: 0 };
     default: return null;
   }

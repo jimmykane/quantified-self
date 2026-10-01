@@ -272,7 +272,9 @@ describe('Training provider delivery controls', () => {
     expect(fixture.nativeElement.textContent).toContain('Distance-based steps are not sent');
     expect(fixture.nativeElement.textContent).toContain('timed-strength Gym workouts');
     expect(fixture.nativeElement.textContent).toContain('Strength repetition sets are unsupported');
-    expect(fixture.nativeElement.textContent).toContain('swimming and outdoor/indoor rowing are timed, untargeted validation candidates');
+    expect(fixture.nativeElement.textContent).toContain('Wahoo supports timed, untargeted pool/open-water swimming and outdoor/indoor rowing');
+    expect(fixture.nativeElement.textContent).toContain('distance endings and intensity targets remain unsupported');
+    expect(fixture.nativeElement.textContent).not.toContain('validation candidate');
     expect(fixture.nativeElement.textContent).toContain('Selected pool length is not sent to Wahoo');
     expect(fixture.nativeElement.textContent).toContain('never change your saved QS sport');
     expect(fixture.nativeElement.textContent).toContain('not native rep/load tracking');

@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { Firestore } from 'firebase-admin/firestore';
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
-import { ServiceNames } from '@sports-alliance/sports-lib';
+import { ActivityTypes, ServiceNames } from '@sports-alliance/sports-lib';
 import { trainingDeliveryCommand } from '../commands';
 import { reconcileTrainingDeliveryPage } from '../store';
 import { processTrainingDelivery } from '../worker';
@@ -17,6 +17,7 @@ import type { TrainingDeliveryCommandV1 } from '../../../../../shared/training-p
 import { projectStrengthWorkoutToV1 } from '../../../../../shared/strength-workout';
 import { wahooFixtureStrengthDetails } from '../test-support/wahoo-http-fixture';
 import { WAHOO_SPORT_FIXTURES } from '../test-support/wahoo-sport-fixtures';
+import { retainWahooTrainingCompletion } from '../../../wahoo/training-completion';
 
 describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Wahoo worker with real Firestore and synthetic provider only', { timeout: 30_000 }, () => {
   const host = process.env.FIRESTORE_EMULATOR_HOST;
@@ -127,6 +128,55 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Wahoo worker with real Fi
     } };
     await send(); expect(server.plans.size).toBe(1); expect(server.workouts.size).toBe(0);
   });
+  it.each([ActivityTypes.Walking, ActivityTypes.Hiking, ActivityTypes.Swimming, ActivityTypes.OpenWaterSwimming,
+    ActivityTypes.Rowing, ActivityTypes.IndoorRowing, ActivityTypes.StrengthTraining])(
+    'recovers %s without duplicates, retains IDs after same-account reconnect and protects the exact linked completion on Stop', async sport => {
+      const ref = user().collection('scheduledWorkouts').doc('w');
+      if (sport === ActivityTypes.StrengthTraining) {
+        const details = wahooFixtureStrengthDetails();
+        await ref.update({ structure: projectStrengthWorkoutToV1(details) });
+        await ref.collection('strengthDetails').doc('current').set(details);
+      } else await ref.update({ 'structure.sport': sport });
+      server.afterHandle = async request => {
+        if (request.method === 'POST' && request.path === '/v1/workouts') {
+          server.afterHandle = null;
+          throw new WahooTrainingHttpError('uncertain', false);
+        }
+      };
+      const row = await send(); expect(row.status).toBe('retrying');
+      await command('retry'); await drain(); await processTrainingDelivery(runtime, uid, row.id); await drain();
+      const accepted = await ledger(); expect(accepted.status).toBe('delivered');
+      const ids = accepted.actual!.ids;
+      const batch = db.batch();
+      batch.update(tokenRoot(), { activeOAuthCredentialGeneration: 'reconnected' });
+      batch.update(tokenRoot().collection('tokens').doc('123'), { tokenCredentialGeneration: 'reconnected' });
+      batch.update(user().collection('meta').doc(ServiceNames.WahooAPI), { connectionStateGeneration: 'reconnected' });
+      await batch.commit(); await mark(); await processTrainingDelivery(runtime, uid, row.id); await drain();
+      expect(await ledger()).toMatchObject({ status: 'delivered', actual: { ids } });
+      expect(server.calls.filter(call => call.method === 'POST')).toHaveLength(2);
+      await user().collection('events').doc('recording').set({ test: true });
+      const result = await retainWahooTrainingCompletion(db, uid, 'recording', {
+        providerUserId: '123', connectionStateGeneration: 'reconnected', activeCredentialGeneration: 'reconnected', credential: null,
+      }, ids.workout, ids.plan, ids.workoutToken!, '999', [{ id: 'activity', startTimeMs: now }], now);
+      expect(result).toMatchObject({ retained: true, linkedWorkoutIds: ['w'] });
+      expect((await user().collection('trainingWorkoutCompletions').doc('w').get()).data())
+        .toMatchObject({ provider: 'wahoo', eventId: 'recording', activityId: 'activity', matchMethod: 'provider_marker' });
+      const writes = server.calls.filter(call => call.method !== 'GET').length;
+      await command('stop'); await drain(); await processTrainingDelivery(runtime, uid, row.id); await drain();
+      expect(await ledger()).toMatchObject({ status: 'completed', desired: 'preserve', actual: { ids, completed: true } });
+      expect(server.calls.filter(call => call.method !== 'GET')).toHaveLength(writes);
+      expect(server.workouts.size).toBe(1); expect(server.plans.size).toBe(1);
+    });
+  it.each([ActivityTypes.Swimming, ActivityTypes.OpenWaterSwimming, ActivityTypes.Rowing, ActivityTypes.IndoorRowing])(
+    'refreshes a stale %s validation warning without replacing an already delivered copy', async sport => {
+      await user().collection('scheduledWorkouts').doc('w').update({ 'structure.sport': sport });
+      const accepted = await send(); expect(accepted.status).toBe('delivered');
+      await user().collection(DELIVERY_LEDGER).doc(accepted.id).update({ status: 'approval_required',
+        approvalDigest: accepted.desiredDigest, issues: ['Obsolete profile validation warning'] });
+      await mark(); await processTrainingDelivery(runtime, uid, accepted.id); await drain();
+      expect(await ledger()).toMatchObject({ status: 'delivered', actual: { ids: accepted.actual!.ids }, issues: [] });
+      expect(server.calls.filter(call => call.method === 'POST')).toHaveLength(2);
+    });
   it('admits one worker, checkpoints both resources, and verifies all three cloud keys', async () => {
     await command('send'); await drain(); const row = await ledger();
     await Promise.all([processTrainingDelivery(runtime, uid, row.id), processTrainingDelivery(runtime, uid, row.id)]); await drain();

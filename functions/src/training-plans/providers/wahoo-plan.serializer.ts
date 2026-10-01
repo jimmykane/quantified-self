@@ -268,7 +268,7 @@ export function serializeWahooPlanJsonV1(
     const additionalIssues: ProviderSerializationIssueV1[] = [];
     const sportProfile = wahooWorkoutSportProfileV1(structure.sport);
     // Preserve the old broad Running/Cycling serializer's explicit location option.
-    // Exact subprofiles and validation candidates must match their native location.
+    // Exact subprofiles must match their native location.
     if (sportProfile && structure.sport !== ActivityTypes.Running && structure.sport !== ActivityTypes.Cycling
         && (options.location === 'indoor' ? 0 : 1) !== sportProfile.location) {
         additionalIssues.push({ severity: 'unsupported', code: 'unsupported_sport',

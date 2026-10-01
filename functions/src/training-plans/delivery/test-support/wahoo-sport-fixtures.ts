@@ -18,8 +18,8 @@ export const WAHOO_SPORT_FIXTURES = [
   { sport: ActivityTypes.DownhillCycling, family: 0, type: 13, location: 1, level: 'degraded' },
   { sport: ActivityTypes.Walking, family: 9, type: 6, location: 1, level: 'exact' },
   { sport: ActivityTypes.Hiking, family: 9, type: 9, location: 1, level: 'exact' },
-  { sport: ActivityTypes.Swimming, family: 2, type: 25, location: 0, level: 'degraded' },
-  { sport: ActivityTypes.OpenWaterSwimming, family: 2, type: 26, location: 1, level: 'degraded' },
-  { sport: ActivityTypes.Rowing, family: 3, type: 39, location: 1, level: 'degraded' },
-  { sport: ActivityTypes.IndoorRowing, family: 6, type: 22, location: 0, level: 'degraded' },
+  { sport: ActivityTypes.Swimming, family: 2, type: 25, location: 0, level: 'exact' },
+  { sport: ActivityTypes.OpenWaterSwimming, family: 2, type: 26, location: 1, level: 'exact' },
+  { sport: ActivityTypes.Rowing, family: 3, type: 39, location: 1, level: 'exact' },
+  { sport: ActivityTypes.IndoorRowing, family: 6, type: 22, location: 0, level: 'exact' },
 ] as const;

@@ -504,8 +504,9 @@ Garmin delivers these four sports through an explicit `GENERIC` fallback, not a 
 approval. Generic workouts work only on some Garmin devices; native sport tracking and display are not guaranteed.
 COROS remains unsupported for these four sports under its current workout contract.
 Wahoo maps outdoor Walking/Hiking to the account-tested family `9` and exact Workout types `6`/`9`, with timed,
-untargeted steps only. Rowing/Indoor Rowing now have timed, untargeted Wahoo validation candidates, requiring review;
-an activity-type enum never proves Plan acceptance or structured playback. The sport-profile proof remains #789.
+untargeted steps only. Rowing/Indoor Rowing and pool/open-water swimming also support timed, untargeted Wahoo delivery.
+All 21 profiles have integrated account readback and owner-confirmed native profile/timed playback (#789); an
+activity-type enum alone is not that proof. Distance endings and intensity targets remain unsupported for these sports.
 The current browser, provider and MCP paths retain the authored sport; a provider's recorded-activity support never
 implies workout delivery support. Synthetic serializer and demo-emulator acceptance does not prove Suunto cloud, app,
 watch or completed-activity behavior. Account-side proof remains in #738 and #739 under #583 and needs separately
@@ -1818,24 +1819,25 @@ catalog. The [Cloud Workout types](https://cloud-api.wahooligan.com/#workout-typ
 
 | QS authored sport | Wahoo Workout type | Plan family | Location | Mapping boundary |
 | --- | ---: | ---: | --- | --- |
-| Running / Trail Running | 1 / 4 | 1 | Outdoor | Exact type; subtype playback needs owner validation |
-| Treadmill / Virtual Running | 5 / 71 | 1 | Indoor | Exact type; playback needs owner validation |
+| Running / Trail Running | 1 / 4 | 1 | Outdoor | Exact type; owner-confirmed timed playback |
+| Treadmill / Virtual Running | 5 / 71 | 1 | Indoor | Exact type; owner-confirmed timed playback |
 | Indoor Running | 5 | 1 | Indoor | Disclosed Treadmill substitution |
-| Cycling / Mountain Biking | 0 / 13 | 0 | Outdoor | Exact type; subtype playback needs owner validation |
-| Indoor / Virtual Cycling | 12 / 68 | 0 | Indoor | Exact type; playback needs owner validation |
-| E-Biking / Hand Cycle | 64 / 70 | 0 | Outdoor | Exact type; playback needs owner validation |
+| Cycling / Mountain Biking | 0 / 13 | 0 | Outdoor | Exact type; owner-confirmed timed playback |
+| Indoor / Virtual Cycling | 12 / 68 | 0 | Indoor | Exact type; owner-confirmed timed playback |
+| E-Biking / Hand Cycle | 64 / 70 | 0 | Outdoor | Exact type; owner-confirmed timed playback |
 | Velomobile | 0 | 0 | Outdoor | Disclosed Cycling substitution |
 | Enduro MTB / Downhill Cycling | 13 | 0 | Outdoor | Disclosed Mountain Biking substitution |
-| Walking / Hiking | 6 / 9 | 9 | Outdoor | Account-tested timed/untargeted envelope; Hiking playback pending |
-| Swimming / Open Water Swimming | 25 / 26 | 2 | Indoor / Outdoor | Timed/untargeted validation candidate; not proven playback |
-| Rowing | 39 | 3 | Outdoor | Timed/untargeted validation candidate; not proven playback |
-| Indoor Rowing | 22 | 6 | Indoor | Timed/untargeted validation candidate; not proven playback |
+| Walking / Hiking | 6 / 9 | 9 | Outdoor | Owner-confirmed timed/untargeted playback |
+| Swimming / Open Water Swimming | 25 / 26 | 2 | Indoor / Outdoor | Owner-confirmed timed/untargeted playback |
+| Rowing | 39 | 3 | Outdoor | Owner-confirmed timed/untargeted playback |
+| Indoor Rowing | 22 | 6 | Indoor | Owner-confirmed timed/untargeted playback |
 | Strength Training | 42 | 6 | Indoor | Existing full-companion timed sets/rests; instruction-only load |
 
-Authored sports, units and prescriptions remain unchanged in QS. Substitutions and swim/rowing candidate warnings
+Authored sports, units and prescriptions remain unchanged in QS. Substitutions and loss of an authored pool length
 use existing degraded compatibility and digest-bound mapping approval; changing an approved prescription requires
-fresh review. Walking/Hiking and swim/rowing candidates reject non-time endings or intensity targets, including
-inside repeats. Selected pool length remains in QS but has no documented Wahoo field and must be set locally.
+fresh review. Obsolete swim/rowing validation warnings are removed after owner proof. Walking/Hiking and swim/rowing
+reject non-time endings or intensity targets, including inside repeats. Selected pool length remains in QS but has no
+documented Wahoo field and must be set locally.
 The time-only/no-target envelope is independent of profile-validation status: confirming playback does not establish
 support for distance steps or intensity targets, and must not automatically remove those restrictions.
 Strength repetition sets remain unsupported. No inferred duration, reps, pool length or narrower RPE target is added.
@@ -1848,14 +1850,24 @@ Existing Running/Cycling/Strength/Walking/Hiking v4 payloads and digests are unc
 MCP strict compatibility and full-recipe reads cover the new profiles without new wire fields, tools, permissions,
 provider actions, Assistant instructions or plugin changes. Provider identifiers and transport evidence stay private.
 
-Before separately approved deployment, inspect existing opted-in plans and due work: newly admitted native run/bike subprofiles
-can become eligible under retained consent. Swim/rowing candidates and substitutions still require mapping review.
-After separately approved deployment/account sends, owner QA must verify the native Wahoo profile before Start,
-absence of Yoga/equipment substitution, correct indoor/outdoor sport, full interval/repeat timing and target playback.
-Start with Indoor Cycling/Treadmill, then Walking/Hiking, pool/open-water swimming and outdoor/indoor rowing; include
-the remaining run/bike subprofiles available on the owner's device. Check pool length locally and Strength's timed
-set/rest instructions. Cloud acceptance is not playback or watch receipt. Record actual device evidence and any
-failed profile in #789; #783 retains integrated timed-strength proof. No live send or deployment is implied here.
+On 1 October 2026, separately approved Functions deployment and integrated standalone Sends established positive
+Plan/Workout/association and full-prescription readback for all 21 named QA profiles. The owner explicitly confirmed
+all 21 native profiles and five rounds of 30-second work/hold plus 30-second recovery/rest, including Hiking,
+pool/open-water swimming, outdoor/indoor rowing and integrated Strength. This supersedes the earlier provisional
+two-control interpretation. It proves the tested timed/untargeted envelope on that account/device, not intensity or
+distance playback, other devices, native Strength reps/load tracking or a newly saved completion link. Frontend release,
+live edit/reschedule/retry/reconnect/eligible withdrawal and integrated completion evidence remain in #789/#783.
+Pool length must be checked locally in Wahoo. This local warning/copy update includes no deployment or live provider action.
+
+Before releasing this warning-only change, inspect opted-in plans and due work: obsolete validation-only approval
+can clear under retained explicit consent, but substitutions, pool-length loss and rounded Strength loads still require
+review. Existing v4 payloads, content/mapping digests and provider identities remain unchanged; no accepted copy is recreated
+merely because the warning changes. Demo Firestore tests cover profile edits/reschedules/Stop, lost-response retry,
+same-account reconnect, exact completion and completed-copy protection for the expanded families and Strength, plus
+stale-warning refresh without replacement. Strict MCP reads distinguish unlinked provider-confirmed completion from an
+exact linked activity and preserve scope, owner and connection isolation. Synthetic results do not replace live evidence.
+No tools, fields, issue codes, schemas, scopes, consent, provider actions, Assistant routing or bundled-plugin instructions
+change; existing strict assessments return the corrected exact/degraded verdict.
 
 #### Walking/Hiking delivery envelope (#789)
 
@@ -1874,9 +1886,10 @@ Synthetic serializer and demo-Firestore lifecycle tests cover edits, reschedulin
 withdrawal and exact marker linking. These tests make no provider requests.
 
 Earlier separately approved direct account probes established positive Plan/Workout/association/full-JSON readback for
-both sports; the owner confirmed Walking device visibility. Hiking app/device playback, integrated production lifecycle,
-and target support remain in #789 under #583. Direct probes had no QS scheduled-workout/delivery ledger and therefore
-cannot demonstrate a QS completion badge. No deployment or new live sends are included in this implementation.
+both sports; later integrated all-21 testing established owner-confirmed Walking/Hiking native profile and timed
+playback. Remaining live lifecycle and any wider target support stay in #789 under #583. Direct probes had no QS
+scheduled-workout/delivery ledger and therefore cannot demonstrate a QS completion badge. No deployment or new live
+sends are included in this implementation.
 
 #### Timed Strength/Gym integration (#783)
 
@@ -1908,7 +1921,9 @@ root cause is not established. Help advises checking the native Strength profile
 to Yoga or claiming that QS controls local profile/equipment settings. These direct probes had no QS planned-workout
 ledger, so the import correctly created no local planned-workout completion link. This proves that bounded unloaded
 timed path and its recorded identifiers, not native reps/load tracking, ELEMNT/watch receipt, a QS completion badge,
-or the integrated adapter's production lifecycle. Local serializer, runtime, transport and demo
+or the integrated adapter's full production lifecycle. Later all-21 confirmation also establishes native Strength
+profile and timed playback through the normal QS companion/Send/ledger path, not merely the direct probe. It does not
+establish an integrated saved activity or a new QS completion link. Local serializer, runtime, transport and demo
 Firestore/MCP tests cover full companion validation, load instructions/rounding, stable IDs through edits/reschedules,
 duplicate/uncertain-create recovery, mid-flight load edits, concurrent workers and Stop. Deployment and live integrated
 update/reschedule/retry/reconnect/eligible deletion remain separately authorized evidence in #783.

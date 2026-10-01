@@ -349,16 +349,11 @@ describe('planned-workout provider proof fixtures', () => {
     it.each([
         [ActivityTypes.Rowing, 3, 'outdoor'], [ActivityTypes.IndoorRowing, 6, 'indoor'],
         [ActivityTypes.Swimming, 2, 'indoor'], [ActivityTypes.OpenWaterSwimming, 2, 'outdoor'],
-    ] as const)('discloses Wahoo %s as an unproven timed validation candidate', (sport, family, location) => {
+    ] as const)('maps owner-confirmed Wahoo %s without a stale playback warning', (sport, family, location) => {
         const structure = { ...oneStepStructure(), sport };
-        expect(() => serializeWahooPlanJsonV1(structure, {
-            name: 'Validation candidate', location, allowDegraded: false,
-        })).toThrow(expect.objectContaining({ code: 'degradation-confirmation-required' }));
-        const result = serializeWahooPlanJsonV1(structure, { name: 'Validation candidate', location, allowDegraded: true });
-        expect(result.level).toBe('degraded');
-        expect(result.issues).toContainEqual(expect.objectContaining({
-            code: 'sport_profile_degraded', message: expect.stringContaining('do not establish'),
-        }));
+        const result = serializeWahooPlanJsonV1(structure, { name: 'Timed profile', location, allowDegraded: false });
+        expect(result.level).toBe('exact');
+        expect(result.issues).toEqual([]);
         expect(result.artifact.header).toMatchObject({ workout_type_family: family,
             workout_type_location: location === 'indoor' ? 0 : 1, duration_s: 600 });
         expect(() => serializeWahooPlanJsonV1(structure, {
@@ -414,7 +409,7 @@ describe('planned-workout provider proof fixtures', () => {
         }));
     });
 
-    it('requires approval for a Garmin family fold and discloses the Wahoo swim candidate', () => {
+    it('requires approval for a Garmin family fold but not an unchanged native Wahoo swim', () => {
         const mountainBike = { ...oneStepStructure(), sport: ActivityTypes.MountainBiking };
         const swimming = { ...oneStepStructure(), sport: ActivityTypes.Swimming };
         expect(assessPlannedWorkoutProviderMappingV1('suunto', mountainBike).level).toBe('exact');
@@ -427,8 +422,8 @@ describe('planned-workout provider proof fixtures', () => {
             issues: [expect.objectContaining({ path: '$.poolLength' })],
         });
         expect(assessPlannedWorkoutProviderMappingV1('wahoo', swimming)).toMatchObject({
-            level: 'degraded',
-            issues: [expect.objectContaining({ code: 'sport_profile_degraded' })],
+            level: 'exact',
+            issues: [],
         });
         expect(() => serializeGarminWorkoutV1(mountainBike, {
             name: 'MTB workout',

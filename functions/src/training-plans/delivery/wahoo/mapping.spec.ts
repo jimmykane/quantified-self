@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { createHash } from 'node:crypto';
 import { ActivityTypes } from '@sports-alliance/sports-lib';
 import { MANUAL_WORKOUT_EDITOR_SPORTS_V1, parseWorkoutStructureV1 } from '../../../../../shared/planned-workout';
 import { WAHOO_PLANNED_WORKOUT_SPORTS_V1, wahooWorkoutSportProfileV1 } from '../../../../../shared/wahoo-workout-sports';
@@ -55,8 +56,21 @@ describe('Wahoo delivery mapping (no editor changes)', () => {
   it.each([ActivityTypes.Walking, ActivityTypes.Hiking, ActivityTypes.Swimming, ActivityTypes.OpenWaterSwimming,
     ActivityTypes.Rowing, ActivityTypes.IndoorRowing])('keeps %s prescription limits separate from profile-validation state', sport => {
     expect(wahooWorkoutSportProfileV1(sport)?.untargetedTimeOnly).toBe(true);
-    expect(wahooWorkoutSportProfileV1(sport)?.validationPending).toBe(
-      sport === ActivityTypes.Walking || sport === ActivityTypes.Hiking ? undefined : true);
+    const workout = { ...wahooFixtureWorkout(), structure: { ...wahooFixtureWorkout().structure, sport } };
+    expect(assessWahooDelivery(workout, 'destination', 'UTC')).toMatchObject({ level: 'exact', issues: [] });
+  });
+  it.each([
+    [ActivityTypes.Running, 'a8c6ec5468a0e0aceabb538a572ce312bc8d9efc633679abc514a9692012c5ce', '86c832a2c9e2e1afd366f25fe673746c3875968f09eadf760daa825f5e033581'],
+    [ActivityTypes.Cycling, 'a41c3104bc690562f5f9da41ac6576dcf3a478b7b486a9085357d93f87e80747', '567a43c918577de7230e7a763ba0139f7c5f7308aa4f567fdf9bbe4f209606b3'],
+    [ActivityTypes.Swimming, '057f5cf00c720474f1f31e141c933ff2a0e7e377a079e72e9097862e3878ec86', '8862ea58c939c6f88c3e777067d0938861c57cf6cb7a7583f9c1957fe69b7214'],
+    [ActivityTypes.OpenWaterSwimming, 'ee56e4be94f095ae4769b8cfd5ac837e38e4bececbb331f9b033952535e1e092', 'ecdcabd3c5ddd6e43390b0f851f7ca886efed4c118942297b78006299d0a8bde'],
+    [ActivityTypes.Rowing, '8603c7fab849139382cc6e4970668429b86440fa837f4a3717eb9311adc8d46c', 'db765d06e062e7c4fffaa25a14751dbba259be3024012cfefbfb1b9997d7e229'],
+    [ActivityTypes.IndoorRowing, '4c185661176a0c59ecc8ee69a9326a61d524d6abe713da92ea893bfdaa82a439', 'bc91be6f001ab1cd8a20c19c3fb988d46ba34b9fee82c16a3778062a8129dfc8'],
+  ] as const)('preserves the pre-proof %s v4 payload and digest when only the warning changes', (sport, digest, payloadHash) => {
+    const workout = wahooFixtureWorkout(); workout.structure.sport = sport;
+    expect(assessWahooDelivery(workout, 'destination', 'UTC')).toMatchObject({ mappingVersion: 'wahoo-plans-v4', digest });
+    expect(createHash('sha256').update(wahooPlanBody(workout, 'destination', true)
+      + '\n' + wahooWorkoutBody(workout, 'destination', 'UTC', '123')).digest('hex')).toBe(payloadHash);
   });
   it.each(WAHOO_SPORT_FIXTURES)('maps $sport to its expected family/type/location without rewriting canonical sport', ({ sport, family, type, location, level }) => {
     const workout = { ...wahooFixtureWorkout(), structure: { ...wahooFixtureWorkout().structure, sport } };
@@ -90,10 +104,16 @@ describe('Wahoo delivery mapping (no editor changes)', () => {
     const recipe = JSON.parse(Buffer.from(encoded.split(',')[1], 'base64').toString());
     expect(recipe.intervals[0].targets).toEqual([{ type: 'hr', low: 100, high: 130 }]);
   });
-  it('preserves selected pool length in QS and discloses that the candidate cannot send it', () => {
+  it('preserves selected pool length in QS and still requires review because Wahoo cannot receive it', () => {
     const workout = wahooFixtureWorkout(); workout.structure.sport = ActivityTypes.Swimming;
     workout.structure.poolLength = { meters: 25, presentation: 'meters' };
-    expect(assessWahooDelivery(workout, 'destination', 'UTC').issues.join(' ')).toContain('does not receive the selected pool length');
+    expect(assessWahooDelivery(workout, 'destination', 'UTC').level).toBe('degraded');
+    expect(assessWahooDelivery(workout, 'destination', 'UTC').requiresApproval).not.toBe(false);
+    expect(() => serializeWahooPlanJsonV1(workout.structure, { name: workout.title, location: 'indoor', allowDegraded: false }))
+      .toThrow(expect.objectContaining({ code: 'degradation-confirmation-required' }));
+    expect(assessWahooDelivery(workout, 'destination', 'UTC').issues).toEqual([
+      'Wahoo does not receive the selected pool length; set it on the device where needed.',
+    ]);
     const encoded = new URLSearchParams(wahooPlanBody(workout, 'destination', true)).get('plan[file]')!;
     expect(Buffer.from(encoded.split(',')[1], 'base64').toString()).not.toMatch(/poolLength|pool_length/);
     expect(workout.structure.poolLength).toEqual({ meters: 25, presentation: 'meters' });

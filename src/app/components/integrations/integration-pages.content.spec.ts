@@ -46,7 +46,9 @@ describe('integration-pages.content', () => {
     expect(training?.answer).toContain('time-based running and cycling');
     expect(training?.answer).toContain('outdoor Walking/Hiking without intensity targets');
     expect(training?.answer).toContain('timed Strength/Gym');
-    expect(training?.answer).toContain('timed, untargeted validation candidates, not proven structured playback');
+    expect(training?.answer).toContain('Native profiles and timed intervals have been account/device-tested');
+    expect(training?.answer).toContain('distance endings and intensity targets remain unsupported');
+    expect(training?.answer).not.toContain('validation candidate');
     expect(training?.answer).toContain('Selected pool length is not sent to Wahoo');
     expect(training?.answer).toContain('Indoor Running uses Treadmill');
     expect(training?.answer).toContain('Repetition-based strength is unsupported');
