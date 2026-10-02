@@ -143,9 +143,10 @@ eligible upcoming copies withdraw automatically. The required choice is bound in
 Apply, not direct model/provider writes. Plan deletion additionally asks whether to keep workouts as standalone or
 permanently delete them. Without delivery access, explain that older-copy cleanup is unavailable and only offer legacy
 deletion if the user accepts that limitation. Completed activities stay untouched, and valid access/provider support
-may prevent cleanup; an applied deletion is not provider/app/watch removal proof. A reply to the cleanup question keeps
-the focused preview selected, but never supplies Apply approval. The model can prepare one strict proposal after
-reading current records. For Workout Library changes it
+may prevent cleanup; an applied deletion is not provider/app/watch removal proof. Replies keep the focused preview
+only through an uninterrupted deletion clarification chain; a new task or cancellation ends that routing. Removing a
+workout from a plan is an association change, not inferred deletion. Routing never supplies Apply approval. The model
+can prepare one strict proposal after reading current records. For Workout Library changes it
 must also read the library revision and exact saved recipe or source workout, then use the additive library preview.
 That preview supports one create, save, duplicate, edit, archive/restore, confirmed permanent recipe delete, or
 explicit-date placement. Saved recipes have no date or provider consent. The model cannot call

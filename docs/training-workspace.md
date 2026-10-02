@@ -52,8 +52,10 @@ deployment and catalog refresh. MCP read-impact review: current plan/workout rec
 projections remain unchanged; cleanup intent stays server-only. Verification covers explicit yes/no choices, both plan
 dispositions, preview without provider I/O, lost-reply replay, revoked grants, completed-copy protection and removal after
 Pro expiry in `npm run test:functions-emulators -- mcp-data`, plus the existing provider cleanup regressions in the
-`delivery` emulator group. Assistant tests keep follow-up choices prepare-only and require the app-owned Apply; public
-contract tests check all three transports, scope isolation and recursive private-field rejection. No new callable,
+`delivery` emulator group. Assistant tests keep follow-up choices prepare-only and require the app-owned Apply. Routing
+follows only an uninterrupted deletion clarification chain; cancellation, another task, and removal from a plan must
+not inherit an earlier deletion intent. This runtime-only routing correction changes no MCP wire contract or read
+projection. Public contract tests check all three transports, scope isolation and recursive private-field rejection. No new callable,
 provider adapter, consent scope or cleanup store is introduced.
 External clients prepare one strict proposal of at most 25 changes, then invoke the separately approval-gated
 `apply_training_changes` write tool. ChatGPT, Claude and other MCP hosts own their native tool-approval UI; QS does not

@@ -321,18 +321,34 @@ function buildAssistantModelInputSchema(
   };
 }
 
+function removesWorkoutFromPlan(prompt: string): boolean {
+  return /\bremove\b[^.!?;\n]{0,100}\bfrom\b[^.!?;\n]{0,40}\bplans?\b/iu.test(prompt);
+}
+
+function canBeTrainingDeletionReply(prompt: string): boolean {
+  return prompt.length <= 160
+    && !/\?|^\s*(?:please\s+)?(?:what|how|why|when|where|who|can|could|would|should|show|list|tell|check|review|read|explain|compare|analy[sz]e|recommend)\b/iu.test(prompt)
+    && !/\b(?:cancel|stop|forget|never\s*mind)\b/iu.test(prompt)
+    && !/\b(?:don't|don’t|do not|never)\s+(?:delete|remove)\b[^.!?;\n]{0,60}\b(?:plans?|workouts?|sessions?)\b(?!\s+copies\b)/iu.test(prompt)
+    && !/\b(?:create|add|build|make|draft|propose|suggest|schedule|edit|update|modify|change|move|copy|duplicate|shift|send|sync|archive|pause|activate|rename|restore|enable|disable|resume|retry|library|templates?)\b/iu.test(prompt)
+    && !removesWorkoutFromPlan(prompt);
+}
+
 export function selectAssistantTrainingPreviewTool(prompt: string,
   history: readonly Pick<AssistantMessage, 'role' | 'text'>[] = []): typeof TRAINING_PREVIEW_TOOLS[number] {
   // A reply to the explicit cleanup question must retain the focused deletion
-  // schema. It still only prepares a preview; it never supplies apply approval.
-  const previousMessage = history[history.length - 1];
-  if (prompt.length < 160 && previousMessage?.role === 'assistant'
-    && !/^(?:cancel|stop|forget|never\s+mind)\b/iu.test(prompt.trim())
-    && !/\b(?:create|add|edit|update|move|copy|duplicate|shift|send|sync)\b/iu.test(prompt)
-    && /(?:older[\s\S]{0,40}(?:copies|service)|standalone[\s\S]{0,80}(?:delete|remove)|(?:delete|remove)[\s\S]{0,80}standalone|which[\s\S]{0,40}(?:plan|workout|session))/iu.test(previousMessage.text)
-    && history.slice(-6).some(message => message.role === 'user'
-      && selectAssistantTrainingPreviewTool(message.text) === 'preview_training_deletion')) {
-    return 'preview_training_deletion';
+  // schema only through an uninterrupted clarification chain, not an older
+  // unrelated request. This routing never supplies Apply approval.
+  if (canBeTrainingDeletionReply(prompt)) {
+    for (let index = history.length - 1; index > 0; index -= 2) {
+      const clarification = history[index], request = history[index - 1];
+      if (clarification.role !== 'assistant' || request.role !== 'user'
+        || !/(?:older[\s\S]{0,40}(?:copies|service)|standalone[\s\S]{0,80}(?:delete|remove)|(?:delete|remove)[\s\S]{0,80}standalone|which[\s\S]{0,40}(?:plan|workout|session))/iu.test(clarification.text)) break;
+      if (selectAssistantTrainingPreviewTool(request.text) === 'preview_training_deletion') {
+        return 'preview_training_deletion';
+      }
+      if (!canBeTrainingDeletionReply(request.text)) break;
+    }
   }
   // A negative library qualifier describes where the user does not want the
   // workout saved; it must not turn an ordinary schedule edit into a library edit.
@@ -343,7 +359,7 @@ export function selectAssistantTrainingPreviewTool(prompt: string,
   // A safety qualifier such as "do not update anything else" is not another
   // requested mutation and should not force a one-workout create into batch.
   const question = withoutNegatedLibrary.replace(
-    /\b(?:don't|do not|does not|never|without)\s+(?:(?:also|any|other|existing)\s+){0,3}(?:edit|update|move|copy|duplicate|delete|skip|archive|rename|change|modify)\b/gu,
+    /\b(?:don't|don’t|do not|does not|never|without)\s+(?:(?:also|any|other|existing)\s+){0,3}(?:edit|update|move|copy|duplicate|delete|remove|skip|archive|rename|change|modify)\b/gu,
     '',
   );
   if (/\b(?:library|saved\s+workouts?|workout\s+templates?|saved\s+recipes?)\b/u.test(question)
@@ -351,7 +367,8 @@ export function selectAssistantTrainingPreviewTool(prompt: string,
     return 'preview_saved_workout_change';
   }
   if (/\b(?:delete|remove)\b[\s\S]{0,80}\b(?:plans?|workouts?|sessions?)\b/u.test(question)
-    && !/\b(?:create|add|edit|update|move|copy|duplicate|shift)\b/u.test(question)) {
+    && !/\b(?:create|add|build|make|draft|propose|suggest|schedule|edit|update|modify|change|move|copy|duplicate|shift|archive|pause|activate|rename|restore|send|sync|enable|disable|stop|resume|retry|cancel|forget)\b/u.test(question)
+    && !removesWorkoutFromPlan(question)) {
     return 'preview_training_deletion';
   }
   const createsPlan = /\b(create|add|build|make)\s+(?:(?:a|an|new|my|the)\s+){0,3}(?:training\s+)?plan\b/u.test(question);
@@ -963,7 +980,7 @@ export const generateAssistantModelAnswer: AssistantRuntimeDependencies['generat
       ? ASSISTANT_PRECISE_ACTIVITY_LOCATION_INSTRUCTIONS
       : ASSISTANT_INTERNAL_BOUNDARY_INSTRUCTIONS,
     trainingDeletionRequested
-      ? 'The current message requests deletion, not new sync consent. Ask for the older uncompleted service-copy cleanup choice before preview unless already explicit. Explain automatic eligible upcoming-copy withdrawal separately from optional older-copy cleanup and never claim provider removal is confirmed.'
+      ? 'The selected Training preview supports deletion and service-copy cleanup, not new sync consent. Prepare it only for the user’s still-current deletion request, never a cancelled request or a request to move a workout out of a plan. Ask for the older uncompleted service-copy cleanup choice before preview unless already explicit. Explain automatic eligible upcoming-copy withdrawal separately from optional older-copy cleanup and never claim provider removal is confirmed.'
       : trainingDeliveryRequested
       ? `The current message expressly requests a provider delivery action. Keep it inside the reviewable Training proposal and never claim it succeeded before the apply result confirms it. ${deliveryPreviewInputGuidance}`
       : 'The current message does not request provider delivery. Do not add delivery to a Training proposal and do not mention syncing, sending, a provider, or a watch as an effect of the proposed change.',

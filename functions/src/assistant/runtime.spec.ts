@@ -111,6 +111,8 @@ describe('Training preview model-tool selection', () => {
       { role: 'assistant' as const, text: 'Also remove older, uncompleted copies from your connected services?' }];
     expect(selectAssistantTrainingPreviewTool('Yes, remove them.', history)).toBe('preview_training_deletion');
     expect(selectAssistantTrainingPreviewTool('No, keep those copies.', history)).toBe('preview_training_deletion');
+    expect(selectAssistantTrainingPreviewTool('No, don’t remove those older copies.', history)).toBe('preview_training_deletion');
+    expect(selectAssistantTrainingPreviewTool("No, don't delete any workout copies on Garmin.", history)).toBe('preview_training_deletion');
     expect(selectAssistantTrainingPreviewTool('Yeah, please.', history)).toBe('preview_training_deletion');
     expect(selectAssistantTrainingPreviewTool('Leave those copies alone.', history)).toBe('preview_training_deletion');
     expect(selectAssistantTrainingPreviewTool('Create a new workout.', history)).toBe('preview_create_planned_workout');
@@ -118,6 +120,10 @@ describe('Training preview model-tool selection', () => {
     const sourceHistory = [{ role: 'user' as const, text: 'Delete one of my plans.' },
       { role: 'assistant' as const, text: 'Which plan should I delete?' }];
     expect(selectAssistantTrainingPreviewTool('September endurance', sourceHistory)).toBe('preview_training_deletion');
+    expect(selectAssistantTrainingPreviewTool('R'.repeat(160), [
+      { role: 'user', text: 'Delete one of my workouts.' },
+      { role: 'assistant', text: 'Which workout should I delete?' },
+    ])).toBe('preview_training_deletion');
     const planHistory = [{ role: 'user' as const, text: 'Delete my training plan.' },
       { role: 'assistant' as const, text: 'Also remove older, uncompleted copies from your connected services?' },
       { role: 'user' as const, text: 'Yes, remove the copies.' },
@@ -188,6 +194,43 @@ describe('Training preview model-tool selection', () => {
       .toBe('preview_saved_workout_change');
     expect(selectAssistantTrainingPreviewTool('Archive the saved recipe, but do not change scheduled workouts.'))
       .toBe('preview_saved_workout_change');
+  });
+
+  it('does not turn a different action or cancelled deletion into a cleanup reply', () => {
+    const history = [{ role: 'user' as const, text: 'Delete my training plan.' },
+      { role: 'assistant' as const, text: 'Also remove older, uncompleted copies from your connected services?' }];
+    for (const prompt of ['Archive the plan instead.', 'Pause it instead.',
+      "Don't delete my workout, just show it.", 'Don’t remove my workout.', 'Please cancel that deletion.',
+      'Show my upcoming workouts instead.',
+      'Remove this workout from my plan and keep it as standalone.']) {
+      expect(selectAssistantTrainingPreviewTool(prompt, history), prompt).toBe('preview_training_changes');
+    }
+    expect(selectAssistantTrainingPreviewTool('Remove this workout from my plan and keep it as standalone.'))
+      .toBe('preview_training_changes');
+    expect(selectAssistantTrainingPreviewTool('Delete this workout and archive my plan.'))
+      .toBe('preview_training_changes');
+  });
+
+  it.each([
+    'Actually create a new workout.', 'What is my readiness?', 'Show my upcoming workouts.',
+  ])('does not revive a deletion after the intervening request %s', request => {
+    const history = [{ role: 'user' as const, text: 'Delete my training plan.' },
+      { role: 'assistant' as const, text: 'Also remove older, uncompleted copies from your connected services?' },
+      { role: 'user' as const, text: request },
+      { role: 'assistant' as const, text: 'Which workout would you like to create?' }];
+    expect(selectAssistantTrainingPreviewTool('Easy run', history)).not.toBe('preview_training_deletion');
+  });
+
+  it('retains an uninterrupted deletion clarification beyond three exchanges', () => {
+    const history = [{ role: 'user' as const, text: 'Delete my training plan.' },
+      { role: 'assistant' as const, text: 'Which plan should I delete?' },
+      { role: 'user' as const, text: 'September endurance' },
+      { role: 'assistant' as const, text: 'Which plan: September endurance 2025 or 2026?' },
+      { role: 'user' as const, text: '2026' },
+      { role: 'assistant' as const, text: 'Also remove older, uncompleted copies from your connected services?' },
+      { role: 'user' as const, text: 'Yes, remove those copies.' },
+      { role: 'assistant' as const, text: 'Keep its workouts as standalone, or permanently delete them?' }];
+    expect(selectAssistantTrainingPreviewTool('Keep workouts as standalone.', history)).toBe('preview_training_deletion');
   });
 
   it('advertises only the selected preview to Gemini while retaining authorized MCP tools', async () => {
