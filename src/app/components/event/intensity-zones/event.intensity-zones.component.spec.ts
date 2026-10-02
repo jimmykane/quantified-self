@@ -310,19 +310,24 @@ describe('EventIntensityZonesComponent', () => {
     const label = option.series[0].label;
     vi.spyOn(component.chartDiv.nativeElement, 'clientWidth', 'get').mockReturnValue(width);
     const labelRect = { x: width - 8, width: 32 };
-    const layout = option.series[0].labelLayout({ labelRect });
+    const rect = { y: 72, height: 18 };
+    const layout = option.series[0].labelLayout({ labelRect, rect });
 
     expect(label.formatter({ dataIndex: 0 })).toBe('{zone_0|100%}');
-    expect(layout.dx).toBeLessThan(0);
-    expect(labelRect.x + labelRect.width + layout.dx).toBeLessThanOrEqual(width);
+    expect(layout.align).toBe('right');
+    expect(layout.verticalAlign).toBe('middle');
+    expect(layout.y).toBe(81);
+    expect(layout.x).toBeLessThanOrEqual(width);
+    expect(layout.x - labelRect.width).toBeGreaterThanOrEqual(0);
     expect(option.grid.right).toBe(0);
     expect(option.xAxis.max).toBeUndefined();
-    expect(option.series[0].labelLayout({ labelRect: { x: 100, width: 32 } })).toEqual({ dx: 0 });
+    expect(option.series[0].labelLayout({ labelRect: { x: 100, width: 32 } })).toEqual({});
 
     // The callback reads the current host size, including after a responsive resize.
     vi.spyOn(component.chartDiv.nativeElement, 'clientWidth', 'get').mockReturnValue(width / 2);
-    const resizedLayout = option.series[0].labelLayout({ labelRect });
-    expect(labelRect.x + labelRect.width + resizedLayout.dx).toBeLessThanOrEqual(width / 2);
+    const resizedLayout = option.series[0].labelLayout({ labelRect, rect });
+    expect(resizedLayout.align).toBe('right');
+    expect(resizedLayout.x).toBeLessThanOrEqual(width / 2);
   });
 
   it('should apply dark theme styles when darkTheme is enabled', async () => {
@@ -394,7 +399,9 @@ describe('EventIntensityZonesComponent', () => {
     expect(option.yAxis.axisLabel.rich.zone_0.align).toBe('center');
     expect(option.yAxis.axisLabel.rich.zone_0.verticalAlign).toBe('middle');
     expect(option.yAxis.axisLabel.rich.zone_0.width).toBe(56);
-    expect(option.series[0].label.rich.zone_0.width).toBe(22);
+    expect(option.yAxis.axisLabel.rich.zone_0.padding).toEqual([2, 6, 2, 6]);
+    expect(option.series[0].label.rich.zone_0.width).toBeUndefined();
+    expect(option.series[0].label.rich.zone_0.padding).toEqual([2, 6, 2, 6]);
     expect(option.series[0].label.rich.zone_2.backgroundColor).toBe('color-Zone 3');
   });
 
