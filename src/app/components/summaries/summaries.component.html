@@ -287,7 +287,7 @@
         </div>
       @if (section.id === 'calendar') {
         @if (showActions && isOwnerDashboard) {
-          <a mat-button appHapticTap routerLink="/calendar" [queryParams]="{ view: 'month', date: calendarSelectedDateKey }" aria-label="Open calendar for the selected day">
+          <a mat-button appHapticTap routerLink="/calendar" [queryParams]="calendarNavigationState || { view: 'month', date: calendarSelectedDateKey }" aria-label="Open calendar for the selected day">
             Open calendar<mat-icon iconPositionEnd aria-hidden="true">arrow_forward</mat-icon>
           </a>
         }
@@ -318,7 +318,7 @@
           [rows]="tile.size.rows"
           [maxColumns]="section.columns">
           @if (tile.type === tileTypes.Chart) {
-          <app-tile-chart [healthSettingsSaving]="healthSavingOrders.has(tile.order)" [healthMetric]="isOwnerDashboard ? $any(getChartTile(tile)).healthMetric : null" (healthMetricChange)="onHealthMetricChange(tile.order, $event)" (healthSectionChange)="moveHealthTile(tile.order, $event)" (calendarDateChange)="calendarSelectedDateKey = $event" [timelineNotes]="timelineNotes" [timelineNotesStatus]="showActions && isOwnerDashboard ? timelineNotesStatus : null" [user]="user" [type]="tile.type" [tileName]="getChartTile(tile).name || ''" [chartType]="getChartTile(tile).chartType"
+          <app-tile-chart [healthSettingsSaving]="healthSavingOrders.has(tile.order)" [healthMetric]="isOwnerDashboard ? $any(getChartTile(tile)).healthMetric : null" (healthMetricChange)="onHealthMetricChange(tile.order, $event)" (healthSectionChange)="moveHealthTile(tile.order, $event)" (calendarDateChange)="calendarSelectedDateKey = $event" (calendarStateChange)="onCalendarStateChange($event)" [calendarView]="getChartTile(tile).displaySettings?.calendarView || 'month'" [calendarViewSaving]="calendarSavingOrders.has(tile.order)" (calendarViewChange)="onCalendarViewChange(tile.order, $event)" [timelineNotes]="timelineNotes" [timelineNotesStatus]="showActions && isOwnerDashboard ? timelineNotesStatus : null" [user]="user" [type]="tile.type" [tileName]="getChartTile(tile).name || ''" [chartType]="getChartTile(tile).chartType"
             [class.dashboard-calendar-chart]="isDashboardActivityCalendarChartType(getChartTile(tile).chartType)"
             [isLoading]="isTileLoading(tile)" [data]="getChartTile(tile).data" [showActions]="showActions" [darkTheme]="darkTheme"
             [dataType]="getChartTile(tile).dataType" [dataValueType]="getChartTile(tile).dataValueType"

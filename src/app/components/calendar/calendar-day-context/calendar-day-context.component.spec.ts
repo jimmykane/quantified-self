@@ -82,7 +82,7 @@ describe('CalendarDayContextComponent', () => {
       .toBe('/calendar/day/2026-09-10');
     const prepareReturn = vi.spyOn(TestBed.inject(CalendarDayDetailsNavigationService), 'prepareReturn');
     fixture.componentInstance.prepareNavigation();
-    expect(prepareReturn).toHaveBeenCalledWith('/', '2026-09-10');
+    expect(prepareReturn).toHaveBeenCalledWith('/', '2026-09-10', undefined, undefined);
     expect(watch).toHaveBeenCalledWith('owner', '2026-09-10', expect.any(Number), expect.any(AbortSignal));
     const oldSignal = watch.mock.calls[0][3] as AbortSignal;
     fixture.componentRef.setInput('data', data('2026-09-11'));

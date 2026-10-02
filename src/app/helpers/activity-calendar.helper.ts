@@ -19,12 +19,19 @@ import { resolveTrainingEventDisplayLabel } from './training-event-label.helper'
 import type { ActivityRange } from '../models/activity-range.interface';
 import { getDateTimeFormatter } from './date-time-format.helper';
 
-export type ActivityCalendarView = 'week' | 'month' | 'year';
+export type ActivityCalendarView = 'week' | 'month' | '30d' | 'year';
 export type ActivityCalendarVolumeMetric = 'duration' | 'distance' | 'ascent' | 'descent';
+
+/** Transient return context; dashboard preferences store only the view. */
+export interface ActivityCalendarPeriodContext {
+  view: ActivityCalendarView;
+  anchor: string;
+}
 
 export interface ActivityCalendarRouteState {
   view: ActivityCalendarView;
   anchorDate: Date;
+  selectedDate: Date;
 }
 
 export type ActivityCalendarQueryWindow = ActivityRange;
@@ -47,6 +54,7 @@ export interface ActivityCalendarDayViewModel {
   date: Date;
   dateKey: string;
   dayNumber: number;
+  monthLabel: string;
   inPrimaryPeriod: boolean;
   isToday: boolean;
   isWeekend: boolean;
@@ -162,7 +170,7 @@ interface ActivityCalendarElevationExclusions {
   descent: ReadonlySet<ActivityTypes>;
 }
 
-const VALID_CALENDAR_VIEWS = new Set<ActivityCalendarView>(['week', 'month', 'year']);
+const VALID_CALENDAR_VIEWS = new Set<ActivityCalendarView>(['week', 'month', '30d', 'year']);
 const CALENDAR_MONTH_GRID_DAYS = 42;
 const MAX_VISIBLE_FAMILIES = 3;
 const MAX_MARKER_DURATION_SECONDS = 3 * 60 * 60;
@@ -175,6 +183,33 @@ export function normalizeActivityCalendarView(
 ): ActivityCalendarView {
   const normalized = `${value || ''}`.toLowerCase() as ActivityCalendarView;
   return VALID_CALENDAR_VIEWS.has(normalized) ? normalized : fallback;
+}
+
+/** Month and 30 days share the same complete-week presentation. */
+export function isActivityCalendarGridView(view: ActivityCalendarView): boolean {
+  return view === 'month' || view === '30d';
+}
+
+export function resolveActivityCalendarViewAnchor(view: ActivityCalendarView, selected: Date, now = new Date()): Date {
+  if (view !== '30d') return startOfLocalDay(selected);
+  const latest = resolveActivityCalendarPrimaryRange('30d', now);
+  return startOfLocalDay(selected.getTime() >= latest.startMs && selected.getTime() < latest.endExclusiveMs ? now : selected);
+}
+
+export function resolveActivityCalendarRouteState(
+  params: { view?: unknown; date?: unknown; anchor?: unknown }, now = new Date(),
+  startOfWeek?: DaysOfTheWeek | number | null,
+): ActivityCalendarRouteState {
+  const selectedDate = parseActivityCalendarDate(params.date, now);
+  const view = normalizeActivityCalendarView(params.view);
+  let anchorDate = parseActivityCalendarDate(params.anchor, selectedDate);
+  const window = resolveActivityCalendarQueryWindow(view, anchorDate, startOfWeek);
+  // A mismatched deep link must not extend note reads across unrelated months/years
+  // or show an empty activity projection for a day outside the bounded reader.
+  if (selectedDate.getTime() < window.startMs || selectedDate.getTime() >= window.endExclusiveMs) {
+    anchorDate = resolveActivityCalendarViewAnchor(view, selectedDate, now);
+  }
+  return { view, selectedDate, anchorDate };
 }
 
 export function parseActivityCalendarDate(value: unknown, fallback = new Date()): Date {
@@ -228,8 +263,8 @@ export function navigateActivityCalendarDate(
   direction: -1 | 1,
 ): Date {
   const anchor = startOfLocalDay(isValidDate(anchorDate) ? anchorDate : new Date());
-  if (view === 'week') {
-    return addLocalDays(anchor, direction * 7);
+  if (view === 'week' || view === '30d') {
+    return addLocalDays(anchor, direction * (view === '30d' ? 30 : 7));
   }
 
   const targetMonthIndex = view === 'month'
@@ -245,24 +280,37 @@ export function navigateActivityCalendarDate(
   return new Date(targetYear, normalizedMonthIndex, Math.min(anchor.getDate(), lastTargetDay));
 }
 
+/** A paged context date can fall just beyond the next boundary week. Keep six local
+ * context dates on either side of 30 days so its exact shifted selection remains loaded. */
 export function resolveActivityCalendarQueryWindow(
+  view: ActivityCalendarView, anchorDate: Date, startOfWeek?: DaysOfTheWeek | number | null,
+): ActivityCalendarQueryWindow {
+  if (view !== '30d') return resolveActivityCalendarVisibleWindow(view, anchorDate, startOfWeek);
+  const primary = resolveActivityCalendarPrimaryRange(view, anchorDate, startOfWeek);
+  return { startMs: addLocalDays(new Date(primary.startMs), -6).getTime(),
+    endExclusiveMs: addLocalDays(new Date(primary.endExclusiveMs), 6).getTime() };
+}
+
+export function resolveActivityCalendarVisibleWindow(
   view: ActivityCalendarView,
   anchorDate: Date,
   startOfWeek?: DaysOfTheWeek | number | null,
 ): ActivityCalendarQueryWindow {
   const normalizedView = normalizeActivityCalendarView(view);
   const primaryRange = resolveActivityCalendarPrimaryRange(normalizedView, anchorDate, startOfWeek);
-  if (normalizedView !== 'month') {
-    return primaryRange;
-  }
+  if (!isActivityCalendarGridView(normalizedView)) return primaryRange;
+  const gridStart = startOfCalendarWeek(new Date(primaryRange.startMs), startOfWeek);
+  const lastWeek = startOfCalendarWeek(addLocalDays(new Date(primaryRange.endExclusiveMs), -1), startOfWeek);
+  return { startMs: gridStart.getTime(), endExclusiveMs: addLocalDays(lastWeek, 7).getTime() };
+}
 
-  const anchor = startOfLocalDay(isValidDate(anchorDate) ? anchorDate : new Date());
-  const monthStart = new Date(anchor.getFullYear(), anchor.getMonth(), 1);
-  const gridStart = startOfCalendarWeek(monthStart, startOfWeek);
-  return {
-    startMs: gridStart.getTime(),
-    endExclusiveMs: addLocalDays(gridStart, CALENDAR_MONTH_GRID_DAYS).getTime(),
-  };
+export function navigateActivityCalendarPeriod(state: ActivityCalendarRouteState, direction: -1 | 1): ActivityCalendarRouteState {
+  const anchorDate = navigateActivityCalendarDate(state.anchorDate, state.view, direction);
+  const selectedDate = state.view === 'month'
+    ? new Date(anchorDate.getFullYear(), anchorDate.getMonth(), Math.min(state.selectedDate.getDate(),
+      new Date(anchorDate.getFullYear(), anchorDate.getMonth() + 1, 0).getDate()))
+    : navigateActivityCalendarDate(state.selectedDate, state.view, direction);
+  return { view: state.view, anchorDate, selectedDate };
 }
 
 export function resolveActivityCalendarPrimaryRange(
@@ -278,6 +326,10 @@ export function resolveActivityCalendarPrimaryRange(
       startMs: start.getTime(),
       endExclusiveMs: addLocalDays(start, 7).getTime(),
     };
+  }
+
+  if (normalizedView === '30d') {
+    return { startMs: addLocalDays(anchor, -29).getTime(), endExclusiveMs: addLocalDays(anchor, 1).getTime() };
   }
 
   if (normalizedView === 'year') {
@@ -347,21 +399,23 @@ export function buildActivityCalendarViewModel(
     };
   }
 
-  const monthStart = new Date(anchorDate.getFullYear(), anchorDate.getMonth(), 1);
-  const months = [buildMonthViewModel(
-    monthStart,
-    eventsByDay,
-    weekdays,
-    options.startOfWeek,
-    locale,
-    now,
-  )];
-  return {
-    view,
-    periodLabel: formatMonthLabel(monthStart, locale),
-    months,
-    summary: buildActivityCalendarPeriodSummaryForMonths(months, options.summariesSettings),
-  };
+  const primary = resolveActivityCalendarPrimaryRange(view, anchorDate, options.startOfWeek);
+  const window = resolveActivityCalendarVisibleWindow(view, anchorDate, options.startOfWeek);
+  const periodLabel = view === '30d'
+    ? formatWeekRange(new Date(primary.startMs), addLocalDays(new Date(primary.endExclusiveMs), -1), locale)
+    : formatMonthLabel(anchorDate, locale);
+  const days: ActivityCalendarDayViewModel[] = [];
+  for (let date = new Date(window.startMs); date.getTime() < window.endExclusiveMs; date = addLocalDays(date, 1)) {
+    days.push(buildDayViewModel(date, eventsByDay,
+      date.getTime() >= primary.startMs && date.getTime() < primary.endExclusiveMs, locale, now));
+  }
+  const months = [{ id: view === 'month' ? `${anchorDate.getFullYear()}-${`${anchorDate.getMonth() + 1}`.padStart(2, '0')}` : `30d-${formatActivityCalendarDateParam(anchorDate)}`, label: periodLabel, weekdays, days }];
+  return { view, periodLabel, months, summary: buildActivityCalendarPeriodSummaryForMonths(months, options.summariesSettings) };
+}
+
+/** Project one exact selected date from the bounded period read, including paged context dates. */
+export function buildActivityCalendarSelectedDay(events: EventInterface[], date: Date, locale?: string, now = new Date()): ActivityCalendarDayViewModel {
+  return buildDayViewModel(startOfLocalDay(date), groupEventsByLocalDay(events), false, locale, startOfLocalDay(now));
 }
 
 export function formatActivityCalendarDuration(durationSeconds: number, unknown = false): string {
@@ -508,6 +562,7 @@ function buildDayViewModel(
     date,
     dateKey,
     dayNumber: date.getDate(),
+    monthLabel: getDateTimeFormatter(locale, { month: 'short' }).format(date),
     inPrimaryPeriod,
     isToday: date.getTime() === now.getTime(),
     isWeekend: isWeekendDay(date.getDay()),

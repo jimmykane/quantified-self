@@ -63,6 +63,17 @@ describe('ActivityCalendarGridComponent', () => {
     expect(fixture.nativeElement.querySelector('.activity-calendar-calm-note')).toBeNull();
     expect(fixture.nativeElement.querySelector('.activity-calendar-calm-legend')).toBeNull();
   });
+  it('includes visible adjoining dates and their markers in the legend without counting them in period totals', async () => {
+    const fixture = await renderGrid('month', false, [createEvent('context', new Date(2026, 6, 28), ActivityTypes.Cycling, 3600)]);
+    fixture.componentRef.setInput('calmMonth', true);
+    fixture.detectChanges();
+    const context = fixture.nativeElement.querySelector('.activity-calendar-day--outside') as HTMLButtonElement;
+    expect(context).toBeTruthy();
+    expect(context.querySelector('.activity-calendar-day-month')?.textContent).toContain('Jul');
+    expect(fixture.nativeElement.querySelector('.activity-calendar-calm-legend')?.textContent).toContain('Cycling');
+    expect(fixture.componentInstance.model.summary.totalDurationSeconds).toBe(0);
+  });
+
   it('marks only the selected date without changing the today marker or day layout', async () => {
     const fixture = await renderGrid('month', false, []);
     fixture.componentRef.setInput('selectedDateKey', '2026-08-03'); fixture.detectChanges();
@@ -306,16 +317,16 @@ describe('ActivityCalendarGridComponent', () => {
     expect(days[first].textContent.trim()).toBe('1');
     expect(fixture.nativeElement.querySelectorAll('.activity-calendar-day-button'))
       .toHaveLength(new Date(year, month + 1, 0).getDate());
-    expect(model.months[0].days).toHaveLength(42);
+    expect(model.months[0].days).toHaveLength(count);
     fixture.componentRef.setInput('fillHeight', true); fixture.detectChanges();
     expect(fixture.nativeElement.querySelectorAll('.activity-calendar-day')).toHaveLength(count);
     expect(fixture.nativeElement.querySelector('.activity-calendar--picker')).toBeNull();
     fixture.componentRef.setInput('fillHeight', false);
     fixture.componentRef.setInput('hideOutsideDays', false); fixture.detectChanges();
-    expect(fixture.nativeElement.querySelectorAll('.activity-calendar-day-button')).toHaveLength(42);
+    expect(fixture.nativeElement.querySelectorAll('.activity-calendar-day-button')).toHaveLength(count);
     fixture.componentRef.setInput('hideOutsideDays', true);
     fixture.componentRef.setInput('compact', false); fixture.detectChanges();
-    expect(fixture.nativeElement.querySelectorAll('.activity-calendar-day')).toHaveLength(42);
+    expect(fixture.nativeElement.querySelectorAll('.activity-calendar-day')).toHaveLength(count);
   });
 
   it('uses a separate right-edge color rail in compact cells without covering date, note, or activity icons', () => {

@@ -1,9 +1,9 @@
 <main class="calendar-page qs-workspace-page" [class.calendar-page--day]="isDayRoute"
-  [class.calendar-page--calm-month]="!isDayRoute && calendarModel().view === 'month'" aria-labelledby="calendar-page-title">
+  [class.calendar-page--calm-month]="!isDayRoute && isGridView()" aria-labelledby="calendar-page-title">
   @if (isDayRoute) {
     <header class="calendar-day-toolbar">
       <a class="calendar-day-back" mat-button appHapticTap [routerLink]="dayBackNavigation().route"
-        [queryParams]="dayBackNavigation().query" [attr.aria-label]="dayBackNavigation().ariaLabel">
+        [queryParams]="dayBackNavigation().query" [attr.aria-label]="dayBackNavigation().ariaLabel" (click)="prepareDayBackNavigation()">
         <mat-icon aria-hidden="true">arrow_back</mat-icon>{{ dayBackNavigation().label }}
       </a>
       <app-timeline-notes-workspace [visibleRange]="timelineNoteRange()"></app-timeline-notes-workspace>
@@ -16,10 +16,15 @@
         hideSingleSelectionIndicator [value]="routeState().view"
         (change)="selectView($event.value)">
         @for (option of viewOptions; track option.value) {
-        <mat-button-toggle [value]="option.value">
+        <mat-button-toggle [value]="option.value" [aria-label]="option.label">
           <span class="calendar-view-option">
             <mat-icon aria-hidden="true">{{ option.icon }}</mat-icon>
-            <span>{{ option.label }}</span>
+            @if (option.value === '30d') {
+              <span class="calendar-view-label--full">{{ option.label }}</span>
+              <span class="calendar-view-label--compact" aria-hidden="true">30d</span>
+            } @else {
+              <span>{{ option.label }}</span>
+            }
           </span>
         </mat-button-toggle>
         }
@@ -27,10 +32,10 @@
     </app-page-header>
   }
 
-  <div class="calendar-main-surface" [class.qs-glass-card-panel]="!isDayRoute && calendarModel().view === 'month'">
+  <div class="calendar-main-surface" [class.qs-glass-card-panel]="!isDayRoute && isGridView()">
   <nav class="calendar-period-navigation" [attr.aria-label]="isDayRoute ? 'Day navigation' : 'Calendar period navigation'">
-    <button mat-icon-button type="button" appHapticTap [matTooltip]="isDayRoute ? 'Previous day' : 'Previous ' + routeState().view"
-      [attr.aria-label]="isDayRoute ? 'Previous day' : 'Previous ' + routeState().view" (click)="navigatePeriod(-1)">
+    <button mat-icon-button type="button" appHapticTap [matTooltip]="isDayRoute ? 'Previous day' : 'Previous ' + periodUnitLabel()"
+      [attr.aria-label]="isDayRoute ? 'Previous day' : 'Previous ' + periodUnitLabel()" (click)="navigatePeriod(-1)">
       <mat-icon>chevron_left</mat-icon>
     </button>
     @if (isDayRoute) {
@@ -50,8 +55,8 @@
       aria-label="Go to today" (click)="goToToday()">
       <mat-icon aria-hidden="true">today</mat-icon>
     </button>
-    <button mat-icon-button type="button" appHapticTap [matTooltip]="isDayRoute ? 'Next day' : 'Next ' + routeState().view"
-      [attr.aria-label]="isDayRoute ? 'Next day' : 'Next ' + routeState().view" (click)="navigatePeriod(1)">
+    <button mat-icon-button type="button" appHapticTap [matTooltip]="isDayRoute ? 'Next day' : 'Next ' + periodUnitLabel()"
+      [attr.aria-label]="isDayRoute ? 'Next day' : 'Next ' + periodUnitLabel()" (click)="navigatePeriod(1)">
       <mat-icon>chevron_right</mat-icon>
     </button>
   </nav>
@@ -105,18 +110,18 @@
     } @else {
     <div class="calendar-day-layout">
     <app-activity-calendar-grid [model]="calendarModel()"
-      [calmMonth]="calendarModel().view === 'month'"
-      [hideOutsideDays]="calendarModel().view === 'month'"
+      [calmMonth]="isGridView()"
+      [hideOutsideDays]="false"
       [selectedDateKey]="selectedDay()?.dateKey ?? null"
       [timelineNotesByDate]="notesByDate()"
       [plannedWorkoutsByDate]="hasTrainingPlanningUIAccess() ? plannedWorkoutsByDate() : null"
       (daySelected)="openDay($event)">
     </app-activity-calendar-grid>
     @if (selectedDayData(); as dayData) {
-      <app-calendar-day-context class="calendar-selected-day" [class.qs-glass-card-panel]="calendarModel().view !== 'month'"
+      <app-calendar-day-context class="calendar-selected-day" [class.qs-glass-card-panel]="!isGridView()"
         [data]="dayData" [showFullDayLink]="true"
         [showActivityTotals]="true"
-        [calmMonth]="calendarModel().view === 'month'"
+        [calmMonth]="isGridView()"
         (noteSelected)="selectDayNote($event.id)"></app-calendar-day-context>
     }
     </div>

@@ -12,9 +12,20 @@
   </header>
   }
 
+  @if (dayContextEnabled()) {
+    <div class="activity-calendar-view-controls">
+      <mat-button-toggle-group aria-label="Calendar view" hideSingleSelectionIndicator [value]="selectedView()"
+        [disabled]="viewSaving()" (change)="selectView($event.value)">
+        <mat-button-toggle value="month">Month</mat-button-toggle>
+        <mat-button-toggle value="30d">30 days</mat-button-toggle>
+      </mat-button-toggle-group>
+      @if (viewSaving()) { <mat-spinner diameter="16" aria-label="Saving calendar view"></mat-spinner> }
+    </div>
+  }
+
   @if (showNavigation() || dayContextEnabled()) {
-    <nav class="activity-calendar-tile-navigation" aria-label="Calendar month navigation">
-      <button mat-icon-button type="button" appHapticTap matTooltip="Previous month" aria-label="Previous month"
+    <nav class="activity-calendar-tile-navigation" aria-label="Calendar period navigation">
+      <button mat-icon-button type="button" appHapticTap [matTooltip]="'Previous ' + periodUnitLabel()" [attr.aria-label]="'Previous ' + periodUnitLabel()"
         (click)="navigateMonth(-1)">
         <mat-icon aria-hidden="true">chevron_left</mat-icon>
       </button>
@@ -23,7 +34,7 @@
         <button mat-icon-button type="button" appHapticTap matTooltip="Go to today" aria-label="Go to today"
           (click)="goToToday()"><mat-icon aria-hidden="true">today</mat-icon></button>
       }
-      <button mat-icon-button type="button" appHapticTap matTooltip="Next month" aria-label="Next month"
+      <button mat-icon-button type="button" appHapticTap [matTooltip]="'Next ' + periodUnitLabel()" [attr.aria-label]="'Next ' + periodUnitLabel()"
         (click)="navigateMonth(1)">
         <mat-icon aria-hidden="true">chevron_right</mat-icon>
       </button>
@@ -54,7 +65,7 @@
         [fillHeight]="fillHeight()"
         [dashboardDayContext]="dayContextEnabled()"
         [calmMonth]="dayContextEnabled() || calmMonth()"
-        [hideOutsideDays]="true"
+        [hideOutsideDays]="false"
         [plannedWorkoutsByDate]="hasTrainingPlanningUIAccess() ? plannedWorkoutsByDate() : null"
         [timelineNotesByDate]="notesByDate()"
         (daySelected)="openDay($event)">
@@ -69,7 +80,7 @@
     }
   </div>
   @if (eventState().status === 'ready' && !hasEvents()) {
-  <div class="activity-calendar-tile-status" role="status">No completed activities this month</div>
+  <div class="activity-calendar-tile-status" role="status">{{ selectedView() === '30d' ? 'No completed activities in this period' : 'No completed activities this month' }}</div>
   }
   @if (hasTrainingPlanningUIAccess() && plansState().status === 'error') {
   <div class="activity-calendar-tile-status" role="status">{{ plansState().restoreInProgress
