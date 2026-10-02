@@ -173,7 +173,7 @@
 .dashboard-readiness-recovery-band {
   align-items: center;
   background: var(--mat-sys-surface-container);
-  border-bottom: 1px solid var(--qs-glass-panel-border, var(--mat-sys-outline-variant));
+  /* The metric grid below owns the shared divider. */
   border-top: 1px solid var(--qs-glass-panel-border, var(--mat-sys-outline-variant));
   box-sizing: border-box;
   display: grid;
