@@ -1,3 +1,4 @@
+import { hasCurrentIntensityPolicy } from '@shared/intensity-zones';
 import { Injectable, inject } from '@angular/core';
 import { Firestore, doc, docData } from 'app/firebase/firestore';
 import { combineLatest, defer, from, Observable, of } from 'rxjs';
@@ -548,6 +549,10 @@ export class DashboardDerivedMetricsService {
       && status !== 'processing'
     ) {
       return 'missing';
+    }
+
+    if (status === 'ready' && !hasCurrentIntensityPolicy(metricKind, this.resolveSnapshotPayload(snapshot))) {
+      return 'stale';
     }
 
     const schemaVersion = this.toFiniteNumber(snapshot?.schemaVersion);

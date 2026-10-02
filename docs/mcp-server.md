@@ -1671,6 +1671,8 @@ redaction and strict validation:
 
 - `form` strips the internal Form payload version and exact per-day activity counts used by the owner-only Training
   impact recap. Its frozen public daily rows remain exactly `{dayMs, load}`.
+- `intensity_distribution`, `easy_percent`, and `hard_percent` reconstruct their exact existing public fields, omitting
+  internal intensity-policy and weekly coverage metadata. The summary and Best Build projections also omit that policy.
 - `training_summary` and `training_build_comparison` retain only Running, Cycling, and Swimming and reconstruct their
   exact registered window objects, so internal `contexts`, profile IDs, and profile metrics cannot leak.
 - `training_explanation` retains those three named families, folds Rowing, Walking & Hiking, Nordic Skiing, Strength,
@@ -1678,6 +1680,20 @@ redaction and strict validation:
   for the registered three.
 - `training_durability` retains its existing Running, Cycling, Pool, and Open-water scopes. Its workspace-only exact
   supporting-workout start time is reduced to the existing UTC `startDayMs` public field.
+
+Intensity uses existing recorded QS zone durations with approximate source-specific groups: HR Easy Z1–Z2, Moderate Z3,
+Hard Z4–Z5; power Easy Z1–Z2, Moderate Z3–Z4, Hard Z5–Z7. Auto selects power per joined child activity when its valid zone
+time is positive, otherwise HR; unusable activities contribute no intensity time. Weekly totals retain each multisport
+segment's source. The existing public weekly `source` enum indicates the dominant activity source (power on ties), while
+mixed weeks can include both sources. No source selector, thresholds, or zone-model detection is introduced.
+
+The five affected snapshots require private `intensityPolicyVersion` 1 through the existing ensure/queue lifecycle.
+Old snapshots and Best Build workout-cache seeds rebuild; unrelated kinds keep their versions. Public tool names,
+scopes, payload schemas, and wire version remain unchanged. Runtime metric descriptions explain the new grouping.
+Catalog availability checks project only the private policy field alongside ordinary snapshot metadata; old ready
+policies report `stale`, and no internal field is returned.
+The bundled Training and cross-domain workflows already discover these descriptions and require ready snapshots;
+their advertised guidance needs no change or plugin rebuild for this correction.
 
 The same projection protects the compact briefing and daily report Training summary. Negative fixtures include all
 all ten internal groups, general/gravity/rowing contexts, the internal maximum-jump and stroke-rate profile metrics, and

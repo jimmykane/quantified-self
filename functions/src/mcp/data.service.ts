@@ -1,3 +1,4 @@
+import { hasCurrentIntensityPolicy } from '../../../shared/intensity-zones';
 import { readinessHrvObservations, buildReadinessEvaluation as buildCurrentReadinessEvaluation,
   calculateReadinessScore as calculateCurrentReadinessScore, READINESS_SLEEP_LOOKBACK_MS as CURRENT_READINESS_LOOKBACK_MS,
   type ReadinessEvaluation as CurrentReadinessEvaluation } from '../../../shared/readiness';
@@ -78,6 +79,8 @@ import {
   DERIVED_METRICS_ENTRY_TYPES,
   DerivedFormDailyLoadEntry,
   DerivedFormNowMetricPayload,
+  DerivedEasyPercentMetricPayload,
+  DerivedIntensityDistributionMetricPayload,
   DerivedBodyWeightTrendMetricPayload,
   DerivedMetricKind,
   DerivedRampRateMetricPayload,
@@ -832,6 +835,7 @@ const defaultDependencies: McpDataServiceDependencies = {
         'schemaVersion',
         'updatedAtMs',
         'sourceEventCount',
+        'payload.intensityPolicyVersion',
       )
       .get();
     return snapshot.docs.map(doc => ({
@@ -3591,6 +3595,20 @@ export function projectDerivedMetricPayloadForMcp(
 ): unknown {
   try {
     switch (metricKind) {
+      case DERIVED_METRIC_KINDS.IntensityDistribution: {
+        const source = payload as Partial<DerivedIntensityDistributionMetricPayload>;
+        return { dayBoundary: source.dayBoundary,
+          weeks: source.weeks?.map(week => ({ weekStartMs: week.weekStartMs, easySeconds: week.easySeconds,
+            moderateSeconds: week.moderateSeconds, hardSeconds: week.hardSeconds, source: week.source })),
+          latestWeekStartMs: source.latestWeekStartMs, latestEasyPercent: source.latestEasyPercent,
+          latestModeratePercent: source.latestModeratePercent, latestHardPercent: source.latestHardPercent };
+      }
+      case DERIVED_METRIC_KINDS.EasyPercent:
+      case DERIVED_METRIC_KINDS.HardPercent: {
+        const source = payload as Partial<DerivedEasyPercentMetricPayload>;
+        return { dayBoundary: source.dayBoundary, latestWeekStartMs: source.latestWeekStartMs,
+          value: source.value, trend8Weeks: source.trend8Weeks?.map(point => ({ weekStartMs: point.weekStartMs, value: point.value })) };
+      }
       case DERIVED_METRIC_KINDS.Form:
         return projectFormForMcp(payload);
       case DERIVED_METRIC_KINDS.TrainingReadiness: {
@@ -3625,6 +3643,9 @@ export function projectDerivedMetricPayloadForMcp(
 }
 
 const MCP_PROJECTED_TRAINING_METRIC_KINDS = new Set<DerivedMetricKind>([
+  DERIVED_METRIC_KINDS.IntensityDistribution,
+  DERIVED_METRIC_KINDS.EasyPercent,
+  DERIVED_METRIC_KINDS.HardPercent,
   DERIVED_METRIC_KINDS.Form,
   DERIVED_METRIC_KINDS.TrainingReadiness,
   DERIVED_METRIC_KINDS.TrainingSummary,
@@ -3636,7 +3657,7 @@ const MCP_PROJECTED_TRAINING_METRIC_KINDS = new Set<DerivedMetricKind>([
 ]);
 
 function parseMcpTrainingMetricPayload(metricKind: DerivedMetricKind, payload: unknown): unknown | null {
-  if (payload === null || payload === undefined) {
+  if (!hasCurrentIntensityPolicy(metricKind, payload) || payload === null || payload === undefined) {
     return null;
   }
   const projectedPayload = MCP_PROJECTED_TRAINING_METRIC_KINDS.has(metricKind)
@@ -4329,6 +4350,7 @@ function projectDailyTrainingSummary(
     || snapshot.status !== 'ready'
     || snapshot.payload == null
     || schemaVersion !== DERIVED_METRIC_SCHEMA_VERSION
+    || !hasCurrentIntensityPolicy(DERIVED_METRIC_KINDS.TrainingSummary, snapshot.payload)
   ) {
     return unavailableDailyTrainingSummary('not_ready');
   }
@@ -6396,6 +6418,8 @@ export function createMcpDataService(
           || snapshotMetricKind !== descriptor.metricKind
         ) {
           status = 'schema_mismatch';
+        } else if (rawStatus === 'ready' && !hasCurrentIntensityPolicy(descriptor.metricKind, snapshot.payload)) {
+          status = 'stale';
         } else if (
           rawStatus === 'ready'
           || rawStatus === 'building'

@@ -8,6 +8,7 @@ import type {
   DerivedFormPlus7dMetricPayload,
   DerivedHardPercentMetricPayload,
   DerivedIntensityDistributionMetricPayload,
+  DerivedIntensityDistributionCoverage,
   DerivedMonotonyStrainMetricPayload,
   DerivedRampRateMetricPayload,
   DerivedTrainingCapacityDiscipline,
@@ -155,6 +156,7 @@ export interface DashboardIntensityDistributionWeek {
 
 export interface DashboardIntensityDistributionContext {
   weeks: DashboardIntensityDistributionWeek[];
+  coverageWeeks?: DerivedIntensityDistributionCoverage[];
   latestWeekStartMs: number | null;
   latestEasyPercent: number | null;
   latestModeratePercent: number | null;
@@ -1394,6 +1396,12 @@ export function resolveDashboardIntensityDistributionContext(payload: unknown): 
 
   return {
     weeks,
+    coverageWeeks: (Array.isArray(normalized.coverageWeeks) ? normalized.coverageWeeks : []).filter(coverage =>
+      !!coverage && Number.isFinite(coverage.weekStartMs)
+      && [coverage.powerActivityCount, coverage.heartRateActivityCount, coverage.excludedActivityCount]
+        .every(count => Number.isInteger(count) && count >= 0)
+      && [coverage.powerZoneSeconds, coverage.heartRateZoneSeconds]
+        .every(seconds => Number.isFinite(seconds) && seconds >= 0)),
     latestWeekStartMs: toFiniteNumber(normalized.latestWeekStartMs),
     latestEasyPercent: toFiniteNumber(normalized.latestEasyPercent),
     latestModeratePercent: toFiniteNumber(normalized.latestModeratePercent),

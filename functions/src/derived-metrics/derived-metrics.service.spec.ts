@@ -607,7 +607,7 @@ describe('resolveDerivedMetricSourceRequirements', () => {
         ).toEqual({
             needsFormDocs: true,
             needsRecoveryNowDocs: false,
-            needsTrainingActivityDocs: false,
+            needsTrainingActivityDocs: true,
             needsTrainingSwimLengths: false,
             needsTrainingBuildBenchmarkSettings: false,
             needsTrainingBuildSleepDocs: false,
@@ -5297,6 +5297,10 @@ describe('writeDerivedMetricSnapshotsReady', () => {
             ],
             {
                 formDocs: formDocs as any,
+                trainingActivities: buildTrainingActivitySources(formDocs.map((doc, index) => ({
+                    id: `source-${index}`,
+                    data: () => ({ ...doc.data(), stats: { ...doc.data().stats, [DataActivityTypes.type]: [ActivityTypes.Running] } }),
+                }))),
                 recoveryNowDocs: [] as any,
             },
             {
@@ -5517,6 +5521,31 @@ describe('writeDerivedMetricSnapshotsReady', () => {
         expect((findPersistedPayload(DERIVED_METRIC_KINDS.EfficiencyDelta4w).payload as Record<string, unknown>).deltaAbs).toBeNull();
     });
 
+    it('writes the five corrected intensity snapshots as current and publicly readable', async () => {
+        const { writeDerivedMetricSnapshotsReady } = await import('./derived-metrics.service');
+        const { isMcpTrainingMetricPayloadReadable } = await import('../mcp/data.service');
+        vi.useFakeTimers();
+        vi.setSystemTime(Date.UTC(2026, 5, 30, 12));
+        const formDocs = [buildEventDoc({ startDate: Date.UTC(2026, 5, 29, 8), stats: {
+            [DataDuration.type]: 1500, [DataActivityTypes.type]: [ActivityTypes.Running],
+            [DataHeartRateZoneOneDuration.type]: 100, [DataHeartRateZoneTwoDuration.type]: 200,
+            [DataHeartRateZoneThreeDuration.type]: 300, [DataHeartRateZoneFourDuration.type]: 400,
+            [DataHeartRateZoneFiveDuration.type]: 500,
+        } })];
+        const kinds = [DERIVED_METRIC_KINDS.IntensityDistribution, DERIVED_METRIC_KINDS.EasyPercent,
+            DERIVED_METRIC_KINDS.HardPercent, DERIVED_METRIC_KINDS.TrainingSummary, DERIVED_METRIC_KINDS.TrainingBuildComparison];
+        await writeDerivedMetricSnapshotsReady('user-1', kinds, {
+            formDocs, trainingActivities: buildTrainingActivitySources(formDocs),
+        }, { builtFromEventMutationVersion: 42 });
+        for (const kind of kinds) {
+            const snapshot = findPersistedPayload(kind);
+            expect(snapshot.payload).toMatchObject({ intensityPolicyVersion: 1 });
+            expect(isMcpTrainingMetricPayloadReadable(kind, snapshot.payload)).toBe(true);
+        }
+        expect(findPersistedPayload(DERIVED_METRIC_KINDS.EasyPercent).payload).toMatchObject({ value: 20 });
+        expect(findPersistedPayload(DERIVED_METRIC_KINDS.HardPercent).payload).toMatchObject({ value: 60 });
+    });
+
     it('excludes benchmark merges but includes multi merges in derived calculations', async () => {
         const { writeDerivedMetricSnapshotsReady } = await import('./derived-metrics.service');
         vi.useFakeTimers();
@@ -5597,5 +5626,68 @@ describe('writeDerivedMetricSnapshotsReady', () => {
         expect(recoveryPayload.totalSeconds).toBe(5_000);
         expect(recoveryPayload.latestWorkoutSeconds).toBe(1_000);
         expect((recoveryPayload.segments as unknown[]).length).toBe(2);
+    });
+});
+
+
+describe('source-specific intensity grouping', () => {
+    const startDate = Date.UTC(2026, 5, 29, 8);
+    const hrStats = {
+        [DataHeartRateZoneOneDuration.type]: 100, [DataHeartRateZoneTwoDuration.type]: 200,
+        [DataHeartRateZoneThreeDuration.type]: 300, [DataHeartRateZoneFourDuration.type]: 400,
+        [DataHeartRateZoneFiveDuration.type]: 500,
+    };
+    it('retains both sources in a multisport event and counts its parent once', async () => {
+        const { joinTrainingActivitySources, buildIntensityDistributionMetricPayload } = await import('./derived-metrics.service');
+        const events = [
+            { id: 'multi', data: () => ({ startDate, isMerge: true, mergeType: 'multi' }) },
+            { id: 'benchmark', data: () => ({ startDate, isMerge: true, mergeType: 'benchmark' }) },
+        ];
+        const activity = (id: string, stats: Record<string, unknown>, eventID = 'multi', start = startDate) => ({
+            id, data: () => ({ startDate: start, type: ActivityTypes.Running, eventID, stats }),
+        });
+        const activities = joinTrainingActivitySources([
+            activity('power', { ...hrStats, [DataPowerZoneOneDuration.type]: 10,
+                [DataPowerZoneFourDuration.type]: 40, [DataPowerZoneFiveDuration.type]: 50 }),
+            activity('hr', hrStats), activity('missing', { [DataPowerZoneOneDuration.type]: -1 }),
+            activity('excluded-only-week', {}, 'multi', startDate + 7 * 86400000),
+            activity('benchmark-child', hrStats, 'benchmark'), activity('orphan', hrStats, 'missing-parent'),
+        ], events);
+        const result = buildIntensityDistributionMetricPayload(activities);
+        expect(result.sourceEventCount).toBe(1);
+        expect(result.payload.intensityPolicyVersion).toBe(1);
+        expect(result.payload.weeks).toEqual([{
+            weekStartMs: Date.UTC(2026, 5, 29), easySeconds: 310, moderateSeconds: 340,
+            hardSeconds: 950, source: 'power',
+        }]);
+        expect(result.payload.coverageWeeks).toEqual([
+            { weekStartMs: Date.UTC(2026, 5, 29), powerActivityCount: 1, heartRateActivityCount: 1,
+                excludedActivityCount: 1, powerZoneSeconds: 100, heartRateZoneSeconds: 1500 },
+            { weekStartMs: Date.UTC(2026, 6, 6), powerActivityCount: 0, heartRateActivityCount: 0,
+                excludedActivityCount: 1, powerZoneSeconds: 0, heartRateZoneSeconds: 0 },
+        ]);
+        expect(result.payload.latestEasyPercent).toBe(19.38);
+        expect(result.payload.latestModeratePercent).toBe(21.25);
+        expect(result.payload.latestHardPercent).toBe(59.38);
+        expect(buildIntensityDistributionMetricPayload([]).payload.latestHardPercent).toBeNull();
+    });
+    it('uses the same HR grouping for weekly distribution, Training Mix and both build windows', async () => {
+        const { buildIntensityDistributionMetricPayload, buildTrainingSummaryMetricPayload,
+            buildTrainingBuildComparisonMetricPayload } = await import('./derived-metrics.service');
+        const activities = buildTrainingActivitySources([startDate, Date.UTC(2026, 0, 30)].map((start, index) => ({
+            id: `event-${index}`, data: () => ({ startDate: start,
+                stats: { ...hrStats, [DataActivityTypes.type]: [ActivityTypes.Running], [DataDuration.type]: 1500 } }),
+        })));
+        const nowMs = Date.UTC(2026, 5, 30, 12);
+        const weekly = buildIntensityDistributionMetricPayload(activities).payload.weeks.at(-1);
+        const mix = buildTrainingSummaryMetricPayload(activities, nowMs).payload.disciplines.find(d => d.discipline === 'running');
+        const build = buildTrainingBuildComparisonMetricPayload(activities, { trainingSettings: { buildBenchmarks: {
+            running: { mode: 'period', durationWeeks: 8, endDayMs: Date.UTC(2026, 2, 10) },
+        } } }, nowMs).payload.disciplines.find(d => d.discipline === 'running');
+        const expected = { easySeconds: 300, moderateSeconds: 300, hardSeconds: 900 };
+        expect(weekly).toMatchObject(expected);
+        expect(mix?.current28d).toMatchObject(expected);
+        expect(build?.current).toMatchObject(expected);
+        expect(build?.benchmark).toMatchObject(expected);
     });
 });

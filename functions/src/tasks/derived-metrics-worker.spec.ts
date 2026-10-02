@@ -503,7 +503,39 @@ describe('processDerivedMetricsTask', () => {
         );
     });
 
-    it('retains unclassified activities only when Training Explanation needs them', async () => {
+    it.each([
+        DERIVED_METRIC_KINDS.IntensityDistribution,
+        DERIVED_METRIC_KINDS.EasyPercent,
+        DERIVED_METRIC_KINDS.HardPercent,
+    ])('retains unclassified activities when refreshing only %s', async metricKind => {
+        const actual = await vi.importActual<typeof import('../derived-metrics/derived-metrics.service')>(
+            '../derived-metrics/derived-metrics.service',
+        );
+        hoisted.startDerivedMetricsProcessing.mockResolvedValueOnce({
+            dirtyMetricKinds: [metricKind], startedAtMs: Date.now(), eventMutationVersion: 13,
+        });
+        const startDate = new Date('2026-01-01T10:00:00Z');
+        hoisted.fetchDerivedMetricsEventDocs.mockResolvedValueOnce([
+            { id: 'event', data: () => ({ startDate }) },
+        ]);
+        hoisted.fetchDerivedMetricsActivityDocs.mockResolvedValueOnce([
+            { id: 'unclassified', data: () => ({ eventID: 'event', startDate, type: 'unknown-zone-sport' }) },
+        ]);
+        hoisted.joinTrainingActivitySources.mockImplementationOnce(actual.joinTrainingActivitySources);
+
+        await (processDerivedMetricsTask as unknown as (
+            request: { data: { uid: string; generation: number } },
+        ) => Promise<void>)({ data: { uid: 'intensity-owner', generation: 93 } });
+
+        expect(hoisted.writeDerivedMetricSnapshotsReady).toHaveBeenCalledWith(
+            'intensity-owner', [metricKind], expect.objectContaining({
+                trainingActivities: [expect.objectContaining({ activityId: 'unclassified', discipline: null })],
+            }), expect.anything(),
+        );
+        expect(hoisted.fetchDerivedFormSnapshotSeed).not.toHaveBeenCalled();
+    });
+
+    it('retains unclassified activities when Training Explanation needs them', async () => {
         hoisted.startDerivedMetricsProcessing.mockResolvedValueOnce({
             dirtyMetricKinds: [DERIVED_METRIC_KINDS.TrainingExplanation],
             startedAtMs: Date.now(),
@@ -596,7 +628,7 @@ describe('processDerivedMetricsTask', () => {
         );
     });
 
-    it('queries full event docs for new KPI derived kinds', async () => {
+    it('queries parent events and child activities for intensity KPI derived kinds', async () => {
         hoisted.startDerivedMetricsProcessing.mockResolvedValueOnce({
             dirtyMetricKinds: [DERIVED_METRIC_KINDS.FormNow, DERIVED_METRIC_KINDS.EasyPercent],
             startedAtMs: Date.now(),
@@ -612,13 +644,15 @@ describe('processDerivedMetricsTask', () => {
         });
 
         expect(hoisted.fetchDerivedMetricsEventDocs).toHaveBeenCalledWith('user-3');
+        expect(hoisted.fetchDerivedMetricsActivityDocs).toHaveBeenCalledWith('user-3', { includeSwimLengths: false });
         expect(hoisted.writeDerivedMetricSnapshotsReady).toHaveBeenCalledWith('user-3', [
             DERIVED_METRIC_KINDS.FormNow,
             DERIVED_METRIC_KINDS.EasyPercent,
         ], {
             formDocs: [{ id: 'kpi-doc' }],
             recoveryNowDocs: [],
-            trainingActivityDocs: [],
+            trainingActivityDocs: [{ id: 'activity-doc' }],
+            trainingActivities: [{ activityId: 'joined-activity' }],
         }, {
             buildAtMs: expect.any(Number),
             builtFromEventMutationVersion: 13,

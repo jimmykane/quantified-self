@@ -231,10 +231,12 @@ function resolveMetricRows(
     case DASHBOARD_EASY_PERCENT_KPI_CHART_TYPE:
       return [
         metricRow('Easy share', inputs.easyPercent?.value, formatMetricValue, { suffix: '%' }),
+        textRow('Approximate grouping', 'HR and power: Z1–Z2'),
       ].filter(isExplanationRow);
     case DASHBOARD_HARD_PERCENT_KPI_CHART_TYPE:
       return [
         metricRow('Hard share', inputs.hardPercent?.value, formatMetricValue, { suffix: '%' }),
+        textRow('Approximate grouping', 'HR: Z4–Z5; power: Z5–Z7'),
       ].filter(isExplanationRow);
     case DASHBOARD_EFFICIENCY_DELTA_4W_KPI_CHART_TYPE:
       return [
@@ -338,6 +340,10 @@ function resolveLatestDayMs(inputs: DashboardKpiExplanationInputs): number | nul
 
 function resolveIntensitySourceLabel(context: DashboardIntensityDistributionContext | null | undefined): string {
   const latestWeekStartMs = toFiniteNumber(context?.latestWeekStartMs);
+  const coverage = context?.coverageWeeks?.find(week => week.weekStartMs === latestWeekStartMs);
+  if (coverage && coverage.powerActivityCount > 0 && coverage.heartRateActivityCount > 0) {
+    return 'Power and heart-rate zones';
+  }
   const latestWeek = latestWeekStartMs === null
     ? null
     : (context?.weeks || []).find(week => toFiniteNumber(week.weekStartMs) === latestWeekStartMs);

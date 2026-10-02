@@ -1,3 +1,4 @@
+import { hasCurrentIntensityPolicy } from '../../../shared/intensity-zones';
 import { createHash } from 'node:crypto';
 import {
     DERIVED_METRIC_KINDS, DERIVED_METRIC_SCHEMA_VERSION,
@@ -92,6 +93,7 @@ export function resolveTrainingBuildWorkoutSeed(
         || !Number.isFinite(metadata.builtAtMs) || metadata.builtAtMs > context.nowMs
         || !Number.isFinite(metadata.validUntilMs) || metadata.validUntilMs <= context.nowMs
         || metadata.validUntilMs > Math.floor(metadata.builtAtMs / DAY_MS) * DAY_MS + DAY_MS
+        || !hasCurrentIntensityPolicy(DERIVED_METRIC_KINDS.TrainingBuildComparison, payload)
         || !payload || payload.dayBoundary !== 'UTC' || payload.excludesMergedEvents !== true
         || payload.asOfDayMs !== Math.floor(context.nowMs / DAY_MS) * DAY_MS
         || !Array.isArray(payload.disciplines) || payload.disciplines.length !== TRAINING_DISCIPLINES.length

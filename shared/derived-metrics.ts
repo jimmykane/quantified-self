@@ -249,6 +249,8 @@ export interface DerivedFormPlus7dMetricPayload {
 }
 
 export interface DerivedEasyPercentMetricPayload {
+  /** Internal calculation version; omitted from MCP projections. */
+  intensityPolicyVersion?: number;
   dayBoundary: 'UTC';
   latestWeekStartMs: number | null;
   value: number | null;
@@ -256,6 +258,8 @@ export interface DerivedEasyPercentMetricPayload {
 }
 
 export interface DerivedHardPercentMetricPayload {
+  /** Internal calculation version; omitted from MCP projections. */
+  intensityPolicyVersion?: number;
   dayBoundary: 'UTC';
   latestWeekStartMs: number | null;
   value: number | null;
@@ -300,9 +304,22 @@ export interface DerivedIntensityDistributionWeek {
   source: DerivedIntensityDistributionSource;
 }
 
+export interface DerivedIntensityDistributionCoverage {
+  weekStartMs: number;
+  powerActivityCount: number;
+  heartRateActivityCount: number;
+  excludedActivityCount: number;
+  powerZoneSeconds: number;
+  heartRateZoneSeconds: number;
+}
+
 export interface DerivedIntensityDistributionMetricPayload {
+  /** Internal calculation version; omitted from MCP projections. */
+  intensityPolicyVersion?: number;
   dayBoundary: 'UTC';
   weeks: DerivedIntensityDistributionWeek[];
+  /** Internal app coverage; includes excluded-only weeks without adding intensity bars. */
+  coverageWeeks?: DerivedIntensityDistributionCoverage[];
   latestWeekStartMs: number | null;
   latestEasyPercent: number | null;
   latestModeratePercent: number | null;
@@ -481,6 +498,8 @@ export interface DerivedTrainingDisciplineSummary {
 }
 
 export interface DerivedTrainingSummaryMetricPayload {
+  /** Internal calculation version; omitted from MCP projections. */
+  intensityPolicyVersion?: number;
   dayBoundary: 'UTC';
   asOfDayMs: number;
   currentWindowDays: number;
@@ -974,6 +993,8 @@ export interface DerivedTrainingBuildDurabilityComparison {
 }
 
 export interface DerivedTrainingBuildComparisonMetricPayload {
+  /** Internal calculation version; omitted from MCP projections. */
+  intensityPolicyVersion?: number;
   recoveryVersion: number;
   dayBoundary: 'UTC';
   asOfDayMs: number;

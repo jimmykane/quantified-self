@@ -11,6 +11,8 @@ import {
   ViewChild,
 } from '@angular/core';
 import type { EChartsType } from 'echarts/core';
+import { DataDuration, type UserUnitSettingsInterface } from '@sports-alliance/sports-lib';
+import { formatUnitAwareDataValue } from '@shared/unit-aware-display';
 import {
   ECHARTS_CARTESIAN_IMMEDIATE_UPDATE_SETTINGS,
   EChartsHostController,
@@ -58,6 +60,7 @@ type IntensityXAxisLabelMode = 'day-month' | 'month-year' | 'year';
 })
 export class ChartsIntensityDistributionComponent implements AfterViewInit, OnChanges, OnDestroy {
   @Input() darkTheme = false;
+  @Input() unitSettings: UserUnitSettingsInterface | null | undefined = null;
   @Input() isLoading = false;
   @Input() distribution?: DashboardIntensityDistributionContext | null;
   @Input() status?: DashboardDerivedMetricStatus | null;
@@ -119,7 +122,7 @@ export class ChartsIntensityDistributionComponent implements AfterViewInit, OnCh
       this.updateHeaderAndErrorState();
       return;
     }
-    if (changes.darkTheme || changes.isLoading || changes.distribution || changes.status
+    if (changes.darkTheme || changes.unitSettings || changes.isLoading || changes.distribution || changes.status
       || changes.showMobileAxisPointerHandle || changes.weekContextTextOverride) {
       void this.refreshChart();
     }
@@ -236,7 +239,8 @@ export class ChartsIntensityDistributionComponent implements AfterViewInit, OnCh
         triggerOn: resolveEChartsTooltipTriggerOn(true, isMobileTooltipViewport),
         axisPointer: { type: 'shadow' },
         renderMode: 'html',
-        ...resolveEChartsTooltipSurfaceConfig(isMobileTooltipViewport),
+        // Coverage can exceed compact plot height; use the shared viewport host on phones too.
+        ...resolveEChartsTooltipSurfaceConfig(false),
         ...buildDashboardEChartsTooltipChrome(style),
         formatter: (params: Array<{ axisValue?: string | number; seriesName?: string; value?: number }>) => {
           if (!Array.isArray(params) || params.length === 0) {
@@ -256,6 +260,24 @@ export class ChartsIntensityDistributionComponent implements AfterViewInit, OnCh
                 : { label: 'Value', value: valueText };
             })
             .filter((row) => row.value.trim().length > 0);
+          const coverage = this.distribution?.coverageWeeks?.find(candidate => candidate.weekStartMs === week?.weekStartMs);
+          if (coverage) {
+            rows.push({
+              label: 'Zone sources',
+              value: coverage.powerActivityCount > 0 && coverage.heartRateActivityCount > 0
+                ? 'Power and heart rate'
+                : coverage.powerActivityCount > 0 ? 'Power' : 'Heart rate',
+            });
+            for (const [label, count, seconds] of [
+              ['Power', coverage.powerActivityCount, coverage.powerZoneSeconds],
+              ['Heart rate', coverage.heartRateActivityCount, coverage.heartRateZoneSeconds],
+            ] as const) {
+              if (count > 0) {
+                rows.push({ label, value: `${count} ${count === 1 ? 'activity' : 'activities'} · ${this.formatZoneDuration(seconds)}` });
+              }
+            }
+            rows.push({ label: 'Without usable zones', value: `${coverage.excludedActivityCount} ${coverage.excludedActivityCount === 1 ? 'activity' : 'activities'}` });
+          }
           return renderDashboardEChartsTooltipCard(style, {
             title: axisHeading,
             rows,
@@ -338,15 +360,9 @@ export class ChartsIntensityDistributionComponent implements AfterViewInit, OnCh
       return '--';
     }
 
-    const seconds = Math.max(0, Number(value));
-    if (seconds < 60) {
-      return seconds === 0 ? '0m' : `${Math.round(seconds)}s`;
-    }
-
-    const totalMinutes = Math.round(seconds / 60);
-    const hours = Math.floor(totalMinutes / 60);
-    const minutes = totalMinutes % 60;
-    return hours > 0 ? `${hours}h ${minutes.toString().padStart(2, '0')}m` : `${minutes}m`;
+    return formatUnitAwareDataValue(DataDuration.type, Math.max(0, Number(value)), this.unitSettings, {
+      compactDuration: true,
+    }) ?? '--';
   }
 
   private formatZoneDurationWithPercent(value: unknown, totalSeconds: number): string {

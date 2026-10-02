@@ -133,6 +133,15 @@ describe('dashboard-derived-metrics.helper', () => {
     expect(efficiency?.latestValue).toBe(1.92);
   });
 
+  it('retains valid coverage and rejects malformed metadata without creating intensity bars', () => {
+    const coverage = { weekStartMs: 1, powerActivityCount: 0, heartRateActivityCount: 0,
+      excludedActivityCount: 2, powerZoneSeconds: 0, heartRateZoneSeconds: 0 };
+    expect(resolveDashboardIntensityDistributionContext({ weeks: [], coverageWeeks: [coverage, null,
+      { ...coverage, powerActivityCount: -1 }, { ...coverage, heartRateZoneSeconds: NaN }] }))
+      .toMatchObject({ weeks: [], coverageWeeks: [coverage] });
+    expect(resolveDashboardIntensityDistributionContext({ weeks: [], coverageWeeks: {} })?.coverageWeeks).toEqual([]);
+  });
+
   it('normalizes readiness and execution KPI payload contexts', () => {
     const formNow = resolveDashboardFormNowContext({
       latestDayMs: Date.UTC(2026, 0, 10),
