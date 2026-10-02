@@ -1,3 +1,4 @@
+@use '@angular/material' as mat;
 @use '../../../styles/breakpoints' as bp;
 
 :host {
@@ -145,10 +146,18 @@ app-summary-primary-info {
 }
 
 .event-tags-button {
+  @include mat.button-overrides((
+    text-container-height: 32px,
+    text-container-shape: 6px,
+    text-horizontal-padding: 8px,
+    text-with-icon-horizontal-padding: 8px,
+    text-touch-target-display: block,
+  ));
+
   justify-content: flex-start;
   min-width: 0;
   max-width: 100%;
-  min-height: 44px;
+  min-height: 32px;
   height: auto;
 }
 
