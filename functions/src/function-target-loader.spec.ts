@@ -6,7 +6,7 @@ import {
 } from './function-target-loader';
 
 describe('function target loader', () => {
-  it('optimizes the Suunto OAuth, marketing, event tag, and Training endpoints', () => {
+  it('optimizes the Suunto OAuth, marketing, and Training endpoints', () => {
     expect(OPTIMIZED_FUNCTION_TARGETS).toEqual([
       'getSuuntoAPIAuthRequestTokenRedirectURI',
       'requestAndSetSuuntoAPIAccessToken',
@@ -21,7 +21,6 @@ describe('function target loader', () => {
       'dispatchMarketingCampaigns',
       'trackMarketingDelivery',
       'marketingUnsubscribe',
-      'projectEventTagCatalog',
       'reconcileTrainingPlanCleanup',
       'reconcileTrainingWorkoutExpiry',
       'reconcileTrainingBulkShift',
