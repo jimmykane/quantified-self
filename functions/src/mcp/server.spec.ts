@@ -4,6 +4,7 @@ import { NodeStreamableHTTPServerTransport } from '@modelcontextprotocol/node';
 import { InMemoryTransport, McpServer } from '@modelcontextprotocol/server';
 import { Client, StreamableHTTPClientTransport } from '@modelcontextprotocol/client';
 import { z } from 'zod';
+import * as logger from 'firebase-functions/logger';
 import { DERIVED_METRIC_KINDS } from '../../../shared/derived-metrics';
 import { McpDataError } from './data.service';
 import {
@@ -578,6 +579,14 @@ describe('MCP HTTP scope enforcement', () => {
       proposalRef: 'opaque', permissionMode: 'combined',
     } } })).toEqual([MCP_OAUTH_SCOPES.TrainingPlansRead, MCP_OAUTH_SCOPES.TrainingPlansWrite,
       MCP_OAUTH_SCOPES.TrainingDeliveryWrite]);
+    for (const mode of ['schedule', 'delivery', 'combined']) {
+      expect(requiredScopesForRequest({ method: 'tools/call', params: { name: 'get_training_change_status',
+        arguments: { proposalRef: 'opaque', permissionMode: mode } } })).toEqual([
+        MCP_OAUTH_SCOPES.TrainingPlansRead,
+        ...(mode !== 'delivery' ? [MCP_OAUTH_SCOPES.TrainingPlansWrite] : []),
+        ...(mode !== 'schedule' ? [MCP_OAUTH_SCOPES.TrainingDeliveryWrite] : []),
+      ]);
+    }
   });
 
   it('advertises live readiness drivers and the daily health and Training report', async () => {
@@ -911,6 +920,7 @@ describe('MCP HTTP scope enforcement', () => {
       'get_planned_workout_v2',
       'get_saved_workout',
       'get_strength_workout_details',
+      'get_training_change_status',
       'get_training_plan',
       'get_training_sync_status',
       'list_activity_types',
@@ -1084,6 +1094,124 @@ describe('MCP HTTP scope enforcement', () => {
     } finally {
       await client.close();
     }
+  });
+
+  it.each(['legacy', '2026-07-28'] as const)(
+    'recovers an accepted Training result after HTTP response loss on %s without calling apply again', async protocol => {
+      const proposalRef = 'opaque-proposal-reference';
+      const applied = { proposalRef, status: 'applied' as const, scheduleRevision: 2,
+        changes: [{ index: 0, kind: 'create-workout', status: 'applied' as const, message: 'Created.' }],
+        providers: [], createdReferences: [{ localKey: 'run', kind: 'workout' as const, reference: 'opaque-workout' }] };
+      let receipt: typeof applied | null = null;
+      const applyTrainingChanges = vi.fn(async () => { receipt = applied; return applied; });
+      const getTrainingChangeStatus = vi.fn(async () => ({ proposalRef, state: receipt ? 'applied' : 'not_started',
+        recordedChangeCount: receipt ? 1 : 0, recordedProviderCount: 0, retryAfterSeconds: null, result: receipt }));
+      const auth = { uid: 'user-1', clientId: 'https://client.example/mcp.json', connectionId: 'connection-1',
+        scopes: [MCP_OAUTH_SCOPES.TrainingPlansRead, MCP_OAUTH_SCOPES.TrainingPlansWrite] };
+      const server = createMcpTransportHandler(() => createMcpServer(auth, 'https://quantified-self.io', {
+        applyTrainingChanges, getTrainingChangeStatus,
+      } as unknown as NonNullable<Parameters<typeof createMcpServer>[2]>), error => { throw error; });
+      const transport = new StreamableHTTPClientTransport(new URL('https://contract.example/mcp'), {
+        fetch: async (url, init) => {
+          const request = new Request(url, init);
+          const body = request.method === 'POST' ? await request.clone().json() : null;
+          const response = await server.fetch(request);
+          if (body?.params?.name === 'apply_training_changes') {
+            expect(response.status).toBe(200);
+            throw new Error('synthetic reply lost after successful server response');
+          }
+          return response;
+        },
+      });
+      const client = new Client({ name: 'training-lost-response-client', version: '1.0.0' }, {
+        versionNegotiation: { mode: protocol === 'legacy' ? 'legacy' : { pin: protocol } },
+      });
+      try {
+        await client.connect(transport);
+        const statusTool = (await client.listTools()).tools.find(tool => tool.name === 'get_training_change_status');
+        expect(statusTool?.annotations).toEqual({ readOnlyHint: true, destructiveHint: false,
+          idempotentHint: true, openWorldHint: false });
+        const args = { proposalRef, permissionMode: 'schedule' };
+        await expect(client.callTool({ name: 'apply_training_changes', arguments: args })).rejects.toThrow('reply lost');
+        const recovered = await client.callTool({ name: 'get_training_change_status', arguments: args });
+        expect(recovered.isError).not.toBe(true);
+        expect(recovered.structuredContent).toMatchObject({ state: 'applied', result: applied });
+        expect(recovered.content).toEqual([{ type: 'text', text: JSON.stringify(recovered.structuredContent) }]);
+        expect(applyTrainingChanges).toHaveBeenCalledTimes(1);
+        expect(getTrainingChangeStatus).toHaveBeenCalledWith({ arguments: args, ...{
+          uid: auth.uid, connectionId: auth.connectionId, scopes: auth.scopes,
+        } });
+      } finally { await client.close(); }
+    },
+  );
+
+  it('does not confuse a client deadline with an unapplied Training change', async () => {
+    const proposalRef = 'opaque-proposal-reference';
+    let release!: () => void;
+    const gate = new Promise<void>(resolve => { release = resolve; });
+    let started!: () => void;
+    const entered = new Promise<void>(resolve => { started = resolve; });
+    let completed!: () => void;
+    const finished = new Promise<void>(resolve => { completed = resolve; });
+    const applied = { proposalRef, status: 'applied' as const, scheduleRevision: 2,
+      changes: [], providers: [], createdReferences: [] };
+    let receipt: typeof applied | null = null;
+    const applyTrainingChanges = vi.fn(async () => {
+      started(); await gate; receipt = applied; completed(); return applied;
+    });
+    const getTrainingChangeStatus = vi.fn(async () => ({ proposalRef, state: receipt ? 'applied' : 'applying',
+      recordedChangeCount: 0, recordedProviderCount: 0, retryAfterSeconds: receipt ? null : 1, result: receipt }));
+    const auth = { uid: 'user-1', clientId: 'https://client.example/mcp.json', connectionId: 'connection-1',
+      scopes: [MCP_OAUTH_SCOPES.TrainingPlansRead, MCP_OAUTH_SCOPES.TrainingPlansWrite] };
+    const server = createMcpTransportHandler(() => createMcpServer(auth, 'https://quantified-self.io', {
+      applyTrainingChanges, getTrainingChangeStatus,
+    } as unknown as NonNullable<Parameters<typeof createMcpServer>[2]>), error => { throw error; });
+    const client = new Client({ name: 'training-client-deadline', version: '1.0.0' }, {
+      versionNegotiation: { mode: { pin: '2026-07-28' } },
+    });
+    try {
+      await client.connect(new StreamableHTTPClientTransport(new URL('https://contract.example/mcp'), {
+        fetch: (url, init) => server.fetch(new Request(url, init)),
+      }));
+      await client.listTools();
+      const args = { proposalRef, permissionMode: 'schedule' };
+      const attempt = expect(client.callTool({ name: 'apply_training_changes', arguments: args }, { timeout: 100 }))
+        .rejects.toThrow(/timed out/i);
+      await entered;
+      await attempt;
+      expect((await client.callTool({ name: 'get_training_change_status', arguments: args })).structuredContent)
+        .toMatchObject({ state: 'applying', result: null });
+      release(); await finished;
+      expect((await client.callTool({ name: 'get_training_change_status', arguments: args })).structuredContent)
+        .toMatchObject({ state: 'applied', result: applied });
+      expect(applyTrainingChanges).toHaveBeenCalledTimes(1);
+    } finally { release(); await client.close(); }
+  });
+
+  it('distinguishes Training operation and output failures without logging private values', async () => {
+    const applyTrainingChanges = vi.fn();
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+    const server = createMcpServer({ uid: 'user-1', clientId: 'https://client.example/mcp.json',
+      connectionId: 'connection-1', scopes: [MCP_OAUTH_SCOPES.TrainingPlansRead, MCP_OAUTH_SCOPES.TrainingPlansWrite] },
+    'https://quantified-self.io', { applyTrainingChanges } as unknown as NonNullable<Parameters<typeof createMcpServer>[2]>);
+    const client = new Client({ name: 'training-diagnostic-stages', version: '1.0.0' });
+    try {
+      await server.connect(serverTransport); await client.connect(clientTransport);
+      const args = { proposalRef: 'opaque-proposal-reference', permissionMode: 'schedule' };
+      for (const stage of ['operation', 'validation']) {
+        vi.mocked(logger.error).mockClear();
+        if (stage === 'operation') applyTrainingChanges.mockRejectedValue(new Error('PRIVATE-REPLY-CANARY'));
+        else applyTrainingChanges.mockResolvedValue({ proposalRef: args.proposalRef, status: 'applied',
+          scheduleRevision: 2, changes: [], providers: [], createdReferences: [], uid: 'PRIVATE-REPLY-CANARY' });
+        const result = await client.callTool({ name: 'apply_training_changes', arguments: args });
+        expect(result.isError).toBe(true);
+        expect(result).not.toHaveProperty('structuredContent');
+        expect(logger.error).toHaveBeenCalledWith('[MCP] Training change result failed',
+          expect.objectContaining({ toolName: 'apply_training_changes', stage }));
+        expect(JSON.stringify(result)).not.toContain('PRIVATE-REPLY-CANARY');
+        expect(JSON.stringify(vi.mocked(logger.error).mock.calls)).not.toContain('PRIVATE-REPLY-CANARY');
+      }
+    } finally { await client.close(); await server.close(); }
   });
 
   it('advertises bounded saved-route type and name filters', async () => {

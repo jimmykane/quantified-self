@@ -14,6 +14,16 @@ import {
 } from './policies.content';
 
 describe('help.content', () => {
+  it('explains uncertain MCP apply replies without authorizing replacement workouts or approval bypass', () => {
+    const copy = HELP_SECTIONS.find(section => section.id === 'training-plans')!.content;
+    expect(copy).toContain('it may already have applied');
+    expect(copy).toContain("check the original proposal's status before retrying");
+    expect(copy).toContain('released and discovered by your client');
+    expect(copy).toContain('Do not create replacement workouts');
+    expect(copy).toContain('replay a declined/cancelled approval elsewhere');
+    expect(copy).toContain("Any same-proposal retry must still use the client's approval controls");
+    expect(copy).toContain('even within the 25-change limit');
+  });
   it('explains bounded Suunto live screens, native sensors/units and watch-controlled boundary alerts', () => {
     const content = HELP_SECTIONS.find(section => section.id === 'training-plans')!.content;
     for (const phrase of ['## Suunto Guide screens and interval alerts', '**pace and HR**', '**power, HR and speed**',

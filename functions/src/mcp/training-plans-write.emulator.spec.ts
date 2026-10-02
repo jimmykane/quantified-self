@@ -22,7 +22,7 @@ import { encodeOpaqueValue } from './data.service';
 import { processTrainingBulkShift, reconcileTrainingBulkShifts } from '../training-plans/bulk-shift-worker';
 import { mutateTrainingScheduleForUser } from '../training-plans/persistence';
 import { BULK_SHIFT_LEASE_MS } from '../training-plans/staged-shift';
-import { applyTrainingChanges, previewCreatePlannedWorkout, previewTrainingChanges,
+import { applyTrainingChanges, getTrainingChangeStatus, previewCreatePlannedWorkout, previewTrainingChanges,
   previewStrengthWorkoutChange, previewPlannedWorkoutV2Change,
   type TrainingWriteDependencies } from './training-plans-write.service';
 import { TRAINING_DELIVERY_WRITE_SCOPE, TRAINING_PLANS_SCOPE, TRAINING_PLANS_WRITE_SCOPE } from './training-plans.schemas';
@@ -31,7 +31,6 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Training MCP write propos
   const host = process.env.FIRESTORE_EMULATOR_HOST;
   if (host && !/^(127\.0\.0\.1|localhost):\d+$/.test(host)) throw new Error('Loopback emulator required.');
   const db = new Firestore({ projectId: 'demo-mcp-training-writes' });
-  const users: string[] = [];
   const scopes = [TRAINING_PLANS_SCOPE, TRAINING_PLANS_WRITE_SCOPE, TRAINING_DELIVERY_WRITE_SCOPE];
   const structure = { version: 1 as const, sport: ActivityTypes.Running, nodes: [{ id: 'work', kind: 'step' as const,
     purpose: 'work' as const, ending: { kind: 'time' as const, seconds: 1800 }, targets: [] }] };
@@ -42,7 +41,6 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Training MCP write propos
 
   beforeEach(async () => {
     uid = `mcp-training-write-${randomUUID()}`;
-    users.push(uid);
     sequence = 0;
     transport = new FakeTrainingTransport();
     const runtime: DeliveryRuntime = {
@@ -61,9 +59,12 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Training MCP write propos
       grantId: 'grant-1', createdAtMs: 1, revokedAtMs: null });
   });
 
-  afterEach(() => { vi.unstubAllEnvs(); });
+  afterEach(async () => {
+    vi.unstubAllEnvs();
+    // Bound cleanup to this synthetic owner instead of accumulating large staged histories until teardown.
+    await db.recursiveDelete(db.collection('users').doc(uid));
+  }, 30_000);
   afterAll(async () => {
-    for (const id of users) await db.recursiveDelete(db.collection('users').doc(id));
     await db.terminate();
   });
 
@@ -73,6 +74,162 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Training MCP write propos
       { kind: 'provider-delivery', targetType: 'workout', target: { localKey: 'run' },
         providers: 'all_connected', action: 'send', timeZone: 'Europe/Helsinki' },
     ] } }, deps);
+
+  const statusInput = (proposalRef: string) => ({ uid, connectionId: 'connection', scopes,
+    arguments: { proposalRef, permissionMode: 'combined' } });
+
+  it('recovers a lost final response for all 25 changes without repeating source, intent or provider creates', async () => {
+    const wahoo = new WahooHttpFixture();
+    deps.runtime.transport = provider => provider === 'wahoo' ? new WahooTrainingTransport(wahoo.request, deps.now) : null;
+    const connection = deps.runtime.connection;
+    deps.runtime.connection = async (...args) => {
+      await new Promise(resolve => setTimeout(resolve, 5));
+      return connection(...args);
+    };
+    const creates = Array.from({ length: 13 }, (_, index) => ({ kind: 'create-workout', localKey: `run-${index}`,
+      plan: null, localDate: '2026-09-18', title: `Synthetic response-loss ${index}`, structure }));
+    const sends = Array.from({ length: 12 }, (_, index) => ({ kind: 'provider-delivery', targetType: 'workout',
+      target: { localKey: `run-${index}` }, providers: ['wahoo'], action: 'send', timeZone: 'Europe/Helsinki' }));
+    const preview = await previewTrainingChanges({ uid, connectionId: 'connection', scopes,
+      arguments: { expectedScheduleRevision: 1, changes: [...creates, ...sends] } }, deps);
+    const input = statusInput(preview.proposalRef);
+    const user = db.collection('users').doc(uid);
+    await expect(getTrainingChangeStatus(input, deps)).resolves.toMatchObject({ state: 'not_started', result: null });
+    let responseLost = false;
+    const interruptedDb = {
+      collection: (id: string) => db.collection(id), getAll: db.getAll.bind(db),
+      runTransaction: async (handler: (transaction: FirebaseFirestore.Transaction) => Promise<unknown>,
+        options?: FirebaseFirestore.ReadOnlyTransactionOptions) => {
+        const result = await db.runTransaction(handler, options);
+        if (options?.readOnly && !responseLost) {
+          responseLost = true;
+          throw new Error('synthetic post-commit response loss');
+        }
+        return result;
+      },
+    } as unknown as Firestore;
+    await expect(applyTrainingChanges(input, { ...deps, db: interruptedDb })).rejects.toThrow('post-commit response loss');
+    const recovered = await getTrainingChangeStatus(input, deps);
+    expect(recovered).toMatchObject({ state: 'applied', recordedChangeCount: 13, recordedProviderCount: 12,
+      retryAfterSeconds: null, result: { status: 'applied', changes: expect.any(Array), providers: expect.any(Array) } });
+    expect(recovered.result!.createdReferences).toHaveLength(13);
+    expect(JSON.stringify(recovered)).not.toMatch(/accessGeneration|destinationKey|scheduleRequests|leaseUntilMs|uid/);
+    const proposal = (await user.collection('trainingMcpProposals').get()).docs[0];
+    const beforeStatusRead = proposal.data();
+    await expect(getTrainingChangeStatus(input, deps)).resolves.toEqual(recovered);
+    expect((await proposal.ref.get()).data()).toEqual(beforeStatusRead);
+    await expect(applyTrainingChanges(input, deps)).resolves.toEqual(recovered.result);
+    expect((await user.collection('scheduledWorkouts').get()).size).toBe(13);
+    expect((await user.collection('trainingDeliverySettings').get()).size).toBe(12);
+    expect(wahoo.calls).toHaveLength(0); // Apply records intents; provider HTTP belongs to workers.
+    for (let page = 0; page < 20 && await reconcileTrainingDeliveryPage(deps.runtime, uid); page++) { /* drain */ }
+    const ledgers = (await user.collection('trainingDeliveryLedger').get()).docs;
+    expect(ledgers).toHaveLength(12);
+    for (const ledger of ledgers) {
+      await processTrainingDelivery(deps.runtime, uid, ledger.id);
+      await processTrainingDelivery(deps.runtime, uid, ledger.id);
+    }
+    expect(wahoo.calls.filter(call => call.method === 'POST')).toHaveLength(24);
+  }, 60_000);
+
+  it('reports independent partial acceptance without retrying a blocked destination', async () => {
+    const preview = await previewTrainingChanges({ uid, connectionId: 'connection', scopes,
+      arguments: { expectedScheduleRevision: 1, changes: [
+        { kind: 'create-workout', localKey: 'run', plan: null, localDate: '2026-09-18', title: 'Partial run', structure },
+        { kind: 'provider-delivery', targetType: 'workout', target: { localKey: 'run' },
+          providers: ['garmin', 'wahoo'], action: 'send', timeZone: 'Europe/Helsinki' },
+      ] } }, deps);
+    const input = statusInput(preview.proposalRef);
+    const result = await applyTrainingChanges(input, deps);
+    expect(result.status).toBe('partially_applied');
+    await expect(getTrainingChangeStatus(input, deps)).resolves.toMatchObject({ state: 'partially_applied', result });
+    expect((await db.collection('users').doc(uid).collection('trainingDeliverySettings').get()).size).toBe(1);
+  });
+
+  it('serializes concurrent apply attempts and lets status reads observe progress without taking the lease', async () => {
+    const preview = await previewCreateAndSend();
+    const input = statusInput(preview.proposalRef);
+    const connection = deps.runtime.connection;
+    let release!: () => void;
+    const gate = new Promise<void>(resolve => { release = resolve; });
+    let started!: () => void;
+    const entered = new Promise<void>(resolve => { started = resolve; });
+    deps.runtime.connection = async (...args) => { started(); await gate; return connection(...args); };
+    const first = applyTrainingChanges(input, deps);
+    try {
+      await entered;
+      await expect(getTrainingChangeStatus(input, deps)).resolves.toMatchObject({ state: 'applying',
+        recordedChangeCount: 1, recordedProviderCount: 0, result: null });
+      await expect(applyTrainingChanges(input, deps)).rejects.toThrow('already being applied');
+    } finally { release(); }
+    const result = await first;
+    await expect(getTrainingChangeStatus(input, deps)).resolves.toMatchObject({ state: 'applied', result });
+    await expect(applyTrainingChanges(input, deps)).resolves.toEqual(result);
+    const user = db.collection('users').doc(uid);
+    expect((await user.collection('scheduledWorkouts').get()).size).toBe(1);
+    expect((await user.collection('trainingDeliverySettings').get()).size).toBe(1);
+    expect(transport!.calls).toHaveLength(0);
+  });
+
+  it('fails closed for malformed checkpoints and expired terminal receipts', async () => {
+    const preview = await previewCreateAndSend();
+    const input = statusInput(preview.proposalRef);
+    const proposal = (await db.collection('users').doc(uid).collection('trainingMcpProposals').get()).docs[0];
+    const original = proposal.data();
+    for (const patch of [{ leaseUntilMs: 'not-an-instant' }, { nextScheduleOperation: -1 },
+      { requiredScopes: [TRAINING_PLANS_SCOPE] }, { status: 'applied' }, { changeResults: [null] },
+      { providerResults: [{ provider: 'private-invalid-field' }] }]) {
+      await proposal.ref.set({ ...original, ...patch });
+      await expect(getTrainingChangeStatus(input, deps)).rejects.toThrow();
+    }
+    await proposal.ref.set(original);
+    await applyTrainingChanges(input, deps);
+    const terminal = (await proposal.ref.get()).data()!;
+    await proposal.ref.update({ result: { ...terminal.result, proposalRef: 'another-proposal' } });
+    await expect(getTrainingChangeStatus(input, deps)).rejects.toThrow('safely');
+    await proposal.ref.set(terminal);
+    deps.now = () => terminal.expireAt.toMillis();
+    await expect(getTrainingChangeStatus(input, deps)).rejects.toThrow('unavailable');
+  });
+
+  it('does not interpret an active or abandoned apply checkpoint as an unapplied proposal', async () => {
+    const preview = await previewCreateAndSend();
+    const input = statusInput(preview.proposalRef);
+    const proposal = (await db.collection('users').doc(uid).collection('trainingMcpProposals').get()).docs[0];
+    await proposal.ref.update({ status: 'applying', approvedAtMs: deps.now(), leaseUntilMs: deps.now() + 60_000 });
+    await expect(getTrainingChangeStatus(input, deps)).resolves.toMatchObject({ state: 'applying', result: null,
+      recordedChangeCount: 0, recordedProviderCount: 0, retryAfterSeconds: 60 });
+    await expect(applyTrainingChanges(input, deps)).rejects.toThrow('already being applied');
+    await proposal.ref.update({ leaseUntilMs: deps.now() - 1 });
+    await expect(getTrainingChangeStatus(input, deps)).resolves.toMatchObject({ state: 'interrupted', result: null });
+    await proposal.ref.update({ cancelledAtMs: deps.now(), leaseUntilMs: deps.now() + 60_000 });
+    await expect(getTrainingChangeStatus(input, deps)).resolves.toMatchObject({ state: 'cancelled',
+      result: null, retryAfterSeconds: null });
+    await expect(applyTrainingChanges(input, deps)).rejects.toThrow('cancelled');
+    expect((await db.collection('users').doc(uid).collection('scheduledWorkouts').get()).empty).toBe(true);
+  });
+
+  it('fences recovery reads by owner, exact connection, original grants and account deletion', async () => {
+    const preview = await previewCreateAndSend();
+    const input = statusInput(preview.proposalRef);
+    const user = db.collection('users').doc(uid);
+    await expect(getTrainingChangeStatus({ ...input, uid: 'another-owner' }, deps)).rejects.toThrow();
+    await expect(getTrainingChangeStatus({ ...input, connectionId: 'another-connection' }, deps)).rejects.toThrow();
+    await expect(getTrainingChangeStatus({ ...input, scopes: [TRAINING_PLANS_SCOPE] }, deps)).rejects.toThrow();
+    await expect(getTrainingChangeStatus({ ...input, arguments: { ...input.arguments, permissionMode: 'schedule' } }, deps))
+      .rejects.toThrow('permission mode');
+    await user.collection('mcpConnections').doc('connection').update({ grantId: 'replacement-grant' });
+    await expect(getTrainingChangeStatus(input, deps)).rejects.toThrow('grant changed');
+    await user.collection('mcpConnections').doc('connection').update({ grantId: 'grant-1', revokedAtMs: deps.now() });
+    await expect(getTrainingChangeStatus(input, deps)).rejects.toThrow('no longer');
+    await user.collection('mcpConnections').doc('connection').update({ revokedAtMs: null });
+    const proposal = (await user.collection('trainingMcpProposals').get()).docs[0];
+    await proposal.ref.update({ expiresAtMs: deps.now() - 1 });
+    await expect(getTrainingChangeStatus(input, deps)).resolves.toMatchObject({ state: 'expired', result: null });
+    await expect(applyTrainingChanges(input, deps)).rejects.toThrow('expired');
+    await user.delete(); // Synthetic emulator-only owner; child records cannot authorize reads.
+    await expect(getTrainingChangeStatus(input, deps)).rejects.toThrow('unavailable or being deleted');
+  });
 
   it('does not preview a mixed schedule while a full-prescription restore is staged', async () => {
     await db.collection('users').doc(uid).collection('trainingPlanState').doc('current')

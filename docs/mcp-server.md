@@ -111,6 +111,16 @@ field entirely. The existing
 retried unchanged after validation rejects it. Neither preview creates authored or provider state.
 `apply_training_changes` consumes the opaque proposal as a separately approval-gated write tool. ChatGPT, Claude and
 other MCP hosts own their native tool-approval UI; QS does not use MCP elicitation as a second confirmation round.
+The additive `get_training_change_status` recovers an uncertain apply reply using its exact opaque proposal reference
+and permission mode, with the same original read/child-write grants. It is read-only: no approval, lease renewal,
+resume, provider call or automatic retry. Finalized results are the retained strict apply result, not provider/watch
+receipt. Nonterminal checkpoint counts are a lower bound; `applying` means wait. Missing or unavailable receipts do not
+prove that nothing applied. Never create replacements, invent references, split an approved batch, or replay a
+declined/cancelled call through another interface. A still-approved retry must retain native client approval.
+The 25-change schema limit is not a host response-time guarantee. The redacted #791 server evidence, recovery states,
+30-day result lifetime and deployment/catalog boundary are detailed in
+[Training workspace](training-workspace.md#lost-mcp-apply-replies-791). This read is not added to the Assistant model's
+tools and does not widen consent. Source support requires separate deployment and registered-client discovery.
 For **Duplicate to…**, the existing `copy-workout` batch change takes an exact source reference, fresh proposal-local
 key, explicit destination date and destination plan reference or `null` for Standalone. Clients should read the exact
 source and current schedule revision, preserve its scope by default and ask if the source or date is ambiguous. The
@@ -934,6 +944,7 @@ The analytics and map entries follow the
 | `preview_training_changes` | `training-plans:read` plus the relevant Training write scope(s) | Strict bounded proposal with authored and per-provider effects; no authored mutation |
 | `preview_saved_workout_change` | `training-plans:read` + `training-plans:write` | One revision-bound library edit or 1–100-date placement preview; no provider consent or authored mutation |
 | `apply_training_changes` | Same scopes bound into the proposal; native client approval gate | Idempotently applies a preview-created proposal and returns independent authored/provider outcomes |
+| `get_training_change_status` | Same original Training read and child-write grants bound into the proposal | Read-only retained apply result or lower-bound checkpoints after an uncertain reply; never applies or resumes |
 | `apply_saved_workout_change` | `training-plans:read` + `training-plans:write`; native client approval gate | Idempotently applies an exact library proposal through the existing sanitized mutation service |
 | `list_health_metrics` | `health:read` | Static allowlisted Health capabilities, Sports Lib types/units, range limits and additional body-composition permission requirements |
 | `query_health_metric` | `health:read`; also `measurements:read` for body composition | Source-separated stored scalars or bounded representative sample trends; identity-free calendar-day body composition |

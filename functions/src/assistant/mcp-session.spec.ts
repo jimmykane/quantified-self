@@ -187,6 +187,8 @@ describe('Assistant MCP session', () => {
       expect(withNotes.instructions).toContain('then query_activities');
       expect(withNotes.instructions).not.toContain('then list_activities');
       expect(withNotes.tools.map(tool => tool.name)).not.toContain('apply_training_changes' as never);
+      expect(withNotes.tools.map(tool => tool.name)).not.toContain('get_training_change_status' as never);
+      expect(withNotes.instructions).not.toContain('get_training_change_status');
       expect(withNotes.tools.map(tool => tool.name)).not.toContain('update_timeline_note' as never);
       expect(withoutNotes.tools.map(tool => tool.name)).not.toContain('query_timeline_notes');
       await expect(withoutNotes.callTool('query_timeline_notes', {

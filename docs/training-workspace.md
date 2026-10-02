@@ -56,6 +56,34 @@ revision and idempotency receipt; oversized revision-history batches fall back t
 apply diagnostics expose only operation counts, stage/total durations, outcome and slowest stage. No owner identifiers,
 opaque references or authored content are logged. A five-second total duration emits one slow-apply warning.
 
+### Lost MCP apply replies (#791)
+
+The 25-change limit bounds the proposal shape, not the time an MCP host will wait. Redacted read-only logs from the
+October 1, 2026 combined 20-operation case show a durable `applied` result after 75.617 seconds and a matching modern
+Streamable HTTP request returning HTTP 200 after 76.002 seconds. This establishes successful server acceptance and a
+long response, not which connector/host stage lost the reply or its exact deadline. A connector internal error or
+timeout is not evidence that the source writes failed. Apply diagnostics additionally label unexpected operation,
+output-validation and serialization failures, and log only the final serialized byte count when the reply is ready.
+
+The additive external MCP `get_training_change_status` takes only the original `proposalRef` and `permissionMode`.
+It performs a field-masked, owner/connection/grant-bound read-only transaction, retaining the original Training read
+and child-write grants and account-deletion fence. It does not fetch recipes, approve, write, renew a lease, resume work,
+call a provider, or enter the built-in Assistant's model tools. No consent or mutation capability is added.
+Terminal `applied`/`partially_applied` replies return the same strict durable apply result during its 30-day retention;
+that is authored/delivery-intent acceptance, not cloud delivery or watch receipt. `not_started`, `applying`,
+`interrupted`, `cancelled` and `expired` distinguish available nonterminal receipts. Active applies return a bounded
+wait hint. Checkpoint counts are a lower bound: a provider command can have committed before its proposal checkpoint.
+Missing, malformed or expired terminal receipts fail closed; absence never proves that nothing applied.
+
+After a lost reply, discover the status read and use the exact preview reference and permission mode before any retry.
+Wait while applying. Retry only the same still-approved proposal through the host's native approval boundary; never
+replay a declined/cancelled call through another interface. If a proposal expired, was cancelled, lost authority or
+is unavailable, review current records and obtain a fresh preview/approval only for genuinely remaining work.
+Never invent references, create replacement workouts, or silently split/reorder an already-approved proposal. Smaller
+proposals may be agreed with the user before preview where a host has a short deadline. This recovery tool and guidance
+require a separately approved Functions deployment, registered-client rescan and bundled-plugin refresh; local source
+and isolated emulator proof are not live-client verification.
+
 Single-workout creation has an additive focused MCP preview. The caller supplies the current schedule revision, optional
 plan reference, calendar date, title and complete canonical recipe; the server supplies the proposal-local key and routes
 the result through the same proposal, native approval and idempotent apply boundary. When the same new workout should be

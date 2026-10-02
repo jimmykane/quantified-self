@@ -6552,6 +6552,11 @@ export function createMcpDataService(
       return applyTrainingChanges(input);
     },
 
+    async getTrainingChangeStatus(input: import('./training-plans-write.service').TrainingWriteInput) {
+      const { getTrainingChangeStatus } = await import('./training-plans-write.service');
+      return getTrainingChangeStatus(input);
+    },
+
     async applySavedWorkoutChange(input: import('./training-plans-write.service').TrainingWriteInput) {
       const { applySavedWorkoutChange } = await import('./workout-library-write.service');
       return applySavedWorkoutChange(input);

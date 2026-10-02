@@ -573,6 +573,9 @@ const service = {
     previewPlannedWorkoutV2Change: vi.fn().mockResolvedValue(trainingPreviewFixture),
     previewSavedWorkoutChange: vi.fn().mockResolvedValue(trainingPreviewFixture),
     applyTrainingChanges: vi.fn().mockResolvedValue(trainingApplyFixture),
+    getTrainingChangeStatus: vi.fn().mockResolvedValue({ proposalRef: trainingApplyFixture.proposalRef,
+      state: 'applied', recordedChangeCount: 1, recordedProviderCount: 0, retryAfterSeconds: null,
+      result: trainingApplyFixture }),
     applySavedWorkoutChange: vi.fn().mockResolvedValue(savedWorkoutApplyFixture),
     getActivityDescription: vi.fn().mockResolvedValue({ activityRef: 'opaque-activity-ref', description: 'Easy run. Felt tired.\nKeep this as reported context.' }),
     queryTimelineNotes: vi.fn().mockResolvedValue({
@@ -1399,6 +1402,7 @@ const successfulToolArguments: Record<
   preview_saved_workout_change: { expectedScheduleRevision: 1, expectedLibraryRevision: 1,
     change: { kind: 'copy', savedWorkoutRef: 'opaque-saved-workout-reference', expectedRevision: 1 } },
   apply_training_changes: { proposalRef: 'opaque-proposal-reference', permissionMode: 'schedule' },
+  get_training_change_status: { proposalRef: 'opaque-proposal-reference', permissionMode: 'schedule' },
   apply_saved_workout_change: { proposalRef: 'opaque-proposal-reference', permissionMode: 'schedule' },
   get_activity_description: { activityRef: 'opaque-activity-ref' },
   query_timeline_notes: { startDate: '2026-07-01', endDate: '2026-07-02' },
@@ -2429,6 +2433,60 @@ describe.each<FixtureTransport>(['in-memory', 'legacy-http', 'modern-http'])('MC
         expect(JSON.stringify(result)).not.toContain('PRIVATE-TRAINING-CANARY');
       }
     }
+  });
+
+  it('keeps Training status recovery read-only, originally scoped and recursively private on every transport', async () => {
+    const service = createFixtureDataService();
+    const readOnly = await connectFixtureServer(service, [MCP_OAUTH_SCOPES.TrainingPlansRead]);
+    connections.push(readOnly);
+    expect((await readOnly.client.listTools()).tools.map(tool => tool.name)).not.toContain('get_training_change_status');
+    const connection = await connectFixtureServer(service, [MCP_OAUTH_SCOPES.TrainingPlansRead,
+      MCP_OAUTH_SCOPES.TrainingPlansWrite, MCP_OAUTH_SCOPES.TrainingDeliveryWrite]);
+    connections.push(connection);
+    const args = successfulToolArguments.get_training_change_status;
+    const fixture = await service.getTrainingChangeStatus({ uid: 'user-1', connectionId: 'connection-1',
+      scopes: [], arguments: args });
+    vi.mocked(service.getTrainingChangeStatus).mockClear();
+    for (const injected of [{ uid: 'attacker' }, { connectionId: 'attacker' }, { scopes: [] }, { resume: true }]) {
+      const result = await connection.client.callTool({ name: 'get_training_change_status', arguments: { ...args, ...injected } });
+      expect(result.isError).toBe(true);
+      expect(service.getTrainingChangeStatus).not.toHaveBeenCalled();
+    }
+    for (const field of ['uid', 'scheduleRequests', 'accessGeneration', 'approvalDigest', 'remoteWorkoutId', 'leaseUntilMs']) {
+      for (const projection of [{ ...fixture, [field]: 'PRIVATE-RECOVERY-CANARY' },
+        { ...fixture, result: { ...fixture.result, [field]: 'PRIVATE-RECOVERY-CANARY' } },
+        { ...fixture, result: { ...fixture.result, changes: [{ ...fixture.result!.changes[0], [field]: 'PRIVATE-RECOVERY-CANARY' }] } }]) {
+        service.getTrainingChangeStatus = vi.fn().mockResolvedValue(projection);
+        const result = await connection.client.callTool({ name: 'get_training_change_status', arguments: args });
+        expect(result.isError, field).toBe(true);
+        expect(result).not.toHaveProperty('structuredContent');
+        expect(JSON.stringify(result)).not.toContain('PRIVATE-RECOVERY-CANARY');
+      }
+    }
+    expect(service.applyTrainingChanges).not.toHaveBeenCalled();
+  });
+
+  it('bounds both retained Training result copies without suggesting replacement or pagination', async () => {
+    const service = createFixtureDataService();
+    const connection = await connectFixtureServer(service, [MCP_OAUTH_SCOPES.TrainingPlansRead,
+      MCP_OAUTH_SCOPES.TrainingPlansWrite, MCP_OAUTH_SCOPES.TrainingDeliveryWrite]);
+    connections.push(connection);
+    const result = { ...trainingApplyFixture,
+      changes: Array.from({ length: 25 }, (_, index) => ({ ...trainingApplyFixture.changes[0], index, message: '界'.repeat(500) })),
+      providers: Array.from({ length: 100 }, (_, index) => ({ index: index % 25, provider: 'wahoo',
+        status: 'applied', message: '界'.repeat(500) })),
+    };
+    service.getTrainingChangeStatus = vi.fn().mockResolvedValue({ proposalRef: result.proposalRef, state: 'applied',
+      recordedChangeCount: 25, recordedProviderCount: 100, retryAfterSeconds: null, result });
+    const reply = await connection.client.callTool({ name: 'get_training_change_status',
+      arguments: successfulToolArguments.get_training_change_status });
+    expect(reply.isError).toBe(true);
+    expect(reply).not.toHaveProperty('structuredContent');
+    expect(JSON.parse((reply.content[0] as { text: string }).text)).toMatchObject({ error: 'query_too_large' });
+    expect(JSON.stringify(reply)).toContain('do not create replacement workouts');
+    expect(JSON.stringify(reply)).not.toContain('smaller page');
+    expect(Buffer.byteLength(JSON.stringify(reply))).toBeLessThan(256 * 1024);
+    expect(service.applyTrainingChanges).not.toHaveBeenCalled();
   });
 
   it('keeps saved-workout writes behind both grants and rejects private proposal fields on every transport', async () => {

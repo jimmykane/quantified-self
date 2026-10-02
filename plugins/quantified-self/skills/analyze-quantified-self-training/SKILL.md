@@ -132,6 +132,14 @@ and its revision history are permanently removed. Permanent single-workout delet
 A standalone create may be followed by send to explicit providers or all connected providers. Plan sync means
 automatic per-workout delivery while active, not a native provider plan. Delivery remains Pro, connection, rollout,
 horizon and compatibility gated.
+If an approved apply reply is lost or times out, discover the read-only proposal-status capability and use the exact
+preview reference and permission mode before any retry. A finalized result means durable acceptance, not provider or
+watch receipt; applying means wait. Other checkpoint counts are only a lower bound, and an unavailable receipt does not
+prove nothing changed. Never create replacements, invent references, split/reorder the approved proposal or replay a
+declined/cancelled call through another interface. Only a same-proposal, still-approved retry may use the native client
+approval boundary. For expired/cancelled/unavailable proposals, inspect current records and prepare only the remaining
+work for fresh approval. The 25-change schema limit is not a host latency promise; agree smaller proposals before preview
+if needed. If recovery is absent from the client catalog, explain that limitation and inspect current records instead.
 For **duplicate to another day**, identify the exact source workout and read its current revision and scope. Ask when
 either the source or destination date is ambiguous. Use the existing `copy-workout` change with a fresh proposal-local
 key and an explicit `YYYY-MM-DD` date; preserve the source plan or standalone scope unless the user requests a transfer.

@@ -51,6 +51,8 @@ import {
   TRAINING_PLANS_WRITE_SCOPE,
   TRAINING_WRITE_INPUTS,
   TRAINING_WRITE_OUTPUTS,
+  TRAINING_CHANGE_STATUS_INPUT,
+  TRAINING_CHANGE_STATUS_OUTPUT,
 } from './training-plans.schemas';
 
 const PROPOSALS = 'trainingMcpProposals';
@@ -999,6 +1001,80 @@ async function readProposal(input: TrainingWriteInput, deps: TrainingWriteDepend
     invalid('The proposal permission mode does not match. Prepare it again.');
   }
   return { ref: args.data.proposalRef, id: decoded.id, proposal };
+}
+
+/** Read durable acceptance without applying, resuming, approving, or touching a lease. */
+export async function getTrainingChangeStatus(
+  input: TrainingWriteInput,
+  provided?: Pick<TrainingWriteDependencies, 'db' | 'now'>,
+): Promise<z.infer<typeof TRAINING_CHANGE_STATUS_OUTPUT>> {
+  assertScopes(input.scopes, [TRAINING_PLANS_SCOPE]);
+  const args = TRAINING_CHANGE_STATUS_INPUT.safeParse(input.arguments);
+  if (!args.success) invalid('A valid Training proposal reference and permission mode are required.');
+  const decoded = decodeProposalRef(args.data.proposalRef, input.uid, input.connectionId);
+  const deps = provided ?? { db: admin.firestore(), now: Date.now };
+  const ref = deps.db.collection('users').doc(input.uid).collection(PROPOSALS).doc(decoded.id);
+  return deps.db.runTransaction(async tx => {
+    const [snapshot] = await tx.getAll(ref, { fieldMask: [
+      'schemaVersion', 'uid', 'connectionId', 'createdAtMs', 'requiredScopes', 'accessGeneration',
+      'status', 'expiresAtMs', 'expireAt', 'leaseUntilMs', 'approvedAtMs', 'cancelledAtMs',
+      'nextScheduleOperation', 'changeResults', 'providerResults', 'result',
+    ] });
+    const proposal = snapshot.data() as StoredProposal | undefined;
+    const validTime = (value: unknown) => typeof value === 'number' && Number.isSafeInteger(value) && value >= 0;
+    if (!proposal || proposal.schemaVersion !== 1 || proposal.uid !== input.uid
+      || proposal.connectionId !== input.connectionId || proposal.createdAtMs !== decoded.createdAtMs
+      || !Array.isArray(proposal.requiredScopes) || !proposal.requiredScopes.includes(TRAINING_PLANS_SCOPE)
+      || !proposal.requiredScopes.some(scope => [TRAINING_PLANS_WRITE_SCOPE, TRAINING_DELIVERY_WRITE_SCOPE].includes(scope))
+      || new Set(proposal.requiredScopes).size !== proposal.requiredScopes.length
+      || proposal.requiredScopes.some(scope => ![TRAINING_PLANS_SCOPE, TRAINING_PLANS_WRITE_SCOPE, TRAINING_DELIVERY_WRITE_SCOPE].includes(scope))
+      || !Array.isArray(proposal.changeResults) || proposal.changeResults.length > 25
+      || !TRAINING_WRITE_OUTPUTS.apply_training_changes.shape.changes.safeParse(proposal.changeResults).success
+      || !Array.isArray(proposal.providerResults) || proposal.providerResults.length > 100
+      || !TRAINING_WRITE_OUTPUTS.apply_training_changes.shape.providers.safeParse(proposal.providerResults).success
+      || !validTime(proposal.expiresAtMs)
+      || !Number.isSafeInteger(proposal.nextScheduleOperation) || proposal.nextScheduleOperation < 0
+      || proposal.nextScheduleOperation > 25
+      || (proposal.leaseUntilMs != null && !validTime(proposal.leaseUntilMs))
+      || (proposal.approvedAtMs !== undefined && !validTime(proposal.approvedAtMs))
+      || (proposal.cancelledAtMs !== undefined && !validTime(proposal.cancelledAtMs))
+      || typeof proposal.accessGeneration !== 'string'
+      || !(proposal.expireAt instanceof Timestamp)
+      || (proposal.result && proposal.expireAt.toMillis() <= deps.now())
+      || !['pending', 'applying', 'applied', 'partially_applied'].includes(proposal.status)) {
+      invalid('This Training proposal is unavailable. Review current records before preparing a new change.');
+    }
+    assertScopes(input.scopes, proposal.requiredScopes);
+    if (args.data.permissionMode !== permissionMode(proposal.requiredScopes)) {
+      invalid('The proposal permission mode does not match.');
+    }
+    // Status remains readable during a bulk lock, but never through lost/replaced authority.
+    await assertAuthorityInTransaction(deps, tx, input.uid, input.connectionId, proposal.requiredScopes,
+      proposal.accessGeneration,
+      input.connectionId.startsWith('first-party-assistant-v1:') ? args.data.proposalRef : undefined, true);
+    const result = proposal.result ? TRAINING_WRITE_OUTPUTS.apply_training_changes.parse(proposal.result) : null;
+    if ((['applied', 'partially_applied'].includes(proposal.status) && !result)
+      || (result && (result.proposalRef !== args.data.proposalRef || result.status !== proposal.status
+        || result.changes.length !== proposal.changeResults.length || result.providers.length !== proposal.providerResults.length))) {
+      unavailable('The Training result could not be read safely. Review current records before preparing a new change.');
+    }
+    const now = deps.now();
+    const active = proposal.cancelledAtMs === undefined && proposal.status === 'applying' && (proposal.leaseUntilMs ?? 0) > now;
+    const started = proposal.approvedAtMs !== undefined || proposal.nextScheduleOperation > 0
+      || proposal.changeResults.length > 0 || proposal.providerResults.length > 0;
+    const state = proposal.cancelledAtMs !== undefined ? 'cancelled'
+      : result ? result.status
+        : active ? 'applying'
+          : proposal.expiresAtMs <= now ? 'expired'
+            : started ? 'interrupted' : 'not_started';
+    return TRAINING_CHANGE_STATUS_OUTPUT.parse({
+      proposalRef: args.data.proposalRef, state,
+      recordedChangeCount: proposal.changeResults.length,
+      recordedProviderCount: proposal.providerResults.length,
+      retryAfterSeconds: active ? Math.min(120, Math.max(1, Math.ceil(((proposal.leaseUntilMs ?? now) - now) / 1000))) : null,
+      result,
+    });
+  }, { readOnly: true });
 }
 
 async function currentDeliveryCommand(
