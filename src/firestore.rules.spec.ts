@@ -293,6 +293,60 @@ describe('Firestore Security Rules', () => {
 
     });
 
+    describe('Stripe checkout entitlement boundary', () => {
+        const uid = 'checkout_owner';
+        const path = `customers/${uid}/checkout_sessions/attempt`;
+        const payload = {
+            price: 'price_existing', mode: 'subscription',
+            success_url: 'https://example.com/success', cancel_url: 'https://example.com/cancel',
+            metadata: { firebaseUID: uid }, automatic_tax: { enabled: true },
+            allow_promotion_codes: true, payment_method_collection: 'if_required', trial_period_days: 7
+        };
+
+        it.each([true, false])('preserves normal create, update, read and delete with email_verified=%s', async (email_verified) => {
+            const owner = testEnv.authenticatedContext(uid, { email_verified }).firestore().doc(path);
+            await assertSucceeds(owner.set(payload));
+            await assertSucceeds(owner.set({ ...payload, mode: 'payment' }, { merge: true }));
+            await assertSucceeds(owner.get());
+            await assertSucceeds(owner.delete());
+        });
+
+        it.each([
+            { line_items: [{ price_data: { currency: 'eur', unit_amount: 0, recurring: { interval: 'month' }, product_data: { name: 'Forged Pro', metadata: { firebaseRole: 'pro' } } } }] },
+            { line_items: [{ price_data: { currency: 'eur', unit_amount: 0, recurring: { interval: 'month' }, product: 'prod_existing_pro' } }] },
+            { line_items: [{ price: 'price_existing' }] },
+            { line_items: [] },
+            { line_items: null }
+        ])('rejects caller line_items on both create and update: %j', async ({ line_items }) => {
+            const owner = testEnv.authenticatedContext(uid).firestore().doc(path);
+            await assertFails(owner.set({ ...payload, line_items }));
+            await assertSucceeds(owner.set(payload));
+            await assertFails(owner.update({ line_items }));
+        });
+
+        it('does not allow another account or an unauthenticated caller to access checkout sessions', async () => {
+            await testEnv.withSecurityRulesDisabled(async context => {
+                await context.firestore().doc(path).set(payload);
+            });
+            for (const caller of [testEnv.authenticatedContext('another_user'), testEnv.unauthenticatedContext()]) {
+                const ref = caller.firestore().doc(path);
+                await assertFails(ref.get());
+                await assertFails(ref.set(payload));
+                await assertFails(ref.update({ price: 'price_other' }));
+                await assertFails(ref.delete());
+            }
+        });
+
+        it('preserves owner reads and deletion of legacy inline checkout records', async () => {
+            await testEnv.withSecurityRulesDisabled(async context => {
+                await context.firestore().doc(path).set({ ...payload, line_items: [{ price: 'price_existing' }] });
+            });
+            const owner = testEnv.authenticatedContext(uid).firestore().doc(path);
+            await assertSucceeds(owner.get());
+            await assertSucceeds(owner.delete());
+        });
+    });
+
     describe('Role protected content', () => {
         const userId = 'role_user';
 

@@ -109,10 +109,9 @@ interface LinkResult {
  *    - Set `stripeRole` custom claim on Firebase Auth user
  *
  * ## Role Resolution Priority
- * 1. `subscription.metadata.role`
- * 2. `subscription.metadata.firebaseRole`
- * 3. `product.metadata.role`
- * 4. `product.metadata.firebaseRole`
+ * 1. Purchased product's `metadata.firebaseRole` (the extension's authority)
+ * 2. Purchased product's legacy `metadata.role`
+ * Subscription metadata is supplied by checkout clients and cannot grant access.
  *
  * @param uid - Firebase user ID to link the customer to
  * @param user - Server Auth record (verified email and existing claims)
@@ -191,19 +190,18 @@ async function findAndLinkStripeCustomer(
             }
             logger.info(`[findAndLinkStripeCustomer] Found subscription ${sub.id} for customer ${customer.id}`);
 
-            // Resolve access before changing any ownership state.
-            let role = sub.metadata?.role || sub.metadata?.firebaseRole;
-            if (!role) {
-                const priceItem = sub.items.data[0];
-                if (priceItem?.price?.product) {
-                    const productId = typeof priceItem.price.product === 'string'
-                        ? priceItem.price.product
-                        : priceItem.price.product.id;
-                    const product = await stripe.products.retrieve(productId);
-                    role = product.metadata?.role || product.metadata?.firebaseRole;
-                }
+            // Checkout clients supply subscription metadata. Resolve access from the
+            // purchased product before changing ownership, matching the extension.
+            const priceItem = sub.items.data[0];
+            if (!priceItem?.price?.product) {
+                continue;
             }
-            if (!role) {
+            const productId = typeof priceItem.price.product === 'string'
+                ? priceItem.price.product
+                : priceItem.price.product.id;
+            const product = await stripe.products.retrieve(productId);
+            const role = product.metadata?.firebaseRole || product.metadata?.role;
+            if (role !== 'free' && role !== 'basic' && role !== 'pro') {
                 continue;
             }
 
