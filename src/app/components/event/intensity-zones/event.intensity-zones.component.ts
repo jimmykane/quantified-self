@@ -174,6 +174,24 @@ export class EventIntensityZonesComponent implements AfterViewInit, OnChanges, O
           },
           rich: zoneBulletRichStyles
         },
+        labelLayout: (params: {
+          rect: { y: number; height: number };
+          labelRect: { x: number; width: number };
+        }) => {
+          if (this.orientation !== 'horizontal') {
+            return {};
+          }
+          // Preserve the full-width plot; anchor overflowing badges inside its right edge.
+          const rightEdge = this.chartDiv.nativeElement.clientWidth - 2;
+          return params.labelRect.x + params.labelRect.width > rightEdge
+            ? {
+              x: rightEdge,
+              y: params.rect.y + params.rect.height / 2,
+              align: 'right' as const,
+              verticalAlign: 'middle' as const,
+            }
+            : {};
+        },
         emphasis: {
           focus: 'none'
         },
@@ -316,7 +334,7 @@ export class EventIntensityZonesComponent implements AfterViewInit, OnChanges, O
     const badgeLineHeight = isVertical
       ? (this.isMobile ? 18 : 22)
       : (this.isMobile ? 16 : 18);
-    const badgePadding = isVertical ? [2, 6, 2, 6] : [1, 4, 1, 4];
+    const badgePadding = [2, 6, 2, 6];
 
     return zones.reduce((styles, zone, zoneIndex) => {
       styles[`zone_${zoneIndex}`] = {
@@ -351,13 +369,11 @@ export class EventIntensityZonesComponent implements AfterViewInit, OnChanges, O
     borderRadius: number;
     color: string;
     fontWeight: number;
-    width: number;
     align: 'center';
     verticalAlign: 'middle';
     lineHeight: number;
     padding: number[];
   }> {
-    const bulletWidth = this.isMobile ? 18 : 22;
     const bulletLineHeight = this.isMobile ? 14 : 16;
 
     return zones.reduce((styles, zone, zoneIndex) => {
@@ -366,11 +382,10 @@ export class EventIntensityZonesComponent implements AfterViewInit, OnChanges, O
         borderRadius: 6,
         color: '#ffffff',
         fontWeight: 600,
-        width: bulletWidth,
         align: 'center',
         verticalAlign: 'middle',
         lineHeight: bulletLineHeight,
-        padding: [0, 1, 0, 1],
+        padding: [2, 6, 2, 6],
       };
       return styles;
     }, {} as Record<string, {
@@ -378,7 +393,6 @@ export class EventIntensityZonesComponent implements AfterViewInit, OnChanges, O
       borderRadius: number;
       color: string;
       fontWeight: number;
-      width: number;
       align: 'center';
       verticalAlign: 'middle';
       lineHeight: number;

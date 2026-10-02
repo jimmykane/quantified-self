@@ -14,10 +14,12 @@ import { normalizeUserUnitSettings } from '@shared/unit-aware-display';
 import {
   buildActivityCalendarPeriodSummary,
   buildActivityCalendarViewModel,
+  buildActivityCalendarSelectedDay,
   formatActivityCalendarDateParam,
   formatActivityCalendarDuration,
   formatActivityCalendarSummaryMetrics,
   navigateActivityCalendarDate,
+  navigateActivityCalendarPeriod,
   navigateActivityCalendarDay,
   normalizeActivityCalendarView,
   parseActivityCalendarDate,
@@ -25,6 +27,8 @@ import {
   resolveActivityCalendarPrimaryRange,
   resolveActivityCalendarQueryWindow,
   resolveActivityCalendarDayRange,
+  resolveActivityCalendarRouteState,
+  resolveActivityCalendarViewAnchor,
 } from './activity-calendar.helper';
 
 function createEvent(
@@ -57,6 +61,49 @@ function createEvent(
 }
 
 describe('activity-calendar helper', () => {
+  it.each(['month', '30d'] as const)('excludes both boundary-week context dates from %s totals', view => {
+    const anchorDate = new Date(2026, 9, 1);
+    const range = resolveActivityCalendarPrimaryRange(view, anchorDate, DaysOfTheWeek.Monday);
+    const before = new Date(range.startMs); before.setDate(before.getDate() - 1);
+    const model = buildActivityCalendarViewModel([
+      createEvent('before', before, [ActivityTypes.Cycling], 3600),
+      createEvent('primary', new Date(range.startMs), [ActivityTypes.Running], 1800),
+      createEvent('after', new Date(range.endExclusiveMs), [ActivityTypes.Swimming], 3600),
+    ], { view, anchorDate, startOfWeek: DaysOfTheWeek.Monday });
+    expect(model.summary.totalDurationSeconds).toBe(1800);
+    expect(model.months[0].days.filter(day => !day.inPrimaryPeriod).some(day => day.eventCount)).toBe(true);
+  });
+
+  it.each([2024, 2026, 2027, 2028])('bounds every month and rolling period in year %i to four-to-six complete weeks', year => {
+    for (let month = 0; month < 12; month++) for (let startOfWeek = 0; startOfWeek < 7; startOfWeek++) {
+      for (const view of ['month', '30d'] as const) {
+        const model = buildActivityCalendarViewModel([], { view, anchorDate: new Date(year, month, 1), startOfWeek });
+        expect([28, 35, 42]).toContain(model.months[0].days.length);
+        expect(model.months[0].days[0].date.getDay()).toBe(startOfWeek);
+        expect(model.months[0].days.filter(day => day.inPrimaryPeriod).length).toBe(view === '30d' ? 30 : new Date(year, month + 1, 0).getDate());
+      }
+    }
+  });
+
+  it('pages a month with an adjoining selection into the new displayed month', () => {
+    const state = navigateActivityCalendarPeriod({ view: 'month', anchorDate: new Date(2026, 8, 1), selectedDate: new Date(2026, 9, 4) }, 1);
+    expect(formatActivityCalendarDateParam(state.anchorDate)).toBe('2026-10-01');
+    expect(formatActivityCalendarDateParam(state.selectedDate)).toBe('2026-10-04');
+  });
+
+  it('keeps a shifted context selection loaded when thirty-day paging changes week alignment', () => {
+    const state = navigateActivityCalendarPeriod({ view: '30d', anchorDate: new Date(2026, 9, 1), selectedDate: new Date(2026, 8, 1) }, -1);
+    expect(formatActivityCalendarDateParam(state.selectedDate)).toBe('2026-08-02');
+    const window = resolveActivityCalendarQueryWindow('30d', state.anchorDate, 1);
+    expect(window.startMs).toBeLessThanOrEqual(state.selectedDate.getTime());
+    expect(window.endExclusiveMs).toBeGreaterThan(state.selectedDate.getTime());
+    const day = buildActivityCalendarSelectedDay([createEvent('run', state.selectedDate, [ActivityTypes.Running], 1800)], state.selectedDate);
+    expect(day.dateKey).toBe('2026-08-02'); expect(day.eventCount).toBe(1);
+    const grid = buildActivityCalendarViewModel(day.events, { view: '30d', anchorDate: state.anchorDate, startOfWeek: 1 });
+    expect(grid.months[0].days.some(item => item.dateKey === day.dateKey)).toBe(false);
+    expect(grid.summary.totalDurationSeconds).toBe(0);
+  });
+
   it('formats selected-day and period totals with the same user units and loading state', () => {
     const summary = buildActivityCalendarPeriodSummary([createEvent(
       'run', new Date(2026, 7, 3, 8), [ActivityTypes.Running], 3600,
@@ -78,6 +125,63 @@ describe('activity-calendar helper', () => {
     expect(formatActivityCalendarSummaryMetrics(buildActivityCalendarPeriodSummary([]))
       .map(item => item.value)).toEqual(['0.0 m', '0m', '0 m']);
   });
+  it.each([0, 1, 2, 3, 4, 5, 6])('completes boundary weeks for week start %i without including context in totals', startOfWeek => {
+    const model = buildActivityCalendarViewModel([
+      createEvent('context', new Date(2026, 8, 30), [ActivityTypes.Cycling], 3600),
+      createEvent('primary', new Date(2026, 9, 1), [ActivityTypes.Running], 1800),
+    ], { view: 'month', anchorDate: new Date(2026, 9, 1), startOfWeek });
+    const days = model.months[0].days;
+    expect(days.length % 7).toBe(0);
+    expect(days.length).toBeLessThanOrEqual(42);
+    expect(days[0].date.getDay()).toBe(startOfWeek);
+    expect(days.filter(day => day.inPrimaryPeriod)).toHaveLength(31);
+    expect(model.summary.totalDurationSeconds).toBe(1800);
+  });
+
+  it('shows September carry-over dates in October and trims February to four weeks', () => {
+    const october = buildActivityCalendarViewModel([], { view: 'month', anchorDate: new Date(2026, 9, 1), startOfWeek: 1 });
+    expect(october.months[0].days.slice(0, 7).map(day => day.dateKey)).toEqual([
+      '2026-09-28', '2026-09-29', '2026-09-30', '2026-10-01', '2026-10-02', '2026-10-03', '2026-10-04',
+    ]);
+    expect(buildActivityCalendarViewModel([], { view: 'month', anchorDate: new Date(2027, 1, 1), startOfWeek: 1 })
+      .months[0].days).toHaveLength(28);
+  });
+
+  it('uses exactly thirty local dates across DST and contiguous paging', () => {
+    const anchor = new Date(2026, 9, 30);
+    const model = buildActivityCalendarViewModel([], { view: '30d', anchorDate: anchor, startOfWeek: 1 });
+    expect(model.months[0].days.filter(day => day.inPrimaryPeriod)).toHaveLength(30);
+    expect(model.months[0].days.length % 7).toBe(0);
+    expect(model.months[0].days.length).toBeLessThanOrEqual(42);
+    const current = resolveActivityCalendarPrimaryRange('30d', anchor);
+    const previous = resolveActivityCalendarPrimaryRange('30d', navigateActivityCalendarDate(anchor, '30d', -1));
+    expect(previous.endExclusiveMs).toBe(current.startMs);
+    expect(formatActivityCalendarDateParam(new Date(current.startMs))).toBe('2026-10-01');
+  });
+
+  it('separates selected date from the period anchor while keeping legacy links', () => {
+    const state = resolveActivityCalendarRouteState({ view: 'month', date: '2026-09-28', anchor: '2026-10-01' });
+    expect(formatActivityCalendarDateParam(state.selectedDate)).toBe('2026-09-28');
+    expect(formatActivityCalendarDateParam(state.anchorDate)).toBe('2026-10-01');
+    expect(resolveActivityCalendarRouteState({ date: '2026-09-28' }).anchorDate).toEqual(state.selectedDate);
+    expect(resolveActivityCalendarViewAnchor('30d', state.selectedDate, new Date(2026, 9, 1))).toEqual(new Date(2026, 9, 1));
+    expect(resolveActivityCalendarViewAnchor('30d', new Date(2026, 7, 1), new Date(2026, 9, 1))).toEqual(new Date(2026, 7, 1));
+  });
+
+  it.each(['week', 'month', '30d', 'year'] as const)('keeps inconsistent %s links within a bounded period containing their selection', view => {
+    const state = resolveActivityCalendarRouteState({ view, date: '2020-01-05', anchor: '2026-10-01' }, new Date(2026, 9, 1));
+    const window = resolveActivityCalendarQueryWindow(state.view, state.anchorDate);
+    expect(state.selectedDate.getTime()).toBeGreaterThanOrEqual(window.startMs);
+    expect(state.selectedDate.getTime()).toBeLessThan(window.endExclusiveMs);
+    expect(formatActivityCalendarDateParam(state.selectedDate)).toBe('2020-01-05');
+  });
+
+  it('uses the configured week start to retain valid adjoining-date links', () => {
+    const state = resolveActivityCalendarRouteState({ view: 'month', date: '2026-09-27', anchor: '2026-10-01' },
+      new Date(2026, 9, 1), DaysOfTheWeek.Sunday);
+    expect(formatActivityCalendarDateParam(state.anchorDate)).toBe('2026-10-01');
+  });
+
   it('normalizes route views and strict local date parameters', () => {
     const fallback = new Date(2026, 7, 3, 18, 30);
 

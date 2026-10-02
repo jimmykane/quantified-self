@@ -502,7 +502,11 @@ service cloud.firestore {
       allow read: if request.auth.uid == userID;
       
       match /checkout_sessions/{id} {
-        allow read, write: if request.auth.uid == userID;
+        allow read, delete: if request.auth.uid == userID;
+        // The app buys an existing price. Inline items let callers define their
+        // own product role or price, which the extension trusts for entitlements.
+        allow create, update: if request.auth.uid == userID
+          && !request.resource.data.keys().hasAny(['line_items']);
       }
       match /subscriptions/{id} {
         allow read: if request.auth.uid == userID;

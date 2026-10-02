@@ -131,6 +131,22 @@ describe('DashboardDerivedMetricsService', () => {
     service = TestBed.inject(DashboardDerivedMetricsService);
   });
 
+  it('marks old intensity snapshots stale without invalidating unrelated kinds', () => {
+    for (const kind of [DERIVED_METRIC_KINDS.IntensityDistribution, DERIVED_METRIC_KINDS.EasyPercent,
+      DERIVED_METRIC_KINDS.HardPercent, DERIVED_METRIC_KINDS.TrainingSummary, DERIVED_METRIC_KINDS.TrainingBuildComparison]) {
+      expect(service['resolveSnapshotStatus'](kind, {
+        status: 'ready', schemaVersion: DERIVED_METRIC_SCHEMA_VERSION, payload: {},
+      })).toBe('stale');
+    }
+    for (const kind of [DERIVED_METRIC_KINDS.IntensityDistribution, DERIVED_METRIC_KINDS.EasyPercent,
+      DERIVED_METRIC_KINDS.HardPercent, DERIVED_METRIC_KINDS.TrainingSummary, DERIVED_METRIC_KINDS.Acwr]) {
+      expect(service['resolveSnapshotStatus'](kind, {
+        status: 'ready', schemaVersion: DERIVED_METRIC_SCHEMA_VERSION,
+        payload: { intensityPolicyVersion: 1, asOfDayMs: Date.now() },
+      })).toBe('ready');
+    }
+  });
+
   it('returns missing snapshot state when uid is not available', async () => {
     const state = await firstValueFrom(service.watch(null));
 

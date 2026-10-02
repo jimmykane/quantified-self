@@ -1,3 +1,4 @@
+import { hasCurrentIntensityPolicy } from '../../../shared/intensity-zones';
 import { onCall, HttpsError } from 'firebase-functions/v2/https';
 import * as admin from 'firebase-admin';
 import { FUNCTIONS_MANIFEST } from '../../../shared/functions-manifest';
@@ -464,7 +465,7 @@ export function resolveDerivedMetricSnapshotPayloadValidity(
     payload: unknown,
     sourceEventCount?: unknown,
 ): boolean {
-    if (payload === null || payload === undefined) {
+    if (!hasCurrentIntensityPolicy(metricKind, payload) || payload === null || payload === undefined) {
         return false;
     }
     if (metricKind === DERIVED_METRIC_KINDS.TrainingDurability) {

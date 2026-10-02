@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, LOCALE_ID, computed, inject, input } from '@angular/core';
+import { ChangeDetectionStrategy, Component, LOCALE_ID, computed, inject, input, linkedSignal } from '@angular/core';
 import { SharedModule } from '../../modules/shared.module';
 import { getDateTimeFormatter } from '../../helpers/date-time-format.helper';
 import { getNumberFormatter } from '../../helpers/number-format.helper';
@@ -8,7 +8,9 @@ import {
   type TrainingSessionImpactView,
 } from '../../helpers/training-impact.helper';
 
-export type TrainingImpactVariant = 'card' | 'summary' | 'compact';
+export type TrainingImpactVariant = 'card' | 'summary' | 'compact' | 'strip';
+
+let nextCalculationDetailsId = 0;
 
 @Component({
   selector: 'app-training-impact',
@@ -17,14 +19,32 @@ export type TrainingImpactVariant = 'card' | 'summary' | 'compact';
   templateUrl: './training-impact.component.html',
   styleUrls: ['./training-impact.component.scss'],
   changeDetection: ChangeDetectionStrategy.OnPush,
+  host: { '[class.training-impact-host--strip]': "variant() === 'strip'" },
 })
 export class TrainingImpactComponent {
   private readonly locale = inject(LOCALE_ID);
   readonly impact = input.required<TrainingSessionImpactView | TrainingDayImpactView>();
   readonly variant = input<TrainingImpactVariant>('card');
   readonly title = input('Training impact');
+  readonly modelExplanation = 'TSS-based model; CTL reflects sustained training load, not measured physiological adaptation.';
   readonly isReady = computed(() => this.impact().availability === 'ready');
   readonly isDayImpact = computed(() => 'sessions' in this.impact());
+  readonly isSessionStrip = computed(() => this.variant() === 'strip' && !this.isDayImpact());
+  readonly calculationDetailsId = `training-impact-calculation-${nextCalculationDetailsId++}`;
+  readonly calculationToggleId = `${this.calculationDetailsId}-toggle`;
+  private readonly calculationContext = computed(() => {
+    const impact = this.impact();
+    return this.isSessionStrip() && impact.availability === 'ready' && 'eventId' in impact
+      ? `${impact.eventId}:${impact.dayMs}` : null;
+  });
+  readonly calculationExpanded = linkedSignal({ source: this.calculationContext, computation: () => false });
+  readonly sessionDayResult = computed(() => {
+    const impact = this.impact();
+    if (impact.availability !== 'ready' || 'sessions' in impact || !impact.impact) return null;
+    const change = impact.impact.day.ctlChange;
+    if (Math.abs(change) < 0.005) return 'Fitness load stayed steady';
+    return `Fitness load ${change > 0 ? 'increased' : 'decreased'} by ${this.formatNumber(Math.abs(change))} CTL`;
+  });
   readonly compactText = computed(() => {
     const impact = this.impact();
     if (impact.availability !== 'ready') return impact.message;
@@ -77,6 +97,10 @@ export class TrainingImpactComponent {
       ctlChange: this.formatSigned(day.ctlChange),
     }));
   });
+
+  toggleCalculation(): void {
+    this.calculationExpanded.update(expanded => !expanded);
+  }
 
   private formatSigned(value: number): string {
     const normalized = Math.abs(value) < 0.005 ? 0 : value;

@@ -211,19 +211,19 @@ export async function processWahooWorkoutQueueItem(
         },
       },
     );
-    if (queueItem.planID && queueItem.workoutToken) {
-      await retainWahooTrainingCompletion(
-        admin.firestore(),
-        userID,
-        eventID,
-        accountGuard,
-        queueItem.workoutID,
-        queueItem.planID,
-        queueItem.workoutToken,
-        queueItem.workoutSummaryID,
-        fitActivityReferencesFromEvent(event),
-      );
-    }
+    await retainWahooTrainingCompletion(
+      admin.firestore(),
+      userID,
+      eventID,
+      accountGuard,
+      queueItem.workoutID,
+      queueItem.planID,
+      queueItem.workoutToken,
+      queueItem.workoutSummaryID,
+      fitActivityReferencesFromEvent(event),
+      undefined,
+      fitFile,
+    );
     const skippedAfterDeletionStarted = await enqueueActivitySyncAfterEventPersistence({
       userID,
       eventID,

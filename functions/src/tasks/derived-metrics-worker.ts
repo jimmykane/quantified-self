@@ -157,7 +157,10 @@ export const processDerivedMetricsTask = onTaskDispatched({
         const trainingActivities = sourceRequirements.needsTrainingActivityDocs
             ? joinTrainingActivitySources(trainingActivityDocs, formDocs, {
                 includeUnclassified: dirtyMetricKinds.includes(DERIVED_METRIC_KINDS.TrainingExplanation)
-                    || dirtyMetricKinds.includes(DERIVED_METRIC_KINDS.TrainingPowerSystems),
+                    || dirtyMetricKinds.includes(DERIVED_METRIC_KINDS.TrainingPowerSystems)
+                    || dirtyMetricKinds.includes(DERIVED_METRIC_KINDS.IntensityDistribution)
+                    || dirtyMetricKinds.includes(DERIVED_METRIC_KINDS.EasyPercent)
+                    || dirtyMetricKinds.includes(DERIVED_METRIC_KINDS.HardPercent),
             })
             : [];
         const trainingBuildSleepDocs = sourceRequirements.needsTrainingBuildSleepDocs

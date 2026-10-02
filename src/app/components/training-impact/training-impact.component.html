@@ -15,23 +15,57 @@
   </span>
 } @else {
   <section class="training-impact" [class.training-impact--summary]="variant() === 'summary'"
+    [class.training-impact--strip]="variant() === 'strip'"
+    [class.training-impact--session]="isSessionStrip()"
     [attr.aria-label]="title()" [attr.aria-busy]="impact().availability === 'updating'">
     <header>
       <span class="training-impact-icon" aria-hidden="true"><mat-icon>monitoring</mat-icon></span>
       <div>
         <h3>{{ title() }}</h3>
-        @if (impact().headline) { <strong>{{ impact().headline }}</strong> }
+        @if (isSessionStrip()) {
+          @if (isReady()) { <p class="training-impact-scope">This workout’s contribution</p> }
+        } @else if (impact().headline) { <strong>{{ impact().headline }}</strong> }
       </div>
     </header>
 
     @if (isReady()) {
-      <div class="training-impact-metrics" role="group" aria-label="Training impact contributions">
+      @if (variant() === 'strip' && !isSessionStrip()) {
+        <button mat-icon-button type="button" class="training-impact-info" aria-label="About Training impact"
+          appHapticTap appTooltipTap [appTooltipTapHideDelayMs]="6000"
+          [matTooltip]="modelExplanation" matTooltipPosition="below">
+          <mat-icon aria-hidden="true">info_outline</mat-icon>
+        </button>
+      }
+      <div class="training-impact-metrics" role="group"
+        [attr.aria-label]="isSessionStrip() ? 'This workout’s contribution' : 'Training impact contributions'">
         <div><span>Fitness load (CTL)</span><strong>{{ values().ctl }}</strong></div>
         <div><span>Fatigue load (ATL)</span><strong>{{ values().atl }}</strong></div>
         <div><span>Freshness (Form)</span><strong>{{ values().form }}</strong></div>
         <div><span>Training Stress Score</span><strong>{{ values().tss }}</strong></div>
       </div>
-      @if (outcomes().length) {
+      @if (isSessionStrip()) {
+        <div class="training-impact-result">
+          <div class="training-impact-result-context">
+            <div class="training-impact-result-line">
+              <span>Day result</span><strong>{{ sessionDayResult() }}</strong>
+            </div>
+            <p class="training-impact-note">Includes all training counted for that day.</p>
+          </div>
+          <button mat-button type="button" class="training-impact-calculation-toggle" appHapticTap
+            [id]="calculationToggleId"
+            [attr.aria-expanded]="calculationExpanded()" [attr.aria-controls]="calculationDetailsId"
+            (click)="toggleCalculation()">
+            <span>How it’s calculated</span>
+            <mat-icon aria-hidden="true">{{ calculationExpanded() ? 'expand_less' : 'expand_more' }}</mat-icon>
+          </button>
+        </div>
+        <div class="training-impact-calculation" [id]="calculationDetailsId" role="region"
+          [attr.aria-labelledby]="calculationToggleId" [hidden]="!calculationExpanded()">
+          <p>The contribution uses this workout’s {{ values().tss }} TSS: fitness load is TSS ÷ 42, fatigue load is TSS ÷ 7, and freshness is fitness load minus fatigue load.</p>
+          <p>The day result includes all training counted for that day and the gradual fade of previous training load. The model uses a fixed daily cutoff, which may differ from local midnight.</p>
+          <p>{{ modelExplanation }}</p>
+        </div>
+      } @else if (outcomes().length) {
         <div class="training-impact-outcomes" aria-label="Training-day outcomes">
           @for (outcome of outcomes(); track outcome.dayMs) {
             <div>
@@ -42,7 +76,9 @@
         </div>
       }
       @if (impact().message) { <p class="training-impact-note">{{ impact().message }}</p> }
-      <p class="training-impact-disclaimer">TSS-based model; CTL reflects sustained training load, not measured physiological adaptation.</p>
+      @if (variant() !== 'strip') {
+        <p class="training-impact-disclaimer">{{ modelExplanation }}</p>
+      }
     } @else {
       <p class="training-impact-state" [attr.role]="impact().availability === 'error' ? 'alert' : 'status'">
         {{ impact().message }}

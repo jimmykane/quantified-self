@@ -13,6 +13,14 @@ const workflow = file => load(readFileSync(resolve(root, '.github/workflows', fi
 const testing = workflow('testing.yaml');
 const shared = workflow('_run-tests.yml');
 
+test('unit and emulator jobs use the declared Functions Node runtime', () => {
+  const functionsPackage = JSON.parse(readFileSync(resolve(root, 'functions/package.json'), 'utf8'));
+  for (const job of [shared.jobs.unit_tests, shared.jobs.functions_emulators]) {
+    const nodeSetup = job.steps.find(step => step.uses === 'actions/setup-node@v4');
+    assert.equal(nodeSetup?.with['node-version'], functionsPackage.engines.node);
+  }
+});
+
 // The job expressions use only equality, boolean operators and literals;
 // evaluate their actual YAML values rather than a second implementation of them.
 function evaluate(expression, github, extraContext = {}) {

@@ -169,6 +169,7 @@ export type AppDashboardFormTimelineWindow = 'w' | 'm' | 'y';
 export type AppDashboardPowerCurveCompareMode = 'latest' | 'best30d' | 'best90d';
 
 export interface AppDashboardChartTileDisplaySettingsInterface {
+    calendarView?: 'month' | '30d';
     derivedChartRange?: AppDashboardDerivedChartRange;
     formTimelineWindow?: AppDashboardFormTimelineWindow;
     powerCurveCompareMode?: AppDashboardPowerCurveCompareMode;

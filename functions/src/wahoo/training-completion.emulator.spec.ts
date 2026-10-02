@@ -9,6 +9,8 @@ import { retainWahooTrainingCompletion } from './training-completion';
 import { projectStrengthWorkoutToV1 } from '../../../shared/strength-workout';
 import { wahooFixtureStrengthDetails } from '../training-plans/delivery/test-support/wahoo-http-fixture';
 import { WAHOO_SPORT_FIXTURES } from '../training-plans/delivery/test-support/wahoo-sport-fixtures';
+import { wahooTrainingFitFixture } from '../training-plans/delivery/test-support/wahoo-fit-fixture';
+import { wahooIdentities } from '../training-plans/delivery/wahoo/mapping';
 
 describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)(
   'Wahoo exact Training completion correlation with real Firestore',
@@ -323,6 +325,87 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)(
       expect((await user().collection('events').doc('event').collection('trainingCompletionEvidence').doc('wahoo').get()).data())
         .toMatchObject({ outcome: 'missing' });
       expect((await user().collection('trainingWorkoutCompletions').get()).empty).toBe(true);
+    });
+
+    async function seedFITSource(): Promise<void> {
+      await user().collection('events').doc('event').collection('metaData').doc(ServiceNames.WahooAPI).set({
+        serviceName: ServiceNames.WahooAPI, serviceUserID: account, serviceWorkoutID: '1001', serviceWorkoutSummaryID: '999',
+      });
+      await user().collection('activities').doc('activity').set({ userID: uid, eventID: 'event',
+        startDate: Date.parse('2026-09-17T07:00:00Z') });
+      const identities = wahooIdentities(destinationKey, 'workout');
+      await user().collection(DELIVERY_LEDGER).doc('delivery').update({
+        'actual.ids.externalId': identities.externalId, 'actual.ids.workoutToken': identities.workoutToken,
+      });
+    }
+    const retainFIT = (options: Parameters<typeof wahooTrainingFitFixture>[0] = {}) => retainWahooTrainingCompletion(
+      db, uid, 'event', accountGuard(), '1001', null, null, '999',
+      [{ id: 'activity', startTimeMs: Date.parse('2026-09-17T07:00:00Z') }], Date.parse('2026-09-17T08:00:00Z'),
+      wahooTrainingFitFixture(options),
+    );
+
+    it.each([456, null])('links by exact owned FIT Plan with scheduled Workout %s, without API association', async workoutId => {
+      await seedFITSource();
+      expect((await retainFIT({ workoutId })).linkedWorkoutIds).toEqual(['workout']);
+      expect((await retainFIT({ workoutId })).linkedWorkoutIds).toEqual(['workout']);
+      expect((await user().collection('trainingWorkoutCompletions').doc('workout').get()).data())
+        .toMatchObject({ provider: 'wahoo', eventId: 'event', activityId: 'activity', timing: 'on_date' });
+      const evidence = (await user().collection('events').doc('event').collection('trainingCompletionEvidence').doc('wahoo').get()).data();
+      expect(evidence).toMatchObject({ workoutId: '1001', planId, reader: 'sports-lib',
+        fitReference: { workoutId: workoutId === null ? null : '456' }, outcome: 'already_linked' });
+    });
+
+    it.each([
+      ['duplicate Plan', async () => { await seedLedger('collision'); }],
+      ['foreign account', async () => { await user().collection(DELIVERY_LEDGER).doc('delivery').update({ destinationKey: 'foreign' }); }],
+      ['wrong source account', async () => { await user().collection('events').doc('event').collection('metaData')
+        .doc(ServiceNames.WahooAPI).update({ serviceUserID: 'foreign' }); }],
+      ['wrong parent activity', async () => { await user().collection('activities').doc('activity').update({ eventID: 'foreign' }); }],
+      ['stale occurrence', async () => { await user().collection('scheduledWorkouts').doc('workout').update({ localDate: '2026-09-18' }); }],
+      ['redelivery after recording', async () => { await user().collection(DELIVERY_LEDGER).doc('delivery')
+        .update({ lastAcceptedAtMs: Date.parse('2026-09-17T07:00:01Z') }); }],
+      ['malformed saved zone', async () => { await user().collection(DELIVERY_LEDGER).doc('delivery').update({ timeZone: 'Not/AZone' }); }],
+      ['foreign app identity', async () => { await user().collection(DELIVERY_LEDGER).doc('delivery')
+        .update({ 'actual.ids.workoutToken': `qs-workout-${'b'.repeat(43)}` }); }],
+      ['reconnected credentials', async () => { await db.collection('wahooAPIAccessTokens').doc(uid)
+        .update({ activeOAuthCredentialGeneration: 'replacement' }); }],
+      ['account deletion', async () => { await db.collection('userDeletionTombstones').doc(uid).set({ deletedAt: Date.now() }); }],
+    ] as const)('leaves FIT completion unlinked for %s', async (_name, change) => {
+      await seedFITSource(); await change();
+      expect((await retainFIT({ workoutId: null })).linkedWorkoutIds).toEqual([]);
+      expect((await user().collection('trainingWorkoutCompletions').get()).empty).toBe(true);
+    });
+
+    it('rejects a mismatched scheduled FIT Workout rather than substituting the saved recording ID', async () => {
+      await seedFITSource();
+      expect((await retainFIT({ workoutId: 1001 })).linkedWorkoutIds).toEqual([]);
+      expect((await retainFIT({ planId: '790', workoutId: null })).linkedWorkoutIds).toEqual([]);
+      expect((await retainFIT({ referenceCount: 2, workoutId: null })).linkedWorkoutIds).toEqual([]);
+      expect((await retainWahooTrainingCompletion(db, uid, 'event', accountGuard(), '1001', '790', null, '999',
+        [{ id: 'activity', startTimeMs: Date.parse('2026-09-17T07:00:00Z') }], Date.now(),
+        wahooTrainingFitFixture({ workoutId: null }))).linkedWorkoutIds).toEqual([]);
+    });
+
+    it('defers FIT matching behind restore/delivery fences and never links a second recording', async () => {
+      await seedFITSource();
+      await user().collection(DELIVERY_LEDGER).doc('delivery').update({ lease: { id: 'lease', expiresAtMs: Date.now() + 60_000 } });
+      await expect(retainFIT({ workoutId: null })).rejects.toThrow('delivery is changing');
+      await user().collection(DELIVERY_LEDGER).doc('delivery').update({ lease: null });
+      const lock = user().collection('trainingPlanState').doc('current').collection('planDeletionLocks').doc('_bulk_restore');
+      await lock.set({ test: true });
+      await expect(retainFIT({ workoutId: null })).rejects.toThrow('plan restore is in progress');
+      await lock.delete();
+      expect((await retainFIT({ workoutId: null })).linkedWorkoutIds).toEqual(['workout']);
+      await user().collection('events').doc('other-event').set({ test: true });
+      await user().collection('events').doc('other-event').collection('metaData').doc(ServiceNames.WahooAPI).set({
+        serviceName: ServiceNames.WahooAPI, serviceUserID: account, serviceWorkoutID: '1001', serviceWorkoutSummaryID: '999',
+      });
+      await user().collection('activities').doc('other-activity').set({ userID: uid, eventID: 'other-event',
+        startDate: Date.parse('2026-09-17T07:00:00Z') });
+      expect((await retainWahooTrainingCompletion(db, uid, 'other-event', accountGuard(), '1001', null, null, '999',
+        [{ id: 'other-activity', startTimeMs: Date.parse('2026-09-17T07:00:00Z') }], Date.now(),
+        wahooTrainingFitFixture({ workoutId: null }))).linkedWorkoutIds).toEqual([]);
+      expect((await user().collection('trainingWorkoutCompletions').doc('workout').get()).get('eventId')).toBe('event');
     });
   },
 );

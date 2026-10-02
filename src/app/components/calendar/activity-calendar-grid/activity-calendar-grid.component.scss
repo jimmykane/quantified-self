@@ -873,3 +873,25 @@
     scroll-behavior: auto;
   }
 }
+
+.activity-calendar-day-month {
+  margin-left: 4px;
+  color: var(--mat-sys-on-surface-variant);
+  font: var(--mat-sys-label-small);
+  letter-spacing: 0;
+}
+
+// Keep boundary-month labels clear of today's corner signal on narrow seven-column grids.
+.activity-calendar--calm-month .activity-calendar-day-month {
+  flex-shrink: 0;
+}
+@container (max-width: 420px) {
+  .activity-calendar--calm-month .activity-calendar-day-month {
+    position: absolute;
+    right: 4px;
+    bottom: 4px;
+    margin: 0;
+  }
+}
+
+.activity-calendar--calm-month .activity-calendar-day-number--month-label { width: auto; min-width: 24px; }

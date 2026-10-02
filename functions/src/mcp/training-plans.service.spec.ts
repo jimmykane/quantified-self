@@ -211,10 +211,15 @@ describe('Training plan MCP reads', () => {
         timing: 'on_date', linkedAtMs: 1_789_404_100_000, updatedAtMs: 1_789_404_100_000 };
       const linked = TRAINING_READ_OUTPUTS.get_planned_workout_completion.parse(await f.run('get_planned_workout_completion', args));
       expect(linked).toMatchObject({ state: 'linked', provider: 'wahoo', workoutChangedSinceCompletion: false });
-      expect(JSON.stringify(linked)).not.toMatch(/private-event|private-activity|private-wahoo|workout_token|plan_id/);
+      expect(JSON.stringify(linked)).not.toMatch(/private-event|private-activity|private-wahoo|workout_token|plan_id|fitReference|private-fit-plan|wahoo-app-plan/);
       await expect(f.run('get_planned_workout_completion', args, [TRAINING_PLANS_SCOPE], 'connection', 'foreign-owner')).rejects.toThrow();
       await expect(f.run('get_planned_workout_completion', args, [TRAINING_PLANS_SCOPE], 'foreign-connection')).rejects.toThrow();
       await expect(f.run('get_planned_workout_completion', args, [], 'connection')).rejects.toThrow();
+      // FIT references belong to the private event sidecar, never the strict completion contract.
+      f.collections.trainingWorkoutCompletions.w1.fitReference = {
+        format: 'wahoo-app-plan-v1', planId: 'private-fit-plan', workoutId: null,
+      };
+      await expect(f.run('get_planned_workout_completion', args)).rejects.toThrow();
     });
   it.each([
     [ActivityTypes.IndoorRunning, 'Running'], [ActivityTypes.VirtualRunning, 'Running'],

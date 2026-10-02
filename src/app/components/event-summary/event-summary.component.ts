@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, Input, OnChanges, SimpleChanges, ChangeDetectorRef } from '@angular/core';
+import { ChangeDetectionStrategy, Component, Input, OnChanges, SimpleChanges, ChangeDetectorRef, inject } from '@angular/core';
 import { AppEventInterface } from '@shared/app-event.interface';
 import {
   User,
@@ -25,6 +25,7 @@ import { MatDialog } from '@angular/material/dialog';
 import { firstValueFrom } from 'rxjs';
 import { EventTagService } from '../../services/event-tag.service';
 import { EventTagsDialogComponent } from '../event-tags/event-tags-dialog.component';
+import { AppHapticsService } from '../../services/app.haptics.service';
 
 @Component({
   selector: 'app-event-summary',
@@ -67,6 +68,7 @@ export class EventSummaryComponent implements OnChanges {
   private cachedSelectedActivitiesRef: ActivityInterface[] | null = null;
   private templateStateInitialized = false;
   private eventTagsValue: string[] = [];
+  private readonly hapticsService = inject(AppHapticsService);
 
   constructor(
     private cd: ChangeDetectorRef,
@@ -139,6 +141,7 @@ export class EventSummaryComponent implements OnChanges {
     if (!this.isOwner || !this.user || !this.event?.getID?.()) {
       return;
     }
+    this.hapticsService.selection();
     const targetEvent = this.event;
     const targetEventID = targetEvent.getID();
     const targetUser = this.user;
@@ -147,7 +150,7 @@ export class EventSummaryComponent implements OnChanges {
       width: 'min(34rem, calc(100vw - 32px))',
       maxWidth: 'calc(100vw - 32px)',
       data: {
-        title: 'Event tags',
+        title: 'Activity tags',
         tags: originalTags,
         save: async (tags: string[]) => {
           const savedTags = await this.eventTagService.saveTags(targetUser, targetEvent, tags, originalTags);

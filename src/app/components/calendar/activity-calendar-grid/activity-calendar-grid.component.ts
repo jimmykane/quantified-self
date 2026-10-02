@@ -3,7 +3,9 @@ import type {
   ActivityCalendarDayViewModel,
   ActivityCalendarMonthViewModel,
   ActivityCalendarViewModel,
+  ActivityCalendarFamilySummary,
 } from '../../../helpers/activity-calendar.helper';
+import { isActivityCalendarGridView } from '../../../helpers/activity-calendar.helper';
 import { SharedModule } from '../../../modules/shared.module';
 import { AppHapticsService } from '../../../services/app.haptics.service';
 import type { CalendarDayTimelineNotes } from '../../../helpers/calendar-timeline-notes.helper';
@@ -35,31 +37,27 @@ export class ActivityCalendarGridComponent implements OnChanges {
   private readonly hapticsService = inject(AppHapticsService);
 
   visibleMonths: (ActivityCalendarMonthViewModel & { weekendBackground: string })[] = [];
-  legendFamilies: ActivityCalendarViewModel['summary']['families'] = [];
+  legendFamilies: ActivityCalendarFamilySummary[] = [];
+  legendFamilyCount = 0;
+  isCalmGrid = false;
   hasVisibleNotes = false;
   hasVisiblePlans = false;
   isMonthPicker = false;
   isDenseDashboardMonth = false;
 
   ngOnChanges(): void {
+    this.isCalmGrid = this.calmMonth && isActivityCalendarGridView(this.model?.view);
     this.isMonthPicker = this.compact && !this.fillHeight && this.model?.view === 'month';
     const months = this.model?.months ?? [];
-    this.legendFamilies = this.calmMonth && this.model?.view === 'month'
-      ? (this.model.summary.families ?? []).slice(0, 4) : [];
-    const visibleDates = months.flatMap(month => month.days.filter(day => day.inPrimaryPeriod).map(day => day.dateKey));
-    this.hasVisibleNotes = this.calmMonth && visibleDates.some(dateKey => this.timelineNotesByDate.has(dateKey));
-    this.hasVisiblePlans = this.calmMonth && visibleDates.some(dateKey => !!this.plannedWorkoutsByDate?.[dateKey]);
-    // Trim only the rendered compact/calm month; the source model and its query window stay intact.
-    this.visibleMonths = months.map(month => {
-      const lastDay = (this.compact || this.calmMonth) && this.model?.view === 'month' && this.hideOutsideDays
-        ? month.days.reduce((last, day, index) => day.inPrimaryPeriod ? index : last, -1)
-        : -1;
-      return {
-        ...month,
-        days: lastDay < 0 ? month.days : month.days.slice(0, Math.ceil((lastDay + 1) / 7) * 7),
-        weekendBackground: this.weekendColumnBackground(month.weekdays),
-      };
-    });
+    const renderedDays = months.flatMap(month => month.days)
+      .filter(day => !this.hideOutsideDays || day.inPrimaryPeriod);
+    const families = [...new Map(renderedDays.flatMap(day => day.families).map(family => [family.id, family])).values()];
+    this.legendFamilies = this.isCalmGrid ? families.slice(0, 4) : [];
+    this.legendFamilyCount = families.length;
+    this.hasVisibleNotes = this.isCalmGrid && renderedDays.some(day => this.timelineNotesByDate.has(day.dateKey));
+    this.hasVisiblePlans = this.isCalmGrid && renderedDays.some(day => !!this.plannedWorkoutsByDate?.[day.dateKey]);
+    this.visibleMonths = months.map(month => ({ ...month,
+      weekendBackground: this.weekendColumnBackground(month.weekdays) }));
     this.isDenseDashboardMonth = this.calmMonth && this.compact && this.fillHeight
       && this.visibleMonths.some(month => month.days.length > 35);
   }

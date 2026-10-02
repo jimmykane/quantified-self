@@ -83,10 +83,10 @@ export function buildDashboardChartThumbnailOption(preview: DashboardChartPrevie
       view: 'month', anchorDate: anchor, now: anchor, startOfWeek: preview.startOfWeek,
     }).months[0];
     return { ...base, xAxis: { type: 'value', show: false, min: -.5, max: 6.5 },
-      yAxis: { type: 'value', show: false, min: -.5, max: 5.5, inverse: true },
+      yAxis: { type: 'value', show: false, min: -.5, max: month.days.length / 7 - .5, inverse: true },
       series: [{ type: 'scatter', symbolSize: [5, 4], silent: true, emphasis: { disabled: true },
-        data: month.days.flatMap((day, index) => day.inPrimaryPeriod ? [{ value: [index % 7, Math.floor(index / 7)],
-          symbol: day.eventCount ? 'circle' : 'rect', itemStyle: { color: day.families[0]?.color || theme.splitLineColor } }] : []) }] };
+        data: month.days.map((day, index) => ({ value: [index % 7, Math.floor(index / 7)],
+          symbol: day.eventCount ? 'circle' : 'rect', itemStyle: { color: day.families[0]?.color || theme.splitLineColor } })) }] };
   }
   if (type === C.DASHBOARD_RECOVERY_NOW_CHART_TYPE) {
     const total = resolveActiveRecoveryTotalSeconds(tile.recoveryNow) ?? 0;

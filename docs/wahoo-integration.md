@@ -10,7 +10,7 @@ Training maps all 15 editor sports plus the six existing MCP running/cycling sub
 profile table, never the entire recorded-activity catalog. The exact Cloud Workout type, Plan family and indoor/outdoor
 location are separate fields and all are read back. See the complete table and evidence checklist in
 [Training workspace](training-workspace.md#wahoo-sport-profile-mappings-and-validation-789).
-Wahoo supports timed, untargeted pool/open-water swimming and outdoor/indoor rowing. All 21 profiles have account acceptance and owner-confirmed native profile/timed playback (#789, 1 October 2026). Distance endings and intensity targets remain unsupported for walking, hiking, swimming and rowing. Selected pool length is not sent to Wahoo; set it locally where needed.
+Wahoo supports timed, untargeted pool/open-water swimming and outdoor/indoor rowing. All 21 profiles have account acceptance and owner-confirmed native profile/timed playback (#789, 1 October 2026). Distance endings and intensity targets remain unsupported for walking, hiking, swimming and rowing. Wahoo has no documented physical pool-length delivery field. QS does not support sending that setting; no local-setting check remains required for #789.
 Existing timed Strength remains Gym/indoor with type 42, instruction-only loads and no rep tracking. The public
 interval format documents only Biking/Running; Cloud catalog IDs do not establish interval-player support.
 Adding these mappings authorizes neither deployment nor account-side sends.
@@ -20,7 +20,7 @@ Adding these mappings authorizes neither deployment nor account-side sends.
 - OAuth 2.0 authorization with `user_read`, `workouts_read`, `workouts_write`, `routes_read`, `routes_write`, `plans_read`, `plans_write`, and `offline_data`. Existing users need explicit reconnect for the new Training grants; ordinary imports/routes do not require them.
 - Connection identity from `GET /v1/user`, stored on the server-only token document and resolved for webhooks through the shared token index.
 - New and updated completed workouts from `workout_summary` webhooks.
-- Exact completion linking for a QS-delivered Training workout when the imported Wahoo-recorded activity returns the same Workout ID, Plan ID, and deterministic `workout_token` under the current connected account. No title/date fallback is used.
+- Exact completion linking uses the returned Workout/Plan/token association, or the Sports Lib 21.4.0 Wahoo app FIT reference when API association is absent. A file-scoped Plan must resolve one accepted, account-bound QS single-workout Plan with its deterministic app identity, consistent retained association and matching persisted session/activity. A missing scheduled Workout ID stays null; the saved recording's new ID is not substituted. Ambiguity, stale occurrences and reused markers fail closed; the first committed activity link wins. References stay private. No title/date/duration fallback is used.
 - Manual history import from the descending, paginated `GET /v1/workouts` endpoint, with the latest two calendar years selected by default and a user-editable range.
 - FIT parsing through `@sports-alliance/sports-lib`, stable event IDs based on the Wahoo workout ID, and original FIT-file retention with the imported event.
 - FIT activity delivery from Wahoo imported events to Suunto or COROS through the shared activity-sync queue, with separate opt-in automatic delivery for new imports and date-range backfill for retained FIT files.
@@ -57,15 +57,17 @@ player/interval behavior on 1 October 2026. A subsequent saved recording retaine
 Cloud type `42` and FIT `training/strength_training`, and imported successfully into QS with zero retries. These direct
 probes had no QS scheduled-workout ledger, so no QS completion badge was expected. The original Yoga/equipment prompt's
 root cause is unproven; Help advises checking/selecting the native Strength profile before starting, not sending Yoga.
-This is not integrated production lifecycle, native reps/load, ELEMNT or watch evidence. Live integrated
-update/reschedule/retry/reconnect/eligible removal remains pending in #783;
-neither implementation nor the earlier test authorizes deployment or deletion.
+Those earlier direct probes did not establish the integrated lifecycle or a QS completion badge. Subsequent completed
+#783/#789 verification covers normal QS companion/Send/ledger delivery, edits/reschedules/retry/reconnect, exact
+automatic completion, eligible withdrawal and completed-copy Stop protection. The production frontend release was
+verified. These results do not establish native reps/load tracking or universal ELEMNT/watch receipt; future deployment
+and deletion still need separate approval.
 
 Walking/Hiking (#789) use outdoor Plan family `9`, with Workout types `6`/`9`. These are account-tested Plan mappings,
 not inferred from recorded-activity enums. Only timed steps without intensity targets are admitted; full-domain RPE
 1–10 is the production envelope for untargeted intervals. Other endings, intensity targets and indoor variants are
-unsupported. Positive full cloud readback exists for both; Walking has owner-confirmed device visibility, while Hiking
-playback and integrated live lifecycle remain pending. Shared scopes, consent, owned identity, completion correlation,
+unsupported. Both have full cloud readback and owner-confirmed native profile/timed playback. Completed #789 records
+the integrated edits/reschedules/retry/reconnect, eligible withdrawal and production frontend checks. Shared scopes, consent, owned identity, completion correlation,
 queue/horizon/recovery and deletion policy are unchanged. Existing v4 sport payloads/digests remain unchanged.
 The existing production app/account supplied the app-owned Plan/Workout cloud proof. Do not interpret the historical
 activity launch checklist below as a requirement to create a sandbox or apply for Wahoo-owned Plan-library entitlement.
@@ -118,10 +120,10 @@ Wahoo requires six composite indexes: one `tokens` collection-group index on `wa
 
 ## Release checklist
 
-1. Publish `@sports-alliance/sports-lib` 17.2.2 and verify both application lockfiles resolve the published artifact and integrity before running `npm ci` in release automation.
+1. Verify both application lockfiles resolve the approved published `@sports-alliance/sports-lib` version and integrity before running `npm ci` in release automation. The completed Training completion proof uses Sports Lib 21.4.0; do not revert to the original 17.2.2 launch dependency.
 2. Complete Wahoo's production-app review and approve the final Wahoo brand asset and consumer-facing copy.
 3. Register every production OAuth redirect URI and configure the production webhook URL/token in the Wahoo developer portal.
 4. Set the production credentials and exact FIT-file host allowlist.
 5. Deploy the Firestore indexes, Rules, queue TTL configuration, Functions, and Hosting artifacts through the normal release workflow.
 6. Exercise OAuth with activity, route, Plan and Workout scopes; webhook handling; edited-workout deduplication; history pagination/rate limiting; activity and route delivery; planned-workout create/update/reschedule/copy/Stop; duplicate recovery; saved-zone today/+6 behavior; disconnect; expired-Pro enforcement; and account deletion with authorized test accounts. Do not treat cloud acceptance as a device receipt.
-7. After the separately approved deployment, monitor callable/webhook error rates, Training delivery outcomes and queue age/retries, reconnect prompts, skipped reasons, FIT download failures, Wahoo upload status failures, Wahoo 429 responses, and cleanup failures. If rollback is needed, turn off the source-controlled Wahoo delivery flag; note that doing so also hides Stop/withdrawal actions until the flag is restored.
+7. Monitor callable/webhook error rates, Training delivery outcomes and queue age/retries, reconnect prompts, skipped reasons, FIT download failures, Wahoo upload status failures, Wahoo 429 responses, and cleanup failures. Wahoo Training delivery is already live under approved enablement; #655 does not require code rollback work or disabling its source-controlled flag. Normal Stop, disconnect and deletion safeguards remain product behavior. Future deployment still needs separate approval.

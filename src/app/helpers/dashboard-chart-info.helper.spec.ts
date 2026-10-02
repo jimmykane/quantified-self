@@ -56,6 +56,14 @@ describe('dashboard-chart-info.helper', () => {
     }
   });
 
+  it('documents the separate approximate HR and power groupings', () => {
+    const info = resolveDashboardChartInfoTooltip(DASHBOARD_INTENSITY_DISTRIBUTION_CHART_TYPE);
+    expect(info).toContain('heart rate — Easy Z1–Z2, Moderate Z3, Hard Z4–Z5');
+    expect(info).toContain('power — Easy Z1–Z2, Moderate Z3–Z4, Hard Z5–Z7');
+    expect(info).toContain('per activity');
+    expect(resolveDashboardChartInfoTooltip(DASHBOARD_HARD_PERCENT_KPI_CHART_TYPE)).toContain('heart-rate Z4–Z5 or power Z5–Z7');
+  });
+
   it('returns null for custom chart types', () => {
     expect(resolveDashboardChartInfoTooltip(ChartTypes.ColumnsVertical)).toBeNull();
     expect(resolveDashboardChartInfoTooltip(null)).toBeNull();

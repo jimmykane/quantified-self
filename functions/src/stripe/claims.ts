@@ -37,6 +37,8 @@ import { getStripe } from './client';
 import { FUNCTIONS_MANIFEST } from '../../../shared/functions-manifest';
 import { enforceAppCheck } from '../utils';
 import { FUNCTION_SECRET_BINDINGS } from '../secrets';
+import { getUserDeletionGuardStateInTransaction } from '../shared/user-deletion-guard';
+import type Stripe from 'stripe';
 
 const USER_DELETION_TOMBSTONES_COLLECTION = 'userDeletionTombstones';
 
@@ -74,7 +76,7 @@ const hasActiveDeletionMarker = async (
 };
 
 /**
- * Result of attempting to find and link a Stripe customer by email.
+ * Result of attempting to recover a bound customer or link one by verified email.
  *
  * @property found - Whether a Stripe customer with an active subscription was found
  * @property role - The subscription role (e.g., 'basic', 'pro') if found
@@ -87,8 +89,8 @@ interface LinkResult {
 }
 
 /**
- * Searches Stripe for a customer with the given email that has an active subscription,
- * then links that customer to the Firebase user and sets appropriate claims.
+ * Recovers the caller's server-bound Stripe customer, or searches by verified email,
+ * then links an eligible active subscription and sets appropriate claims.
  *
  * This is a shared helper used by both `reconcileClaims` (as a fallback) and
  * `linkExistingStripeCustomer` (as the primary lookup method).
@@ -99,47 +101,82 @@ interface LinkResult {
  * 3. **Claims Recovery**: User's custom claims were cleared but subscription still exists in Stripe
  *
  * ## Process Flow
- * 1. Search Stripe for customers matching the email (handles duplicates, up to 10 results)
- * 2. For each customer found, check for active subscriptions
- * 3. If active subscription found:
- *    - Link customer ID to Firestore `customers/{uid}` document
- *    - Extract role from subscription or product metadata
+ * 1. Retrieve the server-bound customer ID, or search by a verified server Auth email
+ * 2. Check active subscriptions and reject conflicting UID metadata
+ * 3. If a role can be resolved:
+ *    - Atomically check existing ownership and link Firestore `customers/{uid}`
+ *    - Update Stripe metadata for the same UID
  *    - Set `stripeRole` custom claim on Firebase Auth user
  *
  * ## Role Resolution Priority
- * 1. `subscription.metadata.role`
- * 2. `subscription.metadata.firebaseRole`
- * 3. `product.metadata.role`
- * 4. `product.metadata.firebaseRole`
+ * 1. Purchased product's `metadata.firebaseRole` (the extension's authority)
+ * 2. Purchased product's legacy `metadata.role`
+ * Subscription metadata is supplied by checkout clients and cannot grant access.
  *
  * @param uid - Firebase user ID to link the customer to
- * @param email - Email address to search for in Stripe
- * @param user - Firebase Auth user record (used to preserve existing claims)
+ * @param user - Server Auth record (verified email and existing claims)
  * @returns Promise resolving to LinkResult indicating success and the linked role
  *
  * @internal This is a helper function, not directly exported
  */
-async function findAndLinkStripeCustomerByEmail(
+async function findAndLinkStripeCustomer(
     uid: string,
-    email: string,
     user: admin.auth.UserRecord
 ): Promise<LinkResult> {
     const db = admin.firestore();
+    const customerRef = db.collection('customers').doc(uid);
+    // This binding is server-owned: clients cannot write customers/{uid}.stripeId.
+    const stripeId = (await customerRef.get()).data()?.stripeId;
+    const boundStripeId = typeof stripeId === 'string' && stripeId ? stripeId : undefined;
+    const email = user.email;
+
+    // Existing UID ownership does not depend on email. Only acquiring a customer
+    // through email matching requires Firebase to have verified the mailbox.
+    if (!boundStripeId && (!email || user.emailVerified !== true)) {
+        logger.info(`[findAndLinkStripeCustomer] Skipping email recovery for unverified user ${uid}`);
+        return { found: false };
+    }
+
     const stripe = await getStripe();
+    const belongsToAnotherUser = (metadata?: Record<string, string>): boolean =>
+        [metadata?.firebaseUID, metadata?.linkedToUid].some(owner => !!owner && owner !== uid);
 
-    // Search for existing customers with this email
-    const customers = await stripe.customers.search({
-        query: `email:'${email}'`,
-        limit: 10 // Get multiple in case there are duplicates
-    });
+    let customers: Stripe.Customer[];
+    if (boundStripeId) {
+        try {
+            const customer = await stripe.customers.retrieve(boundStripeId);
+            if (customer.deleted) {
+                return { found: false };
+            }
+            customers = [customer];
+        } catch (error) {
+            if ((error as { code?: unknown } | null)?.code === 'resource_missing') {
+                return { found: false };
+            }
+            throw error;
+        }
+    } else {
+        const result = await stripe.customers.search({
+            query: `email:'${email}'`,
+            limit: 10 // Get multiple in case there are duplicates
+        });
+        customers = result.data;
+    }
 
-    if (customers.data.length === 0) {
-        logger.info(`[findAndLinkStripeCustomerByEmail] No Stripe customer found for email ${email}`);
+    if (customers.length === 0) {
+        logger.info(`[findAndLinkStripeCustomer] No Stripe customer found for email ${email}`);
         return { found: false };
     }
 
     // Find a customer with an active subscription
-    for (const customer of customers.data) {
+    for (const customer of customers) {
+        const matchesCaller = boundStripeId
+            ? customer.id === boundStripeId
+            : !!email && customer.email?.toLowerCase() === email.toLowerCase();
+        if (!matchesCaller || belongsToAnotherUser(customer.metadata)) {
+            continue;
+        }
+
         const subscriptions = await stripe.subscriptions.list({
             customer: customer.id,
             status: 'active',
@@ -148,16 +185,55 @@ async function findAndLinkStripeCustomerByEmail(
 
         if (subscriptions.data.length > 0) {
             const sub = subscriptions.data[0];
-            logger.info(`[findAndLinkStripeCustomerByEmail] Found subscription ${sub.id} for customer ${customer.id}`);
+            if (belongsToAnotherUser(sub.metadata)) {
+                continue;
+            }
+            logger.info(`[findAndLinkStripeCustomer] Found subscription ${sub.id} for customer ${customer.id}`);
 
-            // Link this customer to the Firebase user and sync basic details immediately
-            await db.collection('customers').doc(uid).set({
-                stripeId: customer.id,
-                stripeLink: `https://dashboard.stripe.com/customers/${customer.id}`,
-                email: customer.email,
-                name: customer.name ?? undefined,
-                phone: customer.phone ?? undefined
-            }, { merge: true });
+            // Checkout clients supply subscription metadata. Resolve access from the
+            // purchased product before changing ownership, matching the extension.
+            const priceItem = sub.items.data[0];
+            if (!priceItem?.price?.product) {
+                continue;
+            }
+            const productId = typeof priceItem.price.product === 'string'
+                ? priceItem.price.product
+                : priceItem.price.product.id;
+            const product = await stripe.products.retrieve(productId);
+            const role = product.metadata?.firebaseRole || product.metadata?.role;
+            if (role !== 'free' && role !== 'basic' && role !== 'pro') {
+                continue;
+            }
+
+            // Checking and writing in one transaction prevents competing recovery requests
+            // from binding the same customer to different UIDs. Never transfer an existing owner.
+            const ownersQuery = db.collection('customers').where('stripeId', '==', customer.id);
+            const linked = await db.runTransaction(async transaction => {
+                const [currentCustomer, owners, deletionGuard] = await Promise.all([
+                    transaction.get(customerRef),
+                    transaction.get(ownersQuery),
+                    getUserDeletionGuardStateInTransaction(db, transaction, uid)
+                ]);
+                const currentStripeId = currentCustomer.data()?.stripeId;
+                if (deletionGuard.shouldSkip
+                    || (boundStripeId && currentStripeId !== boundStripeId)
+                    || (currentStripeId && currentStripeId !== customer.id)
+                    || owners.docs.some(owner => owner.id !== uid)) {
+                    return false;
+                }
+
+                transaction.set(customerRef, {
+                    stripeId: customer.id,
+                    stripeLink: `https://dashboard.stripe.com/customers/${customer.id}`,
+                    email: customer.email,
+                    name: customer.name ?? undefined,
+                    phone: customer.phone ?? undefined
+                }, { merge: true });
+                return true;
+            });
+            if (!linked) {
+                continue;
+            }
 
             // Update Stripe Customer metadata with new Firebase UID
             await stripe.customers.update(customer.id, {
@@ -167,7 +243,7 @@ async function findAndLinkStripeCustomerByEmail(
                     firebaseUID: uid // Ensure this matches the new user
                 }
             });
-            logger.info(`[findAndLinkStripeCustomerByEmail] Updated Stripe customer ${customer.id} metadata.firebaseUID to ${uid}`);
+            logger.info(`[findAndLinkStripeCustomer] Updated Stripe customer ${customer.id} metadata.firebaseUID to ${uid}`);
 
             // Trigger a subscription.updated webhook by updating subscription metadata
             // Also update the firebaseUID in the subscription metadata to match the new user
@@ -179,39 +255,20 @@ async function findAndLinkStripeCustomerByEmail(
                     firebaseUID: uid // Ensure this matches the new user
                 }
             });
-            logger.info(`[findAndLinkStripeCustomerByEmail] Triggered subscription.updated webhook for ${sub.id}`);
+            logger.info(`[findAndLinkStripeCustomer] Triggered subscription.updated webhook for ${sub.id}`);
 
-            // Determine the role from subscription or product metadata
-            let role = sub.metadata?.role || sub.metadata?.firebaseRole;
+            const existingClaims = user.customClaims || {};
+            await admin.auth().setCustomUserClaims(uid, {
+                ...existingClaims,
+                stripeRole: role
+            });
 
-            if (!role) {
-                // Fetch product to get role
-                const priceItem = sub.items.data[0];
-                if (priceItem?.price?.product) {
-                    const productId = typeof priceItem.price.product === 'string'
-                        ? priceItem.price.product
-                        : priceItem.price.product.id;
-
-                    const product = await stripe.products.retrieve(productId);
-                    role = product.metadata?.role || product.metadata?.firebaseRole;
-                }
-            }
-
-            if (role) {
-                // Set claims
-                const existingClaims = user.customClaims || {};
-                await admin.auth().setCustomUserClaims(uid, {
-                    ...existingClaims,
-                    stripeRole: role
-                });
-
-                logger.info(`[findAndLinkStripeCustomerByEmail] Linked customer ${customer.id} to user ${uid} with role ${role}`);
-                return { found: true, role, customerId: customer.id };
-            }
+            logger.info(`[findAndLinkStripeCustomer] Linked customer ${customer.id} to user ${uid} with role ${role}`);
+            return { found: true, role, customerId: customer.id };
         }
     }
 
-    logger.info(`[findAndLinkStripeCustomerByEmail] No active subscription found for email ${email}`);
+    logger.info(`[findAndLinkStripeCustomer] No recoverable active subscription found for user ${uid}`);
     return { found: false };
 }
 
@@ -271,7 +328,7 @@ export const restoreUserClaims = onCall({
  *
  * ## Lookup Strategy
  * 1. **Primary**: Query Firestore `customers/{uid}/subscriptions` for active/trialing subscriptions
- * 2. **Fallback**: If no local subscription, search Stripe API by user's email address
+ * 2. **Fallback**: Retrieve the server-bound Stripe customer, or search by verified email
  *
  * ## Claim Preservation
  * When setting the `stripeRole` claim, existing custom claims are preserved. Only the
@@ -281,16 +338,13 @@ export const restoreUserClaims = onCall({
  * ```
  * Firestore Query → Found? → Extract role → Set claims
  *       ↓ (empty)
- * Stripe Email Search → Found? → Link customer → Set claims
+ * Stripe Bound ID / Verified Email → Found? → Link customer → Set claims
  *       ↓ (not found)
- * Throw 'not-found' error
+ * Set role to 'free' and preserve applicable grace claims
  * ```
  *
  * @param uid - Firebase user ID to reconcile claims for
  * @returns Promise resolving to `{ role: string }` with the user's subscription role
- *
- * @throws HttpsError('not-found') - No active subscription found in Firestore or Stripe
- * @throws HttpsError('failed-precondition') - Subscription exists but has no role defined
  *
  * @example
  * ```typescript
@@ -345,19 +399,17 @@ export async function reconcileClaims(uid: string): Promise<{ role: string }> {
         role = subData.role || 'free';
         logger.info(`[reconcileClaims] Local subscription found for ${uid}. Role: ${role}`);
     } else {
-        // Fallback: Check if the user exists in Stripe by email
-        logger.info(`[reconcileClaims] No local subscription found for ${uid}. Checking Stripe by email...`);
+        // Fallback: Recover the server-bound customer, or match a verified email.
+        logger.info(`[reconcileClaims] No local subscription found for ${uid}. Checking Stripe...`);
 
         if (await hasActiveDeletionMarker(deletionMarkerRef, uid, 'reconcileClaims')) {
             return { role };
         }
 
         const user = await admin.auth().getUser(uid);
-        if (user.email) {
-            const result = await findAndLinkStripeCustomerByEmail(uid, user.email, user);
-            if (result.found && result.role) {
-                role = result.role;
-            }
+        const result = await findAndLinkStripeCustomer(uid, user);
+        if (result.found && result.role) {
+            role = result.role;
         }
     }
 
@@ -441,7 +493,7 @@ export async function reconcileClaims(uid: string): Promise<{ role: string }> {
 /**
  * Cloud Function: linkExistingStripeCustomer
  *
- * Checks if the authenticated user has an existing Stripe customer (by email) with an
+ * Checks if the authenticated user has a bound Stripe customer or a verified email match with an
  * active subscription. If found, links that customer to the Firebase user and sets
  * their custom claims.
  *
@@ -458,7 +510,7 @@ export async function reconcileClaims(uid: string): Promise<{ role: string }> {
  *
  * ## Authentication
  * - **Required**: Must be called by an authenticated Firebase user
- * - Requires the user to have an email address on their Firebase account
+ * - Email-based acquisition requires a verified email on the Firebase account
  *
  * ## Return Values
  * - `{ linked: true, role: 'pro' }` - Found and linked an existing subscription
@@ -468,7 +520,7 @@ export async function reconcileClaims(uid: string): Promise<{ role: string }> {
  * - Throws `HttpsError('unauthenticated')` if not authenticated
  * - Throws `HttpsError('internal')` for Stripe API or other unexpected errors
  *
- * @see findAndLinkStripeCustomerByEmail - The underlying helper that performs the lookup
+ * @see findAndLinkStripeCustomer - The underlying helper that performs the lookup
  */
 export const linkExistingStripeCustomer = onCall({
     region: FUNCTIONS_MANIFEST.linkExistingStripeCustomer.region,
@@ -486,12 +538,7 @@ export const linkExistingStripeCustomer = onCall({
 
     try {
         const user = await admin.auth().getUser(uid);
-        if (!user.email) {
-            logger.info(`[linkExistingStripeCustomer] User ${uid} has no email, cannot search Stripe.`);
-            return { linked: false };
-        }
-
-        const result = await findAndLinkStripeCustomerByEmail(uid, user.email, user);
+        const result = await findAndLinkStripeCustomer(uid, user);
 
         if (result.found && result.role) {
             return { linked: true, role: result.role };

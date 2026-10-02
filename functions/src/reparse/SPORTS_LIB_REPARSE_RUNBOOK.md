@@ -7,6 +7,16 @@ Target version source of truth:
 - `SPORTS_LIB_REPARSE_TARGET_VERSION`
 - File: `functions/src/reparse/sports-lib-reparse.config.ts`
 
+### Sports Lib 21.4.0 Wahoo FIT completion references
+
+This additive release supplies bounded Wahoo app Plan references outside Event/Activity JSON and DataStore. New trusted
+Wahoo imports can use one file-scoped reference plus one matching persisted source session to resolve an exact owned
+delivery when API association fields are missing. A null scheduled Workout ID remains null; the saved recording ID is
+not a substitute. Private sidecar, account/generation, accepted-delivery, occurrence and first-link-wins guards apply.
+No event/route reparse or derived recomputation is needed. Keep both automatic scanners disabled: their target follows
+the installed version, and the generic reparse writer does not persist this completion sidecar. Historical QA proof
+must explicitly reuse the guarded Wahoo correlation path; do not launch a global backfill for this release.
+
 ### Sports Lib 21.2.1 FIT workout-reference sidecars
 
 Sports Lib 21.2.1 adds nonnumeric FIT training-file, embedded-workout and SuuntoPlus Guide reference classes plus

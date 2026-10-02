@@ -271,6 +271,10 @@ describe('EventCardComponent', () => {
         expect(component.isOwner()).toBe(true);
         expect(component.trainingImpact()?.availability).toBe('missing-tss');
         expect(mockTrainingImpactService.watch).toHaveBeenCalledWith('testUser');
+        const impact = fixture.nativeElement.querySelector('app-training-impact') as HTMLElement;
+        expect(impact.hasAttribute('after-summary')).toBe(true);
+        expect(impact.getAttribute('variant')).toBe('strip');
+        expect(impact.hasAttribute('after-stats')).toBe(false);
 
         component.targetUserID.set('another-user');
         fixture.detectChanges();

@@ -4866,7 +4866,33 @@ describe('MCP data service', () => {
     expect(dependencies.importEvent).toHaveBeenCalledTimes(26);
   });
 
-  it('describes Training metrics and reports availability without reading payloads', async () => {
+  it.each([
+    DERIVED_METRIC_KINDS.IntensityDistribution,
+    DERIVED_METRIC_KINDS.EasyPercent,
+    DERIVED_METRIC_KINDS.HardPercent,
+    DERIVED_METRIC_KINDS.TrainingSummary,
+    DERIVED_METRIC_KINDS.TrainingBuildComparison,
+  ])('reports old intensity policies as stale in the %s catalog entry', async metricKind => {
+    const service = createMcpDataService(dependencies);
+    for (const intensityPolicyVersion of [undefined, 0, 1, 2]) {
+      vi.mocked(dependencies.fetchDerivedSnapshotMetadataDocuments).mockResolvedValueOnce([{
+        id: metricKind,
+        data: {
+          entryType: DERIVED_METRICS_ENTRY_TYPES.Snapshot, metricKind, status: 'ready',
+          schemaVersion: DERIVED_METRIC_SCHEMA_VERSION, updatedAtMs: 123, sourceEventCount: 9,
+          payload: { intensityPolicyVersion, coverageWeeks: [{ privateActivityId: 'hidden' }] },
+        },
+      }]);
+      const result = await service.listTrainingMetrics({ uid: 'user-1' });
+      expect(result.metrics.find(metric => metric.metricKind === metricKind)?.status)
+        .toBe(intensityPolicyVersion === 1 ? 'ready' : 'stale');
+      expect(JSON.stringify(result)).not.toContain('intensityPolicyVersion');
+      expect(JSON.stringify(result)).not.toContain('hidden');
+    }
+    expect(dependencies.fetchDerivedSnapshot).not.toHaveBeenCalled();
+  });
+
+  it('describes Training metrics and reports availability without reading full payloads', async () => {
     vi.mocked(dependencies.fetchDerivedSnapshotMetadataDocuments)
       .mockImplementation(async (_uid, metricKinds) => metricKinds.flatMap(
         (metricKind) => {
@@ -5159,6 +5185,31 @@ describe('MCP data service', () => {
     expect(JSON.stringify(payload)).not.toContain('startMs');
   });
 
+  it.each([DERIVED_METRIC_KINDS.IntensityDistribution, DERIVED_METRIC_KINDS.EasyPercent,
+    DERIVED_METRIC_KINDS.HardPercent])('projects current %s without internal policy, coverage or identities', async kind => {
+    const payload = kind === DERIVED_METRIC_KINDS.IntensityDistribution ? {
+      dayBoundary: 'UTC', weeks: [{ weekStartMs: 1, easySeconds: 10, moderateSeconds: 20, hardSeconds: 30,
+        source: 'heart-rate', activityId: 'private-identity' }], latestWeekStartMs: 1,
+      latestEasyPercent: 16.67, latestModeratePercent: 33.33, latestHardPercent: 50,
+    } : { dayBoundary: 'UTC', latestWeekStartMs: 1, value: 50,
+      trend8Weeks: [{ weekStartMs: 1, value: 50, eventId: 'private-identity' }] };
+    const snapshot = { status: 'ready', schemaVersion: DERIVED_METRIC_SCHEMA_VERSION, updatedAtMs: 1,
+      sourceEventCount: 1, payload: { ...payload, intensityPolicyVersion: 1,
+        coverageWeeks: [{ privateProvider: 'must-not-leak' }], privateUserId: 'must-not-leak' } };
+    vi.mocked(dependencies.fetchDerivedSnapshot).mockResolvedValue(snapshot);
+    const service = createMcpDataService(dependencies);
+    const result = await service.getTrainingMetric('user-1', kind);
+    const json = JSON.stringify(result.payload);
+    expect(json).not.toContain('intensityPolicyVersion');
+    expect(json).not.toContain('coverageWeeks');
+    expect(json).not.toContain('private');
+    expect(json).not.toContain('must-not-leak');
+    expect(MCP_DERIVED_PAYLOAD_SCHEMAS[kind].safeParse(result.payload).success).toBe(true);
+    vi.mocked(dependencies.fetchDerivedSnapshot).mockResolvedValue({ ...snapshot,
+      payload: { ...snapshot.payload, intensityPolicyVersion: undefined } });
+    await expect(service.getTrainingMetric('user-1', kind)).rejects.toMatchObject({ code: 'metric_not_ready' });
+  });
+
   it('projects expanded internal Training summaries through the frozen three-sport MCP contract', async () => {
     const contextByDiscipline = {
       running: ['running', 'endurance'],
@@ -5201,6 +5252,7 @@ describe('MCP data service', () => {
       updatedAtMs: 123,
       sourceEventCount: 10,
       payload: {
+        intensityPolicyVersion: 1,
         dayBoundary: 'UTC',
         asOfDayMs: 2,
         currentWindowDays: 28,
@@ -6761,6 +6813,7 @@ describe('MCP data service', () => {
       schemaVersion: DERIVED_METRIC_SCHEMA_VERSION,
       updatedAtMs: nowTimeMs,
       payload: {
+        intensityPolicyVersion: 1,
         dayBoundary: 'UTC',
         asOfDayMs: Date.parse('2026-07-27T00:00:00.000Z'),
         currentWindowDays: 28,
@@ -6925,6 +6978,12 @@ describe('MCP data service', () => {
       'user-1',
       DERIVED_METRIC_KINDS.TrainingSummary,
     );
+    trainingSummarySnapshot.payload.intensityPolicyVersion = 0;
+    const legacyIntensitySummary = await createMcpDataService(dependencies)
+      .getDailyBriefing({ uid: 'user-1', timeZone: 'Europe/Helsinki' });
+    expect(legacyIntensitySummary.trainingSummary).toMatchObject({ status: 'not_ready', current28d: null });
+    trainingSummarySnapshot.payload.intensityPolicyVersion = 1;
+    expect(JSON.stringify(result)).not.toContain('intensityPolicyVersion');
     trainingSummarySnapshot.payload.excludesMergedEvents = false;
     const summaryIncludingMergedEvents = await createMcpDataService(dependencies)
       .getDailyBriefing({
@@ -7107,6 +7166,7 @@ describe('MCP data service', () => {
           schemaVersion: DERIVED_METRIC_SCHEMA_VERSION,
           updatedAtMs: -1,
           payload: {
+            intensityPolicyVersion: 1,
             dayBoundary: 'UTC',
             asOfDayMs: staleSummaryDayMs,
             currentWindowDays: 28,
@@ -7147,6 +7207,7 @@ describe('MCP data service', () => {
           schemaVersion: DERIVED_METRIC_SCHEMA_VERSION,
           updatedAtMs: Date.parse('2026-07-27T12:00:00.000Z'),
           payload: {
+            intensityPolicyVersion: 1,
             dayBoundary: 'UTC',
             asOfDayMs: Date.parse('2026-07-27T00:00:00.000Z'),
             currentWindowDays: 28,

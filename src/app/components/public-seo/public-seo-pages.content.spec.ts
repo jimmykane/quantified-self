@@ -54,18 +54,23 @@ describe('public-seo-pages.content', () => {
     expect(TRAINING_PLANS_HOME_CONTENT.mcpExample.prompt).toContain('HRV');
     expect(TRAINING_PLANS_HOME_CONTENT.mcpExample.prompt).toContain('sleep');
     expect(TRAINING_PLANS_HOME_CONTENT.mcpExample.prompt).toContain('training load');
-    expect(TRAINING_PLANS_HOME_CONTENT.mcpExample.prompt).toContain('already in my plan');
+    expect(TRAINING_PLANS_HOME_CONTENT.mcpExample.prompt).toContain('planned workouts');
+    expect(TRAINING_PLANS_HOME_CONTENT.mcpExample.prompt).toContain('without duplicating training');
   });
-  it('discloses Garmin Generic limitations on the homepage and public Training Plans page', () => {
+  it('keeps detailed Garmin limitations on the feature page while the homepage introduces workout sync', () => {
     const home = JSON.stringify(TRAINING_PLANS_HOME_CONTENT);
     const page = JSON.stringify(TRAINING_PLANS_PAGE_SECTIONS);
-    for (const copy of [home, page]) {
-      expect(copy).toContain('Generic');
-      expect(copy).toContain('only on some devices');
-      expect(copy).toContain('QS keeps your authored sport');
-      expect(copy).not.toContain('Garmin open-water delivery remains unavailable');
-      expect(copy).not.toContain('Garmin and COROS delivery for these sports remain unsupported');
-    }
+    expect(home).toContain('Send compatible workouts to Garmin, Suunto, or Wahoo with Pro');
+    expect(home).not.toContain('Connecting an account alone won’t send planned workouts');
+    expect(home).not.toContain('Support varies by sport and device');
+    expect(home).not.toContain('COROS is coming soon');
+    expect(home).not.toContain('Generic');
+    expect(home).not.toContain('verification pending');
+    expect(page).toContain('Generic');
+    expect(page).toContain('only on some devices');
+    expect(page).toContain('QS keeps your authored sport');
+    expect(page).not.toContain('Garmin open-water delivery remains unavailable');
+    expect(page).not.toContain('Garmin and COROS delivery for these sports remain unsupported');
     expect(page).toContain('not a native swim profile');
     expect(page).toContain('COROS delivery for these sports remains unsupported');
   });

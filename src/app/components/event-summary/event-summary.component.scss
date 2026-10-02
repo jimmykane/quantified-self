@@ -1,3 +1,4 @@
+@use '@angular/material' as mat;
 @use '../../../styles/breakpoints' as bp;
 
 :host {
@@ -15,6 +16,22 @@
 
 app-summary-primary-info {
   --summary-primary-info-padding-top: 0;
+  --summary-primary-info-padding-inline: 0;
+  --summary-primary-info-metrics-order: 1;
+}
+
+app-summary-primary-info:has(+ .summary-primary-extension:not(:empty)) {
+  --summary-primary-info-padding-bottom: 4px;
+  --summary-primary-info-metrics-padding-bottom: 0;
+}
+
+.summary-primary-extension {
+  padding: 4px 0 8px;
+  min-width: 0;
+}
+
+.summary-primary-extension:empty {
+  display: none;
 }
 
 .privacy-mini-wrapper {
@@ -90,23 +107,35 @@ app-summary-primary-info {
 .summary-stats-area {
   display: flex;
   flex-direction: column;
-  padding: 24px;
+  padding: 0 0 24px;
   gap: 16px;
   border-top: 1px solid var(--mat-sys-outline-variant);
   width: 100%;
   box-sizing: border-box;
 }
 
-.device-info-banner {
+.event-metadata-row {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  justify-content: space-between;
-  gap: 12px;
+  gap: 0 12px;
   width: 100%;
+  min-width: 0;
+  min-height: 44px;
   box-sizing: border-box;
-  padding: 8px 24px;
+  padding: 0;
   border-top: 1px solid var(--mat-sys-outline-variant);
   background: var(--mat-sys-surface-container-lowest);
+}
+
+.device-info-banner {
+  display: flex;
+  flex: 1 1 120px;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  max-width: 100%;
+  padding-block: 8px;
   color: var(--mat-sys-on-surface-variant);
   font-size: 0.82rem;
 }
@@ -114,24 +143,74 @@ app-summary-primary-info {
 .event-tags-banner {
   display: flex;
   align-items: center;
-  min-height: 44px;
-  padding: 6px 24px;
-  border-top: 1px solid var(--mat-sys-outline-variant);
-  background: var(--mat-sys-surface-container-lowest);
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.event-tags-banner:not(.event-tags-banner--populated) {
+  margin-inline-start: auto;
 }
 
 .event-tags-button {
+  @include mat.button-overrides((
+    text-container-height: 32px,
+    text-container-shape: 6px,
+    text-horizontal-padding: 8px,
+    text-with-icon-horizontal-padding: 8px,
+    text-touch-target-display: block,
+  ));
+
   justify-content: flex-start;
   min-width: 0;
+  max-width: 100%;
+  min-height: 32px;
+  height: auto;
 }
 
-.event-tags-button mat-chip-set {
-  margin-inline-start: 4px;
+.event-tags-button-content {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-width: 0;
+  white-space: normal;
+}
+
+.event-tags-button-content > mat-icon {
+  flex: 0 0 auto;
+  width: 18px;
+  height: 18px;
+  font-size: 18px;
+  line-height: 18px;
+}
+
+.event-tags-banner mat-chip-set {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.event-tag-label {
+  display: block;
+  max-width: min(12rem, 40vw);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .device-info-banner-primary {
-  display: block;
+  display: flex;
+  align-items: center;
+  gap: 6px;
   min-width: 0;
+}
+
+.device-info-banner-icon {
+  flex: 0 0 auto;
+  width: 16px;
+  height: 16px;
+  font-size: 16px;
+  line-height: 16px;
 }
 
 .device-info-banner-label {
@@ -160,30 +239,21 @@ app-summary-primary-info {
 
 .summary-activities-toggles {
   width: 100%;
-  padding: 16px 40px;
+  padding: 0 0 16px;
   box-sizing: border-box;
   border-top: 1px solid var(--mat-sys-outline-variant);
 }
 
 @include bp.xsmall {
   .summary-stats-area {
-    padding: 12px;
+    padding-bottom: 12px;
   }
 
-  .device-info-banner {
-    padding-left: 12px;
-    padding-right: 12px;
+  .event-tags-banner--populated {
+    flex-basis: 100%;
+    padding-block: 4px;
   }
 
-  .event-tags-banner {
-    padding-left: 12px;
-    padding-right: 12px;
-  }
-
-  .summary-activities-toggles {
-    padding-left: 12px;
-    padding-right: 12px;
-  }
 }
 
 .summary-stats-action-button {

@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import type { Firestore, QueryDocumentSnapshot } from 'firebase-admin/firestore';
 import { ServiceNames } from '@sports-alliance/sports-lib';
 import { parseScheduledWorkoutV1 } from '../../../shared/training-plans';
-import { trainingDeliveryLocalDate } from '../../../shared/training-provider-delivery';
+import { normalizeDeliveryTimeZone, trainingDeliveryLocalDate } from '../../../shared/training-provider-delivery';
 import {
   TRAINING_ACTIVITY_COMPLETION_LINKS_COLLECTION_ID,
   TRAINING_WORKOUT_COMPLETIONS_COLLECTION_ID,
@@ -17,6 +17,9 @@ import { readTrainingDeliveryAuthority } from '../training-plans/delivery/connec
 import { projectDelivery } from '../training-plans/delivery/store';
 import type { FITActivityReference } from '../suunto/guide-completion';
 import type { WahooActiveAccountGuard } from './account';
+import { readWahooFITTrainingReference } from './fit-training-reference';
+import { wahooIdentities } from '../training-plans/delivery/wahoo/mapping';
+import { SPORTS_LIB_VERSION } from '../shared/sports-lib-version.node';
 
 const WAHOO_ID = /^[1-9]\d{0,18}$/;
 const QS_WAHOO_WORKOUT_TOKEN = /^qs-workout-[A-Za-z0-9_-]{43}$/;
@@ -46,18 +49,28 @@ function exactWorkoutToken(value: unknown): string | null {
 function candidateLedger(
   snapshot: QueryDocumentSnapshot,
   destinationKey: string,
-  workoutId: string,
+  workoutId: string | null,
   planId: string,
-  workoutToken: string,
+  workoutToken: string | null,
+  fromFIT = false,
 ): WahooTrainingCompletionCandidate | null {
   const ledger = snapshot.data() as DeliveryLedgerV1;
   const artifact = ledger.actual;
   if (ledger.schemaVersion !== 1 || ledger.id !== snapshot.id || ledger.provider !== 'wahoo'
     || ledger.destinationKey !== destinationKey || typeof ledger.workoutId !== 'string'
     || !/^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/.test(ledger.workoutId)
-    || !artifact || !artifact.ids || artifact.ids.workout !== workoutId || artifact.ids.plan !== planId
-    || artifact.ids.workoutToken !== workoutToken || artifact.ids.association !== `${workoutId}:${planId}`) {
+    || !artifact || !artifact.ids || !exactWahooId(artifact.ids.workout) || artifact.ids.plan !== planId
+    || (workoutId !== null && artifact.ids.workout !== workoutId)
+    || !exactWorkoutToken(artifact.ids.workoutToken)
+    || (workoutToken !== null && artifact.ids.workoutToken !== workoutToken)
+    || artifact.ids.association !== `${artifact.ids.workout}:${planId}`) {
     return null;
+  }
+  if (fromFIT) {
+    const identities = wahooIdentities(destinationKey, ledger.workoutId);
+    if (artifact.ids.externalId !== identities.externalId || artifact.ids.workoutToken !== identities.workoutToken
+      || !ledger.acceptedDigest || !Number.isSafeInteger(ledger.lastAcceptedAtMs) || ledger.lastAcceptedAtMs! < 0) return null;
+    try { normalizeDeliveryTimeZone(ledger.timeZone); } catch { return null; }
   }
   // Completion and delivery writes serialize on the same delivery identity.
   // Retrying the import is safer than allowing a late checkpoint to erase the link.
@@ -85,8 +98,8 @@ function generation(value: unknown): string | null {
   return typeof value === 'string' && value.trim() ? value : null;
 }
 
-/** Links an imported Wahoo activity only when its exact Workout, Plan and
- * app-supplied workout_token identify one current QS delivery. It never uses
+/** Links an imported Wahoo activity by exact API association or a file-scoped
+ * Plan reference resolving one owned, accepted single-workout Plan. It never uses
  * date, title, sport, duration or target-adherence inference. */
 export async function retainWahooTrainingCompletion(
   db: Firestore,
@@ -99,12 +112,20 @@ export async function retainWahooTrainingCompletion(
   workoutSummaryIdValue: unknown,
   activities: readonly FITActivityReference[] = [],
   nowMs = Date.now(),
+  fitInput?: ArrayBuffer | Uint8Array,
 ): Promise<RetainedWahooTrainingCompletionResult> {
-  const workoutId = exactWahooId(workoutIdValue);
-  const planId = exactWahooId(planIdValue);
-  const workoutToken = exactWorkoutToken(workoutTokenValue);
+  const sourceWorkoutId = exactWahooId(workoutIdValue);
+  const apiPlanId = exactWahooId(planIdValue);
+  const apiWorkoutToken = exactWorkoutToken(workoutTokenValue);
+  const fit = fitInput ? readWahooFITTrainingReference(fitInput, activities) : null;
+  const workoutId = fit ? fit.workoutId : sourceWorkoutId;
+  const planId = fit ? fit.planId : apiPlanId;
+  const workoutToken = apiWorkoutToken;
   const workoutSummaryId = exactWahooId(workoutSummaryIdValue);
-  if (!workoutId || !planId || !workoutToken || !workoutSummaryId) {
+  if (!sourceWorkoutId || !planId || !workoutSummaryId || (!fit && (!workoutId || !workoutToken))
+    || (fit && planIdValue != null && apiPlanId !== fit.planId)
+    || (fit && workoutTokenValue != null && !apiWorkoutToken)
+    || (fit && apiPlanId && apiWorkoutToken && fit.workoutId !== null && sourceWorkoutId !== fit.workoutId)) {
     return { retained: false, linkedWorkoutIds: [] };
   }
 
@@ -127,7 +148,25 @@ export async function retainWahooTrainingCompletion(
       return { retained: false, linkedWorkoutIds: [] };
     }
 
-    const matching = await tx.get(user.collection(DELIVERY_LEDGER)
+    if (fit) {
+      const [source, activity] = await Promise.all([
+        tx.get(eventRef.collection('metaData').doc(ServiceNames.WahooAPI)),
+        tx.get(user.collection('activities').doc(activities[0].id)),
+      ]);
+      const metadata = source.data(); const recorded = activity.data();
+      if (metadata?.serviceName !== ServiceNames.WahooAPI || metadata.serviceUserID !== accountGuard.providerUserId
+        || metadata.serviceWorkoutID !== sourceWorkoutId || metadata.serviceWorkoutSummaryID !== workoutSummaryId
+        || recorded?.userID !== uid || recorded.eventID !== eventId || recorded.startDate !== fit.startTimeUnixMs) {
+        return { retained: false, linkedWorkoutIds: [] };
+      }
+    }
+
+    // Each QS delivery owns one Wahoo Plan. A missing scheduled Workout ID in
+    // the app's FIT is not replaced by its new saved-recording Workout ID.
+    // Query exactly that Plan, never scan by date/title/duration. Two retained
+    // rows (even from different accounts) are ambiguous and fail closed.
+    const matching = await tx.get(fit ? user.collection(DELIVERY_LEDGER)
+      .where('actual.ids.plan', '==', planId).limit(2) : user.collection(DELIVERY_LEDGER)
       .where('provider', '==', 'wahoo')
       .where('destinationKey', '==', authority.connection.destinationKey)
       .where('actual.ids.workout', '==', workoutId)
@@ -139,10 +178,11 @@ export async function retainWahooTrainingCompletion(
         workoutId,
         planId,
         workoutToken,
+        !!fit,
       );
       return candidate ? [candidate] : [];
     });
-    // A remote Workout ID is unique within one Wahoo account. More than one
+    // A remote Workout/owned Plan identity is unique within one Wahoo account. More than one
     // ledger, or one ledger whose Plan/token association disagrees, is a
     // collision rather than permission to select the closest-looking row.
     const candidate = matching.size === 1 && candidates.length === 1 ? candidates[0] : null;
@@ -198,7 +238,8 @@ export async function retainWahooTrainingCompletion(
           // Do not let a retained Workout from an earlier plan/date occurrence
           // complete the current one before the provider copy is updated.
           if (!sameCompletion && (workout.planId !== candidate.ledger.planId
-            || workout.localDate !== candidate.artifact.localDate)) outcome = 'conflict';
+            || workout.localDate !== candidate.artifact.localDate
+            || (fit && candidate.ledger.lastAcceptedAtMs! > fit.startTimeUnixMs))) outcome = 'conflict';
           if (outcome !== 'conflict' && ((completionDocument.exists && !sameCompletion)
             || (reverseDocument.exists && !sameReverse))) outcome = 'conflict';
           if (outcome !== 'conflict') {
@@ -257,10 +298,11 @@ export async function retainWahooTrainingCompletion(
       schemaVersion: 1,
       sourceProvider: 'wahoo',
       accountDigest: createHash('sha256').update(accountGuard.providerUserId).digest('hex'),
-      workoutId,
+      workoutId: sourceWorkoutId,
       planId,
       workoutSummaryId,
-      workoutTokenDigest: createHash('sha256').update(workoutToken).digest('hex'),
+      workoutTokenDigest: workoutToken ? createHash('sha256').update(workoutToken).digest('hex') : null,
+      ...(fit ? { reader: 'sports-lib', sportsLibVersion: SPORTS_LIB_VERSION, fitReference: fit } : {}),
       outcome,
       capturedAtMs: nowMs,
     });

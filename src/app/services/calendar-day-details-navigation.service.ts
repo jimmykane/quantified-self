@@ -1,5 +1,5 @@
 import { Injectable, effect, inject, signal } from '@angular/core';
-import { NavigationStart, Router } from '@angular/router';
+import { NavigationEnd, NavigationStart, Router } from '@angular/router';
 import { filter } from 'rxjs';
 import { isTrainingPlansUrl } from '../helpers/training-plans-navigation.helper';
 import { AppUserService } from './app.user.service';
@@ -9,36 +9,49 @@ export interface CalendarDayDetailsRestoration {
   dateKey: string;
   surface?: 'today-sheet';
   deletedEventId?: string;
+  calendarReturn?: import('../helpers/activity-calendar.helper').ActivityCalendarPeriodContext;
 }
 
 @Injectable({ providedIn: 'root' })
 export class CalendarDayDetailsNavigationService {
   private readonly users = inject(AppUserService);
+  private returnOwnerUid: string | null = null;
   private pendingReturn: CalendarDayDetailsRestoration | null = null;
   private readonly restoration = signal<CalendarDayDetailsRestoration | null>(null);
   private readonly destination = signal<{ ownerUid: string; dateKey: string; expiresAtMs: number } | null>(null);
 
   constructor(router: Router) {
     effect(() => {
+      const uid = this.users.user()?.uid ?? null;
+      if (this.returnOwnerUid && uid !== this.returnOwnerUid) {
+        this.pendingReturn = null;
+        this.restoration.set(null);
+        this.returnOwnerUid = null;
+      }
       const destination = this.destination();
       if (destination && this.users.user()?.uid !== destination.ownerUid) this.destination.set(null);
     });
     router.events.pipe(
-      filter((event): event is NavigationStart => event instanceof NavigationStart),
-    ).subscribe(event => this.handleNavigationStart(event));
+      filter((event): event is NavigationStart | NavigationEnd => event instanceof NavigationStart || event instanceof NavigationEnd),
+    ).subscribe(event => {
+      if (event instanceof NavigationStart) this.handleNavigationStart(event);
+      else this.handleNavigationEnd(event);
+    });
   }
 
-  prepareReturn(sourceUrl: string, dateKey: string, surface?: 'today-sheet'): boolean {
+  prepareReturn(sourceUrl: string, dateKey: string, surface?: 'today-sheet', calendarReturn?: CalendarDayDetailsRestoration['calendarReturn']): boolean {
     const normalizedSourceUrl = normalizeLocalUrl(sourceUrl);
     const normalizedDateKey = normalizeDateKey(dateKey);
     if (!normalizedSourceUrl || !normalizedDateKey) {
       return false;
     }
 
+    this.returnOwnerUid = this.users.user()?.uid ?? null;
     this.pendingReturn = {
       sourceUrl: normalizedSourceUrl,
       dateKey: normalizedDateKey,
       ...(surface ? { surface } : {}),
+      ...(calendarReturn ? { calendarReturn } : {}),
     };
     this.restoration.set(null);
     return true;
@@ -103,6 +116,19 @@ export class CalendarDayDetailsNavigationService {
     return true;
   }
 
+  private handleNavigationEnd(event: NavigationEnd): void {
+    const pendingReturn = this.pendingReturn;
+    if (!pendingReturn || normalizeLocalUrl(event.urlAfterRedirects) !== pendingReturn.sourceUrl) return;
+    this.pendingReturn = null;
+    if (this.returnOwnerUid && this.users.user()?.uid !== this.returnOwnerUid) {
+      this.restoration.set(null);
+      return;
+    }
+    // Calendar effects read router.url. Publish only after the destination URL and
+    // its components are active, so a newly mounted tile cannot miss its return.
+    this.restoration.set(pendingReturn);
+  }
+
   private handleNavigationStart(event: NavigationStart): void {
     const pendingReturn = this.pendingReturn;
     if (!pendingReturn) {
@@ -114,9 +140,7 @@ export class CalendarDayDetailsNavigationService {
     }
 
     const targetUrl = normalizeLocalUrl(event.url);
-    if (event.navigationTrigger === 'popstate' && targetUrl === pendingReturn.sourceUrl) {
-      this.pendingReturn = null;
-      this.restoration.set(pendingReturn);
+    if (targetUrl === pendingReturn.sourceUrl) {
       return;
     }
 

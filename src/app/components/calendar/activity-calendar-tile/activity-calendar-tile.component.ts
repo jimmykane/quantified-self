@@ -10,6 +10,7 @@ import {
   input,
   output,
   signal,
+  untracked,
   type Signal,
 } from '@angular/core';
 import { toObservable, toSignal } from '@angular/core/rxjs-interop';
@@ -19,15 +20,20 @@ import type { EventInterface, User } from '@sports-alliance/sports-lib';
 import { catchError, distinctUntilChanged, finalize, map, of, shareReplay, startWith, Subscription, switchMap, take } from 'rxjs';
 import { isTimelineNoteVisible, timelineNoteOverlaps } from '@shared/timeline-notes';
 import type { TimelineNoteChartContext } from '../../../helpers/timeline-notes-chart.helper';
-import { calendarTimelineNoteRange, calendarTimelineNotesByDate } from '../../../helpers/calendar-timeline-notes.helper';
+import { calendarTimelineNoteRange, calendarTimelineNotesByDate, calendarTimelineNoteRangesEqual } from '../../../helpers/calendar-timeline-notes.helper';
 import { revealCalendarDayContext } from '../../../helpers/reveal-calendar-day-context.helper';
 import {
   type ActivityCalendarDayViewModel,
+  type ActivityCalendarPeriodContext,
   buildActivityCalendarViewModel,
-  navigateActivityCalendarDate,
+  buildActivityCalendarSelectedDay,
+  navigateActivityCalendarPeriod,
   parseActivityCalendarDate,
   resolveActivityCalendarQueryWindow,
+  resolveActivityCalendarViewAnchor,
+  formatActivityCalendarDateParam,
 } from '../../../helpers/activity-calendar.helper';
+import { AppHapticsService } from '../../../services/app.haptics.service';
 import { SharedModule } from '../../../modules/shared.module';
 import { ActivityCalendarService } from '../../../services/activity-calendar.service';
 import { AppUserService } from '../../../services/app.user.service';
@@ -85,6 +91,35 @@ export class ActivityCalendarTileComponent {
   private readonly reloadSequence = signal(0);
   private readonly today = signal(new Date());
 
+  private readonly haptics = inject(AppHapticsService);
+  readonly view = input<'month' | '30d'>('month');
+  readonly viewSaving = input(false);
+  readonly viewChange = output<'month' | '30d'>();
+  readonly stateChange = output<{ view: 'month' | '30d'; anchor: string; date: string }>();
+  private readonly mode = signal<'month' | '30d'>('month');
+  readonly periodUnitLabel = computed(() => this.mode() === '30d' ? '30-day period' : 'month');
+  readonly selectedView = this.mode.asReadonly();
+  private readonly modeEffect = effect(() => {
+    const mode = this.view() === '30d' ? '30d' : 'month';
+    untracked(() => {
+      if (mode !== this.mode()) {
+        this.mode.set(mode);
+        this.anchorDate.set(resolveActivityCalendarViewAnchor(mode, parseActivityCalendarDate(this.selectedDateKey()), this.today()));
+      }
+    });
+  });
+  private previousOwnerUid: string | null = null;
+  private readonly ownerEffect = effect(() => {
+    const uid = this.user()?.uid ?? null;
+    if (uid === this.previousOwnerUid) return;
+    this.previousOwnerUid = uid;
+    this.anchorDate.set(untracked(() => this.view()) === '30d' ? parseActivityCalendarDate(localDateKey(new Date())) : startOfCurrentMonth());
+    this.selectedDateKey.set(localDateKey(new Date()));
+    this.followsCurrentMonth.set(true);
+  });
+  private readonly stateEffect = effect(() => {
+    this.stateChange.emit({ view: this.mode(), anchor: formatActivityCalendarDateParam(this.anchorDate()), date: this.selectedDateKey() });
+  });
   readonly user = input<User | null | undefined>(null);
   private readonly trainingImpactSource = computed(() => {
     const uid = this.user()?.uid;
@@ -116,6 +151,7 @@ export class ActivityCalendarTileComponent {
   readonly calmMonth = input(false);
   readonly privateHealthEnabled = input(true);
   readonly initialDateKey = input<string | null>(null);
+  readonly initialPeriodContext = input<ActivityCalendarPeriodContext | null>(null);
   readonly selectedDateKey = signal(localDateKey(new Date()));
   readonly selectedDateKeyChange = output<string>();
   private openedInitialDateKey: string | null = null;
@@ -127,7 +163,7 @@ export class ActivityCalendarTileComponent {
     this.reloadSequence();
     if (!user?.uid) return of({ status: 'ready', events: [] } as ActivityCalendarTileState);
     const queryWindow = resolveActivityCalendarQueryWindow(
-      'month', anchorDate, user.settings?.unitSettings?.startOfTheWeek,
+      this.mode(), anchorDate, user.settings?.unitSettings?.startOfTheWeek,
     );
     return this.calendarService.watchEvents(user, queryWindow).pipe(
       map(events => ({ status: 'ready', events }) as ActivityCalendarTileState),
@@ -186,7 +222,7 @@ export class ActivityCalendarTileComponent {
     );
   });
   readonly calendarModel = computed(() => buildActivityCalendarViewModel(this.eventState().events, {
-    view: 'month',
+    view: this.mode(),
     anchorDate: this.anchorDate(),
     startOfWeek: this.user()?.settings?.unitSettings?.startOfTheWeek,
     locale: this.locale,
@@ -195,8 +231,7 @@ export class ActivityCalendarTileComponent {
   readonly isLoading = computed(() => this.eventState().status === 'loading');
   readonly selectedDay = computed(() => this.calendarModel().months.flatMap(month => month.days)
     .find(day => day.dateKey === this.selectedDateKey())
-    ?? this.calendarModel().months.flatMap(month => month.days).find(day => day.inPrimaryPeriod)
-    ?? null);
+    ?? buildActivityCalendarSelectedDay(this.eventState().events, parseActivityCalendarDate(this.selectedDateKey()), this.locale, this.today()));
   readonly selectedDayActivities = computed(() => ({
     day: this.selectedDay()!, status: this.eventState().status,
   }));
@@ -208,6 +243,7 @@ export class ActivityCalendarTileComponent {
     if (!day || !user?.uid) return null;
     return {
       day, userId: user.uid, locale: this.locale,
+      calendarReturn: { view: this.mode(), anchor: formatActivityCalendarDateParam(this.anchorDate()) },
       privateHealthEnabled: this.privateHealthEnabled(),
       planningEnabled: this.hasTrainingPlanningUIAccess(),
       unitSettings: user.settings?.unitSettings ?? null,
@@ -226,8 +262,8 @@ export class ActivityCalendarTileComponent {
     const context = this.notesContext();
     if (note && context?.ownerUid === this.users.user()?.uid) context.select([note]);
   }
-  readonly notesByDate = computed(() => calendarTimelineNotesByDate(this.calendarModel(), this.notesContext()?.notes ?? [], this.today().getTime()));
-  private readonly notesRange = computed(() => calendarTimelineNoteRange(this.calendarModel()));
+  readonly notesByDate = computed(() => calendarTimelineNotesByDate(this.calendarModel(), this.notesContext()?.notes ?? [], this.today().getTime(), this.selectedDay()));
+  private readonly notesRange = computed(() => calendarTimelineNoteRange(this.calendarModel(), this.selectedDay()), { equal: calendarTimelineNoteRangesEqual });
   private readonly notesRangeEffect = effect(onCleanup => {
     const report = this.reportNotesRange();
     if (!report) return;
@@ -248,7 +284,10 @@ export class ActivityCalendarTileComponent {
       this.selectDate(restoration.dateKey);
     }
 
-    const restoredMonth = startOfCurrentMonth(parseActivityCalendarDate(restoration.dateKey));
+    const returnState = restoration.calendarReturn;
+    if (returnState && this.mode() !== returnState.view) this.mode.set(returnState.view === '30d' ? '30d' : 'month');
+    const restoredMonth = returnState ? parseActivityCalendarDate(returnState.anchor)
+      : resolveActivityCalendarViewAnchor(this.mode(), parseActivityCalendarDate(restoration.dateKey), this.today());
     if (restoredMonth.getTime() !== this.anchorDate().getTime()) {
       this.followsCurrentMonth.set(false);
       this.anchorDate.set(restoredMonth);
@@ -275,7 +314,9 @@ export class ActivityCalendarTileComponent {
     const dateKey = this.initialDateKey();
     if (!dateKey || !this.user()?.uid || this.dayContextEnabled() || this.openedInitialDateKey === dateKey) return;
     const date = parseActivityCalendarDate(dateKey);
-    const month = startOfCurrentMonth(date);
+    const month = this.initialPeriodContext()?.anchor
+      ? parseActivityCalendarDate(this.initialPeriodContext()!.anchor, date)
+      : startOfCurrentMonth(date);
     if (month.getTime() !== this.anchorDate().getTime()) {
       this.followsCurrentMonth.set(false);
       this.anchorDate.set(month);
@@ -295,10 +336,11 @@ export class ActivityCalendarTileComponent {
     if (!this.followsCurrentMonth()) {
       return;
     }
-    const currentMonth = startOfCurrentMonth(now);
+    const currentMonth = this.mode() === '30d' ? parseActivityCalendarDate(localDateKey(now)) : startOfCurrentMonth(now);
     if (currentMonth.getTime() !== this.anchorDate().getTime()) {
       this.anchorDate.set(currentMonth);
     }
+    this.selectDate(localDateKey(now));
   }
 
   @HostListener('document:visibilitychange')
@@ -312,20 +354,28 @@ export class ActivityCalendarTileComponent {
 
   navigateMonth(direction: -1 | 1): void {
     this.followsCurrentMonth.set(false);
-    const target = navigateActivityCalendarDate(this.anchorDate(), 'month', direction);
-    this.anchorDate.set(target);
-    const selected = new Date(`${this.selectedDateKey()}T12:00:00`);
-    const dayOfMonth = Number.isFinite(selected.getTime()) ? selected.getDate() : 1;
-    const next = new Date(target.getFullYear(), target.getMonth(), Math.min(dayOfMonth, new Date(target.getFullYear(), target.getMonth() + 1, 0).getDate()));
-    this.selectDate(localDateKey(next));
+    const target = navigateActivityCalendarPeriod({ view: this.mode(), anchorDate: this.anchorDate(),
+      selectedDate: parseActivityCalendarDate(this.selectedDateKey()) }, direction);
+    this.anchorDate.set(target.anchorDate);
+    this.selectDate(localDateKey(target.selectedDate));
   }
 
   goToToday(): void {
     const today = new Date();
     this.today.set(today);
-    this.anchorDate.set(new Date(today.getFullYear(), today.getMonth(), 1));
+    this.anchorDate.set(this.mode() === '30d' ? parseActivityCalendarDate(localDateKey(today)) : startOfCurrentMonth(today));
     this.followsCurrentMonth.set(true);
     this.selectDate(localDateKey(today));
+  }
+
+  selectView(value: unknown): void {
+    const mode = value === '30d' ? '30d' : 'month';
+    if (this.viewSaving() || mode === this.mode()) return;
+    this.mode.set(mode);
+    this.anchorDate.set(resolveActivityCalendarViewAnchor(mode, parseActivityCalendarDate(this.selectedDateKey()), this.today()));
+    this.followsCurrentMonth.set(false);
+    this.haptics.selection();
+    this.viewChange.emit(mode);
   }
 
   private selectDate(dateKey: string): void {
@@ -336,6 +386,7 @@ export class ActivityCalendarTileComponent {
 
   openDay(day: ActivityCalendarDayViewModel, revealDay = true): void {
     if (this.dayContextEnabled()) {
+      if (day.dateKey !== localDateKey(this.today())) this.followsCurrentMonth.set(false);
       this.selectDate(day.dateKey);
       if (revealDay) requestAnimationFrame(() => revealCalendarDayContext(this.elementRef.nativeElement));
       return;
@@ -394,6 +445,7 @@ export class ActivityCalendarTileComponent {
         data: {
           day,
           userId,
+          calendarReturn: { view: this.mode(), anchor: formatActivityCalendarDateParam(this.anchorDate()) },
           returnToDashboard: this.router.url.startsWith('/dashboard'),
           privateHealthEnabled: this.privateHealthEnabled(),
           planningEnabled: this.hasTrainingPlanningUIAccess(),

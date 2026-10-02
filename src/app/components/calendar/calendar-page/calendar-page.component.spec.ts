@@ -80,6 +80,7 @@ describe('CalendarPageComponent', () => {
     workoutDestinationFor: ReturnType<typeof vi.fn>;
     consumeWorkoutDestination: ReturnType<typeof vi.fn>;
     prepareWorkoutDestination: ReturnType<typeof vi.fn>;
+    prepareReturn: ReturnType<typeof vi.fn>;
   };
   let pendingDestination: ReturnType<typeof signal<string | null>>;
 
@@ -107,6 +108,7 @@ describe('CalendarPageComponent', () => {
       workoutDestinationFor: vi.fn().mockImplementation(() => pendingDestination()),
       consumeWorkoutDestination: vi.fn().mockImplementation(() => { pendingDestination.set(null); return true; }),
       prepareWorkoutDestination: vi.fn().mockImplementation((_uid, date) => { pendingDestination.set(date); return true; }),
+      prepareReturn: vi.fn().mockReturnValue(true),
     };
     await TestBed.configureTestingModule({
       imports: [CalendarPageComponent],
@@ -136,6 +138,36 @@ describe('CalendarPageComponent', () => {
     vi.spyOn(MatDialog.prototype, 'open').mockImplementation(dialogs.open);
   });
 
+  it('selects an adjoining date without changing the month query or anchor', async () => {
+    queryParams.next(convertToParamMap({ view: 'month', date: '2026-10-01' }));
+    const fixture = TestBed.createComponent(CalendarPageComponent);
+    fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+    const adjacent = fixture.componentInstance.calendarModel().months[0].days.find(day => day.dateKey === '2026-09-28')!;
+    fixture.componentInstance.openDay(adjacent);
+    expect(navigate.mock.calls.at(-1)[1].queryParams).toEqual({ view: 'month', date: '2026-09-28', anchor: '2026-10-01' });
+    queryParams.next(convertToParamMap(navigate.mock.calls.at(-1)[1].queryParams));
+    fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+    expect(fixture.componentInstance.calendarModel().periodLabel).toContain('October');
+    expect(fixture.componentInstance.selectedDay()?.dateKey).toBe('2026-09-28');
+    expect(watchEvents).toHaveBeenCalledOnce();
+  });
+
+  it('pages thirty dates while keeping the selected date separate and the table range exact', async () => {
+    queryParams.next(convertToParamMap({ view: '30d', date: '2026-09-16', anchor: '2026-10-01' }));
+    const fixture = TestBed.createComponent(CalendarPageComponent);
+    fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+    expect(fixture.componentInstance.calendarModel().months[0].days.filter(day => day.inPrimaryPeriod)).toHaveLength(30);
+    expect(fixture.nativeElement.querySelector('.calendar-selected-day.qs-glass-card-panel')).toBeNull();
+    expect(fixture.componentInstance.primaryActivityRange()).toEqual({
+      startMs: new Date(2026, 8, 2).getTime(), endExclusiveMs: new Date(2026, 9, 2).getTime(),
+    });
+    fixture.componentInstance.navigatePeriod(-1);
+    expect(navigate.mock.calls.at(-1)[1].queryParams).toEqual({ view: '30d', date: '2026-08-17', anchor: '2026-09-01' });
+    queryParams.next(convertToParamMap({ view: 'month', date: '2026-09-28', anchor: '2026-10-01' }));
+    fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+    expect(fixture.componentInstance.selectedDay()?.dateKey).toBe('2026-09-28');
+  });
+
   it('loads the visible month independently and renders its activity', async () => {
     const fixture = TestBed.createComponent(CalendarPageComponent);
     fixture.detectChanges();
@@ -149,7 +181,7 @@ describe('CalendarPageComponent', () => {
       .toBe('calendar_month');
     expect(fixture.nativeElement.querySelector('.calendar-progress-slot')).toBeTruthy();
     expect(fixture.nativeElement.querySelectorAll('.activity-calendar-day-button')).toHaveLength(
-      fixture.componentInstance.calendarModel().months[0].days.filter(day => day.inPrimaryPeriod).length);
+      fixture.componentInstance.calendarModel().months[0].days.length);
     const summaryMetrics = [...fixture.nativeElement.querySelectorAll('.calendar-period-summary-metric')]
       .map((metric: HTMLElement) => ({
         label: metric.querySelector('.calendar-period-summary-label span')?.textContent?.trim(),
@@ -215,6 +247,55 @@ describe('CalendarPageComponent', () => {
     expect(fixture.nativeElement.querySelector('app-activity-range-table-section')).toBeNull();
   });
 
+  it('keeps mode and period on Full day return, including browser Back and Forward', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] }); vi.setSystemTime(new Date(2026, 7, 15));
+    activatedRoute.snapshot.data = { calendarMode: 'day' };
+    activatedRoute.snapshot.paramMap = convertToParamMap({ date: '2026-08-03' });
+    activatedRoute.snapshot.queryParamMap = convertToParamMap({ calendarView: '30d', calendarAnchor: '2026-08-15' });
+    routeParams.next(activatedRoute.snapshot.paramMap); queryParams.next(activatedRoute.snapshot.queryParamMap);
+    const fixture = TestBed.createComponent(CalendarPageComponent);
+    fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+    expect(fixture.componentInstance.calendarBackQuery()).toEqual({ view: '30d', date: '2026-08-03', anchor: '2026-08-15' });
+    fixture.componentInstance.navigatePeriod(1);
+    expect(navigate).toHaveBeenCalledWith(['/calendar/day', '2026-08-04'], { queryParams: { calendarView: '30d', calendarAnchor: '2026-08-15' } });
+    routeParams.next(convertToParamMap({ date: '2026-08-04' })); fixture.detectChanges();
+    expect(fixture.componentInstance.calendarBackQuery().date).toBe('2026-08-04');
+    routeParams.next(convertToParamMap({ date: '2026-08-03' })); fixture.detectChanges();
+    expect(fixture.componentInstance.calendarBackQuery().date).toBe('2026-08-03');
+    routeParams.next(convertToParamMap({ date: '2026-09-15' })); fixture.detectChanges();
+    expect(fixture.componentInstance.calendarBackQuery().anchor).toBe('2026-09-15');
+    vi.useRealTimers();
+  });
+
+  it('returns to a grid that visibly includes a day beyond the padded 30-day activity window', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] }); vi.setSystemTime(new Date(2026, 9, 1));
+    activatedRoute.snapshot.data = { calendarMode: 'day' };
+    activatedRoute.snapshot.paramMap = convertToParamMap({ date: '2026-10-05' });
+    activatedRoute.snapshot.queryParamMap = convertToParamMap({ calendarView: '30d', calendarAnchor: '2026-10-01' });
+    routeParams.next(activatedRoute.snapshot.paramMap); queryParams.next(activatedRoute.snapshot.queryParamMap);
+    const fixture = TestBed.createComponent(CalendarPageComponent);
+    fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+    expect(fixture.componentInstance.calendarBackQuery()).toEqual({ view: '30d', date: '2026-10-05', anchor: '2026-10-05' });
+    vi.useRealTimers();
+  });
+
+  it.each([undefined, 'today-sheet'])('restores the dashboard period after a fresh full-day load with surface %s', async surface => {
+    const params = { from: 'dashboard', calendarView: '30d', calendarAnchor: '2026-08-15', ...(surface ? { calendarSurface: surface } : {}) };
+    activatedRoute.snapshot.data = { calendarMode: 'day' };
+    activatedRoute.snapshot.paramMap = convertToParamMap({ date: '2026-08-04' });
+    activatedRoute.snapshot.queryParamMap = convertToParamMap(params);
+    routeParams.next(activatedRoute.snapshot.paramMap); queryParams.next(activatedRoute.snapshot.queryParamMap);
+    const router = TestBed.inject(Router); router.resetConfig([{ path: 'dashboard', children: [] }]);
+    const fixture = TestBed.createComponent(CalendarPageComponent);
+    fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+    (fixture.nativeElement.querySelector('.calendar-day-back') as HTMLAnchorElement).click();
+    expect(dayDetailsNavigation.prepareReturn).toHaveBeenCalledWith('/dashboard', '2026-08-04', surface,
+      { view: '30d', anchor: '2026-08-15' });
+    await fixture.whenStable();
+    fixture.componentInstance.navigatePeriod(1);
+    expect(navigate).toHaveBeenCalledWith(['/calendar/day', '2026-08-05'], { queryParams: params });
+  });
+
   it('navigates adjacent day routes and follows the path parameter on Back', async () => {
     activatedRoute.snapshot.data = { calendarMode: 'day' };
     activatedRoute.snapshot.paramMap = convertToParamMap({ date: '2026-08-03' });
@@ -273,7 +354,7 @@ describe('CalendarPageComponent', () => {
       .find(entry => entry.workout.id === 'active-workout')?.completed).toBe(true);
     expect(fixture.nativeElement.querySelector('.planned-workout-marker--completed')?.textContent?.trim()).toBe('task_alt');
     expect(fixture.nativeElement.querySelectorAll('.activity-calendar-day-button')).toHaveLength(
-      fixture.componentInstance.calendarModel().months[0].days.filter(day => day.inPrimaryPeriod).length);
+      fixture.componentInstance.calendarModel().months[0].days.length);
   });
 
   it('renders twelve months when the URL selects the yearly view', async () => {
@@ -393,7 +474,7 @@ describe('CalendarPageComponent', () => {
     fixture.componentInstance.navigatePeriod(1);
 
     expect(navigate).toHaveBeenCalledWith([], expect.objectContaining({
-      queryParams: { view: 'month', date: '2026-09-03' },
+      queryParams: expect.objectContaining({ view: 'month', date: '2026-09-03' }),
       queryParamsHandling: 'merge',
     }));
   });
@@ -427,7 +508,7 @@ describe('CalendarPageComponent', () => {
     const selected = fixture.componentInstance.selectedDay()!;
     fixture.componentInstance.openDay(selected);
     expect(navigate).toHaveBeenCalledWith([], expect.objectContaining({
-      queryParams: { view: 'month', date: selected.dateKey },
+      queryParams: expect.objectContaining({ view: 'month', date: selected.dateKey }),
     }));
   });
 
@@ -438,7 +519,7 @@ describe('CalendarPageComponent', () => {
     const next = fixture.componentInstance.calendarModel().months.flatMap(month => month.days)
       .find(day => day.dateKey === '2026-08-04')!;
     fixture.componentInstance.openDay(next);
-    expect(navigate).toHaveBeenCalledWith([], expect.objectContaining({ queryParams: { view, date: '2026-08-04' } }));
+    expect(navigate).toHaveBeenCalledWith([], expect.objectContaining({ queryParams: expect.objectContaining({ view, date: '2026-08-04' }) }));
     queryParams.next(convertToParamMap({ view, date: '2026-08-04' }));
     fixture.detectChanges();
     expect(fixture.componentInstance.selectedDay()?.dateKey).toBe('2026-08-04');
@@ -456,7 +537,7 @@ describe('CalendarPageComponent', () => {
       fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
       fixture.componentInstance.openDay(fixture.componentInstance.selectedDay()!);
       expect(navigate).toHaveBeenCalledWith([], expect.objectContaining({
-        queryParams: { view: 'month', date: '2026-08-03' },
+        queryParams: expect.objectContaining({ view: 'month', date: '2026-08-03' }),
       }));
     } finally {
       window.matchMedia = originalMatchMedia;
@@ -477,12 +558,12 @@ describe('CalendarPageComponent', () => {
     routerEvents.next(new Scroll(new NavigationEnd(1, '/calendar', '/calendar?view=month&date=2026-08-05'), null, null));
     await Promise.resolve();
     expect(restore).not.toHaveBeenCalled();
-    routerEvents.next(new Scroll(new NavigationEnd(2, '/calendar', '/calendar?view=month&date=2026-08-04'), null, null));
+    routerEvents.next(new Scroll(new NavigationEnd(2, '/calendar', '/calendar?view=month&date=2026-08-04&anchor=2026-08-03'), null, null));
     await Promise.resolve();
     expect(restore).toHaveBeenCalledWith([0, 420]);
     restore.mockClear();
     fixture.componentInstance.navigatePeriod(1);
-    routerEvents.next(new Scroll(new NavigationEnd(3, '/calendar', '/calendar?view=month&date=2026-09-03'), [0, 180], null));
+    routerEvents.next(new Scroll(new NavigationEnd(3, '/calendar', '/calendar?view=month&date=2026-09-03&anchor=2026-09-03'), [0, 180], null));
     await Promise.resolve();
     expect(restore).not.toHaveBeenCalled();
   });
@@ -493,7 +574,7 @@ describe('CalendarPageComponent', () => {
     fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
     const day = fixture.componentInstance.calendarModel().months[0].days.find(item => item.dateKey === '2026-08-04')!;
     fixture.componentInstance.openDay(day);
-    expect(navigate).toHaveBeenCalledWith([], expect.objectContaining({ queryParams: { view: 'month', date: '2026-08-04' } }));
+    expect(navigate).toHaveBeenCalledWith([], expect.objectContaining({ queryParams: expect.objectContaining({ view: 'month', date: '2026-08-04' }) }));
     queryParams.next(convertToParamMap({ view: 'month', date: '2026-08-04' }));
     fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
     expect(fixture.componentInstance.selectedDayData()?.day.eventCount).toBe(0);
@@ -532,7 +613,7 @@ describe('CalendarPageComponent', () => {
 
     expect(fixture.nativeElement.querySelector('[role="alert"]')?.textContent).toContain('could not be loaded');
     expect(fixture.nativeElement.querySelectorAll('.activity-calendar-day-button')).toHaveLength(
-      fixture.componentInstance.calendarModel().months[0].days.filter(day => day.inPrimaryPeriod).length);
+      fixture.componentInstance.calendarModel().months[0].days.length);
     expect(fixture.nativeElement.querySelector('.planned-workout-markers')).toBeTruthy();
     expect([...fixture.nativeElement.querySelectorAll('.calendar-selected-day .calendar-day-context-totals strong')]
       .map((value: HTMLElement) => value.textContent?.trim())).toEqual(['--', '--', '--']);
@@ -584,7 +665,7 @@ describe('CalendarPageComponent', () => {
     fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
     expect(fixture.nativeElement.textContent).toContain('Morning run');
     expect(fixture.nativeElement.querySelectorAll('.activity-calendar-day-button')).toHaveLength(
-      fixture.componentInstance.calendarModel().months[0].days.filter(day => day.inPrimaryPeriod).length);
+      fixture.componentInstance.calendarModel().months[0].days.length);
   });
 
   it('shows the selected month empty state when only an adjacent grid day has an activity', async () => {

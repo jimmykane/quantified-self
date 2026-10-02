@@ -111,6 +111,16 @@ field entirely. The existing
 retried unchanged after validation rejects it. Neither preview creates authored or provider state.
 `apply_training_changes` consumes the opaque proposal as a separately approval-gated write tool. ChatGPT, Claude and
 other MCP hosts own their native tool-approval UI; QS does not use MCP elicitation as a second confirmation round.
+The additive `get_training_change_status` recovers an uncertain apply reply using its exact opaque proposal reference
+and permission mode, with the same original read/child-write grants. It is read-only: no approval, lease renewal,
+resume, provider call or automatic retry. Finalized results are the retained strict apply result, not provider/watch
+receipt. Nonterminal checkpoint counts are a lower bound; `applying` means wait. Missing or unavailable receipts do not
+prove that nothing applied. Never create replacements, invent references, split an approved batch, or replay a
+declined/cancelled call through another interface. A still-approved retry must retain native client approval.
+The 25-change schema limit is not a host response-time guarantee. The redacted #791 server evidence, recovery states,
+30-day result lifetime and deployment/catalog boundary are detailed in
+[Training workspace](training-workspace.md#lost-mcp-apply-replies-791). This read is not added to the Assistant model's
+tools and does not widen consent. Source support requires separate deployment and registered-client discovery.
 For **Duplicate to…**, the existing `copy-workout` batch change takes an exact source reference, fresh proposal-local
 key, explicit destination date and destination plan reference or `null` for Standalone. Clients should read the exact
 source and current schedule revision, preserve its scope by default and ask if the source or date is ambiguous. The
@@ -312,7 +322,9 @@ unknown names remain unsupported without substitution. Missing, foreign or proje
 closed. Compatibility is local contract evidence, never provider/cloud/device acceptance. Existing provider Send and
 plan-sync previews use the full companion, including load-only changes, and retain their independent delivery grant
 and normal proposal confirmation. No registered tool, schema, issue-code enum, response field or permission changes;
-no client catalog refresh or plugin rebuild is required for this mapping-only change. Live proof remains in #782.
+no client catalog refresh or plugin rebuild is required for this mapping-only change. Completed #782 records the
+deployed native Strength cloud lifecycle and owner-confirmed Garmin Connect/watch proof; local assessment alone
+does not claim that receipt.
 New additive tools need
 a client catalog refresh after release; the registered v1 recipe input/output stays unchanged. The app's strength
 editor may display or accept pounds using Sports Lib 21.3.0, but MCP external-load input and output remain canonical
@@ -367,15 +379,24 @@ and completed states for COROS. Partner athlete/workout IDs, destination
 identity, batch journals, request outcomes, token authority and exact `planWorkoutId` evidence remain private and are
 rejected from browser/MCP projections. Plan totals continue to derive from individual workout statuses rather than a
 claimed native plan object. The exact provider marker can update the existing private completion link, which the single
-and bounded bulk completion tools expose only as their sanitized current projection. Candidate discovery, fallback
-matching and manual link changes remain the focused #651 deferral. No provider identity, batch evidence or transport
-action is introduced.
+and bounded bulk completion tools expose only as their sanitized current projection. Completed #651 covers exact-marker
+reconciliation and duplicate/ambiguity handling. Candidate discovery, fallback matching and manual link/unlink/relink
+are explicitly out of scope, not deferred acceptance criteria. No provider identity, batch evidence or transport action
+is introduced.
+
+Sports Lib 21.4.0 also permits exact Wahoo app FIT Plan references to resolve one owned accepted single-workout Plan
+when API association fields are absent. QS verifies the trusted source account, one persisted session/activity, retained
+deterministic delivery identity and current occurrence. A nullable scheduled Workout ID is not replaced by the saved
+recording ID. The references remain private completion sidecars, outside DataStore, activity JSON and all MCP projections.
+Existing linked/unlinked completion reads already cover the result: no tool, schema, scope, consent, metric, provider
+action, Assistant route, contract refresh or bundled-plugin change is introduced by this consumer integration.
 
 Wahoo exact completion correlation follows the same no-wire-change boundary. An imported activity can move its existing
 sanitized delivery status to `completed` only after the private Workout ID, Plan ID and deterministic `workout_token`
 resolve one current account-bound delivery. Those identifiers, the account digest, workout-summary evidence and reverse
 link remain private and are rejected from MCP projections. The existing sanitized completion tools can report the exact
-current link; #651 retains bounded fallback candidate discovery and approval-gated manual link/unlink/relink behavior.
+current link. Completed #651 is exact-marker-only: fallback candidate discovery and manual link/unlink/relink
+are explicitly out of scope.
 No private Wahoo identity or live check is introduced.
 
 Public Garmin, Wahoo and Suunto Training delivery changes runtime availability, not the MCP wire contract. An already
@@ -927,6 +948,7 @@ The analytics and map entries follow the
 | `preview_training_changes` | `training-plans:read` plus the relevant Training write scope(s) | Strict bounded proposal with authored and per-provider effects; no authored mutation |
 | `preview_saved_workout_change` | `training-plans:read` + `training-plans:write` | One revision-bound library edit or 1–100-date placement preview; no provider consent or authored mutation |
 | `apply_training_changes` | Same scopes bound into the proposal; native client approval gate | Idempotently applies a preview-created proposal and returns independent authored/provider outcomes |
+| `get_training_change_status` | Same original Training read and child-write grants bound into the proposal | Read-only retained apply result or lower-bound checkpoints after an uncertain reply; never applies or resumes |
 | `apply_saved_workout_change` | `training-plans:read` + `training-plans:write`; native client approval gate | Idempotently applies an exact library proposal through the existing sanitized mutation service |
 | `list_health_metrics` | `health:read` | Static allowlisted Health capabilities, Sports Lib types/units, range limits and additional body-composition permission requirements |
 | `query_health_metric` | `health:read`; also `measurements:read` for body composition | Source-separated stored scalars or bounded representative sample trends; identity-free calendar-day body composition |
@@ -1671,6 +1693,8 @@ redaction and strict validation:
 
 - `form` strips the internal Form payload version and exact per-day activity counts used by the owner-only Training
   impact recap. Its frozen public daily rows remain exactly `{dayMs, load}`.
+- `intensity_distribution`, `easy_percent`, and `hard_percent` reconstruct their exact existing public fields, omitting
+  internal intensity-policy and weekly coverage metadata. The summary and Best Build projections also omit that policy.
 - `training_summary` and `training_build_comparison` retain only Running, Cycling, and Swimming and reconstruct their
   exact registered window objects, so internal `contexts`, profile IDs, and profile metrics cannot leak.
 - `training_explanation` retains those three named families, folds Rowing, Walking & Hiking, Nordic Skiing, Strength,
@@ -1678,6 +1702,20 @@ redaction and strict validation:
   for the registered three.
 - `training_durability` retains its existing Running, Cycling, Pool, and Open-water scopes. Its workspace-only exact
   supporting-workout start time is reduced to the existing UTC `startDayMs` public field.
+
+Intensity uses existing recorded QS zone durations with approximate source-specific groups: HR Easy Z1–Z2, Moderate Z3,
+Hard Z4–Z5; power Easy Z1–Z2, Moderate Z3–Z4, Hard Z5–Z7. Auto selects power per joined child activity when its valid zone
+time is positive, otherwise HR; unusable activities contribute no intensity time. Weekly totals retain each multisport
+segment's source. The existing public weekly `source` enum indicates the dominant activity source (power on ties), while
+mixed weeks can include both sources. No source selector, thresholds, or zone-model detection is introduced.
+
+The five affected snapshots require private `intensityPolicyVersion` 1 through the existing ensure/queue lifecycle.
+Old snapshots and Best Build workout-cache seeds rebuild; unrelated kinds keep their versions. Public tool names,
+scopes, payload schemas, and wire version remain unchanged. Runtime metric descriptions explain the new grouping.
+Catalog availability checks project only the private policy field alongside ordinary snapshot metadata; old ready
+policies report `stale`, and no internal field is returned.
+The bundled Training and cross-domain workflows already discover these descriptions and require ready snapshots;
+their advertised guidance needs no change or plugin rebuild for this correction.
 
 The same projection protects the compact briefing and daily report Training summary. Negative fixtures include all
 all ten internal groups, general/gravity/rowing contexts, the internal maximum-jump and stroke-rate profile metrics, and

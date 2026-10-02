@@ -164,6 +164,8 @@ describe('processWahooWorkoutQueueItem', () => {
       'qs-workout-abcdefghijklmnopqrstuvwxyzABCDEFGH123456789',
       'summary-1',
       [{ id: 'activity-1', startTimeMs: Date.parse('2026-07-18T09:00:00.000Z') }],
+      undefined,
+      Buffer.from('valid-fit'),
     );
     expect(mocks.retainWahooTrainingCompletion.mock.invocationCallOrder[0])
       .toBeLessThan(mocks.enqueueActivitySyncAfterEventPersistence.mock.invocationCallOrder[0]);
@@ -171,6 +173,10 @@ describe('processWahooWorkoutQueueItem', () => {
 
   it('downloads, parses, rechecks its lease, writes through setEvent, and marks processed', async () => {
     await expect(processWahooWorkoutQueueItem(queueItem)).resolves.toBe('processed');
+    expect(mocks.retainWahooTrainingCompletion).toHaveBeenCalledWith(
+      mocks.firestore, 'firebase-1', 'event-1', expect.any(Object), 'workout-1', undefined, undefined,
+      'summary-1', expect.any(Array), undefined, Buffer.from('valid-fit'),
+    );
 
     expect(mocks.deletionSkip).toHaveBeenNthCalledWith(1, 'firebase-1', ServiceNames.WahooAPI, 'queue-1', 'before_token_refresh');
     expect(mocks.deletionSkip).toHaveBeenNthCalledWith(2, 'firebase-1', ServiceNames.WahooAPI, 'queue-1', 'before_event_write');

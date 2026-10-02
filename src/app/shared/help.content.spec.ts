@@ -14,6 +14,16 @@ import {
 } from './policies.content';
 
 describe('help.content', () => {
+  it('explains uncertain MCP apply replies without authorizing replacement workouts or approval bypass', () => {
+    const copy = HELP_SECTIONS.find(section => section.id === 'training-plans')!.content;
+    expect(copy).toContain('it may already have applied');
+    expect(copy).toContain("check the original proposal's status before retrying");
+    expect(copy).toContain('released and discovered by your client');
+    expect(copy).toContain('Do not create replacement workouts');
+    expect(copy).toContain('replay a declined/cancelled approval elsewhere');
+    expect(copy).toContain("Any same-proposal retry must still use the client's approval controls");
+    expect(copy).toContain('even within the 25-change limit');
+  });
   it('explains bounded Suunto live screens, native sensors/units and watch-controlled boundary alerts', () => {
     const content = HELP_SECTIONS.find(section => section.id === 'training-plans')!.content;
     for (const phrase of ['## Suunto Guide screens and interval alerts', '**pace and HR**', '**power, HR and speed**',
@@ -85,10 +95,12 @@ describe('help.content', () => {
     expect(copy).toContain('changing a distance preset does not reset that choice');
   });
 
-  it('documents supported Garmin strength names without claiming live/device proof', () => {
+  it('records verified Garmin strength delivery without promising every device or exercise', () => {
     const copy = HELP_SECTIONS.find(section => section.id === 'training-plans')!.content;
     expect(copy).toContain('Garmin strength mapping preserves individual reps or timed sets, load and rest');
-    expect(copy).toContain('live cloud/device verification is pending');
+    expect(copy).toContain('verified through cloud create/edit/reschedule/withdrawal and owner-confirmed Garmin Connect/watch checks');
+    expect(copy).toContain('does not guarantee every device or exercise');
+    expect(copy).not.toContain('live cloud/device verification is pending');
     expect(copy).toContain('Barbell back squat');
     expect(copy).toContain('QS never guesses equipment or substitutes another exercise');
     expect(copy).toContain('Garmin receives loads in kilograms');
@@ -578,7 +590,9 @@ describe('help.content', () => {
     expect(gettingStartedSection?.content).toContain('Map');
     expect(gettingStartedSection?.content).toContain('one activity map and one saved-routes map');
     expect(gettingStartedSection?.content).toContain('Event search filters only the dashboard event table');
-    expect(gettingStartedSection?.content).toContain('Event tags can be added from an event row or event details');
+    expect(gettingStartedSection?.content).toContain('Activity tags can be added from an activity row or activity details');
+    expect(gettingStartedSection?.content).toContain('**Add tags** sits beside the device name');
+    expect(gettingStartedSection?.content).toContain('when no device is recorded');
     expect(gettingStartedSection?.content).toContain('exact tag filter');
     expect(gettingStartedSection?.content).toContain('tag filter and tag editors list your saved tags regardless of the selected date range');
     expect(gettingStartedSection?.content).toContain('A tag remains available for reuse after you remove it from every event');
@@ -626,7 +640,7 @@ describe('help.content', () => {
     const gettingStartedSection = HELP_SECTIONS.find(section => section.id === 'getting-started');
     const calendarSection = HELP_SECTIONS.find(section => section.id === 'activity-calendar');
 
-    expect(calendarSection?.content).toContain('**Week**, **Month**, and **Year** views');
+    expect(calendarSection?.content).toContain('**Week**, **Month**, **30 days**, and **Year** views');
     expect(calendarSection?.content).toContain('same sleep-stage breakdown used in Health');
     expect(calendarSection?.content).toContain('full-width **Calendar** section');
     expect(calendarSection?.content).toContain('**Today** card opens a compact month calendar in a bottom sheet');
@@ -638,7 +652,7 @@ describe('help.content', () => {
     expect(calendarSection?.content).toContain('Period totals and activity-group bars remain available below the month');
     expect(calendarSection?.content).toContain('Select an activity row to open its details');
     expect(calendarSection?.content).toContain('Browser **Back** returns to the selected calendar day');
-    expect(calendarSection?.content).toContain('The selected view and date are kept in the URL');
+    expect(calendarSection?.content).toContain('The selected view, displayed period, and selected date are kept in the URL');
     expect(calendarSection?.content).toContain('intentionally have no hover or touch tooltip');
     expect(calendarSection?.content).toContain('recorded **Distance**, **Duration**, and **Ascent**');
     expect(calendarSection?.content).toContain('Month totals exclude adjacent dates');
@@ -702,6 +716,8 @@ describe('help.content', () => {
     expect(planningSection?.content).toContain('distance endings and intensity targets remain unsupported');
     expect(planningSection?.content).not.toMatch(/validation candidate|Hiking device playback remains unverified/);
     expect(planningSection?.content).toContain('Selected pool length is not sent to Wahoo');
+    expect(planningSection?.content).toContain('its Cloud API has no documented physical pool-length field');
+    expect(planningSection?.content).toContain('QS does not support sending that setting');
     expect(planningSection?.content).toContain('the saved QS sport is unchanged');
     expect(planningSection?.content).toContain('select **Strength Training**, not Yoga or Indoor Fitness Equipment');
     expect(planningSection?.content).toContain('Scheduled for later');
@@ -775,7 +791,13 @@ describe('help.content', () => {
     expect(trainingSection?.content).toContain('What drove this');
     expect(trainingSection?.content).toContain('**Training impact** appears for completed activities');
     expect(trainingSection?.content).toContain('TSS divided by 42');
-    expect(trainingSection?.content).toContain('their event detail pages do not show the card');
+    expect(trainingSection?.content).toContain('**This workout’s contribution**');
+    expect(trainingSection?.content).toContain('**Day result**');
+    expect(trainingSection?.content).toContain('includes all training counted for that day, not only this workout');
+    expect(trainingSection?.content).toContain('**How it’s calculated**');
+    expect(trainingSection?.content).toContain('fixed daily cutoff, which may differ from local midnight');
+    expect(trainingSection?.content).not.toContain('**About Training impact**');
+    expect(trainingSection?.content).toContain('their event detail pages do not show Training impact');
     expect(trainingSection?.content).toContain('Public activity shares and planned workouts do not show Training impact');
     expect(trainingSection?.content).toContain('**Training impact recap** appears first under **Load trajectory**');
     expect(trainingSection?.content).toContain('last 7 completed UTC Training days');

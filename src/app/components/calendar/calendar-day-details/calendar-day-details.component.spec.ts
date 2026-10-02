@@ -40,7 +40,7 @@ describe('CalendarDayDetailsComponent', () => {
     const haptics = vi.spyOn(TestBed.inject(AppHapticsService), 'selection');
     vi.spyOn(TestBed.inject(Router), 'navigateByUrl').mockResolvedValue(true);
     link.click();
-    expect(prepareReturn).toHaveBeenCalledWith('/', '2026-08-03', 'today-sheet');
+    expect(prepareReturn).toHaveBeenCalledWith('/', '2026-08-03', 'today-sheet', undefined);
     expect(dismiss).toHaveBeenCalledOnce();
     expect(haptics).toHaveBeenCalledOnce();
   });
@@ -48,7 +48,13 @@ describe('CalendarDayDetailsComponent', () => {
   it('marks a full day opened from the dashboard Today calendar for a dashboard return', async () => {
     const fixture = await renderDayDetails([], { returnToDashboard: true });
     const link = fixture.nativeElement.querySelector('.calendar-day-details-full-day') as HTMLAnchorElement;
-    expect(link?.getAttribute('href')).toBe('/calendar/day/2026-08-03?from=dashboard');
+    expect(link?.getAttribute('href')).toBe('/calendar/day/2026-08-03?from=dashboard&calendarSurface=today-sheet');
+  });
+
+  it('carries the mini-calendar displayed period into Full day', async () => {
+    const fixture = await renderDayDetails([], { calendarReturn: { view: 'month', anchor: '2026-08-01' } });
+    const link = fixture.nativeElement.querySelector('.calendar-day-details-full-day') as HTMLAnchorElement;
+    expect(link.getAttribute('href')).toBe('/calendar/day/2026-08-03?calendarView=month&calendarAnchor=2026-08-01');
   });
 
   it('keeps the full-day link out of public day sheets', async () => {
@@ -208,7 +214,7 @@ describe('CalendarDayDetailsComponent', () => {
     const prepareReturn = vi.spyOn(TestBed.inject(CalendarDayDetailsNavigationService), 'prepareReturn');
     vi.spyOn(TestBed.inject(Router), 'navigateByUrl').mockResolvedValue(true);
     actions[0].click();
-    expect(prepareReturn).toHaveBeenCalledWith('/', '2026-08-03');
+    expect(prepareReturn).toHaveBeenCalledWith('/', '2026-08-03', undefined, undefined);
     expect(TestBed.inject(MatBottomSheetRef).dismiss).toHaveBeenCalledOnce();
     expect(fixture.nativeElement.textContent).not.toContain('No completed activities for this day.');
     expect(fixture.nativeElement.querySelector('.calendar-day-total')).toBeNull();
@@ -231,7 +237,7 @@ describe('CalendarDayDetailsComponent', () => {
     vi.spyOn(TestBed.inject(Router), 'navigateByUrl').mockResolvedValue(true);
     link.click();
     await fixture.whenStable();
-    expect(prepareReturn).toHaveBeenCalledWith('/', '2026-08-03');
+    expect(prepareReturn).toHaveBeenCalledWith('/', '2026-08-03', undefined, undefined);
     expect(TestBed.inject(MatBottomSheetRef).dismiss).toHaveBeenCalledExactlyOnceWith();
     expect(TestBed.inject(AppHapticsService).selection).toHaveBeenCalledOnce();
     expect(TestBed.inject(TrainingWorkoutDuplicateService).duplicate).not.toHaveBeenCalled();
@@ -330,7 +336,7 @@ describe('CalendarDayDetailsComponent', () => {
 
     fixture.componentInstance.prepareEventNavigation(['/user', planningUserUid, 'event', 'event-1']);
 
-    expect(prepareReturn).toHaveBeenCalledWith('/', '2026-08-03');
+    expect(prepareReturn).toHaveBeenCalledWith('/', '2026-08-03', undefined, undefined);
     expect(bottomSheetRef.dismiss).toHaveBeenCalledOnce();
   });
 
@@ -342,8 +348,23 @@ describe('CalendarDayDetailsComponent', () => {
 
     fixture.componentInstance.prepareWorkoutNavigation();
 
-    expect(prepareReturn).toHaveBeenCalledWith('/', '2026-08-03');
+    expect(prepareReturn).toHaveBeenCalledWith('/', '2026-08-03', undefined, undefined);
     expect(bottomSheetRef.dismiss).toHaveBeenCalledOnce();
+  });
+
+  it.each(['activity', 'workout'])('restores the Dashboard Today sheet after an %s visit', async destination => {
+    const calendarReturn = { view: 'month' as const, anchor: '2026-08-01' };
+    const fixture = await renderDayDetails(createEvent(), { returnToDashboard: true, calendarReturn });
+    const prepareReturn = vi.spyOn(TestBed.inject(CalendarDayDetailsNavigationService), 'prepareReturn');
+
+    if (destination === 'activity') {
+      fixture.componentInstance.prepareEventNavigation(['/user', planningUserUid, 'event', 'event-1']);
+    } else {
+      fixture.componentInstance.prepareWorkoutNavigation();
+    }
+
+    expect(prepareReturn).toHaveBeenCalledWith('/', '2026-08-03', 'today-sheet', calendarReturn);
+    expect(TestBed.inject(MatBottomSheetRef).dismiss).toHaveBeenCalledOnce();
   });
 
   it('replaces generic timestamp names without repeating the activity type', async () => {

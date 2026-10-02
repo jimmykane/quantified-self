@@ -398,3 +398,14 @@ export const TRAINING_WRITE_OUTPUTS = {
     libraryRevision: count, scheduleRevision: count, savedWorkoutRef: ref.nullable(),
     workoutRefs: z.array(ref).max(100) }),
 };
+
+/** Additive recovery read; registered preview/apply contracts remain unchanged. */
+export const TRAINING_CHANGE_STATUS_INPUT = TRAINING_WRITE_INPUTS.apply_training_changes;
+export const TRAINING_CHANGE_STATUS_OUTPUT = z.strictObject({
+  proposalRef: ref,
+  state: z.enum(['not_started', 'applying', 'interrupted', 'applied', 'partially_applied', 'cancelled', 'expired']),
+  recordedChangeCount: count.max(25),
+  recordedProviderCount: count.max(100),
+  retryAfterSeconds: count.max(120).nullable(),
+  result: TRAINING_WRITE_OUTPUTS.apply_training_changes.nullable(),
+});

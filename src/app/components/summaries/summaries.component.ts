@@ -375,6 +375,9 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
     });
   }
   private readonly healthHaptics = inject(AppHapticsService);
+  readonly calendarSavingOrders = new Set<number>();
+  private readonly calendarSaveRequests = new Map<number, object>();
+  public calendarNavigationState: { view: 'month' | '30d'; anchor: string; date: string } | null = null;
   readonly healthSavingOrders = new Set<number>();
   readonly library = inject(DashboardChartLibraryState);
   readonly dashboardPicker = viewChild(DashboardChartLibraryComponent);
@@ -539,6 +542,9 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
     if (['user', 'eventUser'].some(key => simpleChanges[key] && simpleChanges[key].previousValue?.uid !== simpleChanges[key].currentValue?.uid)) {
       this.library.resetContext();
       this.calendarSelectedDateKey = null;
+      this.calendarNavigationState = null;
+      this.calendarSavingOrders.clear();
+      this.calendarSaveRequests.clear();
     }
     if (simpleChanges.user || simpleChanges.eventUser) {
       this.refreshTodayHeader(new Date());
@@ -720,17 +726,18 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
     const restoration = this.dayDetailsNavigation.restorationFor(this.router.url);
     if (restoration?.surface !== 'today-sheet' || !this.user?.uid || !this.showActions || !this.isOwnerDashboard) return;
     if (!this.dayDetailsNavigation.consumeRestoration(restoration)) return;
-    this.openDashboardCalendar(restoration.dateKey);
+    this.openDashboardCalendar(restoration.dateKey, restoration.calendarReturn);
   }
 
-  public openDashboardCalendar(initialDateKey?: string): void {
+  public openDashboardCalendar(initialDateKey?: string, initialPeriodContext?: CalendarMonthPickerBottomSheetData['initialPeriodContext']): void {
     if (!this.user?.uid) {
       return;
     }
     this.bottomSheet.open<CalendarMonthPickerBottomSheetComponent, CalendarMonthPickerBottomSheetData>(
       CalendarMonthPickerBottomSheetComponent,
       {
-        data: { user: this.user, timelineNotes: this.timelineNotes, privateHealthEnabled: this.showActions && this.isOwnerDashboard, initialDateKey },
+        data: { user: this.user, timelineNotes: this.timelineNotes, privateHealthEnabled: this.showActions && this.isOwnerDashboard, initialDateKey,
+          ...(initialPeriodContext ? { initialPeriodContext } : {}) },
         panelClass: ['qs-bottom-sheet-container', 'qs-calendar-month-picker-sheet'],
       },
     );
@@ -1258,6 +1265,49 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
 
     if (!this.resolveOwnDashboardUID()) return Promise.resolve();
     return this.configuration.save(this.user.uid, expected, dashboardSettings);
+  }
+
+  public onCalendarStateChange(state: NonNullable<SummariesComponent['calendarNavigationState']>): void {
+    this.calendarNavigationState = state;
+    // Hydration and return restoration emit from a signal effect, outside a user action.
+    this.changeDetector.markForCheck();
+  }
+
+  public async onCalendarViewChange(order: number, view: 'month' | '30d'): Promise<void> {
+    const uid = this.resolveOwnDashboardUID();
+    if (!uid || this.calendarSavingOrders.has(order)) return;
+    const baseline = cloneDashboardSettings(this.user.settings.dashboardSettings);
+    const tiles = cloneDashboardSettings(baseline).tiles;
+    const tile = tiles.find(item => item.order === order) as AppDashboardChartTileSettingsInterface;
+    if (!tile || !isDashboardActivityCalendarTile(tile)) return;
+    const next = view === '30d' ? '30d' : 'month';
+    const previousMode = tile.displaySettings?.calendarView || 'month';
+    if (previousMode === next) return;
+    tile.displaySettings = { ...tile.displaySettings, calendarView: next };
+    const request = {};
+    this.calendarSavingOrders.add(order);
+    this.calendarSaveRequests.set(order, request);
+    this.tiles = this.tiles.map(item => item.order === order ? { ...item, displaySettings: tile.displaySettings } : item);
+    this.refreshTileLanes();
+    try {
+      await this.configuration.save(uid, baseline, { tiles });
+      if (this.resolveOwnDashboardUID() !== uid || this.calendarSaveRequests.get(order) !== request) return;
+      this.user.settings.dashboardSettings = { ...this.user.settings.dashboardSettings, tiles };
+      this.healthHaptics.success();
+    } catch (error) {
+      if (this.resolveOwnDashboardUID() !== uid || this.calendarSaveRequests.get(order) !== request) return;
+      this.tiles = this.tiles.map(item => item.order === order && isDashboardChartTileViewModel(item)
+        ? { ...item, displaySettings: { ...item.displaySettings, calendarView: previousMode } } : item);
+      this.refreshTileLanes();
+      this.healthHaptics.error();
+      this.healthSnack.open(error instanceof Error ? error.message : 'Could not save calendar view.', 'Dismiss', { duration: 6000 });
+    } finally {
+      if (this.calendarSaveRequests.get(order) === request) {
+        this.calendarSaveRequests.delete(order);
+        this.calendarSavingOrders.delete(order);
+        this.changeDetector.markForCheck();
+      }
+    }
   }
 
   public async onHealthMetricChange(order: number, change: { settings: AppDashboardHealthMetricSettings; initial: boolean }): Promise<void> {

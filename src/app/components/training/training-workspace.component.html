@@ -692,7 +692,7 @@
         }
         @if (isOverviewDestination && (derivedState.intensityDistributionStatus === 'ready' || derivedState.intensityDistribution?.weeks?.length)) {
           <article class="training-chart-panel training-intensity-chart qs-glass-card-panel">
-            <app-intensity-distribution-chart [distribution]="derivedState.intensityDistribution" [status]="derivedState.intensityDistributionStatus" [darkTheme]="isDarkTheme()" range="6m"></app-intensity-distribution-chart>
+            <app-intensity-distribution-chart [distribution]="derivedState.intensityDistribution" [status]="derivedState.intensityDistributionStatus" [darkTheme]="isDarkTheme()" [unitSettings]="unitSettings" range="6m"></app-intensity-distribution-chart>
           </article>
         } @else if (isOverviewDestination) {
           <article class="training-chart-state training-chart-state-wide qs-glass-card-panel" role="status">

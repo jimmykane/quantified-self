@@ -75,13 +75,13 @@ const MCP_TRAINING_METRIC_PRESENTATION = {
   },
   [DERIVED_METRIC_KINDS.EasyPercent]: {
     title: 'Easy training percentage',
-    description: 'Share of eligible weekly training time recorded in easy zones.',
+    description: 'Share of recorded weekly zone time in approximate Easy groups: HR and power Z1–Z2. Auto uses usable power per activity, otherwise HR.',
     category: 'intensity',
     periodLabel: 'Latest week and 8-week trend',
   },
   [DERIVED_METRIC_KINDS.HardPercent]: {
     title: 'Hard training percentage',
-    description: 'Share of eligible weekly training time recorded in hard zones.',
+    description: 'Share of recorded weekly zone time in approximate Hard groups: HR Z4–Z5; power Z5–Z7. Auto uses usable power per activity, otherwise HR.',
     category: 'intensity',
     periodLabel: 'Latest week and 8-week trend',
   },
@@ -99,7 +99,7 @@ const MCP_TRAINING_METRIC_PRESENTATION = {
   },
   [DERIVED_METRIC_KINDS.IntensityDistribution]: {
     title: 'Training intensity distribution',
-    description: 'Weekly easy, moderate, and hard shares from eligible recorded zones.',
+    description: 'Recorded weekly intensity time: approximate HR groups Z1–Z2 / Z3 / Z4–Z5; power Z1–Z2 / Z3–Z4 / Z5–Z7. Auto uses usable power per activity, otherwise HR; mixed weeks retain both sources.',
     category: 'intensity',
     periodLabel: 'Latest 8 weeks',
   },
@@ -111,7 +111,7 @@ const MCP_TRAINING_METRIC_PRESENTATION = {
   },
   [DERIVED_METRIC_KINDS.TrainingSummary]: {
     title: 'Training summary',
-    description: 'Current training volume and intensity compared with an equivalent usual period.',
+    description: 'Current volume and intensity versus an equivalent usual period. Approximate Easy/Moderate/Hard groups: HR Z1–Z2 / Z3 / Z4–Z5; power Z1–Z2 / Z3–Z4 / Z5–Z7, using usable power per activity first, otherwise HR.',
     category: 'volume',
     periodLabel: 'Current 28 days versus preceding 84 days',
   },
@@ -147,7 +147,7 @@ const MCP_TRAINING_METRIC_PRESENTATION = {
   },
   [DERIVED_METRIC_KINDS.TrainingBuildComparison]: {
     title: 'Best build comparison',
-    description: 'Current build compared with the user-selected historical build, including recovery context.',
+    description: 'Current build versus the selected historical build, including recovery. Approximate Easy/Moderate/Hard groups: HR Z1–Z2 / Z3 / Z4–Z5; power Z1–Z2 / Z3–Z4 / Z5–Z7, using usable power per activity first, otherwise HR.',
     category: 'comparison',
     periodLabel: 'Matched 8, 10, or 12-week builds',
   },

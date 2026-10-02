@@ -199,10 +199,10 @@ describe('decideDerivedMetricsFreshness', () => {
 
     it('rejects a projected payload that the MCP Training read cannot serve', () => {
         expect(resolveDerivedMetricSnapshotPayloadValidity(
-            DERIVED_METRIC_KINDS.TrainingSummary, {},
+            DERIVED_METRIC_KINDS.TrainingSummary, { intensityPolicyVersion: 1 },
         )).toBe(true);
         expect(isDerivedMetricSnapshotReadableByMcp(
-            DERIVED_METRIC_KINDS.TrainingSummary, {},
+            DERIVED_METRIC_KINDS.TrainingSummary, { intensityPolicyVersion: 1 },
         )).toBe(false);
     });
 
@@ -428,14 +428,31 @@ describe('decideDerivedMetricsFreshness', () => {
         )).toBe(false);
     });
 
+    it.each([DERIVED_METRIC_KINDS.IntensityDistribution, DERIVED_METRIC_KINDS.EasyPercent,
+        DERIVED_METRIC_KINDS.HardPercent, DERIVED_METRIC_KINDS.TrainingSummary,
+        DERIVED_METRIC_KINDS.TrainingBuildComparison])('rejects the old intensity policy for %s', kind => {
+        expect(resolveDerivedMetricSnapshotPayloadValidity(kind, {})).toBe(false);
+        const payload = { intensityPolicyVersion: 1, recoveryVersion: DERIVED_TRAINING_BUILD_COMPARISON_RECOVERY_VERSION };
+        expect(resolveDerivedMetricSnapshotPayloadValidity(kind, payload)).toBe(true);
+        const input = { ...baseInput, metricKinds: [kind, DERIVED_METRIC_KINDS.FormNow],
+            metricSnapshotsByKind: buildMetricSnapshots({
+                [kind]: { payloadValid: resolveDerivedMetricSnapshotPayloadValidity(kind, {}) },
+            }) };
+        expect(decideDerivedMetricsFreshness(input)).toMatchObject({
+            shouldQueue: true, metricKindsToQueue: [kind], reason: 'invalid_metric_payload',
+        });
+        input.metricSnapshotsByKind[kind].payloadValid = resolveDerivedMetricSnapshotPayloadValidity(kind, payload);
+        expect(decideDerivedMetricsFreshness(input).shouldQueue).toBe(false);
+    });
+
     it('rebuilds only build comparisons created before the current recovery calculation', () => {
         expect(resolveDerivedMetricSnapshotPayloadValidity(
             DERIVED_METRIC_KINDS.TrainingBuildComparison,
-            { recoveryVersion: DERIVED_TRAINING_BUILD_COMPARISON_RECOVERY_VERSION - 1 },
+            { intensityPolicyVersion: 1, recoveryVersion: DERIVED_TRAINING_BUILD_COMPARISON_RECOVERY_VERSION - 1 },
         )).toBe(false);
         expect(resolveDerivedMetricSnapshotPayloadValidity(
             DERIVED_METRIC_KINDS.TrainingBuildComparison,
-            { recoveryVersion: DERIVED_TRAINING_BUILD_COMPARISON_RECOVERY_VERSION },
+            { intensityPolicyVersion: 1, recoveryVersion: DERIVED_TRAINING_BUILD_COMPARISON_RECOVERY_VERSION },
         )).toBe(true);
     });
 
