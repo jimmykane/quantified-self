@@ -119,20 +119,22 @@ vi.mock('firebase-functions/v2/https', () => ({
 }));
 
 // Mock Stripe Client
-const { mockStripeInstance, mockStripeCustomersSearch, mockStripeCustomersUpdate, mockStripeSubscriptionsList, mockStripeSubscriptionsUpdate, mockStripeProductsRetrieve } = vi.hoisted(() => {
+const { mockStripeInstance, mockStripeCustomersSearch, mockStripeCustomersRetrieve, mockStripeCustomersUpdate, mockStripeSubscriptionsList, mockStripeSubscriptionsUpdate, mockStripeProductsRetrieve } = vi.hoisted(() => {
     const search = vi.fn();
+    const customersRetrieve = vi.fn();
     const customersUpdate = vi.fn().mockResolvedValue({}); // Mocks stripe.customers.update
     const list = vi.fn();
     const subscriptionsUpdate = vi.fn().mockResolvedValue({}); // Mocks stripe.subscriptions.update
     const retrieve = vi.fn();
     return {
         mockStripeCustomersSearch: search,
+        mockStripeCustomersRetrieve: customersRetrieve,
         mockStripeCustomersUpdate: customersUpdate,
         mockStripeSubscriptionsList: list,
         mockStripeSubscriptionsUpdate: subscriptionsUpdate,
         mockStripeProductsRetrieve: retrieve,
         mockStripeInstance: {
-            customers: { search, update: customersUpdate },
+            customers: { search, retrieve: customersRetrieve, update: customersUpdate },
             subscriptions: { list, update: subscriptionsUpdate },
             products: { retrieve }
         }
@@ -192,6 +194,9 @@ beforeEach(() => {
     // Default auth user
     mockAuth.getUser.mockReset().mockResolvedValue({ customClaims: {}, email: 'test@example.com', emailVerified: true });
     mockStripeCustomersSearch.mockReset().mockResolvedValue({ data: [] });
+    mockStripeCustomersRetrieve.mockReset().mockResolvedValue({ id: 'cus_deleted', deleted: true });
+    mockStripeCustomersUpdate.mockReset().mockResolvedValue({});
+    mockStripeSubscriptionsUpdate.mockReset().mockResolvedValue({});
     mockStripeSubscriptionsList.mockReset().mockResolvedValue({ data: [] });
     mockStripeProductsRetrieve.mockReset();
 });
@@ -645,6 +650,7 @@ describe('Stripe email recovery ownership', () => {
         expect(await (linkExistingStripeCustomer as any)(request)).toEqual({ linked: false });
         expect(await (restoreUserClaims as any)(request)).toEqual({ success: true, role: 'free' });
         expect(mockStripeCustomersSearch).not.toHaveBeenCalled();
+        expect(mockStripeCustomersRetrieve).not.toHaveBeenCalled();
         expectNoAcquisition();
     });
 
@@ -726,6 +732,7 @@ describe('Stripe email recovery ownership', () => {
         customerData = { stripeId: 'cus_paid' };
         mockCustomerOwnersGet.mockResolvedValue({ docs: [{ id: 'user1' }] });
         mockStripeCustomersSearch.mockResolvedValue({ data: [{ ...customer, email: 'TEST@example.com', metadata }] });
+        mockStripeCustomersRetrieve.mockResolvedValue({ ...customer, email: 'TEST@example.com', metadata });
         mockStripeSubscriptionsList.mockResolvedValue({ data: [{ ...subscription, metadata: { ...metadata, role: 'pro' } }] });
 
         expect(await (linkExistingStripeCustomer as any)(request)).toEqual({ linked: true, role: 'pro' });
@@ -766,5 +773,156 @@ describe('Stripe email recovery ownership', () => {
         expect(await (linkExistingStripeCustomer as any)(request)).toEqual({ linked: false });
         expect(mockCustomerOwnersGet).toHaveBeenCalledTimes(2);
         expectNoAcquisition();
+    });
+});
+
+describe('UID-bound Stripe recovery', () => {
+    const request = { auth: { uid: 'user1' }, app: { appId: 'test' } };
+    const metadata = { firebaseUID: 'user1', linkedToUid: 'user1' };
+    const customer = { id: 'cus_owned', email: 'previous-email@example.com', metadata };
+    const subscription = { id: 'sub_owned', metadata: { ...metadata, role: 'pro' }, items: { data: [] } };
+
+    beforeEach(() => {
+        mockAuth.getUser.mockResolvedValue({
+            email: 'current-email@example.com', emailVerified: false,
+            providerData: [{ providerId: 'github.com' }], customClaims: { stripeRole: 'pro', admin: true }
+        });
+        customerData = { stripeId: customer.id };
+        mockGet.mockResolvedValue({ empty: true });
+        mockCustomerOwnersGet.mockResolvedValue({ docs: [{ id: 'user1' }] });
+        mockStripeCustomersRetrieve.mockResolvedValue(customer);
+        mockStripeSubscriptionsList.mockResolvedValue({ data: [subscription] });
+    });
+
+    const expectNoLinkChanges = () => {
+        expect(mockSet).not.toHaveBeenCalledWith(expect.objectContaining({ stripeId: expect.anything() }), expect.anything());
+        expect(mockStripeCustomersUpdate).not.toHaveBeenCalled();
+        expect(mockStripeSubscriptionsUpdate).not.toHaveBeenCalled();
+        expect(mockSetCustomUserClaims).not.toHaveBeenCalled();
+    };
+
+    it.each([false, undefined, true])('restores an owned Pro subscription with server emailVerified=%s when local synchronization is missing', async (emailVerified) => {
+        mockAuth.getUser.mockResolvedValue({ email: 'current-email@example.com', emailVerified, customClaims: { admin: true } });
+
+        expect(await (restoreUserClaims as any)(request)).toEqual({ success: true, role: 'pro' });
+        expect(mockStripeCustomersRetrieve).toHaveBeenCalledWith('cus_owned');
+        expect(mockStripeSubscriptionsList).toHaveBeenCalledWith({ customer: 'cus_owned', status: 'active', limit: 1 });
+        expect(mockStripeCustomersSearch).not.toHaveBeenCalled();
+        expect(mockSetCustomUserClaims).toHaveBeenCalledWith('user1', { stripeRole: 'pro', admin: true });
+    });
+
+    it('recovers the owned customer before checkout without using the unverified email', async () => {
+        expect(await (linkExistingStripeCustomer as any)(request)).toEqual({ linked: true, role: 'pro' });
+        expect(mockStripeCustomersSearch).not.toHaveBeenCalled();
+        expect(mockStripeCustomersRetrieve).toHaveBeenCalledWith('cus_owned');
+    });
+
+    it('recovers an existing binding when the Auth account has no email', async () => {
+        mockAuth.getUser.mockResolvedValue({ email: null, emailVerified: false, customClaims: {} });
+
+        expect(await (linkExistingStripeCustomer as any)(request)).toEqual({ linked: true, role: 'pro' });
+        expect(await (restoreUserClaims as any)(request)).toEqual({ success: true, role: 'pro' });
+        expect(mockStripeCustomersSearch).not.toHaveBeenCalled();
+    });
+
+    it('accepts a server-owned binding with legacy metadata missing', async () => {
+        mockStripeCustomersRetrieve.mockResolvedValue({ ...customer, metadata: {} });
+        mockStripeSubscriptionsList.mockResolvedValue({ data: [{ ...subscription, metadata: { role: 'pro' } }] });
+
+        expect(await (linkExistingStripeCustomer as any)(request)).toEqual({ linked: true, role: 'pro' });
+        expect(mockStripeCustomersSearch).not.toHaveBeenCalled();
+    });
+
+    it.each([
+        ['customer', { firebaseUID: 'other-user', linkedToUid: 'user1' }],
+        ['customer', { firebaseUID: 'user1', linkedToUid: 'other-user' }],
+        ['subscription', { firebaseUID: 'other-user', linkedToUid: 'user1' }],
+        ['subscription', { firebaseUID: 'user1', linkedToUid: 'other-user' }],
+    ])('rejects a bound customer with conflicting %s metadata %j', async (source, conflictingMetadata) => {
+        if (source === 'customer') {
+            mockStripeCustomersRetrieve.mockResolvedValue({ ...customer, metadata: conflictingMetadata });
+        } else {
+            mockStripeSubscriptionsList.mockResolvedValue({ data: [{ ...subscription, metadata: { ...conflictingMetadata, role: 'pro' } }] });
+        }
+
+        expect(await (linkExistingStripeCustomer as any)(request)).toEqual({ linked: false });
+        expectNoLinkChanges();
+    });
+
+    it('rejects a bound customer also assigned to another Firestore UID', async () => {
+        mockCustomerOwnersGet.mockResolvedValue({ docs: [{ id: 'user1' }, { id: 'other-user' }] });
+
+        expect(await (linkExistingStripeCustomer as any)(request)).toEqual({ linked: false });
+        expectNoLinkChanges();
+    });
+
+    it.each([undefined, 'cus_replacement'])('does not restore if the trusted binding becomes %s before the transaction', async (stripeId) => {
+        let customerReads = 0;
+        mockGetDoc.mockImplementation(async (path?: string) => {
+            if (path === 'customers/user1') {
+                customerReads += 1;
+                return { exists: true, data: () => ({ stripeId: customerReads === 1 ? customer.id : stripeId }) };
+            }
+            return getDocSnapshot(path);
+        });
+
+        expect(await (linkExistingStripeCustomer as any)(request)).toEqual({ linked: false });
+        expectNoLinkChanges();
+    });
+
+    it('rejects a retrieved customer ID that differs from the trusted binding', async () => {
+        mockStripeCustomersRetrieve.mockResolvedValue({ ...customer, id: 'cus_someone_else' });
+
+        expect(await (linkExistingStripeCustomer as any)(request)).toEqual({ linked: false });
+        expect(mockStripeSubscriptionsList).not.toHaveBeenCalled();
+        expectNoLinkChanges();
+    });
+
+    it.each(['deleted', 'missing'])('skips a %s Stripe customer without falling back to email or failing background reconciliation', async (state) => {
+        if (state === 'deleted') {
+            mockStripeCustomersRetrieve.mockResolvedValue({ id: customer.id, deleted: true });
+        } else {
+            mockStripeCustomersRetrieve.mockRejectedValue({ code: 'resource_missing' });
+        }
+
+        expect(await (linkExistingStripeCustomer as any)(request)).toEqual({ linked: false });
+        expectNoLinkChanges();
+        expect(await reconcileClaims('user1')).toEqual({ role: 'free' });
+        expect(mockStripeCustomersSearch).not.toHaveBeenCalled();
+    });
+
+    it('does not downgrade claims or try email matching when the bound Stripe lookup fails', async () => {
+        mockStripeCustomersRetrieve.mockRejectedValue(new Error('Stripe unavailable'));
+
+        await expect((restoreUserClaims as any)(request)).rejects.toThrow('Stripe unavailable');
+        expect(mockStripeCustomersSearch).not.toHaveBeenCalled();
+        expectNoLinkChanges();
+    });
+
+    it('reconciles a bound customer without an active subscription to free', async () => {
+        mockStripeSubscriptionsList.mockResolvedValue({ data: [] });
+
+        expect(await (restoreUserClaims as any)(request)).toEqual({ success: true, role: 'free' });
+        expect(mockSetCustomUserClaims).toHaveBeenCalledWith('user1', { stripeRole: 'free', admin: true });
+        expect(mockStripeCustomersSearch).not.toHaveBeenCalled();
+        expect(mockStripeCustomersUpdate).not.toHaveBeenCalled();
+    });
+
+    it.each(['missing root', 'active deletion'])('skips bound customer recovery with %s', async (state) => {
+        userExists = state !== 'missing root';
+        deletionMarkerState = state === 'active deletion' ? 'active' : 'missing';
+
+        expect(await (linkExistingStripeCustomer as any)(request)).toEqual({ linked: false });
+        expectNoLinkChanges();
+    });
+
+    it.each(['customer', 'subscription'])('does not grant claims after a %s update failure and permits a same-UID retry', async (source) => {
+        const update = source === 'customer' ? mockStripeCustomersUpdate : mockStripeSubscriptionsUpdate;
+        update.mockRejectedValueOnce(new Error('Stripe unavailable'));
+
+        await expect((linkExistingStripeCustomer as any)(request)).rejects.toThrow('Stripe unavailable');
+        expect(mockSetCustomUserClaims).not.toHaveBeenCalled();
+        expect(await (linkExistingStripeCustomer as any)(request)).toEqual({ linked: true, role: 'pro' });
+        expect(mockStripeCustomersSearch).not.toHaveBeenCalled();
     });
 });
