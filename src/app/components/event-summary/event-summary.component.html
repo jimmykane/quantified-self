@@ -75,6 +75,7 @@
   @if (showDeviceChip) {
   <div class="device-info-banner" [matTooltip]="deviceChipTooltip" [matTooltipDisabled]="!deviceChipTooltip">
     <div class="device-info-banner-primary">
+      <mat-icon class="device-info-banner-icon" aria-hidden="true">watch</mat-icon>
       <span class="device-info-banner-label">{{ deviceChipLabel }}</span>
     </div>
     <app-service-source-icon class="device-info-banner-source" [event]="event" [user]="ownerMetadataLookupUser" [showIcon]="false"
