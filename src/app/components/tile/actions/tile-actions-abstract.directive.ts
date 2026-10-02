@@ -34,6 +34,16 @@ export class TileActionsAbstractDirective extends TileAbstractDirective {
   private readonly snackBar = inject(MatSnackBar);
   protected pendingBaseline: AppDashboardSettingsInterface | null = null;
   public isSaving = false;
+  @Input() calendarView: 'month' | '30d' | null = null;
+  @Input() calendarViewSaving = false;
+  @Output() calendarViewChange = new EventEmitter<'month' | '30d'>();
+  get isActionSaving(): boolean { return this.isSaving || this.calendarViewSaving; }
+
+  selectCalendarView(view: 'month' | '30d'): void {
+    if (this.isActionSaving || this.presentation.kind !== 'calendar' || !this.calendarView || view === this.calendarView) return;
+    // The calendar owns selection feedback and emits through its existing guarded settings save.
+    this.calendarViewChange.emit(view);
+  }
   public canConfigure = true;
   readonly tileSizeOptions = [1, 2, 3, 4] as const;
   onLayoutMenuOpened(): void { if (!this.isSaving) this.hapticsService.selection(); }

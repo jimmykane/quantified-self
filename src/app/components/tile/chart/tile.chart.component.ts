@@ -1,6 +1,7 @@
 import type { AppDashboardHealthMetricSettings } from '../../../models/app-user.interface';
 import type { DashboardHrvContext } from '../../../helpers/dashboard-hrv-context.helper';
-import { ChangeDetectionStrategy, Component, computed, EventEmitter, input, Input, Output, type Signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, EventEmitter, input, Input, Output, viewChild, type Signal } from '@angular/core';
+import type { ActivityCalendarTileComponent } from '../../calendar/activity-calendar-tile/activity-calendar-tile.component';
 import type { TimelineNoteChartContext } from '../../../helpers/timeline-notes-chart.helper';
 import {
   ChartDataCategoryTypes,
@@ -125,6 +126,7 @@ export class TileChartComponent extends TileAbstractDirective {
   @Output() healthSectionChange = new EventEmitter<'health'|'trainingState'>();
   @Input() calendarView: 'month' | '30d' = 'month';
   @Input() calendarViewSaving = false;
+  readonly calendarTile = viewChild<ActivityCalendarTileComponent>('calendarTile');
   @Output() calendarViewChange = new EventEmitter<'month' | '30d'>();
   @Output() calendarStateChange = new EventEmitter<{ view: 'month' | '30d'; anchor: string; date: string }>();
   @Output() calendarDateChange = new EventEmitter<string>();

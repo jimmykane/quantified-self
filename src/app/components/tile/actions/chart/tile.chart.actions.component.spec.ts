@@ -134,6 +134,62 @@ describe('TileChartActionsComponent', () => {
       autoTiles: expect.objectContaining({ [`preset:${id}`]: expect.objectContaining({ state: 'dismissed' }) }),
     }) } });
   });
+
+  it.each(['month', '30d'] as const)('shows the checked %s Calendar view and sends only a changed choice through the existing save path', async mode => {
+    component.chartType = DASHBOARD_ACTIVITY_CALENDAR_CHART_TYPE;
+    component.calendarView = mode;
+    fixture.detectChanges();
+    const emitted = vi.spyOn(component.calendarViewChange, 'emit');
+    const openMenu = async () => {
+      fixture.nativeElement.querySelector<HTMLButtonElement>('.tile-actions-trigger')!.click();
+      fixture.detectChanges(); await fixture.whenStable();
+    };
+    await openMenu();
+    const choices = Array.from(document.body.querySelectorAll<HTMLButtonElement>('[role="menuitemradio"]'));
+    expect(choices.map(item => item.textContent?.trim())).toEqual([
+      mode === 'month' ? 'checkMonth' : 'calendar_monthMonth',
+      mode === '30d' ? 'check30 days' : 'date_range30 days',
+    ]);
+    expect(choices.map(item => item.getAttribute('aria-checked'))).toEqual(mode === 'month' ? ['true', 'false'] : ['false', 'true']);
+    hapticsMock.selection.mockClear();
+    choices[mode === 'month' ? 0 : 1].click(); fixture.detectChanges(); await fixture.whenStable();
+    expect(emitted).not.toHaveBeenCalled();
+    await openMenu();
+    hapticsMock.selection.mockClear();
+    const changed = document.body.querySelector<HTMLButtonElement>('[role="menuitemradio"][aria-checked="false"]')!;
+    changed.click(); fixture.detectChanges();
+    expect(emitted).toHaveBeenCalledExactlyOnceWith(mode === 'month' ? '30d' : 'month');
+    expect(userMock.updateUserProperties).not.toHaveBeenCalled();
+    expect(hapticsMock.selection).not.toHaveBeenCalled();
+  });
+
+  it('disables every open Calendar action and shows progress while its mode is saving', async () => {
+    component.chartType = DASHBOARD_ACTIVITY_CALENDAR_CHART_TYPE;
+    component.calendarView = 'month'; fixture.detectChanges();
+    const trigger = fixture.nativeElement.querySelector<HTMLButtonElement>('.tile-actions-trigger')!;
+    trigger.click(); fixture.detectChanges(); await fixture.whenStable();
+    component.calendarViewSaving = true; fixture.detectChanges();
+    expect(trigger.disabled).toBe(true);
+    expect(trigger.getAttribute('aria-busy')).toBe('true');
+    expect(trigger.querySelector('[role="progressbar"]')).toBeTruthy();
+    expect(Array.from(document.body.querySelectorAll<HTMLButtonElement>('[role="menu"] button')).every(button => button.disabled)).toBe(true);
+    const emitted = vi.spyOn(component.calendarViewChange, 'emit');
+    component.selectCalendarView('30d');
+    expect(emitted).not.toHaveBeenCalled();
+    component.calendarViewSaving = false; component.isSaving = true;
+    component.selectCalendarView('30d');
+    expect(emitted).not.toHaveBeenCalled();
+  });
+
+  it('keeps Calendar view choices out of other chart menus', async () => {
+    component.calendarView = 'month'; fixture.detectChanges();
+    const emitted = vi.spyOn(component.calendarViewChange, 'emit');
+    fixture.nativeElement.querySelector<HTMLButtonElement>('.tile-actions-trigger')!.click();
+    fixture.detectChanges(); await fixture.whenStable();
+    expect(document.body.querySelector('[role="menuitemradio"]')).toBeNull();
+    component.selectCalendarView('30d');
+    expect(emitted).not.toHaveBeenCalled();
+  });
   it.each([
     [ChartTypes.LinesVertical, 'chart'],
     [DASHBOARD_ACWR_KPI_CHART_TYPE, 'KPI'],
