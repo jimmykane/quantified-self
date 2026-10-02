@@ -30,8 +30,6 @@ const TARGET_LOADERS: Readonly<Record<string, ModuleLoader>> = Object.freeze({
   dispatchMarketingCampaigns: loadMarketingHandlers,
   trackMarketingDelivery: loadMarketingHandlers,
   marketingUnsubscribe: loadMarketingHandlers,
-  projectEventTagCatalog:
-    () => module.require('./events/event-tag-catalog.trigger') as FunctionModule,
   reconcileTrainingPlanCleanup:
     () => module.require('./training-plans/cleanup-worker') as FunctionModule,
   reconcileTrainingWorkoutExpiry:

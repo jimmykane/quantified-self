@@ -24,30 +24,37 @@ differently from JavaScript for some labels, so they do not recompute the hash;
 the owner controls this private list, and catalog reads deduplicate names
 case-insensitively. Keep browser/server key parity tests for Unicode labels.
 
-`projectEventTagCatalog` remains deployed during the transition. It receives
-every event write, including writes unrelated to tags. Retire it only after all
-tag-editing clients and server writers create catalog entries directly and the
-catalog has been verified.
+This revision no longer exports `projectEventTagCatalog`. Removing its source
+does not delete the deployed Function: it continues to receive every event
+write until a separately approved cloud deletion. Direct catalog writes from
+the app, MCP, Assistant, and server event writers must be deployed and verified
+before that deletion. Deleting the trigger does not delete saved tags.
 
 ## Backfill and rollout
 
-The original event-write trigger is already deployed and the production
-backfill has been run and verified. Production deployment still requires
-separate approval. Roll out the lower-cost path in this order:
+The production backfill has been run and verified. This trigger removal is the
+final rollout step; do not deploy a Functions manifest from this revision until
+all of these prerequisites are met:
 
-1. Deploy the owner-create catalog Rules. Keep the event-write trigger running.
-2. Deploy the updated MCP, Assistant, and server event writers, then release the
-   updated app. Verify tags added from each path and simultaneous edits on
-   different events. Confirm saved tags appear outside the selected date range.
+1. Deploy the owner-create catalog Rules while the trigger stays deployed.
+2. Deploy the direct-writing MCP, Assistant, and server event writers from a
+   revision that still exports the trigger, then release the updated app.
+   Verify tag additions from each path, simultaneous edits on different events,
+   and suggestions outside the selected date range.
 3. Run `npm --prefix functions run backfill-event-tag-catalog -- --limit-users 100`
-   as a full dry run, following `nextStartAfter` until `complete: true` and
-   requiring `missingEntries: 0` across every page. Keep the trigger until old
-   app versions that edit tags without creating catalog entries are no longer
-   supported or can no longer write event tags.
-4. With separate approval naming `projectEventTagCatalog` in the production
-   project, remove that Function in a later deployment. Do not run a broad
-   Functions deployment that implicitly deletes it.
+   as a full dry run. Follow `nextStartAfter` until `complete: true` and require
+   `missingEntries: 0` across every page. Confirm old app versions that edit
+   tags without creating catalog entries are no longer supported or can no
+   longer write event tags.
+4. Obtain separate explicit approval to delete `projectEventTagCatalog` in the
+   production project's `europe-west2` region. A broad Functions deployment
+   from this revision may propose that deletion; do not accept it as an
+   incidental part of another deployment.
 
-The backfill can recover tags still present on events, including legacy
-`benchmarkReviewTags`. It cannot recover labels removed from all events before
-the backfill. Do not run `--execute` as part of ordinary local verification.
+If a dry run finds missing entries, obtain separate approval before rerunning
+with `--execute`. If `complete` is false, repeat with `--start-after
+<nextStartAfter>` until complete, then repeat the full dry run. The backfill is
+idempotent and can resume from the last page's prior cursor. It can recover
+tags still present on events, including legacy `benchmarkReviewTags`, but not
+labels removed from every event before backfill. Do not run `--execute` as part
+of ordinary local verification.
