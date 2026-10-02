@@ -6,23 +6,19 @@
     leadingIcon="event_note"
     [subtitle]="libraryView() ? (editor() ? 'Build a reusable workout. Add dates later.' : 'Keep your common workouts ready for any plan.') : editor() ? 'Date, sport, and workout steps.' : showPlanForm() ? 'Workouts across a date range.' : 'Workouts, with or without a plan.'"
     [status]="pageStatus()">
-    @if (browsing()) {
-    <div pageHeaderActions class="plans-header-actions">
-      @if (!libraryView()) {
-      <app-training-delivery-button scope="history" entityId="current" title="Plans and standalone workouts"
+    @if (browsing() && !libraryView()) {
+      <app-training-delivery-button pageHeaderTitleActions scope="history" entityId="current"
+        title="Plans and standalone workouts" historyLabel="Sync"
         [disabled]="busyAction() !== null || scheduleState().status !== 'ready'"></app-training-delivery-button>
-      <a mat-button routerLink="/calendar" appHapticTap>
-        <mat-icon aria-hidden="true">calendar_month</mat-icon>
-        <span>Main Calendar</span>
-      </a>
-      } @else {
+    }
+    @if (browsing() && libraryView()) {
+      <div pageHeaderActions class="plans-header-actions">
         <a mat-button routerLink="/training/plans" appHapticTap><mat-icon aria-hidden="true">arrow_back</mat-icon>Plans</a>
         <a mat-flat-button routerLink="/training/plans/library/new" appHapticTap
           [state]="{ trainingPlansEditorReturn: { uid: currentUser()?.uid, url: '/training/plans/library' } }">
           <mat-icon aria-hidden="true">add</mat-icon>New saved workout
         </a>
-      }
-    </div>
+      </div>
     }
   </app-page-header>
 

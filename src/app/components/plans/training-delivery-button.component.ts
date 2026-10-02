@@ -32,6 +32,7 @@ export class TrainingDeliveryButtonComponent {
   readonly entityId = input.required<string>();
   readonly title = input.required<string>();
   readonly standalone = input(false);
+  readonly historyLabel = input('Workout sync history');
   readonly summaryWorkouts = input<readonly ScheduledWorkoutV1[] | null>(null);
   readonly summaryPlan = input<TrainingPlanV1 | null>(null);
   readonly summaryCompletions = input<readonly TrainingWorkoutCompletionV1[]>([]);
@@ -104,7 +105,7 @@ export class TrainingDeliveryButtonComponent {
     return providers.length === 1 ? providers[0] : null;
   });
   readonly buttonLabel = computed(() => {
-    if (this.scope() === 'history') return 'Workout sync history';
+    if (this.scope() === 'history') return this.historyLabel();
     if (this.hasRecords()) return this.scope() === 'plan' ? 'Plan sync' : 'Workout sync';
     const provider = this.singleProvider();
     const label = provider ? PLANNED_WORKOUT_PROVIDER_CAPABILITIES_V1[provider].label : null;

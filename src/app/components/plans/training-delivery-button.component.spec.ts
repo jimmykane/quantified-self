@@ -63,6 +63,26 @@ describe('Training delivery summaries on the workspace', () => {
     await vi.waitFor(() => { fixture.detectChanges(); expect(fixture.componentInstance.summaries().length).toBe(1); });
     return fixture;
   }
+  it('keeps the compact history shortcut accessible and opens the same history with one haptic', async () => {
+    const fixture = TestBed.createComponent(TrainingDeliveryButtonComponent);
+    fixture.componentRef.setInput('scope', 'history'); fixture.componentRef.setInput('entityId', 'current');
+    fixture.componentRef.setInput('title', 'Plans and standalone workouts'); fixture.componentRef.setInput('historyLabel', 'Sync');
+    fixture.detectChanges();
+    await vi.waitFor(() => { fixture.detectChanges(); expect(fixture.componentInstance.hasRecords()).toBe(true); });
+    const button: HTMLButtonElement = fixture.nativeElement.querySelector('button');
+    expect(button.textContent?.trim()).toBe('syncSync');
+    expect(button.getAttribute('aria-label')).toBe('Workout sync history');
+    expect(selection).not.toHaveBeenCalled();
+    fixture.componentRef.setInput('disabled', true); fixture.detectChanges(); button.click();
+    expect(open).not.toHaveBeenCalled(); expect(selection).not.toHaveBeenCalled();
+    fixture.componentRef.setInput('disabled', false); fixture.detectChanges(); button.click();
+    expect(selection).toHaveBeenCalledTimes(1);
+    expect(open).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ data: {
+      scope: 'history', id: 'current', title: 'Plans and standalone workouts',
+    } }));
+    user.set(null); user$.next(null); fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('button')).toBeNull();
+  });
   it.each(['plan', 'workout'] as const)('shows %s destination confirmation and opens details without granting consent', async scope => {
     const fixture = await render(scope);
     if (scope === 'plan') {

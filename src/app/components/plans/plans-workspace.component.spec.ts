@@ -177,6 +177,20 @@ describe('PlansWorkspaceComponent', () => {
     }
   }
 
+  it('places Sync beside the Plans title and removes the Main Calendar header action', async () => {
+    TestBed.overrideProvider(TrainingDeliveryService, { useValue: { anyReady: () => false,
+      watchPresence: () => of(true), isSetupAvailable: () => false,
+      watchSummaryScope: () => of({ settings: [], statuses: [] }) } });
+    const fixture = await renderPlans();
+    const header: HTMLElement = fixture.nativeElement.querySelector('app-page-header');
+    const button = header.querySelector('.qs-page-header__title-row app-training-delivery-button button');
+    expect(button?.getAttribute('aria-label')).toBe('Workout sync history');
+    expect(button?.textContent?.trim()).toBe('syncSync');
+    expect(header.textContent).not.toContain('Main Calendar');
+    expect(header.querySelector('.qs-page-header__actions')?.textContent?.trim()).toBe('');
+    expect(haptics.selection).not.toHaveBeenCalled();
+  });
+
   it('has one contextual add action without overview or duplicate plan headings', async () => {
     const fixture = await renderPlans();
     expect(fixture.nativeElement.querySelector('.plans-overview')).toBeNull();

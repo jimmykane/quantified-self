@@ -936,8 +936,11 @@ action opens the existing editor with that date
 and plan prefilled. Dates support native keyboard activation plus arrow-key and Page Up/Down navigation, keeping focus
 and selection together. The date-cell button/ripple pattern follows Activity Calendar; a Material datepicker cannot
 contain separate accessible workout-edit actions without overriding its internals. Standalone retains its compact list.
-The **Main Calendar** link identifies the separate all-activity destination. No drag/drop, write API, provider sync,
-completed-activity matching, or new metric is introduced by this presentation change.
+The workspace header keeps **Sync** beside the **Plans** title. It opens **Workout sync history**, with the full name
+retained for assistive technology and in its tooltip. Calendar remains available through app navigation and the Dashboard;
+the former **Main Calendar** header action is removed. The library and workout-editor header actions are unchanged.
+MCP impact review: this header-only presentation changes no plan/workout reads, data contracts, consent, mutations,
+provider sync, completion matching, or exposed metrics.
 The full-month boundary-grid correction changes only visible disabled date cells. It does not alter authored schedules,
 date selection, provider delivery, MCP Training reads or mutations, consent, schemas, Assistant guidance, or the
 registered MCP contract.
@@ -1193,7 +1196,7 @@ that an inactive plan is sending. A missing status is not a confirmed delivery; 
 Unavailable Send/configuration actions stay hidden, but existing settings, problems, reconnect links and Stop remain
 readable. Status details expand in groups of 25 using a live loaded-prefix query, so subsequent pages cannot retain stale
 statuses or miss records moving across page boundaries. Plan workouts retain Stop even when their first delivery fails.
-The workspace's **Workout sync history** entry appears only when delivery records exist and remains reachable after deleting
+The workspace's compact **Sync** history entry appears only when delivery records exist and remains reachable after deleting
 their plan/workout. Each retained row opens delivery details independently of the authored editor. Deleted sources permit
 only Retry/Stop against the server-resolved existing account/workout identity (revision zero for a missing source); they
 cannot be sent, restored, or enrolled through these commands. Retry advances retained-record reconciliation without Pro
