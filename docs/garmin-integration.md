@@ -46,6 +46,46 @@ in addition to the existing Sleep grant for this supplement. See the shared
 - Daily `averageStressLevel` validation failures and unsupported Stress Details state codes attach bounded `validation` metadata to the existing WARNING: fixed family/field/reason, zero-based summary index, value type, and the first offending sample offset when applicable. Only finite numeric values with absolute value at most 1,000,000 are included; all other values are omitted with a disposition code. Strings, objects, raw summaries, provider identities, and credentials are never included. A later successful callback may restore `ready` without recovering an earlier failed batch; inspect the failed jobs separately.
 - Callback URLs contain short-lived pull credentials. Garmin workout, Sleep, and Health failures retain their original `callbackURL` or `garminCallbackURLs` in admin-only failed-job records under the existing 30-day expiry for bounded operator recovery; failure alone does not prove that the URL expired. Successful and skipped live rows still remove them. Keep them out of events, Health records, logs, and safe admin response projections; this retention change adds no logging or projection. Retention does not authorize automatic replay or bypass current account/connection/deletion checks.
 
+## Temporary webhook URL probe
+
+`garminWebhookProbe` is an isolated public Gen 2 HTTP endpoint for checking whether Garmin preserves a configured
+endpoint's path and query parameter. It uses `europe-west2`, 256 MiB, fractional Gen 1 CPU, concurrency one, zero minimum
+instances, one maximum instance, a ten-second timeout, and no bound secrets. Runtime loading excludes the ingestion,
+queue, task, and provider-configuration modules. It does not inspect or persist the request body, resolve accounts,
+follow callbacks, call Garmin, or create tasks. It acknowledges every POST with `200`, including missing markers;
+this is a protocol probe, not the production authentication fix.
+
+Configure only an evaluation app's selected Ping endpoint with:
+
+```text
+<function-base-url>/qs-path-marker-20261002?probe=qs-query-marker-20261002
+```
+
+The two fixed markers are public test values, not credentials. Do not use a real secret: platform access logs may retain
+request URLs even though the application logs only booleans. POST logs use the fixed message
+`[GarminWebhookProbe] URL markers received` with `pathMatches`, `queryMatches`, `manualTest`, and
+`garminClientIdPresent`. The client-ID header and manual-test header do not authenticate the sender.
+GET returns `200` without a delivery log; other methods return `405`.
+
+1. Smoke-test the URL with a synthetic POST and `x-qs-probe-test: manual`. Both marker booleans should be true.
+2. Configure one evaluation endpoint, use Data Generator for a synthetic notification, and verify a correlated POST
+   with both marker booleans true and `manualTest: false`. If the generator does not deliver, use an explicitly
+   authorized test-account sync. A curl request alone proves only our routing, not Garmin compatibility.
+3. Use a bounded evaluation Summary Resender operation to check repeated delivery. New endpoint domains may require
+   Garmin's security review. Never divert a production ingress endpoint to this payload-discarding probe.
+4. After Garmin-originated delivery is demonstrated, implement and verify a separate secret guard before production
+   queue admission. Probe success establishes URL transport, not sender authentication or resource-budget protection.
+5. Remove the probe after testing only with separate explicit approval for that exact Function deletion.
+
+Deploy only this target after explicit approval:
+
+```bash
+firebase deploy --project quantified-self-io --only functions:garminWebhookProbe
+```
+
+The existing product Help remains accurate: this operator-only probe changes no supported integration, user flow,
+OAuth permission, entitlement, ingestion behavior, or MCP surface.
+
 ## Identity and lifecycle
 
 New OAuth callbacks pin the Garmin provider user ID in server-owned service metadata. A retryable backend projection copies only the connected account identity, connection time, and bounded permission names/timestamp to the owner-readable service metadata used by the connection and route-permission UI; credentials and lifecycle generations never enter that projection. The production projection backfill completed and converged in September 2026. The frontend reads connection accounts exclusively from service metadata, an explicit empty projection is authoritative, and Firestore Rules deny every browser read and write against the Garmin token root and descendants.

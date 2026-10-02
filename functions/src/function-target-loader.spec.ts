@@ -6,8 +6,9 @@ import {
 } from './function-target-loader';
 
 describe('function target loader', () => {
-  it('optimizes the Suunto OAuth, marketing, and Training endpoints', () => {
+  it('optimizes the Garmin probe, Suunto OAuth, marketing, and Training endpoints', () => {
     expect(OPTIMIZED_FUNCTION_TARGETS).toEqual([
+      'garminWebhookProbe',
       'getSuuntoAPIAuthRequestTokenRedirectURI',
       'requestAndSetSuuntoAPIAccessToken',
       'listMarketingCampaigns',

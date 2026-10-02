@@ -953,6 +953,12 @@ Use `app-service-source-icon` and the shared presentation helpers. Imported acti
 
 Provider parity includes operational visibility, not only a user-facing connection.
 
+Garmin's temporary `garminWebhookProbe` is an isolated URL-transport experiment, not ingestion or webhook authentication.
+Use public disposable markers and an evaluation endpoint; it discards payloads and logs only boolean marker/header facts.
+It creates no account, queue, task, or product state. Production endpoints must keep their normal receiver. See
+[the probe procedure](garmin-integration.md#temporary-webhook-url-probe) for deployment scope, evaluation checks,
+logging limits, evidence boundaries, and separately authorized removal. No Help or MCP contract change is needed.
+
 ### Required current admin parity
 
 - Add the provider queue collection to `getQueueStats` so the Queue Monitor reports pending, succeeded, stuck, dead-letter, retry-bucket, throughput, and lag statistics.
