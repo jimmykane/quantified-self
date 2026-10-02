@@ -13,6 +13,7 @@
   flex-wrap: wrap;
   padding: 24px;
   padding-top: var(--summary-primary-info-padding-top, 24px);
+  padding-bottom: var(--summary-primary-info-padding-bottom, 24px);
   width: 100%;
   max-width: 100%;
   min-width: 0;
@@ -197,6 +198,7 @@ app-hero-metrics {
   position: relative;
   padding: 12px;
   padding-top: var(--summary-primary-info-padding-top, 12px);
+  padding-bottom: var(--summary-primary-info-padding-bottom, 12px);
   gap: 12px;
   align-items: stretch;
 }
@@ -235,6 +237,7 @@ app-hero-metrics {
   width: 100%;
   justify-content: space-evenly;
   padding: 12px;
+  padding-bottom: var(--summary-primary-info-metrics-padding-bottom, 12px);
   border-radius: 16px;
   gap: 16px;
   margin: 0;
@@ -272,6 +275,7 @@ app-hero-metrics {
     position: relative;
     padding: 12px;
     padding-top: var(--summary-primary-info-padding-top, 12px);
+    padding-bottom: var(--summary-primary-info-padding-bottom, 12px);
     gap: 16px;
     align-items: stretch;
   }
@@ -310,6 +314,7 @@ app-hero-metrics {
     width: 100%;
     justify-content: space-evenly;
     padding: 16px;
+    padding-bottom: var(--summary-primary-info-metrics-padding-bottom, 16px);
     border-radius: 16px;
     gap: 20px;
     margin: 0;
@@ -329,6 +334,7 @@ app-hero-metrics {
   .summary-primary-info {
     padding: 12px;
     padding-top: var(--summary-primary-info-padding-top, 12px);
+    padding-bottom: var(--summary-primary-info-padding-bottom, 12px);
     gap: 12px;
   }
 
@@ -338,6 +344,7 @@ app-hero-metrics {
 
   .summary-primary-info app-hero-metrics {
     padding: 12px;
+    padding-bottom: var(--summary-primary-info-metrics-padding-bottom, 12px);
     gap: 16px;
   }
 }

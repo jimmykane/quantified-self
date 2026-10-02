@@ -3312,7 +3312,9 @@ Activity details place a surface-free **Compact strip** immediately below the pr
 device metadata, and additional statistics. The shared Training-impact component's `strip` variant keeps the contextual
 headline beside four labeled contribution columns on desktop; in narrower containers the headline moves above two
 columns. Numbers match the adjacent activity stats' compact size, with tighter row gaps and vertical padding. Exact
-values and the separate day outcome remain visible. A small right-aligned **About Training impact** Material info
+values and the separate day outcome remain visible. When the strip is present, the activity summary uses the shared
+header's bottom-padding hooks to leave an 8px join instead of stacking summary and phone metric padding. Other summary
+surfaces retain their existing spacing. A small right-aligned **About Training impact** Material info
 button shows the model explanation in a tooltip on hover or keyboard focus; the shared tooltip-tap directive also
 supports phone taps, with six seconds to read it and one haptic-feedback owner. It adds no disclosure row, subscription,
 or request. The full-day breakdown retains its existing detailed variant and visible disclaimer.

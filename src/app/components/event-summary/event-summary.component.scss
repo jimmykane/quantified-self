@@ -18,6 +18,11 @@ app-summary-primary-info {
   --summary-primary-info-padding-top: 0;
 }
 
+app-summary-primary-info:has(+ .summary-primary-extension:not(:empty)) {
+  --summary-primary-info-padding-bottom: 4px;
+  --summary-primary-info-metrics-padding-bottom: 0;
+}
+
 .summary-primary-extension {
   padding: 4px 24px 8px;
   min-width: 0;
