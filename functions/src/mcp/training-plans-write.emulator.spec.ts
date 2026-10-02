@@ -719,6 +719,10 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Training MCP write propos
       .rejects.toThrow('permission mode');
     const result = await applyTrainingChanges(apply, deps);
     expect(result.status).toBe('applied');
+    expect(result.changes[0].message).toContain('The workout was moved to recoverable history');
+    expect(result.changes[0].message).toContain('removal is not yet confirmed');
+    expect(result.changes[0].message).toContain('Completed activities were not changed');
+    expect(result.changes[0].message.includes('older copies remain')).toBe(!removePastProviderCopies);
     expect((await workout.ref.get()).get('lifecycle')).toBe('deleted');
     expect((await user.collection('trainingDeliveryState').doc('current').collection('pastCleanup')
       .doc(`workout_${workout.id}`).get()).get('enabled')).toBe(removePastProviderCopies);
@@ -729,7 +733,12 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Training MCP write propos
     expect(transport!.calls.filter(call => call.kind === 'remove')).toHaveLength(removePastProviderCopies ? 1 : 0);
   });
 
-  it.each(['convert-to-standalone', 'delete-workouts'] as const)('preserves plan deletion disposition %s with explicit past-copy cleanup', async workoutDisposition => {
+  it.each([
+    { workoutDisposition: 'convert-to-standalone', removePastProviderCopies: true },
+    { workoutDisposition: 'convert-to-standalone', removePastProviderCopies: false },
+    { workoutDisposition: 'delete-workouts', removePastProviderCopies: true },
+    { workoutDisposition: 'delete-workouts', removePastProviderCopies: false },
+  ] as const)('preserves plan deletion disposition $workoutDisposition with older-copy cleanup $removePastProviderCopies', async ({ workoutDisposition, removePastProviderCopies }) => {
     const user = db.collection('users').doc(uid);
     const create = await previewTrainingChanges({ uid, connectionId: 'connection', scopes,
       arguments: { expectedScheduleRevision: 1, changes: [
@@ -749,23 +758,27 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Training MCP write propos
     const deletion = await previewTrainingDeletion({ uid, connectionId: 'connection', scopes,
       arguments: { expectedScheduleRevision: created.scheduleRevision, change: { kind: 'delete-plan',
         plan: { ref: created.createdReferences.find(item => item.kind === 'plan')!.reference },
-        workoutDisposition, removePastProviderCopies: true } } }, deps);
-    expect(deletion.changes[0].summary).toContain('including older uncompleted copies');
+        workoutDisposition, removePastProviderCopies } } }, deps);
+    expect(deletion.changes[0].summary).toContain(removePastProviderCopies
+      ? 'including older uncompleted copies' : 'past provider copies remain');
     const input = statusInput(deletion.proposalRef);
     const result = await applyTrainingChanges(input, deps);
     expect(result.changes[0].message).toContain('removal is not yet confirmed');
+    expect(result.changes[0].message.includes('older copies remain')).toBe(!removePastProviderCopies);
     expect((await plan.ref.get()).exists).toBe(false);
     const workouts = await user.collection('scheduledWorkouts').get();
     if (workoutDisposition === 'delete-workouts') expect(workouts.empty).toBe(true);
     else expect(workouts.docs[0].get('planId')).toBeNull();
-    expect((await user.collection('trainingDeliveryState').doc('current').collection('pastCleanup')
-      .doc(`plan_${plan.id}`).get()).data()).toMatchObject({ schemaVersion: 1, scope: 'plan', scopeId: plan.id,
-      workoutIds: [workout.id] });
+    const cleanup = await user.collection('trainingDeliveryState').doc('current').collection('pastCleanup')
+      .doc(`plan_${plan.id}`).get();
+    if (removePastProviderCopies) {
+      expect(cleanup.data()).toMatchObject({ schemaVersion: 1, scope: 'plan', scopeId: plan.id, workoutIds: [workout.id] });
+    } else expect(cleanup.exists).toBe(false);
     await expect(applyTrainingChanges(input, deps)).resolves.toEqual(result);
     expect(transport!.calls).toHaveLength(1); // Only the background worker removes a service copy.
     await reconcileTrainingDeliveryPage(deps.runtime, uid);
     await processTrainingDelivery(deps.runtime, uid, ledger.id);
-    expect(transport!.calls.filter(call => call.kind === 'remove')).toHaveLength(1);
+    expect(transport!.calls.filter(call => call.kind === 'remove')).toHaveLength(removePastProviderCopies ? 1 : 0);
   });
 
   it('fences service-copy cleanup after grant revocation and preserves completed copies', async () => {

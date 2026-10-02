@@ -14,6 +14,15 @@ import {
 } from './policies.content';
 
 describe('help.content', () => {
+  it('explains the Assistant deletion review and distinguishes authored deletion from service cleanup', () => {
+    const copy = HELP_SECTIONS.find(section => section.id === 'ai-insights')!.content;
+    for (const phrase of ['with both Training change choices on', '**Delete plan**', '**Delete workout**',
+      'Workout deletion is recoverable', 'choose whether its workouts stay standalone or are deleted',
+      'Older-copy cleanup is optional', 'does not require Pro',
+      'not removal from a connected app or watch', 'Completed activities stay untouched']) {
+      expect(copy).toContain(phrase);
+    }
+  });
   it('explains the explicit MCP older-copy cleanup choice without promising provider or watch removal', () => {
     const copy = HELP_SECTIONS.find(section => section.id === 'training-plans')!.content;
     expect(copy).toContain('also remove older, uncompleted service copies');

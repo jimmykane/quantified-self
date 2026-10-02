@@ -421,6 +421,10 @@ function describeProviderDeletion(removePastProviderCopies: boolean): string {
     : 'Eligible future provider copies may withdraw; past provider copies remain. Recorded activities are not deleted.';
 }
 
+function describeAppliedProviderDeletion(removePastProviderCopies: boolean): string {
+  return `${removePastProviderCopies ? 'Service-copy cleanup was requested' : 'Eligible upcoming service-copy cleanup was requested; older copies remain'}; removal is not yet confirmed. Completed activities were not changed.`;
+}
+
 function describeOperation(operation: TrainingScheduleMutationOperationV1): string {
   switch (operation.kind) {
     case 'create-plan': return `Create plan “${operation.name}” from ${operation.startLocalDate} to ${operation.endLocalDate}${operation.activate ? ' and make it active' : ''}.`;
@@ -1300,8 +1304,7 @@ async function applyTrainingChangesInternal(
         ? `${response.convertedWorkoutIds.length} workout${response.convertedWorkoutIds.length === 1 ? '' : 's'} converted to standalone.`
         : `${response.permanentlyDeletedWorkoutIds.length} workout${response.permanentlyDeletedWorkoutIds.length === 1 ? '' : 's'} permanently deleted.`;
       changeResults.push({ index: proposal.planDeletion.index, kind: 'delete-plan', status: 'applied',
-        message: `The plan and its revision history were permanently deleted. ${effect}${proposal.planDeletion.request.removePastProviderCopies
-          ? ' Service-copy cleanup was requested; removal is not yet confirmed.' : ''}` });
+        message: `The plan and its revision history were permanently deleted. ${effect} ${describeAppliedProviderDeletion(proposal.planDeletion.request.removePastProviderCopies === true)}` });
       await proposalRefDoc.update({ changeResults, leaseUntilMs: deps.now() + APPLY_LEASE_MS });
     } catch (error) {
       if (error instanceof TrainingPlanDeletionResumeRequiredError) {
@@ -1326,7 +1329,9 @@ async function applyTrainingChangesInternal(
       index: stored.index,
       kind: stored.request.operation.kind,
       status: 'applied' as const,
-      message: describeOperation(stored.request.operation),
+      message: stored.request.operation.kind === 'delete-workout'
+        ? `The workout was moved to recoverable history. ${describeAppliedProviderDeletion(stored.request.operation.removePastProviderCopies === true)}`
+        : describeOperation(stored.request.operation),
     }));
     const stagedLockRef = deps.db.collection('users').doc(input.uid).collection('trainingPlanState').doc('current')
       .collection(TRAINING_PLAN_DELETION_LOCKS_COLLECTION_ID).doc(BULK_SHIFT_LOCK_ID);

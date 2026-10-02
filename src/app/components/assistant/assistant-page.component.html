@@ -220,9 +220,9 @@
       @if (pendingTrainingProposal(); as proposal) {
         <section class="training-proposal" aria-labelledby="training-proposal-title">
           <div class="training-proposal-heading">
-            <mat-icon aria-hidden="true">edit_calendar</mat-icon>
+            <mat-icon aria-hidden="true">{{ trainingDeletionReview() ? 'delete_outline' : 'edit_calendar' }}</mat-icon>
             <div>
-              <h2 id="training-proposal-title">{{ pendingSavedWorkoutProposal() ? 'Review saved workout change' : 'Review Training changes' }}</h2>
+              <h2 id="training-proposal-title">{{ trainingDeletionReview()?.title ?? (pendingSavedWorkoutProposal() ? 'Review saved workout change' : 'Review Training changes') }}</h2>
               <p>{{ proposal.summary }}</p>
             </div>
           </div>
@@ -241,7 +241,9 @@
             }
           </div>
           <p class="training-proposal-disclosure">
-            @if (pendingSavedWorkoutProposal()) {
+            @if (trainingDeletionReview(); as deletionReview) {
+              {{ deletionReview.disclosure }}
+            } @else if (pendingSavedWorkoutProposal()) {
               Nothing changes until you apply. A saved recipe has no sync setting; planned copies follow the plan's existing setting, while Standalone copies need their own Send action.
             } @else {
               Nothing changes until you apply this proposal. Provider results are independent, so a delivery problem never removes an authored workout.
@@ -250,7 +252,7 @@
           <div class="training-proposal-actions">
             <button mat-flat-button type="button" [disabled]="proposalActionInProgress()"
               (click)="applyPendingTrainingProposal()">
-              @if (applyingTrainingProposal()) { <mat-spinner diameter="18"></mat-spinner> } @else { Apply changes }
+              @if (applyingTrainingProposal()) { <mat-spinner diameter="18"></mat-spinner> } @else { {{ trainingDeletionReview()?.applyLabel ?? 'Apply changes' }} }
             </button>
             <button mat-button type="button" [disabled]="proposalActionInProgress()"
               (click)="dismissPendingTrainingProposal()">Dismiss</button>

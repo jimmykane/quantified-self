@@ -152,7 +152,14 @@ That preview supports one create, save, duplicate, edit, archive/restore, confir
 explicit-date placement. Saved recipes have no date or provider consent. The model cannot call
 `apply_training_changes`, `apply_saved_workout_change` or provider
 transport. Quantified Self stores the safe preview with the conversation and shows an **Apply changes** / **Dismiss**
-surface. Applying uses a dedicated Auth + App Check callable that rechecks the same conversation generation and toggles,
+surface. Single current deletions instead show **Review plan deletion** / **Delete plan** or **Review workout deletion** /
+**Delete workout** and **Dismiss**. The review keeps the server-authored workout disposition and service-copy choice;
+it never infers older-copy removal from combined permission or changes it in the browser. Plan/history deletion is
+permanent; workout deletion is recoverable. Apply displays the actual server deletion receipt rather than a generic
+sync-update message. Requested cleanup remains unconfirmed, and a failed or missing deletion outcome never reports
+partial success or gives success haptics. The access sheet explains both required change choices and that removal,
+unlike new delivery, does not require Pro but still needs valid service access/provider support.
+Applying uses a dedicated Auth + App Check callable that rechecks the same conversation generation and toggles,
 then invokes the common proposal service. Dismissal clears the server-owned proposal without changes. New chat, a toggle
 change, account switch, expiry, schedule conflict or stale grant makes the proposal unusable. Provider results are
 independent and a send failure never removes a newly authored workout. Call/output budgets and quotas are unchanged.

@@ -118,6 +118,14 @@ validation and the public recipe coverage gate remain identical.
 The built-in Assistant has separate default-off **Training plans**, **Plan and workout changes**, and **Planned-workout
 sync changes** choices. Only applicable focused/batch preview tools enter Gemini context. The model cannot apply changes; Quantified Self
 stores one bounded proposal under the current server-owned conversation and the user must apply or dismiss it in the app.
+Single plan/workout deletion reviews use explicit **Delete plan** / **Delete workout** actions, preserving the exact
+server preview's workout disposition and service-copy choice. Their receipts state authored deletion separately from
+unconfirmed background service cleanup; declined older-copy removal stays declined. Missing or failed deletion results
+do not get success messaging or haptics. The Training access sheet explains both required change toggles and removal
+without Pro. This Assistant presentation and receipt-wording change adds no MCP tool, field, scope, provider action or
+read projection; no registered-contract or bundled-plugin update is needed. Verification uses the Assistant component,
+helper and callable specs and the deletion cases in the `mcp-data` emulator group, including both plan dispositions
+and both cleanup choices. Backend/frontend deployment remains separate.
 Plan-level and provider-only actions select the batch preview before a sport keyword can select a focused recipe editor;
 a combined historical comparison and workout recommendation keeps live daily and completed-activity reads available.
 For a today recommendation, the server prepares Form, Form Now, ramp-rate and Training Summary snapshots before the
