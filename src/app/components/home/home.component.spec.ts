@@ -397,18 +397,12 @@ describe('HomeComponent', () => {
         }
         expect(text).toContain('Plan Through MCP');
         expect(text).toContain('compatible MCP clients');
-        expect(text).toContain('Optional Provider Delivery');
-        expect(text).toContain('Workout delivery to Garmin, Suunto, and Wahoo is available to connected Pro members');
-        expect(text).toContain('Garmin supports compatible target-free pool swims');
-        expect(text).toContain('Walking, Hiking, Rowing, Indoor Rowing and open-water workouts use Garmin Generic after mapping review');
-        expect(text).toContain('Generic works only on some devices');
-        expect(text).toContain('QS keeps your authored sport');
-        expect(text).toContain('supports timed, untargeted Walking/Hiking, pool/open-water swimming and outdoor/indoor rowing');
-        expect(text).toContain('distance endings and intensity targets remain unsupported for walking, hiking, swimming and rowing');
-        expect(text).not.toContain('validation candidate');
-        expect(text).toContain('Selected pool length is not sent to Wahoo');
-        expect(text).toContain('New COROS plan sync and standalone Send actions are coming soon in the app');
-        expect(text).toContain('never sends workouts by itself');
+        expect(text).toContain('Send Your Workouts');
+        expect(text).toContain('Send compatible workouts to Garmin, Suunto, or Wahoo with Pro');
+        expect(text).toContain('Choose a plan to sync or send a workout on its own');
+        expect(text).toContain('Connecting an account alone won’t send planned workouts');
+        expect(text).toContain('Support varies by sport and device');
+        expect(text).toContain('COROS is coming soon');
         expect(text).toContain('without adding them to recorded totals or Training analysis');
         expect(rows).toHaveLength(TRAINING_PLANS_HOME_CONTENT.rows.length);
         expect(section.querySelectorAll('.training-plans-mcp-example')).toHaveLength(1);
@@ -416,6 +410,14 @@ describe('HomeComponent', () => {
         expect(links[0].getAttribute('href')).toBe(TRAINING_PLANS_HOME_CONTENT.cta.routerLink);
         expect(preview).toBeTruthy();
         expect(preview?.nativeElement.querySelector(':scope > div[data-nosnippet]')).toBeTruthy();
+    });
+
+    it('keeps homepage workout sync copy concise instead of listing technical provider limitations', () => {
+        const copy = TRAINING_PLANS_HOME_CONTENT.rows.find(row => row.icon === 'sync')?.copy ?? '';
+
+        expect(copy).not.toBe('');
+        expect(copy.trim().split(/\s+/).length).toBeLessThanOrEqual(60);
+        expect(copy).not.toMatch(/Generic|mapping review|verification pending|account\/device-tested|pool length|manual rep transitions/i);
     });
 
     it('should explain benchmark merge and hardware precision workflows', () => {

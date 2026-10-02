@@ -45,8 +45,8 @@ export const TRAINING_PLANS_HOME_CONTENT = {
     {
       icon: 'sync',
       iconTone: 'primary',
-      title: 'Optional Provider Delivery',
-      copy: 'Workout delivery to Garmin, Suunto, and Wahoo is available to connected Pro members through explicit plan opt-in or standalone Send actions, subject to sport compatibility. Pool and open-water swimming map to distinct Suunto Guide activities; Garmin supports compatible target-free pool swims, while Walking, Hiking, Rowing, Indoor Rowing and open-water workouts use Garmin Generic after mapping review. Generic works only on some devices, not as a guaranteed native sport profile; QS keeps your authored sport. Wahoo maps running/cycling subprofiles and supports timed, untargeted Walking/Hiking, pool/open-water swimming and outdoor/indoor rowing. These profiles and timed intervals have been account/device-tested; distance endings and intensity targets remain unsupported for walking, hiking, swimming and rowing. Selected pool length is not sent to Wahoo. Suunto can send strength as a Gym Guide with manual rep transitions, not native strength tracking. Garmin strength mapping is implemented for supported exercise names, with live delivery verification pending; Wahoo supports timed strength sets and rests as Gym workouts; repetition sets remain unsupported, and exercise/load instructions are not native tracking. New COROS plan sync and standalone Send actions are coming soon in the app. Connecting a provider never sends workouts by itself.',
+      title: 'Send Your Workouts',
+      copy: 'Send compatible workouts to Garmin, Suunto, or Wahoo with Pro. Choose a plan to sync or send a workout on its own. Connecting an account alone won’t send planned workouts. Support varies by sport and device. COROS is coming soon.',
     },
     {
       icon: 'calendar_month',
