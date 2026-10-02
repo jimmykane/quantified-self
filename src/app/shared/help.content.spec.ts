@@ -95,10 +95,12 @@ describe('help.content', () => {
     expect(copy).toContain('changing a distance preset does not reset that choice');
   });
 
-  it('documents supported Garmin strength names without claiming live/device proof', () => {
+  it('records verified Garmin strength delivery without promising every device or exercise', () => {
     const copy = HELP_SECTIONS.find(section => section.id === 'training-plans')!.content;
     expect(copy).toContain('Garmin strength mapping preserves individual reps or timed sets, load and rest');
-    expect(copy).toContain('live cloud/device verification is pending');
+    expect(copy).toContain('verified through cloud create/edit/reschedule/withdrawal and owner-confirmed Garmin Connect/watch checks');
+    expect(copy).toContain('does not guarantee every device or exercise');
+    expect(copy).not.toContain('live cloud/device verification is pending');
     expect(copy).toContain('Barbell back squat');
     expect(copy).toContain('QS never guesses equipment or substitutes another exercise');
     expect(copy).toContain('Garmin receives loads in kilograms');
@@ -714,6 +716,8 @@ describe('help.content', () => {
     expect(planningSection?.content).toContain('distance endings and intensity targets remain unsupported');
     expect(planningSection?.content).not.toMatch(/validation candidate|Hiking device playback remains unverified/);
     expect(planningSection?.content).toContain('Selected pool length is not sent to Wahoo');
+    expect(planningSection?.content).toContain('its Cloud API has no documented physical pool-length field');
+    expect(planningSection?.content).toContain('QS does not support sending that setting');
     expect(planningSection?.content).toContain('the saved QS sport is unchanged');
     expect(planningSection?.content).toContain('select **Strength Training**, not Yoga or Indoor Fitness Equipment');
     expect(planningSection?.content).toContain('Scheduled for later');

@@ -119,7 +119,8 @@ unsent work when the account or view changes instead of letting a delayed retry 
 
 The ignored local Garmin Training API V2 version 1.0 partner contract is available for development, but it is never
 committed. `shared/planned-workout-providers.ts` and the pure serializer under
-`functions/src/training-plans/providers/` record redacted Running/Cycling and pool-swim payload fixtures for the portable v1 workout model.
+`functions/src/training-plans/providers/` record redacted running/cycling, pool-swim, native-strength and disclosed
+Generic fallback fixtures. Fixture coverage alone is not live provider or device evidence.
 Workout content and date-only Workout Schedule payloads are deliberately separate because Garmin assigns and manages
 their lifecycles independently. The proof covers fixed repeats, time/distance/manual steps, and absolute
 heart-rate/power/speed/pace/cadence ranges.
@@ -134,10 +135,18 @@ Cycling-family folds retain the existing cycling-only secondary-target rule and 
 The #733 extension maps pool Swimming exactly to `LAP_SWIMMING` with optional explicit pool length and
 target-free swim steps. Its synthetic fixture covers a 25 m pool and four 25 m repetitions with final-rest skipping;
 an owner-account cloud test on 23 September 2026 also completed create, edit, date move, positive retained-record checks
-and Stop/withdrawal without retries. That does not establish Garmin app/watch receipt or completed-activity correlation.
-Unspecified pool size is contract-valid but may not work on older devices. Open-water swimming and swim targets remain
-unmapped. Eligible, explicitly consenting Garmin connections can now send pool swimming. #734 tracks the additive MCP contract
-for the new pool-length recipe field.
+and Stop/withdrawal without retries. Later #733 evidence includes owner-confirmed Garmin Connect and watch visibility
+for the 25 m standalone workout; cloud acceptance alone is never watch receipt or completed-activity correlation.
+Unspecified pool size is contract-valid but may not work on older devices. Completed #734 covers the additive MCP
+pool-length contract. Swim targets remain unsupported. Walking, Hiking, Rowing, Indoor Rowing and Open Water Swimming
+use the disclosed `GENERIC` fallback, not native sport profiles; QS preserves the authored sport and requires mapping
+approval. The owner accepted the remaining Generic/device and target/manual/relative/secondary-target matrix in #655
+on 2 October. This records owner sign-off, not newly executed individual device observations.
+
+Native Strength delivery for the verified exercise-name allowlist is complete in #782: deployed cloud
+create/update/reschedule/withdrawal and owner-confirmed Garmin Connect/watch checks. Reps or timed sets, load and rest
+are preserved for supported names; QS does not guess exercise equipment. These results do not establish support for
+every exercise or device, native tracking for Generic fallback sports, or a completed Strength activity.
 
 Garmin planned-workout delivery is available to eligible connected Pro users through the app's explicit Send/plan
 consent flow; see the [public delivery boundary](training-workspace.md#garmin-public-delivery-boundary). There is no
@@ -155,13 +164,20 @@ attention rather than being posted again. Provider responses and credentials nev
 Past/completed copies remain protected, and provider-held copies may remain after disconnect/account deletion.
 
 The detailed implementation and production-verification checklist lives in the
-[Training source of truth](training-workspace.md#garmin-workoutcalendar-adapter-647). Remaining request/response and
-schedule-list/404 behavior, representative device rendering and post-release observation stay tracked in #645/#647/#655.
-The retired #698 issue is not a launch gate. Newly imported Garmin FIT activities may link to a QS-planned workout only
-when the workout-file reference uniquely resolves to one same-account delivered Workout and current dated Schedule, with
-one recorded activity on that date. This is conservative local correlation, not a Garmin completion hook, watch receipt,
-or proof of prescribed-step execution. Multi-source recordings and ambiguous/missing identifiers remain #651.
-Neither the adapter nor the offline proof authorizes a provider call or deployment.
+[Training source of truth](training-workspace.md#garmin-workoutcalendar-adapter-647). Completed request/response,
+schedule-list/404 and device evidence are retained in completed #645/#647/#733/#782. Schedule-only missing-copy repair
+is complete in #703. Missing Workout remains inconclusive under the limit recorded in closed #769; QS does not
+automatically recreate it from a 404. Remaining operational monitoring stays in #655, which no longer requires code
+rollback work or disabled-by-default staging for the approved live rollout. Availability flags and runtime behavior
+are unchanged; COROS remains disabled. The retired #698 issue is not a launch gate.
+
+Completed #651 implements exact-marker completion and duplicate/ambiguity handling. Newly imported Garmin FIT
+activities may link only when the workout-file reference resolves unambiguously to a same-account delivered Workout
+and the applicable dated Schedule. The first committed activity link wins: another recording of the same workout can
+confirm completion without replacing that link. Missing, reused or ambiguous references remain unlinked; fallback/manual
+matching and audited unlink/relink are out of scope. This is exact local correlation, not a Garmin completion hook,
+watch receipt or proof of prescribed-step execution. Documentation and offline proof authorize no new provider call,
+deployment or data deletion.
 
 ## Production configuration
 

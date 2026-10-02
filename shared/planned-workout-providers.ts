@@ -217,7 +217,7 @@ export const PLANNED_WORKOUT_PROVIDER_CAPABILITIES_V1: Readonly<
       'Walking, Hiking, Rowing, Indoor Rowing and Open Water Swimming map to Generic with approval. Generic workouts work only on some devices and do not guarantee native sport tracking or display; QS keeps the authored sport.',
       'Unspecified pool length is permitted by the API but may not work on older devices. Swim intensity targets are not mapped.',
       'Strength requires the complete exercise prescription and a verified Garmin exercise name. Reps, timed holds, kilogram load and rest are preserved; arbitrary names are unsupported.',
-      'Strength mapping has local fixture/emulator evidence only; live cloud and device proof remains in #782.',
+      'Native strength delivery has account-side create/update/reschedule/withdrawal and owner-confirmed Garmin Connect/watch evidence in #782; this is not universal exercise/device support.',
       'A secondary target is documented only for cycling and depends on device support.',
       'Production limits: 3000 application requests per rolling minute including OAuth; 1000 per account per rolling day excluding OAuth.',
       'Cloud acceptance does not prove that Garmin Connect or a device received the workout.',
@@ -282,7 +282,7 @@ export const PLANNED_WORKOUT_PROVIDER_CAPABILITIES_V1: Readonly<
     scheduling: 'Create an app-owned Plan record, then attach it to a dated Workout record.',
     limits: [
       'The public plan.json schema is version 1.0.0 and documents running/cycling. All 21 mapped sport profiles have account-tested acceptance and owner-confirmed native profile/timed playback; other devices and intensity/distance support are not established by those tests.',
-      'Walking/Hiking and pool/open-water swimming and outdoor/indoor rowing support only time-based steps without intensity targets. Selected pool length is not sent to Wahoo; set it locally where needed.',
+      'Walking/Hiking and pool/open-water swimming and outdoor/indoor rowing support only time-based steps without intensity targets. Wahoo has no documented physical pool-length delivery field; QS does not support sending that setting.',
       'Timed strength uses the owner-tested Gym family 6 / indoor Workout type 42. Repetition sets are unsupported; exercise/load instructions are not native tracking.',
       'Bike computers use only the first target in an interval.',
       'Relative heart-rate and threshold-speed targets are documented for treadmill workouts in the Wahoo app, not ELEMNT computers or RIVAL.',

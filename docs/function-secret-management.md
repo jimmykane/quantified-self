@@ -2,10 +2,12 @@
 
 Quantified Self deploys backend credentials through Google Cloud Secret Manager and Firebase `defineSecret()` bindings. A Function receives only the secrets declared for that endpoint in `functions/src/secrets.ts`; an endpoint absent from the policy must receive none.
 
-The private Garmin and Suunto Training adapters reuse their existing OAuth client pairs through shared token refresh.
+The live Garmin and Suunto Training adapters reuse their existing OAuth client pairs through shared token refresh.
 Only `processTrainingDeliveryTask` binds those credentials; preview/mutation callables and dispatchers do not.
-Credentials never grant user consent or public provider readiness. All public Training delivery switches remain false;
-deployment and public enablement require separate approval.
+Credentials never grant user consent or public provider readiness. The approved public Training rollout enables
+Garmin, Wahoo and Suunto; COROS remains disabled in the shared capability registry, with no provider UID allowlist.
+Pro, explicit plan/workout consent and per-request authority remain required. Future deployments or enablement changes
+still require separate approval; this documentation update changes no secret binding or runtime switch.
 
 ## Managed inventory
 

@@ -98,7 +98,7 @@ an ambiguous listing blocks creation, while an empty listing adds no evidence an
 repair path unchanged. Evidence-binding changes clear the old confirmed-absence projection before a new observation chain begins.
 
 Training planning uses a stricter launch boundary than activity or route delivery. Manual plan and standalone-workout
-authoring is free and independent of connected services. Any future provider synchronization is Pro, explicit, and
+authoring is free and independent of connected services. Provider synchronization is Pro, explicit, and
 directional: a plan needs per-provider opt-in, while a standalone workout needs a user-selected Send action. A provider
 connection alone never opts workouts into delivery.
 The manual editor converts the owner's kilometre/mile step distances and separately selected pace units into canonical
@@ -179,8 +179,9 @@ preferences, ledgers and safe status projections remain stored but inactive so a
 them without treating retained consent as current provider availability.
 Every provider retains Pro, explicit consent, connection authority, provider configuration and its provider-specific
 permission checks. Legacy connections must reconnect rather than have permission inferred. See the
-[Garmin public delivery boundary](training-workspace.md#garmin-public-delivery-boundary) for deployment, preflight and
-rollback. Provider status is:
+[Garmin public delivery boundary](training-workspace.md#garmin-public-delivery-boundary) for live availability and consent.
+#655 no longer requires code rollback work for this live rollout; normal Stop/disconnect/deletion controls and the
+source-controlled availability decisions are unchanged. Provider status is:
 
 The v1 manual editor also accepts exact Walking, Hiking, Rowing, and Indoor Rowing sports. Suunto's catalog maps them
 to Guide activity IDs `0`, `11`, `15`, and `57` respectively; `0` is a valid activity ID, never a missing value.
@@ -188,8 +189,9 @@ Rowing distance is authored in metres and pace as a 500 m split while canonical 
 disclosed, approval-bound `GENERIC` fallback for these four sports and Open Water Swimming, not native sport profiles.
 Generic works only on some devices and cannot guarantee native sport tracking or display; QS keeps the authored sport.
 COROS remains unsupported for these four sports. Wahoo's Walking/Hiking and rowing limitations are listed below;
-recorded-activity support never implies workout delivery. The new Suunto mappings have serializer and isolated demo-emulator evidence only; live
-cloud CRUD and app/watch visibility are not yet claimed. See #738 and #739 for separately approved account proof.
+recorded-activity support never implies workout delivery. Completed #738/#739 record approved Guide account-side
+checks and owner confirmation of all four profiles on the watch. Synthetic tests and API readbacks alone cannot
+establish watch receipt or completed-activity linkage.
 
 Strength Training has a separate exercise-aware prescription with ordered names and sets, reps or timed holds,
 optional fixed external load stored in kilograms and optional rest after each set. The app editor follows the owner's
@@ -207,13 +209,15 @@ is explicitly omitted from this implementation and stays pending in #741. Garmin
 mapping preserves native reps/time, exact kilogram load and rest for a verified 20-name Appendix B allowlist using the
 complete companion, never the v1 summary alone. Unknown names are unsupported rather than substituted; Help lists
 supported names and the current Garmin kilogram display. Its Workout/Schedule lifecycle, consent, account/revision,
-retry and deletion protections are unchanged. Fixture/demo-emulator evidence is not live cloud/device proof; #782
-retains separately approved account-side verification. Wahoo #783 accepts timed strength sets/rests as Gym family `6`,
+retry and deletion protections are unchanged. Completed #782 records deployed native Strength create/readback,
+update, reschedule and authorized withdrawal, plus owner-confirmed Garmin Connect/watch visibility and launchability.
+Synthetic fixtures alone do not establish that live evidence. Wahoo #783 accepts timed strength sets/rests as Gym family `6`,
 indoor Workout type `42`, using the validated complete companion. Repetition sets remain unsupported. Exercise/load
 instructions are degraded, not native tracking; loads use the Sports Lib kilogram display, and actual rounding requires
 mapping approval. The QS editor/MCP details keep the exact canonical load and owner kg/lb display preference.
-Suunto strength has demo-emulator evidence, not live app/watch proof. See #740
-and #741 for remaining account-side delivery proof.
+Suunto strength has recorded positive owner app/watch behavior in #741, in addition to synthetic tests and tester
+cloud acceptance. Do not claim the entire strength CRUD/device matrix from that observation; remaining Suunto strength
+lifecycle and COROS live proof stay in #741. Strength authoring is complete in #740.
 
 Runtime wrappers must preserve the entire pure policy interface, including the optional strength companion in
 `assess` and the explicit past-removal opt-in in `canRemove`; bind the policy method rather than copying a fixed
@@ -226,10 +230,10 @@ past deletion even with opt-in. Synthetic wrapper/emulator evidence is not provi
 
 | Provider | Availability | Truthful delivery model and remaining limits |
 | --- | --- | --- |
-| Garmin | `enabled` | Connected Pro users can explicitly deliver compatible running/cycling or pool-swimming workouts through separate Workout and Workout Schedule lifecycle records after granting `WORKOUT_IMPORT`. Running/cycling sub-sports still fold to broad `RUNNING`/`CYCLING`; pool swimming maps to `LAP_SWIMMING` with optional explicit pool length and target-free swim steps. Owner-account cloud create/edit/reschedule/readback/withdrawal passed on 23 and 27 September 2026. For one separate 25 m standalone workout, the owner confirmed Garmin Connect and watch visibility on 27 September. Strength's complete-companion mapping is implemented for verified exercise names with fixture/demo-emulator evidence; deployment and live cloud/app/watch checks remain in #782, separate from those running/cycling/swim observations. Walking, Hiking, Rowing, Indoor Rowing and Open Water Swimming use an approval-bound Generic fallback, not native sport profiles. Generic works only on some devices and does not guarantee native tracking or display; QS retains the authored sport. Local fixtures/emulator evidence does not prove live Generic app/watch behavior. Cloud acceptance alone never proves app/watch receipt or completed-activity linkage; this one watch observation is not a guarantee for other devices. There is no authoritative missing-copy repair from negative reads; completion correlation is tracked separately in #651. |
+| Garmin | `enabled` | Connected Pro users can explicitly deliver compatible running/cycling or pool-swimming workouts through separate Workout and Workout Schedule lifecycle records after granting `WORKOUT_IMPORT`. Running/cycling sub-sports still fold to broad `RUNNING`/`CYCLING`; pool swimming maps to `LAP_SWIMMING` with optional explicit pool length and target-free swim steps. Owner-account cloud create/edit/reschedule/readback/withdrawal passed on 23 and 27 September 2026. For one separate 25 m standalone workout, the owner confirmed Garmin Connect and watch visibility on 27 September. Native Strength delivery for the verified exercise allowlist has deployed cloud create/update/reschedule/withdrawal and owner-confirmed app/watch proof in completed #782. Walking, Hiking, Rowing, Indoor Rowing and Open Water Swimming use an approval-bound Generic fallback, not native sport profiles. Generic works only on some devices and does not guarantee native tracking or display; QS retains the authored sport. The owner accepted the remaining Generic device and target/manual/relative/secondary-target matrix in #655 on 2 October; this is owner sign-off, not newly executed device observations. Local fixtures alone do not prove live behavior. Cloud acceptance alone never proves app/watch receipt or completed-activity linkage; this one watch observation is not a guarantee for other devices. Schedule-only repair proof is recorded in completed #703; missing Workout remains inconclusive (#769). Exact-marker completion and duplicate/ambiguity handling are complete in #651, without fallback/manual matching. |
 | COROS | `disabled` | The serializer, batch adapter and synthetic tests remain available for development, but the shared delivery flag is off for every account. No COROS production transport is bound; Training omits COROS plan, workout and sync-history controls, including retained status summaries. Stored preferences and delivery records remain inactive and are not interpreted as permission to send, update, retry or remove a provider copy. The serializer supports target-free pool-swim time/distance/manual steps as `swim`, not open-water workouts; canonical HR/power/pace/cadence targets fail compatibility because the partner's swim target is stroke. The implemented adapter can batch at most 30 dated workouts, retain stable partner IDs, apply per-item deletion outcomes and link an exact returned `planWorkoutId` once deliberately enabled. COROS exposes no documented planned-workout read/list endpoint, so remote Check, missing-copy classification and automatic recreation remain unavailable. Provider entitlement (`30009`), repeated-ID replacement, overlapping-window behavior, reschedule/delete, callback/history correlation, and app/watch behavior still require separately authorized live evidence. |
-| Wahoo | `enabled` | Connected Pro users can explicitly deliver time-based Running/Cycling and their mapped subprofiles, untargeted outdoor Walking/Hiking and timed Strength/Gym workouts as separate app-owned Plans and dated Workouts. Walking/Hiking use account-tested family `9` with exact Workout types `6`/`9`; intensity targets remain unsupported. Timed strength is degraded instruction-only delivery, not native rep/load tracking; repetition sets are unsupported. The public `plan.json` documents only Biking/Running families. Wahoo supports timed, untargeted pool/open-water swimming and outdoor/indoor rowing. All 21 profiles have integrated account acceptance and owner-confirmed native profile/timed playback (#789, 1 October 2026). Distance endings and intensity targets remain unsupported for walking, hiking, swimming and rowing. Selected pool length is not sent to Wahoo; set it locally where needed. Catalog IDs are not proof of Plan acceptance. The saved-zone window is today through today + 6. Retained-ID recovery and independent positive Plan/Workout/association reads protect retries, and exact account-bound Workout/Plan/token evidence can link a returned recorded activity. Timed Strength also has a saved direct-probe recording with exact identifiers, but no QS ledger. All-21 playback confirmation does not establish universal receipt, intensity/distance support or a new integrated QS completion link. Remaining live extension lifecycle and frontend release evidence stay in #789; timed Gym lifecycle stays in #783. Missing-copy classification and automatic repair remain unavailable because Wahoo inventory and negative responses are not authoritative enough. #649 owns the base adapter; no sandbox is assumed. |
-| Suunto | `enabled` | Connected Pro users can explicitly deliver one workout as a dated SuuntoPlus Guide, not a native plan. The Guide recommends the exact supported canonical sport selected in QS, including Trail Running, Treadmill, Mountain Biking, Indoor Cycling, E-Biking/E-MTB, Hand Cycle, pool Swimming (`21`), and Openwater swimming (`85`) where the documented Suunto activity catalog provides an ID. ZIP/icon CRUD and exact external-ID recovery reuse existing OAuth and the existing Suunto API subscription key with Guides access; today through today + 6 is a QS product window. Actual app/watch visibility remains unknowable through the partner API and is not claimed from fixtures or positive cloud reads. #710 keeps negative classification and automatic repair disabled. |
+| Wahoo | `enabled` | Connected Pro users can explicitly deliver time-based Running/Cycling and their mapped subprofiles, untargeted outdoor Walking/Hiking and timed Strength/Gym workouts as separate app-owned Plans and dated Workouts. Walking/Hiking use account-tested family `9` with exact Workout types `6`/`9`; intensity targets remain unsupported. Timed strength is degraded instruction-only delivery, not native rep/load tracking; repetition sets are unsupported. The public `plan.json` documents only Biking/Running families. Wahoo supports timed, untargeted pool/open-water swimming and outdoor/indoor rowing. All 21 profiles have integrated account acceptance and owner-confirmed native profile/timed playback (#789, 1 October 2026). Distance endings and intensity targets remain unsupported for walking, hiking, swimming and rowing. Wahoo has no documented physical pool-length delivery field; QS does not support delivering that setting, and a local-setting check is not a pending acceptance item. Catalog IDs are not proof of Plan acceptance. The saved-zone window is today through today + 6. Retained-ID recovery and independent positive Plan/Workout/association reads protect retries, and exact account-bound Workout/Plan/token evidence can link a returned recorded activity. The later integrated Strength recording imported automatically and linked to the exact owned QS workout using retained API/FIT identity. Completed #783/#789 record edit/reschedule/retry/reconnect, eligible withdrawal, completed-copy Stop protection and production frontend release checks. Earlier direct probes without a QS ledger did not prove those links. These results do not establish universal receipt, intensity/distance support or native rep/load tracking. Missing-copy classification and automatic repair remain unavailable because Wahoo inventory and negative responses are not authoritative enough. #649 owns the base adapter; no sandbox is assumed. |
+| Suunto | `enabled` | Connected Pro users can explicitly deliver one workout as a dated SuuntoPlus Guide, not a native plan. The Guide recommends the exact supported canonical sport selected in QS, including Trail Running, Treadmill, Mountain Biking, Indoor Cycling, E-Biking/E-MTB, Hand Cycle, pool Swimming (`21`), and Openwater swimming (`85`) where the documented Suunto activity catalog provides an ID. ZIP/icon CRUD and exact external-ID recovery reuse existing OAuth and the existing Suunto API subscription key with Guides access; today through today + 6 is a QS product window. Completed #650 records approved cloud lifecycle and owner-confirmed app/watch visibility/selection. App/watch receipt remains unknowable through the partner API and is not inferred from fixtures or positive cloud reads. Suunto-confirmed retained app/watch copies after cloud removal are expected, not a failed withdrawal or automatic-recreation signal. #710 keeps negative classification and automatic repair disabled. |
 
 Garmin mapping follows the local ignored Training API V2 version 1.0 partner contract; the confidential PDF is evidence,
 not a repository artifact. Workout content and its date-only schedule remain separate artifacts because each has its own
@@ -256,8 +260,9 @@ the authored QS sport visible within the normal 1024-character limit. The degrad
 current-payload/account approval. Time/distance/manual endings, fixed repeats and one primary target are retained;
 repetitions, kJ endings and secondary targets remain unsupported. Open water does not receive pool fields or pool-specific
 last-rest skipping. Existing native pool, strength and Running/Cycling payloads are unchanged. Local serializer,
-strict MCP proposal/read and demo-emulator lifecycle evidence is not deployment or Generic app/watch proof; #655 retains
-that rollout boundary. No provider credential, scope, endpoint, lifecycle, MCP wire contract or metric changes.
+strict MCP proposal/read and demo-emulator lifecycle evidence alone is not Generic app/watch proof. #655 records
+the owner's 2 October acceptance of the remaining device matrix, without new individual device observations.
+No provider credential, scope, endpoint, lifecycle, MCP wire contract or metric changes.
 
 The mapper also supports fixed repeats, time/distance/manual endings, and absolute HR/power/speed/pace/cadence ranges.
 Garmin's percentage fields do not carry
@@ -279,9 +284,10 @@ QS keeps the authored sport. Swimming maps to native `swim` only when its
 steps have no intensity target; the partner's stroke target has no canonical v1 equivalent. COROS Training delivery is
 disabled at the shared frontend/backend boundary. Open-water swimming is not a COROS `swim` profile in the current mapping. Wahoo remains
 mapped to time-based Running/Cycling subprofiles, untargeted outdoor Walking/Hiking and the #783 owner-tested timed Gym path.
-Wahoo supports timed, untargeted pool/open-water swimming and outdoor/indoor rowing. All 21 profiles have integrated account acceptance and owner-confirmed native profile/timed playback (#789, 1 October 2026). Distance endings and intensity targets remain unsupported for walking, hiking, swimming and rowing. Selected pool length is not sent to Wahoo; set it locally where needed.
+Wahoo supports timed, untargeted pool/open-water swimming and outdoor/indoor rowing. All 21 profiles have integrated account acceptance and owner-confirmed native profile/timed playback (#789, 1 October 2026). Distance endings and intensity targets remain unsupported for walking, hiking, swimming and rowing. Wahoo has no documented physical pool-length delivery field; QS does not support delivering that setting, and a local-setting check is not a pending acceptance item.
 Running/cycling subprofiles use their native indoor/outdoor type where available. Indoor Running uses Treadmill, Velomobile uses Cycling, and Enduro MTB/Downhill Cycling use Mountain Biking, with a review warning; the saved QS sport is unchanged. The Walking/Hiking extension is based on positive Plan/Workout and
-uploaded-JSON readback, not the recorded-activity catalog. Its target support and remaining live lifecycle are #789.
+uploaded-JSON readback, not the recorded-activity catalog. Completed #789 records the integrated lifecycle and frontend
+checks; distance endings and intensity targets remain unsupported, not deferred launch checks.
 
 Wahoo's Cloud type `42` names a generic Workout, not a Yoga mapping. The native Strength control and saved timed-Gym
 probe both used type `42` with FIT `training/strength_training`. Keep Gym family `6` / indoor location `0`; do not replace
@@ -382,7 +388,8 @@ to the matching scheduled workout. The private IDs/evidence never enter Event/Ac
 **Activity linked**, which does not claim target or interval adherence. Garmin message 72 is retained as candidate evidence;
 the conservative account/date/source-validated link above can promote one exact match despite the undocumented
 serial-to-API semantics.
-Bounded fallback/manual and multi-source reconciliation remain in #651. The existing OAuth
+Completed #651 implements exact-marker reconciliation with duplicate/ambiguity handling; the first committed
+activity link wins. Fallback/manual matching and audited unlink/relink are explicitly out of scope. The existing OAuth
 application/client credentials/user tokens and `SUUNTOAPP_SUBSCRIPTION_KEY` are reused, with the
 exact OAuth application name supplied through the `SUUNTOAPP_GUIDE_OWNER` Secret Manager setting (`.secret.local`
 for emulators). The name is not hardcoded; only the two Training delivery callables and worker bind it. Guides uses the
@@ -425,7 +432,8 @@ tests with the demo Firestore suite and synthetic transport, not just a localhos
 tests also distinguish empty successful reads from explicit 404 absence and asynchronous acknowledgement from
 completed mutation. Interrupted edits invalidate the old fully accepted payload digest, and provider-imposed retry
 deadlines survive authored changes and manual Retry; these are tested locally, not inferred live provider results.
-Garmin integration checks remain #647/#703; #645 owns contract questions and #655 deployment and post-release observability.
+Completed #647/#703 retain Garmin adapter and schedule-repair proof; #645 records contract research. #655 retains
+outstanding monitoring and release work, not a repeat of completed provider QA.
 The separate #698 certification/evaluation issue is retired. Track deferred functionality in an epic subissue, not a
 code-only TODO, and do not silently narrow the epic's product scope.
 
@@ -1026,6 +1034,11 @@ npm --prefix ../sports-lib run build
 Run commands from the appropriate checked-out worktree. Do not deploy, publish, or push as part of implementation verification.
 
 ## 12. Release and rollback checklist
+
+This is the general checklist for new integrations. The live Training rollout in #655 is an explicit exception to
+disabled-by-default staging and code rollback requirements: Garmin, Wahoo and Suunto have approved enablement; COROS
+remains disabled. Do not reinstate gates or require a rollback implementation/rehearsal for that completed launch.
+Normal Stop, disconnect, deletion safeguards and separate approval for future deployments still apply.
 
 1. Verify the provider agreement, production review, privacy terms, allowed scopes, redirect URIs, webhook registration, exact file hosts, and brand assets.
 2. Publish required shared-library changes first, then update application lockfiles to the published version and verify a clean install resolves it.

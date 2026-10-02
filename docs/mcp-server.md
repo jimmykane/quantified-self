@@ -322,7 +322,9 @@ unknown names remain unsupported without substitution. Missing, foreign or proje
 closed. Compatibility is local contract evidence, never provider/cloud/device acceptance. Existing provider Send and
 plan-sync previews use the full companion, including load-only changes, and retain their independent delivery grant
 and normal proposal confirmation. No registered tool, schema, issue-code enum, response field or permission changes;
-no client catalog refresh or plugin rebuild is required for this mapping-only change. Live proof remains in #782.
+no client catalog refresh or plugin rebuild is required for this mapping-only change. Completed #782 records the
+deployed native Strength cloud lifecycle and owner-confirmed Garmin Connect/watch proof; local assessment alone
+does not claim that receipt.
 New additive tools need
 a client catalog refresh after release; the registered v1 recipe input/output stays unchanged. The app's strength
 editor may display or accept pounds using Sports Lib 21.3.0, but MCP external-load input and output remain canonical
@@ -377,9 +379,10 @@ and completed states for COROS. Partner athlete/workout IDs, destination
 identity, batch journals, request outcomes, token authority and exact `planWorkoutId` evidence remain private and are
 rejected from browser/MCP projections. Plan totals continue to derive from individual workout statuses rather than a
 claimed native plan object. The exact provider marker can update the existing private completion link, which the single
-and bounded bulk completion tools expose only as their sanitized current projection. Candidate discovery, fallback
-matching and manual link changes remain the focused #651 deferral. No provider identity, batch evidence or transport
-action is introduced.
+and bounded bulk completion tools expose only as their sanitized current projection. Completed #651 covers exact-marker
+reconciliation and duplicate/ambiguity handling. Candidate discovery, fallback matching and manual link/unlink/relink
+are explicitly out of scope, not deferred acceptance criteria. No provider identity, batch evidence or transport action
+is introduced.
 
 Sports Lib 21.4.0 also permits exact Wahoo app FIT Plan references to resolve one owned accepted single-workout Plan
 when API association fields are absent. QS verifies the trusted source account, one persisted session/activity, retained
@@ -392,7 +395,8 @@ Wahoo exact completion correlation follows the same no-wire-change boundary. An 
 sanitized delivery status to `completed` only after the private Workout ID, Plan ID and deterministic `workout_token`
 resolve one current account-bound delivery. Those identifiers, the account digest, workout-summary evidence and reverse
 link remain private and are rejected from MCP projections. The existing sanitized completion tools can report the exact
-current link; #651 retains bounded fallback candidate discovery and approval-gated manual link/unlink/relink behavior.
+current link. Completed #651 is exact-marker-only: fallback candidate discovery and manual link/unlink/relink
+are explicitly out of scope.
 No private Wahoo identity or live check is introduced.
 
 Public Garmin, Wahoo and Suunto Training delivery changes runtime availability, not the MCP wire contract. An already
