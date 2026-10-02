@@ -105,7 +105,7 @@ app-summary-primary-info:has(+ .summary-primary-extension:not(:empty)) {
 .summary-stats-area {
   display: flex;
   flex-direction: column;
-  padding: 24px;
+  padding: 0 0 24px;
   gap: 16px;
   border-top: 1px solid var(--mat-sys-outline-variant);
   width: 100%;
@@ -248,7 +248,7 @@ app-summary-primary-info:has(+ .summary-primary-extension:not(:empty)) {
   }
 
   .summary-stats-area {
-    padding: 12px;
+    padding-bottom: 12px;
   }
 
   .event-metadata-row {
