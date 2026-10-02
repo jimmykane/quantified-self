@@ -13,6 +13,7 @@ app-event-card-chart-actions {
 
 .event-chart-shell {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 6px;
 }
 

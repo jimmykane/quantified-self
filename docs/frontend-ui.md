@@ -54,6 +54,19 @@ alongside the route-specific class; do not add another outer width, margin, or p
 Settings intentionally retains its centered 760 px form column, including its aligned fixed save action, rather than
 stretching a form workflow across the workspace width.
 
+## Activity details spacing
+
+Activity details use the workspace shell's inline gutters once. The primary summary, Training impact, metadata,
+activity selector, statistics, map, charts, and lap/jump/swim sections align to the same content edges without extra
+section-wide side insets. Section headings omit redundant top padding and retain an 8px gap below. Material controls,
+table cells, chart axes, overlays, and fullscreen/export frames keep their internal spacing.
+The shared summary's `--summary-primary-info-padding-inline` and section header's `--event-section-header-padding`
+hooks are set only by activity details; saved-route summaries and headers retain their default spacing.
+At tablet widths, activity details set `--summary-primary-info-metrics-order` to keep summary actions beside the
+identity and place the hero metrics below them, rather than creating a third header row.
+The activity chart shell uses a `minmax(0, 1fr)` column so a previously rendered canvas cannot force its grid back to
+desktop width when the viewport narrows. The shared chart host then resizes to the available content width.
+
 ## Sidebar navigation
 
 Training remains a direct link to `/training`. Plans links to `/training/plans` as an indented subitem immediately below

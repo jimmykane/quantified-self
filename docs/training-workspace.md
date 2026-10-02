@@ -3325,7 +3325,8 @@ This density change reuses the existing Form data and does not change MCP/Assist
 calculations, provider behavior, or refresh subscriptions.
 
 Activity details place a surface-free **Compact strip** immediately below the primary activity summary, before tags,
-device metadata, and additional statistics. The shared Training-impact component's `strip` variant keeps the contextual
+device metadata, and additional statistics. It shares the other activity sections' full content width inside the
+workspace shell, without an additional side inset. The shared Training-impact component's `strip` variant keeps the contextual
 headline beside four labeled contribution columns on desktop; in narrower containers the headline moves above two
 columns. Numbers match the adjacent activity stats' compact size, with tighter row gaps and vertical padding. Exact
 values and the separate day outcome remain visible. When the strip is present, the activity summary uses the shared

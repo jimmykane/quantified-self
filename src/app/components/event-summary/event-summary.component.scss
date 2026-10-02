@@ -16,6 +16,8 @@
 
 app-summary-primary-info {
   --summary-primary-info-padding-top: 0;
+  --summary-primary-info-padding-inline: 0;
+  --summary-primary-info-metrics-order: 1;
 }
 
 app-summary-primary-info:has(+ .summary-primary-extension:not(:empty)) {
@@ -24,7 +26,7 @@ app-summary-primary-info:has(+ .summary-primary-extension:not(:empty)) {
 }
 
 .summary-primary-extension {
-  padding: 4px 24px 8px;
+  padding: 4px 0 8px;
   min-width: 0;
 }
 
@@ -121,7 +123,7 @@ app-summary-primary-info:has(+ .summary-primary-extension:not(:empty)) {
   min-width: 0;
   min-height: 44px;
   box-sizing: border-box;
-  padding: 0 24px;
+  padding: 0;
   border-top: 1px solid var(--mat-sys-outline-variant);
   background: var(--mat-sys-surface-container-lowest);
 }
@@ -237,23 +239,14 @@ app-summary-primary-info:has(+ .summary-primary-extension:not(:empty)) {
 
 .summary-activities-toggles {
   width: 100%;
-  padding: 16px 40px;
+  padding: 0 0 16px;
   box-sizing: border-box;
   border-top: 1px solid var(--mat-sys-outline-variant);
 }
 
 @include bp.xsmall {
-  .summary-primary-extension {
-    padding: 4px 12px 8px;
-  }
-
   .summary-stats-area {
     padding-bottom: 12px;
-  }
-
-  .event-metadata-row {
-    padding-left: 12px;
-    padding-right: 12px;
   }
 
   .event-tags-banner--populated {
@@ -261,10 +254,6 @@ app-summary-primary-info:has(+ .summary-primary-extension:not(:empty)) {
     padding-block: 4px;
   }
 
-  .summary-activities-toggles {
-    padding-left: 12px;
-    padding-right: 12px;
-  }
 }
 
 .summary-stats-action-button {

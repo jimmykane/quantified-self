@@ -1,8 +1,7 @@
-@use '../../../styles/breakpoints' as bp;
-
 /* Dashboard Layout Styles */
 
 .event-dashboard-container {
+  --event-section-header-padding: 0 0 8px;
   display: flex;
   flex-direction: column;
   position: relative;
@@ -99,17 +98,9 @@ mat-card-header mat-icon {
 
 /* Ensure identical padding and sizing for alignment */
 .secondary-details-container {
-  padding: 12px 24px;
-  padding-top: 0;
+  padding: 0 0 12px;
   box-sizing: border-box;
   width: 100%;
-}
-
-@include bp.xsmall {
-  .secondary-details-container {
-    padding-left: 12px;
-    padding-right: 12px;
-  }
 }
 
 .event-charts-summary-wrapper {
