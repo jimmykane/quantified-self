@@ -1,19 +1,25 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { buildTrainingLoadPoints, resolveTrainingLoadDayImpact } from '@shared/training-load';
 import type { TrainingDayImpactView, TrainingSessionImpactView } from '../../helpers/training-impact.helper';
-import { TrainingImpactComponent } from './training-impact.component';
+import { AppHapticsService } from '../../services/app.haptics.service';
+import { TrainingImpactComponent, type TrainingImpactVariant } from './training-impact.component';
 
 describe('TrainingImpactComponent', () => {
+  const haptics = { selection: vi.fn() };
   beforeEach(() => {
-    TestBed.configureTestingModule({ imports: [TrainingImpactComponent] });
+    haptics.selection.mockClear();
+    TestBed.configureTestingModule({
+      imports: [TrainingImpactComponent],
+      providers: [{ provide: AppHapticsService, useValue: haptics }],
+    });
   });
 
   function render(
     impact: TrainingSessionImpactView | TrainingDayImpactView,
-    variant: 'card' | 'summary' | 'compact' = 'card',
+    variant: TrainingImpactVariant = 'card',
   ): ComponentFixture<TrainingImpactComponent> {
     const fixture = TestBed.createComponent(TrainingImpactComponent);
     fixture.componentRef.setInput('impact', impact);
@@ -46,6 +52,57 @@ describe('TrainingImpactComponent', () => {
     expect(text).toContain('−10');
     expect(text).toContain('Fitness load rose after normal decay');
     expect(text).toContain('not measured physiological adaptation');
+  });
+
+  it('keeps the strip values and day outcome visible with accessible details on demand', () => {
+    const fixture = render(session(), 'strip');
+    const element = fixture.nativeElement as HTMLElement;
+    const values = Array.from(element.querySelectorAll('.training-impact-metrics strong')).map(value => value.textContent);
+    const button = element.querySelector('button')!;
+    const explanation = element.querySelector('.training-impact-disclaimer') as HTMLElement;
+    expect(element.querySelector('.training-impact--strip')).toBeTruthy();
+    expect(values).toEqual(['+2', '+12', '−10', '84']);
+    expect(element.querySelector('.training-impact-outcomes')?.textContent).toContain('Fitness load rose after normal decay');
+    expect(button.textContent).toContain('About this estimate');
+    expect(button.getAttribute('aria-controls')).toBe(explanation.id);
+    expect(button.getAttribute('aria-expanded')).toBe('false');
+    expect(explanation.hidden).toBe(true);
+    expect(haptics.selection).not.toHaveBeenCalled();
+
+    button.click(); fixture.detectChanges();
+    expect(button.getAttribute('aria-expanded')).toBe('true');
+    expect(button.textContent).toContain('Hide estimate details');
+    expect(explanation.hidden).toBe(false);
+    expect(explanation.textContent).toContain('not measured physiological adaptation');
+    expect(haptics.selection).toHaveBeenCalledOnce();
+
+    button.click(); fixture.detectChanges();
+    expect(explanation.hidden).toBe(true);
+    expect(haptics.selection).toHaveBeenCalledTimes(2);
+  });
+
+  it('gives separately rendered strip disclosures their own content region', () => {
+    const first = render(session(), 'strip');
+    const second = render(session(), 'strip');
+    expect(first.componentInstance.modelExplanationId).not.toBe(second.componentInstance.modelExplanationId);
+    first.nativeElement.querySelector('button').click(); first.detectChanges();
+    expect(second.nativeElement.querySelector('.training-impact-disclaimer').hidden).toBe(true);
+  });
+
+  it('retains honest updating, missing-TSS, and error states in the strip', () => {
+    for (const availability of ['updating', 'missing-tss', 'error'] as const) {
+      const fixture = render({
+        availability, message: `${availability} explanation`, headline: null,
+        eventId: 'event', dayMs: null, impact: null,
+      }, 'strip');
+      const element = fixture.nativeElement as HTMLElement;
+      expect(element.textContent).toContain(`${availability} explanation`);
+      expect(element.querySelector('.training-impact-state')?.getAttribute('role')).toBe(availability === 'error' ? 'alert' : 'status');
+      expect(element.querySelector('section')?.getAttribute('aria-busy')).toBe(String(availability === 'updating'));
+      expect(element.querySelector('.training-impact-metrics')).toBeNull();
+      expect(element.querySelector('button')).toBeNull();
+    }
+    expect(haptics.selection).not.toHaveBeenCalled();
   });
 
   it('renders the compact headline and all three contributions', () => {

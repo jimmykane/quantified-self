@@ -15,6 +15,7 @@
   </span>
 } @else {
   <section class="training-impact" [class.training-impact--summary]="variant() === 'summary'"
+    [class.training-impact--strip]="variant() === 'strip'"
     [attr.aria-label]="title()" [attr.aria-busy]="impact().availability === 'updating'">
     <header>
       <span class="training-impact-icon" aria-hidden="true"><mat-icon>monitoring</mat-icon></span>
@@ -42,7 +43,21 @@
         </div>
       }
       @if (impact().message) { <p class="training-impact-note">{{ impact().message }}</p> }
-      <p class="training-impact-disclaimer">TSS-based model; CTL reflects sustained training load, not measured physiological adaptation.</p>
+      @if (variant() === 'strip') {
+        <div class="training-impact-explanation">
+          <button mat-button type="button" appHapticTap
+            [attr.aria-expanded]="modelExplanationExpanded()" [attr.aria-controls]="modelExplanationId"
+            (click)="modelExplanationExpanded.set(!modelExplanationExpanded())">
+            <mat-icon aria-hidden="true">{{ modelExplanationExpanded() ? 'expand_less' : 'expand_more' }}</mat-icon>
+            {{ modelExplanationExpanded() ? 'Hide estimate details' : 'About this estimate' }}
+          </button>
+          <p class="training-impact-disclaimer" [id]="modelExplanationId" [hidden]="!modelExplanationExpanded()">
+            TSS-based model; CTL reflects sustained training load, not measured physiological adaptation.
+          </p>
+        </div>
+      } @else {
+        <p class="training-impact-disclaimer">TSS-based model; CTL reflects sustained training load, not measured physiological adaptation.</p>
+      }
     } @else {
       <p class="training-impact-state" [attr.role]="impact().availability === 'error' ? 'alert' : 'status'">
         {{ impact().message }}

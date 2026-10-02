@@ -1,4 +1,5 @@
-import { ChangeDetectionStrategy, Component, LOCALE_ID, computed, inject, input } from '@angular/core';
+import { ChangeDetectionStrategy, Component, LOCALE_ID, computed, inject, input, signal } from '@angular/core';
+import { _IdGenerator } from '@angular/cdk/a11y';
 import { SharedModule } from '../../modules/shared.module';
 import { getDateTimeFormatter } from '../../helpers/date-time-format.helper';
 import { getNumberFormatter } from '../../helpers/number-format.helper';
@@ -8,7 +9,7 @@ import {
   type TrainingSessionImpactView,
 } from '../../helpers/training-impact.helper';
 
-export type TrainingImpactVariant = 'card' | 'summary' | 'compact';
+export type TrainingImpactVariant = 'card' | 'summary' | 'compact' | 'strip';
 
 @Component({
   selector: 'app-training-impact',
@@ -17,12 +18,15 @@ export type TrainingImpactVariant = 'card' | 'summary' | 'compact';
   templateUrl: './training-impact.component.html',
   styleUrls: ['./training-impact.component.scss'],
   changeDetection: ChangeDetectionStrategy.OnPush,
+  host: { '[class.training-impact-host--strip]': "variant() === 'strip'" },
 })
 export class TrainingImpactComponent {
   private readonly locale = inject(LOCALE_ID);
   readonly impact = input.required<TrainingSessionImpactView | TrainingDayImpactView>();
   readonly variant = input<TrainingImpactVariant>('card');
   readonly title = input('Training impact');
+  readonly modelExplanationId = inject(_IdGenerator).getId('training-impact-model-');
+  readonly modelExplanationExpanded = signal(false);
   readonly isReady = computed(() => this.impact().availability === 'ready');
   readonly isDayImpact = computed(() => 'sessions' in this.impact());
   readonly compactText = computed(() => {

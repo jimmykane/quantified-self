@@ -3,7 +3,7 @@ import { EventSummaryComponent } from './event-summary.component';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { MatBottomSheet } from '@angular/material/bottom-sheet';
 import { MatDialog } from '@angular/material/dialog';
-import { ChangeDetectorRef, NO_ERRORS_SCHEMA } from '@angular/core';
+import { ChangeDetectorRef, Component, NO_ERRORS_SCHEMA } from '@angular/core';
 import { readFileSync } from 'fs';
 import { resolve } from 'path';
 import {
@@ -27,6 +27,17 @@ import { EventTagService } from '../../services/event-tag.service';
 import { EventTagsDialogComponent } from '../event-tags/event-tags-dialog.component';
 import { from, of, Subject } from 'rxjs';
 
+@Component({
+    standalone: false,
+    template: `<app-event-summary [event]="event" [user]="user" [unitSettings]="{}" [isOwner]="true">
+        <div after-summary data-testid="impact">Training impact strip</div>
+        <div after-stats data-testid="analysis">Activity analysis</div>
+    </app-event-summary>`,
+})
+class SummaryProjectionHost {
+    event!: EventInterface;
+    user!: User;
+}
 
 describe('EventSummaryComponent', () => {
     let component: EventSummaryComponent;
@@ -71,6 +82,7 @@ describe('EventSummaryComponent', () => {
         await TestBed.configureTestingModule({
             declarations: [
                 EventSummaryComponent,
+                SummaryProjectionHost,
             ],
             providers: [
                 { provide: MatBottomSheet, useValue: mockBottomSheet },
@@ -93,6 +105,20 @@ describe('EventSummaryComponent', () => {
 
     it('should create', () => {
         expect(component).toBeTruthy();
+    });
+
+    it('places the impact below the primary summary and before tags, devices, and further statistics', () => {
+        const host = TestBed.createComponent(SummaryProjectionHost);
+        host.componentInstance.event = mockEvent;
+        host.componentInstance.user = mockUser;
+        host.detectChanges();
+        const element = host.nativeElement as HTMLElement;
+        const extension = element.querySelector('.summary-primary-extension')!;
+        expect(extension.previousElementSibling?.tagName).toBe('APP-SUMMARY-PRIMARY-INFO');
+        expect(extension.querySelector('[data-testid="impact"]')?.textContent).toContain('Training impact strip');
+        expect(extension.nextElementSibling?.className).toBe('event-tags-banner');
+        expect(element.querySelector('.summary-stats-area [data-testid="analysis"]')).toBeTruthy();
+        expect(element.querySelector('.summary-stats-area [data-testid="impact"]')).toBeNull();
     });
 
     it('does not show a supported activity types shortcut in event details', () => {

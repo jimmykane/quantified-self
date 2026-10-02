@@ -53,6 +53,7 @@
       </div>
     </div>
   </app-summary-primary-info>
+  <div class="summary-primary-extension"><ng-content select="[after-summary]"></ng-content></div>
   @if (eventTags.length > 0 || isOwner) {
   <div class="event-tags-banner">
     @if (isOwner) {

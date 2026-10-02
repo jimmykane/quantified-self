@@ -17,6 +17,15 @@ app-summary-primary-info {
   --summary-primary-info-padding-top: 0;
 }
 
+.summary-primary-extension {
+  padding: 12px 24px 16px;
+  min-width: 0;
+}
+
+.summary-primary-extension:empty {
+  display: none;
+}
+
 .privacy-mini-wrapper {
   background: var(--mat-sys-surface);
   border-radius: 50%;
@@ -176,6 +185,10 @@ app-summary-primary-info {
 }
 
 @include bp.xsmall {
+  .summary-primary-extension {
+    padding: 8px 12px 12px;
+  }
+
   .summary-stats-area {
     padding: 12px;
   }

@@ -19,7 +19,7 @@
     [statsToShow]="basicStatsTypes">
 
     @if (trainingImpact(); as impact) {
-    <app-training-impact after-stats [impact]="impact"></app-training-impact>
+    <app-training-impact after-summary variant="strip" [impact]="impact"></app-training-impact>
     }
 
     <!-- Keep performance charts first, followed by the pinned dive profile and ordinary charts. -->

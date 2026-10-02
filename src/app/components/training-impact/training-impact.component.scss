@@ -18,6 +18,59 @@
   margin-bottom: 16px;
 }
 
+:host(.training-impact-host--strip) {
+  container-type: inline-size;
+}
+
+.training-impact--strip {
+  grid-template-columns: 210px minmax(0, 1fr);
+  column-gap: 20px;
+  row-gap: 8px;
+
+  .training-impact-metrics > div {
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+  }
+
+  .training-impact-metrics strong {
+    font-size: 1.5rem;
+  }
+
+  .training-impact-outcomes,
+  .training-impact-note,
+  .training-impact-state,
+  .training-impact-explanation {
+    grid-column: 1 / -1;
+  }
+
+  .training-impact-outcomes > div {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 3px 12px;
+  }
+
+  .training-impact-outcomes strong {
+    font: var(--mat-sys-body-small);
+  }
+}
+
+.training-impact-explanation button {
+  --mat-button-text-container-height: 36px;
+  font: var(--mat-sys-body-small);
+}
+
+@container (max-width: 740px) {
+  .training-impact--strip {
+    grid-template-columns: minmax(0, 1fr);
+
+    .training-impact-metrics {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+  }
+}
+
 header {
   display: flex;
   align-items: flex-start;

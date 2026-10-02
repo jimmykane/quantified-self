@@ -3308,11 +3308,14 @@ and exact day outcomes remain accessible. **Full day** provides the detailed imp
 This density change reuses the existing Form data and does not change MCP/Assistant contracts, scopes, consent,
 calculations, provider behavior, or refresh subscriptions.
 
-Activity details and the full-day breakdown present detailed Training impact directly on their parent surface, with
-no enclosing card, tinted icon tile, or nested metric backgrounds. Four labeled contribution columns become two on
-phones, retaining full labels, exact values, dated outcomes, and the model disclaimer. Spacing follows the surrounding
-activity statistics without adding a second inset. This presentation change has no calculation, data-read, planning,
-MCP/Assistant, consent, or provider impact.
+Activity details place a surface-free **Compact strip** immediately below the primary activity summary, before tags,
+device metadata, and additional statistics. The shared Training-impact component's `strip` variant keeps the contextual
+headline beside four labeled contribution columns on desktop; in narrower containers the headline moves above two
+columns. Exact values and the separate day outcome remain visible. **About this estimate** uses the app's Material
+Show/Hide disclosure with a unique controlled region and one haptic-feedback owner to reveal the model explanation.
+It adds no subscription or request. The full-day breakdown retains its existing detailed variant and visible disclaimer.
+Both variants inherit their parent surface, with no enclosing card, tinted icon tile, or nested metric backgrounds.
+This presentation change has no calculation, data-read, planning, MCP/Assistant, consent, or provider impact.
 
 This is a TSS-based model of sustained training load, not a measurement of physiological adaptation. The activity and
 selected-day calculation uses pure shared contribution/day-outcome interfaces beside the canonical Training-load model
