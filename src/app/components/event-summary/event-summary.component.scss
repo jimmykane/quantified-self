@@ -106,16 +106,28 @@ app-summary-primary-info {
   box-sizing: border-box;
 }
 
-.device-info-banner {
+.event-metadata-row {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  justify-content: space-between;
-  gap: 12px;
+  gap: 0 12px;
   width: 100%;
+  min-width: 0;
+  min-height: 44px;
   box-sizing: border-box;
-  padding: 8px 24px;
+  padding: 0 24px;
   border-top: 1px solid var(--mat-sys-outline-variant);
   background: var(--mat-sys-surface-container-lowest);
+}
+
+.device-info-banner {
+  display: flex;
+  flex: 1 1 120px;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  max-width: 100%;
+  padding-block: 8px;
   color: var(--mat-sys-on-surface-variant);
   font-size: 0.82rem;
 }
@@ -123,19 +135,51 @@ app-summary-primary-info {
 .event-tags-banner {
   display: flex;
   align-items: center;
-  min-height: 44px;
-  padding: 6px 24px;
-  border-top: 1px solid var(--mat-sys-outline-variant);
-  background: var(--mat-sys-surface-container-lowest);
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.event-tags-banner:not(.event-tags-banner--populated) {
+  margin-inline-start: auto;
 }
 
 .event-tags-button {
   justify-content: flex-start;
   min-width: 0;
+  max-width: 100%;
+  min-height: 44px;
+  height: auto;
 }
 
-.event-tags-button mat-chip-set {
-  margin-inline-start: 4px;
+.event-tags-button-content {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-width: 0;
+  white-space: normal;
+}
+
+.event-tags-button-content > mat-icon {
+  flex: 0 0 auto;
+  width: 18px;
+  height: 18px;
+  font-size: 18px;
+  line-height: 18px;
+}
+
+.event-tags-banner mat-chip-set {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.event-tag-label {
+  display: block;
+  max-width: min(12rem, 40vw);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .device-info-banner-primary {
@@ -193,14 +237,14 @@ app-summary-primary-info {
     padding: 12px;
   }
 
-  .device-info-banner {
+  .event-metadata-row {
     padding-left: 12px;
     padding-right: 12px;
   }
 
-  .event-tags-banner {
-    padding-left: 12px;
-    padding-right: 12px;
+  .event-tags-banner--populated {
+    flex-basis: 100%;
+    padding-block: 4px;
   }
 
   .summary-activities-toggles {

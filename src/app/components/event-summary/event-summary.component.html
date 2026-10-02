@@ -54,33 +54,39 @@
     </div>
   </app-summary-primary-info>
   <div class="summary-primary-extension"><ng-content select="[after-summary]"></ng-content></div>
-  @if (eventTags.length > 0 || isOwner) {
-  <div class="event-tags-banner">
+  @if (showDeviceChip || eventTags.length > 0 || isOwner) {
+  <div class="event-metadata-row">
+    @if (showDeviceChip) {
+    <div class="device-info-banner" [matTooltip]="deviceChipTooltip" [matTooltipDisabled]="!deviceChipTooltip">
+      <div class="device-info-banner-primary">
+        <mat-icon class="device-info-banner-icon" aria-hidden="true">watch</mat-icon>
+        <span class="device-info-banner-label">{{ deviceChipLabel }}</span>
+      </div>
+      <app-service-source-icon class="device-info-banner-source" [event]="event" [user]="ownerMetadataLookupUser" [showIcon]="false"
+        [showText]="true" [suppressedTextLabels]="deviceSourceSuppressedLabels"></app-service-source-icon>
+    </div>
+    }
+    @if (eventTags.length > 0 || isOwner) {
+    <div class="event-tags-banner" [class.event-tags-banner--populated]="eventTags.length > 0">
     @if (isOwner) {
     <button mat-button type="button" class="event-tags-button" (click)="openTags()"
-      [attr.aria-label]="eventTags.length ? 'Edit event tags' : 'Add event tags'">
-      <mat-icon>sell</mat-icon>
+      [attr.aria-label]="eventTags.length ? 'Edit activity tags' : 'Add activity tags'">
+      <span class="event-tags-button-content">
+      <mat-icon aria-hidden="true">sell</mat-icon>
       @if (eventTags.length) {
       <mat-chip-set aria-hidden="true">
-        @for (tag of eventTags; track tag) { <mat-chip>{{ tag }}</mat-chip> }
+        @for (tag of eventTags; track tag) { <mat-chip><span class="event-tag-label" [matTooltip]="tag">{{ tag }}</span></mat-chip> }
       </mat-chip-set>
       } @else { <span>Add tags</span> }
+      </span>
     </button>
     } @else {
-    <mat-chip-set aria-label="Event tags">
-      @for (tag of eventTags; track tag) { <mat-chip>{{ tag }}</mat-chip> }
+    <mat-chip-set aria-label="Activity tags">
+      @for (tag of eventTags; track tag) { <mat-chip><span class="event-tag-label" [matTooltip]="tag">{{ tag }}</span></mat-chip> }
     </mat-chip-set>
     }
-  </div>
-  }
-  @if (showDeviceChip) {
-  <div class="device-info-banner" [matTooltip]="deviceChipTooltip" [matTooltipDisabled]="!deviceChipTooltip">
-    <div class="device-info-banner-primary">
-      <mat-icon class="device-info-banner-icon" aria-hidden="true">watch</mat-icon>
-      <span class="device-info-banner-label">{{ deviceChipLabel }}</span>
     </div>
-    <app-service-source-icon class="device-info-banner-source" [event]="event" [user]="ownerMetadataLookupUser" [showIcon]="false"
-      [showText]="true" [suppressedTextLabels]="deviceSourceSuppressedLabels"></app-service-source-icon>
+    }
   </div>
   }
 

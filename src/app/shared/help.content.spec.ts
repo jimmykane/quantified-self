@@ -578,7 +578,9 @@ describe('help.content', () => {
     expect(gettingStartedSection?.content).toContain('Map');
     expect(gettingStartedSection?.content).toContain('one activity map and one saved-routes map');
     expect(gettingStartedSection?.content).toContain('Event search filters only the dashboard event table');
-    expect(gettingStartedSection?.content).toContain('Event tags can be added from an event row or event details');
+    expect(gettingStartedSection?.content).toContain('Activity tags can be added from an activity row or activity details');
+    expect(gettingStartedSection?.content).toContain('**Add tags** sits beside the device name');
+    expect(gettingStartedSection?.content).toContain('when no device is recorded');
     expect(gettingStartedSection?.content).toContain('exact tag filter');
     expect(gettingStartedSection?.content).toContain('tag filter and tag editors list your saved tags regardless of the selected date range');
     expect(gettingStartedSection?.content).toContain('A tag remains available for reuse after you remove it from every event');

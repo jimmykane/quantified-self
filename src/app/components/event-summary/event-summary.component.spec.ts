@@ -3,6 +3,8 @@ import { EventSummaryComponent } from './event-summary.component';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { MatBottomSheet } from '@angular/material/bottom-sheet';
 import { MatDialog } from '@angular/material/dialog';
+import { MatButtonModule } from '@angular/material/button';
+import { MatChipsModule } from '@angular/material/chips';
 import { ChangeDetectorRef, Component, NO_ERRORS_SCHEMA } from '@angular/core';
 import { readFileSync } from 'fs';
 import { resolve } from 'path';
@@ -25,6 +27,7 @@ import { vi, describe, it, expect, beforeEach } from 'vitest';
 import { AppBenchmarkFlowService } from '../../services/app.benchmark-flow.service';
 import { EventTagService } from '../../services/event-tag.service';
 import { EventTagsDialogComponent } from '../event-tags/event-tags-dialog.component';
+import { AppHapticsService } from '../../services/app.haptics.service';
 import { from, of, Subject } from 'rxjs';
 
 @Component({
@@ -46,6 +49,7 @@ describe('EventSummaryComponent', () => {
     let mockBenchmarkFlowService: any;
     let mockDialog: any;
     let mockEventTagService: any;
+    let mockHaptics: { selection: ReturnType<typeof vi.fn> };
 
     const mockUser: User = {
         uid: 'test-user-id',
@@ -71,6 +75,7 @@ describe('EventSummaryComponent', () => {
             openBenchmarkReport: vi.fn(),
         };
         mockDialog = { open: vi.fn().mockReturnValue({ afterClosed: () => of(null) }) };
+        mockHaptics = { selection: vi.fn() };
         mockEventTagService = {
             getTags: vi.fn((event: any) => event.tags || event.benchmarkReviewTags || []),
             saveTags: vi.fn(async (_user: unknown, event: any, tags: string[]) => {
@@ -80,6 +85,7 @@ describe('EventSummaryComponent', () => {
         };
 
         await TestBed.configureTestingModule({
+            imports: [MatButtonModule, MatChipsModule],
             declarations: [
                 EventSummaryComponent,
                 SummaryProjectionHost,
@@ -91,6 +97,7 @@ describe('EventSummaryComponent', () => {
                 { provide: AppBenchmarkFlowService, useValue: mockBenchmarkFlowService },
                 { provide: MatDialog, useValue: mockDialog },
                 { provide: EventTagService, useValue: mockEventTagService },
+                { provide: AppHapticsService, useValue: mockHaptics },
             ],
             schemas: [NO_ERRORS_SCHEMA]
         }).compileComponents();
@@ -116,7 +123,7 @@ describe('EventSummaryComponent', () => {
         const extension = element.querySelector('.summary-primary-extension')!;
         expect(extension.previousElementSibling?.tagName).toBe('APP-SUMMARY-PRIMARY-INFO');
         expect(extension.querySelector('[data-testid="impact"]')?.textContent).toContain('Training impact strip');
-        expect(extension.nextElementSibling?.className).toBe('event-tags-banner');
+        expect(extension.nextElementSibling?.className).toBe('event-metadata-row');
         expect(element.querySelector('.summary-stats-area [data-testid="analysis"]')).toBeTruthy();
         expect(element.querySelector('.summary-stats-area [data-testid="impact"]')).toBeNull();
     });
@@ -157,7 +164,7 @@ describe('EventSummaryComponent', () => {
         expect(banner?.textContent).toContain('Race');
         expect(banner?.textContent).toContain('2026');
         expect(banner?.querySelector('button')).toBeNull();
-        expect(chipSet?.getAttribute('aria-label')).toBe('Event tags');
+        expect(chipSet?.getAttribute('aria-label')).toBe('Activity tags');
         expect(chipSet?.hasAttribute('aria-hidden')).toBe(false);
     });
 
@@ -168,8 +175,51 @@ describe('EventSummaryComponent', () => {
 
         const button = fixture.nativeElement.querySelector('.event-tags-button') as HTMLButtonElement;
         const chipSet = button?.querySelector('mat-chip-set');
-        expect(button?.getAttribute('aria-label')).toBe('Edit event tags');
+        expect(button?.getAttribute('aria-label')).toBe('Edit activity tags');
         expect(chipSet?.getAttribute('aria-hidden')).toBe('true');
+    });
+
+    it('places Add tags alongside the device and uses the shared editor once', () => {
+        fixture.componentRef.setInput('event', { ...mockEvent, getDeviceNamesAsString: () => 'Suunto' } as any);
+        fixture.componentRef.setInput('isOwner', true);
+        fixture.detectChanges();
+
+        const row = fixture.nativeElement.querySelector('.event-metadata-row') as HTMLElement;
+        const button = row.querySelector('.event-tags-button') as HTMLButtonElement;
+        expect(row.querySelector('.device-info-banner')?.textContent).toContain('Suunto');
+        expect(button.getAttribute('aria-label')).toBe('Add activity tags');
+        expect(button.textContent).toContain('Add tags');
+        expect(row.querySelector('mat-chip-set')).toBeNull();
+        expect(mockHaptics.selection).not.toHaveBeenCalled();
+
+        button.click();
+
+        expect(mockDialog.open).toHaveBeenCalledTimes(1);
+        expect(mockHaptics.selection).toHaveBeenCalledTimes(1);
+    });
+
+    it('keeps Add tags available without device metadata and removes the action when tags exist', () => {
+        fixture.componentRef.setInput('event', { ...mockEvent, tags: [] } as any);
+        fixture.componentRef.setInput('isOwner', true);
+        fixture.detectChanges();
+        expect(fixture.nativeElement.querySelector('.device-info-banner')).toBeNull();
+        expect(fixture.nativeElement.querySelector('.event-tags-button')?.textContent).toContain('Add tags');
+
+        fixture.componentRef.setInput('event', { ...mockEvent, tags: ['Race'] } as any);
+        fixture.detectChanges();
+        const row = fixture.nativeElement.querySelector('.event-metadata-row') as HTMLElement;
+        expect(row.textContent).toContain('Race');
+        expect(row.textContent).not.toContain('Add tags');
+        expect(row.querySelectorAll('.event-tags-button')).toHaveLength(1);
+    });
+
+    it('hides the empty metadata row from public viewers', () => {
+        fixture.componentRef.setInput('event', { ...mockEvent, tags: [] } as any);
+        fixture.componentRef.setInput('isOwner', false);
+        fixture.detectChanges();
+
+        expect(fixture.nativeElement.querySelector('.event-metadata-row')).toBeNull();
+        expect(mockHaptics.selection).not.toHaveBeenCalled();
     });
 
     describe('open... methods', () => {
@@ -240,7 +290,7 @@ describe('EventSummaryComponent', () => {
             await component.openTags();
 
             expect(mockDialog.open).toHaveBeenCalledWith(EventTagsDialogComponent, expect.objectContaining({
-                data: expect.objectContaining({ title: 'Event tags' }),
+                data: expect.objectContaining({ title: 'Activity tags' }),
             }));
             expect((component.event as any).tags).toEqual(['Race', '2026']);
         });
@@ -316,6 +366,19 @@ describe('EventSummaryComponent', () => {
             await component.openTags();
 
             expect(mockDialog.open).not.toHaveBeenCalled();
+            expect(mockHaptics.selection).not.toHaveBeenCalled();
+        });
+
+        it('does not give tag feedback for a missing user or unsaved activity', async () => {
+            component.isOwner = true;
+            component.user = null as unknown as User;
+            await component.openTags();
+            component.user = mockUser;
+            component.event = { ...mockEvent, getID: () => '' } as any;
+            await component.openTags();
+
+            expect(mockDialog.open).not.toHaveBeenCalled();
+            expect(mockHaptics.selection).not.toHaveBeenCalled();
         });
     });
 
