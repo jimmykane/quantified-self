@@ -7,6 +7,18 @@ for both `unit_tests` and the complete emulator matrix, then fails unless both s
 or skipped dependencies). It preserves the protected-branch check name `run-tests / run_tests`; an emulator failure
 must not leave the required check green. Reusable-workflow deployment dependencies also wait for all jobs.
 
+## Ordinary unit runner
+
+Both unit and emulator jobs use Node 22, matching `functions/package.json` rather than testing Functions on an older
+runtime. `npm run test:workflows` checks that alignment against the actual YAML.
+
+Ordinary Functions tests use at most two isolated Vitest fork workers, with a minimum of one. This bounds concurrent
+imports and worker reporting on shared CI runners instead of scaling automatically with the runner's CPU count.
+The cap addresses runner pressure after a CI run passed every test but failed with an unhandled
+`[vitest-worker]: Timeout calling "onTaskUpdate"`. Emulator commands retain their explicit one-worker, serial-file
+override. Test isolation and unhandled-error failure behavior remain enabled; there is no retry, ignored error or
+extended timeout masking a failure. `test-runner-config.spec.ts` covers these configuration boundaries.
+
 ## Trigger policy without duplicate test runs
 
 - Internal feature-branch pushes run Testing; opening/updating an internal PR does not repeat the suites.

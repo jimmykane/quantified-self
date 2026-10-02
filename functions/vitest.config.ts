@@ -4,6 +4,11 @@ import { resolve } from 'path';
 export default defineConfig({
     root: resolve(__dirname),
     test: {
+        // Bound import/reporting pressure on shared CI runners. Emulator suites
+        // still override this with one worker and serial files via their CLI.
+        pool: 'forks',
+        maxWorkers: 2,
+        minWorkers: 1,
         server: {
             deps: {
                 inline: ['@sports-alliance/sports-lib']
