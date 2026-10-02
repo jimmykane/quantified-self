@@ -46,7 +46,7 @@ export const TRAINING_PLANS_HOME_CONTENT = {
       icon: 'sync',
       iconTone: 'primary',
       title: 'Send Your Workouts',
-      copy: 'Send compatible workouts to Garmin, Suunto, or Wahoo with Pro. Choose a plan to sync or send a workout on its own. Connecting an account alone won’t send planned workouts. Support varies by sport and device. COROS is coming soon.',
+      copy: 'Send compatible workouts to Garmin, Suunto, or Wahoo with Pro. Choose a plan to sync or send a workout on its own.',
     },
     {
       icon: 'calendar_month',

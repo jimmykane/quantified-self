@@ -400,9 +400,9 @@ describe('HomeComponent', () => {
         expect(text).toContain('Send Your Workouts');
         expect(text).toContain('Send compatible workouts to Garmin, Suunto, or Wahoo with Pro');
         expect(text).toContain('Choose a plan to sync or send a workout on its own');
-        expect(text).toContain('Connecting an account alone won’t send planned workouts');
-        expect(text).toContain('Support varies by sport and device');
-        expect(text).toContain('COROS is coming soon');
+        expect(text).not.toContain('Connecting an account alone won’t send planned workouts');
+        expect(text).not.toContain('Support varies by sport and device');
+        expect(text).not.toContain('COROS is coming soon');
         expect(text).toContain('without adding them to recorded totals or Training analysis');
         expect(rows).toHaveLength(TRAINING_PLANS_HOME_CONTENT.rows.length);
         expect(section.querySelectorAll('.training-plans-mcp-example')).toHaveLength(1);

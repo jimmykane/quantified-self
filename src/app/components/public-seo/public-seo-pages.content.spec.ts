@@ -61,8 +61,9 @@ describe('public-seo-pages.content', () => {
     const home = JSON.stringify(TRAINING_PLANS_HOME_CONTENT);
     const page = JSON.stringify(TRAINING_PLANS_PAGE_SECTIONS);
     expect(home).toContain('Send compatible workouts to Garmin, Suunto, or Wahoo with Pro');
-    expect(home).toContain('Support varies by sport and device');
-    expect(home).toContain('COROS is coming soon');
+    expect(home).not.toContain('Connecting an account alone won’t send planned workouts');
+    expect(home).not.toContain('Support varies by sport and device');
+    expect(home).not.toContain('COROS is coming soon');
     expect(home).not.toContain('Generic');
     expect(home).not.toContain('verification pending');
     expect(page).toContain('Generic');

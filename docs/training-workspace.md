@@ -414,10 +414,10 @@ and describe provider workout delivery as a distinct Pro capability with explici
 provider-specific readiness. Garmin, Suunto and Wahoo are available to eligible connected Pro users after explicit
 standalone-send or plan-sync consent. COROS plan sync, plan-workout resume and standalone Send are currently disabled at
 the shared frontend/backend admission boundary and omitted from Training UI. Existing COROS settings and delivery records
-remain stored but inactive. Public copy must say that connecting any provider never sends a planned workout.
+remain stored but inactive. The public feature page and Help explain that connecting any provider never sends a planned workout.
 The homepage keeps delivery discovery concise: supported providers, Pro access, explicit plan sync or single-workout
-Send, sport/device compatibility and COROS coming soon. Provider-specific scheduling windows, mapping losses and
-verification limits belong on the public feature page, in Help and in the in-app delivery review, not in a homepage
+Send. Provider availability (including COROS coming soon), sport/device compatibility, scheduling windows, mapping losses
+and verification limits belong on the public feature page, in Help and in the in-app delivery review, not in a homepage
 compatibility matrix or implementation-status paragraph. Cloud acceptance is not evidence that a workout appeared
 on a particular app or device.
 
