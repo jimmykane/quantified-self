@@ -1,10 +1,14 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { By } from '@angular/platform-browser';
+import { MatTooltip } from '@angular/material/tooltip';
+import { NoopAnimationsModule } from '@angular/platform-browser/animations';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { buildTrainingLoadPoints, resolveTrainingLoadDayImpact } from '@shared/training-load';
 import type { TrainingDayImpactView, TrainingSessionImpactView } from '../../helpers/training-impact.helper';
 import { AppHapticsService } from '../../services/app.haptics.service';
+import { AppWindowService } from '../../services/app.window.service';
 import { TrainingImpactComponent, type TrainingImpactVariant } from './training-impact.component';
 
 describe('TrainingImpactComponent', () => {
@@ -12,8 +16,11 @@ describe('TrainingImpactComponent', () => {
   beforeEach(() => {
     haptics.selection.mockClear();
     TestBed.configureTestingModule({
-      imports: [TrainingImpactComponent],
-      providers: [{ provide: AppHapticsService, useValue: haptics }],
+      imports: [TrainingImpactComponent, NoopAnimationsModule],
+      providers: [
+        { provide: AppHapticsService, useValue: haptics },
+        { provide: AppWindowService, useValue: { windowRef: { matchMedia: () => ({ matches: true }) } } },
+      ],
     });
   });
 
@@ -54,39 +61,47 @@ describe('TrainingImpactComponent', () => {
     expect(text).toContain('not measured physiological adaptation');
   });
 
-  it('keeps the strip values and day outcome visible with accessible details on demand', () => {
+  it('keeps values and the day outcome visible with model details in a labelled info tooltip', () => {
     const fixture = render(session(), 'strip');
     const element = fixture.nativeElement as HTMLElement;
     const values = Array.from(element.querySelectorAll('.training-impact-metrics strong')).map(value => value.textContent);
     const button = element.querySelector('button')!;
-    const explanation = element.querySelector('.training-impact-disclaimer') as HTMLElement;
+    const tooltip = fixture.debugElement.query(By.directive(MatTooltip)).injector.get(MatTooltip);
     expect(element.querySelector('.training-impact--strip')).toBeTruthy();
     expect(values).toEqual(['+2', '+12', '−10', '84']);
     expect(element.querySelector('.training-impact-outcomes')?.textContent).toContain('Fitness load rose after normal decay');
-    expect(button.textContent).toContain('About this estimate');
-    expect(button.getAttribute('aria-controls')).toBe(explanation.id);
-    expect(button.getAttribute('aria-expanded')).toBe('false');
-    expect(explanation.hidden).toBe(true);
+    expect(button.getAttribute('aria-label')).toBe('About Training impact');
+    expect(tooltip.message).toContain('not measured physiological adaptation');
+    expect(tooltip.position).toBe('below');
+    expect(element.querySelector('.training-impact-disclaimer')).toBeNull();
+    expect(element.textContent).not.toContain('About this estimate');
     expect(haptics.selection).not.toHaveBeenCalled();
-
-    button.click(); fixture.detectChanges();
-    expect(button.getAttribute('aria-expanded')).toBe('true');
-    expect(button.textContent).toContain('Hide estimate details');
-    expect(explanation.hidden).toBe(false);
-    expect(explanation.textContent).toContain('not measured physiological adaptation');
-    expect(haptics.selection).toHaveBeenCalledOnce();
-
-    button.click(); fixture.detectChanges();
-    expect(explanation.hidden).toBe(true);
-    expect(haptics.selection).toHaveBeenCalledTimes(2);
   });
 
-  it('gives separately rendered strip disclosures their own content region', () => {
-    const first = render(session(), 'strip');
-    const second = render(session(), 'strip');
-    expect(first.componentInstance.modelExplanationId).not.toBe(second.componentInstance.modelExplanationId);
-    first.nativeElement.querySelector('button').click(); first.detectChanges();
-    expect(second.nativeElement.querySelector('.training-impact-disclaimer').hidden).toBe(true);
+  it('shows details on mobile tap with one feedback owner and no change to the strip content', () => {
+    const fixture = render(session(), 'strip');
+    const tooltip = fixture.debugElement.query(By.directive(MatTooltip)).injector.get(MatTooltip);
+    const show = vi.spyOn(tooltip, 'show').mockImplementation(() => {});
+    const hide = vi.spyOn(tooltip, 'hide').mockImplementation(() => {});
+    const element = fixture.nativeElement as HTMLElement;
+    const content = element.textContent;
+    vi.useFakeTimers();
+    try {
+      element.querySelector('button')!.click(); fixture.detectChanges();
+      expect(show).toHaveBeenCalledWith(0);
+      expect(haptics.selection).toHaveBeenCalledOnce();
+      expect(element.textContent).toBe(content);
+      vi.advanceTimersByTime(2200);
+      expect(hide).not.toHaveBeenCalled();
+      vi.advanceTimersByTime(3800);
+      expect(hide).toHaveBeenCalledWith(0);
+      element.querySelector('button')!.click();
+      fixture.destroy(); hide.mockClear();
+      vi.advanceTimersByTime(6000);
+      expect(hide).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('retains honest updating, missing-TSS, and error states in the strip', () => {

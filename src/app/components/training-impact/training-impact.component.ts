@@ -1,5 +1,4 @@
-import { ChangeDetectionStrategy, Component, LOCALE_ID, computed, inject, input, signal } from '@angular/core';
-import { _IdGenerator } from '@angular/cdk/a11y';
+import { ChangeDetectionStrategy, Component, LOCALE_ID, computed, inject, input } from '@angular/core';
 import { SharedModule } from '../../modules/shared.module';
 import { getDateTimeFormatter } from '../../helpers/date-time-format.helper';
 import { getNumberFormatter } from '../../helpers/number-format.helper';
@@ -25,8 +24,7 @@ export class TrainingImpactComponent {
   readonly impact = input.required<TrainingSessionImpactView | TrainingDayImpactView>();
   readonly variant = input<TrainingImpactVariant>('card');
   readonly title = input('Training impact');
-  readonly modelExplanationId = inject(_IdGenerator).getId('training-impact-model-');
-  readonly modelExplanationExpanded = signal(false);
+  readonly modelExplanation = 'TSS-based model; CTL reflects sustained training load, not measured physiological adaptation.';
   readonly isReady = computed(() => this.impact().availability === 'ready');
   readonly isDayImpact = computed(() => 'sessions' in this.impact());
   readonly compactText = computed(() => {

@@ -19,7 +19,7 @@ app-summary-primary-info {
 }
 
 .summary-primary-extension {
-  padding: 12px 24px 16px;
+  padding: 4px 24px 8px;
   min-width: 0;
 }
 
@@ -239,7 +239,7 @@ app-summary-primary-info {
 
 @include bp.xsmall {
   .summary-primary-extension {
-    padding: 8px 12px 12px;
+    padding: 4px 12px 8px;
   }
 
   .summary-stats-area {

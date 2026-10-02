@@ -23,24 +23,55 @@
 }
 
 .training-impact--strip {
-  grid-template-columns: 210px minmax(0, 1fr);
-  column-gap: 20px;
-  row-gap: 8px;
+  grid-template-columns: 190px minmax(0, 1fr) 20px;
+  column-gap: 12px;
+  row-gap: 4px;
+
+  header {
+    gap: 6px;
+  }
+
+  h3,
+  header strong {
+    font: var(--mat-sys-body-small);
+  }
+
+  header strong {
+    font-weight: 500;
+  }
+
+  .training-impact-icon,
+  .training-impact-icon mat-icon {
+    width: 16px;
+    height: 16px;
+    font-size: 16px;
+    line-height: 16px;
+  }
+
+  .training-impact-metrics {
+    gap: 4px 12px;
+  }
 
   .training-impact-metrics > div {
     display: flex;
     flex-direction: column;
     justify-content: space-between;
+    padding-top: 4px;
+    gap: 2px;
+  }
+
+  .training-impact-metrics span {
+    font-size: .68rem;
+    line-height: 1.2;
   }
 
   .training-impact-metrics strong {
-    font-size: 1.5rem;
+    font-size: 1.14rem;
   }
 
   .training-impact-outcomes,
   .training-impact-note,
-  .training-impact-state,
-  .training-impact-explanation {
+  .training-impact-state {
     grid-column: 1 / -1;
   }
 
@@ -49,6 +80,7 @@
     flex-wrap: wrap;
     align-items: baseline;
     gap: 3px 12px;
+    padding-top: 4px;
   }
 
   .training-impact-outcomes strong {
@@ -56,16 +88,36 @@
   }
 }
 
-.training-impact-explanation button {
-  --mat-button-text-container-height: 36px;
-  font: var(--mat-sys-body-small);
+.training-impact-info {
+  grid-column: -2 / -1;
+  grid-row: 1;
+  align-self: start;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  min-width: 20px;
+  height: 20px;
+  min-height: 20px;
+  padding: 0;
+  --mat-icon-button-state-layer-size: 20px;
+  --mat-icon-button-icon-size: 16px;
+}
+
+.training-impact-info mat-icon {
+  width: 16px;
+  height: 16px;
+  line-height: 16px;
+  font-size: 16px;
+  color: var(--mat-sys-on-surface-variant);
 }
 
 @container (max-width: 740px) {
   .training-impact--strip {
-    grid-template-columns: minmax(0, 1fr);
+    grid-template-columns: minmax(0, 1fr) 20px;
 
     .training-impact-metrics {
+      grid-column: 1 / -1;
       grid-template-columns: repeat(2, minmax(0, 1fr));
     }
   }

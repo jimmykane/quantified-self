@@ -3311,9 +3311,11 @@ calculations, provider behavior, or refresh subscriptions.
 Activity details place a surface-free **Compact strip** immediately below the primary activity summary, before tags,
 device metadata, and additional statistics. The shared Training-impact component's `strip` variant keeps the contextual
 headline beside four labeled contribution columns on desktop; in narrower containers the headline moves above two
-columns. Exact values and the separate day outcome remain visible. **About this estimate** uses the app's Material
-Show/Hide disclosure with a unique controlled region and one haptic-feedback owner to reveal the model explanation.
-It adds no subscription or request. The full-day breakdown retains its existing detailed variant and visible disclaimer.
+columns. Numbers match the adjacent activity stats' compact size, with tighter row gaps and vertical padding. Exact
+values and the separate day outcome remain visible. A small right-aligned **About Training impact** Material info
+button shows the model explanation in a tooltip on hover or keyboard focus; the shared tooltip-tap directive also
+supports phone taps, with six seconds to read it and one haptic-feedback owner. It adds no disclosure row, subscription,
+or request. The full-day breakdown retains its existing detailed variant and visible disclaimer.
 Both variants inherit their parent surface, with no enclosing card, tinted icon tile, or nested metric backgrounds.
 This presentation change has no calculation, data-read, planning, MCP/Assistant, consent, or provider impact.
 
