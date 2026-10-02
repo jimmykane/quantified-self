@@ -174,6 +174,15 @@ export class EventIntensityZonesComponent implements AfterViewInit, OnChanges, O
           },
           rich: zoneBulletRichStyles
         },
+        labelLayout: (params: { labelRect: { x: number; width: number } }) => {
+          if (this.orientation !== 'horizontal') {
+            return {};
+          }
+          // Preserve the full-width plot; shift only badges that cross the canvas edge.
+          const overflow = params.labelRect.x + params.labelRect.width
+            - this.chartDiv.nativeElement.clientWidth + 2;
+          return { dx: Math.min(0, -overflow) };
+        },
         emphasis: {
           focus: 'none'
         },
