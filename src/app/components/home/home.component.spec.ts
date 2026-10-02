@@ -383,6 +383,14 @@ describe('HomeComponent', () => {
         expect(text).toContain(TRAINING_PLANS_HOME_CONTENT.intro);
         expect(text).toContain(TRAINING_PLANS_HOME_CONTENT.mcpExample.title);
         expect(text).toContain(TRAINING_PLANS_HOME_CONTENT.mcpExample.prompt);
+        expect(text).toContain('Create Today\'s Workout with Your Training Data and Notes');
+        expect(text).toContain('Check my Timeline notes for illness, injury, stress, travel, or vacation.');
+        expect(text).toContain('Consider my usual training pattern for this day of the week');
+        expect(text).toContain('recent completed activities and planned workouts');
+        expect(text).toContain('flag missing information');
+        expect(text).toContain('show me the duration, intensity, and workout steps before adding anything.');
+        expect(text).toContain('If recovery or rest is more appropriate, say so.');
+        expect(text).not.toContain('Enable Timeline notes access to include your notes in the recommendation.');
         for (const row of TRAINING_PLANS_HOME_CONTENT.rows) {
             expect(text).toContain(row.title);
             expect(text).toContain(row.copy);
