@@ -3332,8 +3332,8 @@ Freshness (Form) contribution   = CTL contribution - ATL contribution
 
 The contribution is not the same as the actual day-over-day CTL change. The day outcome applies the full recurrence
 above, including normal decay from the prior UTC Training day, and reports whether CTL rose, held, or declined. Session
-headlines compare the complete UTC day's TSS with prior CTL: a session can push the day above maintenance, add load to
-a day that was already above maintenance, or offset decay while the day remains below maintenance. Valid zero TSS is
+role classifications compare the complete UTC day's TSS with prior CTL: a session can push the day above maintenance,
+add load to a day that was already above maintenance, or offset decay while the day remains below maintenance. Valid zero TSS is
 shown as no modeled load contribution; missing TSS stays unavailable rather than becoming zero.
 
 Selected-day totals sum the visible completed activities' contributions. A local calendar date can contain activities
@@ -3354,15 +3354,24 @@ calculations, provider behavior, or refresh subscriptions.
 
 Activity details place a surface-free **Compact strip** immediately below the primary activity summary, before tags,
 device metadata, and additional statistics. It shares the other activity sections' full content width inside the
-workspace shell, without an additional side inset. The shared Training-impact component's `strip` variant keeps the contextual
-headline beside four labeled contribution columns on desktop; in narrower containers the headline moves above two
-columns. Numbers match the adjacent activity stats' compact size, with tighter row gaps and vertical padding. Exact
-values and the separate day outcome remain visible. When the strip is present, the activity summary uses the shared
+workspace shell, without an additional side inset. For event details, the shared Training-impact component's `strip`
+variant labels the four contribution columns **This workout’s contribution** rather than repeating the session's
+maintenance/building/decay role as a headline. The heading sits beside the columns on desktop; in narrower containers
+it moves above two columns. Numbers match the adjacent activity stats' compact size, with tighter row gaps and vertical padding. Exact
+values and one **Day result** remain visible. The result says **Fitness load increased/decreased by … CTL** or
+**Fitness load stayed steady**; locale-aware two-decimal display normalizes signed zero and sub-display-precision noise.
+It explicitly includes all training counted for that day, not only this workout. No second Training-day outcome or
+maintenance headline appears in event details, and UTC terminology stays out of its main presentation.
+When the strip is present, the activity summary uses the shared
 header's bottom-padding hooks to leave an 8px join instead of stacking summary and phone metric padding. Other summary
-surfaces retain their existing spacing. A small right-aligned **About Training impact** Material info
-button shows the model explanation in a tooltip on hover or keyboard focus; the shared tooltip-tap directive also
-supports phone taps, with six seconds to read it and one haptic-feedback owner. It adds no disclosure row, subscription,
-or request. The full-day breakdown retains its existing detailed variant and visible disclaimer.
+surfaces retain their existing spacing. A surface-free **How it’s calculated** Material text button sits alongside the
+day result and wraps beneath it when needed. It controls a labelled hidden region through `aria-expanded` and
+`aria-controls`, with one selection-haptic owner per activation. The initially collapsed explanation contains the
+workout's recorded TSS, contribution formulas, all-training/day-decay meaning, fixed daily cutoff caveat, and existing
+physiological-adaptation disclaimer. Disclosure state is component-local, survives same-event ready refreshes, and
+resets when the event/day context or availability changes; it adds no subscription, request, or setting.
+Full-day breakdowns and compact Calendar/Dashboard/day-sheet summaries retain their existing role/outcome wording,
+detail variants, and disclaimer behavior.
 Both variants inherit their parent surface, with no enclosing card, tinted icon tile, or nested metric backgrounds.
 This presentation change has no calculation, data-read, planning, MCP/Assistant, consent, or provider impact.
 
