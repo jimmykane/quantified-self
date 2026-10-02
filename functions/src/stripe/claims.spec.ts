@@ -10,6 +10,7 @@ const mockGetDoc = vi.fn();
 let userExists = true;
 let systemStatusData: Record<string, unknown> = {};
 let deletionMarkerState: 'missing' | 'active' | 'expired' = 'missing';
+let customerData: Record<string, unknown> = {};
 
 const getDocSnapshot = (path?: string) => {
     if (path?.startsWith('userDeletionTombstones/')) {
@@ -42,6 +43,10 @@ const getDocSnapshot = (path?: string) => {
         };
     }
 
+    if (path?.startsWith('customers/')) {
+        return { exists: true, data: () => customerData };
+    }
+
     return {
         exists: true,
         data: () => ({})
@@ -56,9 +61,11 @@ const mockDoc = vi.fn((path?: string) => ({
 }));
 const mockAuth = {
     setCustomUserClaims: mockSetCustomUserClaims,
-    getUser: vi.fn().mockResolvedValue({ customClaims: {}, email: 'test@example.com' })
+    getUser: vi.fn().mockResolvedValue({ customClaims: {}, email: 'test@example.com', emailVerified: true })
 };
 
+const mockCustomerOwnersGet = vi.fn();
+const mockCustomerOwnersWhere = vi.fn().mockReturnValue({ get: mockCustomerOwnersGet });
 const mockGet = vi.fn();
 const mockLimit = vi.fn().mockReturnValue({ get: mockGet });
 const mockOrderBy = vi.fn().mockReturnValue({ limit: mockLimit });
@@ -72,7 +79,7 @@ const mockCollection = vi.fn((path?: string) => {
     }
 
     return {
-        where: mockWhere,
+        where: path === 'customers' ? mockCustomerOwnersWhere : mockWhere,
         doc: (id: string) => mockDoc(`${path}/${id}`)
     };
 });
@@ -138,52 +145,58 @@ vi.mock('./client', () => ({
 
 import { reconcileClaims, linkExistingStripeCustomer, restoreUserClaims } from './claims';
 
-describe('reconcileClaims', () => {
-    beforeEach(() => {
-        vi.clearAllMocks();
-        mockGetDoc.mockReset();
-        mockRunTransaction.mockReset();
-        userExists = true;
-        systemStatusData = {};
-        deletionMarkerState = 'missing';
-        // Reset chain
-        mockWhere.mockReturnValue({ orderBy: mockOrderBy });
-        mockOrderBy.mockReturnValue({ limit: mockLimit });
-        mockLimit.mockReturnValue({ get: mockGet });
-        mockGetDoc.mockImplementation((path?: string) => Promise.resolve(getDocSnapshot(path)));
-        mockRunTransaction.mockImplementation(async (updateFunction: (transaction: {
-            get: (docRef: { get: () => Promise<unknown> }) => Promise<unknown>;
-            set: (_docRef: unknown, data: unknown, options: unknown) => void;
-            delete: (_docRef: unknown) => void;
-        }) => Promise<unknown>) => updateFunction({
-            get: (docRef) => docRef.get(),
-            set: (_docRef, data, options) => {
-                mockSet(data, options);
-            },
-            delete: (_docRef) => {
-                mockDelete();
-            }
-        }));
+beforeEach(() => {
+    vi.clearAllMocks();
+    mockGetDoc.mockReset();
+    mockRunTransaction.mockReset();
+    userExists = true;
+    systemStatusData = {};
+    deletionMarkerState = 'missing';
+    customerData = {};
+    mockCustomerOwnersGet.mockReset().mockResolvedValue({ docs: [] });
+    mockCustomerOwnersWhere.mockReturnValue({ get: mockCustomerOwnersGet });
+    // Reset chain
+    mockWhere.mockReturnValue({ orderBy: mockOrderBy });
+    mockOrderBy.mockReturnValue({ limit: mockLimit });
+    mockLimit.mockReturnValue({ get: mockGet });
+    mockGetDoc.mockImplementation((path?: string) => Promise.resolve(getDocSnapshot(path)));
+    mockRunTransaction.mockImplementation(async (updateFunction: (transaction: {
+        get: (docRef: { get: () => Promise<unknown> }) => Promise<unknown>;
+        set: (_docRef: unknown, data: unknown, options: unknown) => void;
+        delete: (_docRef: unknown) => void;
+    }) => Promise<unknown>) => updateFunction({
+        get: (docRef) => docRef.get(),
+        set: (_docRef, data, options) => {
+            mockSet(data, options);
+        },
+        delete: (_docRef) => {
+            mockDelete();
+        }
+    }));
 
-        // Explicitly reset collection mock to clear any mockImplementationOnce
-        mockCollection.mockReset();
-        mockCollection.mockImplementation((path?: string) => {
-            if (path?.includes('subscriptions')) {
-                return {
-                    where: mockWhere
-                };
-            }
-
+    // Explicitly reset collection mock to clear any mockImplementationOnce
+    mockCollection.mockReset();
+    mockCollection.mockImplementation((path?: string) => {
+        if (path?.includes('subscriptions')) {
             return {
-                where: mockWhere,
-                doc: (id: string) => mockDoc(`${path}/${id}`)
+                where: mockWhere
             };
-        });
+        }
 
-        // Default auth user
-        mockAuth.getUser.mockResolvedValue({ customClaims: {}, email: 'test@example.com' });
+        return {
+            where: path === 'customers' ? mockCustomerOwnersWhere : mockWhere,
+            doc: (id: string) => mockDoc(`${path}/${id}`)
+        };
     });
 
+    // Default auth user
+    mockAuth.getUser.mockReset().mockResolvedValue({ customClaims: {}, email: 'test@example.com', emailVerified: true });
+    mockStripeCustomersSearch.mockReset().mockResolvedValue({ data: [] });
+    mockStripeSubscriptionsList.mockReset().mockResolvedValue({ data: [] });
+    mockStripeProductsRetrieve.mockReset();
+});
+
+describe('reconcileClaims', () => {
     it('should return "free" if no active subscription exists locally or in Stripe', async () => {
         mockGet.mockResolvedValue({ empty: true });
         mockStripeCustomersSearch.mockResolvedValue({ data: [] });
@@ -376,7 +389,7 @@ describe('reconcileClaims', () => {
 
     it('should fallback to product metadata if subscription metadata is missing role', async () => {
         mockGet.mockResolvedValue({ empty: true });
-        mockStripeCustomersSearch.mockResolvedValue({ data: [{ id: 'cus_123' }] });
+        mockStripeCustomersSearch.mockResolvedValue({ data: [{ id: 'cus_123', email: 'test@example.com' }] });
         mockStripeSubscriptionsList.mockResolvedValue({
             data: [{
                 id: 'sub_123',
@@ -396,11 +409,6 @@ describe('reconcileClaims', () => {
 });
 
 describe('linkExistingStripeCustomer', () => {
-    beforeEach(() => {
-        vi.clearAllMocks();
-        mockAuth.getUser.mockResolvedValue({ customClaims: {}, email: 'test@example.com' });
-    });
-
     it('should throw unauthenticated error if no auth context', async () => {
         const req = { auth: null, app: { appId: 'test' } } as any;
         await expect((linkExistingStripeCustomer as any)(req)).rejects.toThrow('The function must be called while authenticated');
@@ -475,11 +483,6 @@ describe('linkExistingStripeCustomer', () => {
 });
 
 describe('restoreUserClaims', () => {
-    beforeEach(() => {
-        vi.clearAllMocks();
-        mockAuth.getUser.mockResolvedValue({ customClaims: {}, email: 'test@example.com' });
-    });
-
     it('should throw unauthenticated error if no auth context', async () => {
         const req = { auth: null, app: { appId: 'test' } } as any;
         await expect((restoreUserClaims as any)(req)).rejects.toThrow('The function must be called while authenticated');
@@ -550,7 +553,7 @@ describe('reconcileClaims (Complex Scenarios)', () => {
     it('should handle expanded product object in subscription item', async () => {
         mockGet.mockResolvedValue({ empty: true });
         mockStripeCustomersSearch.mockResolvedValue({
-            data: [{ id: 'cus_expanded' }]
+            data: [{ id: 'cus_expanded', email: 'test@example.com' }]
         });
         mockStripeSubscriptionsList.mockResolvedValue({
             data: [{
@@ -584,7 +587,7 @@ describe('reconcileClaims (Complex Scenarios)', () => {
     it('should use firebaseRole from product metadata if role is missing', async () => {
         mockGet.mockResolvedValue({ empty: true });
         mockStripeCustomersSearch.mockResolvedValue({
-            data: [{ id: 'cus_firebase_role' }]
+            data: [{ id: 'cus_firebase_role', email: 'test@example.com' }]
         });
         mockStripeSubscriptionsList.mockResolvedValue({
             data: [{
@@ -606,11 +609,162 @@ describe('reconcileClaims (Complex Scenarios)', () => {
         });
 
         // Also mock getUser with undefined customClaims to cover that branch
-        mockAuth.getUser.mockResolvedValue({ customClaims: undefined, email: 'test@example.com' });
+        mockAuth.getUser.mockResolvedValue({ customClaims: undefined, email: 'test@example.com', emailVerified: true });
 
         const result = await reconcileClaims('user1');
         expect(result.role).toBe('basic');
         // Verify setCustomUserClaims was called with just stripeRole (merging undefined defaults to empty)
         expect(mockSetCustomUserClaims).toHaveBeenCalledWith('user1', { stripeRole: 'basic' });
+    });
+});
+
+describe('Stripe email recovery ownership', () => {
+    const request = {
+        auth: { uid: 'user1', token: { email_verified: true, firebase: { sign_in_provider: 'google.com' } } },
+        app: { appId: 'test' }
+    };
+    const customer = { id: 'cus_paid', email: 'test@example.com', metadata: {} };
+    const subscription = { id: 'sub_paid', metadata: { role: 'pro' }, items: { data: [] } };
+
+    beforeEach(() => {
+        mockGet.mockResolvedValue({ empty: true });
+        mockStripeCustomersSearch.mockResolvedValue({ data: [customer] });
+        mockStripeSubscriptionsList.mockResolvedValue({ data: [subscription] });
+    });
+
+    const expectNoAcquisition = () => {
+        expect(mockSet).not.toHaveBeenCalledWith(expect.objectContaining({ stripeId: expect.anything() }), expect.anything());
+        expect(mockStripeCustomersUpdate).not.toHaveBeenCalled();
+        expect(mockStripeSubscriptionsUpdate).not.toHaveBeenCalled();
+        expect(mockSetCustomUserClaims).not.toHaveBeenCalledWith('user1', expect.objectContaining({ stripeRole: 'pro' }));
+    };
+
+    it.each([false, undefined])('rejects email recovery when server emailVerified is %s, regardless of token/provider hints', async (emailVerified) => {
+        mockAuth.getUser.mockResolvedValue({ email: 'test@example.com', emailVerified, customClaims: {} });
+
+        expect(await (linkExistingStripeCustomer as any)(request)).toEqual({ linked: false });
+        expect(await (restoreUserClaims as any)(request)).toEqual({ success: true, role: 'free' });
+        expect(mockStripeCustomersSearch).not.toHaveBeenCalled();
+        expectNoAcquisition();
+    });
+
+    it('preserves local paid restoration for an unverified email', async () => {
+        mockAuth.getUser.mockResolvedValue({ email: 'test@example.com', emailVerified: false, customClaims: {} });
+        mockGet.mockResolvedValue({ empty: false, docs: [{ data: () => ({ role: 'pro', status: 'active' }) }] });
+
+        expect(await (restoreUserClaims as any)(request)).toEqual({ success: true, role: 'pro' });
+        expect(mockStripeCustomersSearch).not.toHaveBeenCalled();
+        expect(mockSetCustomUserClaims).toHaveBeenCalledWith('user1', { stripeRole: 'pro' });
+    });
+
+    it('preserves grace claims when unverified email recovery is skipped', async () => {
+        const gracePeriodUntil = Date.now() + 60_000;
+        systemStatusData = { gracePeriodUntil: { toMillis: () => gracePeriodUntil } };
+        mockAuth.getUser.mockResolvedValue({ email: 'test@example.com', emailVerified: false, customClaims: { admin: true } });
+
+        expect(await reconcileClaims('user1')).toEqual({ role: 'free' });
+        expect(mockSetCustomUserClaims).toHaveBeenCalledWith('user1', { admin: true, stripeRole: 'free', gracePeriodUntil });
+        expect(mockStripeCustomersSearch).not.toHaveBeenCalled();
+        expectNoAcquisition();
+    });
+
+    it.each([
+        ['customer', { firebaseUID: 'other-user' }],
+        ['customer', { linkedToUid: 'other-user' }],
+        ['customer', { firebaseUID: 'user1', linkedToUid: 'other-user' }],
+        ['customer', { firebaseUID: 'other-user', linkedToUid: 'user1' }],
+        ['subscription', { firebaseUID: 'other-user' }],
+        ['subscription', { linkedToUid: 'other-user' }],
+        ['subscription', { firebaseUID: 'user1', linkedToUid: 'other-user' }],
+        ['subscription', { firebaseUID: 'other-user', linkedToUid: 'user1' }],
+    ])('rejects conflicting %s ownership %j', async (source, metadata) => {
+        if (source === 'customer') {
+            mockStripeCustomersSearch.mockResolvedValue({ data: [{ ...customer, metadata }] });
+        } else {
+            mockStripeSubscriptionsList.mockResolvedValue({ data: [{ ...subscription, metadata: { ...metadata, role: 'pro' } }] });
+        }
+
+        expect(await (linkExistingStripeCustomer as any)(request)).toEqual({ linked: false });
+        expectNoAcquisition();
+    });
+
+    it('rejects a customer owned by another Firestore UID, even when the caller also appears in the query', async () => {
+        mockCustomerOwnersGet.mockResolvedValue({ docs: [{ id: 'user1' }, { id: 'other-user' }] });
+
+        expect(await (linkExistingStripeCustomer as any)(request)).toEqual({ linked: false });
+        expect(mockCustomerOwnersWhere).toHaveBeenCalledWith('stripeId', '==', 'cus_paid');
+        expectNoAcquisition();
+    });
+
+    it('does not overwrite the caller\'s different Stripe customer binding', async () => {
+        customerData = { stripeId: 'cus_original' };
+
+        expect(await (linkExistingStripeCustomer as any)(request)).toEqual({ linked: false });
+        expectNoAcquisition();
+    });
+
+    it.each([null, 'someone-else@example.com'])('rejects a search result whose email is %s', async (email) => {
+        mockStripeCustomersSearch.mockResolvedValue({ data: [{ ...customer, email }] });
+
+        expect(await (linkExistingStripeCustomer as any)(request)).toEqual({ linked: false });
+        expect(mockStripeSubscriptionsList).not.toHaveBeenCalled();
+        expectNoAcquisition();
+    });
+
+    it('recovers an unbound legacy customer with a verified email', async () => {
+        expect(await (linkExistingStripeCustomer as any)(request)).toEqual({ linked: true, role: 'pro' });
+        expect(mockStripeCustomersUpdate).toHaveBeenCalledWith('cus_paid', expect.objectContaining({
+            metadata: expect.objectContaining({ firebaseUID: 'user1', linkedToUid: 'user1' })
+        }));
+        expect(mockStripeSubscriptionsUpdate).toHaveBeenCalledWith('sub_paid', expect.objectContaining({
+            metadata: expect.objectContaining({ firebaseUID: 'user1', linkedToUid: 'user1' })
+        }));
+    });
+
+    it('recovers the same UID with consistent existing bindings and case-insensitive email matching', async () => {
+        const metadata = { firebaseUID: 'user1', linkedToUid: 'user1' };
+        customerData = { stripeId: 'cus_paid' };
+        mockCustomerOwnersGet.mockResolvedValue({ docs: [{ id: 'user1' }] });
+        mockStripeCustomersSearch.mockResolvedValue({ data: [{ ...customer, email: 'TEST@example.com', metadata }] });
+        mockStripeSubscriptionsList.mockResolvedValue({ data: [{ ...subscription, metadata: { ...metadata, role: 'pro' } }] });
+
+        expect(await (linkExistingStripeCustomer as any)(request)).toEqual({ linked: true, role: 'pro' });
+    });
+
+    it('does not link or rewrite Stripe metadata when no role can be resolved', async () => {
+        mockStripeSubscriptionsList.mockResolvedValue({ data: [{ ...subscription, metadata: {} }] });
+
+        expect(await (linkExistingStripeCustomer as any)(request)).toEqual({ linked: false });
+        expectNoAcquisition();
+    });
+
+    it.each(['missing root', 'active deletion'])('does not acquire a customer for a user with %s', async (state) => {
+        userExists = state !== 'missing root';
+        deletionMarkerState = state === 'active deletion' ? 'active' : 'missing';
+
+        expect(await (linkExistingStripeCustomer as any)(request)).toEqual({ linked: false });
+        expectNoAcquisition();
+    });
+
+    it('fails closed if ownership reads fail', async () => {
+        mockCustomerOwnersGet.mockRejectedValue(new Error('Ownership read failed'));
+
+        await expect((linkExistingStripeCustomer as any)(request)).rejects.toThrow('Ownership read failed');
+        expectNoAcquisition();
+    });
+
+    it('rechecks ownership on a transaction retry before any Stripe updates or claims', async () => {
+        mockRunTransaction.mockImplementationOnce(async (updateFunction) => {
+            await updateFunction({ get: (ref: { get: () => Promise<unknown> }) => ref.get(), set: vi.fn() });
+            expect(mockStripeCustomersUpdate).not.toHaveBeenCalled();
+            expect(mockStripeSubscriptionsUpdate).not.toHaveBeenCalled();
+            expect(mockSetCustomUserClaims).not.toHaveBeenCalled();
+            mockCustomerOwnersGet.mockResolvedValue({ docs: [{ id: 'other-user' }] });
+            return updateFunction({ get: (ref: { get: () => Promise<unknown> }) => ref.get(), set: mockSet });
+        });
+
+        expect(await (linkExistingStripeCustomer as any)(request)).toEqual({ linked: false });
+        expect(mockCustomerOwnersGet).toHaveBeenCalledTimes(2);
+        expectNoAcquisition();
     });
 });

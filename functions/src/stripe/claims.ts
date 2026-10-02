@@ -37,6 +37,7 @@ import { getStripe } from './client';
 import { FUNCTIONS_MANIFEST } from '../../../shared/functions-manifest';
 import { enforceAppCheck } from '../utils';
 import { FUNCTION_SECRET_BINDINGS } from '../secrets';
+import { getUserDeletionGuardStateInTransaction } from '../shared/user-deletion-guard';
 
 const USER_DELETION_TOMBSTONES_COLLECTION = 'userDeletionTombstones';
 
@@ -99,11 +100,11 @@ interface LinkResult {
  * 3. **Claims Recovery**: User's custom claims were cleared but subscription still exists in Stripe
  *
  * ## Process Flow
- * 1. Search Stripe for customers matching the email (handles duplicates, up to 10 results)
- * 2. For each customer found, check for active subscriptions
- * 3. If active subscription found:
- *    - Link customer ID to Firestore `customers/{uid}` document
- *    - Extract role from subscription or product metadata
+ * 1. Require a verified email from the server Auth record
+ * 2. Search Stripe for matching customers and active subscriptions without conflicting UID metadata
+ * 3. If a role can be resolved:
+ *    - Atomically check existing ownership and link Firestore `customers/{uid}`
+ *    - Update Stripe metadata for the same UID
  *    - Set `stripeRole` custom claim on Firebase Auth user
  *
  * ## Role Resolution Priority
@@ -124,8 +125,17 @@ async function findAndLinkStripeCustomerByEmail(
     email: string,
     user: admin.auth.UserRecord
 ): Promise<LinkResult> {
+    // Email matching establishes ownership only after Firebase has verified the mailbox.
+    // Skip recovery so background reconciliation can still apply free/grace roles normally.
+    if (user.emailVerified !== true) {
+        logger.info(`[findAndLinkStripeCustomerByEmail] Skipping email recovery for unverified user ${uid}`);
+        return { found: false };
+    }
+
     const db = admin.firestore();
     const stripe = await getStripe();
+    const belongsToAnotherUser = (metadata?: Record<string, string>): boolean =>
+        [metadata?.firebaseUID, metadata?.linkedToUid].some(owner => !!owner && owner !== uid);
 
     // Search for existing customers with this email
     const customers = await stripe.customers.search({
@@ -140,6 +150,10 @@ async function findAndLinkStripeCustomerByEmail(
 
     // Find a customer with an active subscription
     for (const customer of customers.data) {
+        if (customer.email?.toLowerCase() !== email.toLowerCase() || belongsToAnotherUser(customer.metadata)) {
+            continue;
+        }
+
         const subscriptions = await stripe.subscriptions.list({
             customer: customer.id,
             status: 'active',
@@ -148,16 +162,56 @@ async function findAndLinkStripeCustomerByEmail(
 
         if (subscriptions.data.length > 0) {
             const sub = subscriptions.data[0];
+            if (belongsToAnotherUser(sub.metadata)) {
+                continue;
+            }
             logger.info(`[findAndLinkStripeCustomerByEmail] Found subscription ${sub.id} for customer ${customer.id}`);
 
-            // Link this customer to the Firebase user and sync basic details immediately
-            await db.collection('customers').doc(uid).set({
-                stripeId: customer.id,
-                stripeLink: `https://dashboard.stripe.com/customers/${customer.id}`,
-                email: customer.email,
-                name: customer.name ?? undefined,
-                phone: customer.phone ?? undefined
-            }, { merge: true });
+            // Resolve access before changing any ownership state.
+            let role = sub.metadata?.role || sub.metadata?.firebaseRole;
+            if (!role) {
+                const priceItem = sub.items.data[0];
+                if (priceItem?.price?.product) {
+                    const productId = typeof priceItem.price.product === 'string'
+                        ? priceItem.price.product
+                        : priceItem.price.product.id;
+                    const product = await stripe.products.retrieve(productId);
+                    role = product.metadata?.role || product.metadata?.firebaseRole;
+                }
+            }
+            if (!role) {
+                continue;
+            }
+
+            // Checking and writing in one transaction prevents competing recovery requests
+            // from binding the same customer to different UIDs. Never transfer an existing owner.
+            const customerRef = db.collection('customers').doc(uid);
+            const ownersQuery = db.collection('customers').where('stripeId', '==', customer.id);
+            const linked = await db.runTransaction(async transaction => {
+                const [currentCustomer, owners, deletionGuard] = await Promise.all([
+                    transaction.get(customerRef),
+                    transaction.get(ownersQuery),
+                    getUserDeletionGuardStateInTransaction(db, transaction, uid)
+                ]);
+                const currentStripeId = currentCustomer.data()?.stripeId;
+                if (deletionGuard.shouldSkip
+                    || (currentStripeId && currentStripeId !== customer.id)
+                    || owners.docs.some(owner => owner.id !== uid)) {
+                    return false;
+                }
+
+                transaction.set(customerRef, {
+                    stripeId: customer.id,
+                    stripeLink: `https://dashboard.stripe.com/customers/${customer.id}`,
+                    email: customer.email,
+                    name: customer.name ?? undefined,
+                    phone: customer.phone ?? undefined
+                }, { merge: true });
+                return true;
+            });
+            if (!linked) {
+                continue;
+            }
 
             // Update Stripe Customer metadata with new Firebase UID
             await stripe.customers.update(customer.id, {
@@ -181,33 +235,14 @@ async function findAndLinkStripeCustomerByEmail(
             });
             logger.info(`[findAndLinkStripeCustomerByEmail] Triggered subscription.updated webhook for ${sub.id}`);
 
-            // Determine the role from subscription or product metadata
-            let role = sub.metadata?.role || sub.metadata?.firebaseRole;
+            const existingClaims = user.customClaims || {};
+            await admin.auth().setCustomUserClaims(uid, {
+                ...existingClaims,
+                stripeRole: role
+            });
 
-            if (!role) {
-                // Fetch product to get role
-                const priceItem = sub.items.data[0];
-                if (priceItem?.price?.product) {
-                    const productId = typeof priceItem.price.product === 'string'
-                        ? priceItem.price.product
-                        : priceItem.price.product.id;
-
-                    const product = await stripe.products.retrieve(productId);
-                    role = product.metadata?.role || product.metadata?.firebaseRole;
-                }
-            }
-
-            if (role) {
-                // Set claims
-                const existingClaims = user.customClaims || {};
-                await admin.auth().setCustomUserClaims(uid, {
-                    ...existingClaims,
-                    stripeRole: role
-                });
-
-                logger.info(`[findAndLinkStripeCustomerByEmail] Linked customer ${customer.id} to user ${uid} with role ${role}`);
-                return { found: true, role, customerId: customer.id };
-            }
+            logger.info(`[findAndLinkStripeCustomerByEmail] Linked customer ${customer.id} to user ${uid} with role ${role}`);
+            return { found: true, role, customerId: customer.id };
         }
     }
 
