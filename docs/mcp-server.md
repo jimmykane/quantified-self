@@ -371,6 +371,13 @@ and bounded bulk completion tools expose only as their sanitized current project
 matching and manual link changes remain the focused #651 deferral. No provider identity, batch evidence or transport
 action is introduced.
 
+Sports Lib 21.4.0 also permits exact Wahoo app FIT Plan references to resolve one owned accepted single-workout Plan
+when API association fields are absent. QS verifies the trusted source account, one persisted session/activity, retained
+deterministic delivery identity and current occurrence. A nullable scheduled Workout ID is not replaced by the saved
+recording ID. The references remain private completion sidecars, outside DataStore, activity JSON and all MCP projections.
+Existing linked/unlinked completion reads already cover the result: no tool, schema, scope, consent, metric, provider
+action, Assistant route, contract refresh or bundled-plugin change is introduced by this consumer integration.
+
 Wahoo exact completion correlation follows the same no-wire-change boundary. An imported activity can move its existing
 sanitized delivery status to `completed` only after the private Workout ID, Plan ID and deterministic `workout_token`
 resolve one current account-bound delivery. Those identifiers, the account digest, workout-summary evidence and reverse

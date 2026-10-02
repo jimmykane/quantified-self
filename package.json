@@ -62,7 +62,7 @@
     "@fontsource/inter": "^5.3.0",
     "@fontsource/material-symbols-rounded": "^5.3.2",
     "@sentry/angular": "^10.56.0",
-    "@sports-alliance/sports-lib": "21.3.0",
+    "@sports-alliance/sports-lib": "21.4.0",
     "@tiptap/core": "^3.31.3",
     "@tiptap/pm": "^3.31.3",
     "@tiptap/starter-kit": "^3.31.3",

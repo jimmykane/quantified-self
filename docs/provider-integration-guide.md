@@ -521,6 +521,13 @@ Privileged admin billing mutations use a dedicated `STRIPE_ADMIN_BILLING_KEY` re
 
 ## 3. Foundation and shared contracts
 
+Wahoo Training completion can use the API Workout/Plan/token association or a Sports Lib 21.4.0 file-scoped app FIT
+reference. The latter requires one session, one matching persisted activity, trusted event source metadata, current
+account/generation authority, and exactly one accepted owned single-workout Plan with its deterministic app identity.
+A missing scheduled Workout ID must remain null; a new saved recording ID is not a substitute. Retained identifiers
+stay in private event completion evidence and never enter event/activity JSON, metrics or MCP projections. Duplicate
+Plans, stale occurrences and second recordings do not authorize a new link. Neither path infers interval adherence.
+
 Complete these shared changes early. Exhaustive unions and switch statements are deliberate: they force every cross-cutting surface to acknowledge the provider.
 
 1. Add the provider to `ServiceNames` and provider metadata in `@sports-alliance/sports-lib` when the provider is part of the shared contract.

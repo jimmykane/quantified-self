@@ -152,11 +152,17 @@ presentation-only optimizations with no Training calculation, planning, or MCP c
 Current compatibility baseline:
 
 - Quantified Self derived-metric schema: `19`
-- `@sports-alliance/sports-lib`: `21.3.0`
+- `@sports-alliance/sports-lib`: `21.4.0`
 - Training sport groups: eight modeled benchmark families plus data-backed Fitness & Gym and Other training volume groups
 - Imported FTP/VO2 capacity disciplines: Running and Cycling only
 - Rolling power-system capacity: every exact canonical activity type with usable persisted power curves
 - Calendar boundaries: UTC unless a section explicitly says otherwise
+
+Sports Lib 21.4.0 adds bounded, nonnumeric Wahoo app FIT Plan/Workout references. QS consumes them only at the
+trusted Wahoo import boundary, outside event/activity JSON and metric discovery. No event/route reparse, Training
+recomputation, Firestore migration, new index, Rules change, or MCP wire change is required. The installed-version
+reparse target advances automatically; both automatic scanners must remain disabled for this additive release.
+Generic reparsing does not write completion evidence and is not a backfill for this feature.
 
 Sports Lib 21.3.0 adds an independent `weightUnits` preference. Quantified Self defaults legacy accounts to kg,
 lets the athlete choose kg or lb in Settings → Units, and uses Sports Lib `DataWeight` for body-weight and planned
@@ -1794,6 +1800,16 @@ integration and post-release checks remain #647/#703/#655; #651 completion match
 unchanged.
 
 ### Wahoo Plan and dated Workout delivery (#649)
+
+Wahoo app recordings may create a new saved Workout with no API Plan/token association. The 21.4.0 FIT reader can
+instead supply an exact file-scoped Plan reference, with a nullable scheduled Workout ID. QS accepts only one reference
+and one session whose start matches the one persisted activity. Trusted event metadata must match the current connected
+account, saved recording and summary; the exact Plan must resolve one retained accepted QS delivery with its deterministic
+app identity and consistent Plan/Workout association. A missing scheduled ID is never replaced by the saved recording ID.
+Duplicate/reused Plans, malformed or conflicting identities, stale occurrences, delivery accepted after the recording,
+foreign accounts and mismatched stored activities remain unlinked. Delivery leases, bulk-restore locks, deletion fences
+and first-link-wins rules still apply. FIT identities stay in the private event completion sidecar; the existing sanitized
+completion and MCP reads are unchanged. No title/date/duration similarity matching or target-adherence claim is added.
 
 Wahoo uses the shared plan settings, standalone Send, Stop, Retry, approval, reconciliation and lease lifecycle. It is
 available to authenticated Pro users with a connected, correctly scoped Wahoo account and explicit plan/workout consent;
