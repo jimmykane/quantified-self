@@ -14,6 +14,15 @@ import {
 } from './policies.content';
 
 describe('help.content', () => {
+  it('explains the explicit MCP older-copy cleanup choice without promising provider or watch removal', () => {
+    const copy = HELP_SECTIONS.find(section => section.id === 'training-plans')!.content;
+    expect(copy).toContain('also remove older, uncompleted service copies');
+    expect(copy).toContain('Both Training change permissions are required');
+    expect(copy).toContain('deletion preview before approval');
+    expect(copy).toContain('released and discovered');
+    expect(copy).toContain('never deletes recorded activities');
+    expect(copy).not.toContain('MCP plan and workout deletion do not select this option');
+  });
   it('explains uncertain MCP apply replies without authorizing replacement workouts or approval bypass', () => {
     const copy = HELP_SECTIONS.find(section => section.id === 'training-plans')!.content;
     expect(copy).toContain('it may already have applied');

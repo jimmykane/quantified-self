@@ -458,8 +458,13 @@ connection epoch, exact account, completed evidence and provider ownership befor
 then workout, Wahoo its Workout then Plan, and Suunto its owned Guide; acceptance is not device removal. COROS's partner
 contract permits deletion only for unexecuted workouts dated today or later, so its past copy is retained with a clear
 unsupported reason even if selected. The same COROS backend path remains tested while the app hides new-send controls.
-Never infer that deleting a planned provider copy deletes a recorded activity. MCP deletion keeps its existing no-opt-in
-wire contract and cannot grant this extra destructive provider action.
+Never infer that deleting a planned provider copy deletes a recorded activity. The additive MCP
+`preview_training_deletion` offers the same explicit older-copy cleanup choice with both existing Training write grants
+and native/app approval. It calls the existing sanitized deletion transaction and durable worker, not provider HTTP;
+the preview/result describe requested cleanup rather than confirmed removal. The registered batch deletion remains
+no-opt-in. Clients must ask and disclose that limitation instead of silently preserving older copies when removal was
+requested. Completed copies, exact ownership and disconnect epochs remain protected; same-account reconnect is not
+permission to bypass an earlier explicit disconnect. No callable, new consent scope or provider adapter is added.
 
 An adapter must bind to the server-resolved owner/account, implement compatibility, horizon/deletion policy, execution,
 inspection and accepted-artifact checkpoints. Garmin workout/schedule IDs and Wahoo Plan/Workout IDs remain distinct;

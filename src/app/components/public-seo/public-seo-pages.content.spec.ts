@@ -254,6 +254,11 @@ describe('public-seo-pages.content', () => {
     expect(PUBLIC_SEO_PAGES.mcpServer.faqItems.some(item => item.question === 'Can an MCP client rearrange my dashboard or change my data?')).toBe(true);
     expect(PUBLIC_SEO_PAGES.mcpServer.faqItems.find(item => item.question === 'Can an MCP client rearrange my dashboard or change my data?')?.answer)
       .toContain('Plan deletion must be reviewed alone');
+    const deletion = PUBLIC_SEO_PAGES.mcpServer.faqItems.find(item => item.question === 'Does deleting a Training workout also remove service copies?')?.answer;
+    expect(deletion).toContain('older, uncompleted copies');
+    expect(deletion).toContain('Both Training change permissions');
+    expect(deletion).toContain('never deletes recorded activities');
+    expect(deletion).toContain('Once the focused deletion tool is released');
     expect(PUBLIC_SEO_PAGES.mcpServer.faqItems.some(item => item.question === 'Can I use the MCP server with ChatGPT or Claude?')).toBe(true);
     expect(PUBLIC_SEO_PAGES.mcpServer.faqItems.some(item => item.answer.includes('Granting one never exposes the other'))).toBe(true);
     expect(PUBLIC_SEO_PAGES.mcpServer.sections.some(section => section.preview === 'mcp-flow')).toBe(true);

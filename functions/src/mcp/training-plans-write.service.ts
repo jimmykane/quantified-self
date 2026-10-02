@@ -44,6 +44,7 @@ import { requiresDeliveryMappingApproval, type DeliveryRuntime } from '../traini
 import { decodeOpaqueValue, encodeOpaqueValue, McpDataError } from './data.service';
 import {
   TRAINING_CHANGE_SCHEMA,
+  TRAINING_DELETION_CHANGE_SCHEMA,
   TRAINING_STRENGTH_INTERNAL_CHANGE_SCHEMA,
   TRAINING_WORKOUT_V2_CHANGE_SCHEMA,
   TRAINING_DELIVERY_WRITE_SCOPE,
@@ -67,7 +68,7 @@ const proposalPayload = z.strictObject({ kind: z.literal('proposal'), id: entity
   createdAtMs: z.number().int().nonnegative().safe() });
 
 type TrainingChange = z.infer<typeof TRAINING_CHANGE_SCHEMA> | z.infer<typeof TRAINING_STRENGTH_INTERNAL_CHANGE_SCHEMA>
-  | z.infer<typeof TRAINING_WORKOUT_V2_CHANGE_SCHEMA>;
+  | z.infer<typeof TRAINING_WORKOUT_V2_CHANGE_SCHEMA> | z.infer<typeof TRAINING_DELETION_CHANGE_SCHEMA>;
 type PreviewResult = z.infer<typeof TRAINING_WRITE_OUTPUTS.preview_training_changes>;
 type ApplyResult = z.infer<typeof TRAINING_WRITE_OUTPUTS.apply_training_changes>;
 
@@ -414,6 +415,12 @@ function expectedRevisions(snapshot: TrainingScheduleSnapshotV1, operation: Trai
   return expected;
 }
 
+function describeProviderDeletion(removePastProviderCopies: boolean): string {
+  return removePastProviderCopies
+    ? 'Request removal of eligible service copies, including older uncompleted copies. Completed activities stay untouched. Removal needs valid access and provider support; copies on a watch may remain.'
+    : 'Eligible future provider copies may withdraw; past provider copies remain. Recorded activities are not deleted.';
+}
+
 function describeOperation(operation: TrainingScheduleMutationOperationV1): string {
   switch (operation.kind) {
     case 'create-plan': return `Create plan “${operation.name}” from ${operation.startLocalDate} to ${operation.endLocalDate}${operation.activate ? ' and make it active' : ''}.`;
@@ -427,7 +434,7 @@ function describeOperation(operation: TrainingScheduleMutationOperationV1): stri
     case 'move-workout': return `Move the workout to ${operation.localDate}${operation.planId ? ' in the selected plan' : ' as a standalone workout'}.`;
     case 'copy-workout': return `Copy the workout to ${operation.localDate}${operation.planId ? ' in the selected plan' : ' as a standalone workout'}.`;
     case 'set-workout-lifecycle': return `${operation.lifecycle === 'skipped' ? 'Mark' : 'Restore'} the workout ${operation.lifecycle === 'skipped' ? 'as skipped' : 'to planned'}.`;
-    case 'delete-workout': return 'Move the workout to recoverable history. Eligible future provider copies may withdraw; past provider copies remain. Recorded activities are not deleted.';
+    case 'delete-workout': return `Move the workout to recoverable history. ${describeProviderDeletion(operation.removePastProviderCopies === true)}`;
     case 'permanently-delete-workout': return 'Permanently delete the workout.';
   }
 }
@@ -523,7 +530,8 @@ function resolveScheduleOperation(
         planId: plan(change.plan), localDate: change.localDate, confirmPlanRangeExtension: true };
     }
     case 'set-workout-lifecycle': return { kind: change.kind, workoutId: workout(change.workout), lifecycle: change.lifecycle };
-    case 'delete-workout': return { kind: change.kind, workoutId: workout(change.workout) };
+    case 'delete-workout': return { kind: change.kind, workoutId: workout(change.workout),
+      ...('removePastProviderCopies' in change ? { removePastProviderCopies: change.removePastProviderCopies } : {}) };
   }
 }
 
@@ -731,7 +739,7 @@ function decodeProposalRef(value: string, uid: string, connectionId: string): { 
 export async function previewTrainingChanges(
   input: TrainingWriteInput,
   provided?: TrainingWriteDependencies,
-  recipeMode: 'legacy' | 'strength' | 'v2' = 'legacy',
+  recipeMode: 'legacy' | 'strength' | 'v2' | 'deletion' = 'legacy',
 ): Promise<PreviewResult> {
   const deps = provided ?? defaultDependencies();
   assertBytes(input.arguments);
@@ -741,10 +749,16 @@ export async function previewTrainingChanges(
     : recipeMode === 'v2'
       ? z.strictObject({ expectedScheduleRevision: z.number().int().nonnegative().safe(),
         changes: z.array(TRAINING_WORKOUT_V2_CHANGE_SCHEMA).length(1) }).safeParse(input.arguments)
-      : TRAINING_WRITE_INPUTS.preview_training_changes.safeParse(input.arguments);
+      : recipeMode === 'deletion'
+        ? z.strictObject({ expectedScheduleRevision: z.number().int().nonnegative().safe(),
+          changes: z.array(TRAINING_DELETION_CHANGE_SCHEMA).length(1) }).safeParse(input.arguments)
+        : TRAINING_WRITE_INPUTS.preview_training_changes.safeParse(input.arguments);
   if (!parsed.success) invalid('Invalid Training change proposal. Use the advertised operation schema and at most 25 changes.');
   assertProviderActionsLast(parsed.data.changes);
   const required = requiredScopes(parsed.data.changes);
+  // This focused tool explicitly offers provider cleanup and is available only
+  // under both existing child grants. Keep the same binding through apply/retry.
+  if (recipeMode === 'deletion') required.push(TRAINING_DELIVERY_WRITE_SCOPE);
   assertScopes(input.scopes, required);
   const loaded = await loadSnapshot(deps, input.uid, input.connectionId, required);
   if (loaded.snapshot.state.revision !== parsed.data.expectedScheduleRevision) {
@@ -776,6 +790,7 @@ export async function previewTrainingChanges(
         ],
         workoutDisposition: change.workoutDisposition,
         confirmPlanDeletion: true,
+        ...('removePastProviderCopies' in change ? { removePastProviderCopies: change.removePastProviderCopies } : {}),
       });
       try { simulated = applyTrainingPlanDeletion(simulated, request, deps.now()).after; }
       catch (error) { invalid(publicErrorMessage(error) ?? 'This Training plan cannot be deleted safely.'); }
@@ -784,7 +799,7 @@ export async function previewTrainingChanges(
         ? `${currentWorkoutCount} current workout${currentWorkoutCount === 1 ? '' : 's'} will become standalone.`
         : `${currentWorkoutCount} current workout${currentWorkoutCount === 1 ? '' : 's'} will also be permanently deleted.`;
       publicChanges.push({ index, kind: change.kind,
-        summary: `Permanently delete plan “${plan.name}” and its revision history. ${workoutEffect} Eligible future provider copies may withdraw; past provider copies remain. Recorded activities are not deleted.` });
+        summary: `Permanently delete plan “${plan.name}” and its revision history. ${workoutEffect} ${describeProviderDeletion(request.removePastProviderCopies === true)}` });
       return;
     }
     if (recipeMode === 'legacy' && change.kind === 'update-workout') {
@@ -800,7 +815,10 @@ export async function previewTrainingChanges(
     try { simulated = applyTrainingScheduleMutation(simulated, request, deps.now() + index).after; }
     catch (error) { invalid(publicErrorMessage(error) ?? `Training change ${index + 1} is invalid.`); }
     scheduleRequests.push({ index, request });
-    publicChanges.push({ index, kind: operation.kind, summary: describeScheduleEffects(operation, before, simulated)
+    const deletionTarget = recipeMode === 'deletion' && operation.kind === 'delete-workout'
+      ? before.workouts.get(operation.workoutId) : null;
+    publicChanges.push({ index, kind: operation.kind, summary: (deletionTarget
+      ? `Delete “${deletionTarget.title}” on ${deletionTarget.localDate}. ` : '') + describeScheduleEffects(operation, before, simulated)
       + (recipeMode === 'v2' ? describePoolLengthEffect(operation, before, simulated) : '') });
   });
 
@@ -981,6 +999,18 @@ export async function previewCreatePlannedWorkout(
       }] : [])],
     },
   }, provided);
+}
+
+/** Reuses the existing deletion transactions and worker; preview never calls a provider. */
+export async function previewTrainingDeletion(
+  input: TrainingWriteInput,
+  provided?: TrainingWriteDependencies,
+): Promise<PreviewResult> {
+  assertBytes(input.arguments);
+  const parsed = TRAINING_WRITE_INPUTS.preview_training_deletion.safeParse(input.arguments);
+  if (!parsed.success) invalid('Select one current plan or workout and explicitly choose whether to remove older uncompleted service copies. Plan deletion also requires a workout disposition.');
+  return previewTrainingChanges({ ...input, arguments: { expectedScheduleRevision: parsed.data.expectedScheduleRevision,
+    changes: [parsed.data.change] } }, provided, 'deletion');
 }
 
 async function readProposal(input: TrainingWriteInput, deps: TrainingWriteDependencies): Promise<{ ref: string; id: string; proposal: StoredProposal }> {
@@ -1270,7 +1300,8 @@ async function applyTrainingChangesInternal(
         ? `${response.convertedWorkoutIds.length} workout${response.convertedWorkoutIds.length === 1 ? '' : 's'} converted to standalone.`
         : `${response.permanentlyDeletedWorkoutIds.length} workout${response.permanentlyDeletedWorkoutIds.length === 1 ? '' : 's'} permanently deleted.`;
       changeResults.push({ index: proposal.planDeletion.index, kind: 'delete-plan', status: 'applied',
-        message: `The plan and its revision history were permanently deleted. ${effect}` });
+        message: `The plan and its revision history were permanently deleted. ${effect}${proposal.planDeletion.request.removePastProviderCopies
+          ? ' Service-copy cleanup was requested; removal is not yet confirmed.' : ''}` });
       await proposalRefDoc.update({ changeResults, leaseUntilMs: deps.now() + APPLY_LEASE_MS });
     } catch (error) {
       if (error instanceof TrainingPlanDeletionResumeRequiredError) {

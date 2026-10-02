@@ -143,9 +143,19 @@ using Research because Research may invoke connector tools without another appro
 proposal and binds it to the owner, connection, grant, revision and expiry; replay returns its persisted terminal result.
 Plan deletion is available only as the sole proposal change and requires an explicit `convert-to-standalone` or
 `delete-workouts` choice. Its preview states that the plan and revision history are permanently removed, describes the
-workout effect, and states that eligible future provider copies may withdraw, while past provider copies and recorded
-activities remain. MCP deletion does not offer the manual UI's separate past-copy cleanup opt-in. If its resumable
-multi-transaction
+workout effect, and distinguishes automatic eligible future-copy withdrawal from optional older-copy cleanup.
+The additive `preview_training_deletion` requires both child write grants plus the parent read grant, one exact current
+plan/workout reference, the current schedule revision and an explicit `removePastProviderCopies` boolean. Ask
+“Also remove older, uncompleted copies from your connected services?” unless the user already chose. A plan still
+requires its workout disposition. False preserves older copies; true requests best-effort removal through the existing
+mutation-bound cleanup marker and worker. It is not new sync consent, a live provider check, recorded-activity deletion
+or app/watch removal proof. Valid same-account access, disconnect epochs, provider restrictions and completed-copy
+protection remain authoritative. Preview performs no provider I/O; existing approval-gated `apply_training_changes`
+retains the choice and both grants through retries. Legacy batch input is frozen and still preserves older copies;
+never silently use it instead when the user requested full cleanup. For multiple targets, review separate focused
+deletions rather than extending that schema. No new callable, OAuth scope or cleanup model is introduced. Deploy and
+refresh client catalogs separately before use; no reauthorization is needed if all three grants already exist.
+If its resumable multi-transaction
 deletion or cleanup is interrupted after the lock is acquired, the proposal remains retryable and the same approved apply
 resumes the idempotent operation instead of recording a false terminal failure. Permanent single-workout deletion and
 history restoration remain deliberately absent.
@@ -946,6 +956,7 @@ The analytics and map entries follow the
 | `assess_planned_workout_compatibility` | `training-plans:read` | Local mapping fidelity for one current workout; no connection/provider call or delivery guarantee |
 | `preview_create_planned_workout` | `training-plans:read` + `training-plans:write`; optional delivery also requires `training-delivery:write` | Focused one-workout proposal with optional atomic initial send; server-owned local key |
 | `preview_training_changes` | `training-plans:read` plus the relevant Training write scope(s) | Strict bounded proposal with authored and per-provider effects; no authored mutation |
+| `preview_training_deletion` | `training-plans:read` + `training-plans:write` + `training-delivery:write` | One deletion with explicit older uncompleted service-copy cleanup choice; existing approval-gated apply |
 | `preview_saved_workout_change` | `training-plans:read` + `training-plans:write` | One revision-bound library edit or 1–100-date placement preview; no provider consent or authored mutation |
 | `apply_training_changes` | Same scopes bound into the proposal; native client approval gate | Idempotently applies a preview-created proposal and returns independent authored/provider outcomes |
 | `get_training_change_status` | Same original Training read and child-write grants bound into the proposal | Read-only retained apply result or lower-bound checkpoints after an uncertain reply; never applies or resumes |

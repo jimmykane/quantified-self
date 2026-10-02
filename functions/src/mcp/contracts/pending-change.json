@@ -1,7 +1,7 @@
 {
   "formatVersion": 1,
-  "candidateSha256": "f5119c17efae7a6ca50d1eb285f607a41a2899b6c6dcd0db325e7d0e4796095f",
+  "candidateSha256": "87ef1c040490d0db091c87efbf052ade071aceaf57e1f216198994e3eb400d4e",
   "lifecycleAction": "developer-refresh",
-  "summary": "Preserve prior Training, Health, Timeline, activity, OAuth/PKCE, event edits, Strength/pool reads, snapshots and identity-safe TSS impact. Add saved-workout reads/library preview/apply and independent measurements:write manual Health tools. Add read-only get_training_change_status under original proposal grants with lost-reply guidance; no new mutation, replay or consent. Keep strict outputs and native approval. Deploy separately, then refresh/rescan metadata and bundled guidance.",
+  "summary": "Preserve Training/Health/Timeline/activity, OAuth/PKCE, event edits, Strength/pool, snapshots/TSS, library and measurements:write changes. Keep grant-bound read-only get_training_change_status recovery; no replay/new consent. Add preview_training_deletion with both child grants and older-uncompleted-copy cleanup via existing approved deletion/workers; freeze batch schemas and protect completed copies. Keep strict outputs/native approval. Deploy separately; refresh/rescan metadata and guidance.",
   "rescanRequired": true
 }

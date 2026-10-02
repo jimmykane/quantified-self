@@ -137,7 +137,15 @@ Two additional default-off toggles enable **Plan and workout changes** and **Pla
 the read toggle but remain independent of each other. The first grants `training-plans:write`; the second grants
 `training-delivery:write`. A write-enabled in-process session exposes the focused single-workout preview plus the bounded
 batch preview to Gemini. The focused preview can include an atomic initial provider send only when the delivery toggle is
-also enabled. The model can prepare one strict proposal after reading current records. For Workout Library changes it
+also enabled. With both change toggles, current plan/workout deletion uses the additive `preview_training_deletion`.
+The Assistant asks whether to also remove older, uncompleted service copies unless the user already explicitly chose;
+eligible upcoming copies withdraw automatically. The required choice is bound into the existing proposal and app-owned
+Apply, not direct model/provider writes. Plan deletion additionally asks whether to keep workouts as standalone or
+permanently delete them. Without delivery access, explain that older-copy cleanup is unavailable and only offer legacy
+deletion if the user accepts that limitation. Completed activities stay untouched, and valid access/provider support
+may prevent cleanup; an applied deletion is not provider/app/watch removal proof. A reply to the cleanup question keeps
+the focused preview selected, but never supplies Apply approval. The model can prepare one strict proposal after
+reading current records. For Workout Library changes it
 must also read the library revision and exact saved recipe or source workout, then use the additive library preview.
 That preview supports one create, save, duplicate, edit, archive/restore, confirmed permanent recipe delete, or
 explicit-date placement. Saved recipes have no date or provider consent. The model cannot call
@@ -320,7 +328,7 @@ schema. The original strict MCP schema still validates every invocation, includi
 variants. Numeric literals become typed values with a descriptive allowed value, and oversized catalog enums become
 discovery guidance; Gemini rejects those declarations while MCP still validates the exact values. Session setup fails
 closed if an input cannot be projected. Gemini receives only the most relevant Training preview for the current question
-(focused workout create, batch lifecycle, strength, or pool-length edit), because combining all four nested preview
+(focused workout create, batch lifecycle, strength, pool-length, library, or deletion), because combining the nested preview
 schemas with the full read catalogue exceeds its accepted tool request. The authorized in-process MCP session remains
 complete. Regression coverage walks every tool with all optional permissions enabled and checks that Gemini cannot
 receive an undefined required property, array item, or non-string enum.

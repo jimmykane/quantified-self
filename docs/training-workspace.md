@@ -39,8 +39,22 @@ lock is acquired keeps the proposal resumable so the same approved apply can fin
 Permanent single-workout deletion and history restoration remain excluded. The latter allows plan delivery
 enablement and workout send/resume/stop/retry/check/approval. Delivery remains Pro and is gated by provider connection,
 permissions, configuration, compatibility and explicit consent.
-MCP plan and recoverable workout deletion never select the manual UI's optional past-provider-copy cleanup. Their
-previews distinguish eligible future-copy withdrawal from past copies, which remain, and recorded activities are untouched.
+The additive `preview_training_deletion` offers the manual UI's optional older-copy cleanup for one current plan or
+recoverable workout deletion. With both existing child write grants, the client asks whether to also remove older,
+uncompleted copies from connected services (unless already explicitly chosen), then supplies a required
+`removePastProviderCopies` boolean. The proposal binds that choice to the existing deletion transaction, revisions,
+owner/connection/grant and approval. Plan deletion still requires its workout disposition. Upcoming eligible copies
+already withdraw by default; completed activities are never deleted. Cleanup needs current same-account access and
+provider support, and is not app/watch removal proof. No provider HTTP occurs in preview or MCP apply. The frozen
+batch deletion remains available without this opt-in; clients must explain its older-copy limitation rather than
+silently substitute it for requested full cleanup. Removal does not require Pro. Source implementation needs separate
+deployment and catalog refresh. MCP read-impact review: current plan/workout recipes, units, completion links and sync
+projections remain unchanged; cleanup intent stays server-only. Verification covers explicit yes/no choices, both plan
+dispositions, preview without provider I/O, lost-reply replay, revoked grants, completed-copy protection and removal after
+Pro expiry in `npm run test:functions-emulators -- mcp-data`, plus the existing provider cleanup regressions in the
+`delivery` emulator group. Assistant tests keep follow-up choices prepare-only and require the app-owned Apply; public
+contract tests check all three transports, scope isolation and recursive private-field rejection. No new callable,
+provider adapter, consent scope or cleanup store is introduced.
 External clients prepare one strict proposal of at most 25 changes, then invoke the separately approval-gated
 `apply_training_changes` write tool. ChatGPT, Claude and other MCP hosts own their native tool-approval UI; QS does not
 use MCP elicitation for a second confirmation round. A host may let its user configure automatic tool approval, which QS
@@ -1376,8 +1390,11 @@ in again; an old authorization cannot be reused. For plan-to-standalone deletion
 marker pointer across temporary disconnects and rechecks the private marker on retry. A later standalone-workout
 deletion without opt-in overrides that earlier plan choice. COROS deliberately remains in backend reconciliation and tests, but
 its contract allows deleting only unexecuted workouts dated today or later, so past copies are retained and reported
-as unsupported. New-send UI availability remains a separate policy. MCP deletion previews/applies omit the
-opt-in and retain default past-copy preservation; this change adds no MCP tool, schema, scope, or provider action.
+as unsupported. New-send UI availability remains a separate policy. The additive MCP deletion preview uses this same
+opt-in and worker, with both independent Training write grants and native/app approval; its applied result requests
+cleanup rather than claiming provider removal. The registered batch schema remains unchanged and preserves past copies.
+This adds no callable, transport, consent scope, private projection, or cleanup persistence model. Explicit-disconnect
+epochs and completed-copy protections remain authoritative, even after reconnecting the same account.
 
 #### Garmin workout sport profiles (#647)
 

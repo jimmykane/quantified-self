@@ -771,6 +771,10 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
         answer: 'It cannot change dashboard settings, recorded activity data, routes, Health, measurements, or sleep records. Separate permissions can replace shared event tags or titles, edit descriptions with additional description access, or create, edit, and permanently delete Timeline notes through the client’s approval controls. It can change Training plans, planned workouts, or their delivery only when you grant the matching child permission and the client permits the separate apply call for a bounded proposal. Plan deletion must be reviewed alone, requires your explicit choice for its workouts, and permanently removes the plan and its revision history.',
       },
       {
+        question: 'Does deleting a Training workout also remove service copies?',
+        answer: 'Eligible upcoming copies are automatically queued for withdrawal. Once the focused deletion tool is released and available in your client, it can ask whether to also remove older, uncompleted copies from connected services. Both Training change permissions are required, and the choice appears in the preview before approval. Cleanup needs valid service access and provider support; it never deletes recorded activities or guarantees removal from a provider app or watch. Without the optional cleanup, older copies stay.',
+      },
+      {
         question: 'Does MCP access expose my original activity or route files?',
         answer: 'No. Activity charts and detailed sample requests selectively parse existing originals in memory. Only requested numeric data are returned: compact chart points or paginated elapsed-second samples. Original files, absolute sample timestamps, unrequested streams, provider payloads, credentials, and storage paths are excluded. Selected detailed samples may be reused in bounded server memory for up to two minutes; no persistent sample store is created.',
       },
