@@ -14,7 +14,7 @@ still require separate approval; this documentation update changes no secret bin
 | Area | Secret Manager names |
 | --- | --- |
 | COROS | `COROSAPI_CLIENT_ID`, `COROSAPI_CLIENT_SECRET` |
-| Garmin | `GARMINAPI_CLIENT_ID`, `GARMINAPI_CLIENT_SECRET` |
+| Garmin | `GARMINAPI_CLIENT_ID`, `GARMINAPI_CLIENT_SECRET`, `GARMINAPI_WEBHOOK_SECRET` |
 | Suunto | `SUUNTOAPP_CLIENT_ID`, `SUUNTOAPP_CLIENT_SECRET`, `SUUNTOAPP_SUBSCRIPTION_KEY`, `SUUNTOAPP_NOTIFICATION_SECRET` |
 | Suunto Training Guide application name | `SUUNTOAPP_GUIDE_OWNER` |
 | Wahoo | `WAHOOAPI_CLIENT_ID`, `WAHOOAPI_CLIENT_SECRET`, `WAHOOAPI_WEBHOOK_TOKEN`, `WAHOOAPI_ALLOWED_FILE_HOSTS` |
@@ -55,6 +55,34 @@ deploy, or change existing rollout/consent gates.
 Do not put these values in `functions/.env`, workflow YAML, repository documentation, or service-account files. Secret existence can be checked with `firebase functions:secrets:get NAME`; do not print or retrieve values during routine validation.
 
 For admin marketing campaigns, generate a random high-entropy signing key and set it through the approved Secret Manager workflow before deployment: `firebase functions:secrets:set MARKETING_UNSUBSCRIBE_SIGNING_KEY --project <firebase-project-id>`. Bindings are limited to the test-send callable, campaign start/resume dispatcher, scheduled dispatcher, and public unsubscribe endpoint. The value-free local example includes the key; do not check in a real value. The signed endpoint handles no-login opt-outs, so losing the key invalidates unsubscribe links in previously sent emails. Rotate only with a migration plan. Provisioning and deployment need separate approval.
+
+## Garmin callback credential and migration
+
+`GARMINAPI_WEBHOOK_SECRET` is a dedicated callback credential, separate from Garmin OAuth. It is bound only to
+`receiveGarminAPIHealthData`, `insertGarminAPIActivityFileToQueue`, `deauthorizeGarminAPIUsers`, and
+`receiveGarminAPIUserPermissions`. Workers keep their existing OAuth bindings and do not receive this credential.
+Generate 32 cryptographically random bytes, encoded as 64 lowercase hexadecimal characters. A plain value requires
+the exact `/<secret>/API` path immediately; missing or invalid configuration fails closed with HTTP 503.
+
+For a deliberately short migration, the same Secret Manager entry may hold this JSON shape (replace placeholders):
+
+```json
+{"secret":"<64-lowercase-hex-characters>","legacyUntil":"<UTC-timestamp-with-milliseconds>"}
+```
+
+The timestamp must have the exact `YYYY-MM-DDTHH:mm:ss.000Z` form and be at most 24 hours ahead of invocation time.
+Only the old bare function paths remain accepted before that deadline. Unknown paths and incorrect secrets are
+always rejected. At the deadline the old paths automatically return 403 while protected paths keep working.
+An expired, valid deadline does not invalidate the secret. A malformed deadline or one more than 24 hours ahead
+fails the entire credential configuration closed. Omitting `legacyUntil` disables legacy access.
+
+An authorized operator provisions the value interactively with
+`firebase functions:secrets:set GARMINAPI_WEBHOOK_SECRET --project <firebase-project-id>` and deploys the four
+receivers together. Changing an injected secret version requires redeployment; editing Secret Manager alone does
+not immediately change running functions. Follow the [Garmin staged migration](garmin-integration.md#production-configuration).
+Do not put credential values or complete protected URLs in commits, tickets, commands, or application logs.
+Platform request logs may retain paths, so restrict log access and treat those URLs as credentials. Secret
+provisioning, deployment, provider URL changes and eventual resource deletion each require their applicable approval.
 
 ## Source-control guardrails
 
