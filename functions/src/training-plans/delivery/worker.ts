@@ -160,19 +160,24 @@ export async function processTrainingDelivery(runtime: DeliveryRuntime, uid: str
     }
     const observedAbsence = claim.provider === 'wahoo' && operation.kind === 'remove'
       && (progress?.removalOutcome === 'already_absent' || (complete && operation.progress?.removalOutcome === 'already_absent'));
-    const currentPro = observedAbsence ? await runtime.hasPro(uid) : pro;
+    // Wahoo REMOVE's no-progress artifact checkpoints are protective GET readback
+    // (completion/date), not DELETE receipts. DELETEs always use explicit journals.
+    const protectiveReadback = claim.provider === 'wahoo' && operation.kind === 'remove'
+      && !complete && progress === undefined && artifact !== null;
+    const readOnlyRemoval = observedAbsence || protectiveReadback;
+    const currentPro = readOnlyRemoval ? await runtime.hasPro(uid) : pro;
     const recorded = await observeDeliveryCheckpoint(claim.provider, complete, progress, () => db.runTransaction(async tx => {
       if ((await getUserDeletionGuardStateInTransaction(db, tx, uid)).shouldSkip) return false;
       const doc = await tx.get(ledgerRef);
       if (!doc.exists) return false;
       const ledger = doc.data() as DeliveryLedgerV1;
-      // Absence readback did not perform a provider write. A stale observation
+      // Removal readback did not perform a provider write. A stale observation
       // must neither erase a newer copy nor quarantine its lease/queue as a late
       // write acknowledgement. Only its original live lease may persist it.
-      if (observedAbsence && (ledger.attempt?.id !== operation.id || ledger.lease?.id !== leaseId
+      if (readOnlyRemoval && (ledger.attempt?.id !== operation.id || ledger.lease?.id !== leaseId
         || ledger.lease.expiresAtMs <= runtime.now())) return false;
-      if (observedAbsence) {
-        // Unlike a late HTTP write receipt, read-only absence must still be bound
+      if (readOnlyRemoval) {
+        // Unlike a late HTTP write receipt, read-only observations must still be bound
         // to current authority when persisted, including changes after the last
         // request guard. Recovery may record the old REMOVE while a new Send is
         // pending; execute must still have an authorized absent intent.
@@ -186,9 +191,16 @@ export async function processTrainingDelivery(runtime: DeliveryRuntime, uid: str
           || context.connection.destinationKey !== operation.destinationKey || context.connection.epoch !== ledger.connectionEpoch
           || context.connection.generation !== operation.connectionGeneration
           || ledger.blockedConnectionGeneration === context.connection.generation
-          || (ledger.actual && !context.transport.canRemove(ledger.actual,
+          || (observedAbsence && ledger.actual && !context.transport.canRemove(ledger.actual,
             trainingDeliveryLocalDate(runtime.now(), operation.timeZone), !!context.pastCleanup && !!operation.allowPastRemoval))
-          || (diagnosticPhase === 'execute' && resolveDeliveryIntent(context, ledger).desired !== 'absent')) return false;
+          || (observedAbsence && diagnosticPhase === 'execute' && resolveDeliveryIntent(context, ledger).desired !== 'absent')) return false;
+        if (protectiveReadback) {
+          // A GET may strengthen protection for this exact retained copy. It must
+          // not replace another identity or clear completion learned concurrently.
+          if (!ledger.actual || !artifact || Object.keys(artifact.ids).length !== Object.keys(ledger.actual.ids).length
+            || Object.entries(artifact.ids).some(([key, value]) => ledger.actual!.ids[key] !== value)) return false;
+          artifact = { ...artifact, completed: artifact.completed || ledger.actual.completed };
+        }
       }
       // Request-start journals must still own the lease. Late acceptance evidence is
       // retained below even after ownership changes, but cannot launch another request.

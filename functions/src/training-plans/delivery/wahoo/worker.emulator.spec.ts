@@ -58,7 +58,7 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Wahoo worker with real Fi
     await command('stop'); await drain(); vi.mocked(logger.info).mockClear();
     return accepted;
   };
-  const checkpointFault = (phase: 'observation' | 'final', inject: () => Promise<void>) => {
+  const checkpointFault = (phase: 'observation' | 'protection' | 'final', inject: () => Promise<void>) => {
     const run = db.runTransaction.bind(db); let injected = false;
     const interrupted = new Error('Synthetic aborted checkpoint boundary');
     return vi.spyOn(db, 'runTransaction').mockImplementation(async (callback, options) => {
@@ -71,7 +71,8 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Wahoo worker with real Fi
             if (ref.parent.id === 'attempts') {
               const progress = value.progress as Record<string, unknown> | undefined;
               target ||= phase === 'final' ? value.state === 'accepted'
-                : progress?.step === 'finished' && progress.removalOutcome === 'already_absent';
+                : phase === 'protection' ? value.state === 'checkpoint' && value.artifact != null && !progress
+                  : progress?.step === 'finished' && progress.removalOutcome === 'already_absent';
             }
             return options ? set(ref, data, options) : set(ref, data);
           });
@@ -216,6 +217,50 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Wahoo worker with real Fi
     expect(await ledger()).toEqual(newer!); expect((await db.collection(DELIVERY_QUEUE).doc(accepted.id).get()).data()).toEqual(job);
     for (const attempt of (await ref.collection('attempts').get()).docs) expect((await attempt.ref.collection('lateAcceptances').get()).empty).toBe(true);
     expect(vi.mocked(logger.info).mock.calls).not.toContainEqual(['[TrainingDelivery]', expect.objectContaining({ outcome: 'already_absent' })]);
+    expect(server.calls.every(call => call.method === 'GET')).toBe(true);
+  });
+  it('does not treat stale completion readback on a surviving Workout as a late provider write', async () => {
+    const accepted = await send(); await command('stop'); await drain();
+    server.plans.clear(); server.workouts.get(accepted.actual!.ids.workout)!.workout_summary = { id: 999 };
+    server.calls.length = 0;
+    const ref = user().collection(DELIVERY_LEDGER).doc(accepted.id);
+    const job = { uid, kind: 'delivery', deliveryId: accepted.id, dueAtMs: now + 60_000, dispatchToken: 'new-worker' };
+    let newer: DeliveryLedgerV1;
+    const spy = checkpointFault('protection', async () => {
+      const current = await ledger();
+      newer = { ...current, actual: { ...accepted.actual!, ids: { ...accepted.actual!.ids, plan: '333', workout: '444', association: '444:333' } },
+        status: 'pending', lease: { id: 'new-lease', expiresAtMs: now + 60_000 }, attempt: { ...current.attempt!, id: 'new-attempt' } };
+      const batch = db.batch(); batch.set(ref, newer); batch.set(db.collection(DELIVERY_QUEUE).doc(accepted.id), job); await batch.commit();
+    });
+    try { await processTrainingDelivery(runtime, uid, accepted.id); } finally { spy.mockRestore(); }
+    expect(await ledger()).toEqual(newer!);
+    expect((await db.collection(DELIVERY_QUEUE).doc(accepted.id).get()).data()).toEqual(job);
+    for (const attempt of (await ref.collection('attempts').get()).docs) expect((await attempt.ref.collection('lateAcceptances').get()).empty).toBe(true);
+    expect(server.calls.every(call => call.method === 'GET')).toBe(true);
+  });
+  it.each(['authority', 'epoch', 'lease-expired'] as const)(
+    'rejects protective completion readback when %s changes before persistence', async condition => {
+      const accepted = await send(); await command('stop'); await drain();
+      server.plans.clear(); server.workouts.get(accepted.actual!.ids.workout)!.workout_summary = { id: 999 };
+      server.calls.length = 0;
+      const spy = checkpointFault('protection', async () => {
+        if (condition === 'authority') await user().collection('meta').doc(ServiceNames.WahooAPI).update({ connectionStateGeneration: 'new-authority' });
+        if (condition === 'epoch') await user().collection('trainingDeliveryState').doc('current').set({ connectionEpochs: { wahoo: 1 } }, { merge: true });
+        if (condition === 'lease-expired') now += 24 * 60 * 60_000;
+      });
+      try { await processTrainingDelivery(runtime, uid, accepted.id); } finally { spy.mockRestore(); }
+      expect(await ledger()).toMatchObject({ actual: { ids: accepted.actual!.ids, completed: false }, attempt: { progress: null } });
+      expect(server.calls.every(call => call.method === 'GET')).toBe(true);
+    });
+  it('keeps concurrently learned completion when protective readback observes a past Workout', async () => {
+    const accepted = await send(); await command('stop'); await drain(); server.calls.length = 0;
+    server.workouts.get(accepted.actual!.ids.workout)!.starts = '2026-10-24T10:00:00Z';
+    const spy = checkpointFault('protection', async () => {
+      await user().collection(DELIVERY_LEDGER).doc(accepted.id).update({ 'actual.completed': true });
+    });
+    try { await processTrainingDelivery(runtime, uid, accepted.id); } finally { spy.mockRestore(); }
+    expect(await ledger()).toMatchObject({ actual: { ids: accepted.actual!.ids, completed: true, localDate: '2026-10-24' } });
+    await drain(); expect(await ledger()).toMatchObject({ desired: 'preserve', status: 'completed' });
     expect(server.calls.every(call => call.method === 'GET')).toBe(true);
   });
   it.each(['authority', 'epoch', 'lease-expired', 'tombstone', 'new-send', 'completed'] as const)(

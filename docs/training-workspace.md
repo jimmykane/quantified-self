@@ -2133,6 +2133,10 @@ could quarantine a newer copy/lease/queue. Recovery may record the old REMOVE ou
 but never deletes or overwrites the newer copy or consent. Failed persistence emits `checkpoint_failed`, not durable
 success; a retry can converge through the retained journal. Final success is local cleanup satisfaction, not a receipt
 for the earlier external deletion, watch disappearance or recorded-activity removal.
+Protective completion/date GET readback during REMOVE follows the same lease and current-authority fences instead
+of the late-write acknowledgement path. It updates only the exact retained identity and cannot clear concurrently
+learned completion; a stale observation cannot quarantine another worker or delete its delivery job. Actual DELETE
+receipts still use the existing explicit step/state journal and late-acceptance protection.
 
 Verification: Wahoo transport/HTTP unit fixtures cover account/catalog refusals, partial states, protected copies,
 legacy journals, unchanged upsert/inspection policy, and lost-response recovery. The registered delivery emulator

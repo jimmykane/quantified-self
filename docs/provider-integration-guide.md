@@ -502,6 +502,8 @@ DELETE response is not acknowledged just because DELETE returns 404: fresh scope
 retain uncertainty. Read-only absence must still own its lease/current account at persistence; stale evidence cannot
 quarantine a newer lease or erase its queue. Existing event cleanup still clears only matching completion protection
 and triggers reconciliation. No recorded activity, unrelated provider copy, consent or setting is removed by this fix.
+Protective completion/date readback is also read-only, not a late DELETE acknowledgement: it must retain current
+authority and a live lease, match the current copy's exact identity, and preserve concurrently learned completion.
 The transport, actual event-cleanup incident fixture, concurrent/recovery/persistence demo tests and strict MCP reads
 are local evidence; production remediation and deployment need separate approval. Full details and verification are in
 [Wahoo delivery](training-workspace.md#wahoo-plan-and-dated-workout-delivery-649).

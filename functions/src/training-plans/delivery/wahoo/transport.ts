@@ -196,6 +196,8 @@ export class WahooTrainingTransport implements TrainingDeliveryTransport {
     if (completed || (date < trainingDeliveryLocalDate(this.now(), timeZone)
       && !(operation.kind === 'remove' && operation.allowPastRemoval && date === artifact.localDate))) {
       const protectedArtifact = { ...artifact, completed: artifact.completed || completed, localDate: date, timeZone };
+      // REMOVE's no-progress checkpoints are GET evidence only. Its DELETE
+      // acknowledgements always carry an explicit step/state journal via save().
       await checkpoint(protectedArtifact); operation.artifact = protectedArtifact;
       // Recovery can now retire the superseded operation against protected
       // evidence. It must not report delivery success or retry another write.
