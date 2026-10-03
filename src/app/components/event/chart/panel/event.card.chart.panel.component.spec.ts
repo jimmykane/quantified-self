@@ -30,6 +30,7 @@ import { AppShareService } from '../../../../services/app.share.service';
 import { getOrCreateEChartsTooltipHost } from '../../../../helpers/echarts-tooltip-host.helper';
 import { getViewportConstrainedTooltipPosition } from '../../../../helpers/echarts-tooltip-position.helper';
 import { MaterialModule } from '../../../../modules/material.module';
+import { resolveDeviceChartColor } from '../../../../helpers/device-chart-appearance.helper';
 
 describe('EventCardChartPanelComponent', () => {
   let fixture: ComponentFixture<EventCardChartPanelComponent>;
@@ -102,6 +103,7 @@ describe('EventCardChartPanelComponent', () => {
     expect(option.series.slice(4).map((series: any) => series.lineStyle.type)).toEqual(['solid', 'dashed', 'dotted', [8, 3, 2, 3]]);
     expect(option.series.every((series: any) => series.lineStyle.width >= 2)).toBe(true);
     expect(option.series.slice(4).every((series: any) => series.lineStyle.opacity === 1)).toBe(true);
+    expect(option.series[4].lineStyle.width).toBeGreaterThan(option.series[0].lineStyle.width);
     const samples = [...fixture.nativeElement.querySelectorAll('.event-chart-panel__series-legend-dot--line')] as HTMLElement[];
     expect(samples.map(sample => sample.getAttribute('aria-label'))).toEqual([
       'solid line', 'dashed line', 'dotted line', 'dash-dot line', 'solid line', 'dashed line', 'dotted line', 'dash-dot line',
@@ -109,6 +111,8 @@ describe('EventCardChartPanelComponent', () => {
     expect(samples[1].style.borderTopStyle).toBe('dashed');
     expect(samples[2].style.borderTopStyle).toBe('dotted');
     expect(samples[3].classList.contains('event-chart-panel__series-legend-dot--dash-dot')).toBe(true);
+    expect(samples[0].style.getPropertyValue('--series-line-width')).toBe(`${option.series[0].lineStyle.width}px`);
+    expect(samples[4].style.getPropertyValue('--series-line-width')).toBe(`${option.series[4].lineStyle.width}px`);
   });
 
   beforeEach(async () => {
@@ -2906,6 +2910,34 @@ describe('EventCardChartPanelComponent', () => {
         lineStyle: expect.objectContaining({ type: 'dotted', opacity: 0.24 }),
       })
     ]);
+  });
+
+  it.each([false, true])('keeps neutral marker colors visible in dark mode, including the zoom bar (%s)', async (zoomBar) => {
+    component.showZoomBar = zoomBar;
+    if (zoomBar) {
+      component.panel = null;
+      component.zoomBarOverviewData = [[0, 0], [120, 1]];
+    }
+    component.showLaps = true;
+    component.showSwimLengths = true;
+    component.lapTypes = [LapTypes.AutoLap];
+    component.lapMarkers = [{
+      markerType: 'lap', xValue: 5, label: 'Lap 1', color: '#000000', lapType: 'auto', lapNumber: 1,
+      activityID: 'a1', activityName: 'Garmin', tooltipTitle: 'Lap 1', tooltipDetails: [],
+    }];
+    component.swimLengthMarkers = [{
+      markerType: 'swimLength', xValue: 10, label: 'Length 1', color: '#3D3D3D', swimLengthIndex: 1,
+      swimLengthType: 'active', isIdle: false, activityID: 'a1', activityName: 'Garmin',
+      tooltipTitle: 'Length 1', tooltipDetails: [],
+    }];
+    component.darkTheme = true;
+    await renderComponent();
+    const markers = getRenderedOption().series[0].markLine.data;
+    expect(markers.map(marker => marker.lineStyle.color)).toEqual([
+      resolveDeviceChartColor('#000000', true), resolveDeviceChartColor('#3D3D3D', true),
+    ]);
+    expect(component.lapMarkers[0].color).toBe('#000000');
+    expect(component.swimLengthMarkers[0].color).toBe('#3D3D3D');
   });
 
   it('filters session end lap markers from the chart even when configured', async () => {

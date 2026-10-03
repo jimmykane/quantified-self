@@ -672,9 +672,12 @@ export class EventCardChartComponent implements OnInit, OnChanges, OnDestroy {
     this.renderedXAxisType = effectiveXAxisType;
     this.zoomRangeOwnerEventID = nextEventID;
 
-    if (!shouldRebuildPanels && !shouldRebuildLaps && !shouldRebuildSwimLengths) {
+    if (!shouldRebuildPanels) {
       this.allChartPanels = this.applyDeviceAppearance(this.allChartPanels, allActivities);
       this.applyDataTypeVisibility();
+    }
+
+    if (!shouldRebuildPanels && !shouldRebuildLaps && !shouldRebuildSwimLengths) {
       this.cdr.markForCheck();
       return;
     }

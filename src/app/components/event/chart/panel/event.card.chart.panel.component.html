@@ -58,6 +58,7 @@
             [class.event-chart-panel__series-legend-dot--dash-dot]="item.lineStyle === 'dash-dot'"
             [style.background]="item.lineStyle ? null : item.color"
             [style.--series-color]="item.color"
+            [style.--series-line-width]="item.lineWidth ? item.lineWidth + 'px' : null"
             [style.border-top-style]="item.lineStyle === 'dash-dot' ? null : item.lineStyle"
             [attr.role]="item.lineStyle ? 'img' : null"
             [attr.aria-label]="item.lineStyle ? item.lineStyle + ' line' : null"

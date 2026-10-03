@@ -97,10 +97,12 @@ Swatches expose color names, hex values, and pressed state. Accepted actions and
 numeric builds. Full event order assigns solid, dashed, dotted, and dash-dot patterns, repeating after four activities;
 filtering activities or missing metrics does not shift a remaining activity's pattern. The same patterns appear in
 primary/overlay lines and accessible legend samples. Device lines are at least 2px wide and keep full opacity in
-overlays and legends. Comparison charts suppress zone and altitude-grade coloring to
+overlays and legends. Overlay metrics use lines 2px wider than the primary metric, with matching legend samples,
+so device color/pattern reuse does not make the two metrics visually identical. Comparison charts suppress zone and altitude-grade coloring to
 retain device identity. Normal activity charts retain metric and zone coloring. Saved preferences are observed by
-the chart; theme changes also refresh presentation. Rendered colors blend toward theme foreground when necessary to
-meet 3.5:1 contrast against conservative light/dark surface colors, leaving stored hex values unchanged. Dark-map
+the chart; theme changes also refresh presentation when only timeline markers need rebuilding. Rendered series and
+timeline-marker colors blend toward theme foreground when necessary to meet 3.5:1 contrast against conservative
+light/dark surface colors before marker opacity is applied, leaving stored hex values unchanged. Dark-map
 brightening preserves achromatic black/gray rather than adding red saturation. Palette provenance:
 https://jfly.uni-koeln.de/color/index.html#pallet. Simulation and contrast checks do not replace user testing on actual
 benchmark charts, particularly overlapping lines and map backgrounds.

@@ -248,6 +248,31 @@ describe('EventCardChartComponent', () => {
     expect(panels[0].series[2].color).toBe('#FF0000');
   });
 
+  it.each(['showLaps', 'showSwimLengths'])('refreshes cached device colors when the theme and %s change together', async (setting) => {
+    const activity = {
+      getID: () => 'swim-1', type: ActivityTypes.Cycling,
+      getSwimLengths: () => [{ index: 1, type: 'active', startDate: new Date(0), endDate: new Date(25000) }],
+    } as any;
+    component.event = { getID: () => 'comparison', isMerge: true, getActivities: () => [activity] } as any;
+    component.selectedActivities = [activity];
+    mockEventColorService.getActivityColor.mockReturnValue('#000000');
+    vi.spyOn(TestBed.inject(EventChartPanelWorkerService), 'shouldUseWorker').mockReturnValue(false);
+    const buildPanels = vi.spyOn(eventDataHelper, 'buildEventChartPanels').mockReturnValue([{
+      dataType: DataPower.type, displayName: 'Power', colorGroupKey: 'Power', minX: 0, maxX: 1,
+      series: [{ activityID: activity.getID(), color: '#FF0000' }],
+    }] as any);
+
+    await (component as any).rebuildPanels('initial');
+    expect(component.allChartPanels[0].series[0].color).toBe('#000000');
+    component.darkTheme = true;
+    chartSettingsSignal.set({ ...chartSettingsSignal(), [setting]: false });
+    await (component as any).rebuildPanels('theme-and-markers');
+
+    expect(buildPanels).toHaveBeenCalledOnce();
+    expect(component.allChartPanels[0].series[0].color).toBe(resolveDeviceChartColor('#000000', true));
+    expect(component.chartPanelViews[0].panel).toBe(component.allChartPanels[0]);
+  });
+
   it('does not build swim length markers when selected activities have none', async () => {
     const buildSwimLengthMarkersSpy = vi.spyOn(eventDataHelper, 'buildEventSwimLengthMarkers').mockReturnValue([]);
     const activity = {
