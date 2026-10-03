@@ -1,4 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { createServer } from 'node:http';
+import { once } from 'node:events';
+
+const nativeFetch = globalThis.fetch;
 
 // Unmock the global mock from test-setup.ts
 vi.unmock('./request-helper');
@@ -25,6 +29,66 @@ describe('request-helper', () => {
             method: 'GET'
         }));
         expect(result).toBe('ok text');
+    });
+
+    it('passes redirect refusal through to the actual HTTP client', async () => {
+        vi.mocked(fetch).mockRejectedValue(new TypeError('fetch failed'));
+        await expect(requestHelper.get({
+            url: 'https://apis.garmin.com/wellness-api/rest/activityFile?id=1',
+            redirect: 'error',
+        })).rejects.toThrow('fetch failed');
+        expect(fetch).toHaveBeenCalledWith(expect.any(String), expect.objectContaining({ redirect: 'error' }));
+    });
+
+    it('rejects an unsupported redirect policy before sending a request', async () => {
+        await expect(requestHelper.get({ url: 'https://example.com', redirect: 'invalid' })).rejects.toThrow('Unsupported redirect policy');
+        expect(fetch).not.toHaveBeenCalled();
+    });
+
+    it('refuses a real redirect before a second destination receives the bearer', async () => {
+        vi.stubGlobal('fetch', nativeFetch);
+        const received: string[] = [];
+        const server = createServer((req, res) => {
+            received.push(req.url || '');
+            if (req.url === '/source') res.writeHead(302, { Location: '/sink' }).end();
+            else res.end('file');
+        });
+        server.listen(0, '127.0.0.1');
+        await once(server, 'listening');
+        const address = server.address() as { port: number };
+        const url = `http://127.0.0.1:${address.port}/source`;
+        try {
+            await expect(requestHelper.get({
+                url, redirect: 'error', timeout: 1000, maxResponseBytes: 16,
+                headers: { Authorization: 'Bearer test-only' },
+            })).rejects.toThrow();
+            expect(received).toEqual(['/source']);
+            // Preserve the existing default behavior for unrelated callers.
+            await expect(requestHelper.get({ url, timeout: 1000 })).resolves.toBe('file');
+            expect(received).toEqual(['/source', '/source', '/sink']);
+        } finally {
+            server.closeAllConnections();
+            await new Promise<void>(resolve => server.close(() => resolve()));
+        }
+    });
+
+    it('keeps the deadline active while a real response body stalls', async () => {
+        vi.stubGlobal('fetch', nativeFetch);
+        const server = createServer((_req, res) => {
+            res.writeHead(200);
+            res.write('initial');
+        });
+        server.listen(0, '127.0.0.1');
+        await once(server, 'listening');
+        const address = server.address() as { port: number };
+        try {
+            await expect(requestHelper.get({
+                url: `http://127.0.0.1:${address.port}/stall`, timeout: 100, maxResponseBytes: 16,
+            })).rejects.toMatchObject({ name: 'AbortError' });
+        } finally {
+            server.closeAllConnections();
+            await new Promise<void>(resolve => server.close(() => resolve()));
+        }
     });
 
     it('should correctly handle JSON response if json: true is set', async () => {

@@ -699,6 +699,13 @@ For every new persistent write path:
 
 ### Webhooks
 
+Garmin's Health/Sleep, Activity Files, deregistration and permission callbacks share a dedicated Secret Manager
+credential in the exact `/<secret>/API` URL suffix. Verify it before any payload/account/queue work. The optional
+JSON credential's absolute legacy deadline supports a short portal migration and automatically closes the old bare
+paths; those paths remain unauthenticated until the deadline. Wrong-secret paths never enter that fallback. See
+[Garmin production configuration](garmin-integration.md#production-configuration) for endpoint mapping, deadline
+format, proof requirements, secret handling and retirement. The public client-ID header is not authentication.
+
 - Verify the provider's documented authentication or shared secret before accepting work. Reject malformed and unrelated payloads before queueing. Reject unknown, disconnected, deletion-pending, and non-entitled identities before direct queueing. When a strict acknowledgement deadline requires durable asynchronous fan-out, first bind the request through a bounded indexed server-owned identity lookup and recheck lifecycle state in the ingress transaction; do not retain ingress for unknown or ineligible identities. Unless the integration enforces provider-account uniqueness, retain every eligible match as independent durable work rather than selecting the first owner. Recheck each binding and lifecycle again in the retryable worker before fan-out.
 - Resolve provider identity through server-owned credentials or a server-owned direct mapping, never browser-visible metadata. A direct mapping should use a one-way provider-identity key, be updated atomically with credential ownership, and be removed on disconnect and deletion. Do not use a globally limited credential query as webhook authority: unrelated client-writable token documents can consume the limit before structural filtering.
 - Treat access/refresh-token rotation within the same credential generation separately from authority replacement. A worker may rebase a failed write guard only after atomically recapturing the live credential and proving that the provider binding, credential generation, root lifecycle, connection generation, and deletion state are unchanged; bound the rebase attempts and leave repeated rotation retryable.
@@ -856,6 +863,13 @@ Provider file URLs are external input even if they came from an authenticated pa
 Treat a successful HTTP status as transport success, not proof that a provider file is ready. Normalize only recognized wrappers and validate the complete FIT envelope—including its declared length—before invoking Sports Lib. Apply a decoded-body limit when the provider contract documents a safe maximum; do not invent one that could reject valid activity files. A provider-specific incomplete or placeholder response should remain retryable with a distinct exhausted-retry DLQ context. Diagnostics may retain only structural facts such as byte length, an allowlisted content-type category, and validation reason; never retain or log the response body. If a structurally valid FIT parses without a session, retry only when provider evidence supports a narrowly bounded not-ready case (for Suunto, a suspiciously small response); keep ordinary full-sized sessionless files terminal so permanent corruption does not consume the retry budget.
 
 Suunto FIT downloads in the queued sync worker use a 60-second provider deadline without a decoded-body cap because its contract does not establish a safe maximum. The download explicitly sends `Accept: */*`: Suunto's endpoint returns 500 for FIT-specific media types but accepts the wildcard request. That worker has a 540-second runtime, leaving time for sanitized error handling after an abort.
+
+Garmin Activity Files deliberately use an application safety bound: 128 MiB per response and a 60-second deadline,
+including the GPX-to-FIT fallback. This is not asserted as a Garmin API maximum; oversized files move to a distinct
+operator-review DLQ category instead of repeatedly buffering the same response. Original preformed URLs are validated
+before queueing and again in the worker, restricted to the exact Garmin HTTPS Activity File endpoint, and redirects
+are refused by the actual HTTP client. These checks apply to previously queued rows too. The detailed compatibility
+and migration limits are in [Garmin integration](garmin-integration.md#delivery-and-trust-boundary).
 
 Do not use a provider's short-lived file URL as durable application data. Download it in the worker, validate it, and store the original file through the existing event/file flow so reprocessing, export, and sync use the owned copy.
 
