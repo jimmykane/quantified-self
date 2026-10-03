@@ -52,8 +52,16 @@
       @if (seriesLegendItems.length > 0) {
       <div class="event-chart-panel__series-legend">
         @for (item of seriesLegendItems; track item.key) {
-        <span class="event-chart-panel__series-legend-item">
-          <span class="event-chart-panel__series-legend-dot" [style.background]="item.color"></span>
+        <span class="event-chart-panel__series-legend-item" [class.event-chart-panel__series-legend-item--device]="!!item.lineStyle">
+          <span class="event-chart-panel__series-legend-dot"
+            [class.event-chart-panel__series-legend-dot--line]="!!item.lineStyle"
+            [class.event-chart-panel__series-legend-dot--dash-dot]="item.lineStyle === 'dash-dot'"
+            [style.background]="item.lineStyle ? null : item.color"
+            [style.--series-color]="item.color"
+            [style.border-top-style]="item.lineStyle === 'dash-dot' ? null : item.lineStyle"
+            [attr.role]="item.lineStyle ? 'img' : null"
+            [attr.aria-label]="item.lineStyle ? item.lineStyle + ' line' : null"
+            [attr.aria-hidden]="item.lineStyle ? null : true"></span>
           <span class="event-chart-panel__series-legend-label">{{ item.label }}</span>
         </span>
         }

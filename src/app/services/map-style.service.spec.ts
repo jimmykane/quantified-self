@@ -106,6 +106,14 @@ describe('MapStyleService', () => {
     });
 
     describe('adjustColorForTheme', () => {
+        it('keeps black and dark gray neutral when brightened for dark maps', () => {
+            for (const color of ['#000000', '#3D3D3D']) {
+                const adjusted = service.adjustColorForTheme(color, AppThemes.Dark);
+                expect(adjusted).not.toBe(color);
+                expect(adjusted.slice(1, 3)).toBe(adjusted.slice(3, 5));
+                expect(adjusted.slice(3, 5)).toBe(adjusted.slice(5, 7));
+            }
+        });
         it('should return original color if not Dark theme', () => {
             const color = '#000000';
             const result = service.adjustColorForTheme(color, AppThemes.Normal);

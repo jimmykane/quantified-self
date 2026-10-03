@@ -30,6 +30,8 @@ import {
   XAxisTypes,
 } from '@sports-alliance/sports-lib';
 import { AppEventColorService } from '../../../services/color/app.event.color.service';
+import { AppDeviceColorPreferenceService } from '../../../services/color/app-device-color-preference.service';
+import { applyComparisonDeviceAppearance } from '../../../helpers/device-chart-appearance.helper';
 import { AppUserSettingsQueryService } from '../../../services/app.user-settings-query.service';
 import { AppUserService } from '../../../services/app.user.service';
 import { AppActivityCursorService } from '../../../services/activity-cursor/app-activity-cursor.service';
@@ -386,6 +388,7 @@ export class EventCardChartComponent implements OnInit, OnChanges, OnDestroy {
 
   constructor() {
     effect(() => {
+      this.deviceColorPreferences.deviceColorByName();
       const chartSettings = this.userSettingsQuery.chartSettings();
       this.userSettingsQuery.unitSettings();
       if (
@@ -421,6 +424,8 @@ export class EventCardChartComponent implements OnInit, OnChanges, OnDestroy {
       this.queueRebuild('settings-effect');
     }, { injector: this.injector });
   }
+
+  private readonly deviceColorPreferences = inject(AppDeviceColorPreferenceService);
 
   ngOnInit(): void {
     this.cursorPositionSubject.pipe(
@@ -668,6 +673,7 @@ export class EventCardChartComponent implements OnInit, OnChanges, OnDestroy {
     this.zoomRangeOwnerEventID = nextEventID;
 
     if (!shouldRebuildPanels && !shouldRebuildLaps && !shouldRebuildSwimLengths) {
+      this.allChartPanels = this.applyDeviceAppearance(this.allChartPanels, allActivities);
       this.applyDataTypeVisibility();
       this.cdr.markForCheck();
       return;
@@ -699,7 +705,7 @@ export class EventCardChartComponent implements OnInit, OnChanges, OnDestroy {
           return;
         }
 
-        this.allChartPanels = nextChartPanels;
+        this.allChartPanels = this.applyDeviceAppearance(nextChartPanels, allActivities);
         this.lastPanelRebuildKey = panelRebuildKey;
 
         this.syncVisibleDataTypes(this.allChartPanels);
@@ -1124,12 +1130,18 @@ export class EventCardChartComponent implements OnInit, OnChanges, OnDestroy {
 
   private buildActivitiesKey(activities: ActivityInterface[]): string {
     return (activities || [])
-      .map((activity) => `${activity?.getID?.() || ''}:${activity?.type || ''}`)
+      .map((activity) => `${activity?.getID?.() || ''}:${activity?.type || ''}:${this.eventColorService.getActivityColor(activities, activity)}`)
       .join(',');
   }
 
   private shouldColorIntensityZoneLines(): boolean {
-    return this.event?.isMerge !== true;
+    return !isMergeOrBenchmarkEvent(this.event);
+  }
+
+  private applyDeviceAppearance(panels: EventChartPanelModel[], allActivities: ActivityInterface[]): EventChartPanelModel[] {
+    return isMergeOrBenchmarkEvent(this.event)
+      ? applyComparisonDeviceAppearance(panels, allActivities, this.eventColorService, this.darkTheme)
+      : panels;
   }
 
   private buildIntensityZoneBoundariesKey(activities: ActivityInterface[]): string {

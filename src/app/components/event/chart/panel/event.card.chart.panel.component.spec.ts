@@ -88,6 +88,29 @@ describe('EventCardChartPanelComponent', () => {
     verySteep: '#7F1D1D',
   };
 
+  it('renders four device patterns with matching accessible legend samples and overlay styles', async () => {
+    component.strokeWidth = 1;
+    const base = component.panel!.series[0];
+    component.showActivityNamesInTooltip = true;
+    component.panel = { ...component.panel!, series: ['solid', 'dashed', 'dotted', 'dash-dot'].map((lineStyle, index) => ({
+      ...base, id: `device-${index}`, activityID: `device-${index}`, activityName: `Device ${index + 1}`, lineStyle,
+    })) } as any;
+    component.overlayPanel = { ...component.panel, dataType: DataAltitude.type, displayName: 'Altitude' } as any;
+    await renderComponent();
+    const option = getRenderedOption();
+    expect(option.series.slice(0, 4).map((series: any) => series.lineStyle.type)).toEqual(['solid', 'dashed', 'dotted', [8, 3, 2, 3]]);
+    expect(option.series.slice(4).map((series: any) => series.lineStyle.type)).toEqual(['solid', 'dashed', 'dotted', [8, 3, 2, 3]]);
+    expect(option.series.every((series: any) => series.lineStyle.width >= 2)).toBe(true);
+    expect(option.series.slice(4).every((series: any) => series.lineStyle.opacity === 1)).toBe(true);
+    const samples = [...fixture.nativeElement.querySelectorAll('.event-chart-panel__series-legend-dot--line')] as HTMLElement[];
+    expect(samples.map(sample => sample.getAttribute('aria-label'))).toEqual([
+      'solid line', 'dashed line', 'dotted line', 'dash-dot line', 'solid line', 'dashed line', 'dotted line', 'dash-dot line',
+    ]);
+    expect(samples[1].style.borderTopStyle).toBe('dashed');
+    expect(samples[2].style.borderTopStyle).toBe('dotted');
+    expect(samples[3].classList.contains('event-chart-panel__series-legend-dot--dash-dot')).toBe(true);
+  });
+
   beforeEach(async () => {
     vi.clearAllMocks();
     chart.getOption.mockReturnValue({

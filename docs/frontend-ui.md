@@ -85,6 +85,26 @@ Give each primary route title a stable `titleId` and reference it from the route
 `aria-labelledby`. Keep a title status concise and expose failures with the supplied warning status or an equivalent
 projected `role="alert"` state.
 
+### Benchmark device appearance
+
+The Device colors dialog stages the published Okabe–Ito palette before the existing account-settings transaction.
+The first four swatches are vermillion, blue, black, and reddish purple; the remaining four retain the published values.
+Named Standard swatches also include dark gray and tan. The preset supports at most eight listed devices and never
+silently repeats colors. Individual colors and Automatic reset remain available; Cancel discards every staged change.
+Swatches expose color names, hex values, and pressed state. Accepted actions and completed writes use shared haptics.
+
+`device-chart-appearance.helper.ts` applies device colors to merged/benchmark panels after either worker or synchronous
+numeric builds. Full event order assigns solid, dashed, dotted, and dash-dot patterns, repeating after four activities;
+filtering activities or missing metrics does not shift a remaining activity's pattern. The same patterns appear in
+primary/overlay lines and accessible legend samples. Device lines are at least 2px wide and keep full opacity in
+overlays and legends. Comparison charts suppress zone and altitude-grade coloring to
+retain device identity. Normal activity charts retain metric and zone coloring. Saved preferences are observed by
+the chart; theme changes also refresh presentation. Rendered colors blend toward theme foreground when necessary to
+meet 3.5:1 contrast against conservative light/dark surface colors, leaving stored hex values unchanged. Dark-map
+brightening preserves achromatic black/gray rather than adding red saturation. Palette provenance:
+https://jfly.uni-koeln.de/color/index.html#pallet. Simulation and contrast checks do not replace user testing on actual
+benchmark charts, particularly overlapping lines and map backgrounds.
+
 ## Shared scrollbars
 
 `src/styles/_scrollbars.scss`, included once by `src/styles.scss`, owns the app's thin, rounded QS scrollbar skin.
