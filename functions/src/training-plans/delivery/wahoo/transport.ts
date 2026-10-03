@@ -119,7 +119,7 @@ export class WahooTrainingTransport implements TrainingDeliveryTransport {
       || allowPastRemoval);
   }
   private validate(operation: DeliveryOperation): void {
-    checked('operation_invalid', () => wahooPlanGeneration(operation.wahooPlanGeneration));
+    const generation = checked('operation_invalid', () => wahooPlanGeneration(operation.wahooPlanGeneration));
     if (operation.repair || operation.recoveryBlocked) uncertain('operation_invalid');
     if (operation.progress && (operation.progress.version !== 1 || !STEPS.includes(operation.progress.step as Step)
       || !['ready', 'started', 'accepted', 'rejected'].includes(operation.progress.state))) uncertain('operation_invalid');
@@ -130,9 +130,11 @@ export class WahooTrainingTransport implements TrainingDeliveryTransport {
       || !['workout-remove', 'finished'].includes(operation.progress.step))) uncertain('operation_invalid');
     if (operation.artifact) {
       checked('artifact_invalid', () => validateArtifact(operation.artifact!));
-      if (operation.wahooPlanGeneration !== undefined && wahooArtifactGeneration(operation.artifact) !== operation.wahooPlanGeneration) uncertain('artifact_invalid');
+      // A missing reservation is legacy generation zero, not permission to
+      // withdraw a renewed copy and later reset its identity to generation one.
+      if (wahooArtifactGeneration(operation.artifact) !== generation) uncertain('artifact_invalid');
       if (operation.workout) {
-        const expected = wahooIdentities(operation.destinationKey, operation.workout.id, operation.wahooPlanGeneration ?? 0);
+        const expected = wahooIdentities(operation.destinationKey, operation.workout.id, generation);
         if (operation.artifact.ids.externalId !== expected.externalId || operation.artifact.ids.workoutToken !== expected.workoutToken) uncertain('artifact_invalid');
       }
     }

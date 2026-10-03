@@ -82,6 +82,7 @@ export async function processTrainingDelivery(runtime: DeliveryRuntime, uid: str
     // unaccepted attempt must not erase a verified presentation-only upgrade.
     if (intent.mappingApprovalProof) ledger.mappingApprovalProof = intent.mappingApprovalProof;
     if (ledger.provider === 'wahoo') {
+      if (ledger.wahooPlanGeneration !== undefined) wahooPlanGeneration(ledger.wahooPlanGeneration);
       const recoveredGeneration = await recoverWahooWithdrawalGeneration(tx, ledgerRef, ledger);
       if (recoveredGeneration !== undefined) {
         ledger.wahooPlanGeneration = recoveredGeneration;
@@ -128,8 +129,8 @@ export async function processTrainingDelivery(runtime: DeliveryRuntime, uid: str
         ...(kind === 'upsert' && context.strength ? { strength: context.strength } : {}),
         artifact: ledger.actual ?? (kind === 'remove' ? ledger.repair?.original ?? null : null), progress: null,
         ...(kind === 'remove' && context.pastCleanup ? { allowPastRemoval: true } : {}),
-        ...(ledger.provider === 'wahoo' ? { wahooPlanGeneration: wahooPlanGeneration(ledger.wahooPlanGeneration
-          ?? wahooArtifactGeneration(ledger.actual)) } : {}),
+        ...(ledger.provider === 'wahoo' ? { wahooPlanGeneration: wahooPlanGeneration(ledger.wahooPlanGeneration === undefined
+          ? wahooArtifactGeneration(ledger.actual) : ledger.wahooPlanGeneration) } : {}),
         ...(ledger.repair ? { repair: ledger.repair } : {}) };
       tx.create(ledgerRef.collection('attempts').doc(ledger.attempt.id), {
         schemaVersion: 1, operation: ledger.attempt, state: 'started', startedAtMs: runtime.now(),
@@ -237,6 +238,15 @@ export async function processTrainingDelivery(runtime: DeliveryRuntime, uid: str
         writeDelivery(runtime, tx, uid, ledger);
         tx.delete(jobRef);
         return false;
+      }
+      if (complete && claim.provider === 'wahoo' && operation.kind === 'remove'
+        && ledger.wahooPlanGeneration !== undefined
+        && wahooPlanGeneration(operation.wahooPlanGeneration) !== wahooPlanGeneration(ledger.wahooPlanGeneration)) {
+        // A finished REMOVE may have artifact=null already. Validate its durable
+        // reservation too, before retiring the journal or advancing the ledger.
+        throw new TrainingDeliveryTransportError('uncertain', 0, {
+          failurePhase: 'contract', wahooContractCheck: 'operation_invalid',
+        });
       }
       // Record acceptance even when a newer authored edit arrived during the HTTP call.
       tx.set(ledgerRef.collection('attempts').doc(operation.id), {

@@ -43,6 +43,16 @@ describe('Wahoo Plan + dated Workout lifecycle', () => {
     await expect(execute()).rejects.toMatchObject({ diagnostics: { wahooContractCheck: 'artifact_invalid' } });
     expect(server.calls).toHaveLength(0);
   });
+  it.each([false, true])('rejects a renewed removal without its reservation before any request (recovery=%s)', async recovery => {
+    op.wahooPlanGeneration = 1; await execute();
+    op = { ...op, kind: 'remove', workout: null, progress: null };
+    delete op.wahooPlanGeneration; server.calls.length = 0; vi.mocked(checkpoint).mockClear();
+    await expect(recovery ? recover() : execute()).rejects.toMatchObject({
+      diagnostics: { wahooContractCheck: 'artifact_invalid' },
+    });
+    expect(server.calls).toHaveLength(0); expect(checkpoint).not.toHaveBeenCalled();
+    expect(server.workouts.size).toBe(1);
+  });
   it.each([null, -1, 0.5, '1'])('rejects malformed reserved incarnation %s before a fresh send', async generation => {
     op.wahooPlanGeneration = generation as unknown as number;
     await expect(execute()).rejects.toMatchObject({ diagnostics: { wahooContractCheck: 'operation_invalid' } });

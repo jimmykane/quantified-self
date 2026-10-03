@@ -2147,6 +2147,11 @@ stable, but its old copy must have been withdrawn before another is created. Thi
 API POST-idempotency assumption. A lost new-create response still requires the existing positive adoption proof.
 FIT completion validates the exact accepted Plan incarnation as well as the stable token and account; old Plan
 references cannot complete a replacement occurrence.
+Legacy missing operation reservations mean generation zero only. Renewed artifacts must match an explicit
+reservation, and final REMOVE acceptance rechecks that reservation against the ledger even after its artifact
+became null; a missing or conflicting reservation cannot reset or advance the next Plan identity.
+An explicitly malformed ledger reservation, including null, is rejected before claiming a new attempt or
+calling the provider; it is never defaulted into a legacy incarnation.
 
 Legacy ledgers without a generation can recover it from a compact owner-scoped read of the latest 25 attempt records.
 Only the most recent prior operation can qualify: an accepted, finished REMOVE with a null final artifact and an

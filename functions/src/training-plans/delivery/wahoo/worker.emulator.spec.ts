@@ -9,7 +9,7 @@ import { processTrainingDelivery } from '../worker';
 import { processTrainingVerification } from '../verification-worker';
 import { stageTrainingDeliveryReconciliation } from '../marker';
 import { readTrainingDeliveryAuthority } from '../connection';
-import { DELIVERY_LEDGER, DELIVERY_QUEUE, type DeliveryLedgerV1, type DeliveryRuntime } from '../contracts';
+import { DELIVERY_LEDGER, DELIVERY_QUEUE, type DeliveryLedgerV1, type DeliveryOperation, type DeliveryRuntime } from '../contracts';
 import { WahooTrainingTransport } from './transport';
 import { WahooTrainingHttpError } from './http';
 import { WahooHttpFixture, wahooFixtureWorkout } from '../test-support/wahoo-http-fixture';
@@ -149,6 +149,20 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Wahoo worker with real Fi
     }
     expect(server.plans.get(old.ids.plan)?.deleted).toBe(true);
   });
+  it.each([false, true])('rejects an explicit null ledger reservation before claiming or calling the provider (existing attempt=%s)', async existing => {
+    await command('send'); await drain(); const row = await ledger();
+    const ref = user().collection(DELIVERY_LEDGER).doc(row.id);
+    const attempt: DeliveryOperation | null = existing ? { id: 'existing-null-reservation', kind: 'upsert',
+      deliveryId: row.id, generation: row.desiredGeneration, connectionGeneration: 'connection', destinationKey: row.destinationKey,
+      timeZone: row.timeZone, digest: row.desiredDigest, contentDigest: row.contentDigest, workout: wahooFixtureWorkout(),
+      wahooPlanGeneration: 0, artifact: null, progress: null } : null;
+    if (attempt) await ref.collection('attempts').doc(attempt.id).set({ operation: attempt, state: 'started', startedAtMs: now });
+    await ref.update({ wahooPlanGeneration: null, attempt });
+    await expect(processTrainingDelivery(runtime, uid, row.id)).rejects.toMatchObject({ kind: 'uncertain' });
+    expect(server.calls).toHaveLength(0);
+    expect((await ref.get()).data()).toMatchObject({ wahooPlanGeneration: null, actual: null, attempt, lease: null });
+    expect((await ref.collection('attempts').get()).size).toBe(existing ? 1 : 0);
+  });
   it.each(['plan', 'workout'] as const)('recovers a renewed %s POST with a lost response without changing incarnation or duplicating', async resource => {
     server.softDeletePlans = true; const original = await send();
     now += 1000; await command('stop'); await drain(); await processTrainingDelivery(runtime, uid, original.id); await drain();
@@ -183,6 +197,30 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Wahoo worker with real Fi
     await command('send'); await drain(); await processTrainingDelivery(runtime, uid, original.id); await drain();
     expect(await ledger()).toMatchObject({ status: 'delivered', wahooPlanGeneration: 1 });
     expect(server.workouts.size).toBe(1);
+  });
+  it.each([undefined, 2])('does not reset a renewed incarnation from a finished withdrawal with reservation %s', async reservation => {
+    server.softDeletePlans = true; let accepted = await send();
+    now += 1000; await command('stop'); await drain(); await processTrainingDelivery(runtime, uid, accepted.id); await drain();
+    now += 1000; accepted = await send();
+    expect(accepted.wahooPlanGeneration).toBe(1);
+    now += 1000; await command('stop'); await drain(); const row = await ledger();
+    const operation: DeliveryOperation = { id: 'unreserved-remove', kind: 'remove', deliveryId: row.id,
+      generation: row.desiredGeneration, connectionGeneration: 'connection', destinationKey: row.destinationKey,
+      timeZone: row.timeZone, digest: row.desiredDigest, contentDigest: row.contentDigest, workout: null,
+      artifact: null, progress: { version: 1, step: 'finished', state: 'accepted' },
+      ...(reservation === undefined ? {} : { wahooPlanGeneration: reservation }) };
+    // A recovered final acknowledgement has already retired its artifact. It
+    // still must match the ledger reservation before accepting local withdrawal.
+    const ref = user().collection(DELIVERY_LEDGER).doc(row.id);
+    await ref.update({ actual: null, attempt: operation });
+    await ref.collection('attempts').doc(operation.id).set({ state: 'checkpoint', startedAtMs: now,
+      operation: { ...operation, artifact: row.actual }, artifact: null, progress: operation.progress });
+    server.workouts.clear(); server.plans.get(accepted.actual!.ids.plan)!.deleted = true; server.calls.length = 0;
+    await processTrainingDelivery(runtime, uid, row.id);
+    expect(await ledger()).toMatchObject({ wahooPlanGeneration: 1, actual: null, status: 'retrying',
+      attempt: { id: operation.id } });
+    expect((await ref.collection('attempts').doc(operation.id).get()).data()?.state).toBe('checkpoint');
+    expect(server.calls).toHaveLength(0);
   });
   it.each([false, true])('migrates a proven legacy withdrawal before new Send (existing no-write attempt=%s)', async existing => {
     server.softDeletePlans = true; const original = await send();
