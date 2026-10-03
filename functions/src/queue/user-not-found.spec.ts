@@ -391,6 +391,7 @@ describe('User Not Found Scenarios', () => {
             const queueItem: any = {
                 id: 'g-item-1',
                 retryCount: 0,
+                callbackURL: 'https://apis.garmin.com/wellness-api/rest/activityFile?id=1&token=t',
                 userAccessToken: 'token',
                 token: 't',
                 activityFileID: '1',

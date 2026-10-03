@@ -35,12 +35,20 @@ import {
 } from '../queue/token-refresh-contention';
 import { retainGarminFITWorkoutReferences } from '../training-plans/completion/fit-workout-evidence';
 import { fitActivityReferencesFromEvent } from '../suunto/guide-completion';
+import { FUNCTION_SECRET_BINDINGS } from '../secrets';
+import { authenticateGarminWebhook } from './webhook-auth';
+import { normalizeGarminActivityCallbackURL } from './activity-callback-url';
 
 interface RequestError extends Error {
   statusCode?: number;
 }
 
 const GARMIN_CALLBACK_QUEUE_CONCURRENCY = 10;
+export const GARMIN_ACTIVITY_WEBHOOK_MAX_FILES = 10_000;
+export const GARMIN_ACTIVITY_WEBHOOK_MAX_BYTES = 10 * 1024 * 1024;
+// QS worker safety limits, not claimed Garmin API file-size guarantees.
+export const GARMIN_ACTIVITY_MAX_RESPONSE_BYTES = 128 * 1024 * 1024;
+export const GARMIN_ACTIVITY_DOWNLOAD_TIMEOUT_MS = 60_000;
 
 interface GarminActivityQueueInput {
   userID: string,
@@ -55,8 +63,12 @@ interface GarminActivityQueueInput {
 }
 
 function parseGarminActivityFileForQueue(activityFile: GarminAPIActivityFileInterface): GarminActivityQueueInput {
-  const callbackQuery = activityFile.callbackURL.split('?')[1];
-  const callbackParams = new URLSearchParams(callbackQuery);
+  const callbackURL = normalizeGarminActivityCallbackURL(activityFile?.callbackURL);
+  if (!callbackURL || typeof activityFile.userId !== 'string' || !activityFile.userId
+    || activityFile.userId.length > 512 || !['FIT', 'TCX', 'GPX'].includes(activityFile.fileType)) {
+    throw new Error('Invalid Garmin activity file callback.');
+  }
+  const callbackParams = new URL(callbackURL).searchParams;
   const activityFileID = activityFile.summaryId || callbackParams.get('id');
   if (!activityFileID) {
     throw new Error('Garmin activity file callback is missing activity file id.');
@@ -70,7 +82,7 @@ function parseGarminActivityFileForQueue(activityFile: GarminAPIActivityFileInte
     activityFileType: activityFile.fileType,
     token: callbackParams.get('token') || 'No token',
     userAccessToken: activityFile.userAccessToken,
-    callbackURL: activityFile.callbackURL,
+    callbackURL,
   };
 }
 
@@ -144,14 +156,22 @@ function deferGarminQueueItemForPendingDisconnect(
 export const insertGarminAPIActivityFileToQueue = functions.region('europe-west2').runWith({
   timeoutSeconds: 60,
   memory: '512MB',
+  secrets: FUNCTION_SECRET_BINDINGS.insertGarminAPIActivityFileToQueue,
 }).https.onRequest(async (req, res) => {
-  const activityFiles: GarminAPIActivityFileInterface[] = req.body.activityFiles;
+  if (!authenticateGarminWebhook(req, res, 'insertGarminAPIActivityFileToQueue')) return;
+  const activityFiles: GarminAPIActivityFileInterface[] = req.body?.activityFiles;
+  if ((req.rawBody && req.rawBody.length > GARMIN_ACTIVITY_WEBHOOK_MAX_BYTES)
+    || !Array.isArray(activityFiles) || activityFiles.length > GARMIN_ACTIVITY_WEBHOOK_MAX_FILES) {
+    logger.warn('[GarminWebhook] Dropped invalid or oversized activity delivery');
+    res.status(200).send();
+    return;
+  }
   let queueItems: GarminActivityQueueInput[];
   try {
     queueItems = activityFiles.map(parseGarminActivityFileForQueue);
-  } catch (e: unknown) {
-    logger.error(e);
-    res.status(500).send();
+  } catch {
+    logger.warn('[GarminWebhook] Dropped invalid activity callbacks');
+    res.status(200).send();
     return;
   }
 
@@ -217,6 +237,8 @@ export const insertGarminAPIActivityFileToQueue = functions.region('europe-west2
 
 
 export async function processGarminAPIActivityQueueItem(queueItem: GarminAPIActivityQueueItemInterface, bulkWriter?: admin.firestore.BulkWriter, tokenCache?: Map<string, Promise<admin.firestore.QuerySnapshot>>, usageCache?: Map<string, Promise<{ role: string, limit: number, currentCount: number }>>, pendingWrites?: Map<string, number>, taskRecoveryGeneration?: number): Promise<QueueResult> {
+  // Capture the validated URL before any await, including for legacy queue rows.
+  const url = normalizeGarminActivityCallbackURL(queueItem.callbackURL);
   logger.info(`Processing queue item ${queueItem.id} at retry count ${queueItem.retryCount}`);
   // queueItem is never undefined for query queueItem snapshots
   let tokenQuerySnapshots: admin.firestore.QuerySnapshot | undefined;
@@ -258,6 +280,10 @@ export async function processGarminAPIActivityQueueItem(queueItem: GarminAPIActi
   const firebaseUserID = tokenQuerySnapshots.docs[0].ref.parent.parent!.id;
   if (await shouldSkipQueueWorkForDeletedUser(firebaseUserID, ServiceNames.GarminAPI, queueItem.id, 'before_token_refresh')) {
     return markGarminQueueItemSkippedForDeletedUser(queueItem, bulkWriter);
+  }
+
+  if (!url) {
+    return moveToDeadLetterQueue(queueItem, new Error('Untrusted Garmin activity callback URL'), bulkWriter, 'GARMIN_ACTIVITY_INVALID_CALLBACK_URL');
   }
 
   // Use getTokenData (Shared) to handle auto-refresh if needed
@@ -303,44 +329,37 @@ export async function processGarminAPIActivityQueueItem(queueItem: GarminAPIActi
   }
 
   let result;
-  // Use the ORIGINAL callback URL directly, do not reconstruct it
-  const url = queueItem.callbackURL;
+  const downloadActivity = (binary: boolean) => requestPromise.get({
+    headers: { Authorization: `Bearer ${serviceToken.accessToken}` },
+    encoding: binary ? null : undefined,
+    url,
+    redirect: 'error',
+    timeout: GARMIN_ACTIVITY_DOWNLOAD_TIMEOUT_MS,
+    maxResponseBytes: GARMIN_ACTIVITY_MAX_RESPONSE_BYTES,
+  });
+  const handleDownloadFailure = async (error: unknown): Promise<QueueResult> => {
+    // Do not retain provider bodies, fetch error text or signed URLs.
+    const safeError = new Error('Garmin activity download failed.');
+    if (error instanceof requestPromise.ResponseBodyTooLargeError) {
+      return moveToDeadLetterQueue(queueItem, safeError, bulkWriter, 'GARMIN_ACTIVITY_FILE_TOO_LARGE');
+    }
+    const status = (error as RequestError | null)?.statusCode;
+    logger.warn('[GarminActivity] Download failed', { queueItemID: queueItem.id, status: typeof status === 'number' ? status : null });
+    if (status === 410) {
+      return moveToDeadLetterQueue(queueItem, safeError, bulkWriter, 'RESOURCE_GONE');
+    }
+    await increaseRetryCountForQueueItem(queueItem, safeError, status === 400 || status === 500 ? 20 : 1, bulkWriter);
+    return QueueResult.RetryIncremented;
+  };
 
   try {
     logger.info(`Downloading Garmin activityID: ${queueItem.activityFileID} for queue item ${queueItem.id}`);
     logger.info('Starting timer: DownloadFile');
-    result = await requestPromise.get({
-      headers: {
-        'Authorization': `Bearer ${serviceToken.accessToken}`,
-      },
-      encoding: queueItem.activityFileType === 'FIT' ? null : undefined,
-      url: url,
-    });
+    result = await downloadActivity(queueItem.activityFileType === 'FIT');
     logger.info('Ending timer: DownloadFile');
     logger.info(`Downloaded ${queueItem.activityFileType} for ${queueItem.id} and token user ${(serviceToken as any).userID}`);
   } catch (error: unknown) {
-    const e = error as RequestError;
-    if (e.statusCode === 400) {
-      logger.error(new Error(`Could not get workout for ${queueItem.id} and token user ${(serviceToken as any).userID} due to 400, increasing retry by 20 URL: ${url}`));
-      await increaseRetryCountForQueueItem(queueItem, e, 20, bulkWriter);
-    } else if (e.statusCode === 500) {
-      logger.error(new Error(`Could not get workout for ${queueItem.id} and token user ${(serviceToken as any).userID} due to 500 increasing retry by 20 URL: ${url}`));
-      await increaseRetryCountForQueueItem(queueItem, e, 20, bulkWriter);
-    } else if (e.statusCode === 410) {
-      logger.error(new Error(`410 Gone for ${queueItem.id}. The resource is no longer available. Aborting retries.`));
-      await moveToDeadLetterQueue(queueItem, e, bulkWriter, 'RESOURCE_GONE');
-      return QueueResult.MovedToDLQ;
-    } else if (e.statusCode === 401) {
-      // Token might be bad, getTokenData usually handles refresh but if it fails here, maybe we need force refresh?
-      // For now, treat as error
-      logger.error(new Error(`401 Unauthorized for ${queueItem.id}. Token might be invalid despite refresh.`));
-      await increaseRetryCountForQueueItem(queueItem, e, 1, bulkWriter);
-    } else {
-      logger.error(new Error(`Could not get workout for ${queueItem.id} and token user ${(serviceToken as any).userID}. Trying to refresh token and update retry count from ${queueItem.retryCount} to ${queueItem.retryCount + 1} -> ${e.message}  URL: ${url}`));
-      await increaseRetryCountForQueueItem(queueItem, e, 1, bulkWriter);
-    }
-    logger.info('Ending timer: DownloadFile');
-    return QueueResult.RetryIncremented;
+    return handleDownloadFailure(error);
   }
 
 
@@ -362,13 +381,11 @@ export async function processGarminAPIActivityQueueItem(queueItem: GarminAPIActi
           logger.info('Starting timer: DownloadFileRetry');
           // Retry as FIT if GPX failed (Legacy fallback?)
           // Note: We use the same URL
-          result = await requestPromise.get({
-            headers: {
-              'Authorization': `Bearer ${serviceToken.accessToken}`,
-            },
-            encoding: null,
-            url: url,
-          });
+          try {
+            result = await downloadActivity(true);
+          } catch (error) {
+            return handleDownloadFailure(error);
+          }
           logger.info('Ending timer: DownloadFileRetry');
           logger.info(`Downloaded ${queueItem.activityFileType} (retry as FIT) for ${queueItem.id}`);
           event = await EventImporterFIT.getFromArrayBuffer(result, createParsingOptions());

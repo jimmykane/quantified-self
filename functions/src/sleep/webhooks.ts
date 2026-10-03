@@ -26,6 +26,7 @@ import {
 import { isGarminHealthSyncEnabled } from '../garmin/health-flags';
 import { isProviderQueueSkippedWithoutRetryError } from '../queue/provider-queue-errors';
 import { FUNCTION_SECRET_BINDINGS } from '../secrets';
+import { authenticateGarminWebhook } from '../garmin/webhook-auth';
 import {
     persistSuuntoHealthWebhookIngress,
     SUUNTO_HEALTH_WEBHOOK_MAX_WINDOWS,
@@ -357,10 +358,7 @@ async function handleGarminAPIHealthData(
     req: functions.https.Request,
     res: functions.Response,
 ): Promise<void> {
-    if (req.method && req.method !== 'POST') {
-        res.status(405).send();
-        return;
-    }
+    if (!authenticateGarminWebhook(req, res, 'receiveGarminAPIHealthData')) return;
     if (req.rawBody && req.rawBody.length > GARMIN_HEALTH_WEBHOOK_MAX_BYTES) {
         logger.warn('[HealthSync][Garmin] Dropped oversized webhook payload');
         res.status(200).send();
@@ -568,6 +566,7 @@ async function handleGarminAPIHealthData(
 export const receiveGarminAPIHealthData = functions.region('europe-west2').runWith({
     timeoutSeconds: 60,
     memory: '1GB',
+    secrets: FUNCTION_SECRET_BINDINGS.receiveGarminAPIHealthData,
 }).https.onRequest(handleGarminAPIHealthData);
 
 async function handleSuunto247DataWebhook(

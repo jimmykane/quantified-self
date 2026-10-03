@@ -139,6 +139,7 @@ describe('Garmin Auth Wrapper', () => {
     });
 
     beforeEach(() => {
+        process.env.GARMINAPI_WEBHOOK_SECRET = 'a'.repeat(64);
         vi.clearAllMocks();
 
         vi.mocked(utils.isCorsAllowed).mockReturnValue(true);
@@ -281,6 +282,7 @@ describe('Garmin Auth Wrapper', () => {
 
         beforeEach(() => {
             req = {
+                path: `/${'a'.repeat(64)}/API`,
                 method: 'POST',
                 body: {},
                 headers: {},
@@ -293,6 +295,15 @@ describe('Garmin Auth Wrapper', () => {
                 set: vi.fn().mockReturnThis(),
                 write: vi.fn().mockReturnThis()
             };
+        });
+
+        it.each([receiveGarminAPIDeregistration, deauthorizeGarminAPIUsers])('rejects forged deregistration through both names before lookup or cleanup', async handler => {
+            req.path = '/wrong/API';
+            Object.defineProperty(req, 'body', { get() { throw new Error('body accessed'); } });
+            await handler(req, res);
+            expect(res.status).toHaveBeenCalledWith(403);
+            expect(mockCollectionGroup).not.toHaveBeenCalled();
+            expect(serviceAuthLifecycle.cleanupServiceTokenById).not.toHaveBeenCalled();
         });
 
         it('should clean up users by reverse lookup using the shared lifecycle cleanup', async () => {
@@ -491,6 +502,7 @@ describe('Garmin Auth Wrapper', () => {
 
         beforeEach(() => {
             req = {
+                path: `/${'a'.repeat(64)}/API`,
                 method: 'POST',
                 body: {},
                 headers: {},
@@ -503,6 +515,16 @@ describe('Garmin Auth Wrapper', () => {
                 set: vi.fn().mockReturnThis(),
                 write: vi.fn().mockReturnThis()
             };
+        });
+
+        it('rejects forged permissions before lookup or writes', async () => {
+            req.path = '/';
+            Object.defineProperty(req, 'body', { get() { throw new Error('body accessed'); } });
+            await receiveGarminAPIUserPermissions(req, res);
+            expect(res.status).toHaveBeenCalledWith(403);
+            expect(mockCollectionGroup).not.toHaveBeenCalled();
+            expect(mockBatchUpdate).not.toHaveBeenCalled();
+            expect(mockBatchCommit).not.toHaveBeenCalled();
         });
 
         it('should process valid permission change payload and update token', async () => {

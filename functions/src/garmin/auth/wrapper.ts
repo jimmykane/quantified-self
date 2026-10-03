@@ -20,6 +20,7 @@ import {
 } from '../../service-auth-lifecycle';
 import { hasServiceOAuthConnectAccess } from '../../service-oauth-access';
 import { FUNCTION_SECRET_BINDINGS } from '../../secrets';
+import { authenticateGarminWebhook } from '../webhook-auth';
 import type { ServiceOAuthCompletionResult } from '../../../../shared/service-connection';
 
 const SERVICE_NAME = ServiceNames.GarminAPI;
@@ -198,13 +199,10 @@ export const deauthorizeGarminAPI = functions
 
 // Webhook for Garmin Deregistration
 export const receiveGarminAPIDeregistration = functions
-  .runWith({ memory: '512MB' })
+  .runWith({ memory: '512MB', secrets: FUNCTION_SECRET_BINDINGS.deauthorizeGarminAPIUsers })
   .region(FUNCTIONS_MANIFEST.receiveGarminAPIDeregistration.region)
   .https.onRequest(async (req, res) => {
-  if (req.method !== 'POST') {
-    res.status(405).send('Method Not Allowed');
-    return;
-  }
+  if (!authenticateGarminWebhook(req, res, 'deauthorizeGarminAPIUsers')) return;
 
   // Validate payload (Garmin sends { deregistrations: [{ userId: '...' }] })
   if (!req.body.deregistrations || !Array.isArray(req.body.deregistrations)) {
@@ -276,11 +274,10 @@ export const receiveGarminAPIDeregistration = functions
 // Webhook for Garmin User Permission Changes
 // Per Section 2.6.3: Users can opt out of data sharing by turning off certain permissions.
 // This webhook notifies us if those permissions change post-connection.
-export const receiveGarminAPIUserPermissions = functions.region(FUNCTIONS_MANIFEST.receiveGarminAPIUserPermissions.region).https.onRequest(async (req, res) => {
-  if (req.method !== 'POST') {
-    res.status(405).send('Method Not Allowed');
-    return;
-  }
+export const receiveGarminAPIUserPermissions = functions
+  .runWith({ secrets: FUNCTION_SECRET_BINDINGS.receiveGarminAPIUserPermissions })
+  .region(FUNCTIONS_MANIFEST.receiveGarminAPIUserPermissions.region).https.onRequest(async (req, res) => {
+  if (!authenticateGarminWebhook(req, res, 'receiveGarminAPIUserPermissions')) return;
 
   // Validate payload (Garmin sends { userPermissionsChange: [{ userId: '...', permissions: [...], ... }] })
   if (!req.body.userPermissionsChange || !Array.isArray(req.body.userPermissionsChange)) {

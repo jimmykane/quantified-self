@@ -120,7 +120,8 @@ vi.mock('../utils', async (importOriginal) => {
     };
 });
 
-vi.mock('../request-helper', () => ({
+vi.mock('../request-helper', async (importOriginal) => ({
+    ...await importOriginal<typeof import('../request-helper')>(),
     get: mockRequestGet,
 }));
 
@@ -205,6 +206,10 @@ import { addToQueueForGarmin } from '../queue';
 import { getTokenData, TerminalServiceAuthError, TokenRefreshInProgressError, TokenRefreshSkippedForDeletedUserError } from '../tokens';
 import { updateToProcessed } from '../queue-utils';
 import { EventWriteSkippedForDeletedUserError } from '../utils';
+import { ResponseBodyTooLargeError } from '../request-helper';
+import { EventImporterGPX } from '@sports-alliance/sports-lib';
+import * as logger from 'firebase-functions/logger';
+import { GARMIN_ACTIVITY_MAX_RESPONSE_BYTES, GARMIN_ACTIVITY_DOWNLOAD_TIMEOUT_MS, GARMIN_ACTIVITY_WEBHOOK_MAX_FILES, GARMIN_ACTIVITY_WEBHOOK_MAX_BYTES } from './queue';
 
 describe('Garmin Queue', () => { // Grouping for cleaner output
 
@@ -250,13 +255,16 @@ describe('Garmin Queue', () => { // Grouping for cleaner output
 
         beforeEach(() => {
             setupMocks();
+            process.env.GARMINAPI_WEBHOOK_SECRET = 'a'.repeat(64);
             req = {
+                method: 'POST',
+                path: `/${'a'.repeat(64)}/API`,
                 body: {
                     activityFiles: [{
                         userId: 'garmin-user-id',
                         userAccessToken: 'garmin-access-token',
                         fileType: 'FIT',
-                        callbackURL: 'https://callback?id=123&token=abc',
+                        callbackURL: 'https://apis.garmin.com/wellness-api/rest/activityFile?id=123&token=abc',
                         startTimeInSeconds: 1000,
                         manual: false,
                     }]
@@ -266,6 +274,52 @@ describe('Garmin Queue', () => { // Grouping for cleaner output
                 status: vi.fn().mockReturnThis(),
                 send: vi.fn().mockReturnThis(),
             };
+        });
+
+        it.each(['/', '/wrong/API'])('rejects forged activity ingress before payload access or account lookup: %s', async path => {
+            req.path = path;
+            Object.defineProperty(req, 'body', { get() { throw new Error('body accessed'); } });
+            await insertGarminAPIActivityFileToQueue(req, res);
+            expect(res.status).toHaveBeenCalledWith(403);
+            expect(mockResolveFirebaseUserIDForGarminUserID).not.toHaveBeenCalled();
+            expect(addToQueueForGarmin).not.toHaveBeenCalled();
+        });
+
+        it.each([
+            'https://evil.example/file?id=123',
+            'https://apis.garmin.com.evil.example/wellness-api/rest/activityFile?id=123',
+            'https://apis.garmin.com/wellness-api/rest/user/id?id=123',
+            'http://apis.garmin.com/wellness-api/rest/activityFile?id=123',
+        ])('rejects hostile callback destinations before durable admission: %s', async callbackURL => {
+            req.body.activityFiles[0].callbackURL = callbackURL;
+            await insertGarminAPIActivityFileToQueue(req, res);
+            expect(res.status).toHaveBeenCalledWith(200);
+            expect(mockResolveFirebaseUserIDForGarminUserID).not.toHaveBeenCalled();
+            expect(addToQueueForGarmin).not.toHaveBeenCalled();
+        });
+
+        it('bounds descriptor count before doing any account or queue work', async () => {
+            req.body.activityFiles = Array(GARMIN_ACTIVITY_WEBHOOK_MAX_FILES + 1).fill(req.body.activityFiles[0]);
+            await insertGarminAPIActivityFileToQueue(req, res);
+            expect(res.status).toHaveBeenCalledWith(200);
+            expect(mockResolveFirebaseUserIDForGarminUserID).not.toHaveBeenCalled();
+            expect(addToQueueForGarmin).not.toHaveBeenCalled();
+        });
+
+        it('bounds payload bytes before doing any account or queue work', async () => {
+            req.rawBody = Buffer.alloc(GARMIN_ACTIVITY_WEBHOOK_MAX_BYTES + 1);
+            await insertGarminAPIActivityFileToQueue(req, res);
+            expect(res.status).toHaveBeenCalledWith(200);
+            expect(mockResolveFirebaseUserIDForGarminUserID).not.toHaveBeenCalled();
+            expect(addToQueueForGarmin).not.toHaveBeenCalled();
+        });
+
+        it('retains large string summary IDs and supports OAuth2 callbacks without a user access token', async () => {
+            req.body.activityFiles[0].summaryId = '9007199254740993123';
+            delete req.body.activityFiles[0].userAccessToken;
+            await insertGarminAPIActivityFileToQueue(req, res);
+            expect(addToQueueForGarmin).toHaveBeenCalledWith(expect.objectContaining({ activityFileID: '9007199254740993123' }));
+            expect(res.status).toHaveBeenCalledWith(200);
         });
 
         it('should correctly extract metadata and call addToQueueForGarmin', async () => {
@@ -279,7 +333,7 @@ describe('Garmin Queue', () => { // Grouping for cleaner output
                 activityFileType: 'FIT',
                 token: 'abc',
                 userAccessToken: 'garmin-access-token',
-                callbackURL: 'https://callback?id=123&token=abc',
+                callbackURL: 'https://apis.garmin.com/wellness-api/rest/activityFile?id=123&token=abc',
                 firebaseUserID: 'firebase-user-id',
             });
             expect(mockResolveFirebaseUserIDForGarminUserID).toHaveBeenCalledWith('garmin-user-id');
@@ -287,7 +341,7 @@ describe('Garmin Queue', () => { // Grouping for cleaner output
         });
 
         it('should handle missing token in callbackURL and use "No token" default', async () => {
-            req.body.activityFiles[0].callbackURL = 'https://callback?id=123'; // No token
+            req.body.activityFiles[0].callbackURL = 'https://apis.garmin.com/wellness-api/rest/activityFile?id=123'; // No token
             await insertGarminAPIActivityFileToQueue(req, res);
             expect(addToQueueForGarmin).toHaveBeenCalledWith(expect.objectContaining({
                 token: 'No token'
@@ -295,10 +349,10 @@ describe('Garmin Queue', () => { // Grouping for cleaner output
             expect(res.status).toHaveBeenCalledWith(200);
         });
 
-        it('should return 500 if activityFileID is missing in the callbackURL', async () => {
-            req.body.activityFiles[0].callbackURL = 'https://callback?token=abc'; // No id
+        it('acknowledges an invalid callback without looking up an account', async () => {
+            req.body.activityFiles[0].callbackURL = 'https://apis.garmin.com/wellness-api/rest/activityFile?token=abc'; // No id
             await insertGarminAPIActivityFileToQueue(req, res);
-            expect(res.status).toHaveBeenCalledWith(500);
+            expect(res.status).toHaveBeenCalledWith(200);
             expect(addToQueueForGarmin).not.toHaveBeenCalled();
         });
 
@@ -335,7 +389,7 @@ describe('Garmin Queue', () => { // Grouping for cleaner output
                     userId: 'garmin-user-id',
                     userAccessToken: 'garmin-access-token',
                     fileType: 'FIT',
-                    callbackURL: 'https://callback?id=123&token=abc',
+                    callbackURL: 'https://apis.garmin.com/wellness-api/rest/activityFile?id=123&token=abc',
                     startTimeInSeconds: 1000,
                     manual: false,
                 },
@@ -343,7 +397,7 @@ describe('Garmin Queue', () => { // Grouping for cleaner output
                     userId: 'garmin-user-id',
                     userAccessToken: 'garmin-access-token',
                     fileType: 'FIT',
-                    callbackURL: 'https://callback?id=456&token=def',
+                    callbackURL: 'https://apis.garmin.com/wellness-api/rest/activityFile?id=456&token=def',
                     startTimeInSeconds: 2000,
                     manual: false,
                 },
@@ -371,7 +425,7 @@ describe('Garmin Queue', () => { // Grouping for cleaner output
                     userId: 'garmin-user-1',
                     userAccessToken: 'garmin-access-token-1',
                     fileType: 'FIT',
-                    callbackURL: 'https://callback?id=123&token=abc',
+                    callbackURL: 'https://apis.garmin.com/wellness-api/rest/activityFile?id=123&token=abc',
                     startTimeInSeconds: 1000,
                     manual: false,
                 },
@@ -379,7 +433,7 @@ describe('Garmin Queue', () => { // Grouping for cleaner output
                     userId: 'garmin-user-2',
                     userAccessToken: 'garmin-access-token-2',
                     fileType: 'FIT',
-                    callbackURL: 'https://callback?id=456&token=def',
+                    callbackURL: 'https://apis.garmin.com/wellness-api/rest/activityFile?id=456&token=def',
                     startTimeInSeconds: 2000,
                     manual: false,
                 },
@@ -387,7 +441,7 @@ describe('Garmin Queue', () => { // Grouping for cleaner output
                     userId: 'garmin-user-1',
                     userAccessToken: 'garmin-access-token-1',
                     fileType: 'FIT',
-                    callbackURL: 'https://callback?id=789&token=ghi',
+                    callbackURL: 'https://apis.garmin.com/wellness-api/rest/activityFile?id=789&token=ghi',
                     startTimeInSeconds: 3000,
                     manual: false,
                 },
@@ -439,7 +493,7 @@ describe('Garmin Queue', () => { // Grouping for cleaner output
                 userId: 'garmin-user-id',
                 userAccessToken: 'garmin-access-token',
                 fileType: 'FIT',
-                callbackURL: `https://callback?id=${index}&token=token-${index}`,
+                callbackURL: `https://apis.garmin.com/wellness-api/rest/activityFile?id=${index}&token=token-${index}`,
                 startTimeInSeconds: 1000 + index,
                 manual: false,
             }));
@@ -478,7 +532,7 @@ describe('Garmin Queue', () => { // Grouping for cleaner output
                 retryCount: 0,
                 manual: false,
                 startTimeInSeconds: 12345,
-                callbackURL: 'https://test-url'
+                callbackURL: 'https://apis.garmin.com/wellness-api/rest/activityFile?id=file-id&token=token'
             };
 
             // Mock successful token retrieval with proper parent path for Firebase User ID extraction
@@ -515,6 +569,66 @@ describe('Garmin Queue', () => { // Grouping for cleaner output
             mockMarkQueueItemSkipped.mockResolvedValue('PROCESSED');
             mockMoveToDeadLetterQueue.mockResolvedValue('MOVED_TO_DLQ');
             vi.mocked(updateToProcessed).mockResolvedValue('PROCESSED' as any);
+        });
+
+        it.each([
+            'https://evil.example/file?id=1',
+            'https://apis.garmin.com@evil.example/file?id=1',
+            'https://apis.garmin.com/wellness-api/rest/user/id?id=1',
+            'https://apis.garmin.com/wellness-api/rest/activityFile?id=1&id=2',
+        ])('blocks hostile stored queue URLs before token refresh or download: %s', async callbackURL => {
+            queueItem.callbackURL = callbackURL;
+            await expect(processGarminAPIActivityQueueItem(queueItem)).resolves.toBe('MOVED_TO_DLQ');
+            expect(getTokenData).not.toHaveBeenCalled();
+            expect(mockRequestGet).not.toHaveBeenCalled();
+            expect(mockSetEvent).not.toHaveBeenCalled();
+            expect(mockMoveToDeadLetterQueue).toHaveBeenCalledWith(queueItem, expect.any(Error), undefined, 'GARMIN_ACTIVITY_INVALID_CALLBACK_URL');
+        });
+
+        it('captures the checked URL before asynchronous token work', async () => {
+            const checkedURL = queueItem.callbackURL;
+            mockGetTokenData.mockImplementationOnce(async () => {
+                queueItem.callbackURL = 'https://evil.example/file';
+                return { accessToken: 'fresh-token', userID: 'garmin-user-id' };
+            });
+            await processGarminAPIActivityQueueItem(queueItem);
+            expect(mockRequestGet).toHaveBeenCalledWith(expect.objectContaining({ url: checkedURL, redirect: 'error' }));
+        });
+
+        it('applies the deadline, byte limit and redirect refusal to both GPX downloads', async () => {
+            queueItem.activityFileType = 'GPX';
+            vi.mocked(EventImporterGPX.getFromString).mockRejectedValueOnce(new Error('try FIT'));
+            await processGarminAPIActivityQueueItem(queueItem);
+            expect(mockRequestGet).toHaveBeenCalledTimes(2);
+            for (const [options] of mockRequestGet.mock.calls) {
+                expect(options).toEqual(expect.objectContaining({
+                    url: queueItem.callbackURL, redirect: 'error', timeout: GARMIN_ACTIVITY_DOWNLOAD_TIMEOUT_MS,
+                    maxResponseBytes: GARMIN_ACTIVITY_MAX_RESPONSE_BYTES,
+                }));
+            }
+        });
+
+        it.each(['FIT', 'GPX'])('stops oversized %s downloads without retrying or writing events', async fileType => {
+            queueItem.activityFileType = fileType;
+            if (fileType === 'GPX') {
+                mockRequestGet.mockResolvedValueOnce('initial');
+                vi.mocked(EventImporterGPX.getFromString).mockRejectedValueOnce(new Error('try FIT'));
+            }
+            mockRequestGet.mockRejectedValueOnce(new ResponseBodyTooLargeError(GARMIN_ACTIVITY_MAX_RESPONSE_BYTES, GARMIN_ACTIVITY_MAX_RESPONSE_BYTES + 1));
+            await expect(processGarminAPIActivityQueueItem(queueItem)).resolves.toBe('MOVED_TO_DLQ');
+            expect(mockMoveToDeadLetterQueue).toHaveBeenCalledWith(queueItem, expect.any(Error), undefined, 'GARMIN_ACTIVITY_FILE_TOO_LARGE');
+            expect(mockIncreaseRetryCountForQueueItem).not.toHaveBeenCalled();
+            expect(mockSetEvent).not.toHaveBeenCalled();
+        });
+
+        it('sanitizes download failures without logging or retaining signed URLs or provider bodies', async () => {
+            const sensitive = 'private-response-and-pull-token';
+            mockRequestGet.mockRejectedValueOnce(Object.assign(new Error(sensitive), { statusCode: 400, error: sensitive }));
+            await processGarminAPIActivityQueueItem(queueItem);
+            const retainedError = mockIncreaseRetryCountForQueueItem.mock.calls[0][1];
+            expect(retainedError.message).toBe('Garmin activity download failed.');
+            expect(retainedError.error).toBeUndefined();
+            expect(JSON.stringify([vi.mocked(logger.info).mock.calls, vi.mocked(logger.warn).mock.calls, vi.mocked(logger.error).mock.calls])).not.toContain(sensitive);
         });
 
         it('should schedule recovery without consuming retry budget when token refresh is already in progress', async () => {
