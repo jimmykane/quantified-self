@@ -119,6 +119,11 @@ export class WahooTrainingTransport implements TrainingDeliveryTransport {
     if (operation.repair || operation.recoveryBlocked) uncertain('operation_invalid');
     if (operation.progress && (operation.progress.version !== 1 || !STEPS.includes(operation.progress.step as Step)
       || !['ready', 'started', 'accepted', 'rejected'].includes(operation.progress.state))) uncertain('operation_invalid');
+    if (operation.kind === 'remove' && operation.progress
+      && !['workout-remove', 'plan-remove', 'finished'].includes(operation.progress.step)) uncertain('operation_invalid');
+    if (operation.progress?.removalOutcome !== undefined && (operation.kind !== 'remove'
+      || operation.progress.removalOutcome !== 'already_absent' || operation.progress.state !== 'accepted'
+      || !['workout-remove', 'finished'].includes(operation.progress.step))) uncertain('operation_invalid');
     if (operation.artifact) {
       checked('artifact_invalid', () => validateArtifact(operation.artifact!));
       if (operation.workout && operation.artifact.ids.externalId !== wahooIdentities(operation.destinationKey, operation.workout.id).externalId) uncertain('artifact_invalid');
@@ -133,8 +138,9 @@ export class WahooTrainingTransport implements TrainingDeliveryTransport {
     }
   }
   private async save(operation: DeliveryOperation, checkpoint: DeliveryCheckpoint, artifact: DeliveryArtifact | null,
-    step: Step, state: DeliveryTransportProgress['state']): Promise<void> {
-    const progress: DeliveryTransportProgress = { version: 1, step, state };
+    step: Step, state: DeliveryTransportProgress['state'], alreadyAbsent = false): Promise<void> {
+    const progress: DeliveryTransportProgress = { version: 1, step, state,
+      ...(alreadyAbsent ? { removalOutcome: 'already_absent' as const } : {}) };
     await checkpoint(artifact, progress); operation.artifact = artifact; operation.progress = progress;
   }
   private async read(path: string, guard: DeliveryRequestGuard): Promise<unknown | null> {
@@ -171,6 +177,11 @@ export class WahooTrainingTransport implements TrainingDeliveryTransport {
     const artifact = operation.artifact!;
     const raw = await this.read(`/v1/workouts/${artifact.ids.workout}`, guard);
     if (!raw) uncertain('workout_not_readable');
+    return this.checkWorkout(raw, operation, checkpoint, recovering);
+  }
+  private async checkWorkout(raw: unknown, operation: DeliveryOperation, checkpoint: DeliveryCheckpoint,
+    recovering = false): Promise<Value> {
+    const artifact = operation.artifact!;
     const value = ownedWorkout(raw, artifact);
     const retainedZone = artifact.timeZone ?? operation.timeZone;
     const retainedDate = checked('workout_date_invalid', () => wahooWorkoutDate(value.starts, retainedZone));
@@ -293,21 +304,61 @@ export class WahooTrainingTransport implements TrainingDeliveryTransport {
   }
   private async remove(operation: DeliveryOperation, checkpoint: DeliveryCheckpoint, guard: DeliveryRequestGuard): Promise<null> {
     if (!operation.artifact) { await this.save(operation, checkpoint, null, 'finished', 'accepted'); return null; }
-    const plan = await this.read(`/v1/plans/${operation.artifact.ids.plan}`, guard);
-    if (!plan) uncertain('plan_not_readable');
-    ownedPlan(plan, operation.artifact);
+    const { plan, workout } = await this.inspectRemoval(operation, checkpoint, guard);
+    this.assertFuture(operation); await guard(true);
+    if (!plan) {
+      await this.save(operation, checkpoint, null, 'finished', 'accepted', true);
+      return null;
+    }
     if (operation.artifact.ids.workout) {
-      await this.inspectWorkout(operation, checkpoint, guard);
-      if (!await this.association(operation.artifact, guard)) uncertain('association_not_confirmed');
-      const response = await this.write(operation, 'workout-remove', { method: 'DELETE', path: `/v1/workouts/${operation.artifact.ids.workout}` }, checkpoint, guard);
-      if (response.status === 404) uncertain('workout_delete_not_found'); // Ambiguous ownership/absence is not deletion evidence.
-      const ids = { ...operation.artifact.ids }; delete ids.workout; delete ids.association;
-      await this.save(operation, checkpoint, { ...operation.artifact, ids }, 'workout-remove', 'accepted');
+      if (workout) {
+        const response = await this.write(operation, 'workout-remove', { method: 'DELETE', path: `/v1/workouts/${operation.artifact.ids.workout}` }, checkpoint, guard);
+        if (response.status === 404) uncertain('workout_delete_not_found'); // No acknowledgement: recovery must re-establish absence.
+      }
+      await this.retireWorkout(operation, checkpoint, !workout);
     }
     const response = await this.write(operation, 'plan-remove', { method: 'DELETE', path: `/v1/plans/${operation.artifact.ids.plan}` }, checkpoint, guard);
     if (response.status === 404) uncertain('plan_delete_not_found');
     await this.save(operation, checkpoint, null, 'finished', 'accepted');
     return null;
+  }
+  /** Removal only: these identities came from the private ledger, never caller
+   * input. A missing pair cannot bypass current account/access or admission guards. */
+  private async inspectRemoval(operation: DeliveryOperation, checkpoint: DeliveryCheckpoint,
+    guard: DeliveryRequestGuard, recovering = false): Promise<{ plan: Value | null; workout: Value | null }> {
+    const artifact = operation.artifact!;
+    const rawPlan = await this.read(`/v1/plans/${artifact.ids.plan}`, guard);
+    const plan = rawPlan === null ? null : ownedPlan(rawPlan, artifact);
+    const rawWorkout = artifact.ids.workout ? await this.read(`/v1/workouts/${artifact.ids.workout}`, guard) : null;
+    const workout = rawWorkout === null ? null : await this.checkWorkout(rawWorkout, operation, checkpoint, recovering);
+    if (workout) {
+      if (recovering && !this.canRemove(operation.artifact!, trainingDeliveryLocalDate(this.now(), operation.timeZone), operation.allowPastRemoval)) {
+        return { plan, workout };
+      }
+      if (!await this.association(artifact, guard)) uncertain('association_not_confirmed');
+      // A surviving Workout without a readable owned Plan remains unresolved.
+      // Its historical association alone must not authorize deletion.
+      if (!plan) uncertain('plan_not_readable');
+    }
+    if (!plan || (artifact.ids.workout && !workout)) {
+      if (artifact.ids.workout && artifact.ids.association !== `${artifact.ids.workout}:${artifact.ids.plan}`) {
+        uncertain('retained_ownership_unknown');
+      }
+      const account = await this.read('/v1/user', guard);
+      if (account === null) uncertain('account_not_confirmed');
+      checked('account_not_confirmed', () => wahooId(wahooObject(account).id)); // HTTP boundary checks the bound principal.
+      if (!plan) {
+        const matches = await this.read(`/v1/plans?external_id=${artifact.ids.externalId}`, guard);
+        // Prove access to the app-owned catalog, not absence from a partial history
+        // scan. Any positive, malformed or contradictory result remains uncertain.
+        if (!Array.isArray(matches) || matches.length !== 0) uncertain('plan_absence_not_confirmed');
+      }
+    }
+    return { plan, workout };
+  }
+  private async retireWorkout(operation: DeliveryOperation, checkpoint: DeliveryCheckpoint, alreadyAbsent = false): Promise<void> {
+    const ids = { ...operation.artifact!.ids }; delete ids.workout; delete ids.association;
+    await this.save(operation, checkpoint, { ...operation.artifact!, ids }, 'workout-remove', 'accepted', alreadyAbsent);
   }
   /** Two identical, complete bounded enumerations detect common paging shifts and
    * duplicate tokens. They permit positive adoption only, NEVER absence or repair.
@@ -341,6 +392,23 @@ export class WahooTrainingTransport implements TrainingDeliveryTransport {
     if (progress === null) return { kind: operation.artifact ? 'resume' : 'not-accepted' };
     if (progress.step === 'finished' && progress.state === 'accepted') return { kind: 'accepted', artifact: operation.artifact };
     if (progress.state !== 'started') return { kind: operation.artifact ? 'resume' : 'not-accepted' };
+    if (operation.kind === 'remove' && ['workout-remove', 'plan-remove'].includes(progress.step)) {
+      if (!operation.artifact || (progress.step === 'plan-remove' && operation.artifact.ids.workout)) uncertain('operation_invalid');
+      if (!this.canRemove(operation.artifact, trainingDeliveryLocalDate(this.now(), operation.timeZone), operation.allowPastRemoval)) return { kind: 'resume' };
+      const { plan, workout } = await this.inspectRemoval(operation, checkpoint, guard, true);
+      if (!this.canRemove(operation.artifact!, trainingDeliveryLocalDate(this.now(), operation.timeZone), operation.allowPastRemoval)) return { kind: 'resume' };
+      await guard(false);
+      if (!plan) {
+        await this.save(operation, checkpoint, null, 'finished', 'accepted', true);
+        return { kind: 'accepted', artifact: null };
+      }
+      if (operation.artifact!.ids.workout && !workout) {
+        await this.retireWorkout(operation, checkpoint, true);
+      } else {
+        await this.save(operation, checkpoint, operation.artifact, progress.step as Step, 'ready');
+      }
+      return { kind: 'resume' };
+    }
     if (progress.step === 'plan-create' && operation.kind === 'upsert') {
       const artifact = operation.artifact ?? await this.lookupPlan(operation, guard);
       if (!artifact) return { kind: 'uncertain' };
@@ -374,8 +442,8 @@ export class WahooTrainingTransport implements TrainingDeliveryTransport {
       await this.save(operation, checkpoint, operation.artifact, progress.step, 'ready');
       return { kind: 'resume' };
     }
-    // A lost DELETE acknowledgement and a 404 cannot distinguish inaccessible
-    // ownership from absence. Keep both identities; no speculative Plan cleanup.
+    // Unknown/unmatched writes remain uncertain. Only the scoped REMOVE branch
+    // above can accept a fresh, guarded already-absent observation.
     return { kind: 'uncertain' };
   }
 }

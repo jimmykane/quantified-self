@@ -1351,10 +1351,15 @@ Wahoo contract-guard failures add only the fixed private `wahooContractCheck` la
 `failurePhase="contract"`. Filter by `jsonPayload.provider="wahoo"` and group failures by that label to distinguish
 ownership/identity mismatches, missing or invalid completion evidence, moved dates, unconfirmed associations and
 ambiguous DELETE 404s. `plan_deleted` means the provider returned `deleted=true`; `plan_deletion_state_unknown` means
-it did not return an explicit live state. Unreadable resources and DELETE 404s remain uncertain, never proof of absence.
-The labels contain no provider field values, add no requests or stored diagnostic records, and do not change retries,
-completion protection or removal decisions. Demo-Firestore tests verify warning propagation and retained retry state.
-MCP and Help impact: none; recipes, safe status projections, consent, tools, schemas and provider actions are unchanged.
+it did not return an explicit live state. A DELETE 404 alone remains an unacknowledged write, not proof of removal.
+General inspection, upload discovery and upserts still cannot infer authoritative absence or authorize replacement.
+The removal-only convergence path below can separately establish that retained copies are already absent. Its final
+ordinary `accepted` or `recovered_acceptance` INFO includes only the fixed `outcome="already_absent"` after durable worker
+completion; it does not claim a DELETE was performed. `retained_ownership_unknown`, `account_not_confirmed` and
+`plan_absence_not_confirmed` distinguish inadequate retained ownership, current-account readback and catalog access.
+Labels contain no provider field values. Demo-Firestore fixtures verify warning propagation, safe refusals, complete
+cleanup state and suppression of false success when persistence fails or authority/lease changes.
+MCP and Help wire impact: none; recipes, safe status projections, consent, tools, schemas and provider actions are unchanged.
 Suunto Guide HTTP 400 failures also include fixed `providerResponseShape`, `providerRejection`, optional
 `providerField` and `providerValidation` values. These are classifier outputs, not Suunto's free-text reason;
 `unclassified` means the safe log alone cannot establish the exact validation defect. This private diagnostic change
@@ -2098,10 +2103,51 @@ retained-ID readback, expected title/type/duration/date, live Plan and associati
 positive adoption, never absence. Larger, partial, unstable, duplicate or empty inventories require attention without
 another POST. A pre-existing Plan found without local receipts also requires Workout discovery, not a blind create.
 An uncertain PUT resumes against owned retained IDs; missing resources never authorize replacement POSTs. A lost
-DELETE acknowledgement remains ambiguous and cannot trigger speculative Plan cleanup.
+DELETE acknowledgement remains ambiguous until fresh, guarded removal readback can establish a safe outcome; the
+404 from the DELETE itself never acknowledges that write or authorizes speculative Plan cleanup.
 If recovery positively identifies a copy that is now past or provider-completed, retain that protective evidence and
 retire the superseded attempt without another write or a false delivery-success claim. The normal public status then
 becomes Past or Completed; a lost response must not leave such a protected copy stuck in an uncertainty retry loop.
+
+Removal-only already-absent convergence independently reads the exact retained Plan and Workout IDs, including when
+the Plan is missing. Missing copies require the current credential's `/v1/user` ID to match its bound account; a
+missing Plan also requires a successful empty exact `external_id` lookup. This is a bounded app-owned catalog check,
+not an account-history scan. A retained pair must have its prior confirmed association; an incomplete upload receipt
+cannot substitute for that proof. Auth, access, quota, network, malformed or contradictory responses remain failures.
+
+- Both retained copies absent: checkpoint `artifact=null` with private `removalOutcome="already_absent"`, without any
+  provider DELETE, and finish through normal worker acceptance. Clear the active artifact, attempt, lease and retry
+  state and remove its delivery job; preserve immutable attempts/acceptances and consistent safe status/verification projections.
+- Plan present / Workout absent: validate the owned Plan and retained pair/account, checkpoint the observed missing
+  Workout, then remove only the remaining Plan through the existing write journal.
+- Plan absent / Workout present: independently check the Workout's ID/token, summary, date and live association.
+  A surviving copy without a readable owned associated Plan remains unresolved with a fixed diagnostic, not deleted
+  using only its historical association. Completed, unknown-completion, manually moved or protected past copies remain safe.
+- Both present: existing Workout-then-Plan DELETE order and accepted-resource checkpoints are unchanged.
+
+Existing REMOVE attempts with `progress=null`, interrupted partial checkpoints, and lost DELETE acknowledgements
+use the same scoped readback. Unknown upload journals cannot become removal success. A read-only absence checkpoint
+must still own a live lease and current account/connection epoch and generation at the persistence transaction,
+including tombstone and plan-lock checks. Stale observations are discarded, not treated as late provider writes that
+could quarantine a newer copy/lease/queue. Recovery may record the old REMOVE outcome while a newer Send is pending,
+but never deletes or overwrites the newer copy or consent. Failed persistence emits `checkpoint_failed`, not durable
+success; a retry can converge through the retained journal. Final success is local cleanup satisfaction, not a receipt
+for the earlier external deletion, watch disappearance or recorded-activity removal.
+
+Verification: Wahoo transport/HTTP unit fixtures cover account/catalog refusals, partial states, protected copies,
+legacy journals, unchanged upsert/inspection policy, and lost-response recovery. The registered delivery emulator
+group reproduces delivered + linked completion → external provider removal → recoverable source deletion → existing
+event-deletion cleanup → already-absent reconciliation, including an existing null REMOVE journal, concurrent workers,
+checkpoint failures and authority/lease/new-Send races. All records/providers are synthetic on loopback demo Firestore;
+these tests do not retry or remediate a production record. Live convergence still requires separately approved Functions
+deployment followed by read-only confirmation of that record's ledger, attempt, queue and projections.
+
+MCP impact review: no new tool, schema, consent, permission, mutation kind, plugin artifact or client refresh. Existing
+`get_training_sync_status` exposes ordinary `removed`/no-copy results for available workouts; existing completion reads
+show unlinked state once the matching event is deleted. Deleted-source references remain unavailable under the current
+MCP contract rather than silently gaining history access. Strict fixtures reject private absence outcomes, journals,
+account readback and HTTP evidence. The existing deletion preview/apply still confirms only the QS mutation and queued
+best-effort cleanup. Help's current Stop, completed-copy and best-effort deletion explanations remain accurate.
 
 New/reconnected OAuth requests retain existing scopes and add `plans_read plans_write`; existing credentials are not
 assumed to have those grants. Missing Training permissions expose targeted reconnect copy/action without breaking

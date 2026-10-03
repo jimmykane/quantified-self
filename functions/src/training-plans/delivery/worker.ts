@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import * as logger from 'firebase-functions/logger';
 import { parseScheduledWorkoutV1 } from '../../../../shared/training-plans';
+import { trainingDeliveryLocalDate } from '../../../../shared/training-provider-delivery';
 import { getUserDeletionGuardStateInTransaction } from '../../shared/user-deletion-guard';
 import { getCloudTaskRetryBackoffSeconds, MAX_RETRY_COUNT } from '../../shared/queue-config';
 import { DELIVERY_LEDGER, DELIVERY_LEASE_MS, DELIVERY_QUEUE, TrainingDeliveryTransportError,
@@ -135,6 +136,9 @@ export async function processTrainingDelivery(runtime: DeliveryRuntime, uid: str
   const diagnosticMapping = deliveryDiagnosticMapping(claim.provider, transport, operation);
   let diagnosticPhase: DeliveryDiagnosticPhase = claim.recover ? 'recover' : 'execute';
   const diagnosticLabels = () => deliveryDiagnosticLabels(diagnosticMapping, diagnosticPhase);
+  const removalLabels = () => claim.provider === 'wahoo' && operation.kind === 'remove'
+    && operation.progress?.step === 'finished' && operation.progress.state === 'accepted'
+    && operation.progress.removalOutcome === 'already_absent' ? { outcome: 'already_absent' } : {};
   let recoveredAcceptance = false;
 
   const checkpoint = async (artifact: DeliveryArtifact | null, complete = false,
@@ -146,16 +150,46 @@ export async function processTrainingDelivery(runtime: DeliveryRuntime, uid: str
       || (progress.repairApplied !== undefined && (typeof progress.repairApplied !== 'boolean' || !operation.repair || progress.state !== 'accepted')))) {
       throw new TrainingDeliveryTransportError('uncertain');
     }
+    if (progress?.removalOutcome !== undefined && (claim.provider !== 'wahoo' || operation.kind !== 'remove'
+      || progress.removalOutcome !== 'already_absent' || progress.state !== 'accepted'
+      || !['workout-remove', 'finished'].includes(progress.step))) throw new TrainingDeliveryTransportError('uncertain');
     if (complete && ((operation.kind === 'remove') !== (artifact === null))) {
       // A successful upsert must identify a copy; a successful removal must leave none.
       // Preserve the journal and inspect inconsistent acknowledgements rather than claiming success.
       throw new TrainingDeliveryTransportError('uncertain');
     }
+    const observedAbsence = claim.provider === 'wahoo' && operation.kind === 'remove'
+      && (progress?.removalOutcome === 'already_absent' || (complete && operation.progress?.removalOutcome === 'already_absent'));
+    const currentPro = observedAbsence ? await runtime.hasPro(uid) : pro;
     const recorded = await observeDeliveryCheckpoint(claim.provider, complete, progress, () => db.runTransaction(async tx => {
       if ((await getUserDeletionGuardStateInTransaction(db, tx, uid)).shouldSkip) return false;
       const doc = await tx.get(ledgerRef);
       if (!doc.exists) return false;
       const ledger = doc.data() as DeliveryLedgerV1;
+      // Absence readback did not perform a provider write. A stale observation
+      // must neither erase a newer copy nor quarantine its lease/queue as a late
+      // write acknowledgement. Only its original live lease may persist it.
+      if (observedAbsence && (ledger.attempt?.id !== operation.id || ledger.lease?.id !== leaseId
+        || ledger.lease.expiresAtMs <= runtime.now())) return false;
+      if (observedAbsence) {
+        // Unlike a late HTTP write receipt, read-only absence must still be bound
+        // to current authority when persisted, including changes after the last
+        // request guard. Recovery may record the old REMOVE while a new Send is
+        // pending; execute must still have an authorized absent intent.
+        const [workoutDoc, locks] = await Promise.all([
+          tx.get(user.collection('scheduledWorkouts').doc(ledger.workoutId)),
+          tx.get(user.collection('trainingPlanState').doc('current').collection('planDeletionLocks').limit(1)),
+        ]);
+        const context = await readDeliveryContext(runtime, tx, uid,
+          workoutDoc.exists ? parseScheduledWorkoutV1(workoutDoc.data()) : null, ledger.provider, currentPro, ledger.workoutId, ledger);
+        if (!locks.empty || !context.transport || context.connection.state !== 'connected'
+          || context.connection.destinationKey !== operation.destinationKey || context.connection.epoch !== ledger.connectionEpoch
+          || context.connection.generation !== operation.connectionGeneration
+          || ledger.blockedConnectionGeneration === context.connection.generation
+          || (ledger.actual && !context.transport.canRemove(ledger.actual,
+            trainingDeliveryLocalDate(runtime.now(), operation.timeZone), !!context.pastCleanup && !!operation.allowPastRemoval))
+          || (diagnosticPhase === 'execute' && resolveDeliveryIntent(context, ledger).desired !== 'absent')) return false;
+      }
       // Request-start journals must still own the lease. Late acceptance evidence is
       // retained below even after ownership changes, but cannot launch another request.
       if (progress && progress.state !== 'accepted'
@@ -296,7 +330,8 @@ export async function processTrainingDelivery(runtime: DeliveryRuntime, uid: str
       if (recovery.kind === 'accepted') {
         recoveredAcceptance = true;
         await checkpoint(recovery.artifact, true);
-        logger.info('[TrainingDelivery]', { event: 'recovered_acceptance', provider: claim.provider, repair: !!operation.repair, ...diagnosticLabels() });
+        logger.info('[TrainingDelivery]', { event: 'recovered_acceptance', provider: claim.provider, repair: !!operation.repair,
+          ...removalLabels(), ...diagnosticLabels() });
         return;
       }
       if (recovery.kind === 'uncertain') { inspectionUncertain = true; throw new TrainingDeliveryTransportError('uncertain'); }
@@ -313,6 +348,7 @@ export async function processTrainingDelivery(runtime: DeliveryRuntime, uid: str
     const artifact = await transport.execute(operation, transportCheckpoint, requestGuard);
     await checkpoint(artifact, true);
     logger.info('[TrainingDelivery]', { event: operation.repair ? 'repair_accepted' : 'accepted', provider: claim.provider, operation: operation.kind,
+      ...removalLabels(),
       latencyMs: runtime.now() - startedAt, ...diagnosticLabels() });
   } catch (error) {
     const failure = error instanceof TrainingDeliveryTransportError ? error : new TrainingDeliveryTransportError('uncertain');

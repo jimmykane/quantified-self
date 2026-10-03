@@ -72,6 +72,8 @@ export interface DeliveryTransportProgress {
   state: 'ready' | 'started' | 'rejected' | 'accepted';
   /** Adapter-proved no-op repairs must not consume the successful-repair limit. */
   repairApplied?: boolean;
+  /** Private Wahoo REMOVE evidence: observed absence, not an acknowledged DELETE. */
+  removalOutcome?: 'already_absent';
 }
 export type DeliveryCheckpoint = (artifact: DeliveryArtifact | null, progress?: DeliveryTransportProgress | null) => Promise<void>;
 /** Recheck the exact attempt, lease, current intent and authority before EVERY request.
@@ -109,7 +111,8 @@ const WAHOO_CONTRACT_CHECKS = ['artifact_invalid', 'operation_invalid', 'journal
   'plan_response_invalid', 'plan_identity_mismatch', 'plan_ownership_mismatch', 'plan_deleted', 'plan_deletion_state_unknown', 'plan_not_readable',
   'workout_response_invalid', 'workout_identity_mismatch', 'workout_ownership_mismatch', 'workout_not_readable',
   'workout_completion_unknown', 'workout_completed', 'workout_in_past', 'workout_date_invalid', 'workout_date_changed',
-  'workout_plan_mismatch', 'association_not_confirmed', 'read_response_invalid', 'workout_delete_not_found', 'plan_delete_not_found'] as const;
+  'workout_plan_mismatch', 'association_not_confirmed', 'read_response_invalid', 'workout_delete_not_found', 'plan_delete_not_found',
+  'retained_ownership_unknown', 'account_not_confirmed', 'plan_absence_not_confirmed'] as const;
 export type WahooTrainingContractCheck = typeof WAHOO_CONTRACT_CHECKS[number];
 export interface TrainingDeliveryTransportDiagnostics {
   httpStatus?: number;

@@ -80,7 +80,7 @@ for the full policy, request accounting, privacy, diagnostics and rollout contra
 | --- | --- | --- |
 | Garmin | Separate retained Workout/Schedule GETs, exact account/owner/date association checks. A positive read of both verifies the cloud copy, not watch receipt. A controlled deletion proved that removing a calendar entry leaves its Workout present and makes the exact retained Schedule ID return 404. An owner-account #769 probe returned 404 for both retained IDs while another QS Workout read returned 200; the orphan Schedule POST was rejected and no new association appeared. | Schedule-only negative classification and repair are enabled after two unchanged observations at least 15 minutes apart. The paired 404 probe does **not** establish that every Workout 404 authorizes replacement. Missing Workout remains inconclusive and cannot trigger recreation until account-bound not-found semantics, stable absence, association checks, and safe uncertain-create recovery are proved in #769. |
 | COROS | Unavailable; no documented planned-resource read established. | Delivery support does not enable checking; do not substitute activity polling or blind republishing. |
-| Wahoo | The public #649 adapter independently checks its app-owned Plan, dated Workout and association. | Positive-only retained-ID reads and bounded exact create recovery; empty/partial/unstable inventory and 404 never authorize absence or repair. `workout_token` is not POST idempotency. Production cloud CRUD/readback is proved; Wahoo app, ELEMNT and watch receipt remain provider-managed post-release observations, not claimed delivery evidence. |
+| Wahoo | The public #649 adapter independently checks its app-owned Plan, dated Workout and association. | General inspection remains positive-only: empty/partial/unstable inventory and 404 never authorize replacement or repair. Authorized REMOVE alone can finish already-absent retained copies after current-account/exact catalog access and ownership checks; see the scoped removal policy below. `workout_token` is not POST idempotency. Production cloud CRUD/readback is proved; Wahoo app, ELEMNT and watch receipt remain provider-managed post-release observations, not claimed delivery evidence. |
 | Suunto | The #650 adapter keeps positive owned Guide-record reads and resumable inventory internal to exact uncertain-create recovery. User-facing remote visibility checking is unavailable. | A Guide hidden or removed in Suunto can remain visible through the partner API. API presence proves only a retained cloud record, never app/watch visibility; 404/unstable inventory cannot prove deletion. Negative classification and automatic repair remain disabled by #710. |
 
 Inspection never claims device receipt or routinely overwrites provider edits. Stop sync prevents restoration. Pro,
@@ -440,10 +440,12 @@ Logging execution ID, not user/provider identifiers.
 Wahoo delivery failures additionally include the fixed private `wahooContractCheck` label and `failurePhase="contract"`
 when an ownership, date, completion, association or removal-response safety check blocks work. A missing/invalid
 completion summary is not proof of completion; `plan_deletion_state_unknown` is not proof of a deleted Plan, and
-`*_not_readable`/`*_delete_not_found` do not prove absence. These labels retain the existing uncertainty, retry and
-destructive-write guards; HTTP failures keep their original status/phase. No provider requests, persisted fields,
-owner-visible/MCP contracts or Help behavior change. Focused fixtures and the Wahoo demo-Firestore worker suite verify
-both warning propagation and unchanged refusal to delete an unverified copy.
+`*_not_readable`/`*_delete_not_found` do not alone prove absence. These labels retain uncertainty, retry and
+destructive-write guards; HTTP failures keep their original status/phase. Authorized removal can separately converge
+through the scoped policy below. Final INFO uses fixed `outcome="already_absent"` only after durable acceptance, not
+as a claim that this worker performed an earlier DELETE. Private evidence/journals never enter owner-visible or MCP
+contracts. Focused fixtures and the Wahoo demo-Firestore worker suite verify warning propagation, unchanged refusal
+to delete an unverified copy, and truthful success/failure logging at persistence boundaries.
 See [Training diagnostics](training-workspace.md#provider-delivery-foundation-646) for event names and filters.
 Never add response bodies, arbitrary field names, dates, workout contents, credentials, IDs or raw error text to these logs.
 Functions-only emulation can still write live Firestore and trigger deployed delivery workers; isolate bulk/failure
@@ -484,6 +486,25 @@ the preview/result describe requested cleanup rather than confirmed removal. The
 no-opt-in. Clients must ask and disclose that limitation instead of silently preserving older copies when removal was
 requested. Completed copies, exact ownership and disconnect epochs remain protected; same-account reconnect is not
 permission to bypass an earlier explicit disconnect. No callable, new consent scope or provider adapter is added.
+
+Wahoo REMOVE-only cleanup can finish stale retained references when independent exact Plan/Workout reads find their
+previously verified copies already absent. The guarded client confirms the current credential's bound `/v1/user`;
+missing Plan readback also requires a successful empty exact app-owned `external_id` lookup. Retained pairs require
+their earlier confirmed association. These bounded reads neither enumerate the account history nor authorize upsert,
+discovery, inspection or automatic repair to infer absence. Network/auth/access/quota failures, invalid bodies, stale
+authority and contradictory catalog responses cannot satisfy cleanup.
+
+Both absent means no DELETE and ordinary accepted/recovered worker completion with cleared active references, attempt,
+lease, retries and delivery job, preserved history and safe projections. Plan present / Workout missing permits only
+the verified remaining Plan's journaled cleanup. Plan missing / Workout present remains blocked without independently
+readable owned association; cached ownership does not bypass completion, past-date or manual-move protection. A lost
+DELETE response is not acknowledged just because DELETE returns 404: fresh scoped recovery must establish absence or
+retain uncertainty. Read-only absence must still own its lease/current account at persistence; stale evidence cannot
+quarantine a newer lease or erase its queue. Existing event cleanup still clears only matching completion protection
+and triggers reconciliation. No recorded activity, unrelated provider copy, consent or setting is removed by this fix.
+The transport, actual event-cleanup incident fixture, concurrent/recovery/persistence demo tests and strict MCP reads
+are local evidence; production remediation and deployment need separate approval. Full details and verification are in
+[Wahoo delivery](training-workspace.md#wahoo-plan-and-dated-workout-delivery-649).
 
 An adapter must bind to the server-resolved owner/account, implement compatibility, horizon/deletion policy, execution,
 inspection and accepted-artifact checkpoints. Garmin workout/schedule IDs and Wahoo Plan/Workout IDs remain distinct;
