@@ -198,6 +198,7 @@ describe('UserSettingsComponent', () => {
         const control = component.userSettingsFormGroup.get('useDistinctComparisonLinePatterns');
         control.setValue(true);
         let finishSave!: () => void;
+        control.markAsDirty();
         vi.mocked(TestBed.inject(AppUserService).updateUserProperties).mockImplementationOnce(() => new Promise<[]>(resolve => {
             finishSave = () => resolve([]);
         }));
@@ -211,7 +212,7 @@ describe('UserSettingsComponent', () => {
         expect(hapticsServiceMock.success).toHaveBeenCalledOnce();
     });
 
-    it.each([false, true])('hydrates and saves the comparison line patterns preference %s', async (enabled) => {
+    it.each([false, true])('hydrates saved patterns %s and saves an explicit toggle change', async (enabled) => {
         component.user = {
             ...component.user,
             settings: { ...component.user.settings, chartSettings: {
@@ -221,13 +222,53 @@ describe('UserSettingsComponent', () => {
         component.ngOnChanges();
         expect(component.userSettingsFormGroup.get('useDistinctComparisonLinePatterns').value).toBe(enabled);
         expect(hapticsServiceMock.selection).not.toHaveBeenCalled();
+        const control = component.userSettingsFormGroup.get('useDistinctComparisonLinePatterns');
+        control.setValue(!enabled);
+        control.markAsDirty();
         const userService = TestBed.inject(AppUserService);
         const update = vi.mocked(userService.updateUserProperties).mockResolvedValue(undefined);
         await component.onSubmit(new Event('submit'));
         expect(update).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
-            settings: expect.objectContaining({ chartSettings: expect.objectContaining({ useDistinctComparisonLinePatterns: enabled }) }),
+            settings: expect.objectContaining({ chartSettings: expect.objectContaining({ useDistinctComparisonLinePatterns: !enabled }) }),
         }));
         expect(hapticsServiceMock.success).toHaveBeenCalledOnce();
+    });
+
+    it('does not overwrite a remotely changed pattern preference when saving unrelated settings', async () => {
+        component.userSettingsFormGroup.get('displayName').setValue('Edited name');
+        component.userSettingsFormGroup.get('displayName').markAsDirty();
+        const update = vi.mocked(TestBed.inject(AppUserService).updateUserProperties).mockResolvedValue([]);
+        await component.onSubmit(new Event('submit'));
+        const chartSettings = update.mock.calls[0][1].settings.chartSettings;
+        expect(chartSettings).not.toHaveProperty('useDistinctComparisonLinePatterns');
+    });
+
+    it('refreshes untouched patterns while preserving unrelated dirty edits without haptics', () => {
+        const form = component.userSettingsFormGroup;
+        form.get('displayName').setValue('Edited name');
+        form.get('displayName').markAsDirty();
+        component.user = { ...component.user, settings: { ...component.user.settings, chartSettings: {
+            ...component.user.settings.chartSettings, useDistinctComparisonLinePatterns: true,
+        } } } as User;
+        component.ngOnChanges();
+        expect(component.userSettingsFormGroup).toBe(form);
+        expect(form.get('displayName').value).toBe('Edited name');
+        expect(form.get('useDistinctComparisonLinePatterns').value).toBe(true);
+        expect(form.get('useDistinctComparisonLinePatterns').pristine).toBe(true);
+        expect(hapticsServiceMock.selection).not.toHaveBeenCalled();
+    });
+
+    it('keeps explicitly edited line patterns through a background preference refresh', () => {
+        const control = component.userSettingsFormGroup.get('useDistinctComparisonLinePatterns');
+        control.setValue(true);
+        control.markAsDirty();
+        component.user = { ...component.user, settings: { ...component.user.settings, chartSettings: {
+            ...component.user.settings.chartSettings, useDistinctComparisonLinePatterns: false,
+        } } } as User;
+        component.ngOnChanges();
+        expect(control.value).toBe(true);
+        expect(control.dirty).toBe(true);
+        expect(hapticsServiceMock.selection).not.toHaveBeenCalled();
     });
 
     it('should create', () => {

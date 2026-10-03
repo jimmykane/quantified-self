@@ -288,6 +288,13 @@ export class UserSettingsComponent implements OnChanges, OnDestroy, OnInit {
       && this.initializedUserUID === this.user.uid
       && this.userSettingsFormGroup.dirty;
     if (shouldPreserveDirtyFormState) {
+      const linePatternsControl = this.userSettingsFormGroup.get('useDistinctComparisonLinePatterns');
+      if (linePatternsControl.pristine) {
+        const savedChartSettings = this.user.settings?.chartSettings as AppChartSettingsInterface | undefined;
+        const savedValue = savedChartSettings?.useDistinctComparisonLinePatterns === true;
+        linePatternsControl.setValue(savedValue, { emitEvent: false });
+        this.lastDistinctLinePatternsValue = savedValue;
+      }
       this.syncBrandTextControlState();
       return;
     }
@@ -514,7 +521,9 @@ export class UserSettingsComponent implements OnChanges, OnDestroy, OnInit {
       const userChartSettings: AppChartSettingsInterface = {
         dataTypeSettings: dataTypeSettings,
         useAnimations: this.userSettingsFormGroup.get('useAnimations').value,
-        useDistinctComparisonLinePatterns: this.userSettingsFormGroup.get('useDistinctComparisonLinePatterns').value === true,
+        ...(linePatternsControl.dirty
+          ? { useDistinctComparisonLinePatterns: linePatternsControl.value === true }
+          : {}),
         xAxisType: this.userSettingsFormGroup.get('xAxisType').value,
         showAllData: this.userSettingsFormGroup.get('showAllData').value,
         colorAltitudeByGrade: currentChartSettings.colorAltitudeByGrade !== false,

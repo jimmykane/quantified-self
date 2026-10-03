@@ -163,6 +163,26 @@ describe('AppUserSettingsQueryService', () => {
             });
         });
 
+        it.each([false, true])('persists a scoped pattern preference of %s without other chart settings', async (enabled) => {
+            const user = createMockUser({ uid: 'original-user' });
+            mockUserSubject.next(user);
+            await service.updateChartSettings({ useDistinctComparisonLinePatterns: enabled }, {
+                force: true, expectedUserID: 'original-user',
+            });
+            expect(mockUserService.updateUserProperties).toHaveBeenCalledWith(user, {
+                settings: { chartSettings: { useDistinctComparisonLinePatterns: enabled } },
+            });
+        });
+
+        it('rejects a scoped pattern save if the account changes before the write starts', async () => {
+            mockUserSubject.next(createMockUser({ uid: 'original-user' }));
+            const options = { force: true, expectedUserID: 'original-user' };
+            const save = service.updateChartSettings({ useDistinctComparisonLinePatterns: true }, options);
+            mockUserSubject.next(createMockUser({ uid: 'different-user' }));
+            await expect(save).rejects.toThrow('account changed');
+            expect(mockUserService.updateUserProperties).not.toHaveBeenCalled();
+        });
+
         it('propagates chart settings write failures to the caller', async () => {
             const user = createMockUser();
             const error = new Error('write failed');

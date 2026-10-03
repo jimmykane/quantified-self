@@ -97,7 +97,10 @@ Swatches expose color names, hex values, and pressed state. Accepted actions and
 `device-chart-appearance.helper.ts` applies device colors to merged/benchmark panels after either worker or synchronous
 numeric builds. The account chart setting `useDistinctComparisonLinePatterns` defaults to false. A **Distinct line
 patterns** toggle on Compare saves immediately through the existing chart-settings service; the same toggle in
-Settings → Charts uses Save Changes. With it off, charts retain solid lines, normal widths/overlay opacity, and dot
+Settings → Charts uses Save Changes. Settings writes this preference only when the toggle is edited; untouched
+toggles follow account refreshes even while other form fields are dirty. Compare writes verify the initiating account,
+and completions from a previous sign-in session or a destroyed page cannot change its pending UI or feedback.
+With it off, charts retain solid lines, normal widths/overlay opacity, and dot
 legends. ECharts merge updates explicitly reset line types to solid when patterns are removed. With it on,
 full event order assigns solid, dashed, dotted, and dash-dot patterns, repeating after four activities;
 filtering activities or missing metrics does not shift a remaining activity's pattern. The same patterns appear in

@@ -401,6 +401,9 @@ describe('ToolsComparePageComponent', () => {
     expect(fixture.nativeElement.querySelector('[aria-label="Saving line patterns"]')).toBeTruthy();
     await component.onDistinctLinePatternsChange(false);
     expect(settingsQueryMock.updateChartSettings).toHaveBeenCalledOnce();
+    expect(settingsQueryMock.updateChartSettings).toHaveBeenCalledWith(
+      { useDistinctComparisonLinePatterns: true }, { force: true, expectedUserID: 'user-1' },
+    );
     expect(hapticsServiceMock.selection).toHaveBeenCalledOnce();
     expect(hapticsServiceMock.success).not.toHaveBeenCalled();
     finishSave();
@@ -411,7 +414,9 @@ describe('ToolsComparePageComponent', () => {
     await component.onDistinctLinePatternsChange(true);
     expect(settingsQueryMock.updateChartSettings).toHaveBeenCalledOnce();
     await component.onDistinctLinePatternsChange(false);
-    expect(settingsQueryMock.updateChartSettings).toHaveBeenLastCalledWith({ useDistinctComparisonLinePatterns: false }, { force: true });
+    expect(settingsQueryMock.updateChartSettings).toHaveBeenLastCalledWith(
+      { useDistinctComparisonLinePatterns: false }, { force: true, expectedUserID: 'user-1' },
+    );
     expect(component.useDistinctLinePatterns()).toBe(false);
     chartSettings.set({ useDistinctComparisonLinePatterns: false });
     fixture.detectChanges();
@@ -434,6 +439,43 @@ describe('ToolsComparePageComponent', () => {
     await save;
     expect(hapticsServiceMock.success).not.toHaveBeenCalled();
     expect(component.useDistinctLinePatterns()).toBe(false);
+  });
+
+  it('ignores a previous sign-in session save failure while the same account has a new save pending', async () => {
+    userSubject.next(new User('user-1'));
+    fixture.detectChanges();
+    let failOldSave!: (error: Error) => void;
+    let finishNewSave!: () => void;
+    settingsQueryMock.updateChartSettings
+      .mockImplementationOnce(() => new Promise<void>((_resolve, reject) => { failOldSave = reject; }))
+      .mockImplementationOnce(() => new Promise<void>(resolve => { finishNewSave = resolve; }));
+    const oldSave = component.onDistinctLinePatternsChange(true);
+    userSubject.next(null);
+    userSubject.next(new User('user-1'));
+    fixture.detectChanges();
+    const newSave = component.onDistinctLinePatternsChange(true);
+    failOldSave(new Error('Previous session save failed'));
+    await oldSave;
+    fixture.detectChanges();
+    expect(component.isSavingLinePatterns()).toBe(true);
+    expect(component.useDistinctLinePatterns()).toBe(true);
+    expect(hapticsServiceMock.error).not.toHaveBeenCalled();
+    finishNewSave();
+    await newSave;
+    expect(component.isSavingLinePatterns()).toBe(false);
+    expect(hapticsServiceMock.success).toHaveBeenCalledOnce();
+  });
+
+  it('does not send completion feedback after the Compare page is destroyed', async () => {
+    userSubject.next(new User('user-1'));
+    fixture.detectChanges();
+    let finishSave!: () => void;
+    settingsQueryMock.updateChartSettings.mockImplementationOnce(() => new Promise<void>(resolve => { finishSave = resolve; }));
+    const save = component.onDistinctLinePatternsChange(true);
+    fixture.destroy();
+    finishSave();
+    await save;
+    expect(hapticsServiceMock.success).not.toHaveBeenCalled();
   });
 
   it('rolls back a failed preference save and leaves guest actions silent', async () => {

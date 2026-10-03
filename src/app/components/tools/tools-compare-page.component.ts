@@ -264,6 +264,7 @@ export class ToolsComparePageComponent implements OnInit {
   readonly isCreating = signal(false);
   readonly currentUser = signal<User | null>(null);
   readonly isSavingLinePatterns = signal(false);
+  private linePatternsAuthRevision = 0;
   private readonly linePatternsOverride = signal<boolean | null>(null);
   readonly useDistinctLinePatterns = computed(() => this.linePatternsOverride()
     ?? (this.userSettingsQuery.chartSettings()?.useDistinctComparisonLinePatterns === true));
@@ -567,6 +568,7 @@ export class ToolsComparePageComponent implements OnInit {
         this.currentUser.set(user);
 
         if (authScopeChanged) {
+          this.linePatternsAuthRevision += 1;
           this.linePatternsOverride.set(null);
           this.isSavingLinePatterns.set(false);
           this.resetComparisonData();
@@ -588,25 +590,29 @@ export class ToolsComparePageComponent implements OnInit {
     }
 
     const previousValue = this.useDistinctLinePatterns();
+    const authRevision = this.linePatternsAuthRevision;
+    const isCurrentSave = () => !this.destroyRef.destroyed
+      && authRevision === this.linePatternsAuthRevision
+      && this.currentUser()?.uid === userID;
     this.hapticsService.selection();
     this.linePatternsOverride.set(enabled);
     this.isSavingLinePatterns.set(true);
     try {
       await this.userSettingsQuery.updateChartSettings(
-        { useDistinctComparisonLinePatterns: enabled }, { force: true },
+        { useDistinctComparisonLinePatterns: enabled }, { force: true, expectedUserID: userID },
       );
-      if (this.currentUser()?.uid === userID) {
+      if (isCurrentSave()) {
         this.hapticsService.success();
       }
     } catch (error) {
       this.logger.error('[ToolsComparePage] Failed to save distinct line patterns', error);
-      if (this.currentUser()?.uid === userID) {
+      if (isCurrentSave()) {
         this.linePatternsOverride.set(previousValue);
         this.hapticsService.error();
         this.snackBar.open('Could not save line patterns. Please try again.', 'OK', { duration: 5000 });
       }
     } finally {
-      if (this.currentUser()?.uid === userID) {
+      if (isCurrentSave()) {
         this.isSavingLinePatterns.set(false);
       }
     }
