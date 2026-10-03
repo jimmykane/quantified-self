@@ -100,6 +100,37 @@ function createDailyWorkoutSession() {
 }
 
 describe('Training preview model-tool selection', () => {
+  it('uses the focused deletion choice for plans and workouts, not library or other edits', () => {
+    expect(selectAssistantTrainingPreviewTool('Delete my training plan and remove its service copies.')).toBe('preview_training_deletion');
+    expect(selectAssistantTrainingPreviewTool('Delete my strength workout.')).toBe('preview_training_deletion');
+    expect(selectAssistantTrainingPreviewTool('Delete my old plans and workouts.')).toBe('preview_training_deletion');
+    expect(selectAssistantTrainingPreviewTool('Remove this planned session and older copies.')).toBe('preview_training_deletion');
+    expect(selectAssistantTrainingPreviewTool('Delete a saved workout from the library.')).toBe('preview_saved_workout_change');
+    expect(selectAssistantTrainingPreviewTool('Delete this workout and create a new one.')).toBe('preview_training_changes');
+    const history = [{ role: 'user' as const, text: 'Delete my planned workout.' },
+      { role: 'assistant' as const, text: 'Also remove older, uncompleted copies from your connected services?' }];
+    expect(selectAssistantTrainingPreviewTool('Yes, remove them.', history)).toBe('preview_training_deletion');
+    expect(selectAssistantTrainingPreviewTool('No, keep those copies.', history)).toBe('preview_training_deletion');
+    expect(selectAssistantTrainingPreviewTool('No, don’t remove those older copies.', history)).toBe('preview_training_deletion');
+    expect(selectAssistantTrainingPreviewTool("No, don't delete any workout copies on Garmin.", history)).toBe('preview_training_deletion');
+    expect(selectAssistantTrainingPreviewTool('Yeah, please.', history)).toBe('preview_training_deletion');
+    expect(selectAssistantTrainingPreviewTool('Leave those copies alone.', history)).toBe('preview_training_deletion');
+    expect(selectAssistantTrainingPreviewTool('Create a new workout.', history)).toBe('preview_create_planned_workout');
+    expect(selectAssistantTrainingPreviewTool('Cancel, never mind.', history)).not.toBe('preview_training_deletion');
+    const sourceHistory = [{ role: 'user' as const, text: 'Delete one of my plans.' },
+      { role: 'assistant' as const, text: 'Which plan should I delete?' }];
+    expect(selectAssistantTrainingPreviewTool('September endurance', sourceHistory)).toBe('preview_training_deletion');
+    expect(selectAssistantTrainingPreviewTool('R'.repeat(160), [
+      { role: 'user', text: 'Delete one of my workouts.' },
+      { role: 'assistant', text: 'Which workout should I delete?' },
+    ])).toBe('preview_training_deletion');
+    const planHistory = [{ role: 'user' as const, text: 'Delete my training plan.' },
+      { role: 'assistant' as const, text: 'Also remove older, uncompleted copies from your connected services?' },
+      { role: 'user' as const, text: 'Yes, remove the copies.' },
+      { role: 'assistant' as const, text: 'Keep its workouts as standalone, or permanently delete them?' }];
+    expect(selectAssistantTrainingPreviewTool('Keep workouts as standalone.', planHistory)).toBe('preview_training_deletion');
+    expect(selectAssistantTrainingPreviewTool('Delete them too.', planHistory)).toBe('preview_training_deletion');
+  });
   it('keeps a single focused preview for a workout recommendation with Garmin and Suunto delivery', () => {
     expect(selectAssistantTrainingPreviewTool(ASSISTANT_CREATE_TODAYS_WORKOUT_PROMPT))
       .toBe('preview_create_planned_workout');
@@ -165,6 +196,43 @@ describe('Training preview model-tool selection', () => {
       .toBe('preview_saved_workout_change');
   });
 
+  it('does not turn a different action or cancelled deletion into a cleanup reply', () => {
+    const history = [{ role: 'user' as const, text: 'Delete my training plan.' },
+      { role: 'assistant' as const, text: 'Also remove older, uncompleted copies from your connected services?' }];
+    for (const prompt of ['Archive the plan instead.', 'Pause it instead.',
+      "Don't delete my workout, just show it.", 'Don’t remove my workout.', 'Please cancel that deletion.',
+      'Show my upcoming workouts instead.',
+      'Remove this workout from my plan and keep it as standalone.']) {
+      expect(selectAssistantTrainingPreviewTool(prompt, history), prompt).toBe('preview_training_changes');
+    }
+    expect(selectAssistantTrainingPreviewTool('Remove this workout from my plan and keep it as standalone.'))
+      .toBe('preview_training_changes');
+    expect(selectAssistantTrainingPreviewTool('Delete this workout and archive my plan.'))
+      .toBe('preview_training_changes');
+  });
+
+  it.each([
+    'Actually create a new workout.', 'What is my readiness?', 'Show my upcoming workouts.',
+  ])('does not revive a deletion after the intervening request %s', request => {
+    const history = [{ role: 'user' as const, text: 'Delete my training plan.' },
+      { role: 'assistant' as const, text: 'Also remove older, uncompleted copies from your connected services?' },
+      { role: 'user' as const, text: request },
+      { role: 'assistant' as const, text: 'Which workout would you like to create?' }];
+    expect(selectAssistantTrainingPreviewTool('Easy run', history)).not.toBe('preview_training_deletion');
+  });
+
+  it('retains an uninterrupted deletion clarification beyond three exchanges', () => {
+    const history = [{ role: 'user' as const, text: 'Delete my training plan.' },
+      { role: 'assistant' as const, text: 'Which plan should I delete?' },
+      { role: 'user' as const, text: 'September endurance' },
+      { role: 'assistant' as const, text: 'Which plan: September endurance 2025 or 2026?' },
+      { role: 'user' as const, text: '2026' },
+      { role: 'assistant' as const, text: 'Also remove older, uncompleted copies from your connected services?' },
+      { role: 'user' as const, text: 'Yes, remove those copies.' },
+      { role: 'assistant' as const, text: 'Keep its workouts as standalone, or permanently delete them?' }];
+    expect(selectAssistantTrainingPreviewTool('Keep workouts as standalone.', history)).toBe('preview_training_deletion');
+  });
+
   it('advertises only the selected preview to Gemini while retaining authorized MCP tools', async () => {
     const { session } = createDailyWorkoutSession();
     session.tools.push(...(['preview_create_planned_workout', 'preview_training_changes',
@@ -189,6 +257,38 @@ describe('Training preview model-tool selection', () => {
     expect(modelTools).toContain('preview_create_planned_workout');
     expect(modelTools.filter(name => name.startsWith('preview_'))).toEqual(['preview_create_planned_workout']);
     expect(session.tools.map(tool => tool.name)).toContain('preview_training_changes');
+  });
+
+  it.each([true, false])('keeps deletion cleanup choice %s prepare-only after a follow-up answer', async removePastProviderCopies => {
+    const { session, callTool } = createSession();
+    session.tools = (['preview_training_changes', 'preview_training_deletion'] as const).map(name => ({
+      name, title: name, description: name, inputSchema: { type: 'object' as const, properties: {} },
+    }));
+    const proposal = { proposalRef: 'deletion-proposal', permissionMode: 'combined', scheduleRevision: 7,
+      expiresAtMs: Date.parse('2026-09-25T13:15:00Z'), summary: 'Review workout deletion and service-copy choice.',
+      requiresConfirmation: true, changes: [{ index: 0, kind: 'delete-workout',
+        summary: removePastProviderCopies ? 'Request removal of older uncompleted copies.' : 'Keep older service copies.' }],
+      providerPreviews: [] };
+    callTool.mockResolvedValue({ structuredContent: proposal });
+    const assertTrainingWriteAccess = vi.fn().mockResolvedValue(undefined);
+    const runtime = createAssistantRuntime({ createMcpSession: vi.fn().mockResolvedValue(session),
+      now: () => new Date('2026-09-25T12:00:00Z'), generateAnswer: async input => {
+        expect(input.tools.map(tool => tool.name)).toEqual(['preview_training_deletion']);
+        await input.tools[0].execute({ expectedScheduleRevision: 7, change: { kind: 'delete-workout',
+          workout: { ref: 'current-workout-reference' }, removePastProviderCopies } });
+        return { answer: 'Review the deletion and your service-copy choice before confirming.',
+          visualRequest: { chart: null, map: null } };
+      } });
+    const result = await runtime.answer({ uid: 'owner', appBaseUrl: 'https://quantified-self.io',
+      prompt: removePastProviderCopies ? 'Yes, remove those copies.' : 'No, keep those copies.', timeZone: 'Europe/Helsinki',
+      history: [{ id: 'question', role: 'user', createdAt: '2026-09-25T11:58:00Z', text: 'Delete my planned workout.' },
+        { id: 'cleanup-choice', role: 'assistant', createdAt: '2026-09-25T11:59:00Z',
+          text: 'Also remove older, uncompleted copies from your connected services?' }],
+      trainingPlansEnabled: true, trainingPlanChangesEnabled: true, trainingDeliveryEnabled: true,
+      assertTrainingPlansAccess: vi.fn().mockResolvedValue(undefined), assertTrainingWriteAccess });
+    expect(result.pendingTrainingProposal).toMatchObject({ permissionMode: 'combined', changes: proposal.changes });
+    expect(callTool.mock.calls.map(([name]) => name)).toEqual(['preview_training_deletion']);
+    expect(assertTrainingWriteAccess).toHaveBeenCalled();
   });
 
   it('keeps provider delivery out of a daily create unless the current prompt requests it', async () => {

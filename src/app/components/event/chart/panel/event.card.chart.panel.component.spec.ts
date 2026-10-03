@@ -30,6 +30,7 @@ import { AppShareService } from '../../../../services/app.share.service';
 import { getOrCreateEChartsTooltipHost } from '../../../../helpers/echarts-tooltip-host.helper';
 import { getViewportConstrainedTooltipPosition } from '../../../../helpers/echarts-tooltip-position.helper';
 import { MaterialModule } from '../../../../modules/material.module';
+import { resolveDeviceChartColor } from '../../../../helpers/device-chart-appearance.helper';
 
 describe('EventCardChartPanelComponent', () => {
   let fixture: ComponentFixture<EventCardChartPanelComponent>;
@@ -87,6 +88,45 @@ describe('EventCardChartPanelComponent', () => {
     hard: '#E64A19',
     verySteep: '#7F1D1D',
   };
+
+  it('renders four device patterns with matching accessible legend samples and overlay styles', async () => {
+    component.strokeWidth = 1;
+    const base = component.panel!.series[0];
+    component.showActivityNamesInTooltip = true;
+    component.panel = { ...component.panel!, series: ['solid', 'dashed', 'dotted', 'dash-dot'].map((lineStyle, index) => ({
+      ...base, id: `device-${index}`, activityID: `device-${index}`, activityName: `Device ${index + 1}`, lineStyle,
+    })) } as any;
+    component.overlayPanel = { ...component.panel, dataType: DataAltitude.type, displayName: 'Altitude' } as any;
+    await renderComponent();
+    const option = getRenderedOption();
+    expect(option.series.slice(0, 4).map((series: any) => series.lineStyle.type)).toEqual(['solid', 'dashed', 'dotted', [8, 3, 2, 3]]);
+    expect(option.series.slice(4).map((series: any) => series.lineStyle.type)).toEqual(['solid', 'dashed', 'dotted', [8, 3, 2, 3]]);
+    expect(option.series.every((series: any) => series.lineStyle.width >= 2)).toBe(true);
+    expect(option.series.slice(4).every((series: any) => series.lineStyle.opacity === 1)).toBe(true);
+    expect(option.series[4].lineStyle.width).toBeGreaterThan(option.series[0].lineStyle.width);
+    const samples = [...fixture.nativeElement.querySelectorAll('.event-chart-panel__series-legend-dot--line')] as HTMLElement[];
+    expect(samples.map(sample => sample.getAttribute('aria-label'))).toEqual([
+      'solid line', 'dashed line', 'dotted line', 'dash-dot line', 'solid line', 'dashed line', 'dotted line', 'dash-dot line',
+    ]);
+    expect(samples[1].style.borderTopStyle).toBe('dashed');
+    expect(samples[2].style.borderTopStyle).toBe('dotted');
+    expect(samples[3].classList.contains('event-chart-panel__series-legend-dot--dash-dot')).toBe(true);
+    expect(samples[0].style.getPropertyValue('--series-line-width')).toBe(`${option.series[0].lineStyle.width}px`);
+    expect(samples[4].style.getPropertyValue('--series-line-width')).toBe(`${option.series[4].lineStyle.width}px`);
+
+    component.panel = { ...component.panel!, series: component.panel!.series.map(series => ({ ...series, lineStyle: undefined })) };
+    component.overlayPanel = { ...component.overlayPanel!, series: component.overlayPanel!.series.map(series => ({ ...series, lineStyle: undefined })) };
+    // Model changes use ECharts merge updates; explicitly solid types clear old dashes.
+    fixture.componentRef.setInput('panel', component.panel);
+    fixture.componentRef.setInput('overlayPanel', component.overlayPanel);
+    await renderComponent();
+    const disabledOption = getRenderedOption();
+    expect(disabledOption.series.every((series: any) => series.lineStyle.type === 'solid')).toBe(true);
+    expect(disabledOption.series[0].lineStyle.width).toBe(1);
+    expect(disabledOption.series[4].lineStyle.width).toBe(1);
+    expect(disabledOption.series[4].lineStyle.opacity).toBeLessThan(1);
+    expect(fixture.nativeElement.querySelectorAll('.event-chart-panel__series-legend-dot--line')).toHaveLength(0);
+  });
 
   beforeEach(async () => {
     vi.clearAllMocks();
@@ -622,7 +662,7 @@ describe('EventCardChartPanelComponent', () => {
       opacity: 0.82,
     }));
     expect(option?.series?.[1]?.lineStyle?.width).toBeLessThanOrEqual(option?.series?.[0]?.lineStyle?.width);
-    expect(option?.series?.[1]?.lineStyle?.type).toBeUndefined();
+    expect(option?.series?.[1]?.lineStyle?.type).toBe('solid');
     expect(option?.series?.[1]?.lineStyle?.shadowBlur).toBeUndefined();
   });
 
@@ -2883,6 +2923,34 @@ describe('EventCardChartPanelComponent', () => {
         lineStyle: expect.objectContaining({ type: 'dotted', opacity: 0.24 }),
       })
     ]);
+  });
+
+  it.each([false, true])('keeps neutral marker colors visible in dark mode, including the zoom bar (%s)', async (zoomBar) => {
+    component.showZoomBar = zoomBar;
+    if (zoomBar) {
+      component.panel = null;
+      component.zoomBarOverviewData = [[0, 0], [120, 1]];
+    }
+    component.showLaps = true;
+    component.showSwimLengths = true;
+    component.lapTypes = [LapTypes.AutoLap];
+    component.lapMarkers = [{
+      markerType: 'lap', xValue: 5, label: 'Lap 1', color: '#000000', lapType: 'auto', lapNumber: 1,
+      activityID: 'a1', activityName: 'Garmin', tooltipTitle: 'Lap 1', tooltipDetails: [],
+    }];
+    component.swimLengthMarkers = [{
+      markerType: 'swimLength', xValue: 10, label: 'Length 1', color: '#3D3D3D', swimLengthIndex: 1,
+      swimLengthType: 'active', isIdle: false, activityID: 'a1', activityName: 'Garmin',
+      tooltipTitle: 'Length 1', tooltipDetails: [],
+    }];
+    component.darkTheme = true;
+    await renderComponent();
+    const markers = getRenderedOption().series[0].markLine.data;
+    expect(markers.map(marker => marker.lineStyle.color)).toEqual([
+      resolveDeviceChartColor('#000000', true), resolveDeviceChartColor('#3D3D3D', true),
+    ]);
+    expect(component.lapMarkers[0].color).toBe('#000000');
+    expect(component.swimLengthMarkers[0].color).toBe('#3D3D3D');
   });
 
   it('filters session end lap markers from the chart even when configured', async () => {

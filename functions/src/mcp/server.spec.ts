@@ -551,6 +551,10 @@ describe('MCP HTTP scope enforcement', () => {
 
   it('derives independent Training read, schedule-write and delivery-write requirements from tool input', () => {
     expect(requiredScopesForRequest({ method: 'tools/call', params: {
+      name: 'preview_training_deletion', arguments: {},
+    } })).toEqual([MCP_OAUTH_SCOPES.TrainingPlansRead, MCP_OAUTH_SCOPES.TrainingPlansWrite,
+      MCP_OAUTH_SCOPES.TrainingDeliveryWrite]);
+    expect(requiredScopesForRequest({ method: 'tools/call', params: {
       name: 'preview_create_planned_workout', arguments: { expectedScheduleRevision: 1 },
     } })).toEqual([MCP_OAUTH_SCOPES.TrainingPlansRead, MCP_OAUTH_SCOPES.TrainingPlansWrite]);
     expect(requiredScopesForRequest({ method: 'tools/call', params: {
@@ -931,6 +935,7 @@ describe('MCP HTTP scope enforcement', () => {
       'preview_saved_workout_change',
       'preview_strength_workout_change',
       'preview_training_changes',
+      'preview_training_deletion',
       'query_planned_workouts',
       'query_planned_workouts_by_date',
     ]);
@@ -977,6 +982,9 @@ describe('MCP HTTP scope enforcement', () => {
       MCP_OAUTH_SCOPES.TrainingDeliveryWrite,
     ]);
     expect(combinedWriteInstructions).toContain('optional delivery object');
+    expect(combinedWriteInstructions).toContain('Also remove older, uncompleted copies from your connected services?');
+    expect(combinedWriteInstructions).toContain('Use preview_training_deletion');
+    expect(writeInstructions).toContain('cannot request older service-copy cleanup');
     expect(combinedWriteInstructions).toContain('keep necessary concise instructions within 40 characters');
     expect(combinedWriteInstructions).toContain('One approved Send proposal also approves the previewed digest-bound adjustment');
     expect(combinedWriteInstructions).not.toContain('provider delivery is not available on this connection');

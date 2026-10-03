@@ -33,10 +33,11 @@ export const TRAINING_READ_TOOLS = ['list_training_plans', 'get_training_plan', 
   ...TRAINING_READ_EXTENSION_TOOLS] as const;
 export type TrainingReadTool = typeof TRAINING_READ_TOOLS[number];
 export const TRAINING_PREVIEW_TOOLS = ['preview_create_planned_workout', 'preview_training_changes',
-  'preview_strength_workout_change', 'preview_planned_workout_v2_change', 'preview_saved_workout_change'] as const;
+  'preview_strength_workout_change', 'preview_planned_workout_v2_change', 'preview_saved_workout_change',
+  'preview_training_deletion'] as const;
 export const TRAINING_WRITE_TOOLS = [...TRAINING_PREVIEW_TOOLS, 'apply_training_changes', 'apply_saved_workout_change'] as const;
 export const TRAINING_WRITE_EXTENSION_TOOLS = ['preview_strength_workout_change', 'preview_planned_workout_v2_change',
-  'preview_saved_workout_change', 'apply_saved_workout_change'] as const;
+  'preview_saved_workout_change', 'apply_saved_workout_change', 'preview_training_deletion'] as const;
 export type TrainingWriteTool = typeof TRAINING_WRITE_TOOLS[number];
 export const trainingDate = z.string().length(10).refine(value => {
   try { return normalizeTrainingLocalDate(value) === value; } catch { return false; }
@@ -298,6 +299,15 @@ export const TRAINING_CHANGE_SCHEMA = z.discriminatedUnion('kind', [
     timeZone: z.string().min(1).max(100).optional() }),
 ]);
 
+/** Additive deletion choice; the registered batch schema must remain frozen. */
+export const TRAINING_DELETION_CHANGE_SCHEMA = z.discriminatedUnion('kind', [
+  z.strictObject({ kind: z.literal('delete-workout'), workout: z.strictObject({ ref }),
+    removePastProviderCopies: z.boolean() }),
+  z.strictObject({ kind: z.literal('delete-plan'), plan: z.strictObject({ ref }),
+    workoutDisposition: z.enum(['convert-to-standalone', 'delete-workouts']),
+    removePastProviderCopies: z.boolean() }),
+]);
+
 const proposedChange = z.strictObject({ index: count.max(24), kind: z.string().min(1).max(64), summary: z.string().min(1).max(500) });
 const providerPreview = z.strictObject({ index: count.max(24), provider: z.enum(PLANNED_WORKOUT_PROVIDER_IDS),
   targetType: z.enum(['plan', 'workout']), action: z.enum(['enable', 'send', 'resume', 'stop', 'retry', 'check', 'approve']),
@@ -356,6 +366,8 @@ const savedWorkoutChange = z.discriminatedUnion('kind', [
 ]);
 
 export const TRAINING_WRITE_INPUTS = {
+  preview_training_deletion: z.strictObject({ expectedScheduleRevision: count,
+    change: TRAINING_DELETION_CHANGE_SCHEMA }),
   preview_create_planned_workout: z.strictObject({
     ...focusedWorkoutPreviewInput,
     delivery: z.strictObject({
@@ -384,6 +396,7 @@ const trainingPreviewOutput = z.strictObject({ proposalRef: ref, expiresAtMs: co
     changes: z.array(proposedChange).min(1).max(25), providerPreviews: z.array(providerPreview).max(100) });
 
 export const TRAINING_WRITE_OUTPUTS = {
+  preview_training_deletion: trainingPreviewOutput,
   preview_create_planned_workout: trainingPreviewOutput,
   preview_training_changes: trainingPreviewOutput,
   preview_strength_workout_change: trainingPreviewOutput,

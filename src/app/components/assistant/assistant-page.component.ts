@@ -37,6 +37,7 @@ import { AssistantQuotaService } from '../../services/assistant-quota.service';
 import { AppHapticsService } from '../../services/app.haptics.service';
 import { AppUserSettingsQueryService } from '../../services/app.user-settings-query.service';
 import { assistantMeasurementReviewDetails } from '../../helpers/assistant-measurement-review.helper';
+import { assistantTrainingDeletionReview } from '../../helpers/assistant-training-deletion-review.helper';
 import {
   AssistantError,
   AssistantService,
@@ -191,6 +192,7 @@ export class AssistantPageComponent implements OnInit, OnDestroy {
   readonly trainingPlanChangesEnabled = signal(false);
   readonly trainingDeliveryEnabled = signal(false);
   readonly pendingTrainingProposal = signal<AssistantTrainingProposalPreview | null>(null);
+  readonly trainingDeletionReview = computed(() => assistantTrainingDeletionReview(this.pendingTrainingProposal()));
   readonly pendingSavedWorkoutProposal = computed(() => {
     const proposal = this.pendingTrainingProposal();
     return proposal !== null && isSavedWorkoutProposal(proposal);
@@ -699,6 +701,16 @@ export class AssistantPageComponent implements OnInit, OnDestroy {
         confirm: true,
       });
       this.pendingTrainingProposal.set(null);
+      if (assistantTrainingDeletionReview(proposal)) {
+        this.trainingProposalResult.set(result.changes.map(change => change.message).join(' ')
+          || 'No deletion result was returned. Check the current Training schedule before trying again.');
+        if (!result.changes.length || result.changes.some(change => change.status === 'failed')) {
+          this.hapticsService.error();
+        } else {
+          this.hapticsService.success();
+        }
+        return;
+      }
       if (result.status === 'applied') {
         this.trainingProposalResult.set(isSavedWorkoutProposal(proposal)
           ? (result.changes[0]?.message ?? 'Saved workout change applied.')

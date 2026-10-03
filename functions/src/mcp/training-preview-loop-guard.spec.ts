@@ -16,6 +16,15 @@ const validStructure = {
 };
 
 describe('Training preview loop guard', () => {
+  it('guards missing deletion choices without logging authored references', () => {
+    const call = { method: 'tools/call', params: { name: 'preview_training_deletion',
+      arguments: { expectedScheduleRevision: 1, change: { kind: 'delete-workout', workout: { ref: 'PRIVATE' } } } } };
+    expect(invalidTrainingPreviewTool(call)).toMatchObject({ toolName: 'preview_training_deletion' });
+    expect(JSON.stringify(invalidTrainingPreviewTool(call))).not.toContain('PRIVATE');
+    expect(invalidTrainingPreviewTool({ ...call, params: { ...call.params, arguments: {
+      ...call.params.arguments, change: { ...call.params.arguments.change, removePastProviderCopies: false },
+    } } })).toBeNull();
+  });
   it('recognizes only malformed Training preview calls', () => {
     const invalidBatch = invalidTrainingPreviewTool({ method: 'tools/call', params: {
       name: 'preview_training_changes',

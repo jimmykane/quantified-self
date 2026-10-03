@@ -325,7 +325,7 @@ export class AppUserSettingsQueryService {
      */
     public async updateChartSettings(
         settings: Partial<AppChartSettingsInterface>,
-        options: { force?: boolean } = {},
+        options: { force?: boolean; expectedUserID?: string } = {},
     ): Promise<void> {
         if (!options.force) {
             const currentSettings = this.chartSettings();
@@ -345,6 +345,9 @@ export class AppUserSettingsQueryService {
         if (!user) {
             this.logger.warn(`[AppUserSettingsQueryService] Cannot update Chart Settings. No user logged in.`);
             throw new Error('Sign in to save chart settings.');
+        }
+        if (options.expectedUserID !== undefined && user.uid !== options.expectedUserID) {
+            throw new Error('The signed-in account changed before chart settings could be saved.');
         }
 
         const updatedSettings = {

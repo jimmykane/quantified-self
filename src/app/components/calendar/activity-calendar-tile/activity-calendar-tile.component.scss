@@ -130,6 +130,7 @@ app-activity-calendar-grid {
   app-activity-calendar-grid { min-height: 0; flex: none; overflow: visible; }
   app-calendar-day-context { box-sizing: border-box; position: absolute; grid-column: 2; grid-row: 1; inset: 0; min-width: 0; min-height: 0; padding-left: 16px; border-left: 1px solid var(--mat-sys-outline-variant); }
   .activity-calendar-tile-navigation { grid-template-columns: 40px minmax(0, 1fr) 40px 40px; }
+  .activity-calendar-tile-navigation > span { white-space: normal; }
 }
 @container (max-width: 900px) {
   :host(.activity-calendar-tile--day-context) {
@@ -143,6 +144,6 @@ app-activity-calendar-grid {
   min-height: 40px;
   align-items: center;
   gap: 8px;
-  padding-right: 36px;
+  padding-inline-end: 40px;
   margin-bottom: 4px;
 }

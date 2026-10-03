@@ -78,6 +78,7 @@ export class UserSettingsComponent implements OnChanges, OnDestroy, OnInit {
 
   @Input() user: AppUserInterface;
   public isSaving: boolean;
+  private lastDistinctLinePatternsValue = false;
   public isDeleting: boolean;
   public consentToDelete: boolean;
   public errorDeleting;
@@ -287,12 +288,20 @@ export class UserSettingsComponent implements OnChanges, OnDestroy, OnInit {
       && this.initializedUserUID === this.user.uid
       && this.userSettingsFormGroup.dirty;
     if (shouldPreserveDirtyFormState) {
+      const linePatternsControl = this.userSettingsFormGroup.get('useDistinctComparisonLinePatterns');
+      if (linePatternsControl.pristine) {
+        const savedChartSettings = this.user.settings?.chartSettings as AppChartSettingsInterface | undefined;
+        const savedValue = savedChartSettings?.useDistinctComparisonLinePatterns === true;
+        linePatternsControl.setValue(savedValue, { emitEvent: false });
+        this.lastDistinctLinePatternsValue = savedValue;
+      }
       this.syncBrandTextControlState();
       return;
     }
 
     const settings = AppUserUtilities.fillMissingAppSettings(this.user as unknown as User);
     const chartSettings = settings.chartSettings as unknown as AppChartSettingsInterface;
+    this.lastDistinctLinePatternsValue = chartSettings.useDistinctComparisonLinePatterns === true;
 
     // Initialize the user settings and get the enabled ones
     const dataTypesToUse = Object.keys(settings.chartSettings.dataTypeSettings).filter((dataTypeSettingKey) =>
@@ -349,6 +358,7 @@ export class UserSettingsComponent implements OnChanges, OnDestroy, OnInit {
         Validators.required,
       ]),
       useAnimations: new UntypedFormControl(settings.chartSettings.useAnimations, []),
+      useDistinctComparisonLinePatterns: new UntypedFormControl(this.lastDistinctLinePatternsValue, []),
       chartHideAllSeriesOnInit: new UntypedFormControl(settings.chartSettings.hideAllSeriesOnInit, []),
       showAllData: new UntypedFormControl(settings.chartSettings.showAllData, []),
       chartDisableGrouping: new UntypedFormControl(settings.chartSettings.disableGrouping, []),
@@ -462,6 +472,14 @@ export class UserSettingsComponent implements OnChanges, OnDestroy, OnInit {
     this.userSettingsFormGroup.markAsDirty();
   }
 
+  onDistinctLinePatternsChange(enabled: boolean): void {
+    if (this.isSaving || enabled === this.lastDistinctLinePatternsValue) {
+      return;
+    }
+    this.lastDistinctLinePatternsValue = enabled;
+    this.hapticsService.selection();
+  }
+
   onFormatLocaleChange(): void {
     this.hapticsService.selection();
   }
@@ -483,6 +501,8 @@ export class UserSettingsComponent implements OnChanges, OnDestroy, OnInit {
     }
 
     this.isSaving = true;
+    const linePatternsControl = this.userSettingsFormGroup.get('useDistinctComparisonLinePatterns');
+    linePatternsControl.disable({ emitEvent: false });
     try {
       const dataTypesToUseValue = this.userSettingsFormGroup.get('dataTypesToUse').value as string[];
 
@@ -501,6 +521,9 @@ export class UserSettingsComponent implements OnChanges, OnDestroy, OnInit {
       const userChartSettings: AppChartSettingsInterface = {
         dataTypeSettings: dataTypeSettings,
         useAnimations: this.userSettingsFormGroup.get('useAnimations').value,
+        ...(linePatternsControl.dirty
+          ? { useDistinctComparisonLinePatterns: linePatternsControl.value === true }
+          : {}),
         xAxisType: this.userSettingsFormGroup.get('xAxisType').value,
         showAllData: this.userSettingsFormGroup.get('showAllData').value,
         colorAltitudeByGrade: currentChartSettings.colorAltitudeByGrade !== false,
@@ -626,6 +649,7 @@ export class UserSettingsComponent implements OnChanges, OnDestroy, OnInit {
       this.hapticsService.error();
     } finally {
       this.isSaving = false;
+      linePatternsControl.enable({ emitEvent: false });
     }
   }
 

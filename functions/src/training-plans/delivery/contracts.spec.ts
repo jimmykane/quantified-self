@@ -11,18 +11,29 @@ describe('Training delivery contracts', () => {
   it('keeps transport diagnostics allowlisted even with invalid or unexpected runtime fields', () => {
     const details = { httpStatus: 200, failurePhase: 'decode', providerRejection: 'invalid_parameter',
       providerField: 'guide_repeat', providerValidation: 'invalid_step_type', providerResponseShape: 'json',
+      wahooContractCheck: 'workout_completion_unknown',
       body: 'private-payload', url: 'private-url' };
     const error = new TrainingDeliveryTransportError('uncertain', 0, details as TrainingDeliveryTransportError['diagnostics']);
     expect(error.diagnostics).toEqual({ httpStatus: 200, failurePhase: 'decode', providerRejection: 'invalid_parameter',
-      providerField: 'guide_repeat', providerValidation: 'invalid_step_type', providerResponseShape: 'json' });
+      providerField: 'guide_repeat', providerValidation: 'invalid_step_type', providerResponseShape: 'json',
+      wahooContractCheck: 'workout_completion_unknown' });
     expect(JSON.stringify(error)).not.toContain('private');
     expect(new TrainingDeliveryTransportError('uncertain', 0,
       { httpStatus: 999, failurePhase: 'private', providerRejection: 'private', providerField: 'private',
-        providerValidation: 'private', providerResponseShape: 'private' } as unknown as TrainingDeliveryTransportError['diagnostics']).diagnostics).toEqual({});
+        providerValidation: 'private', providerResponseShape: 'private', wahooContractCheck: 'private' } as unknown as TrainingDeliveryTransportError['diagnostics']).diagnostics).toEqual({});
   });
   it('round trips exact JSON without touching the workout recipe', () => {
     expect(parseTrainingDeliveryCommandV1(JSON.parse(JSON.stringify(command)))).toEqual(command);
   });
+  it.each(['retained_ownership_unknown', 'account_not_confirmed', 'plan_absence_not_confirmed'] as const)(
+    'keeps %s as a fixed private diagnostic, not arbitrary provider evidence', wahooContractCheck => {
+      const error = new TrainingDeliveryTransportError('uncertain', 0, {
+        failurePhase: 'contract', wahooContractCheck,
+        account: 'synthetic-private-account', response: 'synthetic-private-response',
+      } as TrainingDeliveryTransportError['diagnostics']);
+      expect(error.diagnostics).toEqual({ failurePhase: 'contract', wahooContractCheck });
+      expect(JSON.stringify(error)).not.toContain('synthetic-private');
+    });
   it('accepts a preview-bound digest on Send but not on unrelated delivery actions', () => {
     const approvalDigest = 'a'.repeat(64);
     expect(parseTrainingDeliveryCommandV1({ ...command, approvalDigest }).approvalDigest).toBe(approvalDigest);
@@ -47,6 +58,9 @@ describe('Training delivery contracts', () => {
       lastAttemptAtMs: null, lastAcceptedAtMs: null, retryCount: 0, nextRetryAtMs: null };
     expect(parseTrainingDeliveryStatusV1(status)).toEqual(status);
     expect(() => parseTrainingDeliveryStatusV1({ ...status, actual: { token: 'secret' } })).toThrow();
+    expect(() => parseTrainingDeliveryStatusV1({ ...status, wahooContractCheck: 'workout_completion_unknown' })).toThrow();
+    expect(() => parseTrainingDeliveryStatusV1({ ...status, removalOutcome: 'already_absent' })).toThrow();
+    expect(() => parseTrainingDeliveryStatusV1({ ...status, progress: { removalOutcome: 'already_absent' } })).toThrow();
     expect(() => parseTrainingDeliveryStatusV1({ ...status, nextRetryAtMs: Infinity })).toThrow();
     expect(() => normalizeDeliveryTimeZone('+03:00')).toThrow();
   });

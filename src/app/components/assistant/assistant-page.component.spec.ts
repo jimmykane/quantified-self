@@ -300,6 +300,78 @@ describe('AssistantPageComponent', () => {
     expect(review.querySelectorAll('.training-proposal-actions button')).toHaveLength(2);
   });
 
+  it.each(['delete-workout', 'delete-plan'] as const)('reviews %s and its explicit cleanup choice, then displays the server outcome', async kind => {
+    const noun = kind === 'delete-plan' ? 'plan' : 'workout';
+    const summary = 'Also request removal of older, uncompleted service copies.';
+    const message = `The ${noun} was deleted. Service-copy cleanup was requested; removal is not yet confirmed.`;
+    component.conversation.set(chatResponse.conversation);
+    component.pendingTrainingProposal.set({ ...trainingProposal,
+      changes: [{ index: 0, kind, summary }], providerPreviews: [] });
+    assistantService.applyTrainingProposal.mockResolvedValueOnce({ status: 'applied', scheduleRevision: 2,
+      changes: [{ index: 0, kind, status: 'applied', message }], providers: [] });
+    fixture.detectChanges();
+    const review = fixture.nativeElement.querySelector('.training-proposal') as HTMLElement;
+    expect(review.querySelector('h2')!.textContent).toBe(`Review ${noun} deletion`);
+    expect(review.textContent).toContain(summary);
+    expect(review.textContent).toContain('not confirmed here');
+    expect(review.textContent).toContain('Completed activities stay untouched');
+    expect(review.textContent).not.toContain('Provider results are independent');
+    const buttons = review.querySelectorAll<HTMLButtonElement>('.training-proposal-actions button');
+    expect(Array.from(buttons).map(button => button.textContent?.trim())).toEqual([`Delete ${noun}`, 'Dismiss']);
+    expect(assistantService.applyTrainingProposal).not.toHaveBeenCalled();
+    await component.applyPendingTrainingProposal();
+    expect(assistantService.applyTrainingProposal).toHaveBeenCalledWith({
+      proposalRef: trainingProposal.proposalRef, permissionMode: 'combined',
+      conversationId: chatResponse.conversation.conversationId, confirm: true,
+    });
+    expect(component.trainingProposalResult()).toBe(message);
+    expect(component.trainingProposalResult()).not.toContain('updates or checks');
+    expect(hapticsService.success).toHaveBeenCalledOnce();
+    expect(component.applyingTrainingProposal()).toBe(false);
+  });
+
+  it('preserves a declined older-copy cleanup choice in a recoverable deletion review', async () => {
+    component.conversation.set(chatResponse.conversation);
+    component.pendingTrainingProposal.set({ ...trainingProposal, changes: [{ index: 0,
+      kind: 'delete-workout', summary: 'Delete “Run”. Eligible upcoming copies withdraw; older copies remain.' }],
+    providerPreviews: [] });
+    const message = 'The workout was moved to recoverable history. Older copies remain; removal of eligible upcoming copies is not yet confirmed.';
+    assistantService.applyTrainingProposal.mockResolvedValueOnce({ status: 'applied', scheduleRevision: 2,
+      changes: [{ index: 0, kind: 'delete-workout', status: 'applied', message }], providers: [] });
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('.training-proposal').textContent).toContain('older copies remain');
+    await component.applyPendingTrainingProposal();
+    expect(component.trainingProposalResult()).toBe(message);
+  });
+
+  it('does not report a failed deletion as partially applied or give success feedback', async () => {
+    component.conversation.set(chatResponse.conversation);
+    component.pendingTrainingProposal.set({ ...trainingProposal,
+      changes: [{ index: 0, kind: 'delete-workout', summary: 'Delete the run.' }], providerPreviews: [] });
+    assistantService.applyTrainingProposal.mockResolvedValueOnce({ status: 'partially_applied', scheduleRevision: 1,
+      changes: [{ index: 0, kind: 'delete-workout', status: 'failed', message: 'The schedule changed. Read it again before deleting.' }], providers: [] });
+    await component.applyPendingTrainingProposal();
+    expect(component.trainingProposalResult()).toBe('The schedule changed. Read it again before deleting.');
+    expect(hapticsService.success).not.toHaveBeenCalled();
+    expect(hapticsService.error).toHaveBeenCalledOnce();
+  });
+
+  it('dismisses a deletion without applying it and does not confirm an empty deletion result', async () => {
+    component.conversation.set(chatResponse.conversation);
+    const proposal = { ...trainingProposal,
+      changes: [{ index: 0, kind: 'delete-workout', summary: 'Delete the run.' }], providerPreviews: [] };
+    component.pendingTrainingProposal.set(proposal);
+    await component.dismissPendingTrainingProposal();
+    expect(assistantService.applyTrainingProposal).toHaveBeenLastCalledWith(expect.objectContaining({ confirm: false }));
+    expect(component.trainingProposalResult()).toContain('Nothing was changed');
+    hapticsService.success.mockClear();
+    component.pendingTrainingProposal.set({ ...proposal, proposalRef: 'fresh-deletion-preview' });
+    await component.applyPendingTrainingProposal();
+    expect(component.trainingProposalResult()).toContain('No deletion result was returned');
+    expect(hapticsService.success).not.toHaveBeenCalled();
+    expect(hapticsService.error).toHaveBeenCalledOnce();
+  });
+
   it('reviews every saved-workout placement date without irrelevant provider-failure copy', async () => {
     component.conversation.set(chatResponse.conversation);
     component.pendingTrainingProposal.set({ ...trainingProposal, permissionMode: 'schedule',

@@ -23,7 +23,7 @@ import { processTrainingBulkShift, reconcileTrainingBulkShifts } from '../traini
 import { mutateTrainingScheduleForUser } from '../training-plans/persistence';
 import { BULK_SHIFT_LEASE_MS } from '../training-plans/staged-shift';
 import { applyTrainingChanges, getTrainingChangeStatus, previewCreatePlannedWorkout, previewTrainingChanges,
-  previewStrengthWorkoutChange, previewPlannedWorkoutV2Change,
+  previewStrengthWorkoutChange, previewPlannedWorkoutV2Change, previewTrainingDeletion,
   type TrainingWriteDependencies } from './training-plans-write.service';
 import { TRAINING_DELIVERY_WRITE_SCOPE, TRAINING_PLANS_SCOPE, TRAINING_PLANS_WRITE_SCOPE } from './training-plans.schemas';
 
@@ -690,6 +690,122 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Training MCP write propos
       .doc(`workout_${workoutId}`).get()).data()).toMatchObject({ enabled: false, scope: 'workout', scopeId: workoutId });
     expect(transport?.calls).toHaveLength(0);
     await expect(applyTrainingChanges(input, deps)).resolves.toEqual(applied);
+  });
+
+  it.each([false, true])('binds the explicit older-copy cleanup choice (%s) to an approved workout deletion', async removePastProviderCopies => {
+    const user = db.collection('users').doc(uid);
+    const create = await previewCreateAndSend();
+    const created = await applyTrainingChanges(statusInput(create.proposalRef), deps);
+    const workoutRef = created.createdReferences[0].reference;
+    const workout = (await user.collection('scheduledWorkouts').get()).docs[0];
+    await reconcileTrainingDeliveryPage(deps.runtime, uid);
+    const ledger = (await user.collection('trainingDeliveryLedger').get()).docs[0];
+    await processTrainingDelivery(deps.runtime, uid, ledger.id);
+    expect(transport!.calls).toHaveLength(1);
+    deps.now = deps.runtime.now = () => Date.parse('2026-09-20T12:00:00Z');
+    deps.runtime.hasPro = async () => false; // Cleanup is not a paid create/update action.
+    const deletionArgs = { expectedScheduleRevision: created.scheduleRevision,
+      change: { kind: 'delete-workout', workout: { ref: workoutRef }, removePastProviderCopies } };
+    const deletion = await previewTrainingDeletion({ uid, connectionId: 'connection', scopes, arguments: deletionArgs }, deps);
+    expect(deletion.permissionMode).toBe('combined');
+    expect(deletion.changes[0].summary).toContain(removePastProviderCopies
+      ? 'including older uncompleted copies' : 'past provider copies remain');
+    expect(deletion.changes[0].summary).toContain('“Easy run” on 2026-09-18');
+    expect(transport!.calls).toHaveLength(1); // No provider I/O in preview or apply.
+    expect((await user.collection('trainingDeliveryState').doc('current').collection('pastCleanup')
+      .doc(`workout_${workout.id}`).get()).exists).toBe(false);
+    const apply = statusInput(deletion.proposalRef);
+    await expect(applyTrainingChanges({ ...apply, arguments: { ...apply.arguments, permissionMode: 'schedule' } }, deps))
+      .rejects.toThrow('permission mode');
+    const result = await applyTrainingChanges(apply, deps);
+    expect(result.status).toBe('applied');
+    expect(result.changes[0].message).toContain('The workout was moved to recoverable history');
+    expect(result.changes[0].message).toContain('removal is not yet confirmed');
+    expect(result.changes[0].message).toContain('Completed activities were not changed');
+    expect(result.changes[0].message.includes('older copies remain')).toBe(!removePastProviderCopies);
+    expect((await workout.ref.get()).get('lifecycle')).toBe('deleted');
+    expect((await user.collection('trainingDeliveryState').doc('current').collection('pastCleanup')
+      .doc(`workout_${workout.id}`).get()).get('enabled')).toBe(removePastProviderCopies);
+    expect(transport!.calls).toHaveLength(1);
+    await expect(applyTrainingChanges(apply, deps)).resolves.toEqual(result);
+    await reconcileTrainingDeliveryPage(deps.runtime, uid);
+    await processTrainingDelivery(deps.runtime, uid, ledger.id);
+    expect(transport!.calls.filter(call => call.kind === 'remove')).toHaveLength(removePastProviderCopies ? 1 : 0);
+  });
+
+  it.each([
+    { workoutDisposition: 'convert-to-standalone', removePastProviderCopies: true },
+    { workoutDisposition: 'convert-to-standalone', removePastProviderCopies: false },
+    { workoutDisposition: 'delete-workouts', removePastProviderCopies: true },
+    { workoutDisposition: 'delete-workouts', removePastProviderCopies: false },
+  ] as const)('preserves plan deletion disposition $workoutDisposition with older-copy cleanup $removePastProviderCopies', async ({ workoutDisposition, removePastProviderCopies }) => {
+    const user = db.collection('users').doc(uid);
+    const create = await previewTrainingChanges({ uid, connectionId: 'connection', scopes,
+      arguments: { expectedScheduleRevision: 1, changes: [
+        { kind: 'create-plan', localKey: 'plan', name: 'P'.repeat(120), startDate: '2026-09-18', endDate: '2026-09-30', activate: true },
+        { kind: 'create-workout', localKey: 'run', plan: { localKey: 'plan' }, localDate: '2026-09-18', title: 'Run', structure },
+        { kind: 'provider-delivery', targetType: 'plan', target: { localKey: 'plan' },
+          providers: ['garmin'], action: 'enable', timeZone: 'Europe/Helsinki' },
+      ] } }, deps);
+    const created = await applyTrainingChanges(statusInput(create.proposalRef), deps);
+    const plan = (await user.collection('trainingPlans').get()).docs[0];
+    const workout = (await user.collection('scheduledWorkouts').get()).docs[0];
+    await reconcileTrainingDeliveryPage(deps.runtime, uid);
+    const ledger = (await user.collection('trainingDeliveryLedger').get()).docs[0];
+    await processTrainingDelivery(deps.runtime, uid, ledger.id);
+    expect(transport!.calls).toHaveLength(1);
+    deps.now = deps.runtime.now = () => Date.parse('2026-09-20T12:00:00Z');
+    const deletion = await previewTrainingDeletion({ uid, connectionId: 'connection', scopes,
+      arguments: { expectedScheduleRevision: created.scheduleRevision, change: { kind: 'delete-plan',
+        plan: { ref: created.createdReferences.find(item => item.kind === 'plan')!.reference },
+        workoutDisposition, removePastProviderCopies } } }, deps);
+    expect(deletion.changes[0].summary).toContain(removePastProviderCopies
+      ? 'including older uncompleted copies' : 'past provider copies remain');
+    const input = statusInput(deletion.proposalRef);
+    const result = await applyTrainingChanges(input, deps);
+    expect(result.changes[0].message).toContain('removal is not yet confirmed');
+    expect(result.changes[0].message.includes('older copies remain')).toBe(!removePastProviderCopies);
+    expect((await plan.ref.get()).exists).toBe(false);
+    const workouts = await user.collection('scheduledWorkouts').get();
+    if (workoutDisposition === 'delete-workouts') expect(workouts.empty).toBe(true);
+    else expect(workouts.docs[0].get('planId')).toBeNull();
+    const cleanup = await user.collection('trainingDeliveryState').doc('current').collection('pastCleanup')
+      .doc(`plan_${plan.id}`).get();
+    if (removePastProviderCopies) {
+      expect(cleanup.data()).toMatchObject({ schemaVersion: 1, scope: 'plan', scopeId: plan.id, workoutIds: [workout.id] });
+    } else expect(cleanup.exists).toBe(false);
+    await expect(applyTrainingChanges(input, deps)).resolves.toEqual(result);
+    expect(transport!.calls).toHaveLength(1); // Only the background worker removes a service copy.
+    await reconcileTrainingDeliveryPage(deps.runtime, uid);
+    await processTrainingDelivery(deps.runtime, uid, ledger.id);
+    expect(transport!.calls.filter(call => call.kind === 'remove')).toHaveLength(removePastProviderCopies ? 1 : 0);
+  });
+
+  it('fences service-copy cleanup after grant revocation and preserves completed copies', async () => {
+    const user = db.collection('users').doc(uid);
+    const create = await previewCreateAndSend();
+    const created = await applyTrainingChanges(statusInput(create.proposalRef), deps);
+    await reconcileTrainingDeliveryPage(deps.runtime, uid);
+    const ledger = (await user.collection('trainingDeliveryLedger').get()).docs[0];
+    await processTrainingDelivery(deps.runtime, uid, ledger.id);
+    await ledger.ref.update({ 'actual.completed': true });
+    const arguments_ = { expectedScheduleRevision: created.scheduleRevision, change: {
+      kind: 'delete-workout', workout: { ref: created.createdReferences[0].reference }, removePastProviderCopies: true } };
+    await expect(previewTrainingDeletion({ uid, connectionId: 'connection',
+      scopes: [TRAINING_PLANS_SCOPE, TRAINING_PLANS_WRITE_SCOPE], arguments: arguments_ }, deps)).rejects.toThrow('permission');
+    await expect(previewTrainingDeletion({ uid, connectionId: 'other', scopes, arguments: arguments_ }, deps)).rejects.toThrow();
+    await expect(previewTrainingDeletion({ uid, connectionId: 'connection', scopes,
+      arguments: { ...arguments_, expectedScheduleRevision: 1 } }, deps)).rejects.toThrow('schedule changed');
+    const deletion = await previewTrainingDeletion({ uid, connectionId: 'connection', scopes, arguments: arguments_ }, deps);
+    await user.collection('mcpConnections').doc('connection').update({ scopes: [TRAINING_PLANS_SCOPE, TRAINING_PLANS_WRITE_SCOPE] });
+    await expect(applyTrainingChanges(statusInput(deletion.proposalRef), deps)).rejects.toThrow();
+    expect((await user.collection('scheduledWorkouts').get()).docs[0].get('lifecycle')).toBe('planned');
+    await user.collection('mcpConnections').doc('connection').update({ scopes });
+    await applyTrainingChanges(statusInput(deletion.proposalRef), deps);
+    await reconcileTrainingDeliveryPage(deps.runtime, uid);
+    await processTrainingDelivery(deps.runtime, uid, ledger.id);
+    expect(transport!.calls.filter(call => call.kind === 'remove')).toHaveLength(0);
+    expect((await ledger.ref.get()).get('status')).toBe('completed');
   });
 
   it('permanently deletes plan workouts and replays the approved deletion idempotently', async () => {

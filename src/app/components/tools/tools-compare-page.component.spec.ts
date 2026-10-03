@@ -1,3 +1,7 @@
+import { signal } from '@angular/core';
+import { MatSlideToggle } from '@angular/material/slide-toggle';
+import { AppChartSettingsInterface } from '../../models/app-user.interface';
+import { AppUserSettingsQueryService } from '../../services/app.user-settings-query.service';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { BreakpointObserver } from '@angular/cdk/layout';
 import { OverlayContainer } from '@angular/cdk/overlay';
@@ -200,8 +204,12 @@ describe('ToolsComparePageComponent', () => {
     observe: ReturnType<typeof vi.fn>;
   };
   let overlayContainer: OverlayContainer;
+  const chartSettings = signal<Partial<AppChartSettingsInterface>>({});
+  const settingsQueryMock = { chartSettings, updateChartSettings: vi.fn() };
 
   beforeEach(async () => {
+    chartSettings.set({});
+    settingsQueryMock.updateChartSettings.mockReset().mockResolvedValue(undefined);
     userSubject = new BehaviorSubject<User | null>(null);
     authServiceMock = {
       user$: userSubject.asObservable(),
@@ -342,6 +350,7 @@ describe('ToolsComparePageComponent', () => {
           provide: AppAuthService,
           useValue: authServiceMock,
         },
+        { provide: AppUserSettingsQueryService, useValue: settingsQueryMock },
         { provide: AppToolsComparisonService, useValue: comparisonServiceMock },
         { provide: AppAnalyticsService, useValue: analyticsServiceMock },
         { provide: AppBenchmarkFlowService, useValue: benchmarkFlowServiceMock },
@@ -364,6 +373,124 @@ describe('ToolsComparePageComponent', () => {
     component = fixture.componentInstance;
     overlayContainer = TestBed.inject(OverlayContainer);
     fixture.detectChanges();
+  });
+
+  it('defaults line patterns off and hydrates the shared preference silently', async () => {
+    userSubject.next(new User('user-1'));
+    fixture.detectChanges();
+    const toggle = fixture.debugElement.query(By.directive(MatSlideToggle)).componentInstance as MatSlideToggle;
+    expect(toggle.checked).toBe(false);
+    expect(fixture.nativeElement.textContent).toContain('Distinct line patterns');
+    chartSettings.set({ useDistinctComparisonLinePatterns: true });
+    fixture.detectChanges();
+    expect(toggle.checked).toBe(true);
+    expect(settingsQueryMock.updateChartSettings).not.toHaveBeenCalled();
+    expect(hapticsServiceMock.selection).not.toHaveBeenCalled();
+  });
+
+  it('saves accepted toggle changes once, shows pending state, and allows off before the read snapshot catches up', async () => {
+    userSubject.next(new User('user-1'));
+    fixture.detectChanges();
+    let finishSave!: () => void;
+    settingsQueryMock.updateChartSettings.mockImplementationOnce(() => new Promise<void>(resolve => { finishSave = resolve; }));
+    const toggle = fixture.debugElement.query(By.directive(MatSlideToggle));
+    toggle.triggerEventHandler('change', { checked: true });
+    fixture.detectChanges();
+    expect(component.useDistinctLinePatterns()).toBe(true);
+    expect(toggle.componentInstance.disabled).toBe(true);
+    expect(fixture.nativeElement.querySelector('[aria-label="Saving line patterns"]')).toBeTruthy();
+    await component.onDistinctLinePatternsChange(false);
+    expect(settingsQueryMock.updateChartSettings).toHaveBeenCalledOnce();
+    expect(settingsQueryMock.updateChartSettings).toHaveBeenCalledWith(
+      { useDistinctComparisonLinePatterns: true }, { force: true, expectedUserID: 'user-1' },
+    );
+    expect(hapticsServiceMock.selection).toHaveBeenCalledOnce();
+    expect(hapticsServiceMock.success).not.toHaveBeenCalled();
+    finishSave();
+    await fixture.whenStable();
+    fixture.detectChanges();
+    expect(component.useDistinctLinePatterns()).toBe(true);
+    expect(hapticsServiceMock.success).toHaveBeenCalledOnce();
+    await component.onDistinctLinePatternsChange(true);
+    expect(settingsQueryMock.updateChartSettings).toHaveBeenCalledOnce();
+    await component.onDistinctLinePatternsChange(false);
+    expect(settingsQueryMock.updateChartSettings).toHaveBeenLastCalledWith(
+      { useDistinctComparisonLinePatterns: false }, { force: true, expectedUserID: 'user-1' },
+    );
+    expect(component.useDistinctLinePatterns()).toBe(false);
+    chartSettings.set({ useDistinctComparisonLinePatterns: false });
+    fixture.detectChanges();
+    chartSettings.set({ useDistinctComparisonLinePatterns: true });
+    fixture.detectChanges();
+    expect(component.useDistinctLinePatterns()).toBe(true);
+  });
+
+  it('clears pending preference state when switching accounts and ignores the old save completion', async () => {
+    userSubject.next(new User('user-1'));
+    fixture.detectChanges();
+    let finishSave!: () => void;
+    settingsQueryMock.updateChartSettings.mockImplementationOnce(() => new Promise<void>(resolve => { finishSave = resolve; }));
+    const save = component.onDistinctLinePatternsChange(true);
+    userSubject.next(new User('user-2'));
+    fixture.detectChanges();
+    expect(component.useDistinctLinePatterns()).toBe(false);
+    expect(component.isSavingLinePatterns()).toBe(false);
+    finishSave();
+    await save;
+    expect(hapticsServiceMock.success).not.toHaveBeenCalled();
+    expect(component.useDistinctLinePatterns()).toBe(false);
+  });
+
+  it('ignores a previous sign-in session save failure while the same account has a new save pending', async () => {
+    userSubject.next(new User('user-1'));
+    fixture.detectChanges();
+    let failOldSave!: (error: Error) => void;
+    let finishNewSave!: () => void;
+    settingsQueryMock.updateChartSettings
+      .mockImplementationOnce(() => new Promise<void>((_resolve, reject) => { failOldSave = reject; }))
+      .mockImplementationOnce(() => new Promise<void>(resolve => { finishNewSave = resolve; }));
+    const oldSave = component.onDistinctLinePatternsChange(true);
+    userSubject.next(null);
+    userSubject.next(new User('user-1'));
+    fixture.detectChanges();
+    const newSave = component.onDistinctLinePatternsChange(true);
+    failOldSave(new Error('Previous session save failed'));
+    await oldSave;
+    fixture.detectChanges();
+    expect(component.isSavingLinePatterns()).toBe(true);
+    expect(component.useDistinctLinePatterns()).toBe(true);
+    expect(hapticsServiceMock.error).not.toHaveBeenCalled();
+    finishNewSave();
+    await newSave;
+    expect(component.isSavingLinePatterns()).toBe(false);
+    expect(hapticsServiceMock.success).toHaveBeenCalledOnce();
+  });
+
+  it('does not send completion feedback after the Compare page is destroyed', async () => {
+    userSubject.next(new User('user-1'));
+    fixture.detectChanges();
+    let finishSave!: () => void;
+    settingsQueryMock.updateChartSettings.mockImplementationOnce(() => new Promise<void>(resolve => { finishSave = resolve; }));
+    const save = component.onDistinctLinePatternsChange(true);
+    fixture.destroy();
+    finishSave();
+    await save;
+    expect(hapticsServiceMock.success).not.toHaveBeenCalled();
+  });
+
+  it('rolls back a failed preference save and leaves guest actions silent', async () => {
+    await component.onDistinctLinePatternsChange(true);
+    expect(settingsQueryMock.updateChartSettings).not.toHaveBeenCalled();
+    expect(hapticsServiceMock.selection).not.toHaveBeenCalled();
+    userSubject.next(new User('user-1'));
+    fixture.detectChanges();
+    settingsQueryMock.updateChartSettings.mockRejectedValueOnce(new Error('save failed'));
+    await component.onDistinctLinePatternsChange(true);
+    fixture.detectChanges();
+    expect(component.useDistinctLinePatterns()).toBe(false);
+    expect(component.isSavingLinePatterns()).toBe(false);
+    expect(hapticsServiceMock.error).toHaveBeenCalledOnce();
+    expect(hapticsServiceMock.success).not.toHaveBeenCalled();
   });
 
   it('tracks the initial comparison route view', () => {

@@ -167,10 +167,21 @@ describe('Assistant MCP session', () => {
       expect(session.tools.map(tool => tool.name)).toContain('preview_training_changes');
       expect(session.tools.map(tool => tool.name)).toContain('preview_create_planned_workout');
       expect(session.tools.map(tool => tool.name)).toContain('preview_planned_workout_v2_change');
+      expect(session.tools.map(tool => tool.name)).toContain('preview_training_deletion');
       expect(session.tools.map(tool => tool.name)).not.toContain('apply_training_changes' as never);
       expect(capturedAuth).toMatchObject({ connectionId: 'first-party-assistant-v1:conversation-123',
         scopes: expect.arrayContaining([MCP_OAUTH_SCOPES.TrainingPlansRead, MCP_OAUTH_SCOPES.TrainingPlansWrite,
           MCP_OAUTH_SCOPES.TrainingDeliveryWrite]) });
+    } finally { await session.close(); }
+  });
+
+  it('does not expose older service-copy cleanup without the independent delivery permission', async () => {
+    const session = await createAssistantMcpSession('owner', 'https://quantified-self.io', undefined,
+      'coordinate_free', false, true, true, false, 'schedule-only');
+    try {
+      expect(session.tools.map(tool => tool.name)).toContain('preview_training_changes');
+      expect(session.tools.map(tool => tool.name)).not.toContain('preview_training_deletion');
+      await expect(session.callTool('preview_training_deletion', {})).rejects.toThrow('not available');
     } finally { await session.close(); }
   });
 

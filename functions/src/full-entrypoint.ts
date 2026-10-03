@@ -79,6 +79,8 @@ export {
 
 
 // Garmin Queue & Backfill
+export { garminWebhookProbe } from './garmin/webhook-probe';
+
 export {
   insertGarminAPIActivityFileToQueue,
 } from './garmin/queue';

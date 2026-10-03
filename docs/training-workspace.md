@@ -39,8 +39,24 @@ lock is acquired keeps the proposal resumable so the same approved apply can fin
 Permanent single-workout deletion and history restoration remain excluded. The latter allows plan delivery
 enablement and workout send/resume/stop/retry/check/approval. Delivery remains Pro and is gated by provider connection,
 permissions, configuration, compatibility and explicit consent.
-MCP plan and recoverable workout deletion never select the manual UI's optional past-provider-copy cleanup. Their
-previews distinguish eligible future-copy withdrawal from past copies, which remain, and recorded activities are untouched.
+The additive `preview_training_deletion` offers the manual UI's optional older-copy cleanup for one current plan or
+recoverable workout deletion. With both existing child write grants, the client asks whether to also remove older,
+uncompleted copies from connected services (unless already explicitly chosen), then supplies a required
+`removePastProviderCopies` boolean. The proposal binds that choice to the existing deletion transaction, revisions,
+owner/connection/grant and approval. Plan deletion still requires its workout disposition. Upcoming eligible copies
+already withdraw by default; completed activities are never deleted. Cleanup needs current same-account access and
+provider support, and is not app/watch removal proof. No provider HTTP occurs in preview or MCP apply. The frozen
+batch deletion remains available without this opt-in; clients must explain its older-copy limitation rather than
+silently substitute it for requested full cleanup. Removal does not require Pro. Source implementation needs separate
+deployment and catalog refresh. MCP read-impact review: current plan/workout recipes, units, completion links and sync
+projections remain unchanged; cleanup intent stays server-only. Verification covers explicit yes/no choices, both plan
+dispositions, preview without provider I/O, lost-reply replay, revoked grants, completed-copy protection and removal after
+Pro expiry in `npm run test:functions-emulators -- mcp-data`, plus the existing provider cleanup regressions in the
+`delivery` emulator group. Assistant tests keep follow-up choices prepare-only and require the app-owned Apply. Routing
+follows only an uninterrupted deletion clarification chain; cancellation, another task, and removal from a plan must
+not inherit an earlier deletion intent. This runtime-only routing correction changes no MCP wire contract or read
+projection. Public contract tests check all three transports, scope isolation and recursive private-field rejection. No new callable,
+provider adapter, consent scope or cleanup store is introduced.
 External clients prepare one strict proposal of at most 25 changes, then invoke the separately approval-gated
 `apply_training_changes` write tool. ChatGPT, Claude and other MCP hosts own their native tool-approval UI; QS does not
 use MCP elicitation for a second confirmation round. A host may let its user configure automatic tool approval, which QS
@@ -102,6 +118,14 @@ validation and the public recipe coverage gate remain identical.
 The built-in Assistant has separate default-off **Training plans**, **Plan and workout changes**, and **Planned-workout
 sync changes** choices. Only applicable focused/batch preview tools enter Gemini context. The model cannot apply changes; Quantified Self
 stores one bounded proposal under the current server-owned conversation and the user must apply or dismiss it in the app.
+Single plan/workout deletion reviews use explicit **Delete plan** / **Delete workout** actions, preserving the exact
+server preview's workout disposition and service-copy choice. Their receipts state authored deletion separately from
+unconfirmed background service cleanup; declined older-copy removal stays declined. Missing or failed deletion results
+do not get success messaging or haptics. The Training access sheet explains both required change toggles and removal
+without Pro. This Assistant presentation and receipt-wording change adds no MCP tool, field, scope, provider action or
+read projection; no registered-contract or bundled-plugin update is needed. Verification uses the Assistant component,
+helper and callable specs and the deletion cases in the `mcp-data` emulator group, including both plan dispositions
+and both cleanup choices. Backend/frontend deployment remains separate.
 Plan-level and provider-only actions select the batch preview before a sport keyword can select a focused recipe editor;
 a combined historical comparison and workout recommendation keeps live daily and completed-activity reads available.
 For a today recommendation, the server prepares Form, Form Now, ramp-rate and Training Summary snapshots before the
@@ -501,11 +525,28 @@ negative values, non-positive endings/reference snapshots, inverted ranges, more
 100, nested repeats, and more than two targets per step. Its JSON output must remain Firestore-safe and must round-trip through stringify/parse without changing
 the persisted v1 value. The manual editor exposes canonical Running, Trail Running, Treadmill, Cycling, Mountain Biking,
 Indoor Cycling, E-Biking, Hand Cycle, Swimming (labelled Pool swimming), and Open Water Swimming sports plus date-only,
-time/distance, fixed-repeat, and single absolute HR/power/pace inputs. Both swim profiles enter distance steps in metres
+time/distance/lap-button, fixed-repeat, and single absolute HR/power/pace inputs. Both swim profiles enter distance steps in metres
 rather than kilometres, and pace targets follow the user's swim-pace preference (/100 m or /100 yd). Changing an unsaved
 editor sport converts displayed distances and paces without changing their canonical values. The pool editor may
 select an optional physical length; a 25 m step alone never asserts a 25 m pool, and open-water swimming has no pool
 length. Other providers do not receive the selected length and require explicit degradation review. These are Sports Lib activity-type strings, not provider profile IDs.
+
+The interval editor's **End by → Lap button press** choice is available for every purpose (warmup, work, recovery,
+cooldown, rest, other), including repeat children and library recipes. It stores the existing strict `{ kind: 'manual' }`
+ending; the numeric input is hidden and any retained editor-only numeric draft value is never serialized. A step waits
+for the lap button with no time/distance limit, not a combined timer-or-button rule. Within the same unsaved editor,
+temporarily selecting Lap button preserves the exact previous distance, including when switching sports changes its
+display unit. Selecting Time or editing the distance discards that distance cache. Reopening a saved lap-ended step
+does not recover a previous numeric draft: only the manual ending is persisted. Reopening and resaving preserves
+the step ID, purpose, targets, instructions and fixed repeats. Garmin maps it to `OPEN`, Suunto to `manualLap`, and
+COROS to `EndManually` for supported sports; COROS delivery remains disabled. Wahoo remains unsupported and cannot
+receive a guessed timed replacement. Lap advances a step; it does not stop the recording or create a QS completion link.
+MCP impact: existing recipe read and strict proposal/confirmation contracts already support `manual` endings across
+purposes and repeat children. Regression tests cover full recipe reads and compatibility without synthesizing duration
+or dropping targets/instructions. No stored/wire schema, scope, consent, tool registration, metric, provider transport,
+or bundled plugin/skill changes are required for exposing this existing ending in the editor. Other editor limitations
+(kJ/repetition endings, relative targets and secondary targets) remain unchanged.
+
 Running and cycling distance-step inputs follow the owner's `distanceUnits` preference (kilometres or miles), while
 their pace-target inputs independently follow the first selected `paceUnits` preference (min/km or min/mi). The editor
 captures normalized units when opened so a settings update in another tab cannot reinterpret an unsaved number. Existing
@@ -936,8 +977,11 @@ action opens the existing editor with that date
 and plan prefilled. Dates support native keyboard activation plus arrow-key and Page Up/Down navigation, keeping focus
 and selection together. The date-cell button/ripple pattern follows Activity Calendar; a Material datepicker cannot
 contain separate accessible workout-edit actions without overriding its internals. Standalone retains its compact list.
-The **Main Calendar** link identifies the separate all-activity destination. No drag/drop, write API, provider sync,
-completed-activity matching, or new metric is introduced by this presentation change.
+The workspace header keeps **Sync** beside the **Plans** title. It opens **Workout sync history**, with the full name
+retained for assistive technology and in its tooltip. Calendar remains available through app navigation and the Dashboard;
+the former **Main Calendar** header action is removed. The library and workout-editor header actions are unchanged.
+MCP impact review: this header-only presentation changes no plan/workout reads, data contracts, consent, mutations,
+provider sync, completion matching, or exposed metrics.
 The full-month boundary-grid correction changes only visible disabled date cells. It does not alter authored schedules,
 date selection, provider delivery, MCP Training reads or mutations, consent, schemas, Assistant guidance, or the
 registered MCP contract.
@@ -1193,7 +1237,7 @@ that an inactive plan is sending. A missing status is not a confirmed delivery; 
 Unavailable Send/configuration actions stay hidden, but existing settings, problems, reconnect links and Stop remain
 readable. Status details expand in groups of 25 using a live loaded-prefix query, so subsequent pages cannot retain stale
 statuses or miss records moving across page boundaries. Plan workouts retain Stop even when their first delivery fails.
-The workspace's **Workout sync history** entry appears only when delivery records exist and remains reachable after deleting
+The workspace's compact **Sync** history entry appears only when delivery records exist and remains reachable after deleting
 their plan/workout. Each retained row opens delivery details independently of the authored editor. Deleted sources permit
 only Retry/Stop against the server-resolved existing account/workout identity (revision zero for a missing source); they
 cannot be sent, restored, or enrolled through these commands. Retry advances retained-record reconciliation without Pro
@@ -1303,6 +1347,19 @@ delivery latency, `stale_suppressed` for obsolete work, and `recovered_acceptanc
 For HTTP failures, group by `jsonPayload.httpStatus` and `jsonPayload.failurePhase` to distinguish rejected responses
 from network uncertainty and response decoding. Legacy failure records lack these fields and cannot prove a specific
 provider response status after the fact.
+Wahoo contract-guard failures add only the fixed private `wahooContractCheck` label to the existing WARNING, with
+`failurePhase="contract"`. Filter by `jsonPayload.provider="wahoo"` and group failures by that label to distinguish
+ownership/identity mismatches, missing or invalid completion evidence, moved dates, unconfirmed associations and
+ambiguous DELETE 404s. `plan_deleted` means the provider returned `deleted=true`; `plan_deletion_state_unknown` means
+it did not return an explicit live state. A DELETE 404 alone remains an unacknowledged write, not proof of removal.
+General inspection, upload discovery and upserts still cannot infer authoritative absence or authorize replacement.
+The removal-only convergence path below can separately establish that retained copies are already absent. Its final
+ordinary `accepted` or `recovered_acceptance` INFO includes only the fixed `outcome="already_absent"` after durable worker
+completion; it does not claim a DELETE was performed. `retained_ownership_unknown`, `account_not_confirmed` and
+`plan_absence_not_confirmed` distinguish inadequate retained ownership, current-account readback and catalog access.
+Labels contain no provider field values. Demo-Firestore fixtures verify warning propagation, safe refusals, complete
+cleanup state and suppression of false success when persistence fails or authority/lease changes.
+MCP and Help wire impact: none; recipes, safe status projections, consent, tools, schemas and provider actions are unchanged.
 Suunto Guide HTTP 400 failures also include fixed `providerResponseShape`, `providerRejection`, optional
 `providerField` and `providerValidation` values. These are classifier outputs, not Suunto's free-text reason;
 `unclassified` means the safe log alone cannot establish the exact validation defect. This private diagnostic change
@@ -1373,8 +1430,11 @@ in again; an old authorization cannot be reused. For plan-to-standalone deletion
 marker pointer across temporary disconnects and rechecks the private marker on retry. A later standalone-workout
 deletion without opt-in overrides that earlier plan choice. COROS deliberately remains in backend reconciliation and tests, but
 its contract allows deleting only unexecuted workouts dated today or later, so past copies are retained and reported
-as unsupported. New-send UI availability remains a separate policy. MCP deletion previews/applies omit the
-opt-in and retain default past-copy preservation; this change adds no MCP tool, schema, scope, or provider action.
+as unsupported. New-send UI availability remains a separate policy. The additive MCP deletion preview uses this same
+opt-in and worker, with both independent Training write grants and native/app approval; its applied result requests
+cleanup rather than claiming provider removal. The registered batch schema remains unchanged and preserves past copies.
+This adds no callable, transport, consent scope, private projection, or cleanup persistence model. Explicit-disconnect
+epochs and completed-copy protections remain authoritative, even after reconnecting the same account.
 
 #### Garmin workout sport profiles (#647)
 
@@ -2043,10 +2103,55 @@ retained-ID readback, expected title/type/duration/date, live Plan and associati
 positive adoption, never absence. Larger, partial, unstable, duplicate or empty inventories require attention without
 another POST. A pre-existing Plan found without local receipts also requires Workout discovery, not a blind create.
 An uncertain PUT resumes against owned retained IDs; missing resources never authorize replacement POSTs. A lost
-DELETE acknowledgement remains ambiguous and cannot trigger speculative Plan cleanup.
+DELETE acknowledgement remains ambiguous until fresh, guarded removal readback can establish a safe outcome; the
+404 from the DELETE itself never acknowledges that write or authorizes speculative Plan cleanup.
 If recovery positively identifies a copy that is now past or provider-completed, retain that protective evidence and
 retire the superseded attempt without another write or a false delivery-success claim. The normal public status then
 becomes Past or Completed; a lost response must not leave such a protected copy stuck in an uncertainty retry loop.
+
+Removal-only already-absent convergence independently reads the exact retained Plan and Workout IDs, including when
+the Plan is missing. Missing copies require the current credential's `/v1/user` ID to match its bound account; a
+missing Plan also requires a successful empty exact `external_id` lookup. This is a bounded app-owned catalog check,
+not an account-history scan. A retained pair must have its prior confirmed association; an incomplete upload receipt
+cannot substitute for that proof. Auth, access, quota, network, malformed or contradictory responses remain failures.
+
+- Both retained copies absent: checkpoint `artifact=null` with private `removalOutcome="already_absent"`, without any
+  provider DELETE, and finish through normal worker acceptance. Clear the active artifact, attempt, lease and retry
+  state and remove its delivery job; preserve immutable attempts/acceptances and consistent safe status/verification projections.
+- Plan present / Workout absent: validate the owned Plan and retained pair/account, checkpoint the observed missing
+  Workout, then remove only the remaining Plan through the existing write journal.
+- Plan absent / Workout present: independently check the Workout's ID/token, summary, date and live association.
+  A surviving copy without a readable owned associated Plan remains unresolved with a fixed diagnostic, not deleted
+  using only its historical association. Completed, unknown-completion, manually moved or protected past copies remain safe.
+- Both present: existing Workout-then-Plan DELETE order and accepted-resource checkpoints are unchanged.
+
+Existing REMOVE attempts with `progress=null`, interrupted partial checkpoints, and lost DELETE acknowledgements
+use the same scoped readback. Unknown upload journals cannot become removal success. A read-only absence checkpoint
+must still own a live lease and current account/connection epoch and generation at the persistence transaction,
+including tombstone and plan-lock checks. Stale observations are discarded, not treated as late provider writes that
+could quarantine a newer copy/lease/queue. Recovery may record the old REMOVE outcome while a newer Send is pending,
+but never deletes or overwrites the newer copy or consent. Failed persistence emits `checkpoint_failed`, not durable
+success; a retry can converge through the retained journal. Final success is local cleanup satisfaction, not a receipt
+for the earlier external deletion, watch disappearance or recorded-activity removal.
+Protective completion/date GET readback during REMOVE follows the same lease and current-authority fences instead
+of the late-write acknowledgement path. It updates only the exact retained identity and cannot clear concurrently
+learned completion; a stale observation cannot quarantine another worker or delete its delivery job. Actual DELETE
+receipts still use the existing explicit step/state journal and late-acceptance protection.
+
+Verification: Wahoo transport/HTTP unit fixtures cover account/catalog refusals, partial states, protected copies,
+legacy journals, unchanged upsert/inspection policy, and lost-response recovery. The registered delivery emulator
+group reproduces delivered + linked completion → external provider removal → recoverable source deletion → existing
+event-deletion cleanup → already-absent reconciliation, including an existing null REMOVE journal, concurrent workers,
+checkpoint failures and authority/lease/new-Send races. All records/providers are synthetic on loopback demo Firestore;
+these tests do not retry or remediate a production record. Live convergence still requires separately approved Functions
+deployment followed by read-only confirmation of that record's ledger, attempt, queue and projections.
+
+MCP impact review: no new tool, schema, consent, permission, mutation kind, plugin artifact or client refresh. Existing
+`get_training_sync_status` exposes ordinary `removed`/no-copy results for available workouts; existing completion reads
+show unlinked state once the matching event is deleted. Deleted-source references remain unavailable under the current
+MCP contract rather than silently gaining history access. Strict fixtures reject private absence outcomes, journals,
+account readback and HTTP evidence. The existing deletion preview/apply still confirms only the QS mutation and queued
+best-effort cleanup. Help's current Stop, completed-copy and best-effort deletion explanations remain accurate.
 
 New/reconnected OAuth requests retain existing scopes and add `plans_read plans_write`; existing credentials are not
 assumed to have those grants. Missing Training permissions expose targeted reconnect copy/action without breaking

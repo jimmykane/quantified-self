@@ -259,6 +259,27 @@ describe('Strict Training write proposal contract', () => {
       changes: Array.from({ length: 26 }, () => change) }).success).toBe(false);
   });
 
+  it('requires an explicit service-copy choice in the additive deletion preview, without widening legacy deletion', () => {
+    for (const removePastProviderCopies of [true, false]) {
+      for (const change of [
+        { kind: 'delete-workout', workout: { ref: 'opaque' }, removePastProviderCopies },
+        { kind: 'delete-plan', plan: { ref: 'opaque' }, workoutDisposition: 'convert-to-standalone', removePastProviderCopies },
+      ]) {
+        expect(TRAINING_WRITE_INPUTS.preview_training_deletion.safeParse({ expectedScheduleRevision: 1, change }).success).toBe(true);
+        expect(TRAINING_WRITE_INPUTS.preview_training_changes.safeParse({ expectedScheduleRevision: 1, changes: [change] }).success).toBe(false);
+        const withoutChoice: Record<string, unknown> = { ...change };
+        delete withoutChoice.removePastProviderCopies;
+        expect(TRAINING_WRITE_INPUTS.preview_training_deletion.safeParse({ expectedScheduleRevision: 1, change: withoutChoice }).success).toBe(false);
+        expect(TRAINING_WRITE_INPUTS.preview_training_deletion.safeParse({ expectedScheduleRevision: 1,
+          change: { ...change, remoteId: 'private' } }).success).toBe(false);
+      }
+    }
+    expect(TRAINING_WRITE_INPUTS.preview_training_deletion.safeParse({ expectedScheduleRevision: 1,
+      change: { kind: 'delete-plan', plan: { ref: 'opaque' }, removePastProviderCopies: true } }).success).toBe(false);
+    expect(TRAINING_WRITE_INPUTS.preview_training_deletion.safeParse({ expectedScheduleRevision: 1,
+      change: { kind: 'delete-workout', workout: { localKey: 'uncreated' }, removePastProviderCopies: true } }).success).toBe(false);
+  });
+
   it('requires a complete strength draft in the additive preview and keeps v1 recipes frozen', () => {
     const draft = { version: 1, exercises: [{ id: 'squat', name: 'Squat', sets: [{ id: 'set-one',
       ending: { kind: 'repetitions', repetitions: 5 }, externalLoadKg: 80, restAfterSeconds: 120 }] }] };

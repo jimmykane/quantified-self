@@ -139,6 +139,7 @@ describe('Garmin Auth Wrapper', () => {
     });
 
     beforeEach(() => {
+        process.env.GARMINAPI_WEBHOOK_SECRET = 'a'.repeat(64);
         vi.clearAllMocks();
 
         vi.mocked(utils.isCorsAllowed).mockReturnValue(true);
@@ -281,6 +282,7 @@ describe('Garmin Auth Wrapper', () => {
 
         beforeEach(() => {
             req = {
+                path: `/${'a'.repeat(64)}/API`,
                 method: 'POST',
                 body: {},
                 headers: {},
@@ -295,7 +297,17 @@ describe('Garmin Auth Wrapper', () => {
             };
         });
 
-        it('should clean up users by reverse lookup using the shared lifecycle cleanup', async () => {
+        it.each([receiveGarminAPIDeregistration, deauthorizeGarminAPIUsers])('rejects forged deregistration through both names before lookup or cleanup', async handler => {
+            req.path = '/wrong/API';
+            Object.defineProperty(req, 'body', { get() { throw new Error('body accessed'); } });
+            await handler(req, res);
+            expect(res.status).toHaveBeenCalledWith(403);
+            expect(mockCollectionGroup).not.toHaveBeenCalled();
+            expect(serviceAuthLifecycle.cleanupServiceTokenById).not.toHaveBeenCalled();
+        });
+
+        it.each(['/', `/${'a'.repeat(64)}/API`])('cleans up users by reverse lookup through rollout route %s', async path => {
+            req.path = path;
             req.body = { deregistrations: [{ userId: 'garminUser123' }] };
 
             // Mock Collection Group Query
@@ -491,6 +503,7 @@ describe('Garmin Auth Wrapper', () => {
 
         beforeEach(() => {
             req = {
+                path: `/${'a'.repeat(64)}/API`,
                 method: 'POST',
                 body: {},
                 headers: {},
@@ -505,7 +518,18 @@ describe('Garmin Auth Wrapper', () => {
             };
         });
 
-        it('should process valid permission change payload and update token', async () => {
+        it('rejects forged permissions before lookup or writes', async () => {
+            req.path = '/wrong/API';
+            Object.defineProperty(req, 'body', { get() { throw new Error('body accessed'); } });
+            await receiveGarminAPIUserPermissions(req, res);
+            expect(res.status).toHaveBeenCalledWith(403);
+            expect(mockCollectionGroup).not.toHaveBeenCalled();
+            expect(mockBatchUpdate).not.toHaveBeenCalled();
+            expect(mockBatchCommit).not.toHaveBeenCalled();
+        });
+
+        it.each(['/', `/${'a'.repeat(64)}/API`])('processes permission changes through rollout route %s', async path => {
+            req.path = path;
             const { receiveGarminAPIUserPermissions } = await import('./wrapper');
 
             const permissions = ['ACTIVITY_EXPORT', 'HEALTH_EXPORT'];

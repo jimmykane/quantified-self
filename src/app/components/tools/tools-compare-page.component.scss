@@ -134,6 +134,15 @@ h2 {
 .workspace-header-actions {
   display: flex;
   justify-content: flex-end;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 1rem;
+}
+
+.line-pattern-preference {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
 }
 
 .workspace-panel {

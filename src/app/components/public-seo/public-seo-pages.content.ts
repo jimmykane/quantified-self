@@ -515,7 +515,7 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
       },
       {
         question: 'Which sports and workout steps can I create?',
-        answer: 'The interval editor supports Running, Trail Running, Treadmill, Cycling, Mountain Biking, Indoor Cycling, E-Biking, Hand Cycle, Pool Swimming, Open Water Swimming, Walking, Hiking, Rowing, and Indoor Rowing. It supports time or distance steps, fixed repeats, and one absolute heart-rate, power, or pace target per step. Swim and rowing distances use metres; rowing pace is a 500 m split. Pool workouts can save an optional pool length; compatible Garmin lap-swim delivery includes it, while Suunto Guides do not. Set the pool length on the device where needed. Open-water workouts have no pool length. The separate Strength Training editor supports named exercises, rep or timed sets, optional kg/lb external load, and rest.',
+        answer: 'The interval editor supports Running, Trail Running, Treadmill, Cycling, Mountain Biking, Indoor Cycling, E-Biking, Hand Cycle, Pool Swimming, Open Water Swimming, Walking, Hiking, Rowing, and Indoor Rowing. It supports time, distance, or lap-button-ended steps, fixed repeats, and one absolute heart-rate, power, or pace target per step. Lap-ended steps wait for a button press with no time or distance limit. Garmin and Suunto support this ending; Wahoo delivery is unsupported and COROS delivery remains Coming soon. Swim and rowing distances use metres; rowing pace is a 500 m split. Pool workouts can save an optional pool length; compatible Garmin lap-swim delivery includes it, while Suunto Guides do not. Set the pool length on the device where needed. Open-water workouts have no pool length. The separate Strength Training editor supports named exercises, rep or timed sets, optional kg/lb external load, and rest.',
       },
       {
         question: 'Do planned workouts change completed activity totals or Training analysis?',
@@ -769,6 +769,10 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
       {
         question: 'Can an MCP client rearrange my dashboard or change my data?',
         answer: 'It cannot change dashboard settings, recorded activity data, routes, Health, measurements, or sleep records. Separate permissions can replace shared event tags or titles, edit descriptions with additional description access, or create, edit, and permanently delete Timeline notes through the client’s approval controls. It can change Training plans, planned workouts, or their delivery only when you grant the matching child permission and the client permits the separate apply call for a bounded proposal. Plan deletion must be reviewed alone, requires your explicit choice for its workouts, and permanently removes the plan and its revision history.',
+      },
+      {
+        question: 'Does deleting a Training workout also remove service copies?',
+        answer: 'Eligible upcoming copies are automatically queued for withdrawal. Once the focused deletion tool is released and available in your client, it can ask whether to also remove older, uncompleted copies from connected services. Both Training change permissions are required, and the choice appears in the preview before approval. Cleanup needs valid service access and provider support; it never deletes recorded activities or guarantees removal from a provider app or watch. Without the optional cleanup, older copies stay.',
       },
       {
         question: 'Does MCP access expose my original activity or route files?',

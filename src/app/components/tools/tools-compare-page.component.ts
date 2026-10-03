@@ -16,6 +16,7 @@ import { MatMenuModule } from '@angular/material/menu';
 import { MatPaginatorModule, PageEvent } from '@angular/material/paginator';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatSelectModule } from '@angular/material/select';
+import { MatSlideToggleModule } from '@angular/material/slide-toggle';
 import { MatSortModule, Sort, SortDirection } from '@angular/material/sort';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { MatTableModule } from '@angular/material/table';
@@ -65,6 +66,7 @@ import { ToolsCompareAuthResolverData } from '../../resolvers/tools-compare-auth
 import { AppEventColorService } from '../../services/color/app.event.color.service';
 import { AppColors } from '../../services/color/app.colors';
 import { AppDeviceColorPreferenceService } from '../../services/color/app-device-color-preference.service';
+import { AppUserSettingsQueryService } from '../../services/app.user-settings-query.service';
 import { AppBenchmarkFlowService } from '../../services/app.benchmark-flow.service';
 import type { BenchmarkGenerationFailureReason } from '../../services/app.benchmark-flow.service';
 import { BENCHMARK_NO_OVERLAP_MESSAGE } from '../../services/app.benchmark.service';
@@ -222,6 +224,7 @@ const PASSIVE_TABLE_TOOLTIP_MEDIA_QUERIES = ['(pointer: coarse)', '(hover: none)
     MatPaginatorModule,
     MatProgressSpinnerModule,
     MatSelectModule,
+    MatSlideToggleModule,
     MatSortModule,
     MatTableModule,
     MatTooltipModule,
@@ -246,6 +249,7 @@ export class ToolsComparePageComponent implements OnInit {
   private comparisonService = inject(AppToolsComparisonService);
   private eventColorService = inject(AppEventColorService);
   private deviceColorPreferenceService = inject(AppDeviceColorPreferenceService);
+  private userSettingsQuery = inject(AppUserSettingsQueryService);
   private benchmarkFlowService = inject(AppBenchmarkFlowService);
   private hapticsService = inject(AppHapticsService);
   private processingService = inject(AppProcessingService);
@@ -259,6 +263,11 @@ export class ToolsComparePageComponent implements OnInit {
   readonly comparisonTitle = signal('');
   readonly isCreating = signal(false);
   readonly currentUser = signal<User | null>(null);
+  readonly isSavingLinePatterns = signal(false);
+  private linePatternsAuthRevision = 0;
+  private readonly linePatternsOverride = signal<boolean | null>(null);
+  readonly useDistinctLinePatterns = computed(() => this.linePatternsOverride()
+    ?? (this.userSettingsQuery.chartSettings()?.useDistinctComparisonLinePatterns === true));
   readonly comparisons = signal<AppEventInterface[]>([]);
   readonly comparisonTotalCount = signal(0);
   readonly isLoadingComparisons = signal(false);
@@ -483,6 +492,13 @@ export class ToolsComparePageComponent implements OnInit {
     return this.sortedComparisonItems().slice(start, start + page.pageSize);
   });
 
+  private readonly syncLinePatternPreference = effect(() => {
+    if (!this.isSavingLinePatterns()
+      && this.linePatternsOverride() === (this.userSettingsQuery.chartSettings()?.useDistinctComparisonLinePatterns === true)) {
+      this.linePatternsOverride.set(null);
+    }
+  });
+
   private readonly hydrateVisibleComparisonActivitySummaries = effect(() => {
     const user = this.currentUser();
     if (!user) {
@@ -552,6 +568,9 @@ export class ToolsComparePageComponent implements OnInit {
         this.currentUser.set(user);
 
         if (authScopeChanged) {
+          this.linePatternsAuthRevision += 1;
+          this.linePatternsOverride.set(null);
+          this.isSavingLinePatterns.set(false);
           this.resetComparisonData();
         }
         if (!user || (previousUserID && previousUserID !== nextUserID)) {
@@ -562,6 +581,41 @@ export class ToolsComparePageComponent implements OnInit {
           void this.loadInitialComparisonPage(user);
         }
       });
+  }
+
+  async onDistinctLinePatternsChange(enabled: boolean): Promise<void> {
+    const userID = this.currentUser()?.uid;
+    if (!userID || this.isSavingLinePatterns() || enabled === this.useDistinctLinePatterns()) {
+      return;
+    }
+
+    const previousValue = this.useDistinctLinePatterns();
+    const authRevision = this.linePatternsAuthRevision;
+    const isCurrentSave = () => !this.destroyRef.destroyed
+      && authRevision === this.linePatternsAuthRevision
+      && this.currentUser()?.uid === userID;
+    this.hapticsService.selection();
+    this.linePatternsOverride.set(enabled);
+    this.isSavingLinePatterns.set(true);
+    try {
+      await this.userSettingsQuery.updateChartSettings(
+        { useDistinctComparisonLinePatterns: enabled }, { force: true, expectedUserID: userID },
+      );
+      if (isCurrentSave()) {
+        this.hapticsService.success();
+      }
+    } catch (error) {
+      this.logger.error('[ToolsComparePage] Failed to save distinct line patterns', error);
+      if (isCurrentSave()) {
+        this.linePatternsOverride.set(previousValue);
+        this.hapticsService.error();
+        this.snackBar.open('Could not save line patterns. Please try again.', 'OK', { duration: 5000 });
+      }
+    } finally {
+      if (isCurrentSave()) {
+        this.isSavingLinePatterns.set(false);
+      }
+    }
   }
 
   onFilesSelected(event: Event): void {

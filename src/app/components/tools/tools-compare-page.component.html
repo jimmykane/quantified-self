@@ -102,8 +102,20 @@
       titleId="tools-compare-workspace-title"
       leadingIcon="compare_arrows"
       eyebrow="Tools / Compare">
-      @if (comparisonDeviceColorItems().length > 0) {
       <div pageHeaderActions class="workspace-header-actions">
+        <div class="line-pattern-preference" [attr.aria-busy]="isSavingLinePatterns()">
+          <mat-slide-toggle
+            [checked]="useDistinctLinePatterns()"
+            [disabled]="!currentUser() || isSavingLinePatterns()"
+            matTooltip="Use different line patterns in merged and benchmark charts. Saved to your chart settings."
+            (change)="onDistinctLinePatternsChange($event.checked)">
+            Distinct line patterns
+          </mat-slide-toggle>
+          @if (isSavingLinePatterns()) {
+          <mat-progress-spinner diameter="18" mode="indeterminate" aria-label="Saving line patterns"></mat-progress-spinner>
+          }
+        </div>
+        @if (comparisonDeviceColorItems().length > 0) {
         <button
           mat-stroked-button
           type="button"
@@ -113,8 +125,8 @@
           <mat-icon>palette</mat-icon>
           Device colors
         </button>
+        }
       </div>
-      }
     </app-page-header>
 
     @if (isSignedInProfileLoading()) {

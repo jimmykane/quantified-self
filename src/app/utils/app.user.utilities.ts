@@ -509,6 +509,7 @@ export class AppUserUtilities {
         settings.chartSettings.showLaps = settings.chartSettings.showLaps !== false;
         appChartSettings.showSwimLengths = appChartSettings.showSwimLengths !== false;
         appChartSettings.syncChartHoverToMap = appChartSettings.syncChartHoverToMap === true;
+        appChartSettings.useDistinctComparisonLinePatterns = appChartSettings.useDistinctComparisonLinePatterns === true;
         appChartSettings.eventChartOverlayDataTypeByPrimary = normalizeEventChartOverlayDataTypeByPrimary(
             appChartSettings.eventChartOverlayDataTypeByPrimary,
         );

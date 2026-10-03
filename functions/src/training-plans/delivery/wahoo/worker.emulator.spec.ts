@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
+import * as logger from 'firebase-functions/logger';
 import { Firestore } from 'firebase-admin/firestore';
-import { afterAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ActivityTypes, ServiceNames } from '@sports-alliance/sports-lib';
 import { trainingDeliveryCommand } from '../commands';
 import { reconcileTrainingDeliveryPage } from '../store';
@@ -18,6 +19,21 @@ import { projectStrengthWorkoutToV1 } from '../../../../../shared/strength-worko
 import { wahooFixtureStrengthDetails } from '../test-support/wahoo-http-fixture';
 import { WAHOO_SPORT_FIXTURES } from '../test-support/wahoo-sport-fixtures';
 import { retainWahooTrainingCompletion } from '../../../wahoo/training-completion';
+import { mutateTrainingScheduleForUser } from '../../persistence';
+import { cleanupEventFile } from '../../../events/cleanup';
+
+// Exercise the real event-deletion handler against only this demo Firestore.
+// Storage is a synthetic empty bucket; neither ADC nor production data is used.
+const cleanupBinding = vi.hoisted(() => ({ db: null as Firestore | null }));
+vi.mock('firebase-admin', async importOriginal => {
+  const actual = await importOriginal<typeof import('firebase-admin')>();
+  const firestore = Object.assign(() => {
+    if (!cleanupBinding.db) throw new Error('Demo cleanup database is not bound');
+    return cleanupBinding.db;
+  }, actual.firestore);
+  const storage = () => ({ bucket: () => ({ name: 'synthetic-empty-bucket', getFiles: async () => [[]] }) });
+  return { ...actual, default: { ...actual, firestore, storage }, firestore, storage };
+});
 
 describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Wahoo worker with real Firestore and synthetic provider only', { timeout: 30_000 }, () => {
   const host = process.env.FIRESTORE_EMULATOR_HOST;
@@ -36,7 +52,61 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Wahoo worker with real Fi
       ...(action === 'send' ? { timeZone } : {}), ...(approvalDigest ? { approvalDigest } : {}) }, false);
   };
   const send = async () => { await command('send'); await drain(); const row = await ledger(); await processTrainingDelivery(runtime, uid, row.id); await drain(); return ledger(); };
+  const absentPair = async () => {
+    const accepted = await send();
+    server.plans.clear(); server.workouts.clear(); server.calls.length = 0;
+    await command('stop'); await drain(); vi.mocked(logger.info).mockClear();
+    return accepted;
+  };
+  const checkpointFault = (phase: 'observation' | 'protection' | 'final', inject: () => Promise<void>) => {
+    const run = db.runTransaction.bind(db); let injected = false;
+    const interrupted = new Error('Synthetic aborted checkpoint boundary');
+    return vi.spyOn(db, 'runTransaction').mockImplementation(async (callback, options) => {
+      try {
+        return await run(async tx => {
+          let target = false;
+          const set = tx.set.bind(tx);
+          vi.spyOn(tx, 'set').mockImplementation((ref, data, options) => {
+            const value = data as Record<string, unknown>;
+            if (ref.parent.id === 'attempts') {
+              const progress = value.progress as Record<string, unknown> | undefined;
+              target ||= phase === 'final' ? value.state === 'accepted'
+                : phase === 'protection' ? value.state === 'checkpoint' && value.artifact != null && !progress
+                  : progress?.step === 'finished' && progress.removalOutcome === 'already_absent';
+            }
+            return options ? set(ref, data, options) : set(ref, data);
+          });
+          const result = await callback(tx);
+          // Abort before injecting a competing write: an out-of-transaction write
+          // inside a pessimistic transaction would wait on its own read locks.
+          if (target && !injected) { injected = true; throw interrupted; }
+          return result;
+        }, options);
+      } catch (error) {
+        if (error !== interrupted) throw error;
+        await inject();
+        return run(callback, options);
+      }
+    });
+  };
+  const expectRemovalComplete = async (id: string) => {
+    const row = await ledger();
+    expect(row).toMatchObject({ desired: 'absent', actual: null, attempt: null, lease: null, retries: 0, retryAtMs: 0 });
+    expect((await db.collection(DELIVERY_QUEUE).doc(id).get()).exists).toBe(false);
+    expect((await user().collection('trainingDeliveryStatuses').doc(id).get()).data())
+      .toMatchObject({ hasRemoteCopy: false, differsFromQS: false, retryCount: 0, nextRetryAtMs: null });
+    expect((await user().collection('trainingDeliveryVerifications').doc(id).get()).data())
+      .toMatchObject({ canCheck: false, missing: false });
+    expect(server.calls.every(call => call.method === 'GET')).toBe(true);
+    const history = await user().collection(DELIVERY_LEDGER).doc(id).collection('attempts').get();
+    expect(history.docs.some(doc => doc.data().state === 'accepted'
+      && doc.data().progress?.removalOutcome === 'already_absent')).toBe(true);
+    const diagnostics = vi.mocked(logger.info).mock.calls.filter(([message]) => message === '[TrainingDelivery]');
+    expect(diagnostics).toContainEqual(['[TrainingDelivery]', expect.objectContaining({ provider: 'wahoo', outcome: 'already_absent' })]);
+    expect(JSON.stringify(diagnostics)).not.toContain(uid);
+  };
   beforeEach(async () => {
+    vi.mocked(logger.warn).mockClear(); vi.mocked(logger.info).mockClear(); cleanupBinding.db = db;
     uid = `wahoo-test-${randomUUID()}`; users.push(uid); now = Date.parse('2026-10-24T22:30:00Z'); pro = true;
     server = new WahooHttpFixture(); const transport = new WahooTrainingTransport(server.request, () => now);
     runtime = { db, now: () => now, hasPro: async () => pro, transport: provider => provider === 'wahoo' ? transport : null,
@@ -56,6 +126,204 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Wahoo worker with real Fi
       for (const doc of (await db.collection(DELIVERY_QUEUE).where('uid', '==', id).get()).docs) await db.recursiveDelete(doc.ref);
     }
     await db.terminate();
+  });
+  it('converges the deleted-workout/deleted-recording incident with an existing null REMOVE journal', async () => {
+    const accepted = await send(); const ids = accepted.actual!.ids;
+    const eventRef = user().collection('events').doc('synthetic-recording');
+    await eventRef.set({ test: true });
+    const result = await retainWahooTrainingCompletion(db, uid, eventRef.id, {
+      providerUserId: '123', connectionStateGeneration: 'connection', activeCredentialGeneration: 'credential', credential: null,
+    }, ids.workout, ids.plan, ids.workoutToken!, '999', [{ id: 'synthetic-activity', startTimeMs: now }], now);
+    expect(result.retained).toBe(true);
+    server.plans.clear(); server.workouts.clear(); server.calls.length = 0;
+    await mutateTrainingScheduleForUser(uid, { mutationId: randomUUID(), expectedRevisions: [
+      { scope: 'state', id: 'current', revision: 1 }, { scope: 'workout', id: 'w', revision: 1 },
+    ], operation: { kind: 'delete-workout', workoutId: 'w' } }, { db, nowMs: now });
+    await drain(); await processTrainingDelivery(runtime, uid, accepted.id);
+    expect(await ledger()).toMatchObject({ desired: 'preserve', status: 'completed', actual: { ids, completed: true } });
+    expect(server.calls).toHaveLength(0);
+    const deletedEvent = await eventRef.get(); await eventRef.delete();
+    await cleanupEventFile.run({ params: { userId: uid, eventId: eventRef.id }, data: deletedEvent,
+      time: new Date(now).toISOString() } as Parameters<typeof cleanupEventFile.run>[0]);
+    await drain();
+    expect((await user().collection('trainingWorkoutCompletions').doc('w').get()).exists).toBe(false);
+    expect((await user().collection('trainingActivityCompletionLinks').get()).empty).toBe(true);
+    const row = await ledger(); expect(row).toMatchObject({ desired: 'absent', actual: { ids, completed: false } });
+    expect(row.completionLinkId ?? null).toBeNull();
+    const operation = { id: 'existing-remove', deliveryId: row.id, generation: row.desiredGeneration, kind: 'remove' as const,
+      destinationKey: row.destinationKey, connectionGeneration: 'connection', timeZone: row.timeZone, digest: row.desiredDigest,
+      contentDigest: row.contentDigest, workout: null, artifact: row.actual, progress: null };
+    await user().collection(DELIVERY_LEDGER).doc(row.id).update({ attempt: operation, retries: 3, retryAtMs: 0 });
+    await user().collection(DELIVERY_LEDGER).doc(row.id).collection('attempts').doc(operation.id)
+      .set({ schemaVersion: 1, operation, state: 'started', startedAtMs: now });
+    vi.mocked(logger.info).mockClear(); vi.mocked(logger.warn).mockClear();
+    await processTrainingDelivery(runtime, uid, row.id); await expectRemovalComplete(row.id);
+    expect(logger.warn).not.toHaveBeenCalled();
+    const attempt = await user().collection(DELIVERY_LEDGER).doc(row.id).collection('attempts').doc(operation.id).get();
+    expect(attempt.data()).toMatchObject({ operation: { artifact: { ids }, progress: null }, state: 'accepted', artifact: null });
+    expect((await attempt.ref.collection('acceptances').get()).size).toBeGreaterThan(0);
+    await drain(); await mark();
+    await Promise.all([processTrainingDelivery(runtime, uid, row.id), processTrainingDelivery(runtime, uid, row.id)]); await drain();
+    await expectRemovalComplete(row.id);
+    expect((await user().collection('scheduledWorkouts').doc('w').get()).data()?.lifecycle).toBe('deleted');
+  });
+  it('completes a fresh already-absent Stop once under duplicate workers', async () => {
+    const row = await absentPair();
+    await Promise.all([processTrainingDelivery(runtime, uid, row.id), processTrainingDelivery(runtime, uid, row.id)]);
+    await expectRemovalComplete(row.id); expect(['removed', 'stopped']).toContain((await ledger()).status);
+    await drain(); await mark(); await processTrainingDelivery(runtime, uid, row.id);
+    await expectRemovalComplete(row.id);
+  });
+  it.each(['workout-remove', 'plan-remove'] as const)('recovers a lost %s DELETE receipt with bounded reads, no duplicate DELETE or POST', async step => {
+    const accepted = await send();
+    await command('stop'); await drain(); server.calls.length = 0;
+    server.afterHandle = async request => {
+      if (request.method === 'DELETE' && request.path.includes(step === 'workout-remove' ? '/workouts/' : '/plans/')) {
+        server.afterHandle = null; throw new WahooTrainingHttpError('uncertain', false);
+      }
+    };
+    await processTrainingDelivery(runtime, uid, accepted.id);
+    const interrupted = await ledger(); expect(interrupted).toMatchObject({ status: 'retrying', attempt: { progress: { step, state: 'started' } } });
+    const callsBefore = server.calls.length; now = interrupted.retryAtMs + 1;
+    await processTrainingDelivery(runtime, uid, accepted.id);
+    const row = await ledger();
+    expect(row).toMatchObject({ actual: null, attempt: null, lease: null, retries: 0, retryAtMs: 0 });
+    expect(server.plans.size).toBe(0); expect(server.workouts.size).toBe(0);
+    expect(server.calls.filter(call => call.method === 'DELETE')).toHaveLength(2);
+    expect(server.calls.filter(call => call.method === 'POST')).toHaveLength(0);
+    if (step === 'plan-remove') expect(server.calls.slice(callsBefore).every(call => call.method === 'GET')).toBe(true);
+    expect((await db.collection(DELIVERY_QUEUE).doc(accepted.id).get()).exists).toBe(false);
+  });
+  it.each(['observation', 'final'] as const)('cannot log durable absence when the %s transaction fails; its retry converges', async phase => {
+    const accepted = await absentPair();
+    const spy = checkpointFault(phase, async () => { throw new Error('Synthetic checkpoint persistence failure'); });
+    try { await processTrainingDelivery(runtime, uid, accepted.id); } finally { spy.mockRestore(); }
+    const failed = await ledger(); expect(failed).toMatchObject({ status: 'retrying', retries: 1 });
+    expect((await db.collection(DELIVERY_QUEUE).doc(accepted.id).get()).exists).toBe(true);
+    expect(logger.warn).toHaveBeenCalledWith('[TrainingDelivery]', expect.objectContaining({ event: 'checkpoint_failed', provider: 'wahoo' }));
+    expect(vi.mocked(logger.info).mock.calls).not.toContainEqual(['[TrainingDelivery]', expect.objectContaining({ outcome: 'already_absent' })]);
+    now = failed.retryAtMs + 1; await processTrainingDelivery(runtime, uid, accepted.id); await expectRemovalComplete(accepted.id);
+  });
+  it.each(['observation', 'final'] as const)('discards stale %s evidence rather than quarantining a newer lease, copy and queue', async phase => {
+    const accepted = await absentPair(); const ref = user().collection(DELIVERY_LEDGER).doc(accepted.id);
+    let newer: DeliveryLedgerV1; const job = { uid, kind: 'delivery', deliveryId: accepted.id, dueAtMs: now + 60_000, dispatchToken: 'new-worker' };
+    const spy = checkpointFault(phase, async () => {
+      const current = await ledger();
+      newer = { ...current, actual: { ...accepted.actual!, ids: { ...accepted.actual!.ids, plan: '333', workout: '444', association: '444:333' } },
+        status: 'pending', lease: { id: 'new-lease', expiresAtMs: now + 60_000 }, attempt: { ...current.attempt!, id: 'new-attempt' } };
+      const batch = db.batch(); batch.set(ref, newer); batch.set(db.collection(DELIVERY_QUEUE).doc(accepted.id), job); await batch.commit();
+    });
+    try { await processTrainingDelivery(runtime, uid, accepted.id); } finally { spy.mockRestore(); }
+    expect(await ledger()).toEqual(newer!); expect((await db.collection(DELIVERY_QUEUE).doc(accepted.id).get()).data()).toEqual(job);
+    for (const attempt of (await ref.collection('attempts').get()).docs) expect((await attempt.ref.collection('lateAcceptances').get()).empty).toBe(true);
+    expect(vi.mocked(logger.info).mock.calls).not.toContainEqual(['[TrainingDelivery]', expect.objectContaining({ outcome: 'already_absent' })]);
+    expect(server.calls.every(call => call.method === 'GET')).toBe(true);
+  });
+  it('does not treat stale completion readback on a surviving Workout as a late provider write', async () => {
+    const accepted = await send(); await command('stop'); await drain();
+    server.plans.clear(); server.workouts.get(accepted.actual!.ids.workout)!.workout_summary = { id: 999 };
+    server.calls.length = 0;
+    const ref = user().collection(DELIVERY_LEDGER).doc(accepted.id);
+    const job = { uid, kind: 'delivery', deliveryId: accepted.id, dueAtMs: now + 60_000, dispatchToken: 'new-worker' };
+    let newer: DeliveryLedgerV1;
+    const spy = checkpointFault('protection', async () => {
+      const current = await ledger();
+      newer = { ...current, actual: { ...accepted.actual!, ids: { ...accepted.actual!.ids, plan: '333', workout: '444', association: '444:333' } },
+        status: 'pending', lease: { id: 'new-lease', expiresAtMs: now + 60_000 }, attempt: { ...current.attempt!, id: 'new-attempt' } };
+      const batch = db.batch(); batch.set(ref, newer); batch.set(db.collection(DELIVERY_QUEUE).doc(accepted.id), job); await batch.commit();
+    });
+    try { await processTrainingDelivery(runtime, uid, accepted.id); } finally { spy.mockRestore(); }
+    expect(await ledger()).toEqual(newer!);
+    expect((await db.collection(DELIVERY_QUEUE).doc(accepted.id).get()).data()).toEqual(job);
+    for (const attempt of (await ref.collection('attempts').get()).docs) expect((await attempt.ref.collection('lateAcceptances').get()).empty).toBe(true);
+    expect(server.calls.every(call => call.method === 'GET')).toBe(true);
+  });
+  it.each(['authority', 'epoch', 'lease-expired'] as const)(
+    'rejects protective completion readback when %s changes before persistence', async condition => {
+      const accepted = await send(); await command('stop'); await drain();
+      server.plans.clear(); server.workouts.get(accepted.actual!.ids.workout)!.workout_summary = { id: 999 };
+      server.calls.length = 0;
+      const spy = checkpointFault('protection', async () => {
+        if (condition === 'authority') await user().collection('meta').doc(ServiceNames.WahooAPI).update({ connectionStateGeneration: 'new-authority' });
+        if (condition === 'epoch') await user().collection('trainingDeliveryState').doc('current').set({ connectionEpochs: { wahoo: 1 } }, { merge: true });
+        if (condition === 'lease-expired') now += 24 * 60 * 60_000;
+      });
+      try { await processTrainingDelivery(runtime, uid, accepted.id); } finally { spy.mockRestore(); }
+      expect(await ledger()).toMatchObject({ actual: { ids: accepted.actual!.ids, completed: false }, attempt: { progress: null } });
+      expect(server.calls.every(call => call.method === 'GET')).toBe(true);
+    });
+  it('keeps concurrently learned completion when protective readback observes a past Workout', async () => {
+    const accepted = await send(); await command('stop'); await drain(); server.calls.length = 0;
+    server.workouts.get(accepted.actual!.ids.workout)!.starts = '2026-10-24T10:00:00Z';
+    const spy = checkpointFault('protection', async () => {
+      await user().collection(DELIVERY_LEDGER).doc(accepted.id).update({ 'actual.completed': true });
+    });
+    try { await processTrainingDelivery(runtime, uid, accepted.id); } finally { spy.mockRestore(); }
+    expect(await ledger()).toMatchObject({ actual: { ids: accepted.actual!.ids, completed: true, localDate: '2026-10-24' } });
+    await drain(); expect(await ledger()).toMatchObject({ desired: 'preserve', status: 'completed' });
+    expect(server.calls.every(call => call.method === 'GET')).toBe(true);
+  });
+  it.each(['authority', 'epoch', 'lease-expired', 'tombstone', 'new-send', 'completed'] as const)(
+    'does not persist absence after %s changes at the observation transaction boundary', async condition => {
+      const accepted = await absentPair();
+      const spy = checkpointFault('observation', async () => {
+        if (condition === 'authority') await user().collection('meta').doc(ServiceNames.WahooAPI).update({ connectionStateGeneration: 'new-authority' });
+        if (condition === 'epoch') await user().collection('trainingDeliveryState').doc('current').set({ connectionEpochs: { wahoo: 1 } }, { merge: true });
+        if (condition === 'lease-expired') now += 24 * 60 * 60_000;
+        if (condition === 'tombstone') await db.collection('userDeletionTombstones').doc(uid).set({ status: 'pending' });
+        if (condition === 'new-send') await command('send');
+        if (condition === 'completed') await user().collection(DELIVERY_LEDGER).doc(accepted.id).update({ 'actual.completed': true });
+      });
+      try { await processTrainingDelivery(runtime, uid, accepted.id); } finally { spy.mockRestore(); }
+      expect((await ledger()).actual?.ids).toEqual(accepted.actual!.ids);
+      expect(vi.mocked(logger.info).mock.calls).not.toContainEqual(['[TrainingDelivery]', expect.objectContaining({ outcome: 'already_absent' })]);
+      expect(server.calls.every(call => call.method === 'GET')).toBe(true);
+    });
+  it.each(['send', 'completion'] as const)('recovers missing DELETE evidence without erasing a newer %s decision', async decision => {
+    const accepted = await send(); await command('stop'); await drain();
+    server.afterHandle = async request => {
+      if (request.method === 'DELETE' && request.path.includes('/workouts/')) {
+        server.afterHandle = null; throw new WahooTrainingHttpError('uncertain', false);
+      }
+    };
+    await processTrainingDelivery(runtime, uid, accepted.id);
+    const interrupted = await ledger(); expect(interrupted.attempt?.progress).toMatchObject({ step: 'workout-remove', state: 'started' });
+    server.plans.clear(); server.calls.length = 0; now = interrupted.retryAtMs + 1;
+    const spy = checkpointFault('observation', async () => {
+      if (decision === 'completion') {
+        await user().collection(DELIVERY_LEDGER).doc(accepted.id).update({ 'actual.completed': true });
+      } else { await command('send'); await drain(); }
+    });
+    try { await processTrainingDelivery(runtime, uid, accepted.id); } finally { spy.mockRestore(); }
+    if (decision === 'completion') {
+      expect(await ledger()).toMatchObject({ actual: { ids: accepted.actual!.ids, completed: true } });
+      expect(vi.mocked(logger.info).mock.calls).not.toContainEqual(['[TrainingDelivery]', expect.objectContaining({ outcome: 'already_absent' })]);
+    } else {
+      expect(await ledger()).toMatchObject({ desired: 'present', status: 'pending', actual: null, attempt: null, retries: 0 });
+      const setting = await user().collection('trainingDeliverySettings').doc('workout_w_wahoo').get();
+      expect(setting.data()?.enabled).toBe(true);
+      expect(logger.info).toHaveBeenCalledWith('[TrainingDelivery]', expect.objectContaining({ event: 'recovered_acceptance', outcome: 'already_absent' }));
+      await drain();
+      expect((await db.collection(DELIVERY_QUEUE).doc(accepted.id).get()).exists).toBe(true);
+    }
+    expect(server.calls.every(call => call.method === 'GET')).toBe(true);
+  });
+  it('logs the removal safety check while retaining the copy and existing retry state', async () => {
+    const accepted = await send(); const ids = accepted.actual!.ids;
+    delete server.workouts.get(ids.workout)!.workout_summary;
+    await command('stop'); await drain();
+    const writes = server.calls.filter(call => call.method !== 'GET').length;
+    await processTrainingDelivery(runtime, uid, accepted.id);
+    expect(logger.warn).toHaveBeenCalledWith('[TrainingDelivery]', expect.objectContaining({
+      event: 'failure', provider: 'wahoo', category: 'uncertain', retryCount: 1,
+      failurePhase: 'contract', wahooContractCheck: 'workout_completion_unknown',
+    }));
+    const row = await ledger();
+    expect(row).toMatchObject({ status: 'retrying', desired: 'absent', actual: { ids }, retries: 1 });
+    expect(JSON.stringify(row)).not.toContain('wahooContractCheck');
+    expect(server.calls.filter(call => call.method !== 'GET')).toHaveLength(writes);
+    const logs = JSON.stringify(vi.mocked(logger.warn).mock.calls);
+    expect(logs).not.toContain(uid); expect(logs).not.toContain(ids.externalId); expect(logs).not.toContain(ids.workoutToken);
   });
   it('sends full timed strength with normal consent, serializes concurrent workers and updates load/rest/date in place before Stop', async () => {
     const details = wahooFixtureStrengthDetails();

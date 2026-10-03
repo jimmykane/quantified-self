@@ -29,6 +29,7 @@ export class WahooHttpFixture {
   };
   private handle(request: WahooTrainingRequest): WahooTrainingResponse {
     const url = new URL(request.path, 'https://fixture.test');
+    if (request.path === '/v1/user' && request.method === 'GET') return { status: 200, body: { id: 123 } };
     if (request.path.startsWith('/v1/plans?')) return { status: 200,
       body: [...this.plans.values()].filter(plan => plan.external_id === url.searchParams.get('external_id')) };
     if (request.path.startsWith('/v1/workouts?')) {

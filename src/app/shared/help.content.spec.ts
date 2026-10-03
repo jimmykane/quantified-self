@@ -14,6 +14,24 @@ import {
 } from './policies.content';
 
 describe('help.content', () => {
+  it('explains the Assistant deletion review and distinguishes authored deletion from service cleanup', () => {
+    const copy = HELP_SECTIONS.find(section => section.id === 'ai-insights')!.content;
+    for (const phrase of ['with both Training change choices on', '**Delete plan**', '**Delete workout**',
+      'Workout deletion is recoverable', 'choose whether its workouts stay standalone or are deleted',
+      'Older-copy cleanup is optional', 'does not require Pro',
+      'not removal from a connected app or watch', 'Completed activities stay untouched']) {
+      expect(copy).toContain(phrase);
+    }
+  });
+  it('explains the explicit MCP older-copy cleanup choice without promising provider or watch removal', () => {
+    const copy = HELP_SECTIONS.find(section => section.id === 'training-plans')!.content;
+    expect(copy).toContain('also remove older, uncompleted service copies');
+    expect(copy).toContain('Both Training change permissions are required');
+    expect(copy).toContain('deletion preview before approval');
+    expect(copy).toContain('released and discovered');
+    expect(copy).toContain('never deletes recorded activities');
+    expect(copy).not.toContain('MCP plan and workout deletion do not select this option');
+  });
   it('explains uncertain MCP apply replies without authorizing replacement workouts or approval bypass', () => {
     const copy = HELP_SECTIONS.find(section => section.id === 'training-plans')!.content;
     expect(copy).toContain('it may already have applied');
@@ -70,6 +88,19 @@ describe('help.content', () => {
     expect(content).toContain('no separate approval for each workout or edit');
     expect(content).toContain('Additional mapping losses, such as shortened exercise instructions, still need review');
     expect(content).toContain('Sent Guide status does not prove app/watch receipt or workout completion');
+  });
+
+  it('explains lap-button endings and their provider and completion boundaries', () => {
+    const content = HELP_SECTIONS.find(section => section.id === 'training-plans')!.content;
+    expect(content).toContain('**End by -> Lap button press**');
+    expect(content).toContain('warmup, work, recovery, cooldown, rest, or other steps');
+    expect(content).toContain('including steps inside fixed repeats');
+    expect(content).toContain('no time or distance limit');
+    expect(content).toContain('not a timer plus a button condition');
+    expect(content).toContain('Garmin and Suunto support these manual transitions');
+    expect(content).toContain('COROS has the mapping but delivery remains **Coming soon**');
+    expect(content).toContain('Wahoo cannot receive lap-ended steps');
+    expect(content).toContain('does not stop the recording or mark the QS workout completed');
   });
   it('keeps COROS strength implementation distinct from public Send or delivery proof', () => {
     const content = HELP_SECTIONS.find(section => section.id === 'training-plans')!.content;
@@ -1084,10 +1115,17 @@ describe('help.content', () => {
     expect(gettingStartedSection?.content).toContain('[FIT and GPX Route Files](/features/fit-gpx-route-files)');
     expect(gettingStartedSection?.content).toContain('[File Comparison Tool](/tools/compare)');
     expect(gettingStartedSection?.content).toContain('[Tools -> Compare](/tools/compare/saved)');
+    expect(gettingStartedSection?.content).toContain('**Distinct line patterns** is available on Compare');
+    expect(gettingStartedSection?.content).toContain('It is off by default');
+    expect(gettingStartedSection?.content).toContain('Both controls use the same account preference');
     expect(gettingStartedSection?.content).toContain('sortable, filterable, paginated table with device, activity type, and review tag filters, selected-row bulk delete, distance, ascent, descent, visible benchmark pairs, GNSS/heart-rate/altitude benchmark error metrics colored by low/moderate/high error, clickable draft metric cells that open the benchmark flow, quick description notes, and custom reviewer tags');
     expect(gettingStartedSection?.content).toContain('Benchmark reports show an **At a Glance** reviewer summary');
     expect(gettingStartedSection?.content).toContain('report share menu can copy that summary');
     expect(gettingStartedSection?.content).toContain('account-level device color preferences from saved file comparisons');
+    expect(gettingStartedSection?.content).toContain('**Use Okabe–Ito preset**');
+    expect(gettingStartedSection?.content).toContain('**Standard** is selected by default and also offers dark gray and tan');
+    expect(gettingStartedSection?.content).toContain('solid, dashed, dotted, and dash-dot patterns');
+    expect(gettingStartedSection?.content).toContain('black becomes neutral gray in dark mode');
     expect(gettingStartedSection?.content).toContain('keyed by the base device name rather than firmware/software version');
     expect(gettingStartedSection?.content).toContain('activity toggles, event tables, benchmark dialogs, charts, and maps');
     expect(gettingStartedSection?.content).toContain('uploaded FIT/TCX/GPX/JSON/SML activity files');

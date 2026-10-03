@@ -134,6 +134,26 @@ describe('TileChartActionsComponent', () => {
       autoTiles: expect.objectContaining({ [`preset:${id}`]: expect.objectContaining({ state: 'dismissed' }) }),
     }) } });
   });
+
+  it('disables every open Calendar action and shows progress while its mode is saving', async () => {
+    component.chartType = DASHBOARD_ACTIVITY_CALENDAR_CHART_TYPE;
+    fixture.detectChanges();
+    const trigger = fixture.nativeElement.querySelector<HTMLButtonElement>('.tile-actions-trigger')!;
+    trigger.click(); fixture.detectChanges(); await fixture.whenStable();
+    component.calendarViewSaving = true; fixture.detectChanges();
+    expect(trigger.disabled).toBe(true);
+    expect(trigger.getAttribute('aria-busy')).toBe('true');
+    expect(trigger.querySelector('[role="progressbar"]')).toBeTruthy();
+    expect(Array.from(document.body.querySelectorAll<HTMLButtonElement>('[role="menu"] button')).every(button => button.disabled)).toBe(true);
+  });
+
+  it('keeps Calendar view switching out of its action menu', async () => {
+    component.chartType = DASHBOARD_ACTIVITY_CALENDAR_CHART_TYPE; fixture.detectChanges();
+    fixture.nativeElement.querySelector<HTMLButtonElement>('.tile-actions-trigger')!.click();
+    fixture.detectChanges(); await fixture.whenStable();
+    expect(document.body.querySelector('[role="menuitemradio"]')).toBeNull();
+    expect(userMock.updateUserProperties).not.toHaveBeenCalled();
+  });
   it.each([
     [ChartTypes.LinesVertical, 'chart'],
     [DASHBOARD_ACWR_KPI_CHART_TYPE, 'KPI'],

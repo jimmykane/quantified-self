@@ -16,6 +16,7 @@ export interface TrackChartPanelSeries {
   activityID: string;
   activityName: string;
   color: string;
+  lineStyle?: 'solid' | 'dashed' | 'dotted' | 'dash-dot';
   streamType: string;
   displayName: string;
   unit: string;

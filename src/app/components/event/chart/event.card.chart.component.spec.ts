@@ -30,6 +30,9 @@ import { AppUserSettingsQueryService } from '../../../services/app.user-settings
 import { AppUserService } from '../../../services/app.user.service';
 import { AppActivityCursorService } from '../../../services/activity-cursor/app-activity-cursor.service';
 import { AppEventColorService } from '../../../services/color/app.event.color.service';
+import { AppDeviceColorPreferenceService } from '../../../services/color/app-device-color-preference.service';
+import { EventChartPanelWorkerService } from '../../../services/event-chart-panel-worker.service';
+import { resolveDeviceChartColor } from '../../../helpers/device-chart-appearance.helper';
 import { LoggerService } from '../../../services/logger.service';
 import { AppChartSettingsLocalStorageService } from '../../../services/storage/app.chart.settings.local.storage.service';
 import * as eventDataHelper from '../../../helpers/event-echarts-data.helper';
@@ -74,6 +77,7 @@ describe('EventCardChartComponent', () => {
   const mockEventColorService = {
     getActivityColor: vi.fn().mockReturnValue('#ff0000'),
   };
+  const deviceColors = signal<Record<string, string>>({});
 
   const mockChartSettingsStorage = {
     getEventChartVisibilityPreference: vi.fn().mockReturnValue({
@@ -96,6 +100,9 @@ describe('EventCardChartComponent', () => {
   };
 
   beforeEach(async () => {
+    deviceColors.set({});
+    mockEventColorService.getActivityColor.mockReset();
+    mockEventColorService.getActivityColor.mockReturnValue('#ff0000');
     chartSettingsSignal.set({
       ...defaultChartSettings,
     });
@@ -130,6 +137,7 @@ describe('EventCardChartComponent', () => {
         { provide: AppUserService, useValue: mockUserService },
         { provide: AppActivityCursorService, useValue: mockActivityCursorService },
         { provide: AppEventColorService, useValue: mockEventColorService },
+        { provide: AppDeviceColorPreferenceService, useValue: { deviceColorByName: deviceColors } },
         { provide: AppChartSettingsLocalStorageService, useValue: mockChartSettingsStorage },
         { provide: LoggerService, useValue: mockLogger },
       ],
@@ -213,6 +221,78 @@ describe('EventCardChartComponent', () => {
     expect(buildPanelsSpy).toHaveBeenCalledWith(expect.objectContaining({
       colorIntensityZoneLines: true,
     }));
+  });
+
+  it('applies device appearance to worker results and refreshes saved colors and dark-theme presentation', async () => {
+    chartSettingsSignal.set({ ...chartSettingsSignal(), useDistinctComparisonLinePatterns: true });
+    const activities = ['a', 'b', 'c', 'd'].map(id => ({ getID: () => id, type: ActivityTypes.Cycling }));
+    component.event = { getID: () => 'comparison', isMerge: true, getActivities: () => activities } as any;
+    component.selectedActivities = activities as any;
+    const colors = ['#D55E00', '#0072B2', '#000000', '#CC79A7'];
+    mockEventColorService.getActivityColor.mockImplementation((_all, activity) => deviceColors()[activity.getID()] || colors[activities.indexOf(activity)]);
+    const panels = [{ dataType: DataPower.type, displayName: 'Power', colorGroupKey: 'Power', minX: 0, maxX: 1,
+      series: activities.map(activity => ({ activityID: activity.getID(), color: '#FF0000' })) }] as any;
+    const worker = TestBed.inject(EventChartPanelWorkerService);
+    vi.spyOn(worker, 'shouldUseWorker').mockReturnValue(true);
+    vi.spyOn(worker, 'buildPanels').mockResolvedValue(panels);
+    await (component as any).rebuildPanels('comparison-test');
+    expect(component.allChartPanels[0].series.map(series => series.lineStyle)).toEqual(['solid', 'dashed', 'dotted', 'dash-dot']);
+    expect(component.allChartPanels[0].series[2].color).toBe('#000000');
+    component.darkTheme = true;
+    await (component as any).rebuildPanels('theme-test');
+    expect(component.allChartPanels[0].series[2].color).not.toBe('#000000');
+    deviceColors.set({ b: '#A68A5B' });
+    fixture.detectChanges();
+    await (component as any).rebuildPanels('preference-test');
+    expect(component.allChartPanels[0].series[1].color).toBe(resolveDeviceChartColor('#A68A5B', true));
+    expect(component.allChartPanels[0].series[1].lineStyle).toBe('dashed');
+    expect(panels[0].series[2].color).toBe('#FF0000');
+  });
+
+  it('defaults to solid lines and enables or clears patterns on cached comparison panels', async () => {
+    const activities = ['a', 'b'].map(id => ({ getID: () => id, type: ActivityTypes.Cycling }));
+    component.event = { getID: () => 'comparison', isMerge: true, getActivities: () => activities } as any;
+    component.selectedActivities = activities as any;
+    vi.spyOn(TestBed.inject(EventChartPanelWorkerService), 'shouldUseWorker').mockReturnValue(false);
+    const buildPanels = vi.spyOn(eventDataHelper, 'buildEventChartPanels').mockReturnValue([{
+      dataType: DataPower.type, displayName: 'Power', colorGroupKey: 'Power', minX: 0, maxX: 1,
+      series: activities.map(activity => ({ activityID: activity.getID(), color: '#FF0000' })),
+    }] as any);
+
+    await (component as any).rebuildPanels('initial');
+    expect(component.allChartPanels[0].series.map(series => series.lineStyle)).toEqual([undefined, undefined]);
+    chartSettingsSignal.set({ ...chartSettingsSignal(), useDistinctComparisonLinePatterns: true });
+    await (component as any).rebuildPanels('enabled');
+    expect(component.allChartPanels[0].series.map(series => series.lineStyle)).toEqual(['solid', 'dashed']);
+    chartSettingsSignal.set({ ...chartSettingsSignal(), useDistinctComparisonLinePatterns: false });
+    await (component as any).rebuildPanels('disabled');
+    expect(component.allChartPanels[0].series.map(series => series.lineStyle)).toEqual([undefined, undefined]);
+    expect(buildPanels).toHaveBeenCalledOnce();
+  });
+
+  it.each(['showLaps', 'showSwimLengths'])('refreshes cached device colors when the theme and %s change together', async (setting) => {
+    const activity = {
+      getID: () => 'swim-1', type: ActivityTypes.Cycling,
+      getSwimLengths: () => [{ index: 1, type: 'active', startDate: new Date(0), endDate: new Date(25000) }],
+    } as any;
+    component.event = { getID: () => 'comparison', isMerge: true, getActivities: () => [activity] } as any;
+    component.selectedActivities = [activity];
+    mockEventColorService.getActivityColor.mockReturnValue('#000000');
+    vi.spyOn(TestBed.inject(EventChartPanelWorkerService), 'shouldUseWorker').mockReturnValue(false);
+    const buildPanels = vi.spyOn(eventDataHelper, 'buildEventChartPanels').mockReturnValue([{
+      dataType: DataPower.type, displayName: 'Power', colorGroupKey: 'Power', minX: 0, maxX: 1,
+      series: [{ activityID: activity.getID(), color: '#FF0000' }],
+    }] as any);
+
+    await (component as any).rebuildPanels('initial');
+    expect(component.allChartPanels[0].series[0].color).toBe('#000000');
+    component.darkTheme = true;
+    chartSettingsSignal.set({ ...chartSettingsSignal(), [setting]: false });
+    await (component as any).rebuildPanels('theme-and-markers');
+
+    expect(buildPanels).toHaveBeenCalledOnce();
+    expect(component.allChartPanels[0].series[0].color).toBe(resolveDeviceChartColor('#000000', true));
+    expect(component.chartPanelViews[0].panel).toBe(component.allChartPanels[0]);
   });
 
   it('does not build swim length markers when selected activities have none', async () => {

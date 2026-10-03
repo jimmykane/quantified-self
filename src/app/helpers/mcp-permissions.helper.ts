@@ -40,7 +40,7 @@ export const MCP_SCOPE_CONTENT: Record<McpScope, {
   },
   'training-delivery:write': {
     title: 'Change planned-workout sync',
-    description: 'Enable or stop plan sync and send, resume, retry, check or approve planned-workout delivery for one or all connected services. Every proposal is previewed before a separate apply tool governed by your client\'s approval controls. Provider delivery remains subject to Pro access, connection permissions and rollout availability. This cannot connect or disconnect a service.',
+    description: 'Enable or stop plan sync and send, resume, retry, check or approve planned-workout delivery for one or all connected services. Together with Change Training plans and workouts, this also allows an explicit request to remove older, uncompleted service copies when deleting a plan or workout. Cleanup needs valid service access and provider support; it never deletes recorded activities or guarantees removal from a watch. Every proposal is previewed before a separate apply tool governed by your client\'s approval controls. New delivery remains subject to Pro access, connection permissions and rollout availability; removal does not require Pro. This cannot connect or disconnect a service.',
   },
   'activity-descriptions:read': {
     title: 'Activity descriptions',
