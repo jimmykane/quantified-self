@@ -87,7 +87,8 @@ projected `role="alert"` state.
 
 ### Benchmark device appearance
 
-The Device colors dialog stages the published Okabe–Ito palette before the existing account-settings transaction.
+The Device colors dialog opens with the Standard palette selected. Choosing Use Okabe–Ito preset stages the
+published palette before the existing account-settings transaction.
 The first four swatches are vermillion, blue, black, and reddish purple; the remaining four retain the published values.
 Named Standard swatches also include dark gray and tan. The preset supports at most eight listed devices and never
 silently repeats colors. Individual colors and Automatic reset remain available; Cancel discards every staged change.

@@ -1120,7 +1120,7 @@ describe('help.content', () => {
     expect(gettingStartedSection?.content).toContain('report share menu can copy that summary');
     expect(gettingStartedSection?.content).toContain('account-level device color preferences from saved file comparisons');
     expect(gettingStartedSection?.content).toContain('**Use Okabe–Ito preset**');
-    expect(gettingStartedSection?.content).toContain('**Standard** also offers dark gray and tan');
+    expect(gettingStartedSection?.content).toContain('**Standard** is selected by default and also offers dark gray and tan');
     expect(gettingStartedSection?.content).toContain('solid, dashed, dotted, and dash-dot patterns');
     expect(gettingStartedSection?.content).toContain('black becomes neutral gray in dark mode');
     expect(gettingStartedSection?.content).toContain('keyed by the base device name rather than firmware/software version');

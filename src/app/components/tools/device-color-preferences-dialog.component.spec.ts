@@ -77,14 +77,18 @@ describe('DeviceColorPreferencesDialogComponent', () => {
     expect(component.selectedDeviceKey()).toBe('garmin edge');
   });
 
-  it('uses Material controls for device selection and custom color picking', () => {
+  it('uses Material controls for device selection and custom color picking', async () => {
     createComponent();
+    await fixture.whenStable();
+    fixture.detectChanges();
     const element = fixture.nativeElement as HTMLElement;
 
     expect(element.querySelector('mat-selection-list')).toBeTruthy();
     expect(element.querySelectorAll('mat-list-option')).toHaveLength(2);
     expect(element.querySelector('mat-form-field.custom-color-field')).toBeTruthy();
     expect(element.querySelector('input[matinput][type="color"]')).toBeTruthy();
+    expect(element.querySelector('mat-select')?.textContent).toContain('Standard');
+    expect(component.selectedPaletteID()).toBe('standard');
   });
 
   it('uses the shared scrollbar for the nested device list', () => {
@@ -156,12 +160,13 @@ describe('DeviceColorPreferencesDialogComponent', () => {
     component.selectDevice('garmin edge');
     component.setSelectedDeviceColor('#112233');
     expect(haptics.selection).not.toHaveBeenCalled();
+    component.selectPalette('okabe-ito');
     component.selectPalette('standard');
     component.selectPalette('standard');
     fixture.detectChanges();
     expect(fixture.nativeElement.querySelector('[aria-label="Use Tan (#A68A5B)"]')).toBeTruthy();
     expect(fixture.nativeElement.querySelector('[aria-label="Use Dark gray (#3D3D3D)"]')).toBeTruthy();
-    expect(haptics.selection).toHaveBeenCalledOnce();
+    expect(haptics.selection).toHaveBeenCalledTimes(2);
   });
 
   it('does not repeat the palette or overwrite preferences for more than eight devices', () => {

@@ -47,10 +47,10 @@ export class DeviceColorPreferencesDialogComponent {
   private originalColorByName = { ...this.deviceColorPreferenceService.deviceColorByName() };
 
   readonly paletteOptions = [
-    { id: 'okabe-ito', label: 'Okabe–Ito', colors: OKABE_ITO_DEVICE_COLORS },
     { id: 'standard', label: 'Standard', colors: STANDARD_DEVICE_COLORS },
+    { id: 'okabe-ito', label: 'Okabe–Ito', colors: OKABE_ITO_DEVICE_COLORS },
   ];
-  readonly selectedPaletteID = signal('okabe-ito');
+  readonly selectedPaletteID = signal('standard');
   readonly presetDeviceLimit = OKABE_ITO_DEVICE_COLORS.length;
   readonly selectedPalette = computed(() => this.paletteOptions.find(palette => palette.id === this.selectedPaletteID())!);
   readonly devices = signal<DeviceColorPreferenceDialogDevice[]>(this.normalizeDevices(this.data.devices));
