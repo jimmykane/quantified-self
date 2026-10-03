@@ -48,10 +48,6 @@ app-activity-calendar-tile {
   flex: 0 0 auto;
 }
 
-.tile-chart-calendar.tile-has-header-controls {
-  --activity-calendar-navigation-end-inset: 40px;
-}
-
 .tile-chart-calendar > .tile-header-controls {
   top: 20px;
 }

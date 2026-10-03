@@ -12,6 +12,17 @@
   </header>
   }
 
+  @if (dayContextEnabled()) {
+    <div class="activity-calendar-view-controls">
+      <mat-button-toggle-group aria-label="Calendar view" hideSingleSelectionIndicator [value]="selectedView()"
+        [disabled]="viewSaving()" (change)="selectView($event.value)">
+        <mat-button-toggle value="month">Month</mat-button-toggle>
+        <mat-button-toggle value="30d">30 days</mat-button-toggle>
+      </mat-button-toggle-group>
+      @if (viewSaving()) { <mat-spinner diameter="16" aria-label="Saving calendar view"></mat-spinner> }
+    </div>
+  }
+
   @if (showNavigation() || dayContextEnabled()) {
     <nav class="activity-calendar-tile-navigation" aria-label="Calendar period navigation">
       <button mat-icon-button type="button" appHapticTap [matTooltip]="'Previous ' + periodUnitLabel()" [attr.aria-label]="'Previous ' + periodUnitLabel()"

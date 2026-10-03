@@ -79,9 +79,7 @@ class MockTileChartActionsComponent {
   @Input() chartTimeInterval?: TimeIntervals;
   @Input() chartDataValueType?: ChartDataValueTypes;
   @Input() showLayoutControls = true;
-  @Input() calendarView: 'month' | '30d' | null = null;
   @Input() calendarViewSaving = false;
-  @Output() calendarViewChange = new EventEmitter<'month' | '30d'>();
   @Output() savingChange = new EventEmitter<boolean>();
   @Output() editTile = new EventEmitter<number>();
 }
@@ -120,12 +118,8 @@ class MockActivityCalendarTileComponent {
   @Input() dayContextEnabled = false;
   @Input() privateHealthEnabled = false;
   @Input() viewSaving = false;
-  readonly selectedView = signal<'month' | '30d'>('month');
+  @Input() view: 'month' | '30d' = 'month';
   @Output() viewChange = new EventEmitter<'month' | '30d'>();
-  readonly selectView = vi.fn((view: 'month' | '30d') => {
-    this.selectedView.set(view);
-    this.viewChange.emit(view);
-  });
   @Output() selectedDateKeyChange = new EventEmitter<string>();
 }
 
@@ -1127,19 +1121,18 @@ describe('TileChartComponent', () => {
     expect(fixture.nativeElement.querySelector('.calendar-route-action')).toBeNull();
   });
 
-  it('routes menu choices through the live Calendar and reflects restored modes and pending saves', () => {
+  it('forwards Calendar selector changes through the existing settings save and blocks concurrent actions', () => {
     component.chartType = DASHBOARD_ACTIVITY_CALENDAR_CHART_TYPE;
     component.showActions = true;
     fixture.detectChanges();
     const calendar = fixture.debugElement.query(By.directive(MockActivityCalendarTileComponent)).componentInstance as MockActivityCalendarTileComponent;
     const actions = getActionsComponent();
     const persisted = vi.spyOn(component.calendarViewChange, 'emit');
-    calendar.selectedView.set('30d'); fixture.detectChanges();
-    expect(component.calendarView).toBe('month');
-    expect(actions.calendarView).toBe('30d');
-    actions.calendarViewChange.emit('month'); fixture.detectChanges();
-    expect(calendar.selectView).toHaveBeenCalledExactlyOnceWith('month');
-    expect(persisted).toHaveBeenCalledExactlyOnceWith('month');
+    expect(calendar.view).toBe('month');
+    calendar.viewChange.emit('30d'); fixture.detectChanges();
+    expect(persisted).toHaveBeenCalledExactlyOnceWith('30d');
+    fixture.componentRef.setInput('calendarView', '30d'); fixture.detectChanges();
+    expect(calendar.view).toBe('30d');
     fixture.componentRef.setInput('calendarViewSaving', true); fixture.detectChanges();
     expect(actions.calendarViewSaving).toBe(true);
     expect(calendar.viewSaving).toBe(true);

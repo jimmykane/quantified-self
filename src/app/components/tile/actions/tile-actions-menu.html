@@ -8,19 +8,6 @@
 </button>
 <mat-menu #tileOptions="matMenu" class="qs-menu-panel qs-menu-panel-form qs-config-menu qs-tile-actions-menu">
   <div class="tile-actions-menu-shell">
-    @if (presentation.kind === 'calendar' && calendarView) {
-      <button mat-menu-item type="button" role="menuitemradio" [attr.aria-checked]="calendarView === 'month'"
-        [disabled]="isActionSaving" (click)="selectCalendarView('month')">
-        <mat-icon>{{ calendarView === 'month' ? 'check' : 'calendar_month' }}</mat-icon>
-        <span>Month</span>
-      </button>
-      <button mat-menu-item type="button" role="menuitemradio" [attr.aria-checked]="calendarView === '30d'"
-        [disabled]="isActionSaving" (click)="selectCalendarView('30d')">
-        <mat-icon>{{ calendarView === '30d' ? 'check' : 'date_range' }}</mat-icon>
-        <span>30 days</span>
-      </button>
-      <div class="tile-actions-divider" role="separator"></div>
-    }
     @if (canResize) {
     <button mat-menu-item type="button" class="tile-action-menu-item" [disabled]="isActionSaving" [matMenuTriggerFor]="columnsMenu" (menuOpened)="onLayoutMenuOpened()">
       <mat-icon>view_column</mat-icon>
