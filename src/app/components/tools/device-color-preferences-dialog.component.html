@@ -49,7 +49,7 @@
         </mat-select>
       </mat-form-field>
       @if (selectedPaletteID() === 'okabe-ito') {
-      <p class="palette-help">Designed by color-blind researchers Masataka Okabe and Kei Ito. Enable Distinct line patterns in Compare or Settings → Charts for additional device cues. Dark colors are lightened in dark mode.</p>
+      <p class="palette-help">Designed by color-blind researchers Masataka Okabe and Kei Ito. Enable Distinct line patterns in Compare’s Chart options or Settings → Charts for additional device cues. Dark colors are lightened in dark mode.</p>
       }
       <div class="palette-grid" role="group" aria-label="Palette colors">
         @for (swatch of selectedPalette().colors; track swatch.color) {

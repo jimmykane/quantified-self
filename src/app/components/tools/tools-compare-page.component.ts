@@ -16,7 +16,6 @@ import { MatMenuModule } from '@angular/material/menu';
 import { MatPaginatorModule, PageEvent } from '@angular/material/paginator';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatSelectModule } from '@angular/material/select';
-import { MatSlideToggleModule } from '@angular/material/slide-toggle';
 import { MatSortModule, Sort, SortDirection } from '@angular/material/sort';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { MatTableModule } from '@angular/material/table';
@@ -224,7 +223,6 @@ const PASSIVE_TABLE_TOOLTIP_MEDIA_QUERIES = ['(pointer: coarse)', '(hover: none)
     MatPaginatorModule,
     MatProgressSpinnerModule,
     MatSelectModule,
-    MatSlideToggleModule,
     MatSortModule,
     MatTableModule,
     MatTooltipModule,
@@ -581,6 +579,12 @@ export class ToolsComparePageComponent implements OnInit {
           void this.loadInitialComparisonPage(user);
         }
       });
+  }
+
+  onChartOptionsMenuOpened(): void {
+    if (this.currentUser()) {
+      this.hapticsService.selection();
+    }
   }
 
   async onDistinctLinePatternsChange(enabled: boolean): Promise<void> {

@@ -400,7 +400,7 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
       return [];
     }
 
-    const primaryStrokeWidth = this.resolveSeriesStrokeWidth(this.panel);
+    const primaryStrokeWidth = this.resolveSeriesStrokeWidth();
     const legendItems = this.buildSeriesLegendItems(this.panel, {
       scope: 'primary',
       includeMetricName: false,
@@ -414,7 +414,7 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
     return legendItems.concat(this.buildSeriesLegendItems(overlayPanel, {
       scope: 'overlay',
       includeMetricName: true,
-      lineWidth: this.resolveOverlayStrokeWidth(overlayPanel, primaryStrokeWidth),
+      lineWidth: this.resolveOverlayStrokeWidth(primaryStrokeWidth),
     }));
   }
 
@@ -832,7 +832,7 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
         visibleRange,
       })
       : null;
-    const seriesStrokeWidth = this.resolveSeriesStrokeWidth(panel);
+    const seriesStrokeWidth = this.resolveSeriesStrokeWidth();
     const resolvedFillOpacity = Number(this.fillOpacity);
     const seriesFillOpacity = Number.isFinite(resolvedFillOpacity)
       ? Math.min(1, Math.max(0, resolvedFillOpacity))
@@ -1111,19 +1111,15 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
     };
   }
 
-  private resolveSeriesStrokeWidth(panel: EventChartPanelModel): number {
+  private resolveSeriesStrokeWidth(): number {
     const resolvedStrokeWidth = Number(this.strokeWidth);
-    const minimumStrokeWidth = panel.series.some(series => series.lineStyle) ? 2 : 0;
-    return Math.max(minimumStrokeWidth, Number.isFinite(resolvedStrokeWidth) && resolvedStrokeWidth > 0
+    return Number.isFinite(resolvedStrokeWidth) && resolvedStrokeWidth > 0
       ? resolvedStrokeWidth
-      : AppUserUtilities.getDefaultChartStrokeWidth());
+      : AppUserUtilities.getDefaultChartStrokeWidth();
   }
 
-  private resolveOverlayStrokeWidth(panel: EventChartPanelModel, primaryStrokeWidth: number): number {
-    // Device color and pattern identify the activity; width identifies the metric.
-    return panel.series.some(series => series.lineStyle)
-      ? primaryStrokeWidth + 2
-      : Math.max(1, primaryStrokeWidth - 0.5);
+  private resolveOverlayStrokeWidth(primaryStrokeWidth: number): number {
+    return Math.max(1, primaryStrokeWidth - 0.5);
   }
 
   private buildOverlaySeriesOptions(
@@ -1131,7 +1127,7 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
     primaryStrokeWidth: number,
     yAxisIndex = 1
   ): ChartLineSeriesOption[] {
-    const overlayStrokeWidth = this.resolveOverlayStrokeWidth(overlayPanel, primaryStrokeWidth);
+    const overlayStrokeWidth = this.resolveOverlayStrokeWidth(primaryStrokeWidth);
     return overlayPanel.series.map((series) => ({
       id: `overlay::${series.id}`,
       name: series.activityName,

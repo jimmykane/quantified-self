@@ -101,9 +101,9 @@ describe('EventCardChartPanelComponent', () => {
     const option = getRenderedOption();
     expect(option.series.slice(0, 4).map((series: any) => series.lineStyle.type)).toEqual(['solid', 'dashed', 'dotted', [8, 3, 2, 3]]);
     expect(option.series.slice(4).map((series: any) => series.lineStyle.type)).toEqual(['solid', 'dashed', 'dotted', [8, 3, 2, 3]]);
-    expect(option.series.every((series: any) => series.lineStyle.width >= 2)).toBe(true);
+    expect(option.series.every((series: any) => series.lineStyle.width === 1)).toBe(true);
     expect(option.series.slice(4).every((series: any) => series.lineStyle.opacity === 1)).toBe(true);
-    expect(option.series[4].lineStyle.width).toBeGreaterThan(option.series[0].lineStyle.width);
+    expect(option.series[4].lineStyle.width).toBe(option.series[0].lineStyle.width);
     const samples = [...fixture.nativeElement.querySelectorAll('.event-chart-panel__series-legend-dot--line')] as HTMLElement[];
     expect(samples.map(sample => sample.getAttribute('aria-label'))).toEqual([
       'solid line', 'dashed line', 'dotted line', 'dash-dot line', 'solid line', 'dashed line', 'dotted line', 'dash-dot line',
@@ -126,6 +126,22 @@ describe('EventCardChartPanelComponent', () => {
     expect(disabledOption.series[4].lineStyle.width).toBe(1);
     expect(disabledOption.series[4].lineStyle.opacity).toBeLessThan(1);
     expect(fixture.nativeElement.querySelectorAll('.event-chart-panel__series-legend-dot--line')).toHaveLength(0);
+  });
+
+  it.each([0.5, 1, 2, 6])('keeps primary, overlay and legend widths unchanged when enabling patterns at %spx', async (strokeWidth) => {
+    component.strokeWidth = strokeWidth;
+    component.showActivityNamesInTooltip = true;
+    component.overlayPanel = { ...component.panel!, dataType: DataAltitude.type, displayName: 'Altitude' };
+    await renderComponent();
+    const normalWidths = getRenderedOption().series.map((series: any) => series.lineStyle.width);
+    expect(normalWidths[0]).toBe(strokeWidth);
+
+    fixture.componentRef.setInput('panel', { ...component.panel!, series: component.panel!.series.map(series => ({ ...series, lineStyle: 'dashed' })) });
+    fixture.componentRef.setInput('overlayPanel', { ...component.overlayPanel!, series: component.overlayPanel!.series.map(series => ({ ...series, lineStyle: 'dashed' })) });
+    await renderComponent();
+    expect(getRenderedOption().series.map((series: any) => series.lineStyle.width)).toEqual(normalWidths);
+    const samples = [...fixture.nativeElement.querySelectorAll('.event-chart-panel__series-legend-dot--line')] as HTMLElement[];
+    expect(samples.map(sample => sample.style.getPropertyValue('--series-line-width'))).toEqual(normalWidths.map(width => `${width}px`));
   });
 
   beforeEach(async () => {

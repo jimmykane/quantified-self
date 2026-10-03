@@ -103,18 +103,6 @@
       leadingIcon="compare_arrows"
       eyebrow="Tools / Compare">
       <div pageHeaderActions class="workspace-header-actions">
-        <div class="line-pattern-preference" [attr.aria-busy]="isSavingLinePatterns()">
-          <mat-slide-toggle
-            [checked]="useDistinctLinePatterns()"
-            [disabled]="!currentUser() || isSavingLinePatterns()"
-            matTooltip="Use different line patterns in merged and benchmark charts. Saved to your chart settings."
-            (change)="onDistinctLinePatternsChange($event.checked)">
-            Distinct line patterns
-          </mat-slide-toggle>
-          @if (isSavingLinePatterns()) {
-          <mat-progress-spinner diameter="18" mode="indeterminate" aria-label="Saving line patterns"></mat-progress-spinner>
-          }
-        </div>
         @if (comparisonDeviceColorItems().length > 0) {
         <button
           mat-stroked-button
@@ -126,6 +114,25 @@
           Device colors
         </button>
         }
+        <button mat-icon-button type="button" class="qs-action-menu-icon-button"
+          [matMenuTriggerFor]="comparisonChartOptionsMenu" [disabled]="!currentUser()"
+          [attr.aria-busy]="isSavingLinePatterns()"
+          aria-label="Comparison chart options" matTooltip="Chart options"
+          (menuOpened)="onChartOptionsMenuOpened()">
+          @if (isSavingLinePatterns()) {
+          <mat-progress-spinner diameter="24" mode="indeterminate" aria-label="Saving line patterns"></mat-progress-spinner>
+          } @else {
+          <mat-icon>tune</mat-icon>
+          }
+        </button>
+        <mat-menu #comparisonChartOptionsMenu="matMenu" class="qs-menu-panel">
+          <button mat-menu-item type="button" role="menuitemcheckbox"
+            [attr.aria-checked]="useDistinctLinePatterns()" [disabled]="!currentUser() || isSavingLinePatterns()"
+            (click)="onDistinctLinePatternsChange(!useDistinctLinePatterns())">
+            <mat-icon aria-hidden="true">{{ useDistinctLinePatterns() ? 'check_box' : 'check_box_outline_blank' }}</mat-icon>
+            <span>Distinct line patterns</span>
+          </button>
+        </mat-menu>
       </div>
     </app-page-header>
 

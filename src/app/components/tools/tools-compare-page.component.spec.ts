@@ -1,5 +1,5 @@
 import { signal } from '@angular/core';
-import { MatSlideToggle } from '@angular/material/slide-toggle';
+import { MatMenuTrigger } from '@angular/material/menu';
 import { AppChartSettingsInterface } from '../../models/app-user.interface';
 import { AppUserSettingsQueryService } from '../../services/app.user-settings-query.service';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
@@ -375,30 +375,43 @@ describe('ToolsComparePageComponent', () => {
     fixture.detectChanges();
   });
 
-  it('defaults line patterns off and hydrates the shared preference silently', async () => {
+  async function openChartOptionsMenu(): Promise<HTMLButtonElement> {
+    const button = fixture.debugElement.query(By.css('button[aria-label="Comparison chart options"]'));
+    button.injector.get(MatMenuTrigger).openMenu();
+    fixture.detectChanges();
+    await fixture.whenStable();
+    return overlayContainer.getContainerElement().querySelector('[role="menuitemcheckbox"]') as HTMLButtonElement;
+  }
+
+  it('keeps line patterns in a compact menu and hydrates the shared preference silently', async () => {
     userSubject.next(new User('user-1'));
     fixture.detectChanges();
-    const toggle = fixture.debugElement.query(By.directive(MatSlideToggle)).componentInstance as MatSlideToggle;
-    expect(toggle.checked).toBe(false);
-    expect(fixture.nativeElement.textContent).toContain('Distinct line patterns');
+    expect(fixture.nativeElement.textContent).not.toContain('Distinct line patterns');
+    expect(hapticsServiceMock.selection).not.toHaveBeenCalled();
+    const option = await openChartOptionsMenu();
+    expect(option.getAttribute('aria-checked')).toBe('false');
+    expect(option.textContent).toContain('Distinct line patterns');
+    expect(hapticsServiceMock.selection).toHaveBeenCalledOnce();
+    hapticsServiceMock.selection.mockClear();
     chartSettings.set({ useDistinctComparisonLinePatterns: true });
     fixture.detectChanges();
-    expect(toggle.checked).toBe(true);
+    expect(option.getAttribute('aria-checked')).toBe('true');
     expect(settingsQueryMock.updateChartSettings).not.toHaveBeenCalled();
     expect(hapticsServiceMock.selection).not.toHaveBeenCalled();
   });
 
-  it('saves accepted toggle changes once, shows pending state, and allows off before the read snapshot catches up', async () => {
+  it('saves menu changes once, shows pending feedback on the trigger, and permits off before the read snapshot catches up', async () => {
     userSubject.next(new User('user-1'));
     fixture.detectChanges();
     let finishSave!: () => void;
     settingsQueryMock.updateChartSettings.mockImplementationOnce(() => new Promise<void>(resolve => { finishSave = resolve; }));
-    const toggle = fixture.debugElement.query(By.directive(MatSlideToggle));
-    toggle.triggerEventHandler('change', { checked: true });
+    const option = await openChartOptionsMenu();
+    hapticsServiceMock.selection.mockClear();
+    option.click();
     fixture.detectChanges();
     expect(component.useDistinctLinePatterns()).toBe(true);
-    expect(toggle.componentInstance.disabled).toBe(true);
     expect(fixture.nativeElement.querySelector('[aria-label="Saving line patterns"]')).toBeTruthy();
+    expect(fixture.nativeElement.querySelector('[aria-label="Comparison chart options"]').getAttribute('aria-busy')).toBe('true');
     await component.onDistinctLinePatternsChange(false);
     expect(settingsQueryMock.updateChartSettings).toHaveBeenCalledOnce();
     expect(settingsQueryMock.updateChartSettings).toHaveBeenCalledWith(
@@ -411,6 +424,7 @@ describe('ToolsComparePageComponent', () => {
     fixture.detectChanges();
     expect(component.useDistinctLinePatterns()).toBe(true);
     expect(hapticsServiceMock.success).toHaveBeenCalledOnce();
+    expect(fixture.nativeElement.querySelector('[aria-label="Saving line patterns"]')).toBeNull();
     await component.onDistinctLinePatternsChange(true);
     expect(settingsQueryMock.updateChartSettings).toHaveBeenCalledOnce();
     await component.onDistinctLinePatternsChange(false);
@@ -423,6 +437,18 @@ describe('ToolsComparePageComponent', () => {
     chartSettings.set({ useDistinctComparisonLinePatterns: true });
     fixture.detectChanges();
     expect(component.useDistinctLinePatterns()).toBe(true);
+  });
+
+  it('disables menu changes while a preference save is pending', async () => {
+    userSubject.next(new User('user-1'));
+    component.isSavingLinePatterns.set(true);
+    fixture.detectChanges();
+    const option = await openChartOptionsMenu();
+    expect(option.disabled).toBe(true);
+    hapticsServiceMock.selection.mockClear();
+    option.click();
+    expect(settingsQueryMock.updateChartSettings).not.toHaveBeenCalled();
+    expect(hapticsServiceMock.selection).not.toHaveBeenCalled();
   });
 
   it('clears pending preference state when switching accounts and ignores the old save completion', async () => {
