@@ -67,7 +67,9 @@ closed with HTTP 503. If JSON was already provisioned, replace it through the ap
 the same underlying secret as a plain value before deploying this revision; changing its format needs no rotation.
 
 Deployment of [#800](https://github.com/jimmykane/quantified-self/pull/800) is the legacy URL cutover. Update and verify
-every enabled Garmin portal URL before deploying the four receivers. Each updated receiver requires the exact
+every enabled Garmin portal URL before deploying the four receivers. The initial rollout revision accepts both
+protected and exact bare URLs with this same plain secret so the portal can be changed after that initial deployment.
+It has no timed cutoff; #800 removes its compatibility fallback. Each cleanup receiver requires the exact
 `/<secret>/API` path and rejects bare URLs, unknown paths and incorrect secrets. There is no timestamp, cutoff parser
 or compatibility switch. Preparing or merging the PR does not change the currently deployed receivers.
 

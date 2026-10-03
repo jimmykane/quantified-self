@@ -254,6 +254,10 @@ the four callback receivers. They retain their existing names, regions and memor
 2. Provision `GARMINAPI_WEBHOOK_SECRET` as exactly 64 lowercase hexadecimal characters, without JSON or whitespace.
    If the value was already stored as JSON, publish the same underlying secret as a plain value through the approved
    secret-version workflow before deployment. Running receivers retain their injected version until redeployed.
+   First deploy the initial rollout revision's four receivers and `processWorkoutTask` under separate deployment
+   approval. That version accepts protected and exact legacy URLs using the same plain secret, without a timed cutoff,
+   while the portal is migrated. Skip this initial deployment only if protected delivery is already supported and
+   the activity download protections are already deployed.
 3. In Garmin's Endpoint Configuration Tool, update and confirm the saved URL for **every enabled** endpoint ends in
    the correct `/<secret>/API` suffix on its production receiver. Replace stale or temporary probe URLs before
    deploying the cleanup:
@@ -271,7 +275,8 @@ the four callback receivers. They retain their existing names, regions and memor
 4. Before deploying, verify POST delivery to the updated URLs and normal Health/activity processing with safe
    test-account evidence on the current receivers. A 200 alone does not prove ingestion. Validate lifecycle behavior
    with synthetic tests, or separately approved exact account-side actions; do not disconnect a live account merely
-   to test routing. Legacy URL retirement does not require waiting for a deadline or closing bare paths first.
+   to test routing. Confirm accepted-route logs show `authenticated: true, legacy: false` for the protected deliveries.
+   The initial rollout's bare deliveries show `authenticated: false, legacy: true`; those URLs stay open until cleanup.
 5. Separately approve and deploy the four receivers from this revision together. Each updated receiver closes its
    bare URL immediately and authenticates before account/queue work. The activity URL/redirect/download protections
    from #798 remain in `processWorkoutTask`; include that worker if those protections have not yet been deployed.
@@ -283,12 +288,13 @@ the four callback receivers. They retain their existing names, regions and memor
    action still reports **Sleep & Health history**. Summary Resender remains bounded operational recovery after the
    protected receiver is healthy. The temporary probe's eventual deletion needs its own exact approval.
 
-If #798's deadline-based build has already been deployed, its existing deadline still applies until that receiver is
-replaced. This PR neither adds a new deadline nor changes live configuration before deployment.
+The initial rollout retains bare-path compatibility until these cleanup receivers are deployed. Preparing or merging
+this PR does not change the currently running receivers or retire legacy URLs.
 
 For separately approved maintenance, Garmin's **On Hold** control can retain notifications while a receiver is being
 changed. Resume only after the protected receiver is healthy. A rollback must retain callback authentication; reopening
-bare URLs restores the reported boundary failure. When rolling back to #798, retain the same plain secret and redeploy
+bare URLs restores the reported boundary failure, so do not roll back to the initial compatibility revision.
+When rolling back to #798, retain the same plain secret and redeploy
 the four receivers through the approved workflow so bare paths remain closed; do not restore its JSON migration format.
 Use Summary Resender only for a bounded recovery window.
 

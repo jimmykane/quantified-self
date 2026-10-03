@@ -726,8 +726,9 @@ Garmin's Health/Sleep, Activity Files, deregistration and permission callbacks s
 credential in the exact `/<secret>/API` URL suffix. `GARMINAPI_WEBHOOK_SECRET` contains only a plain 64-character
 lowercase hexadecimal value; JSON configuration is rejected. Verify it before any payload/account/queue work.
 Deployment of #800 closes the legacy bare URLs, with no cutoff timestamp or compatibility switch. Update and verify
-the portal URLs before deploying the receivers. If a JSON secret was already provisioned, replace it with the same
-underlying secret as a plain value through the approved workflow before deployment. See
+the portal URLs before deploying the receivers. The initial rollout accepts protected and exact bare paths with
+the same plain secret while the portal is migrated; it has no timed cutoff. If a JSON secret was already provisioned,
+replace it with the same underlying secret as a plain value through the approved workflow before deployment. See
 [Garmin production configuration](garmin-integration.md#production-configuration) for endpoint mapping, migration
 prerequisites, proof requirements and secret handling. The public client-ID header is not authentication.
 
