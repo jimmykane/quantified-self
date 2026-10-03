@@ -100,6 +100,9 @@ patterns** checkbox item in Compare’s compact **Chart options** icon menu save
 Settings → Charts uses Save Changes. Settings writes this preference only when the toggle is edited; untouched
 toggles follow account refreshes even while other form fields are dirty. Compare writes verify the initiating account,
 and completions from a previous sign-in session or a destroyed page cannot change its pending UI or feedback.
+**Device colors** and **Chart options** share the header’s appearance action row, including at phone widths. The
+device-color button uses its intrinsic width there rather than the full-width mobile table-action treatment. Color
+preferences and line patterns are independent: either can change without resetting the other.
 With it off, charts retain solid lines, normal widths/overlay opacity, and dot
 legends. ECharts merge updates explicitly reset line types to solid when patterns are removed. With it on,
 full event order assigns solid, dashed, dotted, and dash-dot patterns, repeating after four activities;

@@ -1535,7 +1535,7 @@ describe('ToolsComparePageComponent', () => {
     const sharedTableControls = readFileSync('src/styles/_table-controls.scss', 'utf8');
 
     expect(styles).toContain("@use '../../../styles/table-controls' as tableControls;");
-    expect(styles).toContain('@include tableControls.comparisonTableControlsLayout($includeDeviceColorsButton: true);');
+    expect(styles).toContain('@include tableControls.comparisonTableControlsLayout();');
     expect(styles).toContain('@include bp.max-768 {');
     expect(sharedTableControls).toContain('.comparison-table-controls');
     expect(sharedTableControls).toContain('.comparison-table-actions');
