@@ -11,7 +11,7 @@ const NO_TARGET = '__NO_TARGET__';
 // Exercise a property inherited from Object.prototype so the fallback check
 // also guards against accidental prototype-based routing.
 const UNKNOWN_TARGET = 'toString';
-const EXPECTED_FULL_EXPORT_COUNT = 169;
+const EXPECTED_FULL_EXPORT_COUNT = 168;
 const MARKETING_TARGETS = new Set([
   'listMarketingCampaigns',
   'saveMarketingCampaign',
@@ -153,16 +153,6 @@ function probe(targetArgument: string): void {
   const derivedRefreshTarget = runtimeTarget === 'ensureDerivedMetrics';
   const forbiddenModules = normalizedModules.filter(path => {
     if (path.endsWith('/lib/functions/src/full-entrypoint.js')) return true;
-    if (runtimeTarget === 'garminWebhookProbe' && (
-      path.includes('/lib/functions/src/sleep/')
-      || path.includes('/lib/functions/src/queue/')
-      || path.includes('/lib/functions/src/tasks/')
-      || path.includes('/node_modules/@google-cloud/tasks/')
-      || path.endsWith('/lib/functions/src/queue.js')
-      || path.endsWith('/lib/functions/src/config.js')
-      || path.endsWith('/lib/functions/src/secrets.js')
-      || (path.includes('/lib/functions/src/garmin/') && !path.endsWith('/webhook-probe.js'))
-    )) return true;
     if (
       (path.includes('/node_modules/@genkit-ai/') && !assistantProposalTarget)
       || (path.includes('/node_modules/genkit/') && !assistantProposalTarget)
@@ -254,6 +244,7 @@ async function loadFirebaseManifest(): Promise<DiscoveredStack> {
 async function check(): Promise<void> {
   const discovery = runProbe(NO_TARGET);
   assert(discovery.matchesFullEntrypoint, 'Discovery exports do not match the complete entrypoint.');
+  assert(!discovery.exports.includes('garminWebhookProbe'), 'The retired Garmin probe is still exported.');
   assert(
     discovery.exports.length === EXPECTED_FULL_EXPORT_COUNT,
     `Expected ${EXPECTED_FULL_EXPORT_COUNT} discovery exports, found ${discovery.exports.length}.`,
@@ -339,17 +330,6 @@ async function check(): Promise<void> {
         && endpoint.taskQueueTrigger === undefined
         && endpoint.scheduleTrigger === undefined,
       `${target} HTTP trigger changed.`);
-    } else if (target === 'garminWebhookProbe') {
-      assert(endpoint.availableMemoryMb === 256, `${target} memory configuration changed.`);
-      assert(endpoint.timeoutSeconds === 10, `${target} timeout configuration changed.`);
-      assert(endpoint.concurrency === 1 && endpoint.maxInstances === 1 && endpoint.minInstances === 0,
-        `${target} instance settings changed.`);
-      assert(endpoint.cpu === 'gcf_gen1', `${target} CPU configuration changed.`);
-      assert(secretKeys.length === 0, `${target} must not bind provider secrets.`);
-      assert(endpoint.httpsTrigger !== undefined && endpoint.callableTrigger === undefined,
-        `${target} HTTP trigger changed.`);
-      assert(arraysEqual(endpoint.httpsTrigger.invoker || [], ['public']),
-        `${target} public invocation setting changed.`);
     } else if (target === 'reconcileTrainingPlanCleanup'
       || target === 'reconcileTrainingWorkoutExpiry' || target === 'reconcileTrainingBulkShift') {
       assert(endpoint.availableMemoryMb === 512, `${target} memory configuration changed.`);

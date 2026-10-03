@@ -723,12 +723,14 @@ For every new persistent write path:
 ### Webhooks
 
 Garmin's Health/Sleep, Activity Files, deregistration and permission callbacks share a dedicated Secret Manager
-credential in the exact `/<secret>/API` URL suffix. Store one plain 64-character lowercase hexadecimal value;
-JSON configuration is invalid. Verify the route before any payload/account/queue work. The initial rollout also
-accepts exact old bare paths for the portal migration. Those paths remain unauthenticated until PR #800 is deployed;
-there is no timed cutoff. Wrong-secret and unknown paths never enter that fallback. See
-[Garmin production configuration](garmin-integration.md#production-configuration) for endpoint mapping, proof
-requirements, secret handling and retirement. The public client-ID header is not authentication.
+credential in the exact `/<secret>/API` URL suffix. `GARMINAPI_WEBHOOK_SECRET` contains only a plain 64-character
+lowercase hexadecimal value; JSON configuration is rejected. Verify it before any payload/account/queue work.
+Deployment of #800 closes the legacy bare URLs, with no cutoff timestamp or compatibility switch. Update and verify
+the portal URLs before deploying the receivers. The initial rollout accepts protected and exact bare paths with
+the same plain secret while the portal is migrated; it has no timed cutoff. If a JSON secret was already provisioned,
+replace it with the same underlying secret as a plain value through the approved workflow before deployment. See
+[Garmin production configuration](garmin-integration.md#production-configuration) for endpoint mapping, migration
+prerequisites, proof requirements and secret handling. The public client-ID header is not authentication.
 
 - Verify the provider's documented authentication or shared secret before accepting work. Reject malformed and unrelated payloads before queueing. Reject unknown, disconnected, deletion-pending, and non-entitled identities before direct queueing. When a strict acknowledgement deadline requires durable asynchronous fan-out, first bind the request through a bounded indexed server-owned identity lookup and recheck lifecycle state in the ingress transaction; do not retain ingress for unknown or ineligible identities. Unless the integration enforces provider-account uniqueness, retain every eligible match as independent durable work rather than selecting the first owner. Recheck each binding and lifecycle again in the retryable worker before fan-out.
 - Resolve provider identity through server-owned credentials or a server-owned direct mapping, never browser-visible metadata. A direct mapping should use a one-way provider-identity key, be updated atomically with credential ownership, and be removed on disconnect and deletion. Do not use a globally limited credential query as webhook authority: unrelated client-writable token documents can consume the limit before structural filtering.
@@ -1015,11 +1017,11 @@ Use `app-service-source-icon` and the shared presentation helpers. Imported acti
 
 Provider parity includes operational visibility, not only a user-facing connection.
 
-Garmin's temporary `garminWebhookProbe` is an isolated URL-transport experiment, not ingestion or webhook authentication.
-Use public disposable markers and an evaluation endpoint; it discards payloads and logs only boolean marker/header facts.
-It creates no account, queue, task, or product state. Production endpoints must keep their normal receiver. See
-[the probe procedure](garmin-integration.md#temporary-webhook-url-probe) for deployment scope, evaluation checks,
-logging limits, evidence boundaries, and separately authorized removal. No Help or MCP contract change is needed.
+Garmin's temporary `garminWebhookProbe` tested URL transport and discarded incoming payloads. PR #800 removes its
+source and deployment exports. After saved portal URLs use the protected production receivers and real ingestion
+is verified, retire the existing cloud Function through the exact, separately approved
+[probe retirement procedure](garmin-integration.md#temporary-webhook-url-probe). Deploying only the four receivers
+does not delete the probe. No account, queue, secret or provider data is removed; Help and MCP contracts have no impact.
 
 ### Required current admin parity
 
