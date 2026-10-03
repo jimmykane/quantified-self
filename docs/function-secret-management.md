@@ -61,20 +61,14 @@ For admin marketing campaigns, generate a random high-entropy signing key and se
 `GARMINAPI_WEBHOOK_SECRET` is a dedicated callback credential, separate from Garmin OAuth. It is bound only to
 `receiveGarminAPIHealthData`, `insertGarminAPIActivityFileToQueue`, `deauthorizeGarminAPIUsers`, and
 `receiveGarminAPIUserPermissions`. Workers keep their existing OAuth bindings and do not receive this credential.
-Generate 32 cryptographically random bytes, encoded as 64 lowercase hexadecimal characters. A plain value requires
-the exact `/<secret>/API` path immediately; missing or invalid configuration fails closed with HTTP 503.
+Generate 32 cryptographically random bytes, encoded as one plain value of exactly 64 lowercase hexadecimal
+characters. JSON, missing values and other invalid configuration fail closed with HTTP 503.
 
-For a deliberately short migration, the same Secret Manager entry may hold this JSON shape (replace placeholders):
-
-```json
-{"secret":"<64-lowercase-hex-characters>","legacyUntil":"<UTC-timestamp-with-milliseconds>"}
-```
-
-The timestamp must have the exact `YYYY-MM-DDTHH:mm:ss.000Z` form and be at most 24 hours ahead of invocation time.
-Only the old bare function paths remain accepted before that deadline. Unknown paths and incorrect secrets are
-always rejected. At the deadline the old paths automatically return 403 while protected paths keep working.
-An expired, valid deadline does not invalidate the secret. A malformed deadline or one more than 24 hours ahead
-fails the entire credential configuration closed. Omitting `legacyUntil` disables legacy access.
+The initial rollout accepts both the exact `/<secret>/API` path and the exact old bare function paths so the
+Garmin portal can be migrated after deployment. There is no deadline, switch or alternate secret format. Incorrect
+secrets and unknown paths never fall back to legacy access. The old paths remain unauthenticated until the
+separately deployed cleanup in PR #800 removes that compatibility; keep this overlap short and verify all enabled
+portal endpoints before deploying the cleanup.
 
 An authorized operator provisions the value interactively with
 `firebase functions:secrets:set GARMINAPI_WEBHOOK_SECRET --project <firebase-project-id>` and deploys the four
