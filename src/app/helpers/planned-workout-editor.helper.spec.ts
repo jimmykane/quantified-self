@@ -5,6 +5,7 @@ import { normalizeUserUnitSettings } from '@shared/unit-aware-display';
 import {
   createManualWorkoutEditorStep,
   changeManualWorkoutEditorSport,
+  changeManualWorkoutEditorStepEnding,
   formatManualWorkoutStructure,
   manualWorkoutEditorToStructure,
   workoutStructureToManualEditor,
@@ -13,6 +14,74 @@ import {
 } from './planned-workout-editor.helper';
 
 describe('manual planned-workout editor conversion', () => {
+  it('preserves exact saved metres through lap toggles without persisting the hidden distance', () => {
+    const units = normalizeUserUnitSettings({ distanceUnits: DistanceUnits.Miles });
+    const structure: WorkoutStructureV1 = {
+      version: 1, sport: ActivityTypes.Running,
+      nodes: [{ kind: 'step', id: 'distance', purpose: 'warmup',
+        ending: { kind: 'distance', meters: 1000 }, targets: [] }],
+    };
+    const editor = workoutStructureToManualEditor('Draft', '2026-10-03', structure, units);
+    const step = editor.nodes[0] as ManualWorkoutEditorStep;
+    const lap = changeManualWorkoutEditorStepEnding(step, 'manual', editor.sport, units);
+    expect(manualWorkoutEditorToStructure({ ...editor, nodes: [lap] }, units).nodes[0])
+      .toEqual({ ...structure.nodes[0], ending: { kind: 'manual' } });
+    expect(manualWorkoutEditorToStructure({ ...editor, nodes: [
+      changeManualWorkoutEditorStepEnding(lap, 'distance', editor.sport, units),
+    ] }, units)).toEqual(structure);
+    expect(changeManualWorkoutEditorStepEnding(lap, 'manual', editor.sport, units)).toBe(lap);
+  });
+
+  it.each([ActivityTypes.Swimming, ActivityTypes.Rowing])(
+    'converts an unsaved distance draft while lap-ended when switching to %s', sport => {
+      const units = normalizeUserUnitSettings({ distanceUnits: DistanceUnits.Miles });
+      const distance: ManualWorkoutEditorStep = {
+        ...createManualWorkoutEditorStep('mile'), endingKind: 'distance', endingValue: 1,
+      };
+      const editor: ManualWorkoutEditorValue = {
+        title: 'Draft', localDate: '2026-10-03', sport: ActivityTypes.Running,
+        nodes: [{ kind: 'repeat', id: 'repeats', count: 2,
+          steps: [changeManualWorkoutEditorStepEnding(distance, 'manual', ActivityTypes.Running, units)] }],
+      };
+      const converted = changeManualWorkoutEditorSport(editor, sport, units);
+      const repeat = converted.nodes[0];
+      expect(repeat.kind).toBe('repeat');
+      if (repeat.kind !== 'repeat') throw new Error('Expected a repeat');
+      expect(repeat.steps[0].endingValue).toBe(1609.344);
+      expect(manualWorkoutEditorToStructure({ ...converted, nodes: [{ ...repeat,
+        steps: [changeManualWorkoutEditorStepEnding(repeat.steps[0], 'distance', sport, units)],
+      }] }, units).nodes[0]).toMatchObject({ steps: [{ ending: { kind: 'distance', meters: 1609.344 } }] });
+    },
+  );
+
+  it('clears the distance cache when switching a lap draft to time', () => {
+    const units = normalizeUserUnitSettings({ distanceUnits: DistanceUnits.Miles });
+    const distance: ManualWorkoutEditorStep = {
+      ...createManualWorkoutEditorStep('distance'), endingKind: 'distance', endingValue: 0.621371,
+      sourceDistance: { editorValue: 0.621371, meters: 1000 },
+    };
+    const lap = changeManualWorkoutEditorStepEnding(distance, 'manual', ActivityTypes.Running, units);
+    const time = changeManualWorkoutEditorStepEnding(lap, 'time', ActivityTypes.Running, units);
+    expect(time.sourceDistance).toBeUndefined();
+    const nextLap = changeManualWorkoutEditorStepEnding(time, 'manual', ActivityTypes.Running, units);
+    expect(nextLap.sourceDistance).toBeUndefined();
+    const nextDistance = changeManualWorkoutEditorStepEnding(nextLap, 'distance', ActivityTypes.Running, units);
+    expect(nextDistance.sourceDistance).toBeUndefined();
+  });
+
+  it.each([0, -1, Number.NaN, Number.POSITIVE_INFINITY, Number.MAX_VALUE])(
+    'allows an invalid distance draft of %s to become a valid lap step without retaining a cache', endingValue => {
+      const step: ManualWorkoutEditorStep = {
+        ...createManualWorkoutEditorStep('lap'), endingKind: 'distance', endingValue,
+      };
+      const lap = changeManualWorkoutEditorStepEnding(step, 'manual', ActivityTypes.Running);
+      expect(lap.sourceDistance).toBeUndefined();
+      expect(manualWorkoutEditorToStructure({
+        title: 'Lap', localDate: '2026-10-03', sport: ActivityTypes.Running, nodes: [lap],
+      }).nodes[0]).toMatchObject({ ending: { kind: 'manual' } });
+    },
+  );
+
   it.each(['warmup', 'work', 'recovery', 'cooldown', 'rest', 'other'] as const)(
     'round-trips a lap-ended %s with its ID, target and instructions intact', purpose => {
       const structure: WorkoutStructureV1 = {

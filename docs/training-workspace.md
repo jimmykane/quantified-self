@@ -534,7 +534,10 @@ length. Other providers do not receive the selected length and require explicit 
 The interval editor's **End by → Lap button press** choice is available for every purpose (warmup, work, recovery,
 cooldown, rest, other), including repeat children and library recipes. It stores the existing strict `{ kind: 'manual' }`
 ending; the numeric input is hidden and any retained editor-only numeric draft value is never serialized. A step waits
-for the lap button with no time/distance limit, not a combined timer-or-button rule. Reopening and resaving preserves
+for the lap button with no time/distance limit, not a combined timer-or-button rule. Within the same unsaved editor,
+temporarily selecting Lap button preserves the exact previous distance, including when switching sports changes its
+display unit. Selecting Time or editing the distance discards that distance cache. Reopening a saved lap-ended step
+does not recover a previous numeric draft: only the manual ending is persisted. Reopening and resaving preserves
 the step ID, purpose, targets, instructions and fixed repeats. Garmin maps it to `OPEN`, Suunto to `manualLap`, and
 COROS to `EndManually` for supported sports; COROS delivery remains disabled. Wahoo remains unsupported and cannot
 receive a guessed timed replacement. Lap advances a step; it does not stop the recording or create a QS completion link.

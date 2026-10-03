@@ -29,7 +29,7 @@ export interface ManualWorkoutEditorStep {
   targetMinimum: number | null;
   targetMaximum: number | null;
   note?: string;
-  /** Editor-only: keep the exact saved metres when a rounded unit conversion was not edited. */
+  /** Editor-only: preserve exact metres through rounded display and temporary lap endings. */
   sourceDistance?: { editorValue: number; meters: number };
   /** Editor-only: keep the exact saved speed range when displayed pace was not edited. */
   sourcePace?: {
@@ -105,6 +105,27 @@ function distanceMetersFromEditor(
 ): number {
   return step.sourceDistance?.editorValue === step.endingValue
     ? step.sourceDistance.meters : step.endingValue * distanceScale(sport, units);
+}
+
+/** Keep a distance draft through lap toggles; time endings must not reuse its unit cache. */
+export function changeManualWorkoutEditorStepEnding(
+  step: ManualWorkoutEditorStep,
+  endingKind: ManualWorkoutEnding,
+  sport: ManualWorkoutSport,
+  units?: UserUnitSettingsInterface | null,
+): ManualWorkoutEditorStep {
+  if (step.endingKind === endingKind) return step;
+  let sourceDistance: ManualWorkoutEditorStep['sourceDistance'];
+  if (step.endingKind === 'distance' && endingKind === 'manual'
+    && Number.isFinite(step.endingValue) && step.endingValue > 0) {
+    const meters = distanceMetersFromEditor(step, sport, units);
+    if (Number.isFinite(meters) && meters > 0) {
+      sourceDistance = { editorValue: step.endingValue, meters };
+    }
+  } else if (step.endingKind === 'manual' && endingKind === 'distance') {
+    sourceDistance = step.sourceDistance;
+  }
+  return { ...step, endingKind, sourceDistance };
 }
 
 function paceSpeedRangeFromEditor(
@@ -342,7 +363,9 @@ export function changeManualWorkoutEditorSport(
   const toDistance = distanceScale(sport, units);
   const paceRatio = paceDistanceMeters(sport, units) / paceDistanceMeters(value.sport, units);
   const convert = (step: ManualWorkoutEditorStep): ManualWorkoutEditorStep => {
-    const meters = step.endingKind === 'distance'
+    const hasDistanceDraft = step.endingKind === 'manual'
+      && step.sourceDistance?.editorValue === step.endingValue;
+    const meters = step.endingKind === 'distance' || hasDistanceDraft
       ? distanceMetersFromEditor(step, value.sport, units) : null;
     const endingValue = meters !== null ? roundEditorNumber(meters / toDistance) : step.endingValue;
     const canConvertPace = step.targetKind === 'pace'

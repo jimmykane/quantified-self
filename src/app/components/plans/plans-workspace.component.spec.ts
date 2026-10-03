@@ -1318,6 +1318,54 @@ describe('PlansWorkspaceComponent', () => {
     expect(mutate).not.toHaveBeenCalled();
   });
 
+  it.each([
+    [false, ActivityTypes.Running], [true, ActivityTypes.Running],
+    [false, ActivityTypes.Swimming], [true, ActivityTypes.Swimming],
+  ] as const)('preserves exact distance through lap toggles for repeat=%s and sport=%s', async (repeat, sport) => {
+    const imperialUser = { ...user, settings: { unitSettings: { distanceUnits: DistanceUnits.Miles } } };
+    TestBed.overrideProvider(AppUserService, { useValue: { user: signal(imperialUser), user$: of(imperialUser) } });
+    const step = { kind: 'step' as const, id: 'distance', purpose: 'work' as const,
+      ending: { kind: 'distance' as const, meters: 1000 }, targets: [] };
+    schedule.workouts[0].structure = { version: 1, sport: ActivityTypes.Running,
+      nodes: repeat ? [{ kind: 'repeat', id: 'repeats', count: 2, steps: [step] }] : [step] };
+    setRouteState({ mode: 'edit', workoutId: 'plan-workout' });
+    const fixture = await renderPlans();
+    const component = fixture.componentInstance;
+    component.updateStep(0, repeat ? 0 : null, 'endingKind', 'manual');
+    component.updateEditorField('sport', sport);
+    component.updateStep(0, repeat ? 0 : null, 'endingKind', 'distance');
+    await component.saveWorkout();
+    expect(mutate).toHaveBeenCalledWith(expect.objectContaining({
+      operation: expect.objectContaining({ kind: 'update-workout',
+        structure: { ...schedule.workouts[0].structure, sport } }),
+    }));
+  });
+
+  it.each([
+    [false, 'edit'], [true, 'edit'], [false, 'time'], [true, 'time'],
+  ] as const)('discards a previous distance after %s repeat / %s changes', async (repeat, change) => {
+    const imperialUser = { ...user, settings: { unitSettings: { distanceUnits: DistanceUnits.Miles } } };
+    TestBed.overrideProvider(AppUserService, { useValue: { user: signal(imperialUser), user$: of(imperialUser) } });
+    const step = { kind: 'step' as const, id: 'distance', purpose: 'work' as const,
+      ending: { kind: 'distance' as const, meters: 1000 }, targets: [] };
+    schedule.workouts[0].structure = { version: 1, sport: ActivityTypes.Running,
+      nodes: repeat ? [{ kind: 'repeat', id: 'repeats', count: 2, steps: [step] }] : [step] };
+    setRouteState({ mode: 'edit', workoutId: 'plan-workout' });
+    const fixture = await renderPlans();
+    const component = fixture.componentInstance;
+    const child = repeat ? 0 : null;
+    component.updateStep(0, child, 'endingKind', 'manual');
+    component.updateStep(0, child, 'endingKind', change === 'time' ? 'time' : 'distance');
+    component.updateStep(0, child, 'endingValue', 1);
+    component.updateStep(0, child, 'endingKind', 'distance');
+    await component.saveWorkout();
+    const savedStep = { ...step, ending: { kind: 'distance', meters: 1609.344 } };
+    expect(mutate).toHaveBeenCalledWith(expect.objectContaining({
+      operation: expect.objectContaining({ structure: { version: 1, sport: ActivityTypes.Running,
+        nodes: repeat ? [{ kind: 'repeat', id: 'repeats', count: 2, steps: [savedStep] }] : [savedStep] } }),
+    }));
+  });
+
   it('creates a library recipe with lap-ended repeat children through the shared step controls', async () => {
     libraryMutate.mockResolvedValue({ mutationId: 'mutation-1', item: null });
     setRouteState({ mode: 'library-create' });
