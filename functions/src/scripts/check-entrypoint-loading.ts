@@ -303,7 +303,8 @@ async function check(): Promise<void> {
   assert(!('projectEventTagCatalog' in stack.endpoints), 'Retired event tag trigger is still exported.');
 
   const firstGenerationEndpoint = Object.entries(stack.endpoints)
-    .find(([, endpoint]) => endpoint.platform === 'gcfv1');
+    .find(([target, endpoint]) => endpoint.platform === 'gcfv1'
+      && !OPTIMIZED_FUNCTION_TARGETS.includes(target));
   assert(firstGenerationEndpoint, 'Firebase manifest no longer contains a Gen 1 fallback target.');
   const firstGeneration = runProbe(firstGenerationEndpoint[0]);
   assert(
@@ -314,7 +315,8 @@ async function check(): Promise<void> {
 
   for (const target of OPTIMIZED_FUNCTION_TARGETS) {
     const endpoint = stack.endpoints[target];
-    assert(endpoint?.platform === 'gcfv2', `${target} is no longer a Gen 2 endpoint.`);
+    const expectedPlatform = target === 'receiveSuunto247Data' ? 'gcfv1' : 'gcfv2';
+    assert(endpoint?.platform === expectedPlatform, `${target} runtime generation changed.`);
     assert(endpoint.entryPoint === target, `${target} entrypoint metadata changed.`);
     assert(
       arraysEqual(endpoint.region || [], ['europe-west2']),
@@ -323,7 +325,21 @@ async function check(): Promise<void> {
     const secretKeys = (endpoint.secretEnvironmentVariables || [])
       .map(secret => secret.key || '')
       .sort();
-    if (target === 'garminWebhookProbe') {
+    if (target === 'receiveSuunto247Data') {
+      assert(endpoint.availableMemoryMb === 512, `${target} memory configuration changed.`);
+      assert(endpoint.timeoutSeconds === 60, `${target} timeout configuration changed.`);
+      assert(JSON.stringify(endpoint.minInstances) === 'null'
+        && JSON.stringify(endpoint.maxInstances) === 'null'
+        && endpoint.concurrency === undefined,
+      `${target} instance settings changed.`);
+      assert(arraysEqual(secretKeys, ['SUUNTOAPP_NOTIFICATION_SECRET']), `${target} secret bindings changed.`);
+      assert(endpoint.httpsTrigger !== undefined
+        && endpoint.callableTrigger === undefined
+        && endpoint.eventTrigger === undefined
+        && endpoint.taskQueueTrigger === undefined
+        && endpoint.scheduleTrigger === undefined,
+      `${target} HTTP trigger changed.`);
+    } else if (target === 'garminWebhookProbe') {
       assert(endpoint.availableMemoryMb === 256, `${target} memory configuration changed.`);
       assert(endpoint.timeoutSeconds === 10, `${target} timeout configuration changed.`);
       assert(endpoint.concurrency === 1 && endpoint.maxInstances === 1 && endpoint.minInstances === 0,

@@ -723,7 +723,7 @@ function createSuunto247DataWebhook(
 ) {
     return functions.region('europe-west2').runWith({
         timeoutSeconds: 60,
-        memory: '256MB',
+        memory: '512MB',
         secrets,
     }).https.onRequest(handleSuunto247DataWebhook);
 }

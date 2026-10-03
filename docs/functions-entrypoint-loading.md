@@ -28,6 +28,11 @@ The initial deployed canary included:
 - `getSuuntoAPIAuthRequestTokenRedirectURI`
 - `requestAndSetSuuntoAPIAccessToken`
 
+`receiveSuunto247Data` also loads directly from `sleep/webhooks` and exposes only its original Gen 1 HTTP handler.
+It uses 512 MiB, retains the 60-second timeout and `SUUNTOAPP_NOTIFICATION_SECRET` binding, and avoids loading the
+complete entrypoint, MCP, AI and admin handlers. Signed webhook admission and durable queue staging are unchanged.
+Its deployment does not migrate the endpoint to Gen 2 or change the provider's registered webhook URL.
+
 The target map also isolates all 11 exports from `functions/src/admin/marketing/handlers.ts`, including the
 `trackMarketingDelivery` Firestore trigger. That trigger observes updates to the shared `mail/{mailId}` collection even
 when the updated email is not part of a marketing campaign. Its existing 256 MiB memory limit is unchanged; this routing
@@ -49,12 +54,14 @@ The check builds the Functions package and verifies:
 - discovery exposes all 164 application exports;
 - both Firebase discovery modes ignore an inherited optimized `FUNCTION_TARGET`;
 - an unknown target exposes the same complete export set;
-- a discovered Gen 1 target retains the complete entrypoint fallback;
+- a non-optimized Gen 1 target retains the complete entrypoint fallback;
 - each optimized target exposes only its requested handler;
 - the optimized export is the exact object created by the provider wrapper;
 - optimized Suunto startup does not import Genkit, BigQuery, MCP or admin handler modules;
 - optimized marketing startup does not import Genkit, BigQuery, MCP or unrelated admin modules;
-- optimized Suunto endpoints remain Gen 2 in `europe-west2` with 512 MiB and the same secret bindings;
+- optimized Suunto OAuth endpoints remain Gen 2 in `europe-west2` with 512 MiB and the same secret bindings;
+- the isolated Suunto 24/7 receiver remains Gen 1 HTTP in `europe-west2`, with 512 MiB, a 60-second timeout,
+  unchanged instance settings and only the notification secret;
 - optimized marketing endpoints retain their callable, schedule, Firestore or HTTP triggers, existing memory limits,
   region and secret bindings.
 - the isolated event-tag catalog endpoint retains its Firestore trigger path and type, retry setting, region, 256 MiB
@@ -105,6 +112,11 @@ memory guarantee; keep its memory limit unchanged for rollout measurement.
 Three isolated Node 20.19.3 runs on 2026-09-25 measured 216.6 MiB median RSS, 954 ms import time and 3,108 modules
 for the complete entrypoint, versus 62.2 MiB RSS, 83 ms and 264 modules for isolated `projectEventTagCatalog`. This
 suggests about 154 MiB less local startup RSS. Production memory and retry logs must confirm the rollout.
+
+Three isolated Node 22.23.3 runs on 2026-10-03 measured 234.9 MiB median RSS, 901 ms import time and 3,133 modules
+for the complete entrypoint, versus 127.6 MiB RSS, 339 ms and 1,467 modules for `receiveSuunto247Data` with one export.
+The approximately 107 MiB local startup reduction is not a production memory guarantee; the receiver also uses 512 MiB
+to leave room for validated webhook admission and durable staging.
 
 ## Adding another optimized target
 
