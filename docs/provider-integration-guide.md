@@ -1017,11 +1017,11 @@ Use `app-service-source-icon` and the shared presentation helpers. Imported acti
 
 Provider parity includes operational visibility, not only a user-facing connection.
 
-Garmin's temporary `garminWebhookProbe` is an isolated URL-transport experiment, not ingestion or webhook authentication.
-Use public disposable markers and an evaluation endpoint; it discards payloads and logs only boolean marker/header facts.
-It creates no account, queue, task, or product state. Production endpoints must keep their normal receiver. See
-[the probe procedure](garmin-integration.md#temporary-webhook-url-probe) for deployment scope, evaluation checks,
-logging limits, evidence boundaries, and separately authorized removal. No Help or MCP contract change is needed.
+Garmin's temporary `garminWebhookProbe` tested URL transport and discarded incoming payloads. PR #800 removes its
+source and deployment exports. After saved portal URLs use the protected production receivers and real ingestion
+is verified, retire the existing cloud Function through the exact, separately approved
+[probe retirement procedure](garmin-integration.md#temporary-webhook-url-probe). Deploying only the four receivers
+does not delete the probe. No account, queue, secret or provider data is removed; Help and MCP contracts have no impact.
 
 ### Required current admin parity
 

@@ -67,43 +67,31 @@ provider bodies or signed URL text. Parser work limits are a separate concern.
 
 ## Temporary webhook URL probe
 
-`garminWebhookProbe` is an isolated public Gen 2 HTTP endpoint for checking whether Garmin preserves a configured
-endpoint's path and query parameter. It uses `europe-west2`, 256 MiB, fractional Gen 1 CPU, concurrency one, zero minimum
-instances, one maximum instance, a ten-second timeout, and no bound secrets. Runtime loading excludes the ingestion,
-queue, task, and provider-configuration modules. It does not inspect or persist the request body, resolve accounts,
-follow callbacks, call Garmin, or create tasks. It acknowledges every POST with `200`, including missing markers;
-this is a protocol probe, not the production authentication fix.
+`garminWebhookProbe` was a temporary public Gen 2 endpoint for checking Garmin's URL transport. It discarded
+payloads, acknowledged POSTs with `200`, and logged only boolean marker/header facts. Its successful transport test
+established path preservation, while the portal removed query parameters; it did not prove sender authentication or
+production ingestion. PR #800 removes the probe source, export, isolated loader and probe-only tests/checks.
 
-Configure only an evaluation app's selected Ping endpoint with:
+Source removal or deployment of only the four callback receivers does not delete the existing cloud Function.
+Retire the deployed probe after the [production cutover](#production-configuration):
 
-```text
-<function-base-url>/qs-path-marker-20261002?probe=qs-query-marker-20261002
-```
-
-The two fixed markers are public test values, not credentials. Do not use a real secret: platform access logs may retain
-request URLs even though the application logs only booleans. POST logs use the fixed message
-`[GarminWebhookProbe] URL markers received` with `pathMatches`, `queryMatches`, `manualTest`, and
-`garminClientIdPresent`. The client-ID header and manual-test header do not authenticate the sender.
-GET returns `200` without a delivery log; other methods return `405`.
-
-1. Smoke-test the URL with a synthetic POST and `x-qs-probe-test: manual`. Both marker booleans should be true.
-2. Configure one evaluation endpoint, use Data Generator for a synthetic notification, and verify a correlated POST
-   with both marker booleans true and `manualTest: false`. If the generator does not deliver, use an explicitly
-   authorized test-account sync. A curl request alone proves only our routing, not Garmin compatibility.
-3. Use a bounded evaluation Summary Resender operation to check repeated delivery. New endpoint domains may require
-   Garmin's security review. Never divert a production ingress endpoint to this payload-discarding probe.
-4. After Garmin-originated delivery is demonstrated, implement and verify a separate secret guard before production
-   queue admission. Probe success establishes URL transport, not sender authentication or resource-budget protection.
-5. Remove the probe after testing only with separate explicit approval for that exact Function deletion.
-
-Deploy only this target after explicit approval:
+1. Check saved endpoint URLs in every Garmin app used for this test, including evaluation and On Hold entries.
+   Replace probe URLs intended for ingestion with their correct protected receiver. Do not leave a payload-discarding
+   probe configured as an ingestion endpoint.
+2. Verify protected POST delivery and actual Health/activity processing on the real receivers; a probe `200` is not
+   ingestion evidence. Deploy and verify the four strict cleanup receivers before removing the live probe.
+3. With separate explicit approval for this exact deletion, remove only `garminWebhookProbe` in `europe-west2` from
+   project `quantified-self-io`:
 
 ```bash
-firebase deploy --project quantified-self-io --only functions:garminWebhookProbe
+firebase functions:delete garminWebhookProbe --region europe-west2 --project quantified-self-io
 ```
 
-The existing product Help remains accurate: this operator-only probe changes no supported integration, user flow,
-OAuth permission, entitlement, ingestion behavior, or MCP surface.
+4. Confirm the Function is absent from the deployed inventory and protected ingestion remains healthy. Do not delete
+   any other Function, queue, secret or provider data. Do not redeploy the probe as a rollback step.
+
+Preparing or merging #800 performs no cloud deletion. The existing product Help remains accurate: this operator-only
+retirement changes no supported integration, user flow, OAuth permission, entitlement or MCP surface.
 
 ## Identity and lifecycle
 
@@ -280,13 +268,17 @@ the four callback receivers. They retain their existing names, regions and memor
 5. Separately approve and deploy the four receivers from this revision together. Each updated receiver closes its
    bare URL immediately and authenticates before account/queue work. The activity URL/redirect/download protections
    from #798 remain in `processWorkoutTask`; include that worker if those protections have not yet been deployed.
-   Do not redirect old URLs or delete Functions as part of this cleanup; actual resource removal requires separate approval.
+   Do not redirect old URLs. The removed probe export needs the explicit retirement step below; deploying only these
+   four receivers leaves the existing cloud probe active.
 6. After deployment, recheck protected delivery and queue/worker/import outcomes. `[GarminWebhook] Accepted callback
    route` reports only `functionName`, `authenticated`, and `legacy`; confirm `authenticated: true, legacy: false`.
    Bare and wrong-secret paths must return 403 without side effects; GET returns 405. Watch for stale deliveries.
-7. For a connected Pro account with Historical Data Export and Health Export permission, the existing in-app history
+7. Retire the deployed `garminWebhookProbe` using the [probe retirement procedure](#temporary-webhook-url-probe),
+   after confirming no saved Garmin endpoint still targets it. The PR removes its code; the exact cloud deletion
+   requires separate explicit approval and must not remove any other resource.
+8. For a connected Pro account with Historical Data Export and Health Export permission, the existing in-app history
    action still reports **Sleep & Health history**. Summary Resender remains bounded operational recovery after the
-   protected receiver is healthy. The temporary probe's eventual deletion needs its own exact approval.
+   protected receiver is healthy.
 
 The initial rollout retains bare-path compatibility until these cleanup receivers are deployed. Preparing or merging
 this PR does not change the currently running receivers or retire legacy URLs.

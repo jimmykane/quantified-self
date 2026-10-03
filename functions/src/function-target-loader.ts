@@ -15,8 +15,6 @@ const loadDashboardDerivedMetricsTriggers = (): FunctionModule =>
   module.require('./derived-metrics/derived-metrics.trigger') as FunctionModule;
 
 const TARGET_LOADERS: Readonly<Record<string, ModuleLoader>> = Object.freeze({
-  garminWebhookProbe:
-    () => module.require('./garmin/webhook-probe') as FunctionModule,
   getSuuntoAPIAuthRequestTokenRedirectURI:
     () => module.require('./suunto/auth/wrapper') as FunctionModule,
   requestAndSetSuuntoAPIAccessToken:
