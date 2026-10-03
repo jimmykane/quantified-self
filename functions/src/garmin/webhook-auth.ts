@@ -7,15 +7,7 @@ const SECRET_PATTERN = /^[a-f0-9]{64}$/;
 
 function readCredential(): string | null {
   const value = SECRET_PARAMS.GARMINAPI_WEBHOOK_SECRET.value();
-  if (SECRET_PATTERN.test(value)) return value;
-  try {
-    const parsed = JSON.parse(value);
-    if (!parsed || typeof parsed.secret !== 'string' || !SECRET_PATTERN.test(parsed.secret)) return null;
-    // Keep existing JSON credentials usable; obsolete migration fields confer no access.
-    return parsed.secret;
-  } catch {
-    return null;
-  }
+  return value.length === 64 && SECRET_PATTERN.test(value) ? value : null;
 }
 
 /** Authenticate before reading the payload or touching account/queue state. */

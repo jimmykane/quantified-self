@@ -240,10 +240,10 @@ deployment or data deletion.
 
 ## Production configuration
 
-This revision removes the temporary legacy-URL compatibility. Complete the staged portal migration using the
-migration-capable release from [#798](https://github.com/jimmykane/quantified-self/pull/798) before deploying this
-cleanup. Code or PR completion alone does not deploy it. Existing Garmin OAuth credentials still authorize pulls.
-Provision the dedicated `GARMINAPI_WEBHOOK_SECRET` through the approved
+Deployment of [#800](https://github.com/jimmykane/quantified-self/pull/800) closes the legacy bare URLs. Update and
+verify the Garmin portal URLs first, then deploy the receivers with one plain `GARMINAPI_WEBHOOK_SECRET` value.
+There is no cutoff timestamp, JSON configuration or compatibility switch. Code or PR completion alone does not
+change production behavior. Existing Garmin OAuth credentials still authorize pulls. Provision the callback secret through the approved
 [secret-management workflow](function-secret-management.md#garmin-callback-credential-and-migration) before deploying
 the four callback receivers. They retain their existing names, regions and memory. No additional Function is required.
 
@@ -251,13 +251,12 @@ the four callback receivers. They retain their existing names, regions and memor
    `deauthorizeGarminAPIUsers`; `receiveGarminAPIDeregistration` is its internal handler name, not a separate exported
    deployment. Include any genuinely deployed older aliases in the retirement review instead of assuming an alias
    exists from old documentation.
-2. Confirm the four receivers and `processWorkoutTask` from #798 have been deployed and the staged URL migration is
-   complete. This cleanup changes only the shared callback guard; the activity URL/redirect/download protections
-   remain in the worker. Existing plain or JSON credentials keep working. A leftover `legacyUntil` field is ignored
-   and cannot enable old URLs. There is no deadline or compatibility switch in this revision.
-3. In Garmin's Endpoint Configuration Tool, confirm the saved URL for **every enabled** endpoint ends in the correct
-   `/<secret>/API` suffix. Resolve stale or temporary probe URLs using the migration-capable release before deploying
-   this cleanup:
+2. Provision `GARMINAPI_WEBHOOK_SECRET` as exactly 64 lowercase hexadecimal characters, without JSON or whitespace.
+   If the value was already stored as JSON, publish the same underlying secret as a plain value through the approved
+   secret-version workflow before deployment. Running receivers retain their injected version until redeployed.
+3. In Garmin's Endpoint Configuration Tool, update and confirm the saved URL for **every enabled** endpoint ends in
+   the correct `/<secret>/API` suffix on its production receiver. Replace stale or temporary probe URLs before
+   deploying the cleanup:
 
    | Garmin endpoint | Production receiver |
    | --- | --- |
@@ -269,26 +268,28 @@ the four callback receivers. They retain their existing names, regions and memor
    Leave `epochs` and out-of-scope families disabled. The probe discards payloads even when it reports successful
    delivery, so it cannot serve as a production receiver. No query parameter is required;
    the portal removed query parameters in the operator's transport test while preserving the path.
-4. Before deploying the cleanup, verify POST delivery on the protected paths and normal Health/activity processing
-   with safe test-account evidence.
-   `[GarminWebhook] Accepted callback route` reports only `functionName`, `authenticated`, and `legacy` booleans.
-   Confirm `authenticated: true, legacy: false`; then check normal queue/worker/import outcomes. A 200 alone does not
-   prove ingestion. Validate lifecycle behavior with synthetic tests, or separately approved exact account-side actions;
-   do not disconnect a live account merely to test routing. Missing/wrong-secret paths must return 403 without side
-   effects, and GET returns 405.
-5. Confirm old bare paths already reject on the migration release, then separately approve and deploy this cleanup
-   to the four receivers together. Recheck protected delivery and old/wrong-path rejection after deployment, and
-   watch for stale deliveries. Old paths now reject unconditionally before any account/queue work. No secret rotation
-   or metadata rewrite is needed. Do not redirect old URLs or delete Functions as part of this cleanup; actual resource
-   removal requires separate approval.
-6. For a connected Pro account with Historical Data Export and Health Export permission, the existing in-app history
+4. Before deploying, verify POST delivery to the updated URLs and normal Health/activity processing with safe
+   test-account evidence on the current receivers. A 200 alone does not prove ingestion. Validate lifecycle behavior
+   with synthetic tests, or separately approved exact account-side actions; do not disconnect a live account merely
+   to test routing. Legacy URL retirement does not require waiting for a deadline or closing bare paths first.
+5. Separately approve and deploy the four receivers from this revision together. Each updated receiver closes its
+   bare URL immediately and authenticates before account/queue work. The activity URL/redirect/download protections
+   from #798 remain in `processWorkoutTask`; include that worker if those protections have not yet been deployed.
+   Do not redirect old URLs or delete Functions as part of this cleanup; actual resource removal requires separate approval.
+6. After deployment, recheck protected delivery and queue/worker/import outcomes. `[GarminWebhook] Accepted callback
+   route` reports only `functionName`, `authenticated`, and `legacy`; confirm `authenticated: true, legacy: false`.
+   Bare and wrong-secret paths must return 403 without side effects; GET returns 405. Watch for stale deliveries.
+7. For a connected Pro account with Historical Data Export and Health Export permission, the existing in-app history
    action still reports **Sleep & Health history**. Summary Resender remains bounded operational recovery after the
    protected receiver is healthy. The temporary probe's eventual deletion needs its own exact approval.
 
+If #798's deadline-based build has already been deployed, its existing deadline still applies until that receiver is
+replaced. This PR neither adds a new deadline nor changes live configuration before deployment.
+
 For separately approved maintenance, Garmin's **On Hold** control can retain notifications while a receiver is being
 changed. Resume only after the protected receiver is healthy. A rollback must retain callback authentication; reopening
-bare URLs restores the reported boundary failure. When rolling back to the migration-capable release, use the same
-secret without `legacyUntil` and redeploy the four receivers through the approved workflow so bare paths remain closed.
+bare URLs restores the reported boundary failure. When rolling back to #798, retain the same plain secret and redeploy
+the four receivers through the approved workflow so bare paths remain closed; do not restore its JSON migration format.
 Use Summary Resender only for a bounded recovery window.
 
 The application's Help, OAuth scopes, connection UI, entitlements and MCP contracts need no change for this

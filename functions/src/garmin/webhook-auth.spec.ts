@@ -4,7 +4,6 @@ import * as logger from 'firebase-functions/logger';
 import { authenticateGarminWebhook } from './webhook-auth';
 
 const SECRET = 'a'.repeat(64);
-const NOW = Date.parse('2026-10-03T10:00:00.000Z');
 const FUNCTION = 'receiveGarminAPIHealthData';
 const FUNCTIONS = [
   FUNCTION, 'insertGarminAPIActivityFileToQueue', 'deauthorizeGarminAPIUsers', 'receiveGarminAPIUserPermissions',
@@ -13,7 +12,6 @@ const FUNCTIONS = [
 describe('Garmin webhook authentication', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.spyOn(Date, 'now').mockReturnValue(NOW);
     vi.stubEnv('GARMINAPI_WEBHOOK_SECRET', SECRET);
   });
   afterEach(() => { vi.restoreAllMocks(); vi.unstubAllEnvs(); });
@@ -52,7 +50,10 @@ describe('Garmin webhook authentication', () => {
     expect(response.status).toHaveBeenCalledWith(405);
   });
 
-  it.each(['', 'short', '"' + SECRET + '"', 'null', '[]', '{invalid',
+  it.each(['', 'short', SECRET.toUpperCase(), SECRET + 'a', SECRET + '\n', SECRET + '\r\n',
+    ' ' + SECRET, SECRET + ' ', '"' + SECRET + '"', 'null', '[]', '{invalid',
+    JSON.stringify({ secret: SECRET }),
+    JSON.stringify({ secret: SECRET, legacyUntil: '2026-10-03T11:00:00.000Z' }),
     JSON.stringify({ secret: 'short', legacyUntil: '2026-10-03T11:00:00.000Z' }),
     JSON.stringify({ legacyUntil: '2026-10-03T11:00:00.000Z' }),
     JSON.stringify({ secret: 123 }),
@@ -61,39 +62,22 @@ describe('Garmin webhook authentication', () => {
     const { accepted, response } = authenticate(`/${SECRET}/API`);
     expect(accepted).toBe(false);
     expect(response.status).toHaveBeenCalledWith(503);
-  });
-
-  it('accepts JSON credentials with no legacy deadline', () => {
-    vi.stubEnv('GARMINAPI_WEBHOOK_SECRET', JSON.stringify({ secret: SECRET }));
-    expect(authenticate(`/${SECRET}/API`).accepted).toBe(true);
     expect(authenticate('/').accepted).toBe(false);
+    expect(logger.info).not.toHaveBeenCalled();
   });
 
-  it.each(FUNCTIONS)('requires protected paths for %s even with an active legacy deadline', functionName => {
-    vi.stubEnv('GARMINAPI_WEBHOOK_SECRET', JSON.stringify({
-      secret: SECRET, legacyUntil: '2026-10-03T11:00:00.000Z',
-    }));
+  it.each(FUNCTIONS)('requires the plain secret on protected paths for %s', functionName => {
     for (const path of ['/', `/${functionName}`, `/${functionName}/`, `/${'b'.repeat(64)}/API`, '/unknown']) {
       const { accepted, response } = authenticate(path, 'POST', functionName);
       expect(accepted).toBe(false);
       expect(response.status).toHaveBeenCalledWith(403);
     }
     expect(logger.info).not.toHaveBeenCalled();
+    expect(authenticate(`/${SECRET}/API`, 'POST', functionName).accepted).toBe(true);
     expect(authenticate(`/${functionName}/${SECRET}/API`, 'POST', functionName).accepted).toBe(true);
     expect(logger.info).toHaveBeenCalledWith('[GarminWebhook] Accepted callback route', {
       functionName, authenticated: true, legacy: false,
     });
-  });
-
-  it.each([
-    '2026-10-03T09:00:00.000Z', '2026-10-03T10:00:00.000Z', '2026-10-05T10:00:00.000Z',
-    'forever', null, { enabled: true },
-  ])('ignores obsolete deadline metadata without disabling valid credentials: %j', legacyUntil => {
-    vi.stubEnv('GARMINAPI_WEBHOOK_SECRET', JSON.stringify({
-      secret: SECRET, legacyUntil,
-    }));
-    expect(authenticate('/').accepted).toBe(false);
-    expect(authenticate(`/${SECRET}/API`).accepted).toBe(true);
   });
 
   it('never logs the secret or request path', () => {

@@ -61,28 +61,20 @@ For admin marketing campaigns, generate a random high-entropy signing key and se
 `GARMINAPI_WEBHOOK_SECRET` is a dedicated callback credential, separate from Garmin OAuth. It is bound only to
 `receiveGarminAPIHealthData`, `insertGarminAPIActivityFileToQueue`, `deauthorizeGarminAPIUsers`, and
 `receiveGarminAPIUserPermissions`. Workers keep their existing OAuth bindings and do not receive this credential.
-Generate 32 cryptographically random bytes, encoded as 64 lowercase hexadecimal characters. Both supported secret
-formats require the exact `/<secret>/API` path; missing or invalid credentials fail closed with HTTP 503.
+Store only the plain secret: 32 cryptographically random bytes encoded as exactly 64 lowercase hexadecimal
+characters, without JSON, quotes or whitespace. Missing or invalid values, including the former JSON format, fail
+closed with HTTP 503. If JSON was already provisioned, replace it through the approved secret-version workflow with
+the same underlying secret as a plain value before deploying this revision; changing its format needs no rotation.
 
-The Secret Manager entry can contain the plain secret or the existing JSON shape (replace the placeholder):
-
-```json
-{"secret":"<64-lowercase-hex-characters>"}
-```
-
-The temporary `legacyUntil` option has been retired. Existing JSON values remain usable without rotation or
-reformatting: a leftover `legacyUntil` field is ignored, regardless of its value, and cannot reopen bare URLs or
-disable valid protected requests. Bare URLs, unknown paths and incorrect secrets are always rejected. Removing
-obsolete metadata from Secret Manager is optional and still follows the approved secret-version workflow.
-
-Complete and verify the staged portal migration using the migration-capable release from
-[#798](https://github.com/jimmykane/quantified-self/pull/798) before deploying this cleanup. The cleanup revision has
-no legacy overlap, deadline parser or switch. Do not use it for the initial staged cutover.
+Deployment of [#800](https://github.com/jimmykane/quantified-self/pull/800) is the legacy URL cutover. Update and verify
+every enabled Garmin portal URL before deploying the four receivers. Each updated receiver requires the exact
+`/<secret>/API` path and rejects bare URLs, unknown paths and incorrect secrets. There is no timestamp, cutoff parser
+or compatibility switch. Preparing or merging the PR does not change the currently deployed receivers.
 
 An authorized operator provisions the value interactively with
 `firebase functions:secrets:set GARMINAPI_WEBHOOK_SECRET --project <firebase-project-id>` and deploys the four
 receivers together. Changing an injected secret version requires redeployment; editing Secret Manager alone does
-not immediately change running functions. Follow the [Garmin staged migration](garmin-integration.md#production-configuration).
+not immediately change running functions. Follow the [Garmin deployment cutover](garmin-integration.md#production-configuration).
 Do not put credential values or complete protected URLs in commits, tickets, commands, or application logs.
 Platform request logs may retain paths, so restrict log access and treat those URLs as credentials. Secret
 provisioning, deployment, provider URL changes and eventual resource deletion each require their applicable approval.
