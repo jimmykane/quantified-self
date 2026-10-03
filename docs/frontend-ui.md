@@ -95,9 +95,13 @@ silently repeats colors. Individual colors and Automatic reset remain available;
 Swatches expose color names, hex values, and pressed state. Accepted actions and completed writes use shared haptics.
 
 `device-chart-appearance.helper.ts` applies device colors to merged/benchmark panels after either worker or synchronous
-numeric builds. Full event order assigns solid, dashed, dotted, and dash-dot patterns, repeating after four activities;
+numeric builds. The account chart setting `useDistinctComparisonLinePatterns` defaults to false. A **Distinct line
+patterns** toggle on Compare saves immediately through the existing chart-settings service; the same toggle in
+Settings → Charts uses Save Changes. With it off, charts retain solid lines, normal widths/overlay opacity, and dot
+legends. ECharts merge updates explicitly reset line types to solid when patterns are removed. With it on,
+full event order assigns solid, dashed, dotted, and dash-dot patterns, repeating after four activities;
 filtering activities or missing metrics does not shift a remaining activity's pattern. The same patterns appear in
-primary/overlay lines and accessible legend samples. Device lines are at least 2px wide and keep full opacity in
+primary/overlay lines and accessible legend samples. While enabled, device lines are at least 2px wide and keep full opacity in
 overlays and legends. Overlay metrics use lines 2px wider than the primary metric, with matching legend samples,
 so device color/pattern reuse does not make the two metrics visually identical. Comparison charts suppress zone and altitude-grade coloring to
 retain device identity. Normal activity charts retain metric and zone coloring. Saved preferences are observed by

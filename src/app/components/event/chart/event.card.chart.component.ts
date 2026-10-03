@@ -1143,7 +1143,8 @@ export class EventCardChartComponent implements OnInit, OnChanges, OnDestroy {
 
   private applyDeviceAppearance(panels: EventChartPanelModel[], allActivities: ActivityInterface[]): EventChartPanelModel[] {
     return isMergeOrBenchmarkEvent(this.event)
-      ? applyComparisonDeviceAppearance(panels, allActivities, this.eventColorService, this.darkTheme)
+      ? applyComparisonDeviceAppearance(panels, allActivities, this.eventColorService, this.darkTheme,
+        this.userSettingsQuery.chartSettings()?.useDistinctComparisonLinePatterns === true)
       : panels;
   }
 

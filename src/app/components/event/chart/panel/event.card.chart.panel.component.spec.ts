@@ -113,6 +113,19 @@ describe('EventCardChartPanelComponent', () => {
     expect(samples[3].classList.contains('event-chart-panel__series-legend-dot--dash-dot')).toBe(true);
     expect(samples[0].style.getPropertyValue('--series-line-width')).toBe(`${option.series[0].lineStyle.width}px`);
     expect(samples[4].style.getPropertyValue('--series-line-width')).toBe(`${option.series[4].lineStyle.width}px`);
+
+    component.panel = { ...component.panel!, series: component.panel!.series.map(series => ({ ...series, lineStyle: undefined })) };
+    component.overlayPanel = { ...component.overlayPanel!, series: component.overlayPanel!.series.map(series => ({ ...series, lineStyle: undefined })) };
+    // Model changes use ECharts merge updates; explicitly solid types clear old dashes.
+    fixture.componentRef.setInput('panel', component.panel);
+    fixture.componentRef.setInput('overlayPanel', component.overlayPanel);
+    await renderComponent();
+    const disabledOption = getRenderedOption();
+    expect(disabledOption.series.every((series: any) => series.lineStyle.type === 'solid')).toBe(true);
+    expect(disabledOption.series[0].lineStyle.width).toBe(1);
+    expect(disabledOption.series[4].lineStyle.width).toBe(1);
+    expect(disabledOption.series[4].lineStyle.opacity).toBeLessThan(1);
+    expect(fixture.nativeElement.querySelectorAll('.event-chart-panel__series-legend-dot--line')).toHaveLength(0);
   });
 
   beforeEach(async () => {
@@ -649,7 +662,7 @@ describe('EventCardChartPanelComponent', () => {
       opacity: 0.82,
     }));
     expect(option?.series?.[1]?.lineStyle?.width).toBeLessThanOrEqual(option?.series?.[0]?.lineStyle?.width);
-    expect(option?.series?.[1]?.lineStyle?.type).toBeUndefined();
+    expect(option?.series?.[1]?.lineStyle?.type).toBe('solid');
     expect(option?.series?.[1]?.lineStyle?.shadowBlur).toBeUndefined();
   });
 

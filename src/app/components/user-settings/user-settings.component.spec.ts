@@ -16,6 +16,7 @@ import { By } from '@angular/platform-browser';
 import { ReactiveFormsModule } from '@angular/forms';
 import { NoopAnimationsModule } from '@angular/platform-browser/animations';
 import { MaterialModule } from '../../modules/material.module';
+import { MatSlideToggle } from '@angular/material/slide-toggle';
 import { MatFormField } from '@angular/material/form-field';
 import { vi, describe, it, expect, beforeEach } from 'vitest';
 import { BehaviorSubject, of } from 'rxjs';
@@ -173,6 +174,60 @@ describe('UserSettingsComponent', () => {
         component.user = mockUser as User;
         component.ngOnChanges(); // Initialize form before detectChanges
         fixture.detectChanges();
+    });
+
+    it('defaults comparison line patterns off and emits one selection haptic for accepted toggle changes', () => {
+        component.activeSection = 'charts';
+        fixture.detectChanges();
+        const control = component.userSettingsFormGroup.get('useDistinctComparisonLinePatterns');
+        const toggle = fixture.debugElement.queryAll(By.directive(MatSlideToggle))
+            .find(element => element.attributes['formControlName'] === 'useDistinctComparisonLinePatterns');
+        expect(control.value).toBe(false);
+        expect(toggle).toBeTruthy();
+        expect(hapticsServiceMock.selection).not.toHaveBeenCalled();
+        toggle.triggerEventHandler('change', { checked: true });
+        expect(hapticsServiceMock.selection).toHaveBeenCalledOnce();
+        component.onDistinctLinePatternsChange(true);
+        expect(hapticsServiceMock.selection).toHaveBeenCalledOnce();
+        component.isSaving = true;
+        component.onDistinctLinePatternsChange(false);
+        expect(hapticsServiceMock.selection).toHaveBeenCalledOnce();
+    });
+
+    it('disables the line pattern control during save and restores it after completion', async () => {
+        const control = component.userSettingsFormGroup.get('useDistinctComparisonLinePatterns');
+        control.setValue(true);
+        let finishSave!: () => void;
+        vi.mocked(TestBed.inject(AppUserService).updateUserProperties).mockImplementationOnce(() => new Promise<[]>(resolve => {
+            finishSave = () => resolve([]);
+        }));
+        const save = component.onSubmit(new Event('submit'));
+        expect(control.disabled).toBe(true);
+        expect(hapticsServiceMock.success).not.toHaveBeenCalled();
+        finishSave();
+        await save;
+        expect(control.enabled).toBe(true);
+        expect(control.value).toBe(true);
+        expect(hapticsServiceMock.success).toHaveBeenCalledOnce();
+    });
+
+    it.each([false, true])('hydrates and saves the comparison line patterns preference %s', async (enabled) => {
+        component.user = {
+            ...component.user,
+            settings: { ...component.user.settings, chartSettings: {
+                ...component.user.settings.chartSettings, useDistinctComparisonLinePatterns: enabled,
+            } },
+        } as User;
+        component.ngOnChanges();
+        expect(component.userSettingsFormGroup.get('useDistinctComparisonLinePatterns').value).toBe(enabled);
+        expect(hapticsServiceMock.selection).not.toHaveBeenCalled();
+        const userService = TestBed.inject(AppUserService);
+        const update = vi.mocked(userService.updateUserProperties).mockResolvedValue(undefined);
+        await component.onSubmit(new Event('submit'));
+        expect(update).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
+            settings: expect.objectContaining({ chartSettings: expect.objectContaining({ useDistinctComparisonLinePatterns: enabled }) }),
+        }));
+        expect(hapticsServiceMock.success).toHaveBeenCalledOnce();
     });
 
     it('should create', () => {

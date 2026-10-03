@@ -1115,6 +1115,9 @@ describe('help.content', () => {
     expect(gettingStartedSection?.content).toContain('[FIT and GPX Route Files](/features/fit-gpx-route-files)');
     expect(gettingStartedSection?.content).toContain('[File Comparison Tool](/tools/compare)');
     expect(gettingStartedSection?.content).toContain('[Tools -> Compare](/tools/compare/saved)');
+    expect(gettingStartedSection?.content).toContain('**Distinct line patterns** is available on Compare');
+    expect(gettingStartedSection?.content).toContain('It is off by default');
+    expect(gettingStartedSection?.content).toContain('Both controls use the same account preference');
     expect(gettingStartedSection?.content).toContain('sortable, filterable, paginated table with device, activity type, and review tag filters, selected-row bulk delete, distance, ascent, descent, visible benchmark pairs, GNSS/heart-rate/altitude benchmark error metrics colored by low/moderate/high error, clickable draft metric cells that open the benchmark flow, quick description notes, and custom reviewer tags');
     expect(gettingStartedSection?.content).toContain('Benchmark reports show an **At a Glance** reviewer summary');
     expect(gettingStartedSection?.content).toContain('report share menu can copy that summary');

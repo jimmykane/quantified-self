@@ -54,10 +54,11 @@ export function applyComparisonDeviceAppearance(
   allActivities: ActivityInterface[],
   colorService: Pick<AppEventColorService, 'getActivityColor'>,
   darkTheme: boolean,
+  useDistinctLinePatterns = false,
 ): TrackChartPanelModel[] {
   const appearanceByActivityID = new Map(allActivities.map((activity, index) => [activity.getID?.() || '', {
     color: resolveDeviceChartColor(colorService.getActivityColor(allActivities, activity), darkTheme),
-    lineStyle: LINE_STYLES[index % LINE_STYLES.length],
+    lineStyle: useDistinctLinePatterns ? LINE_STYLES[index % LINE_STYLES.length] : undefined,
   }]));
   return panels.map(panel => ({
     ...panel,

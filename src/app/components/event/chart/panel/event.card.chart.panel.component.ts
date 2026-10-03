@@ -874,7 +874,7 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
         animation: this.useAnimations === true,
         lineStyle: {
           width: seriesStrokeWidth,
-          ...(series.lineStyle ? { type: deviceChartLineType(series.lineStyle) } : {}),
+          type: deviceChartLineType(series.lineStyle),
           ...(!useZoneColors ? { color: series.color } : {}),
         },
         ...(!useZoneColors ? {
@@ -1147,7 +1147,7 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
       animation: this.useAnimations === true,
       lineStyle: {
         width: overlayStrokeWidth,
-        ...(series.lineStyle ? { type: deviceChartLineType(series.lineStyle) } : {}),
+        type: deviceChartLineType(series.lineStyle),
         color: series.color,
         opacity: series.lineStyle ? 1 : OVERLAY_LINE_OPACITY,
       },
@@ -1194,7 +1194,7 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
         animation: this.useAnimations === true,
         lineStyle: {
           width: strokeWidth,
-          ...(series.lineStyle ? { type: deviceChartLineType(series.lineStyle) } : {}),
+          type: deviceChartLineType(series.lineStyle),
           color: group.color,
         },
         itemStyle: {

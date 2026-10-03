@@ -232,6 +232,11 @@
                   </mat-slide-toggle>
                   <mat-slide-toggle formControlName="chartCursorBehaviour">Selection Tool by Default</mat-slide-toggle>
                   <mat-slide-toggle formControlName="useAnimations">Enable Animations</mat-slide-toggle>
+                  <mat-slide-toggle formControlName="useDistinctComparisonLinePatterns"
+                    matTooltip="Use solid, dashed, dotted, and dash-dot device lines in merged and benchmark charts. Off by default."
+                    (change)="onDistinctLinePatternsChange($event.checked)">
+                    Distinct line patterns
+                  </mat-slide-toggle>
                 </div>
 
                 <div class="settings-slider-grid">

@@ -28,12 +28,17 @@ describe('device chart appearance', () => {
       dataType: 'Power', series: activities.map(activity => ({ activityID: activity.getID(), color: '#FF0000' })),
     } as TrackChartPanelModel;
     const colorService = { getActivityColor: vi.fn((_all, activity) => OKABE_ITO_DEVICE_COLORS[activities.indexOf(activity)].color) };
-    const result = applyComparisonDeviceAppearance([panel], activities, colorService, false)[0];
+    const result = applyComparisonDeviceAppearance([panel], activities, colorService, false, true)[0];
     expect(result.series.map(series => series.lineStyle)).toEqual(['solid', 'dashed', 'dotted', 'dash-dot']);
     expect(result.series.map(series => series.color).slice(0, 3)).toEqual(['#D55E00', '#0072B2', '#000000']);
-    const selected = applyComparisonDeviceAppearance([{ ...panel, series: [panel.series[2]] }], activities, colorService, false)[0];
+    const selected = applyComparisonDeviceAppearance([{ ...panel, series: [panel.series[2]] }], activities, colorService, false, true)[0];
     expect(selected.series[0]).toEqual(result.series[2]);
     expect(panel.series[2].color).toBe('#FF0000');
+    // Turning the preference off also clears patterns on already decorated panels.
+    const disabled = applyComparisonDeviceAppearance([result], activities, colorService, false)[0];
+    expect(disabled.series.every(series => series.lineStyle === undefined)).toBe(true);
+    expect(disabled.series.map(series => series.color)).toEqual(result.series.map(series => series.color));
+    expect(result.series[2].lineStyle).toBe('dotted');
     expect(deviceChartLineType('dash-dot')).toEqual([8, 3, 2, 3]);
     expect(deviceChartLineType('dotted')).toBe('dotted');
     expect(deviceChartLineType(undefined)).toBe('solid');

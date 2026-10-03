@@ -224,6 +224,7 @@ describe('EventCardChartComponent', () => {
   });
 
   it('applies device appearance to worker results and refreshes saved colors and dark-theme presentation', async () => {
+    chartSettingsSignal.set({ ...chartSettingsSignal(), useDistinctComparisonLinePatterns: true });
     const activities = ['a', 'b', 'c', 'd'].map(id => ({ getID: () => id, type: ActivityTypes.Cycling }));
     component.event = { getID: () => 'comparison', isMerge: true, getActivities: () => activities } as any;
     component.selectedActivities = activities as any;
@@ -246,6 +247,27 @@ describe('EventCardChartComponent', () => {
     expect(component.allChartPanels[0].series[1].color).toBe(resolveDeviceChartColor('#A68A5B', true));
     expect(component.allChartPanels[0].series[1].lineStyle).toBe('dashed');
     expect(panels[0].series[2].color).toBe('#FF0000');
+  });
+
+  it('defaults to solid lines and enables or clears patterns on cached comparison panels', async () => {
+    const activities = ['a', 'b'].map(id => ({ getID: () => id, type: ActivityTypes.Cycling }));
+    component.event = { getID: () => 'comparison', isMerge: true, getActivities: () => activities } as any;
+    component.selectedActivities = activities as any;
+    vi.spyOn(TestBed.inject(EventChartPanelWorkerService), 'shouldUseWorker').mockReturnValue(false);
+    const buildPanels = vi.spyOn(eventDataHelper, 'buildEventChartPanels').mockReturnValue([{
+      dataType: DataPower.type, displayName: 'Power', colorGroupKey: 'Power', minX: 0, maxX: 1,
+      series: activities.map(activity => ({ activityID: activity.getID(), color: '#FF0000' })),
+    }] as any);
+
+    await (component as any).rebuildPanels('initial');
+    expect(component.allChartPanels[0].series.map(series => series.lineStyle)).toEqual([undefined, undefined]);
+    chartSettingsSignal.set({ ...chartSettingsSignal(), useDistinctComparisonLinePatterns: true });
+    await (component as any).rebuildPanels('enabled');
+    expect(component.allChartPanels[0].series.map(series => series.lineStyle)).toEqual(['solid', 'dashed']);
+    chartSettingsSignal.set({ ...chartSettingsSignal(), useDistinctComparisonLinePatterns: false });
+    await (component as any).rebuildPanels('disabled');
+    expect(component.allChartPanels[0].series.map(series => series.lineStyle)).toEqual([undefined, undefined]);
+    expect(buildPanels).toHaveBeenCalledOnce();
   });
 
   it.each(['showLaps', 'showSwimLengths'])('refreshes cached device colors when the theme and %s change together', async (setting) => {
