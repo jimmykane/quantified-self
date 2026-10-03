@@ -4,29 +4,15 @@ import * as logger from 'firebase-functions/logger';
 import { SECRET_PARAMS } from '../secrets';
 
 const SECRET_PATTERN = /^[a-f0-9]{64}$/;
-const MAX_MIGRATION_WINDOW_MS = 24 * 60 * 60 * 1000;
 
-interface WebhookCredential {
-  secret: string;
-  legacyUntilMs: number;
-}
-
-function readCredential(now: number): WebhookCredential | null {
+function readCredential(): string | null {
   const value = SECRET_PARAMS.GARMINAPI_WEBHOOK_SECRET.value();
-  if (SECRET_PATTERN.test(value)) return { secret: value, legacyUntilMs: 0 };
+  if (SECRET_PATTERN.test(value)) return value;
   try {
     const parsed = JSON.parse(value);
     if (!parsed || typeof parsed.secret !== 'string' || !SECRET_PATTERN.test(parsed.secret)) return null;
-    let legacyUntilMs = 0;
-    if (parsed.legacyUntil !== undefined) {
-      if (typeof parsed.legacyUntil !== 'string'
-        || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.000Z$/.test(parsed.legacyUntil)) return null;
-      legacyUntilMs = Date.parse(parsed.legacyUntil);
-      if (!Number.isFinite(legacyUntilMs)
-        || new Date(legacyUntilMs).toISOString() !== parsed.legacyUntil
-        || legacyUntilMs > now + MAX_MIGRATION_WINDOW_MS) return null;
-    }
-    return { secret: parsed.secret, legacyUntilMs };
+    // Keep existing JSON credentials usable; obsolete migration fields confer no access.
+    return parsed.secret;
   } catch {
     return null;
   }
@@ -42,8 +28,7 @@ export function authenticateGarminWebhook(
     response.status(405).send('Method Not Allowed');
     return false;
   }
-  const now = Date.now();
-  const credential = readCredential(now);
+  const credential = readCredential();
   if (!credential) {
     logger.error('[GarminWebhook] Credential configuration unavailable', { functionName });
     response.status(503).send('Unavailable');
@@ -55,18 +40,17 @@ export function authenticateGarminWebhook(
   const path = request.path === prefix ? '/'
     : request.path?.startsWith(`${prefix}/`) ? request.path.slice(prefix.length)
       : request.path;
-  const expectedPath = `/${credential.secret}/API`;
+  const expectedPath = `/${credential}/API`;
   const authenticated = typeof path === 'string' && path.length <= 256
     && timingSafeEqual(
       createHash('sha256').update(path).digest(),
       createHash('sha256').update(expectedPath).digest(),
     );
-  const legacy = path === '/' && now < credential.legacyUntilMs;
-  if (!authenticated && !legacy) {
+  if (!authenticated) {
     response.status(403).send('Forbidden');
     return false;
   }
   // Request URLs can contain the credential. Only log fixed route facts.
-  logger.info('[GarminWebhook] Accepted callback route', { functionName, authenticated, legacy });
+  logger.info('[GarminWebhook] Accepted callback route', { functionName, authenticated, legacy: false });
   return true;
 }

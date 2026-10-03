@@ -723,11 +723,12 @@ For every new persistent write path:
 ### Webhooks
 
 Garmin's Health/Sleep, Activity Files, deregistration and permission callbacks share a dedicated Secret Manager
-credential in the exact `/<secret>/API` URL suffix. Verify it before any payload/account/queue work. The optional
-JSON credential's absolute legacy deadline supports a short portal migration and automatically closes the old bare
-paths; those paths remain unauthenticated until the deadline. Wrong-secret paths never enter that fallback. See
-[Garmin production configuration](garmin-integration.md#production-configuration) for endpoint mapping, deadline
-format, proof requirements, secret handling and retirement. The public client-ID header is not authentication.
+credential in the exact `/<secret>/API` URL suffix. Verify it before any payload/account/queue work. Bare URLs are
+always rejected; the temporary legacy deadline and fallback have been removed. Plain and existing JSON secret
+values remain supported, and obsolete `legacyUntil` metadata is ignored. Deploy this cleanup only after verifying
+the portal migration using the migration-capable release from #798. See
+[Garmin production configuration](garmin-integration.md#production-configuration) for endpoint mapping, migration
+prerequisites, proof requirements and secret handling. The public client-ID header is not authentication.
 
 - Verify the provider's documented authentication or shared secret before accepting work. Reject malformed and unrelated payloads before queueing. Reject unknown, disconnected, deletion-pending, and non-entitled identities before direct queueing. When a strict acknowledgement deadline requires durable asynchronous fan-out, first bind the request through a bounded indexed server-owned identity lookup and recheck lifecycle state in the ingress transaction; do not retain ingress for unknown or ineligible identities. Unless the integration enforces provider-account uniqueness, retain every eligible match as independent durable work rather than selecting the first owner. Recheck each binding and lifecycle again in the retryable worker before fan-out.
 - Resolve provider identity through server-owned credentials or a server-owned direct mapping, never browser-visible metadata. A direct mapping should use a one-way provider-identity key, be updated atomically with credential ownership, and be removed on disconnect and deletion. Do not use a globally limited credential query as webhook authority: unrelated client-writable token documents can consume the limit before structural filtering.

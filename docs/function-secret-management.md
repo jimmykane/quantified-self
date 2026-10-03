@@ -61,20 +61,23 @@ For admin marketing campaigns, generate a random high-entropy signing key and se
 `GARMINAPI_WEBHOOK_SECRET` is a dedicated callback credential, separate from Garmin OAuth. It is bound only to
 `receiveGarminAPIHealthData`, `insertGarminAPIActivityFileToQueue`, `deauthorizeGarminAPIUsers`, and
 `receiveGarminAPIUserPermissions`. Workers keep their existing OAuth bindings and do not receive this credential.
-Generate 32 cryptographically random bytes, encoded as 64 lowercase hexadecimal characters. A plain value requires
-the exact `/<secret>/API` path immediately; missing or invalid configuration fails closed with HTTP 503.
+Generate 32 cryptographically random bytes, encoded as 64 lowercase hexadecimal characters. Both supported secret
+formats require the exact `/<secret>/API` path; missing or invalid credentials fail closed with HTTP 503.
 
-For a deliberately short migration, the same Secret Manager entry may hold this JSON shape (replace placeholders):
+The Secret Manager entry can contain the plain secret or the existing JSON shape (replace the placeholder):
 
 ```json
-{"secret":"<64-lowercase-hex-characters>","legacyUntil":"<UTC-timestamp-with-milliseconds>"}
+{"secret":"<64-lowercase-hex-characters>"}
 ```
 
-The timestamp must have the exact `YYYY-MM-DDTHH:mm:ss.000Z` form and be at most 24 hours ahead of invocation time.
-Only the old bare function paths remain accepted before that deadline. Unknown paths and incorrect secrets are
-always rejected. At the deadline the old paths automatically return 403 while protected paths keep working.
-An expired, valid deadline does not invalidate the secret. A malformed deadline or one more than 24 hours ahead
-fails the entire credential configuration closed. Omitting `legacyUntil` disables legacy access.
+The temporary `legacyUntil` option has been retired. Existing JSON values remain usable without rotation or
+reformatting: a leftover `legacyUntil` field is ignored, regardless of its value, and cannot reopen bare URLs or
+disable valid protected requests. Bare URLs, unknown paths and incorrect secrets are always rejected. Removing
+obsolete metadata from Secret Manager is optional and still follows the approved secret-version workflow.
+
+Complete and verify the staged portal migration using the migration-capable release from
+[#798](https://github.com/jimmykane/quantified-self/pull/798) before deploying this cleanup. The cleanup revision has
+no legacy overlap, deadline parser or switch. Do not use it for the initial staged cutover.
 
 An authorized operator provisions the value interactively with
 `firebase functions:secrets:set GARMINAPI_WEBHOOK_SECRET --project <firebase-project-id>` and deploys the four

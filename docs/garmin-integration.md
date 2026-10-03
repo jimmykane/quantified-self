@@ -240,8 +240,10 @@ deployment or data deletion.
 
 ## Production configuration
 
-These steps prepare a staged migration; code or PR completion alone does not deploy it. Existing Garmin OAuth
-credentials still authorize pulls. Provision the dedicated `GARMINAPI_WEBHOOK_SECRET` through the approved
+This revision removes the temporary legacy-URL compatibility. Complete the staged portal migration using the
+migration-capable release from [#798](https://github.com/jimmykane/quantified-self/pull/798) before deploying this
+cleanup. Code or PR completion alone does not deploy it. Existing Garmin OAuth credentials still authorize pulls.
+Provision the dedicated `GARMINAPI_WEBHOOK_SECRET` through the approved
 [secret-management workflow](function-secret-management.md#garmin-callback-credential-and-migration) before deploying
 the four callback receivers. They retain their existing names, regions and memory. No additional Function is required.
 
@@ -249,11 +251,13 @@ the four callback receivers. They retain their existing names, regions and memor
    `deauthorizeGarminAPIUsers`; `receiveGarminAPIDeregistration` is its internal handler name, not a separate exported
    deployment. Include any genuinely deployed older aliases in the retirement review instead of assuming an alias
    exists from old documentation.
-2. For the initial migration deploy, configure a short explicit `legacyUntil` deadline in the callback secret. Deploy
-   the four receivers and `processWorkoutTask` (which also deploys the activity URL/redirect/download protections).
-   The old bare URLs remain vulnerable until their deadline, so keep this overlap short. Incorrect secret paths never
-   fall back to legacy access. A plain secret or a JSON secret without a deadline starts with old paths closed.
-3. In Garmin's Endpoint Configuration Tool, append `/<secret>/API` to the saved URL for **every enabled** endpoint:
+2. Confirm the four receivers and `processWorkoutTask` from #798 have been deployed and the staged URL migration is
+   complete. This cleanup changes only the shared callback guard; the activity URL/redirect/download protections
+   remain in the worker. Existing plain or JSON credentials keep working. A leftover `legacyUntil` field is ignored
+   and cannot enable old URLs. There is no deadline or compatibility switch in this revision.
+3. In Garmin's Endpoint Configuration Tool, confirm the saved URL for **every enabled** endpoint ends in the correct
+   `/<secret>/API` suffix. Resolve stale or temporary probe URLs using the migration-capable release before deploying
+   this cleanup:
 
    | Garmin endpoint | Production receiver |
    | --- | --- |
@@ -262,30 +266,34 @@ the four callback receivers. They retain their existing names, regions and memor
    | Deregistrations | `deauthorizeGarminAPIUsers` |
    | User Permissions Change | `receiveGarminAPIUserPermissions` |
 
-   Leave `epochs` and out-of-scope families disabled. Replace any temporary probe URLs with the correct production
-   receiver: the probe discards payloads even when it reports successful delivery. No query parameter is required;
+   Leave `epochs` and out-of-scope families disabled. The probe discards payloads even when it reports successful
+   delivery, so it cannot serve as a production receiver. No query parameter is required;
    the portal removed query parameters in the operator's transport test while preserving the path.
-4. Verify POST delivery on the protected paths and normal Health/activity processing with safe test-account evidence.
+4. Before deploying the cleanup, verify POST delivery on the protected paths and normal Health/activity processing
+   with safe test-account evidence.
    `[GarminWebhook] Accepted callback route` reports only `functionName`, `authenticated`, and `legacy` booleans.
    Confirm `authenticated: true, legacy: false`; then check normal queue/worker/import outcomes. A 200 alone does not
    prove ingestion. Validate lifecycle behavior with synthetic tests, or separately approved exact account-side actions;
    do not disconnect a live account merely to test routing. Missing/wrong-secret paths must return 403 without side
    effects, and GET returns 405.
-5. At the deadline, old bare paths reject before any account/queue work. Verify that behavior and watch for stale
-   deliveries. For earlier retirement, replace the secret configuration with the same secret and no deadline, then
-   separately approve and redeploy the four receivers. Do not create a permanent bypass or redirect the old URL to the
-   new URL. Do not delete Functions as part of path retirement; actual resource removal requires separate approval.
+5. Confirm old bare paths already reject on the migration release, then separately approve and deploy this cleanup
+   to the four receivers together. Recheck protected delivery and old/wrong-path rejection after deployment, and
+   watch for stale deliveries. Old paths now reject unconditionally before any account/queue work. No secret rotation
+   or metadata rewrite is needed. Do not redirect old URLs or delete Functions as part of this cleanup; actual resource
+   removal requires separate approval.
 6. For a connected Pro account with Historical Data Export and Health Export permission, the existing in-app history
    action still reports **Sleep & Health history**. Summary Resender remains bounded operational recovery after the
    protected receiver is healthy. The temporary probe's eventual deletion needs its own exact approval.
 
 For separately approved maintenance, Garmin's **On Hold** control can retain notifications while a receiver is being
 changed. Resume only after the protected receiver is healthy. A rollback must retain callback authentication; reopening
-bare URLs restores the reported boundary failure. Use Summary Resender only for a bounded recovery window.
+bare URLs restores the reported boundary failure. When rolling back to the migration-capable release, use the same
+secret without `legacyUntil` and redeploy the four receivers through the approved workflow so bare paths remain closed.
+Use Summary Resender only for a bounded recovery window.
 
 The application's Help, OAuth scopes, connection UI, entitlements and MCP contracts need no change for this
 operator-managed callback migration. No provider calls, cloud configuration, secret values or deployment are performed
-by the implementation PR. A leaked path credential or deliberately active legacy window can still admit requests;
+by the implementation PR. A leaked path credential can still admit requests;
 the shared secret does not provide body integrity, replay prevention or account-wide resource quotas.
 
 Monitor non-2xx responses, `processGarminHealthBackfillTask` depth/state in the admin queue view, `sleepSyncQueue` retry/DLQ counts, `users/{uid}/sleepSyncState/GarminAPI` Health cursor fields, `users/{uid}/healthSyncState/GarminAPI`, and the expected source-record/sample-chunk families. Each accepted or durably failed ingress log includes non-zero per-family counts for received and valid Ping descriptors, direct-summary/Push-shaped descriptors, invalid Ping descriptors, queued work, skipped accounts, disabled families, and received/direct-summary `epochs` descriptors that remain unsupported. These counters contain only fixed summary-family names and integer counts. Do not log or export callback URLs, OAuth credentials, raw payloads, or raw provider account IDs.
