@@ -409,6 +409,13 @@ current link. Completed #651 is exact-marker-only: fallback candidate discovery 
 are explicitly out of scope.
 No private Wahoo identity or live check is introduced.
 
+Wahoo Stop -> Send incarnation handling preserves that public contract. After confirmed withdrawal, the worker
+reserves a new private Plan identity once, reuses it through retries and validates it during FIT completion matching.
+An unproved deleted Plan maps to the existing Needs attention outcome, not a new provider action or automatic
+recreation permission. `wahooPlanGeneration`, artifact `planGeneration`, withdrawal receipts and provider identities
+remain excluded from strict sync and completion projections. Existing approval-gated Send/Stop preview/apply, Pro
+policy and owner/connection/deletion fences are unchanged; no plugin rebuild or registered-client refresh is needed.
+
 Public Garmin, Wahoo and Suunto Training delivery changes runtime availability, not the MCP wire contract. An already
 authorized client with `training-plans:read` and `training-delivery:write` may preview an explicit delivery change for
 any eligible connected Pro owner; there is no per-UID provider allowlist. COROS remains a valid compatibility/status

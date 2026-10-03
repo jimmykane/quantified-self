@@ -19,6 +19,7 @@ import type { FITActivityReference } from '../suunto/guide-completion';
 import type { WahooActiveAccountGuard } from './account';
 import { readWahooFITTrainingReference } from './fit-training-reference';
 import { wahooIdentities } from '../training-plans/delivery/wahoo/mapping';
+import { wahooArtifactGeneration } from '../training-plans/delivery/wahoo/identity';
 import { SPORTS_LIB_VERSION } from '../shared/sports-lib-version.node';
 
 const WAHOO_ID = /^[1-9]\d{0,18}$/;
@@ -67,10 +68,14 @@ function candidateLedger(
     return null;
   }
   if (fromFIT) {
-    const identities = wahooIdentities(destinationKey, ledger.workoutId);
-    if (artifact.ids.externalId !== identities.externalId || artifact.ids.workoutToken !== identities.workoutToken
-      || !ledger.acceptedDigest || !Number.isSafeInteger(ledger.lastAcceptedAtMs) || ledger.lastAcceptedAtMs! < 0) return null;
-    try { normalizeDeliveryTimeZone(ledger.timeZone); } catch { return null; }
+    try {
+      const generation = wahooArtifactGeneration(artifact);
+      const identities = wahooIdentities(destinationKey, ledger.workoutId, generation);
+      if ((ledger.wahooPlanGeneration !== undefined && ledger.wahooPlanGeneration !== generation)
+        || artifact.ids.externalId !== identities.externalId || artifact.ids.workoutToken !== identities.workoutToken
+        || !ledger.acceptedDigest || !Number.isSafeInteger(ledger.lastAcceptedAtMs) || ledger.lastAcceptedAtMs! < 0) return null;
+      normalizeDeliveryTimeZone(ledger.timeZone);
+    } catch { return null; }
   }
   // Completion and delivery writes serialize on the same delivery identity.
   // Retrying the import is safer than allowing a late checkpoint to erase the link.

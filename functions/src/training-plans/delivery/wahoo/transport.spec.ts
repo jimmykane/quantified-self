@@ -28,6 +28,52 @@ describe('Wahoo Plan + dated Workout lifecycle', () => {
     op.strength = wahooFixtureStrengthDetails();
     next({ title: 'Timed strength', structure: projectStrengthWorkoutToV1(op.strength) });
   };
+  it('keeps a renewed Plan identity through create, edit and reschedule, with stable completion correlation', async () => {
+    op.wahooPlanGeneration = 1;
+    const artifact = (await execute())!;
+    expect(artifact.ids.planGeneration).toBe('1');
+    next({ localDate: '2026-10-26', title: 'Renewed' });
+    expect((await execute())!.ids).toEqual(artifact.ids);
+    expect(server.calls.filter(call => call.method === 'POST' && call.path === '/v1/plans')).toHaveLength(1);
+    const body = new URLSearchParams(server.calls.find(call => call.method === 'POST' && call.path === '/v1/plans')!.body);
+    expect(body.get('plan[external_id]')).toBe(artifact.ids.externalId);
+  });
+  it('rejects a changed reserved incarnation before any request', async () => {
+    op.wahooPlanGeneration = 1; await execute(); next(); op.wahooPlanGeneration = 2; server.calls.length = 0;
+    await expect(execute()).rejects.toMatchObject({ diagnostics: { wahooContractCheck: 'artifact_invalid' } });
+    expect(server.calls).toHaveLength(0);
+  });
+  it.each([null, -1, 0.5, '1'])('rejects malformed reserved incarnation %s before a fresh send', async generation => {
+    op.wahooPlanGeneration = generation as unknown as number;
+    await expect(execute()).rejects.toMatchObject({ diagnostics: { wahooContractCheck: 'operation_invalid' } });
+    expect(server.calls).toHaveLength(0);
+  });
+  it.each([false, true])('confirms an owned deleted Plan and absent Workout without another DELETE (recovery=%s)', async recovery => {
+    const artifact = (await execute())!; server.plans.get(artifact.ids.plan)!.deleted = true; server.workouts.clear(); server.calls.length = 0;
+    op = { ...op, kind: 'remove', workout: null, progress: recovery ? { version: 1, step: 'plan-remove', state: 'started' } : null };
+    // A partial Plan-delete journal must already have retired the Workout.
+    if (recovery) { delete artifact.ids.workout; delete artifact.ids.association; }
+    if (recovery) expect(await recover()).toEqual({ kind: 'accepted', artifact: null });
+    else expect(await execute()).toBeNull();
+    expect(op.progress).toMatchObject({ step: 'finished', state: 'accepted', removalOutcome: 'already_absent' });
+    expect(server.calls.every(call => call.method === 'GET')).toBe(true);
+  });
+  it.each(['surviving-workout', 'unknown-summary', 'completed', 'wrong-id', 'wrong-external-id', 'unknown-deletion', 'duplicate-catalog'])(
+    'does not treat a deleted Plan as safe withdrawal with %s', async reason => {
+      const artifact = (await execute())!; const plan = server.plans.get(artifact.ids.plan)!;
+      plan.deleted = true;
+      if (!['surviving-workout', 'unknown-summary', 'completed'].includes(reason)) server.workouts.clear();
+      if (reason === 'unknown-summary') delete server.workouts.get(artifact.ids.workout)!.workout_summary;
+      if (reason === 'completed') server.workouts.get(artifact.ids.workout)!.workout_summary = { id: 999 };
+      if (reason === 'wrong-id') plan.id = '999';
+      if (reason === 'wrong-external-id') plan.external_id = 'foreign';
+      if (reason === 'unknown-deletion') plan.deleted = 'true';
+      if (reason === 'duplicate-catalog') server.plans.set('999', { ...plan, id: '999' });
+      server.calls.length = 0; op = { ...op, kind: 'remove', workout: null, progress: null };
+      await expect(execute()).rejects.toThrow();
+      expect(server.calls.every(call => call.method === 'GET')).toBe(true);
+      expect(op.artifact).not.toBeNull();
+    });
   it.each([false, true])('finishes an already-absent removal without DELETEs (existing null journal=%s)', async existing => {
     const artifact = (await execute())!;
     server.plans.clear(); server.workouts.clear(); server.calls.length = 0;

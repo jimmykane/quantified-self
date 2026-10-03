@@ -366,7 +366,8 @@ describe('Training plan MCP reads', () => {
     expect(JSON.stringify(read)).not.toMatch(/already_absent|synthetic-wahoo-account|removalOutcome|artifact|attempt|planReadStatus|workoutReadStatus/);
     for (const [key, value] of Object.entries({ removalOutcome: 'already_absent',
       progress: { version: 1, step: 'finished', state: 'accepted', removalOutcome: 'already_absent' },
-      attempt: { id: 'private-journal' }, accountProbe: { id: 'private-account' }, planReadStatus: 404, workoutReadStatus: 404 })) {
+      attempt: { id: 'private-journal' }, wahooPlanGeneration: 1, planGeneration: '1',
+      accountProbe: { id: 'private-account' }, planReadStatus: 404, workoutReadStatus: 404 })) {
       f.collections.trainingDeliveryStatuses[id][key] = value;
       await expect(f.run('get_training_sync_status', args)).rejects.toThrow();
       delete f.collections.trainingDeliveryStatuses[id][key];

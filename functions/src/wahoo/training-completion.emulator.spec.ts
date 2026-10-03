@@ -327,15 +327,16 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)(
       expect((await user().collection('trainingWorkoutCompletions').get()).empty).toBe(true);
     });
 
-    async function seedFITSource(): Promise<void> {
+    async function seedFITSource(generation = 0): Promise<void> {
       await user().collection('events').doc('event').collection('metaData').doc(ServiceNames.WahooAPI).set({
         serviceName: ServiceNames.WahooAPI, serviceUserID: account, serviceWorkoutID: '1001', serviceWorkoutSummaryID: '999',
       });
       await user().collection('activities').doc('activity').set({ userID: uid, eventID: 'event',
         startDate: Date.parse('2026-09-17T07:00:00Z') });
-      const identities = wahooIdentities(destinationKey, 'workout');
+      const identities = wahooIdentities(destinationKey, 'workout', generation);
       await user().collection(DELIVERY_LEDGER).doc('delivery').update({
         'actual.ids.externalId': identities.externalId, 'actual.ids.workoutToken': identities.workoutToken,
+        ...(generation ? { 'actual.ids.planGeneration': String(generation), wahooPlanGeneration: generation } : {}),
       });
     }
     const retainFIT = (options: Parameters<typeof wahooTrainingFitFixture>[0] = {}) => retainWahooTrainingCompletion(
@@ -343,6 +344,21 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)(
       [{ id: 'activity', startTimeMs: Date.parse('2026-09-17T07:00:00Z') }], Date.parse('2026-09-17T08:00:00Z'),
       wahooTrainingFitFixture(options),
     );
+
+    it.each([456, null])('links a re-sent Plan incarnation from FIT without relying on the API association (%s)', async workoutId => {
+      await seedFITSource(1);
+      expect((await retainFIT({ workoutId })).linkedWorkoutIds).toEqual(['workout']);
+      expect((await user().collection('trainingWorkoutCompletions').doc('workout').get()).data()?.provider).toBe('wahoo');
+    });
+    it.each(['wrong-generation', 'malformed-generation', 'original-external-id'])(
+      'refuses FIT completion for a renewed Plan with %s', async reason => {
+        await seedFITSource(1);
+        const patch = reason === 'wrong-generation' ? { wahooPlanGeneration: 2 }
+          : reason === 'malformed-generation' ? { 'actual.ids.planGeneration': '01' }
+            : { 'actual.ids.externalId': wahooIdentities(destinationKey, 'workout').externalId };
+        await user().collection(DELIVERY_LEDGER).doc('delivery').update(patch);
+        expect((await retainFIT({ workoutId: null })).linkedWorkoutIds).toEqual([]);
+      });
 
     it.each([456, null])('links by exact owned FIT Plan with scheduled Workout %s, without API association', async workoutId => {
       await seedFITSource();

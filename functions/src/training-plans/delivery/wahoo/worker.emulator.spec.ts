@@ -127,6 +127,119 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Wahoo worker with real Fi
     }
     await db.terminate();
   });
+  it('reserves a new Plan identity once after each acknowledged Stop, preserving it through duplicate Send and edits', async () => {
+    server.softDeletePlans = true;
+    const original = await send(); const old = original.actual!;
+    for (const generation of [1, 2]) {
+      now += 1000; await command('stop'); await drain(); await processTrainingDelivery(runtime, uid, original.id); await drain();
+      expect(await ledger()).toMatchObject({ actual: null, wahooPlanGeneration: generation });
+      now += 1000; await command('send'); await drain(); server.calls.length = 0;
+      await Promise.all([processTrainingDelivery(runtime, uid, original.id), processTrainingDelivery(runtime, uid, original.id)]);
+      await drain(); const renewed = await ledger();
+      expect(renewed.status).toBe('delivered'); expect(renewed.actual!.ids.planGeneration).toBe(String(generation));
+      expect(renewed.actual!.ids.externalId).not.toBe(old.ids.externalId);
+      expect(renewed.actual!.ids.workoutToken).toBe(old.ids.workoutToken);
+      expect(server.workouts.size).toBe(1);
+      expect([...server.plans.values()].filter(plan => plan.deleted === false)).toHaveLength(1);
+      expect(server.calls.filter(call => call.method === 'POST' && call.path === '/v1/plans')).toHaveLength(1);
+      await command('send'); await drain(); await processTrainingDelivery(runtime, uid, original.id); await mark();
+      expect((await ledger()).actual!.ids).toEqual(renewed.actual!.ids);
+      expect((await ledger()).wahooPlanGeneration).toBe(generation);
+      expect(server.workouts.size).toBe(1);
+    }
+    expect(server.plans.get(old.ids.plan)?.deleted).toBe(true);
+  });
+  it.each(['plan', 'workout'] as const)('recovers a renewed %s POST with a lost response without changing incarnation or duplicating', async resource => {
+    server.softDeletePlans = true; const original = await send();
+    now += 1000; await command('stop'); await drain(); await processTrainingDelivery(runtime, uid, original.id); await drain();
+    await command('send'); await drain(); server.calls.length = 0;
+    server.afterHandle = async call => {
+      if (call.method === 'POST' && call.path === `/v1/${resource}s`) {
+        server.afterHandle = null; throw new WahooTrainingHttpError('uncertain', false);
+      }
+    };
+    await processTrainingDelivery(runtime, uid, original.id);
+    expect((await ledger()).attempt?.wahooPlanGeneration).toBe(1);
+    await command('retry'); await drain(); await processTrainingDelivery(runtime, uid, original.id); await drain();
+    expect(await ledger()).toMatchObject({ status: 'delivered', attempt: null, wahooPlanGeneration: 1,
+      actual: { ids: { planGeneration: '1', workoutToken: original.actual!.ids.workoutToken } } });
+    expect(server.calls.filter(call => call.method === 'POST' && call.path === `/v1/${resource}s`)).toHaveLength(1);
+    expect(server.workouts.size).toBe(1);
+  });
+  it('recovers a lost soft-delete acknowledgement and reserves exactly one next incarnation', async () => {
+    server.softDeletePlans = true; const original = await send();
+    now += 1000; await command('stop'); await drain();
+    server.afterHandle = async call => {
+      if (call.method === 'DELETE' && call.path === `/v1/plans/${original.actual!.ids.plan}`) {
+        server.afterHandle = null; throw new WahooTrainingHttpError('uncertain', false);
+      }
+    };
+    await processTrainingDelivery(runtime, uid, original.id);
+    expect((await ledger()).wahooPlanGeneration).toBeUndefined();
+    await command('retry'); await drain(); server.calls.length = 0;
+    await processTrainingDelivery(runtime, uid, original.id); await drain();
+    expect(await ledger()).toMatchObject({ actual: null, attempt: null, wahooPlanGeneration: 1 });
+    expect(server.calls.every(call => call.method === 'GET')).toBe(true);
+    await command('send'); await drain(); await processTrainingDelivery(runtime, uid, original.id); await drain();
+    expect(await ledger()).toMatchObject({ status: 'delivered', wahooPlanGeneration: 1 });
+    expect(server.workouts.size).toBe(1);
+  });
+  it.each([false, true])('migrates a proven legacy withdrawal before new Send (existing no-write attempt=%s)', async existing => {
+    server.softDeletePlans = true; const original = await send();
+    now += 1000; await command('stop'); await drain(); await processTrainingDelivery(runtime, uid, original.id); await drain();
+    const ref = user().collection(DELIVERY_LEDGER).doc(original.id);
+    const legacy = { ...await ledger() }; delete legacy.wahooPlanGeneration;
+    await ref.set(legacy);
+    now += 1000; await command('send'); await drain();
+    if (existing) {
+      const row = await ledger();
+      const operation = { id: 'legacy-send', kind: 'upsert', deliveryId: row.id, generation: row.desiredGeneration,
+        connectionGeneration: 'connection', destinationKey: row.destinationKey, timeZone: row.timeZone,
+        digest: row.desiredDigest, contentDigest: row.contentDigest, workout: wahooFixtureWorkout(), artifact: null, progress: null };
+      await ref.update({ attempt: operation }); await ref.collection('attempts').doc(operation.id)
+        .set({ operation, state: 'started', startedAtMs: now });
+    }
+    server.calls.length = 0; await processTrainingDelivery(runtime, uid, original.id); await drain();
+    expect(await ledger()).toMatchObject({ status: 'delivered', wahooPlanGeneration: 1, actual: { ids: { planGeneration: '1' } } });
+    expect(server.workouts.size).toBe(1);
+    if (existing) expect((await ref.collection('attempts').doc('legacy-send').get()).data()?.state).toBe('not-accepted');
+  });
+  it('does not retry or replace a tombstone without withdrawal proof', async () => {
+    const original = await send(); server.plans.get(original.actual!.ids.plan)!.deleted = true;
+    // Simulate lost legacy local receipts, not a proven Stop. A surviving dated
+    // Workout (possibly recorded) must never be inferred absent from Plan deletion.
+    const ref = user().collection(DELIVERY_LEDGER).doc(original.id);
+    await db.recursiveDelete(ref.collection('attempts'));
+    await ref.update({ actual: null, acceptedDigest: null, acceptedContentDigest: null });
+    server.calls.length = 0; await command('send'); await drain(); await processTrainingDelivery(runtime, uid, original.id);
+    expect(await ledger()).toMatchObject({ status: 'needs_attention', actual: null });
+    expect((await db.collection(DELIVERY_QUEUE).doc(original.id).get()).exists).toBe(false);
+    expect(server.calls.every(call => call.method === 'GET')).toBe(true);
+    expect(server.workouts.size).toBe(1);
+    await mark(); await processTrainingDelivery(runtime, uid, original.id);
+    expect((await ledger()).status).toBe('needs_attention');
+    expect((await ledger()).issues.join(' ')).toContain('Safe withdrawal has not been confirmed');
+  });
+  it.each([0, 1])('does not advance incarnation %s or touch completed recordings and links after Stop / Send', async generation => {
+    let accepted = await send();
+    if (generation) {
+      await command('stop'); await drain(); await processTrainingDelivery(runtime, uid, accepted.id); await drain();
+      accepted = await send();
+    }
+    const ids = accepted.actual!.ids;
+    const eventRef = user().collection('events').doc('completed-recording'); await eventRef.set({ test: true });
+    await retainWahooTrainingCompletion(db, uid, eventRef.id, {
+      providerUserId: '123', connectionStateGeneration: 'connection', activeCredentialGeneration: 'credential', credential: null,
+    }, ids.workout, ids.plan, ids.workoutToken, '999', [{ id: 'completed-activity', startTimeMs: now }], now);
+    server.calls.length = 0;
+    await command('stop'); await drain(); await processTrainingDelivery(runtime, uid, accepted.id);
+    await command('send'); await drain(); await processTrainingDelivery(runtime, uid, accepted.id);
+    expect((await ledger()).actual?.ids).toEqual(ids);
+    expect((await ledger()).wahooPlanGeneration ?? 0).toBe(generation);
+    expect(server.calls).toHaveLength(0);
+    expect((await eventRef.get()).exists).toBe(true);
+    expect((await user().collection('trainingWorkoutCompletions').doc('w').get()).exists).toBe(true);
+  });
   it('converges the deleted-workout/deleted-recording incident with an existing null REMOVE journal', async () => {
     const accepted = await send(); const ids = accepted.actual!.ids;
     const eventRef = user().collection('events').doc('synthetic-recording');
@@ -463,13 +576,17 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Wahoo worker with real Fi
     expect((await send()).status).toBe('delivered');
   });
   it('withdraws outside the rolling horizon and sends latest content when the date enters', async () => {
+    server.softDeletePlans = true;
     const first = await send();
     await user().collection('scheduledWorkouts').doc('w').update({ localDate: '2026-11-05', title: 'Later run', updatedAtMs: now }); await mark();
     expect((await ledger()).desired).toBe('absent'); await processTrainingDelivery(runtime, uid, first.id); await drain();
-    expect((await ledger()).status).toBe('outside_horizon'); expect(server.plans.size).toBe(0); expect(server.workouts.size).toBe(0);
+    expect((await ledger()).status).toBe('outside_horizon');
+    expect(server.plans.get(first.actual!.ids.plan)?.deleted).toBe(true); expect(server.workouts.size).toBe(0);
     now = Date.parse('2026-10-30T12:00:00Z'); await mark(); await processTrainingDelivery(runtime, uid, first.id); await drain();
     const current = await ledger(); expect(current.status).toBe('delivered');
-    expect(current.actual!.ids.externalId).toBe(first.actual!.ids.externalId);
+    expect(current.actual!.ids.externalId).not.toBe(first.actual!.ids.externalId);
+    expect(current.actual!.ids.workoutToken).toBe(first.actual!.ids.workoutToken);
+    expect(current.actual!.ids.planGeneration).toBe('1');
     expect([...server.workouts.values()][0].name).toBe('Later run');
   });
   it.each(['/v1/plans', '/v1/workouts'])('recovers lost %s creation via explicit Retry without duplicate POST', async path => {

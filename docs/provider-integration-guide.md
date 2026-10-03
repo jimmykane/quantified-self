@@ -858,6 +858,14 @@ Wahoo requests `plans_read` and `plans_write` for all new connections and reconn
 provider permissions, not automatic Training consent: Pro eligibility and per-plan/workout opt-in still apply. Existing
 credentials are not assumed to gain the additional grants without reconnecting.
 
+For Wahoo Training, successful withdrawal reserves a durable new Plan incarnation for the next consented send;
+ordinary retries never rotate identities. Wahoo can return an owned deleted Plan as a tombstone rather than a 404.
+Confirm its ownership, current account and dated-Workout outcome separately: Plan deletion alone is not Workout
+deletion. Never issue an undocumented undelete, infer absence from a history scan, or recreate an uncertain/completed
+copy. Legacy migration requires the latest matching, fully accepted server withdrawal receipt. A deleted Plan without
+that proof requires attention, not an automatic retry loop. FIT completion validates the new Plan incarnation while
+retaining the existing safe read/consent contract. See the Wahoo lifecycle in `docs/training-workspace.md`.
+
 When product behavior specifies a single active provider account, centralize token selection in one server helper and use it for imports, polling, history, direct uploads, shared workers, and route delivery. Pin the stable provider ID in safe connection metadata, use one deterministic migration choice for legacy multi-token roots, and fail closed if the pinned token disappears. A browser-only selection rule is insufficient.
 
 ## 7. Worker, original files, and event persistence

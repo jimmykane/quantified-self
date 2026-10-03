@@ -14,6 +14,13 @@ import {
 } from './policies.content';
 
 describe('help.content', () => {
+  it('explains Wahoo re-sending after confirmed withdrawal without promising blind recreation or recording deletion', () => {
+    const copy = HELP_SECTIONS.find(section => section.id === 'training-plans')!.content;
+    expect(copy).toContain('After Wahoo confirms withdrawal of an upcoming copy');
+    expect(copy).toContain('without reusing its deleted provider Plan');
+    expect(copy).toContain('QS shows **Needs attention**');
+    expect(copy).toContain('never deletes completed recordings or resets their activity links');
+  });
   it('explains the Assistant deletion review and distinguishes authored deletion from service cleanup', () => {
     const copy = HELP_SECTIONS.find(section => section.id === 'ai-insights')!.content;
     for (const phrase of ['with both Training change choices on', '**Delete plan**', '**Delete workout**',

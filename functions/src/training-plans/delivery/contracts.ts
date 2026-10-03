@@ -40,6 +40,8 @@ export interface DeliveryArtifact {
   timeZone?: string;
 }
 export interface DeliveryOperation {
+  /** Private Wahoo Plan incarnation, reserved only after confirmed withdrawal. */
+  wahooPlanGeneration?: number;
   id: string;
   kind: 'upsert' | 'remove';
   deliveryId: string;
@@ -199,6 +201,8 @@ export interface DeliveryRuntime {
   transport(provider: PlannedWorkoutProviderId, uid: string): TrainingDeliveryTransport | null;
 }
 export interface DeliveryLedgerV1 {
+  /** Wahoo's next/current Plan incarnation; preserved across reconciliation. */
+  wahooPlanGeneration?: number;
   /** Private proof of exact approval equivalence across a presentation-only
    * mapping upgrade. Independent of remote acceptance and retained when an
    * obsolete attempt is retired. Does not grant consent or expose a wire field. */

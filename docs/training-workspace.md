@@ -2111,7 +2111,8 @@ becomes Past or Completed; a lost response must not leave such a protected copy 
 
 Removal-only already-absent convergence independently reads the exact retained Plan and Workout IDs, including when
 the Plan is missing. Missing copies require the current credential's `/v1/user` ID to match its bound account; a
-missing Plan also requires a successful empty exact `external_id` lookup. This is a bounded app-owned catalog check,
+missing Plan also requires an empty exact `external_id` lookup or the matching owned `deleted=true` tombstone.
+This is a bounded app-owned catalog check,
 not an account-history scan. A retained pair must have its prior confirmed association; an incomplete upload receipt
 cannot substitute for that proof. Auth, access, quota, network, malformed or contradictory responses remain failures.
 
@@ -2137,6 +2138,37 @@ Protective completion/date GET readback during REMOVE follows the same lease and
 of the late-write acknowledgement path. It updates only the exact retained identity and cannot clear concurrently
 learned completion; a stale observation cannot quarantine another worker or delete its delivery job. Actual DELETE
 receipts still use the existing explicit step/state journal and late-acceptance protection.
+
+Wahoo can retain a removed library Plan as `deleted=true` in exact lookup. An acknowledged withdrawal atomically
+reserves the next private `wahooPlanGeneration` in the delivery ledger. A later consented Send, Resume, plan
+reactivation or horizon re-entry uses that generation's destination/workout-bound Plan external ID; ordinary edits,
+reschedules, retries and reconnect recovery keep the same generation. The dated Workout's completion token stays
+stable, but its old copy must have been withdrawn before another is created. This is not an undelete request or an
+API POST-idempotency assumption. A lost new-create response still requires the existing positive adoption proof.
+FIT completion validates the exact accepted Plan incarnation as well as the stable token and account; old Plan
+references cannot complete a replacement occurrence.
+
+Legacy ledgers without a generation can recover it from a compact owner-scoped read of the latest 25 attempt records.
+Only the most recent prior operation can qualify: an accepted, finished REMOVE with a null final artifact and an
+original confirmed pair belonging to this exact delivery, account and workout. Unknown journals, partial/uncertain
+operations, conflicting/tied history, changed identities and quarantined attempts cannot qualify. An existing legacy
+Send is retired only when its null progress and null artifact prove that no provider write started; the replacement
+attempt and generation are reserved in the same deletion/authority-fenced claim transaction. Attempts are preserved,
+not rewritten or deleted. An already blocked legacy Send needs the existing explicit Retry after deployment.
+
+Removal also accepts a matching owned `deleted=true` Plan as a tombstone only after independently checking the dated
+Workout, current account and exact catalog. A surviving or completed Workout remains protected/unresolved; deleting
+a Plan does not establish Workout absence. A lost Plan DELETE response can therefore converge without another
+DELETE, then reserve the next generation exactly once. Normal inspection and automatic missing-copy repair remain
+unchanged. An upsert encountering a tombstone without withdrawal proof becomes Needs attention immediately, with a
+safe explanation and no repeated automatic retries or speculative POSTs. Completed recordings and their links are
+never removed or reset by Stop/Send.
+
+MCP impact of Plan incarnation handling: no new public field, action, scope, consent, approval bypass, client refresh
+or plugin change. Existing Send/Stop previews and idempotent apply use the same server command; status reads expose
+only existing Delivered/Removed/Needs attention outcomes, and completion reads retain their linked/unlinked contract.
+Strict negative fixtures reject generation fields, while API/FIT completion and demo worker fixtures cover renewed
+delivery. Generation and withdrawal receipts remain private server state under the existing Rules boundary.
 
 Verification: Wahoo transport/HTTP unit fixtures cover account/catalog refusals, partial states, protected copies,
 legacy journals, unchanged upsert/inspection policy, and lost-response recovery. The registered delivery emulator

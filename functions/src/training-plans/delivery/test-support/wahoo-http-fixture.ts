@@ -16,6 +16,7 @@ export function wahooFixtureStrengthDetails(workoutId = 'w'): StrengthWorkoutDet
 }
 /** Synthetic, deliberately NON-idempotent POSTs. No real-provider credentials or data. */
 export class WahooHttpFixture {
+  softDeletePlans = false;
   readonly plans = new Map<string, Record<string, unknown>>();
   readonly workouts = new Map<string, Record<string, unknown>>();
   readonly calls: WahooTrainingRequest[] = [];
@@ -45,7 +46,14 @@ export class WahooHttpFixture {
     }
     const rows = kind === 'plans' ? this.plans : this.workouts;
     if (request.method === 'GET') return { status: rows.has(id) ? 200 : 404, body: rows.get(id) ?? null };
-    if (request.method === 'DELETE') return { status: rows.delete(id) ? 204 : 404, body: null };
+    if (request.method === 'DELETE') {
+      if (kind === 'plans' && this.softDeletePlans && rows.has(id)) {
+        rows.get(id)!.deleted = true;
+        for (const workout of this.workouts.values()) if (String(workout.plan_id) === id) { workout.plan_id = null; workout.plan_ids = []; }
+        return { status: 200, body: null };
+      }
+      return { status: rows.delete(id) ? 204 : 404, body: null };
+    }
     if (request.method === 'PUT' && !rows.has(id)) return { status: 404, body: null };
     const savedId = request.method === 'POST' ? String(++this.sequence) : id;
     const fields = new URLSearchParams(request.body);

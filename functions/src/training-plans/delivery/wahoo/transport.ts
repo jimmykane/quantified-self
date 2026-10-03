@@ -8,6 +8,7 @@ import { TrainingDeliveryTransportError, type DeliveryArtifact, type DeliveryChe
 import type { InspectionPolicy, RemoteInspection } from '../verification-contracts';
 import { WahooTrainingHttpError, wahooId, wahooObject, type WahooTrainingClient, type WahooTrainingRequest } from './http';
 import { assessWahooDelivery, WAHOO_MAPPING_VERSION, wahooIdentities, wahooPlanBody, wahooStarts, wahooWorkoutBody, wahooWorkoutDate, wahooWorkoutFields } from './mapping';
+import { wahooArtifactGeneration, wahooPlanGeneration } from './identity';
 
 export const WAHOO_INSPECTION_POLICY: InspectionPolicy = {
   version: 'wahoo-owned-plan-workout-v1', mode: 'retained-ids', required: ['plan', 'workout', 'association'],
@@ -37,16 +38,18 @@ function validateArtifact(artifact: DeliveryArtifact): void {
     try { normalizeDeliveryTimeZone(artifact.timeZone); } catch { uncertain(); }
   }
   wahooId(ids.plan);
-  if (!/^qs-plan-[A-Za-z0-9_-]{43}$/.test(ids.externalId) || ids.workoutToken !== `qs-workout-${ids.externalId.slice(8)}`
-    || Object.keys(ids).some(key => !['plan', 'workout', 'externalId', 'workoutToken', 'association'].includes(key))) uncertain();
+  const generation = wahooArtifactGeneration(artifact);
+  if (!/^qs-plan-[A-Za-z0-9_-]{43}$/.test(ids.externalId) || !/^qs-workout-[A-Za-z0-9_-]{43}$/.test(ids.workoutToken)
+    || (!generation && ids.workoutToken !== `qs-workout-${ids.externalId.slice(8)}`)
+    || Object.keys(ids).some(key => !['plan', 'workout', 'externalId', 'workoutToken', 'association', 'planGeneration'].includes(key))) uncertain();
   if (ids.workout) wahooId(ids.workout);
   if (ids.association && ids.association !== `${ids.workout}:${ids.plan}`) uncertain();
 }
-function ownedPlan(raw: unknown, artifact: DeliveryArtifact): Value {
+function ownedPlan(raw: unknown, artifact: DeliveryArtifact, allowDeleted = false): Value {
   const value = checked('plan_response_invalid', () => wahooObject(raw));
   if (checked('plan_response_invalid', () => wahooId(value.id)) !== artifact.ids.plan) uncertain('plan_identity_mismatch');
   if (value.external_id !== artifact.ids.externalId) uncertain('plan_ownership_mismatch');
-  if (value.deleted !== false) uncertain(value.deleted === true ? 'plan_deleted' : 'plan_deletion_state_unknown');
+  if (value.deleted !== false && !(allowDeleted && value.deleted === true)) uncertain(value.deleted === true ? 'plan_deleted' : 'plan_deletion_state_unknown');
   return value;
 }
 function ownedWorkout(raw: unknown, artifact: DeliveryArtifact): Value {
@@ -116,6 +119,7 @@ export class WahooTrainingTransport implements TrainingDeliveryTransport {
       || allowPastRemoval);
   }
   private validate(operation: DeliveryOperation): void {
+    checked('operation_invalid', () => wahooPlanGeneration(operation.wahooPlanGeneration));
     if (operation.repair || operation.recoveryBlocked) uncertain('operation_invalid');
     if (operation.progress && (operation.progress.version !== 1 || !STEPS.includes(operation.progress.step as Step)
       || !['ready', 'started', 'accepted', 'rejected'].includes(operation.progress.state))) uncertain('operation_invalid');
@@ -126,7 +130,11 @@ export class WahooTrainingTransport implements TrainingDeliveryTransport {
       || !['workout-remove', 'finished'].includes(operation.progress.step))) uncertain('operation_invalid');
     if (operation.artifact) {
       checked('artifact_invalid', () => validateArtifact(operation.artifact!));
-      if (operation.workout && operation.artifact.ids.externalId !== wahooIdentities(operation.destinationKey, operation.workout.id).externalId) uncertain('artifact_invalid');
+      if (operation.wahooPlanGeneration !== undefined && wahooArtifactGeneration(operation.artifact) !== operation.wahooPlanGeneration) uncertain('artifact_invalid');
+      if (operation.workout) {
+        const expected = wahooIdentities(operation.destinationKey, operation.workout.id, operation.wahooPlanGeneration ?? 0);
+        if (operation.artifact.ids.externalId !== expected.externalId || operation.artifact.ids.workoutToken !== expected.workoutToken) uncertain('artifact_invalid');
+      }
     }
   }
   private assertFuture(operation: DeliveryOperation): void {
@@ -234,7 +242,7 @@ export class WahooTrainingTransport implements TrainingDeliveryTransport {
       && associationMatches(value, expected.plan_id);
   }
   private async lookupPlan(operation: DeliveryOperation, guard: DeliveryRequestGuard): Promise<DeliveryArtifact | null> {
-    const ids = wahooIdentities(operation.destinationKey, operation.workout!.id);
+    const ids = wahooIdentities(operation.destinationKey, operation.workout!.id, operation.wahooPlanGeneration ?? 0);
     const rows = await this.read(`/v1/plans?external_id=${ids.externalId}`, guard);
     if (!Array.isArray(rows) || rows.length > 1) uncertain();
     if (!rows.length) return null;
@@ -264,9 +272,9 @@ export class WahooTrainingTransport implements TrainingDeliveryTransport {
     }
     if (!operation.artifact) {
       const response = await this.write(operation, 'plan-create', { method: 'POST', path: '/v1/plans',
-        body: wahooPlanBody(workout, operation.destinationKey, true, operation.strength) }, checkpoint, guard);
+        body: wahooPlanBody(workout, operation.destinationKey, true, operation.strength, operation.wahooPlanGeneration ?? 0) }, checkpoint, guard);
       const value = wahooObject(response.body);
-      const artifact: DeliveryArtifact = { ids: { ...wahooIdentities(operation.destinationKey, workout.id), plan: wahooId(value.id) },
+      const artifact: DeliveryArtifact = { ids: { ...wahooIdentities(operation.destinationKey, workout.id, operation.wahooPlanGeneration ?? 0), plan: wahooId(value.id) },
         localDate: workout.localDate, completed: false, timeZone: operation.timeZone };
       // Retain receipt before further validation; malformed metadata must never cause
       // a second create or erase the only known provider identity.
@@ -330,7 +338,8 @@ export class WahooTrainingTransport implements TrainingDeliveryTransport {
     guard: DeliveryRequestGuard, recovering = false): Promise<{ plan: Value | null; workout: Value | null }> {
     const artifact = operation.artifact!;
     const rawPlan = await this.read(`/v1/plans/${artifact.ids.plan}`, guard);
-    const plan = rawPlan === null ? null : ownedPlan(rawPlan, artifact);
+    const inspectedPlan = rawPlan === null ? null : ownedPlan(rawPlan, artifact, true);
+    const plan = inspectedPlan?.deleted === false ? inspectedPlan : null;
     const rawWorkout = artifact.ids.workout ? await this.read(`/v1/workouts/${artifact.ids.workout}`, guard) : null;
     const workout = rawWorkout === null ? null : await this.checkWorkout(rawWorkout, operation, checkpoint, recovering);
     if (workout) {
@@ -352,8 +361,10 @@ export class WahooTrainingTransport implements TrainingDeliveryTransport {
       if (!plan) {
         const matches = await this.read(`/v1/plans?external_id=${artifact.ids.externalId}`, guard);
         // Prove access to the app-owned catalog, not absence from a partial history
-        // scan. Any positive, malformed or contradictory result remains uncertain.
-        if (!Array.isArray(matches) || matches.length !== 0) uncertain('plan_absence_not_confirmed');
+        // scan. Only an empty catalog or the exact owned tombstone qualifies;
+        // a live, malformed, duplicate or contradictory result remains uncertain.
+        if (!Array.isArray(matches) || matches.length > 1
+          || (matches.length === 1 && ownedPlan(matches[0], artifact, true).deleted !== true)) uncertain('plan_absence_not_confirmed');
       }
     }
     return { plan, workout };

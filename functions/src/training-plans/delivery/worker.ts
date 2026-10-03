@@ -14,6 +14,7 @@ import { canRepairMissingArtifacts, VERIFICATION_DAY_MS } from './verification-c
 import { emptyVerification } from './verification-queue';
 import { deliveryDiagnosticLabels, deliveryDiagnosticMapping, observeDeliveryCheckpoint, type DeliveryDiagnosticPhase } from './diagnostics';
 import { processTrainingDeliveryBatch } from './batch-worker';
+import { recoverWahooWithdrawalGeneration, wahooArtifactGeneration, wahooPlanGeneration } from './wahoo/identity';
 
 function validateArtifact(value: DeliveryArtifact | null): void {
   if (value === null) return;
@@ -80,6 +81,18 @@ export async function processTrainingDelivery(runtime: DeliveryRuntime, uid: str
     // Keep authorization evidence separate from acceptance: retiring an old
     // unaccepted attempt must not erase a verified presentation-only upgrade.
     if (intent.mappingApprovalProof) ledger.mappingApprovalProof = intent.mappingApprovalProof;
+    if (ledger.provider === 'wahoo') {
+      const recoveredGeneration = await recoverWahooWithdrawalGeneration(tx, ledgerRef, ledger);
+      if (recoveredGeneration !== undefined) {
+        ledger.wahooPlanGeneration = recoveredGeneration;
+        if (ledger.attempt) {
+          // progress=null and artifact=null prove this legacy attempt made no
+          // provider write. Retire it rather than rewriting an immutable identity.
+          tx.set(ledgerRef.collection('attempts').doc(ledger.attempt.id), { state: 'not-accepted' }, { merge: true });
+          ledger.attempt = null;
+        }
+      }
+    }
     const recover = !!ledger.attempt;
     if (!ledger.attempt) {
       const kind = intent.desired === 'present' && ledger.acceptedDigest !== intent.digest ? 'upsert'
@@ -115,6 +128,8 @@ export async function processTrainingDelivery(runtime: DeliveryRuntime, uid: str
         ...(kind === 'upsert' && context.strength ? { strength: context.strength } : {}),
         artifact: ledger.actual ?? (kind === 'remove' ? ledger.repair?.original ?? null : null), progress: null,
         ...(kind === 'remove' && context.pastCleanup ? { allowPastRemoval: true } : {}),
+        ...(ledger.provider === 'wahoo' ? { wahooPlanGeneration: wahooPlanGeneration(ledger.wahooPlanGeneration
+          ?? wahooArtifactGeneration(ledger.actual)) } : {}),
         ...(ledger.repair ? { repair: ledger.repair } : {}) };
       tx.create(ledgerRef.collection('attempts').doc(ledger.attempt.id), {
         schemaVersion: 1, operation: ledger.attempt, state: 'started', startedAtMs: runtime.now(),
@@ -245,6 +260,11 @@ export async function processTrainingDelivery(runtime: DeliveryRuntime, uid: str
         ledger.acceptedContentDigest = null;
       }
       if (complete) {
+        if (claim.provider === 'wahoo' && operation.kind === 'remove') {
+          // Reserve once, in the same transaction that accepts withdrawal. A
+          // future Send must not reuse Wahoo's soft-deleted library Plan key.
+          ledger.wahooPlanGeneration = wahooPlanGeneration((operation.wahooPlanGeneration ?? 0) + 1);
+        }
         ledger.pastCleanup = null;
         const repairTimes = (ledger.verification?.repairTimes ?? []).filter(time => time > runtime.now() - VERIFICATION_DAY_MS);
         ledger.verification = { ...emptyVerification(runtime.now()),
@@ -376,12 +396,16 @@ export async function processTrainingDelivery(runtime: DeliveryRuntime, uid: str
       retryCount = ledger.retries;
       ledger.status = failure.kind === 'deferred' ? 'retrying' : failure.kind === 'auth' ? 'reconnect_required' : failure.kind === 'permission' ? 'connection_repair'
         : failure.kind === 'provider_access' ? 'provider_unavailable'
-        : failure.kind === 'uncertain' ? inspectionUncertain || ledger.retries >= MAX_RETRY_COUNT ? 'needs_attention' : 'retrying'
+        : failure.kind === 'uncertain' ? inspectionUncertain || failure.diagnostics.wahooContractCheck === 'plan_deleted'
+          || ledger.retries >= MAX_RETRY_COUNT ? 'needs_attention' : 'retrying'
           : failure.kind === 'terminal' || ledger.retries >= MAX_RETRY_COUNT ? 'failed' : 'retrying';
       ledger.blockedConnectionGeneration = ['auth', 'permission'].includes(failure.kind) ? operation.connectionGeneration : null;
       ledger.providerAccessBlocked = failure.kind === 'provider_access';
       if (failure.kind === 'permission') ledger.issues = ['Workout delivery permission is missing. Reconnect the provider and allow workout delivery.'];
       if (failure.kind === 'provider_access') ledger.issues = ['The provider has not allowed this application to deliver workouts. Reconnecting may not resolve this.'];
+      if (failure.diagnostics.wahooContractCheck === 'plan_deleted') ledger.issues = [
+        'Wahoo reports this plan deleted. Safe withdrawal has not been confirmed, so QS will not recreate or retry the copy automatically.',
+      ];
       ledger.providerNotBeforeMs = Math.max(ledger.providerNotBeforeMs ?? 0,
         failure.retryAfterMs > 0 ? runtime.now() + failure.retryAfterMs : 0);
       ledger.retryAtMs = Math.max(runtime.now() + getCloudTaskRetryBackoffSeconds(ledger.retries) * 1000, ledger.providerNotBeforeMs);

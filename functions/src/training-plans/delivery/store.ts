@@ -101,6 +101,7 @@ function reconcileRecord(runtime: DeliveryRuntime, context: DeliveryContext, uid
   const retried = settingRevision !== previous?.settingsRevision;
   const mappingApprovalProof = intent.mappingApprovalProof ?? previous?.mappingApprovalProof;
   const record: DeliveryLedgerV1 = { ...(previous?.verification ? { verification: previous.verification } : {}),
+    ...(previous?.wahooPlanGeneration !== undefined ? { wahooPlanGeneration: previous.wahooPlanGeneration } : {}),
     ...(mappingApprovalProof ? { mappingApprovalProof } : {}),
     ...(context.pastCleanup ? { pastCleanup: context.pastCleanup } : {}),
     ...(previous?.providerAccessBlocked && !changed && !retried ? { providerAccessBlocked: true } : {}),
@@ -133,7 +134,12 @@ function reconcileRecord(runtime: DeliveryRuntime, context: DeliveryContext, uid
     record.desired = 'preserve';
   } else record.blockedConnectionGeneration = null;
   // An uncertain create is never cleared by a new edit or a user Retry.
-  if (previous?.status === 'needs_attention' && previous.attempt && !retried) record.status = 'needs_attention';
+  if (previous?.status === 'needs_attention' && previous.attempt && !retried) {
+    record.status = 'needs_attention';
+    // Keep the worker's explanation while its unresolved Wahoo journal remains
+    // blocked; a periodic scan must not erase the deleted-Plan warning.
+    if (provider === 'wahoo') record.issues = [...new Set([...previous.issues, ...record.issues])].slice(0, 20);
+  }
   if (previous?.status === 'needs_attention' && previous.verification && !previous.attempt && !changed) record.status = 'needs_attention';
   if (previous?.status === 'failed' && !changed && !retried) record.status = 'failed';
   // Application access rejection is not repaired by periodic reconciliation or
