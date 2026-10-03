@@ -690,13 +690,18 @@
               <mat-option [value]="ending.value">{{ ending.label }}</mat-option>
             }
           </mat-select>
+          @if (step.endingKind === 'manual') {
+            <mat-hint>Ends when you press the lap button, without a time or distance limit. Wahoo delivery is unsupported.</mat-hint>
+          }
         </mat-form-field>
-        <mat-form-field subscriptSizing="dynamic">
-          <mat-label>{{ step.endingKind === 'time' ? 'Minutes' : editorDistanceUnit() }}</mat-label>
-          <input matInput type="number" [attr.min]="step.endingKind === 'distance' ? 0 : 0.01"
-            [attr.step]="step.endingKind === 'distance' ? 'any' : '0.01'" [ngModel]="step.endingValue"
-            (ngModelChange)="updateStep(nodeIndex, stepIndex, 'endingValue', +$event)">
-        </mat-form-field>
+        @if (step.endingKind !== 'manual') {
+          <mat-form-field subscriptSizing="dynamic">
+            <mat-label>{{ step.endingKind === 'time' ? 'Minutes' : editorDistanceUnit() }}</mat-label>
+            <input matInput type="number" [attr.min]="step.endingKind === 'distance' ? 0 : 0.01"
+              [attr.step]="step.endingKind === 'distance' ? 'any' : '0.01'" [ngModel]="step.endingValue"
+              (ngModelChange)="updateStep(nodeIndex, stepIndex, 'endingValue', +$event)">
+          </mat-form-field>
+        }
         <mat-form-field subscriptSizing="dynamic">
           <mat-label>Target</mat-label>
           <mat-select [value]="step.targetKind" [disabled]="busyAction() !== null" (selectionChange)="updateStep(nodeIndex, stepIndex, 'targetKind', $event.value)">

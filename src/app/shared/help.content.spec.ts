@@ -89,6 +89,19 @@ describe('help.content', () => {
     expect(content).toContain('Additional mapping losses, such as shortened exercise instructions, still need review');
     expect(content).toContain('Sent Guide status does not prove app/watch receipt or workout completion');
   });
+
+  it('explains lap-button endings and their provider and completion boundaries', () => {
+    const content = HELP_SECTIONS.find(section => section.id === 'training-plans')!.content;
+    expect(content).toContain('**End by -> Lap button press**');
+    expect(content).toContain('warmup, work, recovery, cooldown, rest, or other steps');
+    expect(content).toContain('including steps inside fixed repeats');
+    expect(content).toContain('no time or distance limit');
+    expect(content).toContain('not a timer plus a button condition');
+    expect(content).toContain('Garmin and Suunto support these manual transitions');
+    expect(content).toContain('COROS has the mapping but delivery remains **Coming soon**');
+    expect(content).toContain('Wahoo cannot receive lap-ended steps');
+    expect(content).toContain('does not stop the recording or mark the QS workout completed');
+  });
   it('keeps COROS strength implementation distinct from public Send or delivery proof', () => {
     const content = HELP_SECTIONS.find(section => section.id === 'training-plans')!.content;
     expect(content).toContain('COROS backend maps the complete strength prescription');

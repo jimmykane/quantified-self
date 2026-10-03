@@ -57,6 +57,18 @@ describe('public-seo-pages.content', () => {
     expect(TRAINING_PLANS_HOME_CONTENT.mcpExample.prompt).toContain('planned workouts');
     expect(TRAINING_PLANS_HOME_CONTENT.mcpExample.prompt).toContain('without duplicating training');
   });
+
+  it('advertises lap-ended steps without promising unsupported provider delivery', () => {
+    const copy = TRAINING_PLANS_PAGE_SECTIONS.find(section => section.title === 'Build the workout you mean')!.copy;
+    expect(copy).toContain('time, distance, or lap-button-ended steps');
+    expect(copy).toContain('without a time or distance limit');
+    expect(copy).toContain('Garmin and Suunto support this ending');
+    expect(copy).toContain('Wahoo delivery is unsupported');
+    expect(copy).toContain('COROS delivery remains Coming soon');
+    const faq = PUBLIC_SEO_PAGES.trainingPlans.faqItems.find(item => item.question === 'Which sports and workout steps can I create?')!.answer;
+    expect(faq).toContain('time, distance, or lap-button-ended steps');
+    expect(faq).toContain('Wahoo delivery is unsupported');
+  });
   it('keeps detailed Garmin limitations on the feature page while the homepage introduces workout sync', () => {
     const home = JSON.stringify(TRAINING_PLANS_HOME_CONTENT);
     const page = JSON.stringify(TRAINING_PLANS_PAGE_SECTIONS);

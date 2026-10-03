@@ -119,6 +119,9 @@
 
 .plan-form-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 
+// A wrapped ending hint must not stretch the neighboring outlined controls.
+.step-fields { align-items: start; }
+
 .plan-deletion-card mat-card-content {
   padding-top: 16px;
 }

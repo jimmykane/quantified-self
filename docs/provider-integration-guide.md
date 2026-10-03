@@ -111,6 +111,14 @@ never infer input units from the account preference or convert a distance a seco
 metres, COROS applies its existing integer-metre mapping with approval for loss, and Wahoo's dated delivery continues
 to reject distance-ended recipes when a required total duration cannot be established.
 
+The interval editor also exposes the existing canonical `{ kind: 'manual' }` as **Lap button press**, for every purpose
+and repeat child. It has no numeric limit and is not a time/distance-or-button combination. For supported sports,
+Garmin serializes `OPEN`, Suunto Guide transitions use `manualLap`, and COROS serializes `EndManually`; COROS delivery
+remains disabled. Wahoo's documented structured-plan triggers do not include a manual ending, so compatibility and
+delivery must continue rejecting it rather than estimating a duration. Ending a step is neither ending a recording nor
+completion evidence. This UI exposure changes no provider payload or MCP contract; strict recipe reads and existing
+proposal/confirmation already preserve manual endings, targets and notes.
+
 The Training UI checks availability and compatibility automatically on entering sync consent. For an MCP standalone
 create-and-send, the first proposal names any provider mapping loss; one native approval covers the current
 digest-bound adjustment as well as the authored change. The delivery command rechecks that digest, destination and

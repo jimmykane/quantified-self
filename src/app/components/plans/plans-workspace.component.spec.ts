@@ -1242,6 +1242,108 @@ describe('PlansWorkspaceComponent', () => {
     ]);
   });
 
+  it.each(['plans', 'standalone'] as const)('creates a lap-ended workout in %s through the Material selector', async scope => {
+    setRouteState({ mode: 'create', scope, date: '2026-09-09' });
+    const fixture = await renderPlans();
+    const component = fixture.componentInstance;
+    component.updateEditorField('title', 'Warm up until ready');
+    component.updateStep(0, null, 'purpose', 'warmup');
+    haptics.selection.mockClear();
+    const endingSelect = fixture.debugElement.queryAll(By.directive(MatSelect))
+      .find(element => element.componentInstance.value === 'time')!;
+    endingSelect.componentInstance.open();
+    fixture.detectChanges();
+    await fixture.whenStable();
+    expect(endingSelect.componentInstance.options.map((option: { value: string }) => option.value))
+      .toEqual(['time', 'distance', 'manual']);
+    [...document.querySelectorAll<HTMLElement>('mat-option')]
+      .find(option => option.textContent?.includes('Lap button press'))!.click();
+    fixture.detectChanges();
+    await fixture.whenStable();
+    expect(component.editor()?.value.nodes[0]).toMatchObject({ purpose: 'warmup', endingKind: 'manual' });
+    expect(fixture.nativeElement.querySelector('.step-fields input[type="number"]')).toBeNull();
+    const hint: HTMLElement = fixture.nativeElement.querySelector('.step-fields mat-hint');
+    expect(hint.textContent).toContain('without a time or distance limit');
+    expect(hint.textContent).toContain('Wahoo delivery is unsupported');
+    expect(endingSelect.nativeElement.getAttribute('aria-describedby')?.split(' ')).toContain(hint.id);
+    expect(haptics.selection).toHaveBeenCalledOnce();
+    component.updateStep(0, null, 'endingKind', 'manual');
+    expect(haptics.selection).toHaveBeenCalledOnce();
+    const stepId = component.editor()!.value.nodes[0].id;
+    await component.saveWorkout();
+    expect(mutate).toHaveBeenCalledWith(expect.objectContaining({
+      operation: expect.objectContaining({ kind: 'create-workout', planId: scope === 'plans' ? 'active-plan' : null,
+        structure: { version: 1, sport: ActivityTypes.Running, nodes: [{ kind: 'step', id: stepId,
+          purpose: 'warmup', ending: { kind: 'manual' }, targets: [] }] } }),
+    }));
+  });
+
+  it('reopens lap-ended steps with targets and restores numeric inputs when switching endings', async () => {
+    schedule.workouts[0].structure = { version: 1, sport: ActivityTypes.Running,
+      nodes: [{ kind: 'step', id: 'lap-warmup', purpose: 'warmup', ending: { kind: 'manual' },
+        targets: [{ kind: 'heart-rate', mode: 'absolute', minimumBpm: 120, maximumBpm: 140 }],
+        note: 'Press lap when ready' }] };
+    setRouteState({ mode: 'edit', workoutId: 'plan-workout' });
+    const fixture = await renderPlans();
+    const component = fixture.componentInstance;
+    expect(snackBarOpen).not.toHaveBeenCalled();
+    expect(haptics.selection).not.toHaveBeenCalled();
+    expect(fixture.nativeElement.querySelectorAll('.step-fields input[type="number"]')).toHaveLength(2);
+    for (const endingKind of ['time', 'distance'] as const) {
+      component.updateStep(0, null, 'endingKind', endingKind);
+      fixture.detectChanges();
+      expect(fixture.nativeElement.querySelectorAll('.step-fields input[type="number"]')).toHaveLength(3);
+      expect(fixture.nativeElement.querySelector('.step-fields mat-hint')).toBeNull();
+    }
+    component.updateStep(0, null, 'endingKind', 'manual');
+    component.updateEditorField('title', 'Edited lap warmup');
+    await component.saveWorkout();
+    expect(mutate).toHaveBeenCalledWith(expect.objectContaining({
+      operation: expect.objectContaining({ kind: 'update-workout', workoutId: 'plan-workout',
+        structure: schedule.workouts[0].structure }),
+    }));
+  });
+
+  it('keeps lap endings when copying an edited scheduled recipe to the library', async () => {
+    libraryMutate.mockResolvedValue({ mutationId: 'mutation-1', item: null });
+    setRouteState({ mode: 'edit', workoutId: 'plan-workout' });
+    const fixture = await renderPlans();
+    fixture.componentInstance.updateStep(0, null, 'endingKind', 'manual');
+    await fixture.componentInstance.saveEditorCopyToLibrary();
+    expect(libraryMutate).toHaveBeenCalledWith(expect.objectContaining({
+      operation: expect.objectContaining({ kind: 'create', structure: expect.objectContaining({
+        nodes: [expect.objectContaining({ id: 'steady', ending: { kind: 'manual' } })],
+      }) }),
+    }));
+    expect(mutate).not.toHaveBeenCalled();
+  });
+
+  it('creates a library recipe with lap-ended repeat children through the shared step controls', async () => {
+    libraryMutate.mockResolvedValue({ mutationId: 'mutation-1', item: null });
+    setRouteState({ mode: 'library-create' });
+    const fixture = await renderPlans();
+    const component = fixture.componentInstance;
+    component.updateEditorField('title', 'Lap repeats');
+    component.addEditorRepeat();
+    component.updateStep(1, 1, 'endingKind', 'manual');
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelectorAll('.step-fields mat-hint')).toHaveLength(1);
+    expect(component.editor()?.value.nodes[1]).toMatchObject({ kind: 'repeat', steps: [
+      expect.objectContaining({ endingKind: 'time' }), expect.objectContaining({ endingKind: 'manual' }),
+    ] });
+    await component.saveWorkout();
+    expect(libraryMutate).toHaveBeenCalledWith(expect.objectContaining({
+      operation: expect.objectContaining({ kind: 'create', structure: expect.objectContaining({ nodes: [
+        expect.objectContaining({ ending: { kind: 'time', seconds: 600 } }),
+        expect.objectContaining({ kind: 'repeat', steps: [
+          expect.objectContaining({ ending: { kind: 'time', seconds: 600 } }),
+          expect.objectContaining({ purpose: 'recovery', ending: { kind: 'manual' } }),
+        ] }),
+      ] }) }),
+    }));
+    expect(mutate).not.toHaveBeenCalled();
+  });
+
   it('creates an exercise-aware strength workout with reps, hold, load and rest', async () => {
     setRouteState({ mode: 'create', scope: 'standalone', date: '2026-09-24' });
     const fixture = await renderPlans();

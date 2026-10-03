@@ -13,6 +13,68 @@ import {
 } from './planned-workout-editor.helper';
 
 describe('manual planned-workout editor conversion', () => {
+  it.each(['warmup', 'work', 'recovery', 'cooldown', 'rest', 'other'] as const)(
+    'round-trips a lap-ended %s with its ID, target and instructions intact', purpose => {
+      const structure: WorkoutStructureV1 = {
+        version: 1, sport: ActivityTypes.Running,
+        nodes: [{ kind: 'step', id: `lap-${purpose}`, purpose, ending: { kind: 'manual' },
+          targets: [{ kind: 'heart-rate', mode: 'absolute', minimumBpm: 120, maximumBpm: 140 }],
+          note: 'Press lap when ready' }],
+      };
+      const units = normalizeUserUnitSettings({ distanceUnits: DistanceUnits.Miles });
+      const editor = workoutStructureToManualEditor('Lap steps', '2026-10-03', structure, units);
+      expect(editor.nodes[0]).toMatchObject({ endingKind: 'manual' });
+      expect(manualWorkoutEditorToStructure(editor, units)).toEqual(structure);
+      expect(JSON.parse(JSON.stringify(manualWorkoutEditorToStructure(editor, units)))).toEqual(structure);
+      expect(formatManualWorkoutStructure(structure, units).join(' ')).toContain('Manual transition');
+    },
+  );
+
+  it.each([0, -1, Number.NaN, Number.POSITIVE_INFINITY])(
+    'does not invent a numeric limit from a stale lap-step draft value of %s', endingValue => {
+      const editor: ManualWorkoutEditorValue = {
+        title: 'Wait for lap', localDate: '2026-10-03', sport: ActivityTypes.Cycling,
+        nodes: [{ ...createManualWorkoutEditorStep('lap'), endingKind: 'manual', endingValue }],
+      };
+      expect(manualWorkoutEditorToStructure(editor).nodes[0]).toEqual({
+        kind: 'step', id: 'lap', purpose: 'work', ending: { kind: 'manual' }, targets: [],
+      });
+      for (const endingKind of ['time', 'distance'] as const) {
+        const numeric = { ...editor, nodes: [{ ...createManualWorkoutEditorStep('lap'), endingKind, endingValue }] };
+        expect(() => manualWorkoutEditorToStructure(numeric)).toThrow('positive duration or distance');
+      }
+    },
+  );
+
+  it('round-trips mixed fixed repeats and preserves lap endings across sport changes', () => {
+    const structure: WorkoutStructureV1 = {
+      version: 1, sport: ActivityTypes.Running,
+      nodes: [
+        { kind: 'step', id: 'warmup', purpose: 'warmup', ending: { kind: 'manual' }, targets: [] },
+        { kind: 'repeat', id: 'repeats', count: 3, steps: [
+          { kind: 'step', id: 'work', purpose: 'work', ending: { kind: 'distance', meters: 1000 }, targets: [] },
+          { kind: 'step', id: 'recover', purpose: 'recovery', ending: { kind: 'manual' }, targets: [], note: 'Wait until ready' },
+        ] },
+        { kind: 'step', id: 'cooldown', purpose: 'cooldown', ending: { kind: 'time', seconds: 300 }, targets: [] },
+      ],
+    };
+    const editor = workoutStructureToManualEditor('Mixed workout', '2026-10-03', structure);
+    expect(manualWorkoutEditorToStructure(editor)).toEqual(structure);
+    expect(manualWorkoutEditorToStructure(changeManualWorkoutEditorSport(editor, ActivityTypes.Hiking)))
+      .toEqual({ ...structure, sport: ActivityTypes.Hiking });
+  });
+
+  it.each([{ kind: 'kilojoules', kilojoules: 10 }, { kind: 'repetitions', repetitions: 10 }] as const)(
+    'still refuses to edit unsupported %s endings without silently changing them', ending => {
+      const structure: WorkoutStructureV1 = {
+        version: 1, sport: ActivityTypes.Cycling,
+        nodes: [{ kind: 'step', id: 'work', purpose: 'work', ending, targets: [] }],
+      };
+      expect(() => workoutStructureToManualEditor('Unsupported', '2026-10-03', structure))
+        .toThrow('ending that the first manual editor cannot change');
+    },
+  );
+
   it('stores minutes and kilometres as canonical seconds and metres', () => {
     const value: ManualWorkoutEditorValue = {
       title: 'Brick',

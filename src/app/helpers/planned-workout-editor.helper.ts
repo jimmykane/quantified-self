@@ -16,7 +16,7 @@ import {
 } from '@shared/planned-workout';
 
 export type ManualWorkoutSport = ManualWorkoutEditorSportV1 | ActivityTypes.StrengthTraining;
-export type ManualWorkoutEnding = 'time' | 'distance';
+export type ManualWorkoutEnding = 'time' | 'distance' | 'manual';
 export type ManualWorkoutTarget = 'none' | 'heart-rate' | 'power' | 'pace';
 
 export interface ManualWorkoutEditorStep {
@@ -132,6 +132,7 @@ function endingFromEditor(
   sport: ManualWorkoutSport,
   units?: UserUnitSettingsInterface | null,
 ): WorkoutEndingV1 {
+  if (step.endingKind === 'manual') return { kind: 'manual' };
   if (!Number.isFinite(step.endingValue) || step.endingValue <= 0) {
     throw new Error('Every step needs a positive duration or distance.');
   }
@@ -280,14 +281,17 @@ function editorStep(
   sport: ManualWorkoutSport,
   units?: UserUnitSettingsInterface | null,
 ): ManualWorkoutEditorStep {
-  if (step.ending.kind !== 'time' && step.ending.kind !== 'distance') {
+  if (step.ending.kind !== 'time' && step.ending.kind !== 'distance' && step.ending.kind !== 'manual') {
     throw new Error('This workout uses an ending that the first manual editor cannot change.');
   }
   if (step.targets.length > 1) throw new Error('This workout has more targets than the first manual editor supports.');
   const target = editorTarget(step.targets[0], sport, units);
   const endingValue = step.ending.kind === 'time'
     ? step.ending.seconds / 60
-    : roundEditorNumber(step.ending.meters / distanceScale(sport, units));
+    : step.ending.kind === 'distance'
+      ? roundEditorNumber(step.ending.meters / distanceScale(sport, units))
+      // Editor-only default for switching back to a numeric ending; never part of a manual prescription.
+      : createManualWorkoutEditorStep(step.id).endingValue;
   return {
     kind: 'step',
     id: step.id,

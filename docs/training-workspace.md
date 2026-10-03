@@ -525,11 +525,25 @@ negative values, non-positive endings/reference snapshots, inverted ranges, more
 100, nested repeats, and more than two targets per step. Its JSON output must remain Firestore-safe and must round-trip through stringify/parse without changing
 the persisted v1 value. The manual editor exposes canonical Running, Trail Running, Treadmill, Cycling, Mountain Biking,
 Indoor Cycling, E-Biking, Hand Cycle, Swimming (labelled Pool swimming), and Open Water Swimming sports plus date-only,
-time/distance, fixed-repeat, and single absolute HR/power/pace inputs. Both swim profiles enter distance steps in metres
+time/distance/lap-button, fixed-repeat, and single absolute HR/power/pace inputs. Both swim profiles enter distance steps in metres
 rather than kilometres, and pace targets follow the user's swim-pace preference (/100 m or /100 yd). Changing an unsaved
 editor sport converts displayed distances and paces without changing their canonical values. The pool editor may
 select an optional physical length; a 25 m step alone never asserts a 25 m pool, and open-water swimming has no pool
 length. Other providers do not receive the selected length and require explicit degradation review. These are Sports Lib activity-type strings, not provider profile IDs.
+
+The interval editor's **End by → Lap button press** choice is available for every purpose (warmup, work, recovery,
+cooldown, rest, other), including repeat children and library recipes. It stores the existing strict `{ kind: 'manual' }`
+ending; the numeric input is hidden and any retained editor-only numeric draft value is never serialized. A step waits
+for the lap button with no time/distance limit, not a combined timer-or-button rule. Reopening and resaving preserves
+the step ID, purpose, targets, instructions and fixed repeats. Garmin maps it to `OPEN`, Suunto to `manualLap`, and
+COROS to `EndManually` for supported sports; COROS delivery remains disabled. Wahoo remains unsupported and cannot
+receive a guessed timed replacement. Lap advances a step; it does not stop the recording or create a QS completion link.
+MCP impact: existing recipe read and strict proposal/confirmation contracts already support `manual` endings across
+purposes and repeat children. Regression tests cover full recipe reads and compatibility without synthesizing duration
+or dropping targets/instructions. No stored/wire schema, scope, consent, tool registration, metric, provider transport,
+or bundled plugin/skill changes are required for exposing this existing ending in the editor. Other editor limitations
+(kJ/repetition endings, relative targets and secondary targets) remain unchanged.
+
 Running and cycling distance-step inputs follow the owner's `distanceUnits` preference (kilometres or miles), while
 their pace-target inputs independently follow the first selected `paceUnits` preference (min/km or min/mi). The editor
 captures normalized units when opened so a settings update in another tab cannot reinterpret an unsaved number. Existing

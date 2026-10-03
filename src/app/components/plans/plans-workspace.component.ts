@@ -241,6 +241,7 @@ export class PlansWorkspaceComponent {
   readonly endingOptions: ReadonlyArray<{ value: ManualWorkoutEnding; label: string }> = [
     { value: 'time', label: 'Time' },
     { value: 'distance', label: 'Distance' },
+    { value: 'manual', label: 'Lap button press' },
   ];
   readonly targetOptions: ReadonlyArray<{ value: ManualWorkoutTarget; label: string }> = [
     { value: 'none', label: 'No target' },
