@@ -38,6 +38,7 @@ import { AppHapticsService } from '../../services/app.haptics.service';
 import { AppUserSettingsQueryService } from '../../services/app.user-settings-query.service';
 import { assistantMeasurementReviewDetails } from '../../helpers/assistant-measurement-review.helper';
 import { assistantTrainingDeletionReview } from '../../helpers/assistant-training-deletion-review.helper';
+import { formatAssistantCalendarDate, formatAssistantCalendarRange } from '../../helpers/assistant-message-format.helper';
 import {
   AssistantError,
   AssistantService,
@@ -52,6 +53,7 @@ import {
   type AssistantVisualDetailData,
 } from './assistant-visual-detail.component';
 import { AssistantVisualMapComponent } from './assistant-visual-map.component';
+import { AssistantMessageBodyComponent } from './assistant-message-body.component';
 
 const ASSISTANT_PENDING_INITIAL_POLL_INTERVAL_MS = 2_000;
 const ASSISTANT_PENDING_MAX_POLL_INTERVAL_MS = 5_000;
@@ -114,10 +116,10 @@ function contentProposalDetails(proposal: AssistantContentProposalPreview): stri
     return ['The selected Timeline note and its text will be permanently deleted.'];
   }
   const dates = args['endDate'] === null
-    ? `${args['startDate']} – ongoing`
+    ? `${formatAssistantCalendarDate(String(args['startDate']))} – ongoing`
     : args['startDate'] === args['endDate']
-      ? `${args['startDate']}`
-      : `${args['startDate']} – ${args['endDate']}`;
+      ? formatAssistantCalendarDate(String(args['startDate']))
+      : formatAssistantCalendarRange(String(args['startDate']), String(args['endDate']));
   const readableChoice = (value: unknown): string => String(value)
     .replaceAll('_', ' ')
     .replace(/^./, firstCharacter => firstCharacter.toUpperCase());
@@ -143,6 +145,7 @@ function contentProposalDetails(proposal: AssistantContentProposalPreview): stri
     TextFieldModule,
     AssistantVisualChartComponent,
     AssistantVisualMapComponent,
+    AssistantMessageBodyComponent,
   ],
   templateUrl: './assistant-page.component.html',
   styleUrls: ['./assistant-page.component.scss'],

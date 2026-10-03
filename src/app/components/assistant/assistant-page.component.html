@@ -76,7 +76,11 @@
               <mat-icon aria-hidden="true">{{ message.role === 'assistant' ? 'auto_awesome' : 'person' }}</mat-icon>
               <span>{{ message.role === 'assistant' ? 'Assistant' : 'You' }}</span>
             </div>
-            <p class="message-text">{{ message.text }}</p>
+            @if (message.role === 'assistant') {
+              <app-assistant-message-body [text]="message.text" />
+            } @else {
+              <p class="message-text">{{ message.text }}</p>
+            }
 
             @if (message.visuals?.length) {
               <section class="assistant-visuals" aria-label="Answer visuals">

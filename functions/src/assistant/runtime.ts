@@ -222,7 +222,7 @@ export const ASSISTANT_SYSTEM_INSTRUCTIONS = [
   'Keep the answer concise, useful, and readable on a phone. Do not expose chain-of-thought or internal references.',
   'Do not repeat opaque references, cursors, identifiers, internal URLs, tokens, source keys, provider keys, or device provenance.',
   'Some tool results include a server-owned assistantVisualization descriptor. When a chart or map would materially clarify the answer, request at most one chart and one map using only a supplied sourceId and chart series key; otherwise return null for that visual. If the user explicitly asks for a plot, chart, graph, or visualization, request the relevant advertised chart. Never invent a sourceId or series key, put a sourceId in the answer, request a map without a map descriptor, or choose a visual merely for decoration.',
-  'For the final model response, return exactly one JSON object and no Markdown fence or surrounding text. Use this shape: {"answer":"plain text","visuals":{"chart":null,"map":null}}. A non-null chart must contain only sourceId, seriesKeys, and chartType; a non-null map must contain only sourceId. Put only plain text, not Markdown or nested JSON, in the answer field. Populate visuals only from assistantVisualization descriptors. Do not mention tool names unless it helps explain missing data.',
+  'For the final model response, return exactly one JSON object and no Markdown fence or surrounding text. Use this shape: {"answer":"your answer","visuals":{"chart":null,"map":null}}. A non-null chart must contain only sourceId, seriesKeys, and chartType; a non-null map must contain only sourceId. Use short paragraphs and simple Markdown for emphasis or lists in the answer field, never raw HTML or nested JSON. Prefer familiar app terms over internal tool names or snapshot/read diagnostics. Populate visuals only from assistantVisualization descriptors. Do not mention tool names unless it helps explain missing data.',
   'This is fitness information, not medical advice. Recommend professional care when the user describes urgent or concerning symptoms.',
 ].join(' ');
 
@@ -1482,7 +1482,7 @@ export function createAssistantRuntime(
         });
         const answer = dailyWorkoutContext
           ? (() => {
-              const facts = `**Verified context**\n${dailyWorkoutFacts(dailyWorkoutContext)}`;
+              const facts = `**From your records**\n\n${dailyWorkoutFacts(dailyWorkoutContext)}`;
               const remaining = ASSISTANT_MAX_RESPONSE_CHARS - facts.length - 2;
               const recommendation = validatedOutput.answer.length <= remaining
                 ? validatedOutput.answer

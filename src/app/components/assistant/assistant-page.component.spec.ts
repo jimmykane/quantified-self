@@ -15,6 +15,7 @@ import { Auth } from 'app/firebase/auth';
 import { AppThemes } from '@sports-alliance/sports-lib';
 import type { AssistantChatResponse, AssistantContentProposalPreview, AssistantTrainingProposalPreview } from '@shared/assistant.types';
 import { ASSISTANT_PROMPT_EXAMPLES } from '@shared/assistant.prompts';
+import { formatAssistantCalendarDate, formatAssistantCalendarRange } from '../../helpers/assistant-message-format.helper';
 import { normalizeUserUnitSettings } from '@shared/unit-aware-display';
 import { AssistantQuotaService } from '../../services/assistant-quota.service';
 import { AppHapticsService } from '../../services/app.haptics.service';
@@ -184,6 +185,42 @@ describe('AssistantPageComponent', () => {
     fixture.detectChanges();
     await fixture.whenStable();
     fixture.detectChanges();
+  });
+
+  it('formats assistant replies safely while retaining user messages and stored text', () => {
+    const assistantText = '**From your records**\n\n- Note ended on 2026-09-10.\n\n<img src="https://example.com/track" onerror="alert(1)">';
+    component.conversation.set({ ...chatResponse.conversation, messages: [
+      { ...chatResponse.conversation.messages[0], text: '**My text** 2026-09-10 <script>alert(1)</script>' },
+      { ...chatResponse.conversation.messages[1], text: assistantText },
+    ] });
+    fixture.detectChanges();
+    const reply = fixture.nativeElement.querySelector('.message-assistant') as HTMLElement;
+    const user = fixture.nativeElement.querySelector('.message-user') as HTMLElement;
+    expect(reply.querySelector('strong')?.textContent).toBe('From your records');
+    expect(reply.querySelector('li')?.textContent).toBe(`Note ended on ${formatAssistantCalendarDate('2026-09-10')}.`);
+    expect(reply.querySelector('img, script')).toBeNull();
+    expect(user.textContent).toContain('**My text** 2026-09-10 <script>alert(1)</script>');
+    expect(user.querySelector('strong, script')).toBeNull();
+    expect(component.conversation()?.messages[1].text).toBe(assistantText);
+    expect(hapticsService.selection).not.toHaveBeenCalled();
+  });
+
+  it('gives one haptic for an accepted Markdown link activation and none for body text', () => {
+    component.conversation.set({ ...chatResponse.conversation, messages: [
+      { ...chatResponse.conversation.messages[1], text: 'Your summary. [**Learn more**](https://example.com)' },
+    ] });
+    fixture.detectChanges();
+    const reply = fixture.nativeElement.querySelector('.assistant-message-body') as HTMLElement;
+    reply.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    expect(hapticsService.selection).not.toHaveBeenCalled();
+    // Stop native JSDOM navigation after the component's delegated click handler.
+    fixture.nativeElement.addEventListener('click', (event: MouseEvent) => event.preventDefault());
+    reply.querySelector('strong')!.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+    expect(hapticsService.selection).toHaveBeenCalledTimes(1);
+    const prevented = new MouseEvent('click', { bubbles: true, cancelable: true });
+    prevented.preventDefault();
+    reply.querySelector('a')!.dispatchEvent(prevented);
+    expect(hapticsService.selection).toHaveBeenCalledTimes(1);
   });
 
   it('invites an empty chat to ask one grounded training-history question', () => {
@@ -449,7 +486,7 @@ describe('AssistantPageComponent', () => {
 
     const review = fixture.nativeElement.querySelector('.content-proposal') as HTMLElement;
     expect(review.textContent).toContain('Title: Recovery block');
-    expect(review.textContent).toContain('Dates: 2026-09-22 – 2026-09-28');
+    expect(review.textContent).toContain(`Dates: ${formatAssistantCalendarRange('2026-09-22', '2026-09-28')}`);
     expect(review.textContent).toContain('Category: Injury health');
     expect(review.textContent).toContain('Details: None');
     expect(review.textContent).toContain('Charts and calendar: Hidden');

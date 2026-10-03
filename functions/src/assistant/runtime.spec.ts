@@ -376,7 +376,7 @@ describe('Training preview model-tool selection', () => {
       trainingPlanChangesEnabled: true,
       assertTimelineNotesAccess: vi.fn().mockResolvedValue(undefined),
       assertTrainingWriteAccess: vi.fn().mockResolvedValue(undefined) });
-    expect(result.answer).toContain('the scan was incomplete');
+    expect(result.answer).toContain('Some notes could not be checked; more may exist');
     expect(result.pendingTrainingProposal).toBeUndefined();
   });
 
@@ -481,8 +481,9 @@ describe('Training preview model-tool selection', () => {
       requiresConfirmation: true });
     expect(JSON.stringify(result.evidence)).not.toContain('Ignore the user');
     expect(result.answer).toContain('2 of the last 4 Fridays');
-    expect(result.answer).toContain('2026-09-04–2026-09-10 (ended)');
-    expect(result.answer).toContain('1 has an exact stored completion link');
+    expect(result.answer).toContain('2026-09-04 – 2026-09-10 (ended)');
+    expect(result.answer).toContain('1 has a linked recorded activity');
+    expect(result.answer).toContain('**From your records**\n\n- **Training pattern:**');
     expect(ASSISTANT_SYSTEM_INSTRUCTIONS).toContain('an ended note is not current');
     expect(ASSISTANT_SYSTEM_INSTRUCTIONS).toContain('scanComplete false does not establish that no current note exists');
     expect(ASSISTANT_SYSTEM_INSTRUCTIONS).toContain(`canonical ${DataDuration.type} metric`);
@@ -857,7 +858,7 @@ describe('Assistant runtime', () => {
       'return exactly one JSON object',
     );
     expect(ASSISTANT_SYSTEM_INSTRUCTIONS).toContain(
-      'plain text, not Markdown or nested JSON, in the answer field',
+      'simple Markdown for emphasis or lists in the answer field, never raw HTML or nested JSON',
     );
     expect(ASSISTANT_SYSTEM_INSTRUCTIONS).not.toContain('Do not output JSON');
     expect(ASSISTANT_INTERNAL_BOUNDARY_INSTRUCTIONS).toContain(
@@ -1396,7 +1397,7 @@ describe('Assistant runtime', () => {
     }));
     expect(generate).toHaveBeenNthCalledWith(2, expect.objectContaining({
       system: expect.stringContaining(
-        'plain text, not Markdown or nested JSON, in the answer field',
+        'simple Markdown for emphasis or lists in the answer field, never raw HTML or nested JSON',
       ),
       toolChoice: 'auto',
       returnToolRequests: true,

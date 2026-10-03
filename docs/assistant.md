@@ -444,6 +444,21 @@ not authored by the model. The evidence adapter:
 
 This evidence is a compact audit aid, not a full transcript of internal tool calls.
 
+Assistant answer bodies render simple Markdown through an Assistant-specific renderer and Angular's normal HTML
+sanitization. Raw HTML is escaped, external images never load, and only HTTP(S) Markdown links are interactive. User
+messages remain plain text. Headings, lists, tables and code use app typography and surfaces; wide tables and code
+have their own shared QS scrollbars. Standalone ISO calendar dates in prose display using the app's regional formatting
+preference with an explicit UTC formatter, preserving the calendar day. Timestamps, code, IDs, filenames and link
+destinations are left intact; stored messages and proposal arguments remain unchanged. Note-review dates use the same
+calendar formatter.
+
+For today's workout recommendations, the server-authored **From your records** list keeps weekday counts, actual
+activities, ongoing/ended notes, exact persisted activity links and unavailable/incomplete data explicit. It uses
+familiar app labels instead of snapshot/read diagnostics. This is presentation only: no MCP tool, schema, scope,
+consent, Training calculation, completion inference, mutation or proposal/confirmation contract changes. No public
+contract refresh or plugin rebuild is required. Updated server copy requires a separately approved Functions release;
+existing saved answers receive only the frontend formatting improvements.
+
 ## Conversation lifecycle and quota
 
 There is one active document at `users/{uid}/assistantConversations/active`:
