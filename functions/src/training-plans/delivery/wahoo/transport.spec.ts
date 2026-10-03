@@ -290,6 +290,72 @@ describe('Wahoo Plan + dated Workout lifecycle', () => {
     expect(server.calls.filter(call => call.method !== 'GET')).toHaveLength(count);
     if (scenario === 'completed') expect(op.artifact?.completed).toBe(true);
   });
+  it.each([
+    ['plan-missing', 'plan_not_readable'], ['plan-id', 'plan_identity_mismatch'], ['plan-id-invalid', 'plan_response_invalid'],
+    ['plan-owner', 'plan_ownership_mismatch'], ['plan-deleted', 'plan_deleted'], ['plan-state-unknown', 'plan_deletion_state_unknown'],
+    ['workout-missing', 'workout_not_readable'], ['workout-id', 'workout_identity_mismatch'], ['workout-id-invalid', 'workout_response_invalid'],
+    ['token', 'workout_ownership_mismatch'], ['summary-missing', 'workout_completion_unknown'], ['summary-invalid', 'workout_completion_unknown'],
+    ['completed', 'workout_completed'], ['past', 'workout_in_past'], ['date-invalid', 'workout_date_invalid'], ['moved', 'workout_date_changed'],
+    ['association', 'workout_plan_mismatch'], ['association-invalid', 'workout_plan_mismatch'], ['association-missing', 'association_not_confirmed'],
+  ])('labels the %s removal guard without changing uncertainty or making a destructive request', async (scenario, reason) => {
+    const artifact = (await execute())!;
+    const plan = server.plans.get(artifact.ids.plan)!; const workout = server.workouts.get(artifact.ids.workout)!;
+    if (scenario === 'plan-missing') server.plans.delete(artifact.ids.plan);
+    if (scenario === 'plan-id') plan.id = '999';
+    if (scenario === 'plan-id-invalid') plan.id = 'private-id';
+    if (scenario === 'plan-owner') plan.external_id = 'private-owner';
+    if (scenario === 'plan-deleted') plan.deleted = true;
+    if (scenario === 'plan-state-unknown') delete plan.deleted;
+    if (scenario === 'workout-missing') server.workouts.delete(artifact.ids.workout);
+    if (scenario === 'workout-id') workout.id = '999';
+    if (scenario === 'workout-id-invalid') workout.id = 'private-id';
+    if (scenario === 'token') workout.workout_token = 'private-token';
+    if (scenario === 'summary-missing') delete workout.workout_summary;
+    if (scenario === 'summary-invalid') workout.workout_summary = { id: 'private-summary' };
+    if (scenario === 'completed') workout.workout_summary = { id: 42 };
+    if (scenario === 'past') workout.starts = '2026-10-24T10:00:00Z';
+    if (scenario === 'date-invalid') workout.starts = 'private-date';
+    if (scenario === 'moved') workout.starts = '2026-10-30T10:00:00Z';
+    if (scenario === 'association') workout.plan_id = '999';
+    if (scenario === 'association-invalid') workout.plan_ids = ['private-plan'];
+    const client: typeof server.request = scenario === 'association-missing'
+      ? async (request, beforeSend) => {
+        if (request.path.endsWith('/plans')) { await beforeSend(); return { status: 200, body: [] }; }
+        return server.request(request, beforeSend);
+      } : server.request;
+    transport = new WahooTrainingTransport(client, () => now);
+    const writes = server.calls.filter(call => call.method !== 'GET').length;
+    op = { ...op, kind: 'remove', workout: null, progress: null };
+    let failure: unknown;
+    try { await execute(); } catch (error) { failure = error; }
+    expect(failure).toMatchObject({ kind: 'uncertain', diagnostics: { failurePhase: 'contract', wahooContractCheck: reason } });
+    expect(JSON.stringify(failure)).not.toContain('private');
+    expect(server.calls.filter(call => call.method !== 'GET')).toHaveLength(writes);
+    expect(op.artifact?.ids).toEqual(artifact.ids);
+    expect(op.progress).toBeNull();
+  });
+  it.each(['workout', 'plan'])('labels ambiguous %s DELETE 404 without assuming successful removal', async resource => {
+    const artifact = (await execute())!;
+    server.beforeHandle = async request => {
+      if (request.method === 'DELETE' && request.path === `/v1/${resource}s/${artifact.ids[resource]}`) {
+        (resource === 'workout' ? server.workouts : server.plans).delete(artifact.ids[resource]);
+      }
+    };
+    op = { ...op, kind: 'remove', workout: null, progress: null };
+    await expect(execute()).rejects.toMatchObject({ kind: 'uncertain', diagnostics: {
+      failurePhase: 'contract', wahooContractCheck: `${resource}_delete_not_found`,
+    } });
+    expect(op.artifact?.ids[resource]).toBe(artifact.ids[resource]);
+    expect(await recover()).toEqual({ kind: 'uncertain' });
+    if (resource === 'workout') expect(server.plans.size).toBe(1);
+  });
+  it('preserves HTTP failure diagnostics instead of relabeling them as contract checks', async () => {
+    await execute(); op = { ...op, kind: 'remove', workout: null, progress: null };
+    const error = new WahooTrainingHttpError('retryable', false, 60_000, { httpStatus: 500, failurePhase: 'response' });
+    transport = new WahooTrainingTransport(async () => { throw error; }, () => now);
+    await expect(execute()).rejects.toBe(error);
+    expect(error.diagnostics).toEqual({ httpStatus: 500, failurePhase: 'response' });
+  });
   it('removes an exactly owned past Workout and Plan after explicit authorization', async () => {
     const artifact = (await execute())!;
     transport = new WahooTrainingTransport(server.request, () => Date.parse('2026-10-28T12:00:00Z'));

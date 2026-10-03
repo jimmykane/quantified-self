@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
+import * as logger from 'firebase-functions/logger';
 import { Firestore } from 'firebase-admin/firestore';
-import { afterAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ActivityTypes, ServiceNames } from '@sports-alliance/sports-lib';
 import { trainingDeliveryCommand } from '../commands';
 import { reconcileTrainingDeliveryPage } from '../store';
@@ -37,6 +38,7 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Wahoo worker with real Fi
   };
   const send = async () => { await command('send'); await drain(); const row = await ledger(); await processTrainingDelivery(runtime, uid, row.id); await drain(); return ledger(); };
   beforeEach(async () => {
+    vi.mocked(logger.warn).mockClear();
     uid = `wahoo-test-${randomUUID()}`; users.push(uid); now = Date.parse('2026-10-24T22:30:00Z'); pro = true;
     server = new WahooHttpFixture(); const transport = new WahooTrainingTransport(server.request, () => now);
     runtime = { db, now: () => now, hasPro: async () => pro, transport: provider => provider === 'wahoo' ? transport : null,
@@ -56,6 +58,23 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Wahoo worker with real Fi
       for (const doc of (await db.collection(DELIVERY_QUEUE).where('uid', '==', id).get()).docs) await db.recursiveDelete(doc.ref);
     }
     await db.terminate();
+  });
+  it('logs the removal safety check while retaining the copy and existing retry state', async () => {
+    const accepted = await send(); const ids = accepted.actual!.ids;
+    delete server.workouts.get(ids.workout)!.workout_summary;
+    await command('stop'); await drain();
+    const writes = server.calls.filter(call => call.method !== 'GET').length;
+    await processTrainingDelivery(runtime, uid, accepted.id);
+    expect(logger.warn).toHaveBeenCalledWith('[TrainingDelivery]', expect.objectContaining({
+      event: 'failure', provider: 'wahoo', category: 'uncertain', retryCount: 1,
+      failurePhase: 'contract', wahooContractCheck: 'workout_completion_unknown',
+    }));
+    const row = await ledger();
+    expect(row).toMatchObject({ status: 'retrying', desired: 'absent', actual: { ids }, retries: 1 });
+    expect(JSON.stringify(row)).not.toContain('wahooContractCheck');
+    expect(server.calls.filter(call => call.method !== 'GET')).toHaveLength(writes);
+    const logs = JSON.stringify(vi.mocked(logger.warn).mock.calls);
+    expect(logs).not.toContain(uid); expect(logs).not.toContain(ids.externalId); expect(logs).not.toContain(ids.workoutToken);
   });
   it('sends full timed strength with normal consent, serializes concurrent workers and updates load/rest/date in place before Stop', async () => {
     const details = wahooFixtureStrengthDetails();

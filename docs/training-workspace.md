@@ -1344,6 +1344,14 @@ delivery latency, `stale_suppressed` for obsolete work, and `recovered_acceptanc
 For HTTP failures, group by `jsonPayload.httpStatus` and `jsonPayload.failurePhase` to distinguish rejected responses
 from network uncertainty and response decoding. Legacy failure records lack these fields and cannot prove a specific
 provider response status after the fact.
+Wahoo contract-guard failures add only the fixed private `wahooContractCheck` label to the existing WARNING, with
+`failurePhase="contract"`. Filter by `jsonPayload.provider="wahoo"` and group failures by that label to distinguish
+ownership/identity mismatches, missing or invalid completion evidence, moved dates, unconfirmed associations and
+ambiguous DELETE 404s. `plan_deleted` means the provider returned `deleted=true`; `plan_deletion_state_unknown` means
+it did not return an explicit live state. Unreadable resources and DELETE 404s remain uncertain, never proof of absence.
+The labels contain no provider field values, add no requests or stored diagnostic records, and do not change retries,
+completion protection or removal decisions. Demo-Firestore tests verify warning propagation and retained retry state.
+MCP and Help impact: none; recipes, safe status projections, consent, tools, schemas and provider actions are unchanged.
 Suunto Guide HTTP 400 failures also include fixed `providerResponseShape`, `providerRejection`, optional
 `providerField` and `providerValidation` values. These are classifier outputs, not Suunto's free-text reason;
 `unclassified` means the safe log alone cannot establish the exact validation defect. This private diagnostic change

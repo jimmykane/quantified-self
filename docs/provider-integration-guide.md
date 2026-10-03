@@ -437,6 +437,13 @@ schedule-lookup outcomes; the shared worker separately logs journal persistence 
 retry state. Scalar acknowledgements additionally log `garmin_schedule_confirmation` phases `id_retained` and
 `verified`; final worker `accepted` remains the completion signal. Correlate the `[TrainingDelivery]` events by Cloud
 Logging execution ID, not user/provider identifiers.
+Wahoo delivery failures additionally include the fixed private `wahooContractCheck` label and `failurePhase="contract"`
+when an ownership, date, completion, association or removal-response safety check blocks work. A missing/invalid
+completion summary is not proof of completion; `plan_deletion_state_unknown` is not proof of a deleted Plan, and
+`*_not_readable`/`*_delete_not_found` do not prove absence. These labels retain the existing uncertainty, retry and
+destructive-write guards; HTTP failures keep their original status/phase. No provider requests, persisted fields,
+owner-visible/MCP contracts or Help behavior change. Focused fixtures and the Wahoo demo-Firestore worker suite verify
+both warning propagation and unchanged refusal to delete an unverified copy.
 See [Training diagnostics](training-workspace.md#provider-delivery-foundation-646) for event names and filters.
 Never add response bodies, arbitrary field names, dates, workout contents, credentials, IDs or raw error text to these logs.
 Functions-only emulation can still write live Firestore and trigger deployed delivery workers; isolate bulk/failure

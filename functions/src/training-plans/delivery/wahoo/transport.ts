@@ -3,7 +3,8 @@ import { wahooWorkoutSportProfileV1 } from '../../../../../shared/wahoo-workout-
 import type { StrengthWorkoutDetailsV1 } from '../../../../../shared/strength-workout';
 import { normalizeDeliveryTimeZone, trainingDeliveryLocalDate } from '../../../../../shared/training-provider-delivery';
 import { TrainingDeliveryTransportError, type DeliveryArtifact, type DeliveryCheckpoint, type DeliveryOperation,
-  type DeliveryRecovery, type DeliveryRequestGuard, type DeliveryTransportProgress, type TrainingDeliveryTransport } from '../contracts';
+  type DeliveryRecovery, type DeliveryRequestGuard, type DeliveryTransportProgress, type TrainingDeliveryTransport,
+  type WahooTrainingContractCheck } from '../contracts';
 import type { InspectionPolicy, RemoteInspection } from '../verification-contracts';
 import { WahooTrainingHttpError, wahooId, wahooObject, type WahooTrainingClient, type WahooTrainingRequest } from './http';
 import { assessWahooDelivery, WAHOO_MAPPING_VERSION, wahooIdentities, wahooPlanBody, wahooStarts, wahooWorkoutBody, wahooWorkoutDate, wahooWorkoutFields } from './mapping';
@@ -15,7 +16,21 @@ export const WAHOO_INSPECTION_POLICY: InspectionPolicy = {
 const STEPS = ['plan-create', 'plan-update', 'workout-create', 'workout-discover', 'workout-update', 'workout-remove', 'plan-remove', 'finished'] as const;
 type Step = typeof STEPS[number];
 type Value = Record<string, unknown>;
-function uncertain(): never { throw new TrainingDeliveryTransportError('uncertain'); }
+function uncertain(wahooContractCheck?: WahooTrainingContractCheck): never {
+  throw new TrainingDeliveryTransportError('uncertain', 0,
+    wahooContractCheck ? { failurePhase: 'contract', wahooContractCheck } : {});
+}
+/** Annotate existing uncertain validation errors without changing their outcome or exposing input. */
+function checked<T>(reason: WahooTrainingContractCheck, validate: () => T): T {
+  try { return validate(); }
+  catch (error) {
+    if (error instanceof TrainingDeliveryTransportError && error.kind === 'uncertain') {
+      throw new TrainingDeliveryTransportError(error.kind, error.retryAfterMs,
+        { ...error.diagnostics, failurePhase: 'contract', wahooContractCheck: error.diagnostics.wahooContractCheck ?? reason });
+    }
+    throw error;
+  }
+}
 function validateArtifact(artifact: DeliveryArtifact): void {
   const ids = artifact.ids;
   if (artifact.timeZone !== undefined) {
@@ -28,25 +43,29 @@ function validateArtifact(artifact: DeliveryArtifact): void {
   if (ids.association && ids.association !== `${ids.workout}:${ids.plan}`) uncertain();
 }
 function ownedPlan(raw: unknown, artifact: DeliveryArtifact): Value {
-  const value = wahooObject(raw);
-  if (wahooId(value.id) !== artifact.ids.plan || value.external_id !== artifact.ids.externalId || value.deleted !== false) uncertain();
+  const value = checked('plan_response_invalid', () => wahooObject(raw));
+  if (checked('plan_response_invalid', () => wahooId(value.id)) !== artifact.ids.plan) uncertain('plan_identity_mismatch');
+  if (value.external_id !== artifact.ids.externalId) uncertain('plan_ownership_mismatch');
+  if (value.deleted !== false) uncertain(value.deleted === true ? 'plan_deleted' : 'plan_deletion_state_unknown');
   return value;
 }
 function ownedWorkout(raw: unknown, artifact: DeliveryArtifact): Value {
-  const value = wahooObject(raw);
-  if (wahooId(value.id) !== artifact.ids.workout || value.workout_token !== artifact.ids.workoutToken) uncertain();
+  const value = checked('workout_response_invalid', () => wahooObject(raw));
+  if (checked('workout_response_invalid', () => wahooId(value.id)) !== artifact.ids.workout) uncertain('workout_identity_mismatch');
+  if (value.workout_token !== artifact.ids.workoutToken) uncertain('workout_ownership_mismatch');
   return value;
 }
 function associationMatches(value: Value, plan: string): boolean {
   if (value.plan_ids !== undefined && !Array.isArray(value.plan_ids)) return false;
-  const ids = [...(value.plan_id === null || value.plan_id === undefined ? [] : [wahooId(value.plan_id)]),
-    ...(Array.isArray(value.plan_ids) ? value.plan_ids.map(wahooId) : [])];
+  const ids = checked('workout_plan_mismatch', () => [
+    ...(value.plan_id === null || value.plan_id === undefined ? [] : [wahooId(value.plan_id)]),
+    ...(Array.isArray(value.plan_ids) ? value.plan_ids.map(wahooId) : [])]);
   return ids.length > 0 && ids.every(id => id === plan);
 }
 function isCompleted(value: Value): boolean {
   if (value.workout_summary === null) return false;
   // Missing/malformed summary is not proof of an uncompleted workout.
-  wahooId(wahooObject(value.workout_summary).id);
+  checked('workout_completion_unknown', () => wahooId(wahooObject(value.workout_summary).id));
   return true;
 }
 function numeric(value: unknown): number {
@@ -62,7 +81,7 @@ export class WahooTrainingTransport implements TrainingDeliveryTransport {
   readonly inspection: RemoteInspection;
   constructor(private readonly client: WahooTrainingClient, private readonly now: () => number = Date.now) {
     this.inspection = { policy: WAHOO_INSPECTION_POLICY, inspect: async (request, guard) => {
-      const artifact = request.artifact; validateArtifact(artifact);
+      const artifact = request.artifact; checked('artifact_invalid', () => validateArtifact(artifact));
       const plan = await this.read(`/v1/plans/${artifact.ids.plan}`, guard);
       const workout = artifact.ids.workout ? await this.read(`/v1/workouts/${artifact.ids.workout}`, guard) : null;
       let conflict = false; let completed = false;
@@ -97,17 +116,17 @@ export class WahooTrainingTransport implements TrainingDeliveryTransport {
       || allowPastRemoval);
   }
   private validate(operation: DeliveryOperation): void {
-    if (operation.repair || operation.recoveryBlocked) uncertain();
+    if (operation.repair || operation.recoveryBlocked) uncertain('operation_invalid');
     if (operation.progress && (operation.progress.version !== 1 || !STEPS.includes(operation.progress.step as Step)
-      || !['ready', 'started', 'accepted', 'rejected'].includes(operation.progress.state))) uncertain();
+      || !['ready', 'started', 'accepted', 'rejected'].includes(operation.progress.state))) uncertain('operation_invalid');
     if (operation.artifact) {
-      validateArtifact(operation.artifact);
-      if (operation.workout && operation.artifact.ids.externalId !== wahooIdentities(operation.destinationKey, operation.workout.id).externalId) uncertain();
+      checked('artifact_invalid', () => validateArtifact(operation.artifact!));
+      if (operation.workout && operation.artifact.ids.externalId !== wahooIdentities(operation.destinationKey, operation.workout.id).externalId) uncertain('artifact_invalid');
     }
   }
   private assertFuture(operation: DeliveryOperation): void {
     const today = trainingDeliveryLocalDate(this.now(), operation.timeZone);
-    if (operation.artifact && !this.canRemove(operation.artifact, today, operation.kind === 'remove' && operation.allowPastRemoval)) uncertain();
+    if (operation.artifact && !this.canRemove(operation.artifact, today, operation.kind === 'remove' && operation.allowPastRemoval)) uncertain('artifact_protected');
     if (operation.kind === 'upsert') {
       const last = new Date(Date.parse(`${today}T00:00:00Z`) + this.horizonDays * 86_400_000).toISOString().slice(0, 10);
       if (!operation.workout || operation.workout.localDate < today || operation.workout.localDate > last) uncertain();
@@ -122,7 +141,7 @@ export class WahooTrainingTransport implements TrainingDeliveryTransport {
     await guard(false);
     const response = await this.client({ method: 'GET', path }, () => guard(false));
     if (response.status === 404) return null;
-    if (response.status !== 200 || response.body === null || response.body === undefined) uncertain();
+    if (response.status !== 200 || response.body === null || response.body === undefined) uncertain('read_response_invalid');
     return response.body;
   }
   private async write(operation: DeliveryOperation, step: Step, request: WahooTrainingRequest,
@@ -151,17 +170,17 @@ export class WahooTrainingTransport implements TrainingDeliveryTransport {
     recovering = false): Promise<Value> {
     const artifact = operation.artifact!;
     const raw = await this.read(`/v1/workouts/${artifact.ids.workout}`, guard);
-    if (!raw) uncertain();
+    if (!raw) uncertain('workout_not_readable');
     const value = ownedWorkout(raw, artifact);
     const retainedZone = artifact.timeZone ?? operation.timeZone;
-    const retainedDate = wahooWorkoutDate(value.starts, retainedZone);
+    const retainedDate = checked('workout_date_invalid', () => wahooWorkoutDate(value.starts, retainedZone));
     // A time-zone edit can move the old instant onto a different calendar date.
     // Compare the retained copy in its own zone until readback matches our exact
     // desired starts instant (including an accepted PUT whose response was lost).
     const desiredStarts = operation.kind === 'upsert'
       && Date.parse(String(value.starts)) === Date.parse(wahooStarts(operation.workout!.localDate, operation.timeZone));
     const timeZone = desiredStarts ? operation.timeZone : retainedZone;
-    const date = wahooWorkoutDate(value.starts, timeZone);
+    const date = checked('workout_date_invalid', () => wahooWorkoutDate(value.starts, timeZone));
     const completed = isCompleted(value);
     if (completed || (date < trainingDeliveryLocalDate(this.now(), timeZone)
       && !(operation.kind === 'remove' && operation.allowPastRemoval && date === artifact.localDate))) {
@@ -170,12 +189,12 @@ export class WahooTrainingTransport implements TrainingDeliveryTransport {
       // Recovery can now retire the superseded operation against protected
       // evidence. It must not report delivery success or retry another write.
       if (recovering) return value;
-      uncertain();
+      uncertain(completed ? 'workout_completed' : 'workout_in_past');
     }
     // Only the retained calendar date or this operation's exact new instant is admissible.
     // Manual provider moves must not be silently overwritten or removed.
-    if ((retainedDate !== artifact.localDate && !desiredStarts)
-      || !associationMatches(value, artifact.ids.plan)) uncertain();
+    if (retainedDate !== artifact.localDate && !desiredStarts) uncertain('workout_date_changed');
+    if (!associationMatches(value, artifact.ids.plan)) uncertain('workout_plan_mismatch');
     if (date !== artifact.localDate || timeZone !== artifact.timeZone) {
       const observed = { ...artifact, localDate: date, timeZone };
       await checkpoint(observed); operation.artifact = observed;
@@ -213,13 +232,13 @@ export class WahooTrainingTransport implements TrainingDeliveryTransport {
   }
   async execute(operation: DeliveryOperation, checkpoint: DeliveryCheckpoint, guard: DeliveryRequestGuard): Promise<DeliveryArtifact | null> {
     this.validate(operation); this.assertFuture(operation);
-    if (operation.progress === undefined || operation.progress?.state === 'started') uncertain();
+    if (operation.progress === undefined || operation.progress?.state === 'started') uncertain('journal_unknown');
     if (operation.kind === 'remove') return this.remove(operation, checkpoint, guard);
     const workout = operation.workout!;
     this.validatePrescription(operation);
     if (operation.artifact?.ids.workout) {
       await this.inspectWorkout(operation, checkpoint, guard);
-      if (!await this.association(operation.artifact, guard)) uncertain();
+      if (!await this.association(operation.artifact, guard)) uncertain('association_not_confirmed');
     }
     if (!operation.artifact) {
       const found = await this.lookupPlan(operation, guard);
@@ -265,7 +284,7 @@ export class WahooTrainingTransport implements TrainingDeliveryTransport {
     if (!this.matchesWorkout(value, operation) || !await this.association(operation.artifact!, guard)) uncertain();
     // Read Plan independently; a dated Workout is not proof that its recipe exists.
     const plan = await this.read(`/v1/plans/${artifact.ids.plan}`, guard);
-    if (!plan) uncertain();
+    if (!plan) uncertain('plan_not_readable');
     this.confirmPlan(plan, operation);
     const accepted = { ...operation.artifact!, localDate: workout.localDate, timeZone: operation.timeZone,
       ids: { ...operation.artifact!.ids, association: `${operation.artifact!.ids.workout}:${artifact.ids.plan}` } };
@@ -275,18 +294,18 @@ export class WahooTrainingTransport implements TrainingDeliveryTransport {
   private async remove(operation: DeliveryOperation, checkpoint: DeliveryCheckpoint, guard: DeliveryRequestGuard): Promise<null> {
     if (!operation.artifact) { await this.save(operation, checkpoint, null, 'finished', 'accepted'); return null; }
     const plan = await this.read(`/v1/plans/${operation.artifact.ids.plan}`, guard);
-    if (!plan) uncertain();
+    if (!plan) uncertain('plan_not_readable');
     ownedPlan(plan, operation.artifact);
     if (operation.artifact.ids.workout) {
       await this.inspectWorkout(operation, checkpoint, guard);
-      if (!await this.association(operation.artifact, guard)) uncertain();
+      if (!await this.association(operation.artifact, guard)) uncertain('association_not_confirmed');
       const response = await this.write(operation, 'workout-remove', { method: 'DELETE', path: `/v1/workouts/${operation.artifact.ids.workout}` }, checkpoint, guard);
-      if (response.status === 404) uncertain(); // Ambiguous ownership/absence is not deletion evidence.
+      if (response.status === 404) uncertain('workout_delete_not_found'); // Ambiguous ownership/absence is not deletion evidence.
       const ids = { ...operation.artifact.ids }; delete ids.workout; delete ids.association;
       await this.save(operation, checkpoint, { ...operation.artifact, ids }, 'workout-remove', 'accepted');
     }
     const response = await this.write(operation, 'plan-remove', { method: 'DELETE', path: `/v1/plans/${operation.artifact.ids.plan}` }, checkpoint, guard);
-    if (response.status === 404) uncertain();
+    if (response.status === 404) uncertain('plan_delete_not_found');
     await this.save(operation, checkpoint, null, 'finished', 'accepted');
     return null;
   }
