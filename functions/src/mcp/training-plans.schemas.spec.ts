@@ -94,6 +94,15 @@ function expectPublicReadWriteRoundTrip(input: WorkoutStructureV1): void {
   expect(write).toMatchObject({ structure: input });
 }
 
+describe('app-only Garmin replacement boundary', () => {
+  it('does not silently widen the registered v1 provider delivery action enum', () => {
+    const change = { kind: 'provider-delivery', targetType: 'workout', target: { ref: 'owner-bound-ref' }, providers: ['garmin'] };
+    expect(TRAINING_CHANGE_SCHEMA.safeParse({ ...change, action: 'retry' }).success).toBe(true);
+    expect(TRAINING_CHANGE_SCHEMA.safeParse({ ...change, action: 'replace' }).success).toBe(false);
+    expect(TRAINING_CHANGE_SCHEMA.safeParse({ ...change, action: 'retry', manualReplacement: true }).success).toBe(false);
+  });
+});
+
 describe('Strict public Training recipe v1', () => {
   it.each([ActivityTypes.Walking, ActivityTypes.Hiking, ActivityTypes.Rowing, ActivityTypes.IndoorRowing])('round-trips %s through the frozen read and approval-gated proposal schema', sport => {
     expectPublicReadWriteRoundTrip({ ...recipe({ kind: 'distance', meters: 500 }), sport });

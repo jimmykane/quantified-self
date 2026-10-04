@@ -365,13 +365,14 @@ the Health UI display may use pounds when selected. No tool, schema, scope, cons
 or bundled skill changes. The separate Strength Training feature uses this preference only at its app editor boundary;
 its MCP read and preview continue to use canonical kilograms.
 
-Garmin schedule-only remote repair and #769's frontend-only check wording preserve the registered MCP contract.
-The existing sanitized delivery status already stops a confirmed missing copy from counting as synced and represents
-restoration as a non-success outcome.
-Artifact-specific inspection authority, retained provider IDs and repair evidence remain private; MCP performs no live
-provider check or repair and gains no tool, field, scope, consent or write authority. In particular, a `synced` MCP
-delivery outcome records the last accepted send, not a fresh Garmin cloud read; an inconclusive later Workout check
-cannot be promoted to `confirmed_missing` and the frozen v1 tool exposes no verification-state field.
+Garmin schedule-only remote repair and #769's explicit app-only replacement preserve the registered MCP contract.
+The existing sanitized delivery status stops a confirmed missing copy or a complete not-found Garmin Workout
+observation from counting as synced, using existing non-success outcomes rather than new fields.
+Artifact-specific inspection authority, retained provider IDs and repair evidence remain private; MCP sync reads
+perform no live provider check or repair and gain no tool, field, scope, consent or write authority. In particular, a
+`synced` MCP delivery outcome records the last accepted send, not a fresh Garmin cloud read; an unproved negative
+cannot be promoted to `confirmed_missing` and the frozen v1 tool exposes no verification-state field. The additive
+MCP replacement action is tracked in #801, not implemented through the v1 Send or Retry action.
 
 COROS Training delivery (#648) uses the shared provider-readiness boundary with no wire-contract change. COROS is
 currently disabled there for the app, Functions runtime and MCP; explicit COROS proposals report unavailable and
@@ -2304,6 +2305,13 @@ after validation, but no additional server deployment or registered-app rescan o
   sleep data, or user IDs.
 
 ## Local verification and release
+
+Garmin app-only missing-copy recovery (#769) does not widen registered v1 Training provider actions. Existing
+`get_training_sync_status` reports `needs_attention` and zero synced workouts after a complete not-found Workout
+observation, retaining the historical accepted-send timestamp without private inspection or provider identities.
+Registered proposals still reject `replace` and client-supplied replacement authority. A focused additive MCP preview,
+approval and Assistant prepare-only integration is tracked in #801 under #583 / Project 2; do not emulate it with
+Send/Retry or let the broader app command enum grow the frozen registered contract.
 
 Use the Functions emulator and local Angular app for the OAuth/consent flow. At minimum run:
 

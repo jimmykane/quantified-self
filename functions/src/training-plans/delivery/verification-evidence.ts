@@ -41,6 +41,13 @@ export function observeInspection(previous: VerificationEvidence | undefined, bi
     return { ...result, cursor, suspectedAtMs: same && cursor && coverage?.stable === true && !positive ? previous.suspectedAtMs : null,
       manualPending: !!cursor && (previous?.manualPending ?? false) };
   }
+  // Retain observed absence separately: a 404 is not permission for automatic recreation.
+  // Incomplete, conflicting or malformed inspections above never reach this boundary.
+  if (!observation.artifacts.some(item => item.state === 'unknown')
+    && observation.artifacts.some(item => item.state === 'absent'
+      && (!item.authoritative || !isAuthoritativeAbsenceKey(policy, item.key)))) {
+    result.observedMissingKeys = observation.artifacts.filter(item => item.state === 'absent').map(item => item.key).sort();
+  }
   if (observation.artifacts.some(item => item.state === 'unknown' || !item.authoritative
     || (item.state === 'absent' && !isAuthoritativeAbsenceKey(policy, item.key)))) return result;
   const missing = observation.artifacts.filter(item => item.state === 'absent').map(item => item.key).sort();

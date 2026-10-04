@@ -29,6 +29,17 @@ describe('Training delivery explanations', () => {
   it('explains inactive-plan withdrawal instead of a changed workout', () => {
     expect(trainingDeliveryCopyMessage({ status: 'paused_plan', differsFromQS: true } as TrainingDeliveryStatusV1)).toContain('awaiting removal');
   });
+  it('explains blocked replacement without exposing private evidence or offering a blind retry', () => {
+    for (const code of ['failed-precondition', 'functions/failed-precondition']) {
+      for (const saving of [false, true]) {
+        const message = trainingDeliveryCommandError({ code, message: 'private evidence' }, saving, 'replace');
+        expect(message).toContain('check Garmin again'); expect(message).toContain('Cancel this review');
+        expect(message).not.toContain('private'); expect(message).not.toContain('time zone');
+      }
+    }
+    expect(trainingDeliveryCommandError({ code: 'functions/unavailable' }, true, 'replace')).toContain('same request');
+    expect(trainingDeliveryCommandError({ code: 'failed-precondition' }, true, 'retry')).toContain('same request');
+  });
   it('uses actionable safe errors without exposing raw callable messages', () => {
     expect(trainingDeliveryCommandError({ name: 'TimeoutError' }, false)).toContain('No sync settings were changed');
     expect(trainingDeliveryCommandError({ code: 'functions/aborted' }, false)).toContain('latest version');

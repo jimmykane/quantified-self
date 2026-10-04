@@ -329,6 +329,19 @@ describe('Training plan MCP reads', () => {
     expect(result.plans.map(plan => plan.name)).toEqual(['Active', 'Paused', 'Archived']);
   });
 
+  it('does not count a not-found Garmin copy as synced despite retaining its earlier acceptance', async () => {
+    const f = fixture(); f.collections.scheduledWorkouts = { w1: workout(null) };
+    f.collections.trainingDeliverySettings.garmin = { scope: 'workout', scopeId: 'w1', provider: 'garmin', enabled: true,
+      suppressed: false, timeZone: 'Europe/Helsinki', destinationKey: 'synthetic-garmin-account', associationPlanId: null, updatedAtMs: 1 };
+    const id = await trainingDeliverySummaryIdentity('owner', 'garmin', 'synthetic-garmin-account', 'w1');
+    f.collections.trainingDeliveryStatuses[id] = { workoutId: 'w1', planId: null, provider: 'garmin', status: 'needs_attention',
+      differsFromQS: true, hasRemoteCopy: true, timeZone: 'Europe/Helsinki', lastAttemptAtMs: 1, lastAcceptedAtMs: 1, updatedAtMs: 2 };
+    const workoutRef = f.codec.encode({ kind: 'workout', id: 'w1', createdAtMs: 1 }, 'owner', 'connection');
+    const result = TRAINING_READ_OUTPUTS.get_training_sync_status.parse(await f.run('get_training_sync_status', { scope: 'workout', reference: workoutRef }));
+    expect(result.services).toEqual([expect.objectContaining({ provider: 'garmin', syncedWorkouts: 0,
+      lastAcceptedAtMs: 1, outcomes: [{ status: 'needs_attention', count: 1 }] })]);
+    expect(JSON.stringify(result)).not.toMatch(/synthetic-garmin|observedMissingKeys|manualReplacement|repair|binding|ownerId/);
+  });
   it.each(['delivered', 'removed', 'unsupported', 'outside_horizon', 'needs_attention', 'connection_repair', 'provider_unavailable', 'completed'])(
     'projects Wahoo %s without private Plan/Workout identities or device claims', async status => {
       const f = fixture(); f.collections.scheduledWorkouts = { w1: workout('p1') };

@@ -2302,7 +2302,7 @@ unchanged Schedule is reused without a POST. Before creating a replacement, a po
 same retained Workout is adopted under its new Schedule ID; multiple matches remain inconclusive and cannot create
 another copy. Changed dates/owners/associations require attention. Evidence-binding changes clear confirmed absence
 before a new observation chain begins. A missing Workout is
-non-authoritative, remains `unknown`, does not reduce the copy to a confirmed missing state and cannot trigger recreation.
+non-authoritative, remains `unknown`, does not reduce the copy to a confirmed missing state and cannot trigger automatic recreation.
 An owner-account #769 probe found both retained Workout and Schedule IDs returning 404, with a separate same-account QS
 Workout returning 200 and no matching date-list association. A Schedule POST against that missing Workout was rejected
 with 404 and created no artifact. This proves the exact retained pair was not readable in that probe; it does not prove
@@ -2312,14 +2312,29 @@ automatic Workout replacement, require provider-supported, same-owner not-found 
 permission/account errors; two unchanged observations at least 15 minutes apart under the same binding; no surviving
 or reappearing association; and bounded recovery for an uncertain root Workout POST that cannot duplicate provider
 records. Account-side create/update/delete proof must establish that full lifecycle. Until then, the check remains
-inconclusive, retains the prior Last sent timestamp, and never starts another Workout POST. The compact workout row
-reads the bounded current verification projection so a later inconclusive check no longer appears simply as Synced;
-plan totals and MCP sync status continue to describe accepted delivery, not a fresh live cloud inventory.
-The replacement-workout path is not enabled in production. #769 closed with this explicit limit: the provider evidence
-does not establish safe automatic Workout replacement, so missing-Workout checks remain inconclusive. Repairs reuse
-the operation journal and
+inconclusive and retains the prior Last sent timestamp. A complete negative observation is now retained privately as
+`observedMissingKeys`, separately from authoritative `missing`/`missingKeys`. A missing Workout makes the safe delivery
+projection `needs_attention` and not synced, even with its earlier acceptance and retained IDs. The compact row and
+details say **Not found in Garmin** rather than conflating a 404 with a transport/permission failure. Last sent remains
+historical; plan totals and existing MCP sync reads count this as `needs_attention`, not a current synced workout.
+
+#769 is reopened for explicit owner-reviewed recovery. **Create replacement Garmin copy** is an app-only workout
+action, not Check, Retry, ordinary Send, or automatic repair. The server offers a preview only after a complete,
+current, same-binding inspection found both retained Workout and Schedule absent. The inspection is at most 24 hours
+old; a changed prescription/revision, account/connection/epoch, consent, active lease/attempt, plan lock, Pro loss,
+past date or completion rejects review/apply. A surviving Schedule remains unsupported for manual root replacement
+until its provider lifecycle is proved; fixture support does not enable that unproved state. The preview warns that
+404 is not definitive deletion evidence and a duplicate is possible if an old copy reappears. Its exact digest must
+be confirmed; the command changes neither the authored recipe nor other providers and preserves mapping approval.
+Idempotent mutation receipts prevent replay; the worker independently reinspects both IDs before creating one new
+pair. A fully reappearing pair is adopted without POST; partial reappearance, unknown/conflicting reads and permission
+failures stop for attention. The original IDs remain in immutable private attempt evidence. Uncertain root POST
+acceptance is never cleared by Retry, edits or a second replacement request. An accepted retained replacement ID can
+continue without repeating POST; this never claims watch receipt or links a completed activity by similarity.
+The explicit flow requires separately approved Functions/frontend release and authorized account-side proof before
+#769 is complete; automatic missing-Workout repair stays disabled. Repairs reuse the operation journal and
 stable QS identity; unknown replacement-POST acceptance remains blocked, including Retry. Stop, pause, transfers and
-deletion supersede repair. Pro expiry pauses it; past/provider-confirmed completed workouts remain protected. Successful
+deletion supersede repair. Pro expiry pauses it; past/provider-confirmed completed workouts remain protected. Automatic
 repair cycles are limited to two per delivery per rolling day, then deferred until capacity returns. The production
 policy version change invalidates older evidence so it must be observed under the artifact-specific rules. No new
 webhook endpoint is introduced.
@@ -2350,10 +2365,13 @@ and device availability are separate. Unsupported verification reads **Sent · r
 or verified presence. Checking/restoring/deferred/inconclusive states remain concise, with thin global scrollbars,
 surface-free details, keyboard access and sign-out guards. Provider-delivery restrictions are unchanged.
 
-MCP impact: none. `get_training_sync_status` already consumes the sanitized delivery projection, where confirmed missing
-artifacts stop counting as synced and restoration remains an existing non-success delivery outcome. This change adds no
-tool, scope, field, provider ID, live check, write authority or provider payload to MCP; registered schemas, Assistant
-routing and bundled plugin guidance remain unchanged.
+MCP read impact: `get_training_sync_status` consumes the sanitized delivery projection; confirmed missing artifacts
+and observed missing Garmin Workouts no longer count as synced. Regression tests cover retained prior acceptance,
+`needs_attention`, zero synced count and private-evidence exclusion. No registered schema, scope, field or plugin
+metadata changes. The app-only `replace` action is explicitly rejected by registered v1 proposals; it must not widen
+Assistant/MCP authority via the shared app enum. The additive approval-gated MCP/Assistant replacement flow is tracked
+in #801 (real #583 subissue in Project 2), not silently deferred or routed through Send/Retry. Existing MCP reads need
+no new provider HTTP and never expose observed keys, review binding, journals or old/new provider IDs.
 
 Diagnostics use `[TrainingVerification]` with allowlisted event/provider/category/coverage/latency fields and
 `[TrainingDelivery]` acceptance/recovery events. Example Cloud Logging filters:

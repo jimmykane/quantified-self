@@ -25,6 +25,13 @@ describe('Training delivery contracts', () => {
   it('round trips exact JSON without touching the workout recipe', () => {
     expect(parseTrainingDeliveryCommandV1(JSON.parse(JSON.stringify(command)))).toEqual(command);
   });
+  it('limits replacement to the Garmin workout, existing zone and a strict review digest', () => {
+    const { timeZone, ...base } = command;
+    expect(parseTrainingDeliveryCommandV1({ ...base, action: 'replace', approvalDigest: 'b'.repeat(64) }).action).toBe('replace');
+    for (const patch of [{ provider: 'wahoo' }, { scope: 'plan' }, { timeZone }, { remoteId: '123' }, { approvalDigest: 'bad' }]) {
+      expect(() => parseTrainingDeliveryCommandV1({ ...base, action: 'replace', ...patch })).toThrow();
+    }
+  });
   it.each(['retained_ownership_unknown', 'account_not_confirmed', 'plan_absence_not_confirmed'] as const)(
     'keeps %s as a fixed private diagnostic, not arbitrary provider evidence', wahooContractCheck => {
       const error = new TrainingDeliveryTransportError('uncertain', 0, {

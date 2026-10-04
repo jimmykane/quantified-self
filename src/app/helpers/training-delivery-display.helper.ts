@@ -1,4 +1,4 @@
-import { TrainingDeliveryContractError, type TrainingDeliveryStatus, type TrainingDeliveryStatusV1 } from '@shared/training-provider-delivery';
+import { TrainingDeliveryContractError, type TrainingDeliveryAction, type TrainingDeliveryStatus, type TrainingDeliveryStatusV1 } from '@shared/training-provider-delivery';
 import type { TrainingWorkoutCompletionV1 } from '@shared/training-workout-completion';
 
 export const TRAINING_DELIVERY_STATUS_LABELS: Record<TrainingDeliveryStatus, string> = {
@@ -45,12 +45,15 @@ export function trainingDeliveryCopyMessage(status: TrainingDeliveryStatusV1): s
     : 'Your latest changes are not confirmed in the connected app.';
 }
 
-export function trainingDeliveryCommandError(error: unknown, saving: boolean): string {
+export function trainingDeliveryCommandError(error: unknown, saving: boolean, action?: TrainingDeliveryAction): string {
   const code = (error as { code?: unknown } | null)?.code;
   const name = (error as { name?: unknown } | null)?.name;
   if (code === 'functions/aborted' || code === 'aborted') return 'The schedule or sync settings changed. Cancel and review the latest version.';
   if (code === 'functions/unauthenticated' || code === 'unauthenticated') return 'Your session expired. Sign in again to manage delivery.';
   if (code === 'functions/permission-denied' || code === 'permission-denied') return 'This account cannot make this sync change. Check your access and Pro subscription.';
+  if (action === 'replace' && (code === 'functions/failed-precondition' || code === 'failed-precondition')) {
+    return 'Replacement is unavailable for the current state. Cancel this review, check Garmin again, then review the latest workout. Past or completed workouts and unfinished sends cannot be replaced.';
+  }
   if (saving) return 'Saving was not confirmed. Retry this confirmation safely with the same request, or close and check the sync status.';
   if (code === 'functions/deadline-exceeded' || code === 'deadline-exceeded' || name === 'TimeoutError') {
     return 'The sync check timed out. No sync settings were changed. Check your connection and try again.';

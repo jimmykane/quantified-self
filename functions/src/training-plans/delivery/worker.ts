@@ -10,7 +10,7 @@ import { readDeliveryContext, writeDelivery } from './store';
 import { deliveryContentDigest, resolveDeliveryIntent } from './intent';
 import { stageTrainingDeliveryReconciliation } from './marker';
 import { inspectionBinding } from './verification-evidence';
-import { canRepairMissingArtifacts, VERIFICATION_DAY_MS } from './verification-contracts';
+import { canExecuteDeliveryRepair, VERIFICATION_DAY_MS } from './verification-contracts';
 import { emptyVerification } from './verification-queue';
 import { deliveryDiagnosticLabels, deliveryDiagnosticMapping, observeDeliveryCheckpoint, type DeliveryDiagnosticPhase } from './diagnostics';
 import { processTrainingDeliveryBatch } from './batch-worker';
@@ -101,7 +101,7 @@ export async function processTrainingDelivery(runtime: DeliveryRuntime, uid: str
       if (!kind) { writeDelivery(runtime, tx, uid, ledger); tx.delete(jobRef); return null; }
       if (kind === 'upsert' && ledger.repair?.continuation) {
         const policy = transport.inspection?.policy;
-        if (!ledger.actual || !policy || !canRepairMissingArtifacts(policy, ledger.repair.missing)) {
+        if (!ledger.actual || !policy || !canExecuteDeliveryRepair(policy, ledger.repair)) {
           ledger.status = 'provider_unavailable';
           writeDelivery(runtime, tx, uid, ledger); tx.delete(jobRef); return null;
         }
@@ -110,13 +110,17 @@ export async function processTrainingDelivery(runtime: DeliveryRuntime, uid: str
         ledger.repair = { ...ledger.repair, policyVersion: policy.version,
           binding: inspectionBinding({ ...ledger, actual: ledger.repair.original }, context, policy) };
       }
-      if (kind === 'upsert' && ledger.verification?.missing && (!ledger.repair || !transport.inspection?.policy
-        || !canRepairMissingArtifacts(transport.inspection.policy, ledger.repair.missing)
+      if (kind === 'upsert' && (ledger.verification?.missing || ledger.repair?.manualReplacement) && (!ledger.repair || !transport.inspection?.policy
+        || !canExecuteDeliveryRepair(transport.inspection.policy, ledger.repair)
         || inspectionBinding({ ...ledger, actual: ledger.repair.original }, context, transport.inspection.policy) !== ledger.repair.binding)) {
         // An edit/transfer/reconnect invalidates confirmation, not the stable remote identity.
         // Re-inspect current intent before another repair; never fall through to ordinary upsert.
+        if (ledger.repair?.manualReplacement) {
+          ledger.status = 'needs_attention';
+          ledger.issues = ['The workout or provider authority changed. Check Garmin again and review replacement using the latest version.'];
+        }
         ledger.repair = null;
-        ledger.verification = { ...ledger.verification, binding: '', state: 'pending', missing: false, missingKeys: [],
+        ledger.verification = { ...emptyVerification(runtime.now()), ...ledger.verification, observedMissingKeys: [], binding: '', state: 'pending', missing: false, missingKeys: [],
           suspectedAtMs: null, checkedAtMs: null, cursor: null, nextCheckAtMs: runtime.now() };
         writeDelivery(runtime, tx, uid, ledger);
         tx.set(jobRef, { uid, kind: 'verification', priority: 'ordinary', deliveryId: id, dueAtMs: 0, dispatchToken: randomUUID() });
@@ -349,7 +353,7 @@ export async function processTrainingDelivery(runtime: DeliveryRuntime, uid: str
         || ledger.blockedConnectionGeneration === context.connection.generation) return 'blocked';
       const intent = resolveDeliveryIntent(context, ledger);
       if (operation.kind === 'upsert' && operation.repair && (!context.transport?.inspection?.policy
-        || !canRepairMissingArtifacts(context.transport.inspection.policy, operation.repair.missing)
+        || !canExecuteDeliveryRepair(context.transport.inspection.policy, operation.repair)
         || inspectionBinding({ ...ledger, actual: operation.repair.original, desiredDigest: operation.digest },
           context, context.transport.inspection.policy) !== operation.repair.binding)) return 'recover-only';
       return (operation.kind === 'upsert' && intent.desired === 'present' && intent.digest === operation.digest)
@@ -394,6 +398,7 @@ export async function processTrainingDelivery(runtime: DeliveryRuntime, uid: str
       latencyMs: runtime.now() - startedAt, ...diagnosticLabels() });
   } catch (error) {
     const failure = error instanceof TrainingDeliveryTransportError ? error : new TrainingDeliveryTransportError('uncertain');
+    if (operation.repair?.manualReplacement && failure.kind === 'uncertain') inspectionUncertain = true;
     let retryCount = 0;
     await db.runTransaction(async tx => {
       if ((await getUserDeletionGuardStateInTransaction(db, tx, uid)).shouldSkip) return;
@@ -420,7 +425,8 @@ export async function processTrainingDelivery(runtime: DeliveryRuntime, uid: str
         failure.retryAfterMs > 0 ? runtime.now() + failure.retryAfterMs : 0);
       ledger.retryAtMs = Math.max(runtime.now() + getCloudTaskRetryBackoffSeconds(ledger.retries) * 1000, ledger.providerNotBeforeMs);
       ledger.updatedAtMs = runtime.now();
-      if (operation.repair && ledger.verification) ledger.verification.state = failure.kind === 'deferred' ? 'deferred' : 'confirmed_missing';
+      if (operation.repair && ledger.verification) ledger.verification.state = failure.kind === 'deferred' ? 'deferred'
+        : operation.repair.manualReplacement ? 'unknown' : 'confirmed_missing';
       writeDelivery(runtime, tx, uid, ledger);
       if (ledger.status === 'retrying') tx.set(jobRef, { uid, kind: 'delivery', deliveryId: id,
         provider: ledger.provider, destinationKey: ledger.destinationKey, operationKind: operation.kind,
