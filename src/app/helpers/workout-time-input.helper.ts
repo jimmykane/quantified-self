@@ -19,14 +19,18 @@ export function splitWorkoutEditorMinutes(value: number | null): WorkoutDuration
   };
 }
 
-export function workoutDurationPartsToMinutes(parts: WorkoutDurationParts): number {
+export function workoutDurationPartsToSeconds(parts: WorkoutDurationParts): number {
   const { hours, minutes, seconds } = parts;
   if (hours === null || minutes === null || seconds === null
     || !Number.isSafeInteger(hours) || hours < 0
     || !Number.isInteger(minutes) || minutes < 0 || minutes >= 60
     || !Number.isFinite(seconds) || seconds < 0 || seconds >= 60) return Number.NaN;
   const total = hours * 3600 + minutes * 60 + seconds;
-  return Number.isFinite(total) && total > 0 ? total / 60 : Number.NaN;
+  return Number.isFinite(total) && total > 0 ? total : Number.NaN;
+}
+
+export function workoutDurationPartsToMinutes(parts: WorkoutDurationParts): number {
+  return workoutDurationPartsToSeconds(parts) / 60;
 }
 
 /** Pace input is already expressed in the editor's selected distance denominator. */
@@ -42,7 +46,7 @@ export function parseWorkoutEditorPace(text: string): number | null {
   const value = text.trim().replace(',', '.');
   if (!value) return null;
   let seconds: number;
-  if (/^\d+(?:\.\d+)?(?:e[+-]?\d+)?$/i.test(value)) {
+  if (/^\+?(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?$/i.test(value)) {
     seconds = Number(value) * 60;
   } else {
     const match = /^(?:(\d+):)?(\d+):([0-5]?\d(?:\.\d+)?)$/.exec(value);

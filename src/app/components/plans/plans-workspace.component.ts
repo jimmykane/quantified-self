@@ -1220,8 +1220,10 @@ export class PlansWorkspaceComponent {
     });
   }
 
-  updateStep(nodeIndex: number, stepIndex: number | null, field: string, value: unknown): void {
+  updateStep(nodeIndex: number, stepIndex: number | null, field: string, value: unknown, durationSeconds?: number): void {
     if (this.busyAction()) return;
+    const sourceDuration = typeof value === 'number' && Number.isFinite(durationSeconds) && durationSeconds > 0
+      && durationSeconds / 60 === value ? { editorValue: value, seconds: durationSeconds } : undefined;
     this.editor.update(session => {
       if (!session) return null;
       const nodes = session.value.nodes.map((node, index) => {
@@ -1234,7 +1236,7 @@ export class PlansWorkspaceComponent {
           }
           return { ...node, [field]: value,
             ...(field === 'endingValue' && value !== node[field]
-              ? { sourceDistance: undefined, sourceDuration: undefined } : {}),
+              ? { sourceDistance: undefined, sourceDuration: node.endingKind === 'time' ? sourceDuration : undefined } : {}),
             ...((field === 'targetKind' || field === 'targetMinimum' || field === 'targetMaximum') && value !== node[field]
               ? { sourcePace: undefined } : {}),
           } as ManualWorkoutEditorStep;
@@ -1250,7 +1252,7 @@ export class PlansWorkspaceComponent {
               }
               return { ...step, [field]: value,
                 ...(field === 'endingValue' && value !== step[field]
-                  ? { sourceDistance: undefined, sourceDuration: undefined } : {}),
+                  ? { sourceDistance: undefined, sourceDuration: step.endingKind === 'time' ? sourceDuration : undefined } : {}),
                 ...((field === 'targetKind' || field === 'targetMinimum' || field === 'targetMaximum') && value !== step[field]
                   ? { sourcePace: undefined } : {}),
               } as ManualWorkoutEditorStep;

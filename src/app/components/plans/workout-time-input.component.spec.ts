@@ -50,6 +50,37 @@ describe('WorkoutTimeInputComponent', () => {
     expect(child.error()).toBeNull();
   });
 
+  it('emits the exact authored seconds alongside the legacy minute boundary', async () => {
+    const fixture = await render();
+    const child = fixture.debugElement.query(By.directive(WorkoutTimeInputComponent)).componentInstance as WorkoutTimeInputComponent;
+    const emit = vi.spyOn(child.durationChange, 'emit');
+    child.changePart('minutes', 0); child.changePart('seconds', 31);
+    expect(emit).toHaveBeenLastCalledWith({ minutes: 31 / 60, seconds: 31 });
+    child.changePart('seconds', null);
+    expect(emit).toHaveBeenLastCalledWith({ minutes: NaN, seconds: NaN });
+    fixture.componentInstance.disabled.set(true);
+    fixture.detectChanges(); await fixture.whenStable();
+    emit.mockClear(); child.changePart('seconds', 31);
+    expect(emit).not.toHaveBeenCalled();
+  });
+
+  it('keeps no-op typing silent so displayed precision cannot overwrite the original value', async () => {
+    const fixture = await render();
+    fixture.componentInstance.value.set(123.456789012345 / 60);
+    fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+    const child = fixture.debugElement.query(By.directive(WorkoutTimeInputComponent)).componentInstance as WorkoutTimeInputComponent;
+    const emitValue = vi.spyOn(child.valueChange, 'emit');
+    const emitDuration = vi.spyOn(child.durationChange, 'emit');
+    child.changePart('hours', child.parts().hours);
+    child.changePart('seconds', child.parts().seconds);
+    expect(emitValue).not.toHaveBeenCalled(); expect(emitDuration).not.toHaveBeenCalled();
+    fixture.componentInstance.mode.set('pace');
+    fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+    child.changePace(child.paceText());
+    expect(emitValue).not.toHaveBeenCalled();
+    expect(fixture.componentInstance.value()).toBe(123.456789012345 / 60);
+  });
+
   it('accepts colon pace entry, retains partial typing and refreshes on external changes', async () => {
     const fixture = await render();
     fixture.componentInstance.mode.set('pace'); fixture.componentInstance.label.set('Faster min/km');

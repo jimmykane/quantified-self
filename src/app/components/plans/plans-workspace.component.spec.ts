@@ -195,8 +195,32 @@ describe('PlansWorkspaceComponent', () => {
     const fixture = await renderPlans();
     expect(fixture.nativeElement.querySelector('[data-duration-part="minutes"]').value).toBe('2');
     expect(Number(fixture.nativeElement.querySelector('[data-duration-part="seconds"]').value)).toBeCloseTo(3.456789012345, 9);
+    const hours: HTMLInputElement = fixture.nativeElement.querySelector('[data-duration-part="hours"]');
+    hours.dispatchEvent(new Event('input', { bubbles: true }));
+    fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
     await fixture.componentInstance.saveWorkout();
     expect(mutate.mock.calls[0][0].operation.structure).toEqual(schedule.workouts[0].structure);
+  });
+
+  it.each([31, 62, 123, 500, 0.123456789012345])('saves exactly %s authored seconds for ordinary and repeat steps', async seconds => {
+    setRouteState({ mode: 'create', scope: 'standalone', date: '2026-09-09' });
+    const fixture = await renderPlans();
+    const component = fixture.componentInstance;
+    component.updateEditorField('title', 'Exact seconds');
+    component.addEditorRepeat();
+    fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+    const groups: HTMLElement[] = [...fixture.nativeElement.querySelectorAll('.duration-fields')];
+    for (const group of [groups[0], groups[1]]) {
+      for (const [part, value] of [['minutes', Math.floor(seconds / 60)], ['seconds', seconds % 60]]) {
+        const input = group.querySelector(`[data-duration-part="${part}"]`) as HTMLInputElement;
+        input.value = String(value); input.dispatchEvent(new Event('input', { bubbles: true }));
+        fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+      }
+    }
+    await component.saveWorkout();
+    const nodes = mutate.mock.calls[0][0].operation.structure.nodes;
+    expect(nodes[0].ending.seconds).toBe(seconds);
+    expect(nodes[1].steps[0].ending.seconds).toBe(seconds);
   });
 
   it.each([

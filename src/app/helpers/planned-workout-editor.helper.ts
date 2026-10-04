@@ -109,7 +109,7 @@ function distanceMetersFromEditor(
     ? step.sourceDistance.meters : step.endingValue * distanceScale(sport, units);
 }
 
-/** Keep a distance draft through lap toggles; time endings must not reuse its unit cache. */
+/** Keep time/distance drafts through lap toggles without reusing the other ending's unit cache. */
 export function changeManualWorkoutEditorStepEnding(
   step: ManualWorkoutEditorStep,
   endingKind: ManualWorkoutEnding,

@@ -5,7 +5,7 @@ import { MatInputModule } from '@angular/material/input';
 import type { ErrorStateMatcher } from '@angular/material/core';
 import {
   formatWorkoutEditorPace, parseWorkoutEditorPace, splitWorkoutEditorMinutes,
-  workoutDurationPartsToMinutes, type WorkoutDurationParts,
+  workoutDurationPartsToSeconds, type WorkoutDurationParts,
 } from '../../helpers/workout-time-input.helper';
 
 let nextDurationErrorId = 0;
@@ -25,6 +25,8 @@ export class WorkoutTimeInputComponent {
   readonly label = input('Duration');
   readonly disabled = input(false);
   readonly valueChange = output<number | null>();
+  /** Preserve authored seconds without a lossy seconds → editor minutes → seconds round trip. */
+  readonly durationChange = output<{ minutes: number; seconds: number }>();
   readonly parts = signal<WorkoutDurationParts>({ hours: 0, minutes: 0, seconds: 0 });
   readonly paceText = signal('');
   readonly error = signal<string | null>(null);
@@ -48,16 +50,18 @@ export class WorkoutTimeInputComponent {
   }
 
   changePart(part: keyof WorkoutDurationParts, value: number | null): void {
-    if (this.disabled()) return;
+    if (this.disabled() || Object.is(this.parts()[part], value)) return;
     const parts = { ...this.parts(), [part]: value };
     this.parts.set(parts);
-    const minutes = workoutDurationPartsToMinutes(parts);
+    const seconds = workoutDurationPartsToSeconds(parts);
+    const minutes = seconds / 60;
     this.error.set(Number.isFinite(minutes) ? null : 'Enter a positive duration. Minutes and seconds must be below 60.');
     this.emit(minutes);
+    this.durationChange.emit({ minutes, seconds });
   }
 
   changePace(text: string): void {
-    if (this.disabled()) return;
+    if (this.disabled() || text === this.paceText()) return;
     this.paceText.set(text);
     const minutes = parseWorkoutEditorPace(text);
     this.error.set(minutes !== null && Number.isFinite(minutes) ? null : 'Enter a positive pace as m:ss, for example 4:30.');

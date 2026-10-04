@@ -697,7 +697,7 @@
         @if (step.endingKind === 'time') {
           <app-workout-time-input class="workout-duration-input" [value]="step.endingValue"
             [disabled]="busyAction() !== null"
-            (valueChange)="updateStep(nodeIndex, stepIndex, 'endingValue', $event)"></app-workout-time-input>
+            (durationChange)="updateStep(nodeIndex, stepIndex, 'endingValue', $event.minutes, $event.seconds)"></app-workout-time-input>
         } @else if (step.endingKind === 'distance') {
           <mat-form-field subscriptSizing="dynamic">
             <mat-label>{{ editorDistanceUnit() }}</mat-label>

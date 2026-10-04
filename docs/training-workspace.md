@@ -565,7 +565,10 @@ Workout Library editor. Hours/minutes are nonnegative integers, minutes/seconds 
 fractional seconds remain representable. The editor's internal minute boundary is unchanged (1.25 → 75 seconds,
 1.5 → 90 seconds), while persisted v1 endings remain canonical seconds. Reopened times retain their exact saved seconds
 in an editor-only cache; unchanged saves and temporary Lap button → Time toggles cannot round the prescription.
-Distance selection or a duration edit discards that cache. Cleared/invalid drafts stay editable and fail before mutation.
+Distance selection discards that cache; duration edits replace it with the new prescription. Cleared/invalid drafts stay
+editable and fail before mutation. Retyping an unchanged displayed part or pace is a no-op, preserving exact source values.
+New duration input events also carry exact authored seconds to the editor-only cache: integer inputs such as 31 or 123
+seconds must not gain arithmetic noise by passing through decimal minutes. Neither event metadata nor the cache persists.
 Pace inputs accept m:ss (and h:mm:ss for long splits) plus legacy decimal minutes; Sports Lib's duration formatter
 renders editable splits in the already-selected denominator. Exact unchanged saved m/s targets keep the existing cache,
 including running min/km or min/mi, swimming /100 m or /100 yd and rowing /500 m. Range inversion remains an error.
