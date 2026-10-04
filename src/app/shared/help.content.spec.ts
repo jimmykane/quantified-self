@@ -57,10 +57,13 @@ describe('help.content', () => {
   });
   it('explains bounded Suunto live screens, native sensors/units and watch-controlled boundary alerts', () => {
     const content = HELP_SECTIONS.find(section => section.id === 'training-plans')!.content;
-    for (const phrase of ['## Suunto Guide screens and interval alerts', '**pace and HR**', '**power, HR and speed**',
+    for (const phrase of ['## Suunto Guide screens and interval alerts', '**block-average pace and current HR**', '**power, HR and speed**',
       'at most five fields', 'Long manual instructions stay text-only', 'Suunto renders native watch units',
       'not guaranteed to match the 500 m split', 'missing readings are unavailable, not zero',
-      'do not create recorded laps or lap averages', 'including rest/recovery and every repeat', '**Guide complete**',
+      "Suunto's current manual-lap average", 'not instant pace or the whole-workout average',
+      'create recorded laps at automatic step boundaries', 'does not create a duplicate',
+      'creates no opening lap', 'resets the displayed average early', 'including HR-only strength Guides',
+      'do not prove target adherence', 'including rest/recovery and every repeat', '**Guide complete**',
       'without adding workout time or stopping activity recording', '**your watch settings**',
       'no promised pre-end countdown beeps or out-of-target alerts', 'approximately 20 seconds',
       'prioritize your notes or exercise/set instructions', '**For 01m 30s**', '**Recover for 30s**', '**Rest for 02m 00s**',

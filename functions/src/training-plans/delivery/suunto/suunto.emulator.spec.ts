@@ -17,7 +17,7 @@ import { SuuntoHttpFixture } from '../test-support/suunto-http-fixture';
 import { buildSuuntoHealthWebhookAccountBinding, getSuuntoHealthWebhookAccountBindingRef } from '../../../suunto/health-webhook-binding';
 import { readSuuntoGuideCompletions, retainSuuntoGuideCompletions } from '../../../suunto/guide-completion';
 import { suuntoFitFixture, suuntoMultiSessionFitFixture } from '../test-support/suunto-fit-fixture';
-import { guideExternalId, assessSuuntoGuideV2ForRecovery, guidePayloadForRecovery } from './mapping';
+import { guideExternalId, assessSuuntoGuideV2ForRecovery, assessSuuntoGuideV3ForRecovery, guidePayloadForRecovery } from './mapping';
 import { deliveryIdentity } from '../intent';
 import { retainGarminFITWorkoutReferences } from '../../completion/fit-workout-evidence';
 import { standardWorkoutReferenceFitFixture } from '../test-support/suunto-fit-fixture';
@@ -45,9 +45,9 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Suunto worker with real F
   const send = async () => { await command('send'); await drain(); const row = await ledger(); await processTrainingDelivery(runtime, uid, row.id); await drain(); return ledger(); };
   // Simulate a journal and provider archive written by the previous deployed
   // serializer. The fixture, Firestore and all provider HTTP remain local/demo.
-  const startedV2 = async () => {
+  const startedLegacy = async (version: 'v2' | 'v3' = 'v2') => {
     const row = await ledger(); const operation = row.attempt!;
-    operation.digest = assessSuuntoGuideV2ForRecovery(operation.workout!, operation.destinationKey,
+    operation.digest = (version === 'v2' ? assessSuuntoGuideV2ForRecovery : assessSuuntoGuideV3ForRecovery)(operation.workout!, operation.destinationKey,
       operation.timeZone, 'Quantified Self', operation.strength).digest;
     const payload = guidePayloadForRecovery(operation, 'Quantified Self')!;
     const [id, remote] = [...server.guides.entries()][0];
@@ -57,6 +57,7 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Suunto worker with real F
     await ref.collection('attempts').doc(operation.id).update({ operation });
     return { row, operation, id, payload };
   };
+  const startedV2 = () => startedLegacy('v2');
   // Exercise production policy binding while ensuring all provider I/O stays synthetic.
   const useProductionPolicy = () => {
     vi.stubEnv('SUUNTOAPP_GUIDE_OWNER', 'Quantified Self');
@@ -102,7 +103,7 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Suunto worker with real F
     await drain(); expect(server.guides.size).toBe(1);
     expect([...server.guides.values()][0].guide.steps[0]).toMatchObject({ notification: { title: 'Work', text: 'For 10m 00s' } });
     expect(logger.info).toHaveBeenCalledWith('[TrainingDelivery]', expect.objectContaining({
-      event: 'accepted', provider: 'suunto', guideMappingVersion: 'suunto-guides-v3', deliveryPhase: 'execute',
+      event: 'accepted', provider: 'suunto', guideMappingVersion: 'suunto-guides-v4', deliveryPhase: 'execute',
     }));
     expect(await ledger()).toMatchObject({ status: 'delivered', verification: { state: 'unsupported', missing: false } });
     expect((await user().collection(TRAINING_DELIVERY_VERIFICATIONS).doc(row.id).get()).data())
@@ -358,13 +359,14 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Suunto worker with real F
     expect((await ledger()).status).toBe('delivered');
     expect(server.calls.filter(call => ['POST', 'PUT'].includes(call.method))).toHaveLength(2);
   });
-  it('honors the exact previously approved v2 loss through v3 delivery, but not a newly edited instruction', async () => {
+  it.each([assessSuuntoGuideV2ForRecovery, assessSuuntoGuideV3ForRecovery])(
+    'honors exact legacy loss approval through v4 delivery, but not a newly edited instruction', async assessLegacy => {
     await user().collection('scheduledWorkouts').doc('w').update({ 'structure.nodes': [{
       kind: 'step', id: 'step', purpose: 'work', ending: { kind: 'time', seconds: 600 }, targets: [], note: 'A'.repeat(45),
     }] });
     const transport = runtime.transport('suunto')!;
     const previous = vi.spyOn(transport, 'assess').mockImplementation((workout, destination, zone, strength) =>
-      assessSuuntoGuideV2ForRecovery(workout, destination, zone, 'Quantified Self', strength));
+      assessLegacy(workout, destination, zone, 'Quantified Self', strength));
     await command('send'); await drain();
     const blocked = await ledger(); expect(blocked.status).toBe('approval_required');
     const setting = user().collection('trainingDeliverySettings').doc('workout_w_suunto');
@@ -396,7 +398,8 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Suunto worker with real F
     expect((await ledger()).status).toBe('approval_required');
     expect(server.calls.filter(call => call.method === 'PUT')).toHaveLength(1);
   });
-  it.each(['running', 'strength'])('recovers a v2 %s create with a lost ACK then upgrades without another POST', async sport => {
+  it.each((['v2', 'v3'] as const).flatMap(version => ['running', 'strength'].map(sport => [version, sport] as const)))(
+    'recovers a %s %s create with a lost ACK then upgrades without another POST', async (version, sport) => {
     if (sport === 'strength') {
       const details = { version: 1 as const, workoutId: 'w', revision: 1, exercises: [{ id: 'squat', name: 'Squat', sets: [
         { id: 'one', ending: { kind: 'repetitions' as const, repetitions: 5 }, restAfterSeconds: 30 },
@@ -409,42 +412,51 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Suunto worker with real F
     } };
     const original = await send(); expect(original.status).toBe('retrying');
     expect(logger.warn).toHaveBeenCalledWith('[TrainingDelivery]', expect.objectContaining({
-      event: 'failure', guideMappingVersion: 'suunto-guides-v3', deliveryPhase: 'execute',
+      event: 'failure', guideMappingVersion: 'suunto-guides-v4', deliveryPhase: 'execute',
     }));
-    const legacy = await startedV2();
-    expect(JSON.stringify(legacy.payload)).not.toContain('notification');
+    const legacy = await startedLegacy(version);
+    expect(JSON.stringify(legacy.payload).includes('notification')).toBe(version === 'v3');
+    expect(JSON.stringify(legacy.payload)).not.toContain('aggregate');
     await command('retry'); await drain(); await processTrainingDelivery(runtime, uid, original.id); await drain();
     expect((await ledger()).actual?.ids.guide).toBe(legacy.id);
     expect((await ledger()).attempt).toBeNull();
     expect(logger.info).toHaveBeenCalledWith('[TrainingDelivery]', expect.objectContaining({
-      event: 'recovered_acceptance', guideMappingVersion: 'suunto-guides-v2', deliveryPhase: 'recover',
+      event: 'recovered_acceptance', guideMappingVersion: `suunto-guides-${version}`, deliveryPhase: 'recover',
     }));
     await processTrainingDelivery(runtime, uid, original.id); await drain();
     expect((await ledger()).status).toBe('delivered');
     expect(server.calls.filter(call => call.method === 'POST')).toHaveLength(1);
-    expect(server.calls.filter(call => call.method === 'PUT')).toHaveLength(1);
+    // v3 strength already has the exact HR-only v4 payload. Upgrade the digest
+    // without a redundant PUT; all other historical screen layouts need one.
+    expect(server.calls.filter(call => call.method === 'PUT')).toHaveLength(version === 'v3' && sport === 'strength' ? 0 : 1);
     expect(server.guides.get(legacy.id)!.guide.steps.at(-1)).toMatchObject({ title: 'Complete' });
     if (sport === 'running') {
       expect(server.guides.get(legacy.id)!.guide.steps[0]).toMatchObject({ notification: { title: 'Work', text: 'For 10m 00s' } });
+      expect(server.guides.get(legacy.id)!.guide.steps[0]).toMatchObject({ fields: [
+        { type: 'pace', title: 'Avg pace', window: 'manualLap', aggregate: 'average' },
+        { type: 'stepDurationCountdown', value: 600 }, { type: 'heartRate', title: 'HR' },
+      ] });
+      expect(server.guides.get(legacy.id)!.guide.steps.at(-1)).toMatchObject({ createManualLap: true });
     } else {
       expect(server.guides.get(legacy.id)!.guide.steps[1]).toMatchObject({ notification: { title: 'Rest', text: 'Rest for 30s' } });
     }
     expect(logger.info).toHaveBeenCalledWith('[TrainingDelivery]', expect.objectContaining({
-      event: 'accepted', guideMappingVersion: 'suunto-guides-v3', deliveryPhase: 'execute',
+      event: 'accepted', guideMappingVersion: 'suunto-guides-v4', deliveryPhase: 'execute',
     }));
     const logs = JSON.stringify([...vi.mocked(logger.info).mock.calls, ...vi.mocked(logger.warn).mock.calls]);
     for (const value of [uid, legacy.id, legacy.operation.digest, legacy.operation.destinationKey, 'notification', 'Squat']) {
       expect(logs).not.toContain(value);
     }
   });
-  it.each(['not-started', 'ready-create', 'rejected-create', 'unaccepted-update'])(
-    'retains exact v2 loss approval when retiring a %s attempt during upgrade', async state => {
+  it.each((['v2', 'v3'] as const).flatMap(version =>
+    ['not-started', 'ready-create', 'rejected-create', 'unaccepted-update'].map(state => [version, state] as const)))(
+    'retains exact %s loss approval when retiring a %s attempt during upgrade', async (version, state) => {
     await user().collection('scheduledWorkouts').doc('w').update({ 'structure.nodes': [{
       kind: 'step', id: 'step', purpose: 'work', ending: { kind: 'time', seconds: 600 }, targets: [], note: 'A'.repeat(45),
     }] });
     const transport = runtime.transport('suunto')!;
     const previous = vi.spyOn(transport, 'assess').mockImplementation((workout, destination, zone, strength) =>
-      assessSuuntoGuideV2ForRecovery(workout, destination, zone, 'Quantified Self', strength));
+      (version === 'v2' ? assessSuuntoGuideV2ForRecovery : assessSuuntoGuideV3ForRecovery)(workout, destination, zone, 'Quantified Self', strength));
     await command('send'); await drain();
     const blocked = await ledger();
     const setting = user().collection('trainingDeliverySettings').doc('workout_w_suunto');
@@ -464,7 +476,7 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Suunto worker with real F
     if (state === 'unaccepted-update') {
       const payload = guidePayloadForRecovery(operation, 'Quantified Self')!;
       // The previous owned copy survives a lost/nonaccepted PUT. Do not mark
-      // this newer prescription accepted, but preserve the identity for v3 PUT.
+      // this newer prescription accepted, but preserve the identity for v4 PUT.
       const prior = structuredClone(payload);
       if (prior.steps[0].type !== 'fields') throw new Error('Expected fields');
       prior.steps[0].fields = prior.steps[0].fields.filter(field => field.type !== 'text');
@@ -504,7 +516,7 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Suunto worker with real F
     expect((await ledger()).status).toBe('approval_required');
     expect(server.calls.filter(call => ['POST', 'PUT'].includes(call.method))).toHaveLength(writes);
   });
-  it('recovers a v2 reschedule/update with a lost ACK before applying the new screen layout', async () => {
+  it.each(['v2', 'v3'] as const)('recovers a %s reschedule/update with a lost ACK before applying the new screen layout', async version => {
     const original = await send();
     await user().collection('scheduledWorkouts').doc('w').update({ title: 'Rescheduled', localDate: '2026-09-18', revision: 2 });
     await mark();
@@ -512,7 +524,7 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Suunto worker with real F
       server.afterHandle = null; throw new SuuntoGuideHttpError('uncertain', false);
     } };
     await processTrainingDelivery(runtime, uid, original.id);
-    const legacy = await startedV2();
+    const legacy = await startedLegacy(version);
     expect(legacy.operation.progress).toMatchObject({ step: 'update', state: 'started' });
     await command('retry'); await drain(); await processTrainingDelivery(runtime, uid, original.id); await drain();
     expect((await ledger()).actual).toMatchObject({ ids: original.actual!.ids, localDate: '2026-09-18' });
@@ -523,29 +535,31 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Suunto worker with real F
     expect(server.calls.filter(call => call.method === 'POST')).toHaveLength(1);
     expect(server.calls.filter(call => call.method === 'PUT')).toHaveLength(2);
   });
-  it.each(['digest', 'content', 'missing'])('keeps a legacy uncertain create unresolved on %s mismatch, even on Retry', async change => {
+  it.each((['v2', 'v3'] as const).flatMap(version =>
+    ['digest', 'content', 'missing'].map(change => [version, change] as const)))(
+    'keeps a %s uncertain create unresolved on %s mismatch, even on Retry', async (version, change) => {
     server.afterHandle = async request => { if (request.method === 'POST') {
       server.afterHandle = null; throw new SuuntoGuideHttpError('uncertain', false);
     } };
-    const original = await send(); const legacy = await startedV2();
+    const original = await send(); const legacy = await startedLegacy(version);
     if (change === 'digest') await user().collection(DELIVERY_LEDGER).doc(original.id).update({ 'attempt.digest': 'unrecognized-version-digest' });
     if (change === 'content') server.guides.get(legacy.id)!.guide.name = 'Different prescription';
     if (change === 'missing') server.guides.clear();
     await command('retry'); await drain(); await processTrainingDelivery(runtime, uid, original.id); await drain();
     expect((await ledger()).status).toBe('needs_attention');
     expect(logger.warn).toHaveBeenCalledWith('[TrainingDelivery]', expect.objectContaining({
-      event: 'failure', guideMappingVersion: change === 'digest' ? 'unknown' : 'suunto-guides-v2', deliveryPhase: 'recover',
+      event: 'failure', guideMappingVersion: change === 'digest' ? 'unknown' : `suunto-guides-${version}`, deliveryPhase: 'recover',
     }));
     await command('retry'); await drain(); await processTrainingDelivery(runtime, uid, original.id); await drain();
     expect((await ledger()).status).toBe('needs_attention');
     expect(server.calls.filter(call => call.method === 'POST')).toHaveLength(1);
     expect(server.calls.filter(call => call.method === 'PUT')).toHaveLength(0);
   });
-  it('recovers the v2 identity after consent withdrawal without upgrading or recreating it', async () => {
+  it.each(['v2', 'v3'] as const)('recovers the %s identity after consent withdrawal without upgrading or recreating it', async version => {
     server.afterHandle = async request => { if (request.method === 'POST') {
       server.afterHandle = null; throw new SuuntoGuideHttpError('uncertain', false);
     } };
-    const original = await send(); await startedV2();
+    const original = await send(); await startedLegacy(version);
     await command('stop'); await drain(); now = original.retryAtMs + 1;
     await processTrainingDelivery(runtime, uid, original.id); await drain();
     await processTrainingDelivery(runtime, uid, original.id); await drain();
@@ -581,7 +595,7 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Suunto worker with real F
     await command('retry'); await drain(); await processTrainingDelivery(runtime, uid, row.id); await drain();
     expect((await ledger()).status).toBe('delivered'); expect(server.guides.size).toBe(1);
     expect(logger.info).toHaveBeenCalledWith('[TrainingDelivery]', expect.objectContaining({
-      event: 'accepted', guideMappingVersion: 'suunto-guides-v3', deliveryPhase: 'execute',
+      event: 'accepted', guideMappingVersion: 'suunto-guides-v4', deliveryPhase: 'execute',
     }));
     expect((await user().collection('trainingDeliverySettings').doc('workout_w_suunto').get()).data()?.enabled).toBe(true);
   });

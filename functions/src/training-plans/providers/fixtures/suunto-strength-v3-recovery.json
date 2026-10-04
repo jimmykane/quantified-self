@@ -1,0 +1,116 @@
+{
+  "type": "sequence",
+  "name": "Gym day",
+  "description": "Gym day",
+  "shortDescription": "Gym day",
+  "owner": "Quantified Self",
+  "url": "https://quantified-self.io/training/plans",
+  "activities": [
+    23
+  ],
+  "usage": "workout",
+  "localDate": "2026-10-01",
+  "externalId": "qs-suunto-MaHR3o_iy9pDiJFjqOq6_eiiMGeOqDNG0O2cpSQV3gA",
+  "steps": [
+    {
+      "id": "qs-suunto-_kSSCOxTCqKkUblEKSuBESp_uuyHJPwy1sH51MAlJFs",
+      "type": "fields",
+      "title": "Work",
+      "fields": [
+        {
+          "type": "heartRate",
+          "title": "HR"
+        },
+        {
+          "type": "text",
+          "value": "Back squat - set 1 - 5 reps - 80 kg"
+        }
+      ],
+      "transitions": [
+        {
+          "condition": {
+            "type": "manualLap"
+          }
+        }
+      ],
+      "notification": {
+        "title": "Work",
+        "text": "Back squat - set 1 - 5 reps - 80 kg"
+      }
+    },
+    {
+      "id": "qs-suunto-pb6iZ4_1jnTIlfX4aUj7k8lZi97PCjJmga3SiK4xCPo",
+      "type": "fields",
+      "title": "Rest",
+      "fields": [
+        {
+          "type": "heartRate",
+          "title": "HR"
+        },
+        {
+          "type": "stepDurationCountdown",
+          "value": 120,
+          "title": "Remain"
+        }
+      ],
+      "transitions": [
+        {
+          "condition": {
+            "type": "stepDuration",
+            "value": 120
+          }
+        }
+      ],
+      "notification": {
+        "title": "Rest",
+        "text": "Rest for 02m 00s"
+      }
+    },
+    {
+      "id": "qs-suunto-C-jdc3AUybcbraUAOxdmqj43mzpTs53oMm_Rpnt42sU",
+      "type": "fields",
+      "title": "Work",
+      "fields": [
+        {
+          "type": "heartRate",
+          "title": "HR"
+        },
+        {
+          "type": "stepDurationCountdown",
+          "value": 30,
+          "title": "Remain"
+        },
+        {
+          "type": "text",
+          "value": "Back squat - set 2 - 30 seconds"
+        }
+      ],
+      "transitions": [
+        {
+          "condition": {
+            "type": "stepDuration",
+            "value": 30
+          }
+        }
+      ],
+      "notification": {
+        "title": "Work",
+        "text": "Back squat - set 2 - 30 seconds"
+      }
+    },
+    {
+      "type": "fields",
+      "title": "Complete",
+      "fields": [
+        {
+          "type": "text",
+          "value": "Guide complete"
+        }
+      ],
+      "notification": {
+        "title": "Complete",
+        "text": "Guide complete"
+      }
+    }
+  ]
+}

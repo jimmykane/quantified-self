@@ -503,6 +503,13 @@ describe('Training plan MCP reads', () => {
     expect(result.workout.displaySteps[0].text).toContain('mi');
     expect(JSON.stringify(result)).not.toContain('estimated');
     expect(TRAINING_RECIPE_SCHEMA.safeParse({ ...structure, providerId: 'private' }).success).toBe(false);
+    for (const privateField of [{ createManualLap: true }, { window: 'manualLap', aggregate: 'average' },
+      { guideMappingVersion: 'suunto-guides-v4' }, { compatibleApprovalDigests: ['private'] }]) {
+      expect(TRAINING_RECIPE_SCHEMA.safeParse({ ...structure,
+        nodes: [{ ...structure.nodes[0], ...privateField }] }).success).toBe(false);
+      expect(TRAINING_READ_OUTPUTS.get_planned_workout.safeParse({ ...result,
+        workout: { ...result.workout, ...privateField } }).success).toBe(false);
+    }
   });
   it('preserves an exact mountain-biking sport through the existing planned-workout read contract', async () => {
     const f = fixture();

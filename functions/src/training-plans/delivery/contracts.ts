@@ -25,6 +25,8 @@ export interface DeliveryAssessment {
   /** Private, adapter-proved equivalent approval for the identical prescription
    * before a presentation-only mapping upgrade. Never exposed as a wire field. */
   compatibleApprovalDigest?: string;
+  /** Same proof, for multiple frozen presentation versions. Internal only. */
+  compatibleApprovalDigests?: readonly string[];
   issues: string[];
   digest: string;
   mappingVersion: string;

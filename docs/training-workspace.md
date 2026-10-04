@@ -1613,17 +1613,29 @@ implementation, not cloud acceptance, watch receipt or completed-activity proof.
 
 ##### Current readings and boundary notifications (#784)
 
-Mapping v3 independently implements the documented partner [Guide schema](https://apizone.suunto.com/suuntoplus-guide-description),
+Mapping v4 independently implements the documented partner [Guide schema](https://apizone.suunto.com/suuntoplus-guide-description),
 without dependencies or undocumented app-wrapper `alerts`, `trigger`, or `extensions`. Investigation compared
 [OpenAthlete](https://github.com/openathleteorg/openathlete/blob/main/apps/api/src/modules/providers-sync/mapping/suunto-guide.mapper.ts)
 and [suunto-mcp](https://github.com/googlarz/suunto-mcp/blob/main/src/guide-zip.ts); neither is imported or copied into QS.
 Additional authored targets and ZoneSense remain separate in #773.
 
 - Running/Trail Running/Treadmill, Walking/Hiking, pool/open-water swimming and Rowing/Indoor Rowing default to
-  current `pace` and `heartRate`; supported cycling variants default to `power`, `heartRate`, `speed`; strength uses HR
+  block-average `pace` and current `heartRate`; supported cycling variants default to current `power`, `heartRate`, `speed`; strength uses HR
   where exercise/set instructions fit. Suunto renders native units; watch rowing pace is **not** asserted to be /500 m.
   Sensor availability depends on the watch/sport/sensor. Missing readings are unavailable, never synthetic zeroes;
-  native power smoothing may still apply. No averaging windows or `createManualLap` are emitted.
+  native power smoothing may still apply. Only measured pace uses `window: 'manualLap', aggregate: 'average'`, labelled
+  `Avg pace`; targets/countdowns and the other measured fields remain unchanged. Suunto documents no `step` window for pace.
+- Guides containing an average-pace field align the manual-lap window with every prescribed block. Automatic transitions
+  create a lap on entering the next FieldsStep, including recovery/rest and repeat passes; a manual transition's button
+  already creates that lap, so the next step omits `createManualLap`. The first screen starts with recording and creates
+  no zero-length opening lap. The non-timed final screen closes an automatically ended final block, but not a manually
+  ended one. Laps are source-recorded and can appear in the FIT/activity; they are not adherence or QS completion proof.
+  Pressing Lap during a timed/distance step resets the average early without advancing the prescribed step. Guides
+  without an average-pace field, including HR-only strength, emit no automatic laps. Long text-only steps keep their
+  instructions and participate in boundaries only when another step in the Guide uses average pace.
+  Native repeats need different incoming-boundary handling when the first pass's predecessor differs from the last
+  repeat child's ending. Only in that case, emit one `times: 1` repeat followed by `times: count - 1`; otherwise keep
+  one native repeat. This preserves total passes and forbidden-ID omissions without expanding up to 100 copies.
 - At most five fields: reserve the ending countdown, every authored target and the existing instruction first. Remaining
   capacity goes to the primary target's documented measured counterpart (power/cadence sensors for running/cycling,
   never guessed swimming stroke/rowing mappings), HR, then sport defaults, deduplicated
@@ -1637,7 +1649,7 @@ Additional authored targets and ZoneSense remain separate in #773.
   Distance steps say `Follow distance countdown`, leaving unit presentation to Suunto's native numeric field; manual
   steps say `Press lap when ready`. Text does not inherit watch unit settings. Fractional/day-length/unrepresentable or
   overlong generated durations use `Follow time countdown` instead of displaying zero or truncating a number. This wording is
-  part of the not-yet-deployed v3 mapping; the frozen v2 recovery payload is unchanged.
+  retained in v4; frozen v2/v3 recovery payloads are unchanged.
   Starting the next step requests the prior interval's end alert. A final non-timed `Complete` FieldsStep says
   `Guide complete` and requests a final notification, including after a terminal repeat. It adds no prescribed duration,
   does not stop recording, and does not mark the QS workout completed. Existing timed/distance/manual transitions,
@@ -1645,55 +1657,62 @@ Additional authored targets and ZoneSense remain separate in #773.
 - Sound/vibration follow watch settings, not QS control. No pre-end beeps or out-of-target alerts are promised. The
   documented popup may occupy the screen for about 20 seconds; short intervals require explicit watch QA.
 
-Deployment is separately approved. After deployment, new sends use v3 and ordinary reconciliation updates eligible,
+Deployment is separately approved. After deployment, new sends use v4 and ordinary reconciliation updates eligible,
 already-consented future Guides by PUT, preserving external/remote IDs and pinning. Past/completed copies, consent
 withdrawal, Pro expiry, disconnection and deletion fences retain their existing protection. The delivery digest includes
-v3; no Firestore migration is needed. Presentation-only additions do not require new approval. Where a meaningful loss
-was already approved under v2, the adapter recomputes the exact v2 digest from the **same** workout, strength companion,
+v4; no Firestore migration is needed. These screen/lap-boundary changes require no extra mapping-loss approval. Where a meaningful loss
+was already approved under v2/v3, the adapter recomputes the exact historical digests from the **same** workout, strength companion,
 destination, zone and owner and verifies the same warning list. Only that exact approval is compatible; edited
 instructions/targets/date/metadata or changed authority cannot inherit it. An accepted copy or immutable attempt must
 also retain the matching full canonical content digest; old payloads can omit truncated text, so a changed hidden suffix
 must not inherit approval. Once verified, the private ledger retains the exact approved digest, current mapping digest
 and full content digest as `mappingApprovalProof`, independently of provider acceptance. Retiring an obsolete,
-never-started or unaccepted v2 attempt must not erase that proof and require a redundant approval. The tuple is rechecked
+never-started or unaccepted old attempt must not erase that proof and require a redundant approval. The tuple is rechecked
 against the adapter's current equivalence result and current saved approval on every use; it neither grants consent nor
-claims delivery. Missing or mismatched proof fails closed. This optional private ledger field requires no migration,
+claims delivery. A proof carried from v2 through v3 remains usable only when both historical digests are recomputed as
+equivalent for the current complete prescription, with the same saved approval. Missing or mismatched proof fails closed.
+The internal assessment's `compatibleApprovalDigests` is never persisted or projected. This optional private ledger field requires no migration,
 remains under the user subtree and is excluded from owner-visible status and MCP reads. Other adapters and the public
 confirmation/proposal contract are unchanged.
 
-Already-started uncertain v2 attempts reconstruct the original v2 JSON and verify its immutable operation digest before
-comparing full owned remote content. After acceptance recovery, normal reconciliation applies v3 to the same retained
+Already-started uncertain v2/v3 attempts reconstruct their original JSON and verify the immutable operation digest before
+comparing full owned remote content. After acceptance recovery, normal reconciliation applies v4 to the same retained
 ID. Unknown digests, mismatched content and non-authoritative absence stay uncertain and never authorize another POST.
 The v2 golden fixture deliberately freezes old field titles/order, text adaptation, strength instructions and absence
-of generated readings/notifications/completion screen. Fresh delivery never uses the recovery-only serializer.
+of generated readings/notifications/completion screen. Separate v3 running/strength golden fixtures freeze the live-reading
+layout and absence of averaging/automatic laps. Fresh delivery never uses a recovery-only serializer.
 
 Existing `[TrainingDelivery]` Suunto acceptance, recovered-acceptance, stale-suppression, failure and checkpoint-failure
-events include two transient allowlisted labels: `guideMappingVersion` (`suunto-guides-v3`, `suunto-guides-v2`, `unknown`,
+events include two transient allowlisted labels: `guideMappingVersion` (`suunto-guides-v4`, `suunto-guides-v3`, `suunto-guides-v2`, `unknown`,
 or `not_applicable` for removal) and `deliveryPhase` (`execute` or `recover`). The version is proved by recomputing the
 immutable upsert operation's exact payload digest, including strength details, rather than copying the current adapter's
 version onto a legacy attempt. An unrecognized digest or classification failure yields `unknown` and cannot alter
 delivery/recovery. Classification runs once per claimed operation without credentials or HTTP; the phase switches to
 `execute` if recovery resumes a safe request. Other providers' existing events are unchanged.
 For rollout triage, combine `jsonPayload.message="[TrainingDelivery]"`, `jsonPayload.provider="suunto"` and
-`jsonPayload.event="failure"` with `jsonPayload.guideMappingVersion="suunto-guides-v3"` for v3 failures, or
-`jsonPayload.guideMappingVersion="suunto-guides-v2"` and `jsonPayload.deliveryPhase="recover"` for legacy recovery.
+`jsonPayload.event="failure"` with `jsonPayload.guideMappingVersion="suunto-guides-v4"` for current failures, or
+the exact `suunto-guides-v2`/`suunto-guides-v3` label and `jsonPayload.deliveryPhase="recover"` for legacy recovery.
 Checkpoint failures use `jsonPayload.event="checkpoint_failed"`. These labels are not stored in Firestore or exposed
 to the browser/MCP, and contain no UID, account/Guide/workout identity, digest, recipe, instruction, sensor reading,
 credential, provider body or raw error. They report serializer/recovery provenance, not app/watch receipt or completion.
 
-MCP impact: **no wire impact**. Live readings are watch-side fields, not activity metrics or authored recipe targets.
+MCP impact: **no wire impact**. Current/block-average readings are watch-side fields, not new activity metrics or authored recipe targets.
 No tool, registered input/output, scope, consent, Assistant permission, provider action, bundled skill, Sports Lib class,
 endpoint or provider enablement changes. Regression tests exercise unchanged recipes, unlinked/linked completion and
 safe delivery reads and reject private Guide fields and diagnostic labels in strict projection/recipe shapes. Delivery remains cloud acceptance
-only, not evidence of watch readings, boundary alerts, completion or adherence. Recorded laps/totals are unchanged.
+only, not evidence of watch readings, boundary alerts, completion or adherence. New source-recorded lap boundaries may
+appear through the existing independently authorized activity-lap read, with its unchanged schema and bounds; planned
+totals, completion matching and authored recipe/MCP proposal semantics are unchanged.
 
-Local fixtures and isolated demo-emulator HTTP cover layout, create/update/reschedule, IDs, retry, digest-verified v2
+Local fixtures and isolated demo-emulator HTTP cover layout, all time/distance/manual predecessor combinations, repeat
+wrap boundaries (including 100 passes), unchanged v2/v3 golden JSON, create/update/reschedule, IDs, retry, digest-verified v2/v3
 recovery, consent withdrawal and past/completed protection. #784 stays open until separately approved account QA and
 watch evidence: running repeats, cycling power, strength rest/manual sets; update/readback and no duplicates; record
-watch model/firmware and check metrics, every boundary/final alert, muted settings and short-interval usability.
+watch model/firmware and check average pace resets at every automatic/manual/repeat boundary, recorded lap boundaries,
+an extra button press during a timed step, metrics, every boundary/final alert, muted settings and short-interval usability.
 Any failure remains tracked there. Production QA artifact cleanup needs separate approval identifying exact records.
 
-Mapping `suunto-guides-v3` retains v2's conversion of common typographic dashes, curly quotes, ellipses and non-breaking spaces only in
+Mapping `suunto-guides-v4` retains v2's conversion of common typographic dashes, curly quotes, ellipses and non-breaking spaces only in
 outgoing watch text. Its default watch subtitle is derived from the title, word-shortened with an ASCII ellipsis to
 fit 23 code points. Those cosmetic adaptations require no per-workout approval; QS titles/recipes and the app-only
 description remain unchanged. Explicit subtitle truncation, title/instruction loss and remaining unsupported watch

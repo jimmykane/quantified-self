@@ -8,7 +8,7 @@ import { productionDeliveryRuntime } from './runtime';
 import { SuuntoGuideTransport } from './suunto/transport';
 import { authorizeSuuntoGuideRequest } from './suunto/authorization';
 import { readGuideArchive } from './suunto/archive';
-import { assessSuuntoGuideV2ForRecovery, guideExternalId } from './suunto/mapping';
+import { assessSuuntoGuideV2ForRecovery, assessSuuntoGuideV3ForRecovery, guideExternalId } from './suunto/mapping';
 import type { DeliveryOperation } from './contracts';
 import type { InspectionRequest } from './verification-contracts';
 
@@ -77,6 +77,8 @@ describe('Production Training delivery rollout', () => {
       destinationKey: inspection.destinationKey, connectionGeneration: inspection.connectionGeneration, timeZone: inspection.timeZone,
       workout: strengthWorkout, strength, artifact: null, progress: null, contentDigest: 'fixture-content',
       digest: transport.assess(strengthWorkout, inspection.destinationKey, inspection.timeZone, strength).digest };
+    expect(transport.diagnosticMappingVersion?.(operation)).toBe('suunto-guides-v4');
+    operation.digest = assessSuuntoGuideV3ForRecovery(strengthWorkout, inspection.destinationKey, inspection.timeZone, owner, strength).digest;
     expect(transport.diagnosticMappingVersion?.(operation)).toBe('suunto-guides-v3');
     operation.digest = assessSuuntoGuideV2ForRecovery(strengthWorkout, inspection.destinationKey, inspection.timeZone, owner, strength).digest;
     expect(transport.diagnosticMappingVersion?.(operation)).toBe('suunto-guides-v2');
