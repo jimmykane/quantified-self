@@ -184,6 +184,7 @@ describe('UserSettingsComponent', () => {
             .find(element => element.attributes['formControlName'] === 'useDistinctComparisonLinePatterns');
         expect(control.value).toBe(false);
         expect(toggle).toBeTruthy();
+        expect(toggle.nativeElement.closest('.settings-slider-block')?.querySelector('[formControlName="chartStrokeWidth"]')).toBeTruthy();
         expect(hapticsServiceMock.selection).not.toHaveBeenCalled();
         toggle.triggerEventHandler('change', { checked: true });
         expect(hapticsServiceMock.selection).toHaveBeenCalledOnce();

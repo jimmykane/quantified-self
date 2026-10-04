@@ -102,8 +102,8 @@
       titleId="tools-compare-workspace-title"
       leadingIcon="compare_arrows"
       eyebrow="Tools / Compare">
-      <div pageHeaderActions class="workspace-header-actions" role="group" aria-label="Comparison appearance">
-        @if (comparisonDeviceColorItems().length > 0) {
+      @if (comparisonDeviceColorItems().length > 0) {
+      <div pageHeaderActions class="workspace-header-actions">
         <button
           mat-stroked-button
           type="button"
@@ -113,27 +113,8 @@
           <mat-icon>palette</mat-icon>
           Device colors
         </button>
-        }
-        <button mat-icon-button type="button" class="qs-action-menu-icon-button"
-          [matMenuTriggerFor]="comparisonChartOptionsMenu" [disabled]="!currentUser()"
-          [attr.aria-busy]="isSavingLinePatterns()"
-          aria-label="Comparison chart options" matTooltip="Chart options"
-          (menuOpened)="onChartOptionsMenuOpened()">
-          @if (isSavingLinePatterns()) {
-          <mat-progress-spinner diameter="24" mode="indeterminate" aria-label="Saving line patterns"></mat-progress-spinner>
-          } @else {
-          <mat-icon>tune</mat-icon>
-          }
-        </button>
-        <mat-menu #comparisonChartOptionsMenu="matMenu" class="qs-menu-panel">
-          <button mat-menu-item type="button" role="menuitemcheckbox"
-            [attr.aria-checked]="useDistinctLinePatterns()" [disabled]="!currentUser() || isSavingLinePatterns()"
-            (click)="onDistinctLinePatternsChange(!useDistinctLinePatterns())">
-            <mat-icon aria-hidden="true">{{ useDistinctLinePatterns() ? 'check_box' : 'check_box_outline_blank' }}</mat-icon>
-            <span>Distinct line patterns</span>
-          </button>
-        </mat-menu>
       </div>
+      }
     </app-page-header>
 
     @if (isSignedInProfileLoading()) {
