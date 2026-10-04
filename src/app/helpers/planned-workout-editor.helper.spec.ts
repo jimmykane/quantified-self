@@ -14,6 +14,22 @@ import {
 } from './planned-workout-editor.helper';
 
 describe('manual planned-workout editor conversion', () => {
+  it.each([75, 90, 3723, 123.456789012345, 1e-9])('preserves exact %s-second endings through reopen and lap toggles', seconds => {
+    const structure: WorkoutStructureV1 = { version: 1, sport: ActivityTypes.Running,
+      nodes: [{ kind: 'repeat', id: 'repeat', count: 3, steps: [
+        { kind: 'step', id: 'timed', purpose: 'work', ending: { kind: 'time', seconds }, targets: [] },
+      ] }] };
+    const editor = workoutStructureToManualEditor('Intervals', '2026-10-04', structure);
+    expect(manualWorkoutEditorToStructure(editor)).toEqual(structure);
+    const repeat = editor.nodes[0];
+    if (repeat.kind !== 'repeat') throw new Error('Expected repeat');
+    const manual = changeManualWorkoutEditorStepEnding(repeat.steps[0], 'manual', editor.sport);
+    const time = changeManualWorkoutEditorStepEnding(manual, 'time', editor.sport);
+    expect(manualWorkoutEditorToStructure({ ...editor, nodes: [{ ...repeat, steps: [time] }] })).toEqual(structure);
+    expect(changeManualWorkoutEditorStepEnding(manual, 'distance', editor.sport).sourceDuration).toBeUndefined();
+    expect(manualWorkoutEditorToStructure({ ...editor, nodes: [{ ...repeat, steps: [{ ...time, endingValue: 1.5 }] }] })
+      .nodes[0]).toMatchObject({ steps: [{ ending: { kind: 'time', seconds: 90 } }] });
+  });
   it('preserves exact saved metres through lap toggles without persisting the hidden distance', () => {
     const units = normalizeUserUnitSettings({ distanceUnits: DistanceUnits.Miles });
     const structure: WorkoutStructureV1 = {

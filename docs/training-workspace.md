@@ -559,6 +559,21 @@ value to be no greater than the Slower value; the editor does not silently reord
 than rounding to zero. No recipe field, schedule history or stored workout requires migration. Garmin and Suunto consume
 canonical metres directly; COROS applies its existing documented integer-metre rounding and degradation approval;
 Wahoo's dated Workout delivery still rejects distance-ended recipes because its required duration is unknown.
+
+Timed interval steps use separate Hours, Minutes and Seconds inputs, including fixed-repeat children and the shared
+Workout Library editor. Hours/minutes are nonnegative integers, minutes/seconds are below 60, and the total is positive;
+fractional seconds remain representable. The editor's internal minute boundary is unchanged (1.25 → 75 seconds,
+1.5 → 90 seconds), while persisted v1 endings remain canonical seconds. Reopened times retain their exact saved seconds
+in an editor-only cache; unchanged saves and temporary Lap button → Time toggles cannot round the prescription.
+Distance selection or a duration edit discards that cache. Cleared/invalid drafts stay editable and fail before mutation.
+Pace inputs accept m:ss (and h:mm:ss for long splits) plus legacy decimal minutes; Sports Lib's duration formatter
+renders editable splits in the already-selected denominator. Exact unchanged saved m/s targets keep the existing cache,
+including running min/km or min/mi, swimming /100 m or /100 yd and rowing /500 m. Range inversion remains an error.
+Strength's existing timed-hold/rest seconds inputs are unchanged; this change concerns the interval step editor.
+MCP impact: presentation only. Existing strict recipe reads and approval-gated proposals still use seconds and m/s;
+no tool, field, schema, consent, provider action, Assistant permission, skill, Sports Lib type or migration changes.
+Provider serializers, scheduling/history and completed-activity totals are unchanged. Verification covers real input
+events, plan/standalone/library saves, repeat children, exact reopen/resave, invalid drafts, units and pending controls.
 MCP impact: #734 adds `get_planned_workout_v2` and `preview_planned_workout_v2_change` while preserving registered v1
 schemas. The read uses existing Training plans consent and includes only an authored pool length in canonical metres
 plus its metre/yard presentation; a distance step never implies pool size. The focused create/update preview uses

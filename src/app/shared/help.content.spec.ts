@@ -14,6 +14,12 @@ import {
 } from './policies.content';
 
 describe('help.content', () => {
+  it('explains explicit duration parts and colon pace without changing canonical units or provider capabilities', () => {
+    const copy = HELP_SECTIONS.find(section => section.id === 'training-plans')!.content;
+    for (const phrase of ['**Hours**, **Minutes**, and **Seconds**', '0 / 1 / 15', '0 / 1 / 30',
+      'including inside repeats and in the Workout library', '**m:ss**', '**4:30**',
+      'decimal minutes such as 4.5 still work', 'provider-specific delivery limits still apply']) expect(copy).toContain(phrase);
+  });
   it('explains Wahoo re-sending after confirmed withdrawal without promising blind recreation or recording deletion', () => {
     const copy = HELP_SECTIONS.find(section => section.id === 'training-plans')!.content;
     expect(copy).toContain('After Wahoo confirms withdrawal of an upcoming copy');

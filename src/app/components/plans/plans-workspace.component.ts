@@ -46,6 +46,7 @@ import { ConfirmationDialogComponent, type ConfirmationWithPastProviderCleanup }
 import { CompactRowComponent } from '../shared/compact-row/compact-row.component';
 import { PlanScheduleCalendarComponent } from './plan-schedule-calendar.component';
 import { TrainingDeliveryButtonComponent } from './training-delivery-button.component';
+import { WorkoutTimeInputComponent } from './workout-time-input.component';
 import { resolvePlanScheduleDate } from '../../helpers/plan-schedule-calendar.helper';
 import { TRAINING_PLAN_COLOR_OPTIONS, trainingPlanAppearance } from '../../helpers/training-plan-appearance.helper';
 import {
@@ -164,7 +165,7 @@ const EMPTY_SCHEDULE: CurrentTrainingScheduleV1 = {
 @Component({
   selector: 'app-plans-workspace',
   standalone: true,
-  imports: [SharedModule, CompactRowComponent, PlanScheduleCalendarComponent, TrainingDeliveryButtonComponent],
+  imports: [SharedModule, CompactRowComponent, PlanScheduleCalendarComponent, TrainingDeliveryButtonComponent, WorkoutTimeInputComponent],
   templateUrl: './plans-workspace.component.html',
   styleUrls: ['./plans-workspace.component.scss'],
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -1233,7 +1234,7 @@ export class PlansWorkspaceComponent {
           }
           return { ...node, [field]: value,
             ...(field === 'endingValue' && value !== node[field]
-              ? { sourceDistance: undefined } : {}),
+              ? { sourceDistance: undefined, sourceDuration: undefined } : {}),
             ...((field === 'targetKind' || field === 'targetMinimum' || field === 'targetMaximum') && value !== node[field]
               ? { sourcePace: undefined } : {}),
           } as ManualWorkoutEditorStep;
@@ -1249,7 +1250,7 @@ export class PlansWorkspaceComponent {
               }
               return { ...step, [field]: value,
                 ...(field === 'endingValue' && value !== step[field]
-                  ? { sourceDistance: undefined } : {}),
+                  ? { sourceDistance: undefined, sourceDuration: undefined } : {}),
                 ...((field === 'targetKind' || field === 'targetMinimum' || field === 'targetMaximum') && value !== step[field]
                   ? { sourcePace: undefined } : {}),
               } as ManualWorkoutEditorStep;

@@ -9,7 +9,7 @@ import { MatDatepickerInput } from '@angular/material/datepicker';
 import { MatSelect } from '@angular/material/select';
 import { MatFormField } from '@angular/material/form-field';
 import { ActivatedRoute, Router, convertToParamMap, provideRouter, type Data, type ParamMap } from '@angular/router';
-import { ActivityTypes, DistanceUnits, PaceUnits, WeightUnits } from '@sports-alliance/sports-lib';
+import { ActivityTypes, DistanceUnits, PaceUnits, SwimPaceUnits, WeightUnits } from '@sports-alliance/sports-lib';
 import { normalizeUserUnitSettings } from '@shared/unit-aware-display';
 import { projectStrengthWorkoutToV1 } from '@shared/strength-workout';
 import type { ScheduledWorkoutV1 } from '@shared/training-plans';
@@ -151,6 +151,131 @@ describe('PlansWorkspaceComponent', () => {
   });
 
   afterEach(() => vi.useRealTimers());
+
+  it.each(['plans', 'standalone', 'library'] as const)('saves hours/minutes/seconds and colon pace through real inputs in %s', async scope => {
+    libraryMutate.mockResolvedValue({ mutationId: 'mutation-1', item: null });
+    setRouteState({ mode: scope === 'library' ? 'library-create' : 'create',
+      scope: scope === 'standalone' ? 'standalone' : 'plans', date: '2026-09-09' });
+    const fixture = await renderPlans();
+    const component = fixture.componentInstance;
+    component.updateEditorField('title', 'QA interval timing');
+    component.addEditorRepeat();
+    component.updateStep(0, null, 'targetKind', 'pace');
+    fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+    const type = async (input: HTMLInputElement, value: string) => {
+      input.value = value; input.dispatchEvent(new Event('input', { bubbles: true }));
+      fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+    };
+    const durationGroups: HTMLElement[] = [...fixture.nativeElement.querySelectorAll('.duration-fields')];
+    for (const [index, parts] of [[0, ['1', '2', '3']], [1, ['0', '1', '15']], [2, ['0', '1', '30']]] as const) {
+      for (const [partIndex, part] of ['hours', 'minutes', 'seconds'].entries()) {
+        await type(durationGroups[index].querySelector(`[data-duration-part="${part}"]`)!, parts[partIndex]);
+      }
+    }
+    const paceInputs: HTMLInputElement[] = [...fixture.nativeElement.querySelectorAll('app-workout-time-input input[type="text"]')];
+    await type(paceInputs[0], '4:30'); await type(paceInputs[1], '5:00');
+    expect(haptics.selection).toHaveBeenCalledOnce(); // Target selection, never typing.
+    const firstNode = component.editor()!.value.nodes[0];
+    expect(firstNode).toMatchObject({ endingValue: 62.05, targetMinimum: 4.5, targetMaximum: 5 });
+    await component.saveWorkout();
+    const operation = (scope === 'library' ? libraryMutate : mutate).mock.calls[0][0].operation;
+    expect(operation.structure.nodes[0]).toMatchObject({ ending: { kind: 'time', seconds: 3723 },
+      targets: [{ kind: 'speed', mode: 'absolute', presentation: 'pace',
+        minimumMetersPerSecond: 1000 / 300, maximumMetersPerSecond: 1000 / 270 }] });
+    expect(operation.structure.nodes[1]).toMatchObject({ kind: 'repeat', count: 4,
+      steps: [{ ending: { kind: 'time', seconds: 75 } }, { ending: { kind: 'time', seconds: 90 } }] });
+    expect(JSON.stringify(operation.structure)).not.toMatch(/sourceDuration|sourcePace|hours|endingValue/);
+    if (scope === 'library') expect(mutate).not.toHaveBeenCalled();
+  });
+
+  it('reopens and resaves exact timed prescriptions without numeric-input rounding', async () => {
+    schedule.workouts[0].structure.nodes = [{ kind: 'step', id: 'precise-time', purpose: 'work',
+      ending: { kind: 'time', seconds: 123.456789012345 }, targets: [] }];
+    setRouteState({ mode: 'edit', workoutId: 'plan-workout' });
+    const fixture = await renderPlans();
+    expect(fixture.nativeElement.querySelector('[data-duration-part="minutes"]').value).toBe('2');
+    expect(Number(fixture.nativeElement.querySelector('[data-duration-part="seconds"]').value)).toBeCloseTo(3.456789012345, 9);
+    await fixture.componentInstance.saveWorkout();
+    expect(mutate.mock.calls[0][0].operation.structure).toEqual(schedule.workouts[0].structure);
+  });
+
+  it.each([
+    { sport: ActivityTypes.Running, units: normalizeUserUnitSettings({ paceUnits: [PaceUnits.MinutesPerMile] }), meters: 1609.344, label: 'min/mi' },
+    { sport: ActivityTypes.Swimming, units: normalizeUserUnitSettings({}), meters: 100, label: 'min/100m' },
+    { sport: ActivityTypes.OpenWaterSwimming, units: normalizeUserUnitSettings({ swimPaceUnits: [SwimPaceUnits.MinutesPer100Yard] }), meters: 91.44, label: 'min/100yd' },
+    { sport: ActivityTypes.Rowing, units: normalizeUserUnitSettings({}), meters: 500, label: 'min/500m' },
+    { sport: ActivityTypes.IndoorRowing, units: normalizeUserUnitSettings({}), meters: 500, label: 'min/500m' },
+  ])('saves colon pace in the $sport editor using $label', async ({ sport, units, meters, label }) => {
+    const unitUser = { ...user, settings: { unitSettings: units } };
+    TestBed.overrideProvider(AppUserService, { useValue: { user: signal(unitUser), user$: of(unitUser) } });
+    setRouteState({ mode: 'create', scope: 'standalone', date: '2026-09-09' });
+    const fixture = await renderPlans();
+    const component = fixture.componentInstance;
+    component.updateEditorField('title', 'Pace input units');
+    component.updateEditorField('sport', sport);
+    component.updateStep(0, null, 'targetKind', 'pace');
+    fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+    const inputs: HTMLInputElement[] = [...fixture.nativeElement.querySelectorAll('app-workout-time-input input[type="text"]')];
+    expect(inputs[0].getAttribute('aria-label')).toBe('Faster ' + label);
+    for (const [index, pace] of ['1:30', '2:00'].entries()) {
+      inputs[index].value = pace;
+      inputs[index].dispatchEvent(new Event('input', { bubbles: true }));
+      fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+    }
+    await component.saveWorkout();
+    expect(mutate.mock.calls[0][0].operation.structure.nodes[0].targets).toEqual([
+      expect.objectContaining({ minimumMetersPerSecond: meters / 120, maximumMetersPerSecond: meters / 90 }),
+    ]);
+  });
+
+  it('never saves invalid or cleared time and pace input', async () => {
+    setRouteState({ mode: 'create', scope: 'standalone', date: '2026-09-09' });
+    const fixture = await renderPlans();
+    const component = fixture.componentInstance;
+    component.updateEditorField('title', 'Invalid timing');
+    const input: HTMLInputElement = fixture.nativeElement.querySelector('[data-duration-part="seconds"]');
+    input.value = '60'; input.dispatchEvent(new Event('input', { bubbles: true }));
+    fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+    await component.saveWorkout();
+    expect(mutate).not.toHaveBeenCalled();
+    expect(fixture.nativeElement.querySelector('[role="alert"]').textContent).toContain('below 60');
+    component.updateStep(0, null, 'endingValue', 1.25);
+    component.updateStep(0, null, 'targetKind', 'pace');
+    fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+    const pace: HTMLInputElement = fixture.nativeElement.querySelector('app-workout-time-input input[type="text"]');
+    pace.value = '4:'; pace.dispatchEvent(new Event('input', { bubbles: true }));
+    fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+    await component.saveWorkout();
+    expect(mutate).not.toHaveBeenCalled();
+  });
+
+  it('exports the real timing editor for optional isolated visual QA', async () => {
+    if (!process.env.TRAINING_DELIVERY_QA_DIR) return;
+    setRouteState({ mode: 'create', scope: 'standalone', date: '2026-09-09' });
+    const fixture = await renderPlans();
+    const component = fixture.componentInstance;
+    component.updateEditorField('title', 'Controlled long run and pace changes');
+    component.updateStep(0, null, 'endingValue', 62.05);
+    component.updateStep(0, null, 'targetKind', 'pace');
+    component.updateStep(0, null, 'targetMinimum', 4.5); component.updateStep(0, null, 'targetMaximum', 5);
+    component.addEditorRepeat();
+    component.updateStep(1, 0, 'endingValue', 1.25); component.updateStep(1, 1, 'endingValue', 1.5);
+    fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+    const sass = createRequire(createRequire(import.meta.url).resolve('@angular/build/package.json'))('sass');
+    const css = [
+      ['app-plans-workspace', 'src/app/components/plans/plans-workspace.component.scss'],
+      ['app-compact-row', 'src/app/components/shared/compact-row/compact-row.component.scss'],
+      ['app-workout-time-input', 'src/app/components/plans/workout-time-input.component.scss'],
+    ].map(([host, file]) => sass.compileString(host + ' {' + readFileSync(file, 'utf8')
+      .replace(/:host\(([^)]+)\)/g, '&$1').replace(/:host/g, '&') + '}').css).join('\n');
+    const markup = fixture.nativeElement.cloneNode(true) as HTMLElement;
+    const inputs: HTMLInputElement[] = [...fixture.nativeElement.querySelectorAll('input')];
+    markup.querySelectorAll('input').forEach((input, index) => input.setAttribute('value', inputs[index].value));
+    writeFileSync(join(process.env.TRAINING_DELIVERY_QA_DIR, 'timing-editor.html'),
+      '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">'
+      + '<link rel="stylesheet" href="styles.css">' + Array.from(document.head.querySelectorAll('style')).map(style => style.outerHTML).join('')
+      + '<style>' + css + '</style></head><body><app-plans-workspace>' + markup.outerHTML + '</app-plans-workspace></body></html>');
+  });
 
   function setRouteState(options: {
     mode?: 'browse' | 'create' | 'edit' | 'library-browse' | 'library-create' | 'library-edit';
@@ -1292,7 +1417,7 @@ describe('PlansWorkspaceComponent', () => {
     for (const endingKind of ['time', 'distance'] as const) {
       component.updateStep(0, null, 'endingKind', endingKind);
       fixture.detectChanges();
-      expect(fixture.nativeElement.querySelectorAll('.step-fields input[type="number"]')).toHaveLength(3);
+      expect(fixture.nativeElement.querySelectorAll('.step-fields input[type="number"]')).toHaveLength(endingKind === 'time' ? 5 : 3);
       expect(fixture.nativeElement.querySelector('.step-fields mat-hint')).toBeNull();
     }
     component.updateStep(0, null, 'endingKind', 'manual');

@@ -29,6 +29,8 @@ export interface ManualWorkoutEditorStep {
   targetMinimum: number | null;
   targetMaximum: number | null;
   note?: string;
+  /** Editor-only: preserve exact saved seconds through display and temporary lap endings. */
+  sourceDuration?: { editorValue: number; seconds: number };
   /** Editor-only: preserve exact metres through rounded display and temporary lap endings. */
   sourceDistance?: { editorValue: number; meters: number };
   /** Editor-only: keep the exact saved speed range when displayed pace was not edited. */
@@ -116,6 +118,7 @@ export function changeManualWorkoutEditorStepEnding(
 ): ManualWorkoutEditorStep {
   if (step.endingKind === endingKind) return step;
   let sourceDistance: ManualWorkoutEditorStep['sourceDistance'];
+  let sourceDuration: ManualWorkoutEditorStep['sourceDuration'];
   if (step.endingKind === 'distance' && endingKind === 'manual'
     && Number.isFinite(step.endingValue) && step.endingValue > 0) {
     const meters = distanceMetersFromEditor(step, sport, units);
@@ -125,7 +128,14 @@ export function changeManualWorkoutEditorStepEnding(
   } else if (step.endingKind === 'manual' && endingKind === 'distance') {
     sourceDistance = step.sourceDistance;
   }
-  return { ...step, endingKind, sourceDistance };
+  if (step.endingKind === 'time' && endingKind === 'manual'
+    && Number.isFinite(step.endingValue) && step.endingValue > 0) {
+    sourceDuration = { editorValue: step.endingValue,
+      seconds: step.sourceDuration?.editorValue === step.endingValue ? step.sourceDuration.seconds : step.endingValue * 60 };
+  } else if (step.endingKind === 'manual' && endingKind === 'time') {
+    sourceDuration = step.sourceDuration;
+  }
+  return { ...step, endingKind, sourceDistance, sourceDuration };
 }
 
 function paceSpeedRangeFromEditor(
@@ -158,7 +168,8 @@ function endingFromEditor(
     throw new Error('Every step needs a positive duration or distance.');
   }
   return step.endingKind === 'time'
-    ? { kind: 'time', seconds: step.endingValue * 60 }
+    ? { kind: 'time', seconds: step.sourceDuration?.editorValue === step.endingValue
+      ? step.sourceDuration.seconds : step.endingValue * 60 }
     : { kind: 'distance', meters: distanceMetersFromEditor(step, sport, units) };
 }
 
@@ -319,6 +330,9 @@ function editorStep(
     purpose: step.purpose,
     endingKind: step.ending.kind,
     endingValue,
+    ...(step.ending.kind === 'time' ? {
+      sourceDuration: { editorValue: endingValue, seconds: step.ending.seconds },
+    } : {}),
     ...(step.ending.kind === 'distance' ? {
       sourceDistance: { editorValue: endingValue, meters: step.ending.meters },
     } : {}),
