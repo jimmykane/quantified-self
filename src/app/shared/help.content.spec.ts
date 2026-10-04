@@ -1135,6 +1135,8 @@ describe('help.content', () => {
     expect(gettingStartedSection?.content).toContain('It is off by default');
     expect(gettingStartedSection?.content).toContain('Primary and overlay lines keep their normal stroke widths');
     expect(gettingStartedSection?.content).toContain('Use **Save Changes** to apply this account preference');
+    expect(gettingStartedSection?.content).toContain('in **Chart options** on merged and benchmark event details');
+    expect(gettingStartedSection?.content).toContain('changes in event details save immediately and use the same preference');
     expect(gettingStartedSection?.content).toContain('sortable, filterable, paginated table with device, activity type, and review tag filters, selected-row bulk delete, distance, ascent, descent, visible benchmark pairs, GNSS/heart-rate/altitude benchmark error metrics colored by low/moderate/high error, clickable draft metric cells that open the benchmark flow, quick description notes, and custom reviewer tags');
     expect(gettingStartedSection?.content).toContain('Benchmark reports show an **At a Glance** reviewer summary');
     expect(gettingStartedSection?.content).toContain('report share menu can copy that summary');

@@ -98,6 +98,11 @@ Swatches expose color names, hex values, and pressed state. Accepted actions and
 numeric builds. The account chart setting `useDistinctComparisonLinePatterns` defaults to false. A **Distinct line
 patterns** toggle lives below **Line Width** in Settings → Charts and uses Save Changes. Settings writes this preference
 only when the toggle is edited; untouched toggles follow account refreshes even while other form fields are dirty.
+The same toggle appears in **Chart options** on merged and benchmark event details and saves immediately. The event
+chart owns optimistic presentation, pending feedback, rollback and mutation haptics; the actions component owns menu
+opening feedback. Writes verify the signed-in account UID, independently of the event's display user. Sign-out or an
+account switch invalidates pending feedback, including a new session for the same UID; destroyed charts ignore
+completions. Guests cannot change this account preference. The observed settings refresh cached chart presentation.
 Compare’s header keeps the **Device colors** action and does not own chart-setting mutations. The device-color
 button uses its intrinsic width there rather than the full-width mobile table-action treatment. Color
 preferences and line patterns are independent: either can change without resetting the other.

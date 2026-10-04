@@ -2,8 +2,10 @@ import { ChangeDetectionStrategy, Component, EventEmitter, Input, Output, inject
 import { ChartCursorBehaviours, XAxisTypes } from '@sports-alliance/sports-lib';
 import { User } from '@sports-alliance/sports-lib';
 import { AppAnalyticsService } from '../../../../services/app.analytics.service';
+import { AppHapticsService } from '../../../../services/app.haptics.service';
 import { EventInterface } from '@sports-alliance/sports-lib';
 import { MenuRadioListOption } from '../../../shared/menu-radio-list/menu-radio-list.component';
+import type { MatSlideToggleChange } from '@angular/material/slide-toggle';
 
 interface ChartSeriesMenuItem {
   dataType: string;
@@ -34,6 +36,10 @@ export class EventCardChartActionsComponent {
   @Input() syncChartHoverToMap = false;
   @Input() colorAltitudeByGrade = true;
   @Input() fillOpacity = 0;
+  @Input() showDistinctLinePatternsToggle = false;
+  @Input() canChangeDistinctLinePatterns = false;
+  @Input() useDistinctLinePatterns = false;
+  @Input() isSavingDistinctLinePatterns = false;
   @Input() showSeriesMenu = false;
   @Input() showAltitudeGradeColorToggle = false;
   @Input() seriesMenuSummary = '';
@@ -51,6 +57,7 @@ export class EventCardChartActionsComponent {
   @Output() showSwimLengthsChange: EventEmitter<boolean> = new EventEmitter<boolean>();
   @Output() xAxisTypeChange: EventEmitter<XAxisTypes> = new EventEmitter<XAxisTypes>();
   @Output() fillOpacityChange = new EventEmitter<number>();
+  @Output() distinctLinePatternsChange = new EventEmitter<boolean>();
   @Output() cursorBehaviourChange = new EventEmitter<ChartCursorBehaviours>();
   @Output() syncChartHoverToMapChange = new EventEmitter<boolean>();
   @Output() colorAltitudeByGradeChange = new EventEmitter<boolean>();
@@ -61,6 +68,7 @@ export class EventCardChartActionsComponent {
 
   public xAxisTypes = XAxisTypes;
   private analyticsService = inject(AppAnalyticsService);
+  private readonly hapticsService = inject(AppHapticsService);
 
   public get shouldShowAllSeriesAction(): boolean {
     return !this.showResetToSportDefaults
@@ -115,6 +123,24 @@ export class EventCardChartActionsComponent {
   }
 
   constructor() {
+  }
+
+  onOptionsMenuOpened(): void {
+    if (this.user) {
+      this.hapticsService.selection();
+    }
+  }
+
+  onDistinctLinePatternsChange(change: MatSlideToggleChange): void {
+    const enabled = change.checked;
+    // Keep the switch controlled by the parent even if a save fails before the next render.
+    change.source.checked = this.useDistinctLinePatterns;
+    if (!this.showDistinctLinePatternsToggle || !this.canChangeDistinctLinePatterns
+      || this.isSavingDistinctLinePatterns || enabled === this.useDistinctLinePatterns) {
+      return;
+    }
+    this.distinctLinePatternsChange.emit(enabled);
+    this.analyticsService.logEvent('event_chart_settings_change', { property: 'useDistinctComparisonLinePatterns' });
   }
 
   async onShowLapsToggle(checked: boolean) {

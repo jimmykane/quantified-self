@@ -10,6 +10,7 @@ import {
   OnInit,
   Output,
   SimpleChanges,
+  computed,
   effect,
   inject,
   Injector,
@@ -18,6 +19,9 @@ import {
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { throttleTime } from 'rxjs/operators';
 import { Subject, asyncScheduler } from 'rxjs';
+import { MatSnackBar } from '@angular/material/snack-bar';
+import { AppAuthService } from '../../../authentication/app.auth.service';
+import { AppHapticsService } from '../../../services/app.haptics.service';
 import {
   ActivityInterface,
   ChartCursorBehaviours,
@@ -359,6 +363,16 @@ export class EventCardChartComponent implements OnInit, OnChanges, OnDestroy {
   private injector = inject(Injector);
   private cdr = inject(ChangeDetectorRef);
   private destroyRef = inject(DestroyRef);
+  private readonly authService = inject(AppAuthService);
+  private readonly hapticsService = inject(AppHapticsService);
+  private readonly snackBar = inject(MatSnackBar);
+  private readonly linePatternsUserID = signal<string | null>(null);
+  private readonly linePatternsOverride = signal<boolean | null>(null);
+  private linePatternsAuthRevision = 0;
+  readonly isSavingDistinctLinePatterns = signal(false);
+  readonly canChangeDistinctLinePatterns = computed(() => !!this.linePatternsUserID());
+  readonly useDistinctLinePatterns = computed(() => this.linePatternsOverride()
+    ?? (this.userSettingsQuery.chartSettings()?.useDistinctComparisonLinePatterns === true));
 
   private cursorPositionSubject = new Subject<number>();
   private xAxisTypeOverride: XAxisTypes | null = null;
@@ -387,9 +401,25 @@ export class EventCardChartComponent implements OnInit, OnChanges, OnDestroy {
   private zoomRangeOwnerEventID: string | null = null;
 
   constructor() {
+    this.authService.user$.pipe(takeUntilDestroyed(this.destroyRef)).subscribe(user => {
+      const userID = user?.uid ?? null;
+      if (userID === this.linePatternsUserID()) {
+        return;
+      }
+      this.linePatternsAuthRevision += 1;
+      this.linePatternsUserID.set(userID);
+      this.linePatternsOverride.set(null);
+      this.isSavingDistinctLinePatterns.set(false);
+    });
     effect(() => {
       this.deviceColorPreferences.deviceColorByName();
       const chartSettings = this.userSettingsQuery.chartSettings();
+      const distinctLinePatterns = this.useDistinctLinePatterns();
+      if (!this.isSavingDistinctLinePatterns()
+        && this.linePatternsOverride() !== null
+        && distinctLinePatterns === (chartSettings?.useDistinctComparisonLinePatterns === true)) {
+        this.linePatternsOverride.set(null);
+      }
       this.userSettingsQuery.unitSettings();
       if (
         this.cursorBehaviourOverride !== null
@@ -464,6 +494,42 @@ export class EventCardChartComponent implements OnInit, OnChanges, OnDestroy {
 
   public onXAxisTypeChange(value: XAxisTypes): void {
     this.xAxisType = value;
+  }
+
+  async onDistinctLinePatternsChange(enabled: boolean): Promise<void> {
+    const userID = this.linePatternsUserID();
+    if (!userID || !this.showActivityNamesInTooltip || this.destroyRef.destroyed
+      || this.isSavingDistinctLinePatterns() || enabled === this.useDistinctLinePatterns()) {
+      return;
+    }
+
+    const previousValue = this.useDistinctLinePatterns();
+    const authRevision = this.linePatternsAuthRevision;
+    const isCurrentSave = () => !this.destroyRef.destroyed
+      && authRevision === this.linePatternsAuthRevision
+      && this.linePatternsUserID() === userID;
+    this.hapticsService.selection();
+    this.linePatternsOverride.set(enabled);
+    this.isSavingDistinctLinePatterns.set(true);
+    try {
+      await this.userSettingsQuery.updateChartSettings(
+        { useDistinctComparisonLinePatterns: enabled }, { force: true, expectedUserID: userID },
+      );
+      if (isCurrentSave()) {
+        this.hapticsService.success();
+      }
+    } catch (error) {
+      this.logger.error('[EventCardChart] Failed to save distinct line patterns', error);
+      if (isCurrentSave()) {
+        this.linePatternsOverride.set(previousValue);
+        this.hapticsService.error();
+        this.snackBar.open('Could not save line patterns. Please try again.', 'OK', { duration: 5000 });
+      }
+    } finally {
+      if (isCurrentSave()) {
+        this.isSavingDistinctLinePatterns.set(false);
+      }
+    }
   }
 
   public onDataTypeLegendSelectionChange(dataType: string, visible: boolean): void {
@@ -1144,7 +1210,7 @@ export class EventCardChartComponent implements OnInit, OnChanges, OnDestroy {
   private applyDeviceAppearance(panels: EventChartPanelModel[], allActivities: ActivityInterface[]): EventChartPanelModel[] {
     return isMergeOrBenchmarkEvent(this.event)
       ? applyComparisonDeviceAppearance(panels, allActivities, this.eventColorService, this.darkTheme,
-        this.userSettingsQuery.chartSettings()?.useDistinctComparisonLinePatterns === true)
+        this.useDistinctLinePatterns())
       : panels;
   }
 
