@@ -57,7 +57,6 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Suunto worker with real F
     await ref.collection('attempts').doc(operation.id).update({ operation });
     return { row, operation, id, payload };
   };
-  const startedV2 = () => startedLegacy('v2');
   // Exercise production policy binding while ensuring all provider I/O stays synthetic.
   const useProductionPolicy = () => {
     vi.stubEnv('SUUNTOAPP_GUIDE_OWNER', 'Quantified Self');
