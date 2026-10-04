@@ -406,6 +406,30 @@ export async function processTrainingDelivery(runtime: DeliveryRuntime, uid: str
       if (!doc.exists) return;
       const ledger = doc.data() as DeliveryLedgerV1;
       if (ledger.attempt?.id !== operation.id || ledger.lease?.id !== leaseId) return;
+      if (claim.provider === 'garmin' && operation.kind === 'upsert' && !operation.repair && !ledger.repair
+        && failure.kind === 'uncertain' && operation.progress === null && ledger.attempt.progress === null
+        && typeof ledger.lastAcceptedAtMs === 'number' && Number.isSafeInteger(ledger.lastAcceptedAtMs)
+        && transport.inspection?.policy.version === 'garmin-retained-v2-schedule-repair'
+        && operation.artifact?.ids.workout && operation.artifact.ids.schedule && operation.artifact.ids.owner
+        && ledger.actual?.ids.workout === operation.artifact.ids.workout
+        && ledger.actual.ids.schedule === operation.artifact.ids.schedule && ledger.actual.ids.owner === operation.artifact.ids.owner) {
+        // This known old pair failed before ANY write-start journal. Retiring that
+        // provably unstarted edit enables a fresh bound check, not a replacement
+        // POST. Started/legacy/partial creates and repairs can never take this path.
+        tx.set(ledgerRef.collection('attempts').doc(operation.id), { state: 'not-accepted' }, { merge: true });
+        ledger.attempt = null;
+        ledger.lease = null;
+        ledger.status = 'needs_attention';
+        ledger.issues = ['The earlier Garmin copy could not be confirmed before updating it. QS will check it again; no replacement was sent.'];
+        ledger.verification = { ...emptyVerification(runtime.now()),
+          requestedAtMs: ledger.verification?.requestedAtMs ?? 0,
+          repairTimes: ledger.verification?.repairTimes ?? [] };
+        ledger.updatedAtMs = runtime.now();
+        writeDelivery(runtime, tx, uid, ledger);
+        tx.set(jobRef, { uid, kind: 'verification', priority: 'ordinary', deliveryId: id,
+          dueAtMs: Math.max(runtime.now(), ledger.providerNotBeforeMs ?? 0), dispatchToken: randomUUID() });
+        return;
+      }
       ledger.lease = null;
       if (failure.kind !== 'deferred') ledger.retries += 1;
       retryCount = ledger.retries;

@@ -33,7 +33,7 @@
       } @else if (draft.action === 'retry') {
         <p>Check unfinished sync work and try again. Retry does not resume stopped sync or grant new consent.</p>
       } @else if (draft.action === 'replace') {
-        <p>Create one new Garmin copy of this workout after rechecking the earlier copy. Check Garmin Connect first: a not-found response is not proof of deletion, so a duplicate is possible if the old copy reappears.</p>
+        <p>Create one new Garmin copy of this workout after rechecking the earlier copy. Check Garmin Connect first: a not-found response is not proof of deletion, so a duplicate is possible if the old copy reappears. If QS finds the old copy again before sending, it reuses that copy and applies the workout and date you reviewed.</p>
         <p>Your QS workout, other providers and completed activities stay unchanged. If Garmin may have accepted a send but its response was lost, QS stops for attention instead of blindly sending again.</p>
       } @else if (editingSettings()) {
         <p>Sync with {{ draftLabel() }} is already enabled. Change the time zone used for scheduled workout dates.</p>

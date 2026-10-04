@@ -190,6 +190,7 @@ export class GarminTrainingTransport implements TrainingDeliveryTransport {
       || !canExecuteDeliveryRepair(this.inspection.policy, operation.repair))) {
       throw new TrainingDeliveryTransportError('uncertain');
     }
+    let repairWriteApplied = operation.progress?.repairApplied === true;
     if (operation.repair && !operation.repair.continuation && (operation.progress === null || !operation.artifact)) {
       const repair = operation.repair;
       if (!canExecuteDeliveryRepair(this.inspection.policy, repair)
@@ -200,16 +201,23 @@ export class GarminTrainingTransport implements TrainingDeliveryTransport {
         timeZone: operation.timeZone, cursor: null }, guard);
       if (observation.conflict || observation.artifacts.some(item => item.state === 'unknown')) throw new TrainingDeliveryTransportError('uncertain');
       if (observation.artifacts.every(item => item.state === 'present')) {
-        await guard(true);
-        await this.save(operation, checkpoint, original, 'finished', 'accepted', false);
-        return original;
+        if (!repair.manualReplacement) {
+          await guard(true);
+          await this.save(operation, checkpoint, original, 'finished', 'accepted', false);
+          return original;
+        }
+        // An explicitly reviewed replacement can contain an authorized edit or
+        // reschedule. Reuse the old pair, but verify/apply that prescription before
+        // acknowledging its new digest. Never create another root in this case.
+        await this.save(operation, checkpoint, original, 'repair-prepare', 'ready');
+      } else {
+        const missing = observation.artifacts.filter(item => item.state === 'absent'
+          && (item.authoritative || repair.manualReplacement === true)).map(item => item.key).sort();
+        if (JSON.stringify(missing) !== JSON.stringify([...repair.missing].sort())) throw new TrainingDeliveryTransportError('uncertain');
+        const ids = { ...original.ids };
+        delete ids.schedule;
+        await this.save(operation, checkpoint, missing.includes('workout') ? null : { ...original, ids }, 'repair-prepare', 'ready');
       }
-      const missing = observation.artifacts.filter(item => item.state === 'absent'
-        && (item.authoritative || repair.manualReplacement === true)).map(item => item.key).sort();
-      if (JSON.stringify(missing) !== JSON.stringify([...repair.missing].sort())) throw new TrainingDeliveryTransportError('uncertain');
-      const ids = { ...original.ids };
-      delete ids.schedule;
-      await this.save(operation, checkpoint, missing.includes('workout') ? null : { ...original, ids }, 'repair-prepare', 'ready');
     }
     const workout = operation.workout!;
     // The shared worker binds approval to the exact assessment digest. Rechecking here
@@ -227,11 +235,12 @@ export class GarminTrainingTransport implements TrainingDeliveryTransport {
       const owner = garminId(existing.ownerId);
       const artifact: DeliveryArtifact = { ...operation.artifact, ids: { ...operation.artifact.ids, owner } };
       await checkpoint(artifact); operation.artifact = artifact;
-      if ((!operation.repair || operation.repair.continuation) && !matches(payload, existing)) {
+      if ((!operation.repair || operation.repair.continuation || operation.repair.manualReplacement) && !matches(payload, existing)) {
         await this.write(operation, 'workout-update', { method: 'PUT', path: `/training-api/workout/v2/${artifact.ids.workout}`,
           body: garminBody(payload as unknown as ObjectValue, { workoutId: artifact.ids.workout, ownerId: owner }) }, checkpoint, guard);
+        repairWriteApplied = !!operation.repair;
       }
-      await this.save(operation, checkpoint, artifact, 'workout-update', 'accepted');
+      await this.save(operation, checkpoint, artifact, 'workout-update', 'accepted', repairWriteApplied ? true : undefined);
     } else {
       const raw = await this.write(operation, 'workout-create', { method: 'POST', path: '/workoutportal/workout/v2',
         body: garminBody(payload as unknown as ObjectValue) }, checkpoint, guard);
@@ -261,10 +270,11 @@ export class GarminTrainingTransport implements TrainingDeliveryTransport {
         const replacement = await this.lookupScheduleForWorkoutDate(operation, guard);
         if (replacement.state === 'inconclusive') throw new TrainingDeliveryTransportError('uncertain');
         if (replacement.state === 'matched') {
-          const relink = { ...operation.artifact!, ids: { ...operation.artifact!.ids, schedule: replacement.value.id },
+          const relink: DeliveryArtifact = { ...operation.artifact!, ids: { ...operation.artifact!.ids, schedule: replacement.value.id },
             localDate: replacement.value.date };
           await guard(true);
-          await this.save(operation, checkpoint, relink, 'finished', 'accepted', false);
+          await this.save(operation, checkpoint, relink, 'finished', 'accepted', repairWriteApplied
+            || relink.ids.workout !== previous.ids.workout);
           return relink;
         }
       } else {
@@ -288,6 +298,7 @@ export class GarminTrainingTransport implements TrainingDeliveryTransport {
         body: garminBody({ date: workout.localDate }, { workoutId: artifact.ids.workout,
           ...(artifact.ids.schedule ? { scheduleId: artifact.ids.schedule } : {}) }),
       }, checkpoint, guard);
+      repairWriteApplied = !!operation.repair;
       if (result.status === 200 && (typeof result.body === 'number' || typeof result.body === 'string')) {
         // Production Garmin also returns the schedule ID alone. Retain this receipt
         // before inspecting its association, without advancing the started journal.
@@ -314,7 +325,7 @@ export class GarminTrainingTransport implements TrainingDeliveryTransport {
         await this.save(operation, checkpoint, { ...artifact, ids: { ...artifact.ids, schedule: saved.id }, localDate: saved.date }, step, 'accepted');
       }
     }
-    const repairApplied = operation.repair ? operation.artifact!.ids.workout !== operation.repair.original.ids.workout
+    const repairApplied = operation.repair ? repairWriteApplied || operation.artifact!.ids.workout !== operation.repair.original.ids.workout
       || operation.artifact!.ids.schedule !== operation.repair.original.ids.schedule : undefined;
     if (repairApplied === false) await guard(true);
     await this.save(operation, checkpoint, operation.artifact, 'finished', 'accepted', repairApplied);

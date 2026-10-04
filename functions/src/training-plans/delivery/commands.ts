@@ -124,6 +124,7 @@ export async function trainingDeliveryCommand(runtime: DeliveryRuntime, uid: str
     if (command.action === 'replace') {
       const policy = transport?.inspection?.policy;
       const evidence = replacement?.verification;
+      const now = runtime.now();
       const intent = replacementContext ? resolveDeliveryIntent(replacementContext, replacement) : null;
       if (!replacement || !replacementContext || !policy || policy.version !== 'garmin-retained-v2-schedule-repair'
         || !pro || connection.state !== 'connected' || replacement.destinationKey !== connection.destinationKey
@@ -131,11 +132,14 @@ export async function trainingDeliveryCommand(runtime: DeliveryRuntime, uid: str
         || (replacement.lease && replacement.lease.expiresAtMs > runtime.now())
         || !replacement.actual?.ids.workout || !replacement.actual.ids.schedule || !replacement.actual.ids.owner
         || replacement.actual.completed || replacement.actual.localDate < today
-        || replacement.lastAcceptedAtMs === null || intent?.desired !== 'present'
+        || typeof replacement.lastAcceptedAtMs !== 'number' || !Number.isSafeInteger(replacement.lastAcceptedAtMs)
+        || replacement.lastAcceptedAtMs < 0 || intent?.desired !== 'present'
         || !['delivered', 'pending'].includes(intent.status) || intent.digest !== replacement.desiredDigest
         || replacement.status !== 'needs_attention' || evidence?.state !== 'unknown'
-        || !evidence.observedMissingKeys?.includes('workout') || !evidence.observedMissingKeys.includes('schedule') || evidence.checkedAtMs === null
-        || evidence.checkedAtMs > runtime.now() || evidence.checkedAtMs < runtime.now() - VERIFICATION_DAY_MS
+        || !Array.isArray(evidence.observedMissingKeys) || evidence.observedMissingKeys.length !== 2
+        || !evidence.observedMissingKeys.includes('workout') || !evidence.observedMissingKeys.includes('schedule')
+        || typeof evidence.checkedAtMs !== 'number' || !Number.isSafeInteger(evidence.checkedAtMs) || evidence.checkedAtMs < 0
+        || evidence.checkedAtMs > now || evidence.checkedAtMs < now - VERIFICATION_DAY_MS
         || evidence.binding !== inspectionBinding(replacement, replacementContext, policy)) {
         throw new HttpsError('failed-precondition', 'Check Garmin again and review the current workout before creating a replacement. An unfinished send, changed account, past or completed workout cannot be replaced.');
       }

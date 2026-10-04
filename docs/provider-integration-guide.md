@@ -83,6 +83,12 @@ for the full policy, request accounting, privacy, diagnostics and rollout contra
 | Wahoo | The public #649 adapter independently checks its app-owned Plan, dated Workout and association. | General inspection remains positive-only: empty/partial/unstable inventory and 404 never authorize replacement or repair. Authorized REMOVE alone can finish already-absent retained copies after current-account/exact catalog access and ownership checks; see the scoped removal policy below. `workout_token` is not POST idempotency. Production cloud CRUD/readback is proved; Wahoo app, ELEMNT and watch receipt remain provider-managed post-release observations, not claimed delivery evidence. |
 | Suunto | The #650 adapter keeps positive owned Guide-record reads and resumable inventory internal to exact uncertain-create recovery. User-facing remote visibility checking is unavailable. | A Guide hidden or removed in Suunto can remain visible through the partner API. API presence proves only a retained cloud record, never app/watch visibility; 404/unstable inventory cannot prove deletion. Negative classification and automatic repair remain disabled by #710. |
 
+An explicitly reviewed Garmin replacement that finds the original pair again reuses its IDs and applies the reviewed
+prescription/date before claiming acceptance. Unchanged reappearance is a no-op; Schedule-only automatic repair still
+preserves provider-side recipe edits. Malformed private inspection timestamps or artifact lists cannot offer replacement.
+An edit against a retained Garmin pair that fails before any write-start journal retires only its provably unstarted
+attempt for a fresh inspection; started/legacy/partial sends remain protected and cannot authorize replacement.
+
 Inspection never claims device receipt or routinely overwrites provider edits. Stop sync prevents restoration. Pro,
 readiness, compatibility, exact connection, saved-zone date/completion eligibility and deletion are rechecked before
 repair. All three readiness decisions—delivery, inspection, repair—are independent. Production quotas only; no evaluation

@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { Firestore } from 'firebase-admin/firestore';
+import { FieldValue, Firestore } from 'firebase-admin/firestore';
 import { ActivityTypes } from '@sports-alliance/sports-lib';
 import { GARMIN_GENERIC_WORKOUT_SPORTS_V1 } from '../../../../../shared/planned-workout-providers';
 import { projectStrengthWorkoutToV1, type StrengthWorkoutDraftV1 } from '../../../../../shared/strength-workout';
@@ -360,6 +360,42 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Garmin delivery / real Fi
     const statuses = await user().collection('trainingDeliveryStatuses').get();
     expect(statuses.docs[0].data()).toMatchObject({ status: 'delivered', differsFromQS: false });
   });
+  it('retires an unstarted edit against a missing retained pair so Check and explicit replacement remain usable', async () => {
+    const id = await send(); await processTrainingDelivery(runtime, uid, id); await drain();
+    const original = (await ledger()).actual!;
+    server.workouts.delete(original.ids.workout); server.schedules.delete(original.ids.schedule);
+    await edit(); await processTrainingDelivery(runtime, uid, id);
+    expect((await ledger()).status).toBe('needs_attention');
+    expect((await ledger()).attempt).toBeNull();
+    expect((await db.collection(DELIVERY_QUEUE).doc(id).get()).get('kind')).toBe('verification');
+    await processTrainingVerification(runtime, uid, id);
+    await requestReplacement(); await processTrainingDelivery(runtime, uid, id); await drain();
+    const result = await ledger();
+    expect(result.status).toBe('delivered');
+    expect(server.workouts.get(result.actual!.ids.workout)?.workoutName).toBe('Revised run');
+    expect(server.schedules.get(result.actual!.ids.schedule)?.date).toBe('2026-09-21');
+    expect(server.calls.filter(call => call.method === 'POST' && call.path.includes('workout'))).toHaveLength(2);
+    const attempts = await user().collection(DELIVERY_LEDGER).doc(id).collection('attempts').get();
+    expect(attempts.docs.some(doc => doc.get('state') === 'not-accepted'
+      && doc.get('operation.progress') === null && doc.get('operation.artifact.ids.workout') === original.ids.workout)).toBe(true);
+  });
+  it('keeps a started retained-ID edit journal after a lost PUT reply and recovers without replacement', async () => {
+    const id = await send(); await processTrainingDelivery(runtime, uid, id); await drain();
+    const original = (await ledger()).actual!;
+    await edit();
+    server.afterHandle = async request => {
+      if (request.method !== 'PUT' || !request.path.includes('workout')) return;
+      server.afterHandle = null; throw new GarminTrainingHttpError('uncertain', false);
+    };
+    await processTrainingDelivery(runtime, uid, id);
+    expect((await ledger()).attempt?.progress).toMatchObject({ step: 'workout-update', state: 'started' });
+    await expect(command('replace', undefined, true)).rejects.toMatchObject({ code: 'failed-precondition' });
+    await retry(id); await drain();
+    expect((await ledger()).status).toBe('delivered');
+    expect((await ledger()).actual!.ids).toEqual(original.ids);
+    expect(server.schedules.get(original.ids.schedule)?.date).toBe('2026-09-21');
+    expect(server.calls.filter(call => call.method === 'POST')).toHaveLength(2);
+  });
   it('keeps the unproved surviving-Schedule case unsupported rather than enabling replacement', async () => {
     await missingGarminCopy(false);
     await expect(command('replace', undefined, true)).rejects.toMatchObject({ code: 'failed-precondition' });
@@ -440,6 +476,33 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Garmin delivery / real Fi
     expect((await ledger()).status).toBe('delivered');
     expect(server.calls.filter(call => call.method === 'POST' && call.path.includes('workout'))).toHaveLength(1);
   });
+  it('applies the newly reviewed edit and date when the original pair reappears before replacement', async () => {
+    const { id, original, savedWorkout, savedSchedule } = await missingGarminCopy();
+    await requestReplacement(); await edit(); await processTrainingDelivery(runtime, uid, id);
+    await processTrainingVerification(runtime, uid, id); await requestReplacement();
+    server.workouts.set(original.ids.workout, savedWorkout); server.schedules.set(original.ids.schedule, savedSchedule);
+    now += 5_000;
+    await processTrainingDelivery(runtime, uid, id); await drain();
+    const result = await ledger();
+    expect(result).toMatchObject({ status: 'delivered', lastAcceptedAtMs: now,
+      actual: { ids: original.ids, localDate: '2026-09-21' } });
+    expect(server.workouts.get(original.ids.workout)?.workoutName).toBe('Revised run');
+    expect(server.schedules.get(original.ids.schedule)?.date).toBe('2026-09-21');
+    expect(result.acceptedDigest).toBe(result.desiredDigest);
+    expect(server.calls.filter(call => call.method === 'POST' && call.path.includes('workout'))).toHaveLength(1);
+  });
+  it.each(['missing-time', 'nan-time', 'fractional-time', 'unknown-key', 'duplicate-key'] as const)(
+    'rejects malformed private %s evidence instead of offering replacement', async malformed => {
+      const { id } = await missingGarminCopy();
+      const patch = malformed === 'missing-time' ? { 'verification.checkedAtMs': FieldValue.delete() }
+        : malformed === 'nan-time' ? { 'verification.checkedAtMs': Number.NaN }
+          : malformed === 'fractional-time' ? { 'verification.checkedAtMs': now - 0.5 }
+            : { 'verification.observedMissingKeys': malformed === 'unknown-key'
+              ? ['workout', 'schedule', 'unknown'] : ['workout', 'schedule', 'schedule'] };
+      await user().collection(DELIVERY_LEDGER).doc(id).update(patch);
+      await expect(command('replace', undefined, true)).rejects.toMatchObject({ code: 'failed-precondition' });
+      expect(server.calls.filter(call => call.method !== 'GET')).toHaveLength(2);
+    });
   it('never repeats an uncertain replacement root POST, including explicit Retry or another Replace', async () => {
     const { id } = await missingGarminCopy(); await requestReplacement();
     server.afterHandle = async request => {

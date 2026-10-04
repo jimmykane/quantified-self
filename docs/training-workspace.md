@@ -2321,16 +2321,23 @@ historical; plan totals and existing MCP sync reads count this as `needs_attenti
 #769 is reopened for explicit owner-reviewed recovery. **Create replacement Garmin copy** is an app-only workout
 action, not Check, Retry, ordinary Send, or automatic repair. The server offers a preview only after a complete,
 current, same-binding inspection found both retained Workout and Schedule absent. The inspection is at most 24 hours
-old; a changed prescription/revision, account/connection/epoch, consent, active lease/attempt, plan lock, Pro loss,
+old, with a finite whole-millisecond timestamp and exactly the two expected artifact keys; malformed private
+evidence cannot offer replacement. A changed prescription/revision, account/connection/epoch, consent, active lease/attempt, plan lock, Pro loss,
 past date or completion rejects review/apply. A surviving Schedule remains unsupported for manual root replacement
 until its provider lifecycle is proved; fixture support does not enable that unproved state. The preview warns that
 404 is not definitive deletion evidence and a duplicate is possible if an old copy reappears. Its exact digest must
 be confirmed; the command changes neither the authored recipe nor other providers and preserves mapping approval.
 Idempotent mutation receipts prevent replay; the worker independently reinspects both IDs before creating one new
-pair. A fully reappearing pair is adopted without POST; partial reappearance, unknown/conflicting reads and permission
+pair. A fully reappearing pair is reused without POST, but an explicitly reviewed current prescription or reschedule
+is applied through retained-ID updates before its digest is accepted. An unchanged pair is a no-op and does not advance
+Last sent; automatic Schedule-only repair still does not overwrite provider-side recipe edits. Partial reappearance, unknown/conflicting reads and permission
 failures stop for attention. The original IDs remain in immutable private attempt evidence. Uncertain root POST
 acceptance is never cleared by Retry, edits or a second replacement request. An accepted retained replacement ID can
 continue without repeating POST; this never claims watch receipt or links a completed activity by similarity.
+If an ordinary edit of a previously accepted Garmin pair fails during readback before any write-start journal,
+QS retires only that provably unstarted attempt and queues a fresh inspection. This keeps Check and explicit replacement
+review usable after an edit to a missing copy. Started, legacy and partially accepted attempts remain journaled and
+cannot take this path; no inspection or ordinary Retry authorizes a new root POST.
 The explicit flow requires separately approved Functions/frontend release and authorized account-side proof before
 #769 is complete; automatic missing-Workout repair stays disabled. Repairs reuse the operation journal and
 stable QS identity; unknown replacement-POST acceptance remains blocked, including Retry. Stop, pause, transfers and
