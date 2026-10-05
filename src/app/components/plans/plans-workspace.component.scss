@@ -320,9 +320,34 @@
 .strength-set-number { padding-top: 16px; white-space: nowrap; font: var(--mat-sys-label-large); }
 
 .workout-step-editor {
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
   align-items: start;
   gap: 10px;
+}
+
+.repeat-step-editor {
+  grid-template-columns: auto minmax(0, 1fr) auto;
+}
+
+.repeat-step-editor .step-fields { grid-column: 2; grid-row: 1; }
+.workout-node-actions { display: flex; align-items: center; }
+.repeat-step-actions { display: flex; grid-column: 3; grid-row: 1; }
+.workout-drag-handle { cursor: grab; touch-action: none; }
+.workout-drag-handle:active { cursor: grabbing; }
+.workout-drag-handle:disabled { cursor: default; }
+.workout-node-list, .repeat-step-list { min-width: 0; }
+.workout-node-limit { margin: 0; color: var(--mat-sys-on-surface-variant); }
+.cdk-drag-preview {
+  box-sizing: border-box;
+  background: var(--mat-sys-surface-container);
+  color: var(--mat-sys-on-surface);
+  border-radius: 12px;
+  border: 1px solid var(--mat-sys-outline-variant);
+}
+.cdk-drag-placeholder { opacity: 0.25; }
+@media (prefers-reduced-motion: no-preference) {
+  .cdk-drag-animating { transition: transform 180ms ease; }
 }
 
 .workout-step-editor .step-fields {
@@ -563,7 +588,7 @@ mat-card-actions button,
     grid-row: 2;
   }
 
-  .repeat-step-editor > button {
+  .repeat-step-actions {
     grid-column: 2;
     grid-row: 1;
   }

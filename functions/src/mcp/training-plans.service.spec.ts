@@ -56,6 +56,36 @@ function fixture() {
 }
 
 describe('Training plan MCP reads', () => {
+  it('projects saved ordering and duplicated repeat children in canonical and display order', async () => {
+    const f = fixture();
+    const work = { kind: 'step' as const, id: 'work', purpose: 'work' as const,
+      ending: { kind: 'distance' as const, meters: 1609.344123 }, targets: [{ kind: 'speed' as const, mode: 'absolute' as const,
+        presentation: 'pace' as const, minimumMetersPerSecond: 3.14159265, maximumMetersPerSecond: 4.123456789 }], note: 'Hold form' };
+    const recovery = { kind: 'step' as const, id: 'recovery', purpose: 'recovery' as const,
+      ending: { kind: 'time' as const, seconds: 75.1234567890123 }, targets: [], note: 'Easy recovery' };
+    const recipe: WorkoutStructureV1 = { version: 1, sport: ActivityTypes.Running, nodes: [
+      { kind: 'repeat', id: 'block', count: 4, steps: [recovery, work] },
+      { ...recovery, id: 'cooldown', purpose: 'cooldown' },
+      { kind: 'repeat', id: 'block-copy', count: 4, steps: [{ ...recovery, id: 'recovery-copy' }, { ...work, id: 'work-copy' }] },
+    ] };
+    f.structures.w1 = recipe;
+    const workoutRef = f.codec.encode({ kind: 'workout', id: 'w1', createdAtMs: 1 }, 'owner', 'connection');
+    for (const tool of ['get_planned_workout', 'get_planned_workout_v2'] as const) {
+      const read = TRAINING_READ_OUTPUTS[tool].parse(await f.run(tool, { workoutRef }));
+      expect(read.workout.structure).toEqual(recipe);
+      expect(read.workout.displaySteps.map(step => step.nodeId)).toEqual([
+        'block', 'recovery', 'work', 'cooldown', 'block-copy', 'recovery-copy', 'work-copy',
+      ]);
+      expect(JSON.stringify(read)).not.toMatch(/PRIVATE|sourceDuration|sourceDistance|sourcePace|providerWorkoutId/);
+      await expect(f.run(tool, { workoutRef }, [])).rejects.toThrow();
+      await expect(f.run(tool, { workoutRef }, [TRAINING_PLANS_SCOPE], 'other-connection')).rejects.toThrow();
+    }
+    Object.assign(f.collections.scheduledWorkouts.w1, { sourceDuration: { seconds: 'PRIVATE' },
+      sourceDistance: { meters: 'PRIVATE' }, sourcePace: 'PRIVATE', providerWorkoutId: 'PRIVATE' });
+    // The persisted record schema fails closed rather than forwarding unknown editor/provider fields.
+    await expect(f.run('get_planned_workout', { workoutRef })).rejects.toThrow();
+  });
+
   it('reads every lap-ended purpose and repeat child without inventing limits or changing the wire contract', async () => {
     const f = fixture();
     const recipe: WorkoutStructureV1 = { version: 1, sport: ActivityTypes.Running, nodes: [

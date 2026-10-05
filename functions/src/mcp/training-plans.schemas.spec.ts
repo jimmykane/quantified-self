@@ -103,6 +103,35 @@ describe('app-only Garmin replacement boundary', () => {
   });
 });
 
+describe('ordered and duplicated interval recipes', () => {
+  it('round-trips ordered blocks and fresh child IDs through existing reads and complete-recipe proposals', () => {
+    const recovery = { kind: 'step' as const, id: 'recovery', purpose: 'recovery' as const,
+      ending: { kind: 'time' as const, seconds: 75.1234567890123 }, targets: [], note: 'Easy recovery' };
+    const work = { kind: 'step' as const, id: 'work', purpose: 'work' as const,
+      ending: { kind: 'distance' as const, meters: 1609.344123 }, targets: [{ kind: 'speed' as const, mode: 'absolute' as const,
+        presentation: 'pace' as const, minimumMetersPerSecond: 3.14159265, maximumMetersPerSecond: 4.123456789 }], note: 'Hold form' };
+    const input: WorkoutStructureV1 = { version: 1, sport: ActivityTypes.Running, nodes: [
+      { kind: 'repeat', id: 'block', count: 4, steps: [recovery, work] },
+      { ...recovery, id: 'cooldown', purpose: 'cooldown' },
+      { kind: 'repeat', id: 'block-copy', count: 4, steps: [{ ...recovery, id: 'recovery-copy' }, { ...work, id: 'work-copy' }] },
+    ] };
+    expectPublicReadWriteRoundTrip(input);
+    const update = { kind: 'update-workout', workout: { ref: 'opaque-workout' }, plan: null,
+      localDate: '2026-10-05', title: 'Ordered intervals', structure: input };
+    expect(TRAINING_CHANGE_SCHEMA.parse(update)).toMatchObject({ structure: input });
+    expect(TRAINING_READ_OUTPUTS.get_saved_workout.parse({ libraryRevision: 3, savedWorkout: {
+      savedWorkoutRef: 'opaque-saved', title: 'Ordered intervals', status: 'active', revision: 2,
+      createdAtMs: 1, updatedAtMs: 2, structure: input,
+    } }).savedWorkout.structure).toEqual(input);
+    for (const field of ['sourceDuration', 'sourceDistance', 'sourcePace', 'providerWorkoutId']) {
+      const leaked = { ...input, nodes: [{ ...input.nodes[0], [field]: { private: true } }, ...input.nodes.slice(1)] };
+      expect(TRAINING_CHANGE_SCHEMA.safeParse({ ...update, structure: leaked }).success).toBe(false);
+    }
+    const duplicateIds = { ...input, nodes: [input.nodes[0], input.nodes[0]] };
+    expect(TRAINING_CHANGE_SCHEMA.safeParse({ ...update, structure: duplicateIds }).success).toBe(false);
+  });
+});
+
 describe('Strict public Training recipe v1', () => {
   it.each([ActivityTypes.Walking, ActivityTypes.Hiking, ActivityTypes.Rowing, ActivityTypes.IndoorRowing])('round-trips %s through the frozen read and approval-gated proposal schema', sport => {
     expectPublicReadWriteRoundTrip({ ...recipe({ kind: 'distance', meters: 500 }), sport });

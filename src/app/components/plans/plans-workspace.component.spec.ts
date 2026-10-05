@@ -2,6 +2,8 @@ import { signal } from '@angular/core';
 import { Location } from '@angular/common';
 import { TestBed } from '@angular/core/testing';
 import { By } from '@angular/platform-browser';
+import { CdkDrag, CdkDragHandle, CdkDropList, type CdkDragDrop } from '@angular/cdk/drag-drop';
+import { MatMenuTrigger } from '@angular/material/menu';
 import { MatDialog } from '@angular/material/dialog';
 import { MAT_ICON_DEFAULT_OPTIONS } from '@angular/material/icon';
 import { MatSnackBar } from '@angular/material/snack-bar';
@@ -29,6 +31,8 @@ import {
 import { PlansWorkspaceComponent } from './plans-workspace.component';
 import { CompactRowComponent } from '../shared/compact-row/compact-row.component';
 import { TRAINING_PLAN_COLOR_OPTIONS, trainingPlanAppearance } from '../../helpers/training-plan-appearance.helper';
+import { createManualWorkoutEditorStep, manualWorkoutEditorToStructure, workoutStructureToManualEditor,
+  type ManualWorkoutEditorRepeat } from '../../helpers/planned-workout-editor.helper';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { resolve, join } from 'node:path';
 import { createRequire } from 'node:module';
@@ -151,6 +155,144 @@ describe('PlansWorkspaceComponent', () => {
   });
 
   afterEach(() => vi.useRealTimers());
+
+  it.each(['plans', 'standalone', 'library'] as const)('saves ordered independent copies through the existing %s boundary', async scope => {
+    libraryMutate.mockResolvedValue({ mutationId: 'mutation-1', item: null });
+    setRouteState({ mode: scope === 'library' ? 'library-create' : 'create',
+      scope: scope === 'standalone' ? 'standalone' : 'plans', date: '2026-09-09' });
+    const fixture = await renderPlans();
+    const component = fixture.componentInstance;
+    component.updateEditorField('title', 'Ordered intervals');
+    component.addEditorRepeat();
+    component.updateStep(0, null, 'endingValue', 1.25, 75);
+    const [first, repeat] = component.editor()!.value.nodes;
+    if (repeat.kind !== 'repeat') throw new Error('Expected repeat');
+    const originalIds = repeat.steps.map(step => step.id);
+    component.moveEditorNode(originalIds[1], -1, repeat.id);
+    component.duplicateEditorNode(repeat.id);
+    component.moveEditorNode(first.id, 1);
+    const copied = component.editor()!.value.nodes[2] as ManualWorkoutEditorRepeat;
+    component.updateStep(2, 0, 'endingValue', 2, 120);
+    expect((component.editor()!.value.nodes[0] as ManualWorkoutEditorRepeat).steps[0].endingValue).toBe(10);
+    expect(mutate).not.toHaveBeenCalled(); expect(libraryMutate).not.toHaveBeenCalled();
+    await component.saveWorkout();
+    const operation = (scope === 'library' ? libraryMutate : mutate).mock.calls[0][0].operation;
+    expect(operation.structure.nodes.map((node: { id: string }) => node.id)).toEqual([repeat.id, first.id, copied.id]);
+    expect(operation.structure.nodes[0].steps.map((step: { id: string }) => step.id)).toEqual([...originalIds].reverse());
+    expect(operation.structure.nodes[2].steps[0].ending).toEqual({ kind: 'time', seconds: 120 });
+    expect(operation.structure.nodes[1].ending).toEqual({ kind: 'time', seconds: 75 });
+    const ids = operation.structure.nodes.flatMap((node: { id: string; steps?: { id: string }[] }) => [node.id, ...(node.steps ?? []).map(step => step.id)]);
+    expect(new Set(ids).size).toBe(ids.length);
+    expect(manualWorkoutEditorToStructure(workoutStructureToManualEditor('Reopened', '2026-09-09', operation.structure))).toEqual(operation.structure);
+    expect(JSON.stringify(operation.structure)).not.toMatch(/sourceDuration|sourceDistance|sourcePace|endingValue/);
+    if (scope === 'library') expect(mutate).not.toHaveBeenCalled(); else expect(libraryMutate).not.toHaveBeenCalled();
+  });
+
+  it('keeps edit revision checks and cancellation when draft steps change', async () => {
+    setRouteState({ mode: 'edit', workoutId: 'plan-workout' });
+    const fixture = await renderPlans();
+    const component = fixture.componentInstance;
+    const original = structuredClone(schedule.workouts[0].structure);
+    component.duplicateEditorNode(component.editor()!.value.nodes[0].id);
+    mutate.mockRejectedValueOnce(new Error('Revision conflict'));
+    await component.saveWorkout();
+    expect(mutate.mock.calls[0][0]).toMatchObject({ operation: { kind: 'update-workout' },
+      expectedRevisions: expect.arrayContaining([{ scope: 'workout', id: schedule.workouts[0].id, revision: schedule.workouts[0].revision }]) });
+    expect(component.editor()?.value.nodes).toHaveLength(2);
+    component.cancelEditor();
+    expect(schedule.workouts[0].structure).toEqual(original);
+    expect(component.editor()).toBeNull();
+    expect(component.editorOrderMessage()).toBe('');
+  });
+
+  it('uses Material menus with boundary states, copied-row focus and Escape restoration', async () => {
+    setRouteState({ mode: 'create', scope: 'standalone', date: '2026-09-09' });
+    const fixture = await renderPlans();
+    const component = fixture.componentInstance;
+    component.addEditorRepeat(); fixture.detectChanges(); await fixture.whenStable();
+    const trigger = fixture.debugElement.query(By.css('[data-editor-node-action]')).injector.get(MatMenuTrigger);
+    trigger.openMenu(); fixture.detectChanges(); await fixture.whenStable();
+    const items = Array.from(document.querySelectorAll<HTMLButtonElement>('.mat-mdc-menu-item'));
+    expect(items[0].disabled).toBe(true); expect(items[1].disabled).toBe(false);
+    items[2].click(); fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+    expect(component.editor()!.value.nodes).toHaveLength(3);
+    expect((document.activeElement as HTMLElement).dataset['editorNodeAction']).toBe(component.editor()!.value.nodes[1].id);
+    expect(haptics.selection).toHaveBeenCalledOnce();
+    expect(fixture.nativeElement.querySelector('[role="status"]').textContent).toContain('Step copied to position 2 of 3');
+    const copiedTrigger = fixture.debugElement.queryAll(By.css('[data-editor-node-action]'))[1].injector.get(MatMenuTrigger);
+    copiedTrigger.openMenu(); fixture.detectChanges(); await fixture.whenStable();
+    document.querySelector('[role="menu"]')!.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', keyCode: 27, bubbles: true }));
+    fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+    expect(copiedTrigger.menuOpen).toBe(false);
+    expect((document.activeElement as HTMLElement).dataset['editorNodeAction']).toBe(component.editor()!.value.nodes[1].id);
+    expect(haptics.selection).toHaveBeenCalledOnce();
+  });
+
+  it('wires separate unconnected CDK lists and dedicated handles for pointer moves', async () => {
+    setRouteState({ mode: 'create', scope: 'standalone', date: '2026-09-09' });
+    const fixture = await renderPlans();
+    const component = fixture.componentInstance;
+    component.addEditorRepeat(); fixture.detectChanges(); await fixture.whenStable();
+    const lists = fixture.debugElement.queryAll(By.directive(CdkDropList)).map(element => element.injector.get(CdkDropList));
+    expect(lists).toHaveLength(2);
+    expect(lists.every(list => list.connectedTo.length === 0)).toBe(true);
+    expect(lists[0].getSortedItems()).toHaveLength(2); expect(lists[1].getSortedItems()).toHaveLength(2);
+    const drag = lists[0].getSortedItems()[1];
+    const handles = fixture.debugElement.queryAll(By.directive(CdkDragHandle));
+    expect(handles).toHaveLength(4);
+    expect(handles.every(handle => handle.nativeElement.tagName === 'BUTTON')).toBe(true);
+    expect(drag.dragStartDelay).toEqual({ touch: 200, mouse: 0 });
+    drag.started.emit({ source: drag });
+    lists[0].dropped.emit({ item: drag, container: lists[0], previousContainer: lists[0],
+      currentIndex: 0, previousIndex: 1, isPointerOverContainer: true } as CdkDragDrop<string | null>);
+    fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+    expect(component.editor()!.value.nodes[0].id).toBe(drag.data);
+    const child = lists[1].getSortedItems()[1];
+    child.started.emit({ source: child });
+    lists[1].dropped.emit({ item: child, container: lists[1], previousContainer: lists[1],
+      currentIndex: 0, previousIndex: 1, isPointerOverContainer: true } as CdkDragDrop<string | null>);
+    fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+    expect((component.editor()!.value.nodes[0] as ManualWorkoutEditorRepeat).steps[0].id).toBe(child.data);
+    expect(haptics.selection).toHaveBeenCalledTimes(2);
+    expect(mutate).not.toHaveBeenCalled();
+  });
+
+  it('ignores cancelled, stale, unchanged, cross-parent and busy actions without feedback', async () => {
+    setRouteState({ mode: 'create', scope: 'standalone', date: '2026-09-09' });
+    const fixture = await renderPlans(); const component = fixture.componentInstance;
+    component.addEditorRepeat(); fixture.detectChanges(); await fixture.whenStable();
+    const [first, repeat] = component.editor()!.value.nodes;
+    const list = { data: null } as CdkDropList<string | null>;
+    const drop = (over = true, target = list) => component.dropEditorNode({ item: { data: repeat.id },
+      previousContainer: list, container: target, currentIndex: 0, isPointerOverContainer: over } as CdkDragDrop<string | null>);
+    component.startEditorDrag(repeat.id); drop(false);
+    component.startEditorDrag(repeat.id); drop(true, { data: null } as CdkDropList<string | null>);
+    component.moveEditorNode(first.id, -1);
+    component.startEditorDrag(repeat.id); component.addEditorStep(); drop();
+    component.startEditorDrag(repeat.id); component.busyAction.set('save-workout'); drop();
+    component.moveEditorNode(repeat.id, -1); component.duplicateEditorNode(first.id);
+    expect(component.editor()!.value.nodes.map(node => node.id).slice(0, 2)).toEqual([first.id, repeat.id]);
+    component.busyAction.set(null);
+    component.startEditorDrag(repeat.id); component.cancelEditor(); component.openNewWorkout(null, '2026-09-09'); drop();
+    expect(component.editor()!.value.nodes).toHaveLength(1);
+    expect(haptics.selection).not.toHaveBeenCalled(); expect(mutate).not.toHaveBeenCalled();
+  });
+
+  it('disables adding and copying at the structural node budget and while saving', async () => {
+    setRouteState({ mode: 'create', scope: 'standalone', date: '2026-09-09' });
+    const fixture = await renderPlans(); const component = fixture.componentInstance;
+    const session = component.editor()!;
+    component.editor.set({ ...session, value: { ...session.value,
+      nodes: Array.from({ length: 100 }, (_, index) => createManualWorkoutEditorStep(`step-${index}`)) } });
+    component.duplicateEditorNode('step-0'); component.addEditorStep(); component.addEditorRepeat();
+    expect(component.editorNodeCount()).toBe(100); expect(component.canDuplicateEditorNode('step-0')).toBe(false);
+    // The pure helper covers the full budget. Check pending controls without rendering 100 complete forms.
+    component.editor.set(session);
+    component.busyAction.set('save-workout'); fixture.detectChanges();
+    expect(fixture.debugElement.queryAll(By.directive(CdkDrag)).every(element => element.injector.get(CdkDrag).disabled)).toBe(true);
+    expect([...fixture.nativeElement.querySelectorAll('.workout-node-add-actions button')].every(button => button.disabled)).toBe(true);
+    expect(haptics.selection).not.toHaveBeenCalled();
+  });
 
   it.each(['plans', 'standalone', 'library'] as const)('saves hours/minutes/seconds and colon pace through real inputs in %s', async scope => {
     libraryMutate.mockResolvedValue({ mutationId: 'mutation-1', item: null });
@@ -285,7 +427,7 @@ describe('PlansWorkspaceComponent', () => {
     component.addEditorRepeat();
     component.updateStep(1, 0, 'endingValue', 1.25); component.updateStep(1, 1, 'endingValue', 1.5);
     fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
-    const sass = createRequire(createRequire(import.meta.url).resolve('@angular/build/package.json'))('sass');
+    const sass = createRequire(createRequire(resolve('package.json')).resolve('@angular/build/package.json'))('sass');
     const css = [
       ['app-plans-workspace', 'src/app/components/plans/plans-workspace.component.scss'],
       ['app-compact-row', 'src/app/components/shared/compact-row/compact-row.component.scss'],
@@ -298,7 +440,19 @@ describe('PlansWorkspaceComponent', () => {
     writeFileSync(join(process.env.TRAINING_DELIVERY_QA_DIR, 'timing-editor.html'),
       '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">'
       + '<link rel="stylesheet" href="styles.css">' + Array.from(document.head.querySelectorAll('style')).map(style => style.outerHTML).join('')
-      + '<style>' + css + '</style></head><body><app-plans-workspace>' + markup.outerHTML + '</app-plans-workspace></body></html>');
+      + '<style>' + css + '</style></head><body class="app-hydrated"><app-plans-workspace>' + markup.outerHTML + '</app-plans-workspace></body></html>');
+    const repeat = component.editor()!.value.nodes[1] as ManualWorkoutEditorRepeat;
+    component.duplicateEditorNode(repeat.id);
+    component.moveEditorNode(repeat.id, -1);
+    component.moveEditorNode(repeat.steps[1].id, -1, repeat.id);
+    fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+    const ordered = fixture.nativeElement.cloneNode(true) as HTMLElement;
+    const orderedInputs: HTMLInputElement[] = [...fixture.nativeElement.querySelectorAll('input')];
+    ordered.querySelectorAll('input').forEach((input, index) => input.setAttribute('value', orderedInputs[index].value));
+    writeFileSync(join(process.env.TRAINING_DELIVERY_QA_DIR, 'ordering-editor.html'),
+      '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">'
+      + '<link rel="stylesheet" href="styles.css">' + Array.from(document.head.querySelectorAll('style')).map(style => style.outerHTML).join('')
+      + '<style>' + css + '</style></head><body class="app-hydrated"><app-plans-workspace>' + ordered.outerHTML + '</app-plans-workspace></body></html>');
   });
 
   function setRouteState(options: {
@@ -593,7 +747,8 @@ describe('PlansWorkspaceComponent', () => {
     setRouteState({ mode: 'edit', workoutId: 'plan-workout' });
     const fixture = await renderPlans();
     const component = fixture.componentInstance;
-    const notice = vi.spyOn((component as unknown as { snackBar: MatSnackBar }).snackBar, 'open');
+    // Test the copy and feedback, without waiting for the snackbar's five-second dismissal timer.
+    const notice = vi.spyOn((component as unknown as { snackBar: MatSnackBar }).snackBar, 'open').mockImplementation(snackBarOpen);
     component.updateEditorField('title', 'Edited library version');
     component.updateStep(0, null, 'endingValue', 45);
     fixture.detectChanges();
@@ -1003,7 +1158,8 @@ describe('PlansWorkspaceComponent', () => {
     const rows = fixture.debugElement.queryAll(By.directive(CompactRowComponent));
     expect(rows.map(row => (row.componentInstance as CompactRowComponent).title())).toEqual(['Step 1', 'Repeat block 2']);
     expect(rows.map(row => (row.componentInstance as CompactRowComponent).showDivider())).toEqual([true, false]);
-    expect(fixture.nativeElement.querySelectorAll('.workout-node-row .compact-row__action button')).toHaveLength(2);
+    expect(fixture.nativeElement.querySelectorAll('.workout-node-row .compact-row__action [aria-label^="Remove workout node"]')).toHaveLength(2);
+    expect(fixture.nativeElement.querySelectorAll('.workout-node-row .compact-row__action [data-editor-node-action]')).toHaveLength(2);
     expect(fixture.nativeElement.querySelector('.workout-editor mat-card')).toBeNull();
     expect(fixture.nativeElement.querySelector('.editor-save-actions [appHapticTap]')).toBeTruthy();
   });

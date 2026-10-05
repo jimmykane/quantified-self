@@ -560,6 +560,34 @@ than rounding to zero. No recipe field, schedule history or stored workout requi
 canonical metres directly; COROS applies its existing documented integer-metre rounding and degradation approval;
 Wahoo's dated Workout delivery still rejects distance-ended recipes because its required duration is unknown.
 
+Interval draft ordering and duplication use `planned-workout-editor-actions.helper.ts` with the existing v1 ordered
+node arrays. Plans, Standalone and Workout Library share the same editor controls. A move preserves every node ID and
+moves a repeat with its children; a child can move only within its own repeat. Duplication inserts immediately after the
+source, generates unique bounded IDs for the copied block and every copied child, and independently copies exact-duration,
+distance and pace caches as well as purpose, note, repeat count and draft fields. Pool settings remain workout-level.
+Partial/invalid fields remain editable and are still rejected by the existing save conversion. The canonical 100-node
+limit counts both repeat blocks and children; additions and copies are disabled when the complete addition cannot fit.
+Strength exercises/sets use their separate editor and are deliberately outside this interval feature.
+
+Dedicated Angular CDK handles support pointer moves with a 200 ms touch delay; form controls never serve as handles.
+The outer list and each child list remain unconnected. Material Actions menus provide Move up, Move down and Duplicate
+for touch/keyboard users, with disabled boundary actions. Accepted moves/copies announce the resulting position, focus
+the affected row's Actions button and emit one selection haptic. Menu dismissal restores the trigger. Cancelled/outside,
+unchanged, stale-session, changed-list, cross-parent and busy drops leave the draft and feedback unchanged. Copy/move only
+changes the local editor: Save reuses the existing revision-checked schedule or library mutation; failure retains the draft
+and Cancel discards it. Existing history, completion links and delivery reconciliation remain owned by those mutations.
+
+MCP impact review: ordering changes prescription content, but requires no new wire shape or mutation kind. Existing
+`get_planned_workout`, v2 and saved-recipe reads preserve node/child order and public structural IDs; complete-recipe
+create/update proposals already represent the resulting content through their existing strict approval/revision boundary.
+Focused read/schema fixtures cover reordered/copied repeats, fresh IDs, notes, fractional seconds, exact metres and m/s,
+display order, scope/reference isolation and rejection of editor-cache/provider fields. No scopes, provider actions,
+Assistant permission, migration, registered digest or plugin build/refresh changes are required. Bundled Training,
+Activity and cross-domain guidance already discover the authoritative recipe and preview/apply contracts.
+Verification covers draft helpers, real Material menus/focus, CDK list/handle wiring, busy/cancelled/stale operations,
+plan/standalone/library save/reopen and revision-conflict retention. Isolated rendered-fixture browser checks verify
+layout in light/dark at desktop and 320 px; physical touch dragging/vibration still require device QA.
+
 Timed interval steps use separate Hours, Minutes and Seconds inputs, including fixed-repeat children and the shared
 Workout Library editor. Hours/minutes are nonnegative integers, minutes/seconds are below 60, and the total is positive;
 fractional seconds remain representable. The editor's internal minute boundary is unchanged (1.25 → 75 seconds,
