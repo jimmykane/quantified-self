@@ -26,6 +26,99 @@ function setup(call = vi.fn(async () => ({ data: listing }))) {
 }
 
 describe('AdminMarketingComponent haptics', () => {
+  it('ignores an older status response that arrives after saving paused edits', async () => {
+    let releaseOldRefresh!: (value: { data: MarketingCampaignListResponse }) => void;
+    const oldRefresh = new Promise<{ data: MarketingCampaignListResponse }>(resolve => { releaseOldRefresh = resolve; });
+    const edited = { ...pausedCampaign, subject: 'Newly saved message', lastTestMailId: null, lastTestState: null };
+    let lists = 0;
+    const call = vi.fn((name: string) => {
+      if (name === 'listMarketingCampaigns') {
+        lists++;
+        return lists === 1 ? oldRefresh : Promise.resolve({ data: { ...listing, campaigns: [edited] } });
+      }
+      return Promise.resolve({ data: edited });
+    });
+    const { component } = setup(call);
+    component.choose(pausedCampaign, false);
+    const refresh = component.refresh();
+    component.draft.subject = edited.subject;
+    component.dirty = true;
+    await component.save();
+    releaseOldRefresh({ data: { ...listing, campaigns: [pausedCampaign] } });
+    await refresh;
+    expect(component.draft.subject).toBe(edited.subject);
+    expect(component.selected?.subject).toBe(edited.subject);
+    expect(component.selected?.lastTestMailId).toBeNull();
+    expect(component.canResume).toBe(false);
+    component.ngOnDestroy();
+  });
+  it.each(['my-preview@example.org', ''])('refreshes saved content while preserving the test recipient "%s"', async recipient => {
+    const updated = { ...pausedCampaign, subject: 'Saved by another admin',
+      content: { type: 'doc' as const, content: [{ type: 'paragraph' as const, content: [{ type: 'text' as const, text: 'New saved body' }] }] },
+      cta: { label: 'New button', url: 'https://quantified-self.io/help' }, updatedAt: '2026-09-23T11:00:00Z' };
+    const { component, haptics } = setup(vi.fn(async () => ({ data: { ...listing, campaigns: [updated] } })));
+    component.choose(pausedCampaign, false);
+    component.testTo = recipient;
+    await component.refresh();
+    expect(component.draft.subject).toBe(updated.subject);
+    expect(component.draft.content).toEqual(updated.content);
+    expect(component.ctaLabel).toBe(updated.cta.label);
+    expect(component.ctaUrl).toBe(updated.cta.url);
+    expect(component.testTo).toBe(recipient);
+    expect(component.dirty).toBe(false);
+    expect(haptics.selection).not.toHaveBeenCalled();
+    component.ngOnDestroy();
+  });
+  it('preserves unsaved paused edits and a current preview when refreshing delivery status', async () => {
+    const { component } = setup(vi.fn(async () => ({ data: { ...listing, campaigns: [
+      { ...pausedCampaign, subject: 'Another saved message', stats: { ...pausedCampaign.stats, accepted: 3 } },
+    ] } })));
+    component.choose(pausedCampaign, false);
+    component.draft.subject = 'My unsaved message';
+    component.dirty = true;
+    component.preview = { subject: 'My unsaved message', html: '<p>My preview</p>', text: 'My preview' };
+    const preview = component.preview;
+    await component.refresh();
+    expect(component.draft.subject).toBe('My unsaved message');
+    expect(component.preview).toBe(preview);
+    expect(component.dirty).toBe(true);
+    expect(component.canResume).toBe(false);
+    expect(component.counts?.accepted).toBe(3);
+    component.ngOnDestroy();
+  });
+  it('locks the composer during a pending save and restores it on failure without losing edits', async () => {
+    let rejectSave!: (error: Error) => void;
+    const pending = new Promise<never>((_resolve, reject) => { rejectSave = reject; });
+    const call = vi.fn((name: string) => name === 'saveMarketingCampaign' ? pending : Promise.resolve({ data: listing }));
+    const { haptics } = setup(call);
+    const fixture = TestBed.createComponent(AdminMarketingComponent);
+    const component = fixture.componentInstance;
+    component.choose(pausedCampaign, false);
+    component.draft.subject = 'My edited subject';
+    component.dirty = true;
+    fixture.detectChanges();
+    await fixture.whenStable();
+    const save = component.save();
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+    const root = fixture.nativeElement as HTMLElement;
+    expect(root.querySelector<HTMLInputElement>('input[maxlength="180"]')?.disabled).toBe(true);
+    expect(root.querySelector('[aria-label="Campaign email body"]')?.getAttribute('contenteditable')).toBe('false');
+    expect(root.querySelector<HTMLInputElement>('input[maxlength="80"]')?.disabled).toBe(true);
+    expect(root.querySelector<HTMLInputElement>('.test-send input[type="email"]')?.disabled).toBe(true);
+    rejectSave(new Error('Save failed'));
+    await save;
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+    expect(root.querySelector<HTMLInputElement>('input[maxlength="180"]')?.disabled).toBe(false);
+    expect(component.draft.subject).toBe('My edited subject');
+    expect(component.dirty).toBe(true);
+    expect(haptics.error).toHaveBeenCalledTimes(1);
+    expect(haptics.success).not.toHaveBeenCalled();
+    fixture.destroy();
+  });
   it('unlocks paused content while keeping the audience fixed and resume disabled for unsaved or untested changes', async () => {
     setup();
     const fixture = TestBed.createComponent(AdminMarketingComponent);
@@ -76,7 +169,8 @@ describe('AdminMarketingComponent haptics', () => {
     expect(component.notice).toContain('Send a new test before resuming');
     component.testTo = 'new-preview@example.org';
     await component.sendTest();
-    expect(call).toHaveBeenCalledWith('sendMarketingTest', { id: pausedCampaign.id, to: 'new-preview@example.org' });
+    expect(call).toHaveBeenCalledWith('sendMarketingTest', { id: pausedCampaign.id, to: 'new-preview@example.org',
+      draft: expect.objectContaining({ subject: edited.subject, filters: pausedCampaign.filters }) });
     expect(haptics.success).toHaveBeenCalledTimes(2);
     component.ngOnDestroy();
   });
@@ -89,7 +183,8 @@ describe('AdminMarketingComponent haptics', () => {
     expect(component.dirty).toBe(false);
     expect(haptics.selection).not.toHaveBeenCalled();
     await component.change('resume');
-    expect(call).toHaveBeenCalledWith('changeMarketingCampaignStatus', { id: pausedCampaign.id, action: 'resume' });
+    expect(call).toHaveBeenCalledWith('changeMarketingCampaignStatus', { id: pausedCampaign.id, action: 'resume',
+      draft: expect.objectContaining({ subject: pausedCampaign.subject, content: pausedCampaign.content, cta: pausedCampaign.cta }) });
     expect(component.canEdit).toBe(false);
     expect(haptics.success).toHaveBeenCalledTimes(1);
     component.ngOnDestroy();
@@ -136,7 +231,8 @@ describe('AdminMarketingComponent haptics', () => {
     component.selected = { id: 'campaign_1234567890', status: 'draft' } as MarketingCampaignView;
     component.testTo = ' qa@example.org ';
     await component.sendTest();
-    expect(call).toHaveBeenCalledWith('sendMarketingTest', { id: 'campaign_1234567890', to: 'qa@example.org' });
+    expect(call).toHaveBeenCalledWith('sendMarketingTest', { id: 'campaign_1234567890', to: 'qa@example.org',
+      draft: expect.objectContaining({ subject: component.draft.subject }) });
     expect(component.notice).toContain('qa@example.org');
   });
   it('sends the unsaved composer without creating a campaign', async () => {

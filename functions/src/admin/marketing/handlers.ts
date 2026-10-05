@@ -34,7 +34,7 @@ export const changeMarketingCampaignStatus = onAdminCall<Record<string, unknown>
   if (action !== 'start' && action !== 'pause' && action !== 'resume' && action !== 'retry') {
     throw new HttpsError('invalid-argument', 'Unknown campaign action.');
   }
-  await setCampaignStatus(request.data?.id, action);
+  await setCampaignStatus(request.data?.id, action, request.data?.draft);
   if (action === 'start' || action === 'resume') await dispatchCampaigns(signingKey());
   return getCampaign(request.data?.id);
 });

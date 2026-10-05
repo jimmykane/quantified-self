@@ -35,6 +35,15 @@ function checkedId(value: unknown): string {
   if (typeof value !== 'string' || !/^[A-Za-z0-9_-]{10,60}$/.test(value)) badRequest('Invalid campaign ID.');
   return value as string;
 }
+function checkedExpectedDraft(value: unknown): MarketingCampaignDraft | null {
+  if (value === undefined) return null;
+  try { return validateMarketingDraft(value); } catch (error) { badRequest(error); }
+}
+function requireMatchingDraft(actual: MarketingCampaignDraft, expected: MarketingCampaignDraft | null): void {
+  if (expected && JSON.stringify(actual) !== JSON.stringify(expected)) {
+    throw new HttpsError('failed-precondition', 'The saved message changed. Refresh, review it and try again.');
+  }
+}
 export function checkedTestEmail(value: unknown): string {
   if (typeof value !== 'string') badRequest('Enter a test recipient email address.');
   const email = (value as string).trim();
@@ -313,6 +322,7 @@ export async function sendTest(idInput: unknown, adminUid: string, secret: strin
     throw new HttpsError('failed-precondition', 'Tests are available for saved drafts, ready campaigns, and paused campaigns.');
   }
   const testedDraft = validateMarketingDraft(draft!);
+  if (campaign) requireMatchingDraft(testedDraft, checkedExpectedDraft(draftInput));
   const user = await getAuth(adminUid);
   if (!user?.email || user.disabled) throw new HttpsError('failed-precondition', 'Your admin account needs an enabled email address.');
   const mailId = `marketing_test_${campaign?.id || 'unsaved'}_${randomUUID()}`;
@@ -348,7 +358,7 @@ export async function sendTest(idInput: unknown, adminUid: string, secret: strin
   return { mailId, submitted };
 }
 
-export async function setCampaignStatus(idInput: unknown, action: 'start' | 'pause' | 'resume' | 'retry'): Promise<MarketingCampaignView> {
+export async function setCampaignStatus(idInput: unknown, action: 'start' | 'pause' | 'resume' | 'retry', expectedDraftInput?: unknown): Promise<MarketingCampaignView> {
   const id = checkedId(idInput);
   const ref = campaigns().doc(id);
   if (action === 'retry') {
@@ -366,6 +376,7 @@ export async function setCampaignStatus(idInput: unknown, action: 'start' | 'pau
     }
     return getCampaign(id);
   }
+  const expectedDraft = action === 'start' || action === 'resume' ? checkedExpectedDraft(expectedDraftInput) : null;
   await db().runTransaction(async tx => {
     const doc = await tx.get(ref);
     if (!doc.exists) throw new HttpsError('not-found', 'Campaign not found.');
@@ -374,6 +385,7 @@ export async function setCampaignStatus(idInput: unknown, action: 'start' | 'pau
     if (action === 'pause' && status !== 'running') throw new HttpsError('failed-precondition', 'Only a running campaign can be paused.');
     if (action === 'resume' && status !== 'paused') throw new HttpsError('failed-precondition', 'Only a paused campaign can resume.');
     if (action === 'start' || action === 'resume') {
+      requireMatchingDraft(validateMarketingDraft(doc.data()), expectedDraft);
       const testId = doc.get('lastTestMailId');
       if (!testId) throw new HttpsError('failed-precondition', 'Send a test email and wait for SMTP acceptance first.');
       const test = await tx.get(db().collection('mail').doc(testId));

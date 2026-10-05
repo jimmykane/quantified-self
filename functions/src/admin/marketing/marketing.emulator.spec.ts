@@ -295,6 +295,37 @@ describe.skipIf(!enabled)('marketing campaign durability (emulators)', () => {
     await expect(setCampaignStatus(campaign.id, 'resume')).rejects.toThrow('Send a test email');
   });
 
+  it.each(['start', 'resume'] as const)('rejects a stale browser message on %s even when the latest saved test succeeded', async action => {
+    const campaign = await saveCampaign(null, draft, 'admin');
+    const ref = db.collection('marketingCampaigns').doc(campaign.id);
+    const testId = `marketing_test_${campaign.id}_emulator`;
+    await db.collection('mail').doc(testId).set({ delivery: { state: 'SUCCESS' } });
+    const latest = { ...draft, subject: 'Saved and tested by another admin' };
+    const status = action === 'start' ? 'ready' : 'paused';
+    await ref.update({ subject: latest.subject, status, lastTestMailId: testId });
+    await expect(setCampaignStatus(campaign.id, action, draft)).rejects.toThrow('saved message changed');
+    expect((await ref.get()).get('status')).toBe(status);
+    expect((await setCampaignStatus(campaign.id, action, latest)).status).toBe('running');
+  });
+
+  it('does not send or charge for a saved test of text that differs from the browser composer', async () => {
+    const user = await admin.auth().createUser({ email: `stale-composer-${randomUUID()}@example.com` });
+    const campaign = await saveCampaign(null, draft, user.uid);
+    const ref = db.collection('marketingCampaigns').doc(campaign.id);
+    const latest = { ...draft, subject: 'Another saved message' };
+    await ref.update({ status: 'paused' });
+    await saveCampaign(campaign.id, latest, user.uid);
+    await db.doc('marketingControl/global').set({ dailyCap: 2 });
+    const day = db.doc(`marketingDispatchDays/${utcDay(new Date())}`);
+    await day.set({ used: 0 });
+    await expect(sendTest(campaign.id, user.uid, secret, user.email, draft)).rejects.toThrow('saved message changed');
+    expect((await day.get()).get('used')).toBe(0);
+    expect((await ref.get()).get('lastTestMailId')).toBeNull();
+    const test = await sendTest(campaign.id, user.uid, secret, user.email, latest);
+    expect((await db.collection('mail').doc(test.mailId).get()).get('message.subject')).toBe(`[TEST] ${latest.subject}`);
+    expect((await day.get()).get('used')).toBe(1);
+  });
+
   it('uses updated content for a worker already in flight during pause, edit and resume', async () => {
     // Isolate the worker from running fixtures left by previous tests.
     const running = await db.collection('marketingCampaigns').where('status', '==', 'running').get();
