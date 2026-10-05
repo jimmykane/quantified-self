@@ -406,8 +406,8 @@ export async function createAssistantMcpSession(
       : []),
     ...(trainingPlansEnabled ? TRAINING_READ_TOOLS : []),
     ...(trainingPlanChangesEnabled
-      ? TRAINING_PREVIEW_TOOLS.filter(name => name !== 'preview_training_deletion' || trainingDeliveryEnabled)
-      : trainingDeliveryEnabled ? ['preview_training_changes' as const] : []),
+      ? TRAINING_PREVIEW_TOOLS.filter(name => !['preview_training_deletion', 'preview_garmin_workout_replacement'].includes(name) || trainingDeliveryEnabled)
+      : trainingDeliveryEnabled ? ['preview_training_changes' as const, 'preview_garmin_workout_replacement' as const] : []),
   ];
   const auth: AuthenticatedMcpRequest = {
     uid,

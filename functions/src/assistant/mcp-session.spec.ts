@@ -168,6 +168,7 @@ describe('Assistant MCP session', () => {
       expect(session.tools.map(tool => tool.name)).toContain('preview_create_planned_workout');
       expect(session.tools.map(tool => tool.name)).toContain('preview_planned_workout_v2_change');
       expect(session.tools.map(tool => tool.name)).toContain('preview_training_deletion');
+      expect(session.tools.map(tool => tool.name)).toContain('preview_garmin_workout_replacement');
       expect(session.tools.map(tool => tool.name)).not.toContain('apply_training_changes' as never);
       expect(capturedAuth).toMatchObject({ connectionId: 'first-party-assistant-v1:conversation-123',
         scopes: expect.arrayContaining([MCP_OAUTH_SCOPES.TrainingPlansRead, MCP_OAUTH_SCOPES.TrainingPlansWrite,
@@ -181,6 +182,8 @@ describe('Assistant MCP session', () => {
     try {
       expect(session.tools.map(tool => tool.name)).toContain('preview_training_changes');
       expect(session.tools.map(tool => tool.name)).not.toContain('preview_training_deletion');
+      expect(session.tools.map(tool => tool.name)).not.toContain('preview_garmin_workout_replacement');
+      await expect(session.callTool('preview_garmin_workout_replacement', {})).rejects.toThrow('not available');
       await expect(session.callTool('preview_training_deletion', {})).rejects.toThrow('not available');
     } finally { await session.close(); }
   });

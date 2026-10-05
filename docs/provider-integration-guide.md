@@ -95,6 +95,15 @@ for the full policy, request accounting, privacy, diagnostics and rollout contra
 An explicitly reviewed Garmin replacement that finds the original pair again reuses its IDs and applies the reviewed
 prescription/date before claiming acceptance. Unchanged reappearance is a no-op; Schedule-only automatic repair still
 preserves provider-side recipe edits. Malformed private inspection timestamps or artifact lists cannot offer replacement.
+
+#801 adds a focused MCP replacement preview and prepare-only Assistant review using this same command/journal,
+not another adapter. Existing planning-read and delivery-write grants are required. The preview accepts one exact
+opaque workout reference and current revisions, identifies the workout/date and possible-duplicate risk, and never
+calls Garmin. Existing native/app approval consumes the 15-minute proposal and exact private evidence digest;
+Send/Retry cannot grant replacement authority. Apply revalidates current grants, account/connection/epoch, consent,
+revisions, Pro, locks, completion/past state and uncertainty. Existing status/receipts recover lost replies without
+another create. New tool deployment and client catalog refresh/rescan are separate release actions; existing v1
+batch actions and provider transport contracts remain unchanged.
 An edit against a retained Garmin pair that fails before any write-start journal retires only its provably unstarted
 attempt for a fresh inspection; started/legacy/partial sends remain protected and cannot authorize replacement.
 

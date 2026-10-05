@@ -100,6 +100,18 @@ function createDailyWorkoutSession() {
 }
 
 describe('Training preview model-tool selection', () => {
+  it('selects replacement only for explicit Garmin replacement requests, never ordinary Send or Retry', () => {
+    for (const prompt of ['Replace my missing Garmin workout copy.', 'Create a replacement Garmin copy.',
+      'Garmin: please review a replacement for my workout.']) {
+      expect(selectAssistantTrainingPreviewTool(prompt)).toBe('preview_garmin_workout_replacement');
+    }
+    for (const prompt of ['Retry my Garmin workout.', 'Send this workout to Garmin.',
+      'Garmin says replacement is possible, just retry.', "Don't replace my Garmin workout.",
+      'Do not create a replacement on Garmin.', 'Replace my Wahoo workout copy.']) {
+      expect(selectAssistantTrainingPreviewTool(prompt)).not.toBe('preview_garmin_workout_replacement');
+    }
+    expect(ASSISTANT_SYSTEM_INSTRUCTIONS).toContain('possible-duplicate warning');
+  });
   it('uses the focused deletion choice for plans and workouts, not library or other edits', () => {
     expect(selectAssistantTrainingPreviewTool('Delete my training plan and remove its service copies.')).toBe('preview_training_deletion');
     expect(selectAssistantTrainingPreviewTool('Delete my strength workout.')).toBe('preview_training_deletion');
@@ -308,6 +320,36 @@ describe('Training preview model-tool selection', () => {
       trainingPlansEnabled: true, trainingPlanChangesEnabled: true, trainingDeliveryEnabled: true,
       assertTrainingPlansAccess: vi.fn().mockResolvedValue(undefined) });
     expect(previews).toEqual(['preview_planned_workout_v3_change']);
+  });
+
+  it.each([true, false])('keeps Garmin replacement %s prepare-only without substituting ordinary delivery when unavailable', async available => {
+    const { session, callTool } = createSession();
+    session.tools = (available ? ['get_daily_report', 'preview_training_changes', 'preview_garmin_workout_replacement'] as const
+      : ['get_daily_report', 'preview_training_changes'] as const).map(name => ({ name, title: name, description: name,
+        inputSchema: { type: 'object' as const, properties: {} } }));
+    const proposal = { proposalRef: 'replacement-proposal', permissionMode: 'delivery', scheduleRevision: 7,
+      expiresAtMs: Date.parse('2026-09-25T13:15:00Z'), summary: 'Possible duplicate.', requiresConfirmation: true,
+      changes: [{ index: 0, kind: 'garmin-workout-replacement', summary: 'Easy run on 2026-09-26.' }],
+      providerPreviews: [{ index: 0, provider: 'garmin', targetType: 'workout', action: 'replace', availability: 'ready',
+        timeZone: 'Europe/Helsinki', eligibleCount: 1, warningCount: 1, summary: 'Queues recovery, not receipt.' }] };
+    const originalCall = callTool.getMockImplementation()!;
+    callTool.mockImplementation(async (name, args) => name === 'preview_garmin_workout_replacement'
+      ? { structuredContent: proposal } : originalCall(name, args));
+    const runtime = createAssistantRuntime({ createMcpSession: vi.fn().mockResolvedValue(session),
+      now: () => new Date('2026-09-25T12:00:00Z'), generateAnswer: async input => {
+        expect(input.tools.map(tool => tool.name).filter(name => name.startsWith('preview_')))
+          .toEqual(available ? ['preview_garmin_workout_replacement'] : []);
+        if (available) await input.tools.find(tool => tool.name === 'preview_garmin_workout_replacement')!.execute({ workoutRef: 'exact-current-reference',
+          expectedScheduleRevision: 7, expectedWorkoutRevision: 1 });
+        else await input.tools.find(tool => tool.name === 'get_daily_report')!.execute({});
+        return { answer: 'Review possible duplicates in QS before confirming.', visualRequest: { chart: null, map: null } };
+      } });
+    const result = await runtime.answer({ uid: 'owner', appBaseUrl: 'https://quantified-self.io',
+      prompt: 'Create a replacement Garmin copy for my missing workout.', timeZone: 'Europe/Helsinki', history: [],
+      trainingPlansEnabled: true, trainingPlanChangesEnabled: false, trainingDeliveryEnabled: true,
+      assertTrainingPlansAccess: vi.fn().mockResolvedValue(undefined), assertTrainingWriteAccess: vi.fn().mockResolvedValue(undefined) });
+    expect(result.pendingTrainingProposal).toEqual(available ? proposal : undefined);
+    expect(callTool.mock.calls.map(([name]) => name)).toEqual(available ? ['preview_garmin_workout_replacement'] : ['get_daily_report']);
   });
 
   it.each([true, false])('keeps deletion cleanup choice %s prepare-only after a follow-up answer', async removePastProviderCopies => {

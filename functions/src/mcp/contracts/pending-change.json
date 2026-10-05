@@ -1,7 +1,7 @@
 {
   "formatVersion": 1,
-  "candidateSha256": "27716266292680629d684f6964a75b49c2609e443590f4d262b6ed76d340d369",
+  "candidateSha256": "5cc4a9be8d9f1e5f59b4def74c8d33d91bf133c06db6b73e1e5ff8331542ca80",
   "lifecycleAction": "developer-refresh",
-  "summary": "Preserve prior Training/Health/Timeline/activity, OAuth/PKCE, Strength/pool, library, measurements, recovery and deletion contracts. Add strict scheduled v3/saved v2 full-recipe reads and previews for athlete-authored early Lap; preserve false/absence and block lossy legacy edits. Keep existing grants, native/app approval, prepare-only Assistant and frozen schemas. No new mutation/provider authority. Deploy separately, then refresh/rescan exact metadata and plugin skills.",
+  "summary": "Preserve prior Training/Health/Timeline/activity, OAuth, Strength/pool, library, measurements, recovery, deletion and early-Lap contracts. Add focused Garmin replacement preview with existing read/delivery grants, fresh bound evidence, duplicate warning and native/app approval via existing Apply. Frozen v1 Send/Retry remain unchanged; Assistant stays prepare-only and provider identities/journals private. Deploy separately, then refresh/rescan metadata and plugin skills.",
   "rescanRequired": true
 }

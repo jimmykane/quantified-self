@@ -16,6 +16,8 @@ import {
   TRAINING_RECIPE_WITH_POOL_SCHEMA,
   TRAINING_RECIPE_WITH_EARLY_LAP_SCHEMA,
   TRAINING_WRITE_INPUTS,
+  TRAINING_WRITE_OUTPUTS,
+  TRAINING_ASSISTANT_PREVIEW_OUTPUT,
 } from './training-plans.schemas';
 
 const recipe = (ending: WorkoutEndingV1, targets: WorkoutTargetV1[] = []): WorkoutStructureV1 => ({ version: 1, sport: ActivityTypes.Running,
@@ -95,7 +97,29 @@ function expectPublicReadWriteRoundTrip(input: WorkoutStructureV1): void {
   expect(write).toMatchObject({ structure: input });
 }
 
-describe('app-only Garmin replacement boundary', () => {
+describe('additive Garmin replacement boundary', () => {
+  const input = { workoutRef: 'owner-bound-ref', expectedScheduleRevision: 2, expectedWorkoutRevision: 1 };
+  const preview = { proposalRef: 'opaque-proposal', expiresAtMs: 1000, permissionMode: 'delivery', scheduleRevision: 2,
+    requiresConfirmation: true, summary: 'The original may reappear and leave a duplicate.',
+    changes: [{ index: 0, kind: 'garmin-workout-replacement', summary: 'Easy run on 2026-10-06.' }],
+    providerPreviews: [{ index: 0, provider: 'garmin', targetType: 'workout', action: 'replace', availability: 'ready',
+      timeZone: 'Europe/Helsinki', eligibleCount: 1, warningCount: 1, summary: 'Approval queues recovery, not receipt.' }] };
+  it('accepts only exact references/revisions and a single dedicated ready Garmin replacement review', () => {
+    expect(TRAINING_WRITE_INPUTS.preview_garmin_workout_replacement.parse(input)).toEqual(input);
+    expect(TRAINING_WRITE_OUTPUTS.preview_garmin_workout_replacement.parse(preview)).toEqual(preview);
+    expect(TRAINING_WRITE_OUTPUTS.preview_training_changes.safeParse(preview).success).toBe(false);
+    expect(TRAINING_ASSISTANT_PREVIEW_OUTPUT.safeParse({ ...preview, providerPreviews: [] }).success).toBe(false);
+    for (const extra of [{ uid: 'other' }, { provider: 'garmin' }, { approvalDigest: 'private' },
+      { timeZone: 'Europe/Helsinki' }, { workoutId: 'raw' }, { expectedWorkoutRevision: 0 },
+      { expectedScheduleRevision: -1 }, { expectedScheduleRevision: Number.MAX_SAFE_INTEGER + 1 }]) {
+      expect(TRAINING_WRITE_INPUTS.preview_garmin_workout_replacement.safeParse({ ...input, ...extra }).success).toBe(false);
+    }
+    for (const extra of [{ provider: 'wahoo' }, { action: 'retry' }, { targetType: 'plan' },
+      { availability: 'unavailable' }, { index: 1 }, { approvalDigest: 'private' }]) {
+      expect(TRAINING_WRITE_OUTPUTS.preview_garmin_workout_replacement.safeParse({ ...preview,
+        providerPreviews: [{ ...preview.providerPreviews[0], ...extra }] }).success).toBe(false);
+    }
+  });
   it('does not silently widen the registered v1 provider delivery action enum', () => {
     const change = { kind: 'provider-delivery', targetType: 'workout', target: { ref: 'owner-bound-ref' }, providers: ['garmin'] };
     expect(TRAINING_CHANGE_SCHEMA.safeParse({ ...change, action: 'retry' }).success).toBe(true);

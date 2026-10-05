@@ -16,7 +16,7 @@ import {
 } from '../../../shared/assistant.types';
 import { isAssistantContentProposal } from '../../../shared/assistant-response.contract';
 import type { AssistantTrainingProposalPreview } from '../../../shared/assistant.types';
-import { TRAINING_WRITE_OUTPUTS } from '../mcp/training-plans.schemas';
+import { TRAINING_ASSISTANT_PREVIEW_OUTPUT } from '../mcp/training-plans.schemas';
 import {
   findAssistantPromptWorkflow,
   type AssistantPromptWorkflow,
@@ -201,6 +201,7 @@ export const ASSISTANT_SYSTEM_INSTRUCTIONS = [
   'To log, edit or delete a manual Health measurement, discover manual types and units first. For now resolve a concrete observation instant once from catalog serverTime and the turn timezone; retain that instant and mutation UUID on retries. Never infer blood-pressure pairing or VO2 context/method. For an edit or permanent deletion get the exact manual measurement and current revision first; ask when the entry is ambiguous. Provider imports cannot be changed. Prepare only one change for the app review and never claim it is saved until the app confirms Apply. Do not turn a weight-history question into a mutation. The Manual Health measurements choice is independent from Training, Health history, tags and notes.',
   'Use Training tools for load, Form, ramp, volume, intensity, or current-versus-usual questions.',
   'For Training impact of one completed session, discover the exact activity, prepare the Form metric, then use the identity-free Training-impact read with that opaque activity reference. For a selected local calendar day, first complete the bounded activity read for that date, then pass only those exact unique references with the same IANA timezone; never include planned workouts or activities from another local date. Treat CTL and ATL contributions as TSS-based modeled load, not measured physiological adaptation, and keep separate UTC Training-day outcomes when returned.',
+  'Only for an explicit request to create a replacement Garmin copy, use preview_garmin_workout_replacement with the exact current workout reference and schedule/workout revisions. A fresh paired not-found Check in the app is required; not-found does not prove deletion. Explain the possible-duplicate warning and exact workout/date. Send, Retry, a missing-copy status, titles or a lost reply never authorize replacement. Do not substitute a new workout or Send when unavailable. The model prepares only; the user reviews and confirms in Quantified Self. Approval queues recovery, not provider/watch receipt, and leaves the QS recipe, other providers and completed activities unchanged.',
   'For a request to duplicate a planned workout, identify and read the exact source workout and current schedule revision, ask when the source or destination calendar date is ambiguous, and use the existing copy-workout change in preview_training_changes with the source plan or standalone scope by default. Copying creates a new planned workout; it does not copy a completion link or standalone provider consent. Never infer a Send action or plan-sync opt-in. Preview only: the user must review and confirm the proposed change in Quantified Self.',
   'For deletion of a current Training plan or planned workout, read its exact current reference and schedule revision. Ask: "Also remove older, uncompleted copies from your connected services?" unless the user already explicitly chose. Eligible upcoming copies already withdraw automatically. With both Training change permissions, use preview_training_deletion for one deletion with that explicit removePastProviderCopies boolean. Plan deletion also requires asking whether to keep its workouts as standalone or permanently delete them; the plan and history are permanently removed. Completed activities stay untouched. Service removal needs valid access/provider support and may leave app/watch copies. Never promise cleanup from a preview or an applied deletion. Without the delivery permission or focused tool, explain that older copies cannot be removed through this connection and use the legacy deletion only if the user accepts that limitation. The model prepares only; the app-owned confirmation remains mandatory.',
   'For reusable saved workouts, use list_saved_workouts and get_saved_workout_v2 under Training read access. A saved recipe has no date or service sync consent; reading it does not place or send it. When Plan and workout changes access is enabled and the user explicitly requests a library create, save from schedule, edit, copy, archive, restore, delete or placement, read the exact current source and schedule/library revisions and call preview_saved_workout_v2_change once. Preserve the full recipe, including explicit false or absent early-Lap settings; enabling early Lap requires explicit athlete intent. Ask if the source, destination plan or dates are ambiguous. Library deletion is permanent only for the saved recipe; scheduled copies remain. Placement makes independent snapshots and never grants provider consent. Preview only: the user must review and confirm the change in Quantified Self.',
@@ -370,6 +371,9 @@ export function selectAssistantTrainingPreviewTool(prompt: string,
     /\b(?:don't|don’t|do not|doesn't|doesn’t|does not|never|without)\s+(?:(?:also|any|other|existing)\s+){0,3}(?:edit|update|move|copy|duplicate|delete|remove|skip|archive|rename|change|modify)\b/gu,
     '',
   );
+  if (requestsGarminReplacement(question)) {
+    return 'preview_garmin_workout_replacement';
+  }
   if (/\b(?:library|saved\s+workouts?|workout\s+templates?|saved\s+recipes?)\b/u.test(question)
     && /\b(?:create|save|copy|duplicate|edit|update|archive|restore|delete|remove|place|schedule|add)\b/u.test(question)) {
     return 'preview_saved_workout_v2_change';
@@ -421,12 +425,19 @@ export function selectAssistantTrainingPreviewTool(prompt: string,
     : 'preview_training_changes';
 }
 
+function requestsGarminReplacement(prompt: string): boolean {
+  const request = prompt.toLowerCase();
+  return /\bgarmin\b/u.test(request)
+    && /\b(?:replace\b|(?:create|make|prepare|preview|review)\b[^.!?;\n]{0,80}\breplacement)\b/u.test(request)
+    && !/\b(?:don't|don’t|do not|never|no|without)\b[^,.!?;\n]{0,80}\b(?:replace|replacement)\b/u.test(request);
+}
+
 function requestsAssistantTrainingDelivery(prompt: string): boolean {
   const request = prompt.toLowerCase().replace(
     /\b(?:don't|do not|does not|never|without)\s+(?:(?:also|any|this|that|the|my|workout|session)\s+){0,4}(?:send|sync|deliver)\b/gu,
     '',
   );
-  return /\b(?:send|sync|deliver)\b/u.test(request);
+  return /\b(?:send|sync|deliver)\b/u.test(request) || requestsGarminReplacement(prompt);
 }
 
 function projectAssistantToolResultForModel(
@@ -969,7 +980,9 @@ export const generateAssistantModelAnswer: AssistantRuntimeDependencies['generat
     : undefined;
   const deliveryPreviewInputGuidance = requiredDeliveryPreview?.name === 'preview_training_changes'
     ? 'For one existing provider-delivery target, pass the exact schedule revision from the read and one change shaped as {kind:"provider-delivery",targetType:"workout" or "plan",target:{ref:"the exact read reference"},providers:["the requested lowercase provider id"],action:"send",timeZone:"the explicit IANA timezone"}. Do not add fields or use a title as the target reference.'
-    : '';
+    : requiredDeliveryPreview?.name === 'preview_garmin_workout_replacement'
+      ? 'Use only {workoutRef,expectedScheduleRevision,expectedWorkoutRevision} from the exact current workout read. Review possible duplicates before app confirmation. If fresh Check evidence is unavailable, ask the user to Check in the app; never fall back to Send, Retry or a new workout.'
+      : '';
   const createGenkitTools = (
     allowedToolNames?: ReadonlySet<AssistantMcpToolName>,
   ) => input.tools.filter(tool => !allowedToolNames || allowedToolNames.has(tool.name))
@@ -1260,9 +1273,12 @@ export function createAssistantRuntime(
         const preferredTrainingPreview = selectAssistantTrainingPreviewTool(input.prompt, input.history);
         const selectedTrainingPreview = modelToolDefinitions.some(tool => tool.name === preferredTrainingPreview)
           ? preferredTrainingPreview
+          : preferredTrainingPreview === 'preview_garmin_workout_replacement'
+            ? undefined // Never substitute Send/Retry or authoring for missing replacement capability.
           : preferredTrainingPreview === 'preview_training_deletion'
             ? modelToolDefinitions.find(tool => tool.name === 'preview_training_changes')?.name
-          : modelToolDefinitions.find(tool => (TRAINING_PREVIEW_TOOLS as readonly string[]).includes(tool.name))?.name;
+          : modelToolDefinitions.find(tool => tool.name !== 'preview_garmin_workout_replacement'
+            && (TRAINING_PREVIEW_TOOLS as readonly string[]).includes(tool.name))?.name;
         const tools: AssistantRuntimeTool[] = modelToolDefinitions.filter(tool => (
           !(TRAINING_PREVIEW_TOOLS as readonly string[]).includes(tool.name)
           || tool.name === selectedTrainingPreview
@@ -1381,7 +1397,7 @@ export function createAssistantRuntime(
               }
               if ((TRAINING_PREVIEW_TOOLS as readonly string[]).includes(tool.name)) {
                 await input.assertTrainingWriteAccess!();
-                pendingTrainingProposal = TRAINING_WRITE_OUTPUTS.preview_training_changes.parse(result.structuredContent);
+                pendingTrainingProposal = TRAINING_ASSISTANT_PREVIEW_OUTPUT.parse(result.structuredContent);
               }
             } catch (error) {
               if (error instanceof AssistantTrainingMetricsPreparingError) {

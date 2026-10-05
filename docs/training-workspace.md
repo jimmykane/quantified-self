@@ -2567,7 +2567,7 @@ projection `needs_attention` and not synced, even with its earlier acceptance an
 details say **Not found in Garmin** rather than conflating a 404 with a transport/permission failure. Last sent remains
 historical; plan totals and existing MCP sync reads count this as `needs_attention`, not a current synced workout.
 
-#769 is reopened for explicit owner-reviewed recovery. **Create replacement Garmin copy** is an app-only workout
+#769 owner-account recovery is verified and closed. **Create replacement Garmin copy** is an explicitly reviewed workout
 action, not Check, Retry, ordinary Send, or automatic repair. The server offers a preview only after a complete,
 current, same-binding inspection found both retained Workout and Schedule absent. The inspection is at most 24 hours
 old, with a finite whole-millisecond timestamp and exactly the two expected artifact keys; malformed private
@@ -2624,10 +2624,17 @@ surface-free details, keyboard access and sign-out guards. Provider-delivery res
 MCP read impact: `get_training_sync_status` consumes the sanitized delivery projection; confirmed missing artifacts
 and observed missing Garmin Workouts no longer count as synced. Regression tests cover retained prior acceptance,
 `needs_attention`, zero synced count and private-evidence exclusion. No registered schema, scope, field or plugin
-metadata changes. The app-only `replace` action is explicitly rejected by registered v1 proposals; it must not widen
-Assistant/MCP authority via the shared app enum. The additive approval-gated MCP/Assistant replacement flow is tracked
-in #801 (real #583 subissue in Project 2), not silently deferred or routed through Send/Retry. Existing MCP reads need
-no new provider HTTP and never expose observed keys, review binding, journals or old/new provider IDs.
+metadata changes in the registered v1 reads. Registered v1 batch proposals still explicitly reject `replace`;
+the shared app enum does not widen them. #801 adds `preview_garmin_workout_replacement` under existing planning-read
+and delivery-write grants: one exact opaque workout reference and schedule/workout revisions, fresh paired not-found
+Check evidence, one duplicate-warning review, then existing native-approval Apply. The proposal binds the MCP
+grant/generation and private current-evidence digest for 15 minutes. Apply uses the same transaction fences and
+repair journal as the app; no provider HTTP occurs in preview/apply transactions, and no QS recipe or other-provider
+consent changes. Lost replies use existing proposal status/receipts. The Assistant is prepare-only and presents a
+dedicated app-owned replacement confirmation; stale, revoked, changed-account, Stop/completion, lock and Pro changes
+fail closed. Existing MCP reads need no new provider HTTP and never expose observed keys, review binding, journals
+or old/new provider IDs. Separate deployment and registered-client refresh/rescan are required before advertising
+the additive tool as live; an older catalog must never substitute Send/Retry or a new authored workout.
 
 Diagnostics use `[TrainingVerification]` with allowlisted event/provider/category/coverage/latency fields and
 `[TrainingDelivery]` acceptance/recovery events. Example Cloud Logging filters:
