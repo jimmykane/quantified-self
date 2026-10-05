@@ -8,8 +8,6 @@ Keep deeper `AGENTS.md` files additive and minimal: list only area-specific rule
 Shared library path (keep stable for antigravity and other apps/agents): `.agent/`
 
 Always-on rules:
-- Always work in the primary local checkout on local `develop` unless the user explicitly requests a different
-  branch or checkout for the task. Do not create feature branches or worktrees by default.
 - `.agent/rules/verify-changes-with-tests.md`
 - `.agent/rules/backend-crud-boundary.md`
 - `.agent/rules/canonical-metric-display.md`
